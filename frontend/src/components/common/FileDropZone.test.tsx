@@ -66,7 +66,10 @@ describe("FileDropZone", () => {
     dropOn(screen.getByTestId("zone"), [good, bad]);
 
     expect(onFiles).toHaveBeenCalledWith([good]);
-    expect(onRejected).toHaveBeenCalledWith(1);
+    // 第二个参数是被拒文件数组（本次扩展）：资料箱上传要按扩展名给 .doc「先另存为
+    // .docx」的具体建议，只拿到数量分不清是哪一个文件被拒；既有调用方忽略第二个
+    // 参数即可，签名保持向后兼容。
+    expect(onRejected).toHaveBeenCalledWith(1, [bad]);
   });
 
   it("does not call the caller at all when everything was rejected", () => {
@@ -78,10 +81,11 @@ describe("FileDropZone", () => {
       </FileDropZone>,
     );
 
-    dropOn(screen.getByTestId("zone"), [file("简历.pdf", "application/pdf")]);
+    const rejected = file("简历.pdf", "application/pdf");
+    dropOn(screen.getByTestId("zone"), [rejected]);
 
     expect(onFiles).not.toHaveBeenCalled();
-    expect(onRejected).toHaveBeenCalledWith(1);
+    expect(onRejected).toHaveBeenCalledWith(1, [rejected]);
   });
 
   it("keeps only the first file when multiple is false", () => {

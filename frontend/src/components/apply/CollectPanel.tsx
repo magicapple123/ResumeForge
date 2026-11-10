@@ -180,7 +180,7 @@ export default function CollectPanel({ disabled, onStarted, collectTask, progres
 
       <CollectConfigForm
         form={form}
-        getFilters={() => (form.getFieldValue("filters") as Record<string, string>) || {}}
+        getFilters={() => (form.getFieldValue("filters") as Record<string, string[]>) || {}}
         saveSamples={saveSamples}
         onSaveSamplesChange={setSaveSamples}
         disabled={disabled}

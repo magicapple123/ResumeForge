@@ -84,14 +84,22 @@ test("all pages have no serious or critical WCAG violations", async ({ page }) =
       .filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))
       .flatMap((violation) =>
         violation.nodes
-          // Same bounded Ant Design measurement-row exception as a11y.spec.ts.
-          .filter(
-            (node) =>
-              !(
-                violation.id === "aria-hidden-focus" &&
-                node.target.join(" ").includes("ant-table-measure-row")
-              ),
-          )
+          // 与 a11y.spec.ts 的 isAcceptedViolation 保持**同一口径**（同一 DOM 形态不能
+          // 一个 spec 放行、另一个判红，否则「修好一处又冒出三处」会反复发生）：
+          // 1. antd Table 的内部测量行：aria-hidden 且离开文档流，不参与 Tab 序；
+          // 2. antd Collapse 的 header（role=tab）里放行级动作（记录条的「···」）——
+          //    本项目既有模式，动作经 stopPropagation 隔离且键盘可达，重构 Collapse
+          //    结构的影响面远大于收益（评审结论见 a11y.spec.ts 顶部注释）。
+          .filter((node) => {
+            const target = node.target.join(" ");
+            if (violation.id === "aria-hidden-focus" && target.includes("ant-table-measure-row")) {
+              return false;
+            }
+            if (violation.id === "nested-interactive" && target.includes("ant-collapse-header")) {
+              return false;
+            }
+            return true;
+          })
           .map((node) => `${violation.id}: ${node.target.join(" ")}`),
       );
     expect(failures, route).toEqual([]);

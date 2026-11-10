@@ -20,6 +20,16 @@ const claimDraftModal = {
   "claimDraftModal.category.awards": "Awards",
   "claimDraftModal.category.other": "Other",
 
+  "claimDraftModal.label.fromProfile": "Pick from profile",
+  "claimDraftModal.placeholder.fromProfile": "Pick an entry to fill the text and subject",
+  "claimDraftModal.fromProfile.loadFailed": "Could not load the profile - you can still paste text",
+  "claimDraftModal.fromProfile.empty": "No profile entries available yet",
+  "claimDraftModal.replaceEntry.confirm": "Replace what you typed?",
+  "claimDraftModal.replaceEntry.note":
+    "The text, subject and category will be replaced by the new entry",
+  "claimDraftModal.replaceEntry.action": "Replace",
+
+  "claimDraftModal.entryFieldLine": "{label}: {value}",
   "claimDraftModal.placeholder.subjectExample": "e.g. the project name",
   "claimDraftModal.placeholder.rawText":
     "Paste the original material here - the more specific the better. Anything you leave out will not be filled in.",

@@ -32,7 +32,7 @@ const searchCard = {
    * 以免顺手改掉用户可见的文案；英文同样保留同一个记号。
    */
   "searchCard.intro":
-    "这里配的是助手「联网搜索」开关打开时**怎么搜**；助手页那个开关决定这一次要不要联网。抓取正文能拿到比摘要更完整的页面内容，但每次搜索会慢一些，也可能被站点拒绝。",
+    "这里配的是助手「联网搜索」开关打开时**怎么搜**；助手页那个开关决定这一次要不要联网。抓取正文能拿到比摘要更完整的页面内容，但每次搜索会慢一些，也可能被站点拒绝。搜索来源、地址与 Key 保存在全局设置里，所有数据集共用，切换数据集不会改变它们。",
 
   "searchCard.action.save": "保存搜索设置",
   /**
@@ -77,16 +77,17 @@ const searchCard = {
     "勾选这个来源后，抓取正文时网页地址会发送给 DeepSeek 由它读取；只有它失败时才回落到本机读取。不想发送地址就关掉这个来源。",
 
   "searchCard.fetch.title": "抓取正文的条数",
-  "searchCard.fetch.hint": "对排序最靠前的几条结果打开页面读取正文。关闭时助手只能看到搜索摘要。",
+  "searchCard.fetch.hint": "对排在最前的几条结果打开页面读取正文；抓得越多越慢。",
   /** 四个档位的显示名；`value` 是后端 `fetch_pages` 的取值，见文件头。 */
   "searchCard.fetch.0": "只取摘要（最快）",
   "searchCard.fetch.1": "抓前 1 条正文",
   "searchCard.fetch.2": "抓前 2 条正文",
   "searchCard.fetch.3": "抓前 3 条正文（最详细，也最慢）",
 
-  "searchCard.results.title": "每次返回的结果条数",
-  "searchCard.results.hint": "1~15 条。条数越多，占用模型的上下文越多。",
-  "searchCard.results.aria": "搜索结果数量",
+  "searchCard.results.title": "每次最多返回的结果条数",
+  "searchCard.results.hint":
+    "可填 1~50。只是上限：模型会按问题需要决定实际看几条，条数越多占用上下文越多；实际条数还受来源限制（Bing 单来源最多 8 条）。",
+  "searchCard.results.aria": "每次最多返回的结果条数",
   /** 数字输入框后面的单位。 */
   "searchCard.results.unit": "条",
   /**

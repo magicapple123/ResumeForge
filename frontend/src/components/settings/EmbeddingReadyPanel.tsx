@@ -1,97 +1,133 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「已就绪」态：显示当前生效的服务与清理出口；失败态不会走到这里。
+ * 「已就绪」态：状态行 + 切换入口 + 一行说明（2026-11-10 第二轮重排）。
  *
- * ## 危险操作收进「···」（条目 08）
+ * 第 1/16 条之前这里只有「关闭语义检索」+ ⋮：想换到另一边必须先关掉再走一遍启用流程，
+ * 而且旧写路径会把对方的配置整段覆盖掉。现在切换 = `POST /profiles/{id}/activate`
+ * （本地/远程各存一条 profile，互不覆盖），失败时当前 provider 不变。
  *
- * 这一态原先并排两颗按钮：「关闭语义检索」（主操作）+ 一颗裸红按钮（本地「删除本地模型
- * 文件」/ 远程「清除已保存的密钥」，各带一个 Popconfirm）。改后：
- *
- * - 「关闭语义检索」移到卡头 `extra`（整张卡唯一主操作，与「大模型 API 配置」卡同构）；
- * - 删除/清除进「···」，二次确认复用 `useRowActionMenu`（`confirm` / `confirmBody` /
- *   `danger` 自动走 `modal.confirm`），与列表行同一套确认，不手写第三份；
- * - `busy !== null` 时「···」禁用。
+ * 重排的三条依据（清单 §3）：
+ * - **同一事实只说一遍**：host / 模型 / 维度此前在这里与生效配置卡上各说一次，现在只在
+ *   配置卡上说（维度补进它的 meta 行），这里只留"能不能用 + 怎么换"。
+ * - 顶部 ⋮ 与配置卡的 ⋮ 是同一批动作的两个入口，删掉；本地态的「删除已下载文件」改成
+ *   显式文字按钮——它是那条路径的唯一出口，不能跟着 ⋮ 一起消失。
+ * - 回退说明与重建代价本来就是一句话的两半，合成第二行小字。
  */
-import { Button, Dropdown, Flex, Tag, Typography } from "antd";
-import { MoreOutlined } from "@ant-design/icons";
-import type { EmbeddingStatus } from "../../api/settings";
+import { DownOutlined } from "@ant-design/icons";
+import { Badge, Button, Dropdown, Flex, Popconfirm, Tooltip, Typography } from "antd";
+import type { EmbeddingProfile, EmbeddingStatus } from "../../api/settings";
 import type { EmbeddingActionId } from "../../features/settings/useEmbeddingSettings";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import { useRowActionMenu } from "../common/rowActionMenu";
 
 interface Props {
   status: EmbeddingStatus;
   busy: EmbeddingActionId | null;
-  onClearKey: () => void;
+  /** 可切换的远程配置（有密钥的）。 */
+  remoteCandidates: EmbeddingProfile[];
+  onSwitchToLocal: () => void;
+  onDownloadLocal: () => void;
+  onSwitchToRemote: (profile: EmbeddingProfile) => void;
   onRemoveAssets: () => void;
 }
 
-export default function EmbeddingReadyPanel({ status, busy, onClearKey, onRemoveAssets }: Props) {
+export default function EmbeddingReadyPanel({
+  status,
+  busy,
+  remoteCandidates,
+  onSwitchToLocal,
+  onDownloadLocal,
+  onSwitchToRemote,
+  onRemoveAssets,
+}: Props) {
   useLocale();
-  const buildMenu = useRowActionMenu();
   const local = status.provider !== "openai-http";
+  const localReady = status.local.state === "ready";
 
-  // 本地只清理模型文件，远程只清除密钥：两者的后果不同（一个要重下 111 MB，一个要重填 Key）。
-  const cleanupItem = local
-    ? {
-        key: "remove-assets",
-        label: t("embeddingSearch.local.remove"),
-        danger: true,
-        confirm: t("embeddingSearch.local.removeTitle"),
-        confirmBody: t("embeddingSearch.local.removeConfirm"),
-        confirmOkText: t("embeddingSearch.local.remove"),
-        confirmCancelText: t("common.action.cancel"),
-        onClick: onRemoveAssets,
-      }
-    : {
-        key: "clear-key",
-        label: t("embeddingSearch.remote.clear"),
-        danger: true,
-        confirm: t("embeddingSearch.remote.clearTitle"),
-        confirmBody: t("embeddingSearch.remote.clearConfirm"),
-        confirmOkText: t("embeddingSearch.remote.clear"),
-        confirmCancelText: t("common.action.cancel"),
-        onClick: onClearKey,
-      };
+  const remoteSwitch =
+    remoteCandidates.length === 0 ? (
+      <Tooltip title={t("embeddingSearch.ready.switchRemoteEmpty")}>
+        <span>
+          <Button size="small" disabled>
+            {t("embeddingSearch.ready.switchRemote")}
+          </Button>
+        </span>
+      </Tooltip>
+    ) : remoteCandidates.length === 1 ? (
+      <Button
+        size="small"
+        loading={busy === "activate"}
+        onClick={() => onSwitchToRemote(remoteCandidates[0])}
+      >
+        {t("embeddingSearch.ready.switchRemoteHost", { host: remoteCandidates[0].host })}
+      </Button>
+    ) : (
+      <Dropdown
+        trigger={["click"]}
+        disabled={busy !== null}
+        menu={{
+          items: remoteCandidates.map((profile) => ({
+            key: profile.id,
+            label: `${profile.name} · ${profile.host}`,
+          })),
+          onClick: ({ key }) => {
+            const target = remoteCandidates.find((item) => item.id === key);
+            if (target) onSwitchToRemote(target);
+          },
+        }}
+      >
+        <Button size="small" loading={busy === "activate"}>
+          {t("embeddingSearch.ready.switchRemote")}
+          <DownOutlined />
+        </Button>
+      </Dropdown>
+    );
+
+  const switchNode = local ? (
+    remoteSwitch
+  ) : localReady ? (
+    <Button size="small" loading={busy === "activate"} onClick={onSwitchToLocal}>
+      {t("embeddingSearch.ready.switchLocal")}
+    </Button>
+  ) : (
+    <Button size="small" loading={busy === "download"} onClick={onDownloadLocal}>
+      {t("embeddingSearch.ready.downloadLocal")}
+    </Button>
+  );
 
   return (
-    <Flex vertical gap={12}>
-      <Flex gap={8} align="center" wrap>
-        <Tag color="blue">
-          {local ? t("embeddingSearch.state.readyLocal") : t("embeddingSearch.state.readyRemote")}
-        </Tag>
-        <Typography.Text type="secondary">
-          {local ? t("embeddingSearch.local.readyHint") : t("embeddingSearch.fallbackNote")}
-        </Typography.Text>
-        <Dropdown
-          trigger={["click"]}
-          disabled={busy !== null}
-          menu={{ items: buildMenu([cleanupItem]) }}
-        >
-          <Button
-            icon={<MoreOutlined />}
-            aria-label={t("common.rowActions.more")}
-            disabled={busy !== null || undefined}
-          />
-        </Dropdown>
-      </Flex>
-
-      {local ? null : (
-        <Flex vertical gap={4}>
-          <Typography.Text>
-            {t("embeddingSearch.remote.hostLabel")}: {status.remote.host}
+    <Flex vertical gap={4}>
+      <Flex justify="space-between" align="center" gap={12} wrap>
+        <Flex align="center" gap={8} wrap>
+          <Badge status="success" />
+          <Typography.Text strong>
+            {local ? t("embeddingSearch.state.readyLocal") : t("embeddingSearch.state.readyRemote")}
           </Typography.Text>
-          <Typography.Text>
-            {t("embeddingSearch.remote.modelLabel")}: {status.remote.model}
-          </Typography.Text>
-          {status.remote.dim > 0 ? (
-            <Typography.Text type="secondary">
-              {t("embeddingSearch.remote.dimLabel", { dim: status.remote.dim })}
-            </Typography.Text>
+        </Flex>
+        <Flex align="center" gap={8} wrap>
+          {switchNode}
+          {local && localReady ? (
+            // 删除本地模型文件是这条路径的**唯一**出口（顶部 ⋮ 已去掉），
+            // 保留原有的二次确认语义：删完必须重新下载才能用。
+            <Popconfirm
+              title={t("embeddingSearch.local.removeTitle")}
+              description={t("embeddingSearch.local.removeConfirm")}
+              okText={t("embeddingSearch.local.remove")}
+              cancelText={t("common.action.cancel")}
+              okButtonProps={{ danger: true, loading: busy === "remove" }}
+              onConfirm={onRemoveAssets}
+            >
+              <Button type="text" danger size="small">
+                {t("embeddingSearch.local.remove")}
+              </Button>
+            </Popconfirm>
           ) : null}
         </Flex>
-      )}
+      </Flex>
+      <Typography.Text type="secondary" style={{ fontSize: 12, lineHeight: 1.35 }}>
+        {local ? t("embeddingSearch.local.readyHint") : t("embeddingSearch.fallbackNote")} ·{" "}
+        {t("embeddingSearch.ready.rebuildHint")}
+      </Typography.Text>
     </Flex>
   );
 }

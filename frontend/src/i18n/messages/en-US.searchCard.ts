@@ -14,7 +14,7 @@
 const searchCard = {
   "searchCard.title": "Web search",
   "searchCard.intro":
-    "This is **how the search runs** when the assistant's Web search switch is on; the switch on the assistant page decides whether this run searches at all. Fetching page bodies gives more complete content than snippets, but each search is slower and a site may refuse it.",
+    "This is **how the search runs** when the assistant's Web search switch is on; the switch on the assistant page decides whether this run searches at all. Fetching page bodies gives more complete content than snippets, but each search is slower and a site may refuse it. Sources, address and key are stored as a global setting shared by every dataset, so switching datasets keeps them.",
 
   "searchCard.action.save": "Save search settings",
   "searchCard.action.reset": "Restore saved values",
@@ -54,16 +54,16 @@ const searchCard = {
 
   "searchCard.fetch.title": "Page bodies fetched",
   "searchCard.fetch.hint":
-    "The top-ranked results are opened and their body text is read. When this is off, the assistant only sees search snippets.",
+    "The top-ranked results are opened and their body text is read; the more pages, the slower the search.",
   "searchCard.fetch.0": "Snippets only (fastest)",
   "searchCard.fetch.1": "Fetch the top 1 page body",
   "searchCard.fetch.2": "Fetch the top 2 page bodies",
   "searchCard.fetch.3": "Fetch the top 3 page bodies (most detail, slowest)",
 
-  "searchCard.results.title": "Results returned per search",
+  "searchCard.results.title": "Maximum results per search",
   "searchCard.results.hint":
-    "1 to 15. The more results, the more of the model's context they take up.",
-  "searchCard.results.aria": "Number of search results",
+    "1 to 50. This is only a cap: the model decides how many it actually needs. More results take up more of the model's context, and the real count is also limited by the sources (Bing returns at most 8).",
+  "searchCard.results.aria": "Maximum results per search",
   "searchCard.results.unit": "results",
   "searchCard.sources.count": "{count} selected",
   "searchCard.source.note.bing": "No key needed",

@@ -86,7 +86,7 @@ const EXEMPTIONS: Record<string, Exemption> = {
     expires: REVIEW_DATE,
   },
   "interview-setup": {
-    reason: "设置区容器，字段布局由 SetupTab 内的栅格与 .interview-setup-grid 承担",
+    reason: "设置区容器，字段布局由 .interview-setup-stack 与其下的 .interview-setup-fields 承担",
     expires: REVIEW_DATE,
   },
   // —— 资料 / 方案 ——

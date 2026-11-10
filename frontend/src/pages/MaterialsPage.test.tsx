@@ -144,9 +144,11 @@ describe("MaterialsPage", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: /打开资料「护士执业资格证」的详情/ }),
     );
-    // 附件行本身是一个可点按钮（原生 button，键盘也能触发）。
+    // 附件行左侧打开区是一个可点按钮（原生 button，键盘也能触发）；aria-label 带文件名。
     fireEvent.click(
-      await screen.findByRole("button", { name: t("materials.attachments.previewAction") }),
+      await screen.findByRole("button", {
+        name: t("materials.attachments.previewAria", { name: "resume.pdf" }),
+      }),
     );
 
     // 弹层标题是文件名，正文是提取出的文本（DOM 查询：不新增中文 ByText 断言）。

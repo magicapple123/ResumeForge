@@ -9,6 +9,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n";
 import type { Claim, ClaimPageList, ClaimSummary } from "../types";
 import ClaimsPage from "./ClaimsPage";
 
@@ -34,6 +35,8 @@ function makeClaim(overrides: Partial<Claim> = {}): Claim {
     source_fact: "负责检索接口的实现与联调。",
     candidate_wording: "实现检索接口并联调上线",
     sources: [],
+    entry_ids: [],
+    entry_ids_auto: false,
     responsibility_level: "参与",
     verification_status: "待确认",
     allowed_uses: [],
@@ -60,6 +63,8 @@ function makeSummary(claim: Claim): ClaimSummary {
     responsibility_level: claim.responsibility_level,
     verification_status: claim.verification_status,
     last_verified: claim.last_verified,
+    linked: claim.entry_ids.length > 0,
+    linked_auto: claim.entry_ids_auto,
     warnings: claim.warnings,
     created_at: claim.created_at,
     updated_at: claim.updated_at,
@@ -82,6 +87,9 @@ const EMPTY_BASELINE = {
   baseline_text: "",
   blocked_wording: [],
   warnings: [],
+  covered_entries: [],
+  total_confirmed_count: 0,
+  linked_confirmed_count: 0,
 };
 
 function renderPage() {
@@ -179,6 +187,51 @@ describe("ClaimsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /标记已确认/ }));
 
     expect(await screen.findByText(/不能标记为「已确认」/)).toBeInTheDocument();
+  });
+
+  it("marked an unlinked entry so users see it will not enter generation", async () => {
+    apiMocks.listClaimsPage.mockResolvedValue(
+      makePage([makeClaim({ verification_status: "已确认" })]),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText(t("claimCard.link.unlinked"))).toBeInTheDocument();
+    // 悬停说明讲清后果与去哪补，不是只有一个灰标签。
+    expect(screen.getByText(t("claimCard.link.unlinked")).closest(".ant-tag")).toBeTruthy();
+  });
+
+  it("shows the two baseline readings: total confirmed vs linked to profile entries", async () => {
+    apiMocks.getClaimBaseline.mockResolvedValue({
+      ...EMPTY_BASELINE,
+      confirmed_count: 10,
+      total_confirmed_count: 10,
+      linked_confirmed_count: 7,
+    });
+
+    renderPage();
+
+    // 文案本体在语言包里，断言按 t() 取，测试里不再写第二份中文。
+    expect(
+      await screen.findByText(t("claimsPage.baseline.note", { total: 10, linked: 7 })),
+    ).toBeInTheDocument();
+  });
+
+  it("marks migration auto-links with a review hint", async () => {
+    apiMocks.listClaimsPage.mockResolvedValue(
+      makePage([
+        makeClaim({
+          verification_status: "已确认",
+          entry_ids: ["a1".repeat(12)],
+          entry_ids_auto: true,
+        }),
+      ]),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText(t("claimCard.link.autoLinked"))).toBeInTheDocument();
+    expect(screen.queryByText(t("claimCard.link.unlinked"))).not.toBeInTheDocument();
   });
 
   it("offers a way in when the ledger is empty", async () => {

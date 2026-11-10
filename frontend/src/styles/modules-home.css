@@ -460,9 +460,15 @@
 /* 卡片标题栏的上下留白（2026-10-20）。
    antd v6 的 `.ant-card-head` 垂直内边距是 0，标题栏高度全靠 min-height 撑；
    于是右侧 extra 里的按钮只离上下边框几像素——设置页的数据集卡片、
-   网申页的「智能逐项填表」都能看到这个形态。这里给这两类卡片补一点呼吸。 */
+   网申页的「智能逐项填表」都能看到这个形态。这里给这几类卡片补一点呼吸。
+
+   首页「任务」卡（12.1）：两行标题（主标题 + 12px 副标题）刚好吃满 56px 的
+   min-height，文字离上边框只有 ~4px，看起来"顶格"。把它并入同一处而不是新写
+   一条：三处视觉口径一致，且 min-height:0 + padding-block 上下等值（不要只补
+   padding-top，否则标题会下沉、与右侧无 extra 的卡片对不齐）。 */
 .settings-card > .ant-card-head,
-.live-mode-card > .ant-card-head {
+.live-mode-card > .ant-card-head,
+.home-tasks-card > .ant-card-head {
   padding-block: 10px;
   min-height: 0;
 }

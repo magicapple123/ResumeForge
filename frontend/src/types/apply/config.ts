@@ -59,7 +59,7 @@ export interface CollectConfig {
    * 岗位要求"（"我是本科"），这一份是**招聘网站筛选栏本身**（"岗位要求本科"）。
    * 选项清单由后端从站点读来（见 `CollectFilterOptions`），这里只存用户选中的编码。
    */
-  filters: Record<string, string>;
+  filters: Record<string, string[]>;
 }
 
 export interface CollectConfigOut extends CollectConfig {
@@ -76,6 +76,12 @@ export interface CollectFilterOption {
   group: string;
 }
 
+/** 联动规则：控制组的当前编码落在 values 里，这一组才可见（空串 = 控制组未选时也可见）。 */
+export interface CollectFilterVisibleWhen {
+  key: string;
+  values: string[];
+}
+
 export interface CollectFilterGroup {
   key: string;
   /** 拼进搜索地址的参数名（由后端实测站点得到，前端不该自己拼）。 */
@@ -84,6 +90,10 @@ export interface CollectFilterGroup {
   options: CollectFilterOption[];
   source: CollectFilterSource;
   note: string;
+  /** 站点这一格是否支持多选（后端按实测能力表下发，前端不写死站点规则）。 */
+  multi: boolean;
+  /** 联动规则（null = 无联动）。 */
+  visible_when: CollectFilterVisibleWhen | null;
 }
 
 export interface CollectFilterOptions {

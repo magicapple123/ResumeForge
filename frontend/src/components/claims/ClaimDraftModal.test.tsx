@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import { emptyClaim } from "../../types";
 import type { ClaimPayload } from "../../types";
+import { makeEntry, makeWorkspace } from "../../test/profileWorkspaceFixture";
 import ClaimDraftModal from "./ClaimDraftModal";
 
 const apiMocks = vi.hoisted(() => ({
@@ -26,6 +27,28 @@ vi.mock("../../api/claims", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../api/claims")>()),
   ...apiMocks,
 }));
+
+const profileMocks = vi.hoisted(() => ({
+  getWorkspace: vi.fn(),
+}));
+
+vi.mock("../../features/profile-library/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../features/profile-library/api")>()),
+  ...profileMocks,
+}));
+
+const ENTRY_A = "a1".repeat(12);
+const ENTRY_B = "b2".repeat(12);
+
+/** 一条可选的资料条目：字段用 fixture 的通用单行字段（experiences.title）。 */
+function workspaceWithEntries() {
+  return makeWorkspace({
+    entries: [
+      makeEntry("experiences", ENTRY_A, { "experiences.title": "Acme backend intern" }, 0),
+      makeEntry("experiences", ENTRY_B, { "experiences.title": "Beta analytics intern" }, 1),
+    ],
+  });
+}
 
 /** antd 会给两个汉字的按钮文案中间插一个空格（「取 消」）；断言按空白容忍。 */
 function labelPattern(label: string): RegExp {
@@ -70,7 +93,23 @@ function pasteAndGenerate(text = "负责门店排班与库存盘点") {
 beforeEach(() => {
   apiMocks.draftClaims.mockReset();
   apiMocks.createClaim.mockReset();
+  profileMocks.getWorkspace.mockReset();
+  profileMocks.getWorkspace.mockResolvedValue(workspaceWithEntries());
 });
+
+/** 打开「从资料选择」下拉并点某条资料。 */
+async function pickProfileEntry(label: string) {
+  const combobox = screen.getByLabelText(t("claimDraftModal.label.fromProfile"));
+  fireEvent.mouseDown(combobox);
+  const option = await screen.findByTitle(label);
+  fireEvent.click(option);
+}
+
+function rawTextArea(): HTMLTextAreaElement {
+  return screen.getByPlaceholderText(
+    t("claimDraftModal.placeholder.rawText"),
+  ) as HTMLTextAreaElement;
+}
 
 afterEach(() => {
   cleanup();
@@ -201,5 +240,70 @@ describe("ClaimDraftModal 的保存", () => {
       ).not.toBeInTheDocument(),
     );
     expect(generateButton()).toBeInTheDocument();
+  });
+});
+
+describe("ClaimDraftModal 从资料选择（P3）", () => {
+  it("选中一条资料后预填原文、主体与类别", async () => {
+    renderModal();
+
+    await pickProfileEntry("Acme backend intern");
+
+    expect(rawTextArea().value).toContain("Acme backend intern");
+    const subject = screen.getByLabelText(t("claimDraftModal.label.subject")) as HTMLInputElement;
+    expect(subject.value).toBe("Acme backend intern");
+    // 板块 → 台账分类的默认映射（实习/工作经历 → 实习/工作）。
+    expect(
+      screen.getByLabelText(t("claimDraftModal.label.category")).closest(".ant-select"),
+    ).toHaveTextContent(t("claimDraftModal.category.internship"));
+  });
+
+  it("再次选择另一条资料前必须确认，取消后保留用户已改的内容", async () => {
+    renderModal();
+    await pickProfileEntry("Acme backend intern");
+
+    // 用户改过内容之后再选另一条：不能静默覆盖。
+    fireEvent.change(rawTextArea(), { target: { value: "我把这段改成了自己的说法" } });
+    await pickProfileEntry("Beta analytics intern");
+
+    expect(await screen.findByText(t("claimDraftModal.replaceEntry.confirm"))).toBeInTheDocument();
+    const popover = screen
+      .getByText(t("claimDraftModal.replaceEntry.confirm"))
+      .closest(".ant-popconfirm, .ant-popover");
+    if (!(popover instanceof HTMLElement)) throw new Error("popconfirm root not found");
+    const [cancelButton] = popover.querySelectorAll(".ant-popconfirm-buttons button");
+    fireEvent.click(cancelButton);
+
+    await waitFor(() => expect(rawTextArea().value).toBe("我把这段改成了自己的说法"));
+    // 取消后主体仍停在原资料上，不会显示成已经选了新的。
+    const subject = screen.getByLabelText(t("claimDraftModal.label.subject")) as HTMLInputElement;
+    expect(subject.value).toBe("Acme backend intern");
+  });
+
+  it("确认替换后才把原文换成新选的资料", async () => {
+    renderModal();
+    await pickProfileEntry("Acme backend intern");
+    fireEvent.change(rawTextArea(), { target: { value: "临时改过的内容" } });
+
+    await pickProfileEntry("Beta analytics intern");
+    const confirmText = await screen.findByText(t("claimDraftModal.replaceEntry.confirm"));
+    const popover = confirmText.closest(".ant-popconfirm, .ant-popover");
+    if (!(popover instanceof HTMLElement)) throw new Error("popconfirm root not found");
+    const buttons = popover.querySelectorAll(".ant-popconfirm-buttons button");
+    fireEvent.click(buttons[buttons.length - 1]);
+
+    await waitFor(() => expect(rawTextArea().value).toContain("Beta analytics intern"));
+  });
+
+  it("资料库读取失败时给出出路：可以继续手动粘贴", async () => {
+    profileMocks.getWorkspace.mockRejectedValue(new Error("profile unavailable"));
+
+    renderModal();
+
+    expect(
+      await screen.findByText(t("claimDraftModal.fromProfile.loadFailed")),
+    ).toBeInTheDocument();
+    // 手动路径还在：textarea 依旧可输入。
+    expect(rawTextArea()).toBeEnabled();
   });
 });

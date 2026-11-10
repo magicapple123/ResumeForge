@@ -39,6 +39,14 @@ export function ThinkingSection({
   onBackToPresets: () => void;
 }) {
   useLocale();
+  // 该型号**强制思考**（后端能力表 says supported=false，例如 GLM-5.3 / GPT-6 Astra /
+  // Kimi K3）：开关置灰并说明原因——点了也关不掉，发关闭参数还会被上游 400
+  // （清单 §11.5-D）。自动读表发生在弹窗打开时，不额外发上游请求。
+  const cannotDisable = thinkingResult !== null && !thinkingResult.supported;
+  // 读表结论（probed=false）不再单独弹提示条，避免打开弹窗就出现一条 vendor 说明；
+  // 用户真的开了开关或点过检测时仍照旧显示。
+  const showThinkingAlert =
+    thinkingResult !== null && (thinkingResult.probed || thinkingEnabled === true);
   const thinkingAlertType = () => {
     if (!thinkingResult) return "info" as const;
     if (thinkingResult.reasoning_seen) return "success" as const;
@@ -57,9 +65,15 @@ export function ThinkingSection({
             name="thinking_enabled"
             label={t("llmUi.thinking.field.mode")}
             valuePropName="checked"
-            tooltip={t("llmUi.thinking.tooltip.mode")}
+            tooltip={
+              cannotDisable
+                ? t("llmUi.thinking.tooltip.cannotDisable")
+                : t("llmUi.thinking.tooltip.mode")
+            }
           >
             <Switch
+              // 禁用语义只传 true 或 undefined：显式 false 会短路 Form disabled。
+              disabled={cannotDisable || undefined}
               checkedChildren={t("llmUi.thinking.switch.on")}
               unCheckedChildren={t("llmUi.thinking.switch.off")}
             />
@@ -129,7 +143,16 @@ export function ThinkingSection({
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
         {t("llmUi.thinking.note.probe")}
       </Typography.Text>
-      {thinkingResult && (
+      {cannotDisable && thinkingResult && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={t("llmUi.thinking.alert.cannotDisable")}
+          description={thinkingResult.note}
+        />
+      )}
+      {showThinkingAlert && thinkingResult && !cannotDisable && (
         <Alert
           type={thinkingAlertType()}
           showIcon

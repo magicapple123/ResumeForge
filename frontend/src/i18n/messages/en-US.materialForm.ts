@@ -11,22 +11,22 @@ const materialForm = {
   "materialForm.error.imageTooLarge": "A single image cannot exceed 2 MB",
   "materialForm.error.maxImages": "A material can hold at most {count} images",
   "materialForm.error.maxFiles": "A material can hold at most {count} files",
-  "materialForm.error.readImage": "Could not read the image — try again",
-  "materialForm.warning.noText": "This file has no readable text",
-  "materialForm.error.readFile": "Could not read the file — try again",
+  "materialForm.error.uploadFailed": "Could not upload the attachment — try again",
+  "materialForm.error.legacyDoc":
+    "Word 2003 .doc files cannot be read - save the file as .docx first",
   "materialForm.warning.needContent": "Fill in a title, content or a link, or add an attachment",
-  "materialForm.error.unsupported": "Only images and text files (.txt/.md/.csv …) are supported",
+  "materialForm.error.unsupported":
+    "Only png/jpg/webp images and pdf/docx/txt/md/json/csv files are supported",
   "materialForm.title.edit": "Edit material",
   "materialForm.title.create": "Add material",
   "materialForm.action.save": "Save material",
-  "materialForm.action.addImage": "Add image",
-  "materialForm.action.addText": "Add text file",
+  "materialForm.action.addAttachment": "Add attachment",
   "materialForm.hint.drop": "Drop to add the attachment",
   "materialForm.intro":
     "The material library holds loose material that is not part of a resume yet: certificates, work samples, links, notes and more. The assistant can read it and cite it as needed.",
   "materialForm.hint.shortcut": "Ctrl / ⌘ + Enter or S to save, Esc to cancel",
   "materialForm.hint.dropNote":
-    "You can also drop files here. For PDF or Word, paste the text into the content box: the app does not keep the original file.",
+    "You can also drop files here. Images, PDF, Word and text files are supported, and the original file is kept.",
   "materialForm.label.title": "Title",
   "materialForm.label.category": "Category",
   "materialForm.label.content": "Content",
@@ -40,6 +40,10 @@ const materialForm = {
   "materialForm.placeholder.note": "Why you kept it and what is still missing (optional)",
   "materialForm.file.image": "Image · {size} KB",
   "materialForm.file.text": "{count} characters",
+  "materialForm.file.originalOnly": "Original file kept",
+  "materialForm.warning.attachmentTitle":
+    "Could not extract text from these attachments; you can still use Save as to keep the original",
+  "materialForm.warning.attachment": "{name}: {warning}",
   "materialForm.aria.removeFile": "Remove attachment {name}",
 } as const;
 

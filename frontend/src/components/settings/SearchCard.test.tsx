@@ -68,9 +68,9 @@ describe("SearchCard", () => {
     renderCard();
 
     await waitFor(() => expect(apiMocks.getSearchConfig).toHaveBeenCalledOnce());
-    // 抓取正文那组是单选，要看勾中的那一项是不是服务端存的那一项。
-    expect(await screen.findByRole("checkbox", { name: "抓前 2 条正文" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "只取摘要（最快）" })).not.toBeChecked();
+    // 抓取正文那组是单选，要看选中的那一项是不是服务端存的那一项。
+    expect(await screen.findByRole("radio", { name: "抓前 2 条正文" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "只取摘要（最快）" })).not.toBeChecked();
     expect(screen.getByLabelText(t("searchCard.searxng.title"))).toHaveValue(
       "http://localhost:8080",
     );
@@ -80,7 +80,7 @@ describe("SearchCard", () => {
     renderCard();
     await waitLoaded();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "抓前 2 条正文" }));
+    fireEvent.click(screen.getByRole("radio", { name: "抓前 2 条正文" }));
 
     // 这是本次修复的核心：抓取正文的条数以前没有任何界面能改，永远是 0。
     await waitFor(
@@ -207,7 +207,7 @@ describe("SearchCard", () => {
     const field = screen.getByLabelText(t("searchCard.deepseek.keyAria"));
     expect(field).toHaveValue("********");
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "抓前 1 条正文" }));
+    fireEvent.click(screen.getByRole("radio", { name: "抓前 1 条正文" }));
     await waitFor(
       () =>
         expect(apiMocks.saveSearchConfig).toHaveBeenCalledWith(
@@ -316,5 +316,103 @@ describe("SearchCard", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "DeepSeek" }));
     expect(screen.getByLabelText(t("searchCard.deepseek.keyAria"))).toBeEnabled();
     expect(screen.getByLabelText(t("searchCard.searxng.title"))).toBeDisabled();
+  });
+
+  it("uses a radio group for the page-fetch choice: exactly one option stays selected", async () => {
+    renderCard();
+    await waitLoaded();
+
+    // 这组值本来就是互斥的，Checkbox 会导致"点已选项取消不了"、语义与外观不符。
+    const summaries = screen.getByRole("radio", { name: "只取摘要（最快）" });
+    const twoPages = screen.getByRole("radio", { name: "抓前 2 条正文" });
+    expect(summaries).toBeChecked();
+
+    fireEvent.click(twoPages);
+    expect(twoPages).toBeChecked();
+    expect(summaries).not.toBeChecked();
+
+    fireEvent.click(summaries);
+    expect(summaries).toBeChecked();
+    expect(twoPages).not.toBeChecked();
+  });
+
+  it("labels and saves the maximum-results cap (1-50), clamping larger input", async () => {
+    renderCard();
+    await waitLoaded();
+
+    // 语义是「最多返回」：不再是"每次返回"，因为实际条数受来源与去重限制。
+    expect(screen.getByText(t("searchCard.results.title"))).toBeInTheDocument();
+    const input = screen.getByLabelText(t("searchCard.results.aria"));
+
+    fireEvent.change(input, { target: { value: "30" } });
+    await waitFor(
+      () =>
+        expect(apiMocks.saveSearchConfig).toHaveBeenCalledWith(
+          expect.objectContaining({ max_results: 30 }),
+        ),
+      { timeout: 2500 },
+    );
+
+    // 输入 51：在失焦时夹到上限 50，绝不把越界值发给后端（schema 是 le=50）。
+    apiMocks.saveSearchConfig.mockClear();
+    fireEvent.change(input, { target: { value: "51" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(apiMocks.saveSearchConfig).toHaveBeenCalled(), { timeout: 2500 });
+    const caps = apiMocks.saveSearchConfig.mock.calls.map(
+      (call) => (call[0] as { max_results: number }).max_results,
+    );
+    expect(caps).not.toContain(51);
+    expect(caps).toContain(50);
+  });
+
+  it("does not stretch source tiles to the tall DeepSeek card's height", async () => {
+    renderCard();
+    await waitLoaded();
+
+    // 布局回归（清单 §4）：等高拉伸 + 卡片 height:100% 会在 SearXNG 卡的输入框下方
+    // 留出一大块空白；改成按内容高度排列后，网格必须是 auto-fit + alignItems: start。
+    const grid = screen.getByRole("group", { name: t("searchCard.sources.title") });
+    expect(grid.style.alignItems).toBe("start");
+    expect(grid.style.gridTemplateColumns).toContain("auto-fit");
+    expect(grid.style.gridTemplateColumns).toContain("minmax(min(100%, 360px), 1fr)");
+
+    const searxngTile = screen
+      .getByRole("checkbox", { name: /SearXNG/ })
+      .closest('div[style*="background-color"]') as HTMLElement;
+    expect(searxngTile.getAttribute("style") ?? "").not.toContain("height: 100%");
+  });
+
+  it("puts the long DeepSeek billing and privacy hints below the source grid", async () => {
+    renderCard();
+    await waitLoaded();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "DeepSeek" }));
+
+    // 长提示是来源网格的兄弟节点，不是某张卡的子节点——卡片才能按内容收缩。
+    const grid = screen.getByRole("group", { name: t("searchCard.sources.title") });
+    const cost = screen.getByText(t("searchCard.deepseek.cost"));
+    const privacy = screen.getByText(t("searchCard.deepseek.privacy"));
+    expect(grid.contains(cost)).toBe(false);
+    expect(grid.contains(privacy)).toBe(false);
+    // 常驻可见：不能塞进 Tooltip 或折叠区，否则用户根本看不到隐私说明。
+    expect(cost.closest('[role="tooltip"]')).toBeNull();
+    expect(privacy.closest('[role="tooltip"]')).toBeNull();
+
+    // 取消勾选后两条提示一起消失。
+    fireEvent.click(screen.getByRole("checkbox", { name: "DeepSeek" }));
+    expect(screen.queryByText(t("searchCard.deepseek.cost"))).toBeNull();
+    expect(screen.queryByText(t("searchCard.deepseek.privacy"))).toBeNull();
+  });
+
+  it("groups page-fetch and result-cap under the shared parameters heading", async () => {
+    renderCard();
+    await waitLoaded();
+
+    expect(screen.getByText(t("searchCard.general.title"))).toBeInTheDocument();
+    // 两项都在「通用参数」里：抓取档位是单选组，条数上限是数字输入框。
+    expect(
+      screen.getByRole("radiogroup", { name: t("searchCard.fetch.title") }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(t("searchCard.results.aria"))).toBeInTheDocument();
   });
 });

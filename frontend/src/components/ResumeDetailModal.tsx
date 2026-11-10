@@ -166,7 +166,12 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
       setSuggestionsGenerated(false);
       setSuggestionsResetKey((value) => value + 1);
     }
-    void Promise.all([getResume(recordId), fetchResumeHtml(recordId)])
+    // includeOverflowPages：草稿预览要把**超出篇幅上限的页**也画出来（红框 + 不计入
+    // 导出），所以这里要完整正文；打印/下载 HTML 的调用点一律不传（见 fetchResumeHtml）。
+    void Promise.all([
+      getResume(recordId),
+      fetchResumeHtml(recordId, false, { includeOverflowPages: true }),
+    ])
       .then(([data, rendered]) => {
         if (currentRequest !== requestVersion.current) return;
         setDetail(data);

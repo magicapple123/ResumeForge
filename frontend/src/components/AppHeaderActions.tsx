@@ -5,6 +5,10 @@
  *
  * 单独成文件是为了让 App.tsx 留在单文件行数预算内；这里只做组合，不持有状态。
  * 全站搜索的放大镜已从这里移除（D）：⌘/Ctrl+K 与弹层由 GlobalOverlays 统一挂载。
+ *
+ * 桌面壳里**不渲染页内「退出」**（问题清单 §18）：系统 × / 托盘 / 标题栏「文件→退出」
+ * 已经覆盖退出，页内再放一个只会和窗口控件重复。浏览器发行版必须保留它——那里没有
+ * 系统窗口控件，这个按钮是停掉后端与 Vite 进程树的唯一入口。
  */
 import { GithubOutlined } from "@ant-design/icons";
 import { Button, Tooltip } from "antd";
@@ -27,6 +31,8 @@ interface Props {
 
 export default function AppHeaderActions({ hiddenKeys, onStarClick }: Props) {
   useLocale();
+  // 桌面壳注入的静态桥：页面生命周期内不会变，读一次即可。
+  const isDesktop = Boolean(window.splash?.isDesktop);
   return (
     <div className="app-header-actions">
       {/* 主题三档（A3）：放在最前，与语言/空间等"显示偏好"类动作归在一组。 */}
@@ -56,7 +62,8 @@ export default function AppHeaderActions({ hiddenKeys, onStarClick }: Props) {
           />
         </Tooltip>
       )}
-      <ExitAppButton />
+      {/* 桌面版隐藏页内退出（§18.5：组件本身不能删——浏览器发行版靠它停服务）。 */}
+      {!isDesktop && <ExitAppButton />}
     </div>
   );
 }

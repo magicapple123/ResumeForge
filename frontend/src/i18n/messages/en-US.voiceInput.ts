@@ -118,6 +118,47 @@ const voiceInput = {
   "voiceInput.settings.testOk": "Connected in {ms} ms",
   "voiceInput.settings.key.clearTitle": "Clear the saved key",
   "voiceInput.settings.key.clearConfirm": "You must re-enter it before dictation works again",
+  "voiceInput.settings.profiles.create": "New profile",
+  "voiceInput.settings.profiles.emptyHint":
+    "Use New profile in the top right; save it, then click Use on the one you want",
+  "voiceInput.settings.profile.use": "Use",
+  "voiceInput.settings.profile.using": "In use",
+  "voiceInput.settings.profile.activated": "Voice profile switched",
+  "voiceInput.settings.profile.deleted": "Voice profile deleted",
+  "voiceInput.settings.profile.more": "More actions for {name}",
+  "voiceInput.settings.profile.editAria": "Edit profile {name}",
+  "voiceInput.settings.profile.edit": "Edit",
+  "voiceInput.settings.profile.duplicate": "Duplicate",
+  "voiceInput.settings.profile.delete": "Delete",
+  "voiceInput.settings.profile.deleteTitle": "Delete this profile",
+  "voiceInput.settings.profile.deleteConfirm":
+    "The next profile takes over; with none left, dictation is unavailable",
+  "voiceInput.settings.profile.duplicateSuffix": " copy",
+  "voiceInput.settings.profile.unset": "Not set",
+  "voiceInput.settings.profile.incomplete": "Missing {fields}; fill them in to use it",
+  "voiceInput.settings.profile.missingSeparator": ", ",
+  "voiceInput.settings.profile.missing.baseUrl": "address",
+  "voiceInput.settings.profile.missing.model": "model",
+  "voiceInput.settings.profile.missing.key": "key",
+  "voiceInput.settings.modal.createTitle": "New profile",
+  "voiceInput.settings.modal.editTitle": "Edit profile",
+  "voiceInput.settings.modal.save": "Save profile",
+  "voiceInput.settings.modal.activeHint":
+    "This profile is in use; saving applies to dictation immediately",
+  "voiceInput.settings.modal.duplicateHint":
+    "A copy keeps the address, protocol and model only; enter the key again",
+  "voiceInput.settings.modal.name.label": "Profile name",
+  "voiceInput.settings.modal.name.hint": "Up to 64 characters and unique among profiles",
+  "voiceInput.settings.modal.name.placeholder": "e.g. Work OpenAI",
+  "voiceInput.settings.validation.nameRequired": "Enter a profile name",
+  "voiceInput.settings.validation.nameTooLong": "Profile names are limited to 64 characters",
+  "voiceInput.settings.validation.nameConflict": "Another profile already has this name",
+  "voiceInput.settings.validation.profileLimit": "Up to 10 voice profiles",
+  "voiceInput.settings.key.keepHint":
+    "A saved key is never shown; leave it blank to keep it (changing address or protocol clears it)",
+  "voiceInput.settings.key.createHint": "A new profile needs a key before dictation works",
+  "voiceInput.settings.key.willClear":
+    "The address or protocol changed; saving will clear the old key",
 } as const;
 
 export default voiceInput;

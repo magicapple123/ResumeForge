@@ -7,12 +7,13 @@
  *
  * 2026-10-22（行数预算审计 A10）：导入预览与 ?job_id= 深链两个域已拆到
  * TrackerPage.import-modal.test.tsx，共享夹具在 src/test/trackerPageHarness.tsx；
- * 本文件守页面通用行为（列表/骨架/漏斗/筛选/分页/删除/错误态）与统计卡配色（T9）。
+ * 本文件守页面通用行为（列表/骨架/漏斗/筛选/分页/删除/错误态）与指标带配色（T9）。
  */
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
 import { TRACK_STATUS_LABEL_KEYS } from "../i18n/enum/tracker";
+import { daysOverdue } from "../components/tracker/trackDates";
 import {
   cleanupTrackerPage,
   makePage,
@@ -81,7 +82,36 @@ describe("TrackerPage", () => {
     // 漏斗里也有「面试」两个字，所以这里用 getAllByText 而不是断言唯一。
     expect(screen.getAllByText("面试").length).toBeGreaterThan(0);
     expect(screen.getByText("二面")).toBeInTheDocument();
-    expect(screen.getByText("投递台自动记录")).toBeInTheDocument();
+
+    // 13.2-E：状态改成「6px 圆点 + 文字」，行内不再有彩底 Tag。
+    expect(document.querySelector(".track-card .track-status-dot")).not.toBeNull();
+    expect(document.querySelector(".track-card .ant-tag")).toBeNull();
+
+    // 13.2-F：元信息压缩成一行，日期只留「月-日」。
+    expect(screen.getByText(t("trackerUi.card.appliedAt", { date: "09-18" }))).toBeInTheDocument();
+
+    // 来源（系统字段）收进 ⋮ 菜单顶部，不再与业务日期同级展示。
+    fireEvent.click(screen.getByRole("button", { name: "更多操作 示例科技" }));
+    expect(
+      await screen.findByRole("menuitem", { name: t("trackerUi.source.apply") }),
+    ).toBeInTheDocument();
+  });
+
+  it("列表是容器 + 分隔线行：每 10 行一条细分隔，不重新加回卡片（13.2-D / 13.5）", async () => {
+    const rows = Array.from({ length: 12 }, (_, index) =>
+      makeTrack({ id: index + 1, company: `公司-${String(index + 1).padStart(2, "0")}` }),
+    );
+    apiMocks.listTracksPage.mockResolvedValue(makePage(rows, 12));
+    apiMocks.listTrackStats.mockResolvedValue(makeStats(rows));
+    renderPage();
+
+    await screen.findByText("公司-01");
+    const cards = document.querySelectorAll(".track-card");
+    expect(cards).toHaveLength(12);
+    // 只有第 11 行（index 10）是分组起点；首行不需要重复的粗分隔线。
+    expect(document.querySelectorAll(".track-card.is-group-start")).toHaveLength(1);
+    expect(cards[10].classList.contains("is-group-start")).toBe(true);
+    expect(cards[0].classList.contains("is-group-start")).toBe(false);
   });
 
   it("marks a passed deadline as overdue", async () => {
@@ -90,13 +120,23 @@ describe("TrackerPage", () => {
         next_action: "确认面试时间",
         next_action_date: "2000-01-01",
       }),
+      makeTrack({
+        id: 99,
+        next_action_date: "2999-01-01",
+      }),
     ];
     apiMocks.listTracksPage.mockResolvedValue(makePage(tracks));
     apiMocks.listTrackStats.mockResolvedValue(makeStats(tracks));
     renderPage();
 
     expect(await screen.findByText(/确认面试时间/)).toBeInTheDocument();
-    expect(screen.getByText(/已过期/)).toBeInTheDocument();
+    // 第 4 条：从句尾「· 已过期」改成红色短标记「逾期 N 天」。
+    const days = daysOverdue("2000-01-01");
+    expect(days).toBeGreaterThan(0);
+    expect(screen.getByText(t("trackerUi.card.overdueDays", { days }))).toBeInTheDocument();
+    // 只有逾期那一行带标记；非逾期行没有，旧的句尾长句也不再出现。
+    expect(document.querySelectorAll(".track-card-overdue")).toHaveLength(1);
+    expect(screen.queryByText(t("trackerUi.card.overdue"))).not.toBeInTheDocument();
   });
 
   it("shows funnel counts drawn from the server summary", async () => {
@@ -116,9 +156,56 @@ describe("TrackerPage", () => {
     }
   });
 
-  it("漏斗只画条、不印百分比：条长是相对数量的视觉辅助（2-A 裁定 B）", async () => {
-    // 五个状态是互斥快照，不是漏斗的上下级——"面试 33% > 筛选 17%"必然会出现。
-    // 所以数字一律不印，只留条；条长按"占最大那一级"归一，纯视觉。
+  it("构成条按「进行中总数」切段：段宽用 flex 计数，图例百分比用最大余数法合计 100（12.2）", async () => {
+    const tracks = [
+      makeTrack({ id: 1, status: "applied" }),
+      makeTrack({ id: 2, status: "applied", title: "岗位 2" }),
+      makeTrack({ id: 3, status: "applied", title: "岗位 3" }),
+      makeTrack({ id: 4, status: "screening", title: "岗位 4" }),
+      makeTrack({ id: 5, status: "assessment", title: "岗位 5" }),
+      makeTrack({ id: 6, status: "interview", title: "岗位 6" }),
+      makeTrack({ id: 7, status: "interview", title: "岗位 7" }),
+      makeTrack({ id: 8, status: "offer", title: "岗位 8" }),
+    ];
+    apiMocks.listTracksPage.mockResolvedValue(makePage(tracks));
+    apiMocks.listTrackStats.mockResolvedValue(makeStats(tracks));
+    renderPage();
+
+    await waitFor(() => expect(document.querySelector(".tracker-funnel")).not.toBeNull());
+    const stack = document.querySelector(".tracker-funnel-stack");
+    expect(stack?.getAttribute("aria-hidden")).toBe("true");
+    // 段宽是 flex 的原始计数（不是各自算的百分比）：数量 3/1/1/2/1。
+    const segments = Array.from(document.querySelectorAll<HTMLElement>(".tracker-composition-seg"));
+    expect(segments.map((node) => node.style.flexGrow)).toEqual(["3", "1", "1", "2", "1"]);
+    expect(segments.every((node) => node.style.flexShrink === "0")).toBe(true);
+
+    // 图例：阶段名 + 数量 + 占比；3/1/1/2/1 → 38/12/12/25/13，合计恰好 100。
+    const percents = Array.from(
+      document.querySelectorAll<HTMLElement>(".tracker-funnel-percent"),
+    ).map((node) => Number((node.textContent ?? "").replace("%", "")));
+    expect(percents).toEqual([38, 12, 12, 25, 13]);
+    expect(percents.reduce((sum, value) => sum + value, 0)).toBe(100);
+
+    // 旧形态（五条相对长度条 / 序号圆圈）不再存在。
+    expect(document.querySelector(".tracker-funnel-bar")).toBeNull();
+    expect(document.querySelector(".tracker-funnel-meter")).toBeNull();
+    expect(document.querySelector(".tracker-funnel-index")).toBeNull();
+
+    // 无障碍：可访问名来自**可见文本**（WCAG 2.5.3 Label in Name——带「条，占」的
+    // 完整 aria-label 不含「面试225%」这个连续串，axe 会判 label-content-name-mismatch），
+    // 完整口语版（「面试 2 条，占 25%」）放在 title 里当辅助说明。
+    const interviewLabel = t(TRACK_STATUS_LABEL_KEYS.interview);
+    const legend = document.querySelector<HTMLElement>(".tracker-funnel-legend");
+    expect(legend).not.toBeNull();
+    const interviewButton = within(legend as HTMLElement).getByRole("button", {
+      name: new RegExp(interviewLabel, "u"),
+    });
+    expect(interviewButton).toHaveAttribute("aria-pressed", "false");
+    expect(interviewButton).toHaveAttribute("title", expect.stringContaining("2 条"));
+    expect(interviewButton).toHaveAttribute("title", expect.stringContaining("25%"));
+  });
+
+  it("数量为 0 的阶段不画段、图例灰显但仍可点（12.2 验收 2）", async () => {
     const tracks = [
       makeTrack({ id: 1, status: "applied" }),
       makeTrack({ id: 2, status: "interview", title: "算法实习生" }),
@@ -128,24 +215,19 @@ describe("TrackerPage", () => {
     apiMocks.listTrackStats.mockResolvedValue(makeStats(tracks));
     renderPage();
 
-    // 漏斗出现即数据到位（用选择器等，别用中文文案定位——cjkRatchet 会数 ByText 里的中文）。
     await waitFor(() => expect(document.querySelector(".tracker-funnel")).not.toBeNull());
-    const funnel = document.querySelector<HTMLElement>(".tracker-funnel");
-    // 页面上任何一处百分号都会被读成转化率——这正是 2-A 要消掉的东西。
-    expect(funnel?.textContent ?? "").not.toContain("%");
-    expect(document.querySelector(".tracker-funnel-percent")).toBeNull();
-
-    // 条长仍按 funnelMax 归一：已投递 1 / 面试 2 → 50% 与 100%（纯宽度，不是文案）。
-    // 顺序即 FUNNEL_STATUSES：已投递 / 筛选中 / 测评 / 面试 / Offer。
-    const bars = Array.from(document.querySelectorAll<HTMLElement>(".tracker-funnel-bar"));
-    expect(bars.map((bar) => bar.style.width)).toEqual(["50%", "0%", "0%", "100%", "0%"]);
-
-    // 无障碍：序号是 aria-hidden，可访问名仍以阶段名开头（点击筛选靠这个）。
-    // 阶段名从语言包取，不在测试里写死中文。
-    const interviewLabel = t(TRACK_STATUS_LABEL_KEYS.interview);
-    expect(
-      screen.getByRole("button", { name: new RegExp(`^${interviewLabel}`, "u") }),
-    ).toBeInTheDocument();
+    // 1/0/0/2/0：只画两段，不出现 0 宽度的色块残影。
+    expect(document.querySelectorAll(".tracker-composition-seg")).toHaveLength(2);
+    const steps = Array.from(document.querySelectorAll<HTMLElement>(".tracker-funnel-step"));
+    expect(steps).toHaveLength(5);
+    expect(steps.filter((node) => node.classList.contains("is-empty"))).toHaveLength(3);
+    const percents = steps.map((node) =>
+      Number((node.querySelector(".tracker-funnel-percent")?.textContent ?? "").replace("%", "")),
+    );
+    expect(percents).toEqual([33, 0, 0, 67, 0]);
+    expect(percents.reduce((sum, value) => sum + value, 0)).toBe(100);
+    // 灰显的空阶段仍可点（点了会按该阶段筛选，列表给空态）。
+    expect(steps[1]).toHaveAttribute("aria-pressed", "false");
   });
 
   it("filters by status when a funnel step is clicked", async () => {
@@ -324,23 +406,23 @@ describe("TrackerPage", () => {
  * 灰色之外的配色、五张卡的颜色整体前移一格——看起来只是"颜色好像不太对"，没人会觉得
  * 那是 bug。类名与顺序解耦之后，加任何兄弟节点都不影响配色。
  */
-describe("TrackerPage 统计卡配色（T9）", () => {
+describe("TrackerPage 指标带配色（T9）", () => {
   const STAT_KEYS = ["total", "active", "month", "offer", "closed"];
 
-  it("5 张统计卡各带自己的语义类名", async () => {
+  it("5 项指标各带自己的语义类名", async () => {
     apiMocks.listTrackStats.mockResolvedValue(makeStats([makeTrack()]));
     renderPage();
     await screen.findByText("总数");
 
     for (const key of STAT_KEYS) {
       expect(
-        document.querySelector(`.tracker-summary > .tracker-stat--${key}`),
-        `缺少 .tracker-stat--${key}`,
+        document.querySelector(`.tracker-metric--${key}`),
+        `缺少 .tracker-metric--${key}`,
       ).not.toBeNull();
     }
   });
 
-  it("统计失败时：错误文案排在最前，5 张卡的类名一个不少（位置不再决定配色）", async () => {
+  it("统计失败时：错误文案排在最前，5 项指标的类名一个不少（位置不再决定配色）", async () => {
     apiMocks.listTrackStats.mockRejectedValue(new Error("统计接口挂了"));
     renderPage();
 
@@ -351,9 +433,10 @@ describe("TrackerPage 统计卡配色（T9）", () => {
     });
 
     // 多出来的这个兄弟节点（错误文案）不该再"顶掉"任何一张卡的配色。
-    expect(summary.firstElementChild?.textContent).toContain("统计加载失败");
+    const card = summary.querySelector(".tracker-summary-card");
+    expect(card?.firstElementChild?.textContent).toContain("统计加载失败");
     for (const key of STAT_KEYS) {
-      expect(summary.querySelector(`.tracker-stat--${key}`)).not.toBeNull();
+      expect(summary.querySelector(`.tracker-metric--${key}`)).not.toBeNull();
     }
   });
 });

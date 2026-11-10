@@ -1,0 +1,226 @@
+// SPDX-License-Identifier: Apache-2.0
+/** 求职统计页测试共用的看板夹具与渲染函数（2026-11-10 拆分，控制测试文件行数预算）。
+ *
+ * 夹具里的 label 一律留空：本文件属于 src 口径（文件名不带 .test.），而 label 是
+ * product-copy AST 守卫认定的展示字段——留空既避免新增界面文案，也不影响断言：
+ * 漏斗/趋势/周内/来源/内推状态的展示名依次由 status、月份号、星期号、source 映射到
+ * 语言包，夹具只承载数字。
+ */
+import type { AnalyticsDashboard } from "../types";
+
+/** 一份"各字段齐全"的看板：字段与后端 `DashboardOut` 一一对应。 */
+export function analyticsDashboard(overrides: Record<string, unknown> = {}): AnalyticsDashboard {
+  return {
+    total_applications: 7,
+    valid_applications: 6,
+    interview_count: 2,
+    interview_rate: 0.3333,
+    assessment_count: 3,
+    assessment_to_interview_count: 2,
+    assessment_pass_rate: 0.6667,
+    offer_count: 1,
+    offer_rate: 0.1667,
+    funnel: [
+      { status: "applied", label: "", count: 1 },
+      { status: "screening", label: "", count: 1 },
+      { status: "assessment", label: "", count: 1 },
+      { status: "interview", label: "", count: 1 },
+      { status: "offer", label: "", count: 1 },
+      { status: "rejected", label: "", count: 1 },
+      { status: "unknown", label: "", count: 1 },
+    ],
+    trend: [
+      { month: "2026-04", label: "", count: 0 },
+      { month: "2026-05", label: "", count: 1 },
+      { month: "2026-06", label: "", count: 2 },
+      { month: "2026-07", label: "", count: 1 },
+      { month: "2026-08", label: "", count: 3 },
+      { month: "2026-09", label: "", count: 0 },
+    ],
+    active_count: 4,
+    stalled_count: 2,
+    no_next_action_count: 1,
+    weekday: [
+      { key: "0", label: "", count: 3 },
+      { key: "1", label: "", count: 0 },
+      { key: "2", label: "", count: 0 },
+      { key: "3", label: "", count: 0 },
+      { key: "4", label: "", count: 0 },
+      { key: "5", label: "", count: 0 },
+      { key: "6", label: "", count: 0 },
+    ],
+    applied_date_gap: { dated: 7, undated: 0, total: 7 },
+    recent_7d_count: 2,
+    recent_30d_count: 5,
+    reminder_counts: { overdue: 1, soon: 0, upcoming: 0, later: 0, total: 1 },
+    top_companies: [
+      { key: "Acme", label: "", count: 3 },
+      { key: "Beta", label: "", count: 2 },
+    ],
+    other_company_count: 0,
+    record_sources: [
+      { key: "apply", label: "", count: 4 },
+      { key: "manual", label: "", count: 3 },
+      { key: "recognized", label: "", count: 0 },
+    ],
+    referral: { total: 2, converted: 1, rate: 0.5 },
+    referral_status: [
+      { key: "active", count: 1 },
+      { key: "submitted", count: 1 },
+      { key: "closed", count: 0 },
+      { key: "invalid", count: 0 },
+    ],
+    cohort: {
+      event_track_count: 4,
+      historical_track_count: 2,
+      undated_event_count: 1,
+      conversions: [
+        {
+          from_status: "applied",
+          to_status: "screening",
+          numerator: 2,
+          denominator: 4,
+          rate: 0.5,
+          small_sample: false,
+        },
+        {
+          from_status: "screening",
+          to_status: "assessment",
+          numerator: 1,
+          denominator: 2,
+          rate: 0.5,
+          small_sample: true,
+        },
+        {
+          from_status: "assessment",
+          to_status: "interview",
+          numerator: 0,
+          denominator: 1,
+          rate: 0.0,
+          small_sample: true,
+        },
+        {
+          from_status: "interview",
+          to_status: "offer",
+          numerator: 0,
+          denominator: 1,
+          rate: 0.0,
+          small_sample: true,
+        },
+      ],
+      durations: [
+        {
+          from_status: "applied",
+          to_status: "screening",
+          numerator: 2,
+          denominator: 4,
+          median_days: 5.0,
+          skipped_negative: 0,
+          small_sample: false,
+        },
+        {
+          from_status: "screening",
+          to_status: "assessment",
+          numerator: 1,
+          denominator: 2,
+          median_days: 3.0,
+          skipped_negative: 0,
+          small_sample: true,
+        },
+        {
+          from_status: "assessment",
+          to_status: "interview",
+          numerator: 0,
+          denominator: 1,
+          median_days: null,
+          skipped_negative: 0,
+          small_sample: true,
+        },
+        {
+          from_status: "interview",
+          to_status: "offer",
+          numerator: 0,
+          denominator: 1,
+          median_days: null,
+          skipped_negative: 0,
+          small_sample: true,
+        },
+      ],
+    },
+    // ===== 第 17 条新增：渠道转化 / 投递→当前阶段耗时 / 同公司多投 / 简历效果 / 目标与成本 =====
+    channel_stats: [
+      {
+        channel: "job_platform",
+        label: "",
+        total: 7,
+        interview_count: 1,
+        interview_rate: 0.1429,
+        offer_count: 0,
+        offer_rate: 0.0,
+        small_sample: false,
+      },
+      {
+        channel: "referral",
+        label: "",
+        total: 2,
+        interview_count: 1,
+        interview_rate: 0.5,
+        offer_count: 1,
+        offer_rate: 0.5,
+        small_sample: true,
+      },
+    ],
+    status_durations: [
+      {
+        status: "interview",
+        label: "",
+        sample_count: 2,
+        denominator: 2,
+        median_days: 28.5,
+        skipped_negative: 0,
+        small_sample: true,
+      },
+      {
+        status: "applied",
+        label: "",
+        sample_count: 0,
+        denominator: 3,
+        median_days: null,
+        skipped_negative: 0,
+        small_sample: false,
+      },
+    ],
+    company_repeats: {
+      repeats: [
+        { company_key: "Acme", company: "Acme", total: 2, interview_count: 1, offer_count: 0 },
+      ],
+      no_interview: [],
+    },
+    resume_effects: [
+      {
+        resume_id: 1,
+        resume_title: "Backend v1",
+        total: 3,
+        interview_count: 1,
+        interview_rate: 0.3333,
+        small_sample: true,
+      },
+    ],
+    weekly_goal: { target: 5, this_week_count: 2 },
+    generation_cost: {
+      generate_calls: 3,
+      generate_completion_tokens: 6000,
+      generate_avg_duration_ms: 12000,
+      total_calls: 10,
+      total_tokens: 30000,
+      by_model: [{ model: "m1", calls: 3, completion_tokens: 6000, avg_duration_ms: 12000 }],
+    },
+    resume_count: 22,
+    resume_scanned_count: 22,
+    resume_with_warnings_count: 1,
+    resume_with_placeholders_count: 2,
+    unverified_claim_count: 1,
+    track_resume_linked_count: 3,
+    ...overrides,
+  } as AnalyticsDashboard;
+}

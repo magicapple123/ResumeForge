@@ -16,8 +16,11 @@ const claimsPage = {
   "claimsPage.stat.total": "条目总数",
   "claimsPage.stat.confirmed": "已确认（可进正式简历）",
   "claimsPage.stat.pending": "待确认",
-  "claimsPage.stat.baseline": "生成时可用的事实",
+  "claimsPage.stat.baseline": "生成时可用（已关联资料）",
   "claimsPage.stat.blocked": "会被避开的未确认说法",
+  /** 统计行下方的两段读数：全量已确认 M / 其中已关联资料 K。 */
+  "claimsPage.baseline.note":
+    "全量 {total} 条已确认，其中 {linked} 条已关联资料；未关联的不会进入生成。",
   "claimsPage.filter.categoryAria": "事实分类筛选",
   "claimsPage.filter.statusAria": "事实核实状态筛选",
   "claimsPage.filter.allCategories": "全部分类",

@@ -76,6 +76,13 @@ export interface Claim {
   source_fact: string;
   candidate_wording: string;
   sources: ClaimSource[];
+  /**
+   * 关联的资料条目 entry_id 列表（不是自增 id）。生成简历时，只有「已确认」且与本次
+   * 资料快照有交集的条目会进入事实基线；未关联的条目不会进入生成。
+   */
+  entry_ids: string[];
+  /** 关联是否来自迁移 0009 的一次性自动回填（只读）：界面据此提示「已自动关联，请核对」。 */
+  entry_ids_auto: boolean;
   responsibility_level: ResponsibilityLevel;
   verification_status: VerificationStatus;
   allowed_uses: string[];
@@ -89,7 +96,11 @@ export interface Claim {
   warnings: string[];
 }
 
-export type ClaimPayload = Omit<Claim, "id" | "created_at" | "updated_at" | "warnings">;
+/** 可提交字段：entry_ids_auto 是服务端回填标记，客户端从不提交。 */
+export type ClaimPayload = Omit<
+  Claim,
+  "id" | "created_at" | "updated_at" | "warnings" | "entry_ids_auto"
+>;
 
 export interface ClaimList {
   items: Claim[];
@@ -114,6 +125,10 @@ export interface ClaimSummary {
   responsibility_level: ResponsibilityLevel;
   verification_status: VerificationStatus;
   last_verified: string;
+  /** 是否已关联到当前数据集的资料条目（服务端按完整判据算好：entry_ids 或旧 sources）。 */
+  linked: boolean;
+  /** 关联是否来自迁移期自动回填：卡片上提示「已自动关联，请核对」。 */
+  linked_auto: boolean;
   /** 服务端算出的改进建议（列表上就要提示哪条需要补内容）。 */
   warnings: string[];
   created_at: string;
@@ -135,6 +150,12 @@ export interface ClaimDigest {
   baseline_text: string;
   blocked_wording: string[];
   warnings: string[];
+  /** 被本次基线覆盖的经历/项目主体名（提示词据此限定约束范围）。 */
+  covered_entries: string[];
+  /** 页面口径：全量已确认条数（不受生成快照过滤影响）。 */
+  total_confirmed_count: number;
+  /** 页面口径：其中已关联当前数据集资料条目的条数。 */
+  linked_confirmed_count: number;
 }
 
 export interface ClaimDraftPayload {
@@ -162,6 +183,7 @@ export function claimPayload(claim: Claim, patch: Partial<ClaimPayload> = {}): C
     source_fact: claim.source_fact,
     candidate_wording: claim.candidate_wording,
     sources: claim.sources,
+    entry_ids: claim.entry_ids,
     responsibility_level: claim.responsibility_level,
     verification_status: claim.verification_status,
     allowed_uses: claim.allowed_uses,
@@ -182,6 +204,7 @@ export function emptyClaim(): ClaimPayload {
     source_fact: "",
     candidate_wording: "",
     sources: [],
+    entry_ids: [],
     responsibility_level: "参与",
     verification_status: "待确认",
     allowed_uses: [],

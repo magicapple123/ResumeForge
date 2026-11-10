@@ -44,7 +44,15 @@ const claimForm = {
   "claimForm.field.allowedUses": "可用范围",
   "claimForm.placeholder.allowedUses": "回车添加，例如「AI 岗简历」「HR 开场白」。留空表示不限。",
 
-  "claimForm.evidence.title": "证据来源（只记去哪儿能找到，不要粘贴内容）",
+  "claimForm.field.entryIds": "关联资料条目",
+  "claimForm.hint.entryIds":
+    "生成简历时，只有「已确认」且关联到本次资料的条目会进入事实基线；没关联的条目不会进入生成。",
+  "claimForm.placeholder.entryIds": "选择这条主张对应哪段资料（可多选）",
+  "claimForm.hint.autoLinked": "这些关联是迁移时按主体名自动匹配的，请核对后再保存",
+  "claimForm.entryIds.loadFailed": "读取资料条目失败，暂时无法选择关联",
+  "claimForm.entryIds.empty": "资料库还没有可选条目，先去「资料库」添加经历或项目",
+
+  "claimForm.evidence.title": "证据来源（只做定位，不参与生成筛选）",
   "claimForm.placeholder.evidence": "链接、文件名或「导师证明可提供」",
   "claimForm.evidence.public": "公开",
   "claimForm.evidence.private": "不公开",

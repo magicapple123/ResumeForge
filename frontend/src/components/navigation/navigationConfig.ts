@@ -168,6 +168,8 @@ export function pathMatchesNavigationItem(pathname: string, item: NavigationItem
 
 export function navigationPageLabelKey(pathname: string): MessageKey {
   if (pathname === "/claims/drill") return "navigation.page.claimsDrill";
+  // 子页与侧栏条目同名会让页头显示「简历中心 · 简历中心」；这两个分支就是为此存在的。
+  if (pathname === "/resumes/external") return "navigation.page.externalResumes";
   return (
     NAVIGATION_ITEMS.find((item) => pathMatchesNavigationItem(pathname, item))?.labelKey ??
     "navigation.item.home"

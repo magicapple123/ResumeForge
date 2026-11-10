@@ -316,7 +316,10 @@ describe("ResumesPage ?resume_id= 深链（RF-11）", () => {
 
     expect(await screen.findByTestId("resume-preview-stub")).toBeInTheDocument();
     expect(apiMocks.getResume).toHaveBeenCalledWith(8);
-    expect(apiMocks.fetchResumeHtml).toHaveBeenCalledWith(8);
+    // 详情预览要完整正文（超额页也要画出来，问题清单 §7），所以显式带 includeOverflowPages。
+    expect(apiMocks.fetchResumeHtml).toHaveBeenCalledWith(8, false, {
+      includeOverflowPages: true,
+    });
   });
 
   it("非法 resume_id 忽略：不打开弹窗、不取详情", async () => {

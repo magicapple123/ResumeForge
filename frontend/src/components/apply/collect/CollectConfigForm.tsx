@@ -20,7 +20,7 @@ import CollectSiteFilters from "../CollectSiteFilters";
 interface Props {
   form: FormInstance<CollectConfig>;
   /** 读取当前表单里选中的站点筛选项（「测试是否生效」按钮用），原样转传给站点筛选区块。 */
-  getFilters: () => Record<string, string>;
+  getFilters: () => Record<string, string[]>;
   saveSamples: boolean;
   onSaveSamplesChange: (checked: boolean) => void;
   disabled: boolean;

@@ -89,6 +89,7 @@ describe("颜色回归：求职进度不写字面量颜色（T9）", () => {
    */
   const TRACKER_CSS_FILES: string[][] = [
     ["styles", "tracker-board.css"],
+    ["styles", "tracker-summary.css"],
     ["styles", "tracker-form.css"],
   ];
 
@@ -101,5 +102,47 @@ describe("颜色回归：求职进度不写字面量颜色（T9）", () => {
     );
 
     expect(offenders.map((item) => `${item.file}:${item.line}  ${item.text}`)).toEqual([]);
+  });
+});
+
+/**
+ * 颜色回归：首页「近期提醒」启动弹窗的链接色必须是达标档 token。
+ *
+ * 历史写法是字面量 `#5b8ff9`（蓝）：白底只有 **3.11:1**，低于 WCAG AA 的 4.5:1。
+ * 平时不显形，一旦真实数据集里有未 dismiss 的提醒（弹窗自动打开、列表里是
+ * `Link to="/tracker"`），`a11y.spec.ts` / `ui-quality.spec.ts` 的 axe 扫描就会
+ * 判 `serious color-contrast` —— 看起来像"首页坏了"，其实只在这一处。
+ *
+ * 约定：连接类颜色用 `--rf-info-strong`（白底 7.26:1，深色主题是提亮档），
+ * hover 换 `--rf-brand` 压深，而不是把颜色调浅。
+ */
+describe("颜色回归：提醒弹窗链接色用达标 token", () => {
+  const css = readCss("pages", "home", "reminderPopupSurface.css");
+
+  it("不再出现不达标的字面量蓝", () => {
+    // 只看声明行：注释里为了说明历史原因会引用旧色值，那不是"用了这个颜色"。
+    const declarations = css
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^(color|background|border[a-z-]*)\s*:/.test(line))
+      .join("\n");
+    expect(declarations).not.toContain("#5b8ff9");
+    expect(declarations).not.toContain("#3d77d6");
+    expect(declarations).not.toContain("#16365c");
+    expect(declarations).not.toContain("#f0f2f5");
+  });
+
+  it("链接与 hover 都走语义 token", () => {
+    expect(ruleBlock(css, ":where(.rf-reminder-modal-list) a")).toContain("var(--rf-info-strong)");
+    expect(ruleBlock(css, ":where(.rf-reminder-modal-list) a:hover")).toContain("var(--rf-brand)");
+  });
+
+  it("标题图标与分隔线也不再写字面量颜色", () => {
+    expect(ruleBlock(css, ":where(.rf-reminder-modal) .ant-modal-title .anticon")).toContain(
+      "var(--rf-brand)",
+    );
+    expect(
+      ruleBlock(css, ":where(.rf-reminder-modal-list) .ant-listy-item + .ant-listy-item"),
+    ).toContain("var(--rf-border-subtle)");
   });
 });

@@ -33,13 +33,14 @@ const analyticsPage = {
   "analyticsPage.overview.offerHint": "Offer 率 {rate}",
   "analyticsPage.funnel.title": "转化与卡点",
   "analyticsPage.funnel.description":
-    "转化率的分母都是「有效投递」（扣除尚未核实的「待确认」）。「超过 7 天没有更新」指进行中、且 7 天内没有任何改动——改一条备注也算更新，所以它不等于「面试卡住」。",
+    "转化率的分母都是「有效投递」（扣除尚未核实的「待确认」）。「超过 7 天没改状态」指进行中、且超过 7 天没有发生状态变化——改一条备注不算推进，所以它不等于「面试卡住」。",
   "analyticsPage.funnel.chartTitle": "求职漏斗",
   "analyticsPage.funnel.chartHint": "每个阶段的人数，分母是有效投递",
   "analyticsPage.funnel.active": "进行中",
-  "analyticsPage.funnel.activeHint": "未走到终态",
-  "analyticsPage.funnel.stalled": "超过 7 天没更新",
-  "analyticsPage.funnel.stalledHint": "进行中且久未改动",
+  "analyticsPage.funnel.activeHint":
+    "已投递/筛选中/测评、笔试/面试，不含 Offer（Offer 在漏斗里单列）",
+  "analyticsPage.funnel.stalled": "超过 7 天没改状态",
+  "analyticsPage.funnel.stalledHint": "进行中且 7 天没有状态变化",
   "analyticsPage.funnel.noNextAction": "没有下一步",
   "analyticsPage.funnel.noNextActionHint": "进行中且未填",
   "analyticsPage.funnel.action": "去「求职进度」补下一步或推进状态",
@@ -47,8 +48,7 @@ const analyticsPage = {
   "analyticsPage.cohort.description":
     "只统计事件记录功能上线之后发生的状态变化：每项的分子分母都写在副文案里，样本不足时亮出徽标。这些数字只描述过去——它们不预测、也不承诺任何「用了会更好」。",
   "analyticsPage.cohort.empty": "还没有进度记录",
-  "analyticsPage.cohort.emptyHistorical":
-    "现有 {count} 条进度记录早于事件记录功能，没有阶段数据；之后的状态变化会开始记录。",
+  "analyticsPage.cohort.emptyHistorical": "还没有状态变化记录，改一次状态就会开始累积。",
   "analyticsPage.cohort.historicalNotice":
     "有 {historical} 条记录早于事件记录功能（共 {total} 条），无阶段数据；之后的状态变化会开始记录。",
   "analyticsPage.cohort.noRecords": "还没有记录到过这个阶段",
@@ -97,14 +97,14 @@ const analyticsPage = {
   "analyticsPage.weekday.sun": "周日",
   "analyticsPage.channels.title": "渠道与去向",
   "analyticsPage.channels.description":
-    "内推转化由关联的投递记录派生——那条记录走到「面试」及以上才算转化。「记录来源」是这一行**怎么进系统的**，不是投递渠道（本库没有渠道字段）。",
+    "内推转化由关联的投递记录派生——那条记录走到「面试」及以上才算转化。「记录来源」是这一行**怎么进系统的**；「投递渠道」（见上方「渠道转化」）是这份工作从哪来的；内推模块是第三套独立数据。三者口径不同，不要相加。",
   "analyticsPage.channels.referralRate": "内推转化率",
   "analyticsPage.channels.referralRateHint": "已转化 {converted} / 有效内推 {total}",
   "analyticsPage.channels.referralTotal": "内推总数",
   "analyticsPage.channels.referralTotalHint": "含已关闭与无效",
   "analyticsPage.channels.caliberTitle": "口径提示",
   "analyticsPage.channels.caliberBody":
-    "「记录来源」是录入方式，不是投递渠道；内推转化按关联投递走到面试及以上算。",
+    "「记录来源」是录入方式，不是投递渠道；渠道转化见上方区块；内推转化按关联投递走到面试及以上算。",
   "analyticsPage.channels.referralStatusTitle": "内推状态分布",
   "analyticsPage.channels.referralStatusHint": "按当前内推状态",
   "analyticsPage.channels.emptyReferrals": "还没有内推记录",
@@ -121,6 +121,63 @@ const analyticsPage = {
   "analyticsPage.resume.unverifiedClaims": "待确认主张",
   "analyticsPage.resume.missingLink": "投递没有关联简历",
   "analyticsPage.resume.missingLinkAction": "关联后才能按简历看效果；录入界面暂未提供关联入口。",
+
+  // ===== 第 17 条新增：渠道转化 / 投递→当前阶段 / 同公司多投 / 简历效果 / 目标与成本 =====
+  "analyticsPage.channelConversion.title": "渠道转化",
+  "analyticsPage.channelConversion.description":
+    "按投递记录里的「渠道」字段统计：该渠道投了多少、多少进面、多少拿 Offer。渠道与内推是**两套口径**——渠道里的「内推」是记录字段，内推模块是独立对象，只能二选一相加。",
+  "analyticsPage.channelConversion.hint":
+    "进面 {interview} / 投递 {total}；Offer {offer}（{offerRate}）",
+  "analyticsPage.channelConversion.caliber":
+    "来源：投递记录的「渠道」字段（用户手选，不是「记录来源」）；比率分母是该渠道的投递数，样本不足 5 条时仅供参考。",
+  "analyticsPage.channelConversion.empty": "还没有填过投递渠道的记录",
+  "analyticsPage.statusDuration.title": "投递 → 当前阶段",
+  "analyticsPage.statusDuration.description":
+    "按当前状态分组，用「投递日期」与「状态日期」两个用户填的日期算间隔中位数；缺一个日期就不参与。不依赖状态变化事件表，也不拿修改时间反推。",
+  "analyticsPage.statusDuration.medianDays": "中位 {days} 天",
+  "analyticsPage.statusDuration.noComparable": "暂无可比",
+  "analyticsPage.statusDuration.basedOn": "基于 {sample} / {total} 条有日期",
+  "analyticsPage.statusDuration.empty": "还没有同时填了投递日期与状态日期的记录",
+  "analyticsPage.statusDuration.skippedNegative":
+    "有 {count} 条状态日期早于投递日期（乱序补录），未计入中位数。",
+  "analyticsPage.companyRepeats.title": "同公司多投",
+  "analyticsPage.companyRepeats.description":
+    "同一家公司投多个岗位的情况：投了 >=2 个岗位的进入清单；投了 >=3 次但一次面试都没有的单独列出，最该停下来复盘。",
+  "analyticsPage.companyRepeats.itemHint": "投 {total} 次，进面 {interview} 次，Offer {offer} 个",
+  "analyticsPage.companyRepeats.itemLine": "{company}：{hint}",
+  "analyticsPage.companyRepeats.lineSeparator": "；",
+  "analyticsPage.companyRepeats.nameSeparator": "、",
+  "analyticsPage.companyRepeats.noInterviewTitle": "最该止损：投了 >=3 次但 0 面试",
+  "analyticsPage.companyRepeats.noInterviewEmpty": "暂无",
+  "analyticsPage.companyRepeats.empty": "还没有同一家公司投多个岗位的记录",
+  "analyticsPage.resumeEffect.title": "简历版本效果",
+  "analyticsPage.resumeEffect.description":
+    "按投递关联的简历分组；关联入口已有但覆盖率低，每组都标样本量。只描述过去，不做「用了这版会更好」的归因。",
+  "analyticsPage.resumeEffect.hint": "{interview} / {total} 次投递进面",
+  "analyticsPage.resumeEffect.untitled": "未命名简历",
+  "analyticsPage.resumeEffect.bias":
+    "关联本身有选择偏差（好岗位才认真配简历），样本不足 5 条时结论不可靠。",
+  "analyticsPage.resumeEffect.empty": "还没有投递关联了简历",
+  "analyticsPage.goal.title": "目标与生成成本",
+  "analyticsPage.goal.description":
+    "周投递目标只看本周（周一至周日）按投递日期新增的记录；生成成本只报 token 与耗时，不报金额（本地账本没有价格表）。",
+  "analyticsPage.goal.weeklyLabel": "每周投递目标",
+  "analyticsPage.goal.save": "保存目标",
+  "analyticsPage.goal.saved": "已保存周投递目标",
+  "analyticsPage.goal.saveFailed": "保存失败，请重试",
+  "analyticsPage.goal.zeroHint": "填 0 保存 = 取消目标；目标只影响这块对照，不参与投递流程。",
+  "analyticsPage.goal.progress": "{done} / {target} 次",
+  "analyticsPage.goal.thisWeek": "本周已投 {count} 次",
+  "analyticsPage.cost.generateCalls": "生成调用",
+  "analyticsPage.cost.generateCallsHint": "resume_generate 调用次数（含修复/压缩轮）",
+  "analyticsPage.cost.avgDuration": "平均耗时",
+  "analyticsPage.cost.seconds": "秒",
+  "analyticsPage.cost.avgDurationHint": "每次生成调用的平均耗时",
+  "analyticsPage.cost.avgCompletion": "平均输出",
+  "analyticsPage.cost.avgCompletionHint": "每次调用平均 completion token",
+  "analyticsPage.cost.totalCalls": "全部 AI 调用",
+  "analyticsPage.cost.totalCallsHint": "全部任务合计 token {tokens}",
+  "analyticsPage.cost.caliber": "「生成」= resume_generate 任务；金额不展示（账本无价格表）。",
 } as const;
 
 export default analyticsPage;

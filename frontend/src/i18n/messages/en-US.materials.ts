@@ -45,9 +45,21 @@ const materials = {
   "materials.detail.attachmentsTitle": "Attachments ({count})",
   "materials.file.image": "Image · {size} KB",
   "materials.file.text": "{count} characters",
+  "materials.file.originalOnly": "Original file kept",
 
   // Attachment preview: documents only keep the extracted text, so say so.
   "materials.attachments.previewAction": "Click to preview",
+  "materials.attachments.previewAria": "Preview attachment {name}",
+  "materials.attachments.copyAction": "Copy",
+  "materials.attachments.copyAria": "Copy the content of attachment {name}",
+  "materials.attachments.saveAsAction": "Save as",
+  "materials.attachments.saveAsAria": "Save attachment {name} as",
+  "materials.attachments.copyTextDone": "Attachment text copied",
+  "materials.attachments.copyImageDone": "Image copied",
+  "materials.attachments.copyFailed": "Copy failed - use Save as instead",
+  "materials.attachments.copyImageUnsupported":
+    "This browser cannot copy images - use Save as instead",
+  "materials.attachments.copyEmpty": "This attachment has no text to copy",
   "materials.attachments.previewTitle": "Attachment preview",
   "materials.attachments.previewTextNote":
     "This is the text extracted from the file, not the original layout. Open it from My files for the original.",

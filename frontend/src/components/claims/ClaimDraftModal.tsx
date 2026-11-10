@@ -6,9 +6,18 @@
  * 原始事实有没有被曲解。候选表述允许就地改，因为那是最常需要调整的一栏。
  */
 import { App, Button, Checkbox, Input, Modal, Popconfirm, Select, Space, Typography } from "antd";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import EmptyState from "../common/EmptyState";
 import { createClaim, draftClaims } from "../../api/claims";
+import { useApi } from "../../hooks/useApi";
+import {
+  buildClaimEntryGroups,
+  claimCategoryForSection,
+  claimSubjectForEntry,
+  entryToClaimText,
+  findClaimEntry,
+} from "../../features/claims/entryOptions";
+import { getWorkspace } from "../../features/profile-library/api";
 import { t } from "../../i18n";
 import { CLAIM_CATEGORY_LABEL_KEYS } from "../../i18n/enum/claims";
 import { useLocale } from "../../i18n/i18nContext";
@@ -46,11 +55,68 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
   const [generated, setGenerated] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // P3：从资料库选一条，把原文 / 主体 / 分类预填进来（纯前端，不改后端协议）。
+  const workspace = useApi(() => getWorkspace(), [open], { enabled: open });
+  const entryGroups = buildClaimEntryGroups(workspace.data);
+  const [entryId, setEntryId] = useState<string | undefined>(undefined);
+  // 待确认的替换：用户改过内容后再选另一条资料，不能静默覆盖。
+  const [pendingEntryId, setPendingEntryId] = useState<string | undefined>(undefined);
+  // 上一次由"选资料"写入的三段值；用来区分"用户手改过"与"什么都没动"。
+  const lastApplied = useRef<{ rawText: string; subject: string; category: string } | null>(null);
+
   const reset = () => {
     setRows([]);
     setNotes([]);
     // 必须一起清掉：否则关掉再开会立刻说「没提取到事实」，把一次正常启动说成失败。
     setGenerated(false);
+    setEntryId(undefined);
+    setPendingEntryId(undefined);
+    lastApplied.current = null;
+  };
+
+  /** 把选中的资料写进表单（原文按板块字段拼好，主体 / 分类预填，用户仍可改）。 */
+  const applyEntry = (pickedId: string) => {
+    const found = findClaimEntry(workspace.data, pickedId);
+    if (!found) return;
+    const nextRawText = entryToClaimText(found.section, found.entry) || rawText;
+    const nextSubject = claimSubjectForEntry(found.section, found.entry) || subject;
+    const nextCategory = claimCategoryForSection(found.section.key);
+    setRawText(nextRawText);
+    setSubject(nextSubject);
+    setCategory(nextCategory);
+    setEntryId(pickedId);
+    lastApplied.current = {
+      rawText: nextRawText,
+      subject: nextSubject,
+      category: nextCategory,
+    };
+  };
+
+  /** 用户是否在选资料之后又手动改过（没选过资料时，只要填过东西就算改过）。 */
+  const hasManualEdits = () => {
+    const applied = lastApplied.current;
+    if (!applied) return Boolean(rawText.trim() || subject.trim());
+    return (
+      rawText !== applied.rawText || subject !== applied.subject || category !== applied.category
+    );
+  };
+
+  const pickEntry = (pickedId: string | undefined) => {
+    if (!pickedId) {
+      setEntryId(undefined);
+      return;
+    }
+    if (hasManualEdits()) {
+      setPendingEntryId(pickedId);
+      return;
+    }
+    applyEntry(pickedId);
+  };
+
+  const confirmReplace = () => {
+    const pickedId = pendingEntryId;
+    setPendingEntryId(undefined);
+    if (pickedId) applyEntry(pickedId);
   };
 
   const generate = async () => {
@@ -153,6 +219,48 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
     >
       <Space orientation="vertical" size={12} style={{ width: "100%" }}>
         <Typography.Text type="secondary">{t("claimDraftModal.intro")}</Typography.Text>
+        {/* P3：真的从资料库选一条，而不是让用户自己复制粘贴。选中的内容进 raw_text 后
+            仍可编辑；再选另一条会覆盖原文/主体/类别，所以必须先确认。 */}
+        <div className="claim-draft-field">
+          <label className="claim-draft-label" htmlFor="claim-draft-entry">
+            <Typography.Text type="secondary">
+              {t("claimDraftModal.label.fromProfile")}
+            </Typography.Text>
+          </label>
+          <Popconfirm
+            open={pendingEntryId !== undefined}
+            title={t("claimDraftModal.replaceEntry.confirm")}
+            description={t("claimDraftModal.replaceEntry.note")}
+            okText={t("claimDraftModal.replaceEntry.action")}
+            cancelText={t("common.action.cancel")}
+            onConfirm={confirmReplace}
+            onCancel={() => setPendingEntryId(undefined)}
+          >
+            <Select
+              id="claim-draft-entry"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              value={entryId}
+              onChange={(value) => pickEntry(value as string | undefined)}
+              options={entryGroups}
+              placeholder={t("claimDraftModal.placeholder.fromProfile")}
+              loading={workspace.loading}
+              disabled={Boolean(workspace.error) || undefined}
+              style={{ width: "100%" }}
+              notFoundContent={
+                !workspace.loading && entryGroups.length === 0
+                  ? t("claimDraftModal.fromProfile.empty")
+                  : undefined
+              }
+            />
+          </Popconfirm>
+          {workspace.error && (
+            <Typography.Text type="danger">
+              {t("claimDraftModal.fromProfile.loadFailed")}
+            </Typography.Text>
+          )}
+        </div>
         {/* 标签各占一行：只有 placeholder 的话，一旦输入就再也看不出这一栏是什么。 */}
         <div className="claim-draft-input-row">
           <div className="claim-draft-field claim-draft-field--fixed">

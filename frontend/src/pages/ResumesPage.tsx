@@ -47,6 +47,7 @@ import { useSelectAllResumes } from "./resumes/useSelectAllResumes";
 import { useResumeBatchActions } from "./resumes/useResumeBatchActions";
 import { buildResumeBatchRowActions } from "./resumes/resumeBatchActions";
 import BatchConfigModal from "../components/batch/BatchConfigModal";
+import ExternalResumeEntry from "./resumes/ExternalResumeEntry";
 
 export default function ResumesPage() {
   useLocale();
@@ -340,6 +341,8 @@ export default function ResumesPage() {
         <Button onClick={() => setArchiveOpen(true)}>
           {t("resumesPage.page.deliveryArchive")}
         </Button>
+        {/* 第 1 条：外部简历不再常驻本页，改为独立页入口（带数量）。 */}
+        <ExternalResumeEntry />
         {jobId && (
           <Space size={4} align="center">
             <Tag color="blue">

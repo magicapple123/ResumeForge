@@ -88,6 +88,13 @@ export default function ClaimCard({
   const categoryKey = claimCategoryLabelKey(claim.category);
   const responsibilityKey = claimResponsibilityLabelKey(claim.responsibility_level);
   const statusKey = claimStatusLabelKey(claim.verification_status);
+  // 摘要行带服务端算好的 linked / linked_auto（完整判据在服务端：entry_ids 交集或旧
+  // sources.location）；详情行只有 entry_ids，旧字段方式的关联这里判不出来，所以只按
+  // "有没有显式关联"显示，避免把已关联的条目误标成「不会进入生成」。
+  const linked = isSummary ? claim.linked : (claim.entry_ids?.length ?? 0) > 0;
+  const linkedAuto = isSummary ? claim.linked_auto : Boolean(claim.entry_ids_auto);
+  // 详情行显示的关联条数（摘要行不下发 entry_ids）。
+  const linkedCount = isSummary ? 0 : (claim.entry_ids?.length ?? 0);
 
   return (
     <article className="claim-card">
@@ -103,6 +110,17 @@ export default function ClaimCard({
           <Tag color={claimStatusColor(claim.verification_status)}>
             {statusKey ? t(statusKey) : claim.verification_status}
           </Tag>
+          {/* 生成时用不上是一个必须让用户看见的后果，否则"建了台账却没效果"会重演。 */}
+          {!linked && (
+            <Tooltip title={t("claimCard.link.unlinkedTooltip")}>
+              <Tag className="claim-link-tag">{t("claimCard.link.unlinked")}</Tag>
+            </Tooltip>
+          )}
+          {linked && linkedAuto && (
+            <Tooltip title={t("claimCard.link.autoLinkedTooltip")}>
+              <Tag color="warning">{t("claimCard.link.autoLinked")}</Tag>
+            </Tooltip>
+          )}
           {claim.last_verified && (
             <Typography.Text type="secondary" className="claim-card-verified">
               {t("claimCard.header.lastVerified", { date: claim.last_verified })}
@@ -190,8 +208,15 @@ export default function ClaimCard({
         )}
       </div>
 
-      {(sources.length > 0 || allowedUses.length > 0 || hasInterviewDetail) && (
+      {(sources.length > 0 || allowedUses.length > 0 || hasInterviewDetail || linkedCount > 0) && (
         <footer className="claim-card-foot">
+          {linkedCount > 0 && (
+            <Space size={4} wrap>
+              <span className="claim-card-label">
+                {t("claimCard.link.linkedCount", { count: linkedCount })}
+              </span>
+            </Space>
+          )}
           {sources.length > 0 && (
             <Space size={4} wrap>
               <span className="claim-card-label">{t("claimCard.evidence.title")}</span>

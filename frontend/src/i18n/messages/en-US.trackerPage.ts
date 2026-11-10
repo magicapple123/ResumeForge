@@ -25,8 +25,9 @@ const trackerPage = {
   "trackerPage.stat.active": "In progress",
   "trackerPage.stat.month": "Applied this month",
   "trackerPage.stat.closed": "Closed",
-  "trackerPage.funnel.tooltip":
-    "{label}: {count} entries. Bar length shows relative volume, not a conversion rate.",
+  /** 12.2 composition bar: one 100% stacked bar replaces five relative-length bars. */
+  "trackerPage.composition.headline": "{count} in progress · {closed} closed",
+  "trackerPage.composition.stepAria": "{label}: {count} entries, {percent}%",
   "trackerPage.filter.statusAria": "Tracker status filter",
   "trackerPage.filter.allStatuses": "All statuses",
   "trackerPage.filter.searchPlaceholder": "Search company, role, notes or next step",

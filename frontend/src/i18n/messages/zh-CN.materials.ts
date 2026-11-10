@@ -50,9 +50,21 @@ const materials = {
   "materials.detail.attachmentsTitle": "附件（{count}）",
   "materials.file.image": "图片 · {size} KB",
   "materials.file.text": "文字 {count} 字",
+  "materials.file.originalOnly": "原件已保存",
 
   /** 附件预览（0066 补）：文档只存了提取出的文本，弹层要如实说明这一点。 */
   "materials.attachments.previewAction": "点击预览",
+  /** 一行三个操作（第 23 条）：aria-label 必须带文件名，否则读屏只念「复制」分不清。 */
+  "materials.attachments.previewAria": "预览附件 {name}",
+  "materials.attachments.copyAction": "复制",
+  "materials.attachments.copyAria": "复制附件 {name} 的内容",
+  "materials.attachments.saveAsAction": "另存为",
+  "materials.attachments.saveAsAria": "另存为 {name}",
+  "materials.attachments.copyTextDone": "已复制附件文字",
+  "materials.attachments.copyImageDone": "已复制图片",
+  "materials.attachments.copyFailed": "复制失败，可以改用另存为",
+  "materials.attachments.copyImageUnsupported": "当前浏览器不支持复制图片，可用另存为",
+  "materials.attachments.copyEmpty": "这个附件没有可复制的文字",
   "materials.attachments.previewTitle": "附件预览",
   "materials.attachments.previewTextNote":
     "这是系统从文件里提取的文本，不是原文件的排版；原件请到「我的文件」里查看。",

@@ -350,17 +350,31 @@ function readCountHeader(value: string | null): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-/** 读取导出 HTML 文本（用于打开打印窗口生成 PDF） */
-export async function fetchResumeHtml(id: number, allowIncomplete = false): Promise<string> {
-  // 走 POST 的 `preview: true`（2026-10-24）：它不落盘副本、结果进服务端预览缓存。
-  // 从前这里用的是 GET 导出——每次点开一份简历都写一份文件、且每次都要重排一遍，
-  // 这是"简历中心点开预览要等很久"的直接原因（同一条管线，只是多了两件不必做的事）。
-  // 产物字节与 GET 完全一致（同一条 `_export_record`），所以显示口径没有任何变化。
+/**
+ * 读取导出 HTML 文本，供**草稿预览**使用（弹窗/制作台画布）。
+ *
+ * 走 POST 的 preview: true（2026-10-24）：不落盘副本、结果进服务端预览缓存。
+ *
+ * includeOverflowPages（问题清单 §7）：草稿预览要看到**超额页的正文**（第 N 页起照样
+ * 画出来、只是标红不计入导出），所以详情预览传 true——服务端据此不在 HTML 里截断。
+ * 边界：**任何"打印 / 下载 HTML"的调用必须显式传 false（或省略）**，否则会把超额页
+ * 一起打出来；目前只有简历详情预览一个调用点传 true。
+ */
+export async function fetchResumeHtml(
+  id: number,
+  allowIncomplete = false,
+  options: { includeOverflowPages?: boolean } = {},
+): Promise<string> {
   const resp = await requestRaw(`/resumes/${id}/export`, {
     method: "POST",
     budget: "export",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ format: "html", allow_incomplete: allowIncomplete, preview: true }),
+    body: JSON.stringify({
+      format: "html",
+      allow_incomplete: allowIncomplete,
+      preview: true,
+      include_overflow_pages: options.includeOverflowPages === true,
+    }),
   });
   return resp.text();
 }

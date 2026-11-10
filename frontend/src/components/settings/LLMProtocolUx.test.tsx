@@ -73,8 +73,9 @@ describe("T09.1 厂商预设增补", () => {
   });
 
   it("fixes the six stale presets from the plan", () => {
-    // MiniMax：新域名 + 新旗舰模型（旧 .chat 域名不再作为默认）。
-    expect(presetOf("minimax").base_url).toBe("https://api.minimaxi.com/v1");
+    // MiniMax：官方文档域名 api.minimax.io（旧 .chat 不在文档里；国内平台 api.minimaxi.com
+    // 是 Key 绑定的另一域名，见 config.ts 注释）+ 新旗舰模型。
+    expect(presetOf("minimax").base_url).toBe("https://api.minimax.io/v1");
     expect(presetOf("minimax").model).toBe("MiniMax-M3.1-Flash");
     // Gemini / xAI：模型代际更新。
     expect(presetOf("gemini").model).toBe("gemini-3.8-flash");
@@ -128,6 +129,8 @@ describe("T09.1 厂商预设增补", () => {
     expect(presetAnthropicBaseUrl(presetOf("qianfan"))).toBe(
       "https://qianfan.baidubce.com/anthropic/v1",
     );
+    // MiniMax：Anthropic 入口与 chat 同域名，路径在 /anthropic 下（官方文档写法）。
+    expect(presetAnthropicBaseUrl(presetOf("minimax"))).toBe("https://api.minimax.io/anthropic/v1");
     // 同址的厂商不填专用地址：在 chat 地址后追加 /messages。
     expect(presetAnthropicBaseUrl(presetOf("siliconflow"))).toBe(
       "https://api.siliconflow.cn/v1/messages",
@@ -136,14 +139,11 @@ describe("T09.1 厂商预设增补", () => {
       "https://tokenhub.tencentmaas.com/v1/messages",
     );
     // 没有 Anthropic 入口的一律返回 null（切协议时地址一个字都不动）。
-    for (const provider of ["openai", "gemini", "groq", "mistral", "perplexity"]) {
+    // 豆包：官方无 Messages 入口；xAI：官方已废弃该入口（矩阵同步标「不支持」）。
+    for (const provider of ["openai", "gemini", "groq", "mistral", "perplexity", "doubao", "xai"]) {
       expect(presetOf(provider).supports_anthropic).toBeUndefined();
       expect(presetAnthropicBaseUrl(presetOf(provider))).toBeNull();
     }
-    // xAI 例外：官方 OpenAPI 已定义 /v1/messages（无使用文档，矩阵标部分支持），
-    // 地址恰好就是 chat 地址 + /messages。
-    expect(presetOf("xai").supports_anthropic).toBe(true);
-    expect(presetAnthropicBaseUrl(presetOf("xai"))).toBe("https://api.x.ai/v1/messages");
     // chat 地址本身不受影响（Anthropic 地址是另一条，不覆盖默认值）。
     expect(presetOf("deepseek").base_url).toBe("https://api.deepseek.com");
   });
@@ -198,6 +198,49 @@ describe("T09.1 各服务商协议支持矩阵", () => {
     // 表尾与列里都有核对日期。
     expect(screen.getAllByText(/2026-11-09/).length).toBeGreaterThan(0);
     expect(screen.getByText(t("llmProtocol.matrix.footnote"))).toBeInTheDocument();
+  });
+
+  /** 按服务商取该行的单元格文本（第 0 列是服务商名）。 */
+  function rowTextCells(providerLabel: string): string[] {
+    const row = Array.from(document.querySelectorAll("tbody tr.ant-table-row")).find(
+      (candidate) => candidate.querySelector("td")?.textContent === providerLabel,
+    );
+    expect(row).toBeTruthy();
+    return Array.from(row!.querySelectorAll("td")).map((cell) => cell.textContent ?? "");
+  }
+
+  it("corrects the audited protocol cells (doubao / xAI Anthropic)", () => {
+    renderMatrix();
+
+    fireEvent.click(screen.getByText(t("llmProtocol.matrix.toggle")));
+
+    // 豆包：官方没有 Anthropic Messages 入口；xAI：官方已废弃该入口（清单 §11.5-E 的
+    // 前两条修正）。这两格写「支持/部分支持」等于让用户选到一个必然失败的协议。
+    expect(rowTextCells(t("appConfig.preset.doubao"))[3]).toBe(t("llmProtocol.matrix.no"));
+    expect(rowTextCells(t("appConfig.preset.xai"))[3]).toBe(t("llmProtocol.matrix.no"));
+    // 修正不能把真正有入口的厂商一起改掉。
+    for (const key of [
+      "appConfig.preset.deepseek",
+      "appConfig.preset.zhipu",
+      "llmProtocol.preset.spark",
+      "appConfig.preset.minimax",
+    ] as const) {
+      expect(rowTextCells(t(key))[3]).toBe(t("llmProtocol.matrix.yes"));
+    }
+  });
+
+  it("points the footnote at the thinking switch and the forced-thinking models", () => {
+    renderMatrix();
+
+    fireEvent.click(screen.getByText(t("llmProtocol.matrix.toggle")));
+
+    const footnote = t("llmProtocol.matrix.footnote");
+    expect(screen.getByText(footnote)).toBeInTheDocument();
+    // 名单的**唯一事实**在后端 FORCED_THINKING_MODELS；型号是否真的被拦由
+    // backend/tests/test_llm_thinking_disable.py 的跨文件守卫逐条比对。
+    for (const name of ["GPT-6 Astra", "GPT-6.1 Sol", "GLM-5.3", "Kimi K3", "MiniMax M3.1-Flash"]) {
+      expect(footnote).toContain(name);
+    }
   });
 
   it("keeps the matrix row order aligned with the preset popularity order", () => {

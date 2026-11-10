@@ -34,6 +34,18 @@ const claimCard = {
   /** 可用范围一行的标签。 */
   "claimCard.field.allowedUses": "可用范围",
 
+  /** 抬头灰标签：这条没有关联资料条目，生成简历时用不上。 */
+  "claimCard.link.unlinked": "不会进入生成",
+  /** 灰标签的悬停说明：讲清为什么、去哪补。 */
+  "claimCard.link.unlinkedTooltip":
+    "这条还没有关联资料条目，生成简历时不会进入事实基线；编辑里可以关联",
+  /** 抬头标签：关联来自迁移期按主体名自动匹配。 */
+  "claimCard.link.autoLinked": "已自动关联，请核对",
+  /** 自动关联标签的悬停说明：讲清来源与怎么确认。 */
+  "claimCard.link.autoLinkedTooltip": "关联是迁移时按主体名自动匹配的，打开这条核对后保存即可",
+  /** 页脚：已关联的资料条数（仅详情条目有 entry_ids）。 */
+  "claimCard.link.linkedCount": "关联资料 {count} 条",
+
   /** 页脚证据区的标签。 */
   "claimCard.evidence.title": "证据",
   /** 证据不公开时接在出处后面的后缀。 */

@@ -24,11 +24,34 @@
   height: 100%;
 }
 
-/* 卡片外层套了一层可点击容器，网格的等高要交给它传下去，否则同一行的卡片高矮不齐。 */
-.materials-grid > .detail-trigger,
-.knowledge-grid > .detail-trigger {
+/* 等高链：grid 的 stretch 只拉到 grid item（右键菜单容器的 .rf-row-ctx-trigger），
+   而卡片实际隔着两级包裹（RowContextMenu + 页面自己的 div）再套 DetailTrigger。
+   旧规则写成 `.materials-grid > .detail-trigger`（直接子元素），在 RowContextMenu
+   引入后不再匹配任何元素——于是同一行卡片差一行正文的高度（2026-11-10 实测 22.39px）。
+   逐层 height:100% 传到卡片；.detail-trigger 用后代选择器，不再依赖具体层数。 */
+.materials-grid > *,
+.knowledge-grid > *,
+.materials-grid > * > *,
+.knowledge-grid > * > *,
+.materials-grid .detail-trigger,
+.knowledge-grid .detail-trigger {
   display: block;
   height: 100%;
+  min-width: 0;
+}
+
+/* 等高之后，内容少的卡片会在底部留白。把 meta 行压到底部，空白落在正文与 meta
+   之间，同一行看起来才是「一栏」，而不是「顶对齐、底参差」。
+   注意：flex 加在 .ant-card-body 这一层，不要改 .material-card 的 display
+   （antd Card 内部还有 .ant-card-head，直接改会打乱它自己的布局）。 */
+.material-card .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.material-card-meta {
+  margin-top: auto;
 }
 
 .material-card-head {
@@ -78,27 +101,23 @@
   flex: 1;
 }
 
-/* 附件行现在是一个 <button>（点开预览），所以要把浏览器的默认按钮样式清掉，
-   只留下"可点"的视觉反馈：手型光标 + hover 底色 + 键盘焦点环。 */
-.material-file-item--clickable {
-  width: 100%;
-  font: inherit;
-  color: inherit;
+/* 附件行外层是 div（清单 §23.6）：左侧打开区必须 flex:1 + min-width:0，否则长文件名
+   会把右侧两个图标按钮挤出容器；高度交给内容（缩略图 64px），不跟随 antd 按钮的
+   固定高度。hover / 焦点环沿用 antd Button 的 text 变体，不再手写。 */
+.material-file-open {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   text-align: left;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
 }
 
-.material-file-item--clickable:hover {
-  background: var(--rf-surface);
-  border-color: var(--rf-brand);
-}
-
-.material-file-item--clickable:focus-visible {
-  outline: 2px solid var(--rf-focus-visible);
-  outline-offset: 2px;
+/* 两个图标操作常驻可见（不做悬停才出现）：触屏与键盘用户才用得到。 */
+.material-file-action {
+  flex: 0 0 auto;
 }
 
 /* 缩略图尺寸原先是行内样式（64×64 + 圆角），搬进样式表以便复用。 */
@@ -152,13 +171,8 @@
   height: 100%;
 }
 
-/* 等高链路：grid 的 stretch 只拉到无类名包装 div；中间的 .detail-trigger 是普通
-   block（高度=内容），不补 height:100% 的话 Card 的 100% 相对它就断了——
-   这正是知识库卡片高度不齐的根因。 */
-.knowledge-grid > div,
-.knowledge-grid .detail-trigger {
-  height: 100%;
-}
+/* 知识库与资料箱同一套结构：等高链统一走上面「资料箱」一节的分组选择器
+   （.knowledge-grid > * / > * > * / .detail-trigger），这里不再维护第二份。 */
 
 .knowledge-card-head {
   display: flex;

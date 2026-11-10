@@ -6,6 +6,10 @@ const llmUi = {
   "llmUi.thinking.field.mode": "思考模式",
   "llmUi.thinking.tooltip.mode":
     "开启后，AI 对话与简历生成会请求模型先思考再作答——回答更有深度，但每轮都会多一段思考时间；岗位识别、匹配分析等结构化任务不受影响（自动跳过思考以保证速度）。默认关闭；各家对思考参数的写法与档位都不一样，可以先点右边的按钮检测。",
+  /** 强制思考型号：开关置灰，并说明"不会发送关闭参数"（清单 §11.5-D）。 */
+  "llmUi.thinking.tooltip.cannotDisable":
+    "该型号强制思考，无法关闭：本应用不会给它发送关闭参数（即使这里关掉也不会生效）。",
+  "llmUi.thinking.alert.cannotDisable": "无法关闭思考",
   "llmUi.thinking.switch.on": "开启",
   "llmUi.thinking.switch.off": "关闭",
   "llmUi.thinking.field.effort": "思考强度",

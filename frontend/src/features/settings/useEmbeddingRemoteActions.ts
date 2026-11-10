@@ -1,28 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「语义检索」卡的远程动作：测试连接、拉取模型列表、按 host 的隐私确认与启用。
+ * 「语义检索」的远程动作：草稿测试连接、拉模型列表、按 host 的隐私确认与激活。
  *
- * 从 useEmbeddingSettings 拆出来的原因只有一个：把状态编排与远程动作各控制在 300 行内。
- * 隐私确认按 host 记（换 host 重新确认）；确认的 host 口径必须与后端 host() 一致：
- * 模板模式取 request_url 的主机（见 embeddingEndpointAddress）。
+ * 与第 1 条之前相比的关键变化：激活不再是「拿一份整段配置去新建」，而是
+ * `POST /profiles/{id}/activate`（切换 = 激活另一条）。草稿里的空 key 只借**该条**
+ * 已存 key，绝不跨 profile 继承（安全红线）。
  */
 import { App } from "antd";
 import { useState } from "react";
 import {
+  activateEmbeddingProfile,
   confirmEmbeddingHost,
-  enableEmbeddingRemote,
   fetchEmbeddingModels,
+  testEmbeddingProfile,
   testEmbeddingRemote,
   type EmbeddingProbeResult,
+  type EmbeddingProfile,
   type EmbeddingRemoteConfig,
   type EmbeddingStatus,
 } from "../../api/settings";
 import { t } from "../../i18n";
-import {
-  embeddingEndpointAddress,
-  embeddingEndpointHost,
-  embeddingHostOf,
-} from "./embeddingHelpers";
 import type { EmbeddingActionId } from "./useEmbeddingActionRunner";
 
 interface Params {
@@ -40,22 +37,37 @@ export function useEmbeddingRemoteActions({ status, run, setBusy, setActionError
   const { message } = App.useApp();
   const [probe, setProbe] = useState<EmbeddingProbeResult | null>(null);
   const [models, setModels] = useState<string[]>([]);
-  /** 待隐私确认的远端配置；非 null 时弹 Modal。 */
-  const [pendingEnable, setPendingEnable] = useState<EmbeddingRemoteConfig | null>(null);
+  /** 待隐私确认的配置；非 null 时弹 Modal。 */
+  const [pendingProfile, setPendingProfile] = useState<EmbeddingProfile | null>(null);
 
-  const testRemote = async (config: EmbeddingRemoteConfig) => {
-    setBusy("test");
-    setProbe(null);
-    setActionError("");
-    try {
-      setProbe(await testEmbeddingRemote(config));
-    } catch (error) {
-      // 传输层失败（断网/超时）与"探测结果为 ok:false"都归成同一份可读原因。
+  /**
+   * 草稿「测试连接」：编辑态用该条已存 key（后端只借这一条）；新建态必须显式填 key。
+   * 新建态不借当前生效配置的 key —— 那会把另一家的密钥发到草稿地址上。
+   */
+  const testDraft = async (draft: EmbeddingRemoteConfig, profileId?: string) => {
+    if (!profileId && !draft.api_key.trim()) {
       setProbe({
         ok: false,
         dim: 0,
         elapsed_ms: 0,
-        model: config.model,
+        model: draft.model,
+        error: t("embeddingSearch.remote.validation.key"),
+      });
+      return;
+    }
+    setBusy("test");
+    setProbe(null);
+    setActionError("");
+    try {
+      setProbe(
+        profileId ? await testEmbeddingProfile(profileId, draft) : await testEmbeddingRemote(draft),
+      );
+    } catch (error) {
+      setProbe({
+        ok: false,
+        dim: 0,
+        elapsed_ms: 0,
+        model: draft.model,
         error: error instanceof Error ? error.message : t("embeddingSearch.remote.testFailed"),
       });
     } finally {
@@ -63,11 +75,17 @@ export function useEmbeddingRemoteActions({ status, run, setBusy, setActionError
     }
   };
 
-  const fetchModels = async (config: EmbeddingRemoteConfig) => {
+  const fetchModels = async (draft: EmbeddingRemoteConfig, profileId?: string) => {
     setBusy("fetchModels");
     setActionError("");
     try {
-      const result = await fetchEmbeddingModels(config);
+      // 编辑态带上 profile_id：只借这一条的已存 key。
+      const result = await fetchEmbeddingModels({
+        ...draft,
+        profile_id: profileId ?? "",
+      } as EmbeddingRemoteConfig & {
+        profile_id: string;
+      });
       const next = result.models ?? [];
       setModels(next);
       if (next.length > 0) {
@@ -83,69 +101,54 @@ export function useEmbeddingRemoteActions({ status, run, setBusy, setActionError
     }
   };
 
-  /** 表单校验：失败时把原因放进卡片内 Alert（不用 Toast 一闪而过）。 */
-  const validateRemote = (config: EmbeddingRemoteConfig): string => {
-    if (!embeddingHostOf(embeddingEndpointAddress(config))) {
-      return t("embeddingSearch.remote.validation.baseUrl");
-    }
-    if (!config.model.trim()) return t("embeddingSearch.remote.validation.model");
-    if (!config.api_key.trim() && !status?.remote.configured) {
-      return t("embeddingSearch.remote.validation.key");
-    }
-    return "";
+  const activate = async (profile: EmbeddingProfile) => {
+    await run(
+      "activate",
+      () => activateEmbeddingProfile(profile.id),
+      t("embeddingSearch.remote.profile.applied"),
+    );
   };
 
-  const enableRemote = async (config: EmbeddingRemoteConfig) => {
-    await run("enable", () => enableEmbeddingRemote(config), t("embeddingSearch.remote.enabled"));
-  };
-
-  /**
-   * 「启用远程检索」：先校验，再按 host 决定直接启用还是弹一次隐私确认。
-   * 确认状态按 host 记，换 host 会再弹一次（任务书 §4.5）。
-   */
-  const requestEnable = async (config: EmbeddingRemoteConfig) => {
-    const problem = validateRemote(config);
-    if (problem) {
-      setActionError(problem);
-      return;
-    }
-    const host = embeddingEndpointHost(config);
-    const confirmed = status?.remote.confirmed_hosts ?? [];
-    if (confirmed.includes(host)) {
-      await enableRemote(config);
+  /** 点「使用」：host 已确认就直接激活，否则先弹一次隐私确认（按 host 记）。 */
+  const requestActivate = async (profile: EmbeddingProfile) => {
+    if (!profile.key_configured) {
+      setActionError(t("embeddingSearch.remote.profile.noKey"));
       return;
     }
     setActionError("");
-    setPendingEnable(config);
+    const confirmed = status?.remote.confirmed_hosts ?? [];
+    if (profile.host && confirmed.includes(profile.host)) {
+      await activate(profile);
+      return;
+    }
+    setPendingProfile(profile);
   };
 
-  const cancelEnable = () => {
-    setPendingEnable(null);
-  };
+  const cancelActivate = () => setPendingProfile(null);
 
-  const confirmEnable = async () => {
-    if (!pendingEnable) return;
-    const config = pendingEnable;
-    setPendingEnable(null);
+  const confirmActivate = async () => {
+    if (!pendingProfile) return;
+    const profile = pendingProfile;
+    setPendingProfile(null);
     await run(
-      "enable",
+      "activate",
       async () => {
-        await confirmEmbeddingHost(embeddingEndpointAddress(config));
-        await enableEmbeddingRemote(config);
+        await confirmEmbeddingHost(profile.host);
+        await activateEmbeddingProfile(profile.id);
       },
-      t("embeddingSearch.remote.enabled"),
+      t("embeddingSearch.remote.profile.applied"),
     );
   };
 
   return {
     probe,
     models,
-    pendingEnable,
-    testRemote,
+    pendingProfile,
+    testDraft,
     fetchModels,
-    requestEnable,
-    cancelEnable,
-    confirmEnable,
+    requestActivate,
+    cancelActivate,
+    confirmActivate,
     clearProbe: () => setProbe(null),
   };
 }

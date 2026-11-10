@@ -13,6 +13,7 @@
  */
 import { App as AntdApp, Form } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import { SetupTab, type SetupForm } from "./SetupTab";
@@ -26,9 +27,12 @@ const resumesMocks = vi.hoisted(() => ({
   listResumes: vi.fn(),
   getResume: vi.fn(),
 }));
+// 外部简历深链预填（第 21 条）：按 id 取那条只读快照。
+const externalResumeMocks = vi.hoisted(() => ({ getExternalResume: vi.fn() }));
 
 vi.mock("../../api/jobs", () => jobsMocks);
 vi.mock("../../api/resumes", () => resumesMocks);
+vi.mock("../../api/externalResumes", () => externalResumeMocks);
 
 const JOB_OPTIONS = [
   { id: 7, title: "市场运营专员", company: "示例科技" },
@@ -54,26 +58,40 @@ beforeEach(() => {
     .mockImplementation((id: number) =>
       Promise.resolve(RESUME_OPTIONS.find((item) => item.id === id) ?? null),
     );
+  externalResumeMocks.getExternalResume.mockReset();
 });
 
-/** antd 的 form 实例必须来自 Form.useForm，用一层包装组件注入。 */
-function SetupHarness(props: { initialJobId?: number; onStart: (values: SetupForm) => void }) {
+/**
+ * antd 的 form 实例必须来自 Form.useForm，用一层包装组件注入。
+ * SetupTab 现在读 `?externalResumeId=` 深链（第 21 条），所以必须有 Router 上下文。
+ */
+function SetupHarness(props: {
+  initialJobId?: number;
+  search?: string;
+  onStart: (values: SetupForm) => void;
+}) {
   const [form] = Form.useForm<SetupForm>();
   return (
-    <AntdApp>
-      <SetupTab
-        form={form}
-        initialJobId={props.initialJobId}
-        starting={false}
-        onStart={props.onStart}
-      />
-    </AntdApp>
+    <MemoryRouter initialEntries={[props.search ?? "/interview"]}>
+      <AntdApp>
+        <SetupTab
+          form={form}
+          initialJobId={props.initialJobId}
+          starting={false}
+          onStart={props.onStart}
+        />
+      </AntdApp>
+    </MemoryRouter>
   );
 }
 
-function renderSetup(props: { initialJobId?: number; onStart?: (values: SetupForm) => void } = {}) {
+function renderSetup(
+  props: { initialJobId?: number; search?: string; onStart?: (values: SetupForm) => void } = {},
+) {
   const onStart = props.onStart ?? vi.fn();
-  render(<SetupHarness initialJobId={props.initialJobId} onStart={onStart} />);
+  render(
+    <SetupHarness initialJobId={props.initialJobId} search={props.search} onStart={onStart} />,
+  );
   return { onStart };
 }
 
@@ -245,6 +263,79 @@ describe("SetupTab 轮数两档（问题 05）", () => {
   });
 });
 
+describe("SetupTab 外部简历预填（第 21 条）", () => {
+  // 简历中心「用于面试」深链带过来的那条只读快照（详情接口的完整回显）。
+  const EXTERNAL = {
+    id: 3,
+    file_id: 11,
+    name: "external-a.txt",
+    mime: "text/plain",
+    text_chars: 6,
+    has_text: true,
+    job_id: null,
+    job_title: "",
+    created_at: "2026-11-10T00:00:00",
+    updated_at: "2026-11-10T00:00:00",
+    warnings: [],
+    text: "外部简历正文",
+  };
+
+  it("带 externalResumeId：简历侧切到导入文件并预填正文，提交时带 resume_material", async () => {
+    externalResumeMocks.getExternalResume.mockResolvedValue(EXTERNAL);
+    const { onStart } = renderSetup({ search: "/interview?externalResumeId=3" });
+
+    // 预填完成：材料块直接显示文件名。来源切到「导入文件」的证据是**关联简历下拉被禁用**
+    // （文件与记录互斥）——不去读 radio 的 checked：jsdom 里同名的多个 Radio.Group 会
+    // 互相取消选中，属性值不可靠。
+    expect(await screen.findByText("external-a.txt")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText(t("interviewPage.setup.resumeLabel"))).toBeDisabled(),
+    );
+
+    await pickOption(t("interviewPage.setup.jobLabel"), "市场运营专员");
+    await submit();
+
+    await waitFor(() => expect(onStart).toHaveBeenCalled());
+    expect(onStart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resumeId: undefined,
+        resumeMaterial: {
+          name: "external-a.txt",
+          text: "外部简历正文",
+          warnings: [],
+          parser: "text",
+        },
+      }),
+    );
+  });
+
+  it("没有文字层的外部简历：不预填，给一句可照做的提示", async () => {
+    externalResumeMocks.getExternalResume.mockResolvedValue({
+      ...EXTERNAL,
+      id: 4,
+      name: "scan-file.pdf",
+      text: "",
+      text_chars: 0,
+      has_text: false,
+    });
+    renderSetup({ search: "/interview?externalResumeId=4" });
+
+    expect(await screen.findByText(t("interviewPage.setup.external.noText"))).toBeInTheDocument();
+    // 简历侧仍是「从记录选」：没有文件被带入（文件来源才会渲染「选择文件」按钮与文件名）。
+    expect(screen.queryByText("scan-file.pdf")).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: new RegExp(t("interviewPage.setup.material.pickFile")),
+      }),
+    ).toBeNull();
+    // 选好岗位后关联简历下拉可用 —— 这正是"从记录选"这一路。
+    await pickOption(t("interviewPage.setup.jobLabel"), "市场运营专员");
+    await waitFor(() =>
+      expect(screen.getByLabelText(t("interviewPage.setup.resumeLabel"))).not.toBeDisabled(),
+    );
+  });
+});
+
 describe("SetupTab 人设与风格互斥（问题 06）", () => {
   const PERSONA = "Hiring manager who digs into numbers";
 
@@ -253,7 +344,9 @@ describe("SetupTab 人设与风格互斥（问题 06）", () => {
   }
 
   function personaInput() {
-    return screen.getByLabelText(t("interviewPage.setup.personaLabel"));
+    // 人设标签在右侧多了一条 12px 辅助说明（第 2 条），label 的文本因此变长；
+    // 仍按标签前缀定位，不把那条说明写进查询（换文案不该影响定位方式）。
+    return screen.getByLabelText(t("interviewPage.setup.personaLabel"), { exact: false });
   }
 
   it("填了人设：风格下拉禁用并显示原因；清空人设后立刻恢复可用", async () => {
@@ -293,5 +386,72 @@ describe("SetupTab 人设与风格互斥（问题 06）", () => {
     expect(onStart).toHaveBeenCalledWith(
       expect.objectContaining({ interviewerStyle: "严谨专业", persona: PERSONA }),
     );
+  });
+});
+
+/**
+ * 字段区布局契约（第 8 条）：4 个字段单独成网格、轮数说明移到网格下方全宽一行。
+ *
+ * jsdom 不做布局，所以这里只钉 DOM 结构与顺序（顺序 = Tab 顺序）；"4 列 / 2 列 / 1 列"
+ * 与 align-items 的数值约定由 styles/modules-interview-setup.test.ts 读 CSS 原文守。
+ */
+describe("SetupTab 字段区布局（第 8 条）", () => {
+  const FIELD_KEYS = [
+    "interviewPage.setup.typeLabel",
+    "interviewPage.setup.difficultyLabel",
+    "interviewPage.setup.roundsLabel",
+    "interviewPage.setup.focusLabel",
+  ] as const;
+
+  it("外层是纵向 stack，4 个字段都在独立的 .interview-setup-fields 网格里", () => {
+    renderSetup();
+
+    const stack = document.querySelector(".interview-setup-stack");
+    expect(stack).not.toBeNull();
+    // 旧主栅格已移除：它被整行元素逼出多余轨道，右侧空白就是从那儿来的。
+    expect(document.querySelector(".interview-setup-grid")).toBeNull();
+
+    const fields = stack?.querySelector(".interview-setup-fields");
+    expect(fields).not.toBeNull();
+    expect(fields?.querySelectorAll(":scope > .ant-form-item").length).toBe(4);
+    for (const key of FIELD_KEYS) {
+      // 轮数格子里是两个 noStyle 控件（Segmented + InputNumber），没有单一 label 关联，
+      // 所以按 label 文本所在节点判断归属，而不是 getByLabelText。
+      expect(fields?.contains(screen.getByText(t(key)))).toBe(true);
+    }
+  });
+
+  it("轮数说明在字段网格之外全宽一行，不再作为轮数格子的 extra", () => {
+    renderSetup();
+
+    const hint = document.querySelector(".interview-setup-rounds-hint");
+    expect(hint).not.toBeNull();
+    expect(hint?.textContent).toBe(t("interviewPage.setup.roundsExtra"));
+    // 与字段网格是兄弟节点（紧跟其后），且不在任何 Form.Item 里。
+    expect(document.querySelector(".interview-setup-fields")?.nextElementSibling).toBe(hint);
+    expect(hint?.closest(".ant-form-item")).toBeNull();
+    const roundsItem = screen
+      .getByText(t("interviewPage.setup.roundsLabel"))
+      .closest(".ant-form-item");
+    expect(roundsItem?.querySelector(".ant-form-item-extra")).toBeNull();
+  });
+
+  it("DOM 顺序（= Tab 顺序）不变：类型 → 难度 → 轮数 → 考察重点 → 风格 → 人设", () => {
+    renderSetup();
+
+    const labels = Array.from(
+      document.querySelectorAll(".interview-setup-stack .ant-form-item-label label"),
+    ).map((node) => (node.textContent ?? "").trim());
+    expect(labels).toEqual([
+      t("interviewPage.setup.jobLabel"),
+      t("interviewPage.setup.resumeLabel"),
+      t("interviewPage.setup.typeLabel"),
+      t("interviewPage.setup.difficultyLabel"),
+      t("interviewPage.setup.roundsLabel"),
+      t("interviewPage.setup.focusLabel"),
+      t("interviewPage.setup.styleLabel"),
+      // 人设标签行右侧多了一条辅助说明（第 2 条），文本是两段拼起来的。
+      `${t("interviewPage.setup.personaLabel")}${t("interviewPage.setup.personaOverrideHint")}`,
+    ]);
   });
 });

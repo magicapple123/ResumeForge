@@ -132,6 +132,22 @@ export const RECOGNITION_ACCEPT = `${IMAGE_ACCEPT},${DOCUMENT_ACCEPT}`;
 /** 助手附件接受的类型：文本 + 图片 + 文档。 */
 export const ASSISTANT_ACCEPT = `${TEXT_ACCEPT},${IMAGE_ACCEPT},${DOCUMENT_ACCEPT}`;
 
+/**
+ * 资料箱附件的接受类型（第 23+24 条）：图片 + pdf/docx + 文本类（含 markdown）。
+ *
+ * **只有这一份常量**：上传按钮（antd Upload）与拖拽区（FileDropZone）共用，否则会
+ * 出现"能拖不能选"或反之。顺序与后端上传接口的白名单一致。
+ */
+export const MATERIAL_ATTACHMENT_ACCEPT =
+  ".png,.jpg,.jpeg,.webp,.pdf,.docx,.txt,.md,.markdown,.json,.csv";
+
+/** 资料箱附件允许的扩展名（小写、不带点），用于本地先拦不支持的文件。 */
+export const MATERIAL_ATTACHMENT_SUFFIXES = new Set(
+  MATERIAL_ATTACHMENT_ACCEPT.split(",")
+    .map((rule) => rule.trim().replace(/^\./, "").toLowerCase())
+    .filter(Boolean),
+);
+
 export function canPreviewImage(mimeType: string): boolean {
   return PREVIEWABLE_IMAGE_MIMES.has(mimeType.split(";", 1)[0].trim().toLowerCase());
 }

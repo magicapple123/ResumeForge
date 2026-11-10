@@ -58,7 +58,7 @@ export function getCollectFilterOptions(): Promise<CollectFilterOptions> {
  * 浏览器没启动时后端返回 409，`detail` 里有中文提示。
  */
 export function testCollectFilters(
-  filters: Record<string, string>,
+  filters: Record<string, string[]>,
 ): Promise<CollectFilterTestResult> {
   return request("/collect/filters/test", {
     method: "POST",

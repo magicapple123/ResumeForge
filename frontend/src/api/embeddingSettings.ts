@@ -121,6 +121,39 @@ export interface EmbeddingStatus {
   runtime: { available: boolean; version: string };
   /** 掩码后的完整配置（真实路由提供）：只用于回填表单，见 EmbeddingMaskedConfig。 */
   config?: EmbeddingMaskedConfig | null;
+  /** 已保存的远程命名配置列表（脱敏；不含密钥或占位符）。 */
+  profiles?: EmbeddingProfile[];
+  /** 当前生效的命名配置 id（本地生效时也可能指向本地 profile）。 */
+  active_profile_id?: string;
+  /** 生效那一刻该配置的 updated_at：与 profile.updated_at 比对得到「有未生效改动」。 */
+  active_profile_updated_at?: string;
+  /** 本地 profile id（资源就绪后才有）：ready 态一键切回本地用它调 activate。 */
+  local_profile_id?: string;
+}
+
+/** 一条已保存的远程命名配置（GET /status 的 profiles[]，永远不含密钥）。 */
+export interface EmbeddingProfile {
+  id: string;
+  name: string;
+  preset_id: string;
+  base_url: string;
+  model: string;
+  dim: number;
+  batch_size: number;
+  endpoint_mode: EmbeddingEndpointMode;
+  /** 从 base_url / request_url 解析出的主机（隐私确认与卡片展示用）。 */
+  host: string;
+  /** 只说明「配置了密钥」，密钥本体与掩码都不会下发。 */
+  key_configured: boolean;
+  updated_at: string;
+}
+
+/** 新建/更新命名配置的请求体；空 key = 保留同一条旧 key（新建时为空）。 */
+export interface EmbeddingProfilePayload {
+  id?: string;
+  name: string;
+  preset_id?: string;
+  config: EmbeddingRemoteConfig;
 }
 
 /** 「测试连接」的探测结果；失败不是 HTTP 错误（后端 200 + ok:false）。 */
@@ -223,4 +256,44 @@ export function disableEmbedding(): Promise<unknown> {
 /** 清除密钥与配置（含索引）；之后回到未启用。 */
 export function clearEmbedding(): Promise<unknown> {
   return request("/settings/embedding/clear", { method: "POST" });
+}
+
+/** 新建或按 id 更新一条命名配置；重名由后端返回 409。 */
+export function saveEmbeddingProfile(
+  payload: EmbeddingProfilePayload,
+): Promise<EmbeddingStatus & { profile: EmbeddingProfile }> {
+  return request("/settings/embedding/profiles", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** 删除一条配置；删生效项时后端自动回落/停用。 */
+export function deleteEmbeddingProfile(profileId: string): Promise<EmbeddingStatus> {
+  return request(`/settings/embedding/profiles/${profileId}`, { method: "DELETE" });
+}
+
+/** 切换 = 激活另一条配置；失败时后端不改当前生效项（400 + detail）。 */
+export function activateEmbeddingProfile(profileId: string): Promise<EmbeddingStatus> {
+  return request(`/settings/embedding/profiles/${profileId}/activate`, {
+    method: "POST",
+    budget: "task",
+  });
+}
+
+/** 用「该条已存 key + 草稿覆盖」探测；草稿里的空 key 只借这一条自己的。 */
+export function testEmbeddingProfile(
+  profileId: string,
+  config?: Partial<EmbeddingRemoteConfig>,
+): Promise<EmbeddingProbeResult> {
+  return request(`/settings/embedding/profiles/${profileId}/test`, {
+    method: "POST",
+    body: JSON.stringify({ config: config ?? null }),
+    budget: "task",
+  });
+}
+
+/** 只清这一条的密钥；若它是生效项则一并停用（不删除配置）。 */
+export function clearEmbeddingProfileKey(profileId: string): Promise<EmbeddingStatus> {
+  return request(`/settings/embedding/profiles/${profileId}/clear-key`, { method: "POST" });
 }

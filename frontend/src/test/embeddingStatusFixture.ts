@@ -41,6 +41,10 @@ function makeStatus(overrides: StatusOverrides = {}): EmbeddingStatus {
       error: "",
     },
     runtime: { available: false, version: "1.31.1" },
+    profiles: [],
+    active_profile_id: "",
+    active_profile_updated_at: "",
+    local_profile_id: "",
   };
   return {
     ...base,

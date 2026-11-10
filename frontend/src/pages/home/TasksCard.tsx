@@ -52,6 +52,7 @@ export function TasksCard() {
 
   return (
     <Card
+      className="home-tasks-card"
       style={{ marginTop: 16 }}
       title={
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>

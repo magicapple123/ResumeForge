@@ -248,6 +248,22 @@ export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigR
     [editingRecord, recordForm],
   );
 
+  /**
+   * 读一次内置能力表（probe=false，零上游调用），判断「这个型号能不能关闭思考」。
+   *
+   * 不能关闭时 ThinkingSection 会把开关置灰并说明原因（清单 §11.5-D）。打开弹窗与
+   * 换预设时各跑一次——**不给记录上下文**：这一步只读内置表，不需要解密密钥。
+   * 读表失败不挡用户填表：保留上一次结论（没有结论时开关照常可用）。
+   */
+  const loadThinkingSupport = useCallback(async () => {
+    const values = recordForm.getFieldsValue(true) as RecordFormValues;
+    try {
+      setThinkingResult(await checkLLMThinking(mergedConfigFromForm(values, null), false));
+    } catch {
+      // 静默保留旧结论：能力表是"锦上添花"，不该让弹窗打不开或表单卡住。
+    }
+  }, [recordForm]);
+
   /** 实测：会真的发一次最小请求，按钮旁边写明了这一点。 */
   const probeThinking = useCallback(async () => {
     if (checkingThinking) return;
@@ -308,7 +324,8 @@ export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigR
     setCustomEffort(false);
     setEditingRecord(null);
     setModalOpen(true);
-  }, [recordForm]);
+    void loadThinkingSupport();
+  }, [loadThinkingSupport, recordForm]);
 
   /** 打开编辑弹窗：api_key 刻意留空（占位符说明"留空保持不变"），避免把脱敏引用当明文摆出来。
    *  高级/思考字段从原记录整份预填——弹窗只是换了容器，不留空缺省覆盖。 */
@@ -329,8 +346,9 @@ export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigR
       setCustomEffort(false);
       setEditingRecord(record);
       setModalOpen(true);
+      void loadThinkingSupport();
     },
-    [recordForm],
+    [loadThinkingSupport, recordForm],
   );
 
   const closeRecordModal = useCallback(() => {
@@ -360,8 +378,11 @@ export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigR
         model: preset.model,
         api_style: preset.api_style ?? "openai",
       });
+      // 换预设后型号变了：重新读表，决定「思考模式」要不要置灰（GLM-5.3 / Kimi K3
+      // 这类强制思考的预设选中后应立刻说明，而不是等用户点开关）。
+      void loadThinkingSupport();
     },
-    [recordForm],
+    [loadThinkingSupport, recordForm],
   );
 
   /** 弹窗内「测试连接」：用表单当前值发探针（api_key 留空沿用原记录的脱敏引用）。 */

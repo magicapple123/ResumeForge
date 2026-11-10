@@ -195,12 +195,6 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent);
 }
 
-@media (max-width: 900px) {
-  .tracker-summary {
-    grid-template-columns: repeat(2, minmax(130px, 1fr));
-  }
-}
-
 /* ===== 深色主题（T9）=====
    深色背景对低透明度的外发光几乎不敏感：浅色下 12% 的环已经看得见，深色下会糊掉。
    这里只把这一条提到 16%，其余阶段色全部走 token（见 theme/dark-tokens.css）。 */

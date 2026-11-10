@@ -3,8 +3,9 @@
  * 求职进度：把投出去的岗位收到哪一步了集中在一页看。
  *
  * 页面的判断很少——状态怎么合并、这次识别会改变什么，全在后端算好随数据下发，
- * 前端只负责展示与把用户的选择送回去。漏斗条是纯 CSS 画的，没有引入图表库：
- * 这一页要表达的就是"每个阶段各有多少条"，用一个宽度成比例的横条已经说完了。
+ * 前端只负责展示与把用户的选择送回去。顶部「指标带 + 阶段构成条」在
+ * components/tracker/TrackerSummary.tsx（12.2/13）：构成条是纯 CSS 画的，没有引入
+ * 图表库；本页只保留筛选、列表与弹窗编排。
  */
 import {
   BellOutlined,
@@ -23,14 +24,12 @@ import {
   Modal,
   Pagination,
   Select,
-  Skeleton,
   Space,
-  Statistic,
   Tag,
-  Tooltip,
   Typography,
 } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
+import TrackerSummary from "../components/tracker/TrackerSummary";
 import ErrorState from "../components/common/ErrorState";
 import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -45,7 +44,7 @@ import { useApi } from "../hooks/useApi";
 import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import { downloadBlob } from "../utils/download";
 import type { Track } from "../types";
-import { FUNNEL_STATUSES, TRACK_STATUSES } from "../types";
+import { TRACK_STATUSES } from "../types";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import { TRACK_STATUS_LABEL_KEYS } from "../i18n/enum/tracker";
@@ -178,10 +177,7 @@ export default function TrackerPage() {
   }, [setSearchParams]);
 
   const items = useMemo(() => data?.items ?? [], [data]);
-  const counts = stats?.status_counts ?? {};
   const totalCount = data?.total ?? 0;
-  // 漏斗条的宽度按"这条占最大那条的比例"算，这样条目少时也不会全是一小截。
-  const funnelMax = Math.max(1, ...FUNNEL_STATUSES.map((key) => counts[key] ?? 0));
 
   // 软删可撤销：单条删除不再前置确认，Toast 里给 5 秒「撤销」（见 useDeleteUndo）。
   // 批量走的是本页之外的路径，不受这里影响。
@@ -255,102 +251,14 @@ export default function TrackerPage() {
         </Space>
       </div>
 
-      <div className="tracker-summary" aria-busy={statsLoading || undefined}>
-        {/* 统计是独立请求（P1-2）：加载中渲染骨架占位而不是数值卡片——数据没到就画卡
-            会拿 0 冒充真值、加载完成后整排跳变（加载态与卡片同时出现的布局错乱）。
-            区分「加载中」与「空数据」：加载完成（哪怕全为 0）才渲染统计网格。 */}
-        {statsLoading ? (
-          <>
-            {[0, 1, 2, 3, 4].map((index) => (
-              <div key={index} className="tracker-summary-skeleton">
-                <Skeleton active title={false} paragraph={{ rows: 2 }} />
-              </div>
-            ))}
-          </>
-        ) : (
-          <>
-            {statsError && (
-              <Typography.Text type="danger">
-                {t("trackerPage.stats.error", { error: statsError })}
-              </Typography.Text>
-            )}
-            {/* 上色靠**语义类名**（T9）：此前是 `:nth-child(2..5)`，网格里一旦多出
-                一个兄弟节点（statsError 的错误文案就是），整排配色会集体前移一格。 */}
-            <Statistic
-              className="tracker-stat tracker-stat--total"
-              title={t("trackerPage.stat.total")}
-              value={totalCount}
-            />
-            <Statistic
-              className="tracker-stat tracker-stat--active"
-              title={t("trackerPage.stat.active")}
-              value={stats?.active_count ?? 0}
-              prefix={<FunnelPlotOutlined />}
-            />
-            <Statistic
-              className="tracker-stat tracker-stat--month"
-              title={t("trackerPage.stat.month")}
-              value={stats?.month_count ?? 0}
-            />
-            {/* Offer 是招聘行业的通用写法，两种语言都写 Offer——它是纯 ASCII，
-                不进中文棘轮，硬塞一个 key 只会多一条"源文与译文相同"的等值豁免
-                （与进度表单里 `trackerForm.status.offer` 同一处理）。 */}
-            <Statistic
-              className="tracker-stat tracker-stat--offer"
-              title="Offer"
-              value={stats?.offer_count ?? 0}
-              // 与漏斗里 Offer 那一级同一个阶段色：同一页上"同一个阶段"必须是同一种绿，
-              // 否则并排看就是两种颜色（原来是品牌绿 --rf-success-strong）。
-              styles={{ content: { color: "var(--rf-stage-offer)" } }}
-            />
-            <Statistic
-              className="tracker-stat tracker-stat--closed"
-              title={t("trackerPage.stat.closed")}
-              value={stats?.rejected_count ?? 0}
-              styles={{ content: { color: "var(--rf-stage-rejected)" } }}
-            />
-          </>
-        )}
-      </div>
-
-      {totalCount > 0 && (
-        <div className="tracker-funnel">
-          {FUNNEL_STATUSES.map((key) => {
-            const value = counts[key] ?? 0;
-            const stageIndex = FUNNEL_STATUSES.indexOf(key);
-            // 条长是**纯视觉辅助**：把这一级的数量按"最大那一级"归一，好让五条并排时有
-            // 长短可比的形状。它不是转化率——五个状态是互斥快照（一条记录只属于一级），
-            // 跳级改状态很常见，所以"面试 > 筛选"随时可能发生。正因如此页面上不印 %，
-            // 只在 tooltip 里说明条长的含义（问题 2-A，裁定 B）。
-            const barFill = Math.round((value / funnelMax) * 100);
-            return (
-              <Tooltip
-                key={key}
-                title={t("trackerPage.funnel.tooltip", {
-                  label: t(TRACK_STATUS_LABEL_KEYS[key]),
-                  count: value,
-                })}
-              >
-                <button
-                  type="button"
-                  className={`tracker-funnel-step${status === key ? " is-selected" : ""}`}
-                  data-stage-index={stageIndex}
-                  onClick={() => setStatus(status === key ? "" : key)}
-                >
-                  <span className="tracker-funnel-index" aria-hidden="true">
-                    {String(stageIndex + 1).padStart(2, "0")}
-                  </span>
-                  <span className="tracker-funnel-label">{t(TRACK_STATUS_LABEL_KEYS[key])}</span>
-                  <span className="tracker-funnel-count">{value}</span>
-                  <span className="tracker-funnel-meter" aria-hidden="true">
-                    <span className="tracker-funnel-bar" style={{ width: `${barFill}%` }} />
-                  </span>
-                </button>
-              </Tooltip>
-            );
-          })}
-        </div>
-      )}
+      <TrackerSummary
+        stats={stats}
+        statsLoading={statsLoading}
+        statsError={statsError}
+        totalCount={totalCount}
+        status={status}
+        onSelectStatus={setStatus}
+      />
 
       <Space size={16} wrap className="tracker-filters rf-filter-bar">
         <Select
@@ -411,10 +319,12 @@ export default function TrackerPage() {
       )}
 
       <div className="tracker-list">
-        {items.map((track) => (
+        {items.map((track, index) => (
           <TrackCard
             key={track.id}
             track={track}
+            // 长列表每 10 行加一条 2px 细分隔（13.5 风险），不重新加回卡片。
+            groupStart={index > 0 && index % 10 === 0}
             onEdit={() => {
               setEditing(track);
               setFormOpen(true);

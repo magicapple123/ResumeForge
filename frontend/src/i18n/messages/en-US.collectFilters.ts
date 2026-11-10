@@ -21,6 +21,10 @@ const collectFilters = {
     "Check each selected condition on the real job site to see whether it can still be picked there (this briefly navigates to the filter bar and does not affect collection)",
   "collectFilters.intro":
     "These are the conditions from the job site's own filter bar; the site applies them while searching, which is more accurate than filtering after collection and means far fewer pages to go through. The option list is read from the site itself, so it follows the site whenever it changes.",
+  "collectFilters.intro.rules":
+    "Job type and salary are single-choice; the other conditions accept multiple values. Under part-time, salary is replaced by pay type and part-time hours.",
+  "collectFilters.intro.breadth":
+    "The more conditions you pick, the more mixed one batch gets and the sooner duplicates appear.",
   "collectFilters.launch.title":
     "Start the dedicated browser to get the full option list your account can see",
   "collectFilters.launch.body":

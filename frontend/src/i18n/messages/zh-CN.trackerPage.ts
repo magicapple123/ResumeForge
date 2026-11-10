@@ -28,7 +28,9 @@ const trackerPage = {
   "trackerPage.stat.active": "进行中",
   "trackerPage.stat.month": "本月投递",
   "trackerPage.stat.closed": "已结束",
-  "trackerPage.funnel.tooltip": "{label}：{count} 条。条长表示相对数量，不是转化率。",
+  /** 12.2 构成条：一条 100% 堆叠条替代原来的 5 条相对长度条。 */
+  "trackerPage.composition.headline": "流程中 {count} 条 · 已结束 {closed} 条",
+  "trackerPage.composition.stepAria": "{label} {count} 条，占 {percent}%",
   "trackerPage.filter.statusAria": "求职进度状态筛选",
   "trackerPage.filter.allStatuses": "全部状态",
   "trackerPage.filter.searchPlaceholder": "搜索公司、岗位、备注或下一步",

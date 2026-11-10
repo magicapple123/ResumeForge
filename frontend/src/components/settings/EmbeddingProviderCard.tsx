@@ -1,39 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 设置页「语义检索」卡（RAG v3）：本地模型 / 远程服务二选一。
+ * 设置页「语义检索」卡：本地模型 / 远程命名配置（清单第 1/16 条）。
  *
- * 状态机严格按 GET /api/settings/embedding/status（契约 §3）渲染，本组件不保存
- * "是否已启用"这类状态——一切以 status 为准，失败态永远不会显示为已启用。
+ * 状态机严格按 GET /api/settings/embedding/status（契约 §3）渲染：一切以 status 为准，
+ * 失败态永远不会显示为已启用。本组件只做编排：
  *
- * ## 统一口径（条目 02，基准是「大模型 API 配置」卡）
+ * - 卡头 extra：已就绪 →「关闭语义检索」；本地未就绪 →「启用本地模型」；
+ *   远程未就绪不放进线按钮（主操作在列表的「新建配置」上，避免两个同义主动作）。
+ * - 已就绪 → `EmbeddingReadyPanel` 显示当前 provider，并提供**一键切换**（第 16 条）；
+ * - 未就绪 → 本地/远程二选一：本地是下载流程，远程是「新建配置 + 已保存列表」；
+ * - 远程命名配置的增删改在弹窗里，测试结果逐条留在卡片内。
  *
- * - 卡头：`title` + `extra` 放**唯一主操作**（未就绪 = 启用，已就绪 = 关闭）；
- * - 说明：`Alert type="info"` 一句话，替换原来的灰色 `Paragraph`；
- * - 字段：统一走 `SettingsField`（标签 + 控件 + 一行提示）；
- * - 状态：`Tag`（`blue` = 生效中、`green` = 已配置、默认 = 未配置），见厂商卡片；
- * - 加载/错误：`LoadingBlock` + `ErrorState`（不套 LLM 的 `EmptyState`，那是列表空态）。
- *
- * ## 三块内容
- *
- * - 未就绪：先二选一，再渲染对应配置块（本地下载 / 远程厂商卡片 + 字段）；
- * - 下载中：只显示进度与取消（不允许此时切模式，避免两个下载状态打架）；
- * - 已就绪：只显示生效信息与「···」里的清理入口。
- * 已确认 host 清单常驻（与是否就绪无关），可在未就绪时撤销历史确认。
- *
- * ## 远程草稿为什么在卡片这一层
- *
- * 卡头的「启用」要用当前草稿（地址/模型/密钥）发起启用；草稿若留在远程块里，卡头就得
- * 再复制一份状态。所以 `draft` / `presetId` 提升到这里，远程块只做受控渲染。
+ * 远程草稿不再常驻卡片这一层：草稿只属于「新建/编辑配置」弹窗，由 `useEmbeddingProfiles`
+ * 持有；启用/切换走 `POST /profiles/{id}/activate`，不再"新建整段配置"。
  */
-import { Alert, Button, Card, Flex, Segmented, Tooltip, Typography } from "antd";
+import { Alert, Button, Card, Divider, Flex, Segmented, Tooltip, Typography } from "antd";
 import { useState } from "react";
-import type { EmbeddingRemoteConfig, EmbeddingStatus } from "../../api/settings";
-import {
-  embeddingEndpointHost,
-  embeddingGuidanceKey,
-  emptyRemoteConfig,
-  remoteConfigFromStatus,
-} from "../../features/settings/embeddingHelpers";
+import { activateEmbeddingProfile, type EmbeddingStatus } from "../../api/settings";
+import { embeddingGuidanceKey } from "../../features/settings/embeddingHelpers";
 import { useEmbeddingSettings } from "../../features/settings/useEmbeddingSettings";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -42,10 +26,10 @@ import LoadingBlock from "../common/LoadingBlock";
 import EmbeddingConfirmedHosts from "./EmbeddingConfirmedHosts";
 import EmbeddingLocalBlock from "./EmbeddingLocalBlock";
 import EmbeddingPrivacyModal from "./EmbeddingPrivacyModal";
+import EmbeddingProfileList from "./EmbeddingProfileList";
+import EmbeddingProfileModal from "./EmbeddingProfileModal";
 import EmbeddingReadyPanel from "./EmbeddingReadyPanel";
-import EmbeddingRemoteBlock from "./EmbeddingRemoteBlock";
 import SettingsField from "./SettingsField";
-import { CUSTOM_PRESET_ID, EMBEDDING_REMOTE_PRESETS, presetOf } from "./embeddingRemotePresets";
 
 type Mode = "local" | "remote";
 
@@ -66,20 +50,9 @@ function defaultMode(status: EmbeddingStatus | null): Mode {
 export default function EmbeddingProviderCard() {
   useLocale();
   const settings = useEmbeddingSettings();
-  const { status, loading, loadError, busy, actionError, probe, models } = settings;
+  const { status, loading, loadError, busy, actionError } = settings;
   const [mode, setMode] = useState<Mode | null>(null);
-  const [draft, setDraft] = useState<EmbeddingRemoteConfig | null>(null);
-  const [presetId, setPresetId] = useState<string | null>(null);
   const effectiveMode = mode ?? defaultMode(status);
-
-  // 草稿的初值来自 /status（含掩码配置）：status 未到时为 null，此时不渲染字段区。
-  const effectiveDraft =
-    draft ?? (status ? remoteConfigFromStatus(status.remote, status.config ?? null) : null);
-  const effectivePresetId =
-    presetId ??
-    (effectiveDraft
-      ? (presetOf(effectiveDraft.base_url)?.id ?? CUSTOM_PRESET_ID)
-      : CUSTOM_PRESET_ID);
 
   const downloading =
     status !== null &&
@@ -89,71 +62,51 @@ export default function EmbeddingProviderCard() {
     ? status.last_error || status.local.error || status.remote.error
     : "";
   const localProvider = status?.provider !== "openai-http";
+  const profiles = settings.profiles;
+  const remoteReady = Boolean(ready && status?.provider === "openai-http");
+  /** 可切换的远程配置：有密钥的（没 key 激活会被后端拒绝）。 */
+  const remoteCandidates = profiles.filter((item) => item.key_configured);
 
-  const patchDraft = (changes: Partial<EmbeddingRemoteConfig>) => {
-    setDraft({ ...(effectiveDraft ?? emptyRemoteConfig()), ...changes });
-    // 改了字段之后旧的连接测试结论就不作数了，别让"连接成功"停在错的地址旁边。
-    settings.clearProbe();
+  const runActivation = async (action: () => Promise<unknown>) => {
+    await settings.run("activate", action, t("embeddingSearch.remote.profile.applied"));
   };
 
-  const selectPreset = (id: string) => {
-    setPresetId(id);
-    settings.clearProbe();
-    if (id === CUSTOM_PRESET_ID) return;
-    const preset = EMBEDDING_REMOTE_PRESETS.find((item) => item.id === id);
-    if (!preset) return;
-    setDraft({
-      ...(effectiveDraft ?? emptyRemoteConfig()),
-      base_url: preset.baseUrl,
-      model: preset.models[0] ?? effectiveDraft?.model ?? "",
-      allow_private: preset.allowPrivate,
-      endpoint_mode: "openai",
-    });
-  };
-
-  /** 卡头「启用」是否可点：远程要有地址+模型（密钥可沿用已存的那份），本地要已下载。 */
-  const canEnable =
-    effectiveMode === "remote"
-      ? Boolean(effectiveDraft?.base_url.trim()) &&
-        Boolean(effectiveDraft?.model.trim()) &&
-        (Boolean(effectiveDraft?.api_key.trim()) || Boolean(status?.remote.configured))
-      : status?.local.state === "ready";
-
-  const enableHint = downloading
-    ? t("embeddingSearch.state.downloading")
-    : effectiveMode === "remote"
-      ? t("embeddingSearch.card.enableHint.remote")
-      : t("embeddingSearch.card.enableHint.local");
-
-  const enable = () => {
-    if (effectiveMode === "remote") {
-      if (effectiveDraft) void settings.requestEnable(effectiveDraft);
+  /** 第 16 条：切到本地 = 激活本地 profile；本地还没下载则先下载（不自动切）。 */
+  const switchToLocal = () => {
+    if (!status) return;
+    const localId = status.local_profile_id;
+    if (status.local.state === "ready" && localId) {
+      void runActivation(() => activateEmbeddingProfile(localId));
       return;
     }
-    void settings.enableLocal();
+    if (status.local.state === "ready") {
+      // 兜底：资源就绪但还没生成本地 profile（旧数据/清单缺 dim）→ 走原有启用流程同步。
+      void settings.enableLocal();
+      return;
+    }
+    void settings.run("download", () => settings.startDownload({ autoEnable: false }));
   };
 
+  const canEnableLocal = status?.local.state === "ready";
   const primaryAction = ready ? (
     <Button loading={busy === "disable"} onClick={() => void settings.disable()}>
       {t("embeddingSearch.remote.disable")}
     </Button>
-  ) : (
-    <Tooltip title={canEnable ? undefined : enableHint}>
+  ) : !downloading && effectiveMode === "local" ? (
+    <Tooltip title={canEnableLocal ? undefined : t("embeddingSearch.card.enableHint.local")}>
       {/* A disabled button emits no mouse events, so the Tooltip needs a hoverable wrapper. */}
       <span>
         <Button
           type="primary"
-          loading={busy === "enable" || busy === "enableLocal"}
-          disabled={!canEnable || busy !== null || undefined}
-          onClick={enable}
+          loading={busy === "enableLocal"}
+          disabled={!canEnableLocal || busy !== null || undefined}
+          onClick={() => void settings.enableLocal()}
         >
-          {effectiveMode === "remote"
-            ? t("embeddingSearch.remote.enable")
-            : t("embeddingSearch.local.enable")}
+          {t("embeddingSearch.local.enable")}
         </Button>
       </span>
     </Tooltip>
-  );
+  ) : undefined;
 
   return (
     <Card
@@ -161,7 +114,16 @@ export default function EmbeddingProviderCard() {
       className="settings-card"
       extra={status ? primaryAction : undefined}
     >
-      <Alert type="info" showIcon style={{ marginBottom: 16 }} title={t("embeddingSearch.intro")} />
+      {/* 已启用态不再解释"语义检索是什么"——那是首次配置才需要的一句话，
+          启用后重复出现只是把真正要看的状态挤下去（清单 §3.2 第 1 条）。 */}
+      {ready ? null : (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          title={t("embeddingSearch.intro")}
+        />
+      )}
 
       <LoadingBlock spinning={loading}>
         {status === null ? (
@@ -175,14 +137,25 @@ export default function EmbeddingProviderCard() {
             <div />
           )
         ) : (
-          <Flex vertical gap={16}>
+          <Flex vertical gap={8}>
             {ready ? (
-              <EmbeddingReadyPanel
-                status={status}
-                busy={busy}
-                onClearKey={() => void settings.clearKey()}
-                onRemoveAssets={() => void settings.removeAssets()}
-              />
+              <>
+                <EmbeddingReadyPanel
+                  status={status}
+                  busy={busy}
+                  remoteCandidates={remoteCandidates}
+                  onSwitchToLocal={switchToLocal}
+                  onDownloadLocal={() =>
+                    void settings.run("download", () =>
+                      settings.startDownload({ autoEnable: false }),
+                    )
+                  }
+                  onSwitchToRemote={(profile) => void settings.requestActivate(profile)}
+                  onRemoveAssets={() => void settings.removeAssets()}
+                />
+                {/* 1px 分隔线：三块内容之间只有 12px 空白时读起来像一整段（清单 §3.2 第 7 条）。 */}
+                <Divider style={{ margin: 0 }} />
+              </>
             ) : null}
 
             {!ready && !downloading ? (
@@ -245,20 +218,6 @@ export default function EmbeddingProviderCard() {
                     onRetry={() => void settings.retryDownload()}
                     onRemove={() => void settings.removeAssets()}
                   />
-                ) : effectiveDraft ? (
-                  <EmbeddingRemoteBlock
-                    remote={status.remote}
-                    savedConfig={status.config ?? null}
-                    busy={busy}
-                    probe={probe}
-                    models={models}
-                    draft={effectiveDraft}
-                    presetId={effectivePresetId}
-                    onPatch={patchDraft}
-                    onSelectPreset={selectPreset}
-                    onTest={(config) => void settings.testRemote(config)}
-                    onFetchModels={(config) => void settings.fetchModels(config)}
-                  />
                 ) : null}
               </>
             ) : null}
@@ -275,11 +234,33 @@ export default function EmbeddingProviderCard() {
               />
             ) : null}
 
+            {!downloading ? (
+              <EmbeddingProfileList
+                profiles={profiles}
+                activeProfileId={status.active_profile_id}
+                activeProfileUpdatedAt={status.active_profile_updated_at}
+                remoteReady={remoteReady}
+                busy={busy}
+                testingId={settings.testingId}
+                testResults={settings.testResults}
+                onCreate={settings.openCreate}
+                onUse={(profile) => void settings.requestActivate(profile)}
+                onTest={(profile) => void settings.testProfile(profile)}
+                onEdit={settings.openEdit}
+                onDuplicate={settings.duplicate}
+                onClearKey={settings.clearKey}
+                onDelete={settings.remove}
+              />
+            ) : null}
+
+            {/* 地址白名单是安全设置，与配置列表分开读；没有已确认地址时整块不渲染，
+                这里也就不要留一条悬空的分隔线。 */}
+            {(status.remote.confirmed_hosts ?? []).length > 0 ? (
+              <Divider style={{ margin: 0 }} />
+            ) : null}
             <EmbeddingConfirmedHosts
               hosts={status.remote.confirmed_hosts ?? []}
-              activeHost={
-                status.state === "ready" && status.remote.enabled ? status.remote.host : ""
-              }
+              activeHost={remoteReady ? status.remote.host : ""}
               busy={busy}
               onRevoke={(host) => void settings.revokeHost(host)}
             />
@@ -296,12 +277,32 @@ export default function EmbeddingProviderCard() {
         )}
       </LoadingBlock>
 
+      <EmbeddingProfileModal
+        open={settings.modalOpen}
+        editing={settings.editing}
+        name={settings.name}
+        draft={settings.draft}
+        presetId={settings.presetId}
+        busy={busy}
+        saving={settings.saving}
+        probe={settings.modalOpen ? settings.probe : null}
+        models={settings.models}
+        error={settings.modalError}
+        onNameChange={settings.setName}
+        onPatchDraft={settings.patchDraft}
+        onSelectPreset={settings.selectPreset}
+        onTest={() => void settings.testDraft(settings.draft, settings.editing?.id)}
+        onFetchModels={() => void settings.fetchModels(settings.draft, settings.editing?.id)}
+        onSave={() => void settings.save()}
+        onClose={settings.closeModal}
+      />
+
       <EmbeddingPrivacyModal
-        open={settings.pendingEnable !== null}
-        host={settings.pendingEnable ? embeddingEndpointHost(settings.pendingEnable) : ""}
-        busy={busy === "enable"}
-        onConfirm={() => void settings.confirmEnable()}
-        onCancel={settings.cancelEnable}
+        open={settings.pendingProfile !== null}
+        host={settings.pendingProfile?.host ?? ""}
+        busy={busy === "activate"}
+        onConfirm={() => void settings.confirmActivate()}
+        onCancel={settings.cancelActivate}
       />
     </Card>
   );

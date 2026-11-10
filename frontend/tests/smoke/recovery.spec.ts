@@ -74,7 +74,12 @@ async function startGeneration(page: Page) {
   return { dialog, taskId: task.id };
 }
 
-test("生成中关闭弹窗：任务后台完成，重开弹窗接着显示进度并进入预览", async ({
+/**
+ * 第 9 条（并发生成）之后的行为契约：生成中关闭弹窗 = 后台继续，且**弹窗复位到配置页**
+ * （这样用户能立刻去发起第二份岗位的生成）。任务完成与落库由后台任务条/接口保证，
+ * 不再由「重开弹窗接着显示进度」承担，所以这里改为轮询任务状态验证后台仍会完成。
+ */
+test("生成中关闭弹窗：后台继续并在完成后落库，重开回到配置页", async ({
   page,
   api,
   scopedDataset,
@@ -91,14 +96,20 @@ test("生成中关闭弹窗：任务后台完成，重开弹窗接着显示进�
   await dialog.getByRole("button", { name: "后台继续（关闭弹窗）" }).click();
   await expect(dialog).toHaveCount(0);
 
-  // 任务仍在跑：重新打开弹窗应接着显示进度，而不是回到配置页。
+  // 重开弹窗：复位到配置页（可发第二份），而不是回到进度页。
   await clickRowGenerate(page);
-  await expect(dialog.getByText("生成已在后台开始")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "开始生成" })).toBeVisible();
 
-  // stub 慢速输出完毕 → 任务 completed → 弹窗自动进入预览（生成产物可见，
-  // 这同时是 RF-16 的"后台完成有结果"联动断言）。
-  await expect(dialog.getByRole("button", { name: /完\s*成/ })).toBeVisible({ timeout: 60_000 });
-  await dialog.getByRole("button", { name: /完\s*成/ }).click();
+  // stub 慢速输出完毕 → 后台任务 completed → 简历落库（RF-16 的后台完成断言）。
+  await expect
+    .poll(
+      async () => {
+        const state = await api.get(`${BACKEND_URL}/api/resumes/generate/tasks/${taskId}`);
+        return ((await state.json()) as { status: string }).status;
+      },
+      { timeout: 60_000 },
+    )
+    .toBe("completed");
 
   // 落库标题是后端自动拼的「姓名-公司-岗位-时间戳」，断言岗位名在其中即可。
   const resumes = await listResumes(api);

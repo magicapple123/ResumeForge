@@ -28,6 +28,8 @@ const navigation = {
 
   /** 「事实核对」不在侧栏里，但路由标题要用它（/claims/drill）。 */
   "navigation.page.claimsDrill": "事实核对",
+  /** 「外部简历」独立页（第 1 条）：侧栏仍高亮「简历中心」，只有页头标题用它。 */
+  "navigation.page.externalResumes": "外部简历",
 
   /** 「我的空间」菜单的触发按钮文字，同时用作它的无障碍名。 */
   "navigation.mySpace.label": "我的空间",

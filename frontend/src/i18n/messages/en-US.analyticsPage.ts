@@ -36,14 +36,15 @@ const analyticsPage = {
   "analyticsPage.overview.offerHint": "Offer rate: {rate}",
   "analyticsPage.funnel.title": "Conversion and blockers",
   "analyticsPage.funnel.description":
-    "Every conversion rate uses valid applications as its denominator, excluding applications still awaiting confirmation. 'No update for over 7 days' means an active application with no change at all in the past 7 days — even editing a note counts as an update, so it does not mean the interview is stuck.",
+    "Every conversion rate uses valid applications as its denominator, excluding applications still awaiting confirmation. 'No status change for over 7 days' means an active application whose status has not changed for more than 7 days — editing a note does not count as progress, so it does not mean the interview is stuck.",
   "analyticsPage.funnel.chartTitle": "Application funnel",
   "analyticsPage.funnel.chartHint":
     "Number of applications at each stage; the denominator is valid applications",
   "analyticsPage.funnel.active": "In progress",
-  "analyticsPage.funnel.activeHint": "Not yet closed",
-  "analyticsPage.funnel.stalled": "No update for over 7 days",
-  "analyticsPage.funnel.stalledHint": "Active but untouched for a while",
+  "analyticsPage.funnel.activeHint":
+    "Applied / screening / assessment / interview, excluding offers (offers have their own funnel stage)",
+  "analyticsPage.funnel.stalled": "No status change for over 7 days",
+  "analyticsPage.funnel.stalledHint": "Active with no status change for 7 days",
   "analyticsPage.funnel.noNextAction": "No next step",
   "analyticsPage.funnel.noNextActionHint": "Active with no next step set",
   "analyticsPage.funnel.action": "Go to the Job tracker to add a next step or advance the status",
@@ -52,7 +53,7 @@ const analyticsPage = {
     "Counts only status changes recorded after event tracking launched: each item states its numerator and denominator in the hint, and a badge appears when the sample is small. These numbers describe the past only — they do not predict or promise that using the product will improve anything.",
   "analyticsPage.cohort.empty": "No tracker entries yet",
   "analyticsPage.cohort.emptyHistorical":
-    "You have {count} tracker entries from before event tracking, so there is no stage data; changes from now on will be recorded.",
+    "No status changes recorded yet — the next status change will start collecting data.",
   "analyticsPage.cohort.historicalNotice":
     "You have {historical} entries from before event tracking ({total} in total), so there is no stage data; changes from now on will be recorded.",
   "analyticsPage.cohort.noRecords": "No records have reached this stage",
@@ -105,14 +106,14 @@ const analyticsPage = {
   "analyticsPage.weekday.sun": "Sun",
   "analyticsPage.channels.title": "Channels and outcomes",
   "analyticsPage.channels.description":
-    "Referral conversion is derived from the linked tracker entry — it only counts once that entry reaches Interview or later. Source is **how the entry got into the system**, not an application channel (this database has no channel field).",
+    "Referral conversion is derived from the linked tracker entry — it only counts once that entry reaches Interview or later. Source is **how the entry got into the system**; the application channel (see Channel conversion above) is where the job came from; the referral module is a third, independent record set. Do not add them together.",
   "analyticsPage.channels.referralRate": "Referral conversion rate",
   "analyticsPage.channels.referralRateHint": "Converted {converted} / valid referrals {total}",
   "analyticsPage.channels.referralTotal": "Total referrals",
   "analyticsPage.channels.referralTotalHint": "Includes closed and invalid",
   "analyticsPage.channels.caliberTitle": "How to read this",
   "analyticsPage.channels.caliberBody":
-    "Source is how the entry was added, not an application channel; referral conversion counts linked applications that reached Interview or later.",
+    "Source is how the entry was added, not the application channel (see Channel conversion above); referral conversion counts linked applications that reached Interview or later.",
   "analyticsPage.channels.referralStatusTitle": "Referral status distribution",
   "analyticsPage.channels.referralStatusHint": "By current referral status",
   "analyticsPage.channels.emptyReferrals": "No referrals yet",
@@ -130,6 +131,69 @@ const analyticsPage = {
   "analyticsPage.resume.missingLink": "Applications not linked to a resume",
   "analyticsPage.resume.missingLinkAction":
     "Linking is required to see resume performance; the entry form does not offer linking yet.",
+
+  // ===== Item 17 additions: channel conversion / durations / repeats / resume effect / goal+cost =====
+  "analyticsPage.channelConversion.title": "Channel conversion",
+  "analyticsPage.channelConversion.description":
+    "Groups by the application record's channel field: applications, interviews reached and offers per channel. Channels and referrals are **two separate systems** — the referral channel is a record field while the referral module is its own object, so never add them together.",
+  "analyticsPage.channelConversion.hint":
+    "{interview} interviews / {total} applications; {offer} offers ({offerRate})",
+  "analyticsPage.channelConversion.caliber":
+    "Source: the channel field on the tracker entry (user-selected, not the record source). The denominator is that channel's application count; fewer than 5 samples means reference only.",
+  "analyticsPage.channelConversion.empty": "No applications with a channel yet",
+  "analyticsPage.statusDuration.title": "Application → current stage",
+  "analyticsPage.statusDuration.description":
+    "Grouped by current status: median days between the application date and the status date the user filled in. Missing either date means the entry is excluded. This does not use the status-event table and never infers from the updated timestamp.",
+  "analyticsPage.statusDuration.medianDays": "Median {days} days",
+  "analyticsPage.statusDuration.noComparable": "No comparable data",
+  "analyticsPage.statusDuration.basedOn": "Based on {sample} / {total} entries with dates",
+  "analyticsPage.statusDuration.empty":
+    "No entries with both an application date and a status date yet",
+  "analyticsPage.statusDuration.skippedNegative":
+    "{count} entries have a status date earlier than the application date (back-filled out of order) and were excluded from the median.",
+  "analyticsPage.companyRepeats.title": "Multiple applications per company",
+  "analyticsPage.companyRepeats.description":
+    "Companies you applied to more than once: >=2 applications are listed; companies with >=3 applications and zero interviews are called out so you can stop and reassess.",
+  "analyticsPage.companyRepeats.itemHint":
+    "{total} applications, {interview} interviews, {offer} offers",
+  "analyticsPage.companyRepeats.itemLine": "{company}: {hint}",
+  "analyticsPage.companyRepeats.lineSeparator": "; ",
+  "analyticsPage.companyRepeats.nameSeparator": ", ",
+  "analyticsPage.companyRepeats.noInterviewTitle":
+    "Worth stopping: >=3 applications, zero interviews",
+  "analyticsPage.companyRepeats.noInterviewEmpty": "None",
+  "analyticsPage.companyRepeats.empty": "No company has received more than one application yet",
+  "analyticsPage.resumeEffect.title": "Resume version results",
+  "analyticsPage.resumeEffect.description":
+    "Grouped by the resume linked to an application; linking exists but coverage is low, so every group shows its sample size. Describes the past only — no ‘using this version will do better’ claims.",
+  "analyticsPage.resumeEffect.hint": "{interview} interviews / {total} applications",
+  "analyticsPage.resumeEffect.untitled": "Untitled resume",
+  "analyticsPage.resumeEffect.bias":
+    "Linking itself has selection bias (people link a resume for the roles they care about); results with fewer than 5 samples are unreliable.",
+  "analyticsPage.resumeEffect.empty": "No applications are linked to a resume yet",
+  "analyticsPage.goal.title": "Goal and generation cost",
+  "analyticsPage.goal.description":
+    "The weekly goal counts only this week (Monday–Sunday) by application date; generation cost reports tokens and duration only — no money, because the local ledger has no price table.",
+  "analyticsPage.goal.weeklyLabel": "Weekly application goal",
+  "analyticsPage.goal.save": "Save goal",
+  "analyticsPage.goal.saved": "Weekly application goal saved",
+  "analyticsPage.goal.saveFailed": "Could not save. Try again.",
+  "analyticsPage.goal.zeroHint":
+    "Save 0 to clear the goal; it only affects this comparison and never changes the application flow.",
+  "analyticsPage.goal.progress": "{done} / {target}",
+  "analyticsPage.goal.thisWeek": "{count} applications this week",
+  "analyticsPage.cost.generateCalls": "Generation calls",
+  "analyticsPage.cost.generateCallsHint":
+    "resume_generate calls (including repair/compression rounds)",
+  "analyticsPage.cost.avgDuration": "Average duration",
+  "analyticsPage.cost.seconds": "s",
+  "analyticsPage.cost.avgDurationHint": "Average duration per generation call",
+  "analyticsPage.cost.avgCompletion": "Average output",
+  "analyticsPage.cost.avgCompletionHint": "Average completion tokens per call",
+  "analyticsPage.cost.totalCalls": "All AI calls",
+  "analyticsPage.cost.totalCallsHint": "All tasks combined: {tokens} tokens",
+  "analyticsPage.cost.caliber":
+    "'Generation' means the resume_generate task; no money is shown (the ledger has no price table).",
 } as const;
 
 export default analyticsPage;

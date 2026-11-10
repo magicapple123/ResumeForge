@@ -26,6 +26,7 @@ const navigation = {
 
   /** "Fact check" is not in the sidebar, but the /claims/drill route title uses it. */
   "navigation.page.claimsDrill": "Fact check",
+  "navigation.page.externalResumes": "External resumes",
 
   /** Trigger label for the "My space" menu, also its accessible name. */
   "navigation.mySpace.label": "My space",

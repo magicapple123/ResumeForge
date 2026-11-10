@@ -34,6 +34,7 @@ const registryMock = vi.hoisted(() => {
     "ClaimsPage",
     "DrillPage",
     "ResumesPage",
+    "ExternalResumesPage",
     "ApplyPage",
     "WebFormPage",
     "TrackerPage",

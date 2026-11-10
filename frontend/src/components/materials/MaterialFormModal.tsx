@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 资料箱条目编辑：标题、分类、正文、链接、附件与备注。 */
 
-import { DeleteOutlined, FileTextOutlined, PictureOutlined, PlusOutlined } from "@ant-design/icons";
+import { DeleteOutlined, PaperClipOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Form, Image, Input, Select, Space, Typography, Upload } from "antd";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { handleEditorSaveKey } from "../../utils/formKeyboard";
 import type { Material, MaterialFile, MaterialPayload } from "../../types";
 import { MATERIAL_CATEGORIES } from "../../types";
@@ -11,10 +11,12 @@ import FileDropZone from "../common/FileDropZone";
 import FormModal from "../common/FormModal";
 import {
   IMAGE_MIME_BY_EXTENSION,
+  MATERIAL_ATTACHMENT_ACCEPT,
+  MATERIAL_ATTACHMENT_SUFFIXES,
   MAX_ATTACHMENT_BYTES,
   canPreviewImage,
-  readAsDataUrl,
 } from "../../utils/attachments";
+import { uploadMaterialAttachment } from "../../api/material";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { materialCategoryLabel } from "../../i18n/enum/knowledge";
@@ -22,13 +24,6 @@ import { materialCategoryLabel } from "../../i18n/enum/knowledge";
 /** 与后端 MAX_MATERIAL_* 保持一致（服务端仍是权威校验）。 */
 const MAX_FILES = 10;
 const MAX_IMAGE_FILES = 4;
-const MAX_TEXT_FILE_CHARS = 100_000;
-
-const IMAGE_ACCEPT = Object.keys(IMAGE_MIME_BY_EXTENSION)
-  .filter((extension) => ["png", "jpg", "jpeg", "webp", "gif", "bmp"].includes(extension))
-  .map((extension) => `.${extension}`)
-  .join(",");
-const TEXT_FILE_ACCEPT = ".txt,.md,.json,.csv";
 
 interface Props {
   open: boolean;
@@ -43,6 +38,14 @@ interface Props {
 function filesFromMaterial(material: Material | null): MaterialFile[] {
   if (!material) return [];
   return material.files.map((item) => ({ ...item }));
+}
+
+function suffixOf(name: string): string {
+  return name.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function imageCount(files: MaterialFile[]): number {
+  return files.filter((item) => item.data_url).length;
 }
 
 export default function MaterialFormModal({
@@ -62,6 +65,25 @@ export default function MaterialFormModal({
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
   const [files, setFiles] = useState<MaterialFile[]>([]);
+  // 附件列表的同步镜像：多文件一次选中时上传是**串行 await** 的，上限检查必须读到
+  // 前一个文件落下的结果。只读 state 闭包会让"一次选 5 张图"全部通过（清单 §24.7）。
+  const filesRef = useRef<MaterialFile[]>([]);
+  // 提取不到文字的常驻提示（扫描件 PDF 等）：仍允许加入，用户至少能另存为。
+  const [fileWarnings, setFileWarnings] = useState<string[]>([]);
+  // 串行上传队列：一次多选多个文件时按选择顺序逐个上传与检查。
+  const uploadQueue = useRef<Promise<void>>(Promise.resolve());
+
+  const replaceFiles = (next: MaterialFile[]) => {
+    // 只在事件/异步回调里写 ref（渲染期写 ref 会被 react-hooks/refs 判违规）。
+    filesRef.current = next;
+    setFiles(next);
+  };
+
+  // 列表状态变化后把镜像 ref 同步过来：打开弹窗的回填是在渲染期 setState 完成的，
+  // 这里在提交阶段之后补一次同步，保证第一次交互时 ref 已经是最新列表。
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
 
   // 打开时用条目内容（或空值）回填表单。Compiler 规范：随 prop 变化的重置用
   // 渲染期守卫式调整（key = open + material 引用，与原 deps 同源）。
@@ -76,66 +98,81 @@ export default function MaterialFormModal({
       setContent(material?.content ?? "");
       setUrl(material?.url ?? "");
       setNote(material?.note ?? "");
+      setFileWarnings([]);
       setFiles(filesFromMaterial(material));
     }
   }
 
   const options = Array.from(new Set([...categories, ...MATERIAL_CATEGORIES]));
 
-  const addImage = async (file: File) => {
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      message.error(t("materialForm.error.imageTooLarge"));
+  /** 单个附件：本地先判类型与上限，再交给后端存原件 + 提取内容。 */
+  const addAttachment = async (file: File) => {
+    const suffix = suffixOf(file.name);
+    // .doc 在选文件这一秒就说清怎么转（与面试材料同一文案口径），不等上传完再报错。
+    if (suffix === "doc") {
+      message.error(t("materialForm.error.legacyDoc"));
       return;
     }
-    if (files.filter((item) => item.data_url).length >= MAX_IMAGE_FILES) {
-      message.warning(t("materialForm.error.maxImages", { count: MAX_IMAGE_FILES }));
+    if (!MATERIAL_ATTACHMENT_SUFFIXES.has(suffix)) {
+      message.error(t("materialForm.error.unsupported"));
       return;
     }
-    if (files.length >= MAX_FILES) {
+    if (filesRef.current.length >= MAX_FILES) {
       message.warning(t("materialForm.error.maxFiles", { count: MAX_FILES }));
       return;
     }
+    const isImage = Boolean(IMAGE_MIME_BY_EXTENSION[suffix]);
+    if (isImage) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        message.error(t("materialForm.error.imageTooLarge"));
+        return;
+      }
+      if (imageCount(filesRef.current) >= MAX_IMAGE_FILES) {
+        message.warning(t("materialForm.error.maxImages", { count: MAX_IMAGE_FILES }));
+        return;
+      }
+    }
     try {
-      const dataUrl = await readAsDataUrl(file);
-      setFiles((current) => [
-        ...current,
+      const uploaded = await uploadMaterialAttachment(file);
+      // await 之后再查一次：串行队列保证前面文件已落库，但上限仍以最新列表为准。
+      if (filesRef.current.length >= MAX_FILES) {
+        message.warning(t("materialForm.error.maxFiles", { count: MAX_FILES }));
+        return;
+      }
+      if (isImage && imageCount(filesRef.current) >= MAX_IMAGE_FILES) {
+        message.warning(t("materialForm.error.maxImages", { count: MAX_IMAGE_FILES }));
+        return;
+      }
+      replaceFiles([
+        ...filesRef.current,
         {
-          name: file.name,
-          mime_type: file.type || "image/*",
-          size_bytes: file.size,
-          text: "",
-          data_url: dataUrl,
+          name: uploaded.name,
+          mime_type: uploaded.mime_type,
+          size_bytes: uploaded.size_bytes,
+          text: uploaded.text,
+          data_url: uploaded.data_url,
+          file_id: uploaded.file_id,
         },
       ]);
-    } catch {
-      message.error(t("materialForm.error.readImage"));
+      if (uploaded.warnings.length > 0) {
+        setFileWarnings((current) => [
+          ...current,
+          ...uploaded.warnings.map((warning) =>
+            t("materialForm.warning.attachment", { name: uploaded.name, warning }),
+          ),
+        ]);
+      }
+    } catch (error) {
+      // 后端 422 的 detail 是面向用户的原因（超限 / 格式 / 解析失败），原样展示。
+      message.error(error instanceof Error ? error.message : t("materialForm.error.uploadFailed"));
     }
   };
 
-  const addTextFile = async (file: File) => {
-    if (files.length >= MAX_FILES) {
-      message.warning(t("materialForm.error.maxFiles", { count: MAX_FILES }));
-      return;
-    }
-    try {
-      const text = await file.text();
-      if (!text.trim()) {
-        message.warning(t("materialForm.warning.noText"));
-        return;
-      }
-      setFiles((current) => [
-        ...current,
-        {
-          name: file.name,
-          mime_type: file.type || "text/plain",
-          size_bytes: file.size,
-          text: text.slice(0, MAX_TEXT_FILE_CHARS),
-          data_url: "",
-        },
-      ]);
-    } catch {
-      message.error(t("materialForm.error.readFile"));
-    }
+  /** 串行入队：多个文件一次选中时逐个上传，上限检查读到的始终是最新列表。 */
+  const enqueueAttachment = (file: File) => {
+    uploadQueue.current = uploadQueue.current
+      .then(() => addAttachment(file))
+      .catch(() => undefined);
   };
 
   const submit = () => {
@@ -174,9 +211,9 @@ export default function MaterialFormModal({
         disabled={submitting}
         onKeyDown={(event) => handleEditorSaveKey(event, submit)}
       >
-        <Form.Item label={t("materialForm.label.title")} htmlFor={`${fieldId}-title`}>
+        <Form.Item label={t("materialForm.label.title")} htmlFor={fieldId + "-title"}>
           <Input
-            id={`${fieldId}-title`}
+            id={fieldId + "-title"}
             showCount
             value={title}
             maxLength={256}
@@ -184,9 +221,9 @@ export default function MaterialFormModal({
             onChange={(event) => setTitle(event.target.value)}
           />
         </Form.Item>
-        <Form.Item label={t("materialForm.label.category")} htmlFor={`${fieldId}-category`}>
+        <Form.Item label={t("materialForm.label.category")} htmlFor={fieldId + "-category"}>
           <Select
-            id={`${fieldId}-category`}
+            id={fieldId + "-category"}
             // tags 模式的取值是数组，这里始终只放一项，对外仍当单个字符串用。
             value={category ? [category] : []}
             showSearch
@@ -201,18 +238,18 @@ export default function MaterialFormModal({
             placeholder={t("materialForm.placeholder.category")}
           />
         </Form.Item>
-        <Form.Item label={t("materialForm.label.content")} htmlFor={`${fieldId}-content`}>
+        <Form.Item label={t("materialForm.label.content")} htmlFor={fieldId + "-content"}>
           <Input.TextArea
-            id={`${fieldId}-content`}
+            id={fieldId + "-content"}
             value={content}
             autoSize={{ minRows: 4, maxRows: 12 }}
             placeholder={t("materialForm.placeholder.content")}
             onChange={(event) => setContent(event.target.value)}
           />
         </Form.Item>
-        <Form.Item label={t("materialForm.label.url")} htmlFor={`${fieldId}-url`}>
+        <Form.Item label={t("materialForm.label.url")} htmlFor={fieldId + "-url"}>
           <Input
-            id={`${fieldId}-url`}
+            id={fieldId + "-url"}
             value={url}
             placeholder={t("materialForm.placeholder.url")}
             onChange={(event) => setUrl(event.target.value)}
@@ -224,42 +261,57 @@ export default function MaterialFormModal({
             images: MAX_IMAGE_FILES,
           })}
         >
-          {/* 拖进来的文件按类型分流：图片走图片校验，其余按文本文件读取。 */}
+          {fileWarnings.length > 0 ? (
+            <Alert
+              type="warning"
+              showIcon
+              closable
+              onClose={() => setFileWarnings([])}
+              title={t("materialForm.warning.attachmentTitle")}
+              description={
+                <ul style={{ margin: 0, paddingInlineStart: 20 }}>
+                  {fileWarnings.map((warning, index) => (
+                    <li key={warning + index}>{warning}</li>
+                  ))}
+                </ul>
+              }
+              style={{ marginBottom: 12 }}
+            />
+          ) : null}
+          {/* 一个入口、一份 accept：按钮与拖拽区共用 MATERIAL_ATTACHMENT_ACCEPT，
+              不再按"图片 / 文本文件"拆成两个按钮（清单 §24）。 */}
           <FileDropZone
-            accept={`${IMAGE_ACCEPT},${TEXT_FILE_ACCEPT}`}
+            accept={MATERIAL_ATTACHMENT_ACCEPT}
             disabled={files.length >= MAX_FILES}
             hint={t("materialForm.hint.drop")}
-            onFiles={(dropped) =>
-              dropped.forEach((file) => {
-                if (IMAGE_MIME_BY_EXTENSION[`${file.name.split(".").pop()?.toLowerCase()}`]) {
-                  void addImage(file);
-                } else {
-                  void addTextFile(file);
-                }
-              })
-            }
-            onRejected={() => message.error(t("materialForm.error.unsupported"))}
+            onFiles={(dropped) => dropped.forEach(enqueueAttachment)}
+            onRejected={(_count, rejected) => {
+              // .doc 单独说"另存为 .docx"（与面试材料同一口径），其余不支持的格式也给提示。
+              const legacyDoc = rejected.some((file) => suffixOf(file.name) === "doc");
+              message.error(
+                legacyDoc ? t("materialForm.error.legacyDoc") : t("materialForm.error.unsupported"),
+              );
+            }}
           >
             <Space wrap>
               <Upload
-                accept={IMAGE_ACCEPT}
+                accept={MATERIAL_ATTACHMENT_ACCEPT}
                 showUploadList={false}
+                multiple
+                disabled={files.length >= MAX_FILES}
                 beforeUpload={(file) => {
-                  void addImage(file as File);
+                  enqueueAttachment(file as File);
                   return Upload.LIST_IGNORE;
                 }}
               >
-                <Button icon={<PictureOutlined />}>{t("materialForm.action.addImage")}</Button>
-              </Upload>
-              <Upload
-                accept={TEXT_FILE_ACCEPT}
-                showUploadList={false}
-                beforeUpload={(file) => {
-                  void addTextFile(file as File);
-                  return Upload.LIST_IGNORE;
-                }}
-              >
-                <Button icon={<FileTextOutlined />}>{t("materialForm.action.addText")}</Button>
+                <Button
+                  icon={<PaperClipOutlined />}
+                  // 图标自带 role=img + aria-label，按钮的可访问名会变成「paper-clip 添加附件」；
+                  // 显式 aria-label 让读屏与测试都拿到干净的「添加附件」。
+                  aria-label={t("materialForm.action.addAttachment")}
+                >
+                  {t("materialForm.action.addAttachment")}
+                </Button>
               </Upload>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 {t("materialForm.hint.dropNote")}
@@ -268,43 +320,53 @@ export default function MaterialFormModal({
           </FileDropZone>
           {files.length > 0 && (
             <div className="material-file-list">
-              {files.map((item, index) => (
-                <div key={`${item.name}-${index}`} className="material-file-item">
-                  {item.data_url && canPreviewImage(item.mime_type) ? (
-                    <Image src={item.data_url} alt={item.name} width={64} />
-                  ) : (
-                    <PlusOutlined className="material-file-icon" />
-                  )}
-                  <div className="material-file-meta">
-                    <Typography.Text ellipsis={{ tooltip: item.name }}>{item.name}</Typography.Text>
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {item.data_url
-                        ? t("materialForm.file.image", {
-                            size: Math.round(item.size_bytes / 1024),
-                          })
-                        : t("materialForm.file.text", { count: item.text.length })}
-                    </Typography.Text>
+              {files.map((item, index) => {
+                const hasText = Boolean((item.text ?? "").trim());
+                const metaText = item.data_url
+                  ? t("materialForm.file.image", {
+                      size: Math.round(item.size_bytes / 1024),
+                    })
+                  : hasText
+                    ? t("materialForm.file.text", { count: item.text.length })
+                    : t("materialForm.file.originalOnly");
+                return (
+                  <div key={item.file_id ?? item.name + index} className="material-file-item">
+                    {item.data_url && canPreviewImage(item.mime_type) ? (
+                      <Image src={item.data_url} alt={item.name} width={64} />
+                    ) : (
+                      <PaperClipOutlined className="material-file-icon" />
+                    )}
+                    <div className="material-file-meta">
+                      <Typography.Text ellipsis={{ tooltip: item.name }}>
+                        {item.name}
+                      </Typography.Text>
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        {metaText}
+                      </Typography.Text>
+                    </div>
+                    <Button
+                      type="text"
+                      size="small"
+                      danger
+                      aria-label={t("materialForm.aria.removeFile", { name: item.name })}
+                      icon={<DeleteOutlined />}
+                      onClick={() =>
+                        replaceFiles(filesRef.current.filter((_, itemIndex) => itemIndex !== index))
+                      }
+                    />
                   </div>
-                  <Button
-                    type="text"
-                    size="small"
-                    danger
-                    aria-label={t("materialForm.aria.removeFile", { name: item.name })}
-                    icon={<DeleteOutlined />}
-                    onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}
-                  />
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Form.Item>
         <Form.Item
           label={t("materialForm.label.note")}
-          htmlFor={`${fieldId}-note`}
+          htmlFor={fieldId + "-note"}
           style={{ marginBottom: 0 }}
         >
           <Input.TextArea
-            id={`${fieldId}-note`}
+            id={fieldId + "-note"}
             value={note}
             autoSize={{ minRows: 2, maxRows: 5 }}
             placeholder={t("materialForm.placeholder.note")}

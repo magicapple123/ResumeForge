@@ -91,6 +91,87 @@ export interface TrackCohort {
   durations: StageDuration[];
 }
 
+/** 一个投递渠道的投递数 / 面试率 / Offer 率（清单 §17.3-A1）。
+ *
+ *  `channel` 是用户自选的"这份工作从哪来的"，与「记录来源」（`source`）和内推模块
+ *  （`referral` 表）是三套不同口径，不能相加。样本低于阈值时 `small_sample` 为真，
+ *  界面必须亮徽标。
+ */
+export interface ChannelStat {
+  channel: string;
+  /** 中文展示名由后端下发（CHANNEL_LABELS 是唯一词表）。 */
+  label: string;
+  total: number;
+  interview_count: number;
+  interview_rate: number;
+  offer_count: number;
+  offer_rate: number;
+  small_sample: boolean;
+}
+
+/** 「投递 → 当前状态」耗时（清单 §17.3-A2）：只用 applied_at + status_date，不依赖事件表。 */
+export interface StatusDuration {
+  status: string;
+  label: string;
+  /** 有可用日期对的条数。 */
+  sample_count: number;
+  /** 该状态的记录总数（含缺日期的）。 */
+  denominator: number;
+  /** null = 没有可用样本，界面显示"暂无可比数据"，不显示 0 天。 */
+  median_days: number | null;
+  skipped_negative: number;
+  small_sample: boolean;
+}
+
+/** 同一家公司投了多个岗位（清单 §17.3-A3）。 */
+export interface CompanyRepeat {
+  company_key: string;
+  company: string;
+  total: number;
+  interview_count: number;
+  offer_count: number;
+}
+
+export interface CompanyRepeatBlock {
+  /** 投了 >=2 个岗位的公司。 */
+  repeats: CompanyRepeat[];
+  /** 投了 >=3 次但 0 面试的公司——最该止损的清单。 */
+  no_interview: CompanyRepeat[];
+}
+
+/** 按关联简历分组的投递结果（清单 §17.3-B4）；`small_sample` 必须展示，不做因果归因。 */
+export interface ResumeEffect {
+  resume_id: number;
+  resume_title: string;
+  total: number;
+  interview_count: number;
+  interview_rate: number;
+  small_sample: boolean;
+}
+
+export interface ModelUsage {
+  model: string;
+  calls: number;
+  completion_tokens: number;
+  avg_duration_ms: number;
+}
+
+/** 生成成本与耗时（清单 §17.3-C7）。只报 token 与耗时，不报金额（没有价格表）。 */
+export interface GenerationCost {
+  generate_calls: number;
+  generate_completion_tokens: number;
+  generate_avg_duration_ms: number;
+  total_calls: number;
+  total_tokens: number;
+  by_model: ModelUsage[];
+}
+
+/** 周投递目标 vs 本周已投（清单 §17.3-C6）；target=0 表示没设目标。 */
+export interface WeeklyGoal {
+  target: number;
+  this_week_count: number;
+}
+
 export interface AnalyticsDashboard {
   // ===== 概览 =====
   total_applications: number;
@@ -107,7 +188,8 @@ export interface AnalyticsDashboard {
 
   // ===== 转化与卡点 =====
   active_count: number;
-  /** 进行中且**超过 7 天没有任何更新**（改一条备注也算更新），不叫"面试卡住"。 */
+  /** 进行中且**超过 7 天没有发生状态变化**（事件 > status_date > updated_at），
+   *  不叫"面试卡住"——改备注不再刷新这个判定。 */
   stalled_count: number;
   no_next_action_count: number;
 
@@ -129,6 +211,16 @@ export interface AnalyticsDashboard {
 
   // ===== 真实时间线（RF-18，口径来自状态变化事件表）=====
   cohort: TrackCohort;
+
+  // ===== 第 17 条新增：渠道转化 / 投递→当前状态耗时 / 同公司多投 / 简历效果 =====
+  channel_stats: ChannelStat[];
+  status_durations: StatusDuration[];
+  company_repeats: CompanyRepeatBlock;
+  resume_effects: ResumeEffect[];
+
+  // ===== 第 17 条新增：周目标与生成成本（P3） =====
+  weekly_goal: WeeklyGoal;
+  generation_cost: GenerationCost;
 
   // ===== 简历与健康度 =====
   resume_count: number;

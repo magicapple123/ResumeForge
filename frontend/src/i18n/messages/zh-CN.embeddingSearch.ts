@@ -141,6 +141,12 @@ const embeddingSearch = {
   "embeddingSearch.hosts.revoked": "已撤销确认并停用",
   "embeddingSearch.hosts.active": "使用中",
   "embeddingSearch.hosts.hint": "换地址需要重新确认",
+  /** 折叠标题行里的数量（第 3 条）：`{count}` 是已确认的地址数。 */
+  "embeddingSearch.hosts.count": "{count} 个",
+  /** 折叠按钮：展开。 */
+  "embeddingSearch.hosts.toggle": "管理",
+  /** 折叠按钮：收起。 */
+  "embeddingSearch.hosts.toggleOpen": "收起",
 
   "embeddingSearch.guidance.network": "检查网络与接口地址后重试",
   "embeddingSearch.guidance.key": "检查 API 密钥是否正确",
@@ -175,6 +181,51 @@ const embeddingSearch = {
   /** 卡头「启用」在主操作不可点时的原因（禁用按钮的说明，不是错误）。 */
   "embeddingSearch.card.enableHint.remote": "先在下方填好地址、模型与密钥",
   "embeddingSearch.card.enableHint.local": "先下载本地模型",
+
+  /** 命名配置列表（清单第 1/16 条）：列表卡、弹窗、ready 态一键切换。 */
+  "embeddingSearch.remote.profiles.title": "已保存配置",
+  "embeddingSearch.remote.profiles.create": "新建配置",
+  "embeddingSearch.remote.profiles.emptyHint": "点「新建配置」保存一份，之后可一键切换",
+  "embeddingSearch.remote.profile.active": "生效中",
+  "embeddingSearch.remote.profile.pendingChanges": "有未生效改动",
+  "embeddingSearch.remote.profile.keyConfigured": "密钥已配置",
+  "embeddingSearch.remote.profile.use": "使用",
+  /** 保留 key（其它入口仍可能引用），但生效项不再渲染这个按钮（第 3 条）。 */
+  "embeddingSearch.remote.profile.using": "使用中",
+  /** 配置卡 meta 行的向量维度（第 3 条：维度原先只在就绪面板上）。 */
+  "embeddingSearch.remote.profile.dimValue": "{dim} 维",
+  "embeddingSearch.remote.profile.test": "测试连接",
+  /** 配置卡自己的 ⋮。措辞刻意不带「更多」：顶部那颗通用 ⋮ 已删除（第 3 条），
+      两个入口在验收脚本里靠"含不含『更多』"区分，写回旧措辞会让两者重新混在一起。 */
+  "embeddingSearch.remote.profile.moreActions": "{name} 的操作菜单",
+  "embeddingSearch.remote.profile.editNamed": "编辑 {name}",
+  "embeddingSearch.remote.profile.edit": "编辑",
+  "embeddingSearch.remote.profile.duplicate": "复制",
+  "embeddingSearch.remote.profile.copySuffix": "副本",
+  "embeddingSearch.remote.profile.delete": "删除配置",
+  "embeddingSearch.remote.profile.deleteTitle": "删除配置",
+  "embeddingSearch.remote.profile.deleteBody":
+    "生效中的配置会切到剩下第一条，没有剩余则关闭远程检索",
+  "embeddingSearch.remote.profile.deleted": "已删除配置",
+  "embeddingSearch.remote.profile.applied": "已切换检索配置",
+  "embeddingSearch.remote.profile.noKey": "先填写 API 密钥",
+  "embeddingSearch.remote.profile.saveFailed": "配置没能保存",
+  "embeddingSearch.remote.profile.keyKept": "留空则沿用这条已存的密钥",
+  "embeddingSearch.remote.modal.createTitle": "新建配置",
+  "embeddingSearch.remote.modal.editTitle": "编辑配置",
+  "embeddingSearch.remote.modal.nameLabel": "配置名称",
+  "embeddingSearch.remote.modal.nameHint": "最多 64 字，名称不能与已有配置重复",
+  "embeddingSearch.remote.modal.namePlaceholder": "如 公司 Azure",
+  "embeddingSearch.remote.modal.save": "保存配置",
+  "embeddingSearch.remote.validation.nameRequired": "先填写配置名称",
+  "embeddingSearch.remote.validation.nameTooLong": "配置名称不能超过 64 字",
+  "embeddingSearch.remote.validation.profileLimit": "最多保存 20 份配置",
+  "embeddingSearch.ready.switchLocal": "切换到本地服务",
+  "embeddingSearch.ready.switchRemote": "切换到远程服务",
+  "embeddingSearch.ready.switchRemoteHost": "切换到远程服务（{host}）",
+  "embeddingSearch.ready.switchRemoteEmpty": "先新建并保存一份可用的远程配置",
+  "embeddingSearch.ready.downloadLocal": "下载并切换到本地",
+  "embeddingSearch.ready.rebuildHint": "切换后首次生成会重建索引（远程约 2s / 本地约 17s）",
 } as const;
 
 export default embeddingSearch;

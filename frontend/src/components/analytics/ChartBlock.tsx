@@ -15,10 +15,12 @@ interface Props {
   title: string;
   /** 这张图的统计口径；没有就不显示，不要为凑格式写废话。 */
   hint?: string;
+  /** 图卡头右侧的操作位（如趋势图的时间范围选择器）——它只作用于这张图，别再挂到区块标题上。 */
+  extra?: ReactNode;
   children: ReactNode;
 }
 
-export default function ChartBlock({ title, hint, children }: Props) {
+export default function ChartBlock({ title, hint, extra, children }: Props) {
   return (
     <section className="analytics-chart-block" aria-label={title}>
       <div className="analytics-chart-block-head">
@@ -30,6 +32,7 @@ export default function ChartBlock({ title, hint, children }: Props) {
             {hint}
           </Typography.Text>
         ) : null}
+        {extra ? <div className="analytics-chart-block-extra">{extra}</div> : null}
       </div>
       {children}
     </section>

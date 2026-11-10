@@ -90,6 +90,90 @@ export function fetchAsrModels(payload: AsrModelsPayload): Promise<AsrModelsResu
   });
 }
 
+// ===== 命名配置（global_settings.json 的 asr_profiles 段） =====
+//
+// 与旧的单配置接口并存：旧接口仍被「测试连接」草稿与老调用点使用，不删。
+
+/** 一条命名配置的对外形态：**不含 Key**，has_key 只说明有没有已保存的 Key。 */
+export interface AsrProfile {
+  id: string;
+  name: string;
+  preset_id: string;
+  base_url: string;
+  model: string;
+  protocol: AsrProtocol;
+  has_key: boolean;
+  configured: boolean;
+  updated_at: string;
+}
+
+/** 列表与所有增删改接口的统一响应：前端拿整份状态替换本地副本。 */
+export interface AsrProfilesState {
+  active_profile_id: string;
+  profiles: AsrProfile[];
+}
+
+/** 新建/更新一条配置的请求体；id 为空表示新建。 */
+export interface AsrProfilePayload {
+  id?: string;
+  name: string;
+  preset_id: string;
+  base_url: string;
+  model: string;
+  protocol: AsrProtocol;
+  /** 三种口径：新值 / 空串或掩码 = 保留这一条的旧 Key / __clear__ = 清空。 */
+  api_key: string;
+}
+
+/** 弹窗内「测试连接」的草稿覆盖：字段缺省表示用该条已存配置。 */
+export interface AsrProfileTestPayload {
+  base_url?: string;
+  model?: string;
+  protocol?: AsrProtocol;
+  api_key?: string;
+}
+
+/** 新建弹窗还没有 id 时传给测试接口的占位（与后端 NEW_PROFILE_SENTINEL 一致）。 */
+export const NEW_ASR_PROFILE_ID = "new";
+
+/** 最多保存多少份配置（与后端 MAX_ASR_PROFILES 对齐，只用于禁用按钮）。 */
+export const MAX_ASR_PROFILES = 10;
+
+export function getAsrProfiles(): Promise<AsrProfilesState> {
+  return request("/settings/asr/profiles");
+}
+
+export function saveAsrProfile(payload: AsrProfilePayload): Promise<AsrProfilesState> {
+  return request("/settings/asr/profiles", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function deleteAsrProfile(profileId: string): Promise<AsrProfilesState> {
+  return request("/settings/asr/profiles/" + encodeURIComponent(profileId), { method: "DELETE" });
+}
+
+export function activateAsrProfile(profileId: string): Promise<AsrProfilesState> {
+  return request("/settings/asr/profiles/" + encodeURIComponent(profileId) + "/activate", {
+    method: "POST",
+  });
+}
+
+export function clearAsrProfileKey(profileId: string): Promise<AsrProfilesState> {
+  return request("/settings/asr/profiles/" + encodeURIComponent(profileId) + "/clear-key", {
+    method: "POST",
+  });
+}
+
+/** 用「该条已存 Key + 草稿覆盖」探测一次上游；不落盘。 */
+export function testAsrProfile(
+  profileId: string,
+  payload: AsrProfileTestPayload,
+): Promise<AsrTestResult> {
+  return request("/settings/asr/profiles/" + encodeURIComponent(profileId) + "/test", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    budget: "recognition",
+  });
+}
 export function getTranscribeStatus(): Promise<TranscribeStatus> {
   return request("/transcribe/status");
 }

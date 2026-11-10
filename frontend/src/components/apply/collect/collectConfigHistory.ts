@@ -18,17 +18,43 @@ export interface CollectConfigSnapshot {
   config: CollectConfig;
 }
 
-/** 读取历史条件；缺省/损坏时回退空数组。 */
+/**
+ * 历史快照里的站点筛选项：旧版本存的是单个字符串（`{"degree": "203"}`），
+ * 新版本是编码数组（问题清单 §15.3-A）。读取时统一归一成数组，旧快照照样能用。
+ */
+export function normalizeFilterValues(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const cleaned: Record<string, string[]> = {};
+  for (const [rawKey, rawCodes] of Object.entries(value as Record<string, unknown>)) {
+    const key = rawKey.trim();
+    if (!key || rawCodes === null || rawCodes === undefined) continue;
+    const items = Array.isArray(rawCodes) ? rawCodes : [rawCodes];
+    const codes: string[] = [];
+    for (const item of items) {
+      const code = item === null || item === undefined ? "" : String(item).trim();
+      if (code && !codes.includes(code)) codes.push(code);
+    }
+    if (codes.length) cleaned[key] = codes;
+  }
+  return cleaned;
+}
+
+/** 读取历史条件；缺省/损坏时回退空数组（旧快照的 filters 会归一成编码数组）。 */
 export function readConfigHistory(): CollectConfigSnapshot[] {
   try {
     const raw = localStorage.getItem(CONFIG_HISTORY_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (entry): entry is CollectConfigSnapshot =>
-        entry && typeof entry === "object" && "savedAt" in entry && "config" in entry,
-    );
+    return parsed
+      .filter(
+        (entry): entry is CollectConfigSnapshot =>
+          entry && typeof entry === "object" && "savedAt" in entry && "config" in entry,
+      )
+      .map((entry) => ({
+        ...entry,
+        config: { ...entry.config, filters: normalizeFilterValues(entry.config?.filters) },
+      }));
   } catch {
     return [];
   }

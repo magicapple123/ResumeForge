@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 资料箱接口：零散资料的增删改查。 */
-import type { Material, MaterialPayload, MaterialSummary } from "../types";
+import type { Material, MaterialAttachment, MaterialPayload, MaterialSummary } from "../types";
 import type { Page } from "../types/common";
 import { buildQuery, request } from "./client";
 
@@ -27,6 +27,23 @@ export function listMaterialCategories(): Promise<string[]> {
 
 export function getMaterial(id: number): Promise<Material> {
   return request(`/materials/${id}`);
+}
+
+/**
+ * 上传一个资料附件：后端存原件 + 提取文字/生成受限缩略图，返回可直接放进
+ * material.files 的元信息（含 file_id）。
+ *
+ * 走 multipart 而不是 JSON：10 MB 的 PDF 转 base64 会再放大三分之一，而这是一个
+ * 逐个文件上传的接口（表单里可多选，逐个 await 串行上传）。
+ */
+export function uploadMaterialAttachment(file: File): Promise<MaterialAttachment> {
+  const form = new FormData();
+  form.append("file", file);
+  return request("/materials/attachments", {
+    method: "POST",
+    body: form,
+    budget: "upload",
+  });
 }
 
 export function createMaterial(payload: MaterialPayload): Promise<Material> {

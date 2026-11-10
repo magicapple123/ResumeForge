@@ -40,6 +40,8 @@ function makeClaim(id: number, title: string, status: string): Claim {
     source_fact: "demo fact",
     candidate_wording: "demo wording",
     sources: [],
+    entry_ids: [],
+    entry_ids_auto: false,
     responsibility_level: LEVEL as Claim["responsibility_level"],
     verification_status: status as Claim["verification_status"],
     allowed_uses: [],

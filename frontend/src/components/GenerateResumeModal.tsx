@@ -348,6 +348,11 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     // 生成中关弹窗 = 后台继续（不是取消）：任务继续跑，完成后提醒；其余阶段照旧复位。
     if (stage === "generating" && taskId != null) {
       onClose();
+      // 后台登记表已接管（start 时 watchResumeTask）。弹窗自己的任务上下文必须清掉，
+      // 否则下次打开（可能是另一个岗位）还停在上一个任务的生成态，发不起第二份。
+      setTaskId(null);
+      setTask(null);
+      setStage("config");
       return;
     }
     reset();

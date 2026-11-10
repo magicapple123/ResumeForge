@@ -23,8 +23,8 @@ interface Props {
   multiple?: boolean;
   disabled?: boolean;
   hint?: string;
-  /** 有文件被过滤掉时回调（数量），调用方据此提示用户格式不支持。 */
-  onRejected?: (count: number) => void;
+  /** 有文件被过滤掉时回调（数量 + 被拒文件），调用方据此提示格式不支持或给具体建议。 */
+  onRejected?: (count: number, rejectedFiles: File[]) => void;
   className?: string;
   children: ReactNode;
 }
@@ -99,8 +99,8 @@ export default function FileDropZone({
     const files = Array.from(event.dataTransfer?.files ?? []);
     if (files.length === 0) return;
     const accepted = files.filter((file) => matchesAccept(file, accept));
-    const rejected = files.length - accepted.length;
-    if (rejected > 0) onRejected?.(rejected);
+    const rejectedFiles = files.filter((file) => !matchesAccept(file, accept));
+    if (rejectedFiles.length > 0) onRejected?.(rejectedFiles.length, rejectedFiles);
     if (accepted.length === 0) return;
     onFiles(multiple ? accepted : accepted.slice(0, 1));
   };

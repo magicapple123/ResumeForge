@@ -75,6 +75,7 @@ export const ProfilePage = lazyPage(() => import("./ProfilePage"));
 export const ClaimsPage = lazyPage(() => import("./ClaimsPage"));
 export const DrillPage = lazyPage(() => import("./DrillPage"));
 export const ResumesPage = lazyPage(() => import("./ResumesPage"));
+export const ExternalResumesPage = lazyPage(() => import("./ExternalResumesPage"));
 export const ApplyPage = lazyPage(() => import("./ApplyPage"));
 export const WebFormPage = lazyPage(() => import("./WebFormPage"));
 export const TrackerPage = lazyPage(() => import("./TrackerPage"));

@@ -1,0 +1,206 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 求职进度（1/2）：顶部「指标带 + 阶段构成条」合并卡（12.2 + 13.2-A/B/C）。
+   2026-11-10 波次 3：原 tracker-board.css 的统计卡与漏斗两段合并到这里——
+   去掉彩色顶边 / 12px 圆角 + 阴影的仪表盘卡，改成一张卡里的两段：
+   指标带（数字与标签同基线）+ 100% 堆叠构成条（五段按进行中总数切分）。
+   约束：本文件不写字面量颜色（只用 --rf-* token），见 color-regression.test.ts。 */
+
+/* 外层只做布局外壳；统计失败的错误文案与骨架都在卡片内部。 */
+.tracker-summary {
+  display: block;
+}
+
+/* 一张 12px 圆角容器：上半指标带、中间 1px 分隔线、下半构成条。
+   不上阴影：彩色顶边 + 模糊阴影是「AI 生成 dashboard」的默认解，也没有信息量。 */
+.tracker-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border);
+  border-radius: 12px;
+}
+
+/* 加载态：指标带与构成条各占一块骨架，加载完成后高度接近，不整排跳变。 */
+.tracker-summary-skeleton-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.tracker-summary-skeleton {
+  flex: 1 1 120px;
+  min-height: 40px;
+}
+
+/* 指标带：无外壳的一行，数字（18px）与标签（12px）同基线，阅读顺序是「12 总数」。 */
+.tracker-metric-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  row-gap: 8px;
+}
+
+.tracker-metric {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  padding-inline: 18px;
+  border-left: 1px solid var(--rf-border);
+}
+
+.tracker-metric:first-child {
+  padding-inline-start: 0;
+  border-left: 0;
+}
+
+.tracker-metric:last-child {
+  padding-inline-end: 0;
+}
+
+.tracker-metric-value {
+  color: var(--rf-text-body);
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tracker-metric-label {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* 全页只留两处强调色：Offer 绿、已结束红；其余一律正文色。 */
+.tracker-metric--offer .tracker-metric-value {
+  color: var(--rf-stage-offer);
+}
+
+.tracker-metric--closed .tracker-metric-value {
+  color: var(--rf-stage-rejected);
+}
+
+.tracker-summary-divider {
+  height: 1px;
+  background: var(--rf-border);
+}
+
+/* 构成条：一条 100% 堆叠条 + 图例。 */
+.tracker-funnel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tracker-funnel-headline {
+  font-size: 12px;
+}
+
+/* 段间 2px 缝隙 + 容器 overflow hidden：首段左圆角、末段右圆角，中间不圆角。 */
+.tracker-funnel-stack {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  background: var(--rf-surface-alt);
+  border-radius: 999px;
+}
+
+.tracker-composition-seg {
+  display: block;
+  min-width: 0;
+  /* 颜色条专用色：浅色主题给亮彩、深色主题给暗彩（见 tokens 里的 --rf-stage-bar-*）。 */
+  background: var(--rf-stage-bar, var(--rf-stage-color, var(--rf-info)));
+}
+
+.tracker-composition-seg:first-child {
+  border-start-start-radius: 999px;
+  border-end-start-radius: 999px;
+}
+
+.tracker-composition-seg:last-child {
+  border-start-end-radius: 999px;
+  border-end-end-radius: 999px;
+}
+
+.tracker-composition-seg:only-child {
+  border-radius: 999px;
+}
+
+/* 图例：5 个可点筛选按钮；阶段名 + 数量 + 占比（最大余数法，合计 100）。
+
+   2026-11-10 第二轮：grid → flex。此前 `repeat(auto-fit, minmax(128px, 1fr))` 把 1128px
+   切成 5 条 220px（末尾还多出三条 0px 轨道），每项被拉满一列，再叠加
+   `.tracker-funnel-count { margin-left: auto }`，文字与数字之间就空出整列余量（实测 120px）。
+   改成按内容宽度排列 + 20px 列间距，数字紧跟文字。 */
+.tracker-funnel-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+
+.tracker-funnel-step {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 8px;
+  color: var(--rf-text-body);
+  font-size: 12px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+/* 去掉 hover 抬升（translateY + 阴影是 demo 站观感）：只换一层极浅底色。 */
+.tracker-funnel-step:hover {
+  background: var(--rf-surface-alt);
+}
+
+.tracker-funnel-step.is-selected {
+  border-color: var(--rf-stage-color, var(--rf-focus-ring));
+  background: color-mix(in srgb, var(--rf-stage-color, var(--rf-focus-ring)) 8%, transparent);
+}
+
+.tracker-funnel-step.is-empty {
+  color: var(--rf-text-secondary);
+  opacity: 0.6;
+}
+
+.tracker-funnel-step.is-empty .tracker-funnel-dot {
+  background: var(--rf-border-strong);
+}
+
+.tracker-funnel-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  background: var(--rf-stage-bar, var(--rf-stage-color, var(--rf-info)));
+  border-radius: 50%;
+}
+
+.tracker-funnel-label {
+  font-weight: 500;
+}
+
+/* antd 之外的数字间距交给 flex gap；`margin-left: auto` 是"数字飞走"的直接原因，
+   回来就等于回到 120px。占比列保留 min-width + 右对齐：切换筛选时数字宽度变化
+   不会让整排抖动。 */
+.tracker-funnel-count {
+  margin-left: 2px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tracker-funnel-percent {
+  min-width: 34px;
+  color: var(--rf-text-secondary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

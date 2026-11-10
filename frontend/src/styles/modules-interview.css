@@ -3,11 +3,7 @@
 拆分自 modules.css，纯搬迁、规则内容与顺序不变。 */
 
 /* ===== 模拟面试 ===== */
-.interview-setup-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0 16px;
-}
+/* 设定卡的布局规则在 modules-interview-setup.css（第 8 条起：外层纵向 stack）。 */
 
 .interview-room {
   display: flex;
@@ -107,12 +103,12 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .jane-avatar--intro {
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
 }
 
 .jane-avatar--report {
@@ -493,8 +489,4 @@
 /* antd-override: 布局无 token——只作用于面试材料字段，不动全局 extra 间距。 */
 .interview-material-field .ant-form-item-extra {
   margin-top: 8px;
-}
-
-.interview-setup-hint {
-  grid-column: 1 / -1;
 }

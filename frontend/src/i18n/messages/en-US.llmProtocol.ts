@@ -52,9 +52,15 @@ const llmProtocol = {
   "llmProtocol.matrix.no": "Not supported",
   /** Partially supported (extra prerequisite or a separate endpoint). */
   "llmProtocol.matrix.partial": "Partial",
-  /** Table footnote: verification date and disclaimer. */
+  /** Table footnote: verification date, disclaimer, and the pointer to thinking controls. */
   "llmProtocol.matrix.footnote":
-    'Verified on 2026-11-09 against each provider\'s official docs; "Not supported" means the provider does not document such an endpoint. Model names and endpoints may change.',
+    'Verified on 2026-11-09 against each provider\'s official docs; "Not supported" means the provider does not document such an endpoint. Model names and endpoints may change. Thinking controls: some models always think (GPT-6 Astra / GPT-6.1 Sol / GLM-5.3 / Kimi K3 / MiniMax M3.1-Flash); the app never sends them a disable parameter and greys out the Thinking switch with the reason.',
+  /** Note on Doubao's Anthropic cell: no official Messages endpoint (issue §11.4 defect 7). */
+  "llmProtocol.matrix.doubaoAnthropicNote":
+    "The official docs list no Anthropic Messages endpoint (the compatibility layer covers only the OpenAI-compatible protocol); use Chat Completions or Responses instead.",
+  /** Note on the MiniMax row: the documented host vs the mainland platform host. */
+  "llmProtocol.matrix.minimaxNote":
+    "The documented entry is api.minimax.io and the preset now uses it; the mainland platform is api.minimaxi.com. Keys are bound to their host, so mainland accounts should switch it back.",
   /** Note on DeepSeek's Anthropic cell: its endpoint sits under a dedicated prefix. */
   "llmProtocol.matrix.deepseekAnthropicNote":
     "Official Anthropic-compatible endpoint: https://api.deepseek.com/anthropic/v1 (append /messages).",
@@ -73,9 +79,9 @@ const llmProtocol = {
   /** Note on Gemini's chat completions cell: the compat layer is beta and has no Responses. */
   "llmProtocol.matrix.geminiChatNote":
     "The OpenAI compatibility layer is still beta; it also covers embeddings / images / batches, but has no Responses endpoint.",
-  /** Note on Spark's Anthropic cell: entry lives under /anthropic, unlike chat under /v2. */
+  /** Note on Spark's Anthropic cell: entry lives on the new MaaS host, unlike chat under /v2. */
   "llmProtocol.matrix.sparkAnthropicNote":
-    "The Anthropic entry sits under /anthropic on the same host (/anthropic/v1/messages), a different path from chat under /v2.",
+    "Anthropic / Responses entries live on the new MaaS host maas-api.cn-huabei-1.xf-yun.com (/anthropic/v1/messages); the legacy spark-api-open host only serves Chat Completions.",
   /** Note on Groq's Responses cell. */
   "llmProtocol.matrix.groqResponsesNote":
     "Responses is in Beta; store accepts only false/null and previous_response_id is always null.",
@@ -87,9 +93,9 @@ const llmProtocol = {
   /** Note on StepFun's Responses cell: only two models are available. */
   "llmProtocol.matrix.stepfunResponsesNote":
     "Currently supports only step-5-preview and step-3.7-flash.",
-  /** Note on xAI's Anthropic cell: defined in the OpenAPI, yet undocumented. */
+  /** Note on xAI's Anthropic cell: the compatibility entry is deprecated; migrate to Responses. */
   "llmProtocol.matrix.xaiAnthropicNote":
-    "The official OpenAPI defines /v1/messages as Anthropic-compatible, but no usage docs exist yet.",
+    "The official Anthropic compatibility entry is deprecated; migrate to the Responses protocol (4.5 and later can only lower effort, not disable thinking).",
   /** Note on Together AI's Anthropic cell. */
   "llmProtocol.matrix.togetherAnthropicNote":
     "Messages covers only some serverless models such as GLM-5.2 / GLM-5.3; other models may return malformed output.",

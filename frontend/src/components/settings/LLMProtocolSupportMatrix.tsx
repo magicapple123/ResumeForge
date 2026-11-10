@@ -13,6 +13,12 @@
  *
  * **这张表是"用户该选哪个协议"的唯一出处**：协议下拉的说明不再枚举"谁不支持"，
  * 因为那种枚举总是漏（2026-11-07 那版就把 DeepSeek / MiniMax / 千帆 / 星火 全写错了）。
+ *
+ * **2026-11-09 修订**（清单 §11.4 第 7 类缺陷）：豆包 Anthropic 写「支持」但官方无入口、
+ * xAI Anthropic 官方已废弃、讯飞入口在新 MaaS 域名、MiniMax 域名与官方文档不一致——四处
+ * 一并改。表尾同时指向「思考开关」：哪些型号强制思考、本应用不会给它们发关闭参数。
+ * 强制思考型号清单的唯一事实在 ``backend/app/services/llm/thinking_vendors.py``
+ * 的 ``FORCED_THINKING_MODELS``，后端守卫会读本目录的语言包比对（两边必须逐字一致）。
  */
 import { Collapse, Table, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
@@ -53,7 +59,15 @@ const ROWS: MatrixRow[] = [
     anthropic: "yes",
     responsesNoteKey: "llmProtocol.matrix.qwenResponsesNote",
   },
-  { labelKey: "appConfig.preset.doubao", chat: "yes", responses: "yes", anthropic: "yes" },
+  {
+    labelKey: "appConfig.preset.doubao",
+    chat: "yes",
+    responses: "yes",
+    // 官方文档没有 Anthropic Messages 入口（§11.4 缺陷 7）：「支持」会让用户选到一个
+    // 必然 404 的协议。
+    anthropic: "no",
+    anthropicNoteKey: "llmProtocol.matrix.doubaoAnthropicNote",
+  },
   { labelKey: "appConfig.preset.zhipu", chat: "yes", responses: "yes", anthropic: "yes" },
   {
     labelKey: "appConfig.preset.siliconflow",
@@ -88,7 +102,14 @@ const ROWS: MatrixRow[] = [
     anthropic: "yes",
     anthropicNoteKey: "llmProtocol.matrix.sparkAnthropicNote",
   },
-  { labelKey: "appConfig.preset.minimax", chat: "yes", responses: "yes", anthropic: "yes" },
+  {
+    labelKey: "appConfig.preset.minimax",
+    chat: "yes",
+    responses: "yes",
+    anthropic: "yes",
+    // 官方域名与预设保留旧域名的原因（§11.4 缺陷 7 的同一类：矩阵与预设不一致）。
+    anthropicNoteKey: "llmProtocol.matrix.minimaxNote",
+  },
   { labelKey: "appConfig.preset.openrouter", chat: "yes", responses: "yes", anthropic: "yes" },
   {
     labelKey: "llmProtocol.preset.stepfun",
@@ -110,7 +131,9 @@ const ROWS: MatrixRow[] = [
     labelKey: "appConfig.preset.xai",
     chat: "yes",
     responses: "yes",
-    anthropic: "partial",
+    // 官方已废弃 Anthropic 兼容入口（§11.4 缺陷 7）：标「部分支持」等于让用户踩一个
+    // 已下线的入口。迁移目标是 Responses。
+    anthropic: "no",
     anthropicNoteKey: "llmProtocol.matrix.xaiAnthropicNote",
   },
   {

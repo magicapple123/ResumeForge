@@ -1,13 +1,30 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 资料箱条目类型。 */
 
-/** 资料附件：本机提取出的文字，或一张图片的缩略图。 */
+/** 资料附件：本机提取出的文字、一张图片的缩略图，或一份已存原件的引用。 */
 export interface MaterialFile {
   name: string;
   mime_type: string;
   size_bytes: number;
   text: string;
   data_url: string;
+  /**
+   * 已保存原件的 user_file id；null/缺省 = 历史附件，没有原件可「另存为」。
+   * 后端 material.files 是 JSON 列，老数据没有这个字段。
+   */
+  file_id?: number | null;
+}
+
+/** POST /api/materials/attachments 的响应：上传并提取完成的单个附件。 */
+export interface MaterialAttachment {
+  file_id: number;
+  name: string;
+  mime_type: string;
+  size_bytes: number;
+  text: string;
+  data_url: string;
+  /** 没提取到文字时的原因（如扫描件 PDF），前端要常驻提示，但仍允许加入。 */
+  warnings: string[];
 }
 
 export interface Material {

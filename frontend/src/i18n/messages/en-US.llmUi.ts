@@ -7,6 +7,10 @@ const llmUi = {
   "llmUi.thinking.field.mode": "Thinking mode",
   "llmUi.thinking.tooltip.mode":
     "When on, AI chat and resume generation ask the model to think before answering: deeper responses, but a longer wait each turn. Structured tasks such as job recognition and match analysis are unaffected (thinking is skipped for speed). Off by default. Providers differ in how they pass thinking parameters and which levels they offer, so try the check button on the right first.",
+  /** Forced-thinking models: the switch is greyed out and explains why nothing is sent. */
+  "llmUi.thinking.tooltip.cannotDisable":
+    "This model always thinks and cannot be turned off; the app never sends it a disable parameter, so switching it off here would have no effect.",
+  "llmUi.thinking.alert.cannotDisable": "Thinking cannot be disabled",
   "llmUi.thinking.switch.on": "On",
   "llmUi.thinking.switch.off": "Off",
   "llmUi.thinking.field.effort": "Reasoning effort",

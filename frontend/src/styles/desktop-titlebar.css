@@ -1,0 +1,220 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 桌面自绘标题栏（问题清单 §19）。
+ *
+ * 三个必须一起改的值：
+ *  - 高度 32px：主进程 titleBarOverlay 的高度与这里必须同值（desktop/lib/titlebar.js）；
+ *  - 底色：主进程覆盖层颜色与这里的 --rf-titlebar-bg 逐值一致，否则系统按钮下方
+ *    会出现一条色块（深色主题尤其明显）；
+ *  - 拖拽区：只有 .app-titlebar-drag 可拖；菜单容器 / 下拉 / 提示必须 no-drag，
+ *    漏一个整条标题栏点不动，且极难排查。
+ *
+ * 颜色只走本文件内定义的 --rf-* 变量（colorGuard 允许 token 定义行）；深浅两套值
+ * 与主进程 TITLEBAR_THEME 对应（浅 #f5f7fa / #e8edf4 / #e6eaf0；深 #151b23 / #232b36）。
+ */
+
+:root {
+  --rf-titlebar-height: 32px;
+  --rf-titlebar-bg: #f5f7fa;
+  --rf-titlebar-border: #e6eaf0;
+  --rf-titlebar-hover: #e8edf4;
+  --rf-titlebar-text: #3d4a5c;
+}
+
+[data-theme="dark"] {
+  --rf-titlebar-bg: #151b23;
+  --rf-titlebar-border: #232b36;
+  --rf-titlebar-hover: #232b36;
+  --rf-titlebar-text: #cfd8e3;
+}
+
+/*
+ * 净增 0px（§19.2）：标题栏占用的 32px 来自原来系统标题栏让出的空间。
+ *
+ * 布局真相（2026-11-10 真机实测）：React 根是 #root > div.ant-app（antd <App> 的
+ * 包裹层），标题栏与 .app-shell 都在这个包裹层里，**不是** #root 的直接子节点。
+ * 所以纵向 flex 容器要落在 .ant-app 上：标题栏固定 32px，.app-shell 吃掉剩余高度。
+ * 包裹层没有布局 token（antd 只给它颜色/字体），这里的改动只服务桌面外壳。
+ *
+ * 侧栏是 fixed 定位，必须自己把 top/height 让出标题栏那一截，否则会盖住菜单；
+ * 全屏时标题栏隐藏，侧栏吃掉整屏。浏览器版没有 .app-titlebar，:has 不命中。
+ */
+html:has(.app-titlebar) #root > .ant-app {
+  /* antd-override: App 包裹层无布局 token；只给桌面外壳定高，不改 antd 组件外观 */
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+}
+
+html:has(.app-titlebar) .app-shell {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+html:has(.app-titlebar) .app-sider {
+  top: var(--rf-titlebar-height);
+  height: calc(100vh - var(--rf-titlebar-height)) !important;
+}
+
+html:has(.app-titlebar) .app-main {
+  height: 100%;
+}
+
+/* 全屏时标题栏隐藏（display:none），侧栏同步吃掉顶部那 32px。 */
+html:has(.app-titlebar[data-hidden="true"]) .app-sider {
+  top: 0;
+  height: 100vh !important;
+}
+
+.app-titlebar {
+  position: relative;
+  display: flex;
+  flex: 0 0 var(--rf-titlebar-height);
+  align-items: center;
+  width: 100%;
+  height: var(--rf-titlebar-height);
+  background: var(--rf-titlebar-bg);
+  border-bottom: 1px solid var(--rf-titlebar-border);
+  color: var(--rf-titlebar-text);
+  font-size: 12px;
+  /* 下边框画在 32px 之内：主进程 titleBarOverlay 的高度是 32，若这里 32+1 会让
+     系统按钮条与自绘背景错开 1px。 */
+  box-sizing: border-box;
+  user-select: none;
+}
+
+/* 全屏时不删元素（还要收主进程的状态推送），只隐藏。 */
+.app-titlebar[data-hidden="true"] {
+  display: none;
+}
+
+/* 拖拽区宽度按 Window Controls Overlay 暴露的 titlebar-area 走：右侧三颗按钮
+   不属于网页内容，把拖拽区铺到那里会和系统按钮抢命中。 */
+.app-titlebar-drag {
+  display: flex;
+  align-items: center;
+  width: env(titlebar-area-width, 100%);
+  height: 100%;
+  padding-left: 4px;
+  -webkit-app-region: drag;
+}
+
+/* macOS：红绿灯在左上角（主进程 trafficLightPosition x=12），留出 78px 再放菜单。 */
+.app-titlebar--mac .app-titlebar-drag {
+  padding-left: 78px;
+}
+
+/* 菜单容器：必须 no-drag，否则菜单按钮收不到点击。 */
+.app-titlebar-menus {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.app-titlebar-menu-trigger {
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  line-height: 24px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.app-titlebar-menu-trigger:hover,
+.app-titlebar-menu-trigger[data-open="true"],
+.app-titlebar-menu-trigger:focus-visible {
+  background: var(--rf-titlebar-hover);
+}
+
+.app-titlebar-menu-trigger:focus-visible {
+  outline: 2px solid var(--rf-focus-ring);
+  outline-offset: -2px;
+}
+
+/* 下拉：portal 到 body，层级由组件按 layer.popupBase 注入（盖过吸顶页头）。 */
+.app-titlebar-menu-dropdown {
+  position: fixed;
+  min-width: 208px;
+  padding: 4px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--rf-brand) 16%, transparent);
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+
+.app-titlebar-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--rf-text-body);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-titlebar-menu-item:hover,
+.app-titlebar-menu-item:focus-visible {
+  background: var(--rf-surface-alt);
+}
+
+.app-titlebar-menu-item:focus-visible {
+  outline: 2px solid var(--rf-focus-ring);
+  outline-offset: -2px;
+}
+
+.app-titlebar-menu-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-titlebar-menu-shortcut {
+  flex: 0 0 auto;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+}
+
+.app-titlebar-menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--rf-border);
+}
+
+/* 「关于」弹窗内容：版本一行 + 三个外链（只读，关闭只走右上角 ×）。 */
+.app-titlebar-about-modal {
+  text-align: left;
+}
+
+.app-titlebar-about {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-titlebar-about-version {
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+}
+
+.app-titlebar-about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

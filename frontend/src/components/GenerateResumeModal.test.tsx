@@ -11,7 +11,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import { makeResumeDocument } from "../test/documentHarness";
-import type { ResumeDetail, ResumeGenerateTask } from "../types";
+import type { Job, ResumeDetail, ResumeGenerateTask } from "../types";
 import { resetBackgroundTasks } from "../utils/backgroundTasks";
 import { registerNotifyHost } from "../utils/taskNotify";
 import GenerateResumeModal from "./GenerateResumeModal";
@@ -90,6 +90,34 @@ function makeTask(overrides: Partial<ResumeGenerateTask> = {}): ResumeGenerateTa
     created_at: "2025-01-01T00:00:00",
     started_at: "2025-01-01T00:00:00",
     finished_at: null,
+    ...overrides,
+  };
+}
+
+/** 一份真实岗位对象：并发场景要区分"同一个岗位"与"另一个岗位"。 */
+function makeJob(overrides: Partial<Job> = {}): Job {
+  return {
+    id: 1,
+    title: "前端开发工程师",
+    company: "示例公司",
+    location: "",
+    salary: "",
+    job_type: "",
+    description: "",
+    requirements: "",
+    additional_info: "",
+    keywords: [],
+    source: "",
+    source_url: "",
+    posted_at: "",
+    status: "",
+    note: "",
+    note_images: [],
+    recognition_source: "",
+    origin_source: "",
+    favorite: false,
+    created_at: "2025-01-01T00:00:00",
+    updated_at: "2025-01-01T00:00:00",
     ...overrides,
   };
 }
@@ -366,5 +394,37 @@ describe("GenerateResumeModal 后台生成任务", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
     expect(apiMocks.cancelResumeGenerateTask).not.toHaveBeenCalled();
     expect(apiMocks.startResumeGeneration).toHaveBeenCalledOnce();
+  });
+
+  it("closing during generation clears the task context so another job can start", async () => {
+    // 并发改造的关键一环：关闭弹窗只把任务交给后台登记表，弹窗自己的 taskId/stage
+    // 必须复位；否则换一个岗位重新打开时还停在上一份的生成态，发不起第二份。
+    const onClose = vi.fn();
+    const jobA = makeJob({ id: 1, title: "前端开发工程师" });
+    const jobB = makeJob({ id: 2, title: "后端开发工程师" });
+    const view = renderModal({ job: jobA, onClose });
+    fireEvent.click(await screen.findByRole("button", { name: /开始生成/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /后台继续/ }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+
+    // 父组件收起弹窗（open=false）后再用另一个岗位打开：应回到配置态。
+    view.rerender(
+      <MemoryRouter>
+        <AntdApp>
+          <GenerateResumeModal job={jobA} open={false} onClose={onClose} />
+        </AntdApp>
+      </MemoryRouter>,
+    );
+    view.rerender(
+      <MemoryRouter>
+        <AntdApp>
+          <GenerateResumeModal job={jobB} open onClose={onClose} />
+        </AntdApp>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /开始生成/ }));
+    await waitFor(() => expect(apiMocks.startResumeGeneration).toHaveBeenCalledTimes(2));
+    expect(apiMocks.startResumeGeneration.mock.calls[1][0]).toMatchObject({ job_id: jobB.id });
   });
 });

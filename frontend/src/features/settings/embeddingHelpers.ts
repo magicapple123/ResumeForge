@@ -9,6 +9,7 @@ import type { MessageKey } from "../../i18n";
 import type {
   EmbeddingEndpointMode,
   EmbeddingMaskedConfig,
+  EmbeddingProfile,
   EmbeddingRemoteConfig,
   EmbeddingRemoteStatus,
 } from "../../api/settings";
@@ -84,6 +85,58 @@ export function remoteConfigFromStatus(
     response_path: saved?.response_path || "data[*].embedding",
     allow_private: saved?.allow_private ?? false,
   };
+}
+
+/** 一条已保存配置 → 弹窗表单初值（密钥不回显：空串 = 后端沿用同一条旧 key）。 */
+export function profileConfigFromProfile(profile: EmbeddingProfile): EmbeddingRemoteConfig {
+  return {
+    provider: "openai-http",
+    base_url: profile.base_url,
+    model: profile.model,
+    api_key: "",
+    batch_size: profile.batch_size,
+    endpoint_mode: profile.endpoint_mode,
+    request_url: "",
+    headers: [],
+    body_template: "",
+    response_path: "data[*].embedding",
+    allow_private: false,
+  };
+}
+
+/**
+ * 生效项「有未生效改动」：保存时间晚于本次生效时间。
+ *
+ * 激活时后端把 `active_profile_updated_at` 记成那一刻的 profile.updated_at；之后编辑并保存
+ * 会推进 profile.updated_at，于是这里为 true。点「使用」重新探测成功后才消失。
+ */
+export function profileHasPendingChanges(
+  profile: EmbeddingProfile,
+  activeProfileId: string | undefined,
+  activeProfileUpdatedAt: string | undefined,
+): boolean {
+  if (!activeProfileId || profile.id !== activeProfileId) return false;
+  if (!activeProfileUpdatedAt) return false;
+  return Boolean(profile.updated_at) && profile.updated_at > activeProfileUpdatedAt;
+}
+
+/** 配置卡上的厂商标签：预设 id → 语言包 key；本地/未知一律显示「自定义」。 */
+const PROFILE_PRESET_LABEL_KEYS: Record<string, MessageKey> = {
+  dashscope: "embeddingSearch.remote.preset.dashscope",
+  openai: "embeddingSearch.remote.preset.openai",
+  zhipu: "embeddingSearch.remote.preset.zhipu",
+  siliconflow: "embeddingSearch.remote.preset.siliconflow",
+  ollama: "embeddingSearch.remote.preset.ollama",
+  custom: "embeddingSearch.remote.preset.custom",
+};
+
+export function profilePresetLabelKey(presetId: string): MessageKey {
+  return PROFILE_PRESET_LABEL_KEYS[presetId] ?? "embeddingSearch.remote.preset.custom";
+}
+
+/** host 是否已经确认过外发范围（未确认时激活会弹隐私确认）。 */
+export function profileHostConfirmed(profile: EmbeddingProfile, confirmedHosts: string[]): boolean {
+  return Boolean(profile.host) && confirmedHosts.includes(profile.host);
 }
 
 /**

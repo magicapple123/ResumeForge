@@ -25,6 +25,46 @@ const appHeader = {
   "appHeader.avatar.openProfile": "Open My Profile",
   "appHeader.avatar.altWithName": "{name}'s avatar",
   "appHeader.avatar.altFallback": "User avatar",
+  /**
+   * Desktop self-drawn title bar (issue 19): the six menus, their items and the About
+   * dialog. Only rendered by the desktop shell; copy still goes through i18n so an
+   * English UI is fully translated.
+   */
+  "appHeader.desktopMenu.aria": "Application menu",
+  "appHeader.desktopMenu.file": "File",
+  "appHeader.desktopMenu.edit": "Edit",
+  "appHeader.desktopMenu.view": "View",
+  "appHeader.desktopMenu.window": "Window",
+  "appHeader.desktopMenu.help": "Help",
+  "appHeader.desktopMenu.about": "About",
+  "appHeader.desktopMenu.item.newResume": "New resume...",
+  "appHeader.desktopMenu.item.importDataset": "Import dataset...",
+  "appHeader.desktopMenu.item.openDataDir": "Open data folder",
+  "appHeader.desktopMenu.item.backupRestore": "Backup and restore...",
+  "appHeader.desktopMenu.item.quit": "Quit",
+  "appHeader.desktopMenu.item.undo": "Undo",
+  "appHeader.desktopMenu.item.redo": "Redo",
+  "appHeader.desktopMenu.item.cut": "Cut",
+  "appHeader.desktopMenu.item.copy": "Copy",
+  "appHeader.desktopMenu.item.paste": "Paste",
+  "appHeader.desktopMenu.item.selectAll": "Select all",
+  "appHeader.desktopMenu.item.zoomIn": "Zoom in",
+  "appHeader.desktopMenu.item.zoomOut": "Zoom out",
+  "appHeader.desktopMenu.item.zoomReset": "Actual size",
+  "appHeader.desktopMenu.item.fullscreen": "Full screen",
+  "appHeader.desktopMenu.item.minimize": "Minimize",
+  "appHeader.desktopMenu.item.maximize": "Maximize",
+  "appHeader.desktopMenu.item.restore": "Restore",
+  "appHeader.desktopMenu.item.closeWindow": "Close window",
+  "appHeader.desktopMenu.item.guide": "User guide",
+  "appHeader.desktopMenu.item.keyboardShortcuts": "Keyboard shortcuts",
+  "appHeader.desktopMenu.item.openLogDir": "Open log folder",
+  "appHeader.desktopMenu.item.checkUpdate": "Check for updates",
+  "appHeader.desktopMenu.about.title": "About ResumeForge",
+  "appHeader.desktopMenu.about.version": "Version {version}",
+  "appHeader.desktopMenu.about.github": "GitHub repository",
+  "appHeader.desktopMenu.about.website": "Website",
+  "appHeader.desktopMenu.about.license": "Open-source license",
 } as const;
 
 export default appHeader;

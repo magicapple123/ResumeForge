@@ -66,6 +66,27 @@ function jobAnalysisTask(): BackgroundTask {
   };
 }
 
+/** 一条简历生成任务（统一登记表里的形状）：并发多份时要能各占一枚 chip。 */
+function resumeTask(id: number, overrides: Partial<BackgroundTask> = {}): BackgroundTask {
+  return {
+    key: `resume_generate#${id}`,
+    kind: "resume_generate",
+    id,
+    label: `为“岗位 ${id}”生成简历`,
+    status: "running",
+    message: "正在调用模型生成简历…",
+    progressPercent: null,
+    receivedChars: 0,
+    resumeId: null,
+    refId: null,
+    deepLink: null,
+    resultData: null,
+    error: "",
+    unknown: false,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   sourceMocks.tasks = [];
   sourceMocks.matchTasks = [];
@@ -118,6 +139,19 @@ describe("BackgroundTaskBar", () => {
     fireEvent.click(screen.getByRole("button", { name: "取消岗位解读 · 字节跳动 · 算法工程师" }));
 
     expect(sourceMocks.cancelBackgroundTask).toHaveBeenCalledWith("job_analysis#12");
+  });
+
+  it("同时生成多份：每份一枚 chip，排队中的显示后端给的「排队中」文案", () => {
+    // 并发上限之后会有「运行中 + 排队中」并存；pending 的文案由后端 message 给出，
+    // 组件原样展示即可（不在这里编排队状态）。
+    sourceMocks.tasks = [
+      resumeTask(1),
+      resumeTask(2, { status: "pending", message: "排队中，等待空闲生成槽位" }),
+    ];
+    const { container } = renderBar();
+
+    expect(container.querySelectorAll(".background-task-bar-chip")).toHaveLength(2);
+    expect(screen.getByRole("status").textContent).toContain("排队中，等待空闲生成槽位");
   });
 
   it("批量匹配任务也在条上（进度以「已处理 N/M」表示）", () => {

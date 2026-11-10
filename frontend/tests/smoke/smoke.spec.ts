@@ -39,7 +39,7 @@ test.describe.serial("核心链路（第 2 条载入示例，第 3 条依赖它�
   });
 
   test("载入体验示例数据集后，岗位与简历在真实页面里可见", async ({ page }) => {
-    // 通过应用自己的 API 载入示例（独立数据集 + 一个岗位 + 一份简历），再走 UI 验证。
+    // 通过应用自己的 API 载入示例（独立数据集 + 完整演示数据：14 岗位 / 6 简历），再走 UI 验证。
     const api = await playwrightRequest.newContext();
     const load = await api.post(`${BACKEND_URL}/api/settings/datasets/sample/load`);
     expect(load.ok()).toBeTruthy();
@@ -50,13 +50,13 @@ test.describe.serial("核心链路（第 2 条载入示例，第 3 条依赖它�
     // 岗位广场：示例岗位可见（真实渲染路径，jsdom 之外的 CSS/布局层也一起过了）。
     await page.goto("/jobs");
     await dismissGuide(page);
-    await expect(page.getByText("市场运营专员").first()).toBeVisible();
-    await expect(page.getByText("示例科技有限公司").first()).toBeVisible();
+    await expect(page.getByText("后端开发工程师（校招）").first()).toBeVisible();
+    await expect(page.getByText("杭州枢云信息科技有限公司").first()).toBeVisible();
 
     // 简历中心：示例简历可见并可打开预览。
     await page.goto("/resumes");
     await dismissGuide(page);
-    await expect(page.getByText("示例简历 · 市场运营").first()).toBeVisible();
+    await expect(page.getByText("后端开发工程师 - 杭州枢云信息科技有限公司").first()).toBeVisible();
   });
 
   test("示例简历可以真实导出交付包", async ({ page }) => {
@@ -78,11 +78,11 @@ test.describe.serial("核心链路（第 2 条载入示例，第 3 条依赖它�
     await dismissGuide(page);
 
     // 打开示例简历的预览详情。
-    await page.getByText("示例简历 · 市场运营").first().click();
+    await page.getByText("后端开发工程师 - 杭州枢云信息科技有限公司").first().click();
     const downloadPromise = page.waitForEvent("download");
     // W19 起**已保存**简历的导出入口是「导出交付包」面板（旧导出选项只留给
     // 生成/未保存草稿）。示例简历已保存，点「导出」打开的是交付包弹层。
-    const detailDialog = page.getByRole("dialog", { name: "示例简历 · 市场运营" });
+    const detailDialog = page.getByRole("dialog", { name: "后端开发工程师 - 杭州枢云信息科技有限公司" });
     await expect(detailDialog).toBeVisible();
     await detailDialog.getByRole("button", { name: /导出/ }).click();
 
@@ -90,6 +90,14 @@ test.describe.serial("核心链路（第 2 条载入示例，第 3 条依赖它�
     const optionsDialog = page.getByRole("dialog", { name: "导出交付包" });
     await expect(optionsDialog).toBeVisible();
     await optionsDialog.getByRole("button", { name: "导出交付包" }).click();
+    // 示例简历需要 3 页而默认上限 2 页：交付面板会先弹「第 3 页起的内容不会导出」，
+    // 需要点「仍然导出」确认——这是数据内容差异（完整演示集），不是导出链路变化。
+    const stillExport = optionsDialog.getByRole("button", { name: "仍然导出" });
+    const needsConfirm = await stillExport
+      .waitFor({ state: "visible", timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (needsConfirm) await stillExport.click();
     const download = await downloadPromise;
     // 交付包是成套 zip（内含 PDF / DOCX 等原件与 manifest），不再是单个 PDF。
     expect(download.suggestedFilename()).toMatch(/\.zip$/i);

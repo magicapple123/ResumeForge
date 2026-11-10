@@ -35,6 +35,19 @@ const claimCard = {
   /** Label of the allowed-uses row. */
   "claimCard.field.allowedUses": "Allowed uses",
 
+  /** Header tag: this entry is not linked to any profile entry, so generation ignores it. */
+  "claimCard.link.unlinked": "Not used in generation",
+  /** Tooltip for the grey tag: why it happens and where to fix it. */
+  "claimCard.link.unlinkedTooltip":
+    "This entry has no linked profile entry, so it never enters the fact baseline - link it from the editor",
+  /** Header tag: the link came from the migration's subject-based auto-match. */
+  "claimCard.link.autoLinked": "Auto-linked, please review",
+  /** Tooltip explaining where the auto link came from. */
+  "claimCard.link.autoLinkedTooltip":
+    "Auto-matched by subject during migration - open it, review, and save to confirm",
+  /** Footer: how many profile entries are linked (detail records only). */
+  "claimCard.link.linkedCount": "{count} linked profile entries",
+
   /** Label of the evidence section in the footer. */
   "claimCard.evidence.title": "Evidence",
   /** Suffix appended to the location when the evidence is not public. */

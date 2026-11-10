@@ -19,6 +19,15 @@ const claimDraftModal = {
   "claimDraftModal.category.awards": "荣誉奖项",
   "claimDraftModal.category.other": "其他",
 
+  "claimDraftModal.label.fromProfile": "从资料选择",
+  "claimDraftModal.placeholder.fromProfile": "选一条资料，自动填入原文与主体",
+  "claimDraftModal.fromProfile.loadFailed": "读取资料库失败，可以继续手动粘贴",
+  "claimDraftModal.fromProfile.empty": "资料库还没有可选的条目",
+  "claimDraftModal.replaceEntry.confirm": "替换已填的内容？",
+  "claimDraftModal.replaceEntry.note": "会把原文、主体与类别换成新选的资料",
+  "claimDraftModal.replaceEntry.action": "替换",
+
+  "claimDraftModal.entryFieldLine": "{label}：{value}",
   "claimDraftModal.placeholder.subjectExample": "例如：项目名",
   "claimDraftModal.placeholder.rawText":
     "把资料原文贴在这里，越具体越好；没写到的东西不会被补出来。",

@@ -59,7 +59,6 @@ const LEGACY: Record<string, number> = {
   "styles/resume-panels.css:720": 1,
   "styles/workbench-narrow.css:1000": 1,
   "styles/workbench-narrow.css:1280": 1,
-  "styles/tracker-form.css:900": 1,
   "styles/trash.css:768": 1,
 };
 
@@ -190,6 +189,9 @@ describe("断点单一事实源", () => {
       // 该容器内部没有 position:fixed 后代（相机/浮球/弹层都 portal 到 body 或在页面级容器），
       // 按方案 §3.5 判据安全。
       "styles/assistant-composer.css",
+      // interview-setup.css —— 面试设定卡（第 8 条）：`container-type` 挂在 `.interview-setup-stack`
+      // 上，只影响该卡的字段分档；该卡内没有 position:fixed 后代（§3.5 判据），已在 768/380 实测无溢出。
+      "styles/modules-interview-setup.css",
     ]);
     const offenders: string[] = [];
     for (const absolute of collectCssFiles()) {

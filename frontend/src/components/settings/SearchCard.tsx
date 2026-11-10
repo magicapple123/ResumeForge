@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 联网搜索设置：来源（多选卡片）、正文抓取条数、返回条数。
+ * 联网搜索设置：来源（多选卡片）、正文抓取条数、每次最多返回的结果条数。
  *
  * 这些参数一直存在于后端，但此前**没有任何界面能改**：`GET/PUT /api/settings/search`
  * 只有接口没有入口，于是「抓取正文的条数」永远是默认的 0，助手拿到的永远只有摘要。
  * 助手页那个开关是"这次要不要联网"，这里配的是"联网时怎么搜"，两者互不替代。
+ * 配置存在全局设置里，所有数据集共用（切换数据集不会换一套来源与 Key）。
  *
  * ## 统一口径（条目 02 / 03）
  *
  * - 卡头：`title` 里显示「已选 N 个」，`extra` 放**自动保存状态**（这张卡没有保存按钮）；
  * - 说明：`Alert type="info"` 一句话，字段统一走 `SettingsField`；
- * - 来源：4 张可选卡片（2 列），右上角 `Checkbox`，选中态 1.5px 主色边框；
- *   只有勾了 SearXNG 才需要实例地址，只有勾了 DeepSeek 才需要 Key —— 输入框就地放在
- *   对应卡片里（未勾选时禁用），不再单独占两大块；
- * - 抓取正文 / 返回条数放在卡片区下方的「通用参数」。
+ * - 来源：4 张可选卡片自动铺列（`auto-fit`，窄容器降为单列），右上角 `Checkbox`，选中态
+ *   1.5px 主色边框；只有勾了 SearXNG 才需要实例地址，只有勾了 DeepSeek 才需要 Key ——
+ *   输入框就地放在对应卡片里（未勾选时禁用），不再单独占两大块；
+ * - 卡片按内容高度排列（`alignItems: start`，不设 `height: 100%`）：DeepSeek 的计费与
+ *   隐私长提示移出卡片，放网格下方的全宽 `Alert`（常驻可见，不能塞进 Tooltip/折叠区）；
+ * - 通用参数：抓取档位是互斥单选（`Radio.Group`），条数上限是 1–50 的 `InputNumber`。
  *
  * ## 为什么没有保存按钮
  *
@@ -29,6 +32,7 @@ import {
   Flex,
   Input,
   InputNumber,
+  Radio,
   Space,
   Tag,
   Typography,
@@ -51,6 +55,14 @@ const DEFAULT_CONFIG: SearchConfig = {
   max_results: 8,
   deepseek_api_key: "",
 };
+
+/** 「每次最多返回的结果条数」上限，与后端 `SearchConfig.max_results` 的 `le=50` 对齐。 */
+const MAX_RESULTS_LIMIT = 50;
+
+/** 输入框里键入越界值时在本地夹紧，避免 400ms 后发出一个必然 422 的请求。 */
+function clampMaxResults(value: number | null): number {
+  return Math.max(1, Math.min(MAX_RESULTS_LIMIT, value ?? DEFAULT_CONFIG.max_results));
+}
 
 /**
  * 一条搜索来源的显示名与卡片副标题。
@@ -244,7 +256,9 @@ export default function SearchCard() {
   // is normalised, so the 1.5px selection border may never render.
   const tileStyle = (checked: boolean) => ({
     padding: "10px 12px",
-    height: "100%",
+    // 卡片按内容高度收缩：同一行里 SearXNG（标题+说明+地址框）比 DeepSeek 矮一截，
+    // 撑成等高会在输入框下方留出一大块空白（清单 §4）。
+    minWidth: 0,
     borderRadius: token.borderRadiusLG,
     backgroundColor: checked ? "var(--rf-brand-tint)" : "transparent",
     borderStyle: "solid",
@@ -314,9 +328,12 @@ export default function SearchCard() {
               aria-label={t("searchCard.sources.title")}
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                // auto-fit：宽屏保持两列（清单 §4 的「第二行两张卡」），容器窄于两列
+                // 最小宽度时自动降为单列，380px 不会挤成两列半；
+                // alignItems: start：卡片按自身内容高度排列，不再被最高的那张拉齐。
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
                 gap: 8,
-                alignItems: "stretch",
+                alignItems: "start",
               }}
             >
               {SOURCE_OPTIONS.map((option) => {
@@ -348,24 +365,16 @@ export default function SearchCard() {
                     ) : null}
 
                     {option.value === "deepseek" ? (
-                      <>
-                        <Input.Password
-                          aria-label={t("searchCard.deepseek.keyAria")}
-                          value={config.deepseek_api_key}
-                          onChange={(event) => patch({ deepseek_api_key: event.target.value })}
-                          placeholder={t("searchCard.deepseek.keyPlaceholder")}
-                          // 只有勾了 DeepSeek 才需要密钥：未勾选时禁用，避免误解。
-                          disabled={!usesDeepseek || undefined}
-                          allowClear
-                          autoComplete="off"
-                        />
-                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          {t("searchCard.deepseek.cost")}
-                        </Typography.Text>
-                        {usesDeepseek ? (
-                          <Alert type="warning" showIcon title={t("searchCard.deepseek.privacy")} />
-                        ) : null}
-                      </>
+                      <Input.Password
+                        aria-label={t("searchCard.deepseek.keyAria")}
+                        value={config.deepseek_api_key}
+                        onChange={(event) => patch({ deepseek_api_key: event.target.value })}
+                        placeholder={t("searchCard.deepseek.keyPlaceholder")}
+                        // 只有勾了 DeepSeek 才需要密钥：未勾选时禁用，避免误解。
+                        disabled={!usesDeepseek || undefined}
+                        allowClear
+                        autoComplete="off"
+                      />
                     ) : null}
                   </div>
                 );
@@ -373,33 +382,54 @@ export default function SearchCard() {
             </div>
           </SettingsField>
 
-          <SettingsField label={t("searchCard.general.title")} hint={t("searchCard.fetch.hint")}>
-            <Space orientation="vertical">
-              {FETCH_PAGE_OPTIONS.map((option) => (
-                <Checkbox
-                  key={option.value}
-                  checked={config.fetch_pages === option.value}
-                  onChange={() => patch({ fetch_pages: option.value })}
-                >
-                  {t(option.labelKey)}
-                </Checkbox>
-              ))}
-            </Space>
-          </SettingsField>
+          {/* 长提示移出卡片、放到网格下方全宽显示：既让卡片按内容收缩（卡片内不再留白），
+              也保证隐私提示常驻可见——塞进 Tooltip 或折叠区就会被用户忽略（清单 §4.3）。 */}
+          {usesDeepseek ? (
+            <Alert
+              type="warning"
+              showIcon
+              title={t("searchCard.deepseek.cost")}
+              description={t("searchCard.deepseek.privacy")}
+              style={{ marginTop: 8 }}
+            />
+          ) : null}
 
-          <SettingsField label={t("searchCard.results.title")} hint={t("searchCard.results.hint")}>
-            {/* addonAfter is deprecated in antd 6: use Space.Compact + Space.Addon instead. */}
-            <Space.Compact>
-              <InputNumber
-                aria-label={t("searchCard.results.aria")}
-                min={1}
-                max={15}
-                value={config.max_results}
-                onChange={(value) => patch({ max_results: value ?? DEFAULT_CONFIG.max_results })}
-              />
-              <Space.Addon>{t("searchCard.results.unit")}</Space.Addon>
-            </Space.Compact>
-          </SettingsField>
+          <div>
+            <Typography.Text strong>{t("searchCard.general.title")}</Typography.Text>
+            <Flex vertical gap={16} style={{ marginTop: 8 }}>
+              <SettingsField label={t("searchCard.fetch.title")} hint={t("searchCard.fetch.hint")}>
+                {/* 表单控件是互斥单选，必须用 Radio：Checkbox 点已选项无法取消，语义也不对。 */}
+                <Radio.Group
+                  aria-label={t("searchCard.fetch.title")}
+                  value={config.fetch_pages}
+                  onChange={(event) => patch({ fetch_pages: event.target.value })}
+                >
+                  {FETCH_PAGE_OPTIONS.map((option) => (
+                    <Radio key={option.value} value={option.value}>
+                      {t(option.labelKey)}
+                    </Radio>
+                  ))}
+                </Radio.Group>
+              </SettingsField>
+
+              <SettingsField
+                label={t("searchCard.results.title")}
+                hint={t("searchCard.results.hint")}
+              >
+                {/* addonAfter is deprecated in antd 6: use Space.Compact + Space.Addon instead. */}
+                <Space.Compact>
+                  <InputNumber
+                    aria-label={t("searchCard.results.aria")}
+                    min={1}
+                    max={MAX_RESULTS_LIMIT}
+                    value={config.max_results}
+                    onChange={(value) => patch({ max_results: clampMaxResults(value) })}
+                  />
+                  <Space.Addon>{t("searchCard.results.unit")}</Space.Addon>
+                </Space.Compact>
+              </SettingsField>
+            </Flex>
+          </div>
 
           {saveStatus === "error" && saveError ? (
             <Alert type="error" showIcon title={saveError} />

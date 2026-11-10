@@ -29,7 +29,9 @@ import {
   Typography,
 } from "antd";
 import type { FormInstance } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { getExternalResume } from "../../api/externalResumes";
 import type {
   InterviewDifficulty,
   InterviewMaterialExtract,
@@ -81,6 +83,16 @@ export interface SetupForm {
   persona: string;
 }
 
+/**
+ * 深链 `?externalResumeId=`：正整数才认，其余按"没带参"处理（与 `parseLinkedJobId`
+ * 同一口径）。这个参数由简历中心的「用于面试」生成，指向一条**只读快照**外部简历。
+ */
+function parseExternalResumeId(raw: string | null): number | null {
+  if (!raw || !/^\d+$/.test(raw)) return null;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 /** 「指定轮数」档的取值是否合法：越界或空值都按默认值附近夹回来，不把 NaN 递给后端。 */
 function clampRounds(value: number | undefined | null): number | null {
   if (value === undefined || value === null || !Number.isFinite(value)) return null;
@@ -105,6 +117,11 @@ export function SetupTab({
   // 本卡用模块级 t()：必须订阅语言变化，否则切语言后表单文案不重渲染。
   useLocale();
   const { message } = App.useApp();
+  // 从简历中心「用于面试」跳过来：把那份外部简历的**已提取正文**预填到"导入文件"这一侧。
+  // 刻意不新增第三种来源：record / file 二选一已经能表达"这份材料来自文件快照"。
+  const [searchParams] = useSearchParams();
+  const externalResumeId = parseExternalResumeId(searchParams.get("externalResumeId"));
+  const prefilledExternalIdRef = useRef<number | null>(null);
   // 关联岗位下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const jobSelect = useJobSearchSelect();
   // 关联简历（0066）：候选 = 所选岗位关联的简历 **+** 通用简历。岗位没选之前不给候选
@@ -132,6 +149,36 @@ export function SetupTab({
     void resumeSelect.reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedJobId]);
+
+  // 外部简历深链预填（第 21 条）：只处理一次。StrictMode 下 effect 会"跑一遍 → 清理 →
+  // 再跑一遍"：如果把 ref 记在 effect 开头，第二次跑会以为"处理过了"而直接退出，第一次
+  // 的请求又被清理标记成 cancelled —— 结果永远不预填。所以 ref 记在**真正处理成功**的位置，
+  // 两次请求最多浪费一次 GET（与弹层数据加载同一种取舍）。
+  useEffect(() => {
+    if (externalResumeId === null || prefilledExternalIdRef.current === externalResumeId) return;
+    let cancelled = false;
+    void getExternalResume(externalResumeId)
+      .then((record) => {
+        if (cancelled) return;
+        prefilledExternalIdRef.current = externalResumeId;
+        if (!record.has_text) {
+          // 没有正文不能在面试里直接复用；用户仍可在这一侧上传原件（识别链路在面试页）。
+          message.warning(t("interviewPage.setup.external.noText"));
+          return;
+        }
+        setResumeSource("file");
+        setResumeMaterial({ name: record.name, text: record.text, warnings: [], parser: "text" });
+        form.setFieldValue("resumeId", undefined);
+        message.info(t("interviewPage.setup.external.prefilled", { name: record.name }));
+      })
+      .catch(() => {
+        // 外部简历可能已被删除：退回"从记录选"，不阻断用户继续设置这场面试。
+        if (!cancelled) message.warning(t("interviewPage.setup.external.loadFailed"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [externalResumeId, form, message]);
 
   // 深链预填的岗位按 id 回查补进候选（P0-1），否则第 101 条之后的岗位只显示 id；
   // 设定卡常驻可见，挂载时同时预拉第一页候选。
@@ -217,10 +264,13 @@ export function SetupTab({
           }
         }}
       >
-        <div className="interview-setup-grid">
-          {/* 材料行（问题 7）：两个材料字段单独成组并横跨整行。容器自己也是 auto-fit
-              栅格（宽屏两等分、窄屏塌成一列），外侧栅格因此不再为这一行留空位；
-              不包这层容器时，首行只有两个字段、其余格子空着，窗口越宽空白越大。 */}
+        {/* 外层纵向堆叠（第 8 条）：原来的 auto-fit 主栅格被"整行"元素逼出多于 4 条的
+            轨道，4 个字段只占前 4 条，右边空出来的轨道就是那片空白。改成 flex column 后
+            材料行 / 提示 / 字段网格 / 轮数说明 / 人设依次排列，列数交给字段网格自己决定。 */}
+        <div className="interview-setup-stack">
+          {/* 材料行（问题 7）：两个材料字段单独成组。容器自己是 auto-fit 栅格
+              （宽屏两等分、窄屏塌成一列）；align-items: start 让两侧各自按内容高度排，
+              不再被对侧的下拉 / 文件区拉高（第 8 条）。 */}
           <div className="interview-setup-materials">
             {/* 岗位材料（#41）：从记录选 / 导入文件二选一，两侧接受同一组格式
                 （问题 6：图片 / PDF / TXT / Word / Markdown）。切到"导入文件"时下拉框
@@ -296,70 +346,78 @@ export function SetupTab({
             </Form.Item>
           </div>
           {/* #41：边界文案对两种材料来源都成立——不管这一侧是从记录选来的还是导入的文件，
-              面试官看到的都只是"这两份"。放在两列之外并横跨整行：留在某一列的 extra 里
+              面试官看到的都只是"这两份"。放在两列之外独占一行：留在某一列的 extra 里
               会让两侧底部不齐，也容易被读成只针对简历。 */}
           <Typography.Text type="secondary" className="interview-setup-hint">
             {t("interviewPage.setup.scopeHint")}
           </Typography.Text>
-          <Form.Item label={t("interviewPage.setup.typeLabel")} name="interviewType">
-            <Select
-              options={INTERVIEW_TYPES.map((value) => ({
-                value,
-                label: t(INTERVIEW_TYPE_LABEL_KEYS[value]),
-              }))}
-            />
-          </Form.Item>
-          <Form.Item label={t("interviewPage.setup.difficultyLabel")} name="difficulty">
-            <Select
-              options={INTERVIEW_DIFFICULTIES.map((value) => ({
-                value,
-                label: t(INTERVIEW_DIFFICULTY_LABEL_KEYS[value]),
-              }))}
-            />
-          </Form.Item>
-          {/* 轮数（问题 05）：两档短文案 + 条件输入框。输入框走 `noStyle`（与 Segmented
-              同行，外面那个 Form.Item 只提供 label 与说明），校验由 submit() 兜。 */}
-          <Form.Item
-            label={t("interviewPage.setup.roundsLabel")}
-            extra={t("interviewPage.setup.roundsExtra")}
-          >
-            <div className="interview-setup-rounds">
-              <Form.Item name="roundsMode" noStyle>
-                <Segmented
-                  disabled={starting}
-                  options={[
-                    { value: "auto", label: t("interviewPage.setup.roundsAuto") },
-                    { value: "custom", label: t("interviewPage.setup.roundsModeCustom") },
-                  ]}
-                />
-              </Form.Item>
-              {/* 「自动」档整块不渲染（不是禁用）：留在那儿会让人以为自动也能设轮数。
+          {/* 4 个字段单独成网格（第 8 条）：宽屏 4 等列填满整行，容器变窄时由
+              modules-interview-setup.css 的容器查询切成 2 列 / 1 列。 */}
+          <div className="interview-setup-fields">
+            <Form.Item label={t("interviewPage.setup.typeLabel")} name="interviewType">
+              <Select
+                options={INTERVIEW_TYPES.map((value) => ({
+                  value,
+                  label: t(INTERVIEW_TYPE_LABEL_KEYS[value]),
+                }))}
+              />
+            </Form.Item>
+            <Form.Item label={t("interviewPage.setup.difficultyLabel")} name="difficulty">
+              <Select
+                options={INTERVIEW_DIFFICULTIES.map((value) => ({
+                  value,
+                  label: t(INTERVIEW_DIFFICULTY_LABEL_KEYS[value]),
+                }))}
+              />
+            </Form.Item>
+            {/* 轮数（问题 05）：两档短文案 + 条件输入框。输入框走 `noStyle`（与 Segmented
+              同行，外面那个 Form.Item 只提供 label），校验由 submit() 兜。
+              说明文字已移到字段网格下方（第 8 条）：留在这里会在点「指定轮数」时折成
+              3 行、把整行撑高。 */}
+            <Form.Item label={t("interviewPage.setup.roundsLabel")}>
+              <div className="interview-setup-rounds">
+                <Form.Item name="roundsMode" noStyle>
+                  <Segmented
+                    disabled={starting}
+                    options={[
+                      { value: "auto", label: t("interviewPage.setup.roundsAuto") },
+                      { value: "custom", label: t("interviewPage.setup.roundsModeCustom") },
+                    ]}
+                  />
+                </Form.Item>
+                {/* 「自动」档整块不渲染（不是禁用）：留在那儿会让人以为自动也能设轮数。
                   单位用 Space.Addon 而不是 InputNumber 的 addonAfter（v6 已废弃，
                   同 components/settings/SearchCard.tsx 的处理）。 */}
-              {showRoundsInput ? (
-                <Space.Compact>
-                  <Form.Item name="rounds" noStyle>
-                    <InputNumber
-                      min={MIN_INTERVIEW_ROUNDS}
-                      max={MAX_INTERVIEW_ROUNDS}
-                      precision={0}
-                      disabled={starting}
-                    />
-                  </Form.Item>
-                  <Space.Addon>{t("interviewPage.setup.roundsUnit")}</Space.Addon>
-                </Space.Compact>
-              ) : null}
-            </div>
-          </Form.Item>
-          <Form.Item
-            label={t("interviewPage.setup.focusLabel")}
-            name="focus"
-            extra={t("interviewPage.setup.focusExtra")}
-          >
-            <Input maxLength={255} placeholder={t("interviewPage.setup.focusPlaceholder")} />
-          </Form.Item>
-          {/* 风格与人设（问题 06）：二者互斥，所以放进同一分组、垂直排列、同宽，
-              从版式上就能读出"填了人设就不用风格"。分组横跨整行，主网格因此只剩 4 项。 */}
+                {showRoundsInput ? (
+                  <Space.Compact>
+                    <Form.Item name="rounds" noStyle>
+                      <InputNumber
+                        min={MIN_INTERVIEW_ROUNDS}
+                        max={MAX_INTERVIEW_ROUNDS}
+                        precision={0}
+                        disabled={starting}
+                      />
+                    </Form.Item>
+                    <Space.Addon>{t("interviewPage.setup.roundsUnit")}</Space.Addon>
+                  </Space.Compact>
+                ) : null}
+              </div>
+            </Form.Item>
+            <Form.Item
+              label={t("interviewPage.setup.focusLabel")}
+              name="focus"
+              extra={t("interviewPage.setup.focusExtra")}
+            >
+              <Input maxLength={255} placeholder={t("interviewPage.setup.focusPlaceholder")} />
+            </Form.Item>
+          </div>
+          {/* 轮数说明（第 8 条）：字段网格下方全宽一行，点「指定轮数」时只增高输入框
+              那一档，不再把这段多行说明叠进轮数格子。 */}
+          <Typography.Text type="secondary" className="interview-setup-rounds-hint">
+            {t("interviewPage.setup.roundsExtra")}
+          </Typography.Text>
+          {/* 风格与人设（问题 06；第 2 条改成并列）：二者互斥，并排后"填了人设、风格置灰"
+              在同一视觉行里一眼可读。分组独占一行（外层已是纵向堆叠），窄容器塌成一列。 */}
           <div className="interview-setup-persona">
             <Form.Item
               label={t("interviewPage.setup.styleLabel")}
@@ -383,7 +441,16 @@ export function SetupTab({
               />
             </Form.Item>
             <Form.Item
-              label={t("interviewPage.setup.personaLabel")}
+              label={
+                <span>
+                  {t("interviewPage.setup.personaLabel")}
+                  {/* 说明放在标签行里，但 aria-hidden：可访问名仍是「自定义人设（选填）」，
+                      不会变成"标签 + 说明"的长串（精确查询与读屏口径都不变）。 */}
+                  <span className="interview-setup-label-hint" aria-hidden="true">
+                    {t("interviewPage.setup.personaOverrideHint")}
+                  </span>
+                </span>
+              }
               name="persona"
               extra={t("interviewPage.setup.personaExtra")}
             >

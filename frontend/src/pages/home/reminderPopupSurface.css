@@ -27,7 +27,7 @@
 
 /* 标题图标（铃铛）与标题文字同色系，别抢正文。 */
 :where(.rf-reminder-modal) .ant-modal-title .anticon {
-  color: #16365c;
+  color: var(--rf-brand);
   font-size: 16px;
   vertical-align: -2px;
 }
@@ -39,7 +39,7 @@
 }
 
 :where(.rf-reminder-modal-list) .ant-listy-item + .ant-listy-item {
-  border-top: 1px solid #f0f2f5;
+  border-top: 1px solid var(--rf-border-subtle);
 }
 
 /* 「已逾期 N 天」这类紧迫 Tag 保持自身配色，但压一压默认外边距，
@@ -48,13 +48,17 @@
   margin-inline-end: 0;
 }
 
-/* 链接色统一：跟全站导航主色一致，hover 加深一档。 */
+/* 链接色：必须用**达标档**的语义 token。
+   历史写法是字面量 #5b8ff9（蓝），白底只有 3.11:1，低于 WCAG AA 的 4.5:1 ——
+   axe 在真实数据（有提醒条目 → 弹窗打开）下会判 serious。
+   --rf-info-strong 在白底 7.26:1、深色主题的 #9dc3ef 在深底同样达标；
+   hover 换品牌深蓝再压一档，而不是把颜色调浅。 */
 :where(.rf-reminder-modal-list) a {
-  color: #5b8ff9;
+  color: var(--rf-info-strong);
 }
 
 :where(.rf-reminder-modal-list) a:hover {
-  color: #3d77d6;
+  color: var(--rf-brand);
 }
 
 /* 日期文字次级色（组件里已是 type="secondary"，这里再统一压小一号）。 */

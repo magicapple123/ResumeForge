@@ -7,6 +7,8 @@ import {
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Tooltip, Typography } from "antd";
 import AppHeaderActions from "../../components/AppHeaderActions";
+import DesktopTitleBar from "../desktop/DesktopTitleBar";
+import { OPEN_USER_GUIDE_EVENT } from "../desktop/desktopShellBridge";
 import AnnouncementBar from "../../components/common/AnnouncementBar";
 import BackgroundTaskBar from "../../components/BackgroundTaskBar";
 import BulkAiFloatingBar from "./BulkAiFloatingBar";
@@ -49,6 +51,7 @@ import {
   AssistantPage,
   ClaimsPage,
   DrillPage,
+  ExternalResumesPage,
   FavoritesPage,
   HomePage,
   InterviewPage,
@@ -134,6 +137,7 @@ export default function AppShell() {
       "/claims": ClaimsPage.preload,
       "/claims/drill": DrillPage.preload,
       "/resumes": ResumesPage.preload,
+      "/resumes/external": ExternalResumesPage.preload,
       "/apply": ApplyPage.preload,
       "/webform": WebFormPage.preload,
       "/tracker": TrackerPage.preload,
@@ -237,6 +241,14 @@ export default function AppShell() {
     setUserGuideVisible(guideOpen);
   }, [guideOpen]);
 
+  // 桌面标题栏「帮助 → 使用指南」：标题栏与引导弹窗分属两棵组件树，用窗口事件对接；
+  // 浏览器版没有标题栏，事件永远不会来（监听成本为零）。
+  useEffect(() => {
+    const openGuide = () => setGuideOpen(true);
+    window.addEventListener(OPEN_USER_GUIDE_EVENT, openGuide);
+    return () => window.removeEventListener(OPEN_USER_GUIDE_EVENT, openGuide);
+  }, []);
+
   /**
    * 在线体验模式：接收官网 iframe 发来的切页指令。
    *
@@ -260,6 +272,8 @@ export default function AppShell() {
   return (
     <TouTouProvider>
       <>
+        {/* 桌面自绘标题栏（§19）：浏览器版组件自身返回 null，不占位、不挂监听。 */}
+        <DesktopTitleBar />
         <RouteAccessibility />
         {/* 批次完成全局通知：挂在布局层，投递/采集跑完时无论用户在哪个页面都能收到。 */}
         <TaskCompletionNotifier />

@@ -19,6 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { App as AntdApp, Form } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toMaterialPayload } from "../../features/interview/materialPayload";
 import { t } from "../../i18n";
@@ -39,10 +40,13 @@ const RESUME_TEXT = "Alex, backend engineer";
 
 function SetupHarness(props: { onStart: (values: SetupForm) => void }) {
   const [form] = Form.useForm<SetupForm>();
+  // SetupTab 读 ?externalResumeId= 深链（第 21 条）：测试要有 Router 上下文。
   return (
-    <AntdApp>
-      <SetupTab form={form} starting={false} onStart={props.onStart} />
-    </AntdApp>
+    <MemoryRouter initialEntries={["/interview"]}>
+      <AntdApp>
+        <SetupTab form={form} starting={false} onStart={props.onStart} />
+      </AntdApp>
+    </MemoryRouter>
   );
 }
 
@@ -344,11 +348,11 @@ describe("面试材料来源的间距契约（样式表原文）", () => {
 });
 
 /**
- * 材料行的布局契约（问题 7）：两个材料字段必须包在横跨整行的容器里。
+ * 材料行的布局契约（问题 7 + 第 8 条）：两个材料字段必须包在独立容器里。
  *
- * 只按 DOM 层级断言，不量像素：jsdom 不做布局，量出来的宽度恒为 0。真正的回归点是
- * 「容器在不在、是否占满整行、边界文案是否还在容器之外」——少任何一条，右侧那片空白会
- * 随窗口宽度重新出现。
+ * 第 8 条起外层改成纵向堆叠，容器不再需要 grid-column 跨行；两侧高度改为
+ * align-items: start 各自按内容排。只按 DOM 层级与 CSS 原文断言，不量像素：
+ * jsdom 不做布局，量出来的宽度恒为 0。
  */
 describe("面试材料行的布局契约（问题 7）", () => {
   const css = readFileSync(
@@ -362,15 +366,18 @@ describe("面试材料行的布局契约（问题 7）", () => {
     const wrapper = document.querySelector(".interview-setup-materials");
     expect(wrapper).not.toBeNull();
     expect(wrapper?.querySelectorAll(".interview-material-field").length).toBe(2);
-    // 提示语仍是外层栅格的直接子项，继续独占一整行（不能被卷进材料容器）。
+    // 提示语是外层纵向堆叠的直接子项，继续独占一整行（不能被卷进材料容器）。
+    expect(document.querySelector(".interview-setup-stack")).not.toBeNull();
     expect(wrapper?.querySelector(".interview-setup-hint")).toBeNull();
   });
 
-  it("容器横跨整行，且自身是 auto-fit 两列（宽屏两等分、窄屏塌成一列）", () => {
+  it("容器自身是 auto-fit 两列 + align-items: start，不再跨栅格行", () => {
     const rule = css.match(/(?:^|\n)\.interview-setup-materials \{([^}]*)\}/);
     expect(rule, "样式表里找不到 .interview-setup-materials").not.toBeNull();
     const body = rule?.[1] ?? "";
-    expect(body).toMatch(/grid-column:\s*1 \/ -1/);
     expect(body).toMatch(/grid-template-columns:\s*repeat\(auto-fit, minmax\(240px, 1fr\)\)/);
+    // 第 8 条：外层已不是栅格，grid-column 必须去掉（否则是过时规则）。
+    expect(body).toMatch(/align-items:\s*start/);
+    expect(body).not.toMatch(/grid-column/);
   });
 });

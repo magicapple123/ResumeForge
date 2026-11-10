@@ -88,6 +88,16 @@ describe("TasksCard", () => {
     expect(taskApiMocks.listAgentTasks).toHaveBeenCalledWith(undefined);
   });
 
+  it("卡片带 home-tasks-card 类（12.1 标题栏留白规则的落点）", async () => {
+    taskApiMocks.listAgentTasks.mockResolvedValue([makeTask(1, "running")]);
+    renderCard();
+
+    const title = await screen.findByText(t("tasksCard.title"));
+    const card = title.closest(".ant-card");
+    expect(card).not.toBeNull();
+    expect(card?.classList.contains("home-tasks-card")).toBe(true);
+  });
+
   it("总开关关闭：不请求任务列表、整卡不渲染（T04 gate）", async () => {
     settingsMocks.getAgentTaskEvents.mockResolvedValue({ enabled: false });
     renderCard();

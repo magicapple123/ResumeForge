@@ -36,10 +36,10 @@ const userGuide = {
     "The configuration dialog has “Test connection” built in; save only after it succeeds. You can name and save frequently used settings as a record, then click “Use” on the card to switch in one step.",
   "userGuide.setupProfile.step1.point8.lead": "Saved configurations",
   "userGuide.setupProfile.step1.point8.text":
-    "On Settings → AI model, the “Semantic search” card offers a local model or a remote service: the local model downloads about 111 MB once and keeps your data on this machine, while the remote service needs only an OpenAI-compatible address and API key; turning it off or hitting a failure falls back to keyword search. Model configurations are listed as record cards: click **New configuration** or “Edit” on a card to fill the dialog in, click the card itself for details, and the one marked “In use” is the active one.",
+    "On Settings → AI model, the “Semantic search” card offers a local model or a remote service: the local model downloads about 111 MB once and keeps your data on this machine, while the remote service lets you keep multiple named profiles and switch with “Use”; turning it off or hitting a failure falls back to keyword search. Model configurations are listed as record cards: click **New configuration** or “Edit” on a card to fill the dialog in, click the card itself for details, and the one marked “In use” is the active one.",
   "userGuide.setupProfile.step1.point9.lead": "API key",
   "userGuide.setupProfile.step1.point9.text":
-    "Stored in the local database; model requests still go to the provider you chose. When editing a record, leave the key blank to keep the existing one. Settings → Assistant & AI behavior also has a “Voice transcription” card: set the endpoint, model and key, and the assistant and interview inputs can **dictate** — recognized text only fills the input; audio goes to that provider.",
+    "Stored in the local database; model requests still go to the provider you chose. When editing a record, leave the key blank to keep the existing one. Settings → Assistant & AI behavior also has a “Voice transcription” card: keep multiple named profiles and switch with “Use” (one global setting shared across datasets); set the endpoint, model and key, and the assistant and interview inputs can **dictate** — recognized text only fills the input; audio goes to that provider.",
   "userGuide.setupProfile.step1.actionLabel": "Go to Settings",
   // ── Step 2 · Fill in the Profile (setupProfileSteps.ts) ──
   "userGuide.setupProfile.step2.title": "Fill in the Profile",

@@ -49,9 +49,15 @@ const llmProtocol = {
   "llmProtocol.matrix.no": "不支持",
   /** 部分支持（另有前置条件或另有入口）。 */
   "llmProtocol.matrix.partial": "部分支持",
-  /** 表尾：核对日期与免责说明。 */
+  /** 表尾：核对日期、免责说明，以及「思考开关」指向（第 11 条）。 */
   "llmProtocol.matrix.footnote":
-    "核对日期 2026-11-09，以各厂商官方文档为准；「不支持」指官方文档未提供该协议入口。模型名与端点可能变化。",
+    "核对日期 2026-11-09，以各厂商官方文档为准；「不支持」指官方文档未提供该协议入口。模型名与端点可能变化。思考开关另见：部分型号强制思考（GPT-6 Astra / GPT-6.1 Sol / GLM-5.3 / Kimi K3 / MiniMax M3.1-Flash），本应用不会给它们发送关闭参数，设置页会把「思考模式」置灰并说明原因。",
+  /** 豆包 Anthropic 单元格的说明：官方没有 Messages 入口（清单 §11.4 第 7 类缺陷）。 */
+  "llmProtocol.matrix.doubaoAnthropicNote":
+    "官方文档没有 Anthropic Messages 入口（兼容层只覆盖 OpenAI 兼容协议）；请改用对话补全或 Responses。",
+  /** MiniMax 单元格的说明：官方文档域名与国内平台域名（Key 与域名绑定）。 */
+  "llmProtocol.matrix.minimaxNote":
+    "官方文档（platform.minimax.io）的入口是 api.minimax.io，预设已对齐该域名；国内平台是 api.minimaxi.com，Key 与域名绑定，国内账号需手动改回。",
   /** DeepSeek Anthropic 单元格的说明：入口在独立前缀下，与 chat 地址不同。 */
   "llmProtocol.matrix.deepseekAnthropicNote":
     "官方 Anthropic 兼容入口：https://api.deepseek.com/anthropic/v1（拼 /messages）。",
@@ -69,9 +75,9 @@ const llmProtocol = {
   /** Gemini 对话补全单元格的说明：兼容层仍是 beta，且没有 Responses。 */
   "llmProtocol.matrix.geminiChatNote":
     "OpenAI 兼容层仍为 beta（官方说明）；同一层还覆盖 embeddings / images / batches，但没有 Responses 入口。",
-  /** 星火 Anthropic 单元格的说明：入口在 /anthropic 下，与 chat 的 /v2 不同路径。 */
+  /** 星火 Anthropic 单元格的说明：入口在新 MaaS 域名下，与 chat 的 /v2 不同路径。 */
   "llmProtocol.matrix.sparkAnthropicNote":
-    "Anthropic 入口在同一主机的 /anthropic 下（/anthropic/v1/messages），与 chat 的 /v2 不同路径。",
+    "Anthropic/Responses 入口在新 MaaS 域名 maas-api.cn-huabei-1.xf-yun.com 下（/anthropic/v1/messages），旧 spark-api-open 域名只有 Chat Completions。",
   /** Groq Responses 单元格的说明。 */
   "llmProtocol.matrix.groqResponsesNote":
     "Responses 目前是 Beta；store 仅支持 false/null，previous_response_id 恒为 null。",
@@ -82,9 +88,9 @@ const llmProtocol = {
     "Anthropic 走同一主机的根域 + /v1/messages；Step Plan 为订阅制，另有 /step_plan 通道。",
   /** 阶跃星辰 Responses 单元格的说明：只有两款模型可用。 */
   "llmProtocol.matrix.stepfunResponsesNote": "当前仅支持 step-5-preview 与 step-3.7-flash。",
-  /** xAI Anthropic 单元格的说明：OpenAPI 已定义但无使用文档。 */
+  /** xAI Anthropic 单元格的说明：官方已废弃兼容，迁移到 Responses。 */
   "llmProtocol.matrix.xaiAnthropicNote":
-    "官方 OpenAPI 已定义 /v1/messages 并注明兼容 Anthropic，但暂无使用文档。",
+    "官方已废弃 Anthropic 兼容入口；请迁移到 Responses 协议（4.3 以后只能降 effort、不能关闭思考）。",
   /** Together AI Anthropic 单元格的补充说明。 */
   "llmProtocol.matrix.togetherAnthropicNote":
     "Messages 仅覆盖 GLM-5.2 / GLM-5.3 等部分 serverless 模型，其他模型可能返回畸形输出。",

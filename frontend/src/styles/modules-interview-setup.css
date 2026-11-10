@@ -1,14 +1,76 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* 面试设定卡的材料行（问题 7）：两个材料字段单独成组、横跨整行。
-   单独成片是因为 modules-interview.css 已贴到 500 行预算（与 modules-interview-followup.css 同一处理）。 */
+/* 面试设定卡的结构（第 8 条，2026-11-10）。
+   单独成片的原因同材料行：modules-interview.css 已贴到 500 行预算。
 
-/* 容器本身也是 auto-fit 栅格：宽屏两等分，容器宽度不足 2×240 + 16 时塌成一列，
-   不需要媒体查询。外层栅格不再为这一行留空位，右侧的空白区因此消失。 */
+   原先外层是 auto-fit 主栅格，材料行 / 提示行 / 人设块又都写 `grid-column: 1 / -1`：
+   整行元素把 auto-fit 撑出**多于 4 条**的轨道，4 个字段只占前 4 条，右侧空出来的轨道
+   就是那片空白（窗口越宽空得越多）。现在改成纵向堆叠 + 只包 4 个字段的独立网格。 */
+
+/* 外层纵向堆叠：材料行、提示、字段网格、轮数说明、人设依次排列，不再有"空轨道"。
+   container-type 必须放在这一层：Card 的 padding 会让按视口算的媒体查询分档偏掉，
+   容器查询量的是父元素给这一块的实际可用宽度。 */
+.interview-setup-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  container-type: inline-size;
+}
+
+/* 材料行（问题 7）：两个材料字段单独成组；容器自己是 auto-fit 栅格，
+   宽屏两等分、窄屏塌成一列。align-items: start 让两侧各自按内容高度排，
+   不再被对侧的下拉 / 文件区拉高（第 8 条）。 */
 .interview-setup-materials {
-  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 0 16px;
+  align-items: start;
+}
+
+/* antd-override: 材料块内两个 Form.Item 的清零，与 `.interview-setup-fields` 同一条约定。
+   漏这一条会让 antd 默认的 24px 下边距与外层 gap 叠成 40px（第 2 条实测的成因之一）。 */
+.interview-setup-materials .ant-form-item {
+  margin-bottom: 0;
+}
+
+/* 4 个字段（面试类型 / 难度 / 轮数 / 考察重点）：宽屏 4 等列正好填满整行，
+   不再出现"前 4 条轨道之外还有空轨道"的右侧空白。 */
+.interview-setup-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0 16px;
+  align-items: start;
+}
+
+/* antd-override: 字段网格内的 Form.Item 不再自带 24px 下边距——否则会与 stack 的
+   gap: 16px 叠成双倍间距；行距统一由网格 row-gap 与外层 gap 控制。 */
+.interview-setup-fields .ant-form-item {
+  margin-bottom: 0;
+}
+
+/* 容器宽度分档（量 .interview-setup-stack 的可用宽度，不是视口）：
+   760px 以下两列、440px 以下一列；只有多行时才需要 row-gap。 */
+@container (max-width: 760px) {
+  .interview-setup-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 16px;
+  }
+}
+
+@container (max-width: 440px) {
+  .interview-setup-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 边界文案（#41）：外层已不是栅格，普通块即可（类名保留作定位锚点）。 */
+.interview-setup-hint {
+  display: block;
+}
+
+/* 轮数说明（第 8 条）：放在字段网格下方全宽一行。留在轮数格子里时，点「指定轮数」
+   会让这段说明在窄列里折成 3 行、把整行撑高。 */
+.interview-setup-rounds-hint {
+  display: block;
 }
 
 /* 轮数（问题 05）：Segmented 与输入框同行——「指定轮数」时输入框在右侧出现。
@@ -20,18 +82,38 @@
   flex-wrap: wrap;
 }
 
-/* 风格与人设（问题 06）：二者互斥，放进同一分组后垂直排列、同宽、label 与 extra
-   位置一致，版式上就能读出"填了人设就不用风格"。横跨整行，主网格因此只剩 4 项。 */
+/* 风格与人设（问题 06；第 2 条改成并列）：二者互斥，并排后"填了人设、风格置灰"
+   在同一视觉行里一眼可读，也不再让一个 4 项下拉和一个两行文本框各自横跨整行。
+   `align-items: start` 让两列各自按内容高排——不要用固定高度或 stretch 去"对齐"：
+   文案换行、切语言、换字号档位都会溢出。 */
 .interview-setup-persona {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+  align-items: start;
 }
 
-/* antd-override: 分组内两项（风格 / 人设）的间距由这里统一，末项不留悬空空白。 */
-.interview-setup-persona .ant-form-item {
-  margin-bottom: 16px;
+/* 窄容器塌成一列（与字段网格同一档 760px）。用 @container 而不是 @media：
+   容器宽度由外层 stack 决定，视口在左栏可拖时并不等于可用宽度。 */
+@container (max-width: 760px) {
+  .interview-setup-persona {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 12px;
+  }
 }
-.interview-setup-persona .ant-form-item:last-child {
+
+/* antd-override: 两列之间的间距由网格 gap 控制，Item 自己不再留 antd 默认的 24px
+   下边距——旧的两条（16px + :last-child 归零）在栅格下会让右列被顶下去，必须删；
+   留着默认 24px 则整块底部多出一段空白。 */
+.interview-setup-persona .ant-form-item {
   margin-bottom: 0;
+}
+
+/* 标签行右侧的辅助说明（「填写后覆盖风格设定」）。不带方位词：窄容器下两列会叠起来，
+   「左侧/右侧」那时候就是假话。 */
+.interview-setup-label-hint {
+  margin-inline-start: 6px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  font-weight: 400;
 }

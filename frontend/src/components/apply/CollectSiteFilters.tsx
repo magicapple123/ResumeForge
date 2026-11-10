@@ -61,7 +61,7 @@ interface Props {
   /** 是否禁用（有批次在跑时不允许改条件）。 */
   disabled: boolean;
   /** 读取当前表单里选中的站点筛选项（「测试是否生效」用）。 */
-  getFilters: () => Record<string, string>;
+  getFilters: () => Record<string, string[]>;
 }
 
 /** antd Select 认得的下拉项形状（含"分组"那一层），用它标注免得 TS 推出一个联合类型。 */
@@ -81,10 +81,32 @@ function buildOptions(group: CollectFilterGroup): SelectOptionList {
   return [...grouped].map(([label, options]) => ({ label, options }));
 }
 
+/** 表单里的值可能是单值（单选组）或数组（多选组/旧快照），统一折成编码数组。 */
+function toCodes(value: unknown): string[] {
+  if (value === null || value === undefined || value === "") return [];
+  const items = Array.isArray(value) ? value : [value];
+  const codes: string[] = [];
+  for (const item of items) {
+    const code = item === null || item === undefined ? "" : String(item).trim();
+    if (code && !codes.includes(code)) codes.push(code);
+  }
+  return codes;
+}
+
+/** 联动判定：没有规则 = 可见；有规则时控制组的当前编码必须落在白名单里。 */
+function isGroupVisible(group: CollectFilterGroup, controllerCode: string): boolean {
+  if (!group.visible_when) return true;
+  return group.visible_when.values.includes(controllerCode);
+}
+
 export default function CollectSiteFilters({ disabled, getFilters }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
   useLocale();
   const { message } = App.useApp();
+  const form = Form.useFormInstance();
+  // 联动只看「求职类型」：站点实测它决定薪资/结算方式/兼职时间哪些格子可见（§15.2）。
+  const jobTypeValue = Form.useWatch(["filters", "jobType"], form);
+  const currentJobType = toCodes(jobTypeValue)[0] ?? "";
   const [data, setData] = useState<CollectFilterOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -133,10 +155,30 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
     setLoading(false);
   }, [fetchOptions]);
 
-  const groups = useMemo(
+  const allGroups = useMemo(
     () => (data?.groups ?? []).filter((group) => group.options.length > 0),
     [data],
   );
+  // 联动（§15.2 实测）：兼职时「薪资待遇」整组消失，换成「结算方式 + 兼职时间」；
+  // 规则由后端随清单下发（visible_when），前端不写死站点规则。
+  const groups = useMemo(
+    () => allGroups.filter((group) => isGroupVisible(group, currentJobType)),
+    [allGroups, currentJobType],
+  );
+  const hiddenKeys = useMemo(
+    () =>
+      allGroups.filter((group) => !isGroupVisible(group, currentJobType)).map((group) => group.key),
+    [allGroups, currentJobType],
+  );
+  // 切走时清空被隐藏组的**残留值**：只做显隐不清值，历史配置里那组编码仍会被发出去
+  // （站点会忽略它，但界面可能谎报"已生效"——清单 §15.4-2）。
+  useEffect(() => {
+    for (const key of hiddenKeys) {
+      if (toCodes(form.getFieldValue(["filters", key])).length > 0) {
+        form.setFieldValue(["filters", key], undefined);
+      }
+    }
+  }, [hiddenKeys, form]);
   // 来源**按值去重**：七个分组通常来自同一处，逐个渲染就会并排出现七个一模一样的标签，
   // 那不是在说明来源，只是在制造噪声。混了来源时才逐条列出。
   const sources = useMemo(() => [...new Set(groups.map((group) => group.source))], [groups]);
@@ -145,9 +187,11 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
   const runTest = useCallback(async () => {
     if (testing) return;
     const raw = getFilters();
-    const selected = Object.fromEntries(
-      Object.entries(raw || {}).filter(([, code]) => (code || "").trim() !== ""),
-    );
+    const selected: Record<string, string[]> = {};
+    for (const [key, value] of Object.entries(raw || {})) {
+      const codes = toCodes(value);
+      if (codes.length > 0) selected[key] = codes;
+    }
     if (Object.keys(selected).length === 0) {
       message.info(t("collectFilters.toast.needCondition"));
       return;
@@ -233,8 +277,14 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
         </Tooltip>
       </Space>
 
-      <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
+      <Typography.Text type="secondary" style={{ display: "block", marginBottom: 4 }}>
         <InfoCircleOutlined /> {t("collectFilters.intro")}
+      </Typography.Text>
+      <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
+        <InfoCircleOutlined /> {t("collectFilters.intro.rules")}
+      </Typography.Text>
+      <Typography.Text type="warning" style={{ display: "block", marginBottom: 12 }}>
+        {t("collectFilters.intro.breadth")}
       </Typography.Text>
 
       {!sessionRead && (
@@ -301,11 +351,14 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
         {groups.map((group) => (
           <Form.Item key={group.key} name={["filters", group.key]} label={group.label}>
             <Select
+              // 多选/单选由后端能力表决定（§15.2 实测）：求职类型与薪资待遇是单选，其余多选。
+              mode={group.multi ? "multiple" : undefined}
+              maxTagCount="responsive"
               allowClear
               showSearch
               disabled={disabled}
               placeholder={t("collectFilters.tag.any")}
-              style={{ width: group.key === "industry" ? 240 : 170 }}
+              style={{ width: group.key === "industry" ? 240 : group.multi ? 200 : 170 }}
               optionFilterProp="label"
               // 选项多（行业 145 条）时要能搜；分组用 antd 的嵌套 options。
               options={buildOptions(group)}

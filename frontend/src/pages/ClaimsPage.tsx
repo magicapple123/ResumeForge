@@ -202,9 +202,11 @@ export default function ClaimsPage() {
           value={data?.pending_count ?? 0}
           styles={{ content: { color: "var(--rf-warning-text)" } }}
         />
+        {/* 生成时真正可用的是「已确认且已关联资料」的那 K 条；M（全量已确认）单独
+            在下方的两段读数里说明，不能把 M 当成"生成时可用"（问题清单 §20 D5）。 */}
         <Statistic
           title={t("claimsPage.stat.baseline")}
-          value={baseline.data?.confirmed_count ?? 0}
+          value={baseline.data?.linked_confirmed_count ?? 0}
           prefix={<SafetyCertificateOutlined />}
         />
         {(baseline.data?.blocked_wording.length ?? 0) > 0 && (
@@ -215,6 +217,13 @@ export default function ClaimsPage() {
           />
         )}
       </div>
+
+      <Typography.Text type="secondary" className="claims-baseline-note">
+        {t("claimsPage.baseline.note", {
+          total: baseline.data?.total_confirmed_count ?? 0,
+          linked: baseline.data?.linked_confirmed_count ?? 0,
+        })}
+      </Typography.Text>
 
       <Space size={16} wrap className="claims-filters rf-filter-bar">
         <Select

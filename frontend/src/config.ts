@@ -136,14 +136,13 @@ export const LLM_PRESETS: LLMPreset[] = [
   {
     // 最后核对：2026-11-09。官方文档的模型 ID 是连字符 + 日期写法
     // （doubao-seed-2-1-pro-260915），点号写法只是别名，以文档写法为准。
-    // Anthropic 兼容层在 /api/compatible 下，拼 /v1 后才是 /messages 的前一层。
+    // **官方没有 Anthropic Messages 入口**（清单 §11.4 缺陷 7）：不声明 supports_anthropic，
+    // 否则切协议时会把地址改写成 /api/compatible/v1，用户拿到的必然 404。
     labelKey: "appConfig.preset.doubao",
     provider: "doubao",
     base_url: "https://ark.cn-beijing.volces.com/api/v3",
     model: "doubao-seed-2-1-pro-260915",
     supports_responses: true,
-    supports_anthropic: true,
-    anthropic_base_url: "https://ark.cn-beijing.volces.com/api/compatible/v1",
   },
   {
     // 最后核对：2026-11-09。智谱两条专用地址都与 chat 不同：Responses 换到 /api/v1；
@@ -242,18 +241,18 @@ export const LLM_PRESETS: LLMPreset[] = [
     anthropic_base_url: "https://maas-api.cn-huabei-1.xf-yun.com/anthropic/v1",
   },
   {
-    // 最后核对：2026-11-09。域名已换：旧 api.minimax.chat 不再作为默认（现行文档只出现
-    // 新域名）；国内 api.minimaxi.com，海外 api.minimax.io。Responses（POST /v1/responses）
-    // 与 Anthropic 兼容入口（/anthropic 下）官方都已支持。
-    // 注：现行官方文档统一写 api.minimax.cn，旧 api.minimaxi.com 仍可用；为不打断已存配置，
-    // 预设保留旧域名。
+    // 最后核对：2026-11-09。官方文档（platform.minimax.io）的 OpenAI 兼容入口是
+    // https://api.minimax.io/v1，Anthropic 入口是 https://api.minimax.io/anthropic
+    // （拼 /v1/messages）；旧 api.minimax.chat 已不在文档里。国内平台是
+    // https://api.minimaxi.com（**Key 与域名绑定**，换域名会报 invalid api key），
+    // 国内用户可手动改回。预设跟随官方文档域名。
     labelKey: "appConfig.preset.minimax",
     provider: "minimax",
-    base_url: "https://api.minimaxi.com/v1",
+    base_url: "https://api.minimax.io/v1",
     model: "MiniMax-M3.1-Flash",
     supports_responses: true,
     supports_anthropic: true,
-    anthropic_base_url: "https://api.minimaxi.com/anthropic/v1",
+    anthropic_base_url: "https://api.minimax.io/anthropic/v1",
   },
   {
     // 最后核对：2026-11-09。聚合网关：Responses 在现有地址后追加 /responses；
@@ -287,15 +286,13 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
   {
     // 最后核对：2026-11-09。xAI 文档当前示例是 grok-4.7；Responses 按官方兼容层补
-    // /responses。Anthropic：官方 OpenAPI 已定义 /v1/messages 并注明兼容 Anthropic，
-    // 但官网暂无使用文档，所以矩阵标「部分支持」——地址恰好就是 base_url + /messages
-    // （https://api.x.ai/v1/messages），因此不填专用地址。
+    // /responses。Anthropic：官方已**废弃** Anthropic 兼容入口（清单 §11.5-E），所以不声明
+    // supports_anthropic、矩阵标「不支持」；需要 Anthropic 形态请走 Responses 或第三方网关。
     labelKey: "appConfig.preset.xai",
     provider: "xai",
     base_url: "https://api.x.ai/v1",
     model: "grok-4.7",
     supports_responses: true,
-    supports_anthropic: true,
   },
   {
     // 最后核对：2026-11-09。当前旗舰 mistral-large-4；Responses 仍是 Public Preview（矩阵

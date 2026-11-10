@@ -72,7 +72,7 @@ const interviewPage = {
   "interviewPage.setup.typeLabel": "面试类型",
   "interviewPage.setup.difficultyLabel": "难度",
   "interviewPage.setup.styleLabel": "面试官风格",
-  "interviewPage.setup.styleExtraIgnored": "下方已填写自定义人设，此项不生效。",
+  "interviewPage.setup.styleExtraIgnored": "已填写自定义人设，此项不生效。",
   "interviewPage.setup.roundsLabel": "轮数",
   "interviewPage.setup.roundsAuto": "自动",
   "interviewPage.setup.roundsModeCustom": "指定轮数",
@@ -84,9 +84,11 @@ const interviewPage = {
   "interviewPage.setup.focusLabel": "考察重点（选填）",
   "interviewPage.setup.focusExtra": "例如：用户增长、跨部门协作、成本控制",
   "interviewPage.setup.focusPlaceholder": "留空则按面试类型通用考察",
-  "interviewPage.setup.personaLabel": "或 自定义人设（选填）",
+  "interviewPage.setup.personaLabel": "自定义人设（选填）",
+  /** 人设标签行右侧的辅助说明（第 2 条）：与人设并列后方位词失效，只说"覆盖"。 */
+  "interviewPage.setup.personaOverrideHint": "填写后覆盖风格设定",
   "interviewPage.setup.personaExtra":
-    "例如：某公司业务负责人，喜欢追问具体数字与落地过程。填写后上面的面试官风格不再生效。",
+    "例如：某公司业务负责人，喜欢追问具体数字与落地过程。填写后覆盖面试官风格。",
   "interviewPage.setup.start": "开始面试",
   "interviewPage.setup.confidenceTip":
     "面试官会基于你的资料与岗位要求提问，回答越具体（做了什么、结果是什么）点评越有用。",
@@ -159,6 +161,11 @@ const interviewPage = {
   "interviewPage.setup.style.gentle": "温和引导",
   "interviewPage.setup.style.probing": "持续追问",
   "interviewPage.setup.style.pressure": "压力质询",
+
+  // 外部简历（第 21 条）"用于面试"的预填提示：从简历中心跳过来时把材料带进设定卡。
+  "interviewPage.setup.external.prefilled": "已带入外部简历「{name}」",
+  "interviewPage.setup.external.loadFailed": "没能读取这份外部简历，请手动选择或上传",
+  "interviewPage.setup.external.noText": "这份外部简历没有提取到文字，请在简历材料里上传原件",
 } as const;
 
 export default interviewPage;

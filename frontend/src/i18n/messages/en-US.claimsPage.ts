@@ -19,8 +19,11 @@ const claimsPage = {
   "claimsPage.stat.total": "Total entries",
   "claimsPage.stat.confirmed": "Confirmed (usable in a final resume)",
   "claimsPage.stat.pending": "Pending",
-  "claimsPage.stat.baseline": "Facts usable at generation",
+  "claimsPage.stat.baseline": "Usable at generation (linked)",
   "claimsPage.stat.blocked": "Unconfirmed wording that is avoided",
+  /** Two readings under the stats: confirmed total M / of which linked K. */
+  "claimsPage.baseline.note":
+    "{total} confirmed in total, {linked} of them linked to profile entries; unlinked ones are not used for generation.",
   "claimsPage.filter.categoryAria": "Fact category filter",
   "claimsPage.filter.statusAria": "Fact verification status filter",
   "claimsPage.filter.allCategories": "All categories",

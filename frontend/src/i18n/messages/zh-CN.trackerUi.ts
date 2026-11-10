@@ -43,13 +43,15 @@ const trackerUi = {
   "trackerUi.card.action.delete": "删除",
   "trackerUi.card.aria.more": "更多操作 {name}",
   "trackerUi.card.fallbackName": "进度",
-  "trackerUi.card.appliedAt": "投递于 {date}",
-  "trackerUi.card.statusDate": "状态更新 {date}",
+  "trackerUi.card.appliedAt": "{date} 投递",
+  "trackerUi.card.statusDate": "{date} 更新",
   "trackerUi.card.resume": "简历：{title}",
   "trackerUi.card.resumeHistorical": "（历史关联）",
   "trackerUi.card.nextStep": "下一步",
   "trackerUi.card.emptyNextAction": "（未填写内容）",
   "trackerUi.card.overdue": "已过期",
+  /** 逾期短标记（第 4 条）：`{days}` 是距截止日期过去的天数，当天不显示。 */
+  "trackerUi.card.overdueDays": "逾期 {days} 天",
   "trackerUi.card.evidence": "依据：{evidence}",
 
   "trackerUi.source.apply": "投递台自动记录",

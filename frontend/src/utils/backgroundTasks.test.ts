@@ -164,6 +164,29 @@ describe("后台任务登记表", () => {
     expect(getBackgroundTasks()).toEqual([]);
   });
 
+  it("同时跟踪多份生成：完成一条只移除那一条，另一条继续在列表里", async () => {
+    // 并发改造后登记表会同时持有 N 条 resume_generate；Map 键带 task id，
+    // 「完成一条」= finish(key)，绝不能把整个列表清空（那会让另一条再也收不到提醒）。
+    apiMocks.getResumeGenerateTask.mockImplementation((taskId: number) =>
+      Promise.resolve(makeTask({ id: taskId, status: "running" })),
+    );
+    watchResumeTask(makeTask({ id: 7 }), "为「前端」生成简历");
+    watchResumeTask(makeTask({ id: 8 }), "为「后端」生成简历");
+    expect(getBackgroundTasks().map((task) => task.id)).toEqual([7, 8]);
+
+    apiMocks.getResumeGenerateTask.mockImplementation((taskId: number) =>
+      Promise.resolve(
+        taskId === 7
+          ? makeTask({ id: 7, status: "completed", resume_id: 42 })
+          : makeTask({ id: 8, status: "running", message: "正在写第 2 段" }),
+      ),
+    );
+    await runOneTick();
+
+    expect(getBackgroundTasks().map((task) => task.id)).toEqual([8]);
+    expect(notices.filter((item) => item.title === "简历已生成")).toHaveLength(1);
+  });
+
   it("完成时带上「跳到这条简历」的深链动作", async () => {
     apiMocks.getResumeGenerateTask.mockResolvedValue(
       makeTask({ status: "completed", resume_id: 42 }),

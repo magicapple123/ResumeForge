@@ -44,7 +44,20 @@ const claimForm = {
   "claimForm.placeholder.allowedUses":
     "Press Enter to add, e.g. “AI role Resume”, “HR opening line”. Leave empty for no restriction.",
 
-  "claimForm.evidence.title": "Evidence sources (where to find it — do not paste content)",
+  "claimForm.field.entryIds": "Linked profile entries",
+  "claimForm.hint.entryIds":
+    "Only confirmed claims linked to the material used for this generation enter the fact baseline; unlinked entries are not used.",
+  "claimForm.placeholder.entryIds":
+    "Pick which profile entry this claim is about (multiple allowed)",
+  "claimForm.hint.autoLinked":
+    "These links were auto-matched by subject during migration - review them before saving",
+  "claimForm.entryIds.loadFailed":
+    "Could not load profile entries, links cannot be selected right now",
+  "claimForm.entryIds.empty":
+    "No profile entries yet - add an experience or project in the profile library first",
+
+  "claimForm.evidence.title":
+    "Evidence sources (location only - not used for generation filtering)",
   "claimForm.placeholder.evidence": "A link, a file name, or “advisor can confirm”",
   "claimForm.evidence.public": "Public",
   "claimForm.evidence.private": "Private",

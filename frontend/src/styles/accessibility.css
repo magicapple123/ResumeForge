@@ -18,9 +18,13 @@
   color: var(--rf-success-text) !important;
 }
 
-.tracker-funnel-index {
-  color: var(--rf-brand);
-  background: var(--rf-brand-tint);
+/* antd 的 cyan Tag 默认文字 `#08979c` 在 `#e6fffb` 底上只有 **3.39:1**，低于 AA 的
+   4.5:1。岗位卡的技能标签（`SkillTags`，cyan = 工具/方法类）在真实数据集里必然出现，
+   axe 会在 /jobs 判 serious color-contrast —— 看起来像"岗位页坏了"，其实只这一档。
+   复用语义上最接近、且已验证达标的信息蓝深档（浅色 6.94:1，深色 #9dc3ef 在深底同样够）。
+   同一批 tag 里的 blue / purple / gold / red / green 都已在上面覆盖或本身达标。 */
+.ant-tag.ant-tag-cyan {
+  color: var(--rf-info-strong) !important;
 }
 
 .track-card-next-label,
