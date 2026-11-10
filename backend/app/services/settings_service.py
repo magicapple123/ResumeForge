@@ -17,12 +17,7 @@ from ..schemas.setting import (
     NAVIGATION_OPTIONAL_KEYS,
     AssistantOrbSetting,
     NavigationVisibility,
-    SearchConfig,
 )
-
-# 对外兼容面：API_KEY_MASK 的取用点是 test_api_settings.py:8 / test_llm_session_key.py:12 /
-# data_backup/api_keys.py:16，它们都从本模块 import；值本身由 llm_key_refs 定义。
-from .api_key_crypto import decrypt_key, encrypt_key
 
 # 对外兼容面：求职助手「数据权限」四档与旧放宽开关的实现在 assistant_permission；
 # 48 处既有调用点（api/settings.py、api/assistant.py、api/assistant_stream.py、助手工具）
@@ -70,9 +65,18 @@ from .llm_settings import resolve_llm_config_api_key as resolve_llm_config_api_k
 from .llm_settings import save_llm_config as save_llm_config
 from .llm_settings import save_llm_config_record as save_llm_config_record
 
+# 对外兼容面：联网搜索设置的实现在 web_search_settings（全局文件，所有数据集共用）；
+# 既有调用点与测试仍按本模块取符号，逐个 as 同名重导出。
+from .web_search_settings import get_search_config as get_search_config
+from .web_search_settings import (
+    get_search_config_with_secrets as get_search_config_with_secrets,
+)
+from .web_search_settings import migrate_legacy_search_once as migrate_legacy_search_once
+from .web_search_settings import resolve_search_deepseek_key as resolve_search_deepseek_key
+from .web_search_settings import save_search_config as save_search_config
+
 logger = logging.getLogger(__name__)
 
-_SEARCH_CONFIG_KEY = "search_config"
 _REMINDER_POPUP_KEY = "reminder_popup_on_start"
 _ASSISTANT_ORB_KEY = "assistant_orb_enabled"
 _NAVIGATION_VISIBILITY_KEY = "navigation_visibility"
@@ -83,83 +87,6 @@ _AUTO_BACKUP_INTERVAL_KEY = "auto_backup_interval_days"
 # T26 事件触发：提醒到期时自动生成"准备"任务卡。默认**关**——用户主动开启，
 # 避免"助手自作主张"的观感；关闭后不再生成，已生成的卡保留（不追删）。
 _AGENT_TASK_EVENTS_KEY = "agent_task_events_enabled"
-
-
-# ===== 联网搜索设置 =====
-
-# DeepSeek 搜索密钥单独一行：`search_config` 的 JSON 里只放掩码，真实密钥不落进
-# 那份会被整体回传前端的配置。与 LLM 的 key 一样走 DPAPI 加密（非 Windows 保持明文）。
-_SEARCH_DEEPSEEK_KEY = "search_deepseek_api_key"
-
-
-def _load_search_config(db: Session) -> SearchConfig:
-    """读取搜索设置原文；脏数据或缺失时退回默认（Bing + DuckDuckGo）。"""
-    row = db.get(AppSetting, _SEARCH_CONFIG_KEY)
-    if row is None:
-        return SearchConfig()
-    try:
-        return SearchConfig.model_validate(json.loads(row.value))
-    except (json.JSONDecodeError, ValidationError):
-        logger.warning("联网搜索设置数据损坏，已重置为默认值")
-        return SearchConfig()
-
-
-def resolve_search_deepseek_key(db: Session) -> str:
-    """取真实密钥（仅供运行时调用，**不得**回传前端）。未配置返回空串。"""
-    row = db.get(AppSetting, _SEARCH_DEEPSEEK_KEY)
-    if row is None or not row.value:
-        return ""
-    return decrypt_key(str(row.value))
-
-
-def get_search_config(db: Session) -> SearchConfig:
-    """对外（设置页）读取：``deepseek_api_key`` 只会是掩码或空串。"""
-    config = _load_search_config(db)
-    config.deepseek_api_key = API_KEY_MASK if resolve_search_deepseek_key(db) else ""
-    return config
-
-
-def get_search_config_with_secrets(db: Session) -> SearchConfig:
-    """运行时读取：把真实密钥解出来，供 ``aggregate_search`` 调 DeepSeek 用。"""
-    config = _load_search_config(db)
-    config.deepseek_api_key = resolve_search_deepseek_key(db)
-    return config
-
-
-def save_search_config(db: Session, config: SearchConfig) -> SearchConfig:
-    """保存联网搜索配置。
-
-    ``deepseek_api_key`` 的三种取值决定密钥行怎么变——这是"值只能是掩码或引用"
-    的落地点：
-    - 空串：**清除**已保存的密钥（用户显式移除）；
-    - 掩码（``********`` 开头）：保持不变（前端回显的就是它，原样回传不应清空密钥）；
-    - 其它：视为新密钥，加密后写入。
-    """
-    incoming = (config.deepseek_api_key or "").strip()
-    key_row = db.get(AppSetting, _SEARCH_DEEPSEEK_KEY)
-    if incoming.startswith(API_KEY_MASK):
-        stored_placeholder = API_KEY_MASK if key_row is not None else ""
-    elif incoming:
-        encrypted = encrypt_key(incoming)
-        if key_row is None:
-            db.add(AppSetting(key=_SEARCH_DEEPSEEK_KEY, value=encrypted))
-        else:
-            key_row.value = encrypted
-        stored_placeholder = API_KEY_MASK
-    else:
-        if key_row is not None:
-            db.delete(key_row)
-        stored_placeholder = ""
-
-    persisted = config.model_copy(update={"deepseek_api_key": stored_placeholder})
-    row = db.get(AppSetting, _SEARCH_CONFIG_KEY)
-    serialized = json.dumps(persisted.model_dump(), ensure_ascii=False)
-    if row is None:
-        db.add(AppSetting(key=_SEARCH_CONFIG_KEY, value=serialized))
-    else:
-        row.value = serialized
-    db.commit()
-    return get_search_config(db)
 
 
 # ===== 提醒弹窗设置 =====

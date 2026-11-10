@@ -59,7 +59,7 @@ def test_search_error_does_not_enter_sse_history_or_model_context(client, monkey
     """
     _configure_llm(client)
 
-    async def fail(_query, _config):
+    async def fail(_query, _config, limit=None):
         raise AssistantSearchError(PRIVATE_ERROR)
 
     monkeypatch.setattr("app.services.search.aggregate_search", fail)

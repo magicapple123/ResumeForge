@@ -9,10 +9,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..schemas.analytics import DashboardOut
+from ..schemas.analytics import DashboardOut, WeeklyGoalIn, WeeklyGoalOut
 from ..services.actions import add_action_route
 from ..services.actions.catalog import all_actions
 from ..services.analytics import build_dashboard
+from ..services.analytics_goal import save_weekly_goal, weekly_goal_block
 
 logger = logging.getLogger(__name__)
 
@@ -29,3 +30,13 @@ def read_dashboard(
 ):
     """投递总量 / 面试率 / 笔试通过率 / Offer 数 / 六阶段漏斗 / 月度趋势。"""
     return DashboardOut(**build_dashboard(db, trend_months=trend_months))
+
+
+@router.put("/weekly-goal", response_model=WeeklyGoalOut)
+def write_weekly_goal(payload: WeeklyGoalIn, db: Session = Depends(get_db)):
+    """设置/清除周投递目标（0 = 取消）。
+
+    目标值存本数据集设置；只有统计页的「目标 vs 实际」一块读它，不参与任何投递流程。
+    """
+    save_weekly_goal(db, payload.target)
+    return WeeklyGoalOut(**weekly_goal_block(db))

@@ -130,6 +130,102 @@ class TrackCohortOut(BaseModel):
     durations: list[StageDurationOut] = Field(default_factory=list)
 
 
+class ChannelStatOut(BaseModel):
+    """一个投递渠道的投递数 / 面试率 / Offer 率（清单 §17.3-A1）。
+
+    channel / label 来自 models/tracker.py 的 CHANNELS / CHANNEL_LABELS（唯一词表）；
+    small_sample = 该渠道投递数低于小样本阈值——12 条数据下每个渠道都该亮徽标。
+    """
+
+    channel: str = ""
+    label: str = ""
+    total: int = 0
+    interview_count: int = 0
+    interview_rate: float = 0.0
+    offer_count: int = 0
+    offer_rate: float = 0.0
+    small_sample: bool = False
+
+
+class StatusDurationOut(BaseModel):
+    """「投递 → 当前状态」耗时（清单 §17.3-A2，只用 applied_at + status_date）。
+
+    sample_count 是可用日期对的条数，denominator 是该状态的记录总数——两个数一起看
+    才知道中位数覆盖了多少。median_days 为 None 表示没有可用样本（前端显示
+    "暂无可比数据"，不显示 0 天）。skipped_negative 是 status_date 早于 applied_at
+    的乱序补录数，不硬掰成 0。
+    """
+
+    status: str = ""
+    label: str = ""
+    sample_count: int = 0
+    denominator: int = 0
+    median_days: float | None = None
+    skipped_negative: int = 0
+    small_sample: bool = False
+
+
+class CompanyRepeatOut(BaseModel):
+    """同一家公司投了多个岗位的记录组（清单 §17.3-A3）。"""
+
+    company_key: str = ""
+    company: str = ""
+    total: int = 0
+    interview_count: int = 0
+    offer_count: int = 0
+
+
+class CompanyRepeatBlockOut(BaseModel):
+    """同公司多投的两份清单：>=2 次投递；>=3 次且 0 面试（最该止损）。"""
+
+    repeats: list[CompanyRepeatOut] = Field(default_factory=list)
+    no_interview: list[CompanyRepeatOut] = Field(default_factory=list)
+
+
+class ResumeEffectOut(BaseModel):
+    """按关联简历分组的投递结果（清单 §17.3-B4）。**样本量必须展示**，不做因果归因。"""
+
+    resume_id: int
+    resume_title: str = ""
+    total: int = 0
+    interview_count: int = 0
+    interview_rate: float = 0.0
+    small_sample: bool = False
+
+
+class ModelUsageOut(BaseModel):
+    """一个模型的生成用量（按 resume_generate 分组；换模型后不该被旧账拉偏）。"""
+
+    model: str = ""
+    calls: int = 0
+    completion_tokens: int = 0
+    avg_duration_ms: int = 0
+
+
+class GenerationCostOut(BaseModel):
+    """生成成本与耗时（清单 §17.3-C7）。**只报 token 与耗时，不报金额**——本库没有价格表。"""
+
+    generate_calls: int = 0
+    generate_completion_tokens: int = 0
+    generate_avg_duration_ms: int = 0
+    total_calls: int = 0
+    total_tokens: int = 0
+    by_model: list[ModelUsageOut] = Field(default_factory=list)
+
+
+class WeeklyGoalOut(BaseModel):
+    """周投递目标 vs 本周已投（清单 §17.3-C6）。target=0 表示没设目标。"""
+
+    target: int = 0
+    this_week_count: int = 0
+
+
+class WeeklyGoalIn(BaseModel):
+    """写入周目标：0-100；0 = 取消目标。"""
+
+    target: int = Field(default=0, ge=0, le=100)
+
+
 class DashboardOut(BaseModel):
     """看板整体响应：概览指标 + 四个主题区块所需的分组数据。"""
 
@@ -168,6 +264,16 @@ class DashboardOut(BaseModel):
     # ===== 真实时间线（RF-18，口径来自状态变化事件表）=====
     cohort: TrackCohortOut = Field(default_factory=TrackCohortOut)
 
+    # ===== 第 17 条新增：渠道转化 / 投递→当前状态耗时 / 同公司多投 / 简历效果 =====
+    channel_stats: list[ChannelStatOut] = Field(default_factory=list)
+    status_durations: list[StatusDurationOut] = Field(default_factory=list)
+    company_repeats: CompanyRepeatBlockOut = Field(default_factory=CompanyRepeatBlockOut)
+    resume_effects: list[ResumeEffectOut] = Field(default_factory=list)
+
+    # ===== 第 17 条新增：周目标与生成成本（P3） =====
+    weekly_goal: WeeklyGoalOut = Field(default_factory=WeeklyGoalOut)
+    generation_cost: GenerationCostOut = Field(default_factory=GenerationCostOut)
+
     # ===== 简历与健康度 =====
     resume_count: int = 0
     resume_scanned_count: int = 0
@@ -179,14 +285,23 @@ class DashboardOut(BaseModel):
 
 __all__ = [
     "AppliedGapOut",
+    "ChannelStatOut",
+    "CompanyRepeatBlockOut",
+    "CompanyRepeatOut",
     "DashboardOut",
     "FunnelStage",
     "KeyedCount",
     "LabeledCount",
+    "GenerationCostOut",
+    "ModelUsageOut",
     "ReferralBlockOut",
     "ReminderCountsOut",
+    "ResumeEffectOut",
     "StageConversionOut",
     "StageDurationOut",
+    "StatusDurationOut",
     "TrackCohortOut",
     "TrendPoint",
+    "WeeklyGoalIn",
+    "WeeklyGoalOut",
 ]

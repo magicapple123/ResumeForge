@@ -56,6 +56,8 @@ class ExportRequest:
     format_config: dict | None = None
     language: str | None = None
     include_photo: bool = True
+    #: 草稿预览专用（§7）：HTML 不按 page_limit 截断；只在 API 层 preview=true 时置真。
+    include_overflow_pages: bool = False
 
 
 @dataclass(frozen=True)
@@ -244,15 +246,24 @@ _PAGE_LIMIT_EXEMPT_FORMATS = frozenset(("pdf", "json"))
 
 
 def _render_with_page_limit(
-    fmt: str, document: ResumeContent | dict, context: RenderContext
+    fmt: str,
+    document: ResumeContent | dict,
+    context: RenderContext,
+    *,
+    skip_truncation: bool = False,
 ) -> tuple[RenderedArtifact, TruncationResult | None]:
     """1-D 的唯一收口：**先按篇幅上限裁，再渲染**；返回（产物, 裁剪结论）。
 
-    裁剪结论为 ``None`` 表示这条格式走的是既有路径之一（pdf 自己裁 / json 完整 /
-    用户选了「不限篇幅」）。其余格式（docx / html / md / txt）的正文里只保留前 ``N`` 页
+    裁剪结论为 None 表示这条格式走的是既有路径之一（pdf 自己裁 / json 完整 /
+    用户选了「不限篇幅」）。其余格式（docx / html / md / txt）的正文里只保留前 N 页
     的内容——界面上的「最大篇幅」因此对五个格式是同一个承诺。
+
+    skip_truncation（§7）：草稿预览的 HTML 要完整正文（超额页画出来、只标红不计入导出）。
+    只对 html 生效、只由 API 在 preview=true 时传下来——普通导出永远截断。
     """
     renderer = FORMAT_RENDERERS[fmt]
+    if skip_truncation and fmt == "html":
+        return renderer(document, context), None
     if fmt in _PAGE_LIMIT_EXEMPT_FORMATS or context.page_limit_is_unlimited:
         return renderer(document, context), None
     outcome = truncate_for_format(document, context, export_format=fmt)
@@ -347,8 +358,13 @@ def build_export(
         # 只看数字分不清"选了 10 页"与"选了不限"，那 10 页就会变成裁剪预算。
         page_limit_is_unlimited=page_limit_is_unlimited,
     )
+    # §7：草稿预览的 HTML 不截断（超额页照样有正文，画布只标红、不计入导出）；只认 html。
+    skip_truncation = bool(request.include_overflow_pages and request.format == "html")
     rendered, limit_outcome = _render_with_page_limit(
-        request.format, effective_resume, effective_context
+        request.format,
+        effective_resume,
+        effective_context,
+        skip_truncation=skip_truncation,
     )
     content = rendered.content
     if request.watermark:
@@ -442,6 +458,8 @@ def render_config_fingerprint(request: ExportRequest, context: RenderContext) ->
         # 「不限篇幅」与数字 10 是**两种产物**（前者一个字都不裁），必须进指纹，
         # 否则预览缓存会把"不限"的完整产物当成"10 页"的裁剪产物命中。
         "page_limit_is_unlimited": context.page_limit_is_unlimited,
+        # 不截断 HTML 与截断版是两种产物（§7.3-3）：漏进指纹会让完整预览命中旧缓存。
+        "include_overflow_pages": request.include_overflow_pages,
     }
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

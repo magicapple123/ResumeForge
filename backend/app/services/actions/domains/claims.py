@@ -227,9 +227,13 @@ def _run_update_claim(db: Session, payload: UpdateClaimInput) -> ActionOutcome:
     record = claim_or_none(db, payload.claim_id)
     if record is None:
         raise ActionError("not_found", "台账条目不存在或已被删除")
-    update_payload = _validate_business_payload(
-        ClaimUpdate, payload.model_dump(exclude={"claim_id"})
-    )
+    fields = payload.model_dump(exclude={"claim_id"})
+    # 路由入参为了保住工具侧的"局部合并"语义把没传的字段补成了默认值；entry_ids 是新
+    # 列，旧客户端不知道它。请求里没带时**不能**顺手清空既有链接（用户看不见这次清空），
+    # 所以这里把它从字段集里去掉，交给服务层"未显式提供就保留"的规则。
+    if "entry_ids" not in payload.model_fields_set:
+        fields.pop("entry_ids", None)
+    update_payload = _validate_business_payload(ClaimUpdate, fields)
     updated = update_claim_record(db, record, update_payload)
     return ActionOutcome(
         summary=f"更新了台账条目「{updated.title or updated.subject}」",

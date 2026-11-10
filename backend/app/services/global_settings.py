@@ -164,8 +164,13 @@ def mutate_state(mutate) -> dict[str, Any]:
         return state
 
 
-def profiles_of(state: dict[str, Any]) -> list[dict[str, Any]]:
-    block = state.get("llm")
+def profiles_of(state: dict[str, Any], block_key: str = "llm") -> list[dict[str, Any]]:
+    """某个顶层块里的 profile 列表。
+
+    ``block_key`` 默认 ``llm``（大模型配置）；语义检索的 ``embedding_profiles`` 块结构
+    与它同构，传块名即可复用这一套读写，**不要复制第二份**（清单 §1.3）。
+    """
+    block = state.get(block_key)
     if not isinstance(block, dict):
         return []
     items = block.get("profiles")
@@ -174,11 +179,13 @@ def profiles_of(state: dict[str, Any]) -> list[dict[str, Any]]:
     return [item for item in items if isinstance(item, dict) and item.get("id")]
 
 
-def active_profile_of(state: dict[str, Any]) -> dict[str, Any] | None:
-    items = profiles_of(state)
+def active_profile_of(
+    state: dict[str, Any], block_key: str = "llm"
+) -> dict[str, Any] | None:
+    items = profiles_of(state, block_key)
     if not items:
         return None
-    block = state.get("llm") or {}
+    block = state.get(block_key) or {}
     active_id = str(block.get("active_profile_id") or "")
     for item in items:
         if item.get("id") == active_id:
@@ -187,16 +194,20 @@ def active_profile_of(state: dict[str, Any]) -> dict[str, Any] | None:
     return items[0]
 
 
-def find_profile_by_name(state: dict[str, Any], name: str) -> dict[str, Any] | None:
+def find_profile_by_name(
+    state: dict[str, Any], name: str, block_key: str = "llm"
+) -> dict[str, Any] | None:
     """按名称找记录（名称在本地唯一；导入合并依赖这条约束）。"""
-    for item in profiles_of(state):
+    for item in profiles_of(state, block_key):
         if str(item.get("name") or "") == name:
             return item
     return None
 
 
-def find_profile(state: dict[str, Any], profile_id: str) -> dict[str, Any] | None:
-    for item in profiles_of(state):
+def find_profile(
+    state: dict[str, Any], profile_id: str, block_key: str = "llm"
+) -> dict[str, Any] | None:
+    for item in profiles_of(state, block_key):
         if item.get("id") == profile_id:
             return item
     return None

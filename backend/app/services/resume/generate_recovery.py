@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 def fail_orphaned_generate_tasks(db: Any) -> int:
     """应用重启后，把遗留的 pending/running 生成任务标记为失败（RF-02）。
 
-    生成任务只活在进程内的一个工作线程里：进程中断后这些行永远不会有人推进，却
-    占着"同一时刻只跑一个任务"的入口（``/generate/tasks`` 对任何活动任务回 409）。
-    启动恢复把它们转成现有 ``failed`` 终态、写可读原因；**不自动重跑**——重跑要
-    重新花模型调用，必须由用户显式发起。
+    生成任务只活在进程内的工作线程里：进程中断后这些行永远不会有人推进，却仍占着
+    同岗位的生成入口（同一岗位已有 pending/running 任务时 ``/generate/tasks`` 回 409），
+    也可能永远停在排队队列里。启动恢复把它们转成现有 ``failed`` 终态、写可读原因；
+    **不自动重跑**——重跑要重新花模型调用，必须由用户显式发起。
     """
     from sqlalchemy import update
 

@@ -387,6 +387,10 @@ def export_resume_with_options(
         # 草稿语言（预览里切的那一个）：与 format_config 同一条覆盖路径——不给就回落记录值。
         language=variant_options.get("language", payload.language),
         include_photo=payload.include_photo,
+        # 草稿预览专用（问题清单 §7）：只在 preview=true 时向下传。普通导出即使收到这个
+        # 字段也一律忽略——"导出必须截断"是承诺，不能靠请求参数绕开（同批在管线里也只认
+        # format=html）。
+        include_overflow_pages=bool(payload.include_overflow_pages and payload.preview),
     )
     return _export_record(
         db,

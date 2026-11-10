@@ -41,7 +41,14 @@ from .openai_compat import validated_base_url
 from .payload import status_error
 from .responses_messages import convert_messages, convert_tools
 from .responses_stream import ResponsesStreamParser, clean_token
-from .thinking import DEFAULT_EFFORT, host_of, normalize_effort
+from .thinking import (
+    DEFAULT_EFFORT,
+    PROTOCOL_RESPONSES,
+    disable_thinking_payload,
+    host_of,
+    normalize_effort,
+    responses_off_effort,
+)
 from .usage import FINISH_CANCELLED, FINISH_ERROR, FINISH_LENGTH, FINISH_STOP
 
 logger = logging.getLogger(__name__)
@@ -316,9 +323,20 @@ class ResponsesProvider(BaseLLMProvider):
             payload["max_output_tokens"] = self.config.max_tokens
         if self.config.top_p is not None:
             payload["top_p"] = self.config.top_p
-        effort = self._thinking_effort() if thinking else ""
-        if effort:
+        effort = self._thinking_effort(thinking=thinking)
+        if effort != "":
+            # **只有空串才不发**："none" 是有效取值，不是"没有"——它在 Responses 上就是
+            # 关闭思考的唯一写法（清单 §10.3 实测 reasoning_tokens=0）。
             payload["reasoning"] = {"effort": effort}
+        else:
+            # effort 形态表达不了关闭时（豆包 Responses 的关闭写法是 thinking:{type:disabled}）
+            # 合并完整片段；没有关闭入口 / 型号不可关闭时这里是空 dict，一个字都不发。
+            #
+            # reasoning.effort 形态**由 _thinking_effort 独占负责**，这里不再兜第二遍：
+            # 兜了就等于把"none 被吞成空串"这个 bug 重新藏起来（反证会失效）。
+            disable_payload = disable_thinking_payload(self.config, PROTOCOL_RESPONSES)
+            disable_payload.pop("reasoning", None)
+            payload.update(disable_payload)
         tool_payload = convert_tools(tools)
         if tool_payload:
             payload["tools"] = tool_payload
@@ -330,20 +348,29 @@ class ResponsesProvider(BaseLLMProvider):
                 payload.setdefault(key, value)
         return payload
 
-    def _thinking_effort(self) -> str:
-        """本次请求的 reasoning.effort；空串 = 不发送思考参数。
+    def _thinking_effort(self, *, thinking: bool = True) -> str:
+        """本次请求的 reasoning.effort；空串 = 不发 effort（关闭形态可能不是 effort）。
 
         优先级：请求级「思考强度」（助手页）> 设置页「思考模式」开关与档位。
         形态固定是 reasoning.effort——Responses 只认这一种写法；旧的 thinking_style
         字段对这条链路不生效（由 schema 注释与设置页说明体现实情）。
+
+        **"none" 必须原样返回**：Responses 上关闭思考的唯一写法就是
+        ``reasoning: {"effort": "none"}``——省略等于沿用服务商默认，DeepSeek / 智谱这类
+        「不指定就思考」的厂商就等于没关。旧实现把 none 映射成空串，恰好把唯一关闭手段
+        吞掉（清单 §10.3：A 行不发=437 输出/409 思考，C 行 none=29 输出/0 思考）。
+
+        结构化输出类调用（``thinking=False``）同样要显式关：对默认思考的厂商，
+        "不注入"和"关掉"不是一回事（第 10 条 P1：格式修复轮白花 64s 的教训）。
         """
+        if not thinking:
+            return responses_off_effort(self.config)
         effort = str(self.request_overrides.get("reasoning_effort") or "").strip()
         if effort:
-            if effort.casefold() == "none":
-                return ""
-            return effort
+            # 助手侧选「不思考」= 发 none；其余档位原样透传（自定义档位不做白名单过滤）。
+            return "none" if effort.casefold() == "none" else effort
         if not getattr(self.config, "thinking_enabled", False):
-            return ""
+            return responses_off_effort(self.config)
         return normalize_effort(self.config) or DEFAULT_EFFORT
 
     def _endpoint(self) -> str:

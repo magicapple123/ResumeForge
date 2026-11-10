@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""简历生成后台任务运行器：进程内单例线程 + 状态落库 + 前端轮询。
+"""简历生成后台任务 worker：一个任务一个线程 + 状态落库 + 前端轮询。
 
-不自建任务队列：单用户本地应用，生成是"几秒到几分钟的阻塞工艺"，一个 Thread 足够。
-纪律：线程自建自关 SessionLocal；每块事件后查停止信号；异常兜底 failed + 中文 error；完成才落库。
+调度（并发上限 / 排队 / 取消路由）在 resume_generate_manager；本模块只负责单任务执行：
+线程自建自关 SessionLocal；异常兜底 failed + 中文 error；完成才落库。
 """
 
 from __future__ import annotations
@@ -57,9 +57,9 @@ from .resume_runner_loop import RunnerEventLoopHandle
 
 logger = logging.getLogger(__name__)
 
-# 已接收字数写库的粒度：没必要每个 chunk 都 commit 一次，但要让前端 1.5s 轮询能看到
-# 进展，所以每累计 200 字符落一次。
-_CHAR_COMMIT_STEP = 200
+# 已接收字数写库的粒度：4 个并发 worker 争同一个 SQLite 单写者，粒度 400 字以减少提交
+# 次数（并发冲突用"少写"缓解，不靠降并发）；前端 1.5s 轮询仍能跟上进度。
+_CHAR_COMMIT_STEP = 400
 
 
 class ResumeGenerateRunnerError(Exception):
@@ -67,7 +67,7 @@ class ResumeGenerateRunnerError(Exception):
 
 
 class ResumeGenerateRunner:
-    """单例运行器：同一时刻只跑一个生成任务。"""
+    """单任务 worker：一个实例只跑一条生成任务；并发/排队由 resume_generate_manager 管。"""
 
     def __init__(self, *, session_factory: Callable[[], Any] | None = None) -> None:
         # session_factory 默认 None：启动时按值冻结 engine（RF-03，rebind 仍写旧库）；显式传入（测试注入）优先。
@@ -83,6 +83,7 @@ class ResumeGenerateRunner:
         self._loop_handle = RunnerEventLoopHandle(self._stop)
         self._generation_snapshot: GenerationSnapshot | None = None
         self._snapshot_id: int | None = None
+        self._on_finished: Callable[[int], None] | None = None  # 收尾回调，只消费一次
 
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
@@ -96,8 +97,9 @@ class ResumeGenerateRunner:
         *,
         generation_snapshot: GenerationSnapshot | None = None,
         snapshot_id: int | None = None,
+        on_finished: Callable[[int], None] | None = None,
     ) -> None:
-        """启动后台生成任务；generation_snapshot=创建时冻结的消费快照（F3 §1）。"""
+        """启动后台生成任务；generation_snapshot=创建时冻结的快照；on_finished 在租约归还后回调。"""
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 raise ResumeGenerateRunnerError("已有简历生成任务正在进行中")
@@ -118,6 +120,7 @@ class ResumeGenerateRunner:
             self._current_task_id = task_id
             self._generation_snapshot = generation_snapshot
             self._snapshot_id = snapshot_id
+            self._on_finished = on_finished
             self._thread = threading.Thread(
                 # RF-20：复制启动方 contextvars 并绑定 task_id/dataset_id（同 apply 运行器）。
                 target=run_with_bound_context(
@@ -133,11 +136,17 @@ class ResumeGenerateRunner:
             self._thread.start()
 
     def _run_releasing_lease(self, task_id: int, lease: DatasetLease) -> None:
-        """线程入口：保证无论任务怎么收尾，租约都会归还（切换不再被永久挡住）。"""
+        """线程入口：保证租约归还；收尾回调在归还后触发（排队任务才能立刻拿到租约）。"""
         try:
             self._run(task_id)
         finally:
             lease.release()
+            callback, self._on_finished = self._on_finished, None
+            if callback is not None:
+                try:
+                    callback(task_id)
+                except Exception:  # noqa: BLE001 - 调度回调失败不得掩盖任务真实结果
+                    logger.exception("生成任务完成回调失败 task_id=%s", task_id)
 
     def cancel(self, task_id: int) -> None:
         # 先落"取消"信号：若线程已跑完并提交终态，终态守卫会拒绝改写（apply 同款纪律）。
@@ -466,29 +475,21 @@ class ResumeGenerateRunner:
         set_cancelled(task_id, open_session=self._open_session)
 
 
-_RUNNER: ResumeGenerateRunner | None = None
-_RUNNER_LOCK = threading.Lock()
+# 单例在管理器模块；这里保留同名薄封装，既有调用点/测试的导入路径不变。
+# 函数内导入：管理器模块顶部会 import 本模块的 worker 类，模块级互导会成环。
+def get_resume_generate_runner() -> Any:
+    """进程内共享的生成管理器单例（单任务 worker + 排队，问题清单 §9）。"""
+    from .resume_generate_manager import get_resume_generate_runner as _get_manager
 
-
-def get_resume_generate_runner() -> ResumeGenerateRunner:
-    """进程内共享的生成运行器单例。"""
-    global _RUNNER
-    with _RUNNER_LOCK:
-        if _RUNNER is None:
-            _RUNNER = ResumeGenerateRunner()
-        return _RUNNER
+    return _get_manager()
 
 
 def reset_resume_generate_runner() -> None:
-    """测试用：释放单例，避免用例之间共享线程状态。"""
-    global _RUNNER
-    with _RUNNER_LOCK:
-        if _RUNNER is not None:
-            _RUNNER.shutdown()
-        _RUNNER = None
+    """测试用：停止所有 worker 并释放单例，避免用例之间共享线程状态。"""
+    from .resume_generate_manager import reset_resume_generate_runner as _reset_manager
 
+    _reset_manager()
 
-from .generate_recovery import fail_orphaned_generate_tasks  # noqa: E402, F401 - 兼容再导出
 
 __all__ = [
     "ResumeGenerateRunner",

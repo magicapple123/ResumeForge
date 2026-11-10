@@ -15,7 +15,16 @@ SEARCH_TOOLS: tuple[Tool, ...] = (
                 "query": {
                     "type": "string",
                     "description": "搜索关键词，尽量包含公司名、岗位名或技术方向",
-                }
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "description": (
+                        "可选：本次希望返回几条结果；不能超过设置页的「每次最多返回的结果条数」。"
+                        "不填按上限处理。"
+                    ),
+                },
             },
             "required": ["query"],
         },

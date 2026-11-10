@@ -30,7 +30,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from .base import (
@@ -41,6 +41,18 @@ from .base import (
 from .base import (
     SOURCE_SESSION as SOURCE_SESSION,
 )
+from .boss_filter_resolve import (
+    MAX_CODES_PER_GROUP as MAX_CODES_PER_GROUP,
+)
+from .boss_filter_resolve import (
+    UNLIMITED_CODE as UNLIMITED_CODE,
+)
+from .boss_filter_resolve import (
+    ResolvedFilters as ResolvedFilters,
+)
+from .boss_filter_resolve import (
+    resolve_codes as resolve_codes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +60,6 @@ CONDITIONS_ENDPOINT = "https://www.zhipin.com/wapi/zpgeek/pc/all/filter/conditio
 INDUSTRY_ENDPOINT = "https://www.zhipin.com/wapi/zpCommon/data/industry.json"
 DEFAULT_TIMEOUT_SECONDS = 6.0
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
-
-
-# 「不限」的编码。**它不是一个筛选**：选中它等于不加这个查询参数。
-UNLIMITED_CODE = "0"
 
 
 @dataclass(frozen=True)
@@ -75,6 +83,12 @@ class FilterGroup:
     note: str = ""
     # 该分组在站点筛选栏里的标题可能不止一种写法（站点改过文案时按任意一种都能认出来）。
     aliases: tuple[str, ...] = ()
+    # 站点侧是否支持多选（2026-11-09 专用浏览器逐组实测，见 GROUP_SPECS 的注释）。
+    # **由后端随清单下发、前端不写死**：站点能力变了只改这一处。
+    multi: bool = True
+    # 联动规则：控制组的当前编码必须落在白名单里这一组才可见（空 = 无联动）。
+    # 元组的第二项是"允许的编码集合"，包含空串表示"没选控制组时也可见"。
+    visible_when: tuple[str, tuple[str, ...]] | None = None
 
     def option(self, code: str) -> FilterOption | None:
         for item in self.options:
@@ -104,20 +118,53 @@ class GroupSpec:
     titles: tuple[str, ...]
     # 页面筛选栏里的编码能不能当真实编码用。
     #
-    # **只有行业是 False，而且必须是 False**：短清单的 ``ka`` 后缀就是真实编码
-    # （实测 ``sel-job-rec-degree-203`` → ``degree=203``），行业的 ``ka`` 后缀却是**渲染序号**
-    # （``sel-industry-23`` 对应的真实编码是 ``101407``，点一下读地址栏才知道）。照抄序号会
+    # **只有行业是 False，而且必须是 False**：短清单的 ka 后缀就是真实编码
+    # （实测 sel-job-rec-degree-203 → degree=203），行业的 ka 后缀却是**渲染序号**
+    # （sel-industry-23 对应的真实编码是 101407，点一下读地址栏才知道）。照抄序号会
     # 发一个"合法但不相干"的编码出去，站点照样返回结果——那是最坏的一种错：用户以为筛了。
     dom_codes: bool = True
+    # 站点是否接受多个值（2026-11-09 实测：见 GROUP_SPECS 注释）。单选组多给时只保留第一个。
+    multi: bool = True
+    # 联动：控制组当前编码在白名单里才可见。第二项含空串 = "控制组未选时也可见"。
+    visible_when: tuple[str, tuple[str, ...]] | None = None
 
 
 GROUP_SPECS: tuple[GroupSpec, ...] = (
-    GroupSpec("jobType", "jobType", "求职类型", ("求职类型",)),
-    GroupSpec("salary", "salary", "薪资待遇", ("薪资待遇", "薪资")),
+    # 2026-11-09 用投递专用浏览器（CDP，已登录）逐组实测的能力表，**照抄即可**：
+    #   多选：experience / degree / industry / scale / payType / partTime / stage
+    #   单选：jobType / salary（多值只取第一个）
+    # 兼职（jobType=1903）时「薪资待遇」整组消失、换成「结算方式 + 兼职时间」；
+    # 反向不成立（全职下传 payType 站点不认），所以 payType/partTime 只在兼职下可见。
+    # 「薪资待遇」的白名单带上空串/「不限」：没选求职类型时它仍然可用（站点默认不限类型）。
+    GroupSpec("jobType", "jobType", "求职类型", ("求职类型",), multi=False),
+    GroupSpec(
+        "salary",
+        "salary",
+        "薪资待遇",
+        ("薪资待遇", "薪资"),
+        multi=False,
+        visible_when=("jobType", ("", "0", "1901", "1902")),
+    ),
+    GroupSpec(
+        "payType",
+        "payType",
+        "结算方式",
+        ("结算方式",),
+        multi=True,
+        visible_when=("jobType", ("1903",)),
+    ),
+    GroupSpec(
+        "partTime",
+        "partTime",
+        "兼职时间",
+        ("兼职时间",),
+        multi=True,
+        visible_when=("jobType", ("1903",)),
+    ),
     GroupSpec("experience", "experience", "工作经验", ("工作经验", "经验要求")),
     GroupSpec("degree", "degree", "学历要求", ("学历要求", "学历")),
     GroupSpec("industry", "industry", "公司行业", ("公司行业", "行业"), dom_codes=False),
-    GroupSpec("scale", "scale", "公司规模", ("公司规模", "公司规模")),
+    GroupSpec("scale", "scale", "公司规模", ("公司规模",)),
     GroupSpec("stage", "stage", "融资阶段", ("融资阶段", "融资")),
 )
 
@@ -129,6 +176,8 @@ _DOM_CODE_KEYS = frozenset(spec.key for spec in GROUP_SPECS if spec.dom_codes)
 _CONDITION_KEYS: tuple[tuple[str, str], ...] = (
     ("jobTypeList", "jobType"),
     ("salaryList", "salary"),
+    ("payTypeList", "payType"),
+    ("partTimeList", "partTime"),
     ("experienceList", "experience"),
     ("degreeList", "degree"),
     ("scaleList", "scale"),
@@ -188,6 +237,23 @@ _SNAPSHOT: dict[str, tuple[tuple[str, str], ...]] = {
         ("806", "D轮及以上"),
         ("807", "已上市"),
         ("808", "不需要融资"),
+    ),
+    # 兼职联动两组（2026-11-10 从线上 conditions.json 取的真实值）：
+    "payTypeList": (
+        ("0", "不限"),
+        ("2501", "日结"),
+        ("2502", "周结"),
+        ("2503", "月结"),
+        ("2504", "完工结"),
+    ),
+    "partTimeList": (
+        ("0", "不限"),
+        ("2701", "周末/节假日"),
+        ("2702", "寒暑假"),
+        ("2703", "短期兼职"),
+        ("2704", "长期兼职"),
+        ("2705", "工作日"),
+        ("2706", "夜班"),
     ),
 }
 
@@ -270,6 +336,11 @@ def parse_conditions(payload: Any) -> dict[str, tuple[FilterOption, ...]]:
     if not isinstance(data, dict):
         return {}
     parsed: dict[str, tuple[FilterOption, ...]] = {}
+    known = {condition_key for condition_key, _group_key in _CONDITION_KEYS}
+    unknown = sorted(key for key in data if key not in known and _option_list(data.get(key)))
+    if unknown:
+        # conditions.json 一直是这 8 个清单；多出来的说明站点新增了筛选项，值得记录。
+        logger.info("BOSS 条件接口出现未知筛选项清单：%s", unknown)
     for condition_key, group_key in _CONDITION_KEYS:
         options = _option_list(data.get(condition_key))
         if options:
@@ -323,8 +394,18 @@ def parse_filter_bar(payload: Any) -> dict[str, tuple[FilterOption, ...]]:
     for group in groups:
         if not isinstance(group, dict):
             continue
-        key = by_title.get(_text(group.get("title")))
-        if key is None or key in parsed or key not in _DOM_CODE_KEYS:
+        title = _text(group.get("title"))
+        key = by_title.get(title)
+        if key is None:
+            if title and group.get("options"):
+                # 站点筛选栏新出现一个我们不认识的格子：记日志，便于发现站点新增筛选项。
+                logger.info(
+                    "BOSS 筛选栏出现未知分组 title=%s options=%d",
+                    title,
+                    len(group.get("options") or []),
+                )
+            continue
+        if key in parsed or key not in _DOM_CODE_KEYS:
             continue
         options = tuple(
             FilterOption(code=_code(item.get("code")), label=_text(item.get("label")),
@@ -363,6 +444,13 @@ def build_catalogue(
     for mapping in sources:
         merged.update({key: tuple(values) for key, values in mapping.items() if values})
     groups: list[FilterGroup] = []
+    known = {spec.key for spec in GROUP_SPECS}
+    unknown = sorted(key for key in merged if key not in known)
+    if unknown:
+        # 站点新增了筛选项而我们还不认识：不静默吞掉，留一条可检索的日志便于补能力表。
+        logger.info(
+            "BOSS 筛选条件里出现能力表之外的分组（需要评估是否接入）：%s", unknown
+        )
     for spec in GROUP_SPECS:
         options = merged.get(spec.key, ())
         groups.append(
@@ -374,13 +462,15 @@ def build_catalogue(
                 source=source if options else SOURCE_UNAVAILABLE,
                 note="" if options else "这一项暂时读不到，本次不显示选项。",
                 aliases=spec.titles[1:],
+                multi=spec.multi,
+                visible_when=spec.visible_when,
             )
         )
     return tuple(groups)
 
 
 def snapshot_catalogue() -> tuple[FilterGroup, ...]:
-    """离线兜底：只用内置快照（6 个短清单），行业标成不可用。"""
+    """离线兜底：只用内置快照（8 个短清单，含兼职联动的结算方式/兼职时间），行业标不可用。"""
     conditions = {
         group_key: _option_list(_SNAPSHOT.get(condition_key))
         for condition_key, group_key in _CONDITION_KEYS
@@ -388,53 +478,9 @@ def snapshot_catalogue() -> tuple[FilterGroup, ...]:
     return build_catalogue(conditions=conditions, source=SOURCE_SNAPSHOT)
 
 
-@dataclass
-class ResolvedFilters:
-    """一次采集要带上的查询参数，以及**没能执行**的那几条（如实上报，不静默丢）。"""
-
-    params: dict[str, str] = field(default_factory=dict)
-    applied: list[str] = field(default_factory=list)
-    unapplied: list[str] = field(default_factory=list)
-
-    def as_dict(self) -> dict[str, Any]:
-        return {"params": dict(self.params), "applied": list(self.applied),
-                "unapplied": list(self.unapplied)}
+# 编码校验/联动收口已拆到 boss_filter_resolve（本模块贴近 500 行预算）；顶部 re-export
+# 保证 from .boss_filters_catalog import resolve_codes 的既有导入路径与 monkeypatch 落点不变。
 
 
-def resolve_codes(
-    selected: Mapping[str, str] | None,
-    catalogue: Sequence[FilterGroup],
-) -> ResolvedFilters:
-    """把用户在界面上选的 ``{分组 key: 编码}`` 折成查询参数。
 
-    三条纪律，每条都对应一种**静默失效**：
-
-    - 选的是「不限」（编码 ``0``）→ 不产生参数，也不计入"已生效"（它本来就等于没筛）；
-    - 编码**不在**本次读到的清单里 → 计入 ``unapplied``，**绝不发出去**。站点改版后编码会变，
-      发一个过期的编码会被站点当成合法值而返回错误结果，比不筛更糟；
-    - 分组本身读不到（``UNAVAILABLE``）→ 同样计入 ``unapplied``。
-    """
-    result = ResolvedFilters()
-    if not selected:
-        return result
-    by_key = {group.key: group for group in catalogue}
-    for key, raw_code in selected.items():
-        code = _code(raw_code)
-        if not code or code == UNLIMITED_CODE:
-            continue
-        group = by_key.get(key)
-        if group is None:
-            # 这一项是**旧配置留下的**（站点已经不再提供这个分组），同样如实上报。
-            result.unapplied.append(key)
-            continue
-        if group.source == SOURCE_UNAVAILABLE:
-            result.unapplied.append(group.label)
-            continue
-        option = group.option(code)
-        if option is None:
-            result.unapplied.append(group.label)
-            continue
-        result.params[group.param] = code
-        result.applied.append(f"{group.label}：{option.label}")
-    return result
 

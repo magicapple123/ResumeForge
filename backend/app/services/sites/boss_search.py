@@ -129,13 +129,20 @@ class BossSearchMixin(BossFilterMixin):
         # 用户在「站点筛选」里明确选了求职类型时，**以他选的那一项为准**：否则同一个
         # ``jobType`` 参数会在地址里出现两次（一个来自下面的旧映射、一个来自他刚选的），
         # 站点取哪一个不确定——那正是"我明明选了实习却混进全职"的成因。
-        if job_type_param and "jobType" not in query.filters:
+        # 用户显式选过站点筛选的求职类型（含「不限」）时一律以他为准：旧映射可能来自历史
+        # 配置里的 job_type 字段，两条同时出现会让"不限"静默变成"只采某一类岗位"。
+        if (
+            job_type_param
+            and not query.skip_job_type_mapping
+            and "jobType" not in query.filters
+        ):
             base = f"{base}&jobType={job_type_param}"
         # 站点筛选栏选中的条件。**编码已经过校验**（见 prepare_collect_filters），这里只负责
         # 拼进去；参数名一律转义，免得站点改个键名就把查询串拼坏。
         for name, code in sorted(query.filters.items()):
             if name and code:
-                base = f"{base}&{quote(str(name), safe='')}={quote(str(code), safe='')}"
+                # 多选值形如「203,202」：逗号必须保持字面量（编码成 %2C 时站点会整串当未知值）。
+                base = f"{base}&{quote(str(name), safe='')}={quote(str(code), safe=',')}"
         return f"{base}&page={max(page, 1)}"
 
     def _capture_network(

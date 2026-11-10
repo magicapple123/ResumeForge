@@ -3,8 +3,9 @@
 
 覆盖三件事，全部在**真实 alembic 迁移出来的库**上验，而不是 ``create_all``：
 
-1. **往返可用**：空库 ``upgrade head`` → ``downgrade -1`` × 3 → ``upgrade head``
-   三次都成功；中间态三处新结构确实消失，复原后列/表/索引都在。
+1. **往返可用**：空库 ``upgrade head`` → ``downgrade -1`` × 5（0006–0010，
+   波次 2 的 0009/0010 也在链上）→ ``upgrade head``，两次都成功；中间态三处新结构确实
+   消失，复原后列/表/索引都在。
 2. **旧语义零破坏**：agent_task 既有的提醒去重键仍生效；新去重键按
    (source, source_ref, occurrence_key) 生效，且两列为 NULL 的旧行照旧并存。
 3. **新表约束**：job_preference 的活动行 partial unique index / CHECK / pref_id 唯一；
@@ -115,8 +116,8 @@ def _assert_new_structures(engine) -> None:
     } <= _index_names(engine, "job_preference")
 
 
-def test_upgrade_downgrade_three_steps_upgrade_round_trip(tmp_path):
-    """空库往返：升到 head、连退三步、再升回 head，三次都成功且结构可复验。"""
+def test_upgrade_downgrade_round_trip(tmp_path):
+    """空库往返：升到 head、连退到 0005（0006–0010 五条）、再升回 head，两次都成功。"""
     engine = build_engine(f"sqlite:///{(tmp_path / 'roundtrip.db').as_posix()}")
     config = build_alembic_config(engine)
     head = head_revision()
@@ -125,8 +126,8 @@ def test_upgrade_downgrade_three_steps_upgrade_round_trip(tmp_path):
         assert alembic_version_of(engine) == head
         _assert_new_structures(engine)
 
-        # 等价于 downgrade -1 三次：三条迁移都真的能退。
-        for _ in range(3):
+        # 等价于 downgrade -1 五次：0006–0010 五条迁移都真的能退。
+        for _ in range(5):
             command.downgrade(config, "-1")
         assert alembic_version_of(engine) != head
         assert {"source_ref", "occurrence_key"}.isdisjoint(_column_names(engine, "agent_task"))

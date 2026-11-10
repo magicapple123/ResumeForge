@@ -148,10 +148,13 @@ async def _stream_message_events(
             # 请求开始时的旧快照）。下发集合与执行白名单同源（policy）。
             with factory() as db:
                 relaxed_now = resolve_assistant_relaxed_mode(db, payload.relaxed_mode)
-                fetch_pages_now = get_search_config(db).fetch_pages
+                search_config_now = get_search_config(db)
+                fetch_pages_now = search_config_now.fetch_pages
+                max_results_now = search_config_now.max_results
             ctx = tool_policy.build_context(
                 web_search=payload.web_search,
                 fetch_pages=fetch_pages_now,
+                max_results=max_results_now,
                 relaxed=relaxed_now,
                 writable=payload.allow_write,
             )

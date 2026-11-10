@@ -32,10 +32,17 @@ MAX_CANDIDATE_IMPORT_BATCH = 5000
 
 
 class MaterialFileInput(BaseModel):
-    """资料附件：本机提取出的文字，或一张图片的缩略图。
+    """资料附件：本机提取出的文字、一张图片的缩略图，或一份已存原件的引用。
 
-    与助手附件保持同一取舍：文档的原始文件不外发也不入库，只保留提取出的文字；
-    图片则保存受限的 data URL 供界面预览。
+    三种形态由上传接口 POST /api/materials/attachments 统一产出：
+
+    - 图片：data_url 是受限缩略图（原件另有磁盘副本）；
+    - 文档（pdf/docx/txt/md/json/csv）：text 是本机提取出的文字；
+    - 扫描件 PDF 或任何提取不到文字的文档：text 为空，但 file_id 指向已保存的原件，
+      至少还能「另存为」。
+
+    file_id 是 user_file 行 id（material.files 是 JSON 列，加字段不需要数据库迁移）。
+    旧数据没有它，读出来是 None，前端按"无原件"只给「复制」。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -45,6 +52,8 @@ class MaterialFileInput(BaseModel):
     size_bytes: int = Field(default=0, ge=0, le=50 * 1024 * 1024)
     text: str = Field(default="", max_length=MAX_MATERIAL_FILE_TEXT_CHARS)
     data_url: str = Field(default="", max_length=4 * 1024 * 1024)
+    # 已保存原件的 user_file id；None = 历史附件（没有原件可另存为）。
+    file_id: int | None = Field(default=None, ge=1)
 
     @field_validator("data_url")
     @classmethod
@@ -53,10 +62,26 @@ class MaterialFileInput(BaseModel):
 
     @model_validator(mode="after")
     def require_content(self) -> "MaterialFileInput":
-        if not self.text.strip() and not self.data_url:
+        # 有原件（file_id）也算有内容：扫描件 PDF 提取不出文字，但用户可以另存为。
+        if not self.text.strip() and not self.data_url and self.file_id is None:
             raise ValueError(f"附件「{self.name}」没有可保存的内容")
         return self
 
+
+class MaterialAttachmentOut(BaseModel):
+    """POST /api/materials/attachments 的响应：上传并提取完成的单个附件。
+
+    file_id 非空才能「另存为」；text 为空且 data_url 为空时（扫描件 PDF）只能另存
+    原件，warnings 会说明没提取到文字的原因。
+    """
+
+    file_id: int
+    name: str
+    mime_type: str = ""
+    size_bytes: int = 0
+    text: str = ""
+    data_url: str = ""
+    warnings: list[str] = Field(default_factory=list)
 
 class MaterialCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")

@@ -10,8 +10,9 @@
 
 ## 能力表只用来"猜形态"，判定权威是实测
 
-``resolve_style`` 在用户没有显式指定形态时按表猜（不然"开关一开就生效"对智谱、通义
-这类只有自己写法的服务商根本不成立）。猜错的代价被两道闸限制住：
+能力表本身（主机 + 型号白名单、按协议区分的关闭写法）在 :mod:`.thinking_vendors`；
+本模块只做判断。``resolve_style`` 在用户没有显式指定形态时按表猜（不然"开关一开就生效"
+对智谱、通义这类只有自己写法的服务商根本不成立）。猜错的代价被两道闸限制住：
 
 - **上游 400** 时，``openai_compat`` 会去掉思考参数重试一次——最坏是"这一次没有思考"，
   不是"简历生成、岗位解析一起失败"；
@@ -28,18 +29,23 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from urllib.parse import urlsplit
 
 from ...schemas.setting import THINKING_STYLE_UNMANAGED, LLMConfig
 from .base import LLMError
+from .thinking_vendor_table import match_rule
+from .thinking_vendors import (
+    PROTOCOL_CHAT,
+    PROTOCOL_RESPONSES,
+    STYLE_AUTO,
+    STYLE_BUDGET,
+    STYLE_ENABLE_THINKING,
+    STYLE_REASONING_EFFORT,
+    STYLE_THINKING_OBJECT,
+    disable_payload_for_style,
+    host_of,
+)
 
 logger = logging.getLogger(__name__)
-
-STYLE_AUTO = "auto"
-STYLE_REASONING_EFFORT = "reasoning_effort"
-STYLE_THINKING_OBJECT = "thinking_object"
-STYLE_ENABLE_THINKING = "enable_thinking"
-STYLE_BUDGET = "budget"
 
 # 强度档位 → 思考预算（tokens）。**只有这一份实现**：设置页的新开关与助手页的
 # 「思考强度」在原生 Messages 协议下都从这里取预算。
@@ -94,135 +100,6 @@ class ThinkingProbe:
     message: str
 
 
-@dataclass(frozen=True)
-class _VendorRule:
-    """一条能力表规则：主机后缀匹配 + 模型名正则（空 = 不限）。"""
-
-    host: str
-    model_pattern: re.Pattern[str] | None
-    style: str
-    efforts: tuple[str, ...]
-    supported: bool
-    note: str
-    # 该模型**不指定就思考**（DeepSeek V4、通义 Qwen3.5+ 这类）。这时"关"不能靠省略
-    # 表达——省略等于沿用服务商默认，界面写着"关闭"、实际还在思考。所以关着的时候要
-    # 显式发一次关闭参数，见 :func:`_disable_payload`。
-    default_on: bool = False
-
-
-# 能力表：**先匹配先赢**，顺序即优先级。每条都只影响设置页的选项与提示。
-#
-# **最后一次核对：2026-10-01**（依据各家官方文档与下线公告）。这张表最容易过期——
-# 改模型名、换档位词汇、把"默认不思考"改成"默认思考"都会发生。核对时的重点：
-# OpenAI 的档位按代次分（5.2 起多了 none/xhigh）、国内几家普遍改成了默认思考。
-_TABLE: tuple[_VendorRule, ...] = (
-    _VendorRule(
-        "open.bigmodel.cn",
-        re.compile(r"^glm-(4\.[5-9]|5)"),
-        STYLE_THINKING_OBJECT,
-        (),
-        True,
-        "GLM-4.5 及以上用 thinking 开关控制思考；GLM-5.2 起还能分档（low/high/max，"
-        "写法以官方文档为准）。",
-    ),
-    _VendorRule(
-        "dashscope.aliyuncs.com",
-        # 匹配 `^qwen` 而不是 `^qwen3`：预设里用的是官方长期保留的档位别名 `qwen-plus`，
-        # 钉版本号会让它掉进"未收录"。该主机上也会托管别家的模型，所以不能按主机一刀切。
-        re.compile(r"^qwen"),
-        STYLE_ENABLE_THINKING,
-        (),
-        True,
-        "通义 Qwen3.5 及以上的混合模型**默认就思考**：不想思考要显式关掉（本应用会在"
-        "「思考模式」关闭时替你发关闭参数）。qwen3.8 起也支持 reasoning_effort 分档。",
-        default_on=True,
-    ),
-    _VendorRule(
-        "api.deepseek.com",
-        None,
-        STYLE_THINKING_OBJECT,
-        (),
-        True,
-        "DeepSeek（deepseek-flash / deepseek-v4-pro）用 thinking 开关控制思考，且**默认开着**；"
-        "deepseek-v4-flash 是 deepseek-flash 的兼容别名，新配置建议用模型列表里的名称。",
-        default_on=True,
-    ),
-    _VendorRule(
-        "api.minimax",
-        None,
-        STYLE_THINKING_OBJECT,
-        (),
-        True,
-        "MiniMax-M3 默认不思考，开启用的写法是 thinking:{type:'adaptive'}（与本应用的"
-        "通用形态不同）；若检测提示被拒，可用高级调整里的 extra_body 手写。",
-    ),
-    _VendorRule(
-        "api.moonshot",
-        re.compile(r"^kimi-k3"),
-        STYLE_THINKING_OBJECT,
-        (),
-        False,
-        "kimi-k3 的思考是常开的，没有关闭参数——这里的「思考模式」对它不起作用。",
-    ),
-    _VendorRule(
-        "api.openai.com",
-        # 预设自 2026-11-08 起用 gpt-6-astra，所以这条要同时覆盖 5.2+ 与 6 代：
-        # 只写 ^gpt-5 会让预设模型掉进「未收录」，设置页给不出一句可用的档位说明。
-        re.compile(r"^gpt-6|^gpt-5\.[2-9]|^gpt-5\.\d\d"),
-        STYLE_REASONING_EFFORT,
-        ("none", "low", "medium", "high", "xhigh"),
-        True,
-        "GPT-5.2 及以后（含 GPT-6 代）用 reasoning_effort 分档（含 none 与 xhigh）；"
-        "档位不被支持时，上游会直接报错并列出可用的值，以「检测支持」的实测结果为准。",
-    ),
-    _VendorRule(
-        "api.openai.com",
-        re.compile(r"^gpt-5(\.[01])?(-(mini|nano))?$"),
-        STYLE_REASONING_EFFORT,
-        ("minimal", "low", "medium", "high"),
-        True,
-        "GPT-5 / 5.1 代用 reasoning_effort：minimal/low/medium/high。",
-    ),
-    _VendorRule(
-        "api.openai.com",
-        re.compile(r"^o[1-9]"),
-        STYLE_REASONING_EFFORT,
-        ("low", "medium", "high"),
-        True,
-        "o 系列推理模型用 reasoning_effort：low/medium/high（该系列正被 GPT-5 取代）。",
-    ),
-    _VendorRule(
-        "api.openai.com",
-        re.compile(r"^(gpt-4|gpt-3|chatgpt)"),
-        STYLE_REASONING_EFFORT,
-        (),
-        False,
-        "gpt-4 这代不是推理模型（且已陆续下线），开了也不会有思考内容。",
-    ),
-    _VendorRule(
-        "openrouter.ai",
-        None,
-        STYLE_REASONING_EFFORT,
-        ("low", "medium", "high"),
-        True,
-        "OpenRouter 会把 reasoning_effort 归一化后转给具体模型（各模型支持的档位不同，"
-        "以它列出的为准）。",
-    ),
-)
-
-
-def host_of(base_url: str) -> str:
-    """从 Base URL 取小写主机名；非法地址返回空串。
-
-    （RF-14 §2.3：从私有 ``_host_of`` 提取为可复用纯函数，供 capabilities 的能力表
-    做同构匹配；行为零变化。）
-    """
-    try:
-        return (urlsplit(str(base_url or "")).hostname or "").casefold()
-    except ValueError:
-        return ""
-
-
 def _explicit_style(config: LLMConfig) -> str:
     style = str(getattr(config, "thinking_style", "") or "").strip()
     return "" if style in ("", STYLE_AUTO) else style
@@ -252,26 +129,8 @@ def resolve_style(config: LLMConfig) -> str:
         # Responses 的思考是 reasoning:{effort}（形态上仍是"档位"，不是预算），
         # 由 responses provider 自己组装；这里只决定设置页给哪些档位选项。
         return STYLE_REASONING_EFFORT
-    rule = _match_rule(config)
+    rule = match_rule(config)
     return rule.style if rule is not None else STYLE_REASONING_EFFORT
-
-
-def _match_rule(config: LLMConfig) -> _VendorRule | None:
-    host = host_of(config.base_url)
-    model = str(config.model or "").strip().casefold()
-    for rule in _TABLE:
-        # 完整域名按边界匹配，避免把 api.deepseek.com.example.org 当作官方服务。
-        # MiniMax / Moonshot 的规则刻意不带顶级域名，仍兼容其多个官方域名。
-        if rule.host and not (
-            host == rule.host
-            or host.endswith("." + rule.host)
-            or (rule.host in {"api.minimax", "api.moonshot"} and host.startswith(rule.host + "."))
-        ):
-            continue
-        if rule.model_pattern is not None and not rule.model_pattern.search(model):
-            continue
-        return rule
-    return None
 
 
 def thinking_support(config: LLMConfig) -> ThinkingSupport:
@@ -281,13 +140,22 @@ def thinking_support(config: LLMConfig) -> ThinkingSupport:
     "支不支持"由他自己负责，表只贡献一句说明，档位按该形态的通用集合给。
     """
     style = resolve_style(config)
-    rule = _match_rule(config)
+    rule = match_rule(config)
     if _explicit_style(config):
+        # 用户手工指定形态时"支不支持"由他自己负责（可能走的是中转站），不按型号置灰。
         return ThinkingSupport(
             style, _EFFORTS_BY_STYLE.get(style, ()), True, rule.note if rule else _UNLISTED_NOTE
         )
     if rule is not None:
-        return ThinkingSupport(rule.style, rule.efforts, rule.supported, rule.note)
+        # 命中「不可关闭型号」时 supported=False：设置页据此把「思考模式」开关置灰并说明
+        # 原因（清单 §11.5-D）。它不等于"思考参数完全不可用"——只是关不掉，UI 该照实说。
+        cannot_disable = rule.cannot_disable_model(config.model)
+        return ThinkingSupport(
+            rule.style,
+            rule.efforts,
+            rule.supported and not cannot_disable,
+            rule.support_note(config.model),
+        )
     return ThinkingSupport(style, _EFFORTS_BY_STYLE.get(style, ()), True, _UNLISTED_NOTE)
 
 
@@ -320,13 +188,57 @@ def thinking_budget(config: LLMConfig) -> int:
     return effort_budget(config)
 
 
-def _disable_payload(style: str) -> dict:
-    """**显式关闭**思考的写法；该形态没有"关"这种写法时返回空（表里会写明关不掉）。"""
-    if style == STYLE_THINKING_OBJECT:
-        return {"thinking": {"type": "disabled"}}
-    if style == STYLE_ENABLE_THINKING:
-        return {"enable_thinking": False}
-    return {}
+def disable_thinking_payload(config: LLMConfig, protocol: str = PROTOCOL_CHAT) -> dict:
+    """该服务商在该协议下「关闭思考」的请求片段；``{}`` = 关不掉 / 没有关闭入口。
+
+    这是**关闭思考的唯一实现**（清单 §11.5-A）：chat 与 responses 的写法不同是事实——
+    chat 是 ``thinking:{type:disabled}`` / ``enable_thinking:false`` /
+    ``reasoning_effort:"none"``，responses 主要是 ``reasoning:{effort:"none"}``
+    （DeepSeek 本机实测 reasoning_tokens=0），个别厂商在 responses 上仍是 thinking 对象（豆包）。
+
+    三条硬规则（来自清单 §11.3/11.5）：
+
+    1. 只对「不指定就思考」（``default_on``）的端点发关闭参数；默认不思考的端点省略即可，
+       多发一个它不认识的参数只会换来一次 400；
+    2. 命中 ``cannot_disable`` 的型号**一个字都不发**：它们强制思考，传 none/disabled 会被
+       上游 400（GPT-6 Astra / GPT-6.1 Sol / GLM-5.3 / Kimi K3 / MiniMax M3.1-Flash）；
+    3. 表里没写关闭形态时**保守不发**——"没关掉"只是慢，"发错"是直接失败。
+    """
+    if protocol not in (PROTOCOL_CHAT, PROTOCOL_RESPONSES):
+        raise ValueError(f"不支持的思考关闭协议：{protocol}")
+    if str(getattr(config, "thinking_style", "") or "").strip() == THINKING_STYLE_UNMANAGED:
+        # 助手 / 设置自检：这次调用不参与设置页的思考配置，一个字段都不发。
+        return {}
+    rule = match_rule(config)
+    if rule is None or not rule.default_on:
+        return {}
+    if rule.cannot_disable_model(config.model):
+        return {}
+    explicit = rule.disable_responses if protocol == PROTOCOL_RESPONSES else rule.disable_chat
+    if explicit is not None:
+        return dict(explicit)
+    if protocol == PROTOCOL_RESPONSES:
+        # Responses 端点的关闭写法没有"按形态反推"这回事：认不出就是没有入口。
+        return {}
+    return disable_payload_for_style(resolve_style(config))
+
+
+def responses_off_effort(config: LLMConfig) -> str:
+    """Responses 端点上「关闭思考」的 effort 值；空串 = 该端点没有 effort 形态的关闭写法。
+
+    序列化成 ``reasoning: {"effort": ...}`` 的只有这一种；关闭形态是 thinking 对象的
+    厂商（豆包）返回空串，由调用方合并 :func:`disable_thinking_payload` 的完整片段。
+    """
+    payload = disable_thinking_payload(config, PROTOCOL_RESPONSES)
+    reasoning = payload.get("reasoning")
+    if isinstance(reasoning, dict) and str(reasoning.get("effort", "")).casefold() == "none":
+        return "none"
+    return ""
+
+
+def can_disable_thinking(config: LLMConfig, protocol: str = PROTOCOL_CHAT) -> bool:
+    """该端点在该协议下能否真正关闭思考（设置页据此置灰「思考模式」并说明原因）。"""
+    return bool(disable_thinking_payload(config, protocol))
 
 
 def thinking_payload(config: LLMConfig) -> dict:
@@ -335,6 +247,7 @@ def thinking_payload(config: LLMConfig) -> dict:
     - **关着**：默认返回空 dict——一个字都不发，请求体与加这个功能之前逐字节一致。
       例外是表里标了 ``default_on`` 的模型（DeepSeek V4、通义 Qwen3.5+）：它们不指定就
       思考，"省略"等于"开着"，所以必须显式发一次关闭参数，否则界面写着"关闭"、实际在思考。
+      命中不可关闭型号时同样一个字都不发（发了会 400）。
     - **开着**：按形态生成。
     """
     style = resolve_style(config)
@@ -342,10 +255,7 @@ def thinking_payload(config: LLMConfig) -> dict:
         # 助手：这次调用不参与设置页的思考配置，一个字都不发。
         return {}
     if not getattr(config, "thinking_enabled", False):
-        rule = _match_rule(config)
-        if rule is not None and rule.default_on:
-            return _disable_payload(style)
-        return {}
+        return disable_thinking_payload(config, PROTOCOL_CHAT)
     if style == STYLE_REASONING_EFFORT:
         return {"reasoning_effort": normalize_effort(config) or DEFAULT_EFFORT}
     if style == STYLE_THINKING_OBJECT:
@@ -438,6 +348,8 @@ async def probe_thinking(config: LLMConfig, *, seconds: float = _PROBE_SECONDS) 
 __all__ = [
     "DEFAULT_EFFORT",
     "EFFORT_BUDGETS",
+    "PROTOCOL_CHAT",
+    "PROTOCOL_RESPONSES",
     "STYLE_AUTO",
     "STYLE_BUDGET",
     "STYLE_ENABLE_THINKING",
@@ -445,11 +357,14 @@ __all__ = [
     "STYLE_THINKING_OBJECT",
     "ThinkingProbe",
     "ThinkingSupport",
+    "can_disable_thinking",
+    "disable_thinking_payload",
     "effort_budget",
     "host_of",
     "normalize_effort",
     "probe_thinking",
     "resolve_style",
+    "responses_off_effort",
     "thinking_budget",
     "thinking_payload",
     "thinking_support",

@@ -17,6 +17,7 @@ patch 静默断开（部分用例靠真实配置兜底仍会绿，是最危险�
 """
 
 import logging
+import threading
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -47,6 +48,10 @@ from ...services.resume.generate_snapshot import (
     snapshot_entry_ids,
 )
 from ...services.resume.generation_postprocess import enforce_material_only_echo
+from ...services.resume.resume_generate_manager import (
+    QUEUE_MESSAGE,
+    ResumeGenerateQueueFullError,
+)
 from ...services.resume.resume_generate_runner import (
     ResumeGenerateRunnerError,
     get_resume_generate_runner,
@@ -61,6 +66,19 @@ from ...services.resume.scenario_context import (
 from ._shared import _format_sse
 
 logger = logging.getLogger(__name__)
+
+# 同岗位去重 + 建任务行必须原子的短锁（清单 §9.2）：两个并发请求都先查后插时，各自都会
+# 查到"没有活动任务"，于是同一岗位建出两条 pending——旧实现靠"单例运行器只收一个"兜住，
+# 并发化之后必须在创建处自己封口（单进程应用，不需要 DB 唯一索引/迁移）。只锁建任务
+# 这一段：快照冻结与库操作本来就在请求内，模型调用在锁外。
+_START_LOCK = threading.Lock()
+
+
+def _discard_empty_task(db: Session, task: ResumeGenerateTask, snapshot_id: int) -> None:
+    """启动失败时回滚这条空任务与空快照，不留孤儿。"""
+    delete_generation_snapshot(db, snapshot_id)
+    db.delete(task)
+    db.commit()
 
 
 def _log_frozen_context(snapshot, *, transport: str, task_id: int | None = None) -> None:
@@ -371,31 +389,40 @@ def start_resume_generation(payload: GenerateRequest, db: Session = Depends(get_
             content={"detail": exc.detail, "code": exc.code},
         )
 
-    # 防重复：已有进行中的任务就拒绝，绝不因用户连点两次而产生两条任务/两份简历。
-    active = (
-        db.query(ResumeGenerateTask)
-        .filter(ResumeGenerateTask.status.in_(GENERATE_ACTIVE_STATUSES))
-        .first()
-    )
-    if active is not None:
-        raise HTTPException(status_code=409, detail="已有简历生成任务正在进行中")
+    # 同岗位去重（清单 §9.2）：同一岗位已有 pending/running 时 409（防连点/防同岗两份），
+    # 不同岗位放行；通用简历（job_id=None）不受这条守卫影响，可同时生成多份。
+    # 「查重 → 建任务 → commit」必须在同一把短锁里，否则两个并发请求都能查到"没有活动任务"。
+    with _START_LOCK:
+        if payload.job_id is not None:
+            active_same_job = (
+                db.query(ResumeGenerateTask)
+                .filter(
+                    ResumeGenerateTask.status.in_(GENERATE_ACTIVE_STATUSES),
+                    ResumeGenerateTask.job_id == payload.job_id,
+                )
+                .first()
+            )
+            if active_same_job is not None:
+                raise HTTPException(status_code=409, detail="这个岗位已有一份简历正在进行中")
 
-    # F3 §1：冻结当前组消费快照（入队前），并随任务一起提交。
-    frozen = freeze_generation_snapshot(db)
-    _ensure_profile_not_empty(frozen)
-    _log_frozen_profile(frozen, transport="task")
+        # F3 §1：冻结当前组消费快照（入队前），并随任务一起提交。
+        frozen = freeze_generation_snapshot(db)
+        _ensure_profile_not_empty(frozen)
+        _log_frozen_profile(frozen, transport="task")
 
-    task = ResumeGenerateTask(
-        job_id=payload.job_id,
-        title=payload.title,
-        options=payload.options.model_dump(),
-        context_snapshot=snapshot.model_dump() if snapshot is not None else None,
-    )
-    db.add(task)
-    db.flush()
-    snapshot_row = persist_generation_snapshot(db, frozen, task_id=task.id)
-    db.commit()
-    db.refresh(task)
+        task = ResumeGenerateTask(
+            job_id=payload.job_id,
+            title=payload.title,
+            # 排队文案先落库；拿到槽位时 worker 会立刻覆盖为进度文案（清单 §9.3-A3）。
+            message=QUEUE_MESSAGE,
+            options=payload.options.model_dump(),
+            context_snapshot=snapshot.model_dump() if snapshot is not None else None,
+        )
+        db.add(task)
+        db.flush()
+        snapshot_row = persist_generation_snapshot(db, frozen, task_id=task.id)
+        db.commit()
+        db.refresh(task)
     _log_frozen_context(snapshot, transport="task", task_id=task.id)
 
     runner = get_resume_generate_runner()
@@ -405,12 +432,14 @@ def start_resume_generation(payload: GenerateRequest, db: Session = Depends(get_
             generation_snapshot=frozen,
             snapshot_id=int(snapshot_row.id),
         )
+    except ResumeGenerateQueueFullError as exc:
+        # 排队已满：提交被拒（429），回滚这条空任务与空快照，不留孤儿。
+        _discard_empty_task(db, task, int(snapshot_row.id))
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     except ResumeGenerateRunnerError as exc:
-        # 启动失败（极端竞态：恰好有另一条任务刚被创建）：回滚这条空任务与空快照，
-        # 不留孤儿。
-        delete_generation_snapshot(db, int(snapshot_row.id))
-        db.delete(task)
-        db.commit()
+        # 启动失败（极端竞态：另一条任务先占了最后槽位 / 数据集正在切换）：回滚空任务
+        # 与空快照，不留孤儿。
+        _discard_empty_task(db, task, int(snapshot_row.id))
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return GenerateTaskOut.model_validate(task)
 

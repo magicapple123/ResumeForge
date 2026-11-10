@@ -50,6 +50,7 @@ def tool_definitions(
     enabled: bool = True,
     web_search: bool = False,
     fetch_pages: int = 0,
+    max_results: int = 0,
     relaxed: bool = False,
 ) -> list[dict]:
     """OpenAI 工具声明。
@@ -61,8 +62,8 @@ def tool_definitions(
     （默认）不下发放宽模式工具——那些工具会读到敏感信息（身份字段、网申填写值、
     历史对话），只有用户显式开启才可见。
 
-    ``fetch_pages`` 是设置里"抓取正文的条数"，只影响联网搜索那条工具的描述措辞
-    （见 ``web_search_description``）。
+    ``fetch_pages`` 是设置里"抓取正文的条数"、``max_results`` 是"每次最多返回的
+    结果条数"，两者只影响联网搜索那条工具的描述措辞（见 ``web_search_description``）。
     """
     if not enabled:
         return []
@@ -72,6 +73,7 @@ def tool_definitions(
             dataset_generation=0,
             web_search=web_search,
             fetch_pages=fetch_pages,
+            max_results=max_results,
             relaxed=relaxed,
             writable=False,
         )
@@ -80,7 +82,7 @@ def tool_definitions(
         if not tool_visible(tool, web_search=ctx.web_search, relaxed=ctx.relaxed):
             continue
         description = (
-            web_search_description(ctx.fetch_pages)
+            web_search_description(ctx.fetch_pages, ctx.max_results)
             if tool.name == _WEB_SEARCH_TOOL_NAME
             else tool.description
         )

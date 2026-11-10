@@ -11,6 +11,20 @@ from ._types import ToolResult
 # ===== 联网搜索 =====
 
 
+def _parse_limit(arguments: dict) -> int | None:
+    """解析模型给的 ``limit``：缺省/非法值按"没传"处理（由聚合层取设置上限）。
+
+    ``limit=0`` / 负数不在这里夹紧：聚合层统一按 1 兜底，避免两处各写一份夹紧逻辑。
+    """
+    raw = arguments.get("limit")
+    if raw is None or isinstance(raw, bool):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 async def _tool_web_search(
     db: Session, arguments: dict, numberer: SourceNumberer | None = None
 ) -> ToolResult:
@@ -41,7 +55,9 @@ async def _tool_web_search(
             summary="这是简历通本身的使用问题，未进行无关联网搜索",
         )
     try:
-        results = await aggregate_search(query, get_search_config_with_secrets(db))
+        results = await aggregate_search(
+            query, get_search_config_with_secrets(db), limit=_parse_limit(arguments)
+        )
     except AssistantSearchError as exc:
         # 只回白名单化的 `public_message`：异常原文可能带着底层网络的私有细节，
         # 而工具结果会进模型上下文、SSE 和落库历史（见 search_errors 的约定）。

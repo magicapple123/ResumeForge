@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
-"""事实台账的服务层：增删改查、改进建议、以及给生成链路用的事实基线。
+"""事实台账的服务层：增删改查与改进建议。
 
-三件事在这里收口：
+两件事在这里收口：
 
 - **CRUD**：只做存取与排序，不做判断。
 - **改进建议**（:func:`claim_warnings`）：把"这样写会在面试里出问题"的规则集中在一处，
   由接口随条目一起下发。它是**建议不是拦截**——硬拦会让用户放弃维护台账，反而拿不到
   这套规则的好处；唯一被硬拦的是"已确认却带占位符"那种自相矛盾（在 schema 里挡）。
-- **事实基线**（:func:`build_baseline`）：生成简历时注入的已确认事实，以及必须避开
-  的未确认说法。台账为空时返回空基线，整条生成链路的行为与以前完全一致。
+
+事实基线（:func:`build_baseline`）为守住 500 行文件预算已拆到
+:mod:`app.services.claim_baseline`，本模块 re-export 同名符号，既有 import 路径不变。
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterable
 from typing import Any
 
 from sqlalchemy import func
@@ -30,17 +30,15 @@ from ..models.claim import (
     VERIFICATION_PENDING,
     VERIFICATION_REJECTED,
     ClaimRecord,
-    can_enter_final,
     has_placeholder,
-    verification_label,
 )
-from ..schemas.claim import ClaimCreate, ClaimDigestOut, ClaimOut, ClaimUpdate
+from ..schemas.claim import ClaimCreate, ClaimOut, ClaimUpdate
 from . import claims_i18n, trash
+from .claim_baseline import build_baseline, claim_linked, current_entry_ids
 from .ui_locale import is_english
 
 logger = logging.getLogger(__name__)
 
-MAX_BASELINE_CHARS = 12_000
 # 助手读取单条台账时的返回上限：它的长文本是给模型看追问依据用的，
 # 不是让它把整条主张原文复述给用户。
 MAX_CLAIM_TOOL_CHARS = 6_000
@@ -139,6 +137,17 @@ def _apply_payload(record: ClaimRecord, payload: ClaimCreate | ClaimUpdate) -> N
     record.boundary = payload.boundary
     record.risk_notes = list(payload.risk_notes)
     record.last_verified = payload.last_verified
+    # 关联资料条目：**只有请求里显式带了 entry_ids 才改写**。
+    # 旧客户端（以及助手的"局部合并"更新）不会传这个字段，此时必须保留既有链接——
+    # PUT 整体替换语义不该顺手清掉一个用户看不见的关联。
+    if "entry_ids" in getattr(payload, "model_fields_set", set()):
+        cleaned = list(payload.entry_ids)
+        if cleaned != list(record.entry_ids or []):
+            record.entry_ids = cleaned
+            # 用户自己重选了关联：迁移期「已自动关联，请核对」的标记到此为止。
+            record.entry_ids_auto = False
+    elif record.entry_ids is None:
+        record.entry_ids = []
 
 
 def create_claim(db: Session, payload: ClaimCreate) -> ClaimRecord:
@@ -350,99 +359,13 @@ def claim_detail_text(record: ClaimRecord, max_chars: int = MAX_CLAIM_TOOL_CHARS
     return json.dumps(payload, ensure_ascii=False)[:max_chars]
 
 
-def _claim_linked_to_entries(record: ClaimRecord, allowed: set[str]) -> bool:
-    """这条主张的来源是否能关联到本次消费快照里的条目 ID。
-
-    台账来源是自由结构（type/location/note），新模型资料条目没有反向引用列；
-    生成入口用"来源 location 命中本次快照 entry_id"作为唯一可证明的关联判据。
-    关联不上就不自动带入——宁可让用户重新核对，也不把组外/旧资料写进新简历。
-    """
-    for source in record.sources or []:
-        if not isinstance(source, dict):
-            continue
-        location = str(source.get("location") or "").strip()
-        if location and location in allowed:
-            return True
-    return False
-
-
-def build_baseline(
-    db: Session,
-    *,
-    source_entry_ids: Iterable[str] | None = None,
-) -> ClaimDigestOut:
-    """构造生成简历用的事实基线。
-
-    只有 ``已确认`` 的条目会作为事实进入提示词；其余状态的候选表述会被列进
-    ``blocked_wording``，生成时要求模型避开。台账为空时返回空基线——这样没启用
-    台账的用户，生成行为与以前一字不差。
-
-    source_entry_ids 是**仅生成入口使用**的来源筛选（F3 契约 §4）：
-    - 不传（默认）= 全量语义，既有调用方与旧测试逐字节不变；
-    - 传本次消费快照的 entry_id 集合时，已确认正向事实只保留能关联到这些条目的；
-      关联不上新资料的旧正向事实不自动带入，并在 warnings 里提示用户重新核对；
-    - 禁止措辞（blocked_wording）仍然是抑制约束，不因筛选而放行。
-    过滤发生在拼 baseline_text 之前（不是先摘要再丢 sources）。
-    """
-    records = db.query(ClaimRecord).order_by(ClaimRecord.id.asc()).all()
-    if not records:
-        return ClaimDigestOut(confirmed_count=0, baseline_text="")
-    allowed = (
-        {str(item).strip() for item in source_entry_ids if str(item).strip()}
-        if source_entry_ids is not None
-        else None
-    )
-
-    confirmed_lines: list[str] = []
-    blocked: list[str] = []
-    warnings: list[str] = []
-    excluded: list[ClaimRecord] = []
-    for record in records:
-        if can_enter_final(record.verification_status):
-            if allowed is not None and not _claim_linked_to_entries(record, allowed):
-                excluded.append(record)
-                continue
-            entry = {
-                "subject": record.subject or record.title,
-                "category": record.category,
-                "fact": record.source_fact,
-                "responsibility": record.responsibility_level,
-                "boundary": record.boundary,
-                "allowed_uses": record.allowed_uses,
-            }
-            confirmed_lines.append(json.dumps(entry, ensure_ascii=False, separators=(",", ":")))
-        else:
-            wording = (record.candidate_wording or "").strip()
-            if wording:
-                blocked.append(wording[:500])
-            warnings.append(
-                f"「{record.title or record.subject or f'#{record.id}'}」"
-                f"{verification_label(record.verification_status)}"
-            )
-
-    if excluded:
-        names = "、".join(
-            f"「{record.title or record.subject or f'#{record.id}'}」"
-            for record in excluded[:3]
-        )
-        warnings.append(
-            f"{names} 等 {len(excluded)} 条已确认主张来自旧资料，本次未自动带入："
-            "请在新资料里重新核对并关联后再使用"
-        )
-    baseline_text = "\n".join(confirmed_lines)[:MAX_BASELINE_CHARS]
-    return ClaimDigestOut(
-        confirmed_count=len(confirmed_lines),
-        baseline_text=baseline_text,
-        blocked_wording=blocked[:50],
-        warnings=warnings[:50],
-    )
-
-
 __all__ = [
     "MAX_CLAIM_TOOL_CHARS",
     "build_baseline",
+    "current_entry_ids",
     "claim_brief",
     "claim_detail_text",
+    "claim_linked",
     "claim_or_none",
     "claim_out",
     "claim_warnings",

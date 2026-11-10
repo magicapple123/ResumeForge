@@ -204,7 +204,7 @@ def test_protocol_is_persisted_and_echoed_back(client):
 
 
 def test_write_config_does_not_swallow_protocol(client, db_session: Session):
-    """回归线：``_write_config`` 整体重建 JSON，漏字段就表现为"保存后变回 openai"。"""
+    """回归线：保存路径不能再落回旧 ``asr_config``（第二份真相），协议必须跟着 profile 走。"""
     client.put(
         "/api/settings/asr",
         json={
@@ -226,12 +226,14 @@ def test_write_config_does_not_swallow_protocol(client, db_session: Session):
     ).json()
     assert second["protocol"] == "dashscope"
 
+    # 旧键不再写入：两份真相会让"读哪一份"变成永远的猜谜。
     db_session.expire_all()
-    row = db_session.get(AppSetting, "asr_config")
-    assert row is not None
-    stored = json.loads(row.value)
-    assert stored["protocol"] == "dashscope"
-    assert stored["model"] == "qwen3-asr-flash-v2"
+    assert db_session.get(AppSetting, "asr_config") is None
+    profiles = client.get("/api/settings/asr/profiles").json()
+    assert len(profiles["profiles"]) == 1
+    assert profiles["profiles"][0]["protocol"] == "dashscope"
+    assert profiles["profiles"][0]["model"] == "qwen3-asr-flash-v2"
+    assert profiles["active_profile_id"] == profiles["profiles"][0]["id"]
 
 
 def test_changing_protocol_drops_saved_key(client, upstream, db_session: Session):

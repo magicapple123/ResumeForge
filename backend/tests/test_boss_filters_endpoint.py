@@ -53,7 +53,7 @@ def test_prepare_opens_the_search_page_when_the_public_list_is_not_enough():
     )
     client = _BarOnlyClient()
     adapter = BossAdapter(filter_fetcher=getter)
-    resolved = adapter.prepare_collect_filters({"jobType": "1902"}, client)
+    resolved = adapter.prepare_collect_filters({"jobType": ["1902"]}, client)
     assert resolved.params == {"jobType": "1902"}
     assert resolved.applied == ["求职类型：实习"]
     assert resolved.unapplied == []
@@ -67,7 +67,7 @@ def test_prepare_does_not_open_any_page_when_the_public_list_already_answers():
     )
     client = _BarOnlyClient()
     adapter = BossAdapter(filter_fetcher=getter)
-    resolved = adapter.prepare_collect_filters({"degree": "203", "scale": "306"}, client)
+    resolved = adapter.prepare_collect_filters({"degree": ["203"], "scale": ["306"]}, client)
     assert resolved.params == {"degree": "203", "scale": "306"}
     assert client.navigated == []
 
@@ -80,7 +80,7 @@ def test_prepare_does_not_open_a_page_when_one_is_already_there():
     client = _BarOnlyClient()
     client._on_search_page = True
     adapter = BossAdapter(filter_fetcher=getter)
-    resolved = adapter.prepare_collect_filters({"jobType": "1902"}, client)
+    resolved = adapter.prepare_collect_filters({"jobType": ["1902"]}, client)
     assert resolved.params == {"jobType": "1902"}
     assert client.navigated == []
 
@@ -136,7 +136,18 @@ def test_filter_options_endpoint_returns_groups(client, monkeypatch):
     assert body["session_read"] is False  # 没有浏览器 → 用的是公开清单
     by_key = {group["key"]: group for group in body["groups"]}
     assert by_key["degree"]["param"] == "degree"
-    assert [item["label"] for item in by_key["degree"]["options"]] == ["不限", "本科"]
+    assert [item["label"] for item in by_key["degree"]["options"]] == ["不限", "大专", "本科"]
+    # 能力表随清单一起下发：前端不写死站点规则（§15.3-A）。
+    assert by_key["jobType"]["multi"] is False
+    assert by_key["salary"]["multi"] is False
+    assert by_key["degree"]["multi"] is True
+    assert by_key["salary"]["visible_when"] == {
+        "key": "jobType",
+        "values": ["", "0", "1901", "1902"],
+    }
+    assert by_key["payType"]["visible_when"] == {"key": "jobType", "values": ["1903"]}
+    assert by_key["partTime"]["multi"] is True
+    assert by_key["experience"]["visible_when"] is None
     assert by_key["industry"]["options"][1] == {
         "code": "100028",
         "label": "人工智能",
@@ -185,18 +196,40 @@ def test_collect_config_round_trips_site_filters(client):
     """筛选项随采集条件一起存、一起读。"""
     response = client.put(
         "/api/collect/config",
-        json={"keywords": ["python"], "city": "成都", "filters": {"degree": "203"}},
+        json={"keywords": ["python"], "city": "成都", "filters": {"degree": ["203"]}},
     )
     assert response.status_code == 200
-    assert response.json()["filters"] == {"degree": "203"}
-    assert client.get("/api/collect/config").json()["filters"] == {"degree": "203"}
+    assert response.json()["filters"] == {"degree": ["203"]}
+    assert client.get("/api/collect/config").json()["filters"] == {"degree": ["203"]}
+
+
+def test_collect_config_reads_legacy_single_string_filters(client):
+    """旧配置存的是单个字符串（§15.3-A）：读出来必须是编码数组，行为不回退。"""
+    import json
+
+    from app.database import SessionLocal
+    from app.models.setting import AppSetting
+    from app.services.apply._base import COLLECT_CONFIG_KEY
+
+    with SessionLocal() as db:
+        db.add(
+            AppSetting(
+                key=COLLECT_CONFIG_KEY,
+                value=json.dumps({"keywords": ["python"], "filters": {"degree": "203"}}),
+            )
+        )
+        db.commit()
+
+    body = client.get("/api/collect/config").json()
+    assert body["filters"] == {"degree": ["203"]}
 
 
 @pytest.mark.parametrize(
     "payload",
     [
-        {"filters": {f"k{index}": "1" for index in range(20)}},
-        {"filters": {"k": "x" * 64}},
+        {"filters": {f"k{index}": ["1"] for index in range(20)}},
+        {"filters": {"k": ["x" * 64]}},
+        {"filters": {"k": [str(index) for index in range(21)]}},
     ],
 )
 def test_collect_config_rejects_oversized_filters(client, payload):

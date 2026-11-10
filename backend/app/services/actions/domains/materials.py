@@ -130,6 +130,7 @@ def _run_list_materials(db: Session, payload: ListMaterialsInput) -> ActionOutco
 
 
 def _run_get_material(db: Session, payload: GetMaterialInput) -> ActionOutcome:
+    from ....api.materials import enrich_material_file_ids
     from ...materials import material_detail_text, material_or_none
 
     material = material_or_none(db, payload.material_id)
@@ -139,7 +140,8 @@ def _run_get_material(db: Session, payload: GetMaterialInput) -> ActionOutcome:
         summary=f"读取了资料「{material.title or material.category}」",
         text=material_detail_text(material),
         link="/materials",
-        data=MaterialOut.model_validate(material),
+        # 历史图片附件没有 file_id：响应里按来源反查补上（只读），前端才能给「另存为」。
+        data=enrich_material_file_ids(db, material),
     )
 
 

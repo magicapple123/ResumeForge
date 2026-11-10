@@ -35,6 +35,23 @@ AsrProtocol = Literal["openai", "dashscope"]
 DEFAULT_ASR_PROTOCOL: AsrProtocol = "openai"
 
 
+def normalize_base_url(value: str) -> str:
+    """地址校验的唯一实现（单配置、命名配置、命名配置测试三处共用）。
+
+    末尾斜杠统一去掉：拼地址时不二次判断，否则 "https://x/v1/" 会拼出双斜杠，
+    有的网关会 404。
+    """
+    cleaned = (value or "").strip().rstrip("/")
+    if cleaned and not cleaned.startswith(("http://", "https://")):
+        raise ValueError("语音服务地址必须以 http:// 或 https:// 开头")
+    return cleaned
+
+
+def normalize_api_key(value: str) -> str:
+    """粘贴时常带首尾空白/换行；带着它落库，鉴权必然失败。"""
+    return (value or "").strip()
+
+
 class AsrEndpoint(BaseModel):
     """地址 + Key + 协议的公共部分（配置、测试连接、拉模型列表共用同一套校验）。
 
@@ -51,16 +68,12 @@ class AsrEndpoint(BaseModel):
     def base_url_must_be_http(cls, value: str) -> str:
         # 末尾斜杠统一去掉：拼 ``{base_url}/audio/transcriptions`` 时不做二次判断，
         # 否则 ``https://x/v1/`` 会拼出双斜杠，有的网关会 404。
-        cleaned = (value or "").strip().rstrip("/")
-        if cleaned and not cleaned.startswith(("http://", "https://")):
-            raise ValueError("语音服务地址必须以 http:// 或 https:// 开头")
-        return cleaned
+        return normalize_base_url(value)
 
     @field_validator("api_key")
     @classmethod
     def api_key_must_be_stripped(cls, value: str) -> str:
-        # 粘贴时常带首尾空白/换行；带着它落库，鉴权必然失败。
-        return (value or "").strip()
+        return normalize_api_key(value)
 
 
 class AsrSettings(AsrEndpoint):
@@ -124,3 +137,78 @@ class TranscribeResult(BaseModel):
 
     text: str
     provider_host: str = ""
+
+# ===== 命名配置（`global_settings.json` 的 `asr_profiles` 段） =====
+#
+# 存储与语义在 `services/asr_profiles.py`。这里的模型只做两件事：校验请求体、
+# 序列化**不含 Key** 的响应（`has_key` 只说明"这一条有没有已保存的 Key"）。
+
+
+class AsrProfileIn(AsrSettings):
+    """新建/更新一条命名配置的请求体（``POST /settings/asr/profiles``）。
+
+    ``id`` 为空 = 新建；非空 = 按 id 更新。``api_key`` 的三种写入口径与单配置相同，
+    但**按条判断**：掩码或空串只保留这一条自己的 Key，绝不从别的配置继承。
+    """
+
+    id: str | None = Field(default=None, max_length=64)
+    name: str = Field(default="", max_length=200)
+    preset_id: str = Field(default="", max_length=32)
+
+    @field_validator("name", "preset_id")
+    @classmethod
+    def text_must_be_stripped(cls, value: str) -> str:
+        return (value or "").strip()
+
+
+class AsrProfileOut(BaseModel):
+    """一条命名配置的对外形态：**不含 Key**，``has_key`` 只说明有没有已保存的 Key。"""
+
+    id: str
+    name: str
+    preset_id: str = ""
+    base_url: str = ""
+    model: str = ""
+    protocol: AsrProtocol = DEFAULT_ASR_PROTOCOL
+    has_key: bool = False
+    configured: bool = False
+    updated_at: str = ""
+
+
+class AsrProfilesOut(BaseModel):
+    """列表与所有增删改接口的统一响应：前端拿整份状态替换本地副本。"""
+
+    active_profile_id: str = ""
+    profiles: list[AsrProfileOut] = Field(default_factory=list)
+
+
+class AsrProfileTestRequest(BaseModel):
+    """弹窗内「测试连接」的草稿覆盖（不落盘）。
+
+    字段全可选：``None`` = 用该条已存配置，给了值就以草稿为准。``api_key`` 的掩码/
+    空串同样是"沿用该条已存的 Key"（地址或协议变了才清），与保存口径一致。
+    """
+
+    base_url: str | None = Field(default=None, max_length=512)
+    model: str | None = Field(default=None, max_length=128)
+    protocol: AsrProtocol | None = None
+    api_key: str | None = Field(default=None, max_length=8192)
+
+    @field_validator("base_url")
+    @classmethod
+    def base_url_must_be_http(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        # 空串是"草稿里没填"而不是"要连空地址"：保存路径也把空串当未填写。
+        return normalize_base_url(value) or None
+
+    @field_validator("model")
+    @classmethod
+    def model_must_be_stripped(cls, value: str | None) -> str | None:
+        return None if value is None else (value or "").strip()
+
+    @field_validator("api_key")
+    @classmethod
+    def api_key_must_be_stripped(cls, value: str | None) -> str | None:
+        return None if value is None else normalize_api_key(value)
+

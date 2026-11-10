@@ -21,6 +21,9 @@ VALID = {
     "verification_status": "待确认",
 }
 
+ENTRY_A = "a1" * 12
+ENTRY_B = "b2" * 12
+
 
 class ScriptedProvider(BaseLLMProvider):
     def __init__(self, response: str):
@@ -157,6 +160,91 @@ def test_baseline_endpoint_reflects_the_ledger(client):
     assert body["confirmed_count"] == 1
     assert "检索接口" in body["baseline_text"]
     assert any("参与导师项目" in item for item in body["blocked_wording"])
+
+
+def test_baseline_accepts_entry_ids_for_generation_scope(client):
+    """页面口径（不带 entry_ids）与生成口径（带本次快照条目）是两套读数，不能混。"""
+    client.post(
+        "/api/claims",
+        json={
+            **VALID,
+            "verification_status": "已确认",
+            "boundary": "接口由本人实现。",
+            "entry_ids": [ENTRY_A],
+        },
+    )
+
+    page = client.get("/api/claims/baseline").json()
+    assert page["confirmed_count"] == 1, "页面口径仍数全量已确认（旧行为不变）"
+    assert page["total_confirmed_count"] == 1
+    # 测试库里没有 profile_entry，所以这 1 条还不算"已关联资料"。
+    assert page["linked_confirmed_count"] == 0
+
+    linked = client.get("/api/claims/baseline", params={"entry_ids": ENTRY_A}).json()
+    assert linked["confirmed_count"] == 1
+    assert linked["covered_entries"] == ["校园知识检索平台"]
+
+    unlinked = client.get("/api/claims/baseline", params={"entry_ids": ENTRY_B}).json()
+    assert unlinked["confirmed_count"] == 0
+    assert unlinked["baseline_text"] == ""
+
+
+def test_put_without_entry_ids_keeps_existing_links(client):
+    """旧客户端 PUT 不带 entry_ids：不能把用户已经建好的关联清空。"""
+    created = client.post(
+        "/api/claims",
+        json={**VALID, "verification_status": "已确认", "boundary": "接口由本人实现。",
+              "entry_ids": [ENTRY_A]},
+    )
+    assert created.status_code == 201
+    claim_id = created.json()["id"]
+    assert created.json()["entry_ids"] == [ENTRY_A]
+
+    updated = client.put(
+        f"/api/claims/{claim_id}",
+        json={**VALID, "title": "改过的标题", "verification_status": "已确认",
+              "boundary": "接口由本人实现。"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["title"] == "改过的标题"
+    assert updated.json()["entry_ids"] == [ENTRY_A], "没传 entry_ids 的更新不能顺手清空关联"
+
+
+def test_page_rows_report_link_state(client, db_session):
+    """列表卡片要能标出「不会进入生成」与「已自动关联，请核对」，判据由服务端算。"""
+    from app.models.profile_entry import ProfileEntry
+
+    db_session.add(
+        ProfileEntry(
+            entry_id=ENTRY_A,
+            section_key="experiences",
+            sort_order=0,
+            values={"experiences.company": "某公司"},
+        )
+    )
+    db_session.commit()
+
+    linked = client.post(
+        "/api/claims",
+        json={**VALID, "verification_status": "已确认", "boundary": "接口由本人实现。",
+              "entry_ids": [ENTRY_A]},
+    )
+    client.post("/api/claims", json={**VALID, "title": "未关联的一条", "entry_ids": []})
+    # 模拟迁移回填留下的自动关联标记。
+    from sqlalchemy import text
+
+    db_session.execute(
+        text("UPDATE claim_record SET entry_ids_auto = 1 WHERE id = :claim_id"),
+        {"claim_id": linked.json()["id"]},
+    )
+    db_session.commit()
+
+    body = client.get("/api/claims/page").json()
+    rows = {row["title"]: row for row in body["items"]}
+    assert rows["检索接口"]["linked"] is True
+    assert rows["检索接口"]["linked_auto"] is True
+    assert rows["未关联的一条"]["linked"] is False
+    assert rows["未关联的一条"]["linked_auto"] is False
 
 
 # ===== 草拟接口 =====

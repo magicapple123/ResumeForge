@@ -106,7 +106,7 @@ class BossFilterMixin:
         return fetch_catalogue(fetcher=fetcher, timeout=timeout)
 
     def prepare_collect_filters(
-        self, selected: Mapping[str, str] | None, client: CdpClient | None = None
+        self, selected: Mapping[str, Any] | None, client: CdpClient | None = None
     ) -> FilterResolution:
         """解析站点筛选条件。**只在必要时才多走一次页面**。
 
@@ -134,7 +134,10 @@ class BossFilterMixin:
                 "这些筛选条件本次没能生效（编码不在站点当前清单里）：%s", resolved.unapplied
             )
         return FilterResolution(
-            params=resolved.params, applied=resolved.applied, unapplied=resolved.unapplied
+            params=resolved.params,
+            applied=resolved.applied,
+            unapplied=resolved.unapplied,
+            job_type_selected=resolved.job_type_selected,
         )
 
     def _load_filter_bar(self, client: CdpClient) -> bool:

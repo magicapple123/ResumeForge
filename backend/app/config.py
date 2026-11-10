@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     max_backup_upload_mb: int = Field(default=512, ge=1, le=4096)
     max_backup_uncompressed_mb: int = Field(default=4096, ge=1, le=65536)
 
+    # 资料箱附件上传单独放宽：端点按 10MB 校验单个文件，全局默认 8MB 会让 8–10MB
+    # 的 PDF/Word 在进入端点前就被中间件拦下。这里给到 12MB（10MB 内容 + multipart
+    # 边界与表单头的余量），其余接口仍受 max_request_body_mb 约束。
+    max_attachment_upload_mb: int = Field(default=12, ge=1, le=64)
+
     # 文件日志：在数据目录 logs/ 下追加一份 5MB×5 的滚动日志，防止长期挂机时
     # 启动器重定向的 stdout/stderr（runtime/*.log）无限膨胀。不想落盘的场景
     # （如测试）用环境变量 LOG_FILE_ENABLED=false 关闭。
@@ -108,6 +113,14 @@ class Settings(BaseSettings):
     # 简历生成任务的总预算（秒）：覆盖从模型流式输出到结果落库的全程，到期即断流
     # 收尾为 failed，防止模型端挂起时任务无限占用生成入口（RF-02）。
     resume_generate_budget_seconds: int = Field(default=600, ge=1, le=86400)
+
+    # 同时运行的简历生成任务上限（1–8，默认 4）：这是**运行上限**，不是提交上限。
+    # 超出上限的任务保持 pending 排队、有空位自动开始；调高会让多个 worker 争同一个
+    # SQLite 单写者并更容易撞模型限流，低配机器可调到 2（问题清单 §9.7）。
+    resume_generate_max_concurrent: int = Field(default=4, ge=1, le=8)
+    # 排队任务上限（1–200，默认 50）：只有排到这里才拒绝提交（429「生成队列已满」）。
+    # 正常使用碰不到，它防的是脚本/连点造成的无界内存队列。
+    resume_generate_max_pending: int = Field(default=50, ge=1, le=200)
 
     # 求职助手一次回复的整链预算（秒）：覆盖全部工具轮次与模型流式输出，到期即在
     # 下一个事件边界收尾为 error（RF-14 §2.1.b）。运行中的工具不强制中断（协作式，

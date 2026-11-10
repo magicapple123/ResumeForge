@@ -77,12 +77,15 @@ def test_an_unknown_style_is_rejected_at_the_schema():
 @pytest.mark.parametrize(
     ("base_url", "model", "style", "supported"),
     [
-        ("https://api.openai.com/v1", "gpt-5.1", "reasoning_effort", True),
+        # GPT-5 / 5.1 与 o 系列没有 none 档：最低只能到 minimal/low，无法完全关闭，
+        # 所以 supported=False（设置页据此置灰「思考模式」并说明原因，清单 §11.5-D）。
+        ("https://api.openai.com/v1", "gpt-5.1", "reasoning_effort", False),
         ("https://api.openai.com/v1", "gpt-5.2", "reasoning_effort", True),
-        ("https://api.openai.com/v1", "o3-mini", "reasoning_effort", True),
+        ("https://api.openai.com/v1", "o3-mini", "reasoning_effort", False),
         ("https://api.openai.com/v1", "gpt-4o-mini", "reasoning_effort", False),
         ("https://open.bigmodel.cn/api/paas/v4", "glm-4.6", "thinking_object", True),
-        ("https://open.bigmodel.cn/api/paas/v4", "glm-5.3", "thinking_object", True),
+        # GLM-5.3 强制思考、传 disabled 报错（A）→ 不可关闭。
+        ("https://open.bigmodel.cn/api/paas/v4", "glm-5.3", "thinking_object", False),
         ("https://open.bigmodel.cn/api/paas/v4", "glm-4-plus", "reasoning_effort", True),
         ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen3-max", "enable_thinking", True),
         # 预设里用的就是这个别名：钉版本号的正则会让它掉进"未收录"，而它的思考默认是开的。
@@ -91,9 +94,18 @@ def test_an_unknown_style_is_rejected_at_the_schema():
         ("https://api.deepseek.com", "deepseek-v4-flash", "thinking_object", True),
         ("https://api.deepseek.com", "deepseek-v4-pro", "thinking_object", True),
         ("https://api.minimax.chat/v1", "MiniMax-M3", "thinking_object", True),
+        ("https://api.minimaxi.com/v1", "MiniMax-M3.1-Flash", "thinking_object", False),
         ("https://api.moonshot.cn/v1", "kimi-k3", "thinking_object", False),
-        ("https://api.moonshot.cn/v1", "kimi-k2.6", "reasoning_effort", True),
+        ("https://api.moonshot.cn/v1", "kimi-k2.6", "thinking_object", True),
         ("https://openrouter.ai/api/v1", "openai/gpt-5", "reasoning_effort", True),
+        # 2026-11-09 补进来的主机：以前这些预设全部落进兜底 reasoning_effort，形态发错。
+        ("https://ark.cn-beijing.volces.com/api/v3", "doubao-seed-2-1-pro-260915", "thinking_object", True),
+        ("https://api.siliconflow.cn/v1", "deepseek-ai/DeepSeek-V4-Pro-0813", "enable_thinking", True),
+        ("https://qianfan.baidubce.com/v2", "ernie-4.5-turbo-128k", "enable_thinking", True),
+        ("https://maas-api.cn-huabei-1.xf-yun.com/v2", "spark-x2.6", "thinking_object", True),
+        ("https://api.x.ai/v1", "grok-4.7", "reasoning_effort", False),
+        ("https://api.stepfun.com/v1", "step-5-preview", "reasoning_effort", False),
+        ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-3.8-flash", "reasoning_effort", False),
     ],
 )
 def test_the_vendor_table_picks_the_right_style(base_url, model, style, supported):
@@ -180,7 +192,7 @@ def test_a_model_without_levels_offers_no_effort_options():
 
 
 def test_an_unlisted_vendor_says_so_instead_of_guessing_silently():
-    support = thinking_support(_config(base_url="https://api.moonshot.cn/v1", model="kimi-k2"))
+    support = thinking_support(_config(base_url="https://api.example.com/v1", model="m1"))
 
     assert support.supported is True
     assert "没有收录" in support.note and "检测" in support.note

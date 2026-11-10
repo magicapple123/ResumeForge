@@ -31,6 +31,7 @@ from .api import (
     claims,
     datasets,
     drill,
+    external_resumes,
     followups,
     interview,
     interview_answer_review,
@@ -114,6 +115,9 @@ ROUTERS = (
     jobs.router,
     jobs_analysis.router,
     resumes.router,
+    # 第 21 条：外部简历（只读快照）独立前缀 /api/external-resumes；与 /api/resumes
+    # 完全隔离（两表 id 空间独立，不进制作台/导出/版式）。
+    external_resumes.router,
     resume_writing.router,
     # A1：职业场景（独立前缀，不与 /api/resumes、/api/profile 抢路径）。
     career_scenarios.router,

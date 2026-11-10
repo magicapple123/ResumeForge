@@ -146,18 +146,22 @@ def _self_check(assets: dict[str, Any]) -> int:
 
 
 def _write_config(*, model: str, dim: int, variant: str) -> None:
-    """写持久化配置（enabled=True）；保留已确认的远程 host，切本地后不必重新确认。"""
+    """写持久化配置（enabled=True）；保留已确认的远程 host，切本地后不必重新确认。
+
+    **必须用本地版写函数**：``write_embedding_config`` 会沿用镜像里的旧密钥，切到本地后
+    远程的密文仍留在 ``embedding`` 段里（旧版回滚就会把它当成"当前生效配置"）。
+    """
     try:
         from ..llm.embedding_settings import (
             EmbeddingProviderConfig,
             read_embedding_config,
-            write_embedding_config,
+            write_local_embedding_config,
         )
     except Exception as exc:  # noqa: BLE001 - 配置模块未就绪不应让进程崩
         raise SetupError("语义检索配置模块不可用") from exc
     previous = read_embedding_config()
     hosts = previous.confirmed_hosts if previous is not None else ()
-    write_embedding_config(
+    write_local_embedding_config(
         EmbeddingProviderConfig(
             provider="local-onnx",
             enabled=True,

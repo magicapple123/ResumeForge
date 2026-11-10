@@ -15,9 +15,14 @@
 - **Offer 数** = 阶段为 ``offer`` 的行数。
 - **六阶段漏斗** = ``STATUSES`` 的完整计数（含「已结束」「待确认」两个分支），标签用
   ``STATUS_LABELS``。
-- **进行中** = ``is_active(status)`` 的条数；其中**超过 7 天没有更新**的另计一条
-  （``is_stalled``，阈值与判定都在 ``models/tracker.py``，与 `/api/stats` 同源）；
-  **没有下一步** = 进行中且 ``next_action`` 为空的条数。
+- **进行中** = ``is_active(status)`` 的条数（已投递/筛选中/测评、笔试/面试，
+  **不含 Offer**：Offer 是终态，在漏斗里单独占一格，所以「进行中」与「漏斗前五格之和」
+  天然差一个 Offer，页面必须写清这一点）；
+- **找不到进展**（2026-11-10 口径修正）= 进行中、且**超过 7 天没有发生状态变化**的条数。
+  证据优先级：事件表最新 ``event_at`` > 用户填的 ``status_date`` > 
+  ``updated_at``。以前判 ``updated_at``，改一条备注也会把它刷新掉，导入的历史数据
+  更是「全部停滞」——这个指标因此失去意义。阈值与判定都在 ``models/tracker.py``，
+  与 `/api/stats` 同源；**没有下一步** = 进行中且 ``next_action`` 为空的条数。
 - **趋势** = 最近 ``trend_months`` 个自然月（默认 6，接口可传 1..24）的投递数量，
   按 ``applied_at`` 的前缀匹配（空日期不落入趋势）。
 - **周内分布** = 按 ``applied_at`` 的星期分七桶；日期为空或解析不出的不入桶。
@@ -26,8 +31,23 @@
   而后端无从得知（服务器时区不等于用户时区），算出来会是一份错的实现。
 - **投递最多的公司** = 按 ``company_key`` 归并（那才是合并键），超过 ``TOP_COMPANY_LIMIT``
   家时其余合成一个"其他"计数。
-- **记录来源** = 按 ``source`` 分桶，标签取 ``SOURCE_LABELS``。**这是"这一行怎么进系统的"，
-  不是"投递渠道"**——本库没有渠道字段（``referral`` 是另一张表），文案上不要混为一谈。
+- **记录来源** = 按 ``source`` 分桶，标签取 ``SOURCE_LABELS``。**这是「这一行怎么进系统的」**，
+  与投递渠道（``channel``）是两个维度，文案上不要混为一谈。
+- **渠道转化**（第 17 条 P1）= 按 ``channel``（用户自选「这份工作从哪来的」）分桶：投递数 /
+  面试数 / 面试率 / Offer 数 / Offer 率，标签取 ``CHANNEL_LABELS``。**与内推模块是两套口径**：
+  渠道里的「内推」是记录字段，内推模块是独立对象（``referral`` 表），两者只能二选一相加、
+  不能混算；12 条样本下每个渠道都亮小样本徽标。
+- **投递→当前阶段耗时**（第 17 条 P1）= 按当前状态分组，用 ``applied_at`` 与 ``status_date``
+  两个用户填过的业务日期算间隔天数并取中位数；**不依赖事件表**，也**不用 ``updated_at``
+  反推**（那会把「改备注的日期」当成「状态变化的日期」）。两个日期缺一不参与，样本数如实下发。
+- **同公司多投**（第 17 条 P2）= 按 ``company_key`` 归并：投了 >=2 个岗位的清单（带面试/Offer
+  次数），以及投了 >=3 次但 0 面试的「最该止损」清单。
+- **简历版本效果**（第 17 条 P2）= 按 ``resume_id`` 分组的投递数与面试数，**每组都必须带
+  样本量**；关联入口已有但覆盖率低，因此只描述、不做因果归因。
+- **周投递目标**（第 17 条 P3）= 本数据集设置里的目标值（0 = 没设）+ 本周按 ``applied_at`` 落在
+  周一至周日的投递数（业务日期，不按记录创建时间）。
+- **生成成本**（第 17 条 P3）= ``llm_usage_record`` 的聚合：resume_generate 的调用数 /
+  completion token / 平均耗时，以及全账本口径。**只报 token 与耗时，不报金额**（本库没有价格表）。
 - **内推** = 直接复用 ``referral_service.referral_stats``（转化口径的唯一实现在那里）。
 - **提醒** = 复用 ``reminder_service.reminder_urgency_counts``（四档阈值只在那里有一份）。
 - **简历与台账健康度** = ``resume_health.resume_health``。
@@ -42,14 +62,15 @@
   ``status_date``，没有状态历史表，无法重建时间线。RF-18 之后**基于状态变化事件表**
   提供了真实版本（``cohort``，口径与覆盖率说明见 ``services/track_events.py``）——
   它只回答事件能证明的事，旧记录如实标 ``historical_track_count``，**不从当前状态
-  或 ``updated_at`` 反推历史**。看板顶层那些"当前状态"口径的率（面试率、笔试通过率）
-  仍是原口径，与 cohort 指标是两回事。
+  或 ``updated_at`` 反推历史**。第 17 条新增的 ``status_durations`` 是**另一条口径**：
+  它算的是「投递→当前状态」的总跨度（只用 applied_at + status_date），不是相邻阶段耗时，
+  两者不要混为一谈。
 - **"面试通过率"**：``stage_note``（"二面""HR 面"）是自由文本，从里面解析轮次得到的
   数字用户无从核对。cohort 的"测评→面试转化"只数"事件里真的到过面试"，不解析轮次。
 - **按行业分布**：全库没有行业字段。
-- **每份简历的表现**：``resume_id`` 的关联入口已随 RF-17 落地（表单可选），但
-  "每份简历的面试率"仍刻意不做——关联本身有选择偏差（好岗位才认真配简历），
-  ``track_resume_linked_count`` 继续用来把关联覆盖率显示出来。
+- **"用了某版简历能提高 X%"式的归因**：``resume_effects`` 只描述「关联到这份简历的投递
+  走到了哪一步」，关联本身有选择偏差（好岗位才认真配简历），所以每组都亮样本量、
+  不做因果结论。
 - **"用了产品能提高 X% 面试率"式的宣传口径**：任何指标都只描述过去，不做这类归因。
 """
 
@@ -60,6 +81,7 @@ from collections.abc import Sequence
 from datetime import date, timedelta
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..models.profile import utcnow
@@ -74,10 +96,21 @@ from ..models.tracker import (
     STATUS_UNKNOWN,
     STATUSES,
     ApplicationTrack,
+    ApplicationTrackEvent,
     is_active,
     is_stalled,
+    last_status_change_at,
 )
 from . import trash
+from .analytics_breakdowns import (
+    applied_date,
+    channel_stats,
+    company_repeats,
+    resume_effects,
+    status_durations,
+)
+from .analytics_goal import weekly_goal_block
+from .analytics_usage import generation_cost
 from .ratios import rate
 from .referral_service import referral_stats, referral_status_counts
 from .reminder_service import reminder_urgency_counts
@@ -144,23 +177,11 @@ def _month_window(count: int) -> list[str]:
     return months
 
 
-def _applied_date(track: TrackRow) -> date | None:
-    """把 ``applied_at`` 解析成日期；空串或写坏的值返回 ``None``。
-
-    "这条记录有没有可用的投递日期"**只在这一处判定**：趋势、周内分布、缺口计数必须给出
-    互相自洽的答案，否则会出现"缺口说有 3 条带日期、图里只落了 2 条"这种自相矛盾。
-
-    要求严格的 ``YYYY-MM-DD`` 十字形状，而不是只看 ``fromisoformat`` 能不能过——
-    Python 3.11+ 还接受 ``20260920`` 这种紧凑写法，而趋势用的是 ``[:7]`` 前缀匹配，
-    两者对同一个值的判断会不一致。日期写坏的记录一律算"没有日期"，不猜。
-    """
-    raw = (track.applied_at or "").strip()
-    if len(raw) != 10 or raw[4] != "-" or raw[7] != "-":
-        return None
-    try:
-        return date.fromisoformat(raw)
-    except ValueError:
-        return None
+# "这条记录有没有可用的投递日期"**只有一份实现**（analytics_breakdowns.parse_iso_date）：
+# 趋势、周内分布、缺口计数、耗时中位数必须给出互相自洽的答案，否则会出现"缺口说有 3 条
+# 带日期、图里只落了 2 条"这种自相矛盾。严格 YYYY-MM-DD 十字形状（Python 3.11+ 的
+# fromisoformat 还接受紧凑写法 20260920，而趋势用 [:7] 前缀匹配，两者会打架）。
+_applied_date = applied_date
 
 
 def _weekday_buckets(tracks: Sequence[TrackRow]) -> list[dict]:
@@ -232,9 +253,12 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
             ApplicationTrack.company,
             ApplicationTrack.company_key,
             ApplicationTrack.source,
+            ApplicationTrack.channel,
             ApplicationTrack.applied_at,
+            ApplicationTrack.status_date,
             ApplicationTrack.next_action,
             ApplicationTrack.resume_id,
+            ApplicationTrack.resume_title,
             ApplicationTrack.created_at,
             ApplicationTrack.updated_at,
         )
@@ -242,6 +266,16 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
         .all()
     )
     now = utcnow()
+    # 停滞口径（2026-11-10 第 17 条）：最后一次**状态变化**优先取事件表，
+    # 没有事件退回 status_date，再退回 updated_at。只取 (track_id, event_at) 两列。
+    last_events = dict(
+        db.query(
+            ApplicationTrackEvent.track_id,
+            func.max(ApplicationTrackEvent.event_at),
+        )
+        .group_by(ApplicationTrackEvent.track_id)
+        .all()
+    )
 
     counts: dict[str, int] = {status: 0 for status in STATUSES}
     valid_applications = 0
@@ -269,7 +303,12 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
             active_count += 1
             if not (track.next_action or "").strip():
                 no_next_action_count += 1
-        if is_stalled(track.status, track.updated_at, now):
+        last_change = last_status_change_at(
+            updated_at=track.updated_at,
+            status_date=track.status_date,
+            event_at=last_events.get(track.id),
+        )
+        if is_stalled(track.status, last_change, now):
             stalled_count += 1
         if _applied_date(track) is not None:
             dated += 1
@@ -331,6 +370,15 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
         "reminder_counts": reminder_urgency_counts(db, now),
         # ===== 真实时间线（RF-18）：基于状态变化事件表的 cohort 指标 =====
         "cohort": track_cohort_metrics(db),
+        # ===== 第 17 条（P1）：渠道转化 + 投递→当前阶段耗时（不依赖事件表） =====
+        "channel_stats": channel_stats(tracks),
+        "status_durations": status_durations(tracks),
+        # ===== 第 17 条（P2）：同公司多投 + 简历版本效果（带样本量） =====
+        "company_repeats": company_repeats(tracks),
+        "resume_effects": resume_effects(tracks),
+        # ===== 第 17 条（P3）：周目标与生成成本 =====
+        "weekly_goal": weekly_goal_block(db),
+        "generation_cost": generation_cost(db),
         # ===== 简历与健康度 =====
         "track_resume_linked_count": resume_linked,
     }
@@ -342,7 +390,18 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
 # 助手的 ``get_analytics_overview`` 只该看到"标量摘要"：整份看板里最长的几个数组
 # （逐月趋势、周内七桶、招聘公司榜、内推状态）对模型没有用处，却会把上下文稀释掉。
 # 这份投影**保留全部标量**，只裁数组——它是同一份口径的一个视图，不是第二份统计。
-_BRIEF_DROP = ("trend", "weekday", "referral_status", "cohort")
+# 第 17 条新增的几块明细数组同理：渠道逐行、按状态耗时、同公司清单、按简历分组，
+# 这些是给人逐行看的，塞给模型只会稀释上下文。周目标与生成成本是标量，保留。
+_BRIEF_DROP = (
+    "trend",
+    "weekday",
+    "referral_status",
+    "cohort",
+    "channel_stats",
+    "status_durations",
+    "company_repeats",
+    "resume_effects",
+)
 _BRIEF_COMPANY_LIMIT = 5
 
 

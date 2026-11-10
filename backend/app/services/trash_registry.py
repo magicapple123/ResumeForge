@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""回收站注册表：二十三类软删内容的描述、展示名与顺序（services/trash.py 的静态一半）。
+"""回收站注册表：二十四类软删内容的描述、展示名与顺序（services/trash.py 的静态一半）。
 
 **为什么单独成模块**：trash.py 已贴 500 行硬闸门，而注册表是**纯数据 + 两个展示辅助
 函数**——与软删/恢复/彻底删除的行为无关。拆出去后 trash.py 只需保留行为；注册表本身
@@ -21,6 +21,7 @@ from typing import Any
 from ..models.apply import ApplyTaskItem
 from ..models.assistant import ChatConversation
 from ..models.claim import ClaimRecord
+from ..models.external_resume import ExternalResume
 from ..models.glossary import ResumeGlossaryTerm
 from ..models.interview_experience import InterviewExperience
 from ..models.interview_review_record import InterviewReviewRecord
@@ -90,6 +91,9 @@ TRASH_SPECS: tuple[TrashSpec, ...] = (
     # （"我刚才删的那个岗位去哪了"），中间夹一堆别的类型只会让它更难找。
     TrashSpec("candidate_job", "备选岗位", CandidateJob, "title", "company"),
     TrashSpec("resume", "简历记录", ResumeRecord, "title", "company"),
+    # 0010（第 21 条）：外部简历（只读快照）。紧挨简历记录：用户找它时想的是同一件事
+    # （"我传的那份简历去哪了"）；彻底删除同样不删物理文件（同一 sha 可能被别处引用）。
+    TrashSpec("external_resume", "外部简历", ExternalResume, "name"),
     TrashSpec("track", "投递记录", ApplicationTrack, "title", "company"),
     TrashSpec("claim", "事实台账", ClaimRecord, "title", "category"),
     # 0008（T10）：求职偏好也进回收站。紧挨事实台账之后：两者都是"一行一条设定/事实"，
@@ -142,6 +146,7 @@ TRASH_LABELS_EN: dict[str, str] = {
     "job": "Jobs",
     "candidate_job": "Candidate jobs",
     "resume": "Resumes",
+    "external_resume": "External resumes",
     "track": "Applications",
     "claim": "Fact ledger",
     "job_preference": "Job preferences",

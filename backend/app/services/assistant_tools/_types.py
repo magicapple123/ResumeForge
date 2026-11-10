@@ -137,6 +137,14 @@ _WEB_SEARCH_DESC_WITH_PAGES = (
 )
 
 
-def web_search_description(fetch_pages: int = 0) -> str:
-    """按当前设置选联网搜索的工具描述（见上面两版说明）。"""
-    return _WEB_SEARCH_DESC_WITH_PAGES if fetch_pages > 0 else _WEB_SEARCH_DESC_SUMMARIES
+def web_search_description(fetch_pages: int = 0, max_results: int = 0) -> str:
+    """按当前设置选联网搜索的工具描述（见上面两版说明）。
+
+    ``max_results`` 是设置页的「每次最多返回的结果条数」（上限），追加在描述末尾告诉
+    模型它可以用 ``limit`` 参数要更少——**不写这句模型会忽略可选参数、每次都按上限拿满**。
+    ``max_results <= 0`` 表示调用方没有上下文（导入预览等），此时不写具体条数。
+    """
+    base = _WEB_SEARCH_DESC_WITH_PAGES if fetch_pages > 0 else _WEB_SEARCH_DESC_SUMMARIES
+    if max_results <= 0:
+        return base
+    return f"{base}每次最多返回 {max_results} 条；可用 limit 指定更少。"

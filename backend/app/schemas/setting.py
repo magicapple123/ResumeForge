@@ -299,8 +299,9 @@ class SearchConfig(BaseModel):
     searxng_url: str = Field(default="", max_length=512)
     # 抓取前 N 条结果的正文（0 = 只取摘要）。正文抓取更慢，也可能被站点拒绝。
     fetch_pages: int = Field(default=0, ge=0, le=3)
-    # 每次搜索最多返回多少条
-    max_results: int = Field(default=8, ge=1, le=15)
+    # 每次搜索**最多**返回多少条（上限，不是精确值：模型可用 limit 要更少；
+    # 实际条数还受单个来源的取数上限与去重/相关性过滤限制）。
+    max_results: int = Field(default=8, ge=1, le=50)
     # DeepSeek Search / Fetch 的密钥。**这里永远不应出现明文**：读取时是掩码
     # （``********``）或空串，真实密钥由 settings_service 加密后单独存储。
     deepseek_api_key: str = Field(default="", max_length=200)

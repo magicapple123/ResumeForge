@@ -28,7 +28,7 @@ class ToolExecutionContext:
     """一次工具执行的权限快照（请求级开关 + 数据集身份）。
 
     ``web_search`` 来自请求体的联网开关（每次请求由前端显式带上）；
-    ``relaxed`` / ``fetch_pages`` 是全局设置，每轮工具循环重读；
+    ``relaxed`` / ``fetch_pages`` / ``max_results`` 是全局设置，每轮工具循环重读；
     ``writable`` 是用户对**本次请求**显式同意写入的唯一通道（请求级
     ``allow_write``，默认 False）——模型文本声称"用户已确认"不会改变它；
     ``dataset_id`` / ``dataset_generation`` 来自 dataset_scope：切换数据集后
@@ -41,6 +41,9 @@ class ToolExecutionContext:
     fetch_pages: int
     relaxed: bool
     writable: bool
+    # 设置页的「每次最多返回的结果条数」（上限）；0 = 无上下文（导入预览等），
+    # 工具描述里不写具体条数。
+    max_results: int = 0
     request_id: str = ""
 
 
@@ -74,14 +77,15 @@ def build_context(
     *,
     web_search: bool = False,
     fetch_pages: int = 0,
+    max_results: int = 0,
     relaxed: bool = False,
     writable: bool = False,
     request_id: str = "",
 ) -> ToolExecutionContext:
     """构建当前轮次的执行上下文。
 
-    每轮工具循环调用一次：``relaxed``/``fetch_pages`` 由调用方重读设置后传入，
-    数据集身份在这里快照。**不要**把一条流的全部轮次共用同一份上下文。
+    每轮工具循环调用一次：``relaxed``/``fetch_pages``/``max_results`` 由调用方重读
+    设置后传入，数据集身份在这里快照。**不要**把一条流的全部轮次共用同一份上下文。
     """
     return ToolExecutionContext(
         dataset_id=dataset_scope.current_dataset_id(),
@@ -90,6 +94,7 @@ def build_context(
         fetch_pages=fetch_pages,
         relaxed=relaxed,
         writable=writable,
+        max_results=max_results,
         request_id=request_id,
     )
 

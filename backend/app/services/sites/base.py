@@ -75,11 +75,16 @@ class CollectQuery:
     # 采集后本地筛选（``collect_filters``，按接口返回的岗位类型编码判定）。采集器无论哪条
     # 路都会把它随结果入库标注。
     job_type: str = ""
-    # **站点侧筛选项**：``{站点参数名: 编码}``，由适配器在采集开始前解析并校验好
-    # （见 ``SiteAdapter.prepare_collect_filters``）。适配器不认识这里的键名——它只负责把
+    # **站点侧筛选项**：{站点参数名: 编码}，由适配器在采集开始前解析并校验好
+    # （见 SiteAdapter.prepare_collect_filters）。适配器不认识这里的键名——它只负责把
     # 它们拼进搜索 URL。**编码必须是当次校验过的**：站点改版后旧编码照样"合法"，
     # 发出去会静默筛错，那比不筛更糟。
+    #
+    # 多选组的值是逗号连接的编码串（实测站点接受「203,202」；URL 里逗号必须保持字面量）。
     filters: dict[str, str] = field(default_factory=dict)
+    # 用户在站点筛选里显式选过「求职类型」（哪怕选的是「不限」）：此时不能再按旧的
+    # 岗位类型映射追加 jobType，否则"选了不限"会静默变成"只采某一类岗位"（清单 §15.4-1）。
+    skip_job_type_mapping: bool = False
     page: int = 1
 
 
@@ -92,10 +97,13 @@ class FilterResolution:
     """
 
     params: dict[str, str] = field(default_factory=dict)
-    # 人话写法的"已生效"清单（如 ``["学历要求：本科"]``），直接给界面用。
+    # 人话写法的"已生效"清单（如 ["学历要求：本科"]），直接给界面用。
     applied: list[str] = field(default_factory=list)
-    # 没能生效的条件名（如 ``["公司规模"]``）。
+    # 没能生效的条件名（如 ["公司规模"]）。
     unapplied: list[str] = field(default_factory=list)
+    # 用户是否在站点筛选里显式动过「求职类型」（含选「不限」）：采集器据此压住旧的
+    # 岗位类型映射，否则"选了不限"会静默变成"只采某一类岗位"（清单 §15.4-1）。
+    job_type_selected: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -189,9 +197,11 @@ class SiteAdapter(ABC):
         return ()
 
     def prepare_collect_filters(
-        self, selected: Mapping[str, str] | None, client: CdpClient | None = None
+        self, selected: Mapping[str, Any] | None, client: CdpClient | None = None
     ) -> FilterResolution:
-        """把用户在界面上选的 ``{分组: 编码}`` 解析成可以拼进搜索 URL 的查询参数。
+        """把用户在界面上选的 {分组: 编码/编码表} 解析成可以拼进搜索 URL 的查询参数。
+
+        入参兼容旧配置的单个字符串（历史快照）与新配置的编码数组（多选）。
 
         **在采集开始前调用一次**（不是每次翻页调一次）：校验编码要读一次站点清单，
         逐页重复读没有意义。返回的 ``unapplied`` 必须如实上报给用户。

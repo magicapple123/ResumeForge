@@ -52,6 +52,8 @@ MAX_COLLECT_KEYWORDS = 10
 MAX_COLLECT_FILTERS = 16
 COLLECT_FILTER_KEY_MAX_CHARS = 32
 COLLECT_FILTER_CODE_MAX_CHARS = 32
+# 单个多选分组一次最多带多少个编码（§15.3-B）：挡住畸形请求体即可，真实可用性由适配器校验。
+COLLECT_FILTER_CODES_PER_GROUP_MAX = 20
 
 # 「补齐详情」的单批上限。补详情要逐个打开岗位页面（详情页是整个采集里最慢的一步），几百条一批
 # 会让一次任务跑很久、也更容易被风控盯上，所以超过就让用户分批。这个上限由**业务层**给出可操作的

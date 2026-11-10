@@ -22,7 +22,7 @@ import re
 import threading
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..config import DATA_DIR
@@ -97,24 +97,26 @@ def save_from_bytes(
     mime: str,
     source_type: str,
     source_ref: str,
-) -> None:
-    """把一份字节内容登记为用户文件副本。
+) -> int | None:
+    """把一份字节内容登记为用户文件副本，返回 user_file 行 id（空内容返回 None）。
 
     同 ``sha256`` 已有行：把新来源并入 ``sources_json``，并**校验磁盘副本**
     （P5：缺失、大小不符或哈希不符就按这份原件补写）——此前命中即直接返回，于是
     "行在、文件没了"永远补不回来，「我的文件」预览永久 404、导出永久报缺失。
     否则写盘（磁盘上已有同 sha 文件时不重写）并插入一行。``original_name`` 会做
     服务端安全化，客户端给的任何路径成分都不会进落盘名。
+
+    调用方通常忽略返回值；资料箱附件上传要拿 id 存进 ``material.files[].file_id``。
     """
     if not content:
-        return
+        return None
     sha = hashlib.sha256(content).hexdigest()
     existing = db.execute(select(UserFile).where(UserFile.sha256 == sha)).scalar_one_or_none()
     if existing is not None:
         _merge_source(existing, source_type, source_ref)
         ensure_copy(user_files_dir(db.get_bind()), existing, content)
         db.commit()
-        return
+        return int(existing.id)
 
     safe_name = _safe_original_name(original_name)
     disk_name = _stored_name(sha, safe_name)
@@ -137,6 +139,7 @@ def save_from_bytes(
     db.add(row)
     db.commit()
     logger.info("已保存用户文件副本 id=%s name=%s size=%s", row.id, row.original_name, row.size)
+    return int(row.id)
 
 
 def _decode_data_url(data_url: str) -> tuple[bytes, str]:
@@ -190,6 +193,36 @@ def sha_prefix(content: bytes) -> str:
     """没有原名时给副本起名的短指纹（仅用于展示，判重仍靠完整 sha256）。"""
     return hashlib.sha256(content).hexdigest()[:8]
 
+
+def find_material_file(db: Session, material_id: int, name: str) -> UserFile | None:
+    """反查某条资料的某个附件对应的副本行（只读；用于给历史附件补 file_id）。
+
+    历史数据里 ``material.files`` 没有 ``file_id``，但图片的 data_url 早被
+    ``_save_file_copies`` 落过副本。读取详情时按来源 + 安全化后的原名反查，命中就
+    在**响应里**补上 id（不写库）——老图片因此也能用「另存为」，不必重新上传。
+
+    判据与 ``GET /api/user-files/lookup`` 同源（source_ref 同时匹配首次来源列与
+    ``sources_json``）；原名比较用落盘安全化后的形态（``save_from_bytes`` 存的就是它）。
+    只有一个候选且名字对不上时也认它：历史入口改造过原名，但这份资料确实只有一份副本。
+    """
+    ref = f"material:{int(material_id)}"
+    rows = (
+        db.query(UserFile)
+        .filter(UserFile.source_type == "material")
+        .filter(
+            or_(
+                UserFile.source_ref == ref,
+                UserFile.sources_json.contains(f'"{ref}"'),
+            )
+        )
+        .order_by(UserFile.id.asc())
+        .all()
+    )
+    safe_name = _safe_original_name(name)
+    for row in rows:
+        if row.original_name == safe_name:
+            return row
+    return rows[0] if len(rows) == 1 else None
 
 def backfill_missing_copies(db: Session) -> int:
     """幂等回填：扫描各表里的 data URL 字段补齐磁盘副本，返回处理的条目数。

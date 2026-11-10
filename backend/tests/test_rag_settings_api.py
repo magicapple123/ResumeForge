@@ -209,17 +209,24 @@ def test_remote_enable_requires_host_confirmation(client, remote_api, index_spy)
     assert index_spy.cleared >= 1
 
 
-def test_remote_probe_failure_is_visible_not_enabled(client, remote_api):
+def test_remote_probe_failure_does_not_pollute_current_config(client, remote_api):
+    """切换/启用失败不能污染当前生效配置：旧版会写 last_error 让状态变 failed。"""
     client.post("/api/settings/embedding/remote/confirm", json={"base_url": REMOTE["base_url"]})
     assert client.post("/api/settings/embedding/remote/enable", json=REMOTE).status_code == 200
+    before = read_embedding_config(reveal_key=True)
     remote_api.ok = False
     remote_api.error = "凭据无效（HTTP 401），请检查密钥"
     response = client.post("/api/settings/embedding/remote/enable", json=REMOTE)
     assert response.status_code == 400
     assert "401" in response.json()["detail"]
     body = _status(client)
-    assert body["state"] == "failed"
-    assert "401" in body["last_error"]
+    assert body["state"] == "ready"
+    assert body["last_error"] == ""
+    after = read_embedding_config(reveal_key=True)
+    assert after is not None and before is not None
+    assert (after.base_url, after.model, after.api_key, after.enabled) == (
+        before.base_url, before.model, before.api_key, True,
+    )
 
 
 def test_remote_models_and_test_connection(client, remote_api):
@@ -230,17 +237,23 @@ def test_remote_models_and_test_connection(client, remote_api):
     assert models.json()["models"] == ["mock-embed", "mock-embed-large"]
 
 
-def test_clear_key_removes_config_and_clears_index(client, remote_api, index_spy):
+def test_clear_key_keeps_profiles_but_disables(client, remote_api, index_spy):
+    """「清除密钥」= 只清当前生效项的密钥并停用，不再把全部命名配置一起删掉。"""
     client.post("/api/settings/embedding/remote/confirm", json={"base_url": REMOTE["base_url"]})
     assert client.post("/api/settings/embedding/remote/enable", json=REMOTE).status_code == 200
     cleared_before = index_spy.cleared
 
     response = client.post("/api/settings/embedding/clear")
     assert response.status_code == 200
-    assert response.json()["state"] == "not_configured"
+    body = response.json()
+    assert body["state"] == "disabled"
+    assert len(body["profiles"]) == 1
+    assert body["profiles"][0]["key_configured"] is False
     assert index_spy.cleared > cleared_before
+    config = read_embedding_config(reveal_key=True)
+    assert config is not None and config.enabled is False and config.api_key == ""
     raw = json.loads(global_settings.path().read_text(encoding="utf-8"))
-    assert "embedding" not in raw
+    assert raw["embedding_profiles"]["profiles"], "配置文件应保留（只清密钥）"
 
 
 def test_disable_keeps_configuration_but_stops_provider(client, remote_api):

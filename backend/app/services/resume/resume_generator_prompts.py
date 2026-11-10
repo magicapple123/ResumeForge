@@ -238,8 +238,10 @@ def render_generation_messages(
             options.enhancement_level, ENHANCEMENT_POINT_RULES["balanced"]
         ),
         custom_instruction=options.custom_instruction.strip(),
+        # 三个变量分开判断（§20 D2）：没有已确认基线时 blocked_wording 仍必须渲染。
         claim_baseline=baseline.baseline_text if baseline else "",
         blocked_wording=baseline.blocked_wording if baseline else [],
+        covered_entries=baseline.covered_entries if baseline else [],
         career_context_block=career_context_block.strip(),
         extended_facts=has_extended_facts(selection.data),
         resume_sections=output_section_keys(selection.data),

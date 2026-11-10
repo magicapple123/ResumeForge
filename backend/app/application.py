@@ -17,7 +17,7 @@ from . import (
     database,
     models,  # noqa: F401 - 确保全部模型注册到 Base.metadata
 )
-from .api import datasets, resumes, skills
+from .api import datasets, materials, resumes, skills
 from .application_routers import install_routers
 from .config import BACKEND_DIR, DATA_DIR, get_settings
 from .database import run_sqlite_maintenance
@@ -387,6 +387,9 @@ def create_app() -> FastAPI:
         larger_body_paths={
             datasets.IMPORT_PATH: settings.max_backup_upload_mb * 1024 * 1024,
             skills.IMPORT_PATH: settings.max_backup_upload_mb * 1024 * 1024,
+            # 资料箱附件：端点按 10MB 校验单文件，全局 8MB 会让 8–10MB 的
+            # PDF/Word 先被中间件拦下（提示语还写着 8MB，与真实原因不符）。
+            materials.ATTACHMENT_UPLOAD_PATH: settings.max_attachment_upload_mb * 1024 * 1024,
         },
     )
     app.add_middleware(

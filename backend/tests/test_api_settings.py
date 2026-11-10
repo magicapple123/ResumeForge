@@ -375,16 +375,18 @@ def test_the_thinking_check_reads_the_table_without_calling_the_vendor(client, m
         raise AssertionError("probe=false 不该创建 provider")
 
     monkeypatch.setattr("app.services.llm.create_provider", exploding_factory)
+    # 用 gpt-5.2 而不是 5.1：5.1 没有 none 档、属于"不可关闭"（supported=False），
+    # 那是另一条语义（见 test_llm_thinking_disable.py），这里只验"读表不出网"。
     response = client.post(
         "/api/settings/llm/thinking/check",
-        json={"base_url": "https://api.openai.com/v1", "model": "gpt-5.1", "api_key": "k"},
+        json={"base_url": "https://api.openai.com/v1", "model": "gpt-5.2", "api_key": "k"},
     )
 
     assert response.status_code == 200
     body = response.json()
     assert body["probed"] is False
     assert body["style"] == "reasoning_effort"
-    assert body["efforts"] == ["minimal", "low", "medium", "high"]
+    assert body["efforts"] == ["none", "low", "medium", "high", "xhigh"]
     assert body["supported"] is True
     assert body["note"]
 

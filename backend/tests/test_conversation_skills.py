@@ -378,13 +378,13 @@ def test_migration_0005_round_trip(tmp_path):
         assert alembic_version_of(engine) == head_revision()
         tables = set(inspect(engine).get_table_names())
         assert "assistant_conversation_skill" in tables
-        # 模型注册表的表数就是"76 张表"这条验收的来源：迁移必须把它们全建出来。
-        assert len(application_tables()) == 76
+        # 模型注册表的表数就是"77 张表"这条验收的来源：迁移必须把它们全建出来。
+        assert len(application_tables()) == 77
 
-        # 头部在 0005 之后又有三条迁移（跟进巡检 / 交付单 / 求职偏好），所以从 head
-        # 退到 0005 之前要连退 4 步。这里只数步数、不点名 revision——下一条迁移落地时
-        # 只需把循环次数 +1，不必改断言里的字面量。
-        for _ in range(4):
+        # 头部在 0005 之后又有五条迁移（跟进巡检 / 交付单 / 求职偏好 / 台账 entry_ids /
+        # 外部简历），加上 0005 本身，从 head 退到 0005 之前要连退 6 步。这里只数步数、
+        # 不点名 revision——下一条迁移落地时只需把循环次数 +1，不必改断言里的字面量。
+        for _ in range(6):
             command.downgrade(config, "-1")
         downgraded = set(inspect(engine).get_table_names())
         assert "assistant_conversation_skill" not in downgraded
@@ -393,7 +393,7 @@ def test_migration_0005_round_trip(tmp_path):
         command.upgrade(config, "head")
         restored = set(inspect(engine).get_table_names())
         assert restored == tables
-        # 降级再升级后回到 76 张业务表，且每张模型表都在。
+        # 降级再升级后回到 77 张业务表，且每张模型表都在。
         assert set(application_tables()) <= restored
     finally:
         engine.dispose()

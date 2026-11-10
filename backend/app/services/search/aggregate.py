@@ -74,22 +74,30 @@ async def _from_bing(query: str) -> list[dict[str, str]]:
         return []
 
 
-async def _from_duckduckgo(query: str) -> list[dict[str, str]]:
-    return await search_duckduckgo(query, limit=_PER_SOURCE_LIMIT)
+async def _from_duckduckgo(
+    query: str, limit: int = _PER_SOURCE_LIMIT
+) -> list[dict[str, str]]:
+    return await search_duckduckgo(query, limit=limit)
 
 
-async def _from_searxng(query: str, base_url: str) -> list[dict[str, str]]:
-    return await search_searxng(query, base_url, limit=_PER_SOURCE_LIMIT)
+async def _from_searxng(
+    query: str, base_url: str, limit: int = _PER_SOURCE_LIMIT
+) -> list[dict[str, str]]:
+    return await search_searxng(query, base_url, limit=limit)
 
 
 async def _from_deepseek(
-    search_query: str, original_query: str, api_key: str, need_content: bool
+    search_query: str,
+    original_query: str,
+    api_key: str,
+    need_content: bool,
+    limit: int = _PER_SOURCE_LIMIT,
 ) -> list[dict[str, str]]:
     """DeepSeek 来源：失败返回空列表（沿用"单来源失败不拖垮整次搜索"的约定）。"""
     try:
         return await search_deepseek(
             search_query,
-            count=_PER_SOURCE_LIMIT,
+            count=limit,
             need_content=need_content,
             ori_question=original_query,
             api_key=api_key,
@@ -144,9 +152,20 @@ async def _enrich_with_page_text(
             item["text"] = text[:CONTENT_EXCERPT_CHARS]
 
 
-async def aggregate_search(query: str, config: SearchConfig) -> list[dict[str, str]]:
-    """按配置聚合搜索；所有来源都没有结果时抛 ``AssistantSearchError``。"""
+async def aggregate_search(
+    query: str, config: SearchConfig, limit: int | None = None
+) -> list[dict[str, str]]:
+    """按配置聚合搜索；所有来源都没有结果时抛 ``AssistantSearchError``。
+
+    ``limit`` 是**这一次调用**希望返回的条数（模型可以通过 ``web_search`` 工具传）：
+    不传按设置页的 ``max_results``（上限）处理；超过上限夹到上限，小于 1 夹到 1。
+    ``config.max_results`` 是上限而不是精确值——"设 30 就一定要 30 条"是做不到的承诺
+    （单个来源本身有取数上限、去重与相关性过滤也会减少条数）。
+    """
     sources = list(dict.fromkeys(config.sources or ["bing"]))
+    cap = max(1, min(limit if limit is not None else config.max_results, config.max_results))
+    # 每个来源多取一些候选：合并去重与相关性过滤会消耗条数，只按 cap 取会拿不满。
+    per_source_limit = max(_PER_SOURCE_LIMIT, cap)
     # 在聚合层统一改写一次查询：DDG / SearXNG 拿到的是改写后的关键词，而不是用户整句。
     # 否则整句（「帮我把…」）会被搜索引擎分词成首字（「帮」），返回一堆无关结果。
     search_query = build_search_query(query)
@@ -161,9 +180,9 @@ async def aggregate_search(query: str, config: SearchConfig) -> list[dict[str, s
             # 已是关键词列表的输入并不幂等——「互联网大厂 + 招聘」会被再判成"招聘发现类"）。
             tasks.append(_from_bing(query))
         elif source == "duckduckgo":
-            tasks.append(_from_duckduckgo(search_query))
+            tasks.append(_from_duckduckgo(search_query, per_source_limit))
         elif source == "searxng" and config.searxng_url:
-            tasks.append(_from_searxng(search_query, config.searxng_url))
+            tasks.append(_from_searxng(search_query, config.searxng_url, per_source_limit))
         elif source == "deepseek" and config.deepseek_api_key:
             # 无 key 时不入列：它不该占一个并发位，更不该返回"成功但没有结果"。
             tasks.append(
@@ -172,6 +191,7 @@ async def aggregate_search(query: str, config: SearchConfig) -> list[dict[str, s
                     query,
                     config.deepseek_api_key,
                     need_content=config.fetch_pages > 0,
+                    limit=per_source_limit,
                 )
             )
 
@@ -184,7 +204,7 @@ async def aggregate_search(query: str, config: SearchConfig) -> list[dict[str, s
     relevant = filter_relevant_results(merged, query)
     # 排序：用人单位官网与招聘页在前，第三方平台在后；同分保持来源交错顺序。
     relevant.sort(key=lambda item: -official_like_score(item))
-    limited = relevant[: config.max_results]
+    limited = relevant[:cap]
 
     if config.fetch_pages > 0:
         await _enrich_with_page_text(limited, config.fetch_pages, config.deepseek_api_key)
@@ -203,8 +223,10 @@ async def aggregate_search(query: str, config: SearchConfig) -> list[dict[str, s
         # 其它来源有结果时不打断回答，但要把"某个来源这次没参与"留在日志里。
         logger.warning("聚合搜索有来源失败 failures=%s", ",".join(sorted(failures)))
     logger.info(
-        "聚合搜索完成 sources=%s result_count=%s with_text=%s",
+        "聚合搜索完成 sources=%s limit=%s cap=%s result_count=%s with_text=%s",
         ",".join(sources),
+        limit,
+        cap,
         len(limited),
         sum(1 for item in limited if item.get("text")),
     )

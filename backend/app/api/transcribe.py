@@ -24,6 +24,8 @@ from __future__ import annotations
 import logging
 import re
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -34,6 +36,9 @@ from ..schemas.asr import (
     MAX_AUDIO_SECONDS,
     AsrModelsRequest,
     AsrModelsResult,
+    AsrProfileIn,
+    AsrProfilesOut,
+    AsrProfileTestRequest,
     AsrProtocol,
     AsrSettings,
     AsrSettingsOut,
@@ -48,12 +53,24 @@ from ..services.asr_client import (
     probe_asr_connection,
     transcribe_audio,
 )
+from ..services.asr_profiles import (
+    AsrProfileError,
+    AsrProfileNameConflict,
+    AsrProfileNotFound,
+    activate_asr_profile,
+    clear_asr_profile_key,
+    delete_asr_profile,
+    list_asr_profiles,
+    resolve_probe_target,
+    save_asr_profile,
+)
 from ..services.asr_settings import (
     CLEAR_API_KEY,
     binding_changed,
     get_asr_runtime_settings,
     get_asr_settings,
     is_asr_configured,
+    migrate_legacy_asr_once,
     provider_host,
     resolve_asr_api_key,
     save_asr_settings,
@@ -89,6 +106,24 @@ _ASR_ERROR_STATUS = {
     "too_large": 413,
     "empty": 422,
 }
+
+
+def _ensure_asr_migrated(db: Session) -> None:
+    """设置入口先跑一次旧数据迁移（幂等；失败只记日志，不让页面 500）。"""
+    migrate_legacy_asr_once(db)
+
+
+@contextmanager
+def _profile_errors() -> Iterator[None]:
+    """把服务层的配置异常翻成对得上的 HTTP 状态（重名 409 / 不存在 404 / 其余 400）。"""
+    try:
+        yield
+    except AsrProfileNameConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except AsrProfileNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (AsrProfileError, ApiKeyEncryptionError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _resolve_protocol(payload: AsrSettings | AsrModelsRequest, stored: AsrSettings) -> AsrProtocol:
@@ -127,6 +162,7 @@ def _resolve_key(
 @router.get("/settings/asr", response_model=AsrSettingsOut)
 def read_asr_settings(db: Session = Depends(get_db)) -> AsrSettingsOut:
     """读取语音服务配置：``api_key`` 只可能是掩码或空串。"""
+    _ensure_asr_migrated(db)
     return get_asr_settings(db)
 
 
@@ -144,6 +180,7 @@ async def test_asr_settings(
     payload: AsrSettings, db: Session = Depends(get_db)
 ) -> AsrSettingsTestResult:
     """用表单当前值探测一次上游（发一段静音），不要求先保存。"""
+    _ensure_asr_migrated(db)
     stored = get_asr_runtime_settings(db)
     base_url = payload.base_url or stored.base_url
     model = payload.model or stored.model
@@ -174,6 +211,71 @@ async def list_asr_models(
     models = await fetch_asr_models(base_url=base_url, api_key=api_key, protocol=protocol)
     return AsrModelsResult(models=models)
 
+
+@router.get("/settings/asr/profiles", response_model=AsrProfilesOut)
+def read_asr_profiles(db: Session = Depends(get_db)) -> AsrProfilesOut:
+    """命名配置列表（脱敏）+ 生效项；首次读取时把当前数据集的旧配置导入一次。"""
+    _ensure_asr_migrated(db)
+    return list_asr_profiles()
+
+
+@router.post("/settings/asr/profiles", response_model=AsrProfilesOut)
+def write_asr_profile(payload: AsrProfileIn, db: Session = Depends(get_db)) -> AsrProfilesOut:
+    """新建（无 id）或按 id 更新一条配置；**新建不自动设为生效**。"""
+    _ensure_asr_migrated(db)
+    with _profile_errors():
+        return save_asr_profile(payload)
+
+
+@router.delete("/settings/asr/profiles/{profile_id}", response_model=AsrProfilesOut)
+def remove_asr_profile(profile_id: str, db: Session = Depends(get_db)) -> AsrProfilesOut:
+    """删除一条；删的是生效项时自动切到剩下的第一条，删光则语音输入不可用。"""
+    _ensure_asr_migrated(db)
+    with _profile_errors():
+        return delete_asr_profile(profile_id)
+
+
+@router.post("/settings/asr/profiles/{profile_id}/activate", response_model=AsrProfilesOut)
+def activate_asr_profile_endpoint(
+    profile_id: str, db: Session = Depends(get_db)
+) -> AsrProfilesOut:
+    """设为「使用中」：只校验三要素齐全并写 active_profile_id，**不探测网络**。"""
+    _ensure_asr_migrated(db)
+    with _profile_errors():
+        return activate_asr_profile(profile_id)
+
+
+@router.post("/settings/asr/profiles/{profile_id}/clear-key", response_model=AsrProfilesOut)
+def clear_asr_profile_key_endpoint(
+    profile_id: str, db: Session = Depends(get_db)
+) -> AsrProfilesOut:
+    """只清这一条的 Key（其它配置不受影响）。"""
+    _ensure_asr_migrated(db)
+    with _profile_errors():
+        return clear_asr_profile_key(profile_id)
+
+
+@router.post("/settings/asr/profiles/{profile_id}/test", response_model=AsrSettingsTestResult)
+async def test_asr_profile(
+    profile_id: str, payload: AsrProfileTestRequest, db: Session = Depends(get_db)
+) -> AsrSettingsTestResult:
+    """用「该条已存 Key + 草稿覆盖」探测一次上游，**不落盘**。
+
+    ``profile_id`` 允许传 ``new``（新建弹窗里还没有 id）：此时不读取任何已存 Key，
+    避免"新建时留空却测通了上一条配置的 Key"这种误判。
+    """
+    _ensure_asr_migrated(db)
+    with _profile_errors():
+        target = resolve_probe_target(profile_id, payload)
+    if target is None:
+        return AsrSettingsTestResult(ok=False, message="请先填写语音服务地址、模型与 Key")
+    ok, message, latency_ms = await probe_asr_connection(
+        base_url=target.base_url,
+        api_key=target.api_key,
+        model=target.model,
+        protocol=target.protocol,
+    )
+    return AsrSettingsTestResult(ok=ok, latency_ms=latency_ms, message=message)
 
 @router.get("/transcribe/status", response_model=AsrStatus)
 def read_transcribe_status(db: Session = Depends(get_db)) -> AsrStatus:

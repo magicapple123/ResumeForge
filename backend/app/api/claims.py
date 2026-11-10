@@ -33,7 +33,9 @@ from ..services.actions.pilots import pilot_actions
 from ..services.claim_draft import draft_from_text
 from ..services.claims import (
     build_baseline,
+    claim_linked,
     claim_warnings,
+    current_entry_ids,
     delete_claim,
     list_claims_page,
     summarize_query,
@@ -55,9 +57,19 @@ add_action_route(router, claim_actions()["create_claim"])
 
 
 @router.get("/baseline", response_model=ClaimDigestOut)
-def read_baseline(db: Session = Depends(get_db)):
-    """当前可用于生成的事实基线（已确认事实 + 必须避开的未确认说法）。"""
-    return build_baseline(db)
+def read_baseline(
+    entry_ids: list[str] | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """当前可用于生成的事实基线（已确认事实 + 必须避开的未确认说法）。
+
+    entry_ids 可选（可重复）：传本次生成会消费的资料条目 entry_id 时，返回的是
+    **生成口径**（只含能关联到这些条目的已确认主张）；不传 = 页面口径（全量已确认）。
+    响应里的 total_confirmed_count / linked_confirmed_count 给页面显示
+    「全量 M 条已确认，其中 K 条已关联资料」，不再把 M 当成"生成时可用"。
+    """
+    source = [str(item).strip() for item in (entry_ids or []) if str(item).strip()]
+    return build_baseline(db, source_entry_ids=source or None)
 
 
 @router.post("/draft", response_model=ClaimDraftOut)
@@ -70,8 +82,13 @@ async def draft_claims(payload: ClaimDraftRequest, db: Session = Depends(get_db)
         raise HTTPException(status_code=502, detail=f"提取台账草稿失败：{exc}") from exc
 
 
-def _claim_summary(record, locale: str | None = None) -> ClaimSummary:
-    """分页列表行摘要：长文本只带 200 字截断，改进建议仍由服务端算出。"""
+def _claim_summary(record, locale: str | None = None, entry_ids: set[str] | None = None) -> ClaimSummary:
+    """分页列表行摘要：长文本只带 200 字截断，改进建议仍由服务端算出。
+
+    entry_ids 是当前数据集的资料条目集合：摘要行没有 sources / entry_ids 全文，
+    所以「是否已关联资料」由服务端用与生成同一个判据算好下发（ClaimCard 据此标
+    「不会进入生成」或「已自动关联，请核对」）。
+    """
     return ClaimSummary(
         id=record.id,
         title=record.title,
@@ -83,6 +100,8 @@ def _claim_summary(record, locale: str | None = None) -> ClaimSummary:
         verification_status=record.verification_status,
         last_verified=record.last_verified,
         warnings=claim_warnings(record, locale),
+        linked=claim_linked(record, entry_ids or set()),
+        linked_auto=bool(record.entry_ids_auto),
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -114,8 +133,9 @@ def read_claims_page(
     )
     summary = summarize_query(db, category=category, status=status, keyword=keyword)
     locale = get_ui_locale(db)
+    entry_ids = current_entry_ids(db)
     return ClaimPageListOut(
-        items=[_claim_summary(record, locale) for record in records],
+        items=[_claim_summary(record, locale, entry_ids) for record in records],
         **summary,
     )
 

@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, literal, select
+from sqlalchemy import case, func, literal, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db, session_engine
@@ -34,7 +34,12 @@ from ..models.claim import VERIFICATION_PENDING, ClaimRecord
 from ..models.job import JOB_STATUS_OPEN, Job
 from ..models.profile import utcnow
 from ..models.resume import ResumeRecord, saved_only
-from ..models.tracker import ACTIVE_STATUSES, STALLED_DAYS, ApplicationTrack
+from ..models.tracker import (
+    ACTIVE_STATUSES,
+    STALLED_DAYS,
+    ApplicationTrack,
+    ApplicationTrackEvent,
+)
 from ..schemas.job import JobListOut
 from ..schemas.resume import ResumeBrief
 from ..schemas.search import PendingClaimBrief, Stats
@@ -297,6 +302,14 @@ def get_stats(db: Session = Depends(get_db)):
         .all()
     )
 
+    # 停滞判定用的"最后一条状态变化事件"（相关子查询，不额外打库）。
+    last_event_at = (
+        select(func.max(ApplicationTrackEvent.event_at))
+        .where(ApplicationTrackEvent.track_id == ApplicationTrack.id)
+        .correlate(ApplicationTrack)
+        .scalar_subquery()
+    )
+
     # 全部计数并入这一条聚合语句（10 个标量子查询，一次 round-trip）。口径与
     # 合并前逐条一致，新增计数请加在这里，不要另开查询。
     (
@@ -323,14 +336,25 @@ def get_stats(db: Session = Depends(get_db)):
             _live_count(ResumeRecord, saved_only(), ResumeRecord.created_at >= week_ago),
             _live_count(ClaimRecord),
             _live_count(ClaimRecord, ClaimRecord.verification_status == VERIFICATION_PENDING),
-            # 进行中的投递里久未更新的单独计数："卡住了"比"在推进"更需要用户去看。
-            # 阈值与判定口径来自 ``models/tracker``，求职看板的 ``stalled_count``
-            # 读的是同一份（test_stalled_count_matches_stats_endpoint 钉住一致）；
-            # ``(now - updated_at) > 7d`` 与 ``is_stalled`` 严格等价。
+            # 进行中的投递里久未**推进状态**的单独计数："卡住了"比"在推进"更需要用户去看。
+            # 口径（2026-11-10 第 17 条）：最后一次状态变化 = 事件表最新 event_at >
+            # 用户填的 status_date > updated_at（改备注会刷新 updated_at，不能当证据）。
+            # 与求职看板的 stalled_count 同一判据（test_stalled_count_matches_stats_endpoint
+            # 钉住一致）；阈值常量 STALLED_DAYS 在模块命名空间里，测试可 monkeypatch。
             _live_count(
                 ApplicationTrack,
                 ApplicationTrack.status.in_(tuple(ACTIVE_STATUSES)),
-                ApplicationTrack.updated_at < utcnow() - timedelta(days=STALLED_DAYS),
+                func.julianday(
+                    case(
+                        (last_event_at.isnot(None), last_event_at),
+                        (
+                            func.trim(ApplicationTrack.status_date) != "",
+                            ApplicationTrack.status_date,
+                        ),
+                        else_=ApplicationTrack.updated_at,
+                    )
+                )
+                < func.julianday(utcnow() - timedelta(days=STALLED_DAYS)),
             ),
             _plain_count(ApplyQueueItem, ApplyQueueItem.status == QUEUE_STATUS_PENDING),
         )

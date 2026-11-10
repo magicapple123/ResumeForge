@@ -1,18 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-"""语义检索 embedding provider 的设置端点（本地 onnxruntime / 远程 OpenAI 兼容）。
+"""语义检索 embedding 的设置端点（本地 onnxruntime / 远程 OpenAI 兼容）。
 
-状态机只有一份来源：``GET /status``。设置页按它渲染，生成链按持久化配置构造 provider；
-两者读同一份 ``global_settings.json`` 的 ``embedding`` 段（见 ``embedding_settings``）。
+状态机唯一来源：``GET /status``。设置页按它渲染，生成链按持久化配置构造 provider；
+两者读同一份 ``global_settings.json``（``embedding`` 镜像 + ``embedding_profiles``）。
 
-**失败不得显示为已启用**：``enabled`` 只在本地下载校验通过 / 远程真实探测通过后由
-本模块写入；下载失败、401、维度不符都落 ``last_error`` 并在状态里可见。
+失败不得显示为已启用：只有本地校验 / 远程真实探测通过后 ``enabled`` 才为 true；
+provider / 模型 / 维度切换时主动清空向量索引并记 ``rag event provider_switched``。
 
-**清理索引**：provider / 模型 / 维度切换后旧向量既不会被命中又会占着有界 LRU，所以
-enable / disable / clear 都主动 ``get_rag_index().clear()`` 并记一条
-``rag event provider_switched``（与 ``rag_service`` 的兜底检测互补）。
-
-本模块只做 HTTP 编排与错误翻译；下载/探测/模板解析分别在
-``rag_local_setup`` / ``rag_remote_setup`` / ``rag_embedding_endpoint``。
+下载/探测/模板解析分别在 ``rag_local_setup`` / ``rag_remote_setup`` /
+``rag_embedding_endpoint``；命名配置写端点拆在 ``settings_embedding_profiles``。
 """
 
 from __future__ import annotations
@@ -24,6 +20,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ..config import get_settings
+from ..services.llm import embedding_activation, embedding_profiles, embedding_profiles_store
 from ..services.llm.embedding_settings import (
     KEY_MASK,
     EmbeddingProviderConfig,
@@ -35,8 +32,7 @@ from ..services.llm.embedding_settings import (
     read_embedding_config,
     replace_config,
     revoke_host_confirmed,
-    set_embedding_error,
-    write_embedding_config,
+    write_active_embedding_config,
 )
 from ..services.rag.rag_index import get_rag_index
 
@@ -59,6 +55,8 @@ class RemoteConfigIn(BaseModel):
     body_template: str = Field(default="", max_length=16384)
     response_path: str = Field(default="data[*].embedding", max_length=512)
     allow_private: bool = False
+    # 只从这条命名配置借已存密钥（测试连接编辑态用），不跨配置继承。
+    profile_id: str = Field(default="", max_length=64)
 
 
 class ConfirmIn(BaseModel):
@@ -190,8 +188,13 @@ def _remote_payload(config: EmbeddingProviderConfig | None) -> dict[str, Any]:
 
 
 def _status_payload() -> dict[str, Any]:
+    """设置页与生成链共用的唯一状态源；首次调用顺带把旧扁平配置迁移成命名配置。"""
+    embedding_profiles_store.migrate_legacy_once()
     config = read_embedding_config()
     local = _local_status()
+    # 本地已下载但还没启用过时也要有可激活的本地 profile（ready 态一键切换用）。
+    embedding_profiles_store.ensure_local_profile(local)
+    meta = embedding_profiles.active_meta()
     provider = config.provider if config is not None else ""
     return {
         "state": _compose_state(config, local),
@@ -201,6 +204,10 @@ def _status_payload() -> dict[str, Any]:
         "remote": _remote_payload(config),
         "runtime": {"available": _runtime_available(local), "version": "1.31.1"},
         "config": mask_embedding_config(config) if config is not None else None,
+        "profiles": embedding_profiles.list_profiles(),
+        "active_profile_id": meta["active_profile_id"],
+        "active_profile_updated_at": meta["active_profile_updated_at"],
+        "local_profile_id": meta["local_profile_id"],
     }
 
 
@@ -223,7 +230,12 @@ def _merge_remote(payload: RemoteConfigIn) -> EmbeddingProviderConfig:
     template = payload.endpoint_mode.strip().casefold() == "template"
     api_key = payload.api_key.strip()
     if not api_key or api_key == KEY_MASK:
-        api_key = base.api_key
+        # 指定 profile_id 时只借那一条的已存密钥；否则沿用旧口径，绝不跨 profile。
+        api_key = (
+            embedding_profiles.profile_key(payload.profile_id)
+            if payload.profile_id
+            else base.api_key
+        )
     headers = tuple(
         {"name": str(item.get("name") or ""), "value": str(item.get("value") or "")}
         for item in payload.headers
@@ -315,11 +327,13 @@ def remove_local_assets(request: Request) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc) or "删除本地模型失败") from exc
     config = read_embedding_config()
-    if config is not None and config.provider == "local-onnx":
+    was_local = config is not None and config.provider == "local-onnx"
+    hosts = list(config.confirmed_hosts) if config is not None else []
+    # 本地 profile 跟着资产一起删（否则 active 指向资源已不存在的本地配置）。
+    embedding_profiles_store.remove_local_profile()
+    if was_local:
         # 删除下载文件必须回到"未配置"：只置 enabled=False 会留下 provider=local-onnx
-        # 的半配置态，之后每次生成都会先尝试本地 provider 再回退。已确认的远程 host
-        # 保留下来，用户下次配远程时不必重新确认。
-        hosts = list(config.confirmed_hosts)
+        # 半配置态。已确认的远程 host 保留，用户下次配远程时不必重新确认。
         clear_embedding_config()
         for host in hosts:
             mark_host_confirmed(host)
@@ -334,6 +348,11 @@ def enable_local_provider(request: Request) -> dict[str, Any]:
         _local_api().activate_local()
     except Exception as exc:  # noqa: BLE001 - 未下载/校验失败都要可读
         raise HTTPException(status_code=400, detail=str(exc) or "本地语义检索启用失败") from exc
+    try:
+        # 本地分支同步成 profile 并设为生效；之后切换一律走 profiles/{id}/activate。
+        embedding_profiles_store.sync_local_profile_from_mirror()
+    except embedding_profiles.ProfileError as exc:
+        raise HTTPException(status_code=400, detail=str(exc) or "本地配置写入失败") from exc
     config = read_embedding_config()
     if config is None or config.provider != "local-onnx" or not config.enabled:
         raise HTTPException(status_code=400, detail="本地模型未通过校验，未启用")
@@ -358,7 +377,7 @@ def revoke_remote_host(payload: RevokeIn, request: Request) -> dict[str, Any]:
     remaining = revoke_host_confirmed(host)
     config = read_embedding_config()
     if config is not None and config.provider == "openai-http" and config.host() == host:
-        write_embedding_config(replace_config(config, enabled=False))
+        write_active_embedding_config(replace_config(config, enabled=False))
         _log_switch("disabled", "", 0)
     return {"confirmed_hosts": remaining, "host": host}
 
@@ -366,7 +385,10 @@ def revoke_remote_host(payload: RevokeIn, request: Request) -> dict[str, Any]:
 @router.post("/remote/test")
 async def test_remote_provider(payload: RemoteConfigIn, request: Request) -> dict[str, Any]:
     _guard_loopback(request)
-    config = _merge_remote(payload)
+    try:
+        config = _merge_remote(payload)
+    except embedding_profiles.ProfileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     _validate_remote(config)
     try:
         result = await _probe_remote(config)
@@ -385,7 +407,10 @@ async def test_remote_provider(payload: RemoteConfigIn, request: Request) -> dic
 @router.post("/remote/models")
 async def list_remote_models(payload: RemoteConfigIn, request: Request) -> dict[str, Any]:
     _guard_loopback(request)
-    config = _merge_remote(payload)
+    try:
+        config = _merge_remote(payload)
+    except embedding_profiles.ProfileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     if not config.base_url or not endpoint_host(config.base_url):
         raise HTTPException(status_code=400, detail="远程服务缺少 Base URL")
     try:
@@ -413,23 +438,28 @@ async def enable_remote_provider(payload: RemoteConfigIn, request: Request) -> d
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc) or "远程服务校验失败") from exc
     if not getattr(result, "ok", False):
+        # 失败不写 last_error：不能因为一次失败的启用把当前生效配置标成 failed。
         message = str(getattr(result, "error", "") or "远程服务校验未通过")
-        if read_embedding_config() is not None:
-            set_embedding_error(message)
         raise HTTPException(status_code=400, detail=message)
     dim = int(getattr(result, "dim", 0) or 0)
     if dim <= 0:
         raise HTTPException(status_code=400, detail="远程服务没有返回可用的向量维度")
-    write_embedding_config(
-        replace_config(
-            config,
-            enabled=True,
-            dim=dim,
-            pooling="server",
-            normalize=True,
-            last_error="",
+    try:
+        # 旧入口兼容：upsert「默认配置」profile 再提交激活；常规切换走 activate。
+        await embedding_activation.enable_remote_legacy(
+            replace_config(
+                config,
+                enabled=True,
+                dim=dim,
+                pooling="server",
+                normalize=True,
+                last_error="",
+            )
         )
-    )
+    except embedding_profiles.ProfileError as exc:
+        raise HTTPException(
+            status_code=int(getattr(exc, "status_code", 400)), detail=str(exc)
+        ) from exc
     _log_switch("openai-http", config.model, dim)
     return _status_payload()
 
@@ -439,17 +469,31 @@ def disable_embedding_provider(request: Request) -> dict[str, Any]:
     _guard_loopback(request)
     config = read_embedding_config()
     if config is not None:
-        write_embedding_config(replace_config(config, enabled=False, last_error=""))
+        write_active_embedding_config(replace_config(config, enabled=False, last_error=""))
         _log_switch("disabled", "", 0)
     return _status_payload()
 
 
 @router.post("/clear")
 def clear_embedding_provider(request: Request) -> dict[str, Any]:
+    # 兼容旧入口：清除当前生效配置的密钥并停用（「清除密钥」已改走 clear-key）。
     _guard_loopback(request)
-    clear_embedding_config()
+    embedding_profiles_store.migrate_legacy_once()
+    meta = embedding_profiles.active_meta()
+    if meta["active_profile_id"]:
+        try:
+            embedding_profiles_store.clear_profile_key(meta["active_profile_id"])
+        except embedding_profiles.ProfileError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+    else:
+        clear_embedding_config()
     _log_switch("disabled", "", 0)
     return _status_payload()
 
+
+# 命名配置端点单独成模块（守住 500 行预算）；子模块只在函数内 import 本模块。
+from .settings_embedding_profiles import router as _profiles_router  # noqa: E402
+
+router.include_router(_profiles_router)
 
 __all__ = ["router"]

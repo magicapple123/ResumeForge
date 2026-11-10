@@ -122,6 +122,9 @@ class Collector:
             education=config.education,
             job_type=config.job_type,
             filters=dict(site_filters.params),
+            # 用户显式在站点筛选里选过求职类型（哪怕选的是「不限」）→ 压住旧的岗位类型映射，
+            # 否则"选了不限"会静默变成"只采某一类岗位"（清单 §15.4-1）。
+            skip_job_type_mapping=site_filters.job_type_selected,
         )
         unmapped: set[str] = set()
         tally = FilterTally()

@@ -147,6 +147,9 @@ from .collect import (
     CollectFilterTestResultOut as CollectFilterTestResultOut,
 )
 from .collect import (
+    CollectFilterVisibleWhenOut as CollectFilterVisibleWhenOut,
+)
+from .collect import (
     CollectTaskCreateIn as CollectTaskCreateIn,
 )
 from .config import (
@@ -245,6 +248,7 @@ __all__ = [
     "CollectFilterTestIn",
     "CollectFilterTestItemOut",
     "CollectFilterTestResultOut",
+    "CollectFilterVisibleWhenOut",
     "CollectRunSummaryOut",
     "CollectTaskCreateIn",
     "DEFAULT_BROWSER_CHOICE",

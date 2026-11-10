@@ -16,7 +16,7 @@
 - **不做推断**：普通自动回执只能落到「已投递」，不能推断出面试或 Offer。识别不出来就
   是「待确认」，由用户自己判断——这是本模块唯一会误导用户的失误来源。
 """
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -174,19 +174,26 @@ def is_active(status: str) -> bool:
     return status in ACTIVE_STATUSES
 
 
-# 「卡住」的判定阈值：进行中的记录超过这么多天没有任何更新。
+# 「卡住」的判定阈值：进行中的记录超过这么多天**没有发生状态变化**。
 #
-# **口径写在名字里**：``updated_at`` 会被**任何**编辑刷新（改一条备注里的错别字也算），
-# 所以这条规则是「超过 N 天**没有更新**」，**不是**「面试卡住」——调用方把它讲成后者
-# 就是在给用户一个听起来更精确、其实不成立的说法。
+# 口径（2026-11-10 第 17 条修正）：以前判的是 ``updated_at``，但它会被**任何**编辑刷新
+# （改一条备注里的错别字也算）——导入的历史数据更新时间一律很旧，于是"停滞"变成"全部
+# 停滞"，这个指标就失去了"找出真正卡住的那几条"的作用。现在的证据优先级：
 #
+#   1. 状态变化事件表里该记录最新的 ``event_at``（真的改过状态）；
+#   2. 没有事件时退回用户填的 ``status_date``（当前状态对应的业务日期）；
+#   3. 两者都没有才退回 ``updated_at``（没有时间戳就不该被点名，返回 False）。
+#
+# **不是**「面试卡住」：它只说明"很久没有推进状态"，至于对方回没回，这个函数不知道。
 # 放在领域模型这一层而不是某个路由里：它是关于 ApplicationTrack 的规则，
 # ``/api/stats`` 与求职看板必须用同一份（``test_stalled_count_matches_stats_endpoint``
 # 钉住两处结论一致）。
 STALLED_DAYS = 7
 
 # 期一跟进巡检的两个阈值（与 STALLED_DAYS 同源放在领域模型层，服务层只引用不复制）：
-# - 跟进卡：>7 天没有更新 = 与 is_stalled 同一判据，所以**别名引用**而非复制字面量；
+# - 跟进卡：>7 天**没有任何活动**（按 updated_at 判沉默）。它与看板的"停滞"共享同一个
+#   天数常量（看板现在看的是"最后一次状态变化"），但**判据不同**：跟进卡要的是"这行
+#   彻底没人动过"，看板要的是"状态没推进"；
 #   改了 STALLED_DAYS，看板、/api/stats 与巡检候选必须一起变（有守卫钉住）。
 # - 确认状态卡：>21 天没有更新。长期不更新多半是用户忘了维护，这时催跟进是拿旧数据
 #   制造噪音，先说"请确认状态"才是对的；两类卡互斥（>21 天只出确认卡）。
@@ -194,18 +201,58 @@ FOLLOWUP_SILENCE_DAYS = STALLED_DAYS
 CONFIRM_SILENCE_DAYS = 21
 
 
-def is_stalled(
-    status: str, updated_at: datetime | None, now: datetime, *, days: int = STALLED_DAYS
-) -> bool:
-    """进行中、且超过 ``days`` 天没有任何更新。
+def parse_business_date(value: str) -> datetime | None:
+    """把 YYYY-MM-DD 业务日期解析成当天 0 点（naive）；空串/紧凑写法/写坏的返回 None。
 
-    终态（Offer / 已结束 / 待确认）不叫卡住——流程已经走完了，再久没动也只是归档。
-    恰好 ``days`` 天算"还没超"（严格大于才计入），与原先 ``updated_at < now - 7d``
-    的判定等价。``updated_at`` 缺失时返回 False：没有时间戳就不该被点名。
+    与 analytics_breakdowns.parse_iso_date、track_events._parse_date 同一判据（都要求
+    十字形状）——同一份数据在"停滞判定 / 耗时统计 / 趋势"三处必须得到同一个答案。
     """
-    if not is_active(status) or updated_at is None:
+    text = (value or "").strip()
+    if len(text) != 10 or text[4] != "-" or text[7] != "-":
+        return None
+    try:
+        return datetime.combine(date.fromisoformat(text), time.min)
+    except ValueError:
+        return None
+
+
+def last_status_change_at(
+    *,
+    updated_at: datetime | None,
+    status_date: str = "",
+    event_at: datetime | None = None,
+) -> datetime | None:
+    """最后一次**状态变化**的时间：事件 > 用户填的业务日期 > 落库更新时间。
+
+    三个来源的可信度依次下降：事件表是"真的改过状态"的铁证；status_date 是用户填的
+    业务日期（可能为空）；updated_at 只能证明"这行被保存过"（改错别字也算），所以
+    只在前两者都拿不到时兜底。全部缺失返回 None——没有证据就不点名（不默认卡住）。
+    """
+    if event_at is not None:
+        return event_at
+    parsed = parse_business_date(status_date)
+    if parsed is not None:
+        return parsed
+    return updated_at
+
+
+def is_stalled(
+    status: str,
+    last_status_change_at: datetime | None,
+    now: datetime,
+    *,
+    days: int = STALLED_DAYS,
+) -> bool:
+    """进行中、且超过 ``days`` 天没有发生状态变化。
+
+    参数是 :func:`last_status_change_at` 的返回值（事件 > status_date > updated_at）；
+    这样"停滞"不会再被一次改备注刷新掉。终态（Offer / 已结束 / 待确认）不叫卡住——
+    流程已经走完了，再久没动也只是归档。恰好 ``days`` 天算"还没超"（严格大于才计入），
+    与原先 ``updated_at < now - 7d`` 的边界等价。时间缺失时返回 False：没有证据就不点名。
+    """
+    if not is_active(status) or last_status_change_at is None:
         return False
-    return (now - updated_at) > timedelta(days=days)
+    return (now - last_status_change_at) > timedelta(days=days)
 
 
 def normalize_key(value: str) -> str:
@@ -349,6 +396,8 @@ __all__ = [
     "STATUS_UNKNOWN",
     "is_active",
     "is_stalled",
+    "last_status_change_at",
+    "parse_business_date",
     "normalize_key",
     "resolve_status",
     "status_label",

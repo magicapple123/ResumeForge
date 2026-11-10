@@ -132,13 +132,17 @@ def delete_llm_session_key() -> None:
 
 @router.get("/search", response_model=SearchConfig)
 def read_search_settings(db: Session = Depends(get_db)):
-    """联网搜索设置：来源、自建 SearXNG 地址、正文抓取条数与结果上限。"""
+    """联网搜索设置（**全局一份**，所有数据集共用）：来源、SearXNG 地址、抓取与条数上限。
+
+    升级后首次读取会把当前数据集的旧 ``search_config` / ``search_deepseek_api_key`
+    一次性迁移到全局（见 ``services.web_search_settings`），旧行保留不删。
+    """
     return get_search_config(db)
 
 
 @router.put("/search", response_model=SearchConfig)
 def write_search_settings(payload: SearchConfig, db: Session = Depends(get_db)):
-    """保存搜索设置；DeepSeek key 加密失败时显式报错，不落明文。"""
+    """保存全局搜索设置；DeepSeek key 加密失败时显式报错，不落明文。"""
     try:
         return save_search_config(db, payload)
     except ApiKeyEncryptionError as exc:

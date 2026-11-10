@@ -35,7 +35,7 @@ def test_web_search_results_are_cited_context_and_search_does_not_create_jobs(cl
     # 改写（build_search_query / 剥口语填充词）集中发生在聚合层，三个来源都在那里统一改写，
     # 免得在工具处改写后又被聚合层二次改写（build_search_query 对已是关键词列表的输入
     # 并不幂等）。改写行为本身由 test_search_aggregate 里那条用例钉住。
-    async def fake_search(query: str, _config):
+    async def fake_search(query: str, _config, limit=None):
         calls.append(query)
         return [
             {
@@ -82,7 +82,7 @@ def test_web_search_failure_degrades_without_claiming_sources(client, monkeypatc
     """搜索失败的降级：把原因如实回给模型，但绝不伪造来源。"""
     _configure_llm(client)
 
-    async def unavailable(_query: str, _config):
+    async def unavailable(_query: str, _config, limit=None):
         raise AssistantSearchError("联网搜索响应超时，请稍后重试")
 
     monkeypatch.setattr("app.services.search.aggregate_search", unavailable)
@@ -123,7 +123,7 @@ def test_resume_forge_usage_question_skips_public_search(client, monkeypatch):
     """简历通自身的使用问题：模型调了 web_search 也只拿到本地指引，不打网络。"""
     _configure_llm(client)
 
-    async def unexpected_search(_query: str, _config):
+    async def unexpected_search(_query: str, _config, limit=None):
         raise AssertionError("ResumeForge 使用问题不应调用公开搜索")
 
     # 唯一的实现位置：``assistant_tools/search_tools.py`` 在调聚合层之前先做本地问题判断。
@@ -169,7 +169,7 @@ def test_source_numbers_are_globally_unique_across_tool_searches(client, monkeyp
     _configure_llm(client)
     calls: list[str] = []
 
-    async def fake_search(query: str, _config):
+    async def fake_search(query: str, _config, limit=None):
         calls.append(query)
         index = len(calls)
         if index == 1:
@@ -315,3 +315,40 @@ def test_web_search_enabled_recruitment_request_can_call_the_tool(client, monkey
     assert sources_event["source_map"] == [
         {"number": 1, "url": "https://careers.example.com/intern/42"}
     ]
+
+
+def test_web_search_tool_forwards_the_model_chosen_limit(client, monkeypatch):
+    """模型可以在工具调用里用可选 ``limit`` 决定这次要几条；不传则交给设置上限。"""
+    _configure_llm(client)
+    limits: list[int | None] = []
+
+    async def fake_search(query: str, _config, limit=None):
+        limits.append(limit)
+        return [
+            {
+                "title": "后端工程师招聘官网",
+                "url": "https://careers.example.com/jobs/1",
+                "snippet": "招聘",
+            }
+        ]
+
+    monkeypatch.setattr("app.services.search.aggregate_search", fake_search)
+    provider = _ScriptedProvider(
+        [
+            [
+                _tool_call("web_search", {"query": "后端 招聘", "limit": 3}, call_id="call_1"),
+                _tool_call("web_search", {"query": "算法 招聘"}, call_id="call_2"),
+            ],
+            [LLMDelta(text="见 [来源1]。")],
+        ]
+    )
+    monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
+    conversation = _create_conversation(client)
+    response = client.post(
+        f"/api/assistant/conversations/{conversation['id']}/messages",
+        json={"content": "帮我搜后端和算法的招聘信息", "web_search": True},
+    )
+
+    assert response.status_code == 200
+    assert limits == [3, None]
+

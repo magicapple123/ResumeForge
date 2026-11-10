@@ -339,6 +339,13 @@ _MATERIAL_EMPTY_FILE = "文件是空的"
 # 文本类与图片类共用同一句截断警告（上限已拉平到同一个数，见 MAX_DOCUMENT_TEXT_CHARS）。
 MATERIAL_TRUNCATED_WARNING = "内容较长，本次只读取了前一部分"
 
+# 扫描件 PDF 在资料箱里**不做视觉识别**（视觉识别是面试材料链路的预算与语义）：
+# 提取不到文字就如实给一条警告，用户仍可用「另存为」保存原件。
+MATERIAL_SCAN_NO_VISION_WARNING = (
+    "这份 PDF 没有可提取的文字层（疑似扫描件）；资料箱不做图片识别，"
+    "仍可用「另存为」保存原件，需要识别文字请用面试材料导入。"
+)
+
 
 class MaterialText(NamedTuple):
     """一份面试材料的本地提取结果。
@@ -366,8 +373,12 @@ def _truncate_material(text: str) -> tuple[str, list[str]]:
     return text[:MAX_DOCUMENT_TEXT_CHARS], [MATERIAL_TRUNCATED_WARNING]
 
 
-def _extract_pdf_material(raw: bytes) -> MaterialText:
-    """PDF 材料：文字层够用就只返回文字，几乎空白且存在扫描页才渲染图片交给调用方识别。"""
+def _extract_pdf_material(raw: bytes, render_scan_pages: bool = True) -> MaterialText:
+    """PDF 材料：文字层够用就只返回文字，几乎空白且存在扫描页才渲染图片交给调用方识别。
+
+    ``render_scan_pages=False`` 时**不渲染扫描页**（资料箱附件链路：不做视觉识别）：
+    返回已经提取到的文字（可能为空）+ 一条常驻警告，由调用方决定怎么呈现。
+    """
     page_texts = _pdf_page_texts(raw)
     layer, image_pages = _pdf_page_split(page_texts)
     body = layer.strip()
@@ -376,6 +387,10 @@ def _extract_pdf_material(raw: bytes) -> MaterialText:
             raise ValueError(_MATERIAL_NO_TEXT)
         truncated, warnings = _truncate_material(body)
         return MaterialText(truncated, warnings)
+    if not render_scan_pages:
+        # 扫描件但没有视觉识别：不能假装提取成功，也不能把空文本当失败（原件仍可另存为）。
+        truncated, warnings = _truncate_material(body)
+        return MaterialText(truncated, [MATERIAL_SCAN_NO_VISION_WARNING, *warnings])
 
     # 文字层几乎空白 + 存在扫描页：渲染（复用已解析的逐页文本，不再二次解析 PDF）。
     _, rendered, scan_warnings = _pdf_extract_with_images(
@@ -394,7 +409,9 @@ def _extract_pdf_material(raw: bytes) -> MaterialText:
     return MaterialText(truncated, warnings, images, tuple(scan_warnings))
 
 
-def extract_material_text(name: str, raw: bytes) -> MaterialText:
+def extract_material_text(
+    name: str, raw: bytes, *, render_scan_pages: bool = True
+) -> MaterialText:
     """把用户导入的材料文件（PDF / TXT / Markdown / Word）提取成纯文本。
 
     与 :func:`preview_text_of_file` 的区别是**用途不同所以口径不同**：这里是"用户主动
@@ -402,6 +419,10 @@ def extract_material_text(name: str, raw: bytes) -> MaterialText:
     说成"可能是扫描件"——那是用户真正需要知道的事。
 
     ``.doc``（Word 2003 二进制格式）单独给一句"另存为 .docx"：读不了就不假装能读。
+
+    ``render_scan_pages=False`` 供**不做视觉识别**的调用方使用（资料箱附件）：扫描页
+    不渲染、不抛"没文字"失败，而是返回空文本 + 常驻警告，让用户仍能另存为原件。
+    默认 ``True`` 保持面试材料链路的既有行为不变。
 
     失败一律抛 ``ValueError``，文案是面向用户的**原因**（动作由前端补）。
     """
@@ -416,7 +437,7 @@ def extract_material_text(name: str, raw: bytes) -> MaterialText:
         raise ValueError(_MATERIAL_TOO_LARGE)
 
     if suffix == ".pdf":
-        return _extract_pdf_material(raw)
+        return _extract_pdf_material(raw, render_scan_pages=render_scan_pages)
 
     if suffix == ".docx":
         body = strip_markers(_docx_text(raw)).strip()

@@ -18,7 +18,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
@@ -143,6 +143,14 @@ class ClaimRecord(Base):
     # [{"type": "pull_request", "location": "...", "public": true, "note": ""}]
     # 只存定位证据所需的信息；密码、验证码、邮件全文一律不入库（见 AGENTS.md 安全边界）。
     sources: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+
+    # 关联的资料条目 profile_entry.entry_id（24 位十六进制，**不是**自增 id）。
+    # 生成时只有"与本次消费快照求交集非空"的已确认主张才进入事实基线；NULL = 从未关联，
+    # [] = 用户清空了关联——读取侧都按"未关联"处理（迁移 0009 加列，旧行保持 NULL）。
+    entry_ids: Mapped[list[str] | None] = mapped_column(JSON, nullable=True, default=list)
+    # 关联是否来自迁移期按主体名的一次性自动回填：界面据此显示「已自动关联，请核对」，
+    # 用户保存一次后由服务层清掉。旧行与用户手工选的关联都是 NULL/False。
+    entry_ids_auto: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
 
     responsibility_level: Mapped[str] = mapped_column(
         String(32), default=RESPONSIBILITY_PARTICIPATED, index=True

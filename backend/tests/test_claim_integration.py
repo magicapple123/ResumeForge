@@ -95,6 +95,60 @@ async def test_confirmed_facts_and_blocked_wording_reach_the_prompt():
     assert "boundary" in prompt
 
 
+async def test_blocked_wording_renders_even_without_a_confirmed_baseline():
+    """D2 反证：0 条已确认 + 1 条待确认，禁令那一段也必须出现。
+
+    修复前 blocked_wording 整块被包在 {% if claim_baseline %} 里，于是"刚建完台账、
+    全是待确认"的用户拿到的提示词里连"禁止出现"都没有——台账等于没建。
+    """
+    from app.schemas.claim import ClaimDigestOut
+
+    prompt = await _collect(
+        CapturingProvider(),
+        baseline=ClaimDigestOut(
+            confirmed_count=0,
+            baseline_text="",
+            blocked_wording=["【待补：上线范围】做了检索接口"],
+        ),
+    )
+    assert "已确认事实基线" not in prompt, "没有已确认事实时基线整段不渲染（老用户提示词不变）"
+    assert "尚未核实" in prompt
+    assert "做了检索接口" in prompt
+
+
+async def test_covered_entries_replace_the_global_deletion_rule():
+    """D3 反证：有覆盖清单时，全局"基线没提到的一律不得出现"必须换成限定范围的规则。"""
+    from app.schemas.claim import ClaimDigestOut
+
+    prompt = await _collect(
+        CapturingProvider(),
+        baseline=ClaimDigestOut(
+            confirmed_count=1,
+            baseline_text='{"subject":"检索平台","fact":"实现检索接口","responsibility":"参与"}',
+            covered_entries=["检索平台"],
+        ),
+    )
+    assert "已被台账覆盖" in prompt
+    assert "- 检索平台" in prompt
+    # 未覆盖条目仍要按资料写：这句话是防"修好关联反而大幅删内容"的关键。
+    assert "仍按候选资料如实写" in prompt
+    assert "基线里没有提到的经历、指标" not in prompt, "全局强约束会把未覆盖的条目整段删掉"
+
+
+async def test_without_a_coverage_list_the_conservative_global_rule_is_kept():
+    """没有覆盖清单（旧调用方/极端数据）时退回原来的强约束，行为可预期。"""
+    from app.schemas.claim import ClaimDigestOut
+
+    prompt = await _collect(
+        CapturingProvider(),
+        baseline=ClaimDigestOut(
+            confirmed_count=1,
+            baseline_text='{"subject":"检索平台","fact":"实现检索接口","responsibility":"参与"}',
+        ),
+    )
+    assert "基线里没有提到的经历、指标" in prompt
+
+
 # ===== 导出闸门 =====
 
 

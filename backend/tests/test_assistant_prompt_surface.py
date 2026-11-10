@@ -154,7 +154,7 @@ def test_web_search_never_exceeds_the_documented_limit(client, monkeypatch):
     executed: list[str] = []
 
     # 签名比单引擎版本多一个搜索设置参数。
-    async def fake_search(query: str, _config) -> list[dict[str, str]]:
+    async def fake_search(query: str, _config, limit=None) -> list[dict[str, str]]:
         executed.append(query)
         index = len(executed)
         return [{"title": f"招聘 {index}", "url": f"https://example.com/{index}", "snippet": "摘要"}]
@@ -200,11 +200,11 @@ def test_web_search_tool_description_follows_the_page_fetch_setting(client, monk
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
     conversation = _create_conversation(client)
 
-    def prompt_for(fetch_pages: int) -> str:
-        """按指定的抓取条数发一次请求，把发给模型的系统提示拼上工具描述一起取回来。"""
+    def prompt_for(fetch_pages: int, max_results: int = 8) -> str:
+        """按指定的抓取条数与返回上限发一次请求，把系统提示拼上工具描述一起取回来。"""
         client.put(
             "/api/settings/search",
-            json={"sources": ["bing"], "fetch_pages": fetch_pages, "max_results": 8},
+            json={"sources": ["bing"], "fetch_pages": fetch_pages, "max_results": max_results},
         )
         provider.requests.clear()
         client.post(
@@ -225,11 +225,16 @@ def test_web_search_tool_description_follows_the_page_fetch_setting(client, monk
 
     only_summaries = prompt_for(0)
     with_pages = prompt_for(2)
+    larger_cap = prompt_for(0, 12)
 
     assert "不打开网页" in only_summaries
     assert "不打开网页" not in with_pages
     assert "抓取正文" in with_pages
     assert "正文节选" in with_pages
+    # 设置页的「每次最多返回的结果条数」要如实写进工具描述，并提示可用 limit 要更少。
+    assert "最多返回 8 条" in only_summaries
+    assert "最多返回 12 条" in larger_cap
+    assert "limit" in larger_cap
 
 
 def test_every_tool_has_a_chinese_label_in_the_ui():

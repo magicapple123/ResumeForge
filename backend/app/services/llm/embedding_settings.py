@@ -250,7 +250,12 @@ def read_embedding_config(*, reveal_key: bool = False) -> EmbeddingProviderConfi
     if not isinstance(section, dict) or not section:
         return None
     try:
-        return _decode_section(section, reveal_key=reveal_key)
+        # 先解析命名配置列表（新版真相源）；没有 profiles 时回退旧扁平段。
+        # read_embedding_config 是运行时/RAG/导出链的唯一读取入口，解析顺序错了
+        # 会表现成"配置看起来在、生成时却回退关键词"（清单 §1.10 最大风险）。
+        from .embedding_profiles import overlay_active_profile
+
+        return _decode_section(overlay_active_profile(state, section), reveal_key=reveal_key)
     except ApiKeyEncryptionError:
         logger.warning("语义检索密钥解密失败，按未配置处理")
         return None
@@ -272,25 +277,20 @@ def _write_section(section: dict[str, Any]) -> None:
     mutate_state(mutate)
 
 
-def write_embedding_config(config: EmbeddingProviderConfig) -> EmbeddingProviderConfig:
-    """写入 provider 配置；``api_key`` 为空或掩码时沿用已存密钥（与 LLM 配置同语义）。
-
-    ``enabled=True`` 只应由"真实探测/下载校验通过"的调用方设置；本函数不做可用性判断
-    （可用性由 route/服务层保证），但会拒绝非法 provider 名。
-    """
+def _serialize_section(
+    config: EmbeddingProviderConfig, *, previous: dict[str, Any]
+) -> dict[str, Any]:
+    """配置 → 扁平镜像段；空/掩码密钥沿用 previous（只在同一条配置内沿用）。"""
     provider = config.provider.strip().casefold()
     if provider not in EMBEDDING_PROVIDERS:
         raise ValueError(f"不支持的 embedding provider：{config.provider}")
-    previous = _existing_section()
     stored_key = str(previous.get("api_key") or "")
     incoming_key = config.api_key or ""
     if incoming_key and incoming_key != KEY_MASK:
         encrypted = encrypt_secret(incoming_key)
-    elif incoming_key == KEY_MASK or not incoming_key:
+    else:
         encrypted = stored_key
-    else:  # pragma: no cover - 上面两种已覆盖全部输入
-        encrypted = stored_key
-    section: dict[str, Any] = {
+    return {
         "version": SECTION_VERSION,
         "provider": provider,
         "enabled": bool(config.enabled),
@@ -314,9 +314,30 @@ def write_embedding_config(config: EmbeddingProviderConfig) -> EmbeddingProvider
         "last_error": config.last_error[:500],
         "updated_at": _now(),
     }
+
+
+def _write_config(
+    config: EmbeddingProviderConfig, *, inherit_key: bool
+) -> EmbeddingProviderConfig:
+    previous = _existing_section() if inherit_key else {}
+    section = _serialize_section(config, previous=previous)
     _write_section(section)
     return _decode_section(section, reveal_key=False) or config
 
+
+def write_active_embedding_config(config: EmbeddingProviderConfig) -> EmbeddingProviderConfig:
+    """写**当前生效**配置的扁平镜像：激活 / 停用 / 清密钥路径用。"""
+    return _write_config(config, inherit_key=True)
+
+
+def write_local_embedding_config(config: EmbeddingProviderConfig) -> EmbeddingProviderConfig:
+    """写本地分支；不沿用远程镜像里的密钥（本地不需要 key，也不该把远程 key 留在镜像里）。"""
+    return _write_config(config, inherit_key=False)
+
+
+def write_embedding_config(config: EmbeddingProviderConfig) -> EmbeddingProviderConfig:
+    """兼容包装：等价于 write_active_embedding_config（旧调用点不必一次改完）。"""
+    return write_active_embedding_config(config)
 
 def clear_embedding_config() -> None:
     """删除整个 ``embedding`` 段（含密钥与确认记录），回到从未配置。"""
@@ -440,5 +461,7 @@ __all__ = [
     "sanitize_url",
     "revoke_host_confirmed",
     "set_embedding_error",
+    "write_active_embedding_config",
     "write_embedding_config",
+    "write_local_embedding_config",
 ]

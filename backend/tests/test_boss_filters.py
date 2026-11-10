@@ -51,6 +51,7 @@ def conditions_payload(job_types: list[dict] | None = None) -> dict:
             ],
             "degreeList": [
                 {"code": 0, "name": "不限"},
+                {"code": 202, "name": "大专"},
                 {"code": 203, "name": "本科"},
             ],
             "scaleList": [
@@ -60,6 +61,16 @@ def conditions_payload(job_types: list[dict] | None = None) -> dict:
             "stageList": [
                 {"code": 0, "name": "不限"},
                 {"code": 803, "name": "A轮"},
+            ],
+            "payTypeList": [
+                {"code": 0, "name": "不限"},
+                {"code": 2503, "name": "月结"},
+                {"code": 2504, "name": "完工结"},
+            ],
+            "partTimeList": [
+                {"code": 0, "name": "不限"},
+                {"code": 2701, "name": "周末/节假日"},
+                {"code": 2702, "name": "寒暑假"},
             ],
         },
     }
@@ -129,7 +140,7 @@ def test_parse_conditions_keeps_the_zero_code():
     parsed = parse_conditions(conditions_payload())
     assert parsed["jobType"][0].code == UNLIMITED_CODE
     assert parsed["jobType"][0].label == "不限"
-    assert [item.code for item in parsed["degree"]] == ["0", "203"]
+    assert [item.code for item in parsed["degree"]] == ["0", "202", "203"]
 
 
 def test_parse_conditions_ignores_error_responses():
@@ -192,7 +203,7 @@ def test_build_catalogue_lets_the_page_win_over_the_interface():
 
 def test_snapshot_covers_every_short_list_but_not_industry():
     by_key = {group.key: group for group in snapshot_catalogue()}
-    for key in ("jobType", "salary", "experience", "degree", "scale", "stage"):
+    for key in ("jobType", "salary", "payType", "partTime", "experience", "degree", "scale", "stage"):
         assert by_key[key].options, f"{key} 的快照不该是空的"
         assert by_key[key].source == SOURCE_SNAPSHOT
     # 行业 134 条不进代码，拿不到就如实标不可用。
