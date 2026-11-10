@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -49,9 +50,19 @@ def _fail(problems: list[str], message: str) -> None:
 
 
 def _asset_base_url() -> str:
-    """当前生效的下载根地址（含 tag）。"""
-    from app.config import get_settings
+    """当前生效的下载根地址（含 tag）。
 
+    优先问真实的配置对象（能吃到 ``.env`` / 环境变量覆盖，与运行时完全一致）；解释器里没有
+    后端依赖时退回读源码里的默认值——这个脚本的价值在于「发布前后随手能跑」，不该因为用了
+    系统 Python 就直接 ImportError。
+    """
+    try:
+        from app.config import get_settings
+    except ImportError:
+        source = (BACKEND_DIR / "app" / "config.py").read_text(encoding="utf-8")
+        match = re.search(r'rag_asset_base_url:\s*str\s*=\s*\(\s*"([^"]+)"', source)
+        print("  （未加载后端依赖，用的是 config.py 里的默认值）")
+        return (match.group(1) if match else "").rstrip("/")
     return str(get_settings().rag_asset_base_url or "").rstrip("/")
 
 
