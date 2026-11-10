@@ -591,7 +591,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --clobber
 
   source-zips:
-    name: Source zips (all / windows / macos)
+    name: Source zips (all / windows / macos / linux)
     needs: target
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -611,12 +611,16 @@ jobs:
       # 纯源码发行包（git archive + 内置前端产物 + 逐平台启动器裁剪与校验）。
       # v1.0.2 起回归此处：流程迁移到 CI 安装包时这一环曾被漏掉，Release 只挂
       # 安装包、网站下载按钮拿到 404。脚本自带缺文件/泄漏文件校验，失败即中止。
-      - name: Build the three source archives
+      # 四个平台包：all（两平台合集 + Linux 启动器）、windows、macos、linux。
+      # Linux 源码包此前缺失，用户只能拿 -all.zip（含三套启动器、要自己挑 start.sh）；
+      # 补上 -linux.zip 后与 windows/macos 对称，且 in-app 更新的平台挑选会优先命中它
+      # （`update_check._PLATFORM_TOKENS` 里有 linux 词，无专属包时回落到 -all.zip）。
+      - name: Build the four source archives
         env:
           REF: ${{ needs.target.outputs.ref }}
         run: |
           set -euo pipefail
-          for platform in all windows macos; do
+          for platform in all windows macos linux; do
             pwsh -NoProfile -File scripts/Build-Release.ps1 -Ref "$REF" -Platform "$platform" -OutputDirectory dist
           done
 
