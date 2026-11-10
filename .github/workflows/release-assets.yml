@@ -538,14 +538,21 @@ jobs:
             echo "${label}：ELF e_machine=${machine}（${want}）✓"
           }
 
-          for arch in x64 arm64; do
+          # 产物名里的架构词来自 electron-builder 的 `${arch}` 宏，**Linux 上 x64 会展开成
+          # x86_64**（arm64 仍是 arm64）——这是 electron-builder 自己的映射，不是我们的选择。
+          # 所以「ELF 判据（x64/arm64）」与「文件名里的架构词（x86_64/arm64）」是两个 token：
+          # 前者喂 check_elf_machine，后者拼路径。混用会让首跑直接红在一个不存在的文件名上
+          # （2026-11-10 实测：构建成功、产物叫 -linux-x86_64.AppImage，断言却在找 -linux-x64）。
+          for pair in x64:x86_64 arm64:arm64; do
+            want="${pair%%:*}"
+            arch="${pair##*:}"
             artifact="desktop/out/ResumeForge-${version}-linux-${arch}.AppImage"
             if [ ! -f "$artifact" ]; then
-              echo "::error::缺少产物 $artifact（期望 electron-builder.yml 的 artifactName 形状 ResumeForge-${version}-linux-${arch}.AppImage）。"
+              echo "::error::缺少产物 $artifact（期望 electron-builder.yml 的 artifactName 形状 ResumeForge-${version}-linux-${arch}.AppImage，x64 在 Linux 上展开为 x86_64）。"
               ls -la desktop/out >&2 || true
               exit 1
             fi
-            check_elf_machine "$artifact" "$arch" "$(basename "$artifact")"
+            check_elf_machine "$artifact" "$want" "$(basename "$artifact")"
             # 只是留证据、不做断言：AppImage 里应该带着 backend 与前端 dist 的 payload，
             # 但 payload 的内部布局由并行的打包实现决定，CI 不替它定死路径。
             if command -v unsquashfs >/dev/null 2>&1; then
@@ -562,7 +569,8 @@ jobs:
           set -euo pipefail
           version="$(node -p "require('./desktop/package.json').version")"
           cd desktop/out
-          for arch in x64 arm64; do
+          # 同上面：文件名里的架构词是 x86_64 / arm64（electron-builder 的 Linux 映射）。
+          for arch in x86_64 arm64; do
             f="ResumeForge-${version}-linux-${arch}.AppImage"
             sha256sum "$f" >"$f.sha256"
             cat "$f.sha256"
