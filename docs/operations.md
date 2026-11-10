@@ -12,12 +12,13 @@
 | --- | --- | --- |
 | ① 版本号 | 仓库根目录跑 `python scripts/bump_version.py`（按 Conventional Commits 判定幅度；破坏性变更显式传 `--bump`）。5 处版本号（backend config / frontend package.json + lock / README / CHANGELOG）由 `backend/tests/test_version_consistency.py` 钉住 | 脚本改文件，**提交与打 tag 由维护者手动执行**（脚本不 commit） |
 | ② 全量验证 | 后端 `pytest -n auto`（日常，不看覆盖率）+ **交付前覆盖率三步**：`coverage run --rcfile=..\pyproject.toml -m pytest -q` → `coverage combine --keep` → `coverage report --rcfile=..\pyproject.toml --fail-under=80`；`pip check` + `ruff check`；前端 `npm test` / `lint` / `typecheck` / `format:check` / `vite build`；macOS 启动链 `bash scripts/tests/test-macos-launcher.sh`、Windows `scripts/tests/Test-Start-ResumeForge.ps1`。**`--cov` 不能与 `-n auto` 同时用**：并行下覆盖率统计不到子进程，报出来的数字是错的 | 全部本地命令，CI 同样跑（三个 macOS 作业 + `windows-end-to-end`） |
-| ③ 构建 | `scripts/Build-Release.ps1 -Ref <tag>`：`git archive` 打包受追踪文件 → 复开归档校验"必需文件都在、敏感文件绝不在" → 产物 `dist/ResumeForge-<version>.zip`。**校验失败的归档会被脚本直接删除，不进入发布** | ✅ 打包与内容校验自动化 |
+| ③ 构建 | `scripts/Build-Release.ps1 -Ref <tag> -Platform <all\|windows\|macos\|linux>`：`git archive` 打包受追踪文件 → 复开归档校验"必需文件都在、敏感文件绝不在、别的平台启动器已裁掉" → 产物 `dist/ResumeForge-<version>-<平台>.zip`（四份，`-all` 是合集）。**校验失败的归档会被脚本直接删除，不进入发布**；`scripts/tests/Test-Build-Release.ps1` 会真的把三个平台包各打一遍并从里面验启动器 | ✅ 打包与内容校验自动化 |
 | ④ 依赖清单（SBOM 性质） | `scripts/Generate-Sbom.ps1`：pip-licenses 产出 `THIRD-PARTY-NOTICES.txt` 与 `requirements-frozen.txt` 到 `runtime/sbom/`，随 CI 依赖审计作业上传 | ✅ 生成自动化；**只是第三方许可与锁定清单，不是 CycloneDX/SPDX 格式 SBOM**——如需标准格式需另接工具，当前未做 |
 | ⑤ 校验和 | 计算发布 zip 的 SHA-256 并随发布说明公布，供用户下载后核对 | **手动**（无自动发布流水线） |
 | ⑥ 签名 | **Windows 安装包签名已接入 CI。** `release-assets.yml` 的 `windows-installer` 作业把 NSIS 安装包作为本次 run 的 artifact 上传，由 SignPath 校验来源（origin verification）后签名（SHA-256 Authenticode；RFC 3161 时间戳由 SignPath 侧的签名策略一并附加（工作流不传签名参数）；`Apply signed installer` 会打印 `TimeStamperCertificate`，2026-11-06 的演练实测为 `CN=DigiCert SHA256 RSA4096 Timestamp Responder 2026 1`），`.sha256` 对**签名后**的文件计算。macOS dmg **仍未签名、也未公证**（用户需右键→打开）；源码 zip 无代码签名、无 GPG 签名，tag 亦无签名，完整性只能依赖 ⑤ 的 checksum（见 §7 威胁模型备注）。签名政策见官网 `code-signing.html`（中英各一份） | ⚠️ Windows 已接入（test-signing 已跑通，run 42077336929；生产证书待 SignPath 签发，当前线上包仍为未签名）；其余仍无签名 |
 | ⑦ 冒烟 | 干净检出/解包走一遍启动链：CI 的 `windows-end-to-end` / `macos-end-to-end` 从干净检出走完整启动并真的取一次前端入口模块；本地可用隔离演示库（`scripts/seed_demo_data.py --check` → 指定 `DATABASE_URL` 启动前后端）人工点一遍核心页面 | CI 自动 + **人工抽查靠自觉**，无强制冒烟关卡 |
 | ⑧ 发布 | 在 GitHub 上以 tag 发 Release，附 zip 与 SHA-256 | **手动** |
+| ⑨ 资源 Release（本地语义检索） | 本地 embedding 的权重与运行时**不进应用包**，挂在独立 Release `rag-assets-v1`（prerelease）。发版前后各跑一次 `python scripts/check_rag_assets.py --online --dist`：核对清单自洽、`config.rag_asset_base_url` 的 tag、五个资产在线 200 且体积与清单一致、`dist/rag-assets/` 的实体文件哈希。**这个 Release 必须存在且标 prerelease**（否则会抢走 `/releases/latest`，让应用内更新误报版本）；运行时的包没有 HuggingFace 逐文件备用源，缺了本地语义检索就完全不可用 | ✅ 脚本可离线自检、`--online` 验线上；**存在性无 CI 守卫**，靠这一行人工执行 |
 
 ## 2. 事故分级与响应
 

@@ -317,13 +317,27 @@ try {
             -Message "Build-Release.ps1 does not require '$expected', but the app refuses to start without it."
     }
 
-    # --- the two per-platform archives the website serves ---
+    # --- the three per-platform archives the website serves ---
     #
-    # The site's download buttons hand out -Platform windows / -Platform macos
+    # The site's download buttons hand out -Platform windows / macos / linux
     # archives instead of sending people to GitHub. A pruning bug there is the
     # worst kind: the user picked "macOS", unzipped, and found only start.cmd.
-    # So both pruned archives are really built here and checked from the inside.
-    foreach ($platform in @("windows", "macos")) {
+    # So every pruned archive is really built here and checked from the inside.
+    # 三平台对称：选了哪个平台，解压出来就该能双击哪个文件，且不该看见另外两套。
+    $ownLaunchersByPlatform = @{
+        windows = @("start.cmd", "stop.cmd", "uninstall.cmd")
+        macos   = @("start.command", "stop.command", "update.command", "scripts/macos/start.sh")
+        # Linux 的入口是 bash 脚本（AppImage 只是第四种进法，zip 必须能独立跑）。
+        # 注意 $PlatformLaunchers["linux"] 只把 scripts/linux/{start,stop}.sh 列为必需，
+        # 但 scripts/linux/update.sh 确实随包发出，这里一并钉住。
+        linux   = @("start.sh", "stop.sh", "update.sh", "scripts/linux/start.sh", "scripts/linux/update.sh")
+    }
+    $otherLaunchersByPlatform = @{
+        windows = @("start.command", "stop.command", "update.command", "scripts/macos/start.sh", "start.sh", "stop.sh", "update.sh", "scripts/linux/start.sh")
+        macos   = @("start.cmd", "stop.cmd", "update.cmd", "uninstall.cmd", "scripts/Start-ResumeForge.ps1", "start.sh", "stop.sh", "update.sh", "scripts/linux/start.sh")
+        linux   = @("start.cmd", "stop.cmd", "update.cmd", "uninstall.cmd", "scripts/Start-ResumeForge.ps1", "start.command", "stop.command", "update.command", "scripts/macos/start.sh")
+    }
+    foreach ($platform in @("windows", "macos", "linux")) {
         & $BuildScriptPath -OutputDirectory $RuntimeDirectory -Platform $platform
         $platformArchive = Get-ChildItem -LiteralPath $RuntimeDirectory -Filter "ResumeForge-*$platform.zip" -File |
             Select-Object -First 1
@@ -343,24 +357,14 @@ try {
                     ForEach-Object { $_.FullName.Substring($prefix.Length) }
             )
             # 自己的启动器必须在：选了哪个平台，解压出来就该能双击哪个文件。
-            $ownLaunchers = if ($platform -eq "windows") {
-                @("start.cmd", "stop.cmd", "uninstall.cmd")
-            }
-            else {
-                @("start.command", "stop.command", "update.command", "scripts/macos/start.sh")
-            }
+            $ownLaunchers = $ownLaunchersByPlatform[$platform]
             foreach ($launcher in $ownLaunchers) {
                 Assert-ReleaseTest `
                     -Condition ($platformPaths -contains $launcher) `
                     -Message "The $platform archive is missing its own launcher: $launcher."
             }
             # 别人的启动器必须不在：留着它等于把"该双击哪个文件"的困惑原样发给用户。
-            $otherLaunchers = if ($platform -eq "windows") {
-                @("start.command", "stop.command", "update.command", "scripts/macos/start.sh")
-            }
-            else {
-                @("start.cmd", "stop.cmd", "update.cmd", "uninstall.cmd", "scripts/Start-ResumeForge.ps1")
-            }
+            $otherLaunchers = $otherLaunchersByPlatform[$platform]
             foreach ($launcher in $otherLaunchers) {
                 Assert-ReleaseTest `
                     -Condition ($platformPaths -notcontains $launcher) `
