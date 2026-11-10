@@ -72,7 +72,7 @@
 ## ✨ 功能特性
 
 <details>
-<summary><b>全部功能一览（80 项，点击展开）</b></summary>
+<summary><b>全部功能一览（82 项，点击展开）</b></summary>
 
 <p>下表每条功能名都可点击，跳到官方文档里对应的小节；文档没有讲到的功能，也已经在这次一并补齐。</p>
 
@@ -98,6 +98,7 @@
 | [🖼 简历照片](https://magicapple123.github.io/ResumeForge-official/docs.html#profile-photo) | 最多存 8 张，单击缩略图切换使用哪张；**留在本机，不发送给模型** |
 | [🧾 事实台账](https://magicapple123.github.io/ResumeForge-official/docs.html#claims-status) | 每条说法记下事实、表述、承担程度与边界；**只有「已确认」的参与生成**，未确认的显式避开 |
 | [📦 资料箱](https://magicapple123.github.io/ResumeForge-official/docs.html#materials) | 证书、作品、链接与笔记集中管理，可带附件，单击卡片查看详情；助手可读取引用 |
+| [📎 附件多格式](https://magicapple123.github.io/ResumeForge-official/docs.html#materials) | 资料箱 → 编辑 → **一个「添加附件」入口**收图片 / PDF / Word(docx) / txt / md / json / csv（`.doc` 提示先另存为 `.docx`）；图片「复制」得到图片可直接粘贴到聊天或文档，其它格式「复制」得到提取出的文字、「另存为」下载原文件；扫描件 PDF 提取不到文字时给警告，仍可只用来另存 |
 | [📁 文件副本库](https://magicapple123.github.io/ResumeForge-official/docs.html#materials-copies) | 资料箱「文件副本」页签集中查看所有存入文件的副本（图片 / PDF 可直接预览，其它类型可一键调用系统程序打开）；副本统一存本机应用数据目录并随数据集切换 / 迁移自动重建；助手可查询副本清单 |
 | [🖼 截图与文档识别](https://magicapple123.github.io/ResumeForge-official/docs.html#recognition-input) | 岗位与资料识别支持截图与 pdf / docx（Ctrl+V 贴图，最多 4 个、单个 ≤2 MB、合计 ≤5 MB），文字在本机提取；**识别结果先列成清单供校对，确认后才填入，识别中可随时取消** |
 | [🤖 AI 定制简历](https://magicapple123.github.io/ResumeForge-official/docs.html#generate) | 按 JD 筛选事实流式生成；可选美化强度、篇幅（1–3 页 A4）、字号与模板（内置 6 种）；**字体可选内置思源黑体（约 32MB，在设置里按需下载）或历史上传过的字体，仅影响预览 / HTML / PDF**（Word、Markdown 不跟着变）；**板块顺序可调**（预览里调，PDF / Word / Markdown 导出同步生效）；**联系方式可指定字段前强制换行**（每个字段整体不拆行，长网址不会被截断） |
@@ -106,6 +107,7 @@
 | [⚡ AI 修改简历](https://magicapple123.github.io/ResumeForge-official/docs.html#generate-revise) | 简历预览底部「AI 修改 / 重新生成」：填修改要求则**只改提出的部分**（其余逐字保留），留空则整体重新生成（事实不变、表达重写）；岗位优化建议可**逐条采纳**并直接更新当前简历 |
 | [🎓 科研简历](https://magicapple123.github.io/ResumeForge-official/docs.html#write-academic) | 制作台中栏「学术成果 / 科研项目 / 知识产权 / 证书资质」四栏：题目、作者顺序与本人标记、发表状态（**在投 ≠ 已发表**，含在投 / 预印本等六值）、DOI / 链接、证照颁发机构/日期/状态；空栏位不写入内容。「版面」组的「文档模式」可切**普通简历 / 长 CV**（普通 1–3 页、长 CV 上限 10 页，切回普通时超页自动夹紧并提示）；生成弹窗里也能显式选（不自动切换）；分页可按分区或条目设置（见「分页控制」行） |
 | [🌐 通用简历](https://magicapple123.github.io/ResumeForge-official/docs.html#generate-general) | 简历中心页头「AI 生成」生成或「新建简历」手写**不针对任何岗位**的跨行业简历：完整使用资料、不按方向筛选，各方向经历都保留，可多份；生成时可选普通简历或长 CV。新建简历的页签、页签名与每个板块的**可见字段**跟随**当前方案**（自建板块显示你起的名字，资料里隐藏的字段不出现；当前方案没有的分区不显示输入框，已有正文分区始终保留），并在创建时冻结进这份简历——之后改方案只影响新建的简历；资料改动 / 切换方案后自动刷新 |
+| [📄 外部简历](https://magicapple123.github.io/ResumeForge-official/docs.html#generate-center) | 简历中心 → 「外部简历」上传在别处生成的 PDF / Word / txt / Markdown 简历，存成**只读快照**：原文件可预览、可另存，提取文本可做文本级检查（占位符 / 量化 / 联系方式 / 篇幅 / 弱表述，有 JD 时补关键词覆盖），并可「用于面试」带进模拟面试材料；**不转成可编辑简历、不进制作台、不参与导出与自动投递**；可删除（进回收站）与恢复 |
 | [🗂 表达资产库](https://magicapple123.github.io/ResumeForge-official/docs.html#write-assets) | 收藏好用的表达（成果 / 方法 / 结果 / 总结），按关键词、类型、语言与岗位标签检索；换简历时一键插入（生成新对象身份），插入后仍可继续改 |
 | [🔗 来源核对与事实锁](https://magicapple123.github.io/ResumeForge-official/docs.html#claims-source) | 制作台左栏「来源核对」：选中一条内容，看它来自哪条资料、关联时是哪一版、来源是否已更新；**未关联就明说未关联（不按文字相似度猜）**。可按选中内容建立 / 解除来源关联、新建手工来源、查看影响面与修订，并在来源更新后**采纳最新来源写回正文**（带 revision 条件写与冲突提示）；事实锁锁定姓名 / 机构 / 时间 / 数字 / 职责边界，AI 改写想动它们会被拒并**逐条列出会改哪个值**——锁只约束 AI，你手动编辑不受限 |
 | [🛡 防虚构校验](https://magicapple123.github.io/ResumeForge-official/docs.html#generate-fabrication) | 生成结果里的学校 / 公司 / 项目名自动与资料库比对，不一致时给出警告 |

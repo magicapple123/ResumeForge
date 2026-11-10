@@ -1212,7 +1212,9 @@ flowchart LR
     与界面，粘贴识别一直认不出来。
 
 25. **新增/调整厂商的「思考」写法**：形态判定与档位候选集中在
-    `services/llm/thinking.py` 顶部的 `_TABLE`（按主机 + 模型名正则匹配，先匹配先赢）；
+    `services/llm/thinking_vendor_table.py` 的规则表（数据分 `thinking_vendor_rules_cn.py` /
+    `thinking_vendor_rules_global.py`，结构在 `thinking_vendors.py`；`thinking.py` 只留判定与
+    关闭片段生成；规则按主机 + 模型名正则匹配，先匹配先赢）；
     翻译成请求体的只有 `thinking_payload`（OpenAI 兼容）与 `thinking_budget`（原生 Messages），
     所以**改表不需要动 provider、也不需要动前端**。`thinking_style` 的取值同时定义在
     `schemas/setting.py` 的 `THINKING_STYLES`，加一种写法要两处一起加。
