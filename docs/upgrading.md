@@ -20,8 +20,10 @@ macOS 用 `bash scripts/macos/update.sh --dry-run`，Linux 用 `bash scripts/lin
 新包：macOS 用 `update.command`、Linux 用 `update.sh`（同样是"下载新包 → 只覆盖程序文件"，
 `data/` 与 `.env` 原地不动）。
 
-更新包会按**当前平台**挑选（发行版同时挂了 Windows、macOS 与 Linux 的包），下载完还会核对发布时一并上传的
-`.sha256`——两者对不上就停下，不会拿一个可能被截断的包去覆盖程序文件。
+更新包会按**当前平台**挑选：发行版挂的是 `ResumeForge-<版本>-windows.zip`、`-macos.zip` 与通用的
+`-all.zip`，Windows 取前者、macOS 取中间那个、**其它平台取 `-all.zip`**（应用内覆盖安装本来也只在
+Windows 上可用）。dmg / AppImage / `Setup.exe` 是给手动安装用的，应用内更新链路不碰它们。下载完还会核对
+发布时一并上传的 `.sha256`——两者对不上就停下，不会拿一个可能被截断的包去覆盖程序文件。
 
 **更新成没成，看"现在跑的是哪个版本"，不是看它有没有打印"完成"。** 更新器会把这次安装的经过写进
 `runtime/update.log`，把结果（进行中 / 成功 / 失败 + 原因）写进 `runtime/update-status.json`；
