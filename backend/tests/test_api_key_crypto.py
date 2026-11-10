@@ -3,11 +3,16 @@
 
 roundtrip 类断言跨平台成立：Windows 上走 DPAPI，非 Windows 上 ``encrypt_key`` 是恒等
 （保持明文）。前缀与密文形态的断言只在 Windows 上成立。
+
+「落盘形态」的判据收敛在 ``tests/api_key_at_rest.py``（``windows`` 形参可覆盖），
+所以两条平台分支在本文件里都有断言——不必依赖跑测试的是哪台机器。
 """
+
 import sys
 
 import pytest
 from app.services.api_key_crypto import ApiKeyEncryptionError, decrypt_key, encrypt_key
+from tests.api_key_at_rest import assert_key_at_rest
 
 
 @pytest.mark.parametrize(
@@ -45,6 +50,29 @@ def test_windows_encrypts_with_prefix() -> None:
     assert encrypted != "sk-abc123"
     # 密文不该包含明文。
     assert "sk-abc123" not in encrypted
+
+
+def test_key_at_rest_expectation_covers_both_platforms() -> None:
+    """落盘形态的判据本身要跨平台可验：两条分支都断言一遍。
+
+    主用例（``test_save_profile_masks_key_and_encrypts_at_rest`` 等）按**真实平台**跑，
+    所以任一平台上只会走到其中一条分支；另一条由这里显式覆盖——否则改动非 Windows 的
+    「保持明文」策略（RF-24）时，Windows 本机全绿、ubuntu CI 才发现。
+    """
+    # Windows 分支：落盘值是 DPAPI 密文，文件里搜不到明文。
+    assert_key_at_rest("dpapi:v1:AAAA", secret="sk-x", raw='{"key": "dpapi:v1:AAAA"}', windows=True)
+    # 非 Windows 分支：``encrypt_key`` 是恒等函数，落盘就是明文（差异写显式，不是留空）。
+    assert_key_at_rest("sk-x", secret="sk-x", raw='{"key": "sk-x"}', windows=False)
+
+    # 判据对两条分支都真的会失败（不是恒真式）。
+    with pytest.raises(AssertionError):
+        assert_key_at_rest("sk-x", secret="sk-x", windows=True)
+    with pytest.raises(AssertionError):
+        assert_key_at_rest("dpapi:v1:AAAA", secret="sk-x", windows=False)
+    # 空值在两条分支上都算"没保存"。
+    for windows in (True, False):
+        with pytest.raises(AssertionError):
+            assert_key_at_rest("", secret="sk-x", windows=windows)
 
 
 @pytest.mark.parametrize("platform", ["win32", "linux"])

@@ -18,6 +18,7 @@ from app.services.search.deepseek import (
     has_search_operators,
     search_deepseek,
 )
+from tests.api_key_at_rest import assert_key_at_rest
 
 
 @pytest.fixture
@@ -191,12 +192,10 @@ async def test_fetch_rejects_non_http_or_credentialed_urls_without_request(stub_
     assert calls == []
 
 
-# ===== 搜索密钥的存取（掩码回显 / 加密落库） =====
+# ===== 搜索密钥的存取（掩码回显 / 落盘形态随平台） =====
 
 
 def test_search_key_is_stored_encrypted_and_echoed_as_mask(db_session):
-    import sys
-
     from app.models.setting import AppSetting
     from app.services import global_settings
     from app.services.llm_key_refs import API_KEY_MASK
@@ -210,19 +209,19 @@ def test_search_key_is_stored_encrypted_and_echoed_as_mask(db_session):
     saved = save_search_config(
         db_session, SearchConfig(sources=["bing", "deepseek"], deepseek_api_key="sk-secret")
     )
+    # 跨平台恒真：回包只给掩码，读回明文对得上。
     assert saved.deepseek_api_key == API_KEY_MASK
     assert get_search_config(db_session).deepseek_api_key == API_KEY_MASK
     assert get_search_config_with_secrets(db_session).deepseek_api_key == "sk-secret"
 
-    # 唯一真相是全局 web_search：文件里只允许密文，明文 Key 不许落盘。
+    # 唯一真相是全局 web_search；落盘形态随平台（Windows = DPAPI 密文，其它平台 = 明文）。
     block = (global_settings.load_state() or {})[WEB_SEARCH_BLOCK]
     assert block["sources"] == ["bing", "deepseek"]
-    assert "sk-secret" not in global_settings.path().read_text(encoding="utf-8")
-    if sys.platform == "win32":
-        assert block["deepseek_api_key"].startswith("dpapi:v1:")
-    else:
-        # 非 Windows 沿用项目既有口径（api_key_crypto 不回退 keyring）。
-        assert block["deepseek_api_key"] == "sk-secret"
+    assert_key_at_rest(
+        block["deepseek_api_key"],
+        secret="sk-secret",
+        raw=global_settings.path().read_text(encoding="utf-8"),
+    )
     # 旧 AppSetting 行不再写入：升级后全局是唯一真相。
     assert db_session.get(AppSetting, "search_config") is None
     assert db_session.get(AppSetting, "search_deepseek_api_key") is None

@@ -5,14 +5,14 @@
 
 1. 升级后首次读取把当前数据集的旧 AppSetting 一次性迁移到全局，且只迁一次；
 2. 全局块一旦存在就是唯一真相（旧行不再被读、也不再被写）；
-3. 密钥三种口径（新值 / 掩码 / 空串）在全局文件里生效，明文不落盘；
+3. 密钥三种口径（新值 / 掩码 / 空串）在全局文件里生效，落盘形态随平台
+   （Windows = DPAPI 密文，其它平台按设计是明文，见 ``tests/api_key_at_rest.py``）；
 4. 换一份数据集（= 该库的旧行不存在/不同）读到的仍是同一份全局配置。
 """
 
 from __future__ import annotations
 
 import json
-import sys
 
 from app.models.setting import AppSetting
 from app.schemas.setting import SearchConfig
@@ -27,6 +27,7 @@ from app.services.settings_service import (
     save_search_config,
 )
 from app.services.web_search_settings import WEB_SEARCH_BLOCK
+from tests.api_key_at_rest import assert_key_at_rest
 
 
 def _seed_legacy(db_session, *, config: dict, key: str = "") -> None:
@@ -79,12 +80,12 @@ def test_first_read_migrates_legacy_rows_to_global_once(db_session):
     block = _global_block()
     assert block["sources"] == ["bing", "searxng", "deepseek"]
     assert block["fetch_pages"] == 3
-    # 迁移后重新加密落盘：明文不得出现在全局文件里。
-    assert "sk-legacy-secret" not in global_settings.path().read_text(encoding="utf-8")
-    if sys.platform == "win32":
-        assert block["deepseek_api_key"].startswith("dpapi:v1:")
-    else:
-        assert block["deepseek_api_key"] == "sk-legacy-secret"
+    # 迁移后重新落盘：形态随平台（Windows = DPAPI 密文，其它平台按设计就是明文）。
+    assert_key_at_rest(
+        block["deepseek_api_key"],
+        secret="sk-legacy-secret",
+        raw=global_settings.path().read_text(encoding="utf-8"),
+    )
 
     # 幂等：第二次读取 / 再调用迁移都不会重写（旧行保留但不再参与）。
     assert migrate_legacy_search_once(db_session) is False
@@ -242,7 +243,12 @@ def test_api_round_trip_returns_mask_and_persists_globally(db_session, client):
     assert again["sources"] == ["bing", "searxng"]
     assert again["searxng_url"] == "http://localhost:7777"
     assert again["deepseek_api_key"] == API_KEY_MASK
-    assert "sk-api-live" not in global_settings.path().read_text(encoding="utf-8")
+    # 接口写进去的密钥落在同一份全局文件里，形态同样随平台（Windows = 密文，其它 = 明文）。
+    assert_key_at_rest(
+        _global_block()["deepseek_api_key"],
+        secret="sk-api-live",
+        raw=global_settings.path().read_text(encoding="utf-8"),
+    )
 
 
 def test_empty_key_round_trip_clears_the_stored_secret(db_session, client):

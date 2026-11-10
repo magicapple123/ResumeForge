@@ -28,6 +28,7 @@ from app.services.llm.embedding_settings import (
     read_embedding_config,
     revoke_host_confirmed,
 )
+from tests.api_key_at_rest import assert_key_at_rest
 
 SECRET_A = "key-profile-a"
 SECRET_B = "key-profile-b"
@@ -209,13 +210,15 @@ def test_profiles_take_precedence_over_stale_mirror():
 
 def test_save_profile_masks_key_and_encrypts_at_rest():
     profile = _save("公司 Azure", key=SECRET_A)
+    # 跨平台恒真：回包只有掩码 / 布尔，读回能拿到明文。
     assert profile["key_configured"] is True
     assert "api_key" not in profile
     assert "api_key" not in json.dumps(profile)
     assert profile["host"] == "api.example.com"
-    raw = json.loads(global_settings.path().read_text(encoding="utf-8"))
-    stored = raw["embedding_profiles"]["profiles"][0]["config"]["api_key"]
-    assert stored and stored != SECRET_A
+    raw_text = global_settings.path().read_text(encoding="utf-8")
+    stored = json.loads(raw_text)["embedding_profiles"]["profiles"][0]["config"]["api_key"]
+    # 落盘形态随平台：Windows = DPAPI 密文，其它平台按设计就是明文（见 tests/api_key_at_rest）。
+    assert_key_at_rest(stored, secret=SECRET_A, raw=raw_text)
     assert embedding_profiles.profile_key(profile["id"]) == SECRET_A
 
 
