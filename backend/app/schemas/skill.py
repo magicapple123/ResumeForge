@@ -64,6 +64,15 @@ class AssistantSkillOut(BaseModel):
     prompt_chars: int
     files: list[str]
     updated_at: datetime
+    # 0016（#31D/E）：四段内容的另外三段 + 版本 + 生成/验证状态。
+    # 手工导入的老技能默认空串 / 1 / 0 / 空状态，界面不显示徽标。
+    when_to_use: str = ""
+    steps: str = ""
+    pitfalls: str = ""
+    version: int = 1
+    generated: bool = False
+    validation_status: str = ""
+    last_loaded_at: datetime | None = None
 
 
 class AssistantSkillDetail(AssistantSkillOut):

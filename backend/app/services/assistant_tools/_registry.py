@@ -22,6 +22,8 @@ from ._tools_specs_quality import QUALITY_TOOLS
 from ._tools_specs_relaxed import RELAXED_TOOLS
 from ._tools_specs_report import REPORT_TOOLS
 from ._tools_specs_search import SEARCH_TOOLS
+from ._tools_specs_tasks import TASK_TOOLS
+from ._tools_specs_web import WEB_TOOLS
 from ._types import _WEB_SEARCH_TOOL_NAME, Tool, ToolResult, web_search_description
 from .policy import ToolExecutionContext, is_allowed, tool_visible
 
@@ -41,6 +43,11 @@ _TOOLS: tuple[Tool, ...] = (
     *DOCUMENT_TOOLS,
     *QUALITY_TOOLS,
     *DIAGNOSIS_TOOLS,
+    # #16 链接抓取/导入（web_extract 只读 / import_jobs_from_url 写，走提案卡）；
+    # 追加在末尾，不重排既有分组（顺序是发给模型的工具列表契约）。
+    *WEB_TOOLS,
+    # 18A 长任务工具（task_create / task_status / task_cancel），同样追加在末尾。
+    *TASK_TOOLS,
 )
 
 

@@ -27,6 +27,8 @@ from app.services.assistant_tools._tools_specs_quality import QUALITY_TOOLS
 from app.services.assistant_tools._tools_specs_relaxed import RELAXED_TOOLS
 from app.services.assistant_tools._tools_specs_report import REPORT_TOOLS
 from app.services.assistant_tools._tools_specs_search import SEARCH_TOOLS
+from app.services.assistant_tools._tools_specs_tasks import TASK_TOOLS
+from app.services.assistant_tools._tools_specs_web import WEB_TOOLS
 
 # 名字前缀 → 一定是写工具。``delete_`` 目前一条都没有（助手不提供删除工具，
 # test_assistant_coverage 另有一条守卫），留着它是因为这个前缀一旦出现就必须是写。
@@ -70,6 +72,13 @@ EXPECTED_DATA_TOOL_ORDER = (
     "get_job_preferences",
     "create_job_preference",
     "update_job_preference",
+    # 投递队列（#15F）：只读查看 + 重排（可撤销写）+ 开始投递（唯一的外部副作用，必走提案）。
+    # 追加在 DATA_TOOLS 末尾，不重排既有分组。
+    "queue_list",
+    "queue_update_priority",
+    "apply_start",
+    # #29A 知识库混合检索（追加在 DATA 域末尾，不重排既有分组）。
+    "search_knowledge",
 )
 
 # 全量注册表顺序（CORE → DATA → RELAXED → REPORT → SEARCH → DOCUMENT → QUALITY → DIAGNOSIS）。
@@ -85,6 +94,10 @@ EXPECTED_TOOL_ORDER = (
     *(tool.name for tool in QUALITY_TOOLS),
     # T31 只读错误诊断组（追加在末尾）。
     *(tool.name for tool in DIAGNOSIS_TOOLS),
+    # #16 链接抓取/导入组（追加在末尾，不重排既有分组）。
+    *(tool.name for tool in WEB_TOOLS),
+    # 18A 长任务组（追加在末尾）。
+    *(tool.name for tool in TASK_TOOLS),
 )
 
 

@@ -49,7 +49,11 @@ def test_defaults_when_nothing_is_configured(db_session):
     config = get_search_config(db_session)
     assert config.sources == ["bing", "duckduckgo"]
     assert config.searxng_url == ""
-    assert config.fetch_pages == 0
+    # P4-08：默认档位是「标准」（抓 2 页正文）。旧断言 `fetch_pages == 0` 已作废——
+    # 只给摘要的搜索回答不了"这个岗位具体做什么"，这正是 09-1/09-2 要修的问题。
+    # `fetch_pages` 仍按档位折算出来，好让旧前端读到的值不会把深度降回摘要。
+    assert config.depth == "standard"
+    assert config.fetch_pages == 2
     assert config.max_results == 8
     assert config.deepseek_api_key == ""
     # 真的一无所有时不写文件：没人希望升级后平白多一个 global_settings.json。
@@ -73,13 +77,17 @@ def test_first_read_migrates_legacy_rows_to_global_once(db_session):
     config = get_search_config(db_session)
     assert config.sources == ["bing", "searxng", "deepseek"]
     assert config.searxng_url == "http://localhost:8080"
+    # 旧 `fetch_pages=3` 读出来等价「深入」（P4-08 的只读兼容映射）。
+    assert config.depth == "deep"
     assert config.fetch_pages == 3
     assert config.deepseek_api_key == API_KEY_MASK
     assert get_search_config_with_secrets(db_session).deepseek_api_key == "sk-legacy-secret"
 
     block = _global_block()
     assert block["sources"] == ["bing", "searxng", "deepseek"]
-    assert block["fetch_pages"] == 3
+    assert block["depth"] == "deep"
+    # 落盘**只写 depth**：两套深度值同时存在，迟早各说一套。
+    assert "fetch_pages" not in block
     # 迁移后重新落盘：形态随平台（Windows = DPAPI 密文，其它平台按设计就是明文）。
     assert_key_at_rest(
         block["deepseek_api_key"],
@@ -134,7 +142,8 @@ def test_global_block_wins_over_legacy_rows(db_session):
     config = get_search_config(db_session)
     assert config.sources == ["duckduckgo"]
     assert config.searxng_url == ""
-    assert config.fetch_pages == 1
+    # `fetch_pages=1` 折算成「标准」档；落盘只留 depth，回读时 fetch_pages 由档位反推（=2）。
+    assert config.depth == "standard"
     assert migrate_legacy_search_once(db_session) is False
 
 

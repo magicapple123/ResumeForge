@@ -270,6 +270,12 @@ def clean_db():
     from app.services import storage_stats as _storage_stats
 
     _storage_stats.reset_storage_cache()
+    # 联网搜索有 8 分钟进程内结果缓存（P4-05）：同一个进程里前一个用例搜"后端 招聘"
+    # 会把结果留给后一个用例，后者甚至不会调用自己 monkeypatch 的假来源——断言会莫名其妙
+    # 地按上一个用例的数据通过/失败。与存储统计缓存同一条纪律：每例清空。
+    from app.services.search.cache import reset_search_cache as _reset_search_cache
+
+    _reset_search_cache()
     Base.metadata.drop_all(bind=database.engine)
     Base.metadata.create_all(bind=database.engine)
     _seed_schema_gate_state()

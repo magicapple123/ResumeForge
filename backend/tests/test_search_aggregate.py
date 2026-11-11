@@ -129,9 +129,11 @@ async def test_aggregate_fetches_page_text_only_for_the_first_n(monkeypatch):
 
     fetched: list[str] = []
 
-    async def fake_fetch(url: str, max_chars: int = 0):
+    async def fake_fetch(url: str, max_chars: int = 0, **_kwargs):
         fetched.append(url)
-        return "这是抓回来的正文节选。"
+        # 正文必须命中查询词项（P4-07 的选段会跳过 0 命中的页），所以这里写成招聘正文；
+        # 每页内容还要不同——跨页按前 80 字指纹去重，相同正文的第二页会被判成镜像。
+        return f"后端工程师招聘岗位职责（{url}）：负责服务端接口开发与维护。"
 
     monkeypatch.setattr(aggregate_module, "bing_search", fake_bing)
     monkeypatch.setattr(aggregate_module, "fetch_page_text", fake_fetch)
@@ -139,8 +141,9 @@ async def test_aggregate_fetches_page_text_only_for_the_first_n(monkeypatch):
     results = await aggregate_search("后端 招聘", SearchConfig(sources=["bing"], fetch_pages=2))
 
     assert len(fetched) == 2
-    assert results[0]["text"] == "这是抓回来的正文节选。"
-    assert results[1]["text"]
+    # 「抓前 2 条」是档位语义：前两条有（选段后的）正文，第三条没有。
+    assert "后端" in results[0]["text"]
+    assert "后端" in results[1]["text"]
     assert "text" not in results[2]
 
 
@@ -367,11 +370,12 @@ async def test_deepseek_fetch_falls_back_per_item(monkeypatch):
 
     async def fake_deepseek_fetch(url: str, api_key: str):
         fetched_deepseek.append(url)
-        return "DeepSeek 正文" if url.endswith("/1") else ""
+        return "后端工程师招聘岗位说明" if url.endswith("/1") else ""
 
-    async def fake_local_fetch(url: str, max_chars: int = 0):
+    async def fake_local_fetch(url: str, max_chars: int = 0, **_kwargs):
         fetched_local.append(url)
-        return "本地正文"
+        # 两页正文必须不同：P4-07 会按前 80 字指纹把「同一篇文章的镜像」去重。
+        return f"本机读取到的后端招聘岗位正文（{url}）"
 
     monkeypatch.setattr(aggregate_module, "search_deepseek", fake_deepseek)
     monkeypatch.setattr(aggregate_module, "fetch_deepseek_text", fake_deepseek_fetch)
@@ -389,8 +393,8 @@ async def test_deepseek_fetch_falls_back_per_item(monkeypatch):
         "https://careers.example.com/jobs/2",
     ]
     assert fetched_local == ["https://careers.example.com/jobs/2"]
-    assert results[0]["text"] == "DeepSeek 正文"
-    assert results[1]["text"] == "本地正文"
+    assert "后端" in results[0]["text"]
+    assert "后端" in results[1]["text"]
 
 
 @pytest.mark.asyncio
@@ -410,9 +414,10 @@ async def test_deepseek_account_unavailable_falls_back_entirely_to_local(monkeyp
 
     fetched_local: list[str] = []
 
-    async def fake_local_fetch(url: str, max_chars: int = 0):
+    async def fake_local_fetch(url: str, max_chars: int = 0, **_kwargs):
         fetched_local.append(url)
-        return "本地正文"
+        # 两页正文必须不同：P4-07 会按前 80 字指纹把「同一篇文章的镜像」去重。
+        return f"本机读取到的后端招聘岗位正文（{url}）"
 
     monkeypatch.setattr(aggregate_module, "search_deepseek", fake_deepseek)
     monkeypatch.setattr(aggregate_module, "fetch_deepseek_text", unavailable_fetch)
@@ -429,4 +434,4 @@ async def test_deepseek_account_unavailable_falls_back_entirely_to_local(monkeyp
         "https://careers.example.com/jobs/1",
         "https://careers.example.com/jobs/2",
     ]
-    assert all(item["text"] == "本地正文" for item in results)
+    assert all("后端" in item["text"] for item in results)

@@ -367,6 +367,15 @@ def test_three_route_response_shapes_unchanged(client):
         "prompt",
         "file_details",
         "files_truncated",
+        # 0016（#31D/E/F）：四段内容的另外三段 + 版本 + 生成/验证状态。
+        # 这是 #31 的**有意契约变更**（CHANGELOG 已记），不是意外新增字段。
+        "when_to_use",
+        "steps",
+        "pitfalls",
+        "version",
+        "generated",
+        "validation_status",
+        "last_loaded_at",
     }
 
 

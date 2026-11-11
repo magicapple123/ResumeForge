@@ -26,6 +26,9 @@ from ..sites.registry import get_registry
 from ._base import ApplyConflict, ApplyNotFound, ApplyServiceError, _clip_greeting
 from ._config import get_apply_config
 from ._match import _admission_of_match, _blocking_gaps, _match_requires_confirm, latest_match
+from .blocklist import load_blocklist
+from .lifecycle import job_history
+from .signals import favorite_of, reference_score
 
 # 队列列表的兜底上限（P2-2）：超过后前端按 total/truncated 如实提示。
 MAX_QUEUE_LIST = 500
@@ -73,10 +76,24 @@ def unsupported_site_message(job: Job) -> str:
     )
 
 
-def _queue_out(db: Session, item: ApplyQueueItem, job: Job | None) -> ApplyQueueItemOut:
+def _queue_out(
+    db: Session,
+    item: ApplyQueueItem,
+    job: Job | None,
+    *,
+    cache: dict[str, Any] | None = None,
+) -> ApplyQueueItemOut:
+    """队列条目的出口结构：准入摘要 + 能否投递 + 参考分/收藏（14B）+ 生命周期（15A/15B）。
+
+    ``cache`` 只用于列表批量出口时复用"资料文本"（见 ``signals.reference_score``）与
+    "采样序列"（见 ``lifecycle.job_history``）；单条出口（入队、改招呼语）不传，
+    省一次字典分配也不影响正确性。
+    """
     match = latest_match(db, item.job_id)
     admission = _admission_of_match(match) if match is not None else None
     hard_gate = match.hard_gate if match is not None and match.hard_gate in HARD_GATES else None
+    # 15A/15B：僵尸分与 JD 变更都来自同一份采集历史，一次读库（见 lifecycle.job_history）。
+    history = job_history(db, job, cache=cache)
     return ApplyQueueItemOut(
         id=item.id,
         job_id=item.job_id,
@@ -92,6 +109,13 @@ def _queue_out(db: Session, item: ApplyQueueItem, job: Job | None) -> ApplyQueue
         requires_confirm=_match_requires_confirm(match) if match is not None else False,
         # 「能不能自动投」由来源决定，与匹配结论无关；界面上据此禁用勾选并说明原因。
         apply_supported=job_apply_site(job) is not None,
+        match_score=reference_score(db, job, match, cache=cache),
+        favorite=favorite_of(job),
+        ghost_score=history["score"],
+        ghost_evidence=history["evidence"],
+        # 15A：忽略开关随行走（前端据此决定显示「忽略」还是「恢复」，以及徽标是否静音）。
+        ghost_ignored=bool(getattr(job, "ghost_ignored", False)),
+        jd_changed=history["jd_changed"],
         created_at=item.created_at,
         updated_at=item.updated_at,
     )
@@ -114,9 +138,16 @@ def list_queue(db: Session, limit: int = MAX_QUEUE_LIST) -> list[ApplyQueueItemO
     )
     # 岗位一次性取回，避免每行一次查询（队列条数不多，但这属于该顺手做对的事）。
     jobs = _jobs_by_id(db, [item.job_id for item in items])
+    # 参考分要现算：资料文本整页只读一次，简历文本逐岗位不同（见 signals.reference_score）。
+    cache: dict[str, Any] = {}
     # job_id 在模型层可空（岗位删除后置空）；_jobs_by_id 只收非空 id，这里对 None 直接给 None。
     return [
-        _queue_out(db, item, jobs.get(item.job_id) if item.job_id is not None else None)
+        _queue_out(
+            db,
+            item,
+            jobs.get(item.job_id) if item.job_id is not None else None,
+            cache=cache,
+        )
         for item in items
     ]
 
@@ -135,11 +166,13 @@ def _jobs_by_id(db: Session, job_ids: Sequence[int | None]) -> dict[int, Job]:
 
 
 def add_to_queue(db: Session, request: Any) -> list[ApplyQueueItemOut]:
-    """加入队列；命中"来源不支持 / 已在队列 / 真实缺口 / 未分析"时抛 409 并回传原因。
+    """加入队列；命中"屏蔽清单 / 来源不支持 / 已在队列 / 真实缺口 / 未分析"时抛 409 并回传原因。
 
     整批要么全部成功、要么全部回滚：任一岗位不满足准入就中断，避免"加了一半"。
     """
     config = get_apply_config(db)
+    # 14E 闸门②：屏蔽清单整批读一次（不再是每条一次查询）。
+    blocklist = load_blocklist(db)
     next_order = db.query(func.coalesce(func.max(ApplyQueueItem.sort_order), 0)).scalar() or 0
     created: list[ApplyQueueItem] = []
     created_jobs: list[Job] = []
@@ -148,6 +181,21 @@ def add_to_queue(db: Session, request: Any) -> list[ApplyQueueItemOut]:
             job = db.get(Job, entry.job_id)
             if job is None:
                 raise ApplyNotFound(f"岗位不存在或已被删除：{entry.job_id}")
+            # 屏蔽清单**最先判**：它是用户的显式意愿（"这家/这类我不要"），排在其他任何
+            # 准入判断之前——否则用户会先被"未分析，确认加入？"问一遍，确认完才被告知屏蔽。
+            blocked_hit = blocklist.hit(job.company, job.title)
+            if blocked_hit:
+                raise ApplyConflict(
+                    {
+                        "message": (
+                            f"「{job.title or '该岗位'}」命中屏蔽清单（{blocked_hit}），未加入队列。"
+                            "要去掉这条限制，请到「投递设置 → 屏蔽清单」里删除它。"
+                        ),
+                        "job_id": job.id,
+                        "blocked_by_blacklist": True,
+                        "blocked_hit": blocked_hit,
+                    }
+                )
             # 来源闸门**放最前**：这是"这个岗位本来就走不到投递"的硬前提，不是用户确认一下
             # 就能放行的事（与下面的未分析 / 真实缺口不同，那两类可以由用户显式确认）。
             if job_apply_site(job) is None:

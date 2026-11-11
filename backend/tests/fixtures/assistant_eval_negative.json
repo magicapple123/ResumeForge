@@ -1,0 +1,21 @@
+[
+  {
+    "id": "negative_wrong_tool",
+    "category": "tool_selection",
+    "prompt": "我一共有几个岗位？",
+    "answer": "你目前一共有 3 个岗位。",
+    "expect": {
+      "tool_ok": [true],
+      "proposal": false,
+      "db_delta": 0,
+      "answer_include": ["3 个岗位"]
+    },
+    "scripted_tools": [
+      {
+        "name": "list_materials",
+        "arguments": {}
+      }
+    ],
+    "expected_tools": ["list_jobs"]
+  }
+]

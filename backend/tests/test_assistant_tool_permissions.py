@@ -13,14 +13,15 @@ b. ``writes`` 兼容语义：``writes`` 与 permission 一致（``READ_ONLY`` �
    ``tool_writes()`` 与 ``policy.tools_for_turn()`` 的过滤结果仍是只读工具集合
    （T17 要求保留既有调用方语义，见 ``_types.Tool.writes`` 的派生实现）。
 c. 写工具仍有 ``preview``（RF-01 契约：未确认写入时执行层只跑预览）；只读工具不挂。
-d. 82 个工具逐项定级符合 ``EXPECTED_PERMISSIONS``（逐项 parametrize，失败点名工具；
-   T29 新增的 4 个只读质检工具、期二 T12 的 3 个求职偏好工具也在清单里）。
+d. 91 个工具逐项定级符合 ``EXPECTED_PERMISSIONS``（逐项 parametrize，失败点名工具；
+   T29 新增的 4 个只读质检工具、期二 T12 的 3 个求职偏好工具、#15F 的 3 个投递队列
+   工具也在清单里）。
 
 维护方法：新增工具时在注册处的 ``Tool(...)`` 里写 ``permission=ToolPermission.X``，
 再把名字补进下面对应的集合。``update_skill`` 是目前唯一的 irreversible_write
-（传 files 时整体替换知识文件，旧文件没有版本可恢复）；当前没有任何
-external_side_effect 工具（助手不能代为投递、发消息或填网申）——不允许为了凑四类
-去编造。
+（传 files 时整体替换知识文件，旧文件没有版本可恢复）；external_side_effect 目前
+**只有一个** ``apply_start``（#15F 用户拍板的唯一例外，见下面的集合注释）——除此之外
+不允许为了凑四类去编造。
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ IRREVERSIBLE_WRITE = ToolPermission.IRREVERSIBLE_WRITE
 EXTERNAL_SIDE_EFFECT = ToolPermission.EXTERNAL_SIDE_EFFECT
 PERMISSION_LEVELS = (READ_ONLY, REVERSIBLE_WRITE, IRREVERSIBLE_WRITE, EXTERNAL_SIDE_EFFECT)
 
-# ===== 82 个工具的逐项定级（T17/T29/T31/T12 的验收清单，改级别必须同批改这里）=====
+# ===== 91 个工具的逐项定级（T17/T29/T31/T12/#15F/#16/#18A/#29A 的验收清单，改级别必须同批改这里）=====
 
 # 只读：只读查询/检索/读取，不写任何数据。
 _READ_ONLY_TOOLS = (
@@ -91,6 +92,8 @@ _READ_ONLY_TOOLS = (
     "list_share_packages",
     "list_apply_records",
     "list_match_analyses",
+    # #15F 对话式投递军师：查看投递队列（只读；不投递）
+    "queue_list",
     # 联网搜索（只读网络查询，不落库、不向外部系统提交任何东西）
     "web_search",
     # 简历文档只读（版面读数 / 版本 / 变体 / 单条读取）
@@ -107,6 +110,12 @@ _READ_ONLY_TOOLS = (
     "diagnose_recent_errors",
     # 期二 T12 求职偏好只读查询（与 GET /api/job-preferences 同源）
     "get_job_preferences",
+    # #16 链接抓取只读（抓不到就如实说，不写库）
+    "web_extract",
+    # #29A 知识库混合检索（返回 id/标题/摘要，正文仍用 get_knowledge）
+    "search_knowledge",
+    # 18A 查任务进度
+    "task_status",
 )
 
 # 可撤销写入：新建或局部修改记录，事后能删除、改回或从撤销点恢复。
@@ -144,6 +153,14 @@ _REVERSIBLE_WRITE_TOOLS = (
     # 期二 T12：偏好是"下一轮就进系统提示"的用户设定，必须始终由用户确认（同技能）。
     "create_job_preference",
     "update_job_preference",
+    # #15F：只改队列顺序，把顺序再调回去就能撤销；投递本身不在这一级（见下方 apply_start）。
+    "queue_update_priority",
+    # 18A：建任务/取消任务都属于"状态可再调整"的写入（取消是终态，但已完成的步骤保留，
+    # 且任务本身不是用户数据资产）；必须在提案卡里写明 N 条 / M 步后才执行。
+    "task_create",
+    "task_cancel",
+    # #16：链接导入是写（会批量建岗）但可撤销——逐条删掉/跳过即可，不覆盖用户数据。
+    "import_jobs_from_url",
 )
 
 # 不可逆写入：整份覆盖、清空类，事后收不回来。目前只有 update_skill：
@@ -151,9 +168,12 @@ _REVERSIBLE_WRITE_TOOLS = (
 # 其余 update_* 都是"只改传入字段、其余保留"的局部修改，因此仍是可撤销写入。
 _IRREVERSIBLE_WRITE_TOOLS = ("update_skill",)
 
-# 外部副作用：向系统外部投递/发送/提交（投递、发消息、填网申）。当前**一个都没有**
-# ——助手不能代为投递、发消息或填网申。将来真出现这类工具再逐项登记。
-_EXTERNAL_SIDE_EFFECT_TOOLS: tuple[str, ...] = ()
+# 外部副作用：向系统外部投递/发送/提交。**目前只有一个，是用户拍板的唯一例外**：
+# ``apply_start``（#15F 对话式投递军师）会驱动受控浏览器在招聘平台上真的提交投递，
+# 平台侧没有撤回接口 = 本地不可撤销。它必须永远走提案卡（policy.ALWAYS_PROPOSAL_TOOLS）、
+# 不可撤销、失败不自动重试；``tests/test_assistant_apply_tools.py`` 另有专门断言
+# （含"preview 必含不可撤销"与"未确认时 run 一次都不跑"）。除它之外不得再新增这一级。
+_EXTERNAL_SIDE_EFFECT_TOOLS: tuple[str, ...] = ("apply_start",)
 
 EXPECTED_PERMISSIONS: dict[str, ToolPermission] = {
     **{name: READ_ONLY for name in _READ_ONLY_TOOLS},
@@ -162,7 +182,7 @@ EXPECTED_PERMISSIONS: dict[str, ToolPermission] = {
     **{name: EXTERNAL_SIDE_EFFECT for name in _EXTERNAL_SIDE_EFFECT_TOOLS},
 }
 
-EXPECTED_TOOL_COUNT = 82
+EXPECTED_TOOL_COUNT = 91
 
 
 def _tool_constructions() -> list[tuple[Path, ast.Call]]:
@@ -219,7 +239,7 @@ def test_permission_enum_has_exactly_the_four_levels():
 
 
 def test_expected_list_covers_every_registered_tool_exactly_once():
-    """清单与注册表双向一致：新增/改名/漏登记都会在这里红（82 个工具逐个定级）。"""
+    """清单与注册表双向一致：新增/改名/漏登记都会在这里红（91 个工具逐个定级）。"""
     registered = [tool.name for tool in _TOOLS]
     assert len(registered) == EXPECTED_TOOL_COUNT, (
         f"注册表里有 {len(registered)} 个工具，T17/T29 定级清单按 {EXPECTED_TOOL_COUNT} 个编写；"
@@ -236,7 +256,7 @@ def test_expected_list_covers_every_registered_tool_exactly_once():
 
 @pytest.mark.parametrize("name", sorted(EXPECTED_PERMISSIONS))
 def test_expected_permission_per_tool(name: str):
-    """d. 逐项断言 82 个工具的定级（失败信息点名工具，不靠汇总差异猜）。"""
+    """d. 逐项断言 91 个工具的定级（失败信息点名工具，不靠汇总差异猜）。"""
     tool = _registry_by_name().get(name)
     assert tool is not None, f"注册表里没有工具 {name}（清单过期或工具被删）"
     expected = EXPECTED_PERMISSIONS[name]
@@ -247,7 +267,7 @@ def test_expected_permission_per_tool(name: str):
 
 
 def test_every_tool_declares_one_of_the_four_levels():
-    """a. 运行时核验：82 个工具的 permission 都是四类之一且不是缺省 None。"""
+    """a. 运行时核验：91 个工具的 permission 都是四类之一且不是缺省 None。"""
     problems: list[str] = []
     for tool in _TOOLS:
         if tool.permission is None:
@@ -260,22 +280,30 @@ def test_every_tool_declares_one_of_the_four_levels():
 
 
 def test_permission_distribution_is_the_expected_one():
-    """分布快照：51 只读 / 30 可撤销 / 1 不可逆 / 0 外部副作用（T17 + T29 + T31 + T12 结论）。"""
+    """分布快照：55 只读 / 34 可撤销 / 1 不可逆 / 1 外部副作用（T17 + T29 + T31 + T12 + #15F + #16/#18A/#29A）。"""
     counts = {
         level: sum(1 for tool in _TOOLS if tool.permission is level) for level in PERMISSION_LEVELS
     }
     assert counts == {
-        READ_ONLY: 51,
-        REVERSIBLE_WRITE: 30,
+        READ_ONLY: 55,
+        REVERSIBLE_WRITE: 34,
         IRREVERSIBLE_WRITE: 1,
-        EXTERNAL_SIDE_EFFECT: 0,
+        EXTERNAL_SIDE_EFFECT: 1,
     }
 
 
-def test_no_external_side_effect_tool_exists_today():
-    """当前没有任何外部副作用工具：助手不能投递、发消息、填网申（不要凑类别编造）。"""
+def test_external_side_effect_tool_is_apply_start_only():
+    """外部副作用级只有 apply_start（用户拍板的唯一例外），且它必须带非空 preview。
+
+    这条守卫防两件事：① 又有人往这一级塞工具（"助手帮忙海投"是最容易被想出来的功能，
+    也是唯一不可撤销的）；② apply_start 的预览被清空——预览是用户在提案卡上确认前
+    看到的最后一份说明，没有它执行层会直接拒执行（assistant_tool_exec 的 "该写入工具
+    没有预览能力"）。
+    """
     actual = [tool.name for tool in _TOOLS if tool.permission is EXTERNAL_SIDE_EFFECT]
-    assert actual == list(_EXTERNAL_SIDE_EFFECT_TOOLS) == []
+    assert actual == list(_EXTERNAL_SIDE_EFFECT_TOOLS) == ["apply_start"]
+    apply_start = _registry_by_name()["apply_start"]
+    assert apply_start.preview is not None, "apply_start 的写入预览被清空了（提案卡会变空白）"
 
 
 def test_every_registration_site_declares_permission_in_source():

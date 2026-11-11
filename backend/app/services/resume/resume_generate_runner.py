@@ -33,6 +33,7 @@ from ...services.claims import build_baseline
 from ...services.llm import create_provider
 from ...services.llm.base import LLMError
 from ...services.llm.client_pool import aclose_clients_for_current_loop
+from ...services.rag.rag_receipt import append_rag_note, record_retrieval
 from ...services.rag.rag_service import generate_with_scope, prepare_selection_boost
 from ...services.resume.generate_snapshot import (
     GenerationSnapshot,
@@ -254,6 +255,8 @@ class ResumeGenerateRunner:
                         dataset_id=(
                             self._lease.identity.dataset_id if self._lease is not None else ""
                         ),
+                        # #30：检索一结束就写回执与进度行，用户不必等整篇生成完才知道结果。
+                        on_retrieval=lambda p: record_retrieval(task, session, p),
                     )
                     # aclosing 纪律（PR-07-4）：取消/超时/异常路径也显式关闭生成器，让
                     # GeneratorExit 逐层展开、各层 finally（段复位/usage/response）执行。
@@ -400,7 +403,7 @@ class ResumeGenerateRunner:
                     format_config=save_format_config,
                     custom_instruction=options.custom_instruction,
                     coverage_notes=coverage_notes,
-                    rationale=rationale,
+                    rationale=append_rag_note(rationale, task_id=task.id),
                     fact_annotations=fact_annotations,
                     document_mode=options.document_mode,
                     context_snapshot=task.context_snapshot,
@@ -440,12 +443,7 @@ class ResumeGenerateRunner:
             self._stop.clear()
 
     def _snapshot(self, session: Any, task: ResumeGenerateTask) -> Any:
-        """重建生成输入；实现搬到 `resume_generate_inputs`（rubber 只留薄委托）。
-
-        注入 runner 模块命名空间里的 `create_provider`：既有测试用
-        `monkeypatch.setattr("…resume_generate_runner.create_provider")` 替换假 provider，
-        搬移不得让这些锚点静默失效（AGENTS.md 纪律）。
-        """
+        """重建生成输入（实现搬在 resume_generate_inputs；create_provider 锚点留在本模块）。"""
         return prepare_generate_inputs(
             session,
             task,

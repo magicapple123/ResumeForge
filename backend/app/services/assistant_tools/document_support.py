@@ -315,6 +315,43 @@ def undo_hint(version: ResumeVersion | None) -> str:
     return f"修改前的版本「{version.name}」已留档，可在简历制作台「版本」里的命名版本中恢复"
 
 
+def _preview_text(value: object) -> str | None:
+    """把 before/after 值转成界面可显示的一行文本；None 表示"新增"（没有旧值）。"""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def write_preview(
+    *,
+    record: ResumeRecord,
+    version: ResumeVersion | None,
+    revision: int,
+    before: object = None,
+    after: object = None,
+) -> dict:
+    """简历文档写操作的结构化预览（#13D）：界面显示「旧值 → 新值」+「撤销」。
+
+    ``version`` 是落到 ``persist_document`` 之前留下的「助手修改前」命名版本，
+    也就是撤销点；界面用它调 ``POST /api/resumes/{id}/versions/{vid}/restore``。
+    这里**不带内部 path**（含 ob_ 对象 id）：预览会进消息 context 并被导出，
+    模型侧需要的定位信息只留在 ``text`` 里。
+    """
+    return {
+        "before": _preview_text(before),
+        "after": _preview_text(after),
+        "version_id": int(version.id) if version is not None else None,
+        "undo_text": undo_hint(version),
+        "resume_id": int(record.id),
+        "revision": int(revision),
+    }
+
+
 def same_value(before: object, after: object) -> bool:
     return (
         hashlib.sha256(

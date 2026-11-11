@@ -26,6 +26,7 @@ from ..schemas.assistant import (
     ConversationSurface,
 )
 from ..services.assistant.assistant_skills import (
+    PendingSkillError,
     conversation_skill_budget,
     list_conversation_skills,
     set_conversation_skills,
@@ -70,6 +71,10 @@ def register_conversation_skill_routes(router: APIRouter) -> None:
         conversation_or_404(db, conversation_id, surface)
         try:
             set_conversation_skills(db, conversation_id, payload.skill_ids)
+        except PendingSkillError as exc:
+            # #31D/#31F：待验证技能不可启用——用 409 与"参数不合法"区分开，
+            # 前端据此提示「先在技能页确认」而不是让它看起来像填错了。
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ValueError as exc:
             # 8 个上限与"技能不存在"都在服务层校验：这里统一转成 422 + 中文原文。
             raise HTTPException(status_code=422, detail=str(exc)) from exc

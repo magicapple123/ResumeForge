@@ -46,6 +46,10 @@ AI_TASK_KIND_WEBFORM_FILL = "webform_fill"
 #: RAG 语义检索索引的**后台预热**（不是用户可见的生成/分析任务）：生成请求内编码
 #: 超预算时登记它，把缺失向量交给现成 ai_task 执行器补齐；无用户可见产物。
 AI_TASK_KIND_RAG_WARMUP = "rag_index_warmup"
+#: 助手会话空闲后的语义记忆抽取（#31A）：把最近 N 轮里稳定的事实抽成
+#: assistant_memory 的 ADD/UPDATE/SUPERSEDE/NOOP。**不占生成请求关键路径**，
+#: 与 rag_index_warmup 同一种"后台补算"性质；失败不向用户报错，下次空闲重试。
+AI_TASK_KIND_ASSISTANT_MEMORY = "assistant_memory_extract"
 
 AI_TASK_KINDS: tuple[str, ...] = (
     AI_TASK_KIND_RESUME_GENERATE,
@@ -55,6 +59,7 @@ AI_TASK_KINDS: tuple[str, ...] = (
     AI_TASK_KIND_RESUME_REWRITE,
     AI_TASK_KIND_WEBFORM_FILL,
     AI_TASK_KIND_RAG_WARMUP,
+    AI_TASK_KIND_ASSISTANT_MEMORY,
 )
 
 # ===== 状态机 =====
@@ -130,6 +135,7 @@ class AiTask(Base):
 
 __all__ = [
     "AI_TASK_ACTIVE_STATUSES",
+    "AI_TASK_KIND_ASSISTANT_MEMORY",
     "AI_TASK_KIND_JOB_ANALYSIS",
     "AI_TASK_KIND_JOB_MATCH",
     "AI_TASK_KIND_RAG_WARMUP",

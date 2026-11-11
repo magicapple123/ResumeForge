@@ -26,6 +26,12 @@ class ToolResult:
     link: str = ""
     changed: bool = False
     sources: list[dict] = field(default_factory=list)
+    # 写操作的结构化 diff / 撤销入口（#13D）：{before, after, version_id, undo_text,
+    # resume_id, revision}，由 run_tool_call 放进 tool record 的 preview 字段。
+    # 只覆盖简历文档类写工具（document_write_tools 的四个工具）；其余写工具留空，
+    # 前端显示「该操作暂不支持撤销」。永远不带内部 path（含 ob_ 对象 id）——
+    # 那是模型侧才需要的定位信息。
+    preview: dict | None = None
 
 
 class ToolPermission(Enum):
@@ -38,8 +44,10 @@ class ToolPermission(Enum):
       ``update_skill`` 传 ``files`` 时整体替换知识文件这一类（旧文件行被直接替换，
       没有版本或回收站可恢复）；
     - ``EXTERNAL_SIDE_EFFECT``：向系统外部投递/发送/提交（投递、发消息、填网申等）。
-      **当前没有任何工具属于这一级**——助手不能代为投递、发消息或填网申。保留这个
-      成员是为了在枚举层面把"外部副作用"与"本地写入"分开，不允许为了凑四类去编造。
+      **全项目唯一属于这一级的是 ``apply_start``**（#15F，用户拍板的唯一例外：它会真的
+      在招聘平台上提交投递，平台侧没有撤回接口）。这一级的工具必须**永远走提案卡**
+      （登记在 ``policy.ALWAYS_PROPOSAL_TOOLS``，write_full 下也不直接执行）、不可撤销、
+      失败不自动重试；除它之外不允许为了凑四类去编造。
 
     定级口径：分类由注册处逐个显式声明（``_tools_specs_*.py`` / ``p3_tools.py`` 的
     ``Tool(permission=...)``），守卫测试逐项钉住（``tests/test_assistant_tool_permissions.py``）。

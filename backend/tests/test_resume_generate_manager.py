@@ -49,6 +49,21 @@ class _CapturingWorker:
         """空实现：假 worker 没有线程可停。"""
 
 
+@pytest.fixture(autouse=True)
+def restore_request_context():
+    """本文件的用例**故意**往全局 ContextVar 里写请求上下文，用完必须还原。
+
+    不还原的话，后续模块（如 `test_runtime_maintenance`）会在同一个进程里读到上一个
+    用例留下的 `request_id`——串行跑全量时表现为「根 handler 少了 `request_id=-`」的
+    假失败；`-n auto` 因为 worker 隔离看不到，只有串行 + 覆盖率那一轮才会暴露。
+    """
+    yield
+    request_id_context.set("-")
+    set_ambient_task(None)
+    # 与"未声明"等价：`ambient_scope()` 会返回空值，审计表按 missing 记。
+    set_ambient_scope(input_scope="", masked=False)
+
+
 @pytest.fixture
 def manager(monkeypatch):
     """每个用例一个干净管理器：槽位 1（第二条必然排队），worker 换成本文件的假实现。"""

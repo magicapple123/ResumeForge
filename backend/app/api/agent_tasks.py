@@ -26,6 +26,23 @@ from ..services.agent_task_service import AgentTaskError, AgentTaskNotFound
 
 router = APIRouter(prefix="/api/agent-tasks", tags=["agent-tasks"])
 
+# 与 task_tools.ASSISTANT_TASK_SOURCE 逐字一致：只有助手建的任务才自动跑后台执行器，
+# 手动/提醒/跟进卡仍走既有 REST 状态机（行为不变）。
+_ASSISTANT_TASK_SOURCE = "assistant"
+
+
+def _kick_assistant_runner(task: Any) -> None:
+    """助手任务进入 running 后拉起后台执行器（单例线程；已在跑则忽略）。
+
+    局部导入：执行器会 import 四个 handler（连带岗位/简历/抓取服务），放在模块顶层会让
+    所有只读任务接口都背上这份 import 成本。
+    """
+    if getattr(task, "source", "") != _ASSISTANT_TASK_SOURCE:
+        return
+    from ..services.assistant_task_runner import runner
+
+    runner.start(int(task.id))
+
 
 # ===== 请求/响应模型（本地定义：schemas/ 目录本轮不在改动范围内） =====
 
@@ -47,6 +64,8 @@ class AgentTaskCreateRequest(BaseModel):
     conversation_id: int | None = Field(default=None, ge=1)
     goal: str = Field(default="", max_length=2000)
     source: str = Field(default=AGENT_TASK_SOURCE_MANUAL, min_length=1, max_length=32)
+    # #18A 执行所需的最小输入（白名单由服务层校验）；不出现在前端展示里。
+    params: dict[str, Any] | None = None
 
 
 class AgentTaskCompleteRequest(BaseModel):
@@ -87,6 +106,8 @@ class AgentTaskOut(BaseModel):
     updated_at: datetime
     finished_at: datetime | None
     error: str
+    # #18A：执行参数可选下发（前端不展示原文；执行器与排障需要时读取）。
+    params: dict[str, Any] | None = None
     steps: list[AgentTaskStepOut]
 
 
@@ -119,6 +140,7 @@ def create_agent_task(payload: AgentTaskCreateRequest, db: Session = Depends(get
             conversation_id=payload.conversation_id,
             goal=payload.goal,
             source=payload.source,
+            params=payload.params,
         )
     except AgentTaskError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -134,6 +156,7 @@ def start_agent_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AgentTaskError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    _kick_assistant_runner(task)
     return AgentTaskOut.model_validate(task)
 
 
@@ -210,6 +233,8 @@ def resume_agent_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AgentTaskError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    # 用户点「继续」后同样从 resume_cursor 拉起执行器（助手任务才会）。
+    _kick_assistant_runner(task)
     return AgentTaskOut.model_validate(task)
 
 

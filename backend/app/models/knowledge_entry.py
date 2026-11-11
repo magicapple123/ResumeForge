@@ -7,7 +7,7 @@
 """
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
@@ -26,6 +26,21 @@ class KnowledgeEntry(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     # 来源（如「手动录入」「面经导入」等，第 7 批定义白名单）。
     source: Mapped[str] = mapped_column(String(64), default="")
+    # 0014（#29C/#29D/#29E）：从「笔记列表」升级为「可被全站引用的底座」。
+    # 我为什么存这条（<=120 字）——调研结论里这句话比正文更值钱。
+    reason: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    # 关联公司（可空、有索引）：按公司筛选、面试页「这家公司面经 N 条」。
+    company: Mapped[str] = mapped_column(
+        String(128), default="", server_default="", index=True
+    )
+    # 关联岗位（可空外键，SET NULL）：岗位彻底删除后条目仍可读，知识是用户的。
+    job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("job.id", ondelete="SET NULL"), nullable=True
+    )
+    # 蒸馏结果（#29E）：卡片直接显示摘要，RAG 命中优先返回摘要（省 token）。
+    summary: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    # 蒸馏要点（JSON 数组）：与 summary 同源，服务列表展示与检索。
+    key_points: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

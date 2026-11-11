@@ -3,8 +3,8 @@
 
 覆盖三件事，全部在**真实 alembic 迁移出来的库**上验，而不是 ``create_all``：
 
-1. **往返可用**：空库 ``upgrade head`` → ``downgrade -1`` × 5（0006–0010，
-   波次 2 的 0009/0010 也在链上）→ ``upgrade head``，两次都成功；中间态三处新结构确实
+1. **往返可用**：空库 upgrade head → 降到 0006 之前（按迁移名定位父版本，
+   不数步数）→ upgrade head，两次都成功；中间态三处新结构确实
    消失，复原后列/表/索引都在。
 2. **旧语义零破坏**：agent_task 既有的提醒去重键仍生效；新去重键按
    (source, source_ref, occurrence_key) 生效，且两列为 NULL 的旧行照旧并存。
@@ -12,7 +12,7 @@
    application_follow_up 的 decision CHECK 与 track 外键级联。
 
 **测试里不写 revision 字面量**（迁移链再长一条就会集体过期）：head 从
-``tests.migration_refs.head_revision()`` 取，降级只数步数，不点名具体版本。
+tests.migration_refs.head_revision() 取，降级用 prior_revision() 按迁移名找父版本。
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ from app.models.tracker import ApplicationTrack
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from tests.migration_refs import alembic_version_of, head_revision
+from tests.migration_refs import alembic_version_of, head_revision, prior_revision
 
 
 @pytest.fixture
@@ -117,7 +117,7 @@ def _assert_new_structures(engine) -> None:
 
 
 def test_upgrade_downgrade_round_trip(tmp_path):
-    """空库往返：升到 head、连退到 0005（0006–0010 五条）、再升回 head，两次都成功。"""
+    """空库往返：升到 head、退到 0006 之前、再升回 head，两次都成功。"""
     engine = build_engine(f"sqlite:///{(tmp_path / 'roundtrip.db').as_posix()}")
     config = build_alembic_config(engine)
     head = head_revision()
@@ -126,9 +126,8 @@ def test_upgrade_downgrade_round_trip(tmp_path):
         assert alembic_version_of(engine) == head
         _assert_new_structures(engine)
 
-        # 等价于 downgrade -1 五次：0006–0010 五条迁移都真的能退。
-        for _ in range(5):
-            command.downgrade(config, "-1")
+        # 退到 0006 之前（0007/0008 也一并退掉）：按迁移名定位父版本，不数步数。
+        command.downgrade(config, prior_revision("_followup_sweep"))
         assert alembic_version_of(engine) != head
         assert {"source_ref", "occurrence_key"}.isdisjoint(_column_names(engine, "agent_task"))
         assert "application_follow_up" not in _table_names(engine)

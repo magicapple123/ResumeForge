@@ -7,7 +7,8 @@
 **权限分级（T17）**：每个工具在注册处显式声明 `ToolPermission` 四级之一（read_only /
 reversible_write / irreversible_write / external_side_effect）。当前唯一不可逆的是
 `update_skill` 传 files 时整体替换知识文件（旧文件没有版本可恢复），执行前仍需用户
-在写入提案上确认；外部副作用级没有任何工具（助手不能代为投递、发消息或填网申）。
+在写入提案上确认；外部副作用级**只有一个** `apply_start`（#15F 用户拍板的唯一例外：
+开始投递会真的向招聘平台提交、不可撤销），它永远走提案卡，且不在 write_full 下直接执行。
 
 写工具的参数一律交给现成的 Pydantic schema 校验（`JobCreate` / `JobUpdate` /
 `ProfileUpdate`），与 HTTP 接口共用同一套约束，不另写一份。

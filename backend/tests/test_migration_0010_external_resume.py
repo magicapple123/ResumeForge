@@ -5,8 +5,8 @@
 删干净、再升回来结构一致。测试在**真实 alembic 迁移出来的库**上验，而不是
 `create_all`——后者只能证明模型长这样，证明不了迁移链能跑。
 
-**测试里不写 revision 字面量**：head 从 `tests.migration_refs.head_revision()` 取，
-降级只数步数（0010 是最新一条，退一步即 0009）。
+**测试里不写 revision 字面量**：head 从 tests.migration_refs.head_revision() 取，
+降级用 prior_revision() 按迁移名找父版本（不数步数——链尾每加一条迁移就会过期）。
 
 除往返外还钉住两条容易写错的语义：
 
@@ -23,7 +23,7 @@ from alembic import command
 from app.database import build_engine
 from app.database_migrations import build_alembic_config
 from sqlalchemy import inspect
-from tests.migration_refs import alembic_version_of, head_revision
+from tests.migration_refs import alembic_version_of, head_revision, prior_revision
 
 _TABLE = "external_resume"
 
@@ -102,8 +102,9 @@ def test_downgrade_drops_the_table_and_upgrade_brings_it_back(tmp_path):
         assert alembic_version_of(engine) == head
         columns_before = _column_names(engine, _TABLE)
 
-        # 0010 是当前最新一条：退一步就回到 0009，表必须真的消失。
-        command.downgrade(config, "-1")
+        # 退到本迁移之前：按 revision 名定位 0010 的父版本，表必须真的消失。
+        # （不数步数：链尾每加一条迁移，步数都会过期。）
+        command.downgrade(config, prior_revision("_external_resume"))
         assert alembic_version_of(engine) != head
         assert _TABLE not in _table_names(engine)
 

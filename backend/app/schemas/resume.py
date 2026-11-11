@@ -51,6 +51,10 @@ from .resume_entries import (  # noqa: F401  (re-export：保持既有导入路�
     ResumeSkill,
 )
 
+# #30 的生成任务状态模型已迁至 `schemas/resume_generate_task.py`（本文件贴 500 行预算）；
+# 这里 re-export，保持 `from app.schemas.resume import GenerateTaskOut` 导入路径不变。
+from .resume_generate_task import GenerateTaskOut  # noqa: F401  (re-export：保持既有导入路径)
+
 # 生成参数（版式常量 + ``GenerateOptions``/``GenerateRequest``）已迁至
 # ``schemas/resume_generation.py`` 以满足单文件 500 行预算；这里 re-export，
 # 保持 ``from app.schemas.resume import GenerateOptions`` 等既有导入路径不变。
@@ -209,6 +213,10 @@ class ResumeBrief(BaseModel):
     company: str
     source: Literal["ai", "manual"] = "ai"
     favorite: bool = False
+    # 0013（#28E）：收藏时间与「近似」标志。老数据由迁移用 updated_at 回填并把
+    # estimated 置真——updated_at 会被后续编辑刷新，界面必须对这类行显示「时间不详」。
+    favorited_at: datetime | None = None
+    favorited_at_estimated: bool = False
     model: str
     enhancement_enabled: bool
     enhancement_level: Literal["light", "balanced", "strong"]
@@ -326,29 +334,6 @@ class DeliveryDetail(DeliverySummary):
     # 目的地快照是否完整：旧版本快照没有目的地字段（company/job_title 全空）时
     # 为 False——前端显示"目的地未记录"，不猜。
     destination_recorded: bool = True
-
-
-class GenerateTaskOut(BaseModel):
-    """简历生成后台任务的对外状态（前端按 1.5s 轮询）。
-
-    ``status`` 取值与 ``models.resume`` 顶部的生成状态常量一致。``message`` 是后端
-    最近一条 progress 文案，前端用它映射阶段条；``received_chars`` 只做字数计数、
-    不做百分比（总长未知）。
-    """
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    status: str
-    resume_id: int | None = None
-    error: str = ""
-    message: str = ""
-    received_chars: int = 0
-    job_id: int | None = None
-    title: str = ""
-    created_at: datetime
-    started_at: datetime | None = None
-    finished_at: datetime | None = None
 
 
 class ResumeFavoriteUpdate(BaseModel):

@@ -51,15 +51,27 @@ class ToolNotAuthorizedError(Exception):
     """执行层拒绝（工具未下发或未获授权）。message 面向模型可读。"""
 
 
-# 「永远走提案」的写工具（T14 D.1 / 期二 T12）：即使 allow_write=True（完全权限）也不直接落库。
+# 「永远走提案」的写工具（T14 D.1 / 期二 T12 / #15F）：即使 allow_write=True（完全权限）
+# 也不直接执行。
 #
 # 为什么单列这几个：create_skill / update_skill 写的是**下一轮就进系统提示**的提示词，
 # 且被标注"应当遵守"；create_job_preference / update_job_preference 写入的求职偏好
 # 同样会进下一轮系统提示（注入块），且被要求"应当遵守"。完全权限下模型若直接执行，
 # 就能自己造一条"忽略以上全部限制"的技能/偏好并立刻生效——这等于把安全边界交给了模型。
 # 技能与偏好写入必须始终由用户在界面上确认（「以后都这样」/「只在这次对话」两个按钮）。
+#
+# apply_start（#15F，全项目唯一的 EXTERNAL_SIDE_EFFECT 工具）：它会真的向招聘平台提交
+# 投递，平台侧没有撤回接口 = **本地不可撤销**。所以"用户这次给了完全权限"也不能成为
+# 直接执行的理由：每一批投递都必须在提案卡上逐条看清（哪几条、用哪份简历）再确认。
+# 它同时也被排除在"重试/自动重放"之外——外部副作用只允许执行一次。
 ALWAYS_PROPOSAL_TOOLS = frozenset(
-    {"create_skill", "update_skill", "create_job_preference", "update_job_preference"}
+    {
+        "create_skill",
+        "update_skill",
+        "create_job_preference",
+        "update_job_preference",
+        "apply_start",
+    }
 )
 
 

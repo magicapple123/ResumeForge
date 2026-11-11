@@ -84,7 +84,14 @@ def _tag_expression(tag: str):
     return select(literal(1)).select_from(values).where(values.c.value == tag).exists()
 
 
-def _filtered_query(db: Session, *, q: str = "", category: str = "") -> Query[KnowledgeEntry]:
+def _filtered_query(
+    db: Session,
+    *,
+    q: str = "",
+    category: str = "",
+    company: str = "",
+    uncategorized: bool = False,
+) -> Query[KnowledgeEntry]:
     """list_knowledge 与 list_knowledge_page **共用的过滤口径**。
 
     检索口径集中在这一处：标题/正文按关键词命中（``q``）、分类精确筛选（``category``）、
@@ -97,6 +104,12 @@ def _filtered_query(db: Session, *, q: str = "", category: str = "") -> Query[Kn
     query = db.query(KnowledgeEntry).filter(trash.live_only(KnowledgeEntry))
     if category.strip():
         query = query.filter(KnowledgeEntry.category == category.strip())
+    if company.strip():
+        # 0014（#29D）：按公司筛选（精确匹配公司名，走 ix_knowledge_entry_company）。
+        query = query.filter(KnowledgeEntry.company == company.strip())
+    if uncategorized:
+        # #29G：未分类 = 空串（分类可选之后唯一需要的"筛选空值"入口）。
+        query = query.filter(KnowledgeEntry.category == "")
     term = normalized_term(q)
     if term:
         # 传原文而不是 term：前后空白是子串的一部分，FTS 侧也必须按原样匹配，
@@ -115,10 +128,12 @@ def _filtered_query(db: Session, *, q: str = "", category: str = "") -> Query[Kn
     return query
 
 
-def list_knowledge(db: Session, *, q: str = "", category: str = "") -> list[KnowledgeEntry]:
-    """列表：按分类/关键词筛选，只看未删除条目，按更新时间倒序。"""
+def list_knowledge(
+    db: Session, *, q: str = "", category: str = "", company: str = ""
+) -> list[KnowledgeEntry]:
+    """列表：按分类/关键词/公司筛选，只看未删除条目，按更新时间倒序。"""
     return (
-        _filtered_query(db, q=q, category=category)
+        _filtered_query(db, q=q, category=category, company=company)
         .order_by(KnowledgeEntry.updated_at.desc(), KnowledgeEntry.id.desc())
         .all()
     )
@@ -130,6 +145,8 @@ def list_knowledge_page(
     q: str = "",
     category: str = "",
     tag: str = "",
+    company: str = "",
+    uncategorized: bool = False,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[KnowledgeEntry], int]:
@@ -139,7 +156,9 @@ def list_knowledge_page(
     必须下沉到查询里，否则标签筛选会退化成"当前页内挑标签"）：精确成员判定，见
     :func:`_tag_expression`。筛选全部发生在**分页之前**，total 反映筛选后的集合。
     """
-    query = _filtered_query(db, q=q, category=category)
+    query = _filtered_query(
+        db, q=q, category=category, company=company, uncategorized=uncategorized
+    )
     if tag.strip():
         query = query.filter(_tag_expression(tag.strip()))
     total = query.count()
@@ -216,6 +235,66 @@ def knowledge_categories(db: Session) -> list[str]:
     """已使用过的分类，供界面与接口给出建议。"""
     rows = db.query(KnowledgeEntry.category).distinct().all()
     return sorted({row[0] for row in rows if row[0]})
+
+
+def knowledge_companies(db: Session) -> list[str]:
+    """已使用过的公司名（#29D 按公司筛选的下拉选项），字典序升序。"""
+    rows = db.query(KnowledgeEntry.company).filter(trash.live_only(KnowledgeEntry)).all()
+    return sorted({str(company) for (company,) in rows if company})
+
+
+def related_knowledge(
+    db: Session,
+    *,
+    company: str = "",
+    job_id: int | None = None,
+    limit: int = 5,
+) -> tuple[int, list[KnowledgeEntry]]:
+    """与一家公司 / 一条岗位相关的知识条目（#29D，面试页与岗位详情共用）。
+
+    判据是**两个可空列**而不是多对多表：company 精确匹配，或 job_id 精确匹配；
+    两者都没给时返回空（调用方不该用"全库"冒充"相关知识"）。总数是筛选后的全量，
+    列表按更新时间倒序——total 用于界面上「这家公司面经 N 条」的 N。
+    """
+    query = db.query(KnowledgeEntry).filter(trash.live_only(KnowledgeEntry))
+    conditions = []
+    if company.strip():
+        conditions.append(KnowledgeEntry.company == company.strip())
+    if job_id is not None:
+        conditions.append(KnowledgeEntry.job_id == job_id)
+    if not conditions:
+        return 0, []
+    query = query.filter(or_(*conditions))
+    total = query.count()
+    rows = (
+        query.order_by(KnowledgeEntry.updated_at.desc(), KnowledgeEntry.id.desc())
+        .limit(max(1, limit))
+        .all()
+    )
+    return total, rows
+
+
+def review_candidates(
+    db: Session, *, stale_days: int = 30, limit: int = 10
+) -> list[KnowledgeEntry]:
+    """#29F 复习提醒候选：最近 stale_days 天没被打开过、也不再更新的条目。
+
+    知识库没有"打开"这件事的独立记录（不新增列，问题清单 #29F 明确不做 SRS），
+    所以用 updated_at 近似"最近一次被碰":长期没更新 = 值得回头看一眼。只返回候选，
+    "每周提示一次"由前端按周去重（本地偏好），服务端不做定时任务。
+    """
+    from datetime import timedelta
+
+    from ..models.profile import utcnow
+
+    cutoff = utcnow() - timedelta(days=stale_days)
+    return (
+        db.query(KnowledgeEntry)
+        .filter(trash.live_only(KnowledgeEntry), KnowledgeEntry.updated_at < cutoff)
+        .order_by(KnowledgeEntry.updated_at.asc(), KnowledgeEntry.id.asc())
+        .limit(max(1, limit))
+        .all()
+    )
 
 
 __all__ = [

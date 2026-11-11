@@ -25,6 +25,17 @@ SEARCH_TOOLS: tuple[Tool, ...] = (
                         "不填按上限处理。"
                     ),
                 },
+                # P4-08：模型可以按问题类型自己选深度——问"某公司官网地址"用 snippet 更快，
+                # 问"这个岗位具体做什么"要 standard/deep 才读得到正文。
+                "depth": {
+                    "type": "string",
+                    "enum": ["snippet", "standard", "deep"],
+                    "description": (
+                        "可选：搜索深度。snippet 只看摘要（最快）；standard 打开前 2 条结果"
+                        "读正文（默认）；deep 打开前 5 条并多取几段（最详细，也最慢）。"
+                        "不填按设置页的默认档位。"
+                    ),
+                },
             },
             "required": ["query"],
         },

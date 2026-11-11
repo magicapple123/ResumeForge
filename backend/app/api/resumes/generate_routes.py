@@ -18,6 +18,7 @@ patch 静默断开（部分用例靠真实配置兜底仍会绿，是最危险�
 
 import logging
 import threading
+import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -38,7 +39,9 @@ from ...services.career_scenarios.resolve import CareerContextError, resolve_con
 from ...services.claims import build_baseline
 from ...services.llm.base import LLMError
 from ...services.llm.usage_tasks import set_ambient_scope
+from ...services.rag.rag_receipt import append_rag_note, get_rag_receipt
 from ...services.rag.rag_service import generate_with_scope, prepare_selection_boost
+from ...services.rag.rag_visibility import rag_state_payload
 from ...services.resume import document_io
 from ...services.resume.generate_snapshot import (
     consumed_has_content,
@@ -222,12 +225,19 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         job_out = JobOut.model_validate(job) if job is not None else None
         # RAG（默认关闭）：在冻结快照上旁路算一次 boost / 查询扩展词。任何失败
         # （未配置/超时/坏响应）都返回空作用域，生成链行为与改造前逐字节一致。
+        _retrieval_started = time.perf_counter()
         retrieval_scope = await prepare_selection_boost(
             frozen.consumed,
             job_out,
             config=config,
             db=db,
             dataset_id=lease.identity.dataset_id,
+        )
+        # #30：把"这一次用没用上语义检索"固定下来，供 SSE 回执与 done 审计共用。
+        # 只读 scope，不改生成链行为。
+        retrieval_payload = rag_state_payload(
+            retrieval_scope,
+            elapsed_ms=int((time.perf_counter() - _retrieval_started) * 1000),
         )
         # 事实台账里已确认的条目作为事实基线交给模型；台账为空时它就是空基线。
         # F3 契约 §4：只带入能关联到本次快照条目的正向事实（组外/旧资料台账不自动带入）。
@@ -245,6 +255,8 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
     factory = dataset_scope.frozen_session_factory(lease.identity)
 
     async def event_stream():
+        # #30：检索发生在生成之前，所以先给回执——用户不必等整篇生成完才知道"这次没检索"。
+        yield _format_sse({"type": "retrieval", **retrieval_payload})
         raw_parts: list[str] = []
         parsed: dict | None = None
         document: dict | None = None
@@ -306,7 +318,9 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                         format_config=save_format_config,
                         custom_instruction=payload.options.custom_instruction,
                         coverage_notes=done_event.get("coverage_notes") or [],
-                        rationale=done_event.get("rationale") or "",
+                        rationale=append_rag_note(
+                            done_event.get("rationale") or "", payload=retrieval_payload
+                        ),
                         fact_annotations=done_event.get("fact_annotations") or [],
                         document_mode=payload.options.document_mode,
                         context_snapshot=context_snapshot,
@@ -326,6 +340,8 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                 yield _format_sse({"type": "saved", "record_id": record.id})
                 if document is not None:
                     done_event = {**done_event, "resume": document}
+                # 与 retrieval 回执同一份数据：页面展示与"可审计的一行"不会互相矛盾。
+                done_event = {**done_event, "rag": retrieval_payload}
                 yield _format_sse(done_event)
         except LLMError:
             logger.warning("简历生成失败（模型错误，用户可见错误已固定脱敏）")
@@ -450,7 +466,12 @@ def get_resume_generate_task(task_id: int, db: Session = Depends(get_db)):
     task = db.get(ResumeGenerateTask, task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="生成任务不存在或已被删除")
-    return GenerateTaskOut.model_validate(task)
+    payload = GenerateTaskOut.model_validate(task)
+    # #30：回执不在数据库（零迁移），由 runner 在检索完成后写进程内注册表。
+    receipt = get_rag_receipt(task.id)
+    if receipt is not None:
+        payload.rag = receipt
+    return payload
 
 
 @router.post("/generate/tasks/{task_id}/cancel", response_model=GenerateTaskOut)

@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -286,13 +287,49 @@ def test_unknown_site_key_is_accepted_then_falls_back_to_the_first_site(db_sessi
     assert apply_service.default_entry_url(db_session) == "https://www.zhipin.com/"
 
 
+FORBIDDEN_SITE_TOKENS = ("zhipin", "boss直聘", "直聘", "lagou", "51job", "liepin")
+
+
+def hardcoded_site_hits(text: str, tokens: tuple[str, ...] = FORBIDDEN_SITE_TOKENS) -> list[str]:
+    """返回 ``text`` 里命中的站点 token（每个 token 最多一次）。
+
+    **为什么不是 ``token in text``**：子串匹配会命中"更长的英文单词"里恰好包含站点名的
+    片段——`FlagOutlined`（Ant Design 的图标名）里含 `lagou`，于是把一行纯 UI 代码判成
+    "写死了拉勾"。这类误报会让守卫失去可信度（要么被无视、要么被加豁免，两种都比不修更糟）。
+
+    规则分两套，按 token 是否 ASCII 决定：
+
+    - **ASCII token**（zhipin / lagou / 51job / liepin）按**词边界**匹配：前后不能紧邻
+      ASCII 字母或数字。`lagou.com`（后面是 ``.``）、`"zhipin"`（前面是引号）照旧命中，
+      `flagoutlined`（前面是 ``f``）不再命中。用 ``re.IGNORECASE`` 而不是先 casefold，
+      这样"词"的概念与原文大小写无关、报错信息也保留原始写法。
+    - **含中文的 token**（boss直聘 / 直聘）仍按**子串**匹配：中文没有词边界，
+      `BOSS直聘` 里 `直聘` 前面是 ASCII 字母，若也套词边界反而会漏掉这个最该命中的写法
+      （中文文案里"直聘"常常紧跟在英文品牌名后面）。
+
+    已知局限（刻意接受）：驼峰标识符内部的英文 token（如 ``useZhipinHook``）不再命中——
+    词边界把"名字里含站点名"与"写死了站点信息"当成两件事；前者由 review 兜，后者由本守卫兜。
+    """
+
+    hits: list[str] = []
+    folded = text.casefold()
+    for token in tokens:
+        if token.isascii():
+            pattern = rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])"
+            matched = re.search(pattern, text, re.IGNORECASE) is not None
+        else:
+            matched = token in folded
+        if matched:
+            hits.append(token)
+    return hits
+
+
 def test_frontend_production_code_has_no_hardcoded_site_names():
     """前端生产代码（排除 *.test.*）里不得写死站点名 / 站点清单 / 站点 URL。"""
     root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     if not root.exists():  # pragma: no cover - 前端不在时跳过
         pytest.skip("未找到 frontend/src")
 
-    forbidden = ("zhipin", "boss直聘", "直聘", "lagou", "51job", "liepin")
     offenders: list[tuple[str, str]] = []
     for path in root.rglob("*"):
         if not path.is_file():
@@ -302,9 +339,22 @@ def test_frontend_production_code_has_no_hardcoded_site_names():
             continue
         if path.suffix not in {".ts", ".tsx"}:
             continue
-        text = path.read_text(encoding="utf-8", errors="ignore").casefold()
-        for token in forbidden:
-            if token in text:
-                offenders.append((str(path.relative_to(root)), token))
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for token in hardcoded_site_hits(text):
+            offenders.append((str(path.relative_to(root)), token))
 
     assert offenders == [], f"前端生产代码里出现了写死的站点信息：{offenders}"
+
+
+def test_icon_names_containing_a_site_token_are_not_offenders():
+    """`FlagOutlined` 这类图标名里恰好含 `lagou`，不该被判成"写死站点"。
+
+    回归的是真实误报：`components/apply/ApplyRecordTrackButton.tsx` 的
+    `import { FlagOutlined }` → `flagoutlined` 里含 `lagou`，子串匹配把它判红。
+    """
+    assert hardcoded_site_hits('import { FlagOutlined } from "@ant-design/icons";') == []
+    assert hardcoded_site_hits("const icon = <flagOutlined />;") == []
+    # 反面：真·站点名仍然命中（收紧后不能放过这一类）。
+    assert hardcoded_site_hits('const url = "https://www.lagou.com/";') == ["lagou"]
+    assert hardcoded_site_hits('const label = "BOSS直聘";') == ["boss直聘", "直聘"]
+    assert hardcoded_site_hits('const url = "https://www.zhipin.com/";') == ["zhipin"]

@@ -153,8 +153,8 @@ def test_web_search_never_exceeds_the_documented_limit(client, monkeypatch):
     _configure_llm(client)
     executed: list[str] = []
 
-    # 签名比单引擎版本多一个搜索设置参数。
-    async def fake_search(query: str, _config, limit=None) -> list[dict[str, str]]:
+    # 签名比单引擎版本多一个搜索设置参数（P4-08 起还多一个可选的 depth）。
+    async def fake_search(query: str, _config, limit=None, *, depth=None) -> list[dict[str, str]]:
         executed.append(query)
         index = len(executed)
         return [{"title": f"招聘 {index}", "url": f"https://example.com/{index}", "snippet": "摘要"}]

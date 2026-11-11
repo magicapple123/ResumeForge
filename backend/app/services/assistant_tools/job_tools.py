@@ -23,6 +23,7 @@ from ...schemas.profile import (
 )
 from .. import trash
 from ..assistant.assistant_skills import read_skill_knowledge
+from ..favorites import apply_favorite
 from ..job.job_service import create_job_record, update_job_record
 from ..profile.profile_relevance import build_job_prompt_text
 from ..profile.profile_service import update_profile
@@ -270,7 +271,8 @@ def _tool_update_resume(db: Session, arguments: dict) -> ToolResult:
     if "favorite" not in arguments and "note" not in arguments:
         raise ValueError("需要提供 favorite 或 note 中的至少一项")
     if "favorite" in arguments:
-        record.favorite = bool(arguments["favorite"])
+        # #28E：与页面、接口共用同一个收藏写入口（时间戳一起改）。
+        apply_favorite(record, bool(arguments["favorite"]))
     if "note" in arguments:
         record.note = str(arguments["note"])
     db.commit()

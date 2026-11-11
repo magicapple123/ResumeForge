@@ -373,25 +373,35 @@ def test_e07_api_paths_never_fall_back_to_the_frontend_shell(client):
 
 
 def test_e09_page_fetch_defaults_to_off(client, db_session):
-    """抓取正文（fetch_pages）默认必须为 0：要抓正文得用户显式打开。"""
+    """搜索深度默认「标准」（抓 2 页正文），「只取摘要」是一个可选档位。
+
+    **口径变化（P4-08，2026-11-10）**：本用例原先钉的是"抓正文默认关闭（`fetch_pages`
+    必须为 0）"。09-1/09-2 的实测结论把这个默认值推翻了——只给摘要的搜索读到的是导航，
+    回答不了"这个岗位具体做什么"，所以默认档位改成「标准」，抓正文变成默认行为，
+    「摘要」档仍然存在（`depth="snippet"`，0 页）。这里继续钉住"默认值可预期、且能被
+    显式改掉"这条性质，而不再钉住那个被推翻的数值。
+    """
     from app.schemas.setting import SearchConfig
     from app.services.settings_service import get_search_config
 
     response = client.get("/api/settings/search")
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["fetch_pages"] == 0
+    assert payload["depth"] == "standard"
+    # 旧字段仍按档位折算出来（旧前端读到 2 = 「标准」，不会把深度降回摘要）。
+    assert payload["fetch_pages"] == 2
     assert payload["max_results"] >= 1
 
-    assert SearchConfig().fetch_pages == 0
-    assert get_search_config(db_session).fetch_pages == 0
+    assert SearchConfig().depth == "standard"
+    assert get_search_config(db_session).depth == "standard"
 
-    # 显式打开后能存下来（证明关闭不是"写不进去"的假默认）。
+    # 显式改成「摘要」后能存下来（证明默认值不是"写不进去"的假默认）。
     opened = dict(payload)
-    opened["fetch_pages"] = 2
+    opened["depth"] = "snippet"
     written = client.put("/api/settings/search", json=opened)
     assert written.status_code == 200, written.text
-    assert written.json()["fetch_pages"] == 2
+    assert written.json()["depth"] == "snippet"
+    assert written.json()["fetch_pages"] == 0
 
 
 # ===== E11：备份恢复演练（真实子进程） =====

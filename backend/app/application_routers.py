@@ -20,9 +20,13 @@ from .api import (
     analytics,
     apply,
     assistant,
+    assistant_breadth,
+    assistant_memory,
     assistant_permission,
     assistant_proposal_status,
     assistant_proposals,
+    assistant_side_ask,
+    assistant_skill_learning,
     assistant_tools_api,
     ats,
     attachments,
@@ -37,6 +41,8 @@ from .api import (
     interview_answer_review,
     interview_experiences,
     interview_history,
+    job_favorites,
+    job_import_url,
     job_match,
     job_preferences,
     jobs,
@@ -112,6 +118,11 @@ ROUTERS = (
     agent_tasks.router,  # T19：Agent 任务多步计划（独立前缀 /api/agent-tasks）。
     # 期一 T04：跟进巡检决策（独立前缀 /api/followups，不与 /api/agent-tasks 抢路径）。
     followups.router,
+    # #28：/api/jobs/favorites* 是 /api/jobs/{job_id} 的字面量兄弟，必须先于 jobs.router
+    # 注册，否则会被参数段吞掉（同上面 job_match 的 /match-batches）。
+    job_favorites.router,
+    # #16 链接导入：独立前缀 /api/jobs/import/from-url，不与 /import、/{job_id} 抢路径。
+    job_import_url.router,
     jobs.router,
     jobs_analysis.router,
     resumes.router,
@@ -177,15 +188,24 @@ ROUTERS = (
     # W16 数据集级术语表：独立前缀 /api/glossary-terms。
     glossary_api.router,
     assistant.router,
+    # #31C 助手语义记忆（前缀 /api/assistant/memories，路径不与 assistant.router 重叠）。
+    assistant_memory.router,
+    # #31D/E/F 技能学习（前缀 /api/assistant/skills/learning）：字面量段必须先于
+    # assistant.router 的 /skills/{id} 参数段注册，否则会被参数段吞掉。
+    assistant_skill_learning.router,
     # T11 数据权限全局默认（前缀同 /api/assistant，路径 /permission）。
     assistant_permission.router,
     assistant_proposals.router,
+    # #27E 投投「顺便问」：一次性、不落库、不调工具的问答端点（/api/assistant/side-ask）。
+    assistant_side_ask.router,
     # T01：写操作提案状态列表（前缀同 /api/assistant，路径 /write-proposals 与
     # /write-proposals/{id} 不冲突）。
     assistant_proposal_status.router,
     # #38 工具清单：`GET /api/assistant/tools` 单独一个模块（assistant.py 已贴 500 行预算），
     # 前缀同 /api/assistant，路径 /tools 与既有 /conversations/* 不重叠。
     assistant_tools_api.router,
+    # 18B/18C：今日简报与多视角（/api/assistant/digest*、/personas、conversations/{id}/persona）。
+    assistant_breadth.router,
     # 期二 求职偏好档（/api/job-preferences，独立前缀；与 /api/assistant 不抢路径）。
     job_preferences.router,
     trash.router,

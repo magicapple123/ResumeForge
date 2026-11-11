@@ -17,13 +17,26 @@ from typing import Any
 from ...runtime.operation_budget import OperationCancelled
 from ...schemas.assistant import AssistantMessageCreate
 from .. import settings_service
+from ..assistant_limits import (
+    DEFAULT_MAX_TOOL_ROUNDS,
+    get_max_tool_rounds,
+    get_stream_budget_override,
+    get_tool_result_max_chars,
+    truncate_tool_result,
+)
 from ..assistant_run_trace import utcnow
 from ..assistant_tools import policy as tool_policy
 from ..assistant_tools import tool_definitions
 from ..llm.base import BaseLLMProvider, LLMError
 from ..llm.tool_messages import assistant_tool_call_message
 from ..llm.usage import FINISH_BUDGET_EXHAUSTED
-from ..settings_service import get_search_config, resolve_assistant_relaxed_mode
+from ..settings_service import (
+    get_llm_config,
+    get_search_config,
+    resolve_assistant_relaxed_mode,
+)
+from .assistant_compaction_store import compact_before_model
+from .assistant_context_usage import connectors_text, conversation_text, turn_usage
 from .assistant_persistence import (
     cancel_pending_assistant_message,
     finish_assistant_message,
@@ -37,6 +50,7 @@ from .assistant_service import (
 from .assistant_skills import list_conversation_skills
 from .assistant_sources import SourceNumberer
 from .assistant_stream_budget import AssistantStreamBudget
+from .assistant_system_prompt import build_system_prompt_parts
 from .assistant_tool_exec import (
     begin_run_trace,
     close_run_trace,
@@ -49,7 +63,10 @@ from .assistant_tool_exec import (
 logger = logging.getLogger(__name__)
 
 # 一次回复里最多允许几轮工具调用；防止模型在两个工具之间来回打转。
-MAX_TOOL_ROUNDS = 5
+# 这里只是**默认值**：真正的上限在设置页可改（``AppSetting``，见
+# ``services/assistant_limits``），循环里逐轮重读；保留这个模块级常量是因为
+# ``api/assistant_stream`` 与既有测试按模块属性取符号，它同时是 DB 缺省时的兜底。
+MAX_TOOL_ROUNDS = DEFAULT_MAX_TOOL_ROUNDS
 # 一轮回答里最多搜几次网，**全部由 web_search 工具发起**。系统提示、README 与使用指南
 # 都写着"最多 3 次"，这里把它变成真的：此前只有提示词里那句话，代码侧真正的约束是 5 轮
 # 工具调用，而且每轮可以并行发多个搜索——用户按文档预期 3 次，实际可能多花好几倍。
@@ -106,7 +123,11 @@ async def _stream_message_events(
     # 保证正文里的 [来源N] 能对应到模型当时看到的那条 URL（跨多次搜索不重号）。
     numberer = SourceNumberer()
     # RF-14 §2.1.b/§2.2/§2.5：整链预算与用量遥测的协调器（assistant_budget）。
-    budget = AssistantStreamBudget()
+    # 预算秒数**请求开始时读一次** DB 覆盖值（设置页可改）；用户没设过就是 None，
+    # 由协调器回落到 config 的部署默认（1800 秒），不把部署侧配置顶掉。
+    with factory() as db:
+        budget_override = get_stream_budget_override(db)
+    budget = AssistantStreamBudget(stream_budget_seconds=budget_override)
     # T21 运行轨迹：进程内记录，收尾把白名单视图写进助手消息 context（JSON 列，零迁移）。
     trace = begin_run_trace(provider, assistant_message_id, conversation_id)
     # 活预算硬墙钟接线（审计 PR-07-3）：provider 的每次传输尝试以整链剩余预算做
@@ -124,11 +145,38 @@ async def _stream_message_events(
                 "conversation_title": generated_title,
             }
         )
-        messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
-        messages.extend(history_messages_for_model(history))
-        messages.append(
-            current_user_message_for_model(payload.content, attachments, model_context, quoted)
+        # 历史与当前消息各算一次、两处复用：拼进 ``messages`` 的内容与「对话消息」桶
+        # 计量的内容必须是同一份，否则面板上的数字和真正发出去的东西会对不上。
+        history_messages = history_messages_for_model(history)
+        user_message = current_user_message_for_model(
+            payload.content, attachments, model_context, quoted
         )
+        messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+        messages.extend(history_messages)
+        messages.append(user_message)
+        # 需求 #6「上下文用量」：按**构造**分桶，不解析最终 messages。与轮次无关的三段
+        # （系统提示词 / 技能 / 连接器）先算好；每轮只重算"工具"桶——工具 schema 在同一
+        # 轮里不变，工具结果随工具调用累积。
+        with factory() as db:
+            prompt_parts = build_system_prompt_parts(
+                db,
+                relaxed=resolve_assistant_relaxed_mode(db, payload.relaxed_mode),
+                conversation_id=conversation_id,
+                client_context=payload.client_context,
+            )
+            # 百分比分母：当前生效模型的上下文窗口。优先用 provider 带的那份配置；测试
+            # 替身或自定义 provider 没有它时回落到设置里的当前生效配置——与 api 层建
+            # provider 用的是同一个 get_llm_config，两处取到的不会是两个值。
+            window_tokens = int(
+                getattr(getattr(provider, "config", None), "context_window_tokens", 0) or 0
+            )
+            if window_tokens == 0:
+                window_tokens = int(getattr(get_llm_config(db), "context_window_tokens", 0) or 0)
+        # 连接器及 MCP 桶 = 界面上下文块 + 项目上下文块 + 附件文本（没有文本就跳过）。
+        connectors_source = connectors_text(
+            prompt_parts["client"], model_context, attachments
+        )
+        conversation_source = conversation_text([*history_messages, user_message])
 
         tool_records: list[dict[str, Any]] = []
         # 工具里搜到的来源合并展示，按 URL 去重。
@@ -140,17 +188,28 @@ async def _stream_message_events(
         web_searches_used = 0
         # token 估算遥测（RF-14 §2.5）：组装完 messages 后估算，只进 estimated_* 遥测字段。
         budget.estimate_prompt_tokens(messages)
-        for _round in range(MAX_TOOL_ROUNDS):
+        # 轮次上限**逐轮重读**（需求 #5）：用户生成途中把它改小，下一轮立刻按新值收尾。
+        rounds_run = 0
+        hit_round_limit = False
+        while True:
             # RF-14 §2.1.b 检查点 1：每轮工具循环开始——到期就不发起新一轮模型调用。
             budget.check()
             # RF-01：每轮重建执行上下文并重读设置——请求显式覆盖的 relaxed_mode 优先，
             # 否则读全局设置；流中途改全局后下一轮立即生效（撤销不依赖模型自觉，也不依赖
             # 请求开始时的旧快照）。下发集合与执行白名单同源（policy）。
             with factory() as db:
+                rounds_allowed = get_max_tool_rounds(db)
+                # 详册 #5 的 5.3 L1：单条工具结果上限。与轮次同一个读口，设置页改完
+                # 下一轮就生效；0 = 不限。
+                tool_result_limit = get_tool_result_max_chars(db)
                 relaxed_now = resolve_assistant_relaxed_mode(db, payload.relaxed_mode)
                 search_config_now = get_search_config(db)
                 fetch_pages_now = search_config_now.fetch_pages
                 max_results_now = search_config_now.max_results
+            if rounds_run >= rounds_allowed:
+                hit_round_limit = True
+                break
+            rounds_run += 1
             ctx = tool_policy.build_context(
                 web_search=payload.web_search,
                 fetch_pages=fetch_pages_now,
@@ -167,6 +226,37 @@ async def _stream_message_events(
                 session_used_writes=False,
                 relaxed=relaxed_now,
             )
+            # #6：本轮上下文用量（估算）。`messages` 与 `tools` 都定下来了才计量——
+            # 每轮算一次，绝不在每个 delta 里重算（工具 schema 是最大的静态块）。
+            context_usage = turn_usage(
+                prompt_parts=prompt_parts,
+                connectors_source=connectors_source,
+                conversation_source=conversation_source,
+                tools=tools,
+                messages=messages,
+                window_tokens=window_tokens,
+                usage_actual=budget.last_prompt_tokens,
+            )
+            # 同一个 dict 累积、整体写回：工具轮之后与收尾各写一次，历史回看能读到它。
+            assistant_context["context_usage"] = context_usage
+            yield format_sse({"type": "context_usage", "usage": context_usage})
+            # #10 上下文压缩：装配完、调模型前——先遮蔽旧工具结果，仍超阈值再结构化摘要。
+            # 决策、变换与落库全在 services/assistant/assistant_compaction*；本文件只剩二十
+            # 余行余量，这里只接线并把失败标记写进 context（失败绝不阻断发送）。
+            messages, compaction_flags = await compact_before_model(
+                messages,
+                history=history,
+                history_count=len(history_messages),
+                factory=factory,
+                conversation_id=conversation_id,
+                provider=provider,
+                window_tokens=window_tokens,
+                percent=context_usage.get("percent"),
+            )
+            if compaction_flags.get("failed"):
+                assistant_context["compaction_failed"] = True
+            # 面板上的「对话消息」桶按**真正发出去的**那份算：压缩后它变小了，数字要跟着变。
+            conversation_source = conversation_text(messages[1:])
             calls: list[dict[str, Any]] = []
             round_reasoning: list[str] = []
             # aclosing 纪律（审计 PR-07-4）：取消/超时/异常路径也显式关闭 provider 流
@@ -243,7 +333,7 @@ async def _stream_message_events(
                     {
                         "role": "tool",
                         "tool_call_id": call.get("id") or "",
-                        "content": record["result_text"],
+                        "content": truncate_tool_result(record["result_text"], tool_result_limit),
                     }
                 )
                 yield format_sse(
@@ -251,6 +341,11 @@ async def _stream_message_events(
                         "type": "tool",
                         "name": record["name"],
                         "arguments": record["arguments"],
+                        # #13C：参数的安全投影（白名单键带值）。前端工具卡展开后
+                        # 只渲染这份，不直接展示 arguments 里的全部字段。
+                        "args_preview": record.get("args_preview") or [],
+                        # #13D：简历文档写操作的 diff / 撤销入口；没有就是 null。
+                        "preview": record.get("preview"),
                         "summary": record["summary"],
                         "link": record["link"],
                         "ok": record["ok"],
@@ -288,12 +383,14 @@ async def _stream_message_events(
             assistant_context["tool_calls"] = tool_records
             assistant_context["run_trace"] = run_trace_payload(trace)
             update_message_context(assistant_message_id, dict(assistant_context), factory=factory)
-        else:
-            # 到达轮次上限：停止继续调用工具，让用户看到已经做了什么。
+        if hit_round_limit:
+            # 到达轮次上限：停止继续调用工具，让用户看到已经做了什么，并由前端给一个
+            # 「继续」入口（复用现有发送链路，不新开端点）。
             parts.append(
-                f"\n\n（已经连续执行了 {MAX_TOOL_ROUNDS} 轮工具调用，为避免失控先停在这里，"
-                "你可以继续追问。）"
+                f"\n\n（已经连续执行了 {rounds_run} 轮工具调用，为避免失控先停在这里，"
+                "你可以点「继续」或继续追问。）"
             )
+            yield format_sse({"type": "round_limit", "rounds": rounds_run})
 
         # 来源编号映射随助手这条消息一起落库：前端渲染正文里的 [来源N] 时按它解析，
         # 而不是拿"去重后的参考来源"下标去对——那会跳错来源。即使这轮没有工具调用/

@@ -31,7 +31,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
@@ -219,18 +219,12 @@ async def _fetch_following_redirects(
     return ""
 
 
-async def fetch_page_text(
+async def _fetch_local_text(
     url: str,
-    max_chars: int = MAX_TEXT_CHARS,
-    *,
-    transport: httpx.AsyncBaseTransport | None = None,
+    max_chars: int,
+    transport: httpx.AsyncBaseTransport | None,
 ) -> str:
-    """读取一页正文；任何失败都返回空串（调用方按"这条没有正文"处理）。
-
-    失败分类只影响日志的可读性，不影响返回值：拒绝（:class:`PageFetchBlocked`）、
-    总预算耗尽（``TimeoutError``）、单跳超时与网络错误（httpx 异常）各记各的原因。
-    ``transport`` 仅供测试注入 MockTransport，生产调用方不传。
-    """
+    """本地抓取 + 抽取正文；任何失败都返回空串（分类只影响日志可读性）。"""
     try:
         async with asyncio.timeout(_TOTAL_BUDGET_SECONDS):
             return await _fetch_following_redirects(url, max_chars, transport)
@@ -242,6 +236,33 @@ async def fetch_page_text(
         return ""
     except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPError) as exc:
         logger.info("正文抓取失败：%s", type(exc).__name__)
+        return ""
+
+
+async def fetch_page_text(
+    url: str,
+    max_chars: int = MAX_TEXT_CHARS,
+    *,
+    transport: httpx.AsyncBaseTransport | None = None,
+    reader_fallback: Callable[[str, int], Awaitable[str]] | None = None,
+) -> str:
+    """读取一页正文；任何失败都返回空串（调用方按"这条没有正文"处理）。
+
+    失败分类只影响日志的可读性，不影响返回值：拒绝（:class:`PageFetchBlocked`）、
+    总预算耗尽（``TimeoutError``）、单跳超时与网络错误（httpx 异常）各记各的原因。
+    ``transport`` 仅供测试注入 MockTransport，生产调用方不传。
+
+    ``reader_fallback`` 是**可选兜底**（P4-10 的 ``r.jina.ai``）：本地抽出正文就直接返回，
+    **不会调用它**；只有本地拿到空串时才调用一次。这样"JS 重的页面读不出正文"有救，
+    而普通页面不会平白多打一次第三方请求（也就不会重复请求同一个地址）。
+    """
+    text = await _fetch_local_text(url, max_chars, transport)
+    if text or reader_fallback is None:
+        return text
+    try:
+        return (await reader_fallback(url, max_chars)) or ""
+    except Exception:  # noqa: BLE001 - 兜底失败不该让整次搜索失败
+        logger.info("正文兜底读取失败，按「没有正文」处理：%s", url)
         return ""
 
 

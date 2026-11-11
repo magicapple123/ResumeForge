@@ -42,6 +42,10 @@ class ChatConversation(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    # 上下文压缩状态（问题清单 #10，迁移 0011）：可空 JSON。NULL = 没压缩过（默认）。
+    # 只记"覆盖到哪条消息" + 结构化摘要 + 上次压缩的量化结果；**原文永不删除**，
+    # 所以「还原」就是把它置回 NULL，而不是回滚任何消息。
+    compaction: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, default=None)
 
     # 软删除时间戳：NULL 表示「没删」。列表查询一律加 `deleted_at IS NULL`，
     # 回收站里则只看非 NULL 的行（见 ``services/trash.py``）。
@@ -102,6 +106,22 @@ class AssistantSkill(Base):
     # 不再参与系统提示注入。保留列是为了避免破坏性迁移，也不回填历史值；新对话一律为空。
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     source_name: Mapped[str] = mapped_column(String(255), default="")
+    # 0016（#31D）：四段内容的另外三段。手工导入的老技能为空串，行为不变。
+    when_to_use: Mapped[str] = mapped_column(Text, default="", server_default="")
+    steps: Mapped[str] = mapped_column(Text, default="", server_default="")
+    pitfalls: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # 版本（#31E）：自动生成/更新时自增；对话启用行记引用版本，避免组合漂移。
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False, server_default="1")
+    # 是否由对话自动生成（#31D）：生成的学习成果默认待验证，不自动生效。
+    generated: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="0"
+    )
+    # 验证状态（#31D/#31F）：'' = 无需验证（手工导入/手写）；pending = 待验证；validated = 已验证。
+    validation_status: Mapped[str] = mapped_column(
+        String(16), default="", nullable=False, server_default=""
+    )
+    # 最近一次被加载进系统提示的时间（#31E）：90 天未加载 → 提示归档，不自动删。
+    last_loaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -153,6 +173,8 @@ class AssistantConversationSkill(Base):
     skill_id: Mapped[int] = mapped_column(
         ForeignKey("assistant_skill.id", ondelete="CASCADE"), index=True
     )
+    # 0016（#31E）：启用时引用的技能版本快照（NULL = 0016 之前的老关联行，按当前版本读）。
+    skill_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 

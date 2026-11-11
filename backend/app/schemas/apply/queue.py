@@ -73,6 +73,21 @@ class ApplyQueueItemOut(BaseModel):
     # 默认 True 是刻意的兜底方向——万一某处没算，结果是"界面允许、后端拒绝并说明原因"，
     # 而不是把能投的岗位误标成不能投。
     apply_supported: bool = True
+    # 14B：参考分（0-100，派生值、不参与准入）。未分析或读不出可用结论时为 None——
+    # 用 None 而不是 0，界面才能把"没算过"和"算了但很低"分开显示。
+    match_score: int | None = None
+    # 14B：岗位广场里的收藏标记，界面据此提供「只看收藏」筛选。
+    favorite: bool = False
+    # 15A：僵尸分（0–100，派生值、不参与准入）。``None`` = **历史不足**（采样 < 2 条），
+    # 界面显示「历史不足」而不是 0 分——0 分意味着"看过很多次、看不出问题"，把两者混成
+    # 一个数会让新采集的岗位看起来"很健康"，那正是这个功能要反对的说法。
+    ghost_score: int | None = None
+    ghost_evidence: list[str] = Field(default_factory=list)
+    # 15A：用户已忽略这条岗位的僵尸提示。界面上"僵尸 75"徽标与「忽略」按钮的状态都读它；
+    # 它**不影响** ghost_score（分数照旧下发）——忽略只是不再提醒，不是分数被清零。
+    ghost_ignored: bool = False
+    # 15B：重采时 JD 指纹变过。**被动式**——只有下次采集才会更新，UI 必须写明这点。
+    jd_changed: bool = False
     created_at: datetime
     updated_at: datetime
 

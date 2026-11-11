@@ -33,8 +33,16 @@ class AssistantStreamBudget:
     「未知」，禁止伪造 0）。
     """
 
-    def __init__(self) -> None:
-        self._budget = OperationBudget.start(get_settings().assistant_stream_budget_seconds)
+    def __init__(self, stream_budget_seconds: int | None = None) -> None:
+        """``stream_budget_seconds`` 是用户在设置页设过的整链预算；``None`` 表示没设过，
+        回落到 config 的部署默认（可被环境变量覆盖）——区分两者是为了不把部署侧配置顶掉。
+        """
+        seconds = (
+            get_settings().assistant_stream_budget_seconds
+            if stream_budget_seconds is None
+            else stream_budget_seconds
+        )
+        self._budget = OperationBudget.start(seconds)
         self.usage_records: list[LLMUsage] = []
         # token 估算遥测（§2.5）：默认关，只在估算开启时才有值。
         self.estimated_prompt_tokens: int | None = None
@@ -57,6 +65,17 @@ class AssistantStreamBudget:
         round_usage = getattr(provider, "last_usage", None)
         if round_usage is not None:
             self.usage_records.append(round_usage)
+
+    @property
+    def last_prompt_tokens(self) -> int | None:
+        """上一轮**实测**的输入 token（服务商报告值）；没有记录或未报告时是 ``None``。
+
+        「上下文用量」面板的底栏单独展示它（需求 #6）：它是账单口径，与估算值不合并、
+        不换算，``None`` 就写「本次未报告」——绝不用估算值顶替。
+        """
+        if not self.usage_records:
+            return None
+        return self.usage_records[-1].prompt_tokens
 
     def estimate_prompt_tokens(self, messages: list[dict[str, Any]]) -> None:
         """§2.5：估算开启时对组装完的 messages 估算总 token（遥测专用）。

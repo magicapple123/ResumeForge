@@ -77,6 +77,13 @@ from .web_search_settings import save_search_config as save_search_config
 
 logger = logging.getLogger(__name__)
 
+# ===== 投递台的两个 JSON 设置（#14：屏蔽清单 / 话术库）=====
+# 与 ``assistant_limits`` 同一条路：AppSetting 里一行 JSON，**零迁移**。
+# 校验与业务规则不在这里（``services/apply/blocklist.py`` /
+# ``services/apply/greeting_templates.py``）：本模块只负责"存进去、读出来、别把脏数据炸到调用方"。
+_APPLY_BLOCKLIST_KEY = "apply_blocklist"
+_APPLY_GREETING_TEMPLATES_KEY = "apply_greeting_templates"
+
 _REMINDER_POPUP_KEY = "reminder_popup_on_start"
 _ASSISTANT_ORB_KEY = "assistant_orb_enabled"
 _NAVIGATION_VISIBILITY_KEY = "navigation_visibility"
@@ -317,4 +324,96 @@ def save_navigation_visibility(db: Session, config: NavigationVisibility) -> Nav
     else:
         row.value = serialized
     db.commit()
+    return cleaned
+
+
+# ===== 投递台 JSON 设置（#14）=====
+
+
+def _read_json_setting(db: Session, key: str, fallback: object) -> object:
+    """读一行 JSON 设置；**缺失或损坏都退回 fallback，不抛**。
+
+    这两个键是用户手填的（一行一家公司 / 一行一个关键词），也是最容易在落库后被人
+    手动改坏的地方。投递链路（采集入库、入队、投递前）三处都要读屏蔽清单——读不出来的
+    正确反应是"当作没配"，而不是让整次采集或整批投递失败。
+    """
+    row = db.get(AppSetting, key)
+    if row is None:
+        return fallback
+    try:
+        return json.loads(row.value)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("投递台设置 %s 数据损坏，已按未配置处理", key)
+        return fallback
+
+
+def _write_json_setting(db: Session, key: str, value: object) -> None:
+    serialized = json.dumps(value, ensure_ascii=False)
+    row = db.get(AppSetting, key)
+    if row is None:
+        db.add(AppSetting(key=key, value=serialized))
+    else:
+        row.value = serialized
+    db.commit()
+
+
+def _clean_name_list(values: object) -> list[str]:
+    """把任意形态的输入收成"非空、去空白、保序去重"的字符串列表。"""
+    if not isinstance(values, list):
+        return []
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in values:
+        text = str(item or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        cleaned.append(text)
+    return cleaned
+
+
+def get_apply_blocklist(db: Session) -> dict[str, list[str]]:
+    """读取屏蔽清单 ``{companies, keywords}``；缺失/损坏时返回两个空列表。
+
+    只做形态收敛（列表 + 非空字符串 + 去重），**不在这里判停用词**——那属于匹配规则，
+    在 ``services/apply/blocklist.py``；存下来的就是用户填的原话，界面上原样能看见。
+    """
+    raw = _read_json_setting(db, _APPLY_BLOCKLIST_KEY, {})
+    data = raw if isinstance(raw, dict) else {}
+    return {
+        "companies": _clean_name_list(data.get("companies")),
+        "keywords": _clean_name_list(data.get("keywords")),
+    }
+
+
+def save_apply_blocklist(
+    db: Session, companies: list[str], keywords: list[str]
+) -> dict[str, list[str]]:
+    """持久化屏蔽清单（整对象覆盖：PUT 语义）。"""
+    cleaned = {
+        "companies": _clean_name_list(list(companies)),
+        "keywords": _clean_name_list(list(keywords)),
+    }
+    _write_json_setting(db, _APPLY_BLOCKLIST_KEY, cleaned)
+    return cleaned
+
+
+def get_apply_greeting_templates(db: Session) -> list[dict[str, object]]:
+    """读取话术库（``[{id, name, body, tags, uses}]``）；缺失/损坏时返回空列表。
+
+    这里只保证"是个 dict 列表"，逐字段校验交给 schema（``GreetingTemplateIn``）——
+    非法条目由业务层丢弃并记日志，不让一行坏数据把整个话术库读空。
+    """
+    raw = _read_json_setting(db, _APPLY_GREETING_TEMPLATES_KEY, [])
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, dict)]
+
+
+def save_apply_greeting_templates(
+    db: Session, templates: list[dict[str, object]]
+) -> list[dict[str, object]]:
+    """持久化话术库（整对象覆盖：PUT 语义）。"""
+    cleaned = [dict(item) for item in templates if isinstance(item, dict)]
+    _write_json_setting(db, _APPLY_GREETING_TEMPLATES_KEY, cleaned)
     return cleaned

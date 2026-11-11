@@ -59,7 +59,10 @@ def test_search_error_does_not_enter_sse_history_or_model_context(client, monkey
     """
     _configure_llm(client)
 
-    async def fail(_query, _config, limit=None):
+    # 桩必须跟随 `aggregate_search` 的真实签名（`limit` 位置参数 + `depth` 仅关键字）：
+    # 工具调用会把两者都传进来，签名落后会在调用处炸出 TypeError，把这条隐私守卫变成
+    # 一条"桩签名过期"的假红。
+    async def fail(_query, _config, limit=None, *, depth=None):
         raise AssistantSearchError(PRIVATE_ERROR)
 
     monkeypatch.setattr("app.services.search.aggregate_search", fail)

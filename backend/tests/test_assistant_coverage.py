@@ -118,9 +118,20 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "隐私口径，助手不读不写，追溯在简历详情与生成记录里查看。",
     "share_package": ("list_share_packages",),
     # ===== 投递 =====
-    "apply_queue_item": ("list_apply_queue",),
+    "apply_queue_item": (
+        "list_apply_queue",
+        "queue_list",
+        "queue_update_priority",
+        "apply_start",
+    ),
     "apply_task": ("list_apply_records",),
     "apply_task_item": ("list_apply_records",),
+    # 15A/15B：采集历史（每次看到岗位记一行）。**派生结论**已经通过队列行暴露给助手
+    # （ghost_score / jd_changed / ghost_evidence），原始 sighting 不再单独下发。
+    "job_seen": "不暴露：这是采集历史的派生事实表（每次看到岗位记一行），"
+    "助手要看的是 list_apply_queue / queue_list 已经算好的 ghost_score 与 jd_changed 结论，"
+    "不需要原始 sighting 记录——把几百条重复快照灌进上下文既没有信息增量，"
+    "也会让模型拿采样条数当证据去下结论。",
     "web_form_fill_record": (
         "list_web_form_fills",
         "get_web_form_fill",
@@ -194,6 +205,13 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "assistant_conversation_skill": "不暴露：这是「对话 × 技能」的启用关联行，助手按当前对话"
     "被服务端注入，不需要也不应该自读自写；启用/停用是用户在输入区技能菜单里的显式动作，"
     "允许模型改它等于让它给自己换指令。",
+    # 0015（#31A/#31C/#18D）：语义记忆由服务端按相关性注入固定区块，助手既不需要
+    # 也不应该自读写——让它改自己的长期记忆等于让它给自己换人格设定，而且抽取本来
+    # 就是异步任务；用户在设置页「助手记忆」里逐条编辑/删除/标永不使用。
+    "assistant_memory": "不暴露：语义记忆（目标岗位/意向城市/薪资底线等）由服务端按当前"
+    "用户消息相关性取 top 5 注入固定区块，助手在对话里已经能看到；它的写入来自异步抽取"
+    "与用户在设置页的手填（source=manual/extracted），由模型自读自写会形成自我强化循环、"
+    "并绕过「用户可见可改」的硬要求（编辑/删除/永不使用只能在设置页做）。",
 
     # T01：写操作提案是**授权状态**（待确认参数 + 目标指纹 + 终态），不是业务数据。
     # 模型只通过系统提示里的状态块得知结果；给它读写工具等于让它查参数甚至自批，
@@ -201,12 +219,15 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "assistant_write_proposal": "不暴露：写操作提案是服务端授权与幂等状态表（含待确认参数、"
     "目标指纹与终态）；模型只看系统提示的状态块，不能读参数、不能改状态，"
     "否则「用户是唯一确认人」的边界失效。",
-    # T19：任务层由服务端任务服务推进；T20 把任务展示在助手页任务区（前端读 REST），
-    # 本轮不给模型任务读写工具——否则模型可以自己创建/推进/取消任务，破坏"用户可见可控"。
-    "agent_task": "不暴露：任务生命周期由服务端任务服务与页面任务区推进（T20），"
-    "本轮不给模型读写工具，避免模型自建/自推进任务；状态跨轮可见靠页面向用户展示。",
-    "agent_task_step": "不暴露：任务步骤是 agent_task 的子状态（幂等键/attempt/终态），"
-    "与 agent_task 同一理由；模型不需要读步骤行，页面任务区提供用户可见进度。",
+    # 18A：任务层由服务端任务服务推进，模型只能经三个任务工具建/查/取消（写操作走提案卡）；
+    # 任务卡仍由页面展示，模型看不到别人的任务。
+    "agent_task": (
+        "task_create",
+        "task_status",
+        "task_cancel",
+    ),
+    "agent_task_step": "不暴露：步骤行仍只在页面任务区展示（task_status 只回进度计数与当前步标题，"
+    "不回 output_ref/attempt 等内部状态）；模型不应读写单步行。",
 
     # ===== W12 来源/事实锁/用量 + W13 版本/变体 + W17 表达资产：刻意不暴露 =====
     "resume_source": "不暴露：W12 来源实体是制作台「核对这条要点来自哪份资料」的关系数据；"

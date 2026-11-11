@@ -71,6 +71,7 @@ from .interview_shared import (
 )
 from .interview_stream import _QuestionDeltaExtractor as _QuestionDeltaExtractor
 from .interview_stream import make_answer_stream
+from .interview_voice import record_stream_answer, register_voice_routes
 
 logger = logging.getLogger(__name__)
 
@@ -448,7 +449,7 @@ async def submit_answer_stream(
         raise HTTPException(status_code=409, detail="这场面试已经结束")
     provider, _model = _require_provider(db)
 
-    answer = _record_answer(session, payload.content)
+    answer = record_stream_answer(session, payload.content, payload.client_turn_id)
     db.commit()
     index = answered_rounds(session)
 
@@ -471,3 +472,5 @@ register_question_routes(
 # 完全一致；两块的校验与错误文案各自留在自己的模块里（见模块文档）。
 register_material_routes(router, lambda db: _require_provider(db))
 register_followup_routes(router, lambda db: _require_provider(db))
+# #26 P0：语音取消端点（插话 → 中止生成 + 回滚）；
+register_voice_routes(router)

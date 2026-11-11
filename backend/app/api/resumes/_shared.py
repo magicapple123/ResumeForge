@@ -180,6 +180,8 @@ def _to_resume_out(
         company=record.company,
         source=_as_resume_source(record.source or "ai"),
         favorite=record.favorite,
+        favorited_at=record.favorited_at,
+        favorited_at_estimated=bool(record.favorited_at_estimated),
         model=record.model,
         enhancement_enabled=record.enhancement_enabled,
         enhancement_level=_as_enhancement_level(record.enhancement_level),

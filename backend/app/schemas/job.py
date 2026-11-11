@@ -322,6 +322,10 @@ class JobOut(JobCreate):
     # 不是这一列能存多少。库里可能存在按旧上限写入的记录，读取不该因为条数变多
     # 就把整份列表炸掉，所以这里重新声明、去掉上限。
     note_images: list[str] = Field(default_factory=list)
+    # 0013（#28E）：收藏时间与「近似」标志。老数据由迁移用 updated_at 回填并把
+    # estimated 置真——updated_at 会被后续编辑刷新，界面必须对这类行显示「时间不详」。
+    favorited_at: datetime | None = None
+    favorited_at_estimated: bool = False
 
     @field_validator("status")
     @classmethod

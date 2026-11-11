@@ -32,6 +32,7 @@ from . import (
     generate_routes,
     layout_render_routes,
     preflight_routes,
+    preview_pages_routes,
     profile_usage_routes,
     review_routes,
     scenario_variant_routes,
@@ -84,3 +85,5 @@ router.include_router(export_routes.router, prefix="/api/resumes")
 router.include_router(export_share_routes.router, prefix="/api/resumes")
 # W11 统一检查：路径含 /{resume_id}/preflight，与既有端点不冲突；放最后保持原顺序不变量。
 router.include_router(preflight_routes.router, prefix="/api/resumes")
+# P3-2：精确预览的逐页位图（/{resume_id}/preview-pages/{token}/…）。段数更深，顺序无关。
+router.include_router(preview_pages_routes.router, prefix="/api/resumes")

@@ -20,10 +20,14 @@
     "web_search": {
       "sources": ["bing", "duckduckgo"],
       "searxng_url": "",
-      "fetch_pages": 0,
+      "depth": "standard",
       "max_results": 8,
-      "deepseek_api_key": "<encrypted>"
+      "deepseek_api_key": "<encrypted>",
+      "tavily_api_key": "<encrypted>",
+      "jina_api_key": "<encrypted>"
     }
+
+`fetch_pages` 不落盘（已被 `depth` 取代，读旧块时由 `SearchConfig` 的 before-validator 折算）。
 
 不提升 `GLOBAL_SETTINGS_VERSION`：`load_state()` 在版本不等于 2 时返回 None，
 升版本会让主题与大模型配置一起读丢。新增顶层键不需要动版本号。
@@ -51,6 +55,10 @@ WEB_SEARCH_BLOCK = "web_search"
 # 迁移来源：旧版把这两项存在当前数据集的 AppSetting 里。
 _LEGACY_CONFIG_KEY = "search_config"
 _LEGACY_KEY_KEY = "search_deepseek_api_key"
+# 三个来源的密钥都只存密文，密钥列不参与 `SearchConfig` 的公开校验（见 `_config_from_block`）。
+_SECRET_FIELDS = ("deepseek_api_key", "tavily_api_key", "jina_api_key")
+# 落盘时**不写**的字段：`fetch_pages` 已被 `depth` 取代，双写会让"两套值各说一套"。
+_LEGACY_ONLY_FIELDS = frozenset({"fetch_pages"})
 
 
 def _block_of(state: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -59,8 +67,8 @@ def _block_of(state: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 def _config_from_block(block: dict[str, Any]) -> SearchConfig | None:
-    """校验存量的公开字段；密钥列不参与校验（它是密文，不是 `SearchConfig` 的明文值）。"""
-    public = {key: value for key, value in block.items() if key != "deepseek_api_key"}
+    """校验存量的公开字段；密钥列不参与校验（它们是密文，不是 `SearchConfig` 的明文值）。"""
+    public = {key: value for key, value in block.items() if key not in _SECRET_FIELDS}
     try:
         return SearchConfig.model_validate(public)
     except ValidationError:
@@ -69,16 +77,19 @@ def _config_from_block(block: dict[str, Any]) -> SearchConfig | None:
 
 
 def _stored_block(config: SearchConfig) -> dict[str, Any]:
-    """落盘形态：公开字段 + 加密后的密钥。加密失败由 `encrypt_key` 显式抛错，不落明文。"""
-    secret = (config.deepseek_api_key or "").strip()
-    return {**config.model_dump(), "deepseek_api_key": encrypt_key(secret)}
+    """落盘形态：公开字段 + 加密后的密钥（`fetch_pages` 不写，只想留 `depth` 一份真值）。"""
+    dumped = config.model_dump(exclude=set(_SECRET_FIELDS) | _LEGACY_ONLY_FIELDS)
+    return {
+        **dumped,
+        **{field: encrypt_key((getattr(config, field) or "").strip()) for field in _SECRET_FIELDS},
+    }
 
 
-def _key_of(block: dict[str, Any] | None) -> str:
+def _key_of(block: dict[str, Any] | None, field: str = "deepseek_api_key") -> str:
     """取出真实密钥（仅供运行时使用，**不得**回传前端）。未配置返回空串。"""
     if not block:
         return ""
-    return decrypt_key(str(block.get("deepseek_api_key") or ""))
+    return decrypt_key(str(block.get(field) or ""))
 
 
 def _legacy_config(db: Session) -> SearchConfig | None:
@@ -141,47 +152,51 @@ def resolve_search_deepseek_key(db: Session) -> str:
 
 
 def get_search_config(db: Session) -> SearchConfig:
-    """对外（设置页）读取：`deepseek_api_key` 只会是掩码或空串。"""
+    """对外（设置页）读取：三个密钥字段只会是掩码或空串。"""
     block = _ensure_block(db)
     config = _config_from_block(block) if block is not None else None
     if block is None or config is None:
         return SearchConfig()
-    config.deepseek_api_key = API_KEY_MASK if str(block.get("deepseek_api_key") or "") else ""
+    for field in _SECRET_FIELDS:
+        setattr(config, field, API_KEY_MASK if str(block.get(field) or "") else "")
     return config
 
 
 def get_search_config_with_secrets(db: Session) -> SearchConfig:
-    """运行时读取：把真实密钥解出来，供 `aggregate_search` 调 DeepSeek 用。"""
+    """运行时读取：把真实密钥解出来，供 `aggregate_search` 调各来源用。"""
     block = _ensure_block(db)
     config = _config_from_block(block) if block is not None else None
     if config is None:
         return SearchConfig()
-    config.deepseek_api_key = _key_of(block)
+    for field in _SECRET_FIELDS:
+        setattr(config, field, _key_of(block, field))
     return config
 
 
 def save_search_config(db: Session, config: SearchConfig) -> SearchConfig:
     """保存联网搜索配置：只写全局 `web_search`，**不再写旧 AppSetting**（避免第二份真相）。
 
-    `deepseek_api_key` 的三种取值决定密钥怎么变——这是"值只能是掩码或引用"的落地点：
+    每个密钥字段的三种取值决定密钥怎么变——这是"值只能是掩码或引用"的落地点：
 
     - 空串：**清除**已保存的密钥（用户显式移除）；
     - 掩码（`********` 开头）：保持不变（前端回显的就是它，原样回传不应清空密钥）；
     - 其它：视为新密钥，加密后写入。
+
+    落盘**只写 `depth`**（`fetch_pages` 被排除）：两套深度值同时存在时迟早各说一套。
     """
     block = _ensure_block(db)
-    existing = str((block or {}).get("deepseek_api_key") or "")
-    incoming = (config.deepseek_api_key or "").strip()
-    if incoming.startswith(API_KEY_MASK):
-        encrypted = existing
-    elif incoming:
-        encrypted = encrypt_key(incoming)
-    else:
-        encrypted = ""
-    persisted = {
-        **config.model_copy(update={"deepseek_api_key": ""}).model_dump(),
-        "deepseek_api_key": encrypted,
-    }
+    encrypted: dict[str, str] = {}
+    for field in _SECRET_FIELDS:
+        existing = str((block or {}).get(field) or "")
+        incoming = (getattr(config, field) or "").strip()
+        if incoming.startswith(API_KEY_MASK):
+            encrypted[field] = existing
+        elif incoming:
+            encrypted[field] = encrypt_key(incoming)
+        else:
+            encrypted[field] = ""
+    persisted = _stored_block(config.model_copy(update=dict.fromkeys(_SECRET_FIELDS, "")))
+    persisted.update(encrypted)
 
     def _apply(state: dict[str, Any]) -> None:
         state[WEB_SEARCH_BLOCK] = persisted

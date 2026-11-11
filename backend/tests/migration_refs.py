@@ -38,6 +38,27 @@ def head_revision() -> str:
     return str(ScriptDirectory.from_config(config).get_current_head())
 
 
+def prior_revision(suffix: str) -> str:
+    """按 revision 名后缀定位某条迁移，返回它的父版本（用于「退到某迁移之前」）。
+
+    为什么不用 downgrade -1 数步数：链尾每加一条迁移，步数就过期一次，而失败会表现成
+    「降级没删表」这种看起来像业务 bug 的形态。按名字找父版本对「加迁移」免疫。
+
+    后缀必须恰好命中一条；找不到或多条都大声失败——拼写错误不能被静默吞掉。
+    """
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config()
+    config.set_main_option(
+        "script_location", str(Path(__file__).resolve().parents[1] / "migrations")
+    )
+    script = ScriptDirectory.from_config(config)
+    matches = [revision for revision in script.walk_revisions() if revision.revision.endswith(suffix)]
+    assert len(matches) == 1, f"期望恰好一条 revision 以 {suffix!r} 结尾，实际命中 {len(matches)} 条"
+    return str(matches[0].down_revision)
+
+
 def alembic_version_of(db: Any) -> str | None:
     """读库里的 ``alembic_version``；接受 Engine 或 SQLite 文件路径。
 
@@ -70,4 +91,10 @@ def alembic_version_of(db: Any) -> str | None:
     return str(row[0]) if row and row[0] is not None else None
 
 
-__all__ = ["BASELINE_REVISION", "LEGACY_1X_REVISION", "alembic_version_of", "head_revision"]
+__all__ = [
+    "BASELINE_REVISION",
+    "LEGACY_1X_REVISION",
+    "alembic_version_of",
+    "head_revision",
+    "prior_revision",
+]

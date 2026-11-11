@@ -29,7 +29,7 @@ boost"，因此 boost 必须与整数分同量级才有意义。RRF 的 `1/(K+ra
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -98,7 +98,10 @@ def keyword_ranking(consumed: ConsumedProfile, focus: Any) -> tuple[RankedHit, .
 
 
 def cosine_similarity(
-    left: tuple[float, ...] | list[float], right: tuple[float, ...] | list[float]
+    # ``Sequence`` 而不是 ``tuple | list``：向量既可能来自本地推理（list）、也可能来自
+    # 缓存/远程 provider 的任意序列；本函数只用 len/zip，放宽类型不会改变行为。
+    left: Sequence[float],
+    right: Sequence[float],
 ) -> float:
     """纯 Python cosine（无 numpy）：语料上限 320 条，检索不是瓶颈（计划 §2.2）。"""
     if len(left) != len(right) or not left:

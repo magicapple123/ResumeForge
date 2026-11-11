@@ -23,6 +23,7 @@ from ..profile.profile_budget import _trim_text
 from ..profile.profile_matching import JobFocus
 from ..profile.profile_references import _reference_chunks, _select_reference_excerpt
 from ..skill_archive import ParsedSkill
+from .skill_learning import SKILL_VALIDATION_PENDING
 
 logger = logging.getLogger(__name__)
 
@@ -138,10 +139,16 @@ def update_skill(
     enabled: bool | None = None,
     files: list[tuple[str, str]] | None = None,
 ) -> AssistantSkill | None:
-    """更新技能；``files`` 提交时整体替换知识文件。"""
+    """更新技能；``files`` 提交时整体替换知识文件。
+
+    #31D/#31F：enabled=True 与 set_skill_enabled 同一道闸——待验证的自动生成技能
+    不允许借"整份更新"入口绕过启用限制（PUT 与助手 update_skill 工具都走这里）。
+    """
     skill = db.get(AssistantSkill, skill_id)
     if skill is None:
         return None
+    if enabled and is_pending_skill(skill):
+        raise PendingSkillError(f"技能「{skill.name}」待验证：先在技能页确认通过后再启用")
     if name is not None and name != skill.name:
         existing = find_skill(db, name)
         if existing is not None and existing.id != skill.id:
@@ -165,10 +172,12 @@ def update_skill(
 
 
 def set_skill_enabled(db: Session, skill_id: int, enabled: bool) -> AssistantSkill | None:
-    """启用/停用一个助手技能。"""
+    """启用/停用一个助手技能；待验证的自动生成技能不允许启用（#31D）。"""
     skill = db.get(AssistantSkill, skill_id)
     if skill is None:
         return None
+    if enabled and is_pending_skill(skill):
+        raise PendingSkillError(f"技能「{skill.name}」待验证：先在技能页确认通过后再启用")
     skill.enabled = enabled
     db.commit()
     db.refresh(skill)
@@ -218,6 +227,25 @@ def list_conversation_skills(db: Session, conversation_id: int | None) -> list[A
     )
 
 
+class PendingSkillError(ValueError):
+    """待验证技能不能启用（#31D/#31F）：自动生成的技能必须先由用户确认。
+
+    继承 ValueError：路由层可以先单独捕获它转 409，其余 ValueError 仍是 422。
+    """
+
+
+def is_pending_skill(skill: AssistantSkill) -> bool:
+    """自动生成且尚未验证的技能（用户还没在技能页确认过）。"""
+    return bool(skill.generated) and (skill.validation_status or "") == SKILL_VALIDATION_PENDING
+
+
+def _raise_for_pending_skills(skills: list[AssistantSkill]) -> None:
+    pending = [skill.name for skill in skills if is_pending_skill(skill)]
+    if pending:
+        names = "、".join(pending)
+        raise PendingSkillError(f"技能「{names}」待验证：先在技能页确认通过后再启用")
+
+
 def validate_conversation_skill_ids(db: Session, skill_ids: list[int]) -> list[int]:
     """去重 + 数量上限 + 存在性校验；返回按首次出现顺序排列的 id。
 
@@ -236,6 +264,9 @@ def validate_conversation_skill_ids(db: Session, skill_ids: list[int]) -> list[i
         if missing:
             names = "、".join(str(skill_id) for skill_id in missing)
             raise ValueError(f"技能不存在或已被删除：{names}")
+        # #31D/#31F：待验证的自动生成技能不允许挂到对话上（手写/导入技能不受影响）。
+        skills = db.query(AssistantSkill).filter(AssistantSkill.id.in_(unique)).all()
+        _raise_for_pending_skills(skills)
     return unique
 
 
@@ -341,9 +372,20 @@ def build_skill_prompt(
     ``assistant_conversation_skill` 关联行。``conversation_id`` 为空（草稿 / 无会话）
     时返回空串——新对话默认不带任何技能。
     """
-    text, _truncated, _skipped, _loaded = _compose_skill_prompt(
-        list_conversation_skills(db, conversation_id), max_chars
-    )
+    skills = list_conversation_skills(db, conversation_id)
+    text, _truncated, _skipped, _loaded = _compose_skill_prompt(skills, max_chars)
+    # #31E/#31F：记录"这次加载了哪些技能"，写 last_loaded_at 与对话引用版本快照。
+    # 90 天未加载的提示归档据此判断；引用版本避免父技能悄悄吃到子技能的新版本。
+    # 元数据写入失败不影响本轮对话（最坏只是少一次归档信号）。
+    if conversation_id is not None and skills:
+        try:
+            from .skill_learning import mark_skill_loaded
+
+            mark_skill_loaded(db, skills, conversation_id)
+            db.commit()
+        except Exception:  # noqa: BLE001 - 技能加载元数据是增强项，不能挡住对话
+            logger.warning("记录技能加载时间失败", exc_info=True)
+            db.rollback()
     return text
 
 

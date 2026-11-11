@@ -20,6 +20,7 @@ from ..schemas.setting import LLMConfig
 from .llm.base import BaseLLMProvider, LLMError
 from .llm.structured_output import parse_json_object
 from .profile_text_parser import parse_profile_text
+from .profile_value_cleanup import sanitize_source_text
 from .text_extraction_normalization import (
     normalize_job_result,
     normalize_profile_result,
@@ -176,6 +177,10 @@ async def extract_profile_text(
     image_data_urls: Sequence[str] = (),
 ) -> ProfileTextParseResult:
     """用模型抽取资料字段：调模型 → 解析 JSON → 规范化（来源锚定），本地草稿兜底。"""
+    # 版式与安全预处理（#19 FIX-3/FIX-6）：Excel 抄录的一行里 `\t` 出现 ≥2 次才当列分隔符
+    # （换成 ` | `，否则模型把整串标题当成公司名），提示词注入行整行不进材料。放在这里
+    # 是为了让**模型看到的**、本地规则解析的、以及字段锚定用的都是同一份文字。
+    source_text = sanitize_source_text(source_text)
     raw = await provider.chat(
         build_profile_extraction_messages(source_text, local_draft, image_data_urls), thinking=False
     )

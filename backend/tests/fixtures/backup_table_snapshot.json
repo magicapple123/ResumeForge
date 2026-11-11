@@ -1,7 +1,7 @@
 {
   "_comment": "备份『表覆盖』的冻结快照。manifest[\"tables\"] 由代码里的 _APPLICATION_TABLES（= Base.metadata 推导）生成，与 test_backup_table_coverage 的断言同源；直接互相比是恒等式，守不住『新增模型表却没进备份』。这张快照是独立于代码的第二份事实：**新增或删除模型表（含新迁移建表）时必须手工更新本文件**——这一步就是『显式确认备份覆盖面』。只改列/索引/外键不需要动它。",
-  "_updated_at": "2026-11-10（波次 2 external_resume / 迁移 0010。此前：2026-11-09 期一 application_follow_up / 迁移 0006；期二 job_preference / 迁移 0008；T01 assistant_write_proposal / 迁移 0002；T19 agent_task+agent_task_step / 迁移 0003；T14 assistant_conversation_skill / 迁移 0005）",
-  "_count": 77,
+  "_updated_at": "2026-11-11（波次 3 W3 迁移 0015 assistant_memory（#31A 助手语义记忆 + #18D 结构化画像合并模型）。此前：2026-11-11 job_seen / 迁移 0012；2026-11-10 external_resume / 迁移 0010；2026-11-09 期一 application_follow_up / 迁移 0006；期二 job_preference / 迁移 0008；T01 assistant_write_proposal / 迁移 0002；T19 agent_task+agent_task_step / 迁移 0003；T14 assistant_conversation_skill / 迁移 0005）",
+  "_count": 79,
   "tables": [
     "agent_task",
     "agent_task_step",
@@ -15,6 +15,7 @@
     "apply_task",
     "apply_task_item",
     "assistant_conversation_skill",
+    "assistant_memory",
     "assistant_skill",
     "assistant_skill_file",
     "assistant_write_proposal",
@@ -36,6 +37,7 @@
     "interview_review_record",
     "interview_session",
     "job",
+    "job_seen",
     "job_match_analysis",
     "job_match_batch",
     "job_preference",

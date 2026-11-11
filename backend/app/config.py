@@ -125,7 +125,9 @@ class Settings(BaseSettings):
     # 求职助手一次回复的整链预算（秒）：覆盖全部工具轮次与模型流式输出，到期即在
     # 下一个事件边界收尾为 error（RF-14 §2.1.b）。运行中的工具不强制中断（协作式，
     # 与 RF-02 同一约定）；它只防"挂死/无限拖"，不做用户取消语义。
-    assistant_stream_budget_seconds: int = Field(default=600, ge=1, le=86400)
+    # 这里是**部署默认**（1800 秒）：用户在设置页改的值存 AppSetting 且优先于此
+    # （见 ``services/assistant_limits``），设过之后本项只在读到脏值时兜底。
+    assistant_stream_budget_seconds: int = Field(default=1800, ge=1, le=86400)
 
     # 可选：OpenAI 兼容流式请求发送 stream_options.include_usage 以获取 token 用量。
     # 该开关**会改变默认请求体**，默认关闭（RF-14 §2.2：默认路径请求体逐字节不变的

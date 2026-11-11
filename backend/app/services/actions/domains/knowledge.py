@@ -26,8 +26,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ....schemas.knowledge import (
     MAX_KNOWLEDGE_CATEGORY_CHARS,
+    MAX_KNOWLEDGE_COMPANY_CHARS,
     MAX_KNOWLEDGE_CONTENT_CHARS,
+    MAX_KNOWLEDGE_KEY_POINTS,
+    MAX_KNOWLEDGE_REASON_CHARS,
     MAX_KNOWLEDGE_SOURCE_CHARS,
+    MAX_KNOWLEDGE_SUMMARY_CHARS,
     MAX_KNOWLEDGE_TAGS,
     MAX_KNOWLEDGE_TITLE_CHARS,
     KnowledgeCreate,
@@ -85,9 +89,9 @@ class CreateKnowledgeInput(KnowledgeCreate):
         description="标题，必填",
     )
     category: str = Field(
-        default="其他",
+        default="",
         max_length=MAX_KNOWLEDGE_CATEGORY_CHARS,
-        description="分类，如 面经/简历技巧/求职策略/其他",
+        description="可选分类建议：面经/简历技巧/求职策略/…；留空表示未分类",
     )
     tags: list[str] = Field(
         default_factory=list, max_length=MAX_KNOWLEDGE_TAGS, description="标签，可选"
@@ -101,6 +105,31 @@ class CreateKnowledgeInput(KnowledgeCreate):
         default="手动录入",
         max_length=MAX_KNOWLEDGE_SOURCE_CHARS,
         description="来源，默认「助手录入」",
+    )
+    # 0014（#29C/#29D/#29E）：五列一次加完；工具 schema 里给模型看的说明必须写清
+    # "可选"，否则模型会为了填满字段而编造公司/理由。
+    reason: str = Field(
+        default="",
+        max_length=MAX_KNOWLEDGE_REASON_CHARS,
+        description="可选：我为什么存这条（一句话，<=120 字）",
+    )
+    company: str = Field(
+        default="",
+        max_length=MAX_KNOWLEDGE_COMPANY_CHARS,
+        description="可选：关联公司名（用于按公司筛选与岗位详情关联）",
+    )
+    job_id: int | None = Field(
+        default=None, ge=1, description="可选：关联岗位 id（岗位删除后自动置空）"
+    )
+    summary: str = Field(
+        default="",
+        max_length=MAX_KNOWLEDGE_SUMMARY_CHARS,
+        description="可选：蒸馏摘要（<=300 字），列表与检索命中优先用它",
+    )
+    key_points: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_KNOWLEDGE_KEY_POINTS,
+        description="可选：要点清单，每条 <=200 字",
     )
 
     @model_validator(mode="after")
@@ -117,16 +146,18 @@ class CreateKnowledgeInput(KnowledgeCreate):
             raise ValueError("请填写标题")
         if title != self.title:
             self.title = title
+        # #29G：空分类是合法状态（未分类），不再兜成「其他」。
         category = self.category.strip()
         if category != self.category:
             self.category = category
-        if not category:
-            self.category = "其他"
         source = self.source.strip()
         if source != self.source:
             self.source = source
         if not source:
             self.source = "手动录入"
+        self.reason = self.reason.strip()
+        self.company = self.company.strip()
+        self.summary = self.summary.strip()
         return self
 
 
@@ -298,7 +329,19 @@ def knowledge_actions() -> dict[str, ActionSpec]:
             ),
             preview=_preview_update_knowledge,
             service_entry="knowledge_service.update_knowledge",
-            tool_fields=("knowledge_id", "title", "category", "tags", "content", "source"),
+            tool_fields=(
+                "knowledge_id",
+                "title",
+                "category",
+                "tags",
+                "content",
+                "source",
+                "reason",
+                "company",
+                "job_id",
+                "summary",
+                "key_points",
+            ),
             http=HttpRoute(
                 "PUT", "/api/knowledge/{knowledge_id}", KnowledgeOut, tags=("knowledge",)
             ),

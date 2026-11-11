@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""助手对「投递台」的只读工具。
+"""助手对「投递台」的队列与记录工具（**本文件里的两个工具都只读**）。
 
-**刻意只读**：真正点下"投递"是用户在投递台上做的动作，助手只负责如实报告队列状态——
-那一步要填的表单千差万别，代填填错的代价是用户的真实误投。删除类工具本仓库助手一概不提供。
+**发起投递需经提案卡确认；确认后会真的提交，且不可撤销**——那条能力是 ``apply_start``
+（见 ``actions/domains/apply_queue.py``，全项目唯一 ``EXTERNAL_SIDE_EFFECT``），
+不在本文件里。本文件的两个工具只如实报告队列与批次状态、不改库；因此它们的输出里
+**不得**出现"助手不代为投递 / 只能去投递台点"这类否认自身能力的说法——模型看到工具
+输出就会照说，而提示词守卫扫不到工具输出。删除类工具本仓库助手一概不提供。
 
 **这个模块是搬出来的**：它原先住在 ``official_tools.py`` 里（官网采集与投递台两个功能的工具
 写在同一份文件），而官网采集被移除后，那个文件整份删掉了。投递台的工具与官网采集没有任何
@@ -43,7 +46,7 @@ def _tool_list_apply_queue(db: Session, arguments: dict) -> ToolResult:
         "总数": len(items),
         "返回": len(rows),
         "队列": rows,
-        "说明": "这是「投递台」的队列状态快照。助手不代为发起投递——那一步必须在投递台上由用户点击。",
+        "说明": "这是「投递台」的队列状态快照。发起投递需经提案卡确认；确认后会真的提交，且不可撤销。",
     }
     return ToolResult(
         text=json.dumps(payload, ensure_ascii=False),
@@ -101,7 +104,8 @@ def _tool_list_apply_records(db: Session, arguments: dict) -> ToolResult:
         "总批次数": total,
         "返回批次": len(rows),
         "投递记录": rows,
-        "说明": "这是「投递台 → 投递记录」的按批次分组快照；重投要在页面上操作，助手不代为投递。",
+        "说明": "这是「投递台 → 投递记录」的按批次分组快照。重投同样要发起投递：需经提案卡确认；"
+        "确认后会真的提交，且不可撤销。",
     }
     return ToolResult(
         text=json.dumps(payload, ensure_ascii=False),

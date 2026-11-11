@@ -144,8 +144,11 @@ def test_product_docs_search_reports_no_match_without_inventing_content():
 def test_chunks_split_at_third_level_with_parent_breadcrumb():
     chunk = _user_guide_chunk("导出：格式、水印与脱敏")
     # 行号是"这一块从第几行开始"的锚点：只要在它上面增删了 user-guide 的段落就会整体平移
-    # （2026-11-08 协议一节补了几行，1532 → 1537），跟着改数字即可，别改成范围断言。
-    assert chunk.line == 1565
+    # （2026-11-09 协议一节 1532 → 1537；2026-11-10 页头手势与搜索深度两节 1537 → 1569；
+    # 2026-11-11 语音听写排查段 1569 → 1576；同日识别清洗说明 1576 → 1581；
+    # 2026-11-11 剩余条目新增「从链接导入岗位」一节 1581 → 1602；同日知识库/助手记忆两节
+    # 增补 1602 → 1612），跟着改数字即可，别改成范围断言。
+    assert chunk.line == 1612
     assert chunk.heading_path == "使用指南 > 4. 制作、编辑和导出简历 > 导出：格式、水印与脱敏"
     assert chunk.source == f"docs/user-guide.md#{chunk.heading_path}"
     # 切块停在 ###：块内不应再出现 1-3 级标题行（出现就说明跨度超过一个小节）。

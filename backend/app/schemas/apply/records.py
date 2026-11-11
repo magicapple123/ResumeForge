@@ -34,6 +34,13 @@ class ApplyRecordOut(BaseModel):
     failure_target: str = ""
     failure_reason: str = ""
     attempt: int = 0
+    # 15B：这条记录对应的岗位，JD 在两次采集之间改过（**被动式**：下次采集时才更新）。
+    # 记录行上的徽标只说"改过了"，before/after 由 ``GET /queue/{id}/jd-change`` 提供。
+    jd_changed: bool = False
+    # 15B：这条记录关联的**队列条目 id**（按 job_id 反查，供上面那个徽标点开抽屉）。
+    # 记录表里没有这一列，服务层批量算好后传入；岗位不在队列里（已投完移出、手改过队列）
+    # 时为空 —— 此时徽标仍显示，但点不开：抽屉端点只认队列条目 id，不许拿 job_id 去猜。
+    queue_id: int | None = None
     created_at: datetime
     finished_at: datetime | None = None
 

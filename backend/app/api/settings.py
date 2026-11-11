@@ -19,6 +19,7 @@ from ..schemas.batch_operation import (
     BatchOperationConfigOut,
 )
 from ..schemas.setting import (
+    AssistantLimitSetting,
     AssistantOrbSetting,
     AssistantRelaxedModeSetting,
     AutoBackupIntervalSetting,
@@ -39,6 +40,12 @@ from ..schemas.setting import (
 )
 from ..services.api_key_crypto import ApiKeyEncryptionError
 from ..services.api_key_session import clear_session_key, session_key_configured, set_session_key
+from ..services.assistant_limits import (
+    get_max_tool_rounds,
+    get_stream_budget_seconds,
+    save_max_tool_rounds,
+    save_stream_budget_seconds,
+)
 from ..services.batch_operation import (
     read_batch_operation_config,
     save_batch_export_config,
@@ -84,10 +91,13 @@ from ..services.settings_service import (
     save_webform_relaxed_mode,
 )
 from ..services.ui_locale import get_ui_locale
+from .assistant_compaction_api import register_compaction_setting_routes
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+# 上下文压缩的三个设置项（#10）单独一层模块：本文件已贴 500 行硬预算，只留注册一行。
+register_compaction_setting_routes(router)
 
 
 class AgentTaskEventsSetting(BaseModel):
@@ -172,6 +182,23 @@ def write_assistant_orb(payload: AssistantOrbSetting, db: Session = Depends(get_
     return save_assistant_orb_setting(db, payload)
 
 
+@router.get("/assistant-limits", response_model=AssistantLimitSetting)
+def read_assistant_limits(db: Session = Depends(get_db)):
+    """求职助手的两条运行上限（工具轮次 / 整链预算）：DB 优先，缺省回默认。"""
+    return AssistantLimitSetting(
+        max_tool_rounds=get_max_tool_rounds(db),
+        stream_budget_seconds=get_stream_budget_seconds(db),
+    )
+
+
+@router.put("/assistant-limits", response_model=AssistantLimitSetting)
+def write_assistant_limits(payload: AssistantLimitSetting, db: Session = Depends(get_db)):
+    """保存上限：轮次下一轮生效、预算下一次请求生效；越界由模型校验直接拒绝。"""
+    save_max_tool_rounds(db, payload.max_tool_rounds)
+    save_stream_budget_seconds(db, payload.stream_budget_seconds)
+    return payload
+
+
 @router.get("/webform-relaxed-mode", response_model=WebFormRelaxedModeSetting)
 def read_webform_relaxed_mode(db: Session = Depends(get_db)):
     """网申填表「放宽模式」（默认关）：代点下拉/弹层与逐条确认过的声明勾选。"""
@@ -206,9 +233,7 @@ def read_agent_task_events(db: Session = Depends(get_db)):
 
 
 @router.put("/agent-task-events", response_model=AgentTaskEventsSetting)
-def write_agent_task_events(
-    payload: AgentTaskEventsSetting, db: Session = Depends(get_db)
-):
+def write_agent_task_events(payload: AgentTaskEventsSetting, db: Session = Depends(get_db)):
     """保存开关；打开时立即启动后台扫描并补扫一次最近 24h 内的到期提醒。"""
     enabled = save_agent_task_events_enabled(db, payload.enabled)
     # 函数级导入：避免设置路由模块加载期就拉起后台调度服务依赖。

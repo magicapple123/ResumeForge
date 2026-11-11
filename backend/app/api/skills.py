@@ -29,6 +29,7 @@ from ..services.actions import add_action_route
 from ..services.actions.catalog import all_actions
 from ..services.actions.pilots import pilot_actions
 from ..services.assistant.assistant_skills import (
+    PendingSkillError,
     delete_skill,
     set_skill_enabled,
     upsert_skill,
@@ -78,6 +79,14 @@ def _to_out(skill) -> AssistantSkillOut:
         prompt_chars=len(skill.prompt),
         files=[item.path for item in skill.files],
         updated_at=skill.updated_at,
+        # 0016（#31D/E）：技能学习四段内容 / 版本 / 验证状态，前端据此显示「待验证」徽标。
+        when_to_use=skill.when_to_use or "",
+        steps=skill.steps or "",
+        pitfalls=skill.pitfalls or "",
+        version=int(skill.version or 1),
+        generated=bool(skill.generated),
+        validation_status=skill.validation_status or "",
+        last_loaded_at=skill.last_loaded_at,
     )
 
 
@@ -153,7 +162,11 @@ def toggle_skill(skill_id: int, payload: AssistantSkillUpdate, db: Session = Dep
     """快速开关技能（助手页与设置页的 Switch 走这里）。"""
     if payload.enabled is None:
         raise HTTPException(status_code=422, detail="缺少要切换的启用状态")
-    skill = set_skill_enabled(db, skill_id, payload.enabled)
+    try:
+        skill = set_skill_enabled(db, skill_id, payload.enabled)
+    except PendingSkillError as exc:
+        # #31D/#31F：待验证技能不可启用（409，前端据此提示先确认）。
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if skill is None:
         raise HTTPException(status_code=404, detail="技能不存在或已被删除")
     return _to_out(skill)

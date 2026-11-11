@@ -21,6 +21,7 @@ from ..schemas.assistant import (
     ChatEarlierMessagesOut,
     ChatMessageDeleteRequest,
     ChatMessageDeleteResult,
+    ContextUsageOut,
     ConversationSurface,
     ConversationToMaterialRequest,
 )
@@ -33,8 +34,17 @@ from ..schemas.material import (
 )
 from ..services.actions import add_action_route
 from ..services.actions.catalog import all_actions
+from ..services.assistant.assistant_compaction_store import (
+    compaction_state_out,
+    load_compaction,
+)
+from ..services.assistant.assistant_context_usage import build_context_usage
+from ..services.assistant.assistant_context_usage import (
+    conversation_text as usage_conversation_text,
+)
 from ..services.assistant.assistant_service import (
     conversation_title,
+    history_messages_for_model,
     normalize_attachments,
 )
 from ..services.assistant.assistant_system_prompt import (
@@ -48,6 +58,9 @@ from ..services.assistant.assistant_system_prompt import (
 )
 from ..services.assistant.assistant_system_prompt import (
     _system_prompt as _system_prompt,
+)
+from ..services.assistant.assistant_system_prompt import (
+    build_system_prompt_parts,
 )
 from ..services.conversation_export import (
     EXPORT_FORMATS,
@@ -67,6 +80,7 @@ from ..services.settings_service import (
 )
 from ..services.ui_locale import get_ui_locale
 from ..services.user_files import save_from_data_url
+from .assistant_compaction_api import register_compaction_routes
 from .assistant_context import load_local_context
 from .assistant_conversation_skills import register_conversation_skill_routes
 from .assistant_conversations import (
@@ -97,6 +111,7 @@ from .assistant_conversations import (
 from .assistant_conversations import (
     update_conversation as update_conversation_record,
 )
+from .assistant_regenerate_api import register_regenerate_routes
 from .assistant_stream import history_snapshot, stream_message_events
 
 logger = logging.getLogger(__name__)
@@ -129,6 +144,10 @@ router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 # T14：对话技能两条路由（GET/PUT /conversations/{id}/skills）挂在同一个 router 上；
 # 单独成文件是为了不与 500 行预算冲突，注册顺序即路由注册顺序。
 register_conversation_skill_routes(router)
+# 上下文压缩（#10）的两条路由同样单独成文件：POST/DELETE /conversations/{id}/compact。
+register_compaction_routes(router)
+# #13A 重新生成回答：POST /conversations/{id}/messages/{mid}/regenerate。
+register_regenerate_routes(router)
 
 # 系统提示词装配（基础提示 + 平台事实 + 能力地图 + 联网/放宽模式说明 + 写操作状态 +
 # 本地时间 + 本对话技能 + 界面上下文）已下沉到
@@ -190,6 +209,60 @@ def rename_conversation(
     db: Session = Depends(get_db),
 ):
     return update_conversation_record(conversation_id, payload, db, surface)
+
+
+def _stored_context_usage(message: ChatMessage | None) -> dict[str, Any] | None:
+    """从消息 context 里取出落过库的用量（需求 #6）；旧消息没有该字段时返回 None。"""
+    if message is None:
+        return None
+    context = message.context if isinstance(message.context, dict) else {}
+    usage = context.get("context_usage")
+    return usage if isinstance(usage, dict) else None
+
+
+@router.get("/conversations/{conversation_id}/context-usage", response_model=ContextUsageOut)
+def read_context_usage(
+    conversation_id: int,
+    surface: ConversationSurface = Query(default="page"),
+    db: Session = Depends(get_db),
+) -> ContextUsageOut:
+    """这个对话最近一轮的上下文用量（需求 #6，输入区 chip 的弹层用）。
+
+    正常路径读最新一条**助手消息**落库的 ``context.context_usage``——那是流式期间按
+    构造分桶算出来的真实构成，原样返回。
+
+    旧消息（本条之前生成的）没有该字段：只按历史 + 当前系统提示词估算 system 与
+    conversation 两桶，其余三桶记 0，并标 ``partial=true``。工具 schema 与连接器块
+    无法回溯，所以不是"精确度差一点"，而是**结构性缺失**——前端因此显示「部分数据」，
+    不把它当成完整口径。
+    """
+    conversation_or_404(db, conversation_id, surface)
+    # 压缩状态与用量一起下发（#10）：用户在问「占了多少」时，同一屏要能回答
+    # 「压过什么、还能不能还原」。没有压缩过就是 null。
+    compaction_state = compaction_state_out(load_compaction(db, conversation_id)) or None
+    # 分母取当前生效配置：用户刚改过窗口，面板下次打开就该按新值算。
+    window_tokens = int(getattr(get_llm_config(db), "context_window_tokens", 0) or 0)
+    latest = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.conversation_id == conversation_id, ChatMessage.role == "assistant")
+        .order_by(ChatMessage.id.desc())
+        .first()
+    )
+    stored = _stored_context_usage(latest)
+    if stored is not None:
+        return ContextUsageOut.model_validate({**stored, "compaction": compaction_state})
+    system_text = build_system_prompt_parts(
+        db,
+        relaxed=resolve_assistant_relaxed_mode(db, None),
+        conversation_id=conversation_id,
+    )["base"]
+    history_text = usage_conversation_text(history_messages_for_model(history_snapshot(db, conversation_id)))
+    estimated = build_context_usage(
+        {"system": system_text, "conversation": history_text},
+        window_tokens=window_tokens,
+        partial=True,
+    )
+    return ContextUsageOut.model_validate({**estimated, "compaction": compaction_state})
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)

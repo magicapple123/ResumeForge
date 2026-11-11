@@ -114,11 +114,16 @@ def test_budget_exhausted_mid_stream_ends_with_error_and_budget_reason(client, m
 
 
 def test_budget_exhausted_between_tool_rounds_blocks_next_model_call(client, monkeypatch):
-    """检查点 1：每轮工具循环开始——预算到期就不放过下一次模型调用。"""
+    """检查点 1：每轮工具循环开始——预算到期就不放过下一次模型调用。
+
+    预算给 0.5s 而不是毫秒级：这条用例断言的是「**第一轮**模型调用已经发生过」，预算若在
+    建会话/建 provider 的这几毫秒里就到期，断言会以「一次请求都没有」的形式失败——那是
+    调度抖动，不是被测行为。工具故意睡 0.65s，让预算在**工具执行期间**耗尽。
+    """
     from tests.test_assistant import _FakeProvider, _tool_call
 
     _configure_llm(client)
-    _stub_settings(monkeypatch, budget_seconds=0.05)
+    _stub_settings(monkeypatch, budget_seconds=0.5)
 
     class _RoundAwareProvider(_AssistantFake, _FakeProvider):
         def __init__(self):
@@ -134,8 +139,10 @@ def test_budget_exhausted_between_tool_rounds_blocks_next_model_call(client, mon
     provider = _RoundAwareProvider()
 
     async def slow_tool(db, name, arguments, *, numberer=None, ctx=None):
-        await asyncio.sleep(0.12)  # 工具执行期间预算耗尽（协作式：不打断它）
-        return SimpleNamespace(summary="概览", link="", text="ok", changed=False, sources=[])
+        await asyncio.sleep(0.65)  # 工具执行期间预算耗尽（协作式：不打断它）
+        return SimpleNamespace(
+            summary="概览", link="", text="ok", changed=False, sources=[], preview=None
+        )
 
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
     monkeypatch.setattr("app.services.assistant.assistant_tool_exec.execute_tool_async", slow_tool)
@@ -156,11 +163,15 @@ def test_budget_exhausted_between_tool_rounds_blocks_next_model_call(client, mon
 
 
 def test_budget_exhausted_before_second_tool_call(client, monkeypatch):
-    """检查点 2：每个工具调用发起前——预算到期就不发起下一次工具调用。"""
+    """检查点 2：每个工具调用发起前——预算到期就不发起下一次工具调用。
+
+    与上一条同理（预算 0.5s / 工具睡 0.65s）：这条断言的是「**第一次**工具调用真的发生了」，
+    毫秒级预算会把建会话的抖动算进预算里。
+    """
     from tests.test_assistant import _FakeProvider, _tool_call
 
     _configure_llm(client)
-    _stub_settings(monkeypatch, budget_seconds=0.05)
+    _stub_settings(monkeypatch, budget_seconds=0.5)
 
     class _TwoCallsProvider(_AssistantFake, _FakeProvider):
         def __init__(self):
@@ -177,8 +188,10 @@ def test_budget_exhausted_before_second_tool_call(client, monkeypatch):
     provider = _TwoCallsProvider()
 
     async def slow_tool(db, name, arguments, *, numberer=None, ctx=None):
-        await asyncio.sleep(0.12)
-        return SimpleNamespace(summary="概览", link="", text="ok", changed=False, sources=[])
+        await asyncio.sleep(0.65)  # 第一次工具调用就要吃掉整条预算
+        return SimpleNamespace(
+            summary="概览", link="", text="ok", changed=False, sources=[], preview=None
+        )
 
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
     monkeypatch.setattr("app.services.assistant.assistant_tool_exec.execute_tool_async", slow_tool)

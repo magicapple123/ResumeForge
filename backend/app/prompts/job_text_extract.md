@@ -7,6 +7,9 @@
 4. 团队介绍、公司介绍、职位 ID、部门、工作安排、福利、申请流程和无法归入职责或任职要求的内容放入 additional_info。
 5. title 只保留岗位名称，去掉公司、地点、职位编号、招聘链接和日期。company、location、salary、posted_at 只填写原文能够支持的内容；更新日期不是发布时间。
 6. local_draft 只是规则解析草稿和校对线索，不是事实来源。必要时可纠正它的分类，但不能凭它创造 source_text 没有的内容。
+7. **即使原文没有小标题，也要切出 requirements**：出现「本科及以上学历」「3 年以上经验」「熟悉/熟练掌握…」「具备…能力」这类条件句时，把它们放进 requirements，**不得把全文都放进 description**。
+8. **福利句即使夹在职责列表中间也要抽出来**：「你将获得」「薪资福利」「五险一金」「弹性工作」「年度旅游」「股票期权」这类待遇内容放进 additional_info，不要留在 description 里，也不要因为夹在职责中间就整段丢掉。
+9. **同一段内容只能落在一个字段**：一句话不要同时出现在 description 和 additional_info（详情页会变成两遍重复）。归属顺序：职责→description，条件/资格→requirements，其余（福利、流程、公司介绍）→additional_info。
 
 只输出一个 JSON 对象，不要 Markdown、代码围栏或说明文字，字段必须完整：
 {

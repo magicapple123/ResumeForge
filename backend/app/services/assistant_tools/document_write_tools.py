@@ -34,6 +34,7 @@ from .document_support import (
     section_titles,
     undo_hint,
     validate_value,
+    write_preview,
 )
 
 
@@ -76,6 +77,9 @@ def _tool_update_resume_field(db: Session, arguments: dict) -> ToolResult:
         summary=f"修改了简历「{record.title}」的「{section_name} · {entry_name}」：{before} → {after}",
         link="/resumes",
         changed=True,
+        preview=write_preview(
+            record=record, version=version, revision=revision, before=before, after=after
+        ),
     )
 
 
@@ -123,6 +127,13 @@ def _tool_add_resume_entry(db: Session, arguments: dict) -> ToolResult:
         summary=f"在简历「{record.title}」的「{payload['section_label']}」新增了一条",
         link="/resumes",
         changed=True,
+        # 新增条目没有旧值：before=None 由界面显示成「新增」，撤销仍指回整份简历快照。
+        preview=write_preview(
+            record=record,
+            version=version,
+            revision=revision,
+            after=f"{payload['section_label']} · {entry_label(entry)}",
+        ),
     )
 
 
@@ -165,11 +176,19 @@ def _tool_reorder_sections(db: Session, arguments: dict) -> ToolResult:
         "undo": undo_hint(version),
     }
     labels = [section_label(titles, key) for key in after]
+    before_labels = [section_label(titles, key) for key in before]
     return ToolResult(
         text=json.dumps(payload, ensure_ascii=False, default=str)[:MAX_RESULT_CHARS],
         summary=f"调整了简历「{record.title}」的板块顺序：{' → '.join(labels)}",
         link="/resumes",
         changed=True,
+        preview=write_preview(
+            record=record,
+            version=version,
+            revision=revision,
+            before=" · ".join(before_labels),
+            after=" · ".join(labels),
+        ),
     )
 
 
@@ -210,4 +229,7 @@ def _tool_set_entry_layout(db: Session, arguments: dict) -> ToolResult:
         ),
         link="/resumes",
         changed=True,
+        preview=write_preview(
+            record=record, version=version, revision=revision, before=before, after=after
+        ),
     )

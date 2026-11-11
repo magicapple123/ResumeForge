@@ -123,6 +123,10 @@ class AgentTask(Base):
     title: Mapped[str] = mapped_column(String(200), default="")
     # 用户目标原话：步骤是"怎么做"，这里是"为什么做"，失败时可读地解释上下文。
     goal: Mapped[str] = mapped_column(Text, default="")
+    # #18A 执行所需的最小输入（JSON）：kind + resume_id/section/instruction、url/limit、
+    # job_ids…。只放执行参数，不存正文/隐私/密钥；NULL = 迁移前创建的老任务（执行器不猜，
+    # 如实报"缺少执行参数"）。迁移 0017 加列。
+    params: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     # draft/running/paused/waiting_approval/done/failed/cancelled（见模块顶部常量）。
     status: Mapped[str] = mapped_column(String(24), default=AGENT_TASK_STATUS_DRAFT, index=True)
     # 0 基的"当前/下一步"步骤下标：等于已完成步骤数。所有步骤完成时等于步骤总数。

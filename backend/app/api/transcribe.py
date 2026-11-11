@@ -338,10 +338,11 @@ async def transcribe(
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         # 只记状态/字节/耗时/主机：音频内容、文件名、Key 一律不落日志。
         logger.warning(
-            "asr status=error kind=%s bytes=%d ms=%d host=%s",
+            "asr status=error kind=%s bytes=%d ms=%d duration_ms=%d host=%s",
             exc.kind,
             len(raw),
             elapsed_ms,
+            duration_ms if duration_ms is not None else -1,
             host,
         )
         raise HTTPException(
@@ -349,5 +350,14 @@ async def transcribe(
         ) from exc
 
     elapsed_ms = int((time.perf_counter() - started) * 1000)
-    logger.info("asr status=ok bytes=%d ms=%d host=%s", len(raw), elapsed_ms, host)
+    # duration_ms 是"录音被掐断"的唯一直接证据（需求 #8：之前只能拿 bytes 反推时长，
+    # 1.5 KB 的 opus 折算 0.25 秒才定位到"用户连点两下"）。缺省记 -1，与"0 毫秒"区分开。
+    logged_duration = duration_ms if duration_ms is not None else -1
+    logger.info(
+        "asr status=ok bytes=%d ms=%d duration_ms=%d host=%s",
+        len(raw),
+        elapsed_ms,
+        logged_duration,
+        host,
+    )
     return TranscribeResult(text=text, provider_host=host)

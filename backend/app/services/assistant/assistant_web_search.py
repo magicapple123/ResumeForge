@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from .search_errors import BING_RSS_EMPTY_MESSAGE as BING_RSS_EMPTY_MESSAGE
 from .search_errors import AssistantSearchError as AssistantSearchError
 
 logger = logging.getLogger(__name__)
@@ -143,8 +144,11 @@ def _plain_text(value: str, max_chars: int) -> str:
 
 
 def _child_text(node: ET.Element, name: str) -> str:
+    # 两边都 casefold：RSS 的标签大小写不统一（`pubDate` vs `pubdate`），
+    # 只折一边会让 `pubDate` 永远取不到——"日期全丢"就是这样发生的。
+    wanted = name.casefold()
     for child in node:
-        if child.tag.rsplit("}", 1)[-1].casefold() == name:
+        if child.tag.rsplit("}", 1)[-1].casefold() == wanted:
             return child.text or ""
     return ""
 
@@ -330,7 +334,12 @@ def filter_relevant_results(results: list[dict[str, str]], question: str) -> lis
 
 
 def parse_bing_rss(xml_bytes: bytes, limit: int = _MAX_RESULTS) -> list[dict[str, str]]:
-    """解析体积已受限的 RSS；显式拒绝 DTD/实体声明，避免 XML 实体展开。"""
+    """解析体积已受限的 RSS；显式拒绝 DTD/实体声明，避免 XML 实体展开。
+
+    ``pubDate`` 归一成 ``published_at``（ISO）：用户的原话是「不要引入过时东西」，
+    而旧实现把它整条丢掉，于是 2021 年的招聘公告和上周的岗位在模型眼里一模一样。
+    解析不出来就**不带这个字段**（下游显示「日期未知」），绝不用抓取时间顶替。
+    """
     upper = xml_bytes.upper()
     if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
         raise AssistantSearchError("联网搜索返回了不安全的响应格式")
@@ -340,6 +349,10 @@ def parse_bing_rss(xml_bytes: bytes, limit: int = _MAX_RESULTS) -> list[dict[str
         raise AssistantSearchError("联网搜索返回了无法解析的响应") from exc
 
     results: list[dict[str, str]] = []
+    # 函数级 import：``services.search`` 的 ``__init__`` 会导入聚合层，而聚合层又导入本模块，
+    # 模块级 import 会在这条路径上形成循环（``canonical`` / ``passages`` 同理）。
+    from ..search.dates import parse_published_at
+
     for node in root.iter():
         if node.tag.rsplit("}", 1)[-1].casefold() != "item":
             continue
@@ -347,13 +360,15 @@ def parse_bing_rss(xml_bytes: bytes, limit: int = _MAX_RESULTS) -> list[dict[str
         title = _plain_text(_child_text(node, "title"), 300)
         if not url or not title:
             continue
-        results.append(
-            {
-                "title": title,
-                "url": url,
-                "snippet": _plain_text(_child_text(node, "description"), 1000),
-            }
-        )
+        item = {
+            "title": title,
+            "url": url,
+            "snippet": _plain_text(_child_text(node, "description"), 1000),
+        }
+        published = parse_published_at(_child_text(node, "pubDate"))
+        if published:
+            item["published_at"] = published
+        results.append(item)
         if len(results) >= max(1, min(limit, _MAX_CANDIDATE_RESULTS)):
             break
     return results
@@ -407,17 +422,16 @@ async def fetch_bing_rss(query: str) -> bytes:
 
 
 def _deduplicate(results: list[dict[str, str]]) -> list[dict[str, str]]:
-    """按主机名 + 路径去重，丢掉查询参数造成的同页重复。"""
-    seen: set[tuple[str, str]] = set()
-    unique: list[dict[str, str]] = []
-    for result in results:
-        parsed = urlsplit(result["url"])
-        key = ((parsed.hostname or "").casefold(), parsed.path.rstrip("/"))
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(result)
-    return unique
+    """按 canonical URL 去重（P4-01）：同一条内容的不同写法算一条，内容参数必须区分。
+
+    旧实现只按 ``(hostname, path)``：`…/post?id=1` 与 `…/post?id=2` 被判成同一条，
+    第二条被**静默丢掉**——同一个 CMS（Discuz、WordPress 的 `?p=`）就是这样被吃掉的。
+    canonical 规则（剥追踪参数、保留 `?id=`/`?p=`）只实现一份，见
+    ``services/search/canonical.canonical_url``。
+    """
+    from ..search.canonical import dedupe_by_url
+
+    return dedupe_by_url(results)
 
 
 def is_third_party_source(url: str) -> bool:
@@ -465,6 +479,10 @@ async def search_web(query: str) -> list[dict[str, str]]:
         raise AssistantSearchError("请先输入要搜索的内容")
     search_query = build_search_query(normalized)
     candidates = parse_bing_rss(await fetch_bing_rss(search_query), limit=_MAX_CANDIDATE_RESULTS)
+    if not candidates:
+        # 「解析到 0 条」与「有候选但都被相关性过滤掉」是两件事，必须分开报：
+        # 前者是端点结构变了（换来源/等修复），后者是换关键词就能解决。
+        raise AssistantSearchError(BING_RSS_EMPTY_MESSAGE)
     results = rank_results(_deduplicate(filter_relevant_results(candidates, normalized)))[
         :_MAX_RESULTS
     ]

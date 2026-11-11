@@ -139,7 +139,14 @@ def test_conversation_crud_and_soft_delete(client, db_session, monkeypatch):
         f"/api/assistant/conversations/{conversation['id']}/messages",
         json={"content": "帮我准备面试"},
     )
-    assert [event["type"] for event in _events(sent)] == ["start", "delta", "delta", "done"]
+    # context_usage 在第一轮拼装完就下发（需求 #6），早于正文 delta。
+    assert [event["type"] for event in _events(sent)] == [
+        "start",
+        "context_usage",
+        "delta",
+        "delta",
+        "done",
+    ]
 
     detail = client.get(f"/api/assistant/conversations/{conversation['id']}").json()
     assert [item["role"] for item in detail["messages"]] == ["user", "assistant"]

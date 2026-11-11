@@ -24,6 +24,7 @@ from ..schemas.assistant import (
 )
 from ..services import trash
 from ..services.assistant.assistant_skills import (
+    PendingSkillError,
     copy_conversation_skills,
     replace_conversation_skills,
     validate_conversation_skill_ids,
@@ -33,6 +34,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TITLE = "新对话"
 WELCOME_TITLE = "开始使用求职助手"
+# 「重新生成」把旧回答标记成 superseded（#13A）：DB 保留，但列表/历史/计数都当它
+# 不存在。不用新列（迁移归 W3），直接复用 status 与 context.superseded_by 双标记。
+SUPERSEDED_STATUS = "superseded"
 _WELCOME_PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "assistant_welcome.md"
 
 _SURFACE_VALUES: tuple[ConversationSurface, ...] = get_args(ConversationSurface)
@@ -87,7 +91,10 @@ def _message_counts(db: Session, conversation_ids: list[int]) -> dict[int, int]:
         return {}
     rows = (
         db.query(ChatMessage.conversation_id, func.count(ChatMessage.id))
-        .filter(ChatMessage.conversation_id.in_(conversation_ids))
+        .filter(
+            ChatMessage.conversation_id.in_(conversation_ids),
+            ChatMessage.status != SUPERSEDED_STATUS,
+        )
         .group_by(ChatMessage.conversation_id)
         .all()
     )
@@ -116,6 +123,9 @@ def create_conversation(payload: ChatConversationCreate, db: Session) -> ChatCon
     # 验收（GET /conversations/{id}/skills 立刻能看到）不依赖第二次请求补写。
     try:
         validate_conversation_skill_ids(db, payload.skill_ids)
+    except PendingSkillError as exc:
+        # #31D/#31F：待验证技能不可启用（新建会话时同样拦）。
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     conversation = ChatConversation(title=title[:120], surface=payload.surface)
@@ -209,7 +219,10 @@ def read_conversation(
     )
     if conversation is None:
         raise HTTPException(status_code=404, detail="会话不存在或已被删除")
-    message_query = db.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id)
+    message_query = db.query(ChatMessage).filter(
+        ChatMessage.conversation_id == conversation_id,
+        ChatMessage.status != SUPERSEDED_STATUS,
+    )
     messages_total = message_query.count()
     if message_limit > 0:
         rows = message_query.order_by(ChatMessage.id.desc()).limit(message_limit).all()
@@ -245,6 +258,7 @@ def read_earlier_messages(
     query = db.query(ChatMessage).filter(
         ChatMessage.conversation_id == conversation_id,
         ChatMessage.id < before_id,
+        ChatMessage.status != SUPERSEDED_STATUS,
     )
     remaining = query.count()
     rows = query.order_by(ChatMessage.id.desc()).limit(limit).all()

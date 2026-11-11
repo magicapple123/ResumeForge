@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from ...models.job import Job
 from ...schemas.job import JobCreate, JobUpdate
 from .. import trash
+from ..favorites import apply_favorite
 from ..jd_parser import parse_jd
 
 
@@ -103,12 +104,16 @@ def create_job_record(db: Session, payload: JobCreate, *, source: str = "") -> J
     自由改写或清空；备注从此只存用户自己写的内容。
     """
     data = payload.model_dump()
+    favorite = bool(data.pop("favorite", False))
     if not (data.get("origin_source") or "").strip():
         data["origin_source"] = (data.get("recognition_source") or "").strip()
     clean_source = (source or "").strip()
     if clean_source:
         data["source"] = clean_source
     job = Job(**data)
+    if favorite:
+        # 新建时就收藏的条目也必须拿到收藏时间（#28E），否则它永远排在收藏夹末尾。
+        apply_favorite(job, True)
     refresh_job_keywords(job)
     db.add(job)
     db.commit()
@@ -123,8 +128,13 @@ def update_job_record(db: Session, job: Job, payload: JobUpdate) -> Job:
     必须照办（这正是把来源从备注拆成独立字段的意义：来源删得掉了）。
     """
     data = payload.model_dump(exclude_unset=True)
+    # favorite 单独走收藏写入口：它必须与 favorited_at 一起改（#28E），
+    # 不能靠 setattr 只翻布尔列。
+    favorite = data.pop("favorite", None)
     for field, value in data.items():
         setattr(job, field, value)
+    if favorite is not None:
+        apply_favorite(job, favorite)
     # 只有 JD 内容变了才值得重算标签。
     if {"description", "requirements", "additional_info"}.intersection(data):
         refresh_job_keywords(job)

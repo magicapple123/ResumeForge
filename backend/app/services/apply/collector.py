@@ -32,10 +32,15 @@ from ...models.profile import utcnow
 from ...schemas.apply import CollectConfigIn
 from ...schemas.job import RECOGNITION_SOURCE_COLLECT
 from .. import trash
-from ..candidate_jobs import find_staged_candidate, stage_candidate_job
-from ..job.job_service import find_job_by_identity, refresh_job_keywords
+from ..candidate_jobs import stage_candidate_job
+from ..job.job_service import refresh_job_keywords
 from ..sites.base import CollectQuery, FilterResolution, SearchResult, SiteAdapter, SiteFailure
+from .blocklist import drop_if_blocked, load_blocklist
 from .collect_filters import FilterTally, evaluate_filters
+
+# 去重判据与「采样留痕」都在 collector_history（15A/15B）：前者原样搬走只为腾行数，
+# 后者是本批新增——重采不再"跳过即无痕"。
+from .collector_history import already_known, known_job_of, record_sighting
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +73,7 @@ class CollectReport:
     # 「补齐详情」模式：成功补到的条数，以及因为"已经有描述 / 在回收站里 / 没有链接"跳过的条数。
     backfilled: int = 0
     backfill_skipped: int = 0
+    blocked: int = 0  # 命中屏蔽清单被丢弃的条数：用户要知道"为什么这次采到的比往年少"
     # 翻页饱和提前停止的位置：站点从某一页起开始返回与前面**完全相同**的结果
     # （筛选组合下岗位总量就这么多，或站点对深层翻页重复推送），再翻只会原样重复到
     # 页数上限。0 表示没有触发（正常翻完或被上限/去重之外的路径终止）。
@@ -102,6 +108,9 @@ class Collector:
         """
         report = CollectReport()
         limit = config.per_task_limit
+        # 本轮采集任务 id：写进 job_seen.run_id（"哪一轮见到的"）。取不到（离线/单测里的
+        # 轻量 task 对象）就记空，采样本身仍然有效。
+        run_id = getattr(task, "id", None)
         # 站点侧筛选：**整个批次只解析一次**——校验编码要读一次站点清单，逐页重复读没有意义。
         # 解析不出来（站点改版 / 清单读不到）时按"这次没筛"如实记账，绝不发未经校验的编码：
         # 旧编码在站点看来同样"合法"，发出去会静默筛错，比不筛更糟。
@@ -131,6 +140,8 @@ class Collector:
         # 本地筛选只对**适配器声明过**的条件生效。这份声明是有约束力的：没声明就说明该站点的
         # 接口不保证返回对应字段，硬筛会变成"凭缺失的字段做判断"——那正是要避免的误杀。
         declared = set(adapter.post_filter_conditions)
+        # 14E 闸门①：屏蔽清单一次读出、整轮复用（每条命中都要丢弃，不能只拦手动入队）。
+        blocklist = load_blocklist(session)
 
         if backfill_job_ids:
             self._backfill(
@@ -192,7 +203,12 @@ class Collector:
                         report.skipped += 1
                         continue
                     seen_results.add(identity)
-                    known = self._already_known(session, result)
+                    # 15A/15B：**每一条**结果都记一次采样（已知岗位也记，新岗位 job_id 为空）。
+                    # 没有这一步，重采就只是一次 `continue`——"这条岗位挂了半年""JD 改过"
+                    # 永远没有证据。岗位只查一次，两处复用（见 collector_history 的纪律②）。
+                    known_job = known_job_of(session, result)
+                    record_sighting(session, result, known_job=known_job, run_id=run_id)
+                    known = already_known(session, result, job=known_job)
                     if known:
                         report.skipped += 1
                         if known == "trashed":
@@ -219,6 +235,8 @@ class Collector:
                         # 岗位没给这个字段 → **保留**（判断不了就不误杀），但要记账。
                         tally.undecided.update(decision.undecided)
                         tally.undecided_count += 1
+                    if drop_if_blocked(report, blocklist, result.company, result.title):
+                        continue
                     pending.append(result)
 
                 # 翻页饱和判定：这一页有结果但全是已见过的 → 记一次饱和；
@@ -328,33 +346,6 @@ class Collector:
         return report
 
     # ===== 内部步骤 =====
-
-    def _already_known(self, session: Session, result: SearchResult) -> str:
-        """这个岗位是否已经有"正式岗位"或"待处理的候选"，以及**在不在回收站里**。
-
-        返回 ``""``（没采过）/ ``"existing"``（库里已有）/ ``"trashed"``（在回收站里）。
-
-        **两张表都要查**，少查一边都会出问题：只查岗位广场，暂存区里会堆出同一岗位的多条
-        候选（用户勾一次就重复导入一次）；只查暂存区，则会把已经在岗位广场里的岗位重新捞回来，
-        让用户以为采到了新东西。去重判据本身走 ``find_by_job_identity``——与后续"勾选导入"
-        的重复判定是同一份实现，且对岗位广场**刻意不过滤软删除**。
-
-        区分"在回收站里"是因为这两种"跳过"对用户的含义完全不同：一种是"早就在库里了"，
-        另一种是"你之前删过它"——后者得说清楚，否则用户会以为删除没生效（或者以为工具坏了）。
-
-        **暂存区那一句不区分**：候选岗位（0050 起也在回收站范围内）的去重显式排除已删的
-        （``find_staged_candidate`` 传 ``skip_deleted=True``），所以走到这里的候选必定没删。
-        这是刻意的——用户删掉一条候选正是让它从待办里消失，把已删的仍算"采过"等于让这条
-        岗位再也采不回来。
-        """
-        identity = {"title": result.title, "company": result.company, "source_url": result.url}
-        job = find_job_by_identity(session, **identity)
-        if job is not None:
-            return "trashed" if trash.is_deleted(job) else "existing"
-        candidate = find_staged_candidate(session, **identity)
-        if candidate is not None:
-            return "existing"
-        return ""
 
     @staticmethod
     def _stage_candidate(
@@ -467,6 +458,7 @@ class Collector:
         task.processed = done
         task.succeeded = done
         task.skipped = report.skipped + report.backfill_skipped
+        task.config = {**(task.config or {}), "blocked": report.blocked}  # 14E：屏蔽命中数随进度落库
         session.commit()
 
     @staticmethod

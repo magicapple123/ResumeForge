@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .assistant_compaction import ContextCompactionStateOut
 from .material import MAX_MATERIAL_TITLE_CHARS
 
 MAX_ASSISTANT_MESSAGE_CHARS = 20_000
@@ -319,7 +320,9 @@ class ChatMessageOut(BaseModel):
     quoted_message_id: int | None = None
     attachments: list[ChatAttachmentOut] = Field(default_factory=list)
     context: dict[str, Any] = Field(default_factory=dict)
-    status: Literal["pending", "complete", "error", "cancelled"]
+    # superseded（#13A）：被「重新生成」取代的旧回答。DB 保留、供审计/导出回看，
+    # 但会话消息列表与模型历史都会过滤它，所以正常响应里不会出现这个值。
+    status: Literal["pending", "complete", "error", "cancelled", "superseded"]
     error: str = ""
     model: str = ""
     # 消息类别（T01）：normal = 普通对话；proposal_result = 写操作终态的派生回写。
@@ -389,3 +392,38 @@ class AssistantToolListOut(BaseModel):
 
     items: list[AssistantToolOut] = Field(default_factory=list)
     count: int = 0
+
+
+class ContextUsageBucket(BaseModel):
+    """上下文用量的一个桶（需求 #6）。
+
+    ``key`` 是固定枚举（system / tools / conversation / connectors / skills），**不翻译**：
+    它是前后端共用的协议值，中文显示名在前端语言包里按 key 映射。
+    """
+
+    key: str
+    # 估算 token（``services/llm/token_estimate``）。**不是**服务商口径，禁止用于计费。
+    tokens: int = 0
+    # 该桶占上下文窗口的百分比；窗口未设置（0）时是 null 而不是 0——没有分母就不猜。
+    percent: float | None = None
+
+
+class ContextUsageOut(BaseModel):
+    """``GET /api/assistant/conversations/{id}/context-usage`` 的载荷。
+
+    字段与流式事件 ``context_usage`` 的 ``usage`` 完全一致，前端一套类型两处复用。
+    ``usage_actual`` 是上一轮服务商**实测**的输入 token；估算（``total``）/实测两者
+    不合并、不换算。
+    """
+
+    buckets: list[ContextUsageBucket] = Field(default_factory=list)
+    # 五桶之和（估算）。
+    total: int = 0
+    # 百分比分母（当前模型的 context_window_tokens）；0 = 未设置。
+    window: int = 0
+    percent: float | None = None
+    # true = 旧消息没有落过用量，这里只有 system / conversation 两桶是估算出来的。
+    partial: bool = False
+    usage_actual: int | None = None
+    # 压缩状态（#10）：null = 这个会话从来没压缩过。
+    compaction: ContextCompactionStateOut | None = None

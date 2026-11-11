@@ -411,26 +411,21 @@ def export_resume_with_options(
     )
 
 
-@router.post("/{resume_id}/preview-pdf")
-def preview_resume_pdf(
-    request: HTTPRequest,
-    resume_id: int,
+def preview_pdf_response(
+    db: Session,
+    record: ResumeRecord,
     payload: PreviewPdfRequest,
-    db: Session = Depends(get_db),
-):
-    """精确预览：返回**与导出逐字节相同**的 PDF，供前端用浏览器原生查看器渲染。
+) -> Response:
+    """精确预览的 PDF 出口：**同一份导出产物**，但按"预览"的五个开关收尾。
 
-    为什么要有这条端点：预览此前用 CSS 多列模拟分页（`column-count`），而导出的 PDF 由
-    `pdf_exporter`（fpdf2）另排一遍，断点规则不同。要"严格相同"，唯一可靠的口径是
-    **让预览显示的就是导出产物本身**（同一条管线、同一组参数）。
+    抽成函数是为了让 `POST …/preview-pages`（P3-2 的逐页位图）复用**完全相同**的一趟排版：
+    位图必须来自这一份字节，否则"预览 = 导出产物"这条契约会在两条端点之间悄悄分叉。
 
-    三个"不是导出"的差别（都通过 `_export_record` 的开关表达）：`allow_incomplete=True`
-    草稿也能看；`save_copy=False` 不写「生成内容保存位置」；`inline=True` + no-store 内联且不缓存。
-    W04 起可按最终交付配置预览：水印/脱敏走与导出相同的管线（脱敏前置、水印后叠加），
-    但仍不落库、不冻结交付。`X-Resume-Pages` / `X-Resume-Overflow` 照常返回。
+    五个开关（都通过 `_export_record` 表达）：`allow_incomplete=True` 草稿也能看；
+    `save_copy=False` 不写「生成内容保存位置」；`record_delivery=False` 不冻结交付；
+    `inline=True` + no-store 内联且不让中间层缓存；`cache_result=True` 同一组参数第二次
+    进来直接给上一次的字节。模板/版式走**草稿值**（换完还没保存也要按新的排，W16 变体优先）。
     """
-    _require_local_export_request(request)
-    record = _get_live_resume(db, resume_id)
     variant_options = resolve_variant_export_options(db, record, payload)
     explicit_content = payload.content
     return _export_record(
@@ -462,3 +457,25 @@ def preview_resume_pdf(
         # 中栏还没保存的正文（W04）：预览与"点保存后导出的那份"因此是同一份内容。
         content_override=variant_options.get("content") if variant_options else explicit_content,
     )
+
+
+@router.post("/{resume_id}/preview-pdf")
+def preview_resume_pdf(
+    request: HTTPRequest,
+    resume_id: int,
+    payload: PreviewPdfRequest,
+    db: Session = Depends(get_db),
+):
+    """精确预览：返回**与导出逐字节相同**的 PDF，供前端用浏览器原生查看器渲染。
+
+    为什么要有这条端点：预览此前用 CSS 多列模拟分页（`column-count`），而导出的 PDF 由
+    `pdf_exporter`（fpdf2）另排一遍，断点规则不同。要"严格相同"，唯一可靠的口径是
+    **让预览显示的就是导出产物本身**（同一条管线、同一组参数）。
+
+    三个"不是导出"的差别（都通过 `_export_record` 的开关表达，见 `preview_pdf_response`）。
+    W04 起可按最终交付配置预览：水印/脱敏走与导出相同的管线（脱敏前置、水印后叠加），
+    但仍不落库、不冻结交付。`X-Resume-Pages` / `X-Resume-Overflow` 照常返回。
+    """
+    _require_local_export_request(request)
+    record = _get_live_resume(db, resume_id)
+    return preview_pdf_response(db, record, payload)

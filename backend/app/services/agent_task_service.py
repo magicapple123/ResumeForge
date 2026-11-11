@@ -21,6 +21,7 @@ import（`from app.services import agent_task_service` 后 `agent_task_service.p
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping
 from typing import Any, cast
 
@@ -36,6 +37,8 @@ from ..models.agent_task import (
     AGENT_TASK_STATUSES,
     AGENT_TASK_STEP_STATUS_DONE,
     AGENT_TASK_STEP_STATUS_FAILED,
+    AGENT_TASK_STEP_STATUS_PENDING,
+    AGENT_TASK_STEP_STATUS_RUNNING,
     AGENT_TASK_STEP_STATUS_SKIPPED,
     AgentTask,
     AgentTaskStep,
@@ -63,6 +66,9 @@ from .agent_task_transitions import (
 
 #: 一次任务最多的步骤数：计划是给用户看的小列表，不是无限工作流。
 MAX_AGENT_TASK_STEPS = 50
+#: 执行参数（agent_task.params）的序列化上限：它是"最小输入"，不是数据仓库；
+#: 超限说明调用方把正文塞进来了，显式拒绝而不是让它撑大任务行。
+MAX_AGENT_TASK_PARAMS_CHARS = 4_000
 
 
 # ===== 创建与读取 =====
@@ -101,8 +107,13 @@ def create_task(
     conversation_id: int | None = None,
     goal: str = "",
     source: str = AGENT_TASK_SOURCE_MANUAL,
+    params: Mapping[str, Any] | None = None,
 ) -> AgentTask:
-    """建一个 draft 任务：步骤顺序落库，`resume_cursor` 从 0 开始。"""
+    """建一个 draft 任务：步骤顺序落库，`resume_cursor` 从 0 开始。
+
+    ``params`` 是执行所需的最小输入（#18A，0017 新增列）：存 JSON 对象，不存正文/隐私/
+    密钥。显式传的非法值抛 ``AgentTaskError``，不静默丢弃——执行器要靠它干活。
+    """
     clean_title = (title or "").strip()
     if not clean_title or len(clean_title) > 200:
         raise AgentTaskError("任务标题不能为空，也不能超过 200 字")
@@ -111,6 +122,18 @@ def create_task(
     clean_source = (source or "").strip()
     if not clean_source or len(clean_source) > 32:
         raise AgentTaskError("任务来源必须是 1–32 字的标签")
+    if params is not None and not isinstance(params, Mapping):
+        raise AgentTaskError("任务参数必须是 JSON 对象")
+    clean_params: dict[str, Any] | None = dict(params) if params else None
+    if clean_params is not None:
+        try:
+            serialized = json.dumps(clean_params, ensure_ascii=False)
+        except (TypeError, ValueError) as exc:
+            raise AgentTaskError("任务参数必须是可序列化的 JSON 对象") from exc
+        if len(serialized) > MAX_AGENT_TASK_PARAMS_CHARS:
+            raise AgentTaskError(
+                f"任务参数不能超过 {MAX_AGENT_TASK_PARAMS_CHARS} 字符（只存执行所需的最小输入）"
+            )
     specs = _normalize_steps(steps)
     db.expire_all()
     task = AgentTask(
@@ -121,6 +144,7 @@ def create_task(
         status=AGENT_TASK_STATUS_DRAFT,
         resume_cursor=0,
         source=clean_source,
+        params=clean_params,
     )
     task.steps = [
         AgentTaskStep(step_index=index, kind=kind, title=step_title)
@@ -266,7 +290,46 @@ def advance_step(
     return load_task(db, task_id)
 
 
+def mark_step_running(db: Session, task_id: int, step_index: int) -> AgentTask:
+    """把当前步骤标 `running` 并写 `started_at`（#18A 执行器专用）。
+
+    条件写：只有"任务 running 且这一步还是 pending"才生效；重复调用（例如恢复后
+    重跑）直接返回快照，不覆盖 started_at。执行器的唯一标记入口，避免每个 handler
+    各写一份 SQL。
+    """
+    if step_index < 0:
+        raise AgentTaskError("step_index 不能为负")
+    task = load_task(db, task_id)
+    if task.status != AGENT_TASK_STATUS_RUNNING:
+        raise AgentTaskError(f"任务当前状态为「{task.status}」，不能执行步骤")
+    if step_index != task.resume_cursor:
+        raise AgentTaskError(f"只能执行当前步骤（当前是第 {task.resume_cursor} 步）")
+    step = find_step(db, task.id, step_index)
+    if step.status == AGENT_TASK_STEP_STATUS_RUNNING:
+        return task
+    if step.status != AGENT_TASK_STEP_STATUS_PENDING:
+        raise AgentTaskError(f"第 {step_index} 步状态为「{step.status}」，不能开始执行")
+    claimed = cast(
+        "CursorResult[Any]",
+        db.execute(
+            update(AgentTaskStep)
+            .where(
+                AgentTaskStep.id == step.id,
+                AgentTaskStep.status == AGENT_TASK_STEP_STATUS_PENDING,
+            )
+            .values(status=AGENT_TASK_STEP_STATUS_RUNNING, started_at=utcnow())
+            .execution_options(synchronize_session=False)
+        ),
+    )
+    if (claimed.rowcount or 0) == 0:
+        db.rollback()
+        return load_task(db, task_id)
+    db.commit()
+    return load_task(db, task_id)
+
+
 __all__ = [
+    "MAX_AGENT_TASK_PARAMS_CHARS",
     "MAX_AGENT_TASK_STEPS",
     "AgentTaskError",
     "AgentTaskNotFound",
@@ -276,6 +339,7 @@ __all__ = [
     "fail",
     "get_task",
     "list_tasks",
+    "mark_step_running",
     "mark_waiting_approval",
     "pause",
     "recover_running_tasks",

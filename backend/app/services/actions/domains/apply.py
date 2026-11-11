@@ -88,7 +88,7 @@ def apply_actions() -> dict[str, ActionSpec]:
                 "查看「投递台」的队列状态：每个待投递/已投递/失败的岗位、对应简历、"
                 "是否支持自动投递以及最近一次匹配结论。用户问「队列里还有什么」"
                 "「那家公司投出去了吗」时用它。"
-                "**助手不代为发起投递**——那一步必须由用户在投递台上点击确认。"
+                "**发起投递需经提案卡确认；确认后会真的提交，且不可撤销。**"
             ),
             input_model=ListApplyQueueInput,
             permission=Permission.READ_ONLY,
@@ -110,7 +110,7 @@ def apply_actions() -> dict[str, ActionSpec]:
                 "查看投递记录（按投递批次分组）：每个批次的状态与成功/失败/跳过计数，"
                 "以及批次里每个岗位的投递结果、失败分类与可操作诊断。"
                 "用户问「上次投递结果怎么样」「为什么投失败」时用它。"
-                "重投要在投递台上操作，助手不代为投递。"
+                "重投需经提案卡确认；确认后会真的提交，且不可撤销。"
             ),
             input_model=ListApplyRecordsInput,
             permission=Permission.READ_ONLY,

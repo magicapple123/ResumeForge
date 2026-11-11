@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""AI 条目与本地草稿的**合并**与脏条目清洗。
+"""AI 条目与本地草稿的**合并与脏条目清洗**（锚点判定与一对一配对的唯一实现）。
 
 从 `text_extraction_normalization` 拆出（2026-10-27，500 行预算）：那一侧负责字段边界、
-来源锚定和最终装配，这一侧只回答一个问题——"模型给的这几条，和本地规则解析出的那几条，
+来源锚定和最终装配，这一侧只回答两个问题——"模型给的这几条，和本地规则解析出的那几条，
 怎么一对一配上？哪些根本不是记录？"
 
-四条根因都在这里：
+四条根因在这里：
 
 1. **同名条目互相串值**：原实现用 `{anchor: item}` 字典，同名条目互相覆盖，只剩最后
    一条，于是每条同名 AI 条目都拿同一条本地条目 merge（用户实测：4 条「浙江大学」的
@@ -14,6 +14,9 @@
    字面不等就 AI 一条 + 本地一条（4 条变 5 条）。现在先精确、再**前缀**配对。
 3. **页眉页脚被当成记录**：`第 2 页` 让 1 条教育变 2 条。
 4. **同一份内容粘贴两遍**：模型把整段再输出一遍 → 完全相同的条目去重。
+
+同分区合并（FIX-9）、技能合法性（FIX-10）与头部字段兜底（FIX-11）在
+``profile_entry_dedup``：它们在"条目已成形"之后收尾，与这里的配对是两件事。
 """
 
 from __future__ import annotations
@@ -45,14 +48,60 @@ _NOISE_ANCHOR_RE = re.compile(
     re.IGNORECASE,
 )
 
+# FIX-1：装饰符号只剥首尾，而且**仅当字面长度 ≥4**。`C#`（2 字）必须原样保留，
+# 一律剥会把 `C#` 变成 `C`、把 `.NET` 这类技术名改成另一个技能。
+_DECORATION_CHARS = "*#_~"
+_MIN_DECORATED_CHARS = 4
+
+# FIX-2：表头字段词与指代词。**只做整串精确匹配**——`北京某某科技有限公司` 是
+# 真公司名，用"含「公司」就杀"会把它和一堆真实企业名一起清掉。
+_HEADER_LABEL_ANCHORS = frozenset(
+    {
+        "学校",
+        "公司",
+        "单位",
+        "组织",
+        "项目",
+        "职位",
+        "岗位",
+        "时间",
+        "姓名",
+        "电话",
+        "邮箱",
+        "学历",
+        "专业",
+        "经历",
+        "教育",
+        "技能",
+        "奖项",
+    }
+)
+_PLACEHOLDER_ANCHORS = frozenset({"现在这家公司", "该公司", "某公司", "上家公司"})
+
 
 def normalized_key(value: str) -> str:
-    """锚定/比对用的归一：全半角折叠 + 去所有空白 + 大小写折叠。
+    """锚定/比对用的归一：全半角折叠 + 去所有空白 + 大小写折叠 + 剥首尾装饰符号。
 
     全半角这一步是必需的：抄录文本常写成 ``２０１４．０９``（截图 OCR 的全角标点），
     模型输出却是 ``2014-09``；不折叠就会在"是否是同一条"上互相认不出。
+
+    装饰符号（FIX-1）是 Markdown 抄录的残留：`*清华大学**` 与 `清华大学` 是同一条，
+    但只有字面长度 ≥4 时才剥——`C#` 剥完就成了 `C`，那是另一个技能。
     """
-    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", value)).casefold()
+    normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", value)).casefold()
+    stripped = normalized.strip(_DECORATION_CHARS)
+    if len(normalized) >= _MIN_DECORATED_CHARS and stripped:
+        return stripped
+    return normalized
+
+
+def clean_identity_text(value: str) -> str:
+    """身份字段的写回值：与 `normalized_key` 同一套剥法，但保留原大小写与空格。"""
+    text = value.strip()
+    stripped = text.strip(_DECORATION_CHARS)
+    if len(text) >= _MIN_DECORATED_CHARS and stripped:
+        return stripped.strip()
+    return text
 
 
 def entry_anchor(section: str, item: dict[str, Any]) -> str:
@@ -64,12 +113,23 @@ def entry_anchor(section: str, item: dict[str, Any]) -> str:
     return ""
 
 
-def is_usable_anchor(section: str, anchor: str) -> bool:
-    """这个锚点够不够指向一条记录（噪声行与过短锚点都不算）。
+def is_label_value(value: str) -> bool:
+    """这个字面值是不是表头标签 / 指代词 / 页码噪声（而不是一个实体名）。"""
+    normalized = normalized_key(value)
+    if not normalized:
+        return False
+    if normalized in _HEADER_LABEL_ANCHORS or normalized in _PLACEHOLDER_ANCHORS:
+        return True
+    return bool(_NOISE_ANCHOR_RE.match(normalized))
 
-    **唯一定义**：合并阶段（`prune_entries`）与识别归一化（`_ground_entries` 决定
-    "这条有没有身份锚点"）必须用同一套判定，否则同一条记录会在两处得到不同结论——
-    典型是技能名 `C` / `R` / `Go`：技能分区里合法的短名字，在另一处被当成脏条目清掉。
+
+def is_usable_anchor(section: str, anchor: str) -> bool:
+    """这个锚点够不够指向一条记录（表头词、指代词、噪声行与过短锚点都不算）。
+
+    **唯一定义**：合并阶段（`prune_entries`）、识别归一化（`_ground_entries` 决定
+    "这条有没有身份锚点"）与收尾清洗（`finalize_sections`）必须用同一套判定，否则
+    同一条记录会在三处得到不同结论——典型是技能名 `C` / `R` / `Go`：技能分区里合法
+    的短名字，在另一处被当成脏条目清掉。
 
     参数可以是原文，也可以是已经归一过的锚点（`normalized_key` 幂等）。
     """
@@ -78,15 +138,17 @@ def is_usable_anchor(section: str, anchor: str) -> bool:
         return False
     if _NOISE_ANCHOR_RE.match(normalized):
         return False
+    if normalized in _HEADER_LABEL_ANCHORS or normalized in _PLACEHOLDER_ANCHORS:
+        return False
     return section in _SHORT_NAME_SECTIONS or len(normalized) >= _MIN_ANCHOR_CHARS
 
 
-def _same_anchor(anchor: str, other: str) -> bool:
+def same_anchor(anchor: str, other: str) -> bool:
     """两个身份锚点是否指同一条记录（先精确，再前缀包含）。
 
-    前缀这一档是为**本地解析粘了多余列**准备的：``第一中学 高中``（学历没拆出来）与
-    模型给的 ``第一中学`` 是同一条，字面不等就会被当成两条、一条 AI 一条本地双双留下
-    （用户实测"4 条教育变 5 条，多出第一中学 高中"）。要求短的一侧至少 2 个字，
+    前缀这一档是为**字面不等但同一条**准备的：``第一中学 高中``（学历没拆出来）与
+    模型给的 ``第一中学`` 是同一条；同分区里 ``浙江大学`` 与
+    ``浙江大学 计算机科学与技术 本科`` 也是同一条（FIX-9）。要求短的一侧至少 2 个字，
     避免 ``一`` 这种字匹配一切。
     """
     if anchor == other:
@@ -94,6 +156,11 @@ def _same_anchor(anchor: str, other: str) -> bool:
     if len(anchor) < 2 or len(other) < 2:
         return False
     return anchor.startswith(other) or other.startswith(anchor)
+
+
+def has_value(value: Any) -> bool:
+    """字段是否"有内容"（空串、None、空列表都算没有）。"""
+    return bool(str(value).strip()) if isinstance(value, str) else bool(value)
 
 
 def _take_local(
@@ -112,7 +179,7 @@ def _take_local(
         local_anchor = entry_anchor(section, item)
         if not local_anchor:
             continue
-        matched = local_anchor == anchor if exact else _same_anchor(anchor, local_anchor)
+        matched = local_anchor == anchor if exact else same_anchor(anchor, local_anchor)
         if matched:
             return index
     return None
@@ -150,27 +217,28 @@ def merge_entries(
 
 
 def prune_entries(section: str, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """丢掉**脏条目**：噪声行、没有信息量的锚点、邻条里的一段文字、完全重复的条目。
+    """丢掉**脏条目**，并把同一条的两种写法并回一条。
 
     模型偶尔把一行劈成两条（``项目8号`` + 名字叫 ``0`` 的条目，用户实测 20 条项目变
-    21 条）、把页眉页脚当成记录、或把同一份内容粘贴两遍时整段再输出一遍。四条**保守**
-    规则，宁少勿多：
-    1. 锚点是排版噪声（``第 N 页`` / ``共 N 页`` / ``N/M`` / ``简历编号``）；
-    2. 锚点归一后不足 2 个字符 —— ``0`` / ``1`` / 空串都不是名字；
-    3. 整条只有身份字段有值，且这个锚点能在一段**其他条目的文字**里整段找到 ——
-       它是被重复输出的一段文字，不是独立记录；
-    4. 除 ``reference_*`` 外全部字段相同的两条 —— 同一条记录被输出了两次。
+    21 条）、把页眉页脚当成记录，或把同一份内容粘贴两遍时整段再输出一遍。规则：
+    1. 锚点是排版噪声 / 表头标签 / 指代词 / 过短 → 不是记录（`is_usable_anchor`）；
+    2. 同一锚点（相等或前缀）的两条 → 合成一条（FIX-9，含日期保护）；
+    3. 除 ``reference_*`` 外全部字段相同的两条 —— 同一条记录被输出了两次；
+    4. 整条只有身份字段有值，且这个锚点能在一段**其他条目的文字**里整段找到 ——
+       它是被重复输出的一段文字，不是独立记录。
 
     单条分区不做任何清洗：没有"邻条"可比，且短名字在那里是合法的。
     """
+    # 局部 import：`profile_entry_dedup` 反过来要这里的锚点判定，模块级互相 import 会成环。
+    from .profile_entry_dedup import merge_anchor_variants
+
     if len(entries) <= 1:
         return entries
-    kept: list[dict[str, Any]] = []
+    kept = [item for item in entries if is_usable_anchor(section, entry_anchor(section, item))]
+    kept = merge_anchor_variants(section, kept)
+    deduped: list[dict[str, Any]] = []
     seen: set[tuple[tuple[str, str], ...]] = set()
-    for item in entries:
-        anchor = entry_anchor(section, item)
-        if not is_usable_anchor(section, anchor):
-            continue
+    for item in kept:
         fingerprint = tuple(
             sorted(
                 (field, str(value))
@@ -181,14 +249,14 @@ def prune_entries(section: str, entries: list[dict[str, Any]]) -> list[dict[str,
         if fingerprint in seen:
             continue
         seen.add(fingerprint)
-        kept.append(item)
-    if len(kept) <= 1:
-        return kept
-    pruned: list[dict[str, Any]] = []
-    for index, item in enumerate(kept):
-        if not _is_fragment(section, item, kept, index):
-            pruned.append(item)
-    return pruned
+        deduped.append(item)
+    if len(deduped) <= 1:
+        return deduped
+    return [
+        item
+        for index, item in enumerate(deduped)
+        if not _is_fragment(section, item, deduped, index)
+    ]
 
 
 def _is_fragment(
@@ -217,9 +285,13 @@ def _is_fragment(
 
 __all__ = [
     "IDENTITY_FIELDS",
+    "clean_identity_text",
     "entry_anchor",
+    "has_value",
+    "is_label_value",
     "is_usable_anchor",
     "merge_entries",
     "normalized_key",
     "prune_entries",
+    "same_anchor",
 ]

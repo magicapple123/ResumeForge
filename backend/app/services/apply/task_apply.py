@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import logging
-import random
 import time
 from collections.abc import Callable
 from typing import Any
@@ -44,7 +43,10 @@ from .. import diagnostics, tracker
 from ..browser.cdp_client import CdpClient, CdpError
 from ..sites.base import SiteFailure
 from ..sites.registry import get_registry
+from .blocklist import skip_if_blocked
 from .failure_taxonomy import classify_failure
+from .greeting_templates import render_greeting_template
+from .pacing import interruptible_sleep as interruptible_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -91,25 +93,6 @@ def same_company_skip_reason(
     if not key or key not in attempted:
         return ""
     return f"按「同公司只投一个岗位」跳过：本批次已经投过「{' '.join(item.company.split())}」的岗位"
-
-
-def interruptible_sleep(runner: Any, interval: int, jitter: int) -> bool:
-    """岗位间限速等待；暂停可恢复，停止可即时打断。"""
-    total = max(0, interval)
-    if jitter:
-        total += random.uniform(0, jitter)
-    if total <= 0:
-        return True
-    end = runner._clock() + total
-    while True:
-        if runner._stop.is_set():
-            return False
-        if not runner._resume.is_set() and not runner._wait_resume_or_stop():
-            return False
-        remaining = end - runner._clock()
-        if remaining <= 0:
-            return True
-        runner._sleeper(min(0.2, remaining))
 
 
 def mark_failed(
@@ -263,6 +246,10 @@ def run_apply(
                         message=f"今日投递已达上限（{config.daily_limit}），剩余岗位已跳过",
                     )
                     return
+                # 14E 闸门③：黑名单可能是入队之后才加的，投递前再兜底判一次
+                # （命中就地把这一条记为「已跳过」并留下原因，见 services/apply/blocklist.py）。
+                if skip_if_blocked(session, task, item):
+                    continue
                 skip_reason = same_company_skip_reason(config, item, attempted_companies)
                 if skip_reason:
                     # 与 ItemSkip 同一形态：软跳过、不计失败、不触发熔断，但**留下原因**——
@@ -428,7 +415,12 @@ def execute_item(
             target="resume_upload",
         )
     data = apply_service.build_apply_data(session, resume)
-    greeting = (item.greeting or "").strip() or config.default_greeting
+    # 14D：招呼语里的 {company} / {job_title} / {name} 在**发送前**才替换成实际值——
+    # 提前替换会让队列里的文案与用户看到的不一致；未知花括号原样保留（见渲染函数）。
+    greeting = render_greeting_template(
+        (item.greeting or "").strip() or config.default_greeting,
+        company=item.company, job_title=item.job_title, name=str(data.get("name", "")),
+    )
 
     step_started = time.monotonic()
     task.current_step = STEP_FILLING

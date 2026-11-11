@@ -201,6 +201,7 @@ def _preview_update_skill(db: Session, payload: UpdateSkillInput) -> WritePrevie
 
 def _run_update_skill(db: Session, payload: UpdateSkillInput) -> ActionOutcome:
     from ...api.skills import _to_detail
+    from ..assistant.assistant_skills import PendingSkillError
     from ..assistant.assistant_skills import update_skill as update_skill_record
     from ..assistant_tools.data_tools.skills import _skill_files_from_arguments
 
@@ -229,6 +230,9 @@ def _run_update_skill(db: Session, payload: UpdateSkillInput) -> ActionOutcome:
             enabled=payload.enabled,
             files=files,
         )
+    except PendingSkillError as exc:
+        # #31D/#31F：待验证技能不可启用——conflict 在 ERROR_SEMANTICS 里映射 409。
+        raise ActionError("conflict", str(exc)) from exc
     except ValueError as exc:
         # 迁移前这些领域规则在路由侧是 HTTPException(400)、工具侧是 ValueError；
         # 统一成 invalid_request（400）后两侧错误仍来自同一张映射表。

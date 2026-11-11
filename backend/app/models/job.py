@@ -40,6 +40,13 @@ class Job(Base):
     # 备注里的图片（受限的 base64 data URL 列表）：招聘截图、内推码截图等。
     note_images: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 0013（#28E）：收藏时间。NULL = 从未收藏或已取消（收藏写、取消清空）；
+    # 老数据由迁移用 updated_at 回填并把 estimated 置真——updated_at 会被后续编辑刷新，
+    # 所以回填值只是近似值，界面必须标「时间不详」而不是当精确时间展示。
+    favorited_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    favorited_at_estimated: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     # 招聘信息的录入方式，用于方便用户溯源：手动填写 / 粘贴文本识别 / 图片识别 /
     # 文档识别 / 备选岗位导入。旧数据为空字符串，界面按"未记录"处理。
     recognition_source: Mapped[str] = mapped_column(String(32), default="", server_default="")
@@ -52,6 +59,12 @@ class Job(Base):
     # 软删除时间戳：NULL 表示「没删」。列表查询一律加 `deleted_at IS NULL`，
     # 回收站里则只看非 NULL 的行（见 ``services/trash.py``）。
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 15A：用户显式「忽略这条岗位的僵尸提示」。置真后 14A 体检不再报 ``ghost_job``，
+    # 但采集侧照常记采样——用户关掉的是提示，不是要求我们停止记录历史。
+    # 只在这里存 bool，不存"为什么忽略"：理由只有一种（用户看过了、仍然想投）。
+    ghost_ignored: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     # AI 解读缓存（R2）：{"fingerprint","generated_at","result"}。放在岗位上而不是
     # 单独的日志表——解读针对的是"这条岗位的这段描述"，岗位删了它就没有意义。
     # 指纹在每次读取时与当前内容比对，不一致即标记"可能过期"，但**不自动作废**：

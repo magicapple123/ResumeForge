@@ -52,6 +52,7 @@ from ..services.llm.base import LLMError
 from ..services.settings_service import get_llm_config
 from ..services.site_health import site_health_overview
 from ._disconnect import client_gone, run_until_disconnect
+from .apply_extra import register_apply_extra_routes
 from .apply_queue import router as apply_queue_router
 from .apply_record_items import router as apply_record_items_router
 from .apply_tasks_page import router as apply_tasks_page_router
@@ -73,6 +74,8 @@ router.include_router(apply_tasks_page_router)
 router.include_router(apply_queue_router)
 # 批次明细分页（B4 按需加载）：grouped 轻量分页后，展开批次在这里拉明细。
 router.include_router(apply_record_items_router)
+# #14 的 8 个补强端点整批在 apply_extra.py（本文件预算只剩个位数余量）。
+register_apply_extra_routes(router)
 
 
 def _raise(exc: apply_service.ApplyServiceError) -> None:

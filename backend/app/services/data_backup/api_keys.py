@@ -28,8 +28,15 @@ def _plaintext_api_keys(bind: Engine) -> list[str]:
 # （只有 Windows 走 DPAPI），所以"不含密钥"的导出必须把它们一起收集、一起剥离，
 # 否则备份包里会留下可直接使用的明文 Key。前缀匹配是为了将来的多条语音配置
 # （asr_api_key:xxx）也落在同一道闸门里。
+#
+# 2.1.0 修过的洞（"勾了不含 API Key 仍带出 key"）就出在这张名单上：新增来源的 Key
+# 忘了登记，它就会以明文留在包里。P4-09/P4-10 接 Tavily 与 Jina 时**必须**同步登记，
+# 否则"不含密钥"的勾选对这两个来源无效。
 _SECRET_APP_SETTING_WHERE = (
-    "key LIKE 'asr_api_key%' OR key LIKE 'search_deepseek_api_key%'"
+    "key LIKE 'asr_api_key%'"
+    " OR key LIKE 'search_deepseek_api_key%'"
+    " OR key LIKE 'search_tavily_api_key%'"
+    " OR key LIKE 'search_jina_api_key%'"
 )
 
 

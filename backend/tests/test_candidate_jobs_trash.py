@@ -17,7 +17,7 @@ import json
 from app.models.material import CandidateJob
 from app.schemas.material import CandidateJobCreate
 from app.services import trash
-from app.services.apply.collector import Collector
+from app.services.apply.collector_history import already_known, known_job_of
 from app.services.assistant_tools.data_tools.candidate_jobs import _tool_list_candidate_jobs
 from app.services.candidate_csv import find_duplicate, import_candidate_rows
 from app.services.candidate_jobs import (
@@ -31,6 +31,15 @@ from app.services.candidate_jobs import (
     stage_candidate_job,
 )
 from app.services.sites.base import SearchResult
+
+
+def _known(db, result: SearchResult) -> str:
+    """采集侧对这个岗位的去重结论（``""`` / ``existing`` / ``trashed``）。
+
+    15A 起判据搬到 ``services/apply/collector_history``（``collector.py`` 只留 import 与
+    调用），**实现仍是同一份**：岗位只查一次，两处复用（``known_job_of`` + ``already_known``）。
+    """
+    return already_known(db, result, job=known_job_of(db, result))
 
 
 def _candidate(db, **overrides) -> CandidateJob:
@@ -136,9 +145,9 @@ def test_deleted_candidate_does_not_block_recollection(db_session):
         "已软删的候选仍在去重里 —— 用户删了它，这条岗位就再也采集不回来了"
     )
     # 采集判定随之回到"没采过"，于是会重新落进暂存区。
-    state = Collector()._already_known(
+    state = _known(
         db_session, SearchResult(title="后端开发", company="A公司", url="https://example.com/job/1")
-    )  # noqa: SLF001
+    )
     assert state == ""
 
 
@@ -152,9 +161,9 @@ def test_trashed_job_still_blocks_recollection(db_session):
     trash.soft_delete(db_session, "job", job)
     db_session.commit()
 
-    state = Collector()._already_known(
+    state = _known(
         db_session, SearchResult(title="后端开发", company="A公司", url="https://example.com/job/1")
-    )  # noqa: SLF001
+    )
     assert state == "trashed", "岗位广场的去重必须把回收站里的也算已存在，这样界面才能说明原因"
 
 
@@ -266,7 +275,7 @@ def test_live_candidate_still_blocks_recollection(db_session):
     live_candidate = _candidate(db_session)
 
     assert find_staged_candidate(db_session, **_IDENTITY) is live_candidate
-    state = Collector()._already_known(  # noqa: SLF001
+    state = _known(
         db_session,
         SearchResult(title="后端开发", company="A公司", url="https://example.com/job/1"),
     )
@@ -364,9 +373,7 @@ def test_deleted_candidate_does_not_block_recollection_without_a_url(db_session)
         is None
     )
     # ③ 采集侧同一套判据：结论回到"没采过"，于是会重新落进暂存区。
-    state = Collector()._already_known(  # noqa: SLF001
-        db_session, SearchResult(title="后端开发", company="A公司", url="")
-    )
+    state = _known(db_session, SearchResult(title="后端开发", company="A公司", url=""))
     assert state == ""
 
 

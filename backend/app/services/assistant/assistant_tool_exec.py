@@ -34,6 +34,86 @@ from .assistant_persistence import update_message_context
 
 logger = logging.getLogger(__name__)
 
+# #13C 工具参数预览：白名单比黑名单可靠——只有这几类键的**值**会进「助手做了什么」
+# 的参数区；其余键只留名字，敏感键连名字都不留。值统一截断到 120 字符。
+ARG_PREVIEW_KEYS = ("query", "entry_id", "field", "section", "resume_id", "url")
+ARG_PREVIEW_MAX_VALUE_CHARS = 120
+# 敏感参数：值绝不外露，名字也不进预览（前端与消息 context 都是用户可见/可导出的）。
+SENSITIVE_ARG_KEYS = frozenset(
+    {
+        "api_key",
+        "apikey",
+        "token",
+        "access_token",
+        "refresh_token",
+        "password",
+        "secret",
+        "client_secret",
+        "phone",
+        "mobile",
+        "id_card",
+        "id_number",
+        "email",
+    }
+)
+# #13D 写操作预览只允许这些字段进 record（不泄露内部 path / 对象 id）。
+PREVIEW_FIELDS = ("before", "after", "version_id", "undo_text", "resume_id", "revision")
+PREVIEW_MAX_TEXT_CHARS = 500
+
+
+def _is_sensitive_arg_key(name: str) -> bool:
+    lowered = name.lower()
+    if lowered in SENSITIVE_ARG_KEYS:
+        return True
+    return lowered.endswith(("_key", "_token", "_password", "_secret"))
+
+
+def _arg_value_text(value: Any) -> str:
+    if isinstance(value, str):
+        text = value
+    else:
+        try:
+            text = json.dumps(value, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            text = str(value)
+    return text[:ARG_PREVIEW_MAX_VALUE_CHARS]
+
+
+def build_args_preview(arguments: dict[str, Any]) -> list[dict[str, str]]:
+    """工具参数的安全预览（#13C）：白名单键带值（截 120 字），其余键只留名字。
+
+    一处实现（本函数）服务全部工具：工具实现里不再各自拼一份参数说明，
+    否则白名单口径必然漂移。敏感键整条跳过——名字带出去也会被导出与回放。
+    """
+    preview: list[dict[str, str]] = []
+    for key, value in arguments.items():
+        name = str(key)
+        if _is_sensitive_arg_key(name):
+            continue
+        if name in ARG_PREVIEW_KEYS and value not in (None, ""):
+            preview.append({"key": name, "value": _arg_value_text(value)})
+        else:
+            preview.append({"key": name})
+    return preview
+
+
+def _sanitize_preview(raw: Any) -> dict[str, Any] | None:
+    """写操作 diff 的白名单投影：只留约定字段，文本截断，拒绝非整数 id。"""
+    if not isinstance(raw, dict):
+        return None
+    sanitized: dict[str, Any] = {}
+    for field_name in PREVIEW_FIELDS:
+        if field_name not in raw:
+            continue
+        value = raw[field_name]
+        if field_name in {"before", "after", "undo_text"}:
+            sanitized[field_name] = None if value is None else str(value)[:PREVIEW_MAX_TEXT_CHARS]
+        elif isinstance(value, bool) or not isinstance(value, int):
+            continue
+        else:
+            sanitized[field_name] = int(value)
+    return sanitized or None
+
 
 def _parse_tool_arguments(raw: str) -> dict[str, Any]:
     if not raw.strip():
@@ -73,6 +153,11 @@ async def run_tool_call(
     record: dict[str, Any] = {
         "name": name,
         "arguments": {},
+        # #13C：参数的安全投影。开跑前就占好位（哪怕参数解析失败），
+        # SSE 事件与落库 context 的字段形状保持一致。
+        "args_preview": [],
+        # #13D：简历文档写操作的 diff / 撤销预览；非文档写工具为 None。
+        "preview": None,
         "summary": "",
         "link": "",
         "ok": True,
@@ -84,6 +169,7 @@ async def run_tool_call(
     try:
         arguments = _parse_tool_arguments(function.get("arguments") or "")
         record["arguments"] = arguments
+        record["args_preview"] = build_args_preview(arguments)
         if tool_writes(name) and tool_policy.requires_proposal(name, writable=ctx.writable):
             # 写工具 + 用户未同意写入（RF-01）：不执行 handler，生成结构化提案等
             # 用户在界面上确认。批准走 REST 端点用存储参数执行，token 不进模型
@@ -126,6 +212,9 @@ async def run_tool_call(
         record["result_text"] = result.text
         record["changed"] = result.changed
         record["sources"] = result.sources
+        # #13D：写操作的 before/after/版本号只由工具自己声明（它才知道真实改了什么），
+        # 这里统一做白名单投影，绝不把 path 等内部定位信息带出去。
+        record["preview"] = _sanitize_preview(result.preview)
     except Exception as exc:  # noqa: BLE001 - 工具失败不能拖垮整轮回复
         record["ok"] = False
         record["error"] = str(exc)

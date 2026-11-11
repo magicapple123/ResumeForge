@@ -41,6 +41,10 @@ class SelectionBoost:
     extra_terms: tuple[str, ...] = ()
     #: 诊断用回退原因（只进日志，不进 prompt）
     fallback_reason: str = ""
+    #: #30 审计明细：boost 键映射回的真实条目（entry_id / 标题 / 分区 / 提升幅度），
+    #: 顺序与 boost 一致（分数降序）。只进对外回执，绝不进 prompt——生成链仍只读
+    #: boost/extra_terms，候选形状不变。空元组 = 没有命中，与 boost 是否为空无关。
+    impacts: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def is_empty(self) -> bool:

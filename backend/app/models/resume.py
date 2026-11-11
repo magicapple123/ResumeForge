@@ -27,6 +27,12 @@ class ResumeRecord(Base):
     # 历史记录没有该字段时由 SQLite 迁移默认标记为 AI 生成。
     source: Mapped[str] = mapped_column(String(16), default="ai", nullable=False)
     favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 0013（#28E）：收藏时间。语义与 Job 的两列逐字相同（收藏写、取消清空；
+    # 老数据由迁移用 updated_at 回填并标 estimated，界面显示「时间不详」）。
+    favorited_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    favorited_at_estimated: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     # 简历制作台的**草稿**（0051）：点「前往简历制作台」时先建一行，但它还不是一份
     # 用户认可的简历。存在这一列之前，那个入口会立刻 POST 出一条记录，于是用户只是
     # "点进去看了看、什么都没存就关掉"，简历中心里也多出一份空白简历。

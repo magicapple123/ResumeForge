@@ -50,6 +50,25 @@ from .assistant import (
     ChatConversation,
     ChatMessage,
 )
+from .assistant_memory import (
+    MEMORY_KIND_AVOID_COMPANY,
+    MEMORY_KIND_CITY,
+    MEMORY_KIND_CONSTRAINT,
+    MEMORY_KIND_LABELS,
+    MEMORY_KIND_SALARY_FLOOR,
+    MEMORY_KIND_SKILL_TAG,
+    MEMORY_KIND_TARGET_ROLE,
+    MEMORY_KIND_WORK_MODE,
+    MEMORY_KINDS,
+    MEMORY_SOURCE_EXTRACTED,
+    MEMORY_SOURCE_MANUAL,
+    MEMORY_SOURCES,
+    MEMORY_STATUS_ACTIVE,
+    MEMORY_STATUS_DELETED,
+    MEMORY_STATUS_SUPERSEDED,
+    MEMORY_STATUSES,
+    AssistantMemory,
+)
 from .career_scenario import CareerScenario
 from .claim import (
     CLAIM_CATEGORIES,
@@ -110,6 +129,7 @@ from .job_preference import (
     PREF_VALUE_KINDS,
     JobPreference,
 )
+from .job_seen import JobSeen
 from .knowledge_entry import KnowledgeEntry
 from .llm_usage import LLMUsageRecord
 from .material import MATERIAL_CATEGORIES, CandidateJob, Material
@@ -235,6 +255,8 @@ __all__ = [
     "AppSchemaEpoch",
     "Job",
     "JobMatchBatch",
+    # 15A/15B 岗位采样流水（0012）：一次采集一条，见 models/job_seen.py。
+    "JobSeen",
     # T10 求职偏好档（0008）：状态 / 来源 / 值形态三轴常量 + 模型。
     "JobPreference",
     "PREF_STATES",
@@ -253,6 +275,24 @@ __all__ = [
     "AssistantWriteProposal",
     "AssistantSkill",
     "AssistantSkillFile",
+    # 0015 助手语义记忆（#31A / #18D 合并模型）：kind 白名单 + 状态 + 来源 + 模型。
+    "AssistantMemory",
+    "MEMORY_KINDS",
+    "MEMORY_KIND_TARGET_ROLE",
+    "MEMORY_KIND_CITY",
+    "MEMORY_KIND_SALARY_FLOOR",
+    "MEMORY_KIND_AVOID_COMPANY",
+    "MEMORY_KIND_WORK_MODE",
+    "MEMORY_KIND_SKILL_TAG",
+    "MEMORY_KIND_CONSTRAINT",
+    "MEMORY_KIND_LABELS",
+    "MEMORY_STATUSES",
+    "MEMORY_STATUS_ACTIVE",
+    "MEMORY_STATUS_SUPERSEDED",
+    "MEMORY_STATUS_DELETED",
+    "MEMORY_SOURCES",
+    "MEMORY_SOURCE_MANUAL",
+    "MEMORY_SOURCE_EXTRACTED",
     "UserProfile",
     "ProfilePhoto",
     "ProfileCustomSection",

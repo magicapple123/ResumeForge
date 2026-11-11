@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import get_args
 
 from sqlalchemy import func, or_
@@ -31,6 +32,7 @@ from ...schemas.apply import (
     TaskStatus,
 )
 from .. import trash
+from .lifecycle import jd_changed_map
 
 _TASK_ITEM_STATUS_VALUES: tuple[TaskItemStatus, ...] = get_args(TaskItemStatus)
 _TASK_STATUS_VALUES: tuple[TaskStatus, ...] = get_args(TaskStatus)
@@ -94,7 +96,19 @@ def daily_success_count(db: Session) -> int:
     )
 
 
-def _record_out(item: ApplyTaskItem) -> ApplyRecordOut:
+def _record_out(
+    item: ApplyTaskItem, *, jd_changed: bool = False, queue_id: int | None = None
+) -> ApplyRecordOut:
+    """记录条目的出口结构。
+
+    ``jd_changed`` 与 ``queue_id`` 都由调用方**批量**算好后传入（:func:`lifecycle.jd_changed_map`
+    与 :func:`_queue_id_map`，各一次查询覆盖整页记录）——逐条查一次会让"一页 20 条"变成 20 次
+    额外 SQL，而它们读的是同一张历史表 / 同一张队列表。
+
+    ``queue_id`` 是 15B 抽屉的入口：记录行上的「JD 改过了」徽标要点开 before/after，而那个
+    端点（``GET /queue/{id}/jd-change``）只认队列条目 id。岗位不在队列里时为空，前端据此
+    只显示徽标、不给点击（绝不拿 job_id 顶替去猜一份别人的 diff）。
+    """
     return ApplyRecordOut(
         id=item.id,
         task_id=item.task_id,
@@ -112,9 +126,42 @@ def _record_out(item: ApplyTaskItem) -> ApplyRecordOut:
         failure_target=item.failure_target or "",
         failure_reason=item.failure_reason or "",
         attempt=item.attempt,
+        jd_changed=jd_changed,
+        queue_id=queue_id,
         created_at=item.created_at,
         finished_at=item.finished_at,
     )
+
+
+def _queue_id_map(db: Session, job_ids: Iterable[int | None]) -> dict[int, int]:
+    """15B：批量反查"这些岗位各自对应哪条队列条目"（**一次查询**，按 job_id 索引）。
+
+    记录行没有 ``queue_id`` 列，而 15B 的 before/after 抽屉只认队列条目 id，所以只能在
+    出口处按 ``job_id`` 反查一次。做法与 :func:`lifecycle.jd_changed_map` 一致：调用方把
+    整页（或整批）的 job_id 一起交进来，服务层不逐条查。
+
+    同一岗位若命中多条队列条目（队列表的唯一约束放宽后可能出现），取**最小 id**：
+    队列是按加入顺序投的，最早那条是最初被勾选的条目，也是可复现的选择——按读库顺序
+    随机挑一条会让同一条记录两次打开看到两份不同的 diff。
+
+    ``job_id`` 为空的记录（岗位已删除）不参与：它们既没有可比对的历史，也没有队列条目。
+    """
+    ids = sorted({int(job_id) for job_id in job_ids if job_id})
+    if not ids:
+        return {}
+    rows = (
+        db.query(ApplyQueueItem.id, ApplyQueueItem.job_id)
+        .filter(ApplyQueueItem.job_id.in_(ids))
+        .order_by(ApplyQueueItem.id)
+        .all()
+    )
+    mapping: dict[int, int] = {}
+    for queue_id, job_id in rows:
+        if job_id is None:
+            continue
+        # setdefault + 升序遍历 = 保留最小 id。
+        mapping.setdefault(int(job_id), int(queue_id))
+    return mapping
 
 
 def _matched_items_query(
@@ -156,7 +203,19 @@ def list_records(
         .limit(page_size)
         .all()
     )
-    return [_record_out(row) for row in rows], total
+    # 15B：整页记录一次算出"这些岗位的 JD 变过没有"（见 lifecycle.jd_changed_map）。
+    flags = jd_changed_map(db, [row.job_id for row in rows])
+    # 15B：同一次请求再算一次"这些岗位各自是哪条队列条目"（徽标点开抽屉要它的 id）。
+    queue_ids = _queue_id_map(db, [row.job_id for row in rows])
+    return [
+        # job_id 在模型层可空（岗位删除后置空）；没有 job_id 就没有可比对的历史。
+        _record_out(
+            row,
+            jd_changed=flags.get(row.job_id or 0, False),
+            queue_id=queue_ids.get(row.job_id or 0),
+        )
+        for row in rows
+    ], total
 
 
 def list_record_batches(
@@ -259,8 +318,18 @@ def list_record_batches(
             .order_by(ApplyTaskItem.sort_order, ApplyTaskItem.id)
             .all()
         )
+        # 明细整批一次算（与组头同一次请求，不逐条重查历史表）。
+        flags = jd_changed_map(db, [item.job_id for item in item_rows])
+        # 队列条目映射同样整批一次算（不逐条查队列表）。
+        queue_ids = _queue_id_map(db, [item.job_id for item in item_rows])
         for item in item_rows:
-            items_by_task.setdefault(item.task_id, []).append(_record_out(item))
+            items_by_task.setdefault(item.task_id, []).append(
+                _record_out(
+                    item,
+                    jd_changed=flags.get(item.job_id or 0, False),
+                    queue_id=queue_ids.get(item.job_id or 0),
+                )
+            )
     batches = [
         ApplyRecordBatchOut(
             id=task.id,
@@ -308,7 +377,17 @@ def list_batch_items(
         .limit(page_size)
         .all()
     )
-    return [_record_out(row) for row in rows], total
+    flags = jd_changed_map(db, [row.job_id for row in rows])
+    # 一页明细一次算（徽标点开抽屉要队列条目 id，见 _queue_id_map）。
+    queue_ids = _queue_id_map(db, [row.job_id for row in rows])
+    return [
+        _record_out(
+            row,
+            jd_changed=flags.get(row.job_id or 0, False),
+            queue_id=queue_ids.get(row.job_id or 0),
+        )
+        for row in rows
+    ], total
 
 
 def select_retryable_items(

@@ -25,6 +25,9 @@ class UpdateCheckResult(BaseModel):
     # 改过"这类问题——发行包里是要覆盖到程序目录的代码，值得多这一步。
     checksum_url: str = Field(default="", max_length=1024)
     installable: bool = False
+    # 这次结果是不是从缓存 / 节流层拿的（没有真的再问一次 GitHub）。
+    # 界面用它决定要不要提示"这是刚才的结果"；用例用它断言节流真的生效了。
+    cached: bool = False
 
 
 class UpdateDownloadRequest(BaseModel):

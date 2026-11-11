@@ -29,6 +29,7 @@ from ...schemas.resume import (
 from ...services import trash
 from ...services.actions import add_action_route
 from ...services.actions.catalog import all_actions
+from ...services.favorites import apply_favorite
 from ...services.resume.document_save import (
     RevisionConflict,
     revision_conflict_response,
@@ -385,7 +386,8 @@ def update_resume_favorite(
     record = db.get(ResumeRecord, resume_id)
     if record is None or trash.is_deleted(record):
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-    record.favorite = payload.favorite
+    # #28E：收藏布尔列与收藏时间必须一起改（唯一写入口，见 services/favorites.py）。
+    apply_favorite(record, payload.favorite)
     db.commit()
     db.refresh(record)
     return _to_resume_out(record, db)

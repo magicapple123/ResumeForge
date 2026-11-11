@@ -209,9 +209,12 @@ async def test_tool_handler_passes_limit_and_ignores_invalid_values(db_session, 
     from app.services.assistant_tools.search_tools import _tool_web_search
 
     seen: list[int | None] = []
+    depths: list[str | None] = []
 
-    async def fake_search(_query: str, _config, limit=None):
+    async def fake_search(_query: str, _config, limit=None, *, depth=None):
+        # P4-08 起工具会把模型给的 `depth` 一起传给聚合层，假实现要跟着收。
         seen.append(limit)
+        depths.append(depth)
         return [
             {
                 "title": "后端工程师招聘官网",
@@ -229,3 +232,5 @@ async def test_tool_handler_passes_limit_and_ignores_invalid_values(db_session, 
     await _tool_web_search(db_session, {"query": "后端 招聘", "limit": True})
 
     assert seen == [3, None, None, None]
+    # 没给 depth 时一定是 None（由聚合层按设置页的档位决定），不能瞎猜一个值。
+    assert depths == [None, None, None, None]

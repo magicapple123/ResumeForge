@@ -271,4 +271,10 @@ from . import ai_task_handlers_ai_entries as _ai_entries  # noqa: E402,F401
 
 _ = _ai_entries  # 显式引用：导入的副作用（注册）才是本行存在的理由。
 
+# #31A 助手语义记忆抽取（kind=assistant_memory_extract）：与上面同一形态的自跑任务，
+# 实现放在兄弟模块，导入即注册。
+from . import ai_task_handlers_memory as _memory  # noqa: E402,F401
+
+_ = _memory  # 同上：导入的副作用（注册）才是本行存在的理由。
+
 __all__ = ["handle_job_match", "handle_rag_warmup", "handle_resume_generate"]

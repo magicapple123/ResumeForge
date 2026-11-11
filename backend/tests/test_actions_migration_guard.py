@@ -6,7 +6,8 @@
    （逐名 allowlist：每项必须写 reason 与 review_after；迁移一个就从名单删一个）。
 2. 已注册为 action 的工具不得再出现在静态声明里（防"迁移了一半"）。
 3. 注册表 == 静态声明 ∪ action 注册（双向一致，防幽灵/漏注册）。
-4. 每个 action 必须同时有工具与 HTTP 路由，且权限两侧一致；action registry 非空防空转。
+4. 每个 action 必须同时有工具与 HTTP 路由（工具专属动作在 ``TOOL_ONLY_ACTIONS`` 里
+   显式登记后可以没有路由），且权限两侧一致；action registry 非空防空转。
 """
 
 from __future__ import annotations
@@ -22,6 +23,13 @@ from app.services.assistant_tools import get_tool, tool_names
 BACKEND = Path(__file__).resolve().parents[1]
 TOOLS_DIR = BACKEND / "app" / "services" / "assistant_tools"
 ALLOWLIST_PATH = BACKEND / "tests" / "fixtures" / "actions_legacy_allowlist.json"
+
+# 工具专属 action（无 HTTP 等价入口）。契约层允许 http=None（ActionSpec._validate_http
+# 明确保留了这个口子），这里逐个登记：**"决定不加路由"必须是显式的**，不能靠"忘了写"
+# 也能变绿。#15F 的三个投递队列工具：队列的读/改已有既有路由（GET /api/apply/queue、
+# PATCH /api/apply/queue/reorder），而"助手视图"与"提案确认后才执行"的投递入口没有
+# 等价 HTTP 语义，硬编一条路由只会让同一份能力长出第二套契约。
+TOOL_ONLY_ACTIONS = frozenset({"queue_list", "queue_update_priority", "apply_start"})
 _ALLOWED_REASONS = {
     "no_http_route",
     "multipart_or_file_response",
@@ -29,6 +37,10 @@ _ALLOWED_REASONS = {
     "special_route_dependency",
     "semantic_conflict_pending_design",
     "assistant_only_aggregate",
+    # 2026-11-11 剩余条目批次：#13/#16/#18/#27/#29/#31 新增的工具走静态 Tool(...) 声明
+    # （本轮按"先交付能力、迁移下一批"取舍），逐名登记并统一 review_after；不是"忘了走
+    # define_action"，到期前必须迁移或重新评审。
+    "not_yet_migrated",
 }
 
 
@@ -100,6 +112,12 @@ def test_every_action_has_both_tool_and_http_route():
     for name in action_names():
         action = get_action(name)
         assert action is not None
+        if name in TOOL_ONLY_ACTIONS:
+            # 工具专属动作：契约层允许 http=None（见 ActionSpec._validate_http 的说明），
+            # 但必须显式登记在上面——"忘了加路由"与"决定不加路由"要能区分。
+            assert action.http is None, f"{name} 已登记为工具专属，却又声明了 HTTP 路由"
+            assert get_tool(name) is not None, f"action {name} 没有同名工具（as_tool 未注册）"
+            continue
         assert action.http is not None, f"action {name} 缺少显式 http 元数据"
         tool = get_tool(name)
         assert tool is not None, f"action {name} 没有同名工具（as_tool 未注册）"

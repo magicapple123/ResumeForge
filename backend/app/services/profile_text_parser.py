@@ -98,6 +98,7 @@ from .profile_parser.skill_fields import (
     _skill_name_and_level,
     _split_tokens,
 )
+from .profile_value_cleanup import sanitize_source_text
 
 __all__ = [
     "parse_profile_text",
@@ -183,7 +184,7 @@ __all__ = [
 
 def parse_profile_text(text: str) -> ProfileTextParseResult:
     """解析一段个人资料，返回可直接回填表单的结构化草稿。"""
-    lines = _normalize_lines(text or "")
+    lines = _normalize_lines(sanitize_source_text(text or ""))
     sections = _split_sections(lines)
     basic = _extract_basic(lines)
     summary_lines = [_clean_line(line) for line in sections["summary"] if line]

@@ -9,7 +9,9 @@ from urllib.parse import urlsplit
 from ..schemas.extraction import MAX_RECOGNIZED_TEXT_CHARS
 from ..schemas.job import JobTextParseResult
 from ..schemas.profile import ProfileTextParseResult
+from .job_field_cleanup import clean_job_fields
 from .llm.base import LLMError
+from .profile_entry_dedup import finalize_sections
 from .profile_entry_merge import (
     IDENTITY_FIELDS,
     is_usable_anchor,
@@ -18,6 +20,7 @@ from .profile_entry_merge import (
 )
 from .profile_parser.normalization import _normalize_lines
 from .profile_parser.section_detection import _split_sections
+from .profile_value_cleanup import clean_profile_values, sanitize_source_text
 
 _JOB_FIELDS = (
     "title",
@@ -63,11 +66,16 @@ _PROFILE_BASIC_LIMITS = {
 _PROFILE_ENTRY_LIMITS = {
     "educations": {
         "school": 128,
+        "department": 128,
         "major": 128,
         "degree": 32,
+        "study_mode": 32,
+        "degree_type": 32,
         "start_date": 32,
         "end_date": 32,
         "gpa": 64,
+        "cet4_score": 16,
+        "cet6_score": 16,
         "courses": 200_000,
         "achievements": 200_000,
     },
@@ -233,9 +241,14 @@ def normalize_job_result(
     values["status"] = local.status
     for field in ("description", "requirements", "additional_info"):
         values[field] = _pick_grounded(values[field], getattr(local, field), source_text)
+    # 落框兜底（#21）：字段级锚定只回答"这个值在原文里出现过吗"，发现不了同一句落两个
+    # 框、某段原文谁都没接、以及整段未切分。实现在 `job_field_cleanup`，这里只调用。
+    values, field_notes = clean_job_fields(values, source_text)
+    for field in ("description", "requirements", "additional_info"):
+        values[field] = _bounded_text(values.get(field), _JOB_TEXT_LIMITS[field], state)
     if not any(values[field] for field in ("title", "company", "description", "requirements")):
         raise LLMError("模型未识别到有效岗位字段，请重试")
-    warnings = ["AI 结果已通过字段和来源校验，请核对后保存。"]
+    warnings = ["AI 结果已通过字段和来源校验，请核对后保存。", *field_notes]
     if state["truncated"]:
         warnings.append("部分 AI 识别字段超过可保存长度，已截断，请核对。")
     return JobTextParseResult.model_validate(
@@ -376,6 +389,9 @@ def normalize_profile_result(
     """把模型抽取的资料 JSON 规范化成可落库结果：字段截断、来源锚定、与本地结果合并。"""
     if isinstance(data.get("profile"), dict):
         data = data["profile"]
+    # 版式与安全预处理（#19 FIX-3/FIX-6）：`\t` 出现 ≥2 次才当列分隔符，注入句整行剔除。
+    # 作用在锚定文本上，让"字段有没有出处"和用户看到的材料是同一份。
+    source_text = sanitize_source_text(source_text)
     data = _canonical_section_keys(data)
     state = {"truncated": False}
     local_data = local.model_dump()
@@ -401,11 +417,16 @@ def normalize_profile_result(
         )
         values[section] = merge_entries(section, ai_entries, local_data.get(section, []))
 
+    # 值级修补（#19 FIX-4/FIX-5/FIX-6）与收尾清洗（#20 FIX-7/10/11）：两处实现分别在
+    # `profile_value_cleanup` 与 `profile_entry_dedup`，这里只调用，保持本文件只做装配。
+    value_notes = clean_profile_values(values, source_text)
+    value_notes.extend(finalize_sections(values))
+
     if not any(
         [values["name"], values["summary"], *(values[section] for section in _PROFILE_ENTRY_LIMITS)]
     ):
         raise LLMError("模型未识别到有效个人资料字段，请重试")
-    warnings = ["AI 结果已通过字段和来源校验，请核对后保存。"]
+    warnings = ["AI 结果已通过字段和来源校验，请核对后保存。", *value_notes]
     if state["truncated"]:
         warnings.append("部分 AI 识别字段超过可保存长度，已截断，请核对。")
     return ProfileTextParseResult.model_validate(

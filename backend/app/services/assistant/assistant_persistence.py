@@ -26,19 +26,30 @@ MAX_HISTORY_MESSAGES = 20
 MAX_HISTORY_CHARS = 12_000
 
 
-def history_snapshot(db: Session, conversation_id: int) -> list[dict[str, Any]]:
-    rows = (
-        db.query(ChatMessage)
-        .filter(
-            ChatMessage.conversation_id == conversation_id,
-            ChatMessage.status == "complete",
-        )
-        .order_by(ChatMessage.id.desc())
-        .limit(MAX_HISTORY_MESSAGES)
-        .all()
+def history_snapshot(
+    db: Session, conversation_id: int, *, before_id: int | None = None
+) -> list[dict[str, Any]]:
+    """取最近一段已完成历史；``before_id`` 只取更旧的消息（"重新生成"用）。
+
+    重新生成不插入新的用户消息，而是拿原用户消息再答一次——那条消息本身不能
+    进历史（否则问题会出现两遍），所以调用方传 ``before_id=原用户消息 id``。
+    被取代的旧回答（status=superseded）自动被 ``status == "complete"`` 挡掉，
+    模型历史里不会出现两版答案。
+    """
+    query = db.query(ChatMessage).filter(
+        ChatMessage.conversation_id == conversation_id,
+        ChatMessage.status == "complete",
     )
+    if before_id is not None:
+        query = query.filter(ChatMessage.id < before_id)
+    rows = query.order_by(ChatMessage.id.desc()).limit(MAX_HISTORY_MESSAGES).all()
     history = [
-        {"role": row.role, "content": row.content, "attachments": row.attachments or []}
+        {
+            "id": row.id,
+            "role": row.role,
+            "content": row.content,
+            "attachments": row.attachments or [],
+        }
         for row in reversed(rows)
         if row.role in {"user", "assistant"}
     ]

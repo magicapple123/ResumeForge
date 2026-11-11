@@ -35,7 +35,7 @@ import inspect
 import logging
 import threading
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Any, cast
 
 from ...config import Settings, get_settings
@@ -60,6 +60,7 @@ from .rag_seam import (
     exit_selection_scope,
     selection_done,
 )
+from .rag_visibility import impact_details, rag_state_payload
 
 logger = logging.getLogger(__name__)
 
@@ -103,12 +104,45 @@ async def prepare_selection_boost(
     settings: Settings | None = None,
     index: RagIndex | None = None,
     dataset_id: str = "",
+    on_retrieval: Callable[[dict[str, Any]], None] | None = None,
 ) -> SelectionBoost:
     """构造一次生成请求的 RAG 输入；**永不抛异常**（失败即空作用域 + 回退原因）。
+
+    ``on_retrieval``（#30）：检索结束后把五态回执交给调用方（后台任务写进度行 / 前端
+    轮询可见性）。回执只在旁路消费，回调抛异常只记日志——可见性绝不影响生成结果。
 
     预算语义见模块 docstring：超预算回退并（在 `db` 可达时）登记后台预热；
     预热只是补齐进程内向量缓存，不改变本次生成的候选。
     """
+    started = time.perf_counter()
+    scope = await _prepare_selection_boost(
+        consumed,
+        job,
+        config=config,
+        db=db,
+        settings=settings,
+        index=index,
+        dataset_id=dataset_id,
+    )
+    if on_retrieval is not None:
+        try:
+            on_retrieval(rag_state_payload(scope, elapsed_ms=_elapsed_ms(started)))
+        except Exception:  # noqa: BLE001 - 可见性是旁路，回调失败不得影响生成
+            logger.warning("rag on_retrieval callback failed")
+    return scope
+
+
+async def _prepare_selection_boost(
+    consumed: ConsumedProfile | None,
+    job: Any,
+    *,
+    config: LLMConfig | None = None,
+    db: Any = None,
+    settings: Settings | None = None,
+    index: RagIndex | None = None,
+    dataset_id: str = "",
+) -> SelectionBoost:
+    """检索本体（真实实现；对外入口是上面的 `prepare_selection_boost`）。"""
     settings = settings or get_settings()
     started = time.perf_counter()
     extra_terms = await _safe_expansion(job, config, db, settings)
@@ -334,7 +368,8 @@ async def _retrieve(
     fused = build_boost(consumed, focus, chunking, query_vector, vectors)
     max_candidates = int(settings.rag_embedding_max_candidates)
     ordered = sorted(fused.scores.items(), key=lambda pair: (-pair[1], pair[0]))
-    limited = dict(ordered[:max_candidates])
+    top = ordered[:max_candidates]
+    limited = dict(top)
     _emit(
         spec.provider,
         spec.model,
@@ -344,7 +379,11 @@ async def _retrieve(
         "",
         tuple(rag_observability.hash_prefix(key) for key, _score in ordered[:3]),
     )
-    return SelectionBoost(boost=limited, extra_terms=extra_terms)
+    return SelectionBoost(
+        boost=limited,
+        extra_terms=extra_terms,
+        impacts=impact_details(chunking, top),
+    )
 
 
 async def generate_with_scope(

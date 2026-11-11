@@ -94,6 +94,9 @@ class InterviewAnswerCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     content: str = Field(min_length=1, max_length=MAX_ANSWER_CHARS)
+    # 语音轮次幂等键（#26 P0）：同一轮重复提交不重复计轮、不重复生成；
+    # 纯文字调用方不传，行为与以前逐字一致。
+    client_turn_id: str | None = Field(default=None, max_length=64)
 
     @field_validator("content")
     @classmethod

@@ -77,6 +77,36 @@
       "reason": "no_http_route",
       "note": "助手联网检索能力（external_side_effect 四级权限刻意留空），没有 HTTP 端点。",
       "review_after": "2027-02-28"
+    },
+    "web_extract": {
+      "reason": "not_yet_migrated",
+      "note": "#16 链接抓取只读工具：任意 URL 的抓取/抽取是内部链路（含 SSRF 校验与双引擎升级），没有等价 HTTP 端点；本轮按「先交付能力、T28 迁移下一批」取舍，静态声明保留。",
+      "review_after": "2027-02-28"
+    },
+    "import_jobs_from_url": {
+      "reason": "semantic_conflict_pending_design",
+      "note": "#16 写工具：对应 HTTP 是两阶段 /api/jobs/import/from-url/{preview,details,commit}，而工具是一次调用+提案卡语义，单 http 无法安全表达；需先设计「工具直调两阶段」的契约再迁移。",
+      "review_after": "2027-02-28"
+    },
+    "search_knowledge": {
+      "reason": "not_yet_migrated",
+      "note": "#29A 知识库混合检索：对应 GET /api/knowledge/search，但工具输出形状（id/标题/摘要/分数+回退原因）与路由 DTO 尚未统一；本轮静态声明，T28 迁移下一批。",
+      "review_after": "2027-02-28"
+    },
+    "task_create": {
+      "reason": "semantic_conflict_pending_design",
+      "note": "#18A 长任务：对应 POST /api/agent-tasks，但工具入参是 {kind, params} 的计划语义（提案卡写明 N 条/M 步），与既有 agent-task 路由的步骤模型不同；需先设计计划层契约。",
+      "review_after": "2027-02-28"
+    },
+    "task_status": {
+      "reason": "not_yet_migrated",
+      "note": "#18A 查任务进度：对应 GET /api/agent-tasks/{id}，但工具只回进度计数与当前步标题（刻意不回内部状态），路由返回完整行；本轮静态声明，T28 迁移下一批。",
+      "review_after": "2027-02-28"
+    },
+    "task_cancel": {
+      "reason": "semantic_conflict_pending_design",
+      "note": "#18A 取消任务：既有取消路由需要任务状态机语义（保留已完成步骤、终态不可恢复），工具的取消走提案卡确认；需先设计统一契约再迁移。",
+      "review_after": "2027-02-28"
     }
   }
 }

@@ -5,6 +5,17 @@
 - 只发一个匿名 GET，不带任何用户数据，也不上报本地版本之外的任何信息；
 - 结果缓存一段时间，避免用户反复点「检查更新」把 GitHub 的匿名限额用完；
 - 任何网络/解析失败都降级为一句可读提示，不影响其它功能。
+
+两层节流（缺一不可，因为它们的失效方式不同）：
+
+1. **15 分钟结果缓存**：`refresh=false`（界面上的「检查更新」首次点击）命中缓存就不发
+   网络请求。它保证"正常路径下第二次点击不打上游"。
+2. **60 秒最小间隔**：`refresh=true`（「重新检查」）在两分钟内连着点也只打一次上游。
+   缓存层挡不住刷新，而前端的倒计时按钮只是体验——用户可以绕过它，所以后端也要挡。
+
+降级文案的口径在 `update_check_degrade.py`：结论（有没有新版本）在前，原因与恢复时间在
+括号里。日志用 `warning` 而不是 `info`——桌面壳与便携启动器默认 `--log-level warning`，
+`info` 会被整条吞掉，出问题时日志里就查不到"这次为什么降级了"。
 """
 from __future__ import annotations
 
@@ -22,6 +33,7 @@ import httpx
 
 from ..config import get_settings
 from ..schemas.update import UpdateCheckResult
+from .update_check_degrade import build_api_error, degraded_available_message
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +49,9 @@ RELEASES_PAGE = "https://github.com/{repo}/releases"
 _TAG_MARKER = "/releases/tag/"
 
 _CACHE_SECONDS = 900
+# 「重新检查」的最小间隔：连点 5 次只应该产生 1 次上游请求。缓存层挡不住 refresh，
+# 所以这里单独设一道闸；界面上同时有倒计时按钮，但那只算体验，不能当约束。
+_MIN_REFRESH_INTERVAL_SECONDS = 60
 _MAX_RESPONSE_BYTES = 512 * 1024
 _TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
 _USER_AGENT = "ResumeForge-update-check"
@@ -255,7 +270,8 @@ async def _fetch_latest_release(repo: str) -> dict:
         if response.status_code == 404:
             raise LookupError("仓库还没有发布任何 Release")
         if response.status_code != 200:
-            raise RuntimeError(_github_error_message(response.status_code, repo))
+            # 把状态码与限额头一起带出去：降级文案要据此说"等一会儿"还是"换网络"。
+            raise build_api_error(response, _github_error_message(response.status_code, repo))
         body = bytearray()
         async for chunk in response.aiter_bytes():
             if len(body) + len(chunk) > _MAX_RESPONSE_BYTES:
@@ -278,7 +294,7 @@ async def _fetch_latest_tag_via_redirect(repo: str) -> str:
     if response.status_code == 404:
         raise LookupError("仓库还没有发布任何 Release")
     if response.status_code not in (301, 302, 303, 307, 308):
-        raise RuntimeError(_github_error_message(response.status_code, repo))
+        raise build_api_error(response, _github_error_message(response.status_code, repo))
     location = str(response.headers.get("location") or "")
     if _TAG_MARKER not in location:
         # 没有 Release 时 GitHub 会重定向到 /releases 列表页（没有 tag 段）。
@@ -311,14 +327,24 @@ def _truncate_notes(notes: str, limit: int = NOTES_BUDGET) -> str:
 
 
 async def check_for_update(*, refresh: bool = False) -> UpdateCheckResult:
-    """返回当前版本与最新版本的对比结果。"""
+    """返回当前版本与最新版本的对比结果。
+
+    两层节流见模块文档：``refresh=False`` 走 15 分钟缓存，``refresh=True`` 受 60 秒
+    最小间隔约束。命中任何一层时返回的结果带 ``cached=True``，方便界面与用例区分
+    "这次真的问了 GitHub"和"这次是旧结果"。
+    """
     current = get_settings().app_version
     repo = repository()
     cached = _cache.get(repo)
-    if not refresh and cached is not None and time.time() - cached[0] < _CACHE_SECONDS:
-        return cached[1]
+    if cached is not None:
+        age = time.time() - cached[0]
+        if not refresh and age < _CACHE_SECONDS:
+            return _cached_result(cached)
+        if refresh and age < _MIN_REFRESH_INTERVAL_SECONDS:
+            return _cached_result(cached)
 
     api_failure = ""
+    failure: Exception | None = None
     try:
         data = await _fetch_latest_release(repo)
     except LookupError:
@@ -331,7 +357,16 @@ async def check_for_update(*, refresh: bool = False) -> UpdateCheckResult:
         # "到底有没有新版本"。用户点「检查更新」想知道的就是这一件事，
         # 而"接口不可用"不该等于"回答不了"。
         api_failure = str(exc)
-        logger.info("检查更新主路径失败，改用备用探测：%s", api_failure)
+        failure = exc
+        # warning 而不是 info：启动器与桌面壳默认 --log-level warning，info 会被吞掉，
+        # 出问题时日志里就查不到"这次为什么降级"。状态码与是否限额必须写进日志——
+        # 那是唯一能区分"等一会儿"和"换网络"的证据。
+        logger.warning(
+            "检查更新主路径失败（status=%s rate_limited=%s），改用备用探测：%s",
+            getattr(exc, "status_code", 0),
+            getattr(exc, "rate_limited", False),
+            api_failure,
+        )
         try:
             tag = await _fetch_latest_tag_via_redirect(repo)
         except LookupError:
@@ -359,9 +394,14 @@ async def check_for_update(*, refresh: bool = False) -> UpdateCheckResult:
                 update_available=available,
                 release_name=tag[:256],
                 release_url=RELEASES_PAGE.format(repo=repo),
+                # 结论前置：先回答"有没有新版本"，再说"更新说明这次没取到、为什么、
+                # 什么时候恢复"。措辞与换算都在 update_check_degrade 里。
                 message=(
-                    f"检测到新版本 {latest}（GitHub 接口这次不可用，已用备用方式确认）；"
-                    f"更新说明与安装包请在 Release 页查看"
+                    degraded_available_message(
+                        latest=latest,
+                        release_page=RELEASES_PAGE.format(repo=repo),
+                        failure=failure,
+                    )
                     if available
                     else f"已是最新版本（{current}）"
                 ),
@@ -423,6 +463,15 @@ def _remember(repo: str, result: UpdateCheckResult) -> UpdateCheckResult:
     result.checked_at = datetime.now(UTC)
     _cache[repo] = (time.time(), result)
     return result
+
+
+def _cached_result(entry: tuple[float, UpdateCheckResult]) -> UpdateCheckResult:
+    """命中节流时把 ``cached=True`` 标出来。
+
+    用 ``model_copy`` 而不是原地改缓存里那一份：它是所有调用方共享的对象，就地改会把
+    "这次是旧结果"永久写进缓存，之后真正发过一次网络请求的调用也会被标成缓存命中。
+    """
+    return entry[1].model_copy(update={"cached": True})
 
 
 def clear_cache() -> None:

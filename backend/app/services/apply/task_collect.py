@@ -199,6 +199,11 @@ def collect_message(task: ApplyTask) -> str:
         parts = [f"采集完成：已暂存 {succeeded} 个岗位。"]
         if filtered:
             parts.append(f"另有 {filtered} 个不符合你填的筛选条件，已筛掉。")
+        # 14E：屏蔽清单命中数必须说出来。不说的话，用户只会看到"这次怎么少了"，
+        # 然后去检查筛选条件——而真正生效的是他自己配的屏蔽清单。
+        blocked = int(config.get("blocked") or 0)
+        if blocked:
+            parts.append(f"另有 {blocked} 个命中屏蔽清单，已丢弃。")
         if unapplied:
             parts.append(
                 f"注意：{'、'.join(str(item) for item in unapplied)} "
