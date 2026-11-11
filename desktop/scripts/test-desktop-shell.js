@@ -414,6 +414,8 @@ test("preload 暴露 desktopShell 桥，通道名与主进程逐字一致", () =
   assert.equal(typeof shell.getWindowState, "function");
   assert.equal(typeof shell.onWindowState, "function");
   assert.equal(typeof shell.setTheme, "function");
+  // #34F：焦点可编辑状态只报一个布尔，主进程侧据它回填窗口实态快照。
+  assert.equal(typeof shell.setEditableFocus, "function");
 
   // 调用一下，断言发送到的通道名与 desktop-shell-ipc.js 的定义一致。
   shell.menuAction("edit.undo").then((payload) => {
@@ -422,10 +424,17 @@ test("preload 暴露 desktopShell 桥，通道名与主进程逐字一致", () =
   });
   shell.getWindowState();
   shell.setTheme("dark");
+  shell.setEditableFocus(true);
   shell.onWindowState(() => {});
   const sentChannels = listeners.map((entry) => entry.channel);
   assert.ok(sentChannels.includes(CHANNELS.menuAction));
   assert.ok(sentChannels.includes(CHANNELS.getWindowState));
   assert.ok(sentChannels.includes(CHANNELS.setTheme));
   assert.ok(sentChannels.includes(CHANNELS.windowState));
+  assert.ok(sentChannels.includes(CHANNELS.editableFocus));
+  // 只发布尔：即使传字符串也不会把任意载荷送进主进程。
+  assert.equal(
+    listeners.find((entry) => entry.channel === CHANNELS.editableFocus).payload,
+    true,
+  );
 });

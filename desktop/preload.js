@@ -19,12 +19,13 @@ contextBridge.exposeInMainWorld("splash", {
 /**
  * 自绘标题栏桥（问题清单 §19，主进程侧见 desktop/lib/desktop-shell-ipc.js）。
  *
- * 只暴露四个**固定**入口，不接收任意通道名：
- *  - menuAction：发菜单动作 id（编辑 / 视图 / 窗口 / 打开目录 / 关于信息），
+ * 只暴露五个**固定**入口，不接收任意通道名：
+ *  - menuAction：发菜单动作 id（编辑 / 视图 / 窗口 / 打开目录 / 诊断 / 关于信息），
  *    主进程的 desktop-menu.js 是唯一动作白名单；
- *  - getWindowState：窗口最大化/全屏快照（菜单文案与全屏隐藏标题栏用）；
+ *  - getWindowState：窗口最大化/全屏/置顶/可编辑焦点快照（菜单文案、勾选态、置灰用）；
  *  - onWindowState：主进程状态变化时推送（最大化 / 还原 / 进出全屏）；
- *  - setTheme：把实际生效主题告诉主进程，同步系统绘制的标题栏覆盖层颜色。
+ *  - setTheme：把实际生效主题告诉主进程，同步系统绘制的标题栏覆盖层颜色；
+ *  - setEditableFocus：把"焦点在不在可编辑区"报给主进程（#34F），菜单打开前读回同源实态。
  * platform 只用于 macOS 红绿灯的左内边距分支，不暴露进程信息。
  */
 contextBridge.exposeInMainWorld("desktopShell", {
@@ -34,6 +35,8 @@ contextBridge.exposeInMainWorld("desktopShell", {
   onWindowState: (callback) =>
     ipcRenderer.on("desktop:window-state", (_event, state) => callback(state)),
   setTheme: (theme) => ipcRenderer.send("desktop:set-theme", theme),
+  // #34F：只发一个布尔，不接受任意载荷；主进程侧同样校验发送方必须是主窗口。
+  setEditableFocus: (editable) => ipcRenderer.send("desktop:editable-focus", Boolean(editable)),
 });
 
 /**
@@ -44,4 +47,25 @@ contextBridge.exposeInMainWorld("desktopShell", {
  */
 contextBridge.exposeInMainWorld("resumeForge", {
   printPdf: (payload) => ipcRenderer.invoke("resume:print-pdf", payload),
+});
+
+/**
+ * 桌面版的手动更新入口（P2-2 的 B 方案）。
+ *
+ * 设置页那张「软件更新」卡片在桌面形态下没有"下载/安装"按钮（更新包补不齐 payload），
+ * 真正能升级的是壳里的 updater。此前用户只能靠菜单或 update.cmd，卡片上的「检查更新」
+ * 点了只会在页面里问后端、给一份和实际升级无关的结果。现在这个桥把它接回主进程：
+ *
+ *   checkUpdate() → ipcMain 「desktop:check-update」→ runManualUpdateCheck(mainWindow, ...)
+ *   → 系统弹窗给出结论（有新版就弹「立即更新/暂不」，已是最新就弹「已是最新版本」）。
+ *
+ * **能力探测只能看这个对象在不在**，不要看平台/UA：2.1 及更早的壳没有这条通道，
+ * 前端探测不到就回退到设置页的三段式文字说明（A 方案）。也就是说 B 从 2.1 → 2.2 才生效，
+ * 2.0 旧壳的用户仍然只能靠文字说明 + 手动 Setup.exe。
+ *
+ * 与其它桥同一纪律：只暴露一个**固定**通道名，不接收渲染层传来的任意通道 / 任意参数，
+ * 发送方在主进程侧（desktop/lib/desktop-shell-ipc.js）校验必须是主窗口。
+ */
+contextBridge.exposeInMainWorld("rfDesktop", {
+  checkUpdate: () => ipcRenderer.invoke("desktop:check-update"),
 });

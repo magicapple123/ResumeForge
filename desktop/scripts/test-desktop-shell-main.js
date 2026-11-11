@@ -234,6 +234,8 @@ test("IPC 只信主窗口：非主窗口 sender 的动作 / 主题都被拒绝",
     assert.deepEqual(await stateHandler({ sender: { rogue: true } }), {
       maximized: false,
       fullscreen: false,
+      alwaysOnTop: false,
+      editableFocus: false,
     });
   } finally {
     loaded.cleanup();
@@ -273,7 +275,14 @@ test("窗口最大化 / 全屏变化会推 desktop:window-state 给渲染层", a
 
     const handler = loaded.events.ipcHandlers["desktop:get-window-state"];
     const state = await handler({ sender: window.webContents });
-    assert.deepEqual(state, { maximized: true, fullscreen: true });
+    assert.deepEqual(state, {
+      maximized: true,
+      fullscreen: true,
+      // #34A：快照里带上置顶实态（测试桩没实现 isAlwaysOnTop，按 false 兜底）。
+      alwaysOnTop: false,
+      // #34F：可编辑焦点由渲染层上报，初始为 false。
+      editableFocus: false,
+    });
   } finally {
     loaded.cleanup();
   }

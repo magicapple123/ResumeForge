@@ -16,6 +16,18 @@
 const TITLEBAR_HEIGHT = 32;
 
 /**
+ * 兜底 padding 的 CSS。
+ *
+ * **本常量必须与 `TITLEBAR_HEIGHT` 同源，二者又必须与前端 `--rf-titlebar-height`（32px，
+ * 定义在 frontend/src/styles/desktop-titlebar.css）逐值一致。** 只要有一个漂移，兜底层
+ * 就会让页面要么差一条 32px 的缝，要么继续与系统三颗按钮互相遮挡（P1-1 症状）。
+ * 所以这里从 TITLEBAR_HEIGHT 拼字符串，绝不写字面量 32。
+ */
+function titleBarFallbackCss(height = TITLEBAR_HEIGHT) {
+  return `body{padding-top:${height}px}`;
+}
+
+/**
  * 标题栏覆盖层配色：与应用 CSS 的 `--rf-titlebar-bg` 逐值一致（浅 #f5f7fa / 深 #151b23）。
  * symbolColor 取对应主题的正文色系，保证最小化/最大化/关闭图标在两种底色上都清晰。
  */
@@ -123,12 +135,66 @@ function createTitleBarController(deps) {
   };
 }
 
+/**
+ * P1-1 方案 3 的最后一层兜底：加载完成后检查 `.app-titlebar` 到底有没有渲染出来。
+ *
+ * 为什么主进程也要管这件事：前两层（分流条件看 `window.splash.isDesktop`、`data-hidden`
+ * 只信真实全屏事件）都在渲染层，而用户报的形态是"页面内容从 y=0 开始、三颗系统按钮压
+ * 在页头/制作台操作条上、点击被吞（误点 = 最小化/关闭）"。一旦渲染层因为任何原因没渲染
+ * 出标题栏（旧 dist、渲染异常、桥缺失），主进程是唯一还能补救的地方——补一条 padding，
+ * 让内容整体让开 32px。补不上最多多一条缝，不补就是误关窗口。
+ *
+ * @param {object} deps
+ * @param {object} deps.webContents 目标 webContents（需有 executeJavaScript / insertCSS）
+ * @param {function(string): void} [deps.logLine] 诊断日志（写 desktop-main.log）
+ * @returns {Promise<boolean>} true = 打了兜底
+ */
+function padForMissingTitleBar(deps) {
+  const { webContents, logLine = () => {} } = deps || {};
+  if (!webContents || typeof webContents.executeJavaScript !== "function") {
+    return Promise.resolve(false);
+  }
+  return Promise.resolve(
+    webContents.executeJavaScript("document.querySelector('.app-titlebar') !== null", true),
+  )
+    .then((present) => {
+      if (present) return false;
+      // warning 级别：启动器与壳的诊断都是按 warning 收的，info 会被整条吞掉。
+      logLine(
+        `titlebar: .app-titlebar missing after load; applying ${TITLEBAR_HEIGHT}px body padding fallback`,
+      );
+      if (typeof webContents.insertCSS !== "function") return true;
+      return Promise.resolve(webContents.insertCSS(titleBarFallbackCss())).then(() => true);
+    })
+    .catch((err) => {
+      logLine(`titlebar: missing-titlebar check failed: ${err}`);
+      return false;
+    });
+}
+
+/**
+ * 把上面那层兜底挂到**下一次** `did-finish-load` 上（在 loadURL 之前调用）。
+ *
+ * 挂在事件上而不是 loadURL 之后直接执行：loadURL 的 Promise 与 did-finish-load 的先后
+ * 依赖 Electron 版本，而"document 已经就绪"是这条检查成立的前提。
+ */
+function installTitleBarFallbackOnLoad(deps) {
+  const { webContents, logLine = () => {} } = deps || {};
+  if (!webContents || typeof webContents.once !== "function") return;
+  webContents.once("did-finish-load", () => {
+    void padForMissingTitleBar({ webContents, logLine });
+  });
+}
+
 module.exports = {
   TITLEBAR_HEIGHT,
   TITLEBAR_THEME,
   normalizeTheme,
   titleBarOverlayFor,
+  titleBarFallbackCss,
   supportsOverlay,
   windowChromeOptions,
   createTitleBarController,
+  padForMissingTitleBar,
+  installTitleBarFallbackOnLoad,
 };

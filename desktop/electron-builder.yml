@@ -32,8 +32,13 @@ files:
   - lib/titlebar.js
   # 标题栏菜单的主进程动作表（§19）：编辑/视图/窗口/目录/外链，只认固定动作 id。
   - lib/desktop-menu.js
+  # 「帮助 → 复制诊断信息」（#34D）的日志侧：desktop-shell-ipc.js 顶层 require 它，
+  # 漏打包会让这个菜单项在安装版里抛 MODULE_NOT_FOUND（同 updater.js 当年那类事故）。
+  - lib/diagnostic-summary.js
   # 托盘菜单（§18 的「关闭窗口时询问」恢复入口，§19 保持原生 Menu）。
   - lib/tray-menu.js
+  # 媒体权限（麦克风）：语音输入在桌面壳里要用它，策略与理由见该文件；main.js 一行 require。
+  - lib/media-permissions.js
   # 标题栏 IPC 注册与发送方校验（§19）：main.js 顶层 require。
   - lib/desktop-shell-ipc.js
   # 启动失败的可操作对话框（从 main.js 下沉）：main.js 顶层 require。

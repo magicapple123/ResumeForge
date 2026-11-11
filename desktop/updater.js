@@ -277,6 +277,26 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
   );
   if (!installer || !checksum) {
     // Release exists but assets incomplete: skip rather than half-update.
+    //
+    // 这里原先是直接 `return`：后台检查静默跳过可以理解，但**手动**检查（菜单「帮助 →
+    // 检查更新」/ 安装目录的 update.cmd / 设置页的「检查更新」）也一声不响，用户看到的是
+    // "点了没反应"，与"网络坏了"、"已经是最新"完全分不开。所以：
+    //   - 一律留一条 warning 日志（写清缺的是哪个文件），
+    //   - 手动检查时弹一句话说明这次没装成的原因。
+    const missing = !installer ? assetName : checksumName;
+    if (typeof deps.logLine === "function") {
+      deps.logLine(`update assets incomplete for ${latest}: missing ${missing}`);
+    }
+    if (deps.manual) {
+      await showUpdateDialog(parentWindow, {
+        type: "warning",
+        message: "这个版本的安装包还没传全",
+        detail:
+          `最新版本是 ${latest}，但发布页上缺少 ${missing}，所以这次没有自动更新。\n\n` +
+          `可以稍后再检查一次，或到发布页手动下载安装。`,
+        buttons: ["好"],
+      }).catch(() => undefined);
+    }
     return;
   }
 
@@ -386,6 +406,10 @@ function runManualUpdateCheck(parentWindow, logLine, deps = {}) {
   }
   checkAndOfferUpdate(parentWindow, {
     ...deps,
+    // manual：附件缺失时要弹一句"这个版本的安装包还没传全"（自动检查保持安静）。
+    // logLine：无论手动还是自动，缺附件都必须在 desktop-main.log 留一条 warning。
+    manual: true,
+    logLine,
     onUpToDate: () =>
       dialog.showMessageBox(parentWindow, {
         type: "info",
@@ -413,6 +437,10 @@ function scheduleUpdateCheck(parentWindow, logLine, deps = {}) {
   // 回答"到底有没有尝试安装"。
   const wiredDeps = {
     ...deps,
+    // 后台检查保持安静（不弹窗），但缺附件这件事必须留在日志里，否则"为什么一直不更新"
+    // 在 desktop-main.log 里查不到任何线索。
+    logLine,
+    manual: false,
     onAutoInstall:
       deps.onAutoInstall ||
       ((installerPath) => {

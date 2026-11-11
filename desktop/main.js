@@ -19,7 +19,7 @@
 // the window or sets quitting before app.quit(). Window chrome (self-drawn
 // 32px title bar + WCO buttons) lives in lib/titlebar.js + lib/tray-menu.js.
 
-const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, screen, shell } = require("electron");
+const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, screen, session, shell } = require("electron");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
 const { createShellLogging, announceDegradedOnReady } = require("./lib/preflight");
@@ -33,7 +33,7 @@ const { createQuitLifecycle } = require("./lib/quit-lifecycle");
 // 桌面自绘标题栏 / 托盘 / 关闭行为 / 启动失败出口（§18 §19）：决策都在 lib/ 下，
 // 本文件只保留装配与 Electron 事件注册，500 行预算不会被这些分支吃光。
 const { createCloseBehavior, createPreferenceStore } = require("./lib/close-behavior");
-const { createTitleBarController } = require("./lib/titlebar");
+const { createTitleBarController, installTitleBarFallbackOnLoad } = require("./lib/titlebar");
 const { createTrayManager } = require("./lib/tray-menu");
 const { registerDesktopShellIpc } = require("./lib/desktop-shell-ipc");
 const { createStartupFailureReporter } = require("./lib/startup-failure");
@@ -247,6 +247,7 @@ function createWindow() {
     },
   });
   mainWindow.setMenuBarVisibility(false);
+  require("./lib/media-permissions").installMediaPermissionHandler(session.defaultSession); // 语音输入要麦克风
   if (remembered && remembered.maximized) mainWindow.maximize();
 
   // 尺寸/位置：400ms 防抖后落盘（拖动时每一帧都写盘没有意义）。
@@ -328,6 +329,10 @@ function handleUnexpectedExit(info) {
 
 async function startBackend() {
   const url = await backend.start((stage) => sendStage(stage));
+  // P1-1 方案 3（主进程兜底）：加载完成后确认 React 真的渲染出了 32px 标题栏；缺了就补
+  // 一条 body padding 并写 warning（决策与常量在 lib/titlebar.js）。必须挂在 loadURL
+  // **之前**，否则事件可能已经过去了。
+  installTitleBarFallbackOnLoad({ webContents: mainWindow.webContents, logLine });
   await mainWindow.loadURL(url);
   return url;
 }

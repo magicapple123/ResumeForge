@@ -53,6 +53,8 @@ function loadMain() {
     messageBoxPrompts: [],
     ipcHandlers: {},
     themeCalls: [],
+    // 媒体权限处理器（语音输入要麦克风）：main.js 在 createWindow 里装它。
+    permissionHandler: null,
   };
 
   const mainTmp = fs.mkdtempSync(path.join(os.tmpdir(), "rf-main-vm-"));
@@ -271,6 +273,18 @@ function loadMain() {
     },
   };
 
+  // 会话层：main.js 在 createWindow 里装媒体权限处理器（语音输入要麦克风）。桩必须
+  // 提供 defaultSession.setPermissionRequestHandler，否则装配会在这一步抛错，
+  // 窗口与托盘都建不出来——所有依赖 waitForShellReady 的用例会一起红。
+  const sessionStub = {
+    permissionHandler: null,
+    setPermissionRequestHandler(handler) {
+      sessionStub.permissionHandler = handler;
+      events.permissionHandler = handler;
+    },
+  };
+  sessionStub.defaultSession = sessionStub;
+
   const ipcMainStub = {
     // 自绘标题栏（§19）的 invoke 通道：用例直接调用捕获到的 handler 断言行为。
     handle(name, handler) {
@@ -373,6 +387,7 @@ function loadMain() {
           Menu: MenuStub,
           dialog: dialogStub,
           ipcMain: ipcMainStub,
+          session: sessionStub,
           // 屏幕信息：默认尺寸按工作区算（方案 §2.3.1），桩给一块 1920x1040 的主屏。
           screen: {
             getPrimaryDisplay: () => ({
