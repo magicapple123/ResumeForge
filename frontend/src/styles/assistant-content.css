@@ -142,6 +142,9 @@
 .assistant-markdown-table-wrap table {
   width: max-content;
   min-width: 100%;
+  /* 超过容器时压回容器宽，由浏览器自动换行（#9）。只给 min-width:100% 时，
+     `width: max-content` 仍会按"最长单元格不换行"铺开，长中文句子必然溢出气泡。 */
+  max-width: 100%;
   border-collapse: collapse;
   font-size: 13px;
   line-height: 1.55;
@@ -149,7 +152,10 @@
 
 .assistant-markdown-table-wrap th,
 .assistant-markdown-table-wrap td {
-  min-width: 100px;
+  /* 100px 会让 8 列表最少 800px 起步，直接顶穿气泡；0 之后列宽由内容决定。
+     长 URL / 长英文串靠 overflow-wrap 断行，而不是伸到气泡外面。 */
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 8px 10px;
   text-align: left;
   vertical-align: top;

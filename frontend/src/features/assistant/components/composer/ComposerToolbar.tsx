@@ -18,8 +18,10 @@ import { Button, Switch, Tooltip } from "antd";
 import { t } from "../../../../i18n";
 import { useLocale } from "../../../../i18n/i18nContext";
 import type { ReasoningEffort } from "../../../../types/assistant";
+import type { ContextUsage } from "../../../../types";
 import AddMenu from "./AddMenu";
 import type { AddMenuProps } from "./AddMenu";
+import ContextUsageChip from "./ContextUsageChip";
 import PermissionMenu from "./PermissionMenu";
 import type { PermissionMenuProps } from "./PermissionMenu";
 import ReasoningChip from "./ReasoningChip";
@@ -38,6 +40,17 @@ export interface ComposerToolbarProps {
   permission: PermissionMenuProps;
   /** 左侧「+」面板的全部输入（附件 / 关联 / 技能）。 */
   addMenu: AddMenuProps;
+  /**
+   * 上下文用量（需求 #6）。`null` = 还不知道（chip 显示「上下文 —」，不猜数字）。
+   * 可选：输入区之外（如浅测试）不传时 chip 照常渲染，只是没有数字。
+   */
+  contextUsage?: ContextUsage | null;
+  /** 弹层里改了上下文窗口后，让上层本地重算百分比。 */
+  onContextWindowSaved?: (windowTokens: number) => void;
+  /** 压缩 / 还原按会话调用（#10）；不传时弹层里的压缩动作禁用。 */
+  contextConversationId?: number | null;
+  /** 压缩或还原成功后让上层重取用量。 */
+  onContextChanged?: () => void;
   onWebSearchChange: (value: boolean) => void;
   onReasoningEffortChange: (value: ReasoningEffort) => void;
   onSend: () => void;
@@ -55,6 +68,10 @@ export default function ComposerToolbar({
   voiceSlot,
   permission,
   addMenu,
+  contextUsage = null,
+  onContextWindowSaved,
+  contextConversationId = null,
+  onContextChanged,
   onWebSearchChange,
   onReasoningEffortChange,
   onSend,
@@ -83,6 +100,13 @@ export default function ComposerToolbar({
             <Switch size="small" checked={webSearch} onChange={onWebSearchChange} />
             <span>{t("assistantComposer.toggle.webSearch")}</span>
           </label>
+          {/* 上下文用量（需求 #6）：与「允许联网」「数据权限」同一排，点开是五段构成。 */}
+          <ContextUsageChip
+            usage={contextUsage}
+            onWindowSaved={onContextWindowSaved}
+            conversationId={contextConversationId}
+            onContextChanged={onContextChanged}
+          />
         </div>
       </div>
       <div className="assistant-composer-submit">

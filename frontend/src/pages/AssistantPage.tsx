@@ -4,7 +4,9 @@ import { ArrowDownOutlined } from "@ant-design/icons";
 import { App, Drawer } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import AssistantBreadthPanel from "../features/assistant/AssistantBreadthPanel";
 import AssistantComposer from "../features/assistant/components/AssistantComposer";
+import AssistantContinueBar from "../features/assistant/components/AssistantContinueBar";
 import AssistantGroupModal from "../features/assistant/components/AssistantGroupModal";
 import AssistantMessageList from "../features/assistant/components/AssistantMessageList";
 import AssistantWorkspaceHeader from "../features/assistant/components/AssistantWorkspaceHeader";
@@ -14,10 +16,12 @@ import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import { mqMax } from "../theme/breakpoints";
 import { readStoredReasoningEffort } from "../features/assistant/readStoredReasoningEffort";
+import { readStoredWebSearch, writeStoredWebSearch } from "../features/assistant/webSearchPref";
 import type { StarterPrompt } from "../features/assistant/assistantTypes";
 import { positiveId } from "../features/assistant/assistantUtils";
 import { useAssistantAttachments } from "../features/assistant/hooks/useAssistantAttachments";
 import { useAssistantAutoScroll } from "../features/assistant/hooks/useAssistantAutoScroll";
+import { useAssistantContextUsage } from "../features/assistant/hooks/useAssistantContextUsage";
 import { useAssistantConversations } from "../features/assistant/hooks/useAssistantConversations";
 import {
   useAssistantMessageActions,
@@ -59,7 +63,8 @@ export default function AssistantPage({
   const [resumeId, setResumeId] = useState<number | undefined>(() =>
     positiveId(searchParams.get("resume_id")),
   );
-  const [webSearch, setWebSearch] = useState(false);
+  // 允许联网：惰性读上次的选择（首帧就是对的，不会先闪一下"关"再变"开"）。
+  const [webSearch, setWebSearch] = useState(readStoredWebSearch);
   const [reasoningEffort, setReasoningEffort] =
     useState<ReasoningEffort>(readStoredReasoningEffort);
   const [groupTarget, setGroupTarget] = useState<AssistantConversationBrief | null>(null);
@@ -156,10 +161,18 @@ export default function AssistantPage({
     streamingTools,
     progressText,
     streamError,
+    roundLimitRounds,
     send,
     stop,
+    regenerate,
   } = stream;
   const { displayText, displayReasoning } = useAssistantDisplayStream(stream);
+  // 上下文用量（需求 #6）：流式事件优先，切会话时补一次 GET（失败静默）。
+  const {
+    contextUsage,
+    applyWindowTokens,
+    reload: reloadContextUsage,
+  } = useAssistantContextUsage(activeId);
   const { removeMessage, enterMessageSelecting } = useAssistantMessageActions({
     activeId,
     loadDetail,
@@ -169,6 +182,14 @@ export default function AssistantPage({
     sending,
     setSelecting,
   });
+  // #13A 重新生成：只对最后一条助手回答可用（消息列表侧只在那条上渲染按钮）。
+  const handleRegenerate = useCallback(
+    (target: { id: number }) => {
+      if (activeId === null) return;
+      void regenerate(activeId, target.id);
+    },
+    [activeId, regenerate],
+  );
 
   useEffect(() => {
     mountedRef.current = true;
@@ -195,6 +216,12 @@ export default function AssistantPage({
   useEffect(() => {
     window.localStorage.setItem("resumeforge.assistant.reasoning_effort", reasoningEffort);
   }, [reasoningEffort]);
+
+  // 允许联网：与思考强度并排记一次。走 webSearchPref 而不是直接写 localStorage，
+  // 是为了在存储被禁用时不抛（那会让整页白屏）。
+  useEffect(() => {
+    writeStoredWebSearch(webSearch);
+  }, [webSearch]);
 
   // 深链 / ?new=1 / 欢迎草稿三段引导 effect：整域下沉到 useAssistantUrlBootstrap。
   useAssistantUrlBootstrap({
@@ -361,6 +388,12 @@ export default function AssistantPage({
           exitSelecting={exitSelecting}
           title={detail?.title || t("responsive.assistant.defaultTitle")}
         />
+        <AssistantBreadthPanel
+          conversationId={activeId}
+          showDigest={!compact && historyMessages.length === 0 && !awaitingConversation}
+          compact={compact}
+          onSkillsChanged={reloadSkills}
+        />
         <AssistantMessageList
           detail={detail}
           showLoading={awaitingConversation}
@@ -391,6 +424,7 @@ export default function AssistantPage({
           onManageSkills={openSkillWorkbench}
           onQuote={quoteMessage}
           onDeleteMessage={removeMessage}
+          onRegenerate={handleRegenerate}
           onEnterSelecting={enterMessageSelecting}
           selecting={selecting}
           selectedIds={selectedIds}
@@ -412,6 +446,12 @@ export default function AssistantPage({
             <ArrowDownOutlined aria-hidden="true" />
           </button>
         )}
+        {/* 撞到工具轮次上限时给「继续」：复用同一条发送链路，不新开端点（需求 #5）。 */}
+        <AssistantContinueBar
+          rounds={roundLimitRounds}
+          disabled={sending}
+          onContinue={() => void send(t("assistantLimits.continue.action"), () => setContent(""))}
+        />
         <AssistantComposer
           compact={compact}
           conversationId={activeId}
@@ -439,6 +479,9 @@ export default function AssistantPage({
           onRemoveAttachment={removeAttachment}
           quoted={quoted}
           onClearQuote={clearQuote}
+          contextUsage={contextUsage}
+          onContextWindowSaved={applyWindowTokens}
+          onContextChanged={reloadContextUsage}
           onSend={() => void send(content, () => setContent(""))}
           onStop={stop}
         />

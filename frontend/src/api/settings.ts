@@ -6,6 +6,8 @@ import type {
   AutoBackupIntervalSetting,
   DatasetImportResult,
   DatasetInfo,
+  AssistantCompactionSetting,
+  AssistantLimitSetting,
   AssistantOrbSetting,
   AssistantRelaxedModeSetting,
   ExportSaveLocation,
@@ -119,6 +121,17 @@ export function listLLMConfigRecords(): Promise<LLMConfigRecord[]> {
   return request("/settings/llm/records");
 }
 
+/**
+ * 保存为**当前生效**的模型配置（`PUT /settings/llm`：全局记录 + 数据集快照双写）。
+ *
+ * 与 `saveLLMConfigRecord`（按名称 upsert 一条记录，不切换生效项）不同：这里改的就是
+ * 「现在正在用的这份」。用户没填过窗口的旧配置保存一次即升级为全局记录——这是后端
+ * 既定语义，不是本函数引入的。助手「上下文用量」弹层改窗口走这里。
+ */
+export function saveLLMConfig(config: LLMConfig): Promise<LLMConfig> {
+  return request("/settings/llm", { method: "PUT", body: JSON.stringify(config) });
+}
+
 export function saveLLMConfigRecord(
   record: Pick<LLMConfigRecord, "name"> & LLMConfig,
 ): Promise<LLMConfigRecord> {
@@ -183,6 +196,52 @@ export function saveAssistantRelaxedMode(
   setting: AssistantRelaxedModeSetting,
 ): Promise<AssistantRelaxedModeSetting> {
   return request("/settings/assistant-relaxed-mode", {
+    method: "PUT",
+    body: JSON.stringify(setting),
+  });
+}
+
+/** 求职助手的两条运行上限（轮次上限 / 整链时间预算）；缺省时后端给默认值。 */
+export function getAssistantLimitSetting(): Promise<AssistantLimitSetting> {
+  return request("/settings/assistant-limits");
+}
+
+/**
+ * 保存运行上限。**整对象 PUT**：两项一起提交，只带一项会把另一项打回默认。
+ * 越界值由后端直接拒绝（422），前端不做静默夹取。
+ */
+export function saveAssistantLimitSetting(
+  setting: AssistantLimitSetting,
+): Promise<AssistantLimitSetting> {
+  return request("/settings/assistant-limits", {
+    method: "PUT",
+    body: JSON.stringify(setting),
+  });
+}
+
+/*
+ * 上下文自动压缩（需求 #10）的三个设置项。
+ *
+ * 只有 `GET/PUT /settings/assistant-compaction` 一对接口：读到的就是整份当前值，保存也
+ * 整份提交。默认值（空模型 / 60 / 75）由后端给，前端不重复硬编码一份"真相"——读失败时
+ * 才用同值占位，避免输入框空着。
+ */
+
+/** 读上下文压缩设置：摘要模型（空串 = 跟随当前对话模型）+ 两个百分比阈值。 */
+export function getAssistantCompactionSetting(): Promise<AssistantCompactionSetting> {
+  return request("/settings/assistant-compaction");
+}
+
+/**
+ * 保存上下文压缩设置。**整对象 PUT**：三项一起提交，只带一项会把另两项打回默认。
+ *
+ * 阈值越界、或 `summary_percent <= mask_percent` 时后端返回 422——前端已有同口径的
+ * 禁用 + inline 提示，这里不做静默夹取（夹取会悄悄改掉用户填的数字）。
+ */
+export function saveAssistantCompactionSetting(
+  setting: AssistantCompactionSetting,
+): Promise<AssistantCompactionSetting> {
+  return request("/settings/assistant-compaction", {
     method: "PUT",
     body: JSON.stringify(setting),
   });

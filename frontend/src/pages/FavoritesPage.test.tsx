@@ -8,15 +8,24 @@ import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import FavoritesPage from "./FavoritesPage";
 
 const apiMocks = vi.hoisted(() => ({
-  listJobs: vi.fn(),
+  listFavoriteJobs: vi.fn(),
   updateJob: vi.fn(),
+  batchFavoriteJobs: vi.fn(),
+  downloadFavoritesExport: vi.fn(),
+  addToQueue: vi.fn(),
   listResumes: vi.fn(),
   updateResumeFavorite: vi.fn(),
 }));
 
+// #28：收藏夹岗位页签改用专用端点（带生命周期徽标与「已投/未投」筛选）。
 vi.mock("../api/jobs", () => ({
-  listJobs: apiMocks.listJobs,
+  listFavoriteJobs: apiMocks.listFavoriteJobs,
   updateJob: apiMocks.updateJob,
+  batchFavoriteJobs: apiMocks.batchFavoriteJobs,
+  downloadFavoritesExport: apiMocks.downloadFavoritesExport,
+}));
+vi.mock("../api/apply", () => ({
+  addToQueue: apiMocks.addToQueue,
 }));
 // 展开真实模块再覆盖：显式列导出时，生产代码新增一个导出就会让调用方直接抛
 // "export is not defined"，看起来像组件崩了。
@@ -32,7 +41,7 @@ vi.mock("../api/resumes", async (importOriginal) => ({
 }));
 
 beforeEach(() => {
-  apiMocks.listJobs.mockReset().mockResolvedValue({
+  apiMocks.listFavoriteJobs.mockReset().mockResolvedValue({
     items: [
       {
         id: 1,
@@ -40,7 +49,14 @@ beforeEach(() => {
         company: "示例公司",
         location: "上海",
         posted_at: "2026-08-20",
+        status: "开放中",
         favorite: true,
+        favorited_at: "2026-11-01T10:00:00",
+        favorited_at_estimated: false,
+        applied: false,
+        queued: false,
+        keywords: [],
+        note: "",
       },
     ],
     total: 1,
@@ -65,6 +81,9 @@ beforeEach(() => {
   });
   apiMocks.updateJob.mockReset().mockResolvedValue({});
   apiMocks.updateResumeFavorite.mockReset().mockResolvedValue({});
+  apiMocks.batchFavoriteJobs.mockReset().mockResolvedValue({ updated: 1, skipped: [] });
+  apiMocks.downloadFavoritesExport.mockReset().mockResolvedValue(undefined);
+  apiMocks.addToQueue.mockReset().mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -87,7 +106,9 @@ describe("FavoritesPage", () => {
     renderPage();
 
     expect(await screen.findByText("数据分析师")).toBeInTheDocument();
-    expect(apiMocks.listJobs).toHaveBeenCalledWith(expect.objectContaining({ favorite: true }));
+    expect(apiMocks.listFavoriteJobs).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: "favorited_desc" }),
+    );
 
     fireEvent.click(screen.getByText("简历"));
     expect(await screen.findByText("数据分析岗位简历")).toBeInTheDocument();
@@ -126,7 +147,7 @@ describe("FavoritesPage", () => {
 
     await waitFor(() => expect(apiMocks.updateJob).toHaveBeenCalledWith(1, { favorite: false }));
     expect(apiMocks.updateJob).toHaveBeenCalledOnce();
-    await waitFor(() => expect(apiMocks.listJobs).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(apiMocks.listFavoriteJobs).toHaveBeenCalledTimes(2));
   });
 
   it("removes a resume favorite through the resume API", async () => {
@@ -176,7 +197,7 @@ describe("FavoritesPage", () => {
  */
 describe("FavoritesPage 空收藏的横向滚动区（a11y）", () => {
   beforeEach(() => {
-    apiMocks.listJobs.mockReset().mockResolvedValue({ items: [], total: 0 });
+    apiMocks.listFavoriteJobs.mockReset().mockResolvedValue({ items: [], total: 0 });
     apiMocks.listResumes.mockReset().mockResolvedValue({ items: [], total: 0 });
   });
 

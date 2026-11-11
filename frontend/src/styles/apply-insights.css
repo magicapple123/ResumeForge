@@ -1,0 +1,94 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * #15A 僵尸岗雷达 / #15B JD 变更（投递台决策辅助）。
+ *
+ * 为什么单独一个文件：`apply.css` 已到 458/500 行（同 `apply-density.css` 的拆分理由），
+ * 而这一批只服务两个徽标 + 一个 diff 栅格，与队列/记录的主体排版无关。
+ * 颜色一律取 `--rf-*`：`--rf-diff-*` 三态在深色主题下另有定义（浅色底块在深底上会变成"亮砖"）。
+ */
+
+/* 僵尸分徽标：色阶由 antd Tag 的 color 承担（灰/橙/红），这里只管数字的等宽与行高——
+   同一行里还有公司名与来源标签，字号跟着表格正文走，不额外放大（放大就变成"结论"了）。 */
+.apply-ghost-badge {
+  margin-inline-end: 0;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+/* 低分（<40）用中性色：这类岗位更像"样本还不够"而不是"很可疑"，
+   用暖色会让用户以为系统在报警。 */
+.apply-ghost-badge[data-band="low"] {
+  color: var(--rf-text-secondary);
+}
+
+/* 证据列表：逐条一行，不用 antd List（Popover 里要的是紧凑的一段，不是一张卡片）。 */
+.apply-ghost-evidence {
+  margin: 0;
+  padding-inline-start: 18px;
+  color: var(--rf-text-body);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* 记录行的「你投的岗位有变更」徽标：可点整块，所以给键盘焦点环（role=button 的等价物）。 */
+.apply-jd-change-badge {
+  margin-inline-end: 0;
+  cursor: pointer;
+}
+
+.apply-jd-change-badge:hover {
+  text-decoration: underline;
+}
+
+.apply-jd-change-badge:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 2px;
+}
+
+/* 左右两栏 diff：用 grid 而不是 table —— 每行只有两个格子，行数可能上百，
+   表格的 border/布局开销与语义（这是一段文本对比，不是数据表）都不合适。 */
+.apply-jd-diff {
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.apply-jd-diff-head,
+.apply-jd-diff-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+}
+
+.apply-jd-diff-head {
+  background: var(--rf-fill-secondary);
+  border-bottom: 1px solid var(--rf-border-subtle);
+  font-weight: 600;
+}
+
+.apply-jd-diff-cell {
+  padding: 4px 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 新增行绿底、删除行红底（只做底色 + 左侧一道描边，不引第三条色阶：
+   颜色只承担"哪边变了"，具体文字仍然读得清）。 */
+.apply-jd-diff-cell[data-diff="added"] {
+  background: var(--rf-diff-added-bg);
+  color: var(--rf-diff-added-text);
+  box-shadow: inset 2px 0 0 var(--rf-diff-added-border);
+}
+
+.apply-jd-diff-cell[data-diff="removed"] {
+  background: var(--rf-diff-removed-bg);
+  color: var(--rf-diff-removed-text);
+  box-shadow: inset 2px 0 0 var(--rf-diff-removed-border);
+}
+
+/* 空的对侧格子：保留高度，让左右同一行的段落仍然对齐（缺了它整段会错行）。 */
+.apply-jd-diff-cell[data-diff="none"] {
+  background: var(--rf-fill-quaternary);
+}

@@ -16,7 +16,7 @@
  */
 
 import type { RefObject } from "react";
-import { sendAssistantMessage } from "../../../api/assistant";
+import { regenerateAssistantMessage, sendAssistantMessage } from "../../../api/assistant";
 import { resolvePermissionAxes } from "../assistantPermission";
 import { buildAssistantClientContext } from "../clientContext";
 import { t } from "../../../i18n";
@@ -26,6 +26,7 @@ import type {
   AssistantStreamEvent,
   AssistantToolCall,
   AssistantSurface,
+  ContextUsage,
   ReasoningEffort,
 } from "../../../types";
 import type { PendingAttachment } from "../assistantUtils";
@@ -45,6 +46,15 @@ export interface AssistantStreamState {
   streamingTools: AssistantToolCall[];
   progressText: string;
   streamError: string;
+  /** 上一轮回复撞到工具轮次上限时的轮数；null = 没撞到（不显示「继续」）。 */
+  roundLimitRounds: number | null;
+  /**
+   * 最近一次收到的上下文用量（需求 #6）。它属于 `contextUsageConversationId` 那个
+   * 会话——切换会话后由 `useAssistantContextUsage` 决定还用不用它，所以这里不在流
+   * 收尾时清空（清空会让面板在"刚回答完"的瞬间闪成「—」）。
+   */
+  contextUsage: ContextUsage | null;
+  contextUsageConversationId: number | null;
 }
 
 const initialState: AssistantStreamState = {
@@ -60,6 +70,9 @@ const initialState: AssistantStreamState = {
   streamingTools: [],
   progressText: "",
   streamError: "",
+  roundLimitRounds: null,
+  contextUsage: null,
+  contextUsageConversationId: null,
 };
 
 /**
@@ -70,6 +83,17 @@ export interface AssistantStreamInstance {
   activeIdRef: RefObject<number | null>;
   reloadConversations: () => Promise<unknown>;
   loadDetail: (id: number) => Promise<void>;
+}
+
+/**
+ * 「重新生成」目标（#13A）：重跑会话里最后一条助手回答。
+ *
+ * 与发送共用同一套流式生命周期（handleEvent / 收尾刷新），差别只有三处：
+ * 不建会话、不插用户消息、请求打到 regenerate 端点。
+ */
+export interface RegenerateStreamTarget {
+  conversationId: number;
+  messageId: number;
 }
 
 export interface SendAssistantStreamOptions extends AssistantStreamInstance {
@@ -187,16 +211,26 @@ export function abortAssistantStream(): void {
  * 发送一条消息并接管整个流式生命周期（原 useAssistantStream.send 的 store 化）。
  * 期间无论组件是否卸载，状态都写进全局 store，收尾刷新始终执行。
  */
+/**
+ * 发送一条消息并接管整个流式生命周期（原 useAssistantStream.send 的 store 化）。
+ * 期间无论组件是否卸载，状态都写进全局 store，收尾刷新始终执行。
+ *
+ * ``regenerate``（#13A）非空时走「重新生成最后一条回答」分支：不建会话、不插用户
+ * 消息、请求打到 regenerate 端点；流式状态与收尾刷新与发送完全共用。
+ */
 export async function sendAssistantStreamMessage(
   text: string,
   clearContent: () => void,
   options: SendAssistantStreamOptions,
+  regenerate?: RegenerateStreamTarget,
 ): Promise<void> {
   const trimmedText = text.trim();
+  if (sending) return;
+  // 重新生成不读输入框/附件，只关心"当前没有别的流正在写同一会话"。
   if (
-    (!trimmedText && options.attachmentsRef.current.length === 0) ||
-    sending ||
-    options.attachmentReadsRef.current > 0
+    !regenerate &&
+    ((!trimmedText && options.attachmentsRef.current.length === 0) ||
+      options.attachmentReadsRef.current > 0)
   ) {
     return;
   }
@@ -206,7 +240,10 @@ export async function sendAssistantStreamMessage(
   options.setTouTouStatus("thinking");
   let conversationId: number | null;
   try {
-    conversationId = options.activeIdRef.current ?? (await options.createConversation());
+    conversationId =
+      regenerate?.conversationId ??
+      options.activeIdRef.current ??
+      (await options.createConversation());
   } catch (error) {
     sending = false;
     patch({
@@ -228,19 +265,24 @@ export async function sendAssistantStreamMessage(
   // T11 四档权限：请求体永远发送**解算后的两轴布尔**（跟随全局在这里解算成具体档位），
   // 不发中间态——后端只认布尔。解算所需的全局默认取不到时按「仅查看」处理（少发安全）。
   const permissionAxes = await resolvePermissionAxes(conversationId);
-  const attachmentPayload = options.attachmentsRef.current.map(({ name, mime_type, data }) => ({
-    name,
-    mime_type,
-    data,
-  }));
-  const optimisticAttachments = [...options.attachmentsRef.current];
-  clearContent();
-  // 引用只对这一次提问有效：发出去就清掉，避免用户以为下一条也带着引用。
-  options.clearQuote();
+  const attachmentPayload = regenerate
+    ? []
+    : options.attachmentsRef.current.map(({ name, mime_type, data }) => ({
+        name,
+        mime_type,
+        data,
+      }));
+  const optimisticAttachments = regenerate ? [] : [...options.attachmentsRef.current];
+  if (!regenerate) {
+    clearContent();
+    // 引用只对这一次提问有效：发出去就清掉，避免用户以为下一条也带着引用。
+    options.clearQuote();
+  }
   const controller = new AbortController();
   abortController = controller;
   patch({
-    pendingUserText: trimmedText || t("assistantHooks.stream.attachmentOnly"),
+    // 重新生成：用户消息已经在历史里，不再画一条乐观气泡。
+    pendingUserText: regenerate ? "" : trimmedText || t("assistantHooks.stream.attachmentOnly"),
     // 正在发送的这条消息还没有服务端时间戳，用它被发出的时刻顶上。
     pendingSentAt: new Date().toISOString(),
     pendingUserAttachments: optimisticAttachments,
@@ -251,8 +293,10 @@ export async function sendAssistantStreamMessage(
     streamingTools: [],
     progressText: "",
     sendingConversationId: conversationId,
+    // 新的一轮开始：上一轮撞到的轮次上限提示作废（否则「继续」会跟着旧回答赖着不走）。
+    roundLimitRounds: null,
   });
-  options.clearAttachments();
+  if (!regenerate) options.clearAttachments();
   const handleEvent = (event: AssistantStreamEvent) => {
     // 手动停止后立刻重发的场景：旧流的迟到事件不能写进新一轮会话状态。
     if (abortController !== controller) return;
@@ -280,6 +324,8 @@ export async function sendAssistantStreamMessage(
           {
             name: event.name,
             arguments: event.arguments,
+            args_preview: event.args_preview,
+            preview: event.preview,
             summary: event.summary,
             link: event.link,
             ok: event.ok,
@@ -305,9 +351,33 @@ export async function sendAssistantStreamMessage(
       options.setTouTouStatus("error");
     }
     if (event.type === "done") options.setTouTouStatus("done");
+    if (event.type === "round_limit") {
+      // 撞到轮次上限：留着轮数，流收尾后仍要给用户一个「继续」入口（下一轮发送时复位）。
+      patch({ roundLimitRounds: event.rounds });
+    }
+    if (event.type === "context_usage") {
+      // 归到发送时那个会话：面板只在"这条会话"上显示，切换会话时不串号。
+      patch({ contextUsage: event.usage, contextUsageConversationId: conversationId });
+    }
     if (event.type === "start") void options.reloadConversations();
   };
   try {
+    if (regenerate) {
+      // #13A：只带"这一次怎么生成"的运行参数；问题与上下文由后端从原消息里取。
+      await regenerateAssistantMessage(
+        regenerate.conversationId,
+        regenerate.messageId,
+        {
+          reasoning_effort: options.reasoningEffort,
+          relaxed_mode: permissionAxes.relaxed,
+          allow_write: permissionAxes.allowWrite,
+        },
+        handleEvent,
+        controller.signal,
+        options.surface,
+      );
+      return;
+    }
     // surface 只影响请求 URL 的查询参数，请求通路完全相同，无需分叉。
     await sendAssistantMessage(
       conversationId,

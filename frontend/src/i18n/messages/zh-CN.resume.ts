@@ -52,6 +52,44 @@ const resume = {
   /** 无障碍名：生成说明入口。 */
   "resume.diagnostics.aria.rationale": "为什么是这样一份简历（生成说明）",
 
+  // ── 制作台左栏的版面状态条（#24 24A，WorkbenchLayoutStatusBar）──────
+  /**
+   * 还没量到版面时那一行（首帧 / iframe 尚未排版完）。
+   * 这几条挂在 `resume.*` 包里是因为它们与上面「版面诊断」是同一件事的两种形态：
+   * 数字与句式的来源在 `components/resume/layoutStatusSummary.ts`，与诊断条共用。
+   */
+  "workbench.layoutStatus.measuring": "正在测量版面…",
+  /** 放得下时的整行：占用率 + 需要几页 + 页数上限。 */
+  "workbench.layoutStatus.summary": "占用 {percent}% · 需要 {pages} 页 / 上限 {limit} 页",
+  /** 超出上限时多一段"超出几页"。 */
+  "workbench.layoutStatus.summaryOverflow":
+    "占用 {percent}% · 需要 {pages} 页 / 上限 {limit} 页 · 超出 {over} 页",
+  /** 「不限篇幅」（page_limit = 0）时没有上限可比、也没有占用率可比，只报页数。 */
+  "workbench.layoutStatus.summaryUnlimited": "需要 {pages} 页（篇幅不限）",
+  /** 未保存标记：制作台按草稿量，预览卡按已保存的记录量，两边数字可能不同。 */
+  "workbench.layoutStatus.unsaved": "未保存",
+  /** 未保存标记的悬停说明：把"为什么两边数字不一样"说清楚，别让用户当成 bug。 */
+  "workbench.layoutStatus.dirtyHint": "数字按当前未保存的改动测量；保存后与预览卡一致。",
+
+  // ── 「结构」页签的未收录资料组（#24 24D，CoverageStructureGroup）──────
+  /** 常驻说明：清单按**已保存**的版本统计，与中栏草稿无关。 */
+  "workbench.coverage.savedHint":
+    "按已保存的版本统计；「补进简历」会写回记录，请先保存制作台里的改动。",
+  /** 「AI 补上这段」在制作台没有修订弹窗：如实指路，不假装能做。 */
+  "workbench.coverage.reviseHint": "这类内容请在中间一栏对应板块里直接改写。",
+
+  // ── 中栏字段的来源徽标（#24 24E，FactSourceBadge）────────────────────
+  /**
+   * 三档来源词：把后端的五种 `origin` 收成用户看得懂的三种。
+   * `grounded` / `restored` = 来自资料库；`enhanced_kept` / `ai_rewrite` = AI 生成；
+   * `user_added` = 用户手动补的。映射表在 `factAnnotationMeta.ts`，与色板同源。
+   */
+  "resume.factSource.profile": "资料库",
+  "resume.factSource.ai": "AI 生成",
+  "resume.factSource.manual": "手动",
+  /** 读屏名：{source} 是上面三个来源词之一（徽标上的字很小，读屏必须说清含义）。 */
+  "resume.factSource.aria": "内容来源：{source}，点开看来源原文",
+
   // ── 底部动作条（ResumeDetailFooter）────────────────────────────
   /** 打开「手动调整简历内容」弹窗；中栏有未保存内容时禁用。 */
   "resume.footer.edit": "手动调整",

@@ -15,6 +15,8 @@ const composerAddMenu = {
   "composerAddMenu.section.resume": "Related resume",
   "composerAddMenu.section.skills": "Skills",
   "composerAddMenu.action.attach": "Add attachment",
+  "composerAddMenu.skills.search": "Search skills",
+  "composerAddMenu.skills.noMatch": "No matching skills",
 } as const;
 
 export default composerAddMenu;

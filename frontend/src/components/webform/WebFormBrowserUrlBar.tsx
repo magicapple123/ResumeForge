@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { App } from "antd";
 import { DeleteOutlined, LinkOutlined } from "@ant-design/icons";
-import { Button, Dropdown, Input, Space, Tooltip, Typography, theme } from "antd";
+import { Button, Dropdown, Input, Space, Typography, theme } from "antd";
 import type { MenuProps } from "antd";
-import { useState } from "react";
 import type { WebFormUrlHistory } from "../../types";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -32,7 +31,6 @@ export default function WebFormBrowserUrlBar({
   const { modal } = App.useApp();
   const { token } = theme.useToken();
   // 点击「打开目标页」后提示就该收掉，而不是等鼠标移开才消失（受控开关）。
-  const [openTip, setOpenTip] = useState(false);
   // 删除确认走全局 modal：此前每条历史一个 Popconfirm，几十条历史会挂几十个弹层
   // 触发器，页面滚动时逐个做定位计算，整页滚动明显卡顿。
   const confirmDelete = (item: WebFormUrlHistory) => {
@@ -80,17 +78,9 @@ export default function WebFormBrowserUrlBar({
         aria-label={t("webFormPage.urlBar.inputAria")}
       />
       <Space className="webform-url-actions" size={8} wrap>
-        <Tooltip
-          open={openTip}
-          onOpenChange={setOpenTip}
-          title={t("webFormPage.urlBar.openTooltip")}
-        >
-          <span onClick={() => setOpenTip(false)}>
-            <Button type="primary" loading={busy} disabled={busy} onClick={onOpen}>
-              {t("webFormPage.urlBar.open")}
-            </Button>
-          </span>
-        </Tooltip>
+        <Button type="primary" loading={busy} disabled={busy} onClick={onOpen}>
+          {t("webFormPage.urlBar.open")}
+        </Button>
         {/* 历史可能攒几十条：菜单限高滚动，不让整屏被占满。
             menu.styles.list 在 antd 6 实测不生效（菜单仍全高），改用 popupRender
             包一层限高滚动容器。注意两点（2026 用户反馈修复）：

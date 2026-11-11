@@ -25,6 +25,13 @@ export interface LLMConfig {
   temperature: number;
   timeout_seconds: number;
   max_tokens: number;
+  /**
+   * 上下文窗口（tokens）；0 = 未知/未设置。
+   *
+   * 助手「上下文用量」的百分比分母（需求 #6）。不做联网探测（`/models` 不返回窗口
+   * 长度），所以它是用户手填值；可选是因为更早的后端响应里没有这个字段。
+   */
+  context_window_tokens?: number;
   api_style: LLMApiStyle;
   /** 高级调整（可选）：null 表示不发送该参数，沿用服务商默认值。 */
   top_p: number | null;
@@ -117,8 +124,11 @@ export interface LLMThinkingResult {
   message: string;
 }
 
-/** 联网搜索的来源。 */
-export type SearchSource = "bing" | "duckduckgo" | "searxng" | "deepseek";
+/** 联网搜索的来源。协议值，提交给后端，不翻译。 */
+export type SearchSource = "bing" | "duckduckgo" | "searxng" | "deepseek" | "tavily" | "jina";
+
+/** 搜索深度三档（P4-08）：摘要 0 页 / 标准 2 页×2 段 / 深入 5 页×3 段。 */
+export type SearchDepth = "snippet" | "standard" | "deep";
 
 /**
  * 联网搜索设置。
@@ -127,12 +137,18 @@ export type SearchSource = "bing" | "duckduckgo" | "searxng" | "deepseek";
  * 字段就会在保存时被默认值填回去（与 `LLMConfig` 同一类坑）。
  */
 export interface SearchConfig {
-  /** 至少一个来源；后端要求 1~4 项且自动去重。 */
+  /** 至少一个来源；后端要求 1~6 项且自动去重。 */
   sources: SearchSource[];
   /** 自建 SearXNG 实例根地址（`http://` 或 `https://` 开头）；不用可留空。 */
   searxng_url: string;
-  /** 抓取前 N 条结果的正文，0 = 只取摘要。取值范围 0~3。 */
-  fetch_pages: number;
+  /**
+   * 搜索深度（**唯一真值**）：snippet 只看摘要、standard 抓 2 页各 2 段、deep 抓 5 页各 3 段。
+   */
+  depth: SearchDepth;
+  /**
+   * **已弃用**，只为兼容旧后端：写入端只认 depth。读到时按档位折算（0/2/3）。
+   */
+  fetch_pages?: number;
   /** 每次搜索最多返回多少条，1~15。 */
   max_results: number;
   /**
@@ -142,6 +158,10 @@ export interface SearchConfig {
    * PUT 回去，所以读到掩码时保持原值提交即可（后端识别掩码 = 不修改）；清空 = 移除密钥。
    */
   deepseek_api_key: string;
+  /** Tavily 的密钥（同上：只回显掩码或空串）。 */
+  tavily_api_key: string;
+  /** Jina 的密钥（同上）。 */
+  jina_api_key: string;
 }
 
 /** 一份数据集：一整个数据库，可切换。 */
@@ -255,6 +275,35 @@ export interface AssistantOrbSetting {
 /** 求职助手「放宽模式」：开启后助手可读取完整资料（含敏感信息），默认关。 */
 export interface AssistantRelaxedModeSetting {
   enabled: boolean;
+}
+
+/**
+ * 求职助手的两条运行上限：一次回复的工具轮次上限与整链时间预算（秒）。
+ *
+ * 默认 30 轮 / 1800 秒，与后端 `services/assistant_limits` 的常量一致。两项**一起 PUT**：
+ * 只提交一项的话，另一项会被默认值填回（整对象落库语义）。
+ */
+export interface AssistantLimitSetting {
+  max_tool_rounds: number;
+  stream_budget_seconds: number;
+}
+
+/**
+ * 上下文自动压缩的三个设置项（需求 #10）。
+ *
+ * `model` 是**摘要专用**的模型名，空串 = 跟随当前对话所用的模型（默认）；两个阈值都是
+ * 「窗口占用百分比」，1–99，默认 60 / 75，语义是：
+ * - 占用 ≥ `mask_percent` → 先遮蔽最早的几组工具结果原文（消息结构不变）；
+ * - 占用 ≥ `summary_percent` → 再把更早的历史压成一段摘要。
+ *
+ * 因此 `summary_percent` **必须大于** `mask_percent`（否则达到摘要线时遮蔽还没做，两档
+ * 互相覆盖）。后端对越界与"遮蔽 ≥ 摘要"直接 422；三项**一起 PUT**（整对象落库语义），
+ * 只提交一项会把另两项打回默认。
+ */
+export interface AssistantCompactionSetting {
+  model: string;
+  mask_percent: number;
+  summary_percent: number;
 }
 
 export interface NavigationVisibility {

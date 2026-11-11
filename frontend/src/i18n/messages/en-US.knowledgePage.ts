@@ -37,7 +37,54 @@ const knowledgePage = {
   "knowledgePage.card.openAria": "Open details for the knowledge entry “{title}”",
   "knowledgePage.card.selectAria": "Select knowledge entry {title}",
 
+  // Filters and export (#29A/#29D/#29G)
+  "knowledgePage.filter.company.aria": "Filter by company",
+  "knowledgePage.filter.company.all": "All companies",
+  "knowledgePage.filter.uncategorized": "Uncategorized only",
+  "knowledgePage.filter.category.uncategorized": "Uncategorized",
+  "knowledgePage.filter.semantic": "Semantic search",
+  "knowledgePage.filter.semantic.aria": "Toggle semantic search",
+  "knowledgePage.filter.semantic.hint": "Find by meaning; results show the summary first",
+  "knowledgePage.action.export": "Export Markdown",
+  "knowledgePage.toast.exported": "Exported {count} entries",
+  "knowledgePage.error.exportFailed": "Export failed: {error}",
+  "knowledgePage.error.exportEmpty": "There are no entries to export yet",
+
+  // Semantic search (#29A)
+  "knowledgePage.semantic.title": "Semantic search results",
+  "knowledgePage.semantic.hint": "Matched by meaning; select a result to open the entry",
+  "knowledgePage.semantic.empty": "No matching entries",
+  "knowledgePage.semantic.loading": "Searching…",
+  "knowledgePage.semantic.error": "Semantic search failed: {error}",
+  "knowledgePage.semantic.fallback":
+    "Vector search unavailable; fell back to keyword matching: {reason}",
+  "knowledgePage.semantic.vectorTag": "Vector",
+  "knowledgePage.semantic.keywordTag": "Keyword",
+  "knowledgePage.semantic.score": "Relevance {score}",
+
+  // Cards (#29C/#29D/#29E)
+  "knowledgePage.card.reason": "Why keep this: {reason}",
+  "knowledgePage.card.summary": "Summary",
+  "knowledgePage.card.keyPoints": "Key points",
+  "knowledgePage.card.company": "Company: {company}",
+  "knowledgePage.card.job": "Related job #{id}",
+  "knowledgePage.card.updated": "Updated {time}",
+
+  // Review prompt (#29F)
+  "knowledgePage.review.title": "{count} entries have not been revisited for 30 days",
+  "knowledgePage.review.description":
+    "A quick review helps retention; you can also skip it — the prompt returns next week.",
+  "knowledgePage.review.dismiss": "Don't remind me this week",
+  "knowledgePage.review.dismissed": "Review reminder muted for this week",
+
   "knowledgePage.pagination.total": "Total {count} entries",
+  // #29B knowledge capture: interview report / apply failure / resume diagnosis -> entry
+  "knowledgePage.capture.interview": "Save to knowledge base",
+  "knowledgePage.capture.experience": "Turn into an experience note",
+  "knowledgePage.capture.saved": "Saved “{title}” to the knowledge base",
+  "knowledgePage.capture.exists":
+    "“{title}” is already in the knowledge base; nothing was duplicated",
+  "knowledgePage.capture.failed": "Could not save to the knowledge base. Please try again.",
 } as const;
 
 export default knowledgePage;

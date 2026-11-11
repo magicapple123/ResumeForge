@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 麦克风按钮三态（计划 §6 T12）：
+ * 麦克风按钮四态（计划 §6 T12；starting 见需求 #8）：
  *
  * - 空闲：麦克风图标按钮，hover 提示单段上限；
+ * - 打开中（starting）：**disabled +「正在打开麦克风…」**。申请麦克风是异步的，
+ *   这一态存在的唯一目的就是让"点一下没反应"不再发生——用户不会去点第二下，
+ *   录音也就不会被掐死在 0.1 秒；
  * - 录音中：**不是 Button**——红色脉冲点 + mm:ss。同一行里往往已经有 danger 的
  *   「停止本轮」，再来一颗红 Button 会让人分不清哪个是哪个；
  * - 转写中：转圈 +「识别中」，此时点它没有意义（loading 天然挡住点击）。
@@ -28,12 +31,20 @@ import { useVoiceInput, type VoiceController } from "../../hooks/useVoiceInput";
 import { formatVoiceSeconds } from "./voiceFormat";
 import "../../styles/voice-input.css";
 
-/** 提示行：错误优先，其次录音中的隐私告知，最后是"未配置"的指路。 */
+/** 提示行：错误优先，其次一次性提示，然后是录音中的隐私告知，最后是"未配置"的指路。 */
 function VoiceHint({ voice }: { voice: VoiceController }) {
   if (voice.error) {
     return (
       <Typography.Text type="danger" className="voice-input-hint">
         {voice.error.message}
+      </Typography.Text>
+    );
+  }
+  // 设备回退这类提示不是错误（录音仍在进行），所以走 warning 而不是 danger。
+  if (voice.notice) {
+    return (
+      <Typography.Text type="warning" className="voice-input-hint">
+        {voice.notice}
       </Typography.Text>
     );
   }
@@ -82,6 +93,9 @@ export function VoiceButton({
   const active = voice ?? ownVoice;
   const recording = active.status === "recording";
   const transcribing = active.status === "transcribing";
+  // starting = 已经在申请麦克风、但 recorder.start() 还没成功。这段时间按钮必须
+  // disabled + 有明确文案：否则"点一下没反应"会让用户再点一下，正是 #8 的根因。
+  const starting = active.status === "starting";
 
   if (recording) {
     const recordingButton = (
@@ -124,8 +138,8 @@ export function VoiceButton({
             : "voice-input-button"
         }
         icon={<AudioOutlined />}
-        loading={transcribing}
-        disabled={disabled || undefined}
+        loading={transcribing || starting}
+        disabled={disabled || starting || undefined}
         aria-label={t("voiceInput.aria.start")}
         onClick={() => {
           if (active.configured === false) active.clearError();
@@ -133,6 +147,7 @@ export function VoiceButton({
         }}
       >
         {transcribing ? t("voiceInput.status.transcribing") : null}
+        {starting ? t("voiceInput.status.starting") : null}
       </Button>
     </Tooltip>
   );

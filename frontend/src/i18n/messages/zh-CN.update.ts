@@ -38,8 +38,19 @@ const update = {
   "update.hint.restart": "点击「重启并安装」后，应用会在原路径覆盖旧版本并自动重启。",
   "update.action.release": "打开发布页面",
   "update.result.title": "检查完成",
-  "update.result.latest": "最新版本：{version}",
-  "update.result.published": "发布时间：{date}",
+  /** 结论条（唯一的一句话）：有新版。`{version}` 是上游最新版本号。 */
+  "update.result.available": "有新版可用：{version}",
+  /** 结论条：已是最新，没有可升的东西。 */
+  "update.result.uptodate": "已是最新版本",
+  /** 版本信息第 4 列（通道 / 当前 / 最新 / 发布时间）。 */
+  "update.field.published": "发布时间",
+  /** 上游没给发布时间时的占位（不是"去检查"，因为结论已经有了）。 */
+  "update.value.noDate": "未提供",
+  /** 发布说明块的标题。 */
+  "update.notes.title": "更新说明",
+  /** 展开 / 收起发布说明；默认收起，长公告不把卡片撑长。 */
+  "update.notes.expand": "展开",
+  "update.notes.collapse": "收起",
 
   /** 安装结果里后端没给原因时的兜底。 */
   "update.installResult.noReason": "更新器没有给出原因。",
@@ -57,6 +68,21 @@ const update = {
   "update.intro.backupHint": "更新前仍建议先在「数据集与备份」里导出一份备份。",
   /** 下载进度；两个占位符都是格式化后的体积。 */
   "update.downloading": "正在下载更新包：{downloaded} / {total}",
+
+  // ── 桌面形态的三段式说明（02-1） ──────────────────────────────
+  // 桌面版**有**应用内升级通道（desktop/updater.js：启动 30s + 每 6 小时），但它不在这
+  // 张卡片里跑，所以这里必须写清"谁在检查 + 手动入口在哪"。标题与第一段正文是
+  // `zh-CN.ts` 里的 `update.desktop.title` / `update.desktop.description`（既有 key，
+  // 改文案就地改值，不新建）。
+  /** ② 手动检查的两个固定入口。 */
+  "update.desktop.manual":
+    "想手动检查有两个入口：菜单里的「帮助 → 检查更新」，或双击安装目录下的 update.cmd。",
+  /** ③ 保底出口：发布页手动下载安装包。链接本身在卡片里紧跟这句。 */
+  "update.desktop.releaseHint": "也可以在发布页面下载 Setup.exe，双击手动安装。",
+  /** 「重新检查」的 60 秒冷却态；`{seconds}` 是剩余秒数（见 UpdateCard 的最小点击间隔）。 */
+  "update.action.recheckIn": "重新检查（{seconds} 秒）",
+  /** 桌面壳里「检查更新」走 IPC：结果由主进程用系统弹窗给出，页面里没有进度可看。 */
+  "update.toast.desktopStarted": "已在桌面应用中检查，结果会弹窗告知",
 } as const;
 
 export default update;

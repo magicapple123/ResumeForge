@@ -30,16 +30,31 @@
  * 说着同一件事，于是并成一句交给 `PreviewZoomBar` 的 `hint`：说明落在纸面下方、
  * 与缩放按钮同处一行，且随滚动一直可见（`workbench-canvas.css` 里吸底）。
  * 画布上方只留实时预览状态（没有状态时整条不渲染，不留空白盒）。
+ *
+ * ## 为什么这里上报测量（#24 24B，2026-11-11 补）
+ *
+ * 制作台此前只把 html / 页数 / 预览口径交给预览，**一个测量回调都没接**：于是右栏画得出
+ * 纸、左栏却连"占用 426%"都算不出来（`.html` 排完多高只有 iframe 自己知道）。用户在左栏
+ * 拖滑块时完全是盲改。
+ *
+ * 现在这一层接住 `onMeasure` / `onLayoutStatus` 并写进 `workbenchLayoutStore`——左栏
+ * 「版面」组顶部的常驻状态条订阅同一份快照。**不改上层签名**：左栏与右栏没有共同 props 链，
+ * 把状态提到外壳再传下去要改三处（外壳已贴 500 行预算），而 `paginationReportStore` 已经
+ * 用同样的办法解决过同一个形状的问题。
+ *
+ * 口径与阈值**不在这里**：住 `layoutStatusSummary.ts`（与预览卡的诊断条共用一份）。
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import ResumePreview, {
   type ExactPreviewOptions,
   type ResumePreviewHandle,
 } from "../ResumePreview";
-import type { PreviewMode } from "../resume-preview/config";
+import type { PreviewMode, PreviewLayoutStatus } from "../resume-preview/config";
+import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { resetWorkbenchLayout, syncWorkbenchLayout } from "./workbenchLayoutStore";
 
 interface Props {
   html: string;
@@ -98,6 +113,52 @@ export default function ResumeWorkbenchCanvas({
   const scrollRef = externalScrollRef ?? internalScrollRef;
   // `undefined` = 还没量到：预览据此退回它自己的窗口比例口径（主预览即这一支）。
   const [availableHeight, setAvailableHeight] = useState<number | undefined>(undefined);
+  /**
+   * #24 24B：接住预览上报的测量。
+   *
+   * 这一层是全站**唯一**能拿到 `LayoutMeasure` 的制作台位置（iframe 在 `ResumePreview`
+   * 里），而它算出来的占用率正是左栏「版面」组那条状态条要显示的数字——此前这一层
+   * 一个测量回调都没传，于是左栏"连 426% 这个数都算不出来"（#24 现状盘点的结论）。
+   *
+   * 只在本层写进 store（左栏订阅），不改任何一个上层签名：见 `workbenchLayoutStore`。
+   */
+  const [measure, setMeasure] = useState<LayoutMeasure | null>(null);
+  const [layoutStatus, setLayoutStatus] = useState<PreviewLayoutStatus | null>(null);
+
+  /**
+   * 回调身份必须稳：`ResumePreview` 的 `applyLayoutToFrame` 把这两个回调写进了
+   * `useCallback` 依赖，`useFrameRelayout` 又按 `applyLayout` 的引用重排——每次渲染换一个
+   * 内联箭头函数就等于让右栏不停地重新排版。所以这里 `useCallback([])` + 值不变就返回原对象，
+   * 顺带把"同一高度重复上报"折叠掉（预览会在字体就绪、缩放变化时各报一次同样的高度）。
+   */
+  const handleMeasure = useCallback((next: LayoutMeasure) => {
+    setMeasure((previous) =>
+      previous &&
+      previous.usedHeight === next.usedHeight &&
+      previous.pageContentHeight === next.pageContentHeight &&
+      previous.pageLimit === next.pageLimit
+        ? previous
+        : next,
+    );
+  }, []);
+  const handleLayoutStatus = useCallback((next: PreviewLayoutStatus) => {
+    setLayoutStatus((previous) =>
+      previous &&
+      previous.pages === next.pages &&
+      previous.overflow === next.overflow &&
+      previous.pagesNeeded === next.pagesNeeded &&
+      previous.pagesRendered === next.pagesRendered
+        ? previous
+        : next,
+    );
+  }, []);
+
+  useEffect(() => {
+    syncWorkbenchLayout({ measure, layoutStatus });
+  }, [layoutStatus, measure]);
+
+  // 画布卸载即清空：否则关掉制作台再打开，左栏会先显示上一份简历的旧数字。
+  useEffect(() => resetWorkbenchLayout, []);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -131,6 +192,9 @@ export default function ResumeWorkbenchCanvas({
           onPreviewModeChange={onPreviewModeChange}
           exactPreview={exactPreview}
           availableHeight={availableHeight}
+          // #24 24B：把测量接上（左栏状态条读的就是这两个回调写进 store 的那份）。
+          onMeasure={handleMeasure}
+          onLayoutStatus={handleLayoutStatus}
           // 右栏窄而高：按宽度适应（纸宽 = 相框宽），高度交给纵向滚动（Q21）。
           fitMode="width"
           onPickField={onPickField}

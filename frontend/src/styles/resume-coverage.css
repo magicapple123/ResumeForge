@@ -6,8 +6,13 @@
    所以不要把这些规则搬回父文件的中段。 */
 
 /* 一组：组间靠上边框分隔（首组不画，它紧跟说明文字）。
-   弹层本身已限高 360px（见 `.resume-diagnostics-popover`），这里只管每一行收敛。 */
+   弹层本身已限高 360px（见 `.resume-diagnostics-popover`），这里只管每一行收敛。
+
+   `min-width: 0` 是 05-1 的根因修复：这一组是弹层内联网格的**子项**，grid 子项默认
+   `min-width: auto`，nowrap 的条目会把轨道从 560 撑到 742（实测），`max-width: 100%`
+   于是参照的是被撑宽的轨道，等于失效。显式给 0 之后轨道按弹层宽度分配，条目才肯省略。 */
 .resume-coverage-group {
+  min-width: 0;
   padding-block: 8px;
   border-top: 1px solid var(--rf-border, #f0f0f0);
 }
@@ -48,7 +53,9 @@
   overflow-wrap: anywhere;
 }
 
-/* 长条目单行省略（阈值见 `LONG_ITEM_CHARS`），全文在 Tooltip 里。 */
+/* 长条目单行省略（阈值见 `LONG_ITEM_CHARS`，超过即挂 Tooltip 全文）。
+   省略要真的生效，前提是祖先链上有 `min-width: 0`（`.resume-coverage-group`）与
+   内容盒的 `minmax(0, 1fr)` 列模板——否则 `max-width: 100%` 参照的是被 nowrap 撑宽的轨道。 */
 .resume-coverage-item {
   display: inline-block;
   max-width: 100%;

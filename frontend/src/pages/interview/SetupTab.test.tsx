@@ -183,7 +183,8 @@ describe("SetupTab 关联岗位与关联简历都必选（0066）", () => {
     await submit();
 
     await waitFor(() => expect(onStart).toHaveBeenCalled());
-    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ jobId: 7, resumeId: 1 }));
+    // 关联简历的值带前缀（#25）：`r:` = 本应用的简历。
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ jobId: 7, resumeId: "r:1" }));
     // 候选请求带 include_general：真实面试里通用简历同样可选。
     expect(resumesMocks.listResumes).toHaveBeenCalledWith(
       expect.objectContaining({ job_id: 7, include_general: true }),

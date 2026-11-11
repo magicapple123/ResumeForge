@@ -78,6 +78,11 @@ function findSkill(
   );
 }
 
+/** #31D/#31F：自动生成且尚未验证的技能不能启用（后端会 409，这里提前禁用并说明）。 */
+function isPendingSkill(skill: AssistantSkill): boolean {
+  return Boolean(skill.generated) && skill.validation_status === "pending";
+}
+
 export interface SkillPickerProps {
   /** 技能库（勾选列表）。 */
   catalog: AssistantSkill[];
@@ -128,21 +133,34 @@ export function SkillPicker({
           role="group"
           aria-label={t("composerAddMenu.section.skills")}
         >
-          {catalog.map((skill) => (
-            <label key={skill.id} className="assistant-skill-picker-option">
-              <Checkbox
-                checked={selectedIds.has(skill.id)}
-                disabled={disabled || togglingId === skill.id}
-                onChange={(event) => onToggle(skill, event.target.checked)}
-              />
-              <span className="assistant-skill-option-text">
-                <span className="assistant-skill-option-name">{skill.name}</span>
-                {skill.description ? (
-                  <span className="assistant-skill-option-desc">{skill.description}</span>
-                ) : null}
-              </span>
-            </label>
-          ))}
+          {catalog.map((skill) => {
+            // Pending skill: block enabling it here (already-linked history may still be removed).
+            const pending = isPendingSkill(skill) && !selectedIds.has(skill.id);
+            return (
+              <label key={skill.id} className="assistant-skill-picker-option">
+                <Checkbox
+                  checked={selectedIds.has(skill.id)}
+                  disabled={disabled || togglingId === skill.id || pending}
+                  onChange={(event) => onToggle(skill, event.target.checked)}
+                />
+                {/* #32: the icon is the row's second column (same line as the name, does not
+                  squeeze the description); `aria-hidden` keeps the accessible name as the name text. */}
+                <ExperimentOutlined className="assistant-skill-picker-icon" aria-hidden="true" />
+                <span className="assistant-skill-option-text">
+                  <span className="assistant-skill-option-name">{skill.name}</span>
+                  {skill.description ? (
+                    <span className="assistant-skill-option-desc">{skill.description}</span>
+                  ) : null}
+                  {isPendingSkill(skill) ? (
+                    <span className="assistant-skill-option-desc">
+                      {t("conversationSkills.menu.pendingBadge")}
+                      {t("conversationSkills.menu.pendingHint")}
+                    </span>
+                  ) : null}
+                </span>
+              </label>
+            );
+          })}
         </div>
       )}
       <div className="assistant-skill-menu-footer">

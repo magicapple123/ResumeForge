@@ -12,15 +12,12 @@
  * - AI 改写（enhanced_kept / ai_rewrite）**永不显示为已确认**——即使标注里带了
  *   verification_status="已确认"（防御性：正常链路不会带），渲染层也要压掉。
  */
-import { Collapse, Space, Tag, Typography } from "antd";
+import { Collapse, Typography } from "antd";
 import { useMemo } from "react";
 import type { MessageKey } from "../../i18n";
 import { useI18n } from "../../i18n/i18nContext";
-import { claimResponsibilityColor, claimStatusColor } from "../claims/claimPresentation";
-import { claimResponsibilityLabelKey, claimStatusLabelKey } from "../../i18n/enum/claims";
-import { describeResumeFieldPath } from "../../utils/resumeFieldPath";
 import type { FactAnnotation, ResumeContent } from "../../types";
-import { ORIGIN_COLORS, ORIGIN_LABELS, canShowVerified } from "./factAnnotationMeta";
+import FactAnnotationItem from "./factAnnotationItem";
 
 const SECTION_ORDER = [
   "summary",
@@ -100,64 +97,15 @@ export default function EvidencePanel({ annotations, content, embedded = false }
                 {titleKey ? t(titleKey) : group.section}
               </Typography.Text>
               <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
-                {group.items.map((annotation) => {
-                  const verified = canShowVerified(annotation)
-                    ? annotation.verification_status
-                    : null;
-                  // 标注里的状态/承担程度是后端下发的协议值：映射到语言包，
-                  // 认不出的取值回退原样显示（不丢信息）。
-                  const verifiedKey = verified ? claimStatusLabelKey(verified) : undefined;
-                  const responsibilityKey = claimResponsibilityLabelKey(
-                    annotation.responsibility ?? "",
-                  );
-                  const originKey = ORIGIN_LABELS[annotation.origin];
-                  return (
-                    <div
-                      key={`${annotation.path}:${annotation.origin}`}
-                      style={{ fontSize: 13, lineHeight: 1.7 }}
-                    >
-                      <Space size={6} wrap>
-                        <Typography.Text style={{ fontSize: 13 }}>
-                          {describeResumeFieldPath(annotation.path, content)}
-                        </Typography.Text>
-                        <Tag
-                          color={ORIGIN_COLORS[annotation.origin] ?? "default"}
-                          style={{ marginInlineEnd: 0 }}
-                        >
-                          {originKey ? t(originKey) : annotation.origin}
-                        </Tag>
-                        {verified && (
-                          <Tag color={claimStatusColor(verified)}>
-                            {verifiedKey ? t(verifiedKey) : verified}
-                          </Tag>
-                        )}
-                        {annotation.responsibility && (
-                          <Tag color={claimResponsibilityColor(annotation.responsibility)}>
-                            {responsibilityKey ? t(responsibilityKey) : annotation.responsibility}
-                          </Tag>
-                        )}
-                      </Space>
-                      {annotation.source_fact && (
-                        <Typography.Paragraph
-                          type="secondary"
-                          style={{ fontSize: 12, margin: "2px 0 0" }}
-                        >
-                          {t("resume.evidence.basis", { fact: annotation.source_fact })}
-                        </Typography.Paragraph>
-                      )}
-                      {annotation.boundary && (
-                        <Typography.Paragraph
-                          type="secondary"
-                          style={{ fontSize: 12, margin: "2px 0 0" }}
-                        >
-                          {t("resume.evidence.boundary", {
-                            boundary: annotation.boundary,
-                          })}
-                        </Typography.Paragraph>
-                      )}
-                    </div>
-                  );
-                })}
+                {group.items.map((annotation) => (
+                  // 单条标注的渲染件与中栏字段徽标的弹层**同一份**（#24 24E 抽出，
+                  // 见 `factAnnotationItem.tsx`）：色板 / key / 压缩规则只有一处实现。
+                  <FactAnnotationItem
+                    key={`${annotation.path}:${annotation.origin}`}
+                    annotation={annotation}
+                    content={content}
+                  />
+                ))}
               </div>
             </div>
           );

@@ -24,16 +24,13 @@ const assistantPermission = {
   "assistantPermission.level.read_full.desc": "可读姓名、电话等真实资料",
   "assistantPermission.level.write_confirm.desc": "可改数据，读仍脱敏",
   "assistantPermission.level.write_full.desc": "可读真实资料，也可改数据",
-  "assistantPermission.notice.readFull.title": "放宽读取已对当前对话生效",
-  "assistantPermission.notice.readFull.body":
-    "助手会看到姓名、电话、邮箱等真实资料与网申填写值，这些内容会发送给当前配置的模型服务。",
-  "assistantPermission.notice.writeFull.title": "完全权限已对当前对话生效",
-  "assistantPermission.notice.writeFull.body":
-    "助手会读取真实资料，并可直接修改你的数据而不再逐条询问。可以随时切回。",
-  "assistantPermission.notice.closeAria": "关闭本次权限提示",
   "assistantPermission.confirm.title": "开启{level}？",
   "assistantPermission.confirm.body": "开启后助手会直接修改你的数据，不再逐条询问。可以随时切回。",
-  "assistantPermission.confirm.ok": "开启",
+  "assistantPermission.confirm.readFullBody":
+    "开启后助手可以读到你的姓名、电话等真实资料（不再脱敏）。可以随时切回。",
+  "assistantPermission.confirm.risk": "我已知晓风险，并愿意继续",
+  "assistantPermission.confirm.ok": "启用{level}",
+  "assistantPermission.confirm.okReadFull": "启用放宽读取",
   "assistantPermission.confirm.cancel": "先不开",
   "assistantPermission.settings.title": "求职助手 · 数据权限",
   "assistantPermission.settings.intro":

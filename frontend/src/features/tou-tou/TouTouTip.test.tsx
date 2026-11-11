@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 投投小贴士（`.tt-tip`）的视口夹取（8-A 同批）。
+ * 投投信号气泡（`.tt-tip`）的视口夹取与内容（8-A 同批 + #27B/27D）。
  *
- * 气泡的定位规则散在 CSS 里：贴上下边时 `left: 50%` + `translateX(-50%)` 居中，
- * 贴左右边时挂在球旁边。球被拖到边上、视口又窄的时候两种摆法都会撞出视口——
- * 这里守"撞出视口"这件事，以及"夹取没有动 transform"这条硬约定。
+ * 定位规则散在 CSS 里：贴上下边时 `left: 50%` + `translateX(-50%)` 居中，贴左右边时
+ * 挂在球旁边。球被拖到边上、视口又窄的时候两种摆法都会撞出视口——这里守"撞出视口"
+ * 这件事，以及"夹取没有动 transform"这条硬约定。
+ *
+ * 内容侧守三件事：信号文案走 key 渲染期翻译、主行动可点、「这类别再提示」可点。
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import TouTouTip from "./TouTouTip";
+
+const SIGNAL_TEXT = "touTou.signal.layoutOverflow.title" as const;
 
 /** jsdom 不做布局（rect 全 0），夹取要用的尺寸只能自己喂。 */
 const REAL_RECT = HTMLElement.prototype.getBoundingClientRect;
@@ -51,15 +55,29 @@ afterEach(() => {
 });
 
 describe("TouTouTip", () => {
-  it("渲染文案与关闭键，关闭键可点", () => {
+  it("渲染信号文案、主行动与「这类别再提示」，关闭键可点", () => {
     const onClose = vi.fn();
+    const onAction = vi.fn();
+    const onMute = vi.fn();
     render(
       <div className="tt-shell is-edge-bottom">
-        <TouTouTip onClose={onClose} text="touTou.tips.results" />
+        <TouTouTip
+          onClose={onClose}
+          text={SIGNAL_TEXT}
+          params={{ needed: 3, limit: 1 }}
+          actionLabel="touTou.signal.layoutOverflow.action"
+          onAction={onAction}
+          muteLabel="touTou.signal.mute"
+          onMute={onMute}
+        />
       </div>,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent(t("touTou.tips.results"));
+    expect(screen.getByRole("status")).toHaveTextContent(t(SIGNAL_TEXT, { needed: 3, limit: 1 }));
+    fireEvent.click(screen.getByRole("button", { name: t("touTou.signal.layoutOverflow.action") }));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: t("touTou.signal.mute") }));
+    expect(onMute).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: t("touTou.tip.close") }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -69,7 +87,7 @@ describe("TouTouTip", () => {
     stubLayout({ shellLeft: 148, tipWidth: 280, viewportWidth: 360 });
     render(
       <div className="tt-shell is-edge-bottom">
-        <TouTouTip onClose={vi.fn()} text="touTou.tips.results" />
+        <TouTouTip onClose={vi.fn()} text={SIGNAL_TEXT} />
       </div>,
     );
 
@@ -86,7 +104,7 @@ describe("TouTouTip", () => {
     stubLayout({ shellLeft: 24, tipWidth: 280, viewportWidth: 360 });
     render(
       <div className="tt-shell is-edge-left">
-        <TouTouTip onClose={vi.fn()} text="touTou.tips.results" />
+        <TouTouTip onClose={vi.fn()} text={SIGNAL_TEXT} />
       </div>,
     );
 
@@ -100,7 +118,7 @@ describe("TouTouTip", () => {
     stubLayout({ shellLeft: 272, tipWidth: 280, viewportWidth: 360 });
     render(
       <div className="tt-shell is-edge-right">
-        <TouTouTip onClose={vi.fn()} text="touTou.tips.results" />
+        <TouTouTip onClose={vi.fn()} text={SIGNAL_TEXT} />
       </div>,
     );
 
@@ -113,7 +131,7 @@ describe("TouTouTip", () => {
   it("量不到尺寸时不写内联定位，沿用 CSS 的 50% 居中（避免闪烁）", () => {
     render(
       <div className="tt-shell is-edge-bottom">
-        <TouTouTip onClose={vi.fn()} text="touTou.tips.results" />
+        <TouTouTip onClose={vi.fn()} text={SIGNAL_TEXT} />
       </div>,
     );
 

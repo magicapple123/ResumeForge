@@ -102,6 +102,52 @@ export function useAssistantStream(options: Options) {
       webSearch,
     ],
   );
+  /**
+   * #13A 重新生成最后一条助手回答：与 send 共用同一套流式生命周期与收尾刷新，
+   * 只是不建会话、不插用户消息。生成期间 store 的 sending 为真，按钮据此置灰。
+   */
+  const regenerate = useCallback(
+    (conversationId: number, messageId: number) =>
+      sendAssistantStreamMessage(
+        "",
+        () => {},
+        {
+          activeIdRef,
+          reloadConversations,
+          loadDetail,
+          createConversation,
+          clearAttachments,
+          attachmentReadsRef,
+          attachmentsRef,
+          setTouTouStatus,
+          jobId,
+          resumeId,
+          webSearch,
+          reasoningEffort,
+          surface,
+          quotedMessageId,
+          clearQuote,
+        },
+        { conversationId, messageId },
+      ),
+    [
+      activeIdRef,
+      attachmentReadsRef,
+      attachmentsRef,
+      clearAttachments,
+      clearQuote,
+      createConversation,
+      jobId,
+      loadDetail,
+      quotedMessageId,
+      reasoningEffort,
+      reloadConversations,
+      resumeId,
+      setTouTouStatus,
+      surface,
+      webSearch,
+    ],
+  );
   const stop = useCallback(() => abortAssistantStream(), []);
-  return { ...state, send, stop };
+  return { ...state, send, stop, regenerate };
 }

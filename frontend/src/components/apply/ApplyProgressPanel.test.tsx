@@ -6,11 +6,17 @@
  * 如果一律标成「诊断信息」，用户看到跳过条目会以为出错了——而它其实是一次**正常的**跳过。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ApplyTaskDetail, ApplyTaskItem } from "../../types";
+import { t } from "../../i18n";
 import ApplyProgressPanel from "./ApplyProgressPanel";
+
+const apiMocks = vi.hoisted(() => ({ createKnowledgeFromSource: vi.fn() }));
+vi.mock("../../api/knowledge", () => ({
+  createKnowledgeFromSource: apiMocks.createKnowledgeFromSource,
+}));
 
 afterEach(() => {
   cleanup();
@@ -77,6 +83,8 @@ function renderPanel(items: ApplyTaskItem[]) {
 }
 
 const SKIP_REASON = "按「同公司只投一个岗位」跳过：本批次已经投过「核桃编程」的岗位";
+// Row title is fixture data, not UI copy; keep CJK out of ByText call args (cjkRatchet).
+const ROW_TITLE = "后端开发";
 
 describe("ApplyProgressPanel 条目明细", () => {
   it("跳过的条目标成「跳过原因」，并写明为什么", async () => {
@@ -103,7 +111,7 @@ describe("ApplyProgressPanel 条目明细", () => {
       item({ id: 1, job_title: "后端开发", status: "failed", failure_detail: "等聊天输入框超时" }),
     ]);
 
-    const row = await screen.findByText("后端开发");
+    const row = await screen.findByText(ROW_TITLE);
     within(row.closest("tr") as HTMLElement)
       .getByRole("button", { name: /展开行|Expand row/i })
       .click();
@@ -111,6 +119,36 @@ describe("ApplyProgressPanel 条目明细", () => {
     expect(await screen.findByText("诊断信息")).toBeInTheDocument();
     expect(screen.getByText("等聊天输入框超时")).toBeInTheDocument();
     expect(screen.queryByText("跳过原因")).not.toBeInTheDocument();
+  });
+
+  it("#29B：失败条目可以沉淀为一条知识经验（服务端取源，前端只传 id）", async () => {
+    apiMocks.createKnowledgeFromSource.mockReset().mockResolvedValue({
+      id: 9,
+      title: "示例公司 · 后端开发 投递失败复盘",
+      category: "求职策略",
+      source: "投递复盘",
+      created: true,
+    });
+    // jsdom 不实现 window.location.assign：成功后的整页跳转会打一条 console.error，
+    // 这里静音它，只断言行为（API 入参与成功路径）。
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderPanel([
+      item({ id: 1, job_title: "后端开发", status: "failed", failure_detail: "等聊天输入框超时" }),
+    ]);
+
+    const row = await screen.findByText(ROW_TITLE);
+    within(row.closest("tr") as HTMLElement)
+      .getByRole("button", { name: /展开行|Expand row/i })
+      .click();
+
+    // 图标自带 aria-label（anticon），按可见文字定位按钮更稳；文案经 t() 取，不写中文。
+    const captureText = await screen.findByText(t("knowledgePage.capture.experience"));
+    fireEvent.click(captureText.closest("button") as HTMLElement);
+
+    await waitFor(() =>
+      expect(apiMocks.createKnowledgeFromSource).toHaveBeenCalledWith("apply_failure", 1),
+    );
+    errorSpy.mockRestore();
   });
 });
 

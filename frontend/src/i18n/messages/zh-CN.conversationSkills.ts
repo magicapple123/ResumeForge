@@ -8,6 +8,9 @@ const conversationSkills = {
   "conversationSkills.menu.budgetPending": "本对话 {count} 个 · 发送第一条消息后开始计预算",
   "conversationSkills.menu.budgetOver": "已超预算 {over} 字，靠后的技能会被截断",
   "conversationSkills.menu.empty": "还没有技能，先到工作台新建一个",
+  // #31D/#31F：自动生成但尚未验证的技能不可启用（后端 409 的前端前置提示）
+  "conversationSkills.menu.pendingBadge": "〔待验证〕",
+  "conversationSkills.menu.pendingHint": "待验证：先到技能页确认通过之后才能启用",
   "conversationSkills.chip.disable": "停用技能「{name}」",
   "conversationSkills.chip.truncatedHint":
     "提示词超出本对话预算，未完整加载；精简提示词或停用其它技能后可完整生效",

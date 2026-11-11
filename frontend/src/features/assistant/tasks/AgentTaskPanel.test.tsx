@@ -231,6 +231,12 @@ describe("AgentTaskPanel", () => {
         name: buttonName("assistantUi.tasks.action.cancel"),
       }),
     );
+    // 取消不可恢复：必须先过二次确认（确认按钮写「停止执行」而不是「确定」）。
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: buttonName("assistantUi.tasks.action.cancelConfirm"),
+      }),
+    );
     expect(onCancel).toHaveBeenCalledWith(6);
     // 终态不提供操作。
     expect(
@@ -267,5 +273,50 @@ describe("AgentTaskPanel", () => {
     );
     expect(screen.getByRole("status").textContent).toBe(t("assistantUi.tasks.error"));
     expect(screen.getByTestId("agent-task-1")).toBeTruthy();
+  });
+
+  it("进行中的任务显示禁用的「进行中」按钮，不出现开始/继续", () => {
+    renderPanel([makeTask(8, "running")]);
+    const runningButton = within(screen.getByTestId("agent-task-8")).getByRole("button", {
+      name: buttonName("assistantUi.tasks.status.running"),
+    });
+    expect(runningButton).toBeDisabled();
+    expect(
+      within(screen.getByTestId("agent-task-8")).queryByRole("button", {
+        name: buttonName("assistantUi.tasks.action.start"),
+      }),
+    ).toBeNull();
+    expect(
+      within(screen.getByTestId("agent-task-8")).queryByRole("button", {
+        name: buttonName("assistantUi.tasks.action.resume"),
+      }),
+    ).toBeNull();
+  });
+
+  it("失败任务显示失败原因；终态不出现开始/继续/取消", () => {
+    // 错误文案是后端返回的数据（不是界面文案）：用 \u 转义写出，避免新增中文棘轮行。
+    const failureText = "\u6a21\u578b\u8fde\u63a5\u88ab\u91cd\u7f6e";
+    const failed = makeTask(9, "failed", { error: failureText, resume_cursor: 1 });
+    failed.steps[1].status = "failed";
+    failed.steps[1].error = failureText;
+    renderPanel([failed]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: t("tasksCard.finishedCount", { count: 1 }) }),
+    );
+    expect(screen.getByTestId("agent-task-error-9")).toHaveTextContent(
+      t("assistantUi.tasks.failedReason", { error: failureText }),
+    );
+    for (const key of [
+      "assistantUi.tasks.action.start",
+      "assistantUi.tasks.action.resume",
+      "assistantUi.tasks.action.cancel",
+    ] as const) {
+      expect(
+        within(screen.getByTestId("agent-task-9")).queryByRole("button", {
+          name: buttonName(key),
+        }),
+      ).toBeNull();
+    }
   });
 });

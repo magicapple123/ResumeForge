@@ -1,0 +1,47 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 技能二级浮出层（#32）：一级面板留在原地，鼠标在「技能」行停留后在右侧浮出二级。
+ *
+ * 单独成文件而不塞进 `assistant-composer.css`：那个文件已 493/500 行，本层需要的注释
+ * （为什么要有 12px 桥）压不进去——把规则硬塞成一行会连带 `format:check` 变红。
+ *
+ * 三条约束决定了写法：
+ * - **不能有真空**：二级与一级之间留 12px 间隙，`::before` 把这 12px 铺成透明桥。
+ *   不铺的话，指针斜向移动会先离开一级、又还没进二级，mouseleave 当场排上收起计时器，
+ *   面板就在手底下闪一下没了（桥的 `width` 必须与 TSX 的 `SKILL_FLYOUT_GAP` 一致）。
+ *   翻到左侧时桥换到另一边（`.is-left`）。
+ * - **定位交给 TSX**：left/top 由 `useLayoutEffect` 在展开那一刻算一次（右侧不足翻左、
+ *   下方溢出上移），这里只负责「挂在哪、怎么连」，不放会随滚动变化的值。
+ * - **外观复用 `.composer-add-panel`**：底色 / 描边 / 阴影 / 宽度都与一级一致，
+ *   两处不会漂移（浮出层的 className 同时带 `composer-add-panel`）。
+ *
+ * `.is-empty`：搜索无匹配时，列表自带的空态文案（"还没有技能"）是错的，压掉它，
+ * 换成 AddMenu 渲染的「没有匹配的技能」；底部预算行仍由 `SkillPicker` 出，口径不分叉。
+ */
+.composer-add-skills-anchor {
+  display: block;
+  position: relative;
+}
+
+.composer-add-flyout {
+  position: absolute;
+  z-index: 1;
+}
+
+.composer-add-flyout::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 100%;
+  bottom: 0;
+  width: 12px;
+}
+
+.composer-add-flyout.is-left::before {
+  right: auto;
+  left: 100%;
+}
+
+.composer-add-panel.is-empty .assistant-skill-menu-hint {
+  display: none;
+}

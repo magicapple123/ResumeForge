@@ -13,7 +13,7 @@
  * 时**显示醒目、可操作的标记。判据完全在后端，前端只展示 `reasons`，绝不在此再判一次。
  */
 import { GlobalOutlined, WarningFilled } from "@ant-design/icons";
-import { Space, Tag, Typography } from "antd";
+import { Space, Tag, Tooltip, Typography } from "antd";
 import { getSiteHealth, listSites } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
 import { type SiteHealthList, type SiteList, siteDisplayName, siteHealthFor } from "../../types";
@@ -63,9 +63,13 @@ export default function CurrentSiteBar({ refreshKey = 0 }: Props) {
           <Typography.Text strong>{current}</Typography.Text>
         </Typography.Text>
         {capabilities && <Tag color="blue">{capabilities}</Tag>}
-        <Typography.Text type="secondary">
-          {onlyOne ? t("applyUi.siteBar.onlyOne") : t("applyUi.siteBar.switchHint")}
-        </Typography.Text>
+        {/* #14G 第二版：这句说明原先在 1366 下换行，把站点行顶到 88px（首屏表格因此少两行）。
+            现在单行省略、全文在悬停里——信息没删，只是不再常驻两行。 */}
+        <Tooltip title={onlyOne ? t("applyUi.siteBar.onlyOne") : t("applyUi.siteBar.switchHint")}>
+          <Typography.Text type="secondary" className="apply-site-bar-hint" ellipsis>
+            {onlyOne ? t("applyUi.siteBar.onlyOne") : t("applyUi.siteBar.switchHint")}
+          </Typography.Text>
+        </Tooltip>
       </Space>
       {degraded && (
         // 醒目标记：只在 degraded 时出现，不给健康站点加装饰。aria-label 用后端原因文本，

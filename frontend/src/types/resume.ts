@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历内容、生成选项和简历建议类型。 */
+import type { RagRetrieval } from "./ragRetrieval";
 import type { ResumeFormatConfig } from "./resumeFormat";
 import type { ResumeProfileUsageSnapshot } from "./resumeProfileUsage";
 import type { TemplateMarketPreset } from "./templateMarket";
@@ -468,4 +469,9 @@ export interface ResumeGenerateTask {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+  /** #30：本次生成的语义检索回执（尚未检索时缺省）。 */
+  rag?: RagRetrieval | null;
 }
+// #30 语义检索回执（RagState / RagImpact / RagRetrieval）单列 ragRetrieval.ts；既有从
+// "../types/resume" 或 "../types" 导入这些类型的路径由下面的 re-export 保持不变。
+export type { RagImpact, RagRetrieval, RagState } from "./ragRetrieval";

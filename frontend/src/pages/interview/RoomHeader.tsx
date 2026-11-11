@@ -15,6 +15,7 @@ import {
   interviewerStyleLabelKey,
 } from "../../i18n/enum/interview";
 import { useLocale } from "../../i18n/i18nContext";
+import { CompanyKnowledgeSection } from "./CompanyKnowledgeSection";
 
 export function RoomHeader({
   session,
@@ -47,49 +48,55 @@ export function RoomHeader({
   const current = Math.min(answered + (finished ? 0 : 1), session.rounds);
 
   return (
-    <div className="interview-room-head">
-      <Space size={6} wrap>
-        <b>{session.title}</b>
-        <Tag color="blue">{typeLabelKey ? t(typeLabelKey) : session.interview_type}</Tag>
-        <Tag>{difficultyLabelKey ? t(difficultyLabelKey) : session.difficulty}</Tag>
-        <Tag>{styleLabelKey ? t(styleLabelKey) : session.interviewer_style}</Tag>
-        {session.job_title ? <Tag color="geekblue">{session.job_title}</Tag> : null}
-        {/* 关联简历（0066）：面试官读的就是这份简历，摆在头上让用户随时能确认。 */}
-        {session.resume_title ? <Tag color="cyan">{session.resume_title}</Tag> : null}
-        {/* 导入的材料文件名（#41）：文件这一侧没有标题可显示，就把文件名摆出来。 */}
-        {session.job_material_name ? <Tag color="geekblue">{session.job_material_name}</Tag> : null}
-        {session.resume_material_name ? (
-          <Tag color="cyan">{session.resume_material_name}</Tag>
-        ) : null}
-      </Space>
-      <Space size={6} wrap>
-        <Typography.Text type="secondary">
-          {session.rounds_min != null
-            ? t("interview.round.withClosing", { current })
-            : t("interview.round.progress", { current, total: session.rounds })}
-        </Typography.Text>
-        {/* 计时器只在用户点过「准备好了」之后出现：没开始就不该有读数。 */}
-        {showTimer ? (
-          <Typography.Text type="secondary" className="interview-timer">
-            <ClockCircleOutlined /> {t("interviewPage.timer.label")} {timerLabel}
+    <>
+      <div className="interview-room-head">
+        <Space size={6} wrap>
+          <b>{session.title}</b>
+          <Tag color="blue">{typeLabelKey ? t(typeLabelKey) : session.interview_type}</Tag>
+          <Tag>{difficultyLabelKey ? t(difficultyLabelKey) : session.difficulty}</Tag>
+          <Tag>{styleLabelKey ? t(styleLabelKey) : session.interviewer_style}</Tag>
+          {session.job_title ? <Tag color="geekblue">{session.job_title}</Tag> : null}
+          {/* 关联简历（0066）：面试官读的就是这份简历，摆在头上让用户随时能确认。 */}
+          {session.resume_title ? <Tag color="cyan">{session.resume_title}</Tag> : null}
+          {/* 导入的材料文件名（#41）：文件这一侧没有标题可显示，就把文件名摆出来。 */}
+          {session.job_material_name ? (
+            <Tag color="geekblue">{session.job_material_name}</Tag>
+          ) : null}
+          {session.resume_material_name ? (
+            <Tag color="cyan">{session.resume_material_name}</Tag>
+          ) : null}
+        </Space>
+        <Space size={6} wrap>
+          <Typography.Text type="secondary">
+            {session.rounds_min != null
+              ? t("interview.round.withClosing", { current })
+              : t("interview.round.progress", { current, total: session.rounds })}
           </Typography.Text>
-        ) : null}
-        {!finished && (
-          <Button
-            size="small"
-            danger
-            icon={<StopOutlined />}
-            onClick={onEndEarly}
-            loading={submitting}
-          >
-            {t("interview.action.end")}
+          {/* 计时器只在用户点过「准备好了」之后出现：没开始就不该有读数。 */}
+          {showTimer ? (
+            <Typography.Text type="secondary" className="interview-timer">
+              <ClockCircleOutlined /> {t("interviewPage.timer.label")} {timerLabel}
+            </Typography.Text>
+          ) : null}
+          {!finished && (
+            <Button
+              size="small"
+              danger
+              icon={<StopOutlined />}
+              onClick={onEndEarly}
+              loading={submitting}
+            >
+              {t("interview.action.end")}
+            </Button>
+          )}
+          <Button size="small" icon={<ThunderboltOutlined />} onClick={onNew}>
+            {t("interview.action.new")}
           </Button>
-        )}
-        <Button size="small" icon={<ThunderboltOutlined />} onClick={onNew}>
-          {t("interview.action.new")}
-        </Button>
-      </Space>
-    </div>
+        </Space>
+      </div>
+      {/* #29D：这家公司面经 N 条（读知识库 related；0 条/无公司名时整块不渲染）。 */}
+      <CompanyKnowledgeSection company={session.company} />
+    </>
   );
 }
 

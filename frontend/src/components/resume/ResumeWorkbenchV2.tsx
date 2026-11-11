@@ -14,12 +14,8 @@
  */
 import { App } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { RefObject } from "react";
-import type { GenerationContextSnapshot } from "../../features/career-scenarios/types";
-import type { ResumeDetail, ResumeLanguage, ResumeLayout } from "../../types";
-import type { DocumentConversionSummary } from "../../types/resume";
-import type { DocumentFieldCatalog, ResumeDocument } from "../../types/resumeDocument";
-import type { ResumeDocumentPipeline } from "../../features/resume-document/types";
+import type { ResumeDetail } from "../../types";
+import type { ResumeDocument } from "../../types/resumeDocument";
 import {
   asResumeDocument,
   documentName,
@@ -29,8 +25,7 @@ import { useOpenLayoutBaseline } from "../../features/resume-document/useOpenLay
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
 import { useLocale } from "../../i18n/i18nContext";
-import type { ExactPreviewOptions, ResumePreviewHandle } from "../ResumePreview";
-import type { PreviewMode } from "../resume-preview/config";
+import type { ResumePreviewHandle } from "../ResumePreview";
 import WorkbenchColumnsBody from "./WorkbenchColumnsBody";
 import WorkbenchModalFrame from "./WorkbenchModalFrame";
 import WorkbenchPanelsDrawer from "./WorkbenchPanelsDrawer";
@@ -57,52 +52,10 @@ import { useWorkbenchV2Save } from "./useWorkbenchV2Save";
 import { useWorkbenchCloseGuard } from "./useWorkbenchCloseGuard";
 import { useStructureHighlightTargets } from "./structure/useStructureHighlightTargets";
 import "./workbench-v2.css";
+import type { ResumeWorkbenchV2Props } from "./resumeWorkbenchV2Props";
 
-export interface ResumeWorkbenchV2Props {
-  open: boolean;
-  html: string;
-  warnings: string[];
-  /** 记录里的页数上限（预览虚线按它切）。 */
-  pages: number;
-  onClose: () => void;
-  layout?: ResumeLayout;
-  resumeId?: number;
-  resumeTitle?: string;
-  resumeLanguage?: ResumeLanguage;
-  relayouting?: boolean;
-  hasPhoto?: boolean;
-  pagesNeeded?: number | null;
-  onApplyLayout?: (next: ResumeLayout) => void;
-  onCommitLayout?: () => Promise<boolean>;
-  documentPipeline?: ResumeDocumentPipeline;
-  layoutSaving?: boolean;
-  onExport?: () => void;
-  previewRef?: RefObject<ResumePreviewHandle | null>;
-  previewMode?: PreviewMode;
-  onPreviewModeChange?: (mode: PreviewMode) => void;
-  exactPreview?: ExactPreviewOptions;
-  /** 这份简历当前已保存的 v2 文档；null/缺省 = 中栏不渲染（只读预览宿主）。 */
-  document?: ResumeDocument | null;
-  /** 没有 pipeline 的宿主（生成流程只读预览）：无条件保存正文。 */
-  onSaveContent?: (content: ResumeDocument, expectedRevision?: number) => Promise<number | void>;
-  onEditorDirtyChange?: (dirty: boolean) => void;
-  isDraft?: boolean;
-  onPublishDraft?: () => Promise<boolean>;
-  /** 旧简历转换摘要：显示在编辑区顶部，保存成功后宿主置空。 */
-  conversion?: DocumentConversionSummary | null;
-  /** 后端字段目录：编辑器「添加字段」菜单与结构面板的仅素材徽标共用。 */
-  fieldCatalog?: DocumentFieldCatalog | null;
-  /** 后端 resume_record.document_mode（左栏文档模式开关的当前值）。 */
-  documentMode?: "resume" | "long_cv";
-  /** 文档模式保存成功：宿主用后端最新详情刷新 detail/html/revision。 */
-  onDocumentModeSaved?: (detail: ResumeDetail) => void;
-  /**
-   * 页签内组件（表达资产插入 / 双语采纳 / 来源采纳）**服务端已落库**后的宿主替换出口：
-   * 宿主更新 detail/html/revision 并重排。工作台内部还会把历史基线对齐到新文档。
-   */
-  onAdoptDocument?: (document: ResumeDocument, revision: number) => void;
-  contextSnapshot?: GenerationContextSnapshot | null;
-}
+// 既有引用方从这里 import 类型，保持原路径可用。
+export type { ResumeWorkbenchV2Props };
 
 export default function ResumeWorkbenchV2({
   open,
@@ -137,6 +90,8 @@ export default function ResumeWorkbenchV2({
   onDocumentModeSaved,
   onAdoptDocument,
   contextSnapshot = null,
+  factAnnotations = null,
+  rationale = null,
 }: ResumeWorkbenchV2Props) {
   useLocale();
   const { message } = App.useApp();
@@ -331,6 +286,7 @@ export default function ResumeWorkbenchV2({
         conversion={showConversion ? conversion : null}
         onDismissConversion={() => setConversionDismissed(true)}
         onCollectAsset={(path) => void collectAsset(path)}
+        factAnnotations={factAnnotations}
         fillMenu={
           resumeId && safeDocument ? (
             <ProfileFillMenu
@@ -376,6 +332,9 @@ export default function ResumeWorkbenchV2({
       pagesNeeded={pagesNeeded}
       resumeId={resumeId ?? null}
       revision={documentPipeline?.revision ?? null}
+      // #24 接线：中栏正文的草稿脏也计入左栏「未保存」（版式脏由左栏自己判）。
+      dirty={save.dirty}
+      rationale={rationale}
       documentMode={documentMode}
       onDocumentModeSaved={onDocumentModeSaved}
       layoutSaving={layoutSaving}

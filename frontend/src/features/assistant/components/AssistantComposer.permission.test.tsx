@@ -90,37 +90,67 @@ async function chooseLevel(levelKey: MessageKey) {
   fireEvent.click(await screen.findByText(t(levelKey)));
 }
 
-describe("数据权限提示条集成", () => {
-  it("默认（跟随全局=仅查看）不显示提示条", async () => {
+describe("数据权限一次性确认卡（#12）", () => {
+  const modal = () => document.querySelector(".ant-modal");
+
+  it("默认（跟随全局=仅查看）不弹确认卡", async () => {
     renderComposer({ conversationId: 7 });
     await waitFor(() => expect(permissionApiMocks.getAssistantPermission).toHaveBeenCalled());
-    expect(screen.queryByText(t("assistantPermission.notice.readFull.title"))).toBeNull();
+    expect(modal()).toBeNull();
   });
 
-  it("切到放宽读取：出现琥珀提示条，可关闭，且按会话落 localStorage", async () => {
+  it("放宽读取：弹确认卡，读档位无需勾选，确认后按会话落 localStorage", async () => {
     renderComposer({ conversationId: 7 });
     await chooseLevel("assistantPermission.level.read_full");
 
-    expect(
-      await screen.findByText(t("assistantPermission.notice.readFull.title")),
-    ).toBeInTheDocument();
-    expect(window.localStorage.getItem(permissionStorageKey(7))).toBe("read_full");
-
+    await waitFor(() => expect(modal()).not.toBeNull());
+    // 读档位没有勾选框，主按钮直接可用
+    expect(screen.queryByRole("checkbox")).toBeNull();
     fireEvent.click(
-      screen.getByRole("button", { name: t("assistantPermission.notice.closeAria") }),
+      screen.getByRole("button", { name: t("assistantPermission.confirm.okReadFull") }),
     );
     await waitFor(() =>
-      expect(screen.queryByText(t("assistantPermission.notice.readFull.title"))).toBeNull(),
+      expect(window.localStorage.getItem(permissionStorageKey(7))).toBe("read_full"),
+    );
+    await waitFor(() => expect(modal()).toBeNull());
+  });
+
+  it("写档位：未勾选时主按钮 disabled，勾选后才能确认", async () => {
+    renderComposer({ conversationId: 7 });
+    await chooseLevel("assistantPermission.level.write_full");
+
+    await waitFor(() => expect(modal()).not.toBeNull());
+    const ok = await screen.findByRole("button", {
+      name: t("assistantPermission.confirm.ok", {
+        level: t("assistantPermission.level.write_full"),
+      }),
+    });
+    expect(ok).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(ok).toBeEnabled();
+    fireEvent.click(ok);
+    await waitFor(() =>
+      expect(window.localStorage.getItem(permissionStorageKey(7))).toBe("write_full"),
     );
   });
 
-  it("已存过覆盖值的会话：重新打开立即按该档位生效（提示条直接出现）", async () => {
+  it("已确认过的会话重开不再弹；取消不写任何存储", async () => {
     window.localStorage.setItem(permissionStorageKey(7), "write_full");
     renderComposer({ conversationId: 7 });
+    // 覆盖值存在但该档位没确认过 → 仍要弹一次
+    await waitFor(() => expect(modal()).not.toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: t("assistantPermission.confirm.cancel") }));
+    await waitFor(() => expect(modal()).toBeNull());
+    cleanup();
 
-    expect(
-      await screen.findByText(t("assistantPermission.notice.writeFull.title")),
-    ).toBeInTheDocument();
+    // 用户确认一次后，同一会话重开不再弹
+    window.localStorage.setItem(
+      "rf.assistant.permissionAck.7",
+      JSON.stringify({ levels: ["write_full"] }),
+    );
+    renderComposer({ conversationId: 7 });
+    await waitFor(() => expect(permissionApiMocks.getAssistantPermission).toHaveBeenCalled());
+    expect(modal()).toBeNull();
   });
 
   it("新会话（无 conversationId）回到「跟随全局」且不可改", async () => {
@@ -128,6 +158,6 @@ describe("数据权限提示条集成", () => {
 
     const trigger = await screen.findByRole("button", { name: /跟随全局/ });
     expect(trigger).toBeDisabled();
-    expect(window.localStorage.length).toBe(0);
+    expect(modal()).toBeNull();
   });
 });

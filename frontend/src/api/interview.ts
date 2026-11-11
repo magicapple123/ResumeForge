@@ -8,6 +8,7 @@
  * （`submitInterviewAnswerStream`）走 SSE、不限时，不需要预算。
  */
 import { t } from "../i18n";
+import { recordVoiceTelemetry } from "../features/interview-voice/telemetry";
 import type {
   InterviewAnalysis,
   InterviewAnswerReview,
@@ -146,17 +147,29 @@ export async function submitInterviewAnswerStream(
   onPhase?: (phase: "finishing") => void,
   /** 停止本轮用：abort 即断开，服务端不再继续烧 token。 */
   signal?: AbortSignal,
+  /** #26 P0 幂等键：同一轮重连/重试复用同一个 id，服务端不会重复计轮（可选）。 */
+  clientTurnId?: string,
 ): Promise<InterviewAnswerResult> {
   let result: InterviewAnswerResult | null = null;
+  // 26H：LLM 首字延迟（第一个 question_delta 到达）。无 TTS 时它就是用户感知的首字延迟。
+  const startedAt = performance.now();
+  let firstDeltaAt: number | null = null;
   // 注意必须带 `/api` 前缀：consumeSSE 拿到什么就 fetch 什么（不像 request() 会自动
   // 补前缀），漏了就会打到前端自身源上 → 404「请求失败（HTTP 404）」。
   await consumeSSE<InterviewAnswerStreamEvent>(
     `/api/interview/${id}/answers/stream`,
-    { content },
+    { content, ...(clientTurnId ? { client_turn_id: clientTurnId } : {}) },
     (event) => {
       if (event.type === "phase" && event.phase) onPhase?.(event.phase);
-      else if (event.type === "question_delta" && event.text) onQuestionDelta(event.text);
-      else if (event.type === "done" && event.result) result = event.result;
+      else if (event.type === "question_delta" && event.text) {
+        if (firstDeltaAt === null) {
+          firstDeltaAt = performance.now();
+          recordVoiceTelemetry("interview-voice.llm-ttft", {
+            llmTtftMs: Math.round(firstDeltaAt - startedAt),
+          });
+        }
+        onQuestionDelta(event.text);
+      } else if (event.type === "done" && event.result) result = event.result;
       else if (event.type === "error")
         throw new Error(event.detail || t("apiErrors.interview.streamFailed"));
     },

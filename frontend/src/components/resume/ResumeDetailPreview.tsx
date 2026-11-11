@@ -388,6 +388,10 @@ export default function ResumeDetailPreview({
         onSaveContent={onSaveEditedResume}
         conversion={detail.document_conversion ?? null}
         contextSnapshot={detail.context_snapshot ?? null}
+        // #24 24E / 24F：这里已经取过一次详情——标注与生成说明直接复用上面那份
+        // `factAnnotations` 与 `detail.rationale`，中栏徽标 / 左栏入口**不再发请求**。
+        factAnnotations={factAnnotations}
+        rationale={detail.rationale ?? null}
         onClose={() => {
           setZoomOpen(false);
         }}

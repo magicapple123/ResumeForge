@@ -21,6 +21,7 @@ import { useLocale } from "../../i18n/i18nContext";
 import { useAsrProfiles } from "../../features/settings/useAsrProfiles";
 import AsrProfileList from "./AsrProfileList";
 import AsrProfileModal from "./AsrProfileModal";
+import MicSettingsRow from "./MicSettingsRow";
 import {
   MAX_ASR_PROFILES,
   NEW_ASR_PROFILE_ID,
@@ -123,6 +124,12 @@ export default function AsrSettingsCard() {
           style={{ marginBottom: 16 }}
           title={t("voiceInput.settings.cardHint")}
         />
+
+        {/* 麦克风选择与「测试麦克风」放在配置列表之前：出现「没声音」时，
+            第一件该做的事是确认输入设备，而不是改服务商配置。 */}
+        <div style={{ marginBottom: 16 }}>
+          <MicSettingsRow />
+        </div>
 
         {controller.loadError ? (
           <div style={{ marginBottom: 16 }}>

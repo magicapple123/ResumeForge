@@ -9,7 +9,6 @@ const backgroundTasks = {
   "backgroundTasks.label": "Background tasks",
   "backgroundTasks.aria.viewTasks": "View background tasks",
   "backgroundTasks.popover.title": "Tasks in progress",
-  "backgroundTasks.tooltip.running": "{count} tasks in progress",
   "backgroundTasks.status.preparing": "Preparing…",
   "backgroundTasks.status.unknown": "Task status unknown",
   "backgroundTasks.progress.received": "Received {count} characters",

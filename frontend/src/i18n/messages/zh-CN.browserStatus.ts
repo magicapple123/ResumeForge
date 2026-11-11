@@ -24,6 +24,12 @@ const browserStatus = {
     "投递与采集都在这个「独立窗口」里进行（用的是专用数据目录，和你日常的浏览器互不影响）。点「启动浏览器」后，这个窗口会「直接打开招聘网站首页」，请在那里扫码登录一次——登录由你自己完成，应用不保存密码、Cookie 或验证码；登录态由浏览器自己保留，下次启动无需重复登录。若你把标签页关掉或跳到了别处，点「打开招聘网站」即可找回来，不用重启浏览器。",
   "browserStatus.adopted":
     "这个窗口是「上一次运行」打开的，应用重启时丢掉了它的进程句柄，因此「关不掉它」——应用只关自己启动的窗口，不按进程号去猜（免得误关你自己的浏览器）。直接关闭那个窗口即可，「采集与投递不受影响」。",
+  "browserStatus.more.aria": "更多浏览器操作（关闭窗口、刷新状态、使用说明）",
+  "browserStatus.help.trigger": "使用说明",
+  "browserStatus.help.aria": "查看投递专用浏览器的使用说明",
+  "browserStatus.help.sectionIntro": "它是怎么工作的",
+  "browserStatus.help.sectionEntry": "这个窗口会去哪里",
+  "browserStatus.help.sectionBrowser": "用的是哪个浏览器",
   "browserStatus.entry": "站点入口：{url}",
   "browserStatus.browser": "使用浏览器：",
   "browserStatus.browserWithName": "{name}（{path}）",

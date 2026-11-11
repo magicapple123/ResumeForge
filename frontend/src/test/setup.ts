@@ -51,6 +51,16 @@ beforeEach(async () => {
   ]);
   store.selectLocale(DEFAULT_LOCALE);
   store.applyDocumentLocale(DEFAULT_LOCALE);
+
+  // 偏好类持久化（允许联网 #7、语音设备 #8、草稿等）会让"上一个用例开了、下一个用例
+  // 默认变开"，成为真实的跨用例污染源。统一在这里清一次，比每个用例各自清可靠：
+  // 单文件跑得通、全量跑才红的用例，绝大多数都是这类残留。
+  try {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  } catch {
+    // 某些环境（jsdom 的 about:blank）访问会抛：忽略即可，用例自己会处理。
+  }
 });
 
 // `findBy*` 的默认等待窗口只有 1 秒，而这些页面要挂载 antd 的整套组件、再等几个 mock 接口

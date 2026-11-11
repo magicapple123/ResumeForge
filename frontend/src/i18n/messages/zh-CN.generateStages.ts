@@ -32,6 +32,22 @@ const generateStages = {
   "generateStages.preview.goResumes": "去简历中心",
   /** 预览阶段的收尾按钮。 */
   "generateStages.preview.done": "完成",
+
+  // ── #30 语义检索回执（进度行徽标 + 结果审计共用五态文案）──────────
+  /** 进度行的字段名（徽标前缀）。 */
+  "generateStages.rag.progress.label": "语义检索",
+  "generateStages.rag.state.off": "未启用 · 仅按关键词匹配",
+  "generateStages.rag.state.empty": "已启用 · 索引为空",
+  "generateStages.rag.state.miss": "已启用 · 本次无命中",
+  "generateStages.rag.state.hit": "已参与 · 命中 {count} 条",
+  "generateStages.rag.state.fallback": "超时回退关键词 · {ms} ms",
+  "generateStages.rag.enable": "去开启",
+  /** 结果卡的审计行：命中时同时给条数与影响条目数。 */
+  "generateStages.rag.audit.hit": "本次使用语义检索 · 命中 {count} 条，影响 {impacts} 个条目",
+  "generateStages.rag.audit.expand": "展开明细",
+  "generateStages.rag.audit.collapse": "收起明细",
+  "generateStages.rag.audit.jump": "去资料页查看",
+  "generateStages.rag.audit.exportNote": "结构化检索明细只随本次生成展示，导出件不含",
 } as const;
 
 export default generateStages;

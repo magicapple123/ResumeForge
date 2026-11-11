@@ -5,6 +5,8 @@
  * 深色主题同步、全屏隐藏、浏览器里不渲染。
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { App as AntdApp } from "antd";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DesktopTitleBar from "./DesktopTitleBar";
@@ -18,9 +20,21 @@ vi.mock("react-router-dom", async (importOriginal) => {
   return { ...actual, useNavigate: () => nav.navigate };
 });
 
+// 主题拉取 + #34D 诊断信息用到的四个只读接口：它们是模块级依赖（DEFAULT_LOADERS），
+// 必须在 mock 工厂里一起给出来，否则模块在 import 期就取不到导出。
 const settingsApi = vi.hoisted(() => ({
   getGlobalTheme: vi.fn(async () => ({ theme: "light" })),
   saveGlobalTheme: vi.fn(async () => undefined),
+  getLLMConfig: vi.fn(async () => ({
+    provider: "deepseek",
+    base_url: "https://api.example.com",
+    api_key: "********",
+    model: "deepseek-chat",
+    api_style: "openai",
+  })),
+  getReminderPopupSetting: vi.fn(async () => ({ enabled: true })),
+  getWebFormRelaxedMode: vi.fn(async () => ({ enabled: false })),
+  getAssistantRelaxedMode: vi.fn(async () => ({ enabled: false })),
 }));
 vi.mock("../../api/settings", () => settingsApi);
 
@@ -30,6 +44,7 @@ interface BridgeStub {
   getWindowState: ReturnType<typeof vi.fn>;
   onWindowState: ReturnType<typeof vi.fn>;
   setTheme: ReturnType<typeof vi.fn>;
+  setEditableFocus: ReturnType<typeof vi.fn>;
 }
 
 type SplashWindow = Window & {
@@ -40,7 +55,13 @@ type SplashWindow = Window & {
 let bridge: BridgeStub;
 
 function installBridge(
-  overrides: Partial<{ maximized: boolean; fullscreen: boolean; platform: string }> = {},
+  overrides: Partial<{
+    maximized: boolean;
+    fullscreen: boolean;
+    platform: string;
+    alwaysOnTop: boolean;
+    editableFocus: boolean;
+  }> = {},
 ) {
   bridge = {
     platform: overrides.platform ?? "win32",
@@ -53,21 +74,29 @@ function installBridge(
     getWindowState: vi.fn(async () => ({
       maximized: overrides.maximized ?? false,
       fullscreen: overrides.fullscreen ?? false,
+      alwaysOnTop: overrides.alwaysOnTop ?? false,
+      editableFocus: overrides.editableFocus ?? false,
     })),
     onWindowState: vi.fn(),
     setTheme: vi.fn(),
+    setEditableFocus: vi.fn(),
   };
   (window as SplashWindow).splash = { isDesktop: true, quitApp: vi.fn() };
   (window as SplashWindow).desktopShell = bridge;
   return bridge;
 }
 
-function renderTitleBar() {
-  return render(
-    <MemoryRouter>
-      <DesktopTitleBar />
-    </MemoryRouter>,
+// 标题栏用 App.useApp() 弹 toast（#34D 复制诊断信息），测试必须包 <AntdApp>。
+function Wrapper({ children }: { children: ReactNode }) {
+  return (
+    <AntdApp>
+      <MemoryRouter>{children}</MemoryRouter>
+    </AntdApp>
   );
+}
+
+function renderTitleBar() {
+  return render(<DesktopTitleBar />, { wrapper: Wrapper });
 }
 
 function menuTrigger(id: string) {
@@ -178,19 +207,20 @@ describe("DesktopTitleBar", () => {
     fireEvent.keyDown(menuTrigger("file"), { key: "ArrowRight" });
     expect(menuTrigger("edit")).toHaveFocus();
 
-    // 打开「编辑」并把焦点送进第一项（撤销）。
+    // 打开「编辑」并把焦点送进第一项。撤销/重做在焦点不在可编辑区时是灰的（#34F），
+    // 键盘导航从第一个**可用**项开始——这是置灰要真的生效，而不是只改颜色。
     fireEvent.keyDown(menuTrigger("edit"), { key: "ArrowDown" });
     const firstItem = await screen.findByRole("menuitem", {
-      name: t("appHeader.desktopMenu.item.undo"),
+      name: t("appHeader.desktopMenu.item.cut"),
     });
     await waitFor(() => expect(firstItem).toHaveFocus());
 
     fireEvent.keyDown(firstItem, { key: "ArrowDown" });
-    const redo = screen.getByRole("menuitem", { name: t("appHeader.desktopMenu.item.redo") });
-    expect(redo).toHaveFocus();
+    const copyItem = screen.getByRole("menuitem", { name: t("appHeader.desktopMenu.item.copy") });
+    expect(copyItem).toHaveFocus();
 
-    fireEvent.click(redo);
-    expect(bridge.menuAction).toHaveBeenCalledWith("edit.redo");
+    fireEvent.click(copyItem);
+    expect(bridge.menuAction).toHaveBeenCalledWith("edit.copy");
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
@@ -256,10 +286,13 @@ describe("DesktopTitleBar", () => {
     }
   });
 
-  it("「关于」打开纯静态弹窗：版本来自主进程，外链走固定动作", async () => {
+  it("「关于」与其它菜单一致：先展开下拉，点「关于简历通」才弹窗（#34I）", async () => {
     installBridge();
     renderTitleBar();
     fireEvent.click(menuTrigger("about"));
+    const aboutMenu = await screen.findByRole("menu", { name: t("appHeader.desktopMenu.about") });
+    expect(aboutMenu).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: t("appHeader.desktopMenu.about.title") }));
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toBeInTheDocument();
     expect(await screen.findByText(/9\.9\.9/)).toBeInTheDocument();
@@ -269,11 +302,51 @@ describe("DesktopTitleBar", () => {
     expect(bridge.menuAction).toHaveBeenCalledWith("external.github");
   });
 
-  it("全屏时标题栏隐藏（元素保留在 DOM，退出全屏的推送还收得到）", async () => {
+  it("快照误报 fullscreen=true 时仍然占位（P1-1：快照只用于菜单文案）", async () => {
     installBridge({ fullscreen: true });
     renderTitleBar();
     const bar = screen.getByTestId("desktop-titlebar");
+    // 快照确实被读到了（否则这条用例会因为"没等到"而假绿），但它不能决定隐藏。
+    await waitFor(() => expect(bridge.getWindowState).toHaveBeenCalled());
+    expect(bar.getAttribute("data-hidden")).toBeNull();
+  });
+
+  it("全屏时标题栏隐藏（元素保留在 DOM，退出全屏的推送还收得到）", async () => {
+    installBridge();
+    renderTitleBar();
+    const bar = screen.getByTestId("desktop-titlebar");
+    expect(bar.getAttribute("data-hidden")).toBeNull();
+    // 真实来源之一：Chromium 的文档级全屏事件。
+    act(() => {
+      document.dispatchEvent(new Event("enter-html-full-screen"));
+    });
     await waitFor(() => expect(bar.getAttribute("data-hidden")).toBe("true"));
+    act(() => {
+      document.dispatchEvent(new Event("leave-html-full-screen"));
+    });
+    await waitFor(() => expect(bar.getAttribute("data-hidden")).toBeNull());
+  });
+
+  it("主进程推送全屏状态时同样隐藏（第二个真实来源）", async () => {
+    const stub = installBridge();
+    renderTitleBar();
+    const bar = screen.getByTestId("desktop-titlebar");
+    const push = stub.onWindowState.mock.calls[0]?.[0] as
+      ((state: { maximized: boolean; fullscreen: boolean }) => void) | undefined;
+    expect(typeof push).toBe("function");
+    act(() => {
+      push?.({ maximized: false, fullscreen: true });
+    });
+    await waitFor(() => expect(bar.getAttribute("data-hidden")).toBe("true"));
+  });
+
+  it("旧壳（只有 splash、没有 desktopShell）渲染 32px 纯占位条（P1-1 兜底）", () => {
+    (window as SplashWindow).splash = { isDesktop: true, quitApp: vi.fn() };
+    renderTitleBar();
+    const placeholder = screen.getByTestId("desktop-titlebar-placeholder");
+    expect(placeholder).toHaveClass("app-titlebar");
+    // 占位条没有菜单：旧壳的菜单动作通道不存在，画出来也点不动。
+    expect(screen.queryByRole("menuitem")).toBeNull();
   });
 
   it("macOS 平台：标题栏带红绿灯内边距修饰类", async () => {

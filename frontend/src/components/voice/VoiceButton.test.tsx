@@ -87,6 +87,20 @@ describe("VoiceButton", () => {
     expect(screen.getByText(t("voiceInput.status.transcribing"))).toBeInTheDocument();
   });
 
+  /**
+   * #8 的根因是"申请麦克风期间按钮没有任何反馈"，用户会再点一下把录音掐死。
+   * 这一态必须 disabled 且有明确文案——否则同样的 bug 会以别的方式回来。
+   */
+  it("打开麦克风期间按钮 disabled 并显示「正在打开麦克风…」", () => {
+    const voice = controller({ status: "starting" });
+    renderButton(voice);
+    const button = screen.getByRole("button", { name: t("voiceInput.aria.start") });
+    expect(button).toBeDisabled();
+    expect(screen.getByText(t("voiceInput.status.starting"))).toBeInTheDocument();
+    fireEvent.click(button);
+    expect(voice.start).not.toHaveBeenCalled();
+  });
+
   it("未配置时显示指路文案；点击仍会调用 start（由 hook 出 not_configured，不发请求）", () => {
     const voice = controller({ configured: false, providerHost: "" });
     renderButton(voice);

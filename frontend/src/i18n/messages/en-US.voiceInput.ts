@@ -16,6 +16,7 @@ const voiceInput = {
   "voiceInput.aria.start": "Start voice input",
   "voiceInput.aria.stop": "Stop recording",
   "voiceInput.status.transcribing": "Transcribing",
+  "voiceInput.status.starting": "Opening the microphone…",
   "voiceInput.tooltip.start": "Click to start dictation (up to {seconds} seconds per clip)",
 
   "voiceInput.hint.privacy": "Audio will be sent to {host}",
@@ -38,6 +39,9 @@ const voiceInput = {
   "voiceInput.error.serviceFailed": "The voice service is temporarily unavailable. Try again later",
   "voiceInput.error.backendTooOld":
     "This backend version does not support voice. Restart and try again",
+  "voiceInput.error.tooShort": "Recording too short. Finish speaking, then stop",
+  "voiceInput.error.noSound": "No sound detected (peak {peak}). Check the microphone device",
+  "voiceInput.error.noHeard": "Did not catch that. Please say it again",
 
   "voiceInput.action.submitBlocked": "Stop recording first",
 
@@ -79,6 +83,29 @@ const voiceInput = {
     "Up to 3 minutes / 10 MB per clip; 3 minutes for interview answers and 1 minute for follow-up questions.",
   "voiceInput.settings.privacyNote":
     "After saving, recordings go to {host}; this app does not store audio.",
+
+  "voiceInput.settings.device.label": "Microphone",
+  "voiceInput.settings.device.aria": "Choose a microphone device",
+  "voiceInput.settings.device.default": "System default",
+  "voiceInput.settings.device.unnamed": "Microphone {index}",
+  "voiceInput.settings.device.empty": "No device list yet; allow access, then refresh",
+  "voiceInput.settings.device.refresh": "Refresh microphone list",
+  "voiceInput.settings.device.hint": "Device names appear after you allow access",
+  "voiceInput.settings.device.lost": "That microphone is gone; using the system default",
+
+  "voiceInput.settings.micTest.open": "Test microphone",
+  "voiceInput.micTest.title": "Test microphone",
+  "voiceInput.micTest.intro": "Records 3 seconds to show the level; nothing is uploaded",
+  "voiceInput.micTest.start": "Start test",
+  "voiceInput.micTest.stop": "Stop test",
+  "voiceInput.micTest.remaining": "Recording, {seconds}s left",
+  "voiceInput.micTest.device": "Device: {name}",
+  "voiceInput.micTest.deviceDefault": "System default microphone",
+  "voiceInput.micTest.peak": "Peak {peak}",
+  "voiceInput.micTest.idle": "Start the test and say something to see the level",
+  "voiceInput.micTest.result.silent": "Almost no sound; check the microphone and system input",
+  "voiceInput.micTest.result.ok": "The level looks normal",
+  "voiceInput.micTest.noSupport": "This browser cannot record audio",
 
   "voiceInput.settings.cardHint":
     "Audio goes only to the provider you pick; this app keeps no recording",

@@ -41,10 +41,9 @@
   display: flex;
   flex-direction: column;
   /* 视口上下各留 48px：1280×720 下弹窗距上下沿 ≥ 40px（验收口径）。
-     先 vh 后 dvh：移动端地址栏收放时 vh 不是真实可见高度，不认 dvh 的浏览器
-     留在前一条上。 */
-  max-height: calc(100vh - 96px);
-  max-height: calc(100dvh - 96px);
+     高度读 --rf-viewport-h（P1-3）：桌面外壳里它已经扣掉 32px 标题栏；
+     该令牌内部已按 dvh 优先取值（base-shell.css），所以这里不再写两条。 */
+  max-height: calc(var(--rf-viewport-h) - 96px);
   overflow: hidden;
 }
 

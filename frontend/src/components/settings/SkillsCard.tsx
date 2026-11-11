@@ -10,7 +10,7 @@
  * 以及超过 5 项时的「显示全部」折叠。
  */
 
-import { Button, Card, Listy, Space, Typography } from "antd";
+import { Button, Card, Listy, Space, Tag, Typography } from "antd";
 import { Link } from "react-router-dom";
 import EmptyState from "../common/EmptyState";
 import LoadingBlock from "../common/LoadingBlock";
@@ -82,6 +82,9 @@ export default function SkillsCard({ skills, loading, onOpen }: Props) {
                       <Button type="link" className="table-text-link" onClick={() => onOpen(skill)}>
                         {skill.name}
                       </Button>
+                      {skill.validation_status === "pending" && (
+                        <Tag color="orange">{t("skills.learning.pendingBadge")}</Tag>
+                      )}
                     </Space>
                   }
                   description={describe(skill)}

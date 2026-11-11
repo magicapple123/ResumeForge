@@ -20,6 +20,21 @@ export interface AssistantSkill {
   /** 附带的知识文件名清单（正文由助手按需读取）。 */
   files: string[];
   updated_at: string;
+  // ===== 0016（#31D/E/F 技能学习）：四段内容、版本与验证状态 =====
+  /** 何时使用（四段内容之一；老技能为空串）。 */
+  when_to_use?: string;
+  /** 步骤（换行分隔的文本；老技能为空串）。 */
+  steps?: string;
+  /** 反例与注意事项（老技能为空串）。 */
+  pitfalls?: string;
+  /** 技能版本；自动生成/更新时自增。 */
+  version?: number;
+  /** 是否由对话自动生成（true 时默认待验证、不自动启用）。 */
+  generated?: boolean;
+  /** 验证状态："" = 无需验证 / pending = 待验证 / validated = 已验证。 */
+  validation_status?: string;
+  /** 最近一次被加载进系统提示的时间（90 天未加载 → 提示归档）。 */
+  last_loaded_at?: string | null;
 }
 
 export interface AssistantSkillFileInfo {

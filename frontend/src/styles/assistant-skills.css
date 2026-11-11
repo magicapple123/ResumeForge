@@ -114,6 +114,17 @@
   background: var(--rf-surface-alt);
 }
 
+/* 列表项前的图标（#32）：占行首一列、与名称**同一行**。`height` 取名称行高（14×1.57≈22px）
+   让图标在自己的盒子里垂直居中，下面的描述行因此不会被顶开；行容器是 `align-items: flex-start`。 */
+.assistant-skill-picker-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 22px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
 .assistant-message-skills-line {
   font-size: 12px;
 }

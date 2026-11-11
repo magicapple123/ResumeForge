@@ -18,7 +18,7 @@
  * 批量删除的二次确认留在**这里**（就地 `Popconfirm`），因为它必须在抽屉之中、又不能是
  * 第二层容器：抽屉(1) + `modal.confirm`(1) 就是 §3.7 禁止的叠层，Popover 不占容器层。
  */
-import { Checkbox, Button, Popconfirm, Space, Tooltip, Typography } from "antd";
+import { Checkbox, Button, Popconfirm, Space, Typography } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
@@ -97,18 +97,16 @@ export default function CandidateBatchToolbar({
           })}
         </Typography.Text>
         {onSelectAllPages && totalCount > 0 && (
-          <Tooltip title={t("jobs.candidate.batchToolbar.selectAllTooltip", { count: totalCount })}>
-            <Button
-              type="link"
-              size="small"
-              style={{ padding: 0 }}
-              disabled={busy}
-              loading={selectAllPagesLoading}
-              onClick={onSelectAllPages}
-            >
-              {t("jobs.candidate.batchToolbar.selectAll")}
-            </Button>
-          </Tooltip>
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0 }}
+            disabled={busy}
+            loading={selectAllPagesLoading}
+            onClick={onSelectAllPages}
+          >
+            {t("jobs.candidate.batchToolbar.selectAll")}
+          </Button>
         )}
       </Space>
       {/* 批量操作区：进入即见，未选中时禁用（导出 CSV/批量删除/清空选择）。 */}

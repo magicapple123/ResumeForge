@@ -1,0 +1,183 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 投递台「首屏密度」（#14G/#14H 第二版）。
+ *
+ * 为什么单独一个文件：`apply.css` 已到 500 行预算边缘（458/500），而这一批是**另一类规则**
+ * ——它不描述组件长什么样，只描述"在 1366×768 下首屏要塞下 7 行表格"这件事的收敛手段，
+ * 每一条都能对应一次实测数字（见 evidence/14-apply-boost/verify-frontend.md）。
+ *
+ * 全部选择器都带 `.apply-` 前缀或 `.apply-page`/`.apply-queue-panel` 作用域：
+ * 投递台之外的页面沿用原间距（那里没有"表格必须 7 行"的判据）。
+ *
+ * 实测（1366×768，10 条队列）：
+ * 改前 firstRowY 618.14 / rowH 69.78 / visibleRows 2
+ * 改后 firstRowY 296~300 / rowH 56 / visibleRows 7~8
+ */
+
+/* 块间距 16→8：页头/站点行/浏览器卡/页签/工具栏之间共省下约 32px。 */
+.apply-page {
+  gap: 4px;
+}
+
+/* 页头压成一行：标题 + 说明「?」在左，漏斗 + 设置按钮在右。113px → 48px。 */
+.apply-page-head {
+  gap: 8px 12px;
+  align-items: center;
+}
+
+/* 浏览器卡：状态 + 端口 + 主按钮 + 「⋯」同一行。114px → 44px（含扫码提示时 68px）。 */
+.apply-browser-bar {
+  padding: 3px 12px;
+}
+
+.apply-browser-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+}
+
+/* 端口是次要信息：窄屏时先让它省略，而不是把按钮挤到第二行。 */
+.apply-browser-port {
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 扫码提示与状态**同一行**（超出省略，全文在悬停里）：多一行就等于首屏少一行表格。 */
+.apply-browser-login-hint {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--rf-warning-text);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.apply-browser-row > .ant-space:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 只有出错时才会单独占一行（错误必须完整可读，省略会掩盖原因）。 */
+.apply-browser-hint-line {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.apply-browser-hint-line .ant-alert-message {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 「上一次运行留下的窗口」的解释：一行小字。 */
+.apply-browser-adopted {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 工具栏必须是**一行**：换行成两行会白吃 44px（实测）。
+   收窄手段：低频的「清空选择」进「⋯」、跨页说明改挂 Tooltip。
+   nowrap + 横向滚动兜底：窄屏宁可横向滚，也不要再把表头往下推一行。 */
+.apply-queue-head {
+  flex-wrap: nowrap;
+  margin-bottom: 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.apply-queue-head > .ant-space {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+/*
+ * 吸底条右侧避让全局助手球（#14 P2，QA2 实测）。
+ *
+ * 助手球是 `position: fixed` 贴**视口**右下角，吸底条右缘跟着内容区走，所以两者的重叠
+ * 与视口宽度无关：实测 1366 / 1536 都是 −19px，1920 仍有 −11px。因此这里**不加媒体查询**
+ * （只修 1366 等于把同一个 bug 留给大屏；1400 也不在断点表里，`breakpointGuard` 会红）。
+ *
+ * 60 = 12（原内边距）+ 48 避让：「开始投递」右缘从 1319 收到 1259，与球左缘（1300）
+ * 留 41px，够点也不显空。只作用于本页吸底条。
+ */
+.apply-queue-startbar {
+  padding-right: 60px;
+}
+
+/* 行高：单元格是两行内容（岗位+公司 / 简历+招呼语），默认 padding 把每行顶到 69.8px。
+   压到约 56px——判据是首屏 ≥7 行，光靠上面那些块还不够。只作用于队列表格。 */
+.apply-queue-panel .ant-table-thead > tr > th {
+  padding: 2px 8px !important;
+}
+
+.apply-queue-panel .ant-table-tbody > tr > td {
+  padding: 2px 8px !important;
+}
+
+/* 次要行（公司名、招呼语首行）跟主行贴紧，别再各带一份 1.57 行高。 */
+.apply-queue-panel .ant-table-tbody .ant-typography {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.apply-queue-panel .ant-table-tbody .table-text-link {
+  height: 22px;
+  padding: 0;
+  line-height: 22px;
+}
+
+/* 站点行：兜底「目前仅支持这一个…」那句原先在 1366 下换行，把整行顶到 88px。
+   现在单行 + 省略（全文在 Tooltip 里），站点行回到 ~28px。 */
+.apply-site-bar > .ant-space {
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.apply-site-bar-hint {
+  max-width: 220px;
+}
+
+/* 漏斗：Statistic 默认 title 14 / value 18，四枚并排在页头会把行高顶到 61px。
+   压到 title 12 / value 16 后与标题同高（48px 以内），信息一个不少。 */
+.apply-funnel-bar .ant-statistic {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+}
+
+.apply-funnel-bar .ant-statistic-title {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.apply-funnel-item {
+  padding: 0 2px;
+  height: auto;
+}
+
+/* 页签栏的默认下边距 16 是给"页签下面还有内容"的页面留的；这里紧接工具栏，
+   8 就够，省下的 8px 直接变成一行表格。 */
+.apply-page .ant-tabs-nav {
+  margin-bottom: 4px;
+}
+
+.apply-page .ant-tabs-tab {
+  padding: 4px 0 !important;
+}

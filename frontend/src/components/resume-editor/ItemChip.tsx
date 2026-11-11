@@ -30,6 +30,8 @@ import { useDocumentDrag } from "./documentDragContext";
 import { useDocumentChipMenu } from "./documentChipMenuContext";
 import { useBlockSelectStart } from "./useBlockSelectStart";
 import { useChipExpandGesture } from "./useChipExpandGesture";
+import { resolveFactAnnotation, useFactAnnotations } from "./factSourceContext";
+import FactSourceBadge from "../resume/FactSourceBadge";
 
 interface Props {
   document: ResumeDocument;
@@ -67,6 +69,13 @@ export default function ItemChip({
 }: Props) {
   const { t } = useI18n();
   const drag = useDocumentDrag();
+  /**
+   * #24 24E：这一栏的**来源徽标**。标注由中栏宿经 context 一次给全（`factSourceContext`），
+   * 这里只按自己的路径解析；解析不到（页眉式字段 / 旧记录没有标注）就**不渲染徽标**，
+   * 绝不显示"未知来源"。
+   */
+  const factAnnotations = useFactAnnotations();
+  const factAnnotation = resolveFactAnnotation(document, path, factAnnotations);
   const [grabbed, setGrabbed] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   // R-30：菜单不在这里，交给编辑器那一份（见 documentChipMenuContext）。
@@ -317,6 +326,11 @@ export default function ItemChip({
         </button>
         {materialOnly ? (
           <span className="document-chip-badge is-material">{t("document.item.materialOnly")}</span>
+        ) : null}
+        {/* #24 24E：来源徽标（资料库 / AI 生成 / 手动）。放在 `.document-chip-main` **外面**：
+            主按钮是"选中 / 双击展开"的热区，把这些行为挤进按钮里会连带改变它的可点区域。 */}
+        {factAnnotation ? (
+          <FactSourceBadge annotation={factAnnotation} document={document} />
         ) : null}
         {hidden ? (
           <span className="document-chip-badge">{t("document.item.hiddenBadge")}</span>

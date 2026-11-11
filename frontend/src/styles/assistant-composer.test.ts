@@ -45,3 +45,56 @@ describe("输入区窄栏", () => {
     expect(block).toContain("display: inline-flex");
   });
 });
+
+describe("设置页权限卡 2×2（11-1）", () => {
+  /** 去掉注释后的样式表：注释里会提到"不要写 display: contents"，不能被断言误伤。 */
+  function bare(): string {
+    return css().replace(/\/\*[\s\S]*?\*\//g, "");
+  }
+
+  /** 网格主体：`.assistant-permission-grid`（TSX 里挂在 `Radio.Group` 上的类名）。 */
+  function gridRule(): string {
+    return (
+      /\.assistant-permission-stack \.assistant-permission-grid \{([\s\S]*?)\}/.exec(bare())?.[1] ??
+      ""
+    );
+  }
+
+  it("选项区是两列等宽网格，列间距 24 / 行间距 8", () => {
+    const block = gridRule();
+    expect(block).toContain("display: grid");
+    expect(block).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(block).toContain("gap: 8px 24px");
+    expect(block).toContain("align-items: start");
+  });
+
+  it("四个选项占满轨道：网格内撤掉 280px 上限（否则两列里仍只用左侧一小块）", () => {
+    const style = bare();
+    expect(style).toMatch(
+      /\.assistant-permission-grid \.assistant-permission-option \{\s*max-width: none;/,
+    );
+    expect(style).toMatch(
+      /\.assistant-permission-grid > \.ant-radio-wrapper \{[\s\S]*?margin-inline-end: 0;/,
+    );
+    // 容器那层 Space 是 `inline-flex`（按内容收缩）：不撑满的话网格只有内容宽（实测 514px），
+    // 两列轨道各 245px，右侧依旧空 475px——等于把"一列窄"换成"两列都窄"。
+    expect(style).toMatch(/\.assistant-permission-stack \{[\s\S]*?width: 100%;/);
+  });
+
+  it("不做宽选择器：不用 `display: contents` 摊平 antd 的 Space，也不靠 `:has()` 定位", () => {
+    // 这两条是 11-1 收口时改掉的实现方式：`display: contents` / `.settings-card ... :has()`
+    // 都会顺手影响 `.settings-card` 里其它卡的 Space（副作用面远超这张卡）。
+    const style = bare();
+    expect(style).not.toContain("display: contents");
+    expect(style).not.toContain(":has(");
+  });
+
+  it("按容器宽度分档：卡片内容区 ≤620px 塌单列（不用视口媒体查询）", () => {
+    const style = bare();
+    expect(style).toMatch(/\.assistant-permission-stack \{[\s\S]*?container-type: inline-size;/);
+    expect(style).toContain("container-name: rf-permission");
+    const narrow =
+      /@container rf-permission \(max-width: 620px\) \{([\s\S]*?)\n\}/.exec(style)?.[1] ?? "";
+    expect(narrow).toContain("grid-template-columns: minmax(0, 1fr)");
+  });
+});

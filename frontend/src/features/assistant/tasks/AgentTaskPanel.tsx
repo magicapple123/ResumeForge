@@ -26,6 +26,8 @@ interface Props {
   onStart: (taskId: number) => void;
   onResume: (taskId: number) => void;
   onCancel: (taskId: number) => void;
+  /** 可选：传了才给「进行中」的任务显示暂停（助手页任务条用）。 */
+  onPause?: (taskId: number) => void;
   /** 组顺序，默认 `BUCKET_ORDER`；首页传 `HOME_BUCKET_ORDER`。 */
   bucketOrder?: readonly AgentTaskBucket[];
   /** 未结束（待确认 + 进行中）合计最多展示几条；不传 = 不限制。 */
@@ -40,6 +42,7 @@ export default function AgentTaskPanel({
   onStart,
   onResume,
   onCancel,
+  onPause,
   bucketOrder = BUCKET_ORDER,
   activeLimit,
   finishedPreviewLimit,
@@ -90,6 +93,7 @@ export default function AgentTaskPanel({
       onStart={onStart}
       onResume={onResume}
       onCancel={onCancel}
+      onPause={onPause}
     />
   );
 

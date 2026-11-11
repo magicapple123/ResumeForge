@@ -3,8 +3,19 @@
 
 .tt-assistant-card {
   position: fixed;
-  right: 24px;
-  bottom: 96px;
+  /* 2px：卡片首帧的右缘与球右缘对齐（球右缘距视口 2px）。那个 2 的唯一真相是
+     `styles/tou-tou-orb.css` 的 `--tt-edge`——不能写 `var(--tt-edge)`，因为令牌声明在
+     `.tt-shell` 上、卡片是它的兄弟节点，取不到；所以要按同源值写字面量。
+     原来是 24px（`--tt-edge` 的旧值），球贴边收到 2px 后卡片首帧会与球错开 22px。 */
+  right: 2px;
+  /*
+   * 78px = 2（贴边缝隙）+ 64（球直径）+ 12（卡片与球的间隙）。
+   * 12 与 `features/tou-tou/useTouTouCardDrag.ts` 的 `ORB_GAP_PX` **同源**：卡片挂载后
+   * 由那一处按球的真实 rect 摆位，公式是 `球底 - 12`。首帧这里必须算出一模一样的 78px，
+   * 否则"全链路只认一个数"就是纸面话——曾经写 74（按 8px 间隙），JS 接管时会有 4px 位移。
+   * 也不要再写成 96（= 64 + 24 + 8，把已删掉的 24px 藏在第二处）。
+   */
+  bottom: 78px;
   /*
    * 3400：略低于悬浮球（.tt-shell 的 3650），保证球压在卡片之上、随时可以再点球收起；
    * 高于 antd 6 容器链——zIndexPopupBase（3100）+ useZIndex 容器偏移 +100/层
@@ -14,7 +25,9 @@
    */
   z-index: var(--rf-layer-assistant-card);
   width: min(760px, calc(100vw - 24px));
-  height: min(680px, calc(100vh - 132px));
+  /* 高度上限读 --rf-viewport-h（P1-3）：桌面外壳里它已经扣掉 32px 标题栏，
+     否则贴底时卡片会有一条被系统按钮条压住。 */
+  height: min(680px, calc(var(--rf-viewport-h) - 132px));
   overflow: hidden;
   border: 1px solid var(--rf-border-strong);
   border-radius: 14px;
@@ -76,24 +89,31 @@
 
 .tt-assistant-card.is-edge-left {
   right: auto;
-  left: 24px;
+  /* 与上面 `.tt-assistant-card` 的 `right: 2px` 对称：贴左边时卡片左缘与球左缘对齐，
+     同一个 2px（`--tt-edge`）来源；原来是 `--tt-edge` 的旧值 24px。 */
+  left: 2px;
 }
 
 .tt-assistant-card.is-edge-top {
   /*
-   * 140px：球贴顶边时占 64~128px（HEADER_OFFSET 64 + 直径 64），
-   * 140 = 球下缘 128 + 12px 间隙——原来的 96px 会让卡片盖住球的大半，
-   * 用户没法再点球收起。
+   * 78px：球贴顶边时占 2~66px（贴边缝隙 2 + 直径 64，单一真相是
+   * `styles/tou-tou-orb.css` 的 `--tt-edge`，见 P1-4），78 = 球下缘 66 + 12px 间隙。
+   * 贴边缝隙从 24px 收到 2px 之后球整整上去 22px，卡片必须跟着上移——沿用旧的
+   * 140px 会在球和卡片之间留出 74px 的空白。12px 间隙的意义是**不盖住球**：
+   * 盖住了用户就点不到球收起卡片。
    */
-  top: 140px;
+  top: 78px;
   bottom: auto;
-  /* 顶边让出 44px 后可用高度同步收缩，避免卡片底部溢出视口。 */
-  height: min(680px, calc(100vh - 172px));
+  /* 顶边让出 78px 后可用高度同步收缩：`- 172px` 保证卡片底边距视口下沿还有 94px
+     （78 + (视口 − 172) = 视口 − 94），球贴底时（占下沿上 66px）也不会被卡片压住。 */
+  height: min(680px, calc(var(--rf-viewport-h) - 172px));
 }
 
 .tt-assistant-card.is-edge-bottom {
   top: auto;
-  bottom: 96px;
+  /* 与 `.tt-assistant-card` 的 78px 同一个算式（2 + 64 + 12，12 同 `ORB_GAP_PX`）：
+     贴底时 JS 摆位得到 `球顶 - 12` = 视口底 - 78，首帧必须一致，否则接管瞬间会跳 4px。 */
+  bottom: 78px;
 }
 
 /* 浮窗是"页面的缩略版"而不是页面本身：下面这批规则只作用在浮窗里，
@@ -322,6 +342,8 @@
     bottom: 82px;
     left: 12px;
     width: auto;
-    height: min(720px, calc(100vh - 96px));
+    /* 同样读 --rf-viewport-h（P1-3），桌面外壳里扣掉 32px 标题栏。
+       窄屏本身比 720px 矮的时候这条才生效，扣掉标题栏后只会更保守、不会溢出。 */
+    height: min(720px, calc(var(--rf-viewport-h) - 96px));
   }
 }

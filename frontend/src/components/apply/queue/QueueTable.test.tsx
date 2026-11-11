@@ -52,6 +52,7 @@ function renderTable(items: ApplyQueueItem[]) {
           setSelectedIds={vi.fn()}
           setDetail={vi.fn()}
           rowMenuItems={() => [{ key: "x", label: "占位项" }]}
+          onInspect={vi.fn()}
         />
       </ContextMenuHost>
     </AntdApp>,
@@ -73,7 +74,7 @@ describe("QueueTable 横向滚动区（a11y）", () => {
     expectNoUnfocusableScroller(container);
   });
 
-  it("有数据时保持原行为：列宽固定 880px + 横向滚动", async () => {
+  it("有数据时保持原行为：列宽固定 900px + 横向滚动", async () => {
     const { container } = renderTable([BASE_ITEM]);
     // 用 role/aria-label 定位，不用中文文案做 ByText 断言（i18n 棘轮只降不升）。
     await screen.findByRole("button", { name: /查看队列条目详情/ });
@@ -83,7 +84,7 @@ describe("QueueTable 横向滚动区（a11y）", () => {
     expect(
       container.querySelector(".ant-table")?.classList.contains("ant-table-scroll-horizontal"),
     ).toBe(true);
-    expect(container.querySelector<HTMLElement>(".ant-table table")?.style.width).toBe("880px");
+    expect(container.querySelector<HTMLElement>(".ant-table table")?.style.width).toBe("900px");
   });
 
   it("悬停「来源不支持」标签只弹一个提示，不与岗位提示叠在一起", async () => {

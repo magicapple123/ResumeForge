@@ -142,6 +142,9 @@ import appConfig from "./zh-CN.appConfig";
 import applyCollect from "./zh-CN.applyCollect";
 import applyUi from "./zh-CN.applyUi";
 import assistantHooks from "./zh-CN.assistantHooks";
+import assistantBreadth from "./zh-CN.assistantBreadth";
+import assistantMemory from "./zh-CN.assistantMemory";
+import assistantLimits from "./zh-CN.assistantLimits";
 import assistantUi from "./zh-CN.assistantUi";
 import componentsMisc from "./zh-CN.componentsMisc";
 import componentsMisc2 from "./zh-CN.componentsMisc2";
@@ -155,6 +158,7 @@ import hooksUi from "./zh-CN.hooksUi";
 import interviewPage from "./zh-CN.interviewPage";
 import jobsCandidate from "./zh-CN.jobsCandidate";
 import jobsForm from "./zh-CN.jobsForm";
+import jobsImport from "./zh-CN.jobsImport";
 import jobsPage from "./zh-CN.jobsPage";
 import jobsUi from "./zh-CN.jobsUi";
 import llmUi from "./zh-CN.llmUi";
@@ -176,6 +180,8 @@ import followupSweep from "./zh-CN.followupSweep";
 import deliveryReceipt from "./zh-CN.deliveryReceipt";
 /** 求职偏好档（T14）。 */
 import jobPreference from "./zh-CN.jobPreference";
+/** 求职助手「上下文用量」面板（需求 #6）。 */
+import contextUsage from "./zh-CN.contextUsage";
 import enumsApply from "./zh-CN.enumsApply";
 import enumsAssistant from "./zh-CN.enumsAssistant";
 import enumsClaims from "./zh-CN.enumsClaims";
@@ -186,6 +192,10 @@ import enumsKnowledge from "./zh-CN.enumsKnowledge";
 import enumsReferral from "./zh-CN.enumsReferral";
 import enumsResumeCatalog from "./zh-CN.enumsResumeCatalog";
 import enumsTracker from "./zh-CN.enumsTracker";
+/** 模拟面试实时语音（#26 P0）。 */
+import interviewVoice from "./zh-CN.interviewVoice";
+/** 面试页「这家公司面经 N 条」（#29D）。 */
+import interviewKnowledge from "./zh-CN.interviewKnowledge";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -386,6 +396,9 @@ const namespaces = {
   ...applyCollect,
   ...applyUi,
   ...assistantHooks,
+  ...assistantBreadth,
+  ...assistantMemory,
+  ...assistantLimits,
   ...assistantUi,
   ...componentsMisc,
   ...componentsMisc2,
@@ -399,6 +412,7 @@ const namespaces = {
   ...interviewPage,
   ...jobsCandidate,
   ...jobsForm,
+  ...jobsImport,
   ...jobsPage,
   ...jobsUi,
   ...llmUi,
@@ -417,6 +431,8 @@ const namespaces = {
   ...followupSweep,
   ...deliveryReceipt,
   ...jobPreference,
+  /** 求职助手「上下文用量」面板（需求 #6）。 */
+  ...contextUsage,
   ...enumsApply,
   ...enumsAssistant,
   ...enumsClaims,
@@ -427,6 +443,10 @@ const namespaces = {
   ...enumsReferral,
   ...enumsResumeCatalog,
   ...enumsTracker,
+  /** 模拟面试实时语音（#26 P0）。 */
+  ...interviewVoice,
+  /** 面试页「这家公司面经 N 条」（#29D）。 */
+  ...interviewKnowledge,
 } as const;
 
 export default namespaces;

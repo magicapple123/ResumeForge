@@ -26,9 +26,11 @@ vi.mock("../../api/settings", () => apiMocks);
 const stored = {
   sources: ["bing", "duckduckgo"],
   searxng_url: "",
-  fetch_pages: 0,
+  depth: "standard",
   max_results: 8,
   deepseek_api_key: "",
+  tavily_api_key: "",
+  jina_api_key: "",
 };
 
 function renderCard() {
@@ -61,7 +63,7 @@ describe("SearchCard", () => {
       ...stored,
       sources: ["bing", "searxng"],
       searxng_url: "http://localhost:8080",
-      fetch_pages: 2,
+      depth: "standard",
       max_results: 12,
     });
 
@@ -69,24 +71,24 @@ describe("SearchCard", () => {
 
     await waitFor(() => expect(apiMocks.getSearchConfig).toHaveBeenCalledOnce());
     // 抓取正文那组是单选，要看选中的那一项是不是服务端存的那一项。
-    expect(await screen.findByRole("radio", { name: "抓前 2 条正文" })).toBeChecked();
+    expect(await screen.findByRole("radio", { name: "标准：抓前 2 页正文" })).toBeChecked();
     expect(screen.getByRole("radio", { name: "只取摘要（最快）" })).not.toBeChecked();
     expect(screen.getByLabelText(t("searchCard.searxng.title"))).toHaveValue(
       "http://localhost:8080",
     );
   });
 
-  it("saves the page-fetch count automatically after a change", async () => {
+  it("saves the chosen depth automatically after a change", async () => {
     renderCard();
     await waitLoaded();
 
-    fireEvent.click(screen.getByRole("radio", { name: "抓前 2 条正文" }));
+    fireEvent.click(screen.getByRole("radio", { name: "深入：抓前 5 页正文（最详细，也最慢）" }));
 
     // 这是本次修复的核心：抓取正文的条数以前没有任何界面能改，永远是 0。
     await waitFor(
       () =>
         expect(apiMocks.saveSearchConfig).toHaveBeenCalledWith(
-          expect.objectContaining({ fetch_pages: 2 }),
+          expect.objectContaining({ depth: "deep" }),
         ),
       { timeout: 2500 },
     );
@@ -207,7 +209,8 @@ describe("SearchCard", () => {
     const field = screen.getByLabelText(t("searchCard.deepseek.keyAria"));
     expect(field).toHaveValue("********");
 
-    fireEvent.click(screen.getByRole("radio", { name: "抓前 1 条正文" }));
+    // 改一个**与当前不同**的档位来触发自动保存（当前是 standard，所以点「深入」）。
+    fireEvent.click(screen.getByRole("radio", { name: "深入：抓前 5 页正文（最详细，也最慢）" }));
     await waitFor(
       () =>
         expect(apiMocks.saveSearchConfig).toHaveBeenCalledWith(
@@ -318,22 +321,25 @@ describe("SearchCard", () => {
     expect(screen.getByLabelText(t("searchCard.searxng.title"))).toBeDisabled();
   });
 
-  it("uses a radio group for the page-fetch choice: exactly one option stays selected", async () => {
+  it("uses a radio group for the depth choice: exactly one of the three stays selected", async () => {
     renderCard();
     await waitLoaded();
 
     // 这组值本来就是互斥的，Checkbox 会导致"点已选项取消不了"、语义与外观不符。
-    const summaries = screen.getByRole("radio", { name: "只取摘要（最快）" });
-    const twoPages = screen.getByRole("radio", { name: "抓前 2 条正文" });
-    expect(summaries).toBeChecked();
+    // P4-08 起是三档；服务端存的档位（这里的 standard）必须是选中的那个。
+    const snippets = screen.getByRole("radio", { name: "只取摘要（最快）" });
+    const standard = screen.getByRole("radio", { name: "标准：抓前 2 页正文" });
+    const deep = screen.getByRole("radio", { name: "深入：抓前 5 页正文（最详细，也最慢）" });
+    expect(standard).toBeChecked();
 
-    fireEvent.click(twoPages);
-    expect(twoPages).toBeChecked();
-    expect(summaries).not.toBeChecked();
+    fireEvent.click(snippets);
+    expect(snippets).toBeChecked();
+    expect(standard).not.toBeChecked();
+    expect(deep).not.toBeChecked();
 
-    fireEvent.click(summaries);
-    expect(summaries).toBeChecked();
-    expect(twoPages).not.toBeChecked();
+    fireEvent.click(deep);
+    expect(deep).toBeChecked();
+    expect(snippets).not.toBeChecked();
   });
 
   it("labels and saves the maximum-results cap (1-50), clamping larger input", async () => {
@@ -404,15 +410,42 @@ describe("SearchCard", () => {
     expect(screen.queryByText(t("searchCard.deepseek.privacy"))).toBeNull();
   });
 
-  it("groups page-fetch and result-cap under the shared parameters heading", async () => {
+  it("groups search depth and result-cap under the shared parameters heading", async () => {
     renderCard();
     await waitLoaded();
 
     expect(screen.getByText(t("searchCard.general.title"))).toBeInTheDocument();
-    // 两项都在「通用参数」里：抓取档位是单选组，条数上限是数字输入框。
+    // 两项都在「通用参数」里：深度档位是单选组，条数上限是数字输入框。
     expect(
-      screen.getByRole("radiogroup", { name: t("searchCard.fetch.title") }),
+      screen.getByRole("radiogroup", { name: t("searchCard.depth.title") }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(t("searchCard.results.aria"))).toBeInTheDocument();
+  });
+
+  it("offers Tavily and Jina source cards whose key fields unlock when checked", async () => {
+    // P4-09 / P4-10：两个新来源各有一张卡，Key 就地放在卡片里（未勾选时禁用）。
+    renderCard();
+    await waitLoaded();
+
+    expect(screen.getByLabelText(t("searchCard.tavily.keyAria"))).toBeDisabled();
+    expect(screen.getByLabelText(t("searchCard.jina.keyAria"))).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Tavily" }));
+    expect(screen.getByLabelText(t("searchCard.tavily.keyAria"))).toBeEnabled();
+    expect(screen.getByLabelText(t("searchCard.jina.keyAria"))).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(t("searchCard.tavily.keyAria")), {
+      target: { value: "  tvly-live  " },
+    });
+    await waitFor(
+      () =>
+        expect(apiMocks.saveSearchConfig).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sources: expect.arrayContaining(["tavily"]),
+            tavily_api_key: "tvly-live",
+          }),
+        ),
+      { timeout: 2500 },
+    );
   });
 });

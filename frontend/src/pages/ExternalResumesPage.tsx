@@ -7,13 +7,16 @@
  *
  * 版式约束（清单 §1.9，用户明确要求）：
  * - 页面标题**不放进 `Card title`**：antd v6 的 `.ant-card-head` 纵向内边距为 0，标题里
- *   放"标题 + 副标题"两行时文字会贴着卡片上边框（实测 1px）。这里用页面级标题行，
- *   顶格问题从结构上不存在。
+ *   放"标题 + 副标题"两行时文字会贴着卡片上边框（实测 1px）。标题行由
+ *   `ExternalResumePanel` 的 `bare` 变体渲染在卡片**之外**，顶格问题从结构上不存在。
  * - 页面根节点不包 `<Card>`：`.app-content` 已有 `--rf-content-pad`，再套一层会出现
  *   "页内卡片贴页面边缘"的第二种顶格。
+ *
+ * 2026-11-10（07-1）：标题行连同上传按钮一起搬进面板（面板才知道列表是否为空，
+ * 空列表时按钮只留 `EmptyState` 里那一颗）。本页只剩返回链接 + 面板。
  */
 import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Button, Flex, Tag, Typography } from "antd";
+import { Button, Flex } from "antd";
 import { useNavigate } from "react-router-dom";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
@@ -31,26 +34,17 @@ export default function ExternalResumesPage() {
 
   return (
     <Flex vertical gap={12}>
-      <Flex vertical gap={4}>
-        {/* 纵向 flex 里按钮默认 stretch：不钉住左缘时整颗按钮横跨一行、文字居中，
-            看起来像"标题上方飘着一行居中的链接"。 */}
-        <Button
-          type="link"
-          size="small"
-          style={{ alignSelf: "flex-start", paddingInline: 0 }}
-          icon={<ArrowLeftOutlined aria-hidden />}
-          onClick={goBack}
-        >
-          {t("resumesPage.external.back")}
-        </Button>
-        <Flex gap={8} align="center" wrap>
-          <Typography.Title level={4} style={{ margin: 0 }}>
-            {t("resumesPage.external.title")}
-          </Typography.Title>
-          <Tag>{t("resumesPage.external.tag")}</Tag>
-        </Flex>
-        <Typography.Text type="secondary">{t("resumesPage.external.subtitle")}</Typography.Text>
-      </Flex>
+      {/* 纵向 flex 里按钮默认 stretch：不钉住左缘时整颗按钮横跨一行、文字居中，
+          看起来像"标题上方飘着一行居中的链接"。 */}
+      <Button
+        type="link"
+        size="small"
+        style={{ alignSelf: "flex-start", paddingInline: 0 }}
+        icon={<ArrowLeftOutlined aria-hidden />}
+        onClick={goBack}
+      >
+        {t("resumesPage.external.back")}
+      </Button>
       <ExternalResumePanel variant="bare" />
     </Flex>
   );

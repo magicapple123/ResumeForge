@@ -41,8 +41,9 @@ interface DetailState {
 interface Props {
   /**
    * `card`（默认）：自带标题 / 副标题 / 上传按钮的独立卡片，任何页面都能直接嵌。
-   * `bare`：**不传 `title`**（因此没有 `.ant-card-head`，见清单 §1.9），标题由宿主页提供，
-   * 卡片里只留"上传按钮 + 列表"。独立页（`/resumes/external`）用这一档。
+   * `bare`：**不传 `title`**（因此没有 `.ant-card-head`，见清单 §1.9），标题行与副标题
+   * 由本组件渲染在卡片**之外**，上传按钮挂在标题行右端（07-1）。独立页
+   * （`/resumes/external`）用这一档；宿主页只保留返回链接。
    *
    * 默认值必须保持 `card`：将来若别处复用面板，默认值不能变成 `bare`，否则外观会被改掉。
    */
@@ -150,6 +151,35 @@ export default function ExternalResumePanel({ variant = "card" }: Props) {
     </Button>
   );
 
+  /**
+   * 独立页的标题行（`bare` 变体专用）：标题 + 标签 + 副标题，上传按钮挂在标题同一行的右端。
+   *
+   * 为什么标题行放在面板里而不是宿主页（07-1）：按钮必须在**列表为空时消失**
+   * （只留 `EmptyState` 里那一颗，避免两颗同名按钮），而条数在 `useExternalResumes` 里，
+   * 宿主页拿不到。放在同一个组件里，这个判断就是 `items.length > 0` 一行。
+   * 宿主页（`ExternalResumesPage`）只保留页面级返回链接——「标题不进 `Card title`」的
+   * 版式约束（清单 §1.9）依然成立：这一行不在 `.ant-card-head` 里。
+   *
+   * 对齐：按钮与标题同一行、`align="center"`（按钮 40px / 标题 28px，中心线差 0）。
+   * 改之前按钮在卡片里单独占一行，中心比标题低 85px，把列表推下去 77px。
+   */
+  const bareHeader = (
+    <div className="external-resume-header">
+      <Flex vertical gap={4}>
+        <Flex justify="space-between" align="center" gap={12} wrap>
+          <Flex gap={8} align="center" wrap style={{ minWidth: 0 }}>
+            <Typography.Title level={4} style={{ margin: 0 }}>
+              {t("resumesPage.external.title")}
+            </Typography.Title>
+            <Tag style={{ marginInlineEnd: 0 }}>{t("resumesPage.external.tag")}</Tag>
+          </Flex>
+          {items.length > 0 ? uploadButton : null}
+        </Flex>
+        <Typography.Text type="secondary">{t("resumesPage.external.subtitle")}</Typography.Text>
+      </Flex>
+    </div>
+  );
+
   const body = () => {
     if (loading) return <LoadingBlock minHeight={96} />;
     if (error) return <ErrorState description={error} onRetry={() => void reload()} />;
@@ -231,17 +261,18 @@ export default function ExternalResumePanel({ variant = "card" }: Props) {
     </>
   );
 
-  // 独立页形态：没有 Card head（清单 §1.9 的硬约束），标题由宿主页渲染。
+  // 独立页形态：没有 Card head（清单 §1.9 的硬约束），标题行由本组件渲染在卡片之外，
+  // 上传按钮挂在标题行右端（07-1：不再单独占一行、不再把列表推下去 77px）。
+  //
+  // 标题行与列表卡之间 gap 11 而不是 12：副标题到首行 = 11（间距）+ 1（卡片边框）+
+  // 12（卡内边距）= 24px，正好落在验收线上（改之前 77px）。用 12 会多出边框那 1px → 25px。
   if (variant === "bare") {
     return (
-      <Card size="small">
-        <Flex vertical gap={12}>
-          {/* 卡片里唯一的写操作放右上角，与列表拉开 12px，不抢标题的层级。 */}
-          <Flex justify="flex-end">{uploadButton}</Flex>
-          {body()}
-        </Flex>
+      <Flex vertical gap={11}>
+        {bareHeader}
+        <Card size="small">{body()}</Card>
         {modals}
-      </Card>
+      </Flex>
     );
   }
 

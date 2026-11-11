@@ -35,6 +35,8 @@ export const EQUALITY_EXEMPT_KEYS = {
   "interviewPage.interviewerName": "Person name, identical in both languages",
   // Search provider brand name, spelled the same in every locale.
   "searchCard.source.deepseek": "Provider brand name, identical in both languages",
+  "searchCard.source.tavily": "Provider brand name, identical in both languages",
+  "searchCard.source.jina": "Provider brand name, identical in both languages",
   // The version badge is a token ("v1", "v2", …), not prose: the letter is part of the
   // notation and must not become "第 1 版" on the Chinese side either, otherwise the
   // version bar no longer matches how the same feature is described in docs and tests.

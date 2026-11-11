@@ -60,6 +60,41 @@ const applySettings = {
   "applySettings.action.save": "保存设置",
   "applySettings.saved": "投递设置已保存",
   "applySettings.saveFailed": "保存投递设置失败",
+
+  // #14D/#14E：弹窗改成三个页签，新增「话术库」与「屏蔽清单」。
+  "applySettings.tab.cadence": "投递节奏",
+  "applySettings.tab.templates": "话术库",
+  "applySettings.tab.blocklist": "屏蔽清单",
+
+  "applySettings.blocklist.intro":
+    "命中的岗位在采集、入队、投递三处都会被拦下；一行填一项，留空即不屏蔽。",
+  "applySettings.blocklist.companies": "屏蔽公司",
+  "applySettings.blocklist.companiesHint": "按公司名比较，忽略空格与大小写。例如：某某科技有限公司",
+  "applySettings.blocklist.keywords": "屏蔽关键词",
+  "applySettings.blocklist.keywordsHint":
+    "岗位名或描述里包含这些词就跳过；至少两个字，避免一个词屏蔽整座城市。例如：外包、驻场",
+  "applySettings.blocklist.save": "保存屏蔽清单",
+  "applySettings.blocklist.saved": "屏蔽清单已保存",
+  "applySettings.blocklist.saveFailed": "保存屏蔽清单失败",
+  "applySettings.blocklist.loadFailed": "屏蔽清单读取失败，请重试",
+
+  "applySettings.templates.intro":
+    "把常用招呼语存成模板，编辑队列条目时可直接套用；正文里可用 {company}、{job_title}、{name} 三个变量。",
+  "applySettings.templates.name": "模板名",
+  "applySettings.templates.body": "招呼语正文",
+  "applySettings.templates.namePlaceholder": "例如：通用开场",
+  "applySettings.templates.bodyPlaceholder":
+    "例如：您好，我是{name}，看到贵司的{job_title}岗位，想进一步沟通。",
+  "applySettings.templates.add": "新建模板",
+  "applySettings.templates.remove": "删除这条模板",
+  "applySettings.templates.save": "保存话术库",
+  "applySettings.templates.saved": "话术库已保存",
+  "applySettings.templates.saveFailed": "保存话术库失败",
+  "applySettings.templates.loadFailed": "话术库读取失败，请重试",
+  "applySettings.templates.empty": "还没有模板：点「新建模板」写一条，编辑队列条目时就能直接套用。",
+  "applySettings.templates.uses": "用过 {count} 次",
+  "applySettings.templates.needName": "请先填写模板名",
+  "applySettings.templates.needBody": "请先填写招呼语正文",
 } as const;
 
 export default applySettings;

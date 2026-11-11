@@ -3,8 +3,10 @@
 
 @media (max-width: 767px) {
   .tt-shell {
+    /* 球径在窄屏缩到 56px，但**贴边缝隙不变**（P1-4）：2px 是"贴边"的验收口径，
+       跟着尺寸一起放大只会让手机上的球又浮起来。 */
     --tt-size: 56px;
-    --tt-edge: 16px;
+    --tt-edge: 2px;
   }
 
   .tt-tip {

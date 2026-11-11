@@ -243,6 +243,19 @@
   margin-bottom: 12px;
 }
 
+/* 一条事实来源标注（`FactAnnotationItem`，证据面板与字段徽标弹层共用同一个渲染件）。
+   字号与行高由调用点内联给出——徽标弹层挂在编辑器的 chip 上，不保证加载本文件；
+   这里补两件与宿主无关的事：长字段路径（"教育经历 · 某某大学 的 学校"）在窄弹层里
+   要能折行、不能把后面的 Tag 顶出去；同一分区里多条标注紧挨时留一档纵向节奏。 */
+.resume-fact-annotation {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.resume-fact-annotation + .resume-fact-annotation {
+  margin-top: 6px;
+}
+
 /* ===== 详情顶部元信息一行 / 诊断条（2026-11 问题 8） ===== */
 /* 目标：让 A4 纸面回到首屏。原来标题到纸面之间堆了 12 段元信息（≈690px），这里把
    「Tag 行 + 本次使用 + 独立版本 + 四条诊断入口 + 两行工具栏」压成 3 行（≈110px）。
@@ -346,6 +359,50 @@
   max-height: 360px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* ===== compact 变体（#24 24A：制作台左栏的常驻状态条）=====
+ *
+ * 形状是**一行**：状态句 + 可选的「未保存」标签，左栏只有 320–360px 宽，标签与徽标并排会
+ * 直接换行（那一行的高度就翻倍）。所以收起成一句话，超长时省略——完整数字在弹层里。
+ * 颜色语义与 full 变体完全一致：琥珀只由 `attention`（那一颗点）承载。
+ */
+.resume-diagnostics-bar.is-compact {
+  flex-wrap: nowrap;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--rf-text-secondary);
+}
+
+.resume-diagnostics-bar.is-compact .resume-diagnostics-entry {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-inline: 0;
+}
+
+.resume-diagnostics-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 「未保存」标签：中性灰，不用琥珀——它不是警告，是**口径说明**。 */
+.resume-diagnostics-dirty.ant-tag {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 16px;
+  padding-inline: 4px;
+  margin-inline: 0;
+  color: var(--rf-text-tertiary);
+  border-color: var(--rf-border);
+  background: var(--rf-fill-quaternary);
 }
 
 /* 窄档（用户把窗口拖窄 / 抽屉形态）：允许换行，别横向溢出。

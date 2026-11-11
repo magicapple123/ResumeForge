@@ -42,6 +42,10 @@ const llmRecord = {
   "llmRecord.hint.maxTokens":
     "限制模型单次回复的最大输出 Token 数。值越大可能增加费用；过小可能导致内容被截断。它不是模型的上下文长度上限。",
   "llmRecord.aria.maxTokens": "最大输出 Token 说明",
+  "llmRecord.field.contextWindow": "上下文窗口",
+  "llmRecord.hint.contextWindow":
+    "这个模型一次能装多少 Token（如 DeepSeek 64K、GPT 128K、Claude 200K）。留 0 = 不知道：助手不做累计上下文限制，上下文面板也不显示百分比。存的是本地设置，不会发给服务商。",
+  "llmRecord.aria.contextWindow": "上下文窗口说明",
   "llmRecord.hint.unlimited":
     "勾选后不再发送 max_tokens，由服务商决定上限。可缓解推理模型把思考过程算进输出预算、正文被挤空的问题；但它不是真的无限——部分服务商的默认值可能比手动设置的值更小。",
   "llmRecord.label.unlimited": "不限制",

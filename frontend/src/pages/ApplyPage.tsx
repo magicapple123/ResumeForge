@@ -5,10 +5,11 @@
  * 页面只负责编排（谁在跑、把任务交给进度面板），具体交互拆在 `components/apply/` 下的子组件里。
  * 执行采用**轮询**模型：`useTaskPolling` 按 1.5s 拉取批次详情，任务进入终态后自动停止。
  */
-import { SettingOutlined } from "@ant-design/icons";
-import { App, Button, Space, Tabs, Typography } from "antd";
+import { InfoCircleOutlined, SettingOutlined } from "@ant-design/icons";
+import { App, Button, Space, Tabs, Tooltip, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+
 import {
   getCollectTaskDetail,
   getCurrentTask,
@@ -19,6 +20,7 @@ import {
 } from "../api/apply";
 import ReferralPanel from "../components/ReferralPanel";
 import ApplyProgressPanel from "../components/apply/ApplyProgressPanel";
+import ApplyFunnelBar, { type FunnelDrill } from "../components/apply/ApplyFunnelBar";
 import ApplyQueuePanel from "../components/apply/ApplyQueuePanel";
 import ApplyRecordsPanel from "../components/apply/ApplyRecordsPanel";
 import ApplySettingsModal from "../components/apply/ApplySettingsModal";
@@ -117,21 +119,53 @@ export default function ApplyPage() {
 
   const adoptTask = (created: ApplyTask) => setTask(created);
 
+  /**
+   * #14F 漏斗下钻：三个执行量维度切到「投递记录」并带上结果筛选；「面试中」来自求职进度，
+   * 没有对应的投递记录筛选，直接去 `/tracker`——不做一条点了没反应的假联动。
+   */
+  const [recordsPreset, setRecordsPreset] = useState<{ result: string; nonce: number }>({
+    result: "",
+    nonce: 0,
+  });
+  const navigate = useNavigate();
+  const drillFunnel = (drill: FunnelDrill) => {
+    if (drill === "interviewing") {
+      navigate("/tracker");
+      return;
+    }
+    const result = drill === "succeeded" ? "success" : drill === "failed" ? "failed" : "";
+    setRecordsPreset((previous) => ({ result, nonce: previous.nonce + 1 }));
+    setTab("records");
+  };
+
   return (
     <div className="apply-page">
+      {/* #14G 第二版：标题与副标题原先竖排成 90px（副标题两行），实测把首屏表格挤到 2 行。
+          现在标题单行、副标题收进标题旁的「?」（真要读的人点一下就有），漏斗与设置同排。 */}
       <div className="apply-page-head">
-        <Space orientation="vertical" size={0}>
+        <Space size={6} align="center">
           <Typography.Title level={4} style={{ margin: 0 }}>
             {t("pagesMisc.applyPage.title")}
           </Typography.Title>
-          <Typography.Text type="secondary">{t("pagesMisc.applyPage.subtitle")}</Typography.Text>
+          <Tooltip title={t("pagesMisc.applyPage.subtitle")}>
+            <Button
+              type="text"
+              size="small"
+              icon={<InfoCircleOutlined />}
+              aria-label={t("pagesMisc.applyPage.subtitleAria")}
+            />
+          </Tooltip>
         </Space>
-        <Button icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)}>
-          {t("pagesMisc.applyPage.action.settings")}
-        </Button>
+        {/* 右侧一行：当前站点 + 最近 7 天执行量 + 设置。
+            站点行原本是页头的兄弟块（再吃 22px + 4px 间距），并入同排后首屏多一行表格。 */}
+        <Space size={12} align="center" wrap={false}>
+          <CurrentSiteBar refreshKey={collectRefreshKey} />
+          <ApplyFunnelBar onDrill={drillFunnel} />
+          <Button icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)}>
+            {t("pagesMisc.applyPage.action.settings")}
+          </Button>
+        </Space>
       </div>
-
-      <CurrentSiteBar refreshKey={collectRefreshKey} />
 
       <BrowserStatusBar />
 
@@ -213,7 +247,14 @@ export default function ApplyPage() {
           {
             key: "records",
             label: t("pagesMisc.applyPage.tab.records"),
-            children: <ApplyRecordsPanel disabled={running} onRetried={adoptTask} />,
+            children: (
+              <ApplyRecordsPanel
+                disabled={running}
+                onRetried={adoptTask}
+                presetResult={recordsPreset.result}
+                presetNonce={recordsPreset.nonce}
+              />
+            ),
           },
           {
             key: "referrals",

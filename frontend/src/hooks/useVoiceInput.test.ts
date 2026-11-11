@@ -19,6 +19,7 @@ vi.mock("../api/client", async () => {
 });
 
 import { t } from "../i18n";
+import { installFakeAudioContext } from "../test/fakeAudioContext";
 import { uploadErrorFor, useVoiceInput } from "./useVoiceInput";
 
 const TRACK_STOP = vi.fn();
@@ -80,6 +81,8 @@ beforeEach(() => {
   getUserMedia.mockReset();
   getUserMedia.mockResolvedValue(fakeStream());
   apiMocks.request.mockReset();
+  // 电平替身：默认"有声音"。静音用例自己 setAmplitude(0)。
+  installFakeAudioContext();
   installMediaStubs();
 });
 
@@ -250,6 +253,9 @@ describe("useVoiceInput", () => {
     const { result } = renderHook(() => useVoiceInput({ onTranscribed: vi.fn() }));
     await waitFor(() => expect(result.current.configured).toBe(true));
 
+    // 起录时长必须超过 MIN_RECORDING_MS（500ms），否则会先撞上 too_short 闸门：
+    // 这是 #8 刻意的行为——0 毫秒的录音不该发给上游。
+    vi.useFakeTimers();
     act(() => {
       result.current.start();
     });
@@ -260,6 +266,7 @@ describe("useVoiceInput", () => {
     const recorder = FakeMediaRecorder.instances[0];
     act(() => {
       recorder.emitData(10);
+      vi.advanceTimersByTime(1200);
     });
     await act(async () => {
       result.current.stop();
@@ -308,6 +315,8 @@ describe("useVoiceInput", () => {
     const { result } = renderHook(() => useVoiceInput({ onTranscribed: vi.fn() }));
     await waitFor(() => expect(result.current.configured).toBe(true));
 
+    // 同上：先超过 MIN_RECORDING_MS，才轮得到上传路径。
+    vi.useFakeTimers();
     act(() => {
       result.current.start();
     });
@@ -318,6 +327,7 @@ describe("useVoiceInput", () => {
     const recorder = FakeMediaRecorder.instances[0];
     act(() => {
       recorder.emitData(10);
+      vi.advanceTimersByTime(1200);
     });
     await act(async () => {
       result.current.stop();
@@ -349,6 +359,8 @@ describe("useVoiceInput", () => {
     const recorder = FakeMediaRecorder.instances[0];
     act(() => {
       recorder.emitData(10);
+      // 超过 MIN_RECORDING_MS，否则会先被 too_short 挡下（见 #8 的闸门）。
+      vi.advanceTimersByTime(1200);
     });
     await act(async () => {
       result.current.stop();

@@ -3,16 +3,18 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTouTou } from "./touTouContext";
-import { TOU_TOU_TIPS } from "./touTouTips";
 import type { TouTouStatus } from "./touTouTypes";
 import TouTouTip from "./TouTouTip";
 import TouTouSaveCard from "./TouTouSaveCard";
 import TouTouProfilePromptCard from "./TouTouProfilePromptCard";
+import TouTouActionPanel from "./TouTouActionPanel";
+import TouTouProposalCard from "./TouTouProposalCard";
+import TouTouSelectionMenu from "./TouTouSelectionMenu";
 import { faceKeyFor } from "./touTouFaces";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 import { useTouTouOrbDrag } from "./useTouTouOrbDrag";
 import { useTouTouOrbBlink } from "./useTouTouOrbBlink";
-import { useTouTouOrbTips } from "./useTouTouOrbTips";
+import { useTouTouOrbFeatures } from "./useTouTouOrbFeatures";
 import { useTouTouOrbPet } from "./useTouTouOrbPet";
 import { TouTouOrbButton } from "./TouTouOrbButton";
 import {
@@ -58,13 +60,9 @@ export default function TouTouOrb({
   const [blinking, setBlinking] = useState(false);
   const [petted, setPetted] = useState(false);
   const [pressed, setPressed] = useState(false);
-  const [tipVisible, setTipVisible] = useState(false);
-  const [tipIndex, setTipIndex] = useState(0);
   const statusTimerRef = useRef<number | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const sleepTimerRef = useRef<number | null>(null);
-  const tipTimerRef = useRef<number | null>(null);
-  const tipHideTimerRef = useRef<number | null>(null);
   const statusSyncedRef = useRef(false);
   /** 上一次激活（单击落点）的时间戳，配合定时器区分单击与双击。 */
   const lastActivateRef = useRef(0);
@@ -80,12 +78,10 @@ export default function TouTouOrb({
   const isBusyRef = useRef(isBusy);
   const visualStatusRef = useRef(visualStatus);
   // 标语轮换 effect 只留开关依赖，瞬态条件经 ref 镜像在回调里读取。
-  const hiddenRef = useRef(hidden);
   // ref 写入放 effect（Compiler 禁止渲染期写 ref）：这些镜像只在定时回调里被读。
   useEffect(() => {
     isBusyRef.current = isBusy;
     visualStatusRef.current = visualStatus;
-    hiddenRef.current = hidden;
   });
 
   /** 「好奇」是过渡态：到点自己回到正常，别一直瞪着。 */
@@ -187,7 +183,6 @@ export default function TouTouOrb({
 
   const wake = useCallback(() => {
     resetInactivity();
-    setTipVisible(false);
   }, [resetInactivity]);
 
   const { handlePetStroke } = useTouTouOrbPet({ isBusyRef, setPetted });
@@ -220,14 +215,9 @@ export default function TouTouOrb({
     getProfileEditControl,
   );
   const profilePromptControl = context.tipsEnabled ? profileEditControl : null;
-  // 提示卡在场时压掉旋转标语：两者都贴在球的正上方，底边吸附时更是同一竖带，
-  // 而标语层级更高且可点——不压掉就会盖住卡片、吃掉它的按钮。
-  // 标语那个 effect 的依赖刻意只留开关，所以这里同样用 ref 镜像给它读。
+  // 提示卡在场时压掉信号气泡：两者都贴在球的正上方，底边吸附时更是同一竖带，
+  // 而气泡层级更高且可点——不压掉就会盖住卡片、吃掉它的按钮。
   const hasProfilePrompt = profilePromptControl !== null;
-  const profilePromptRef = useRef(hasProfilePrompt);
-  useEffect(() => {
-    profilePromptRef.current = hasProfilePrompt;
-  });
 
   useTouTouOrbBlink({ prefersReducedMotion, hidden, dragging, visualStatus, setBlinking });
 
@@ -235,25 +225,25 @@ export default function TouTouOrb({
     context.setEdge(position.side);
   }, [context, position.side]);
 
-  useTouTouOrbTips({
+  /**
+   * #27 六项的编排：页面上下文、信号 pulse、中断预算气泡、划词动作、动作面板、
+   * 侧问与提案卡。逻辑全在 hook 里（本文件只剩渲染与拖拽/表情状态机）。
+   */
+  const features = useTouTouOrbFeatures({
     enabled: context.enabled,
     tipsEnabled: context.tipsEnabled,
-    hidden,
-    dragging,
-    isBusy,
-    hasProfilePrompt,
-    hiddenRef,
-    draggingRef,
-    isBusyRef,
-    profilePromptRef,
-    visualStatusRef,
-    tipTimerRef,
-    tipHideTimerRef,
-    setTipVisible,
-    setTipIndex,
+    suppressAnnouncement: hasProfilePrompt,
+    onOpenAssistant: onOpen,
+    onOpenClipboard,
   });
+  // 长按与拖拽共用一个 pointerdown：按下后**移动超过阈值**才算拖、取消长按；
+  // 不能用 dragging 状态取消——拖拽 hook 一按下就置 dragging，那会让长按永远不成立。
+  const cancelOrbLongPress = features.cancelLongPress;
+  const longPressOriginRef = useRef<{ x: number; y: number } | null>(null);
 
   const handleActivate = (options: { immediate?: boolean } = {}) => {
+    // 长按已经打开了动作面板：松手后的这次 click 不是"单击"，吞掉。
+    if (features.consumeLongPress()) return;
     if (suppressClickRef.current) {
       suppressClickRef.current = false;
       return;
@@ -305,15 +295,19 @@ export default function TouTouOrb({
       clearTimer(statusTimerRef);
       clearTimer(hideTimerRef);
       clearTimer(sleepTimerRef);
-      clearTimer(tipTimerRef);
-      clearTimer(tipHideTimerRef);
       clearTimer(singleOpenTimerRef);
     };
   }, []);
 
   if (!context.enabled) return null;
 
-  const classes = ["tt-shell", `is-edge-${position.side}`, isWebform ? "is-webform" : ""]
+  const classes = [
+    "tt-shell",
+    `is-edge-${position.side}`,
+    isWebform ? "is-webform" : "",
+    // 有信号才 pulse（#27B）：没信号的页面球保持原样，不做"会动所以看得见"的噪声。
+    features.pulsing ? "has-signals" : "",
+  ]
     .filter(Boolean)
     .join(" ");
   // 眨眼借用闭眼素材闪一下；其余时候是状态对应的那张脸。
@@ -343,9 +337,28 @@ export default function TouTouOrb({
 
   return (
     <div className={classes} style={shellStyle}>
-      {tipVisible ? (
-        <TouTouTip text={TOU_TOU_TIPS[tipIndex]} onClose={() => setTipVisible(false)} />
+      {features.tip ? (
+        <TouTouTip
+          text={features.tip.text}
+          params={features.tip.params}
+          actionLabel={features.tip.actionLabel}
+          onAction={features.tip.onAction}
+          muteLabel={features.tip.muteLabel}
+          onMute={features.tip.onMute}
+          onClose={features.onTipClose}
+        />
       ) : null}
+      {/* #27A 划词浮条：全局唯一一份，选中文本后原地浮出。 */}
+      <TouTouSelectionMenu
+        enabled={features.selectionEnabled}
+        onAction={features.onSelectionAction}
+      />
+      {/* #27C 动作面板：只在打开时挂载，内部状态随卸载复位。 */}
+      {features.panelProps ? (
+        <TouTouActionPanel key={features.panelKey ?? "tt-panel"} {...features.panelProps} />
+      ) : null}
+      {/* #27F 提案卡：没有提案时自身渲染 null。 */}
+      <TouTouProposalCard proposal={features.proposal} onDismiss={features.onProposalDismiss} />
       {/* 卡片自带入场/退场动画，故即使 control 为 null 也要常驻（内部渲染 null）。
           脏状态提示点已从球上挪进卡片标题行，见 TouTouSaveCard。 */}
       <TouTouSaveCard control={profileSaveControl} />
@@ -361,7 +374,27 @@ export default function TouTouOrb({
         buttonRef={buttonRef}
         buttonClasses={buttonClasses}
         activeFace={activeFace}
-        onPointerDown={handlePointerDown}
+        onPointerDown={(event) => {
+          // 长按与拖拽共用 pointerdown：两个都启动，谁先成立谁生效（见 cancelOrbLongPress）。
+          longPressOriginRef.current = { x: event.clientX, y: event.clientY };
+          features.startLongPress();
+          handlePointerDown(event);
+        }}
+        onPointerMove={(event) => {
+          const origin = longPressOriginRef.current;
+          if (!origin) return;
+          if (Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 4) {
+            // 移动超过 4px = 用户在拖，不是长按。
+            longPressOriginRef.current = null;
+            cancelOrbLongPress();
+          }
+        }}
+        onPointerUp={() => {
+          longPressOriginRef.current = null;
+          cancelOrbLongPress();
+        }}
+        onPointerLeave={cancelOrbLongPress}
+        onPointerCancel={cancelOrbLongPress}
         onClick={() => handleActivate()}
         onKeyDown={handleKeyDown}
         onFocus={wake}

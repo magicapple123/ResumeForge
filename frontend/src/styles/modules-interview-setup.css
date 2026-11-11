@@ -117,3 +117,11 @@
   font-size: 12px;
   font-weight: 400;
 }
+
+/* 「当前材料」（#25）：选中/导入之后唯一常驻的来源说明，必须独立成行——
+   留在 Select 的同一行里会被下拉宽度挤掉，而它是"这份材料从哪来"的唯一线索。
+   secondary 的颜色由 <Typography.Text type="secondary"> 给，这里只管版面。 */
+.interview-resume-current {
+  display: block;
+  margin-top: 4px;
+}

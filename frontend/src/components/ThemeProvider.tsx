@@ -53,6 +53,10 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
       locale={antdLocale(locale)}
       theme={dark ? darkTheme : appTheme}
       getPopupContainer={() => document.body}
+      /* #35A 全站提示降噪：antd 默认 0.1s，鼠标扫过就弹，203 处 Tooltip 一起变成噪声。
+         0.6s 意味着「划过去」不出现，只有真的停下来看才显示；离开仍然 0.1s，避免挡住下一步操作。
+         这里是唯一入口——不要在调用点各自写 mouseEnterDelay。 */
+      tooltip={{ mouseEnterDelay: 0.6, mouseLeaveDelay: 0.1 }}
     >
       <AntdApp message={MESSAGE_CONFIG}>{children}</AntdApp>
     </ConfigProvider>

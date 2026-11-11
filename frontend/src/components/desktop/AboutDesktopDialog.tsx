@@ -50,6 +50,13 @@ export default function AboutDesktopDialog({ open, bridge, onClose }: Props) {
     if (pending) void pending.catch(() => undefined);
   };
 
+  // #34H：「检查更新」只留在「关于」里（帮助菜单里那一份已移除）。点击后由主进程
+  // 的系统弹窗给出结论，这里不需要结果状态。
+  const checkUpdate = () => {
+    const pending = bridge.menuAction?.("help.checkUpdate");
+    if (pending) void pending.catch(() => undefined);
+  };
+
   return (
     <Modal
       open={open}
@@ -69,6 +76,9 @@ export default function AboutDesktopDialog({ open, bridge, onClose }: Props) {
               {t(link.labelKey)}
             </Button>
           ))}
+          <Button type="link" onClick={checkUpdate}>
+            {t("appHeader.desktopMenu.about.checkUpdate")}
+          </Button>
         </div>
       </div>
     </Modal>

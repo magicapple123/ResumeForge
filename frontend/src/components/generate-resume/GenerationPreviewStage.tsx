@@ -11,7 +11,8 @@ import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import ResumeDetailPreview from "../resume/ResumeDetailPreview";
 import type { ResumePreviewHandle } from "../ResumePreview";
-import type { ResumeDetail, ResumeLayout } from "../../types";
+import type { RagRetrieval, ResumeDetail, ResumeLayout } from "../../types";
+import RagRetrievalState from "./RagRetrievalState";
 import type { ResumeDocument } from "../../types/resumeDocument";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
@@ -42,6 +43,10 @@ interface Props {
   onGoResumes: () => void;
   onRegenerate: () => void;
   onClose: () => void;
+  /** #30 本次生成结束时的检索回执（结果卡底部的审计行）。 */
+  ragAudit?: RagRetrieval | null;
+  /** 审计明细里单条经历的跳转（去资料页查看）。 */
+  onOpenProfile?: () => void;
 }
 
 export default function GenerationPreviewStage({
@@ -65,44 +70,50 @@ export default function GenerationPreviewStage({
   onGoResumes,
   onRegenerate,
   onClose,
+  ragAudit = null,
+  onOpenProfile,
 }: Props) {
   useLocale();
   return (
-    <ResumeDetailPreview
-      detail={result.detail}
-      html={previewHtml}
-      layout={layout}
-      layoutStatus={layoutStatus}
-      measure={measure}
-      pdfDirectAvailable={pdfDirectAvailable}
-      relayouting={relayouting}
-      previewRef={previewRef}
-      onLayoutStatus={setLayoutStatus}
-      onMeasure={setMeasure}
-      onApplyLayout={applyLayout}
-      onApplyFittedFormat={applyFittedFormat}
-      onSaveEditedResume={saveEditedResume}
-      onResumeRevised={applyRevisedDetail}
-      showReviseAction={false}
-      // W19 入口迁移：生成流程/未保存预览仍走旧导出面板（内容尚未定稿落库）。
-      exportFlow="legacy"
-      suggestionsGenerated={suggestionsGenerated}
-      suggestionsResetKey={suggestionsResetKey}
-      onSuggestionsGenerated={() => setSuggestionsGenerated(true)}
-      extraActions={
-        // 层级（2026-11 问题 3）：整条底栏只留「导出」一个 primary——「完成」原本也是实心，
-        // 两个终点动作并列就看不出哪个是"拿走产物"。「去简历中心」是导航而非动作，
-        // 用 `text` 降到导航层（仍可 Tab 聚焦、有焦点环）。
-        <Space wrap>
-          <Button type="text" onClick={onGoResumes}>
-            {t("generateStages.preview.goResumes")}
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={onRegenerate}>
-            {t("generateStages.action.regenerate")}
-          </Button>
-          <Button onClick={onClose}>{t("generateStages.preview.done")}</Button>
-        </Space>
-      }
-    />
+    <>
+      <ResumeDetailPreview
+        detail={result.detail}
+        html={previewHtml}
+        layout={layout}
+        layoutStatus={layoutStatus}
+        measure={measure}
+        pdfDirectAvailable={pdfDirectAvailable}
+        relayouting={relayouting}
+        previewRef={previewRef}
+        onLayoutStatus={setLayoutStatus}
+        onMeasure={setMeasure}
+        onApplyLayout={applyLayout}
+        onApplyFittedFormat={applyFittedFormat}
+        onSaveEditedResume={saveEditedResume}
+        onResumeRevised={applyRevisedDetail}
+        showReviseAction={false}
+        // W19 入口迁移：生成流程/未保存预览仍走旧导出面板（内容尚未定稿落库）。
+        exportFlow="legacy"
+        suggestionsGenerated={suggestionsGenerated}
+        suggestionsResetKey={suggestionsResetKey}
+        onSuggestionsGenerated={() => setSuggestionsGenerated(true)}
+        extraActions={
+          // 层级（2026-11 问题 3）：整条底栏只留「导出」一个 primary——「完成」原本也是实心，
+          // 两个终点动作并列就看不出哪个是"拿走产物"。「去简历中心」是导航而非动作，
+          // 用 `text` 降到导航层（仍可 Tab 聚焦、有焦点环）。
+          <Space wrap>
+            <Button type="text" onClick={onGoResumes}>
+              {t("generateStages.preview.goResumes")}
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={onRegenerate}>
+              {t("generateStages.action.regenerate")}
+            </Button>
+            <Button onClick={onClose}>{t("generateStages.preview.done")}</Button>
+          </Space>
+        }
+      />
+      {/* #30 生成后审计：静默降级是最坏的选择，未参与也要写清原因。 */}
+      <RagRetrievalState rag={ragAudit} variant="audit" onOpenProfile={onOpenProfile} />
+    </>
   );
 }

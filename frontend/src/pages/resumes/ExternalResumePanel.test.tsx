@@ -49,11 +49,11 @@ function externalResume(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderPanel() {
+function renderPanel(variant: "card" | "bare" = "card") {
   return render(
     <MemoryRouter>
       <AntdApp>
-        <ExternalResumePanel />
+        <ExternalResumePanel variant={variant} />
       </AntdApp>
     </MemoryRouter>,
   );
@@ -161,5 +161,38 @@ describe("ExternalResumePanel", () => {
     expect(
       await screen.findByText(t("resumesPage.external.noTextForInterview")),
     ).toBeInTheDocument();
+  });
+});
+
+describe("ExternalResumePanel · bare 变体（07-1 空白行）", () => {
+  const uploadName = () => new RegExp(t("resumesPage.external.upload"));
+
+  it("标题行由面板渲染在卡片之外，上传按钮与标题同一行", async () => {
+    apiMocks.listExternalResumes.mockResolvedValue({
+      items: [externalResume()],
+      total: 1,
+      page: 1,
+      page_size: 100,
+    });
+    const { container } = renderPanel("bare");
+
+    await screen.findByText("external-a.txt");
+    const header = container.querySelector(".external-resume-header");
+    expect(header).not.toBeNull();
+    // 标题与按钮同属标题行；卡片头不存在（§1.9），按钮也不再占卡片里的一整行。
+    expect(header?.querySelector("h4")?.textContent).toBe(t("resumesPage.external.title"));
+    expect(header?.querySelector("button")).not.toBeNull();
+    expect(container.querySelectorAll(".ant-card-head")).toHaveLength(0);
+    expect(screen.getAllByRole("button", { name: uploadName() })).toHaveLength(1);
+  });
+
+  it("空列表时标题行不放按钮：只留空态那一颗", async () => {
+    const { container } = renderPanel("bare");
+
+    await screen.findByText(t("resumesPage.external.empty"));
+    const header = container.querySelector(".external-resume-header");
+    expect(header).not.toBeNull();
+    expect(header?.querySelector("button")).toBeNull();
+    expect(screen.getAllByRole("button", { name: uploadName() })).toHaveLength(1);
   });
 });

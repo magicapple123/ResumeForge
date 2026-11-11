@@ -17,6 +17,10 @@
  * - `[文字](地址)` → 链接（**只放行 http/https**；其余只留 link text，见 renderLink）；
  * - 空行分段；其余行按普通段落。
  *
+ * 表格一律 `table-layout: fixed` + `<colgroup>`（两列按 58 / 42），文件名单元格
+ * （`ResumeForge-2.0.0-win-x64.zip` 这类）套等宽字体：下载表要对得齐，用户才敢按
+ * 自己的平台挑包。
+ *
  * 关于 key：全部用**数字**（列表起始行号 / 表格起始行号 / 段落的行号 / 单元格序号），
  * 不拼 `p-3`、`notes-table-2` 这类字符串。`src/i18n/cjkRatchet` 的 AST product-copy
  * 扫把 JSX 表达式里出现的模板串当"产品文案"（`renderInline(x, \`h-${i}\`)` 会被记成
@@ -35,6 +39,9 @@ const TABLE_STYLE: CSSProperties = {
   width: "100%",
   margin: "0 0 8px",
   fontSize: "inherit",
+  // 固定列宽（见 renderTable 的 colgroup）：下载表两列 58 / 42，内容长短不再互相挤压，
+  // 换行位置可预期——`auto` 布局下长文件名会把「说明」列压成一条竖线。
+  tableLayout: "fixed",
 };
 
 const CELL_STYLE: CSSProperties = {
@@ -42,7 +49,25 @@ const CELL_STYLE: CSSProperties = {
   padding: "5px 6px",
   textAlign: "left",
   verticalAlign: "top",
+  // fixed 布局下必须自己断词，否则超长文件名会溢出单元格。
+  wordBreak: "break-word",
 };
+
+/**
+ * 文件名单元格的字体：等宽才分得清 `-win-x64` 与 `-win-arm64`、`.zip` 与 `.tar.gz`。
+ *
+ * 判据是**内容形状**而不是列位置：公告里「文件」列有时在左有时在右，而一个纯
+ * `ResumeForge-2.0.0-win-x64.zip` 无论出现在哪一列都该等宽显示。
+ */
+const FILE_NAME = /^[A-Za-z0-9._+-]+\.(?:zip|exe|msi|dmg|tar\.gz|tgz|sh|cmd)$/;
+
+const FILE_NAME_STYLE: CSSProperties = {
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontSize: "0.92em",
+};
+
+/** 下载表两列的宽度（%）：文件名列要宽，说明列够读即可。 */
+const DOWNLOAD_TABLE_WIDTHS = ["58%", "42%"] as const;
 
 const CODE_STYLE: CSSProperties = {
   fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
@@ -56,7 +81,14 @@ const LIST_STYLE: CSSProperties = { margin: "0 0 4px", paddingLeft: 20 };
 
 const PARAGRAPH_STYLE: CSSProperties = { marginBottom: 4 };
 
-const HEADING_STYLE: CSSProperties = { marginTop: 0, marginBottom: 4 };
+/* 说明块内的标题：14px（原来是 antd h5 的 16px，比正文大太多、把说明块撑高），
+   上边距 18px 用来把「要不要升 / 下载 / 主要变化」切成看得出来的段。 */
+const HEADING_STYLE: CSSProperties = {
+  marginTop: 18,
+  marginBottom: 4,
+  fontSize: 14,
+  lineHeight: 1.45,
+};
 
 const HR_STYLE: CSSProperties = {
   border: "none",
@@ -145,6 +177,11 @@ function renderInline(text: string): ReactNode[] {
   return nodes;
 }
 
+/** 单元格样式：文件名（`…-win-x64.zip`）额外套等宽字体，其余只加断词。 */
+function cellStyle(cell: string): CSSProperties {
+  return FILE_NAME.test(cell.trim()) ? { ...CELL_STYLE, ...FILE_NAME_STYLE } : CELL_STYLE;
+}
+
 /** 一张表：首个 `|` 行进 thead，其余进 tbody；列数按最多的一行补齐空单元格。 */
 function renderTable(rows: string[][], blockKey: number): ReactNode {
   const columns = rows.reduce((widest, row) => Math.max(widest, row.length), 0);
@@ -155,12 +192,22 @@ function renderTable(rows: string[][], blockKey: number): ReactNode {
   };
   const header = normalize(rows[0] ?? []);
   const body = rows.slice(1).map(normalize);
+  // 两列表（真实公告里的「要不要升」「下载」）按 58 / 42 分；其余列数等宽。
+  const colWidth = (column: number): string =>
+    columns === DOWNLOAD_TABLE_WIDTHS.length
+      ? DOWNLOAD_TABLE_WIDTHS[column]
+      : `${Math.round(100 / Math.max(columns, 1))}%`;
   return (
     <table key={blockKey} style={TABLE_STYLE}>
+      <colgroup>
+        {header.map((_, column) => (
+          <col key={column} style={{ width: colWidth(column) }} />
+        ))}
+      </colgroup>
       <thead>
         <tr>
           {header.map((cell, column) => (
-            <th key={column} style={CELL_STYLE}>
+            <th key={column} style={cellStyle(cell)}>
               {renderInline(cell)}
             </th>
           ))}
@@ -170,7 +217,7 @@ function renderTable(rows: string[][], blockKey: number): ReactNode {
         {body.map((cells, row) => (
           <tr key={row}>
             {cells.map((cell, column) => (
-              <td key={column} style={CELL_STYLE}>
+              <td key={column} style={cellStyle(cell)}>
                 {renderInline(cell)}
               </td>
             ))}

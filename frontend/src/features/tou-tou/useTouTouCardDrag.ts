@@ -23,9 +23,11 @@ const DRAG_THRESHOLD_PX = 4;
 const KEYBOARD_STEP_PX = 16;
 /** 卡片与悬浮球之间留的间隙。 */
 const ORB_GAP_PX = 12;
-/** 悬浮球的兜底几何（球未渲染或量不到时按 CSS 默认的右下角位置算）。 */
+/** 悬浮球的兜底几何（球未渲染或量不到时按 CSS 默认的右下角位置算）。
+    数值必须与 `styles/tou-tou-orb.css` 的 `--tt-edge` / `--tt-size` 同源：P1-4 把
+    贴边缝隙从 24px 收到 2px，这里再留着 24 会让"球量不到"时卡片偏出 22px。 */
 const DEFAULT_ORB_SIZE = 64;
-const DEFAULT_ORB_EDGE = 24;
+const DEFAULT_ORB_EDGE = 2;
 
 interface CardMetrics {
   width: number;

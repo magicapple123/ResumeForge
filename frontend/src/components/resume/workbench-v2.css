@@ -186,3 +186,112 @@
   flex-direction: column;
   min-width: 0;
 }
+
+/* ===== #24 24A：左栏「版面」组顶部的常驻状态条 =====
+ *
+ * 外面这一层只是锚点（e2e 量高度、自动化断言 data-fill），视觉全交给诊断条自己。
+ * `min-width: 0` 是 flex 子项能省略的前提：左栏 320–360px，一句话放不下时必须省略号，
+ * 不能把整列撑宽（撑宽会把滑杆挤出可视区）。
+ */
+.resume-wb-layout-status {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ===== #24 24D：「结构」页签里的未收录资料组 =====
+ *
+ * 位置在结构树与「条目字段排版」之间。`flex: 0 0 auto` 与相邻两块同值：这一列是整体滚动
+ * （`.resume-wb-structure-tab` 带 `overflow-y: auto`），哪一块被压扁都会让树行互相盖住
+ * （2026-10-31 M7 复跑就是这么暴露的）。
+ */
+.resume-wb-coverage {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-md, 8px);
+  background: var(--rf-fill-quaternary, #fafafa);
+}
+
+.resume-wb-coverage-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 口径说明：常驻一行小字（清单按已保存版本统计），不折叠——它是"为什么数字和预览卡
+   不一样"的唯一解释，藏起来就等于没说。 */
+.resume-wb-coverage-hint {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--rf-text-tertiary);
+}
+
+/* ===== #24 24E：中栏字段旁的来源徽标（FactSourceBadge）=====
+ *
+ * 形状直接复用 `.document-chip-badge`（`.document-chip` 是 flex 行，徽标与
+ * 「仅素材 / 已隐藏」两颗同一档），这里只补三件事：
+ * 1. 它是 `<button>`（点开看来源原文），所以要把浏览器默认的灰底与内边距压掉；
+ * 2. 三档来源各自的颜色（`data-source` 是唯一判据，不靠类名叠加）；
+ * 3. 焦点可见：这颗徽标很小，纯色差不足以让键盘用户确认"我在这一颗上"。
+ *
+ * 色板与证据面板 / 台账同源（success = 资料库、warning = AI 生成、info = 手动），
+ * 这样"AI 写的那一段"在徽标、Tag、弹层里始终是同一个色系。
+ */
+.resume-fact-source-badge {
+  /* 按钮化：`.document-chip-badge` 只给了 border / 字号 / 圆角。 */
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  border-color: currentColor;
+  opacity: 0.85;
+}
+
+.resume-fact-source-badge:hover,
+.resume-fact-source-badge:focus-visible {
+  opacity: 1;
+}
+
+.resume-fact-source-badge[data-source="profile"] {
+  color: var(--rf-success-text);
+}
+
+.resume-fact-source-badge[data-source="ai"] {
+  color: var(--rf-warning-text);
+}
+
+.resume-fact-source-badge[data-source="manual"] {
+  color: var(--rf-info-strong);
+}
+
+/* 弹层正文：只有一条标注，上下各留一点，别贴着浮层边框。 */
+.resume-fact-source-body {
+  padding: 4px 2px;
+  min-width: 220px;
+  max-width: 360px;
+}
+
+/* ===== #24 24F：左栏「查看生成说明」入口（WorkbenchRationaleEntry）=====
+ *
+ * 入口在「版面」组里紧挨状态条，视觉上不该比那一行数字更抢眼：antd 的 link 按钮已经
+ * 是低权重样式，这里只把它的左内边距归零，让文字左缘与上方状态条对齐（左栏是
+ * 「标签列 + 控件列」网格，多出来的缩进会让这一行看起来像另一块内容的子项）。
+ */
+.resume-wb-rationale {
+  display: flex;
+  min-width: 0;
+}
+
+.resume-wb-rationale-entry {
+  padding-inline: 0;
+  font-size: 12px;
+}
+
+.resume-wb-rationale-body {
+  max-width: 420px;
+}

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 联网搜索设置：来源（多选卡片）、正文抓取条数、每次最多返回的结果条数。
+ * 联网搜索设置：来源（多选卡片）、搜索深度、每次最多返回的结果条数。
  *
  * 这些参数一直存在于后端，但此前**没有任何界面能改**：`GET/PUT /api/settings/search`
  * 只有接口没有入口，于是「抓取正文的条数」永远是默认的 0，助手拿到的永远只有摘要。
@@ -32,7 +32,6 @@ import {
   Flex,
   Input,
   InputNumber,
-  Radio,
   Space,
   Tag,
   Typography,
@@ -41,6 +40,7 @@ import {
 import ErrorState from "../common/ErrorState";
 import LoadingBlock from "../common/LoadingBlock";
 import SettingsField from "./SettingsField";
+import SearchDepthField from "./SearchDepthField";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSearchConfig, saveSearchConfig } from "../../api/settings";
 import type { SearchConfig, SearchSource } from "../../types";
@@ -51,9 +51,12 @@ import { useLocale } from "../../i18n/i18nContext";
 const DEFAULT_CONFIG: SearchConfig = {
   sources: ["bing", "duckduckgo"],
   searxng_url: "",
-  fetch_pages: 0,
+  // 与后端 `SearchConfig.depth` 的默认值一致（P4-08）：「标准」= 抓 2 页正文。
+  depth: "standard",
   max_results: 8,
   deepseek_api_key: "",
+  tavily_api_key: "",
+  jina_api_key: "",
 };
 
 /** 「每次最多返回的结果条数」上限，与后端 `SearchConfig.max_results` 的 `le=50` 对齐。 */
@@ -92,20 +95,17 @@ const SOURCE_OPTIONS: SourceOption[] = [
     labelKey: "searchCard.source.deepseek",
     noteKey: "searchCard.source.note.deepseek",
   },
-];
-
-/**
- * 抓取正文的档位。
- *
- * `value` 就是后端 `fetch_pages` 的取值（0 = 只取摘要），原样提交；
- * `labelKey` 只负责显示，在渲染处 `t()`——模块作用域里调 `t()` 会把语言固定在
- * 模块求值那一刻（§8.1）。
- */
-const FETCH_PAGE_OPTIONS: { value: number; labelKey: MessageKey }[] = [
-  { value: 0, labelKey: "searchCard.fetch.0" },
-  { value: 1, labelKey: "searchCard.fetch.1" },
-  { value: 2, labelKey: "searchCard.fetch.2" },
-  { value: 3, labelKey: "searchCard.fetch.3" },
+  // P4-09 / P4-10：两个需要 Key 的第三方来源。
+  {
+    value: "tavily",
+    labelKey: "searchCard.source.tavily",
+    noteKey: "searchCard.source.note.tavily",
+  },
+  {
+    value: "jina",
+    labelKey: "searchCard.source.jina",
+    noteKey: "searchCard.source.note.jina",
+  },
 ];
 
 /** 一条来源选项的显示名（品牌名直接用，其余走词表）。 */
@@ -181,6 +181,8 @@ export default function SearchCard() {
       ...next,
       searxng_url: next.searxng_url.trim(),
       deepseek_api_key: next.deepseek_api_key.trim(),
+      tavily_api_key: next.tavily_api_key.trim(),
+      jina_api_key: next.jina_api_key.trim(),
     };
     if (trimmed.sources.length === 0) {
       setSaveStatus("error");
@@ -233,6 +235,8 @@ export default function SearchCard() {
 
   const usesSearxng = config.sources.includes("searxng");
   const usesDeepseek = config.sources.includes("deepseek");
+  const usesTavily = config.sources.includes("tavily");
+  const usesJina = config.sources.includes("jina");
 
   const toggleSource = (value: SearchSource, checked: boolean) => {
     const sources = checked
@@ -376,6 +380,31 @@ export default function SearchCard() {
                         autoComplete="off"
                       />
                     ) : null}
+
+                    {/* P4-09 / P4-10：两个新来源的 Key 同样就地放在自己的卡片里。 */}
+                    {option.value === "tavily" ? (
+                      <Input.Password
+                        aria-label={t("searchCard.tavily.keyAria")}
+                        value={config.tavily_api_key}
+                        onChange={(event) => patch({ tavily_api_key: event.target.value })}
+                        placeholder={t("searchCard.tavily.keyPlaceholder")}
+                        disabled={!usesTavily || undefined}
+                        allowClear
+                        autoComplete="off"
+                      />
+                    ) : null}
+
+                    {option.value === "jina" ? (
+                      <Input.Password
+                        aria-label={t("searchCard.jina.keyAria")}
+                        value={config.jina_api_key}
+                        onChange={(event) => patch({ jina_api_key: event.target.value })}
+                        placeholder={t("searchCard.jina.keyPlaceholder")}
+                        disabled={!usesJina || undefined}
+                        allowClear
+                        autoComplete="off"
+                      />
+                    ) : null}
                   </div>
                 );
               })}
@@ -394,23 +423,30 @@ export default function SearchCard() {
             />
           ) : null}
 
+          {/* 新来源的说明同样是全宽常驻（理由同上：塞进卡片会把卡片撑高留白）。 */}
+          {usesTavily ? (
+            <Alert
+              type="info"
+              showIcon
+              title={t("searchCard.tavily.note")}
+              style={{ marginTop: 8 }}
+            />
+          ) : null}
+          {usesJina ? (
+            <Alert
+              type="info"
+              showIcon
+              title={t("searchCard.jina.note")}
+              style={{ marginTop: 8 }}
+            />
+          ) : null}
+
           <div>
             <Typography.Text strong>{t("searchCard.general.title")}</Typography.Text>
             <Flex vertical gap={16} style={{ marginTop: 8 }}>
-              <SettingsField label={t("searchCard.fetch.title")} hint={t("searchCard.fetch.hint")}>
-                {/* 表单控件是互斥单选，必须用 Radio：Checkbox 点已选项无法取消，语义也不对。 */}
-                <Radio.Group
-                  aria-label={t("searchCard.fetch.title")}
-                  value={config.fetch_pages}
-                  onChange={(event) => patch({ fetch_pages: event.target.value })}
-                >
-                  {FETCH_PAGE_OPTIONS.map((option) => (
-                    <Radio key={option.value} value={option.value}>
-                      {t(option.labelKey)}
-                    </Radio>
-                  ))}
-                </Radio.Group>
-              </SettingsField>
+              {/* 「搜索深度」整块在 SearchDepthField 里（拆分为守住 500 行预算）；
+                  换档只上报新值，400ms 合并保存仍由本卡负责。 */}
+              <SearchDepthField value={config.depth} onChange={(depth) => patch({ depth })} />
 
               <SettingsField
                 label={t("searchCard.results.title")}

@@ -157,7 +157,7 @@ const userGuideFlow = {
   "userGuideFlow.assistant.step1.title": "Job assistant",
   "userGuideFlow.assistant.step1.heading": "Let the assistant work on your data",
   "userGuideFlow.assistant.step1.description":
-    "Ask it anything about the project, and let it change data directly after telling you exactly what it will do; on any other page, click the Toutou floating ball to open it, or **double-click** it to open the “Toutou clipboard” for snippets you paste often.",
+    "Ask it anything about the project, and let it change data directly after telling you exactly what it will do; on any other page, click the Toutou floating ball to open it, or **double-click** it to open the “Toutou clipboard” for snippets you paste often. The assistant page also shows a **daily digest** (worth-applying jobs, applications with no reply for 7 days, interview countdowns, etc.) and a **perspective** switch (default / HR / interviewer / headhunter).",
   "userGuideFlow.assistant.step1.point1.lead": "What it can look up",
   "userGuideFlow.assistant.step1.point1.text":
     "Besides Jobs, Candidate Jobs, the material library, Resume layout presets and the Profile, it can read reminders, referrals, interview experiences, question-bank history, retrospective history, the knowledge base, job-search statistics and share packages; it can also summarize the failure reasons in Apply records to help you diagnose them.",
@@ -190,13 +190,13 @@ const userGuideFlow = {
     "Skill chips at the top of the input show the skills **enabled for this conversation**; click the × on a chip to disable that one, or the “Skills” button at the end of the row to open the menu and tick more. They **apply to this conversation only — each conversation has its own set**; a new conversation starts with none, at most 8 can be enabled, and skills beyond the injection budget are truncated and marked.",
   "userGuideFlow.assistant.step1.point11.lead": "New skills",
   "userGuideFlow.assistant.step1.point11.text":
-    "To create or edit a prompt, go to “**Workbench → Skills**” in the sidebar; the Skills library no longer has an enable switch — enabling now happens in the conversation input.",
+    "To create or edit a prompt, go to “**Workbench → Skills**” in the sidebar; the Skills library no longer has an enable switch — enabling now happens in the conversation input. A skill generated from a conversation starts as “pending validation” and cannot be enabled until you mark it verified.",
   "userGuideFlow.assistant.step1.point12.lead": "Conversations",
   "userGuideFlow.assistant.step1.point12.text":
     "The “⋮” on a conversation in the left list (or a right-click) renames it, pins it, copies a share link, continues it in a new conversation, archives or deletes it, and exports it as Markdown or saves it to the material library.",
   "userGuideFlow.assistant.step1.point13.lead": "Messages",
   "userGuideFlow.assistant.step1.point13.text":
-    "Right-click any message to “Quote this and keep asking”, copy or delete it; to delete several at once, right-click any message, choose “Batch select”, tick them and click “Delete selected”.",
+    "Right-click any message to “Quote this and keep asking”, copy or delete it; hovering a message also reveals an action bar: copy (always the full text), quote, regenerate (last assistant answer only) and delete. Long answers collapse automatically — click “Show full text” to read everything; to delete several at once, right-click any message, choose “Batch select”, tick them and click “Delete selected”.",
   "userGuideFlow.assistant.step1.point14.lead": "Thinking",
   "userGuideFlow.assistant.step1.point14.text":
     "Models with a thinking mode let you set “Thinking effort” on the right of the input; when it is on, a collapsed “Thinking process” appears below the reply. The current **model name (read-only)** is also shown left of the send button: hover it to see the record name and “switch at the top”; use the header dropdown to change models and this label follows.",
@@ -215,7 +215,7 @@ const userGuideFlow = {
     "Stored files all appear under the “My files” tab of the material library: images, documents and PDFs are visible at a glance and open any time; they belong to the current dataset, so export/import and upgrades never lose them",
   "userGuideFlow.assistant.step2.point3.lead": "Knowledge base",
   "userGuideFlow.assistant.step2.point3.text":
-    "Written-up content — interview summaries, Resume tips, job-search strategy, interview Q&A, industry notes and so on; it has categories and tags, the body supports Markdown, entries can be searched, added, edited and deleted, and clicking a card reads the full text.",
+    "Written-up content — interview summaries, Resume tips, job-search strategy, interview Q&A, industry notes and so on; it has categories and tags, the body supports Markdown, entries can be searched, added, edited and deleted, and clicking a card reads the full text. Each entry can record why it was saved plus a summary and key points, be filtered by company, and be found through semantic search (similar meaning, different wording); a long assistant answer, an interview report, an apply failure and a resume diagnosis can each be saved as an entry in one click, and the job detail and interview pages show “related knowledge / N interview notes for this company”.",
   "userGuideFlow.assistant.step2.point4.lead": "Which one to use",
   "userGuideFlow.assistant.step2.point4.text":
     "The material library holds **loose material that is not organized yet**; the knowledge base holds **notes written up and worth re-reading**.",

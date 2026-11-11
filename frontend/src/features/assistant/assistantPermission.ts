@@ -134,19 +134,90 @@ export function writePermissionChoice(
   store.setItem(permissionStorageKey(conversationId), choice);
 }
 
-/** 该会话是否已经确认过「写档位会直接改数据」。 */
-export function hasAcknowledgedWritePermission(conversationId: number | null | undefined): boolean {
-  if (conversationId == null) return false;
-  const store = storage();
-  if (!store) return false;
-  return store.getItem(permissionAckStorageKey(conversationId)) === "1";
+/** 需要一次性确认的档位（#12）：放宽读取 + 两个写档位。 */
+export const CONFIRM_REQUIRED_LEVELS: readonly AssistantPermissionLevel[] = [
+  "read_full",
+  "write_confirm",
+  "write_full",
+];
+
+interface PermissionAckRecord {
+  levels: AssistantPermissionLevel[];
+  updatedAt?: string;
 }
 
-export function acknowledgeWritePermission(conversationId: number | null | undefined): void {
+/**
+ * 读该会话已确认过的档位（#12）。
+ *
+ * 旧版语义是一个不分档位的布尔 `"1"`：**不继承**。继承会把"确认过可修改"当成"确认过完全权限"，
+ * 等于静默把最高权限给出去。所以旧值直接丢弃并重弹一次——宁可多问一次。
+ */
+export function acknowledgedLevels(
+  conversationId: number | null | undefined,
+): AssistantPermissionLevel[] {
+  if (conversationId == null) return [];
+  const store = storage();
+  if (!store) return [];
+  const key = permissionAckStorageKey(conversationId);
+  const raw = store.getItem(key);
+  if (raw === null) return [];
+  if (raw === "1") {
+    store.removeItem(key);
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw) as PermissionAckRecord;
+    const levels = Array.isArray(parsed?.levels) ? parsed.levels : [];
+    return levels.filter((value): value is AssistantPermissionLevel =>
+      isPermissionLevel(String(value)),
+    );
+  } catch {
+    store.removeItem(key);
+    return [];
+  }
+}
+
+/** 记下"这个会话的这个档位已确认"。同一会话可累积多个档位。 */
+export function acknowledgePermission(
+  conversationId: number | null | undefined,
+  level: AssistantPermissionLevel,
+): void {
   if (conversationId == null) return;
   const store = storage();
   if (!store) return;
-  store.setItem(permissionAckStorageKey(conversationId), "1");
+  const levels = acknowledgedLevels(conversationId);
+  const next = levels.includes(level) ? levels : [...levels, level];
+  const record: PermissionAckRecord = { levels: next, updatedAt: new Date().toISOString() };
+  try {
+    store.setItem(permissionAckStorageKey(conversationId), JSON.stringify(record));
+  } catch {
+    // 存储不可用：本次会话内仍会重复询问。不阻断改档位。
+  }
+}
+
+/**
+ * 唯一触发判定（#12）：这个会话的这个档位要不要弹确认卡。
+ *
+ * 无会话 id（草稿态）时永远不弹——那时 `editable=false`，本来就改不了档位。
+ */
+export function needsConfirm(
+  conversationId: number | null | undefined,
+  level: AssistantPermissionLevel,
+): boolean {
+  if (conversationId == null) return false;
+  if (!CONFIRM_REQUIRED_LEVELS.includes(level)) return false;
+  return !acknowledgedLevels(conversationId).includes(level);
+}
+
+/** @deprecated 用 `acknowledgedLevels` / `needsConfirm`；保留仅为兼容旧调用点。 */
+export function hasAcknowledgedWritePermission(conversationId: number | null | undefined): boolean {
+  return acknowledgedLevels(conversationId).some((level) => isWriteLevel(level));
+}
+
+/** @deprecated 用 `acknowledgePermission(id, level)`。 */
+export function acknowledgeWritePermission(conversationId: number | null | undefined): void {
+  if (conversationId == null) return;
+  acknowledgePermission(conversationId, "write_full");
 }
 
 // ===== 全局默认：模块级缓存 + 广播（与 llmConfigEvents 同构） =====
@@ -232,7 +303,7 @@ export async function resolvePermissionAxes(
   return permissionAxes(globalLevel);
 }
 
-/** 输入区用的权限状态：覆盖值、全局默认、解算结果与提示条关闭态。 */
+/** 输入区用的权限状态：覆盖值、全局默认、解算结果与待确认档位。 */
 export function useAssistantPermission(conversationId: number | null | undefined) {
   const [globalLevel, setGlobalLevel] = useState<AssistantPermissionLevel | null>(
     cachedGlobalPermission,
@@ -240,18 +311,16 @@ export function useAssistantPermission(conversationId: number | null | undefined
   const [choice, setChoiceState] = useState<AssistantPermissionChoice>(() =>
     readPermissionChoice(conversationId),
   );
-  // 提示条关闭态记「在哪个档位上关的」而不是一个布尔：换档位/换会话后自动重新出现，
-  // 不需要 effect 里再 setState（那会多一轮级联渲染）。
-  const [noticeDismissedLevel, setNoticeDismissedLevel] = useState<AssistantPermissionLevel | null>(
-    null,
-  );
+  // 待确认的高风险档位（#12）。非空 = 确认卡打开；此时 `choice` 仍是旧值，
+  // 也就是说卡片开着的时候发送消息用的还是旧权限——"选择不立即生效"就是靠这一条。
+  const [pendingLevel, setPendingLevel] = useState<AssistantPermissionLevel | null>(null);
 
   // 会话切换：重新读该会话的覆盖值（新会话回到「跟随全局」）。这是"把外部存储里的
   // 当前值同步进组件状态"的显式同步点：localStorage 不是可响应数据源，无法靠推导拿到。
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 外部存储同步点
     setChoiceState(readPermissionChoice(conversationId));
-    setNoticeDismissedLevel(null);
+    setPendingLevel(null);
   }, [conversationId]);
 
   // 全局默认：挂载取一次 + 设置页保存后重取（切页不会重建模块级缓存）。
@@ -273,18 +342,44 @@ export function useAssistantPermission(conversationId: number | null | undefined
   const effectiveLevel: AssistantPermissionLevel =
     choice === FOLLOW_GLOBAL ? (globalLevel ?? DEFAULT_ASSISTANT_PERMISSION) : choice;
 
+  // 全局默认（或切会话后继承的值）把高风险档位"带进来"时也要问一次——这属于
+  // "从别的地方再选到这个选项"。已确认过的档位不会再命中 needsConfirm，所以不会反复弹。
+  useEffect(() => {
+    if (needsConfirm(conversationId, effectiveLevel)) setPendingLevel(effectiveLevel);
+  }, [conversationId, effectiveLevel]);
+
+  /**
+   * 改档位的唯一入口（#12）：需要确认的档位**不立即生效**，先挂起等确认卡。
+   * 卡片上的主按钮在写档位未勾选时是 disabled，所以这里不存在"未确认就已落盘"的路径。
+   */
   const requestChoice = (next: AssistantPermissionChoice) => {
+    if (next !== FOLLOW_GLOBAL && needsConfirm(conversationId, next)) {
+      setPendingLevel(next);
+      return;
+    }
     writePermissionChoice(conversationId, next);
     setChoiceState(next);
   };
+
+  const confirmPending = () => {
+    if (pendingLevel != null && conversationId != null) {
+      acknowledgePermission(conversationId, pendingLevel);
+      writePermissionChoice(conversationId, pendingLevel);
+      setChoiceState(pendingLevel);
+    }
+    setPendingLevel(null);
+  };
+
+  const cancelPending = () => setPendingLevel(null);
 
   return {
     choice,
     effectiveLevel,
     globalLevel,
     editable: conversationId != null,
-    noticeVisible: showsRelaxedNotice(effectiveLevel) && noticeDismissedLevel !== effectiveLevel,
-    dismissNotice: () => setNoticeDismissedLevel(effectiveLevel),
+    pendingLevel,
     requestChoice,
+    confirmPending,
+    cancelPending,
   };
 }

@@ -23,7 +23,7 @@
   flex-direction: column;
   gap: var(--rf-space-1);
   width: 344px;
-  max-height: calc(100vh - 24px);
+  max-height: calc(var(--rf-viewport-h) - 24px);
   overflow-y: auto;
   padding: var(--rf-space-3);
   border: 1px solid var(--rf-border);

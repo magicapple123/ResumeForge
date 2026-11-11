@@ -343,106 +343,97 @@
   pointer-events: auto;
 }
 
-/* 精确预览：显示的是服务端排出的真实 PDF（与「导出」下载的是同一份字节）。
-   所以它只需要一个干净的相框——分页、阴影、缩放条全部交给浏览器 PDF 查看器，
-   任何"预览自己的装饰"在这里都会与查看器的工具栏打架。 */
+/* 精确预览：显示的是服务端排出的真实产物（与「导出」下载的是同一份字节）。
+   2026-11（P3-2）起产物不再交给浏览器 PDF 查看器，而是**逐页位图**：查看器自己画的两条
+   滚动条、纸边 4px 深色描边、56px 工具栏全部随它一起消失——那三样都在它的内部文档里，
+   外层 CSS 从来够不到。这里只剩一个干净的相框。 */
 .exact-preview {
   width: 100%;
   border: 1px solid var(--rf-border-subtle);
   border-radius: 6px;
   background: var(--rf-surface-alt);
-  /* 放大（`scale > 1`）时纸会比相框宽：允许横向滚动看右边，而不是把纸裁掉。
-     **但只在真的放大时才开**（`.is-zoomed`）：100% 时纸列宽度已经等于相框宽，
-     浮点累计出的半像素会让 `overflow-x: auto` 凭空多出一条横向滚动条，用户拖动它
-     纸就歪了（2026-11 反馈"精确预览有时候可以左右滑动、简历歪斜"）。
-     `overflow-x: hidden` 与 `overflow-y: hidden` 配对，不会按规范把 `overflow-y`
-     连带算成 `auto`——纵向高度是按页数算出来的，再出一条竖向滚动条就回到"两个滚动条"。 */
-  /* 不放大时这一层不滚动：纸列宽度恰好等于相框宽，任何 `overflow-x: auto` 都会因为
-     半像素误差凭空多出一条横向滚动条（2026-11 反馈"精确预览有时候可以左右滑动"）。 */
-  overflow: visible;
+  /* 只横向滚、纵向永不滚（P3-3）。
+     - `overflow-y` 必须是**显式** `hidden`：按规范，另一轴不是 `visible` 时 `visible` 会
+       被抬成 `auto`，于是又多出一条纵向滚动条（Chromium 实测如此）。
+     - 纵向高度是按页数算出来的（`previewPagesHeight`），给多少就正好装多少。
+     - 横向在 100% 时纸宽 === 相框宽（`Math.floor` 取整，见面板的 `pageWidth`），
+       `auto` 因此不会凭空多出一条；放大时才出现那一条**唯一允许**的横向滚动条。 */
+  overflow-x: auto;
+  overflow-y: hidden;
   position: relative;
 }
 
-/* 只有用户显式放大之后才让纸溢出相框，而且**横向滚动就发生在纸面层**（Q21）：
-   头部/提示/工具条/缩放条都是这一层的兄弟节点（在 `.resume-preview-chrome` 与页脚里），
-   不参与横向滚动。相框高度由 `useExactPreviewFrameHeight` 按宽度算；横向滚动条只会压缩
-   高度、不影响 `clientWidth`，所以宽度测量不会自激。 */
+/* 放大后才需要"纸溢出相框"的语义补充：滚到底不要带着外层页面一起滚（触控板横扫时的
+   橡皮筋会让人以为纸在飘）。两轴都显式写出来（P3-3 的验收就是量这两项的计算值）：
+   横向 `auto` 是那唯一允许的滚动条，纵向永远 `hidden`——高度按页数算好了。 */
 .exact-preview.is-zoomed {
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: hidden;
   overscroll-behavior-x: contain;
 }
 
 /* 相框自己的横向滚动条收窄一点，别抢纸面（全局细滚动条不一定覆盖到这里）。 */
-.exact-preview.is-zoomed::-webkit-scrollbar {
+.exact-preview::-webkit-scrollbar {
   height: 8px;
 }
 
-.exact-preview.is-zoomed::-webkit-scrollbar-thumb {
+.exact-preview::-webkit-scrollbar-thumb {
   border-radius: 4px;
   background: var(--rf-border);
 }
 
-.exact-preview-frame {
-  display: block;
-  width: 100%;
-  border: none;
-  /* PDF 只当"图"看：指针交给外层视口。否则 iframe 会把滚轮与拖动全吃掉——
-     Ctrl+滚轮落进查看器里成了**它自己的**缩放，与缩放条不是同一套状态（用户 2026-10-29：
-     "按钮缩放没有和滚轮缩放同步"）；顺手也避免查看器内部滚动条与外层滚动打架。 */
-  pointer-events: none;
-}
-
-/* 双缓冲的两层叠在一起：可见层在下（不透明），预加载层在上（完全透明）。
-   两者都是 PDF 查看器，位置必须严格重合，否则换上来时会"跳"一下。 */
+/* 双缓冲的两层叠在一起：可见层在下（不透明），待换层在上（完全透明）。
+   两者位置必须严格重合，否则换上来时会"跳"一下。 */
 .exact-preview-stack {
   position: relative;
-  width: 100%;
+  margin: 0 auto;
 }
 
 /* ===== 精确预览的纸列（2026-10-24 起不再补空白页） ===== */
 /* 2026-10-23 曾经按"上限 − 实际页数"补同比例的白纸，让精确预览与草稿模式的纸数看起来
    一致。2026-10-24 用户口径把它推翻了：**多页状态下后面补出来的空白页要去掉**——
    那些纸在导出的 PDF 里根本不存在，画出来只是让人以为"我的简历有 3 页"。
-   现在只画 PDF 实际排出来的页，预览与下载到的文件永远一致。 */
+   现在只画产物里实际有的页，预览与下载到的文件永远一致。 */
 .exact-preview-paper-column {
-  /* 高度由相框（`frameHeight`）决定，不需要额外预留：宽度一变，纸高自己跟着变。 */
   margin: 0 auto;
   /* 100% 时不允许比相框更宽（半像素也不许）：多出来的那一点就是横向滚动条的来源。
-     放大时由 `.is-zoomed` 把上限放开——那条路上"纸比相框宽"才是正确行为。 */
+     放大时纸本来就该比相框宽，宽度由内联样式给（面板的 `pageWidth`）。 */
   max-width: 100%;
   min-width: 0;
 }
 
 .exact-preview.is-zoomed .exact-preview-paper-column {
+  /* 放大后由 `.is-zoomed` 的 `overflow-x: auto` 承担滚动，`max-width` 不再夹住纸。 */
   max-width: none;
 }
 
-/* 相框里的 iframe 必须**铺满 stack**：`inset: 0` 单独用时，`width: 100%`（见
-   `.exact-preview-frame`）会让 `height: auto` 退回 iframe 的默认 150px——PDF 只画一小条。
-   高度显式写 100%，由 stack 的宽高决定；缩放时改的是 stack 的尺寸，不再用 transform。 */
-.exact-preview-stack > .exact-preview-frame {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+/* 一叠纸：竖向排列，页间距由内联 `gap` 给（它随缩放变化，写死在 CSS 里会与高度算式脱节）。 */
+.exact-preview-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-/* 盖掉查看器给页面画的那圈深色外框：Chromium 内嵌 PDF 查看器会在纸四周画 1–4px 深色描边，
-   缩小看整页时就是一道"黑框"（PDF 本身四边纯白，已用 pypdfium2 渲染验证）。这圈边画在
-   查看器内部、外层 CSS 改不到，只能用 4px 白色内描边压住——只压纸边留白，不碰正文。 */
-.exact-preview-stack::after {
-  content: "";
+/* 待换层绝对定位覆盖在可见层上：它**不参与**相框高度（高度按可见层的页数与页高算），
+   只是把新一版的图解码出来。`opacity: 0` 而不是 `visibility: hidden`——后者在高版本
+   Chromium 里会跳过后台解码，"换上来"的那一刻仍要等一次解码。 */
+.exact-preview-pages-pending {
   position: absolute;
   inset: 0;
-  pointer-events: none;
-  box-shadow: inset 0 0 0 4px #fff;
-}
-
-/* 预加载层：`onLoad` 之前谁也看不见它，但浏览器已经在解析新 PDF。 */
-.exact-preview-frame-pending {
   opacity: 0;
   pointer-events: none;
+}
+
+/* 一页纸。**没有任何描边/阴影**：PDF 的纸边本身就是纯白，边上再画一圈只会被读成黑框
+   （旧实现用 4px 白色内描边去盖查看器画的黑框，那是"遮"不是"治"；现在黑框的来源没了）。 */
+.exact-preview-page-image {
+  display: block;
+  background: #fff;
+  border: 0;
+  max-width: none;
+  /* 拖动纸面横向滚动时不要选中图片周围的文字（图片本身选中也没有意义）。 */
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 /* 重排遮罩：半透明，让人知道"还在算"，同时仍能看见旧图的轮廓

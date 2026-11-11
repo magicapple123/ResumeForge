@@ -23,6 +23,8 @@ import { formatDateTime } from "../../../utils/format";
 import { RowContextMenu, type RowActionItem } from "../../../components/common/RowActions";
 import PageSkeleton from "../../../components/common/PageSkeleton";
 import AssistantEmptyState from "./AssistantEmptyState";
+import AssistantMessageActions from "./AssistantMessageActions";
+import MessageCollapse from "./MessageCollapse";
 import ProposalResultNote from "./ProposalResultNote";
 import {
   AssistantMessageContent,
@@ -32,6 +34,7 @@ import {
   MessageToolCalls,
   StreamingStatus,
 } from "./AssistantMessageContent";
+import { toolLabel } from "./MessageToolCalls";
 import type { PendingAttachment } from "../assistantUtils";
 import type { StarterPrompt } from "../assistantTypes";
 import { t } from "../../../i18n";
@@ -71,6 +74,8 @@ interface Props {
   /** 引用某条历史消息追问（右键菜单）。 */
   onQuote: (message: AssistantMessage) => void;
   onDeleteMessage: (message: AssistantMessage) => void;
+  /** #13A 重新生成最后一条回答（生成期间按钮 disabled）。 */
+  onRegenerate?: (message: AssistantMessage) => void;
   /** 右键菜单「批量选择」的动作：进入消息多选模式（页头按钮已收进这里，R8）。 */
   onEnterSelecting: () => void;
   /** 多选模式：勾选多条后一次删掉。 */
@@ -87,8 +92,13 @@ interface BubbleProps {
   item: AssistantMessage;
   assistantLabel: string;
   selected: boolean;
+  /** 只在最后一条助手回答上显示「重新生成」（#13A）。 */
+  showRegenerate: boolean;
+  /** 流式生成中：重新生成按钮 disabled，避免两条流同时写同一会话。 */
+  regenerateDisabled: boolean;
   onQuote: (message: AssistantMessage) => void;
   onDeleteMessage: (message: AssistantMessage) => void;
+  onRegenerate?: (message: AssistantMessage) => void;
   /** 右键菜单「批量选择」的动作：进入消息多选模式（页头按钮已收进这里，R8）。 */
   onEnterSelecting: () => void;
 }
@@ -107,8 +117,11 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
   item,
   assistantLabel,
   selected,
+  showRegenerate,
+  regenerateDisabled,
   onQuote,
   onDeleteMessage,
+  onRegenerate,
   onEnterSelecting,
 }: BubbleProps) {
   useLocale();
@@ -188,7 +201,10 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
           reasoning={item.context.reasoning}
           truncated={item.context.reasoning_truncated}
         />
-        <AssistantMessageContent content={item.content} sourceMap={item.context.source_map} />
+        {/* #13B 长回答折叠：只对助手消息生效，折叠不影响复制（复制取完整正文）。 */}
+        <MessageCollapse enabled={item.role === "assistant"} content={item.content}>
+          <AssistantMessageContent content={item.content} sourceMap={item.context.source_map} />
+        </MessageCollapse>
         <MessageAttachments attachments={item.attachments} />
         <MessageSources sources={item.context.sources ?? []} />
         <MessageToolCalls calls={item.context.tool_calls ?? []} />
@@ -203,6 +219,15 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
           </div>
         ) : null}
         {item.status === "error" && item.error && <Alert type="error" title={item.error} />}
+        {/* #13A 消息操作条：hover / focus-within 显示，≤767px 触屏常显。 */}
+        <AssistantMessageActions
+          message={item}
+          showRegenerate={item.role === "assistant" && showRegenerate}
+          regenerateDisabled={regenerateDisabled}
+          onQuote={onQuote}
+          onDelete={onDeleteMessage}
+          onRegenerate={onRegenerate}
+        />
       </article>
     </RowContextMenu>
   );
@@ -236,6 +261,7 @@ export default function AssistantMessageList({
   onManageSkills,
   onQuote,
   onDeleteMessage,
+  onRegenerate,
   onEnterSelecting,
   selecting,
   selectedIds,
@@ -247,6 +273,12 @@ export default function AssistantMessageList({
   // 页面总会传已翻译的显示名；缺省时按整页形态的「求职助手」兜底。
   const resolvedAssistantLabel = assistantLabel ?? t("responsive.assistant.label");
   const historyMessages = detail?.messages ?? [];
+  // #13A：「重新生成」只对**最后一条**助手回答出现——历史回答重跑会打乱后面的上下文。
+  const lastAssistantId =
+    [...historyMessages]
+      .reverse()
+      .find((message) => message.role === "assistant" && message.kind !== "proposal_result")?.id ??
+    null;
 
   return (
     <div
@@ -290,11 +322,15 @@ export default function AssistantMessageList({
           {historyMessages.map((item) => {
             const bubble = (
               <AssistantMessageBubble
+                key={item.id}
                 item={item}
                 assistantLabel={resolvedAssistantLabel}
                 selected={selectedIds.has(item.id)}
+                showRegenerate={item.id === lastAssistantId}
+                regenerateDisabled={sending}
                 onQuote={onQuote}
                 onDeleteMessage={onDeleteMessage}
+                onRegenerate={onRegenerate}
                 onEnterSelecting={onEnterSelecting}
               />
             );
@@ -351,6 +387,17 @@ export default function AssistantMessageList({
                 : progressText || t("assistantUi.messageList.preparing")
             }
           />
+          {/* #13C 步骤视图：只报「已执行 N 步 · 当前 xxx」。后端没有 plan 事件，
+              所以不写「第 N/M 步」这种没有分母的假进度。 */}
+          {streamingTools.length > 0 ? (
+            <div className="assistant-steps-hint" data-testid="assistant-steps-hint">
+              {t("assistantUi.steps.executed", {
+                count: streamingTools.length,
+                current:
+                  progressText.trim() || toolLabel(streamingTools[streamingTools.length - 1].name),
+              })}
+            </div>
+          ) : null}
           <MessageSources sources={streamingSources} />
           <MessageToolCalls calls={streamingTools} />
         </article>

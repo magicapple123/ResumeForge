@@ -2,7 +2,9 @@
 /* 设置页 · 软件更新：正文之后接一条横向版本信息，填满宽度且不再留大片空白。 */
 .update-meta {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* 四列等宽：通道 / 当前 / 最新 / 发布时间。发布时间原本在结果 Alert 里，挪进来后
+     与另外三项同权，用户不必再读一整个说明框才知道这条结论有多新。 */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-top: 18px;
   padding: 12px 16px;
@@ -27,6 +29,48 @@
   display: block;
   margin-top: 8px;
   font-size: 12px;
+}
+
+/* 结论条：只放结论与主操作（发布说明搬去 .update-notes）。内边距收紧到 8/12，
+   单行结论条约 40px，占卡片高度一成上下；默认的 12/16 会白留一圈。 */
+.update-status-bar {
+  padding: 8px 12px;
+}
+
+/* 发布说明：独立一块，**不设 max-height / overflow**——此前那个
+   `min(40vh, 420px)` 的内滚正是卡片被撑到 789px 的病因。 */
+.update-notes {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--rf-border);
+  border-radius: 10px;
+  background: var(--rf-surface-alt);
+}
+
+.update-notes-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.update-notes-title {
+  font-size: 13px;
+}
+
+/* 展开 / 收起是文字按钮：不要 antd 默认的左右内边距，否则标题与它对不齐。 */
+.update-notes-toggle.ant-btn {
+  height: auto;
+  padding: 0;
+  font-size: 13px;
+}
+
+.update-notes-body {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  /* 只断词、不裁剪：说明再长也由页面统一滚动。 */
+  word-break: break-word;
 }
 
 @media (max-width: 767px) {

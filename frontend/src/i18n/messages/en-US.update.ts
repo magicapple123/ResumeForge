@@ -41,8 +41,13 @@ const update = {
     "After Restart and install, the app overwrites the old version in place and restarts.",
   "update.action.release": "Open the release page",
   "update.result.title": "Check complete",
-  "update.result.latest": "Latest version: {version}",
-  "update.result.published": "Published: {date}",
+  "update.result.available": "Update available: {version}",
+  "update.result.uptodate": "You are on the latest version",
+  "update.field.published": "Published",
+  "update.value.noDate": "Not provided",
+  "update.notes.title": "What's new",
+  "update.notes.expand": "Show",
+  "update.notes.collapse": "Hide",
   "update.installResult.noReason": "The updater did not give a reason.",
   "update.installResult.lead": "The app still works and your data was not changed. The log is at",
   "update.installResult.middle": ", or double-click",
@@ -53,6 +58,17 @@ const update = {
   "update.intro.backupHint":
     "Before updating, it is still worth exporting a backup in Datasets and backups.",
   "update.downloading": "Downloading the update package: {downloaded} / {total}",
+
+  // Desktop shape: the shell owns its own upgrade channel (desktop/updater.js), so the
+  // card explains who checks and where the two manual entry points are. The heading and
+  // the first paragraph are `update.desktop.title` / `update.desktop.description` in
+  // en-US.core.ts (existing keys, reworded in place).
+  "update.desktop.manual":
+    "To check manually, use Help → Check for updates in the menu, or double-click update.cmd in the install folder.",
+  "update.desktop.releaseHint":
+    "You can also download Setup.exe from the release page and install it manually.",
+  "update.action.recheckIn": "Check again ({seconds}s)",
+  "update.toast.desktopStarted": "Checking in the desktop app; the result will appear in a dialog",
 } as const;
 
 export default update;

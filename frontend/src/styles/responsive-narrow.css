@@ -78,6 +78,9 @@
      转单栏后侧栏变成顶部横条（220px），消息区恢复整行宽度。 */
   .assistant-page {
     grid-template-columns: 1fr;
+    /* 单栏形态保持整页滚动：#1 的高度链路只在 ≥1093 生效，这两条是显式兜底，
+       防止以后有人把那条规则挪出媒体查询。 */
+    height: auto;
     min-height: auto;
   }
 

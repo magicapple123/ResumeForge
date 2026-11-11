@@ -9,15 +9,19 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
-import type { PreviewShot } from "./exactPreviewCache";
+import type { PreviewShot } from "./previewPages";
 import { ExactPreviewStatus } from "./ExactPreviewNotes";
 
-function shot(pages: number | null): PreviewShot {
+/** 一版结果：页数由 `pages` 数组长度决定（P3-2 起纸面是逐页位图，没有单独的页数字段）。 */
+function shot(pages: number): PreviewShot {
   return {
     key: "k1",
-    url: "blob:exact",
-    blob: new Blob(["%PDF-1.3"], { type: "application/pdf" }),
-    pages,
+    token: "token-1",
+    pages: Array.from({ length: pages }, (_, index) => ({
+      index,
+      width: 1800,
+      height: 2546,
+    })),
     pagesNeeded: pages,
     overflow: false,
   };

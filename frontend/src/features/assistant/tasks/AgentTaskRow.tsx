@@ -17,7 +17,7 @@
  * 铺开），所以整行交给 `FollowupCard`，通用按钮一个都不留——「确认状态」桶更不该出现
  * 任何"发跟进"类动作（长期没更新时先请用户确认状态）。
  */
-import { Button, Space, Tag, Typography } from "antd";
+import { Button, Popconfirm, Space, Tag, Typography } from "antd";
 import type { AgentTask } from "../../../api/agentTasks";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -40,6 +40,8 @@ interface Props {
   onStart: (taskId: number) => void;
   onResume: (taskId: number) => void;
   onCancel: (taskId: number) => void;
+  /** 可选：传了才显示「暂停」（助手页任务条用它；首页任务卡不传，行为不变）。 */
+  onPause?: (taskId: number) => void;
 }
 
 export default function AgentTaskRow({
@@ -49,6 +51,7 @@ export default function AgentTaskRow({
   onStart,
   onResume,
   onCancel,
+  onPause,
 }: Props) {
   useLocale();
   // 跟进巡检卡：整行交给 FollowupCard（决策按钮 + 整卡提交），不渲染通用任务动作。
@@ -115,15 +118,39 @@ export default function AgentTaskRow({
               {t("assistantUi.tasks.action.resume")}
             </Button>
           ) : null}
+          {/* 后台执行器正在推进：按钮只作状态指示，禁用避免重复 start。 */}
+          {task.status === "running" ? (
+            <Button size="small" disabled>
+              {t("assistantUi.tasks.status.running")}
+            </Button>
+          ) : null}
+          {task.status === "running" && onPause ? (
+            <Button size="small" onClick={() => onPause(task.id)}>
+              {t("assistantBreadth.tasks.pause")}
+            </Button>
+          ) : null}
           {waiting ? (
             <Button size="small" type="primary" onClick={onToggleExpanded}>
               {t("assistantUi.tasks.action.review")}
             </Button>
           ) : null}
           {bucketOf(task.status) !== "finished" ? (
-            <Button size="small" danger onClick={() => onCancel(task.id)}>
-              {t("assistantUi.tasks.action.cancel")}
-            </Button>
+            // 取消不可恢复：二次确认写清"已完成保留、其余不再执行"，不写"确定/取消"。
+            <Popconfirm
+              title={t("assistantUi.tasks.confirm.cancelTitle")}
+              description={t("assistantUi.tasks.confirm.cancelContent", {
+                done: current,
+                rest: total - current,
+              })}
+              okText={t("assistantUi.tasks.action.cancelConfirm")}
+              cancelText={t("common.action.cancel")}
+              okButtonProps={{ danger: true }}
+              onConfirm={() => onCancel(task.id)}
+            >
+              <Button size="small" danger>
+                {t("assistantUi.tasks.action.cancel")}
+              </Button>
+            </Popconfirm>
           ) : null}
           <Button size="small" type="link" onClick={onToggleExpanded}>
             {t(expanded ? "assistantUi.tasks.action.hideSteps" : "assistantUi.tasks.action.steps")}
@@ -132,6 +159,12 @@ export default function AgentTaskRow({
       </div>
       {waiting ? (
         <Typography.Text type="secondary">{t("assistantUi.tasks.waitingHint")}</Typography.Text>
+      ) : null}
+      {/* 失败原因直接铺在行内：用户不必展开步骤才知道为什么失败。 */}
+      {task.status === "failed" && task.error ? (
+        <Typography.Text type="danger" data-testid={`agent-task-error-${task.id}`}>
+          {t("assistantUi.tasks.failedReason", { error: task.error })}
+        </Typography.Text>
       ) : null}
       {expanded ? (
         <ol
@@ -154,6 +187,11 @@ export default function AgentTaskRow({
                   </Tag>
                 ) : null}
                 <Tag style={{ marginLeft: 6 }}>{t(STEP_STATUS_LABEL_KEYS[step.status])}</Tag>
+                {step.status === "failed" && step.error ? (
+                  <Typography.Text type="danger" style={{ marginLeft: 6 }}>
+                    {step.error}
+                  </Typography.Text>
+                ) : null}
               </li>
             );
           })}

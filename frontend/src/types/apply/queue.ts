@@ -25,6 +25,31 @@ export interface ApplyQueueItem {
    * **可选**：缺失按"支持"处理（与后端默认同向），判断写 `=== false`，别写 `!x`。
    */
   apply_supported?: boolean;
+  /**
+   * #14B 参考分（0–100）：由后端用 `score_match_result` 从匹配结论派生，**不参与准入**。
+   *
+   * `null` 表示这个岗位还没做过匹配分析。它只用来帮用户决定"先投哪个"，投不投得出去
+   * 仍然只看 `admission`；列头必须写「参考分」并原样展示免责文案。
+   * **可选**：后端未升级时缺失，按 `null`（未分析）处理。
+   */
+  match_score?: number | null;
+  /** #14B 是否被收藏（`Job.favorite` 透出）；**可选**：缺失按 false 处理。 */
+  favorite?: boolean;
+  /**
+   * #15A 僵尸岗分数（0–100）：由后端按**你自己这条岗位的复采历史**算出来（首见至今天数 /
+   * 复采次数 / 薪资是否变过 / HR 是否长期不活跃），不是平台的"健康度"。
+   *
+   * `null` = 复采历史不足（冷启动，只有 1 条 sighting），界面**不渲染**徽标——把"没数据"
+   * 画成 0 分会一直被读成"这个岗位很健康"。
+   * **可选**：后端未升级时缺失，与 `null` 同义。
+   */
+  ghost_score?: number | null;
+  /** #15A 四项证据：后端给的人话，界面**逐条原样**展示，不在前端重算阈值或改写措辞。 */
+  ghost_evidence?: string[];
+  /** #15B 这条岗位的 JD 在你上次投递之后被改过（被动式：只在下一次采集时才发现）。 */
+  jd_changed?: boolean;
+  /** #15A 用户已经点过「忽略此岗位」：徽标不再渲染，分数本身仍留在数据里。 */
+  ghost_ignored?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -129,6 +154,20 @@ export interface ApplyRecord {
   failure_target?: string;
   failure_reason?: string;
   attempt: number;
+  /**
+   * #15B 你投的这个岗位在你投之后被改过（被动式：只在下一次采集时才发现）。
+   * **可选**：旧响应没有，缺失按 false 处理（不渲染徽标）。
+   */
+  jd_changed?: boolean;
+  /**
+   * #15B 变更明细按**队列条目 id** 取（`GET /apply/queue/{queue_id}/jd-change`），而记录本身
+   * 只带岗位与批次，所以后端按 `job_id` 反查出这条记录关联的队列条目，随记录一起下发。
+   * 只有「徽标点开抽屉」这一个用途：
+   * - 有值 → 徽标可点，抽屉按它取 before/after；
+   * - 空 / 缺失 → 徽标照旧显示（"有变更"是真的），但不猜一个 id 去打请求
+   *   （猜错会看到别人岗位的 diff，比不给更糟）。
+   */
+  queue_id?: number | null;
   created_at: string;
   finished_at: string | null;
 }

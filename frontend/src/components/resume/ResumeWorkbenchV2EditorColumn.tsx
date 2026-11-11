@@ -25,6 +25,8 @@ import { defaultSectionLayout } from "../../features/resume-document/defaults";
 import { newObjectId } from "../../features/resume-document/identity";
 import AddSectionModal from "./AddSectionModal";
 import DocumentEditor from "../resume-editor/DocumentEditor";
+import { EMPTY_FACT_ANNOTATIONS, FactSourceContext } from "../resume-editor/factSourceContext";
+import type { FactAnnotation } from "../../types";
 import "./workbench-v2.css";
 
 export interface ResumeWorkbenchV2EditorColumnProps {
@@ -47,6 +49,11 @@ export interface ResumeWorkbenchV2EditorColumnProps {
   fillMenu?: ReactNode;
   /** #19：编辑器右键「收藏当前要点」→ 宿主收藏（不传 = 菜单不出现该项）。 */
   onCollectAsset?: (path: string) => void;
+  /**
+   * #24 24E：这份简历的事实来源标注（`detail.fact_annotations`），字段旁徽标用。
+   * 与预览卡顶部「来源」弹层**同一份数据**（宿主只取一次详情），这一层不发请求。
+   */
+  factAnnotations?: readonly FactAnnotation[] | null;
 }
 
 export default function ResumeWorkbenchV2EditorColumn({
@@ -64,6 +71,7 @@ export default function ResumeWorkbenchV2EditorColumn({
   onDismissConversion,
   fillMenu = null,
   onCollectAsset,
+  factAnnotations = null,
 }: ResumeWorkbenchV2EditorColumnProps) {
   useLocale();
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -156,21 +164,26 @@ export default function ResumeWorkbenchV2EditorColumn({
         />
       ) : null}
       {fillMenu ? <div className="resume-wb-v2-fill-menu">{fillMenu}</div> : null}
-      <DocumentEditor
-        document={document}
-        onChange={onChange}
-        selectedPath={selectedPath}
-        onSelectPath={onSelectPath}
-        onHoverPath={onHoverPath}
-        revealNonce={revealNonce}
-        readOnly={readOnly}
-        fieldCatalog={fieldCatalog}
-        layout={layout}
-        onLayoutChange={onLayoutChange}
-        onAddSection={() => setAddSectionOpen(true)}
-        onCollectAsset={onCollectAsset}
-        noticeHost={noticeHost}
-      />
+      {/* #24 24E：标注走 context，而不是给 DocumentEditor 加 prop——那个文件正好 500 行，
+          而 chip 在它下面三层，透传要改四处签名。空表用模块级常量（引用稳定，不会让
+          上百个 chip 因"新的空数组"重渲染）。 */}
+      <FactSourceContext.Provider value={factAnnotations ?? EMPTY_FACT_ANNOTATIONS}>
+        <DocumentEditor
+          document={document}
+          onChange={onChange}
+          selectedPath={selectedPath}
+          onSelectPath={onSelectPath}
+          onHoverPath={onHoverPath}
+          revealNonce={revealNonce}
+          readOnly={readOnly}
+          fieldCatalog={fieldCatalog}
+          layout={layout}
+          onLayoutChange={onLayoutChange}
+          onAddSection={() => setAddSectionOpen(true)}
+          onCollectAsset={onCollectAsset}
+          noticeHost={noticeHost}
+        />
+      </FactSourceContext.Provider>
       {/* 问题 14：中栏底部的提示浮层宿主——在滚动容器之外，提示不随内容滚走。 */}
       <div className="resume-wb-notice-host" ref={attachNoticeHost} />
     </div>

@@ -45,6 +45,7 @@ import { TouTouProvider } from "../../features/tou-tou/TouTouProvider";
 import { useNavigationVisibility } from "../../hooks/useNavigationVisibility";
 import { useSiderCollapse } from "../../hooks/useSiderCollapse";
 import { useResponsiveShell } from "../../hooks/useResponsiveShell";
+import { useBrandMarkGesture } from "../../features/shell/useBrandMarkGesture";
 import {
   AnalyticsPage,
   ApplyPage,
@@ -111,6 +112,9 @@ export default function AppShell() {
   const [clipboardOpen, setClipboardOpen] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const closeMobileNavigation = useCallback(() => setMobileNavigationOpen(false), []);
+  // 品牌图标三联手势（1=回顶部 / 2=刷新当前页 / 3=回首页）+ Alt+R、Alt+Home 键盘兜底。
+  // 逻辑在 `features/shell/useBrandMarkGesture.ts`：本文件贴着 500 行硬预算。
+  const brandMark = useBrandMarkGesture();
   // R5 快捷键的三个全局落点，全部接在既有实现上（不新造入口）：
   // 搜索 = 跳首页 + 聚焦首页那个全站搜索框；助手 = 复用悬浮助手卡的开关；
   // 新建岗位 = 岗位页自己登记的"打开新建弹窗"（不在岗位页就什么都不做）。
@@ -321,24 +325,17 @@ export default function AppShell() {
             collapsed={siderCollapsed}
           >
             <div className="app-brand-button">
+              {/* 手势是彩蛋：不再提供任何可见提示（#22）。aria-label 只描述单击（回到顶部），
+                  它是无障碍名称、不是彩蛋提示，必须保留。alt+r / alt+home 是键盘兜底，也不要动。 */}
               <button
                 type="button"
                 className="app-brand-mark app-brand-mark-button"
-                onClick={() => {
-                  const scroller = document.querySelector<HTMLElement>(".app-main");
-                  const content = document.querySelector<HTMLElement>(
-                    ".app-main .ant-layout-content",
-                  );
-                  const position = { top: 0, behavior: "smooth" as const };
-                  if (typeof scroller?.scrollTo === "function") scroller.scrollTo(position);
-                  if (typeof content?.scrollTo === "function") content.scrollTo(position);
-                  if (typeof window.scrollTo === "function") window.scrollTo(position);
-                }}
+                onClick={brandMark.onClick}
                 aria-label={t("navigation.shell.scrollTop")}
               >
                 {/* 用 import 拿到带 base 前缀的 URL，不要写死 "/resumeforge-icon.png"：
-                  在线体验构建把产物部署在 GitHub Pages 的**子路径**（base: "./"）下，
-                  写死的绝对路径会指到域名根目录、图标 404。import 由 Vite 按 base 重写。 */}
+                在线体验构建把产物部署在 GitHub Pages 的**子路径**（base: "./"）下，
+                写死的绝对路径会指到域名根目录、图标 404。import 由 Vite 按 base 重写。 */}
                 <img className="app-brand-image" src={brandIcon} alt="" />
               </button>
               <span className="app-brand-copy">

@@ -19,7 +19,14 @@ export const VIEWPORTS = [
   { name: "V8-1092", width: 1092, height: 614 },
 ] as const;
 
-/** 18 条路由（与 `App.tsx` 的 `<Route path=` 一一对应，`*` 除外）。 */
+/**
+ * 18 条路由（与 `App.tsx` 的 `<Route path=` 一一对应，`*` 除外）。
+ *
+ * `fitsViewport`：这条路由**声明自己必须装进一屏**（`.app-content` 不出现纵向滚动）。
+ * 只有 `/assistant` 是这种三条式工作区（标题/消息/输入，消息区内部滚动）；其余页面是
+ * 普通长页面，`.app-content` 就是滚动容器，纵向滚动是设计内的——把它们也判进去会得到
+ * 80 条假红（2026-11-11 实测），那条守卫会立刻被人删掉。
+ */
 export const ROUTES = [
   { name: "home", path: "/" },
   { name: "jobs", path: "/jobs" },
@@ -29,7 +36,7 @@ export const ROUTES = [
   { name: "tracker", path: "/tracker" },
   { name: "analytics", path: "/analytics" },
   { name: "favorites", path: "/favorites" },
-  { name: "assistant", path: "/assistant" },
+  { name: "assistant", path: "/assistant", fitsViewport: true },
   { name: "materials", path: "/materials" },
   { name: "knowledge", path: "/knowledge" },
   { name: "skills", path: "/skills" },
@@ -148,6 +155,56 @@ export async function collectMetrics(
       clipped: [...new Set(clipped)],
       outOfViewport: [...new Set(outOfViewport)].slice(0, 10),
       overlaps: [...new Set(overlaps)].slice(0, 10),
+    };
+  });
+}
+
+/** 只有双栏（≥1093）才判纵向"装得下"：≤1092 是单栏，整页滚动是设计内的（#1/#2）。 */
+export const DESKTOP_VIEWPORTS = VIEWPORTS.filter((viewport) => viewport.width >= 1093);
+
+export interface VerticalMetrics {
+  /** `.app-content` 的纵向溢出（scrollHeight − clientHeight）。 */
+  contentOverflow: number;
+  /** 声明式 `overflow: scroll` 却装得下 = 那条"没东西可滚"的滚动条。 */
+  emptyScrollbars: string[];
+  /** `/assistant` 的消息区高度；其它路由为 null。 */
+  assistantMessagesHeight: number | null;
+}
+
+/**
+ * R4 的采集函数（#2）。
+ *
+ * 为什么单独一个函数而不是并进 `collectMetrics`：那一份只量横向，而 R4 要判的是
+ * **纵向**——两者成因完全不同（横向是内容比容器宽，纵向是高度链路没闭合）。
+ * 混在一起会让失败信息说不清是哪一类。
+ */
+export async function collectVertical(
+  page: import("@playwright/test").Page,
+): Promise<VerticalMetrics> {
+  return page.evaluate(() => {
+    const content = document.querySelector(".app-content") as HTMLElement | null;
+    const emptyScrollbars: string[] = [];
+
+    // R4-b：只找**显式**写死 `overflow-y: scroll`（auto/overlay 是"需要时才出现"，
+    // 装得下时本来就不显示滚动条，不该判红）。
+    for (const node of Array.from(document.querySelectorAll<HTMLElement>("body *"))) {
+      const style = getComputedStyle(node);
+      if (style.overflowY !== "scroll") continue;
+      if (node === document.scrollingElement) continue;
+      if (node.scrollHeight <= node.clientHeight + 1) {
+        const id = node.id ? `#${node.id}` : "";
+        const cls = node.className && typeof node.className === "string"
+          ? `.${node.className.trim().split(/\s+/).slice(0, 2).join(".")}`
+          : "";
+        emptyScrollbars.push(`${node.tagName.toLowerCase()}${id}${cls}`);
+      }
+    }
+
+    const messages = document.querySelector(".assistant-messages") as HTMLElement | null;
+    return {
+      contentOverflow: content ? content.scrollHeight - content.clientHeight : 0,
+      emptyScrollbars: [...new Set(emptyScrollbars)].slice(0, 5),
+      assistantMessagesHeight: messages ? Math.round(messages.clientHeight) : null,
     };
   });
 }

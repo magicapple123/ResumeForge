@@ -3,8 +3,10 @@
  * 面试评分报告卡：dashboard 分数 + 维度列表 + 强项/改进清单。
  * （自 InterviewPage 拆出，逐字搬运，行为等价。）
  */
-import { ClockCircleOutlined, PlusOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Listy, Progress, Space, Tag, Typography } from "antd";
+import { BookOutlined, ClockCircleOutlined, PlusOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Card, Listy, Progress, Space, Tag, Typography } from "antd";
+import { useState } from "react";
+import { createKnowledgeFromSource } from "../../api/knowledge";
 import { ListyItem } from "../../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
 import { formatElapsed } from "../../features/interview/useInterviewTimer";
@@ -24,7 +26,29 @@ export function ReportCard({
 }) {
   // 本卡用模块级 t()：必须订阅语言变化，否则切语言后报告文案不重渲染。
   useLocale();
+  const { message } = App.useApp();
+  const [savingKnowledge, setSavingKnowledge] = useState(false);
   const report = session.report ?? {};
+
+  /** #29B：服务端取源数据生成面经条目（正文/分类/公司/问题清单都由后端拼）。 */
+  const saveToKnowledge = async () => {
+    if (savingKnowledge) return;
+    setSavingKnowledge(true);
+    try {
+      const saved = await createKnowledgeFromSource("interview_report", session.id);
+      if (saved.created) {
+        message.success(t("knowledgePage.capture.saved", { title: saved.title }));
+      } else {
+        message.info(t("knowledgePage.capture.exists", { title: saved.title }));
+      }
+      // 整页跳转（不用 useNavigate）：报告卡也会在非 Router 的阅读态/测试里渲染。
+      window.location.assign("/knowledge");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t("knowledgePage.capture.failed"));
+    } finally {
+      setSavingKnowledge(false);
+    }
+  };
   const failed = report.error || (!report.dimensions?.length && !report.summary);
   return (
     <Card size="small" className="interview-report" title={t("interviewPage.report.cardTitle")}>
@@ -101,9 +125,19 @@ export function ReportCard({
           </div>
         </>
       )}
-      <Button onClick={onSaveToMaterial} loading={saving} icon={<PlusOutlined />}>
-        {t("interviewPage.report.saveToMaterial")}
-      </Button>
+      <Space wrap>
+        <Button onClick={onSaveToMaterial} loading={saving} icon={<PlusOutlined />}>
+          {t("interviewPage.report.saveToMaterial")}
+        </Button>
+        {/* #29B 回流：会话 id 由后端取报告/问题清单，前端不拼正文。 */}
+        <Button
+          onClick={() => void saveToKnowledge()}
+          loading={savingKnowledge}
+          icon={<BookOutlined />}
+        >
+          {t("knowledgePage.capture.interview")}
+        </Button>
+      </Space>
     </Card>
   );
 }

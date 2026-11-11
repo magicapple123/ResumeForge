@@ -16,7 +16,7 @@ import {
   type PendingAttachment,
 } from "../assistantUtils";
 import type { AssistantQuotedMessage, AssistantSkill } from "../../../types";
-import type { ReasoningEffort } from "../../../types/assistant";
+import type { ContextUsage, ReasoningEffort } from "../../../types/assistant";
 import type {
   ConversationSkillBudget,
   ConversationSkillItem,
@@ -29,7 +29,7 @@ import { useLocale } from "../../../i18n/i18nContext";
 import { useAssistantPermission } from "../assistantPermission";
 import ComposerToolbar from "./composer/ComposerToolbar";
 import ContextChips from "./composer/ContextChips";
-import { PermissionNotice } from "./composer/PermissionMenu";
+import PermissionConfirmModal from "./composer/PermissionConfirmModal";
 import SkillChips from "./composer/SkillChips";
 
 /** 文档按扩展名区分图标：pdf 和 docx 混在一串标签里时，图标比文件名更好认。 */
@@ -74,6 +74,12 @@ interface Props {
   /** 当前引用的消息（右键消息「引用这条继续问」后出现）。 */
   quoted: AssistantQuotedMessage | null;
   onClearQuote: () => void;
+  /** 上下文用量（需求 #6）：`null` = 还没拿到，chip 显示「—」。 */
+  contextUsage?: ContextUsage | null;
+  /** 弹层里改了上下文窗口后的本地重算。 */
+  onContextWindowSaved?: (windowTokens: number) => void;
+  /** 压缩或还原成功后让上层重取用量（#10）。 */
+  onContextChanged?: () => void;
   onSend: () => void;
   onStop: () => void;
 }
@@ -105,6 +111,9 @@ export default function AssistantComposer({
   onRemoveAttachment,
   quoted,
   onClearQuote,
+  contextUsage = null,
+  onContextWindowSaved,
+  onContextChanged,
   onSend,
   onStop,
 }: Props) {
@@ -216,10 +225,8 @@ export default function AssistantComposer({
             )}
           </div>
         )}
-        {/* 放宽读取 / 完全权限生效时的琥珀提示条（可关闭，换档位后重新出现）。 */}
-        {permission.noticeVisible ? (
-          <PermissionNotice level={permission.effectiveLevel} onClose={permission.dismissNotice} />
-        ) : null}
+        {/* #12：常驻琥珀横幅已删除，档位可见性由输入区那颗 chip 承担；
+            高风险档位改为选中时弹一次性确认卡（挂在组件尾部）。 */}
         <Input.TextArea
           value={content}
           autoSize={{ minRows: compact ? 2 : 3, maxRows: 8 }}
@@ -281,10 +288,20 @@ export default function AssistantComposer({
           }
           onWebSearchChange={onWebSearchChange}
           onReasoningEffortChange={onReasoningEffortChange}
+          contextUsage={contextUsage}
+          onContextWindowSaved={onContextWindowSaved}
+          contextConversationId={conversationId ?? null}
+          onContextChanged={onContextChanged}
           onSend={onSend}
           onStop={onStop}
         />
       </div>
+      {/* #12 一次性确认卡：只在 needsConfirm 命中时打开；卡片开着时发送仍用旧档位。 */}
+      <PermissionConfirmModal
+        level={permission.pendingLevel}
+        onConfirm={permission.confirmPending}
+        onCancel={permission.cancelPending}
+      />
     </FileDropZone>
   );
 }

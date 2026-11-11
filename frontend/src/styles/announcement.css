@@ -2,9 +2,12 @@
 /*
  * 公告条（`components/common/AnnouncementBar.tsx`）。
  *
- * **它是流内元素，不是弹层。** `sticky top: 64px` 让它在 `.app-main` 这个滚动容器里
- * 贴住 Header 下沿；`z-index: 9` 刻意低于 Header 的 10——滚动时被 Header 压住，
- * 视觉上就是"挂在标题栏下面"。
+ * **它是流内元素，不是弹层。** 滚动容器是 `.app-content`（P1-2 起 `.app-main` 只做
+ * 列布局、自身不滚），所以它天然就"挂在标题栏下面"、不会跟着内容滚走；`sticky
+ * top: var(--rf-header-height)` 只是把这一点写实，防止有人把外层再改成滚动容器时
+ * 它反而被卷上去。`z-index: 9` 刻意低于 Header 的 10——需要遮挡时被 Header 压住。
+ * 高度 40px 由 `.app-main` 的 flex 列自然扣减，**不再对外暴露 --rf-announcement-h**：
+ * 那个变量声明在横幅自身，兄弟 `.app-content` 读不到，恒走 0 兜底（P1-2 的根因之一）。
  *
  * 不要把它"抬上去"：与投投族（3400+）、antd 弹层（3100+）完全无关，那些数字是
  * 覆盖层的层级，公告条不参与。改这一行之前先读 `theme/tokens.ts` 的层级注释。
@@ -20,8 +23,6 @@
   height: 40px;
   padding: 0 16px;
   border-bottom: 1px solid transparent;
-  /* 高度对外暴露：`.app-content` 的 min-height 用它扣掉这 40px，避免多出一屏滚动量。 */
-  --rf-announcement-h: 40px;
 }
 
 .rf-announcement-warning {

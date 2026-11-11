@@ -12,7 +12,7 @@
 .rf-ctx-menu {
   position: fixed;
   /* 长菜单（行操作 + 删除）在矮视口里要能滚，不能被裁掉。 */
-  max-height: calc(100vh - 16px);
+  max-height: calc(var(--rf-viewport-h) - 16px);
   min-width: 132px;
   overflow-y: auto;
   padding: 4px;

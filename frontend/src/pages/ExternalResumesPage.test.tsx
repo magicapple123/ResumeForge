@@ -7,7 +7,7 @@
  * （MemoryRouter 不写 window.history，等价于"直接打开"）。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
@@ -37,6 +37,14 @@ function renderPage() {
       </AntdApp>
     </MemoryRouter>,
   );
+}
+
+/**
+ * 上传按钮的可访问名：带图标的按钮名里含 `aria-label="upload"`，精确匹配拿不到，
+ * 所以用正则按子串匹配（空态那颗与标题行那颗同一个文案）。
+ */
+function uploadName(): RegExp {
+  return new RegExp(t("resumesPage.external.upload"));
 }
 
 beforeEach(() => {
@@ -71,5 +79,51 @@ describe("ExternalResumesPage", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: t("resumesPage.external.back") }));
     expect(await screen.findByTestId("resumes-stub")).toBeInTheDocument();
+  });
+
+  it("空列表只留空态那一颗上传按钮（标题行不再重复一颗）", async () => {
+    renderPage();
+
+    await screen.findByText(t("resumesPage.external.empty"));
+    expect(screen.getAllByRole("button", { name: uploadName() })).toHaveLength(1);
+  });
+
+  it("列表非空时上传按钮在标题行右端，与标题同一行且只有一颗（07-1）", async () => {
+    apiMocks.listExternalResumes.mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          file_id: 11,
+          name: "external-a.txt",
+          mime: "text/plain",
+          text_chars: 120,
+          has_text: true,
+          job_id: null,
+          job_title: "",
+          created_at: "2026-11-10T10:00:00",
+          updated_at: "2026-11-10T10:00:00",
+          warnings: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 100,
+    });
+    const { container } = renderPage();
+
+    await screen.findByText("external-a.txt");
+    // 标题行是同一块容器：标题与按钮都在里面，按钮不再是卡片里单独的一行。
+    const header = container.querySelector(".external-resume-header");
+    expect(header).not.toBeNull();
+    const scoped = within(header as HTMLElement);
+    expect(
+      scoped.getByRole("heading", { name: t("resumesPage.external.title") }),
+    ).toBeInTheDocument();
+    expect(scoped.getByRole("button", { name: uploadName() })).toBeInTheDocument();
+    // 整页只有这一颗（卡片里没有第二颗）。
+    expect(screen.getAllByRole("button", { name: uploadName() })).toHaveLength(1);
+    // 副标题仍在标题行里（页面级），不在 `.ant-card-head` 中。
+    expect(scoped.getByText(t("resumesPage.external.subtitle"))).toBeInTheDocument();
+    expect(container.querySelectorAll(".ant-card-head")).toHaveLength(0);
   });
 });

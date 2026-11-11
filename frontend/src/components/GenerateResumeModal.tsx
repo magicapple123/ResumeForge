@@ -33,6 +33,7 @@ import { formatErrorGuidance } from "../api/errorGuidance";
 import type {
   EnhancementLevel,
   Job,
+  RagRetrieval,
   ResumeDocument,
   ResumeDetail,
   ResumeGenerateTask,
@@ -89,6 +90,8 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   // 生成改为后台任务：taskId 驱动轮询，task 是最近一次轮询到的状态。
   const [taskId, setTaskId] = useState<number | null>(null);
   const [task, setTask] = useState<ResumeGenerateTask | null>(null);
+  // #30：任务终态会被清空（下面收尾会把 task 置 null），审计行要在那之前捕获下来。
+  const [ragAudit, setRagAudit] = useState<RagRetrieval | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [previewHtml, setPreviewHtml] = useState("");
@@ -192,6 +195,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     setTitle(initialTitle);
     setTaskId(null);
     setTask(null);
+    setRagAudit(null);
     setErrorMsg("");
     setResult(null);
     setPreviewHtml("");
@@ -217,6 +221,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     setStage("generating");
     setTaskId(null);
     setTask(null);
+    setRagAudit(null);
     setErrorMsg("");
     setResult(null);
     setSuggestionsGenerated(false);
@@ -309,6 +314,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     if (!task) return;
     if (task.status === "completed") {
       const resumeId = task.resume_id;
+      setRagAudit(task.rag ?? null);
       setTaskId(null);
       setTask(null);
       if (resumeId == null) {
@@ -448,6 +454,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
           taskId={taskId}
           onClose={handleClose}
           onCancel={() => void handleCancelGenerate()}
+          onOpenSettings={() => navigate("/settings")}
         />
       )}
 
@@ -473,6 +480,8 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
           onGoResumes={() => navigate("/resumes")}
           onRegenerate={() => void startGenerate()}
           onClose={handleClose}
+          ragAudit={ragAudit}
+          onOpenProfile={() => navigate("/profile")}
         />
       )}
 

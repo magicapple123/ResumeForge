@@ -42,6 +42,25 @@ body {
   background-color: var(--rf-scrim-strong);
 }
 
+/* ── 视口高度令牌（P1-3）──────────────────────────────────────
+   桌面外壳里页面的可用高度比视口矮 32px（自绘标题栏占的那一条），所以凡是
+   「按视口高度算出来的上限」（弹层 max-height、助手工作区 max-height…）都必须读
+   这个令牌，而不是直接写 100vh —— 否则那些盒子把标题栏也算进可用高度，纵向多出
+   32px，弹层底边被系统按钮条压住。
+
+   两个取值都在这儿定，桌面形态的覆盖在 desktop-titlebar.css：
+   浏览器 / 无标题栏 → 整屏；`html:has(.app-titlebar)` → 扣掉 --rf-titlebar-height。
+   dvh 优先：移动端地址栏收放时 100vh 不是真实可见高度，而这两类盒子正是按它算的。 */
+:root {
+  --rf-viewport-h: 100vh;
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --rf-viewport-h: 100dvh;
+  }
+}
+
 #root {
   height: 100vh;
   overflow: hidden;
@@ -73,16 +92,22 @@ body {
 }
 
 /* 左偏移与侧栏宽度读同一个变量（theme/design-tokens.css）：改宽度只改一处，
-   不再出现「App.tsx 写 200、这里写 200、responsive.css 又写 64」的三份真相。 */
+   不再出现「App.tsx 写 200、这里写 200、responsive.css 又写 64」的三份真相。
+
+   **主区是两层高度链（P1-2 双滚动条）**：这里只做列布局与裁剪，自身永不滚动；
+   真正滚动的只有 `.app-content`（见 base-tasks.css）。以前两层都能滚，右侧就出现
+   两条滚动条；而且滚的是外层时，`position: sticky` 的页头跟着一起上跳——sticky 的
+   参照物就是被滚动的那个盒子。 */
 .app-main {
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   min-height: 0;
   min-width: 0;
   margin-left: var(--rf-sider-width);
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
   overscroll-behavior-y: contain;
-  scrollbar-gutter: stable;
   background: var(--rf-surface-alt);
 }
 

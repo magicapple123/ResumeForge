@@ -70,6 +70,13 @@
   --rf-stage-bar-interview: #a79ad6;
   --rf-stage-bar-offer: #6cc79a;
   --rf-stage-bar-rejected: #d98a8a;
+  /* 分类色 1–5 的深色一套（需求 #6）：比浅色那套提亮、降饱和，深底上不刺眼但仍可区分。
+     同名同序的一份在 design-tokens.css。 */
+  --rf-cat-1: #6aa9ff;
+  --rf-cat-2: #a394ff;
+  --rf-cat-3: #4dd6c8;
+  --rf-cat-4: #f0bb5a;
+  --rf-cat-5: #f286ad;
   --rf-surface-glass: rgb(26 30 36 / 92%);
   --rf-surface-glass-border: rgb(255 255 255 / 10%);
   /* 这两个在深色下也要显式给出：danger 提亮一点，白字保持白字。 */

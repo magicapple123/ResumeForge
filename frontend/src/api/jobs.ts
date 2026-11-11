@@ -21,6 +21,9 @@ import type {
   JobImportPreview,
   JobImportResult,
   JobImportRow,
+  FavoriteJob,
+  FavoriteJobParams,
+  FavoriteLifecycleItem,
 } from "../types";
 import { buildQuery, request, requestRaw } from "./client";
 
@@ -201,4 +204,60 @@ export function cancelJobMatchBatchTask(taskId: string): Promise<JobMatchBackgro
 
 export function getJobMatchBatch(id: number): Promise<JobMatchBatchOut> {
   return request(`/jobs/match-batches/${id}`);
+}
+
+// ===== 收藏夹（#28）=====
+
+/**
+ * 收藏夹列表（#28A/#28B）：搜索 + 状态筛选 + 三种排序 + 生命周期徽标。
+ *
+ * 比 GET /jobs 多的是 applied/queued 两个标记与「已投/未投」筛选——它们来自投递记录
+ * 与队列，通用岗位列表不该为收藏夹这一处背上两次额外查询。
+ */
+export function listFavoriteJobs(params: FavoriteJobParams = {}): Promise<Page<FavoriteJob>> {
+  return request(`/jobs/favorites${buildQuery(params)}`);
+}
+
+/** 批量收藏/取消收藏（#28F）。不存在的行会被跳过并回传 id。 */
+export function batchFavoriteJobs(
+  jobIds: number[],
+  favorite: boolean,
+): Promise<{ updated: number; skipped: number[] }> {
+  return request("/jobs/favorites/batch", {
+    method: "POST",
+    body: JSON.stringify({ job_ids: jobIds, favorite }),
+  });
+}
+
+/** 按 id 批量查生命周期（#28B）：行内按钮据此禁用「立即投递」。 */
+export function fetchFavoriteLifecycle(jobIds: number[]): Promise<FavoriteLifecycleItem[]> {
+  return request<{ items: FavoriteLifecycleItem[] }>("/jobs/favorites/lifecycle", {
+    method: "POST",
+    body: JSON.stringify({ job_ids: jobIds }),
+  }).then((payload) => payload.items);
+}
+
+/**
+ * 导出全部收藏（#28F）：后端按同一份筛选口径导出 CSV/Markdown，CSV 带 UTF-8 BOM。
+ *
+ * 用 fetch + Blob 而不是直接开新窗口：要带当前筛选参数，并从 Content-Disposition 拿
+ * 服务端生成的文件名（前端不重复实现一份命名规则）。
+ */
+export async function downloadFavoritesExport(
+  format: "csv" | "md",
+  params: Omit<FavoriteJobParams, "page" | "page_size"> = {},
+): Promise<void> {
+  const response = await requestRaw(`/jobs/favorites/export${buildQuery({ ...params, format })}`);
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const matched = /filename="?([^";]+)"?/i.exec(disposition);
+  const filename = matched?.[1] || `resumeforge-favorites.${format}`;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }

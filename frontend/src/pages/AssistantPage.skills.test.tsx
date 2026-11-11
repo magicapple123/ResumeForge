@@ -125,9 +125,15 @@ describe("对话技能 chip 行", () => {
     renderPage();
     await openFirstConversation();
 
-    expect(await screen.findByText(INTERVIEW_SKILL)).toBeInTheDocument();
-    expect(screen.getByText(RESUME_SKILL)).toBeInTheDocument();
-    expect(screen.queryByText(UNUSED_SKILL)).toBeNull();
+    // 限定在 chip 文本元素里找：18C 的「视角」切换器有一个同名显示项（面试官追问），
+    // 页面级 getByText 会命中两处。这里要验的是"技能 chip 行只显示本对话启用的技能"。
+    expect(
+      await screen.findByText(INTERVIEW_SKILL, { selector: ".assistant-skill-chip-text" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(RESUME_SKILL, { selector: ".assistant-skill-chip-text" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(UNUSED_SKILL, { selector: ".assistant-skill-chip-text" })).toBeNull();
     // 停用入口按技能名可寻址（读屏用户也能准确点掉某一枚）。
     expect(screen.getByRole("button", { name: "停用技能「面试官追问」" })).toBeInTheDocument();
     // R06-A：空态/追加入口不再是行末那枚「+ 技能」虚线按钮，而是工具栏最左的 `+`。

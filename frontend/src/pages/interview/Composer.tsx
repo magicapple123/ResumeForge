@@ -15,9 +15,12 @@
  */
 import { StopOutlined } from "@ant-design/icons";
 import { Button, Input, Space, Typography } from "antd";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { appendTranscript } from "../../components/voice/appendTranscript";
 import { VoiceButton } from "../../components/voice/VoiceButton";
+import type { EndpointMode } from "../../features/interview-voice/endpoint";
+import { InterviewVoiceBar } from "../../features/interview-voice/InterviewVoiceBar";
+import { useInterviewVoice } from "../../features/interview-voice/useInterviewVoice";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { useVoiceInput } from "../../hooks/useVoiceInput";
@@ -52,6 +55,21 @@ export function Composer({
   });
   const recording = voice.status === "recording";
 
+  // #26 P0 实时语音：VAD 分段 → /api/transcribe → 断句规则决定何时把文字落进输入框。
+  // 面试官正在生成（submitting）时同一条麦克风切到插话检测；硬停后先 cancel 服务端
+  // 这一轮再 abort（顺序由会话保证），界面立刻回到可提问态。
+  const [voiceMode, setVoiceMode] = useState<EndpointMode>("always-on");
+  const onStopRef = useRef(onStop);
+  useEffect(() => {
+    onStopRef.current = onStop;
+  }, [onStop]);
+  const realtimeVoice = useInterviewVoice({
+    mode: voiceMode,
+    assistantActive: submitting,
+    onTranscript: (text) => onChange(appendTranscript(valueRef.current, text)),
+    onBargeIn: () => onStopRef.current(),
+  });
+
   // 提交/停止本轮后这一轮清空（turn.reset 会把 answer 置空）：正在录的那段必须停掉，
   // 否则它会在下一轮才把文字追加进来，看起来像"提交后自己又冒出一句话"。
   const cancelVoiceRef = useRef(voice.cancel);
@@ -83,6 +101,12 @@ export function Composer({
             onSubmit();
           }
         }}
+      />
+      <InterviewVoiceBar
+        voice={realtimeVoice}
+        mode={voiceMode}
+        onModeChange={setVoiceMode}
+        disabled={submitting}
       />
       <div className="interview-composer-actions">
         <Typography.Text type="secondary">{t("interview.hint.dontKnow")}</Typography.Text>

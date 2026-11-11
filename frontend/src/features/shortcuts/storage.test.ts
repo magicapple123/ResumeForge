@@ -80,6 +80,9 @@ describe("默认值与坏数据", () => {
         "commandPalette",
         "exportPdf",
         "focusAssistant",
+        // P5-3：品牌图标手势的键盘兜底（Alt+R / Alt+Home）。
+        "goHome",
+        "refreshView",
         "newJob",
         "newResume",
         "nextPage",

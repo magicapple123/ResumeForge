@@ -30,6 +30,21 @@ const applyRecords = {
   "applyRecords.error.retryFailedBatch": "批量重投失败",
   "applyRecords.error.deleteFailed": "删除失败",
   "applyRecords.error.batchDeleteFailed": "批量删除失败，请重试",
+
+  // #14C 跟进闭环：静默提醒条与行内「更新进度」。
+  "applyRecords.stale.title": "7 天以上没有回音的有 {count} 条",
+  "applyRecords.stale.body": "点「批量标为跟进中」把它们记进求职进度，之后在求职进度里更新阶段。",
+  "applyRecords.stale.markAll": "批量标为跟进中",
+  "applyRecords.stale.view": "查看这 {count} 条",
+  "applyRecords.stale.hide": "收起",
+  "applyRecords.stale.line": "{title}｜{company}｜已投 {days} 天",
+  "applyRecords.stale.done": "已把 {count} 条标为跟进中",
+  "applyRecords.stale.partial": "成功 {ok} 条，{failed} 条没记上，请重试",
+  "applyRecords.action.track": "更新进度",
+  "applyRecords.track.hint": "在求职进度里留一条记录（已有则复用），之后可在那边更新阶段",
+  "applyRecords.toast.tracked": "已在求职进度里记录这条投递",
+  "applyRecords.toast.trackUpdated": "已更新求职进度里的这条投递",
+  "applyRecords.error.trackFailed": "记到求职进度失败，请重试",
 } as const;
 
 export default applyRecords;

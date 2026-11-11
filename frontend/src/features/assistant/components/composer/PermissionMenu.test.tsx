@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 输入区四档权限下拉与琥珀提示条（T11）。
+ * 输入区四档权限下拉（T11 / #12）。
  *
- * 钉住的行为：写档位首次选中弹一次确认（每对话一次）、非写档位直接切换、没有会话时
- * 只能「跟随全局」不可改、提示条只在放宽两档出现且可关闭。
+ * 钉住的行为：选哪一档就回调哪一档（确认卡与提示条已分别上移 / 删除）、
+ * 没有会话时只能「跟随全局」不可改、五项说明互不重复。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import PermissionMenu, { PermissionNotice } from "./PermissionMenu";
+import PermissionMenu from "./PermissionMenu";
 import type { PermissionMenuProps } from "./PermissionMenu";
 import {
   ASSISTANT_PERMISSION_DESC_KEYS,
   ASSISTANT_PERMISSION_LABEL_KEYS,
   ASSISTANT_PERMISSION_LEVELS,
-  hasAcknowledgedWritePermission,
   resetAssistantPermissionForTests,
   type AssistantPermissionLevel,
 } from "../../assistantPermission";
@@ -79,76 +78,18 @@ describe("PermissionMenu 四档切换", () => {
     ).toBeInTheDocument();
   });
 
-  it("非写档位（放宽读取）直接切换，不弹确认", async () => {
+  it("选了哪一档就回调哪一档：确认判定不在本组件里（#12 已上移）", async () => {
     const { onChange } = renderMenu();
+
     await chooseLevel("read_full");
-
     expect(onChange).toHaveBeenCalledWith("read_full");
-    expect(
-      screen.queryAllByText(
-        t("assistantPermission.confirm.title", { level: t("assistantPermission.level.read_full") }),
-      ).length,
-    ).toBe(0);
-  });
 
-  it("写档位首次选中弹确认；确认后只记一次，再切另一写档位不再弹", async () => {
-    const { onChange } = renderMenu();
     await chooseLevel("write_confirm");
+    expect(onChange).toHaveBeenCalledWith("write_confirm");
 
-    // 确认框出现，并写明"会直接改数据"（antd 6 的 confirm 把标题同时渲染在
-    // .ant-modal-title 与 .ant-modal-confirm-title 里，所以这里用 AllBy 变体）
-    expect(
-      (
-        await screen.findAllByText(
-          t("assistantPermission.confirm.title", {
-            level: t("assistantPermission.level.write_confirm"),
-          }),
-        )
-      ).length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByText(t("assistantPermission.confirm.body"))).toBeInTheDocument();
-    // 取消不做任何修改
-    expect(onChange).not.toHaveBeenCalled();
-
-    // antd 会给两个汉字的按钮自动插空格（"开 启"），按宽松匹配点名。
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: new RegExp(`^${t("assistantPermission.confirm.ok").split("").join("\\s?")}$`),
-      }),
-    );
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith("write_confirm"));
-
-    // 同一个对话再切到「完全权限」：已经确认过，不再弹
-    await chooseLevel("write_full");
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith("write_full"));
-    await waitFor(() =>
-      expect(
-        screen.queryAllByText(
-          t("assistantPermission.confirm.title", {
-            level: t("assistantPermission.level.write_full"),
-          }),
-        ).length,
-      ).toBe(0),
-    );
-  });
-
-  it("取消确认框不改变档位", async () => {
-    const { onChange } = renderMenu();
-    await chooseLevel("write_full");
-    expect(
-      (
-        await screen.findAllByText(
-          t("assistantPermission.confirm.title", {
-            level: t("assistantPermission.level.write_full"),
-          }),
-        )
-      ).length,
-    ).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByRole("button", { name: t("assistantPermission.confirm.cancel") }));
-    // 取消 = 不切换、也不写"已确认"标记（下次再选写档位仍会询问）
-    await waitFor(() => expect(onChange).not.toHaveBeenCalled());
-    expect(hasAcknowledgedWritePermission(CONVERSATION_ID)).toBe(false);
+    // 本组件不再自己弹确认框：卡片由 PermissionConfirmModal 承担，
+    // 是否该弹由 useAssistantPermission.needsConfirm 判定（见 AssistantComposer.permission.test.tsx）。
+    expect(screen.queryByText(t("assistantPermission.confirm.risk"))).toBeNull();
   });
 });
 
@@ -212,43 +153,5 @@ describe("菜单五项说明互不重复（R03）", () => {
     const globalKeyword = hintHalves[hintHalves.length - 1].trim().slice(0, 4);
     expect(globalKeyword.length).toBeGreaterThan(0);
     expect(followDesc).toContain(globalKeyword);
-  });
-});
-
-describe("PermissionNotice 琥珀提示条", () => {
-  function renderNotice(level: AssistantPermissionLevel) {
-    const onClose = vi.fn();
-    const result = render(
-      <AntdApp>
-        <PermissionNotice level={level} onClose={onClose} />
-      </AntdApp>,
-    );
-    return { onClose, ...result };
-  }
-
-  it("仅查看 / 可修改不显示提示条", () => {
-    const readOnly = renderNotice("read_only");
-    expect(readOnly.container.querySelector(".assistant-permission-notice")).toBeNull();
-    readOnly.unmount();
-
-    const writeConfirm = renderNotice("write_confirm");
-    expect(writeConfirm.container.querySelector(".assistant-permission-notice")).toBeNull();
-  });
-
-  it("放宽读取显示提示条，关闭按钮回调且不误触发切换", () => {
-    const { onClose } = renderNotice("read_full");
-    expect(screen.getByText(t("assistantPermission.notice.readFull.title"))).toBeInTheDocument();
-    expect(screen.getByText(t("assistantPermission.notice.readFull.body"))).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: t("assistantPermission.notice.closeAria") }),
-    );
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("完全权限用写档位的提示文案", () => {
-    renderNotice("write_full");
-    expect(screen.getByText(t("assistantPermission.notice.writeFull.title"))).toBeInTheDocument();
-    expect(screen.getByText(t("assistantPermission.notice.writeFull.body"))).toBeInTheDocument();
   });
 });

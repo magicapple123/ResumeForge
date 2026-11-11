@@ -51,6 +51,42 @@ const applySettings = {
   "applySettings.action.save": "Save settings",
   "applySettings.saved": "Apply settings saved",
   "applySettings.saveFailed": "Could not save the apply settings",
+
+  "applySettings.tab.cadence": "Pacing",
+  "applySettings.tab.templates": "Greeting library",
+  "applySettings.tab.blocklist": "Block list",
+
+  "applySettings.blocklist.intro":
+    "Matching Jobs are stopped at collection, enqueue and apply time. One entry per line; leave it empty to block nothing.",
+  "applySettings.blocklist.companies": "Blocked companies",
+  "applySettings.blocklist.companiesHint":
+    "Compared by company name, ignoring spaces and case. For example: Acme Technologies Ltd.",
+  "applySettings.blocklist.keywords": "Blocked keywords",
+  "applySettings.blocklist.keywordsHint":
+    "Skip a Job when its title or description contains one of these words; at least two characters, so one word cannot block a whole city. For example: outsourcing, on-site vendor",
+  "applySettings.blocklist.save": "Save block list",
+  "applySettings.blocklist.saved": "Block list saved",
+  "applySettings.blocklist.saveFailed": "Could not save the block list",
+  "applySettings.blocklist.loadFailed": "Could not load the block list, try again",
+
+  "applySettings.templates.intro":
+    "Save greetings you reuse as templates and pick them while editing a queue item. A body may use {company}, {job_title} and {name}.",
+  "applySettings.templates.name": "Template name",
+  "applySettings.templates.body": "Greeting body",
+  "applySettings.templates.namePlaceholder": "For example: general opener",
+  "applySettings.templates.bodyPlaceholder":
+    "For example: Hello, I am {name}. I saw the {job_title} role and would like to talk.",
+  "applySettings.templates.add": "New template",
+  "applySettings.templates.remove": "Delete this template",
+  "applySettings.templates.save": "Save greeting library",
+  "applySettings.templates.saved": "Greeting library saved",
+  "applySettings.templates.saveFailed": "Could not save the greeting library",
+  "applySettings.templates.loadFailed": "Could not load the greeting library, try again",
+  "applySettings.templates.empty":
+    "No templates yet - click New template to write one, then pick it while editing a queue item.",
+  "applySettings.templates.uses": "Used {count} times",
+  "applySettings.templates.needName": "Give the template a name first",
+  "applySettings.templates.needBody": "Write the greeting body first",
 } as const;
 
 export default applySettings;

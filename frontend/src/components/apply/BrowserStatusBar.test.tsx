@@ -14,6 +14,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BrowserStatus } from "../../types";
+import { t } from "../../i18n";
 import BrowserStatusBar from "./BrowserStatusBar";
 
 const apiMocks = vi.hoisted(() => ({
@@ -40,13 +41,16 @@ vi.mock("../../hooks/useBrowserStatus", () => ({
   BROWSER_STATUS_POLL_INTERVAL_MS: 1500,
 }));
 
+/** 站点入口：断言时当数据引用，不把 URL 重复写进多处。 */
+const ENTRY_URL = "https://www.zhipin.com/";
+
 const RUNNING_WITH_ENTRY: BrowserStatus = {
   state: "running",
   port: 9333,
   profile_dir: "C:/data/browser-profile",
   browser_path: "C:/Program Files/Google/Chrome/Application/chrome.exe",
   browser_name: "Google Chrome",
-  entry_url: "https://www.zhipin.com/",
+  entry_url: ENTRY_URL,
   logged_in_hint: "首次使用请在弹出的浏览器窗口里扫码登录一次。",
   owned: true,
 };
@@ -73,6 +77,15 @@ function renderBar() {
   );
 }
 
+/**
+ * 打开「⋯」菜单（#14G 第二版：关闭/刷新/说明三个按钮收进来了，首屏只留一个主按钮）。
+ * 返回后即可用 `getByRole("menuitem", ...)` 断言里面的三项。
+ */
+async function openMoreMenu(): Promise<void> {
+  fireEvent.click(screen.getByRole("button", { name: t("browserStatus.more.aria") }));
+  await screen.findByRole("menu");
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   apiState.data = null;
@@ -85,11 +98,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("BrowserStatusBar", () => {
-  it("浏览器未启动时禁用「打开招聘网站」，避免点了没反应", () => {
+  it("浏览器未启动时只给「启动浏览器」，不摆一个点了没反应的「打开招聘网站」", () => {
+    // #14G 第二版：主按钮随状态换语义（未启动=启动浏览器，运行中=打开招聘网站），
+    // 两个同时常驻既占宽度又让用户自己判断先点哪个。
     apiState.data = STOPPED;
     renderBar();
 
-    expect(screen.getByRole("button", { name: /打开招聘网站/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /启动浏览器/ })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /打开招聘网站/ })).not.toBeInTheDocument();
   });
 
   it("浏览器运行中时「打开招聘网站」可用，点击会请求后端导航", async () => {
@@ -112,45 +128,88 @@ describe("BrowserStatusBar", () => {
     expect(screen.getByRole("button", { name: /打开招聘网站/ })).toBeDisabled();
   });
 
-  it("展示站点入口地址，让用户知道这个窗口会去哪里", () => {
+  it("展示站点入口地址，让用户知道这个窗口会去哪里", async () => {
     apiState.data = RUNNING_WITH_ENTRY;
     renderBar();
 
-    expect(screen.getByText(/站点入口/)).toHaveTextContent("https://www.zhipin.com/");
+    // #14G 第二版：三段说明在「⋯ → 使用说明」打开的弹窗里（弹层不进流，不占首屏高度）。
+    await openMoreMenu();
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: new RegExp(t("browserStatus.help.trigger")) }),
+    );
+
+    expect(
+      await screen.findByText(t("browserStatus.entry", { url: ENTRY_URL })),
+    ).toBeInTheDocument();
   });
 
-  it("展示实际使用的浏览器名，而不只是一串路径", () => {
+  it("展示实际使用的浏览器名，而不只是一串路径", async () => {
     apiState.data = RUNNING_WITH_ENTRY;
     renderBar();
 
-    expect(screen.getByText(/使用浏览器/)).toHaveTextContent("Google Chrome");
+    await openMoreMenu();
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: new RegExp(t("browserStatus.help.trigger")) }),
+    );
+
+    expect(await screen.findByText(/使用浏览器/)).toHaveTextContent("Google Chrome");
   });
 
-  it("本次运行启动的窗口可以关闭", () => {
+  it("三段说明默认不在页面上（首屏让给队列表格），只留在使用说明里", () => {
     apiState.data = RUNNING_WITH_ENTRY;
     renderBar();
 
-    expect(screen.getByRole("button", { name: /关闭浏览器/ })).toBeEnabled();
+    // 这一段有 164px 高，常驻会把首屏表格挤到只剩 3 行（#14G）。
+    expect(document.body.textContent).not.toContain(t("browserStatus.intro"));
+    expect(document.body.textContent).not.toContain(t("browserStatus.entry", { url: ENTRY_URL }));
+    expect(document.body.textContent).not.toContain(t("browserStatus.browser"));
+    // 入口本身必须在：删掉说明不等于让首次使用的人找不到说明。
+    expect(screen.getByRole("button", { name: t("browserStatus.more.aria") })).toBeInTheDocument();
   });
 
-  it("未启动时没有可关的窗口", () => {
+  it("未登录时扫码提示仍然常驻页面，没有被收进说明里", () => {
+    // 扫码提示是"需要你做一个动作"的提醒，显隐由后端 logged_in_hint 决定。
+    apiState.data = RUNNING_WITH_ENTRY;
+    renderBar();
+
+    expect(screen.getByText("首次使用请在弹出的浏览器窗口里扫码登录一次。")).toBeInTheDocument();
+  });
+
+  it("本次运行启动的窗口可以关闭", async () => {
+    apiState.data = RUNNING_WITH_ENTRY;
+    renderBar();
+
+    await openMoreMenu();
+    expect(
+      screen.getByRole("menuitem", { name: new RegExp(t("browserStatus.action.stop")) }),
+    ).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("未启动时没有可关的窗口", async () => {
     apiState.data = STOPPED;
     renderBar();
 
-    expect(screen.getByRole("button", { name: /关闭浏览器/ })).toBeDisabled();
+    await openMoreMenu();
+    expect(
+      screen.getByRole("menuitem", { name: new RegExp(t("browserStatus.action.stop")) }),
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
-  it("上一次运行留下的窗口照常可用，但关不掉——原因直接写在页面上", () => {
+  it("上一次运行留下的窗口照常可用，但关不掉——原因直接写在页面上", async () => {
     // 后端重启会丢掉进程句柄，而应用只关自己拉起的窗口（绝不按 PID 去猜）。
     // 这种窗口照样能采集、能投递，所以状态仍是"运行中"，只有关闭能力被收回。
     apiState.data = RUNNING_FROM_A_PREVIOUS_RUN;
     renderBar();
 
-    expect(screen.getByRole("button", { name: /关闭浏览器/ })).toBeDisabled();
     // 光置灰不够：用户会以为按钮坏了。原因必须可见，不能藏在悬停提示里
-    // （禁用按钮不派发鼠标事件，Tooltip 根本弹不出来）。
+    // （禁用按钮不派发鼠标事件，Tooltip 根本弹不出来）——所以它在页面上，
+    // 只有「关闭浏览器」这一项被 disable。
     expect(screen.getByText(/上一次运行/)).toBeInTheDocument();
     expect(screen.getByText(/采集与投递不受影响/)).toBeInTheDocument();
+    await openMoreMenu();
+    expect(
+      screen.getByRole("menuitem", { name: new RegExp(t("browserStatus.action.stop")) }),
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("浏览器是本次启动时不显示那段说明，避免噪音", () => {
@@ -160,11 +219,14 @@ describe("BrowserStatusBar", () => {
     expect(screen.queryByText(/关不掉它/)).not.toBeInTheDocument();
   });
 
-  it("提供手动刷新入口，并把刷新动作交给状态 hook", () => {
+  it("提供手动刷新入口，并把刷新动作交给状态 hook", async () => {
     apiState.data = RUNNING_WITH_ENTRY;
     renderBar();
 
-    fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
+    await openMoreMenu();
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: new RegExp(t("browserStatus.aria.reload")) }),
+    );
 
     expect(apiState.reload).toHaveBeenCalledTimes(1);
   });

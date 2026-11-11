@@ -42,7 +42,8 @@ vi.mock("./interview/ReportCard", () => ({ ReportCard: () => <div>report</div> }
 const setupStubs = vi.hoisted(() => {
   const base = {
     jobId: 3,
-    resumeId: 5,
+    // 关联简历的值带前缀（#25）：`r:` = 本应用的简历。
+    resumeId: "r:5",
     interviewType: "综合面",
     difficulty: "中级",
     interviewerStyle: "严谨专业",

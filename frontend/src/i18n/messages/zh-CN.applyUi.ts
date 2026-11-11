@@ -127,6 +127,14 @@ const applyUi = {
   "applyUi.siteBar.degradedTag": "站点可能已改版",
   "applyUi.siteBar.healthAria": "站点健康度告警：{reason}",
 
+  // #14F 页头漏斗条：最近 7 天的执行量，点击下钻到投递记录 / 求职进度。
+  "applyUi.funnel.applied": "已投递",
+  "applyUi.funnel.succeeded": "成功",
+  "applyUi.funnel.failed": "失败",
+  "applyUi.funnel.interviewing": "面试中",
+  "applyUi.funnel.hint": "近 {days} 天",
+  "applyUi.funnel.drillAria": "近 {days} 天{dimension} {value}，点击查看",
+
   // T07「我已提交」：成功记录详情抽屉里的记录动作、提醒日期与一次性引导。
   "applyUi.recordDetail.submitted.section": "记录投递结果",
   "applyUi.recordDetail.submitted.hint":

@@ -6,30 +6,40 @@
  * - `block`（真实缺口）显示为「不投」并说明原因；
  * - `needs_confirm`（证据不足 / 待确认）提示需要用户确认；
  * - 未分析的岗位以「未分析」呈现。
+ *
+ * #14 之后本文件只做**编排**：说明收进 `ApplyQueueGuide`、吸底条是 `ApplyQueueStartBar`、
+ * 体检抽屉是 `ApplyQueuePreflightDrawer`、详情是 `ApplyQueueDetailDrawer`、批量套话术是
+ * `BatchGreetingTemplateModal`。面板自己保留的只有状态、请求与"哪些条目可投"的判定。
  */
 import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
-import { App, Alert, Button, Empty, Space, Tag, Typography, Popconfirm } from "antd";
+import { App, Alert, Button, Modal, Space, Typography } from "antd";
 import PageSkeleton from "../common/PageSkeleton";
+import EmptyState from "../common/EmptyState";
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { createApplyTask, getBrowserStatus, listQueue, removeQueueItem } from "../../api/apply";
+import { runQueuePreflight } from "../../api/applyExtras";
 import { useApi } from "../../hooks/useApi";
-import {
-  QUEUE_STATUS_META,
-  type ApplyQueueItem,
-  type ApplyQueueList,
-  type ApplyTask,
-  type QueueStatus,
+import type {
+  ApplyPreflightResult,
+  ApplyQueueItem,
+  ApplyQueueList,
+  ApplyTask,
+  QueueStatus,
 } from "../../types";
-import { formatDateTime } from "../../utils/format";
-import { RecordDetailDrawer } from "../common/RecordDetail";
 import { type RowMenuItem } from "../common/rowActionMenu";
-import { AdmissionTag } from "./queue/AdmissionTag";
+import { ApplyQueueDetailDrawer } from "./queue/ApplyQueueDetailDrawer";
+import { ApplyQueueGuide } from "./queue/ApplyQueueGuide";
+import { ApplyQueuePreflightDrawer } from "./queue/ApplyQueuePreflightDrawer";
+import { ApplyQueueStartBar } from "./queue/ApplyQueueStartBar";
+import { BatchGreetingTemplateModal } from "./queue/BatchGreetingTemplateModal";
 import { QueueFilterBar } from "./queue/QueueFilterBar";
 import { UNANALYZED_FILTER, type AdmissionFilterValue } from "./queue/filterOptions";
 import { QueueItemEditor } from "./queue/QueueItemEditor";
 import { QueueTable } from "./queue/QueueTable";
+import ApplyJobInspectCard from "./insights/ApplyJobInspectCard";
+import ApplyResumeFitDrawer from "./insights/ApplyResumeFitDrawer";
 import { t } from "../../i18n";
-import { QUEUE_STATUS_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
@@ -55,7 +65,20 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
   const [admissionFilter, setAdmissionFilter] = useState<AdmissionFilterValue | undefined>(
     undefined,
   );
+  // #14B 只看收藏。
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [batchRemoving, setBatchRemoving] = useState(false);
+  // #14A 体检：抽屉、结果与"开始时自动跑一次"的确认弹层。
+  const [preflightOpen, setPreflightOpen] = useState(false);
+  const [preflightLoading, setPreflightLoading] = useState(false);
+  const [preflight, setPreflight] = useState<ApplyPreflightResult | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // #14D 批量套用话术模板。
+  const [templateOpen, setTemplateOpen] = useState(false);
+  // #15C 岗位体检（行内「体检」→ 小卡片）；#15D 优化指派（勾选后批量看建议）。
+  // 二者都只在本面板留一个 state + 一个回调，卡片 JSX 不进本文件（500 行预算）。
+  const [inspecting, setInspecting] = useState<ApplyQueueItem | null>(null);
+  const [resumeFitOpen, setResumeFitOpen] = useState(false);
 
   useEffect(() => {
     if (error) message.error(error);
@@ -69,7 +92,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
     [items],
   );
   // 来源不支持的待投条目：它们**无法**被自动投递，整队列投递时会被后端一次性拦下。
-  // 提前在页面上说明，用户才不会在点了「开始投递」之后才被一条 409 拦住。
+  // #14I 之后它们不再是首屏横幅（58px），而是工具栏上的一个 chip + 就地确认的清理入口。
   const unsupportedPending = useMemo(
     () => pendingItems.filter((item) => item.apply_supported === false),
     [pendingItems],
@@ -80,15 +103,16 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
     () =>
       items.filter((item) => {
         if (statusFilter && item.status !== statusFilter) return false;
+        if (favoriteOnly && !item.favorite) return false;
         if (admissionFilter) {
           if (admissionFilter === UNANALYZED_FILTER) return item.admission === null;
           return item.admission === admissionFilter;
         }
         return true;
       }),
-    [items, statusFilter, admissionFilter],
+    [items, statusFilter, admissionFilter, favoriteOnly],
   );
-  const filterActive = statusFilter !== undefined || admissionFilter !== undefined;
+  const filterActive = statusFilter !== undefined || admissionFilter !== undefined || favoriteOnly;
   // 「全选队列」= 勾选当前筛选结果里**全部可投**的条目（跨页生效），可选范围与表格
   // 勾选框的非禁用条件（getCheckboxProps）保持一致。
   const selectableIds = useMemo(
@@ -100,6 +124,10 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
         )
         .map((item) => item.id),
     [filteredItems],
+  );
+  const selectedItems = useMemo(
+    () => items.filter((item) => selectedIds.includes(item.id)),
+    [items, selectedIds],
   );
 
   const refresh = () => {
@@ -151,42 +179,91 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
     }
   };
 
-  /** 批量移出：后端没有批量端点，逐条 DELETE、allSettled 聚合账目——一条失败不拖垮整批。 */
-  const removeSelected = async () => {
-    const ids = [...selectedIds];
+  /**
+   * 批量移出：后端没有批量端点，逐条 DELETE、allSettled 聚合账目——一条失败不拖垮整批。
+   * 「移出所选」与 #14I 的「移出这 N 条来源不支持」共用这一处，不再各写一份。
+   */
+  const removeMany = async (ids: number[], done: string) => {
     if (ids.length === 0) return;
     setBatchRemoving(true);
     try {
       const results = await Promise.allSettled(ids.map((id) => removeQueueItem(id)));
       const failed = results.filter((result) => result.status === "rejected").length;
-      setSelectedIds([]);
+      setSelectedIds((current) => current.filter((id) => !ids.includes(id)));
       refresh();
       if (failed > 0) {
         message.warning(t("applyQueue.toast.removePartial", { ok: ids.length - failed, failed }));
       } else {
-        message.success(t("applyQueue.toast.removedCount", { count: ids.length }));
+        message.success(done);
       }
     } finally {
       setBatchRemoving(false);
     }
   };
 
-  const start = async () => {
-    // Table 的 rowKey 是队列条目 id，而后端 /apply/tasks 的 job_ids 明确要求岗位 id。
-    // 两种 id 通常不同，直接提交 selectedIds 会投错岗位，甚至在碰巧存在同号岗位时静默误投。
-    const chosen =
-      selectedIds.length > 0
-        ? items
-            .filter(
-              (item): item is ApplyQueueItem & { job_id: number } =>
-                selectedIds.includes(item.id) && item.status === "pending" && item.job_id !== null,
-            )
-            .map((item) => item.job_id)
-        : undefined;
-    if (selectedIds.length > 0 && chosen?.length === 0) {
-      message.warning(t("applyQueue.toast.notEligible"));
-      return;
+  const removeSelected = () =>
+    removeMany([...selectedIds], t("applyQueue.toast.removedCount", { count: selectedIds.length }));
+
+  const removeUnsupported = () => {
+    const ids = unsupportedPending.map((item) => item.id);
+    void removeMany(ids, t("applyQueue.toast.removedUnsupported", { count: ids.length }));
+  };
+
+  /**
+   * 跑一次体检（只读）。返回 `null` 表示体检没跑成（接口缺失 / 网络失败）——
+   * 此时**不拦**投递：体检是额外保险，不该成为新的单点故障。
+   */
+  const runPreflight = async (queueIds?: number[]): Promise<ApplyPreflightResult | null> => {
+    setPreflightLoading(true);
+    try {
+      const result = await runQueuePreflight(queueIds);
+      setPreflight(result);
+      return result;
+    } catch {
+      return null;
+    } finally {
+      setPreflightLoading(false);
     }
+  };
+
+  /** 体检范围：勾了就只查勾选的（与「开始投递」提交的范围同源），否则查整个队列。 */
+  const preflightScope = (ids: number[]): number[] | undefined =>
+    ids.length > 0 ? [...ids] : undefined;
+
+  const openPreflight = () => {
+    setPreflightOpen(true);
+    void runPreflight(preflightScope(selectedIds));
+  };
+
+  /** 体检抽屉里的「移出队列」：删完立刻重跑一次，抽屉里的结论不会停在删之前。 */
+  const fixRemove = async (queueId: number) => {
+    const rest = selectedIds.filter((id) => id !== queueId);
+    setBusy(true);
+    try {
+      await removeQueueItem(queueId);
+      setSelectedIds(rest);
+      message.success(t("applyQueue.toast.removed"));
+      refresh();
+      await runPreflight(preflightScope(rest));
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : t("applyQueue.toast.removeFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** 勾选条目的岗位 id（= 后端 `/apply/tasks` 要的形状）；没勾选时返回 undefined（整队列）。 */
+  const chosenJobIds = (): number[] | undefined => {
+    if (selectedIds.length === 0) return undefined;
+    return items
+      .filter(
+        (item): item is ApplyQueueItem & { job_id: number } =>
+          selectedIds.includes(item.id) && item.status === "pending" && item.job_id !== null,
+      )
+      .map((item) => item.job_id);
+  };
+
+  const launch = async (chosen: number[] | undefined) => {
     setBusy(true);
     try {
       // 投递由受控浏览器执行：浏览器没启动时后端必然失败。按钮不禁用（保留可发现性），
@@ -213,39 +290,32 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
     }
   };
 
+  /**
+   * 「开始投递」：先自动跑一次体检，有 blocking **弹确认但不硬拦**（与现有 409 语义一致）。
+   * 体检接口不可用（`null`）时直接投——体检是额外保险，不是准入门。
+   */
+  const start = async () => {
+    // Table 的 rowKey 是队列条目 id，而后端 /apply/tasks 的 job_ids 明确要求岗位 id。
+    // 两种 id 通常不同，直接提交 selectedIds 会投错岗位，甚至在碰巧存在同号岗位时静默误投。
+    const chosen = chosenJobIds();
+    if (selectedIds.length > 0 && chosen?.length === 0) {
+      message.warning(t("applyQueue.toast.notEligible"));
+      return;
+    }
+    const check = await runPreflight(preflightScope(selectedIds));
+    if (check && check.summary.blocking > 0) {
+      // 叠层约束：同一时刻只留一个容器——体检抽屉先关，再开确认弹层。
+      setPreflightOpen(false);
+      setConfirmOpen(true);
+      return;
+    }
+    await launch(chosen);
+  };
+
   if (loading && !data) return <PageSkeleton rows={5} />;
 
   return (
     <div className="apply-queue-panel">
-      {/* 用户反馈过「点进来不知道下一步干什么」：这一段是唯一的入口说明，明确"岗位从哪来、
-          在这里做什么、什么时候才真的投出去"。不用弹窗，避免每次进来都要关一次。 */}
-      <Alert
-        className="apply-queue-flow"
-        type="info"
-        showIcon
-        title={t("applyQueue.guide.title")}
-        description={
-          <ol style={{ margin: 0, paddingLeft: 18 }}>
-            <li>{t("applyQueue.guide.step1")}</li>
-            <li>{t("applyQueue.guide.step2")}</li>
-            <li>{t("applyQueue.guide.step3")}</li>
-            <li>{t("applyQueue.guide.step4")}</li>
-          </ol>
-        }
-      />
-
-      {/* 来源不支持的条目现在的**唯一**来源是"闸门上线前就已经在队列里"的历史数据。
-          写清楚它们是什么、以及两种处理方式，用户才不会在点开始时被一条 409 拦住。 */}
-      {unsupportedPending.length > 0 && (
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 12 }}
-          title={t("applyQueue.unsupported.title", { count: unsupportedPending.length })}
-          description={<span>{t("applyQueue.unsupported.body")}</span>}
-        />
-      )}
-
       {/* 队列被封顶展示（P2-2）：如实在说，引导用筛选/开始投递消化，而不是假装队列只有 500 条。 */}
       {queueTruncated && items.length > 0 && (
         <Alert
@@ -261,31 +331,44 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
         onStatusChange={setStatusFilter}
         admissionFilter={admissionFilter}
         onAdmissionChange={setAdmissionFilter}
+        favoriteOnly={favoriteOnly}
+        onFavoriteOnlyChange={setFavoriteOnly}
         queueTotal={queueTotal}
         filteredCount={filteredItems.length}
         filterActive={filterActive}
         selectedCount={selectedIds.length}
         selectableCount={selectableIds.length}
+        unsupportedCount={unsupportedPending.length}
         busy={busy}
         batchRemoving={batchRemoving}
         loading={loading}
         onSelectAll={() => setSelectedIds(selectableIds)}
         onClearSelection={() => setSelectedIds([])}
         onRemoveSelected={() => void removeSelected()}
+        onRemoveUnsupported={removeUnsupported}
+        onPreflight={openPreflight}
+        preflightLoading={preflightLoading}
         onReload={() => void reload()}
-        startDisabled={disabled || pendingItems.length === 0}
-        onStart={() => void start()}
+        onBatchTemplate={() => setTemplateOpen(true)}
+        onResumeFit={() => setResumeFitOpen(true)}
+        guide={<ApplyQueueGuide />}
       />
 
       {items.length === 0 ? (
-        <Empty
+        // #14I 空态补主按钮：原来只有一句「先去岗位广场挑几个岗位」，没有可点的入口
+        // （空态里的主按钮要内嵌，不能用「点右上角」这类方位词指路）。
+        <EmptyState
           description={
             <Space orientation="vertical" size={4}>
               <Typography.Text>{t("applyQueue.empty.title")}</Typography.Text>
               <Typography.Text type="secondary">{t("applyQueue.empty.body")}</Typography.Text>
             </Space>
           }
-        />
+        >
+          <Link to="/jobs">
+            <Button type="primary">{t("applyQueue.empty.action")}</Button>
+          </Link>
+        </EmptyState>
       ) : (
         <QueueTable
           items={filteredItems}
@@ -294,98 +377,31 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
           setSelectedIds={setSelectedIds}
           setDetail={setDetail}
           rowMenuItems={rowMenuItems}
+          onInspect={setInspecting}
         />
       )}
 
-      {/* 队列条目的详情：表格里只放得下摘要，招呼语全文、准入结论与时间都在这里看。 */}
-      <RecordDetailDrawer
-        open={detail !== null}
-        title={detail?.job_title || t("applyQueue.detail.deletedJob")}
-        subtitle={detail?.company}
-        tags={detail && <AdmissionTag item={detail} />}
-        fields={
-          detail
-            ? [
-                {
-                  label: t("applyQueue.detail.autoApply"),
-                  value:
-                    detail.apply_supported === false ? (
-                      <Tag color="red">{t("applyQueue.detail.unsupported")}</Tag>
-                    ) : (
-                      t("applyQueue.detail.supported")
-                    ),
-                },
-                {
-                  label: t("applyQueue.detail.status"),
-                  value: (
-                    <Tag color={QUEUE_STATUS_META[detail.status].color}>
-                      {t(QUEUE_STATUS_LABEL_KEYS[detail.status])}
-                    </Tag>
-                  ),
-                },
-                {
-                  label: t("applyQueue.detail.queuePosition"),
-                  value: t("applyQueue.detail.position", {
-                    index: items.findIndex((i) => i.id === detail.id) + 1,
-                  }),
-                },
-                {
-                  label: t("applyQueue.detail.resume"),
-                  value: detail.resume_title || t("applyQueue.detail.defaultResume"),
-                },
-                {
-                  label: t("applyQueue.detail.joinedAt"),
-                  value: formatDateTime(detail.created_at),
-                },
-                {
-                  label: t("applyQueue.detail.updatedAt"),
-                  value: formatDateTime(detail.updated_at),
-                },
-              ]
-            : []
-        }
-        sections={
-          detail
-            ? [
-                {
-                  title: t("applyQueue.detail.greeting"),
-                  content: detail.greeting || t("applyQueue.detail.defaultGreeting"),
-                },
-              ]
-            : []
-        }
-        actions={
-          detail && (
-            <Space>
-              <Button
-                icon={<EditOutlined />}
-                onClick={() => {
-                  setEditing(detail);
-                  setDetail(null);
-                }}
-              >
-                {t("applyQueue.action.edit")}
-              </Button>
-              <Popconfirm
-                title={t("applyQueue.confirm.removeTitle")}
-                // 后果段与行菜单那一处同措辞：移出队列不动岗位与投递记录。
-                description={t("applyQueue.confirm.removeBody")}
-                okText={t("applyQueue.action.removeShort")}
-                cancelText={t("common.action.cancel")}
-                okButtonProps={{ danger: true }}
-                onConfirm={() => {
-                  void remove(detail);
-                  setDetail(null);
-                }}
-              >
-                <Button danger icon={<DeleteOutlined />}>
-                  {t("applyQueue.action.remove")}
-                </Button>
-              </Popconfirm>
-            </Space>
-          )
-        }
+      {/* #14H 吸底操作条：`.app-content` 才是滚动容器，它必须留在这个子树里才 sticky 得住。 */}
+      <ApplyQueueStartBar
+        selectedCount={selectedIds.length}
+        eligibleCount={selectableIds.length}
+        busy={busy}
+        startDisabled={disabled || pendingItems.length === 0}
+        onStart={() => void start()}
+      />
+
+      <ApplyQueueDetailDrawer
+        item={detail}
+        queueItems={items}
         onClose={() => setDetail(null)}
+        onEdit={(item) => {
+          setEditing(item);
+          setDetail(null);
+        }}
+        onRemove={(item) => {
+          void remove(item);
+          setDetail(null);
+        }}
       />
 
       {editing && (
@@ -398,6 +414,68 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
           }}
         />
       )}
+
+      <ApplyQueuePreflightDrawer
+        open={preflightOpen}
+        loading={preflightLoading}
+        result={preflight}
+        items={items}
+        onClose={() => setPreflightOpen(false)}
+        onFixRemove={(queueId) => void fixRemove(queueId)}
+        onFixEdit={(item) => {
+          setPreflightOpen(false);
+          setEditing(item);
+        }}
+      />
+
+      {/* 有 blocking 时的一次确认（不硬拦）：文案写清数量，按钮描述结果而不是「是/否」。 */}
+      <Modal
+        open={confirmOpen}
+        title={t("applyQueue.preflight.confirmTitle")}
+        onCancel={() => setConfirmOpen(false)}
+        mask={{ closable: false }}
+        footer={[
+          <Button key="cancel" onClick={() => setConfirmOpen(false)}>
+            {t("applyQueue.preflight.confirmCancel")}
+          </Button>,
+          <Button
+            key="go"
+            type="primary"
+            onClick={() => {
+              setConfirmOpen(false);
+              void launch(chosenJobIds());
+            }}
+          >
+            {t("applyQueue.preflight.confirmGo")}
+          </Button>,
+        ]}
+      >
+        <Typography.Paragraph style={{ marginBottom: 0 }}>
+          {t("applyQueue.preflight.confirmBody", { count: preflight?.summary.blocking ?? 0 })}
+        </Typography.Paragraph>
+      </Modal>
+
+      <BatchGreetingTemplateModal
+        open={templateOpen}
+        items={selectedItems}
+        onClose={() => setTemplateOpen(false)}
+        onApplied={refresh}
+      />
+
+      {/* #15C 岗位体检：只读小卡片，接口失败只在卡片里报错，不影响队列与开始投递。 */}
+      <ApplyJobInspectCard
+        queueId={inspecting?.id ?? null}
+        jobTitle={inspecting?.job_title}
+        onClose={() => setInspecting(null)}
+      />
+
+      {/* #15D 优化指派：只对勾选的条目算建议，换用走现有的改简历接口，成功后刷新队列。 */}
+      <ApplyResumeFitDrawer
+        open={resumeFitOpen}
+        items={selectedItems}
+        onClose={() => setResumeFitOpen(false)}
+        onApplied={refresh}
+      />
     </div>
   );
 }

@@ -44,8 +44,52 @@ const knowledgePage = {
   "knowledgePage.card.openAria": "打开知识条目「{title}」的详情",
   "knowledgePage.card.selectAria": "选择知识条目 {title}",
 
+  // ── 筛选与导出（#29A/#29D/#29G）─────────────────────────
+  "knowledgePage.filter.company.aria": "公司筛选",
+  "knowledgePage.filter.company.all": "全部公司",
+  "knowledgePage.filter.uncategorized": "只看未分类",
+  "knowledgePage.filter.category.uncategorized": "未分类",
+  "knowledgePage.filter.semantic": "语义检索",
+  "knowledgePage.filter.semantic.aria": "切换语义检索",
+  "knowledgePage.filter.semantic.hint": "按含义查找，结果优先显示摘要",
+  "knowledgePage.action.export": "导出 Markdown",
+  "knowledgePage.toast.exported": "已导出 {count} 条知识",
+  "knowledgePage.error.exportFailed": "导出失败：{error}",
+  "knowledgePage.error.exportEmpty": "知识库还没有可导出的条目",
+
+  // ── 语义检索（#29A）──────────────────────────────────────
+  "knowledgePage.semantic.title": "语义检索结果",
+  "knowledgePage.semantic.hint": "按含义匹配，点击结果打开原文",
+  "knowledgePage.semantic.empty": "没有匹配的条目",
+  "knowledgePage.semantic.loading": "正在检索…",
+  "knowledgePage.semantic.error": "语义检索失败：{error}",
+  "knowledgePage.semantic.fallback": "向量检索不可用，已回退关键词匹配：{reason}",
+  "knowledgePage.semantic.vectorTag": "向量",
+  "knowledgePage.semantic.keywordTag": "关键词",
+  "knowledgePage.semantic.score": "相关度 {score}",
+
+  // ── 卡片（#29C/#29D/#29E）────────────────────────────────
+  "knowledgePage.card.reason": "为什么记这条：{reason}",
+  "knowledgePage.card.summary": "摘要",
+  "knowledgePage.card.keyPoints": "要点",
+  "knowledgePage.card.company": "公司：{company}",
+  "knowledgePage.card.job": "关联岗位 #{id}",
+  "knowledgePage.card.updated": "更新于 {time}",
+
+  // ── 复习提醒（#29F）──────────────────────────────────────
+  "knowledgePage.review.title": "有 {count} 条知识超过 30 天没回顾",
+  "knowledgePage.review.description": "回看一遍能巩固记忆；也可以直接忽略，下周还会再提醒一次。",
+  "knowledgePage.review.dismiss": "本周不再提示",
+  "knowledgePage.review.dismissed": "本周不再提示复习提醒",
+
   // ── 分页 ─────────────────────────────────────────────────
   "knowledgePage.pagination.total": "共 {count} 条",
+  // #29B 知识回流：面试复盘 / 投递失败 / 简历诊断 → 知识条目（服务端生成正文）
+  "knowledgePage.capture.interview": "存进知识库",
+  "knowledgePage.capture.experience": "沉淀为一条经验",
+  "knowledgePage.capture.saved": "已存入知识库「{title}」",
+  "knowledgePage.capture.exists": "知识库里已有这条「{title}」，没有重复保存",
+  "knowledgePage.capture.failed": "存入知识库失败，请稍后重试",
 } as const;
 
 export default knowledgePage;

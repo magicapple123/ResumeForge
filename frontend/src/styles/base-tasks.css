@@ -160,15 +160,25 @@
   background: var(--rf-border);
 }
 
+/* 唯一的滚动容器（P1-2）：`.app-main` 是 flex 列，这里 `flex: 1 1 auto` 吃掉
+   页头 / 公告条 / 任务条剩下的全部高度，滚动量由内容自身决定。
+   `min-height: 0` 是"flex 子项可以被压扁"的前提 —— 不给它，内容再高也只会把父级
+   撑破，而不是让这里出滚动条。 */
 .app-content {
   box-sizing: border-box;
+  flex: 1 1 auto;
   width: 100%;
   min-width: 0;
-  /* 顶部常驻元素的真实高度由变量给出：公告条出现时多 40px，不扣掉就会多出一屏滚动量。
-     两个 fallback 保证"没有公告条"时计算值与历史完全一致（64px）。 */
+  min-height: 0;
   /* 内边距读 --rf-content-pad：这一处取代了 responsive.css 与 mobile.css 里各自的
      16px 写法，D 档自动收紧，不需要再写媒体查询。 */
-  min-height: calc(100vh - var(--rf-header-height, 64px) - var(--rf-announcement-h, 0px));
   padding: var(--rf-content-pad);
   overflow-x: hidden;
+  /* 显式写 overflow-y：历史上它是靠「另一轴非 visible 时 visible 抬成 auto」隐式
+     拿到的，改一次 overflow-x 就会静默失去滚动能力。 */
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  /* 滚动条槽位跟着滚动容器走（原来在 .app-main 上）：滚动条现在长在这个盒子里，
+     槽位留在外层会让内容横向位移约 15px。 */
+  scrollbar-gutter: stable;
 }

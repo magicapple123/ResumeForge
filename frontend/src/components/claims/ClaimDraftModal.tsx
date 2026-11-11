@@ -56,7 +56,11 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
   const [busy, setBusy] = useState(false);
 
   // P3：从资料库选一条，把原文 / 主体 / 分类预填进来（纯前端，不改后端协议）。
-  const workspace = useApi(() => getWorkspace(), [open], { enabled: open });
+  const workspace = useApi(() => getWorkspace(), [open], {
+    enabled: open,
+    // 与 `ClaimFormModal` 同款理由：编辑弹窗里的数据不许被"双击刷新"换掉。
+    refreshOnRequest: false,
+  });
   const entryGroups = buildClaimEntryGroups(workspace.data);
   const [entryId, setEntryId] = useState<string | undefined>(undefined);
   // 待确认的替换：用户改过内容后再选另一条资料，不能静默覆盖。

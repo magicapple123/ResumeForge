@@ -10,7 +10,7 @@
  * 在网申页铺开只会让人困惑。保存时把当前配置整份提交、只改这两个字段——后端是整份覆盖，
  * 所以必须先取回现值再合并，否则会把其它设置清空。
  */
-import { App, Button, Form } from "antd";
+import { App, Form, Typography } from "antd";
 import FormModal from "../common/FormModal";
 import { useEffect, useState } from "react";
 import { getApplyConfig, updateApplyConfig } from "../../api/apply";
@@ -106,16 +106,19 @@ export default function BrowserSettingsModal({ open, onClose, onSaved }: Props) 
         <PageSkeleton rows={3} card={false} />
       ) : (
         <>
-          {/* 说明段落与表单、表单与底部链接之间的间距统一收紧（用户反馈行距偏松）。 */}
-          <p style={{ marginBottom: 12 }}>{t("applyUi.browserSettings.intro")}</p>
+          {/* 说明段落与表单之间的间距统一收紧（用户反馈行距偏松）。 */}
+          <p style={{ marginBottom: 8 }}>{t("applyUi.browserSettings.intro")}</p>
+          {/* 「改完要关掉再启动一次才生效」原来只挂在网申卡片那颗设置按钮的悬停提示里
+              （#35D）——不悬停就永远看不到，而这正是最容易白改一条配置的地方。
+              现在常驻在弹窗顶部；底部那颗只关弹窗的"假链接"一并去掉。 */}
+          <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
+            {t("applyUi.browserSettings.effectiveHint")}
+          </Typography.Text>
           {/* mb-tight：Form.Item 默认 marginBottom 24 与 Space 行距叠加，两枚字段换行
               后中间会空出一大段，这里收紧到 8；compact 让字段换行行距 16→8。 */}
           <Form form={form} layout="vertical" className="browser-settings-form">
             <BrowserChoiceFields compact />
           </Form>
-          <Button type="link" style={{ paddingLeft: 0 }} onClick={onClose}>
-            {t("applyUi.browserSettings.effectiveHint")}
-          </Button>
         </>
       )}
     </FormModal>

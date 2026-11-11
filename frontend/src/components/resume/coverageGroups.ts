@@ -53,8 +53,15 @@ export const COVERAGE_REASON_DISPLAY_ORDER: readonly CoverageReason[] = [
 /** 每组默认展开的条数：超出部分折叠，靠"展开全部"看。 */
 export const DEFAULT_VISIBLE_ITEMS = 5;
 
-/** 单行省略的字符阈值：超过它的条目单行省略 + Tooltip 全文（约 48 字符）。 */
-export const LONG_ITEM_CHARS = 48;
+/**
+ * 单行省略的字符阈值：超过它的条目单行省略 + Tooltip 全文。
+ *
+ * 2026-11-10（问题 05-1）：48 → **30**。原先 40–48 字符档看着"有省略号、点开没有全文"——
+ * 阈值比弹层实际能放的字符数大，`CoverageItemRow` 判定"不算长条"于是不挂 Tooltip，
+ * 而 CSS 的单行省略照样生效（当时靠弹层横向滚动才能看到全文）。30 字符（≈375px @12.5px）
+ * 是 560px 弹层内容盒里能整行放下的安全上限，超过就一定有 Tooltip 兜底。
+ */
+export const LONG_ITEM_CHARS = 30;
 
 /** 回退推导时用的桶：原因 → note 上的数组字段（顺序由 {@link COVERAGE_REASON_PRIORITY} 给）。 */
 const REASON_FIELD: Record<CoverageReason, keyof ResumeCoverageNote> = {

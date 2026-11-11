@@ -1,0 +1,155 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 投投动作面板（#27C）：底部右侧的轻量对话框 + 遮罩。
+   颜色全部走 --rf-* token（深色主题自动跟随），不使用 .ant-* 覆写。 */
+
+.tt-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--rf-layer-orb-tooltip);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: var(--rf-space-3);
+  /* 垫高让开球体：面板从球上方展开，不盖住球自己。 */
+  padding-bottom: 84px;
+  background: var(--rf-scrim);
+}
+
+.tt-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-space-2);
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(560px, calc(100vh - 120px));
+  padding: var(--rf-space-3);
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-panel);
+  background: var(--rf-surface-elevated);
+  box-shadow: 0 18px 44px rgb(15 23 42 / 24%);
+  overflow: hidden;
+}
+
+.tt-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rf-space-2);
+}
+
+.tt-panel-title {
+  margin: 0;
+  color: var(--rf-text-body);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tt-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.tt-panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.tt-panel-section-title {
+  margin: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.tt-panel-region {
+  align-self: flex-start;
+  margin: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--rf-info-strong);
+  background: var(--rf-info-bg);
+  font-size: 11px;
+}
+
+.tt-panel-item {
+  padding: 8px 10px;
+  border-radius: var(--rf-radius-control);
+  color: var(--rf-text-body);
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.tt-panel-item:hover,
+.tt-panel-item.is-active {
+  color: var(--rf-brand);
+  background: var(--rf-brand-wash);
+}
+
+.tt-panel-empty,
+.tt-panel-hint,
+.tt-panel-asking {
+  margin: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tt-panel-asking {
+  color: var(--rf-info-strong);
+}
+
+.tt-panel-side-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: var(--rf-space-2);
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+.tt-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--rf-space-2);
+}
+
+.tt-panel-error {
+  margin: 0;
+  color: var(--rf-danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tt-panel-answer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-space-2);
+  min-height: 0;
+}
+
+.tt-panel-answer-text {
+  margin: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  color: var(--rf-text-body);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .tt-panel-overlay {
+    padding: var(--rf-space-2);
+    padding-bottom: 84px;
+  }
+
+  .tt-panel {
+    width: 100%;
+    max-height: calc(100vh - 100px);
+  }
+}

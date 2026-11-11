@@ -45,6 +45,10 @@ const jobDetail = {
   "jobDetail.empty.extra": "暂无其他招聘信息",
   "jobDetail.empty.note": "暂无备注",
   "jobDetail.section.noteImages": "备注图片",
+  // #29D 岗位详情「相关知识 N 条」（29B 存进来的条目按公司关联）。
+  "jobDetail.relatedKnowledge.title": "相关知识（{count}）",
+  "jobDetail.relatedKnowledge.aria": "相关知识",
+  "jobDetail.relatedKnowledge.viewAll": "查看全部相关知识",
   "jobDetail.alt.noteImage": "备注图片 {index}",
 } as const;
 

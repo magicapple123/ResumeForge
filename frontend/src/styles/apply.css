@@ -86,19 +86,140 @@
   margin-bottom: 12px;
 }
 
-/* 队列的入口说明：与「自动采集」用同一套写法（浅色说明块 + 有序步骤），
-   用户在这个页面反馈过两次「不知道下一步做什么」，所以步骤要留得住视线。 */
-.apply-queue-flow {
-  margin-bottom: 16px;
-}
-
-.apply-queue-flow ol {
+/* #14G：四步说明收进标题旁的「?」Popover（原来是一条常驻 96px 的蓝色 Alert，
+   首屏只剩 3 行表格）。弹出层的排版在这里定，不再抢页面高度。 */
+.apply-queue-guide-steps {
+  max-width: 360px;
+  margin: 0;
+  padding-left: 18px;
   line-height: 1.9;
 }
 
-.apply-queue-flow-em {
-  font-weight: 600;
+/* #14H 吸底操作条：`position: sticky; bottom: 0` 挂在最近的滚动容器上——
+   本页是 `.app-content`（`.app-main` 只是 flex 列），所以这条必须留在 Tab 内容里。 */
+.apply-queue-startbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  box-shadow: 0 -2px 12px rgb(15 23 42 / 6%);
+}
+
+/* #14B 参考分：<60 灰、60–79 蓝、≥80 绿。它是派生值、不参与准入，
+   所以只用文字色区分，不做进度条或大色块（那会读成"结论"）。 */
+.apply-queue-score {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.apply-queue-score[data-band="low"] {
+  color: var(--rf-text-secondary);
+}
+
+.apply-queue-score[data-band="mid"] {
   color: var(--rf-info-strong);
+}
+
+.apply-queue-score[data-band="high"] {
+  color: var(--rf-success-text);
+}
+
+.apply-queue-score[data-band="none"] {
+  font-size: 12px;
+}
+
+/* 列头里的排序开关：去掉 antd text 按钮的内边距，让它看起来就是表头文字。 */
+.apply-queue-sort {
+  height: auto;
+  padding: 0;
+  font-weight: inherit;
+}
+
+/* 收藏星标：只用在图标上（--rf-favorite 就是为此定义的琥珀色）。 */
+.apply-queue-favorite {
+  color: var(--rf-favorite);
+  font-size: 12px;
+}
+
+/* 「来源不支持 N」chip：看着像标签、行为像按钮，所以保留圆角药丸形。 */
+.apply-queue-chip {
+  border-radius: 999px;
+}
+
+/* 资产列的简历名标签：列宽只有 240px，标签自己不能带右边距。 */
+.apply-queue-resume-tag {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* #14A 体检抽屉：按严重度分组，每组一个标题 Tag + 若干行。 */
+.apply-queue-preflight-group {
+  margin-bottom: 12px;
+}
+
+.apply-queue-preflight-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.apply-queue-preflight-row:last-child {
+  border-bottom: none;
+}
+
+/* #14G 浏览器说明 Popover：三段说明各带一个小标题，段间距比段落内大一点。 */
+.apply-browser-help {
+  max-width: 420px;
+}
+
+/* #14F 页头漏斗条：四个指标贴在一起，点击下钻。 */
+.apply-funnel-bar {
+  align-items: center;
+}
+
+.apply-funnel-item {
+  height: auto;
+  padding: 2px 10px;
+  text-align: left;
+}
+
+/* #14C 静默提醒：与下面的筛选区留白，不要贴在一起。 */
+.apply-stale-banner {
+  margin-bottom: 12px;
+}
+
+.apply-stale-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+}
+
+/* #14D 话术库：一条模板 = 一行「名字 + 次数 + 删除」+ 一段正文。 */
+.apply-template-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.apply-template-row:last-of-type {
+  border-bottom: none;
 }
 
 .apply-collect-unmapped {

@@ -19,10 +19,27 @@ const knowledgeForm = {
   "knowledgeForm.label.category": "Category",
   "knowledgeForm.label.tags": "Tags",
   "knowledgeForm.label.source": "Source",
+
+  "knowledgeForm.label.reason": "Why keep this",
+  "knowledgeForm.placeholder.reason":
+    "One line on why it matters (max 120), e.g. rate limiting came up in round two",
+  "knowledgeForm.hint.reason": "This line is worth more than the body: read it first next time.",
+  "knowledgeForm.label.company": "Company",
+  "knowledgeForm.placeholder.company": "Optional, e.g. Acme",
+  "knowledgeForm.label.job": "Related job",
+  "knowledgeForm.placeholder.job": "Optional: search your saved jobs",
+  "knowledgeForm.label.summary": "Summary",
+  "knowledgeForm.placeholder.summary": "Optional: one or two sentences (max 300)",
+  "knowledgeForm.label.keyPoints": "Key points",
+  "knowledgeForm.placeholder.keyPoint": "One point, e.g. token bucket allows bursts",
+  "knowledgeForm.hint.keyPoints": "Up to 20 points, each max 200 characters",
+  "knowledgeForm.action.addKeyPoint": "Add point",
+  "knowledgeForm.action.removeKeyPoint": "Remove this point",
+
   "knowledgeForm.label.content": "Content",
   "knowledgeForm.error.titleRequired": "Enter a title",
   "knowledgeForm.placeholder.title": "e.g. STAR method / self-introduction template",
-  "knowledgeForm.placeholder.category": "Pick a category or type a new one",
+  "knowledgeForm.placeholder.category": "Pick or type a category; empty = uncategorized",
   "knowledgeForm.placeholder.tags": "Type a tag and press Enter, e.g. resume, STAR, metrics",
   "knowledgeForm.placeholder.source": "e.g. Manual entry / interview notes import",
   "knowledgeForm.placeholder.content":

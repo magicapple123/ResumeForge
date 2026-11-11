@@ -53,9 +53,14 @@ export default function ScenarioEditor({
   const { message } = App.useApp();
   const { catalog, error: catalogError } = useScenarioCatalog(open);
   // 偏好栏目的可选项来自简历模板目录：只在编辑器打开时取一次（不增加常驻请求）。
+  // `refreshOnRequest: false`：这是**编辑器**——品牌图标双击/Alt+R 的整页刷新若在这里重取
+  // 目录，下拉选项会换一轮实例，正在编辑的场景草稿（名称/偏好/正文，全是本地 `useState`）
+  // 虽然按 `targetKey` 不被重置，但选项列表被替换后 `Select` 的受控值可能落到"无对应选项"。
+  // 目录本身就近乎静态，编辑期间重取没有任何收益，所以直接不参与广播。
   const { data: templateCatalog } = useApi(
     () => (open ? fetchResumeTemplates() : Promise.resolve(null)),
     [open],
+    { refreshOnRequest: false },
   );
 
   const [name, setName] = useState("");

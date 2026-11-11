@@ -10,6 +10,7 @@
  * 用户会以为是应用坏了。
  */
 import type { MessageKey } from "../../i18n";
+import { SHELL_GESTURE_LABEL_KEYS } from "../shell/shellGestureMessages";
 
 /** 动作的作用域：只用于设置页展示与代码阅读，拦截判断由"有没有注册 handler"决定。 */
 export type ShortcutScope = "form" | "page" | "global" | "jobs";
@@ -31,7 +32,9 @@ export type ShortcutActionId =
   | "prevPage"
   | "nextPage"
   | "focusAssistant"
-  | "commandPalette";
+  | "commandPalette"
+  | "refreshView"
+  | "goHome";
 
 export interface ShortcutAction {
   id: ShortcutActionId;
@@ -142,6 +145,22 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
     labelKey: "shortcutSettings.action.commandPalette",
     defaultKeys: ["mod+shift+p"],
     scope: "page",
+  },
+  // P5-3（13-3/13-4）：品牌图标手势的键盘兜底。遮罩、弹层、抽屉打开时图标被挡住，
+  // 双击/三击完全不可达，所以这两个组合必须有真实落点（`features/shell/useBrandMarkGesture.ts`
+  // 里用 `useShortcut` 注册）。文案在 `messages/*.shellGestures.ts` 自己的命名空间里，
+  // 由 `features/shell/shellGestureMessages.ts` 登记（不改聚合表）。
+  {
+    id: "refreshView",
+    labelKey: SHELL_GESTURE_LABEL_KEYS.refreshView,
+    defaultKeys: ["alt+r"],
+    scope: "global",
+  },
+  {
+    id: "goHome",
+    labelKey: SHELL_GESTURE_LABEL_KEYS.goHome,
+    defaultKeys: ["alt+home"],
+    scope: "global",
   },
 ];
 

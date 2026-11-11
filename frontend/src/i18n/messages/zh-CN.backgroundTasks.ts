@@ -7,7 +7,6 @@ const backgroundTasks = {
   "backgroundTasks.label": "后台任务",
   "backgroundTasks.aria.viewTasks": "查看后台任务",
   "backgroundTasks.popover.title": "正在进行的任务",
-  "backgroundTasks.tooltip.running": "{count} 个任务正在进行",
   "backgroundTasks.status.preparing": "正在准备…",
   "backgroundTasks.status.unknown": "任务状态未知",
   "backgroundTasks.progress.received": "已接收 {count} 字",

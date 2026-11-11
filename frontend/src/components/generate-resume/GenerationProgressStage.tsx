@@ -8,6 +8,7 @@ import { Alert, Button, Space, Steps, Typography } from "antd";
 import type { ResumeGenerateTask } from "../../types";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import RagRetrievalState from "./RagRetrievalState";
 import {
   RESUME_GENERATION_STAGES,
   stageForProgressMessage,
@@ -19,9 +20,17 @@ interface Props {
   taskId: number | null;
   onClose: () => void;
   onCancel: () => void;
+  /** "去开启"：跳设置页的语义检索设置（#30 回执里的 off 态出口）。 */
+  onOpenSettings: () => void;
 }
 
-export default function GenerationProgressStage({ task, taskId, onClose, onCancel }: Props) {
+export default function GenerationProgressStage({
+  task,
+  taskId,
+  onClose,
+  onCancel,
+  onOpenSettings,
+}: Props) {
   useLocale();
   return (
     <div>
@@ -31,6 +40,8 @@ export default function GenerationProgressStage({ task, taskId, onClose, onCance
         items={RESUME_GENERATION_STAGES.map((item) => ({ title: t(item.titleKey) }))}
         style={{ marginBottom: 8 }}
       />
+      {/* #30 生成前回执 / 生成中徽标：和进度同一行区，不新增一块高度。 */}
+      <RagRetrievalState rag={task?.rag} variant="progress" onEnable={onOpenSettings} />
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
         {t("generateStages.progress.status", {
           message: task?.message || t("generateStages.progress.preparing"),

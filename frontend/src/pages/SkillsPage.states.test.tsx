@@ -8,6 +8,8 @@ import SkillsPage from "./SkillsPage";
 vi.mock("../api/skill", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/skill")>()),
   listSkills: vi.fn(),
+  // #31D/E/F 技能学习面板挂载时会读归档候选；这里给空清单，避免测试打真实请求。
+  listSkillArchiveCandidates: vi.fn().mockResolvedValue([]),
 }));
 
 afterEach(cleanup);

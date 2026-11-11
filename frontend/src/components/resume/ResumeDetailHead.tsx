@@ -33,6 +33,7 @@ import ResumeDiagnosticsBar from "./ResumeDiagnosticsBar";
 import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
 import { ResumeCoverageNotesBody } from "./ResumeCoverageNotes";
 import { coverageSummaryCount } from "./coverageGroups";
+import { layoutFillLabel, layoutFillPercent, layoutNeedsAttention } from "./layoutStatusSummary";
 import RationaleParagraphs from "./rationaleParagraphs";
 import EvidencePanel from "./EvidencePanel";
 import { formatServerTime } from "../../utils/serverTime";
@@ -92,8 +93,10 @@ export default function ResumeDetailHead({
       : t("resumes.list.on");
   /**
    * 诊断结论只有版面诊断卡算得出来（阈值在后端），所以由卡片回调上来；卡片还没算出来
-   * （弹层没打开过）时，退一步只显示**本地能算的占用率**
-   * （`usedHeight / (pageContentHeight × pageLimit)`，与后端 `derive_pages` 同一个分数线）。
+   * （弹层没打开过）时，退一步只显示**本地能算的占用率**。
+   *
+   * 占用率公式、阈值与文案 key 都在 `layoutStatusSummary` 里（#24 24C）：制作台左栏那条
+   * 常驻状态条读的是同一份实现——两处各写一遍是 2026-11 反复出现的"数字打架"来源。
    */
   const [diagnosisInfo, setDiagnosisInfo] = useState<{
     status: ResumeLayoutStatus;
@@ -106,21 +109,18 @@ export default function ResumeDetailHead({
       setDiagnosisInfo(info),
     [],
   );
-  const localFillPercent =
-    measure && measure.pageContentHeight > 0 && measure.pageLimit > 0
-      ? Math.round((measure.usedHeight / (measure.pageContentHeight * measure.pageLimit)) * 100)
-      : null;
+  const localFillPercent = layoutFillPercent(measure);
   const diagnosisBadge = diagnosisInfo
     ? `${diagnosisInfo.statusLabel} · ${t("resume.diagnosis.fill", {
         percent: Math.round(diagnosisInfo.fill * 100),
       })}`
-    : localFillPercent !== null
-      ? t("resume.diagnosis.fill", { percent: localFillPercent })
-      : null;
+    : layoutFillLabel(measure);
   // 琥珀语义（问题 8 的风险项）：偏空 / 拥挤 / 溢出都要留颜色信号，健康与未知不留。
-  const diagnosisAttention = diagnosisInfo
-    ? diagnosisInfo.status !== "healthy" && diagnosisInfo.status !== "unknown"
-    : Boolean(layoutStatus?.overflow);
+  const diagnosisAttention = layoutNeedsAttention({
+    status: diagnosisInfo?.status ?? null,
+    overflow: Boolean(layoutStatus?.overflow),
+    fillPercent: localFillPercent,
+  });
   const coverageCount = coverageSummaryCount(coverageNotes, legacyCoverageWarnings);
   return (
     <>

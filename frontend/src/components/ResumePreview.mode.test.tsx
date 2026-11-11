@@ -25,16 +25,20 @@ vi.mock("../utils/resumeLayoutMeasure", async (importOriginal) => {
   };
 });
 
-// 精确预览会去服务端要 PDF；默认让请求永远悬着（= 还在排版），个别用例再给结果。
-const fetchPreviewPdf = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
-vi.mock("../api/resumes", () => ({ fetchResumePreviewPdf: fetchPreviewPdf }));
+// 精确预览会去服务端要"按这组参数排一版"的逐页位图清单；默认让请求永远悬着
+// （= 还在排版），个别用例再给结果。P3-2 之后不再有 PDF/iframe 这条路径，
+// 桩也从 `fetchResumePreviewPdf` 换成了 `fetchResumePreviewPages`。
+const fetchPreviewPages = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
+vi.mock("./resume-preview/previewPagesApi", () => ({
+  fetchResumePreviewPages: fetchPreviewPages,
+}));
 
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
   measureState.value = null;
-  fetchPreviewPdf.mockReset();
-  fetchPreviewPdf.mockImplementation(() => new Promise(() => {}));
+  fetchPreviewPages.mockReset();
+  fetchPreviewPages.mockImplementation(() => new Promise(() => {}));
   clearPreviewCache();
 });
 
@@ -76,11 +80,10 @@ describe("ResumePreview 预览口径切换（精确 / 草稿）", () => {
 
   it("切回精确模式**不重排**：同一组参数只问服务端要一次", async () => {
     stubObjectUrls();
-    fetchPreviewPdf.mockResolvedValueOnce({
-      blob: new Blob(["%PDF-1.3"], { type: "application/pdf" }),
-      pages: 1,
+    fetchPreviewPages.mockResolvedValueOnce({
+      token: "tok-1",
+      pages: [{ index: 0, width: 912, height: 1290 }],
       pagesNeeded: 1,
-      pageLimit: 1,
       overflow: false,
     });
 
@@ -88,9 +91,9 @@ describe("ResumePreview 预览口径切换（精确 / 草稿）", () => {
     act(() => {
       screen.getByRole("radio", { name: /精确/ }).click();
     });
-    // 去抖 150ms + 一次请求：等它把 PDF 拿到、挂上 iframe。
+    // 去抖 150ms + 一次请求：等它把清单拿到、把第一页画出来。
     expect(await screen.findByTitle("简历精确预览（导出 PDF）")).toBeTruthy();
-    expect(fetchPreviewPdf).toHaveBeenCalledTimes(1);
+    expect(fetchPreviewPages).toHaveBeenCalledTimes(1);
 
     // 草稿 → 精确：面板是**常驻**的（只是藏起来），所以这里既不该发请求，
     // 也不该把已经排好的那份丢掉——用户看到的还是同一份 PDF。
@@ -107,7 +110,7 @@ describe("ResumePreview 预览口径切换（精确 / 草稿）", () => {
     await waitFor(() =>
       expect(screen.getByTitle("简历精确预览（导出 PDF）").closest("[hidden]")).toBeNull(),
     );
-    expect(fetchPreviewPdf).toHaveBeenCalledTimes(1);
+    expect(fetchPreviewPages).toHaveBeenCalledTimes(1);
   });
 
   it("精确模式下草稿画布**不卸载**：版面诊断的测量来源必须还活着", () => {

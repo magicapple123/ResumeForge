@@ -5,7 +5,10 @@ antdOverrideGuard 的非递归扫描能看见它；规则内容与顺序不变�
 
 .tt-shell {
   --tt-size: 64px;
-  --tt-edge: 24px;
+  /* 贴边缝隙 2px（P1-4）：四边吸附后球与视口边缘只留这一条细缝。
+     这是**唯一**的贴边真相 —— hook 读它（useTouTouOrbDrag 的 readOrbMetrics），
+     HEADER_OFFSET / VIEWPORT_MARGIN 那两个各自的数字已经删掉，上下左右同值。 */
+  --tt-edge: 2px;
   /* 0.45：四边收纳后露出近一半（探头张望的姿态），睡着时另有 0.62 的覆写。 */
   --tt-hide-keep: 0.45;
   --tt-float: 8px;
@@ -313,6 +316,43 @@ antdOverrideGuard 的非递归扫描能看见它；规则内容与顺序不变�
 .tt-shell.is-edge-top .tt-zzz {
   top: auto;
   bottom: calc(var(--tt-size) * -0.12);
+}
+
+/*
+ * #27B 页面信号 pulse：**只在 `signals` 非空时**出现（`has-signals` 由球体按合并后的
+ * 信号列表挂上）。没有信号的页面球保持原样——这直接替换掉旧的"120s 轮播标语"。
+ *
+ * 只动 box-shadow（不吃布局、不触发重排）；颜色走 token，深色主题自动跟随。
+ * reduced-motion 下改为静态虚线环：消息还在，只是不动。
+ */
+@keyframes tt-signal-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--rf-focus-ring);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.tt-shell.has-signals .tt {
+  animation: tt-signal-pulse 1.8s var(--tt-ease-soft) infinite;
+}
+
+.tt-shell.has-signals .tt:focus-visible {
+  outline-offset: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tt-shell.has-signals .tt {
+    animation: none;
+    outline: 2px dashed var(--rf-focus-ring);
+    outline-offset: 4px;
+  }
 }
 
 @keyframes tt-zzz {

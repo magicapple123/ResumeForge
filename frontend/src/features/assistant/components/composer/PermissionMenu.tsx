@@ -1,29 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 输入区「数据权限」四档下拉与琥珀提示条（T11）。
+ * 输入区「数据权限」四档下拉（T11 / #12）。
  *
  * 触发区显示当前档位；无会话（还没建）时只显示「跟随全局」且不可改——覆盖值按会话存
- * localStorage，没有会话就没有可覆盖的对象。写档位（可修改 / 完全权限）首次选中时弹一次
- * 确认：开启后写操作不再逐条询问，这是本轮唯一改变安全边界的位置。
+ * localStorage，没有会话就没有可覆盖的对象。
+ *
+ * 本组件**不再**自己弹确认框，也**不再**渲染琥珀提示条（#12）：
+ * - 确认卡由 `PermissionConfirmModal` 承担，触发判定在 `useAssistantPermission` 的
+ *   `needsConfirm`（按「会话 + 档位」记账，旧的布尔 ack 不继承）；
+ * - 常驻横幅删除后，档位可见性由这颗 chip 承担——所以它的文案必须始终带档位名。
  */
-import { Alert, App, Button, Dropdown, Tooltip } from "antd";
-import {
-  CheckOutlined,
-  CloseOutlined,
-  DownOutlined,
-  SafetyCertificateOutlined,
-} from "@ant-design/icons";
+import { Button, Dropdown, Tooltip } from "antd";
+import { CheckOutlined, DownOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
 import { t } from "../../../../i18n";
 import { useLocale } from "../../../../i18n/i18nContext";
 import {
-  acknowledgeWritePermission,
   ASSISTANT_PERMISSION_DESC_KEYS,
   ASSISTANT_PERMISSION_LABEL_KEYS,
   ASSISTANT_PERMISSION_LEVELS,
   FOLLOW_GLOBAL,
-  hasAcknowledgedWritePermission,
-  isWriteLevel,
-  showsRelaxedNotice,
   type AssistantPermissionChoice,
   type AssistantPermissionLevel,
 } from "../../assistantPermission";
@@ -34,6 +29,7 @@ function assistantPermissionLabel(level: AssistantPermissionLevel): string {
 }
 
 export interface PermissionMenuProps {
+  /** 保留在契约里：父级仍在传，但确认判定已上移到 useAssistantPermission（#12）。 */
   conversationId: number | null;
   choice: AssistantPermissionChoice;
   effectiveLevel: AssistantPermissionLevel;
@@ -42,7 +38,6 @@ export interface PermissionMenuProps {
 }
 
 export default function PermissionMenu({
-  conversationId,
   choice,
   effectiveLevel,
   editable,
@@ -50,35 +45,13 @@ export default function PermissionMenu({
 }: PermissionMenuProps) {
   // 本组件用模块级 t()：必须订阅语言变化。
   useLocale();
-  const { modal } = App.useApp();
   const followLabel = t("assistantPermission.followGlobalWith", {
     level: assistantPermissionLabel(effectiveLevel),
   });
 
-  const choose = (next: AssistantPermissionChoice) => {
-    if (next === FOLLOW_GLOBAL || !isWriteLevel(next)) {
-      onChange(next);
-      return;
-    }
-    const id = conversationId;
-    if (id == null || hasAcknowledgedWritePermission(id)) {
-      onChange(next);
-      return;
-    }
-    // 写档位首次选中确认：每个对话只弹一次（确认后记在 localStorage）。
-    modal.confirm({
-      title: t("assistantPermission.confirm.title", {
-        level: assistantPermissionLabel(next),
-      }),
-      content: t("assistantPermission.confirm.body"),
-      okText: t("assistantPermission.confirm.ok"),
-      cancelText: t("assistantPermission.confirm.cancel"),
-      onOk: () => {
-        acknowledgeWritePermission(id);
-        onChange(next);
-      },
-    });
-  };
+  // 是否需要弹确认卡由 useAssistantPermission 的 needsConfirm 判定（按会话 + 档位），
+  // 本组件不再自己做安全判定——两套判据迟早会不一致。
+  const choose = (next: AssistantPermissionChoice) => onChange(next);
 
   if (!editable) {
     // 没有会话 id：覆盖值无处可存，只能跟随全局。Tooltip 需要一层可接收事件的包裹
@@ -167,39 +140,5 @@ export default function PermissionMenu({
         <DownOutlined className="assistant-permission-caret" />
       </Button>
     </Dropdown>
-  );
-}
-
-export interface PermissionNoticeProps {
-  level: AssistantPermissionLevel;
-  onClose: () => void;
-}
-
-/** 琥珀色提示条：放宽读取 / 完全权限生效时钉在输入框上方，可关闭。 */
-export function PermissionNotice({ level, onClose }: PermissionNoticeProps) {
-  useLocale();
-  if (!showsRelaxedNotice(level)) return null;
-  const write = isWriteLevel(level);
-  return (
-    <Alert
-      type="warning"
-      showIcon
-      className="assistant-permission-notice"
-      closable={{
-        closeIcon: <CloseOutlined />,
-        "aria-label": t("assistantPermission.notice.closeAria"),
-        onClose,
-      }}
-      title={t(
-        write
-          ? "assistantPermission.notice.writeFull.title"
-          : "assistantPermission.notice.readFull.title",
-      )}
-      description={t(
-        write
-          ? "assistantPermission.notice.writeFull.body"
-          : "assistantPermission.notice.readFull.body",
-      )}
-    />
   );
 }

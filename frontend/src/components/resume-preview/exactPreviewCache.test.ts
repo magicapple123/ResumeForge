@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 精确预览缓存：命中 / LRU 顺序 / 容量上限。
+ * 精确预览缓存：命中 / 覆盖 / LRU 顺序 / 容量上限。
  *
- * 这几条都不是"实现细节"：缓存不淘汰 = 拖一次滑块多留一份整 PDF；淘汰顺序错 = 把
- * 用户刚看过的那份扔了、留下更早的；key 混淆 = 换了版式却显示旧图（比慢得多更糟）。
+ * 这几条都不是"实现细节"：缓存不淘汰 = 拖一次滑块就多留一份清单永远不放；淘汰顺序错 =
+ * 把用户刚看过的那份扔了、留下更早的；key 混淆 = 换了版式却显示旧图（比慢得多更糟）。
+ *
+ * 2026-11（P3-2）起缓存的是**清单**（token + 逐页尺寸），不再存 PDF 字节：图片由服务端的
+ * `GET …/{token}/{index}.webp` 提供，浏览器 HTTP 缓存再兜一层，前端因此不需要管 objectURL。
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -11,14 +14,18 @@ import {
   previewCacheStats,
   readCachedPreview,
   writeCachedPreview,
-  type CachedPreview,
+  type CachedPreviewPages,
 } from "./exactPreviewCache";
 
-function shot(pages = 1, bytes = 16): CachedPreview {
+function meta(pageCount = 1): CachedPreviewPages {
   return {
-    blob: new Blob([new Uint8Array(bytes)], { type: "application/pdf" }),
-    pages,
-    pagesNeeded: pages,
+    token: `token-${pageCount}`,
+    pages: Array.from({ length: pageCount }, (_, index) => ({
+      index,
+      width: 1800,
+      height: 2546,
+    })),
+    pagesNeeded: pageCount,
     overflow: false,
   };
 }
@@ -28,24 +35,24 @@ beforeEach(() => {
 });
 
 describe("exactPreviewCache", () => {
-  it("存进去的原样读出来，元数据不丢", () => {
-    writeCachedPreview("k1", { ...shot(2), pagesNeeded: 3, overflow: true });
+  it("存进去的原样读出来，页数与结论都不丢", () => {
+    writeCachedPreview("k1", { ...meta(2), pagesNeeded: 3, overflow: true });
 
     const hit = readCachedPreview("k1");
     expect(hit).not.toBeNull();
-    expect(hit?.pages).toBe(2);
+    expect(hit?.pages).toHaveLength(2);
     expect(hit?.pagesNeeded).toBe(3);
     expect(hit?.overflow).toBe(true);
     expect(readCachedPreview("没有这个 key")).toBeNull();
   });
 
   it("超过条数上限时淘汰**最久未用**的那一份", () => {
-    for (let index = 0; index < 8; index += 1) writeCachedPreview(`k${index}`, shot());
+    for (let index = 0; index < 8; index += 1) writeCachedPreview(`k${index}`, meta());
     expect(previewCacheStats().entries).toBe(8);
 
     // 再用一次 k0：它变成最近使用，于是下一个被淘汰的应该是 k1。
     expect(readCachedPreview("k0")).not.toBeNull();
-    writeCachedPreview("k8", shot());
+    writeCachedPreview("k8", meta());
 
     expect(previewCacheStats().entries).toBe(8);
     expect(readCachedPreview("k0")).not.toBeNull();
@@ -54,23 +61,15 @@ describe("exactPreviewCache", () => {
   });
 
   it("同一个 key 覆盖写不会撑大缓存", () => {
-    writeCachedPreview("k", shot(1));
-    writeCachedPreview("k", shot(2));
+    writeCachedPreview("k", meta(1));
+    writeCachedPreview("k", meta(2));
     expect(previewCacheStats().entries).toBe(1);
-    expect(readCachedPreview("k")?.pages).toBe(2);
+    expect(readCachedPreview("k")?.pages).toHaveLength(2);
   });
 
-  it("总字节超上限时按最久未用回收，但**至少留一份**", () => {
-    // 每份 12MB：三份就超过 24MB 上限。
-    const big = () => shot(1, 12 * 1024 * 1024);
-    writeCachedPreview("a", big());
-    writeCachedPreview("b", big());
-    writeCachedPreview("c", big());
-
-    const stats = previewCacheStats();
-    expect(stats.entries).toBeLessThanOrEqual(2);
-    expect(stats.bytes).toBeLessThanOrEqual(24 * 1024 * 1024);
-    // 最后写的那份一定还在（否则刚存完就删，等于没缓存）。
-    expect(readCachedPreview("c")).not.toBeNull();
+  it("统计口径给出条数与总页数（调试与容量判断都用它）", () => {
+    writeCachedPreview("a", meta(1));
+    writeCachedPreview("b", meta(3));
+    expect(previewCacheStats()).toEqual({ entries: 2, pages: 4 });
   });
 });

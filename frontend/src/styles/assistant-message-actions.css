@@ -1,0 +1,134 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* #13 消息级操作：操作条（13A）、长回答折叠（13B）、工具参数与步骤（13C）、
+   写操作 diff+撤销（13D）。单独成片是因为 assistant-content.css 已贴 500 行预算，
+   与 apply-density / apply-insights 同样的理由。 */
+
+/* ===== 13A 消息操作条：hover / focus-within 显示，≤767px 触屏常显 ===== */
+.assistant-message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.assistant-message:hover .assistant-message-actions,
+.assistant-message:focus-within .assistant-message-actions {
+  opacity: 1;
+}
+
+/* 触屏没有 hover：窄档常显，否则这些按钮永远发现不了。 */
+@media (max-width: 767px) {
+  .assistant-message-actions {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-message-actions {
+    transition: none;
+  }
+}
+
+/* ===== 13B 长回答折叠 ===== */
+.assistant-message-collapse {
+  position: relative;
+}
+
+.assistant-message-collapse-body {
+  overflow: hidden;
+}
+
+/* 底部渐隐：只做视觉提示，点击目标始终是下方那颗「展开全文」按钮。 */
+.assistant-message-collapse-fade {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 64px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--rf-surface));
+}
+
+.assistant-message-collapse-toggle {
+  margin-top: 4px;
+  color: var(--rf-info);
+}
+
+/* ===== 13C 步骤视图：已执行 N 步 · 当前 xxx（没有分母，不造假进度） ===== */
+.assistant-steps-hint {
+  margin-top: 2px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* ===== 13C 工具参数 / 13D diff + 撤销 ===== */
+.assistant-tool-call-details {
+  margin: 6px 0 8px;
+  padding-left: 20px;
+}
+
+.assistant-tool-call-section + .assistant-tool-call-section {
+  margin-top: 8px;
+}
+
+.assistant-tool-call-section-title {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+
+/* 参数值是后端截断过的 120 字，单行省略；完整值靠 title 与「展开」由浏览器原生提示。 */
+.assistant-tool-call-arg-value {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--rf-text-body);
+  font-family: var(--rf-font-mono, monospace);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.assistant-tool-call-diff {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.assistant-tool-call-diff-label {
+  color: var(--rf-text-secondary);
+}
+
+/* 长文本 diff 单行截断：整份简历回滚的语义在确认框里说，工具卡里只做提示。 */
+.assistant-tool-call-diff-value {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  padding: 0 4px;
+  color: var(--rf-text-body);
+  font-family: var(--rf-font-mono, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  background: var(--rf-surface-alt);
+  border-radius: 4px;
+}
+
+.assistant-tool-call-diff-arrow {
+  color: var(--rf-text-secondary);
+}
+
+.assistant-tool-call-undone {
+  font-size: 12px;
+}
+
+.assistant-tool-call-unsupported {
+  display: block;
+  font-size: 12px;
+}

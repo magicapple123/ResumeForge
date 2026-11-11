@@ -4,11 +4,18 @@
 @import "./styles/resume.css";
 @import "./styles/assistant-layout.css";
 @import "./styles/assistant-content.css";
+/* #13 消息级操作单独成片：assistant-content.css 已贴 500 行预算。 */
+@import "./styles/assistant-message-actions.css";
 @import "./styles/assistant-composer.css";
+@import "./styles/assistant-context.css";
 @import "./styles/form-state.css";
 @import "./styles/recognition.css";
 @import "./styles/jobs.css";
 @import "./styles/apply.css";
+/* 投递台首屏密度（#14G/H 第二版）：必须排在 apply.css 之后，靠后覆盖基础块的间距。 */
+@import "./styles/apply-density.css";
+/* #15A/#15B 决策辅助徽标与 JD diff：apply.css 已到 458/500，另起一片（同 apply-density 的理由）。 */
+@import "./styles/apply-insights.css";
 @import "./styles/tracker.css";
 @import "./styles/profile.css";
 @import "./styles/claims.css";

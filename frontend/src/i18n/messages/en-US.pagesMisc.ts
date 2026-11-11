@@ -10,6 +10,7 @@
 const pagesMisc = {
   // ── Apply desk (ApplyPage) ─────────────────────────────────────
   "pagesMisc.applyPage.title": "Apply desk",
+  "pagesMisc.applyPage.subtitleAria": "How this flow works",
   "pagesMisc.applyPage.subtitle":
     "Collect jobs → judge the match → confirm each one → apply automatically. Every action on a job site starts with you, and you sign in inside your own browser window.",
   "pagesMisc.applyPage.action.settings": "Apply settings",

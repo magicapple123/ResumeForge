@@ -163,6 +163,22 @@ const interviewPage = {
   "interviewPage.setup.style.probing": "Persistent follow-ups",
   "interviewPage.setup.style.pressure": "Pressure questioning",
 
+  // Resume-material dropdown, two groups (item 25).
+  "interviewPage.setup.resumeGroup.internal": "Resumes in this app",
+  "interviewPage.setup.resumeGroup.external": "External resumes (uploaded)",
+  // External resumes without text are disabled in the dropdown (plan 25C).
+  "interviewPage.setup.resumeNoTextBadge": "no text",
+  "interviewPage.setup.resumeNoText":
+    "No text could be extracted from this resume - upload the original file",
+  // Job link is a label only, never a filter (plan 25D).
+  "interviewPage.setup.resumeJobTag": "linked to this job",
+  // "Current material": after picking an external resume the select is empty (the text lives
+  // on the "import a file" side), so the applied material has to be spelled out.
+  "interviewPage.setup.currentMaterial.record": "Current material: in-app resume “{name}”",
+  "interviewPage.setup.currentMaterial.external": "Current material: external resume “{name}”",
+  "interviewPage.setup.currentMaterial.file": "Current material: imported file “{name}”",
+  "interviewPage.setup.currentMaterial.empty": "Current material: nothing selected yet",
+
   // External-resume prefill from the resume center (item 21).
   "interviewPage.setup.external.prefilled": "Loaded external resume “{name}”",
   "interviewPage.setup.external.loadFailed":

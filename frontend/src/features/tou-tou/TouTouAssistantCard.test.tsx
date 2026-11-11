@@ -62,8 +62,11 @@ describe("TouTouAssistantCard", () => {
       </TouTouAssistantCard>,
     );
     const reopened = screen.getByRole("dialog", { name: "投投求职助手" }) as HTMLElement;
-    expect(reopened.style.left).toBe("164px");
-    expect(reopened.style.top).toBe("64px");
+    // jsdom 没有布局：球量不到，只能退回"贴右下角"的兜底几何（`useTouTouCardDrag` 的
+    // DEFAULT_ORB_EDGE）。P1-4 把贴边缝隙从 24px 收到 2px，球的兜底 left 因此右移 22px，
+    // 卡片（摆在球左侧、宽 760 + 间隙 12）从 164 变成 186。
+    expect(reopened.style.left).toBe("186px");
+    expect(reopened.style.top).toBe("86px");
   });
 
   it("a plain click on the grip does not drag the card (position stays as opened)", () => {
@@ -82,8 +85,9 @@ describe("TouTouAssistantCard", () => {
     });
 
     // 位移没超过阈值：不算拖动。内联定位仍是打开时 placeNextToOrb 摆的"球旁边"，
-    // 不会被一次误触改变。
-    expect(card.style.left).toBe("164px");
-    expect(card.style.top).toBe("64px");
+    // 不会被一次误触改变。（186 / 86 的来源见上一条用例：jsdom 的兜底球几何 + 2px 贴边，
+    // 贴边从 24px 收到 2px 后两项都右/下移 22px。）
+    expect(card.style.left).toBe("186px");
+    expect(card.style.top).toBe("86px");
   });
 });

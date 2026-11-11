@@ -7,11 +7,12 @@
  *   百分比会给人一个并不准确的确定性；设计也明确禁止渲染任何百分比（§9 ⑩）。
  * - 暂停/停止按钮**常驻**（按状态置灰而不是隐藏），用户不用去别处找停止入口。
  */
-import { PauseOutlined, PlayCircleOutlined, StopOutlined } from "@ant-design/icons";
-import { Alert, Button, Descriptions, Space, Spin, Table, Tag, Typography } from "antd";
+import { BookOutlined, PauseOutlined, PlayCircleOutlined, StopOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Descriptions, Space, Spin, Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { createKnowledgeFromSource } from "../../api/knowledge";
 import {
   TASK_ITEM_STATUS_META,
   TASK_STATUS_META,
@@ -69,6 +70,28 @@ const KIND_LABEL_KEYS: Record<string, MessageKey> = {
 
 export default function ApplyProgressPanel({ task, busy, onPause, onResume, onStop }: Props) {
   useLocale();
+  const { message } = App.useApp();
+  const [savingKnowledgeId, setSavingKnowledgeId] = useState<number | null>(null);
+
+  /** #29B：把一条失败投递沉淀为知识条目（正文/分类/诊断都由服务端取）。 */
+  const saveFailureExperience = async (item: ApplyTaskItem) => {
+    if (savingKnowledgeId !== null) return;
+    setSavingKnowledgeId(item.id);
+    try {
+      const saved = await createKnowledgeFromSource("apply_failure", item.id);
+      if (saved.created) {
+        message.success(t("knowledgePage.capture.saved", { title: saved.title }));
+      } else {
+        message.info(t("knowledgePage.capture.exists", { title: saved.title }));
+      }
+      window.location.assign("/knowledge");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t("knowledgePage.capture.failed"));
+    } finally {
+      setSavingKnowledgeId(null);
+    }
+  };
+
   const statusMeta = TASK_STATUS_META[task.status];
   // 未登记的步骤码（后端新增）按旧行为回退：空串显示「空闲」，未知码原样显示。
   const currentStepKey = stepKey(task.current_step);
@@ -122,36 +145,50 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
   ];
 
   const expandedRowRender = (item: ApplyTaskItem): ReactNode => (
-    <Descriptions size="small" column={1} className="apply-progress-detail">
-      <Descriptions.Item label={t("applyProgress.field.currentStep")}>
-        {currentStep}
-      </Descriptions.Item>
-      <Descriptions.Item label={t("applyProgress.field.resume")}>
-        {item.resume_title || t("applyProgress.defaultResume")}
-      </Descriptions.Item>
-      <Descriptions.Item label={t("applyProgress.field.greeting")}>
-        {item.greeting || t("applyProgress.defaultGreeting")}
-      </Descriptions.Item>
-      {item.failure_detail && (
-        // 跳过的条目也会写明细（例如「按『同公司只投一个岗位』跳过」），那是**跳过原因**
-        // 不是失败诊断——同一个字段两种含义时，标签得跟着状态走，否则用户会以为出错了。
-        <Descriptions.Item
-          label={
-            item.status === "skipped"
-              ? t("applyProgress.field.skipReason")
-              : t("applyProgress.field.diagnosis")
-          }
-        >
-          {item.failure_detail}
+    <>
+      <Descriptions size="small" column={1} className="apply-progress-detail">
+        <Descriptions.Item label={t("applyProgress.field.currentStep")}>
+          {currentStep}
         </Descriptions.Item>
-      )}
-      <Descriptions.Item label={t("applyProgress.field.startedAt")}>
-        {formatDateTime(item.started_at ?? undefined)}
-      </Descriptions.Item>
-      <Descriptions.Item label={t("applyProgress.field.finishedAt")}>
-        {formatDateTime(item.finished_at ?? undefined)}
-      </Descriptions.Item>
-    </Descriptions>
+        <Descriptions.Item label={t("applyProgress.field.resume")}>
+          {item.resume_title || t("applyProgress.defaultResume")}
+        </Descriptions.Item>
+        <Descriptions.Item label={t("applyProgress.field.greeting")}>
+          {item.greeting || t("applyProgress.defaultGreeting")}
+        </Descriptions.Item>
+        {item.failure_detail && (
+          // 跳过的条目也会写明细（例如「按『同公司只投一个岗位』跳过」），那是**跳过原因**
+          // 不是失败诊断——同一个字段两种含义时，标签得跟着状态走，否则用户会以为出错了。
+          <Descriptions.Item
+            label={
+              item.status === "skipped"
+                ? t("applyProgress.field.skipReason")
+                : t("applyProgress.field.diagnosis")
+            }
+          >
+            {item.failure_detail}
+          </Descriptions.Item>
+        )}
+        <Descriptions.Item label={t("applyProgress.field.startedAt")}>
+          {formatDateTime(item.started_at ?? undefined)}
+        </Descriptions.Item>
+        <Descriptions.Item label={t("applyProgress.field.finishedAt")}>
+          {formatDateTime(item.finished_at ?? undefined)}
+        </Descriptions.Item>
+      </Descriptions>
+      {/* #29B 回流：只有失败记录能沉淀为经验（服务端还会再校验一次状态）。按钮放在
+          明细下方而不是塞进 Descriptions，避免与「诊断信息」标签重复出现两个同名项。 */}
+      {item.status === "failed" ? (
+        <Button
+          size="small"
+          icon={<BookOutlined />}
+          loading={savingKnowledgeId === item.id}
+          onClick={() => void saveFailureExperience(item)}
+        >
+          {t("knowledgePage.capture.experience")}
+        </Button>
+      ) : null}
+    </>
   );
 
   return (

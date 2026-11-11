@@ -2,7 +2,7 @@
 /**
  * 桌面自绘标题栏（问题清单 §19）。
  *
- * 32px 高的标题栏住在应用根（#root > .app-shell 之上），左侧六个菜单，右侧三颗窗口
+ * 32px 高的标题栏住在应用根（`#root > .ant-app` 之内），左侧六个菜单，右侧三颗窗口
  * 按钮由系统覆盖层（titleBarOverlay）绘制——本组件不画按钮、也不接管系统贴靠布局。
  *
  * 几条容易被"看起来没问题"掩盖的约束：
@@ -13,67 +13,75 @@
  *  4. 主题切换要把实际生效的深浅色告诉主进程，覆盖层按钮颜色跟着变；
  *  5. 全屏时隐藏标题栏，但组件保持挂载（否则收不到退出全屏的推送）。
  *
+ * 本轮 #34 在这里接的四件事：重新加载（34E，路由记忆见 desktopRouteMemory）、
+ * 窗口置顶勾选（34A，实态读自 useDesktopWindowState）、复制诊断信息（34D）、
+ * 撤销/重做置灰（34F，焦点状态见 useDesktopEditableFocus）。
+ *
  * 动作全部通过 desktopShellBridge 的固定动作 id 交给主进程；渲染层不直接碰 Electron。
  */
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { App } from "antd";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import AboutDesktopDialog from "./AboutDesktopDialog";
+import DesktopMenuDropdown, { MENU_ITEM_SELECTOR } from "./DesktopMenuDropdown";
+import { copyDesktopDiagnostics } from "./desktopDiagnostics";
+import { requestJobUrlImport } from "./desktopJobImport";
 import {
   DESKTOP_MENUS,
-  desktopMenuItemLabelKey,
   desktopMenuIndex,
   type DesktopMenu,
   type DesktopMenuItem,
 } from "./desktopMenuModel";
+import { useDesktopRouteMemory } from "./desktopRouteMemory";
 import {
   getDesktopShellBridge,
+  isDesktopShell,
   openUserGuideFromMenu,
   requestDesktopQuit,
   type DesktopShellBridge,
-  type DesktopWindowState,
 } from "./desktopShellBridge";
+import TitleBarPlaceholder from "./TitleBarPlaceholder";
+import { useDesktopEditableFocus } from "./useDesktopEditableFocus";
+import { useDesktopMenuExport } from "./useDesktopMenuExport";
 import { useDesktopMenuShortcuts } from "./useDesktopMenuShortcuts";
+import { useDesktopWindowState } from "./useDesktopWindowState";
 import { useResolvedTheme } from "../../features/theme/themeStore";
-import { formatShortcut } from "../../features/shortcuts/matchShortcut";
-import { layer } from "../../theme/tokens";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import "../../styles/desktop-titlebar.css";
 
 const MENUBAR_ID = "desktop-titlebar-menubar";
-const ITEM_SELECTOR = ".app-titlebar-menu-item";
 
 interface DropdownPosition {
   left: number;
   top: number;
 }
 
-/** 加速键提示文本：F11 用原样文本，其余交给 formatShortcut 按平台排版。 */
-function shortcutLabel(item: DesktopMenuItem, isMac: boolean): string {
-  if (item.shortcutText) return item.shortcutText;
-  return item.shortcut ? formatShortcut(item.shortcut, { mac: isMac }) : "";
-}
-
-/** 外层只做"是不是桌面壳"的分流：浏览器里不挂任何 hook、不渲染任何元素。 */
+/**
+ * 外层只做"是不是桌面壳"的分流：浏览器里不挂任何 hook、不渲染任何元素。
+ *
+ * 分流依据是 **`window.splash.isDesktop`**（主进程最早注入、所有壳版本都有它），
+ * 不是自绘标题栏桥：桥是 2.1 才加的，旧壳只有 splash。按桥分流会让旧壳整条标题栏
+ * 都不渲染 → 32px 没人占位 → 系统三颗按钮浮在页面内容上（P1-1 的根因之一）。
+ * 桥缺失时退化成纯占位条，占位与菜单是两件事，不能互相绑死。
+ */
 export default function DesktopTitleBar() {
+  if (!isDesktopShell()) return null;
   const bridge = getDesktopShellBridge();
-  if (!bridge) return null;
+  if (!bridge) return <TitleBarPlaceholder />;
   return <DesktopTitleBarInner bridge={bridge} />;
 }
 
 function DesktopTitleBarInner({ bridge }: { bridge: DesktopShellBridge }) {
-  useLocale();
+  const locale = useLocale();
+  const { message } = App.useApp();
   const navigate = useNavigate();
+  const location = useLocation();
   const resolvedTheme = useResolvedTheme();
   const isMac = bridge.platform === "darwin";
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [focusIndex, setFocusIndex] = useState(-1);
-  const [windowState, setWindowState] = useState<DesktopWindowState>({
-    maximized: false,
-    fullscreen: false,
-  });
   const [dropdown, setDropdown] = useState<DropdownPosition | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const barRef = useRef<HTMLDivElement | null>(null);
@@ -81,6 +89,28 @@ function DesktopTitleBarInner({ bridge }: { bridge: DesktopShellBridge }) {
   const triggerRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const focusMenuOnOpenRef = useRef(false);
+
+  // 进入全屏时收起下拉：标题栏马上要被隐藏，留着菜单没有意义。走窗口状态的推送回调
+  // 而不是在 effect 里对 fullscreen 做 setState——那属于"订阅外部系统"的场景。
+  const closeMenuOnFullScreen = useCallback((fullscreen: boolean) => {
+    if (fullscreen) setOpenMenuId(null);
+  }, []);
+
+  // 窗口实态（最大化 / 全屏 / 置顶 / 可编辑焦点）：菜单文案、勾选态、置灰都读它。
+  const {
+    windowState,
+    refresh: refreshWindowState,
+    merge: mergeWindowState,
+  } = useDesktopWindowState(bridge, { onFullScreenChange: closeMenuOnFullScreen });
+
+  const applyEditableFocus = useCallback(
+    (editable: boolean) => mergeWindowState({ editableFocus: editable }),
+    [mergeWindowState],
+  );
+  const { restoreEditableFocus } = useDesktopEditableFocus(bridge, applyEditableFocus);
+
+  // #34E：路由记忆（刷新后还停在原页面）挂在桌面壳里，浏览器版不参与。
+  useDesktopRouteMemory(navigate, location);
 
   const openMenu = openMenuId
     ? (DESKTOP_MENUS.find((menu) => menu.id === openMenuId) ?? null)
@@ -91,22 +121,11 @@ function DesktopTitleBarInner({ bridge }: { bridge: DesktopShellBridge }) {
     bridge.setTheme?.(resolvedTheme);
   }, [bridge, resolvedTheme]);
 
-  // 窗口状态：初始快照 + 主进程推送（最大化/还原文案、全屏隐藏标题栏都读它）。
+  // #34A / #34F：**菜单打开前**重新读一次窗口实态。勾选态与置灰态必须来自窗口，
+  // 不能沿用上一次打开菜单时的记忆（上一次动作失败或窗口被系统改过时会反过来）。
   useEffect(() => {
-    let active = true;
-    const apply = (state?: DesktopWindowState | null) => {
-      if (!active || !state) return;
-      setWindowState(state);
-      // 进入全屏时收起下拉：标题栏马上要被隐藏，留着菜单没有意义。
-      if (state.fullscreen) setOpenMenuId(null);
-    };
-    const pending = bridge.getWindowState?.();
-    if (pending) void pending.then(apply).catch(() => undefined);
-    bridge.onWindowState?.(apply);
-    return () => {
-      active = false;
-    };
-  }, [bridge]);
+    if (openMenuId) refreshWindowState();
+  }, [openMenuId, refreshWindowState]);
 
   // 关闭：Esc / 点菜单外 / 滚动内容区 / 窗口失焦（§19.5-2）。
   useEffect(() => {
@@ -164,12 +183,18 @@ function DesktopTitleBarInner({ bridge }: { bridge: DesktopShellBridge }) {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, []);
 
-  // 加速键：文件 (Ctrl+N / Ctrl+O) 与视图 (Ctrl+± / Ctrl+0 / F11)；编辑类交给 Chromium。
-  useDesktopMenuShortcuts({ bridge, isMac, navigate });
+  const reloadPage = useCallback(() => {
+    // 路由记忆由 useDesktopRouteMemory 在每次路由变化时写下，主进程 reload 的是同一个
+    // URL；这条 IPC 只是"让页面重新加载"，不改变地址。
+    const pending = bridge.menuAction?.("view.reload");
+    if (pending) void pending.catch(() => undefined);
+  }, [bridge]);
+
+  // 加速键：文件 (Ctrl+N / Ctrl+O)、视图 (Ctrl+R / F12 / Ctrl+± / Ctrl+0 / F11)、
+  // 关闭窗口（Alt+F4 / ⌘W）；编辑类交给 Chromium。
+  useDesktopMenuShortcuts({ bridge, isMac, navigate, onReload: reloadPage });
 
   // 下拉定位：贴着触发按钮下沿并夹进视口（jsdom 量到 0 时按 0 处理，不影响断言）。
-  // 这是"把浏览器量出来的矩形同步到 React 状态"的典型场景；菜单关闭时 stale 的
-  // dropdown 不会被渲染（openMenu 为 null），所以关闭分支不需要额外清状态。
   useLayoutEffect(() => {
     if (!openMenuId) return;
     const index = desktopMenuIndex(openMenuId);
@@ -183,9 +208,7 @@ function DesktopTitleBarInner({ bridge }: { bridge: DesktopShellBridge }) {
   useLayoutEffect(() => {
     if (!dropdown || !focusMenuOnOpenRef.current) return;
     focusMenuOnOpenRef.current = false;
-    dropdownRef.current
-      ?.querySelector<HTMLButtonElement>(ITEM_SELECTOR)
-      ?.focus({ preventScroll: true });
+    focusableItems(dropdownRef)[0]?.focus({ preventScroll: true });
   }, [dropdown]);
 
   const focusTrigger = useCallback((index: number) => {
@@ -208,50 +231,102 @@ function DesktopTitleBarInner({ bridge }: { bridge: DesktopShellBridge }) {
       const current = openMenuId ? desktopMenuIndex(openMenuId) : 0;
       const from = current >= 0 ? current : 0;
       const next = (from + step + DESKTOP_MENUS.length) % DESKTOP_MENUS.length;
-      const target = DESKTOP_MENUS[next];
       setFocusIndex(next);
-      if (target.opensDialog) {
-        setOpenMenuId(null);
-        return;
-      }
       focusMenuOnOpenRef.current = true;
-      setOpenMenuId(target.id);
+      setOpenMenuId(DESKTOP_MENUS[next].id);
     },
     [openMenuId],
   );
 
+  /** 执行一个主进程动作；复选类条目用回执里的实态纠正勾选（#34A）。 */
+  const runIpc = useCallback(
+    (action: string | undefined, item?: DesktopMenuItem) => {
+      if (!action) return;
+      // O3：编辑类命令只作用于焦点元素，而点自绘菜单项会把焦点移到标题栏——先把焦点
+      // 还给最近的可编辑元素，否则「菜单点撤销/剪切」看起来可点、实际是 no-op。
+      if (item?.focusEditableBeforeRun) restoreEditableFocus();
+      const pending = bridge.menuAction?.(action);
+      if (!pending) return;
+      void pending
+        .then((reply) => {
+          if (item?.checkbox !== "alwaysOnTop" || !reply?.ok) return;
+          const result = reply.result as { alwaysOnTop?: unknown } | undefined;
+          if (result && typeof result.alwaysOnTop === "boolean") {
+            mergeWindowState({ alwaysOnTop: result.alwaysOnTop });
+          } else {
+            // 回执里没有实态（旧壳）：退回到"重新读一次窗口"，绝不自作主张翻转。
+            refreshWindowState();
+          }
+        })
+        .catch(() => undefined);
+    },
+    [bridge, mergeWindowState, refreshWindowState, restoreEditableFocus],
+  );
+
+  const copyDiagnostics = useCallback(() => {
+    void copyDesktopDiagnostics(bridge, { theme: resolvedTheme, locale })
+      .then((outcome) => {
+        if (outcome.ok) message.success(t("appHeader.desktopMenu.diagnostics.copied"));
+        else message.error(t("appHeader.desktopMenu.diagnostics.copyFailed"));
+      })
+      .catch(() => message.error(t("appHeader.desktopMenu.diagnostics.copyFailed")));
+  }, [bridge, locale, message, resolvedTheme]);
+
+  // #34C：三档导出里的两个下载动作（下载实现在 desktopExport.ts，toast 收尾在 hook 里）。
+  const exportActions = useDesktopMenuExport(message);
+
   const runItem = useCallback(
     (item: DesktopMenuItem) => {
       setOpenMenuId(null);
-      if (item.kind === "navigate" && item.path) {
-        navigate(item.path);
-        return;
+      switch (item.kind) {
+        case "navigate":
+          if (item.path) navigate(item.path);
+          return;
+        case "ipc":
+          runIpc(item.ipcAction, item);
+          return;
+        case "quit":
+          requestDesktopQuit();
+          return;
+        case "open-guide":
+          openUserGuideFromMenu();
+          return;
+        case "reload":
+          reloadPage();
+          return;
+        case "copy-diagnostics":
+          copyDiagnostics();
+          return;
+        case "open-job-import":
+          // 先跳岗位广场再请求打开：弹窗与"导入后刷新列表"的 onImported 都在那一页，
+          // 标题栏不另挂一套弹窗（见 desktopJobImport.ts 的文件头）。
+          navigate("/jobs");
+          requestJobUrlImport();
+          return;
+        case "export-favorites":
+          exportActions.runFavorites();
+          return;
+        case "export-knowledge":
+          exportActions.runKnowledge();
+          return;
+        case "submenu":
+          // 子菜单的展开/收起由下拉自己处理（runItem 只接收叶子动作）。
+          return;
+        case "about":
+          setAboutOpen(true);
+          return;
+        default:
       }
-      if (item.kind === "ipc" && item.ipcAction) {
-        const pending = bridge.menuAction?.(item.ipcAction);
-        if (pending) void pending.catch(() => undefined);
-        return;
-      }
-      if (item.kind === "quit") {
-        requestDesktopQuit();
-        return;
-      }
-      if (item.kind === "open-guide") openUserGuideFromMenu();
     },
-    [bridge, navigate],
+    [copyDiagnostics, exportActions, navigate, reloadPage, runIpc],
   );
 
-  const toggleTrigger = (menu: DesktopMenu, keyboard: boolean) => {
-    if (menu.opensDialog) {
-      setOpenMenuId(null);
-      setAboutOpen(true);
-      return;
-    }
+  const toggleTrigger = (menu: DesktopMenu) => {
     if (openMenuId === menu.id) {
       setOpenMenuId(null);
       return;
     }
-    focusMenuOnOpenRef.current = keyboard;
+    focusMenuOnOpenRef.current = false;
     setOpenMenuId(menu.id);
   };
 
@@ -262,27 +337,18 @@ function DesktopTitleBarInner({ bridge }: { bridge: DesktopShellBridge }) {
       case "ArrowLeft": {
         event.preventDefault();
         const step = event.key === "ArrowRight" ? 1 : -1;
-        if (openMenuId && !menu.opensDialog) {
-          switchMenu(step);
-        } else {
-          focusTrigger(index + step);
-        }
+        if (openMenuId) switchMenu(step);
+        else focusTrigger(index + step);
         return;
       }
       case "ArrowDown":
       case "ArrowUp": {
         event.preventDefault();
         setFocusIndex(index);
-        if (menu.opensDialog) {
-          setAboutOpen(true);
-          return;
-        }
         // 菜单已经打开时（例如先用 Enter 打开），方向键要直接进条目——只把
         // openMenuId 重设成同一个值不会触发定位 effect，焦点会卡在触发按钮上。
         if (openMenuId === menu.id) {
-          const items = Array.from(
-            dropdownRef.current?.querySelectorAll<HTMLButtonElement>(ITEM_SELECTOR) ?? [],
-          );
+          const items = focusableItems(dropdownRef);
           const target = event.key === "ArrowDown" ? items[0] : items[items.length - 1];
           target?.focus({ preventScroll: true });
           return;
@@ -317,88 +383,6 @@ function DesktopTitleBarInner({ bridge }: { bridge: DesktopShellBridge }) {
     }
   };
 
-  const handleDropdownKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-    const items = Array.from(
-      dropdownRef.current?.querySelectorAll<HTMLButtonElement>(ITEM_SELECTOR) ?? [],
-    );
-    const active = document.activeElement;
-    const current = items.findIndex((item) => item === active);
-    switch (event.key) {
-      case "ArrowDown":
-      case "ArrowUp": {
-        event.preventDefault();
-        if (items.length === 0) return;
-        const step = event.key === "ArrowDown" ? 1 : -1;
-        const next =
-          current < 0
-            ? step > 0
-              ? 0
-              : items.length - 1
-            : (current + step + items.length) % items.length;
-        items[next].focus({ preventScroll: true });
-        return;
-      }
-      case "Home":
-      case "End": {
-        event.preventDefault();
-        items[event.key === "Home" ? 0 : items.length - 1]?.focus({ preventScroll: true });
-        return;
-      }
-      case "ArrowRight":
-      case "ArrowLeft":
-        event.preventDefault();
-        switchMenu(event.key === "ArrowRight" ? 1 : -1);
-        return;
-      case "Escape":
-        event.preventDefault();
-        closeAndFocusTrigger();
-        return;
-      case "Tab":
-        setOpenMenuId(null);
-        return;
-      default:
-    }
-  };
-
-  const dropdownNode =
-    openMenu && !openMenu.opensDialog && dropdown
-      ? createPortal(
-          <div
-            ref={dropdownRef}
-            id={`${MENUBAR_ID}-${openMenu.id}`}
-            className="app-titlebar-menu-dropdown"
-            role="menu"
-            aria-label={t(openMenu.labelKey)}
-            style={{ left: dropdown.left, top: dropdown.top, zIndex: layer.popupBase }}
-            onKeyDown={handleDropdownKeyDown}
-          >
-            {openMenu.items.map((item) => (
-              <Fragment key={item.key}>
-                {item.separatorBefore ? (
-                  <div className="app-titlebar-menu-separator" role="separator" />
-                ) : null}
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="app-titlebar-menu-item"
-                  data-menu-item-id={item.key}
-                  aria-label={t(desktopMenuItemLabelKey(item, windowState.maximized))}
-                  onClick={() => runItem(item)}
-                >
-                  <span className="app-titlebar-menu-label">
-                    {t(desktopMenuItemLabelKey(item, windowState.maximized))}
-                  </span>
-                  {shortcutLabel(item, isMac) ? (
-                    <span className="app-titlebar-menu-shortcut">{shortcutLabel(item, isMac)}</span>
-                  ) : null}
-                </button>
-              </Fragment>
-            ))}
-          </div>,
-          document.body,
-        )
-      : null;
-
   return (
     <>
       <div
@@ -425,24 +409,18 @@ function DesktopTitleBarInner({ bridge }: { bridge: DesktopShellBridge }) {
                 }}
                 type="button"
                 role="menuitem"
-                aria-haspopup={menu.opensDialog ? "dialog" : "menu"}
-                aria-expanded={menu.opensDialog ? undefined : openMenuId === menu.id}
-                aria-controls={
-                  openMenuId === menu.id && !menu.opensDialog
-                    ? `${MENUBAR_ID}-${menu.id}`
-                    : undefined
-                }
+                aria-haspopup="menu"
+                aria-expanded={openMenuId === menu.id}
+                aria-controls={openMenuId === menu.id ? `${MENUBAR_ID}-${menu.id}` : undefined}
                 tabIndex={index === (focusIndex >= 0 ? focusIndex : 0) ? 0 : -1}
                 data-menu-id={menu.id}
                 className="app-titlebar-menu-trigger"
                 data-open={openMenuId === menu.id ? "true" : "false"}
                 onFocus={() => setFocusIndex(index)}
-                onClick={() => toggleTrigger(menu, false)}
+                onClick={() => toggleTrigger(menu)}
                 onMouseEnter={() => {
-                  // 已展开时悬停切换（Windows 习惯，§19.5-1）；「关于」弹窗不参与。
-                  if (openMenuId && openMenuId !== menu.id && !menu.opensDialog) {
-                    setOpenMenuId(menu.id);
-                  }
+                  // 已展开时悬停切换（Windows 习惯，§19.5-1）。
+                  if (openMenuId && openMenuId !== menu.id) setOpenMenuId(menu.id);
                 }}
                 onKeyDown={(event) => handleTriggerKeyDown(event, index)}
               >
@@ -452,8 +430,30 @@ function DesktopTitleBarInner({ bridge }: { bridge: DesktopShellBridge }) {
           </div>
         </div>
       </div>
-      {dropdownNode}
+      {openMenu && dropdown ? (
+        <DesktopMenuDropdown
+          menu={openMenu}
+          position={dropdown}
+          isMac={isMac}
+          maximized={windowState.maximized}
+          alwaysOnTop={Boolean(windowState.alwaysOnTop)}
+          editableFocus={Boolean(windowState.editableFocus)}
+          dropdownRef={dropdownRef}
+          onRun={runItem}
+          onSwitchMenu={switchMenu}
+          onEscape={closeAndFocusTrigger}
+          onDismiss={() => setOpenMenuId(null)}
+        />
+      ) : null}
       <AboutDesktopDialog open={aboutOpen} bridge={bridge} onClose={() => setAboutOpen(false)} />
     </>
   );
+}
+
+/** 下拉里可聚焦的条目：跳过禁用项（禁用的按钮不该出现在 Tab / 方向键顺序里）。 */
+function focusableItems(ref: { current: HTMLDivElement | null }): HTMLButtonElement[] {
+  const all = Array.from(
+    ref.current?.querySelectorAll<HTMLButtonElement>(MENU_ITEM_SELECTOR) ?? [],
+  );
+  return all.filter((item) => !item.disabled);
 }

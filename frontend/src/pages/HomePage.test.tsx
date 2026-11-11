@@ -28,7 +28,12 @@ const settingsApiMocks = vi.hoisted(() => ({
   getAgentTaskEvents: vi.fn(),
 }));
 
-vi.mock("../api/settings", () => settingsApiMocks);
+// 桌面标题栏的诊断组装会静态 import ../api/settings 的多个函数（getLLMConfig 等）；
+// 只 mock 用到的几个会让「部分模块 mock」缺导出而整文件 import 失败，所以这里保留真实导出再覆盖测试桩。
+vi.mock("../api/settings", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/settings")>()),
+  ...settingsApiMocks,
+}));
 
 const agentTaskApiMocks = vi.hoisted(() => ({ listAgentTasks: vi.fn() }));
 

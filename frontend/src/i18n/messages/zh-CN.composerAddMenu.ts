@@ -22,6 +22,10 @@ const composerAddMenu = {
   "composerAddMenu.section.skills": "技能",
   /** 添加附件这一行动作的文字（可点区域等于原来那枚附件按钮）。 */
   "composerAddMenu.action.attach": "添加附件",
+  /** 技能二级浮出层的搜索框（占位即无障碍名：两处说的是同一件事）。 */
+  "composerAddMenu.skills.search": "搜索技能",
+  /** 搜索无匹配时的空态：说的是"没搜到"，不是"一个技能都没有"。 */
+  "composerAddMenu.skills.noMatch": "没有匹配的技能",
 } as const;
 
 export default composerAddMenu;

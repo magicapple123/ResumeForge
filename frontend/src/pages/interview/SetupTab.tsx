@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * 面试官设定卡：类型/难度/轮数/考察重点 + 面试官风格与人设（二者互斥），提交后由页面发起面试。
- * （自 InterviewPage 拆出：SetupForm 接口随迁，提示语改由语言包
- * `interviewPage.setup.*` 提供；form 实例由页面持有，
- * 供题库「开始模拟面试」的 startFromBank 联动写回考察重点。）
+ * （自 InterviewPage 拆出：SetupForm 接口随迁，form 实例由页面持有，供题库「开始模拟面试」
+ * 的 startFromBank 联动写回考察重点。）
  *
- * 两处本轮的口径变化：
- * - **轮数只有两档**（问题 05）：「自动」= AI 按表现决定何时收尾；「指定轮数」才渲染
- *   输入框（3–12 轮）。**隐藏**而不是禁用——禁用会让人以为自动档还能设轮数。
- * - **人设与风格互斥**（问题 06）：填了人设就禁用风格下拉，且值**不清空**（后端
- *   `interviewer_style` 是 Literal 必填）；真正让它失效的是提示词，见
- *   `backend/app/services/interview/interview.py` 的 `persona_and_style`。
+ * 两处口径：**轮数只有两档**（问题 05，「自动」档整块隐藏而不是禁用）；**人设与风格互斥**
+ * （问题 06，填了人设就禁用风格且值不清空——后端 `interviewer_style` 必填，真正让它失效的是
+ * 提示词，见 `backend/app/services/interview/interview.py` 的 `persona_and_style`）。
  *
  * 类型/难度/风格的显示名来自 `i18n/enum/interview.ts`（协议值 → 语言包 key），
  * 提交给后端的仍是 `types/interview.ts` 的协议值，不随语言变。
@@ -38,10 +34,13 @@ import type {
   InterviewType,
   InterviewerStyle,
 } from "../../types";
+import { useJobSearchSelect } from "../../hooks/remoteSearchOptions";
 import {
-  useJobSearchSelect,
-  useResumeSearchSelectForJobOrGeneral,
-} from "../../hooks/remoteSearchOptions";
+  describeCurrentMaterial,
+  parseExternalResumeId,
+  useExternalResumeApplier,
+  useInterviewResumeSelect,
+} from "../../hooks/useInterviewResumeSelect";
 import { t } from "../../i18n";
 import {
   INTERVIEW_DIFFICULTY_LABEL_KEYS,
@@ -65,8 +64,12 @@ export type RoundsMode = "auto" | "custom";
 export interface SetupForm {
   /** 关联岗位：与 `jobMaterial` 二选一（选了文件时这一项不出现在表单里）。 */
   jobId?: number;
-  /** 关联简历：与 `resumeMaterial` 二选一。 */
-  resumeId?: number;
+  /**
+   * 关联简历：与 `resumeMaterial` 二选一。**带前缀的字符串**（#25）：`r:<id>` = 本应用的
+   * 简历，`e:<id>` = 外部简历——前缀就是 `onChange` 的分派依据；提交时由
+   * `toInternalResumeId` 还原成后端要的数字 id（外部简历没有内部 id，正文走材料）。
+   */
+  resumeId?: string;
   /** 导入的岗位材料（#41）：已在上传时提取成文本，非空表示这一侧用文件。 */
   jobMaterial?: InterviewMaterialExtract | null;
   /** 导入的简历材料（#41）：已在上传时提取成文本。 */
@@ -81,16 +84,6 @@ export interface SetupForm {
   rounds: number;
   focus: string;
   persona: string;
-}
-
-/**
- * 深链 `?externalResumeId=`：正整数才认，其余按"没带参"处理（与 `parseLinkedJobId`
- * 同一口径）。这个参数由简历中心的「用于面试」生成，指向一条**只读快照**外部简历。
- */
-function parseExternalResumeId(raw: string | null): number | null {
-  if (!raw || !/^\d+$/.test(raw)) return null;
-  const parsed = Number(raw);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 /** 「指定轮数」档的取值是否合法：越界或空值都按默认值附近夹回来，不把 NaN 递给后端。 */
@@ -124,10 +117,10 @@ export function SetupTab({
   const prefilledExternalIdRef = useRef<number | null>(null);
   // 关联岗位下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const jobSelect = useJobSearchSelect();
-  // 关联简历（0066）：候选 = 所选岗位关联的简历 **+** 通用简历。岗位没选之前不给候选
-  // （面试官要读的就是"这份简历 + 那个岗位的 JD"，脱离岗位挑简历没有意义）。
+  // 关联简历（0066 / #25）：候选 = 所选岗位关联的简历 **+** 通用简历 **+** 外部简历（分组展示）。
+  // 岗位没选之前整块下拉仍然禁用（记录侧候选本来就依赖岗位，外部简历也一并等它挑完）。
   const watchedJobId = Form.useWatch("jobId", form) as number | undefined;
-  const resumeSelect = useResumeSearchSelectForJobOrGeneral(watchedJobId ?? null);
+  const watchedResumeValue = Form.useWatch("resumeId", form) as string | undefined;
   // 人设与风格互斥（问题 06）：**看的是实时值**，所以用 useWatch 而不是读 initialValues——
   // 用户边打人设，风格下拉边变灰，无需先提交或失焦。
   const persona = Form.useWatch("persona", form) as string | undefined;
@@ -142,11 +135,32 @@ export function SetupTab({
   const [jobMaterial, setJobMaterial] = useState<InterviewMaterialExtract | null>(null);
   const [resumeSource, setResumeSource] = useState<MaterialSourceMode>("record");
   const [resumeMaterial, setResumeMaterial] = useState<InterviewMaterialExtract | null>(null);
+  // 文件侧这份材料是"导入的文件"还是"外部简历的正文"（#25）：两者都落在 `resumeMaterial`，
+  // 但「当前材料」要说清来源，否则用户以为系统把上传的文件弄丢了。
+  const [resumeFileOrigin, setResumeFileOrigin] = useState<"file" | "external" | null>(null);
+
+  // 外部简历落地（深链与下拉**共用**这一个函数）：引用稳定，深链 effect 才不会每渲染重跑。
+  const externalResume = useExternalResumeApplier({
+    useFileSource: () => setResumeSource("file"),
+    useFileMaterial: (material) => {
+      setResumeMaterial(material);
+      setResumeFileOrigin("external");
+    },
+    clearRecordValue: () => form.setFieldValue("resumeId", undefined),
+  });
+  const resumeSelect = useInterviewResumeSelect({
+    jobId: watchedJobId ?? null,
+    value: watchedResumeValue,
+    onExternal: externalResume.apply,
+    onExternalFailed: externalResume.notifyFailed,
+    onSelectInternal: (value) => form.setFieldValue("resumeId", value),
+  });
 
   // 岗位一变就重拉简历候选：上一次的候选属于上一个岗位，留着会让用户挑到不该出现的简历。
-  // hook 的 fetch 闭包跟随 jobId，`reload` 引用因此每次渲染都不同，只在 jobId 变化时执行。
+  // 外部简历组不随岗位变（列表接口没有 job_id 参数），`reload` 里一并刷新；已选项由
+  // hook 的 `pinned` 缓存保住显示。
   useEffect(() => {
-    void resumeSelect.reload();
+    resumeSelect.reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedJobId]);
 
@@ -161,24 +175,16 @@ export function SetupTab({
       .then((record) => {
         if (cancelled) return;
         prefilledExternalIdRef.current = externalResumeId;
-        if (!record.has_text) {
-          // 没有正文不能在面试里直接复用；用户仍可在这一侧上传原件（识别链路在面试页）。
-          message.warning(t("interviewPage.setup.external.noText"));
-          return;
-        }
-        setResumeSource("file");
-        setResumeMaterial({ name: record.name, text: record.text, warnings: [], parser: "text" });
-        form.setFieldValue("resumeId", undefined);
-        message.info(t("interviewPage.setup.external.prefilled", { name: record.name }));
+        // 与下拉选中走同一个函数：切来源、写材料、清记录侧的 id（漏掉清 id 就是脏状态）。
+        externalResume.apply(record);
       })
       .catch(() => {
-        // 外部简历可能已被删除：退回"从记录选"，不阻断用户继续设置这场面试。
-        if (!cancelled) message.warning(t("interviewPage.setup.external.loadFailed"));
+        if (!cancelled) externalResume.notifyFailed();
       });
     return () => {
       cancelled = true;
     };
-  }, [externalResumeId, form, message]);
+  }, [externalResumeId, externalResume]);
 
   // 深链预填的岗位按 id 回查补进候选（P0-1），否则第 101 条之后的岗位只显示 id；
   // 设定卡常驻可见，挂载时同时预拉第一页候选。
@@ -190,14 +196,21 @@ export function SetupTab({
   }, [initialJobId]);
 
   /**
-   * 提交前补齐"文件这一侧到底有没有材料"。
-   *
-   * 表单校验只能看到**渲染出来**的字段：切到"导入文件"时那条 `required` 规则随下拉框
-   * 一起消失，所以这里必须自己判一次——否则用户能在没选文件的情况下开出一场"没有材料"
-   * 的面试（后端会 422，但那时候点的是"开始面试"，体验很差）。
-   *
-   * 轮数同理：输入框与 Segmented 同行（`noStyle`），校验文案没有位置显示，所以空值 /
-   * 越界在这里给一条明确提示，而不是让按钮"点了没反应"。
+   * 「当前材料」（#25）：选中外部简历后记录侧下拉是**空的**（材料落在"导入文件"那一侧），
+   * 不显式说清现在用的是哪一份，用户会以为系统把文件弄丢了。判据与文案在 hook 里。
+   */
+  const currentMaterialText = describeCurrentMaterial({
+    source: resumeSource,
+    recordLabel: resumeSelect.labelFor(watchedResumeValue),
+    fileName: resumeMaterial?.name,
+    fileOrigin: resumeFileOrigin,
+  });
+
+  /**
+   * 提交前补齐"文件这一侧到底有没有材料"：表单校验只看**渲染出来**的字段，切到"导入文件"
+   * 时那条 `required` 规则随下拉框一起消失，不自己判一次就能开出一场没有材料的面试
+   * （后端会 422，但那时候点的是"开始面试"，体验很差）。轮数同理——输入框与 Segmented
+   * 同行（`noStyle`），校验文案没有位置显示，空值 / 越界在这里给明确提示。
    */
   const submit = (values: SetupForm) => {
     if (jobSource === "file" && !jobMaterial) {
@@ -264,17 +277,14 @@ export function SetupTab({
           }
         }}
       >
-        {/* 外层纵向堆叠（第 8 条）：原来的 auto-fit 主栅格被"整行"元素逼出多于 4 条的
-            轨道，4 个字段只占前 4 条，右边空出来的轨道就是那片空白。改成 flex column 后
-            材料行 / 提示 / 字段网格 / 轮数说明 / 人设依次排列，列数交给字段网格自己决定。 */}
+        {/* 外层纵向堆叠（第 8 条）：auto-fit 主栅格会被"整行"元素逼出多于 4 条的轨道，
+            4 个字段只占前 4 条，右边那条轨道就是原来那片空白。 */}
         <div className="interview-setup-stack">
-          {/* 材料行（问题 7）：两个材料字段单独成组。容器自己是 auto-fit 栅格
-              （宽屏两等分、窄屏塌成一列）；align-items: start 让两侧各自按内容高度排，
-              不再被对侧的下拉 / 文件区拉高（第 8 条）。 */}
+          {/* 材料行（问题 7）：两个材料字段单独成组，容器是 auto-fit 栅格 + align-items: start，
+              两侧各自按内容高度排，不被对侧的下拉 / 文件区拉高。 */}
           <div className="interview-setup-materials">
-            {/* 岗位材料（#41）：从记录选 / 导入文件二选一，两侧接受同一组格式
-                （问题 6：图片 / PDF / TXT / Word / Markdown）。切到"导入文件"时下拉框
-                禁用且不再校验（材料由文件提供），文件区在 extra 里显示解析结果。 */}
+            {/* 岗位材料（#41）：从记录选 / 导入文件二选一，两侧接受同一组格式（问题 6）。
+                切到"导入文件"时下拉框禁用且不再校验（材料由文件提供）。 */}
             <Form.Item
               label={t("interviewPage.setup.jobLabel")}
               name="jobId"
@@ -305,9 +315,10 @@ export function SetupTab({
                 {...jobSelect.selectProps}
               />
             </Form.Item>
-            {/* 简历材料（#41）：从记录选 / 导入文件二选一（与岗位侧同一组格式）。
-                extra 与左列**同结构**（都只有 `MaterialSourceField`），两侧 extra 的起点与
-                底部才能对齐；边界文案因此移到两列之外，见下方 `.interview-setup-hint`。 */}
+            {/* 简历材料（#41 / #25）：从记录选 / 导入文件二选一（与岗位侧同一组格式）；
+                记录侧下拉现在分两组（本应用的简历 / 外部简历，见 `useInterviewResumeSelect`）。
+                extra 在左列的基础上多一行「当前材料」——外部简历的正文落在文件侧，下拉里
+                没有它的 value，这行提示是选完之后唯一常驻的来源说明。 */}
             <Form.Item
               label={t("interviewPage.setup.resumeLabel")}
               name="resumeId"
@@ -318,17 +329,28 @@ export function SetupTab({
                   : []
               }
               extra={
-                <MaterialSourceField
-                  kind="resume"
-                  mode={resumeSource}
-                  material={resumeMaterial}
-                  disabled={starting}
-                  onModeChange={(mode) => {
-                    setResumeSource(mode);
-                    if (mode === "file") form.setFieldValue("resumeId", undefined);
-                  }}
-                  onMaterialChange={setResumeMaterial}
-                />
+                <>
+                  <MaterialSourceField
+                    kind="resume"
+                    mode={resumeSource}
+                    material={resumeMaterial}
+                    disabled={starting}
+                    onModeChange={(mode) => {
+                      setResumeSource(mode);
+                      if (mode === "file") form.setFieldValue("resumeId", undefined);
+                    }}
+                    onMaterialChange={(material) => {
+                      setResumeMaterial(material);
+                      // 换过文件就不再是"外部简历的正文"了（否则「当前材料」会认错来源）。
+                      setResumeFileOrigin(material ? "file" : null);
+                    }}
+                  />
+                  {/* 「当前材料」（#25）：external 的正文不进下拉的 value（它走 resume_material），
+                      所以这份提示是外部简历选完之后**唯一**常驻的来源说明。 */}
+                  <Typography.Text type="secondary" className="interview-resume-current">
+                    {currentMaterialText}
+                  </Typography.Text>
+                </>
               }
             >
               <Select
@@ -345,9 +367,8 @@ export function SetupTab({
               />
             </Form.Item>
           </div>
-          {/* #41：边界文案对两种材料来源都成立——不管这一侧是从记录选来的还是导入的文件，
-              面试官看到的都只是"这两份"。放在两列之外独占一行：留在某一列的 extra 里
-              会让两侧底部不齐，也容易被读成只针对简历。 */}
+          {/* #41：边界文案对两种来源都成立——不管这一侧是从记录选来的还是导入的文件。
+              放在两列之外独占一行：留在某列 extra 里会让两侧底部不齐，也像只针对简历。 */}
           <Typography.Text type="secondary" className="interview-setup-hint">
             {t("interviewPage.setup.scopeHint")}
           </Typography.Text>
@@ -370,10 +391,9 @@ export function SetupTab({
                 }))}
               />
             </Form.Item>
-            {/* 轮数（问题 05）：两档短文案 + 条件输入框。输入框走 `noStyle`（与 Segmented
-              同行，外面那个 Form.Item 只提供 label），校验由 submit() 兜。
-              说明文字已移到字段网格下方（第 8 条）：留在这里会在点「指定轮数」时折成
-              3 行、把整行撑高。 */}
+            {/* 轮数（问题 05）：两档短文案 + 条件输入框（`noStyle` 与 Segmented 同行，外面那个
+              Form.Item 只提供 label，校验由 submit() 兜）。说明文字已移到网格下方（第 8 条），
+              否则点「指定轮数」时它会折成 3 行把整行撑高。 */}
             <Form.Item label={t("interviewPage.setup.roundsLabel")}>
               <div className="interview-setup-rounds">
                 <Form.Item name="roundsMode" noStyle>
@@ -385,9 +405,8 @@ export function SetupTab({
                     ]}
                   />
                 </Form.Item>
-                {/* 「自动」档整块不渲染（不是禁用）：留在那儿会让人以为自动也能设轮数。
-                  单位用 Space.Addon 而不是 InputNumber 的 addonAfter（v6 已废弃，
-                  同 components/settings/SearchCard.tsx 的处理）。 */}
+                {/* 「自动」档整块不渲染（不是禁用）：留着会让人以为自动也能设轮数。单位用
+                  Space.Addon 而不是 InputNumber 的 addonAfter（v6 已废弃）。 */}
                 {showRoundsInput ? (
                   <Space.Compact>
                     <Form.Item name="rounds" noStyle>
@@ -411,19 +430,17 @@ export function SetupTab({
               <Input maxLength={255} placeholder={t("interviewPage.setup.focusPlaceholder")} />
             </Form.Item>
           </div>
-          {/* 轮数说明（第 8 条）：字段网格下方全宽一行，点「指定轮数」时只增高输入框
-              那一档，不再把这段多行说明叠进轮数格子。 */}
+          {/* 轮数说明（第 8 条）：字段网格下方全宽一行，点「指定轮数」时只增高输入框那一档。 */}
           <Typography.Text type="secondary" className="interview-setup-rounds-hint">
             {t("interviewPage.setup.roundsExtra")}
           </Typography.Text>
-          {/* 风格与人设（问题 06；第 2 条改成并列）：二者互斥，并排后"填了人设、风格置灰"
-              在同一视觉行里一眼可读。分组独占一行（外层已是纵向堆叠），窄容器塌成一列。 */}
+          {/* 风格与人设（问题 06 / 第 2 条）：二者互斥，并排后"填了人设、风格置灰"一眼可读。 */}
           <div className="interview-setup-persona">
             <Form.Item
               label={t("interviewPage.setup.styleLabel")}
               name="interviewerStyle"
               // 禁用但**不清空**：后端 `interviewer_style` 是 Literal 必填，清空会 422；
-              // 真正让它不生效的是提示词（persona 非空时风格整条链路都被跳过）。
+              // 真正让它不生效的是提示词（persona 非空时风格整条链路被跳过）。
               extra={
                 hasPersona ? (
                   <Typography.Text type="warning">
@@ -444,7 +461,7 @@ export function SetupTab({
               label={
                 <span>
                   {t("interviewPage.setup.personaLabel")}
-                  {/* 说明放在标签行里，但 aria-hidden：可访问名仍是「自定义人设（选填）」，
+                  {/* 说明放在标签行里但 aria-hidden：可访问名仍是「自定义人设（选填）」本身，
                       不会变成"标签 + 说明"的长串（精确查询与读屏口径都不变）。 */}
                   <span className="interview-setup-label-hint" aria-hidden="true">
                     {t("interviewPage.setup.personaOverrideHint")}

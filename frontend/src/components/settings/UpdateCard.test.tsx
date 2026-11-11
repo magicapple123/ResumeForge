@@ -46,7 +46,7 @@ function renderCard() {
 
 beforeEach(() => {
   window.localStorage.clear();
-  // 默认按浏览器/控制台形态（既有行为）；桌面形态的用例自己覆盖。
+  // 默认按浏览器/控制台形态（既有行为）；桌面形态的用例在 .degrade 文件里自己覆盖。
   apiMocks.getAppForm.mockResolvedValue({
     desktop: false,
     platform: "win32",
@@ -289,6 +289,8 @@ describe("UpdateCard", () => {
     renderCard();
 
     fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+    // 说明块默认收起（#11）：先展开，再看渲染结果——渲染器本身没变，只是挂载位置变了。
+    fireEvent.click(await screen.findByRole("button", { name: t("update.notes.expand") }));
 
     // `## 新增` → 标题；`- **深挖** …` → 列表项（内含 strong）。
     expect(await screen.findByRole("heading", { name: "新增" })).toBeInTheDocument();
@@ -301,84 +303,46 @@ describe("UpdateCard", () => {
     expect(card.textContent ?? "").not.toContain("**");
   });
 
-  it("桌面形态不给页面内下载/安装入口，改成引导用 Setup.exe", async () => {
-    // 桌面安装里 PROJECT_ROOT 是 resources/payload，更新包是源码形态整包（没有
-    // python-runtime.zip、没有 desktop/）：页面内"下载 zip 并安装"补不齐依赖，
-    // 装上去只会半新半旧。所以按钮必须消失，只留检查更新 + 安装包指引。
-    apiMocks.getAppForm.mockResolvedValue({
-      desktop: true,
-      platform: "win32",
-      app_version: "1.0.2",
-    });
-
+  it("结论条不再承载发布说明：说明独立成块、默认收起、没有内滚（#11）", async () => {
     renderCard();
-    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+    fireEvent.click(screen.getByRole("button", { name: t("update.action.check") }));
 
-    // 有更新（mock 里 update_available=true），但桌面形态不出现下载/安装按钮。
-    expect(await screen.findByText(t("update.desktop.title"))).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "下载更新" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "重启并安装" })).not.toBeInTheDocument();
-    // 后台下载开关也随之消失（它是下载入口的一部分）。
-    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-    // 检查/重新检查保留；发布页面可以打开。
-    expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重新检查" })).toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: "打开发布页面" })).toHaveAttribute(
+    // ① Alert 只剩结论（有新版 + 版本号）与主操作（发布页）。
+    const conclusion = await screen.findByText(t("update.result.available", { version: "0.12.0" }));
+    expect(conclusion).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: t("update.action.release") })).toHaveAttribute(
       "href",
       "https://example.com/release",
     );
+
+    // ② 说明块**不在** Alert 里：这正是 789px 卡片的成因（Alert 占掉六成高）。
+    const notes = document.querySelector(".update-notes-body") as HTMLElement;
+    expect(notes).not.toBeNull();
+    expect(notes.closest(".ant-alert")).toBeNull();
+
+    // ③ 无内滚：说明块不设 inline 的 maxHeight/overflow（病因是 `min(40vh, 420px)`）。
+    expect(notes).not.toHaveAttribute("style");
+
+    // ④ 默认收起：长公告不把卡片一进来就撑长；开关如实报告状态。
+    const toggle = screen.getByRole("button", { name: t("update.notes.expand") });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(screen.getByRole("button", { name: t("update.notes.collapse") })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    // 展开后说明正文确实在里面（夹具的 notes 是「修复问题」）。
+    expect(notes.textContent).toContain("修复问题");
   });
 
-  it("桌面形态即使后端说「已下载完成」也不显示重启并安装", async () => {
-    apiMocks.getAppForm.mockResolvedValue({
-      desktop: true,
-      platform: "win32",
-      app_version: "1.0.2",
-    });
-    apiMocks.getUpdateDownloadStatus.mockResolvedValue({
-      state: "ready",
-      current_version: "0.11.0",
-      target_version: "0.12.0",
-      progress: 100,
-      downloaded_bytes: 2048,
-      total_bytes: 2048,
-      background: false,
-      installable: true,
-      message: "更新包已下载完成，可以重启安装",
-    });
-
+  it("四列等宽版本信息：通道 / 当前 / 最新 / 发布时间（发布时间从 Alert 搬来）", async () => {
     renderCard();
+    fireEvent.click(screen.getByRole("button", { name: t("update.action.check") }));
 
-    // 后端状态是 ready，但桌面形态下那个按钮不该出现（走了也装不成）。
-    expect(await screen.findByText(t("update.desktop.title"))).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "重启并安装" })).not.toBeInTheDocument();
-    expect(screen.queryByText(t("update.downloaded.title"))).not.toBeInTheDocument();
-  });
-
-  it("浏览器形态保持原有入口：可下载、可安装", async () => {
-    // 非桌面（控制台 start.cmd / 开发态）是既有路径，界面必须逐条不变。
-    renderCard();
-    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
-
-    expect(await screen.findByRole("button", { name: "下载更新" })).toBeEnabled();
-    expect(screen.getByRole("switch")).toBeInTheDocument();
-    expect(screen.queryByText(t("update.desktop.title"))).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "下载更新" }));
-    expect(await screen.findByText(t("update.downloaded.title"))).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重启并安装" })).toBeInTheDocument();
-  });
-
-  it("形态接口失败时静默按浏览器形态处理，设置页不报错", async () => {
-    // 老后端没有 /system/form；不能让多问一句就把整张卡片变成错误框。
-    apiMocks.getAppForm.mockRejectedValueOnce(new Error("SYNTHETIC_FORM_ERROR"));
-
-    renderCard();
-    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
-
-    expect(await screen.findByRole("button", { name: "下载更新" })).toBeEnabled();
-    expect(screen.queryByText("SYNTHETIC_FORM_ERROR")).not.toBeInTheDocument();
-    expect(screen.queryByText(t("update.desktop.title"))).not.toBeInTheDocument();
+    await screen.findByText(t("update.result.available", { version: "0.12.0" }));
+    // 四列等宽：通道 / 当前 / 最新 / 发布时间。发布时间从 Alert 里搬到了这里。
+    expect(document.querySelectorAll(".update-meta-item")).toHaveLength(4);
+    expect(screen.getByText("2026-09-24")).toBeInTheDocument();
   });
 
   it("点检查更新发现新版本：立刻给出含版本号的反馈（QA ST.04）", async () => {
@@ -414,6 +378,8 @@ describe("UpdateCard", () => {
         { timeout: 5000 },
       ),
     ).toBeInTheDocument();
+    // 结论条同步给出「已是最新版本」（#11：Alert 只留结论，不再塞发布说明）。
+    expect(await screen.findByText(t("update.result.uptodate"))).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "下载更新" })).not.toBeInTheDocument();
   });
 
@@ -426,4 +392,25 @@ describe("UpdateCard", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("网络不可用，请稍后重试");
   });
+
+  // ── P2-1：refresh 口径与 60 秒最小点击间隔 ────────────────────────────────
+
+  it("「检查更新」走缓存（refresh=false），60 秒内连点只打一次后端", async () => {
+    // 后端的 15 分钟缓存靠 refresh=false：第一次点「检查更新」不该强制刷新上游
+    // （GitHub 匿名额度是 60 次/小时，用户点几下就用完——这正是 01-2 的现场）。
+    renderCard();
+    const checkButton = screen.getByRole("button", { name: "检查更新" });
+
+    fireEvent.click(checkButton);
+    await waitFor(() => expect(apiMocks.checkForUpdate).toHaveBeenCalledTimes(1));
+    expect(apiMocks.checkForUpdate).toHaveBeenLastCalledWith(false);
+
+    // 冷却期内按钮禁用，连点不再产生请求（后端还有一道 60s 闸，见后端用例）。
+    await waitFor(() => expect(checkButton).toBeDisabled());
+    fireEvent.click(checkButton);
+    fireEvent.click(checkButton);
+    expect(apiMocks.checkForUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  // ── P2-2：「重新检查」与桌面壳更新桥的用例在 UpdateCard.degrade.test.tsx ──
 });

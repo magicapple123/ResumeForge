@@ -8,6 +8,7 @@
 const pagesMisc = {
   // ── 投递台（ApplyPage） ─────────────────────────────────────────
   "pagesMisc.applyPage.title": "投递台",
+  "pagesMisc.applyPage.subtitleAria": "这次的流程是怎样的",
   "pagesMisc.applyPage.subtitle":
     "采集岗位 → 判断匹配度 → 显式确认 → 自动投递。所有对招聘网站的动作都由你显式发起，登录在你自己的浏览器窗口里完成。",
   "pagesMisc.applyPage.action.settings": "投递设置",

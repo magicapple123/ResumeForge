@@ -14,6 +14,7 @@ import {
   Select,
   Space,
   Switch,
+  Tabs,
   Typography,
   App,
 } from "antd";
@@ -23,6 +24,8 @@ import { getApplyConfig, listSites, updateApplyConfig } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
 import { HintedTextArea } from "../common/MaxLengthHint";
 import { type ApplyConfig, type ApplyConfigOut, type SiteList } from "../../types";
+import ApplyBlocklistSection from "./ApplyBlocklistSection";
+import ApplyGreetingTemplatesSection from "./ApplyGreetingTemplatesSection";
 import BrowserChoiceFields from "./BrowserChoiceFields";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -240,7 +243,32 @@ export default function ApplySettingsModal({ open, onClose, onSaved }: Props) {
         body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", paddingRight: 8 },
       }}
     >
-      {open && <ApplySettingsForm onClose={onClose} onSaved={onSaved} />}
+      {/*
+        #14D/#14E 之后弹窗分三个页签：投递节奏（原来的表单）/ 话术库 / 屏蔽清单。
+        后两个各有自己的保存按钮与端点（`/apply/greeting-templates`、`/apply/blocklist`），
+        不与主表单的 `/apply/config` 混在一次提交里——否则「保存设置」会悄悄写三个接口。
+      */}
+      {open && (
+        <Tabs
+          items={[
+            {
+              key: "cadence",
+              label: t("applySettings.tab.cadence"),
+              children: <ApplySettingsForm onClose={onClose} onSaved={onSaved} />,
+            },
+            {
+              key: "templates",
+              label: t("applySettings.tab.templates"),
+              children: <ApplyGreetingTemplatesSection />,
+            },
+            {
+              key: "blocklist",
+              label: t("applySettings.tab.blocklist"),
+              children: <ApplyBlocklistSection />,
+            },
+          ]}
+        />
+      )}
     </Modal>
   );
 }

@@ -10,6 +10,10 @@ const conversationSkills = {
     "This conversation: {count} · budget starts after the first message",
   "conversationSkills.menu.budgetOver": "{over} chars over budget; later skills will be truncated",
   "conversationSkills.menu.empty": "No skills yet — create one in the workbench first",
+  // #31D/#31F: auto-generated skills stay disabled until the user validates them
+  "conversationSkills.menu.pendingBadge": "[Pending validation]",
+  "conversationSkills.menu.pendingHint":
+    "Pending validation: confirm it on the skills page before enabling",
   "conversationSkills.chip.disable": "Turn off the skill “{name}”",
   "conversationSkills.chip.truncatedHint":
     "The prompt exceeds this conversation's budget and was not fully loaded; shorten it or turn off other skills to load it fully",

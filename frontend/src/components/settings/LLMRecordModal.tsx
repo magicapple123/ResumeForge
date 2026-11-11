@@ -369,6 +369,30 @@ export default function LLMRecordModal({
             </Form.Item>
           </Col>
         </Row>
+
+        {/* 上下文窗口（#5 的 5.3；#6 的百分比分母）。0 = 未知：助手不做累计上下文
+            限制、上下文面板也不显示百分比。**不预填**——填错比不填更糟（用户会以为
+            窗口真那么大），只把常见型号写在提示里。 */}
+        <Row gutter={16}>
+          <Col xs={24} md={8}>
+            <Form.Item
+              name="context_window_tokens"
+              label={
+                <Space size={4} wrap={false}>
+                  {t("llmRecord.field.contextWindow")}
+                  <Tooltip title={t("llmRecord.hint.contextWindow")}>
+                    <QuestionCircleOutlined
+                      style={{ color: "var(--rf-text-description)", fontSize: 12 }}
+                      aria-label={t("llmRecord.aria.contextWindow")}
+                    />
+                  </Tooltip>
+                </Space>
+              }
+            >
+              <InputNumber min={0} max={2_000_000} step={1024} style={{ width: "100%" }} />
+            </Form.Item>
+          </Col>
+        </Row>
         {/* 用户反馈：三列行（Form.Item 默认 marginBottom 24）与思考模式行之间太空，收紧 12px。 */}
         <div style={{ marginBottom: -12 }} />
 

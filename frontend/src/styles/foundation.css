@@ -30,7 +30,10 @@
   transform: translateY(0);
 }
 
-:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+/* tabindex="-1" 按定义只能被脚本聚焦，用户没有用键盘"走到"它，因此不该画焦点环。
+   不加这个排除时，脚本 focus() 的容器（如右键菜单 .rf-ctx-menu）会被画上 2px 蓝框，
+   而 :where() 是零特异性、与本文件的规则同权重，靠源码顺序险胜（#33）。 */
+:where(button, a, input, textarea, select, [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: 2px solid var(--rf-focus-visible);
   outline-offset: 3px;
 }

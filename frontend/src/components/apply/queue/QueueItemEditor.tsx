@@ -13,6 +13,8 @@ import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import { HintedTextArea } from "../../common/MaxLengthHint";
 import type { ApplyQueueItem } from "../../../types";
+import { GreetingTemplatePicker } from "./GreetingTemplatePicker";
+import ResumeFitHint from "../insights/ResumeFitHint";
 
 export function QueueItemEditor({
   item,
@@ -97,6 +99,16 @@ export function QueueItemEditor({
       width={560}
     >
       <Form form={form} layout="vertical">
+        {/* #15D 推荐简历：放在简历下拉**上方**——先看建议再选，比"选完再告诉你有更好的"顺手。
+            `gain <= 0` 时组件自身不渲染，编辑器保持原样。 */}
+        <ResumeFitHint
+          queueId={item.id}
+          onApply={(resumeId) => {
+            form.setFieldValue("resume_id", resumeId);
+            // 把推荐项补进下拉候选，否则选择框里只会显示一个裸 id。
+            void resumeSelect.ensure(resumeId);
+          }}
+        />
         <Form.Item
           name="resume_id"
           label={t("applyQueue.detail.resume")}
@@ -108,6 +120,12 @@ export function QueueItemEditor({
             {...resumeSelect.selectProps}
           />
         </Form.Item>
+        {/* #14D：模板选择放在招呼语输入框**上方**——先挑模板再改，比"先手写再替换"顺手。
+            没有模板时本组件自身不渲染，编辑器保持原样。 */}
+        <GreetingTemplatePicker
+          item={item}
+          onApply={(text) => form.setFieldValue("greeting", text)}
+        />
         <Form.Item name="greeting" label={t("applyQueue.detail.greeting")}>
           <HintedTextArea rows={3} maxLength={1000} />
         </Form.Item>

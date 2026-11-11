@@ -65,6 +65,14 @@
   --rf-stage-bar-interview: #7c6cf5;
   --rf-stage-bar-offer: #3fbf7f;
   --rf-stage-bar-rejected: #e05c5c;
+  /* 分类色 1–5（需求 #6 的上下文用量五段条与图例点）：五个**可区分**的色相，
+     语义色顶不上——`--rf-danger` 拿来当"对话消息"会直接被读成警告。
+     深色对应值见 dark-tokens.css（同名同序）；图形用色，门槛按 3:1 判（不是正文的 4.5）。 */
+  --rf-cat-1: #4f8ff7;
+  --rf-cat-2: #7c6cf5;
+  --rf-cat-3: #2ec4b6;
+  --rf-cat-4: #e59f27;
+  --rf-cat-5: #e0618f;
   /* 半透明面板（悬浮卡、吸顶条）：背景会透出一点，必须随主题翻转。 */
   --rf-surface-glass: rgb(255 255 255 / 92%);
   --rf-surface-glass-border: rgb(31 56 85 / 8%);

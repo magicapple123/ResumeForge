@@ -1,0 +1,117 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 投投写操作提案卡（#27F）：改前/改后 + 执行/撤销。颜色只走 --rf-* token。 */
+
+.tt-proposal {
+  position: fixed;
+  right: var(--rf-space-3);
+  bottom: 84px;
+  z-index: var(--rf-layer-orb-tooltip);
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-space-2);
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(460px, calc(100vh - 120px));
+  padding: var(--rf-space-3);
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-panel);
+  background: var(--rf-surface-elevated);
+  box-shadow: 0 18px 44px rgb(15 23 42 / 24%);
+  overflow-y: auto;
+}
+
+.tt-proposal-title {
+  margin: 0;
+  color: var(--rf-text-body);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tt-proposal-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--rf-space-2);
+}
+
+.tt-proposal-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tt-proposal-label {
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+}
+
+.tt-proposal-text {
+  margin: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: var(--rf-radius-control);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tt-proposal-text.is-before {
+  color: var(--rf-text-secondary);
+  background: var(--rf-surface-alt);
+}
+
+.tt-proposal-text.is-after {
+  color: var(--rf-text-body);
+  background: var(--rf-brand-wash);
+}
+
+.tt-proposal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--rf-space-2);
+}
+
+.tt-proposal-undo-text {
+  margin: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tt-proposal-hint {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.tt-proposal-status {
+  margin: 0;
+  color: var(--rf-success-text);
+  font-size: 12px;
+}
+
+.tt-proposal-error {
+  margin: 0;
+  color: var(--rf-danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 767px) {
+  .tt-proposal {
+    right: var(--rf-space-2);
+    left: var(--rf-space-2);
+    width: auto;
+    bottom: 84px;
+  }
+
+  .tt-proposal-diff {
+    grid-template-columns: 1fr;
+  }
+}

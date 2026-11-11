@@ -1,0 +1,71 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 投投划词浮条（#27A）：选区旁的动作条。定位由 JS 写 top/left（fixed），这里只管外观。 */
+
+.tt-selection-bar {
+  position: fixed;
+  z-index: var(--rf-layer-orb-tooltip);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 16px);
+  padding: 6px 8px;
+  border: 1px solid var(--rf-border-strong);
+  border-radius: 10px;
+  background: var(--rf-surface-elevated);
+  box-shadow: 0 12px 30px rgb(15 23 42 / 20%);
+  animation: tt-selection-in 120ms ease-out;
+}
+
+@keyframes tt-selection-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.tt-selection-region {
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--rf-info-strong);
+  background: var(--rf-info-bg);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.tt-selection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.tt-selection-action {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--rf-brand);
+  background: transparent;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tt-selection-action:hover {
+  background: var(--rf-brand-wash);
+}
+
+.tt-selection-action:focus-visible {
+  outline: 2px solid var(--rf-focus-ring);
+  outline-offset: 1px;
+}
+
+.tt-selection-feedback {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}

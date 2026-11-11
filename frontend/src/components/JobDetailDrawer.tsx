@@ -27,6 +27,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Job } from "../types";
 import { getMatchAnalyzingIds, subscribeMatchAnalysis } from "../utils/jobMatchAnalysisState";
+import RelatedKnowledgeBlock from "./jobs/RelatedKnowledgeBlock";
 import SkillTags from "./SkillTags";
 import { t, type MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
@@ -302,6 +303,9 @@ export default function JobDetailDrawer({
               <SkillTags tags={job.keywords} max={20} />
             </>
           )}
+
+          {/* #29D：按公司回溯知识库里与这个岗位相关的条目；0 条时整块不渲染。 */}
+          <RelatedKnowledgeBlock company={job.company} jobId={job.id} />
 
           <div className="job-detail-text-sections">
             <TextSection

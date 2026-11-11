@@ -18,31 +18,51 @@
  * 5. **`Select` 不能塞进 `Menu` 的 item**：antd 会在选中时收掉菜单，搜索框当场失焦、
  *    没法连续选。所以面板用 `Dropdown` + `popupRender` 自定义（外观仍是菜单），
  *    宽度封顶 320px（沿用 `ModelProfileSelect` 的经验），窄栏不横向溢出。
+ *
+ * 第六点（#32）：**技能二级改成"悬停浮出"**——一级留在原地，鼠标在「技能」行停留 150ms 后
+ * 从右侧浮出二级、移出 300ms 收起（`compact` 没有横向余量，保持点击整块替换；点击与键盘都保留）。
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ExperimentOutlined,
   LeftOutlined,
   PaperClipOutlined,
   PlusOutlined,
   RightOutlined,
+  SearchOutlined,
 } from "@ant-design/icons";
-import { Button, Dropdown, Select, Tooltip, Upload } from "antd";
+import { Button, Dropdown, Input, Select, Tooltip, Upload } from "antd";
 import { ASSISTANT_ACCEPT, MAX_ATTACHMENT_COUNT } from "../../assistantUtils";
 import { layer } from "../../../../theme/tokens";
 import { t } from "../../../../i18n";
 import { useLocale } from "../../../../i18n/i18nContext";
 import { useJobSearchSelect, useResumeSearchSelect } from "../../../../hooks/remoteSearchOptions";
 import { SkillPicker } from "./SkillChips";
+import { useSkillFlyoutKeyboard } from "./useSkillFlyoutKeyboard";
 import type { AssistantSkill } from "../../../../types";
 import type {
   ConversationSkillBudget,
   ConversationSkillItem,
 } from "../../../../api/conversationSkills";
+// #32 的浮出层样式单独成文件：`.composer-add-panel` 那条契约（500 行）已经贴线。
+import "../../../../styles/assistant-composer-flyout.css";
 
-/** 面板两级：顶级四组，技能点进去是第二级（复用 SkillChips 的勾选列表与预算行）。 */
-type AddPanelLevel = "root" | "skills";
+/** 悬停多久算"要看"：150ms 足够滤掉路过，又不至于让人觉得没反应。 */
+export const SKILL_FLYOUT_OPEN_DELAY_MS = 150;
+/** 移出多久才收起：比展开长一倍——斜向移进二级的途中不会闪关。 */
+export const SKILL_FLYOUT_CLOSE_DELAY_MS = 300;
+/** 二级面板宽度（与 `.composer-add-panel` 同宽）、与一级的间隙、贴视口的最低留白。 */
+export const SKILL_FLYOUT_WIDTH = 320;
+const SKILL_FLYOUT_GAP = 12;
+const SKILL_FLYOUT_EDGE = 12;
+
+interface FlyoutPlacement {
+  left: number;
+  top: number;
+  /** 右侧放不下时翻到一级面板左侧（`::before` 桥也跟着换边）。 */
+  flipLeft: boolean;
+}
 
 export interface AddMenuProps {
   /** 浮窗形态：弹层要抬到卡片之上，否则被卡片盖住。 */
@@ -90,7 +110,17 @@ export default function AddMenu({
   const jobSelect = useJobSearchSelect();
   const resumeSelect = useResumeSearchSelect();
   const [open, setOpen] = useState(false);
-  const [level, setLevel] = useState<AddPanelLevel>("root");
+  /** 二级是否展开：`compact` 下是"整块替换"，其余形态是"右侧浮出"。 */
+  const [skillsOpen, setSkillsOpen] = useState(false);
+  /** 二级的搜索词（关掉二级就清空，下次从完整列表开始）。 */
+  const [skillQuery, setSkillQuery] = useState("");
+  const [placement, setPlacement] = useState<FlyoutPlacement | null>(null);
+
+  /** 浮出层的定位基准：「技能」行容器（`position: relative`）。 */
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
+  const hoverOpenTimer = useRef<number | null>(null);
+  const hoverCloseTimer = useRef<number | null>(null);
 
   // 打开面板才拉第一页候选：空对话里不该为一个没点开的菜单花两次请求。
   useEffect(() => {
@@ -111,25 +141,178 @@ export default function AddMenu({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeId]);
 
+  /** 清掉一个悬停计时器（没有就跳过）。 */
+  const stopTimer = useCallback((handle: { current: number | null }) => {
+    if (handle.current === null) return;
+    window.clearTimeout(handle.current);
+    handle.current = null;
+  }, []);
+
+  /** 收起二级。`restoreFocus` 用于键盘路径：焦点要还给「技能」行，不能掉到 body 上。 */
+  const closeSkills = useCallback(
+    (restoreFocus = false) => {
+      stopTimer(hoverOpenTimer);
+      stopTimer(hoverCloseTimer);
+      setSkillsOpen(false);
+      setSkillQuery("");
+      setPlacement(null);
+      if (restoreFocus) {
+        anchorRef.current?.querySelector<HTMLButtonElement>(".composer-add-action")?.focus();
+      }
+    },
+    [stopTimer],
+  );
+
+  const openSkills = useCallback(() => {
+    stopTimer(hoverCloseTimer);
+    setSkillsOpen(true);
+  }, [stopTimer]);
+
+  // 键盘（Enter / Space / → / ← / Esc）整段在 hook 里：`compact` 没有浮出层，整条入口关掉。
+  const { onRowKeyDown, onFlyoutKeyDown } = useSkillFlyoutKeyboard({
+    flyoutRef,
+    skillsOpen,
+    enabled: !compact,
+    open: openSkills,
+    close: closeSkills,
+  });
+
+  /** 悬停展开：只在 `compact` 之外排 150ms 计时器。生成中不展开——勾选框全是禁用的。 */
+  const scheduleHoverOpen = useCallback(() => {
+    if (compact || sending || skillsOpen) return;
+    stopTimer(hoverCloseTimer);
+    if (hoverOpenTimer.current !== null) return;
+    hoverOpenTimer.current = window.setTimeout(() => {
+      hoverOpenTimer.current = null;
+      setSkillsOpen(true);
+    }, SKILL_FLYOUT_OPEN_DELAY_MS);
+  }, [compact, sending, skillsOpen, stopTimer]);
+
+  /** 悬停收起：300ms 的缓冲。二级是「技能」行的子节点，指针进到二级会重新取消这个计时器。 */
+  const scheduleHoverClose = useCallback(() => {
+    if (compact || !skillsOpen) return;
+    stopTimer(hoverOpenTimer);
+    if (hoverCloseTimer.current !== null) return;
+    hoverCloseTimer.current = window.setTimeout(() => {
+      hoverCloseTimer.current = null;
+      closeSkills();
+    }, SKILL_FLYOUT_CLOSE_DELAY_MS);
+  }, [compact, skillsOpen, stopTimer, closeSkills]);
+
+  // 卸载时清计时器：面板被 `destroyOnHidden` 收走时，回调不该再碰已卸载的状态。
+  useEffect(
+    () => () => {
+      stopTimer(hoverOpenTimer);
+      stopTimer(hoverCloseTimer);
+    },
+    [stopTimer],
+  );
+
   // Esc 关闭：面板挂在 body 上，键盘事件不经过触发器，所以监听在 document 上。
+  // 二级开着时的 Esc 走二级自己的 React 处理器（带 `stopPropagation`）——antd 的 Dropdown
+  // 也监听 Esc，冒到 document 就两层一起收，等于"想收二级、整块面板没了"。
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setOpen(false);
-      setLevel("root");
+      closeSkills();
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open]);
+  }, [open, closeSkills]);
+
+  /**
+   * 定位只在展开那一刻测一次：右侧不足 `320 + 12 + 12 = 344`px 翻到左侧，下方溢出则整体
+   * 上移贴合视口（`SKILL_FLYOUT_EDGE` 留白）。逐帧测量会跟着动画抖，也会每帧重渲染。
+   */
+  useLayoutEffect(() => {
+    if (!skillsOpen || compact) {
+      setPlacement(null);
+      return;
+    }
+    const anchor = anchorRef.current;
+    const flyout = flyoutRef.current;
+    if (!anchor || !flyout) return;
+    const rect = anchor.getBoundingClientRect();
+    const rightSpace = window.innerWidth - rect.right;
+    const flipLeft = rightSpace < SKILL_FLYOUT_WIDTH + SKILL_FLYOUT_GAP + SKILL_FLYOUT_EDGE;
+    const overflowBottom =
+      rect.top + flyout.offsetHeight - (window.innerHeight - SKILL_FLYOUT_EDGE);
+    setPlacement({
+      left: flipLeft ? -(SKILL_FLYOUT_WIDTH + SKILL_FLYOUT_GAP) : rect.width + SKILL_FLYOUT_GAP,
+      top: -Math.max(0, overflowBottom),
+      flipLeft,
+    });
+  }, [skillsOpen, compact]);
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
-    // 收起时回到顶级：下次点开不该停在上一次的技能二级。
-    if (!next) setLevel("root");
+    // 收起时二级与搜索词一起归零：下次点开不该停在上一次的技能二级。
+    if (!next) closeSkills();
   };
 
   const attachDisabled = sending || attachmentReads > 0 || attachmentsCount >= MAX_ATTACHMENT_COUNT;
+  // 搜索：名称与描述都参与匹配；查询为空时原样返回（不复制一份数组）。
+  const normalizedQuery = skillQuery.trim().toLowerCase();
+  const filteredSkills = normalizedQuery
+    ? skillCatalog.filter(
+        (skill) =>
+          skill.name.toLowerCase().includes(normalizedQuery) ||
+          (skill.description ?? "").toLowerCase().includes(normalizedQuery),
+      )
+    : skillCatalog;
+  const noSkillMatch = normalizedQuery.length > 0 && filteredSkills.length === 0;
+
+  /**
+   * 二级内容（`compact` 是整块替换，其余是浮出层）：两级共用一份，预算口径不会分叉。
+   * 列表与底部预算行仍由 `SkillPicker` 渲染——搜索无匹配时它那句"还没有技能"是错的，
+   * 所以本层加 `is-empty` 压掉它，换成「没有匹配的技能」，预算行照常由它出。
+   */
+  const skillsBody = (
+    <>
+      <div className="composer-add-head">
+        <Button
+          type="text"
+          size="small"
+          className="composer-add-back"
+          icon={<LeftOutlined />}
+          aria-label={t("common.action.back")}
+          onClick={() => closeSkills(true)}
+        />
+        <span className="composer-add-head-title">{t("composerAddMenu.section.skills")}</span>
+      </div>
+      <Input
+        size="small"
+        allowClear
+        className="composer-add-select"
+        value={skillQuery}
+        onChange={(event) => setSkillQuery(event.target.value)}
+        placeholder={t("composerAddMenu.skills.search")}
+        aria-label={t("composerAddMenu.skills.search")}
+        prefix={<SearchOutlined aria-hidden="true" />}
+      />
+      {noSkillMatch ? (
+        <span className="composer-add-row-label">{t("composerAddMenu.skills.noMatch")}</span>
+      ) : null}
+      <SkillPicker
+        catalog={filteredSkills}
+        selected={selectedSkills}
+        budget={skillBudget}
+        loaded={skillsLoaded}
+        togglingId={togglingSkillId}
+        disabled={sending}
+        onToggle={onToggleSkill}
+        onManage={onManageSkills}
+      />
+    </>
+  );
+
+  const emptyClass = skillsOpen && noSkillMatch ? " is-empty" : "";
+  const panelClass = `composer-add-panel${compact ? emptyClass : ""}`;
+  const flyoutClass = `composer-add-panel composer-add-flyout${emptyClass}${
+    placement?.flipLeft ? " is-left" : ""
+  }`;
 
   const rootPanel = (
     <>
@@ -197,45 +380,42 @@ export default function AddMenu({
           </Upload>
         </span>
       </Tooltip>
-      <Button
-        type="text"
-        size="small"
-        className="composer-add-action is-navigate"
-        icon={<ExperimentOutlined />}
-        disabled={sending}
-        onClick={() => setLevel("skills")}
+      {/* 技能行：悬停容器 + 浮出层的定位基准。`compact` 下既没有 hover 也没有浮出层，
+          点击依旧是"整块替换一级内容"。 */}
+      <div
+        ref={anchorRef}
+        className="composer-add-skills-anchor"
+        onMouseEnter={compact ? undefined : scheduleHoverOpen}
+        onMouseLeave={compact ? undefined : scheduleHoverClose}
       >
-        <span className="composer-add-action-row">
-          <span>{t("assistantComposer.skills.count", { count: selectedSkills.length })}</span>
-          <RightOutlined className="composer-add-caret" aria-hidden="true" />
-        </span>
-      </Button>
-    </>
-  );
-
-  const skillsPanel = (
-    <>
-      <div className="composer-add-head">
         <Button
           type="text"
           size="small"
-          className="composer-add-back"
-          icon={<LeftOutlined />}
-          aria-label={t("common.action.back")}
-          onClick={() => setLevel("root")}
-        />
-        <span className="composer-add-head-title">{t("composerAddMenu.section.skills")}</span>
+          className="composer-add-action is-navigate"
+          icon={<ExperimentOutlined />}
+          disabled={sending}
+          aria-expanded={compact ? undefined : skillsOpen}
+          onClick={() => (skillsOpen ? closeSkills(true) : openSkills())}
+          onKeyDown={onRowKeyDown}
+        >
+          <span className="composer-add-action-row">
+            <span>{t("assistantComposer.skills.count", { count: selectedSkills.length })}</span>
+            <RightOutlined className="composer-add-caret" aria-hidden="true" />
+          </span>
+        </Button>
+        {!compact && skillsOpen ? (
+          <div
+            ref={flyoutRef}
+            className={flyoutClass}
+            style={placement ? { left: placement.left, top: placement.top } : undefined}
+            onMouseEnter={() => stopTimer(hoverCloseTimer)}
+            onMouseLeave={scheduleHoverClose}
+            onKeyDown={onFlyoutKeyDown}
+          >
+            {skillsBody}
+          </div>
+        ) : null}
       </div>
-      <SkillPicker
-        catalog={skillCatalog}
-        selected={selectedSkills}
-        budget={skillBudget}
-        loaded={skillsLoaded}
-        togglingId={togglingSkillId}
-        disabled={sending}
-        onToggle={onToggleSkill}
-        onManage={onManageSkills}
-      />
     </>
   );
 
@@ -250,7 +430,7 @@ export default function AddMenu({
           disabled={sending}
           destroyOnHidden
           popupRender={() => (
-            <div className="composer-add-panel">{level === "skills" ? skillsPanel : rootPanel}</div>
+            <div className={panelClass}>{compact && skillsOpen ? skillsBody : rootPanel}</div>
           )}
           // 浮窗卡片（3400）高于 antd 弹层默认：不抬层会被卡片盖住。
           styles={compact ? { root: { zIndex: layer.cardPopup } } : undefined}

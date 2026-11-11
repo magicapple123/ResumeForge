@@ -82,4 +82,14 @@ describe("tracker de-templating layout guards", () => {
     expect(hover).not.toContain("translateY");
     expect(hover).not.toContain("box-shadow");
   });
+
+  it("group separator is a 1px line on the previous row's bottom edge, not a 2px top border", () => {
+    // 2026-11-10（08-1）：分段行原先自己画 2px 上边框，与上一条的 1px border-bottom 紧贴，
+    // 实测边界 3px 两段色。改法：分段行**不再有** border-top 规则，深色落在上一条底边。
+    // 这两条断言缺一条就会退回"3px 两段色"：只删上边框 → 分段线消失；只加上底边 → 双线。
+    expect(board).not.toMatch(/\.track-card\.is-group-start\s*\{/);
+    const join = ruleBlock(board, ".track-card:has(+ .track-card.is-group-start)");
+    expect(join).toContain("border-bottom-color: var(--rf-border-strong)");
+    expect(join).not.toContain("border-top");
+  });
 });

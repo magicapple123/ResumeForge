@@ -240,3 +240,53 @@
   display: flex;
   justify-content: flex-end;
 }
+
+/*
+ * #27B / #27D 信号气泡的内容：说明文字 + 主行动 + 「这类别再提示」。
+ * 沿用 .tt-tip 的骨架（贴球、不吃指针事件）；只有按钮把指针收回来。
+ */
+.tt-tip-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tt-tip-text {
+  overflow-wrap: anywhere;
+}
+
+.tt-tip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tt-tip-action,
+.tt-tip-mute {
+  padding: 3px 8px;
+  border: 1px solid var(--rf-border-strong);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+  /* .tt-tip 本体 pointer-events: none，交互元素必须自己收回来。 */
+  pointer-events: auto;
+}
+
+.tt-tip-action {
+  color: var(--rf-brand);
+  background: var(--rf-brand-wash);
+}
+
+.tt-tip-mute {
+  color: var(--rf-text-secondary);
+  background: transparent;
+}
+
+.tt-tip-action:focus-visible,
+.tt-tip-mute:focus-visible {
+  outline: 2px solid var(--rf-focus-ring);
+  outline-offset: 1px;
+}

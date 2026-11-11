@@ -133,10 +133,39 @@ export interface AssistantWriteProposal {
   result_summary?: string;
 }
 
+/**
+ * 工具参数的安全投影（#13C）：白名单键带值（后端已截到 120 字符），其余键只有名字。
+ * 前端工具卡展开后只渲染这份，不直接展示 `arguments` 里的全部字段。
+ */
+export interface AssistantToolArgPreview {
+  key: string;
+  /** 白名单键的值；非白名单键没有这个字段。 */
+  value?: string;
+}
+
+/**
+ * 简历文档写操作的结构化预览（#13D）：界面据此显示「旧值 → 新值」与「撤销」。
+ * `version_id` 是写前自动留档的命名版本（撤销点）；`before` 为 null 表示新增。
+ * 空值/缺省兼容更早存下的历史消息（那时没有这个字段）。
+ */
+export interface AssistantToolWritePreview {
+  before: string | null;
+  after: string | null;
+  version_id: number | null;
+  undo_text: string;
+  resume_id: number | null;
+  /** 写入之后的简历 revision：撤销时作为条件写的 expected_revision。 */
+  revision: number | null;
+}
+
 /** 助手调用过一次工具的记录；写在助手消息的 context 里，供历史回看。 */
 export interface AssistantToolCall {
   name: string;
   arguments: Record<string, unknown>;
+  /** #13C 参数的安全投影；缺省（更早的历史消息）按空数组处理。 */
+  args_preview?: AssistantToolArgPreview[];
+  /** #13D 简历文档写操作的 diff / 撤销入口；没有就是 null/缺省。 */
+  preview?: AssistantToolWritePreview | null;
   summary: string;
   link: string;
   ok: boolean;
@@ -209,10 +238,21 @@ export interface AssistantMessage {
     /** 上面的思考过程是否因超过存储上限被截断。 */
     reasoning_truncated?: boolean;
     quoted?: AssistantQuotedMessage;
+    /**
+     * #13A 重新生成：这条旧回答被哪条新回答取代。旧消息不会再出现在列表里，
+     * 这里只作为后端保留的追溯标记存在。
+     */
+    superseded_by?: number;
     /** 写操作终态回写的结构化摘要（只有 kind=proposal_result 的消息才有）。 */
     proposal_result?: AssistantProposalResult;
+    /**
+     * 这一轮落库的上下文用量（需求 #6）。可选：更早存下的历史消息没有它，
+     * 那时 `GET /context-usage` 会返回 `partial: true` 的估算值。
+     */
+    context_usage?: ContextUsage;
   };
-  status: "pending" | "complete" | "error" | "cancelled";
+  /** superseded（#13A）：被「重新生成」取代的旧回答，后端过滤后不会下发，仅作类型完整。 */
+  status: "pending" | "complete" | "error" | "cancelled" | "superseded";
   /**
    * 消息类别（T01）：normal = 普通对话；proposal_result = 写操作终态的派生回写。
    * 可选：更早存下的历史消息没有这个字段，按 normal 处理。
@@ -239,6 +279,92 @@ export interface AssistantAttachmentInput {
   data: string;
 }
 
+/**
+ * 上下文用量的一个桶（需求 #6）。
+ *
+ * `key` 是协议值（system / tools / conversation / connectors / skills），**不翻译**：
+ * 中文显示名在语言包里按 key 映射（见 `CONTEXT_USAGE_BUCKET_KEYS`）。
+ */
+export interface ContextUsageBucket {
+  key: string;
+  /** 估算 token（后端 `estimate_tokens` 口径，不是服务商口径，禁止用于计费）。 */
+  tokens: number;
+  /** 该桶占上下文窗口的百分比；窗口未设置时是 `null`（不是 0——没有分母就不猜）。 */
+  percent: number | null;
+}
+
+/**
+ * 会话的上下文压缩状态（问题清单 #10）。
+ *
+ * 与用量一起下发（`ContextUsage.compaction`）：面板在回答「占了多少」的同时要能回答
+ * 「压过什么、还能不能还原」——否则用户会以为压缩删了聊天记录（原文从未删除，
+ * 只是不再发给模型）。
+ */
+export interface ContextCompactionState {
+  /** 摘要覆盖到哪条消息；之后新增的消息不受影响。 */
+  covered_until_message_id: number | null;
+  /** 已摘要的轮数（会话累计）。 */
+  turns: number;
+  tokens_before: number;
+  tokens_after: number;
+  /** 生成摘要的模型；空 = 跟随当前对话模型。 */
+  model: string;
+  created_at: string;
+  /** 上次遮蔽掉的工具结果条数（L1 的量化结果）。 */
+  masked_tool_results: number;
+}
+
+/**
+ * 「上下文用量」载荷（前端契约，与后端 `ContextUsageOut` 同名同义）。
+ *
+ * 估算（`total` / 各桶 / `percent`）与实测（`usage_actual`）**不合并、不换算**：
+ * 前者来自字符启发式，后者是服务商上一轮真正报告的 `prompt_tokens`。
+ */
+export interface ContextUsage {
+  buckets: ContextUsageBucket[];
+  /** 五桶之和（估算）。 */
+  total: number;
+  /** 百分比分母（当前模型的上下文窗口）；0 = 未设置。 */
+  window: number;
+  percent: number | null;
+  /** true = 这条会话的旧消息没落过用量，只有系统提示与对话两桶是估算出来的。 */
+  partial: boolean;
+  /** 上一轮实测输入 token；`null` = 服务商没报告（显示「本次未报告」）。 */
+  usage_actual: number | null;
+  /** 压缩状态（#10）；`null` / 缺省 = 这个会话从来没压缩过。 */
+  compaction?: ContextCompactionState | null;
+}
+
+/**
+ * 手动压缩的结果（dry-run 与真跑同一个形状）。
+ *
+ * `dry_run=true` 时 `percent_after` 是**预估**（摘要块大小按中位值估），界面必须标
+ * 「预计」；真跑之后才是实测。
+ */
+export interface AssistantCompactionResult {
+  dry_run: boolean;
+  percent_before: number | null;
+  percent_after: number | null;
+  turns_covered: number;
+  tool_results_masked: number;
+  model: string;
+  created_at: string;
+  covered_until_message_id: number | null;
+  summary: Record<string, unknown> | null;
+  compaction: ContextCompactionState | null;
+  /** 没做成时的原因（nothing_to_summarize 等），成功时是空串。 */
+  reason: string;
+}
+
+/** 五个桶的固定顺序（与后端 `BUCKET_KEYS` 逐字一致）。 */
+export const CONTEXT_USAGE_BUCKET_KEYS = [
+  "system",
+  "tools",
+  "conversation",
+  "connectors",
+  "skills",
+] as const;
+
 export type AssistantStreamEvent =
   | {
       type: "start";
@@ -259,5 +385,9 @@ export type AssistantStreamEvent =
   | { type: "write_proposal"; proposal: AssistantWriteProposal }
   | { type: "delta"; text: string }
   | { type: "reasoning"; text: string }
+  // 上下文用量（需求 #6）：每轮拼装完下发一次，面板据此显示这一轮真正发出去什么。
+  | { type: "context_usage"; usage: ContextUsage }
+  // 工具轮次到顶：后端先停下并如实上报轮数，前端据此给「继续」入口（需求 #5）。
+  | { type: "round_limit"; rounds: number }
   | { type: "done"; message: AssistantMessage }
   | { type: "error"; message: string };

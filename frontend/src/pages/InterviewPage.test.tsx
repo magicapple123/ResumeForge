@@ -53,7 +53,8 @@ const setupStubs = vi.hoisted(() => {
   const base = {
     // 0066：关联岗位与关联简历都是必选，页面直接从 values 里取。
     jobId: 3,
-    resumeId: 5,
+    // 关联简历的值带前缀（#25）：`r:` = 本应用的简历，提交时由 `toInternalResumeId` 还原成 5。
+    resumeId: "r:5",
     interviewType: "综合面",
     difficulty: "中级",
     interviewerStyle: "严谨专业",

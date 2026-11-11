@@ -1,0 +1,273 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 助手「上下文用量」chip 与弹层（需求 #6）。
+ *
+ * 单独成文件而不塞进 `assistant-composer.css`：那个文件已 493/500 行，chip 这点样式
+ * 挤进去就要先拆别的域。引入点在 `src/index.css`（与 composer 同一处）。
+ *
+ * 颜色全部走 `--rf-cat-1..5`（浅色/深色各一套）+ `--rf-*` 语义变量，不写死色值：
+ * 深色主题能用的前提就是"零硬编码颜色"（`theme/colorGuard.test.ts` 守着）。
+ * 窄栏判定用 `@container`：容器是输入区自己（`.assistant-composer` 有
+ * `container-type: inline-size`），左栏可被拖到 380px，视口断点看不出来。
+ */
+
+/* ===== chip（工具栏里那枚只读按钮） ===== */
+.assistant-context-usage-chip.ant-btn {
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 6px;
+  color: var(--rf-text-secondary);
+}
+
+.assistant-context-usage-chip-inner {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* 细环：视觉上"一圈未填满的用量"，不表达具体数值（数值在右侧文本里）。 */
+.assistant-context-usage-ring {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--rf-cat-1);
+  border-radius: 50%;
+  opacity: 0.85;
+}
+
+.assistant-context-usage-chip-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--rf-text-body);
+}
+
+/* 窄栏（输入区 ≤520px）：只留细环 + 百分比，隐藏「上下文」三个字。 */
+@container (max-width: 520px) {
+  .assistant-context-usage-chip-label {
+    display: none;
+  }
+}
+
+/* ===== 弹层本体 ===== */
+.assistant-context-usage-panel {
+  box-sizing: border-box;
+  width: 320px;
+  padding: 4px 2px 2px;
+  color: var(--rf-text-body);
+  font-size: 12px;
+}
+
+.assistant-context-usage-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.assistant-context-usage-title {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* 「估算」与「部分数据」是口径标注，不是标题的一部分：小一号、次级色。 */
+.assistant-context-usage-estimate,
+.assistant-context-usage-partial {
+  padding: 0 4px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 4px;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.assistant-context-usage-figure {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-top: 8px;
+}
+
+/* 大号占比：与榜单类大数字同档（24px/600），不新造排版档。 */
+.assistant-context-usage-percent {
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.assistant-context-usage-used {
+  color: var(--rf-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 五段条：高 6px，段间 2px 白缝（用 gap + 背景色实现，不写死白色）。 */
+.assistant-context-usage-bar {
+  display: flex;
+  gap: 2px;
+  overflow: hidden;
+  height: 6px;
+  margin: 8px 0 10px;
+  border-radius: 3px;
+  background: var(--rf-fill-secondary);
+}
+
+.assistant-context-usage-seg {
+  min-width: 0;
+  border-radius: 3px;
+}
+
+.assistant-context-usage-seg-cat1 {
+  background: var(--rf-cat-1);
+}
+
+.assistant-context-usage-seg-cat2 {
+  background: var(--rf-cat-2);
+}
+
+.assistant-context-usage-seg-cat3 {
+  background: var(--rf-cat-3);
+}
+
+.assistant-context-usage-seg-cat4 {
+  background: var(--rf-cat-4);
+}
+
+.assistant-context-usage-seg-cat5 {
+  background: var(--rf-cat-5);
+}
+
+/* 图例：五行，色点 + 名称 + 右对齐百分比（分母是窗口，不是已用）。 */
+.assistant-context-usage-legend {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assistant-context-usage-legend-row {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.assistant-context-usage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.assistant-context-usage-legend-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-context-usage-legend-percent {
+  color: var(--rf-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 未设置窗口：一句实话 + 一个直达设置的出口（不外链到别处，也不留死路）。 */
+.assistant-context-usage-nowindow {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 10px;
+  color: var(--rf-text-secondary);
+}
+
+.assistant-context-usage-divider {
+  height: 1px;
+  margin: 10px 0;
+  background: var(--rf-border-subtle);
+}
+
+/* ===== 上下文窗口选择器 ===== */
+.assistant-context-window {
+  display: grid;
+  gap: 6px;
+}
+
+.assistant-context-window-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.assistant-context-window-label {
+  color: var(--rf-text-secondary);
+}
+
+.assistant-context-window-select {
+  min-width: 96px;
+}
+
+.assistant-context-window-custom {
+  width: 100%;
+}
+
+/* 「只影响使用这个模型的对话」：说明窗口是模型级设置，不是对话级偏好。 */
+.assistant-context-window-hint {
+  margin: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+}
+
+/* 底栏实测值：与上面的估算分开一行，两者不合并。 */
+.assistant-context-usage-actual {
+  margin: 10px 0 0;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== 压缩状态（问题清单 #10） ===== */
+.assistant-context-compaction {
+  display: grid;
+  gap: 4px;
+}
+
+.assistant-context-compaction-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--rf-text-secondary);
+}
+
+/* 「省下 N%」是实测（tokens_before/after 都来自落库状态），所以给一个小徽标而不是正文。 */
+.assistant-context-compaction-badge {
+  padding: 0 6px;
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+  background: var(--rf-surface-alt);
+  border-radius: 999px;
+}
+
+.assistant-context-compaction-line {
+  margin: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 「原文仍在本地，可随时还原」：这条提示不能省——否则用户会以为压缩删了聊天记录。 */
+.assistant-context-compaction-hint {
+  margin: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+}
+
+.assistant-context-compaction-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}

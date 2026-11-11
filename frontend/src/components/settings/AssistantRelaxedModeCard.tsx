@@ -80,27 +80,34 @@ export default function AssistantRelaxedModeCard() {
         {t("assistantPermission.settings.intro")}
       </Typography.Paragraph>
       <LoadingBlock spinning={loading}>
-        <Space orientation="vertical" size={12}>
+        {/* `assistant-permission-stack` 是权限卡的定位锚点：卡片内容区的宽度容器
+            （`container-type: inline-size` 挂在它上面，见 `styles/assistant-composer.css`）。
+            外层的纵向 Space 是 `inline-flex`（按内容收缩），没有这个类名，网格会只有
+            内容宽度，右侧又空回去。 */}
+        <Space orientation="vertical" size={12} className="assistant-permission-stack">
           <Radio.Group
             aria-label={t("assistantPermission.settings.aria")}
+            className="assistant-permission-grid"
             value={permission}
             disabled={saving}
             onChange={(event) => void onChange(event.target.value as AssistantPermissionLevel)}
           >
-            <Space orientation="vertical" size={8}>
-              {ASSISTANT_PERMISSION_LEVELS.map((level) => (
-                <Radio key={level} value={level}>
-                  <span className="assistant-permission-option">
-                    <span className="assistant-permission-option-name">
-                      {t(ASSISTANT_PERMISSION_LABEL_KEYS[level])}
-                    </span>
-                    <span className="assistant-permission-option-desc">
-                      {t(ASSISTANT_PERMISSION_DESC_KEYS[level])}
-                    </span>
+            {/* 四档排 2×2（11-1）：原来是一个纵向 `Space`，四条竖直堆叠只用掉卡片左侧
+                ~280px。网格直接挂在这个 `Radio.Group` 上——四个 `Radio` 就是网格项，
+                不再套一层 `Space`，也就没有"把 antd 的 `.ant-space` 摊平成
+                `display: contents`"这种会外溢到别的卡的写法。 */}
+            {ASSISTANT_PERMISSION_LEVELS.map((level) => (
+              <Radio key={level} value={level}>
+                <span className="assistant-permission-option">
+                  <span className="assistant-permission-option-name">
+                    {t(ASSISTANT_PERMISSION_LABEL_KEYS[level])}
                   </span>
-                </Radio>
-              ))}
-            </Space>
+                  <span className="assistant-permission-option-desc">
+                    {t(ASSISTANT_PERMISSION_DESC_KEYS[level])}
+                  </span>
+                </span>
+              </Radio>
+            ))}
           </Radio.Group>
           <Typography.Text type="secondary">
             {t("assistantPermission.settings.state", {

@@ -27,17 +27,14 @@ const assistantPermission = {
   "assistantPermission.level.read_full.desc": "Read real names, phone numbers and more",
   "assistantPermission.level.write_confirm.desc": "Can edit data, reads stay masked",
   "assistantPermission.level.write_full.desc": "Read real data and edit it directly",
-  "assistantPermission.notice.readFull.title": "Full read is on for this conversation",
-  "assistantPermission.notice.readFull.body":
-    "The assistant can see real names, phone numbers, emails and submitted form values; this content is sent to the configured model service.",
-  "assistantPermission.notice.writeFull.title": "Full access is on for this conversation",
-  "assistantPermission.notice.writeFull.body":
-    "The assistant can read real data and change your data directly without asking each time. You can switch back anytime.",
-  "assistantPermission.notice.closeAria": "Dismiss this permission notice",
   "assistantPermission.confirm.title": "Turn on {level}?",
   "assistantPermission.confirm.body":
     "The assistant will change your data directly without asking each time. You can switch back anytime.",
-  "assistantPermission.confirm.ok": "Turn on",
+  "assistantPermission.confirm.readFullBody":
+    "The assistant will see real names, phone numbers and other personal details (no longer masked). You can switch back anytime.",
+  "assistantPermission.confirm.risk": "I understand the risk and want to continue",
+  "assistantPermission.confirm.ok": "Turn on {level}",
+  "assistantPermission.confirm.okReadFull": "Turn on full read",
   "assistantPermission.confirm.cancel": "Not now",
   "assistantPermission.settings.title": "Job assistant · Data permission",
   "assistantPermission.settings.intro":

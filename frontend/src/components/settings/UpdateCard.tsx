@@ -19,25 +19,28 @@ import {
 } from "../../api/settings";
 import type { UpdateCheckResult } from "../../types";
 import { useUpdateDownloadStatus } from "../../hooks/useUpdateDownloadStatus";
-import { t, type MessageKey } from "../../i18n";
+import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import { renderReleaseNotes } from "./updateNotesRenderer";
+import UpdateReleaseNotes from "./UpdateReleaseNotes";
+import {
+  formatBytes,
+  getDesktopUpdateBridge,
+  releasePageUrl,
+  resultConclusion,
+  type CardError,
+} from "./updateCardHelpers";
 
 const UPDATE_COMPLETED_KEY = "resumeforge.update.completed";
 
 /**
- * 卡片内的错误提示：后端原文原样透传，没有原文时回退到语言包 key。
- * key 在渲染期才 `t()`——事件期求值会把当时的语言冻进 state，切语言后不会重译。
+ * 「重新检查」的最小点击间隔（秒），与后端 `update_check._MIN_REFRESH_INTERVAL_SECONDS`
+ * 同值。
+ *
+ * 两处都要有，因为它们防的不是同一件事：后端那道闸挡住"绕过界面直接打接口"，以及
+ * 多标签页同时点；这里这道闸让按钮**自己**说出"还要等 N 秒"，用户不用去猜为什么点不动。
+ * 连点 5 次只产生 1 次上游请求的实证在后端用例里（`test_five_rechecks_in_a_row_hit_the_upstream_once`）。
  */
-type CardError = { backendMessage: string } | { fallbackKey: MessageKey };
-
-function formatBytes(value: number | null): string {
-  if (value === null || value < 0) return t("update.size.unknown");
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
-  return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
-}
+const RECHECK_COOLDOWN_SECONDS = 60;
 
 export default function UpdateCard() {
   useLocale();
@@ -52,6 +55,8 @@ export default function UpdateCard() {
   // 桌面安装壳：页面内的"下载 zip 并覆盖"对它无效（桌面 payload 是源码形态整包，
   // 更新包里没有 python-runtime.zip / desktop/，装上去只会半新半旧），所以要先问形态。
   const [desktop, setDesktop] = useState(false);
+  // 「重新检查」的冷却剩余秒数：>0 时按钮禁用并显示倒计时（见 RECHECK_COOLDOWN_SECONDS）。
+  const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
     // 旧版本会在**点击安装时**先写一个"已完成"的标记，于是安装崩了下次打开照样显示
@@ -115,11 +120,30 @@ export default function UpdateCard() {
     };
   }, [modal]);
 
+  // 冷却倒计时：每秒减一，归零后按钮恢复。用 setTimeout 递归（每次依赖变化重建）
+  // 而不是 setInterval，卸载或重新点击时不会留下一个还在跑的定时器。
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = window.setTimeout(() => setCooldown(cooldown - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [cooldown]);
+
   const check = async (refresh: boolean) => {
-    if (checking) return;
+    if (checking || cooldown > 0) return;
     setChecking(true);
     setError(null);
     try {
+      // 桌面壳里更新由主进程负责（它才知道安装包路径、静默安装和重启的先后顺序），
+      // 页面这层只负责"按一下"。桥不存在（2.1 及更早的壳）就往下走普通检查——
+      // 那条路会直接连后端，结果照常渲染，同时 A 方案的三段式说明仍在卡片上方，
+      // 用户至少知道手动入口在哪。
+      const bridge = desktop ? getDesktopUpdateBridge() : null;
+      if (bridge?.checkUpdate) {
+        await bridge.checkUpdate();
+        // 结论由主进程用系统弹窗给出（页面里没有进度可看），这里只说明"去哪儿看"。
+        message.info(t("update.toast.desktopStarted"));
+        return;
+      }
       const next = await checkForUpdate(refresh);
       setResult(next);
       // 结果 Alert 在卡片底部，用户点完按钮时看不到（QA ST.04：8 秒内"无任何反馈"）。
@@ -138,6 +162,8 @@ export default function UpdateCard() {
       );
     } finally {
       setChecking(false);
+      // 冷却起点放在 finally：无论成功、失败还是走了桌面桥，下一次点击都要等 60 秒。
+      setCooldown(RECHECK_COOLDOWN_SECONDS);
     }
   };
 
@@ -214,7 +240,10 @@ export default function UpdateCard() {
           icon={<CloudDownloadOutlined />}
           aria-label={t("update.action.check")}
           loading={checking}
-          onClick={() => void check(true)}
+          // 「检查更新」首次传 refresh=false：后端 15 分钟缓存命中就不打上游。
+          // refresh=true 只留给「重新检查」（用户明确要一次新的结果）。
+          disabled={cooldown > 0}
+          onClick={() => void check(false)}
         >
           {t("update.action.check")}
         </Button>
@@ -234,10 +263,13 @@ export default function UpdateCard() {
           <Button
             icon={<ReloadOutlined />}
             aria-label={t("update.action.recheck")}
-            disabled={checking || activeStatus}
+            disabled={checking || activeStatus || cooldown > 0}
             onClick={() => void check(true)}
           >
-            {t("update.action.recheck")}
+            {/* 冷却期间把剩余秒数写在按钮上：点不动的时候，用户需要知道还要等多久。 */}
+            {cooldown > 0
+              ? t("update.action.recheckIn", { seconds: cooldown })
+              : t("update.action.recheck")}
           </Button>
         )}
         {status?.state === "ready" && !statusError && !desktop && (
@@ -284,6 +316,14 @@ export default function UpdateCard() {
           <span className="update-meta-label">{t("update.field.latest")}</span>
           <Typography.Text strong>
             {result?.latest_version || status?.target_version || t("update.value.checkFirst")}
+          </Typography.Text>
+        </div>
+        <div className="update-meta-item">
+          {/* 发布时间从结果 Alert 里搬到这里：它是「这条结论有多新」的属性，
+              与通道/当前/最新并列才读得通（#11 第 2 条，四列等宽）。 */}
+          <span className="update-meta-label">{t("update.field.published")}</span>
+          <Typography.Text strong>
+            {result?.published_at ? result.published_at.slice(0, 10) : t("update.value.noDate")}
           </Typography.Text>
         </div>
       </div>
@@ -335,6 +375,9 @@ export default function UpdateCard() {
         />
       )}
       {desktop && (
+        /* A 方案（02-1）：三段式说清"谁在检查 → 手动入口在哪 → 保底出口"。
+           桌面版的升级通道在壳里（desktop/updater.js：启动 30s + 每 6 小时），不在这张卡片，
+           所以这里既不能放"下载"按钮，也不能只说一句"由应用自己检查"——用户会以为没救。 */
         <Alert
           style={{ marginTop: 16 }}
           type="info"
@@ -342,66 +385,45 @@ export default function UpdateCard() {
           title={t("update.desktop.title")}
           description={
             <Space orientation="vertical" size={4} style={{ width: "100%" }}>
+              {/* ① 谁在检查、什么时候检查 */}
               <span>{t("update.desktop.description")}</span>
-              {result?.release_url && (
+              {/* ② 手动入口固定两个：菜单项与安装目录里的 update.cmd */}
+              <span>{t("update.desktop.manual")}</span>
+              {/* ③ 保底出口：发布页下载 Setup.exe，链接始终可见（走桌面桥时页面里没有 result） */}
+              <span>
+                {t("update.desktop.releaseHint")}{" "}
                 <Typography.Link
-                  href={result.release_url}
+                  href={releasePageUrl(result)}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   {t("update.action.release")}
                 </Typography.Link>
-              )}
+              </span>
             </Space>
           }
         />
       )}
       {result && (
+        /* 结果只做一件事：给出结论 + 主操作。版本号在 .update-meta 里已有专列，
+           发布说明在下面的独立块里——Alert 不再承载正文（原来它一个就占了卡片六成高）。 */
         <Alert
+          className="update-status-bar"
           style={{ marginTop: 16 }}
           type={result.update_available ? "success" : "info"}
           showIcon
-          title={result.message || t("update.result.title")}
-          description={
-            <Space orientation="vertical" size={4} style={{ width: "100%" }}>
-              {result.latest_version && (
-                <span>{t("update.result.latest", { version: result.latest_version })}</span>
-              )}
-              {result.published_at && (
-                <span>
-                  {t("update.result.published", { date: result.published_at.slice(0, 10) })}
-                </span>
-              )}
-              {result.notes && (
-                /* 版本说明是 markdown 子集（标题 / 表格 / 列表 / 行内代码 / 链接），不能当
-                   纯文本直出；容器保留内部滚动，说明再长也不把弹窗撑爆。
-                   高度取 min(40vh, 420px)：2.0 这类长公告至少能看到「要不要升」和「主要
-                   变化」两段，窄屏/矮屏下又不会占满整屏。 */
-                <div
-                  style={{
-                    maxHeight: "min(40vh, 420px)",
-                    overflowY: "auto",
-                    overflowX: "auto",
-                    width: "100%",
-                  }}
-                >
-                  {renderReleaseNotes(result.notes)}
-                </div>
-              )}
-              {/* 桌面形态下"打开发布页面"已经在上面的指引框里出现，这里不再重复。 */}
-              {result.release_url && !desktop && (
-                <Typography.Link
-                  href={result.release_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {t("update.action.release")}
-                </Typography.Link>
-              )}
-            </Space>
+          title={resultConclusion(result)}
+          action={
+            /* 桌面形态下「打开发布页面」已经在上面的指引框里出现，这里不再重复。 */
+            !desktop && result.release_url ? (
+              <Typography.Link href={result.release_url} target="_blank" rel="noopener noreferrer">
+                {t("update.action.release")}
+              </Typography.Link>
+            ) : undefined
           }
         />
       )}
+      {result?.notes ? <UpdateReleaseNotes notes={result.notes} /> : null}
     </Card>
   );
 }

@@ -29,6 +29,28 @@
 }
 
 /*
+ * 桌面形态的视口高度令牌（P1-3）。
+ *
+ * 令牌本身定义在 base-shell.css（浏览器 / 无标题栏 = 整屏），这里只负责桌面那一段：
+ * 可用的「视口高度」比真实视口矮一条标题栏。所有按视口算出来的上限（弹层
+ * `max-height`、助手页 `min-height`）都读它，否则那些盒子把 32px 也算进可用高度，
+ * 底边会被系统按钮条压住。
+ *
+ * 选择器带 `:not([data-hidden="true"])` 不是为了好看：全屏时标题栏只被 `display:none`，
+ * **元素仍然挂载**（要收主进程的状态推送），`html:has(.app-titlebar)` 依旧命中——
+ * 不排除它，满屏状态下弹层会白少 32px。
+ */
+html:has(.app-titlebar:not([data-hidden="true"])) {
+  --rf-viewport-h: calc(100vh - var(--rf-titlebar-height));
+}
+
+@supports (height: 100dvh) {
+  html:has(.app-titlebar:not([data-hidden="true"])) {
+    --rf-viewport-h: calc(100dvh - var(--rf-titlebar-height));
+  }
+}
+
+/*
  * 净增 0px（§19.2）：标题栏占用的 32px 来自原来系统标题栏让出的空间。
  *
  * 布局真相（2026-11-10 真机实测）：React 根是 #root > div.ant-app（antd <App> 的
@@ -191,10 +213,60 @@ html:has(.app-titlebar[data-hidden="true"]) .app-sider {
   font-size: 11px;
 }
 
+/* #34C 子菜单（文件 → 导出）：渲染在同一个下拉容器内、绝对定位到父项右侧。
+   不另开 portal 的理由：点外关闭 / 焦点归属 / 滚动关闭都由容器那层的 contains 判断覆盖。 */
+.app-titlebar-menu-item-wrap {
+  position: relative;
+}
+
+.app-titlebar-menu-submenu {
+  position: absolute;
+  top: -4px;
+  left: 100%;
+  min-width: 208px;
+  padding: 4px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--rf-brand) 16%, transparent);
+  -webkit-app-region: no-drag;
+}
+
+.app-titlebar-menu-submenu-arrow {
+  flex: 0 0 auto;
+  margin-left: 16px;
+  color: var(--rf-text-tertiary);
+  font-size: 10px;
+}
+
+/* 子菜单展开时父项保持 hover 底色（与系统菜单的观感一致）。 */
+.app-titlebar-menu-item[data-submenu-open="true"] {
+  background: var(--rf-surface-alt);
+}
+
 .app-titlebar-menu-separator {
   height: 1px;
   margin: 4px 2px;
   background: var(--rf-border);
+}
+
+/* 复选类菜单项的勾选标记（#34A 窗口置顶）：语义在 role="menuitemcheckbox" +
+   aria-checked 上，这里只画一个固定宽度的对勾，没有勾选时也占位以免文字跳动。 */
+.app-titlebar-menu-check {
+  display: inline-block;
+  width: 14px;
+  color: var(--rf-brand);
+}
+
+/* 不可执行的菜单项（#34F：焦点不在可编辑区时的撤销 / 重做）：置灰且不显示 hover，
+   让"看起来能点"和"实际能执行"保持一致。 */
+.app-titlebar-menu-item:disabled {
+  color: var(--rf-text-tertiary);
+  cursor: default;
+}
+
+.app-titlebar-menu-item:disabled:hover {
+  background: transparent;
 }
 
 /* 「关于」弹窗内容：版本一行 + 三个外链（只读，关闭只走右上角 ×）。 */

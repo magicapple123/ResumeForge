@@ -134,6 +134,9 @@ import appConfig from "./en-US.appConfig";
 import applyCollect from "./en-US.applyCollect";
 import applyUi from "./en-US.applyUi";
 import assistantHooks from "./en-US.assistantHooks";
+import assistantBreadth from "./en-US.assistantBreadth";
+import assistantMemory from "./en-US.assistantMemory";
+import assistantLimits from "./en-US.assistantLimits";
 import assistantUi from "./en-US.assistantUi";
 import componentsMisc from "./en-US.componentsMisc";
 import componentsMisc2 from "./en-US.componentsMisc2";
@@ -147,6 +150,7 @@ import hooksUi from "./en-US.hooksUi";
 import interviewPage from "./en-US.interviewPage";
 import jobsCandidate from "./en-US.jobsCandidate";
 import jobsForm from "./en-US.jobsForm";
+import jobsImport from "./en-US.jobsImport";
 import jobsPage from "./en-US.jobsPage";
 import jobsUi from "./en-US.jobsUi";
 import llmUi from "./en-US.llmUi";
@@ -168,6 +172,8 @@ import followupSweep from "./en-US.followupSweep";
 import deliveryReceipt from "./en-US.deliveryReceipt";
 /** Job preference profile (T14). */
 import jobPreference from "./en-US.jobPreference";
+/** Assistant "context usage" panel (issue #6). */
+import contextUsage from "./en-US.contextUsage";
 import enumsApply from "./en-US.enumsApply";
 import enumsAssistant from "./en-US.enumsAssistant";
 import enumsClaims from "./en-US.enumsClaims";
@@ -178,6 +184,10 @@ import enumsKnowledge from "./en-US.enumsKnowledge";
 import enumsReferral from "./en-US.enumsReferral";
 import enumsResumeCatalog from "./en-US.enumsResumeCatalog";
 import enumsTracker from "./en-US.enumsTracker";
+/** Interview realtime voice (issue #26 P0). */
+import interviewVoice from "./en-US.interviewVoice";
+/** Company interview notes block on the interview page (issue #29D). */
+import interviewKnowledge from "./en-US.interviewKnowledge";
 
 const enUS = {
   ...core,
@@ -313,6 +323,9 @@ const enUS = {
   ...applyCollect,
   ...applyUi,
   ...assistantHooks,
+  ...assistantBreadth,
+  ...assistantMemory,
+  ...assistantLimits,
   ...assistantUi,
   ...componentsMisc,
   ...componentsMisc2,
@@ -326,6 +339,7 @@ const enUS = {
   ...interviewPage,
   ...jobsCandidate,
   ...jobsForm,
+  ...jobsImport,
   ...jobsPage,
   ...jobsUi,
   ...llmUi,
@@ -344,6 +358,8 @@ const enUS = {
   ...followupSweep,
   ...deliveryReceipt,
   ...jobPreference,
+  /** Assistant "context usage" panel (issue #6). */
+  ...contextUsage,
   ...enumsApply,
   ...enumsAssistant,
   ...enumsClaims,
@@ -354,6 +370,10 @@ const enUS = {
   ...enumsReferral,
   ...enumsResumeCatalog,
   ...enumsTracker,
+  /** Interview realtime voice (issue #26 P0). */
+  ...interviewVoice,
+  /** Company interview notes block on the interview page (issue #29D). */
+  ...interviewKnowledge,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

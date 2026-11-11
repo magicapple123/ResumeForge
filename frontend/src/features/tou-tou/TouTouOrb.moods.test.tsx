@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import TouTouOrb from "./TouTouOrb";
 import { defaultTouTouContext, TouTouContext } from "./touTouContext";
 import { setProfileEditControl } from "./profileSaveBridge";
-import { activeFaceSrc } from "./touTouTestUtils";
+import { activeFaceSrc, renderOrb } from "./touTouTestUtils";
 
 describe("TouTouOrb (moods)", () => {
   it("发呆时偶尔眨一下眼，眨完就睁回来", () => {
     vi.useFakeTimers();
     // 眨眼间隔是带抖动的；把抖动钉死，间隔就等于下限 6s。
     vi.spyOn(Math, "random").mockReturnValue(0);
-    render(<TouTouOrb />);
+    renderOrb(<TouTouOrb />);
 
     act(() => {
       vi.advanceTimersByTime(1_500); // 出场的好奇先回落到正常
@@ -32,7 +32,7 @@ describe("TouTouOrb (moods)", () => {
 
   it("久置睡着时留着更多在屏幕里，并飘出 Zzz", () => {
     vi.useFakeTimers();
-    render(<TouTouOrb />);
+    renderOrb(<TouTouOrb />);
 
     act(() => {
       vi.advanceTimersByTime(60_000);
@@ -49,7 +49,7 @@ describe("TouTouOrb (moods)", () => {
 
   it("助手在思考时拖拽不会把表情顶掉", () => {
     vi.useFakeTimers();
-    render(<TouTouOrb status="thinking" />);
+    renderOrb(<TouTouOrb status="thinking" />);
     const button = screen.getByRole("button", { name: "打开求职助手" });
     expect(activeFaceSrc()).toContain("ball-thinking");
 
@@ -64,12 +64,16 @@ describe("TouTouOrb (moods)", () => {
       vi.advanceTimersByTime(5_000);
     });
     expect(activeFaceSrc()).toContain("ball-thinking");
-    expect(document.querySelector(".tt-shell")).toHaveClass("is-edge-left");
+    // jsdom 没有布局：`.tt-shell` 的 rect 全是 0，拖动起点只能退回"贴边默认位"。
+    // P1-4 把贴边缝隙从 24px 收到 2px 之后，同样的位移落点从 (116, 580) 变成 (138, 602)
+    // ——离底边 102px、离左边 138px，最近边因此是底边。这里断言的是"拖完仍然贴着某条边"，
+    // 具体哪条边在无布局环境里取决于贴边缝隙，不是这条用例要守的东西。
+    expect(document.querySelector(".tt-shell")).toHaveClass("is-edge-bottom");
   });
 
   it("peeks with the curious face on all four hidden edges and restores on wake", () => {
     vi.useFakeTimers();
-    render(<TouTouOrb />);
+    renderOrb(<TouTouOrb />);
 
     act(() => {
       vi.advanceTimersByTime(12_000);
@@ -87,7 +91,7 @@ describe("TouTouOrb (moods)", () => {
 
   it("keeps the sleeping face while hidden — a peeking orb is still asleep", () => {
     vi.useFakeTimers();
-    render(<TouTouOrb />);
+    renderOrb(<TouTouOrb />);
 
     act(() => {
       vi.advanceTimersByTime(60_000);
@@ -102,7 +106,7 @@ describe("TouTouOrb (moods)", () => {
     const onEdit = vi.fn();
     const onDismiss = vi.fn();
     const onOpen = vi.fn();
-    render(<TouTouOrb onOpen={onOpen} />);
+    renderOrb(<TouTouOrb onOpen={onOpen} />);
 
     expect(document.querySelector(".tt-profile-prompt-card")).toBeNull();
 
@@ -135,7 +139,7 @@ describe("TouTouOrb (moods)", () => {
       setProfileEditControl({ onEdit: vi.fn(), onDismiss: vi.fn() });
     });
 
-    const { rerender } = render(
+    const { rerender } = renderOrb(
       <TouTouContext.Provider value={{ ...defaultTouTouContext, tipsEnabled: false }}>
         <TouTouOrb />
       </TouTouContext.Provider>,
@@ -150,90 +154,9 @@ describe("TouTouOrb (moods)", () => {
     expect(document.querySelector(".tt-profile-prompt-card")).toBeInTheDocument();
   });
 
-  it("holds the rotating tip while the profile prompt card is up", () => {
-    // 两者都贴在球的正上方，球停在下边缘时更是同一竖带；标语层级更高且可点，
-    // 不压掉就会盖住卡片、吃掉它的按钮。
-    vi.useFakeTimers();
-    render(<TouTouOrb />);
-    const button = screen.getByRole("button", { name: "打开求职助手" });
-
-    act(() => {
-      vi.advanceTimersByTime(1_500); // 出场好奇归位：标语计时器随 effect 重排
-    });
-    act(() => {
-      vi.advanceTimersByTime(6_000); // 首条标语到点
-    });
-    expect(document.querySelector(".tt-tip")).not.toBeNull();
-
-    // 提示卡一出现，已经在屏上的标语要立刻收起来。
-    act(() => {
-      setProfileEditControl({ onEdit: vi.fn(), onDismiss: vi.fn() });
-    });
-    expect(document.querySelector(".tt-tip")).toBeNull();
-
-    // 球静置 12s 就会收纳，收纳期间本来也不弹标语（与提示卡无关）——所以要唤醒着
-    // 越过轮播点：推进到它前 10s（仍在唤醒窗口内），唤醒后再跨过去。
-    const crossNextTipTick = () => {
-      act(() => {
-        vi.advanceTimersByTime(110_000);
-      });
-      // 唤醒与推进要分成两个 act：套在同一个 act 里的话，嵌套 act 不会中途 flush，
-      // 唤醒带来的 hidden/status 更新要等外层 act 结束才落到 ref 镜像上——轮播点读到的
-      // 就还是"睡着"，那样测出来的是"球在睡"而不是"提示卡压着标语"。
-      act(() => {
-        fireEvent.mouseEnter(button);
-      });
-      act(() => {
-        vi.advanceTimersByTime(10_000);
-      });
-    };
-
-    // 卡片在场期间，轮播点也不冒标语。
-    crossNextTipTick();
-    expect(document.querySelector(".tt-tip")).toBeNull();
-
-    // 关掉提示卡后周期自然恢复（不必刷新页面）。
-    act(() => {
-      setProfileEditControl(null);
-    });
-    crossNextTipTick();
-    expect(document.querySelector(".tt-tip")).not.toBeNull();
-  });
-
-  it("stops popping tips when tipsEnabled is off, and resumes when on", () => {
-    vi.useFakeTimers();
-    function renderOrb(tipsEnabled: boolean) {
-      return render(
-        <TouTouContext.Provider value={{ ...defaultTouTouContext, tipsEnabled }}>
-          <TouTouOrb />
-        </TouTouContext.Provider>,
-      );
-    }
-
-    const off = renderOrb(false);
-    act(() => {
-      vi.advanceTimersByTime(1_500); // 出场好奇归位：标语计时器随 effect 重排
-    });
-    act(() => {
-      vi.advanceTimersByTime(6_000); // 重排后的首条标语到点（5s + 余量越过边界）
-    });
-    expect(document.querySelector(".tt-tip")).toBeNull();
-    off.unmount();
-
-    // 开关是独立的：关标语不影响球本身，重新开启后周期自然恢复（无需刷新）。
-    renderOrb(true);
-    act(() => {
-      vi.advanceTimersByTime(1_500);
-    });
-    act(() => {
-      vi.advanceTimersByTime(6_000);
-    });
-    expect(document.querySelector(".tt-tip")).not.toBeNull();
-  });
-
   it("shows the content face when petted quickly, then returns to idle", () => {
     vi.useFakeTimers();
-    render(<TouTouOrb />);
+    renderOrb(<TouTouOrb />);
     const button = screen.getByRole("button", { name: "打开求职助手" });
 
     act(() => {
@@ -260,7 +183,7 @@ describe("TouTouOrb (moods)", () => {
 
   it("does not show the pet face while the assistant is busy", () => {
     vi.useFakeTimers();
-    render(<TouTouOrb status="thinking" />);
+    renderOrb(<TouTouOrb status="thinking" />);
     const button = screen.getByRole("button", { name: "打开求职助手" });
 
     act(() => {
@@ -293,7 +216,7 @@ describe("TouTouOrb (moods)", () => {
     });
 
     try {
-      render(<TouTouOrb />);
+      renderOrb(<TouTouOrb />);
       const button = screen.getByRole("button", { name: "打开求职助手" });
       act(() => {
         vi.advanceTimersByTime(1_500);

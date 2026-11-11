@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import TouTouOrb from "./TouTouOrb";
 import { setProfileSaveControl } from "./profileSaveBridge";
-import { activeFaceSrc } from "./touTouTestUtils";
+import { activeFaceSrc, renderOrb } from "./touTouTestUtils";
 
 describe("TouTouOrb", () => {
   it("renders an accessible assistant entry", () => {
-    render(<TouTouOrb onOpen={vi.fn()} />);
+    renderOrb(<TouTouOrb onOpen={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "打开求职助手" })).toBeInTheDocument();
     // 只渲染 activeFace 对应的一张 img：src 随表情切换，不再 6 张常驻 DOM。
@@ -19,7 +19,7 @@ describe("TouTouOrb", () => {
 
   it("shows a hover tooltip describing click and double-click actions", async () => {
     vi.useFakeTimers();
-    render(<TouTouOrb onOpen={vi.fn()} />);
+    renderOrb(<TouTouOrb onOpen={vi.fn()} />);
     const button = screen.getByRole("button", { name: "打开求职助手" });
 
     fireEvent.mouseEnter(button);
@@ -28,7 +28,9 @@ describe("TouTouOrb", () => {
     });
 
     const tooltip = screen.getByRole("tooltip");
-    expect(tooltip).toHaveTextContent("单击：打开求职助手；双击：打开投递剪贴板");
+    expect(tooltip).toHaveTextContent(
+      "单击：打开求职助手；双击：打开投投剪贴板；长按：打开动作面板；选中文字后按 Ctrl/Cmd+K：打开划词动作",
+    );
     // overlayStyle 落在 .ant-tooltip 根节点上（role=tooltip 的是内层内容节点）；
     // 3700 高于球的 3650——球被压住的 antd 默认 Tooltip（1070）等于没有。
     const overlay = tooltip.closest(".ant-tooltip") as HTMLElement;
@@ -38,7 +40,7 @@ describe("TouTouOrb", () => {
   it("still opens the assistant while the tooltip is armed (hover does not eat clicks)", () => {
     vi.useFakeTimers();
     const onOpen = vi.fn();
-    render(<TouTouOrb onOpen={onOpen} />);
+    renderOrb(<TouTouOrb onOpen={onOpen} />);
     const button = screen.getByRole("button", { name: "打开求职助手" });
 
     fireEvent.mouseEnter(button);
@@ -55,7 +57,7 @@ describe("TouTouOrb", () => {
     const onSave = vi.fn();
     const onCancel = vi.fn();
     const onOpen = vi.fn();
-    render(<TouTouOrb onOpen={onOpen} />);
+    renderOrb(<TouTouOrb onOpen={onOpen} />);
 
     // 无 control 时完全不渲染（连尾巴和圆点也没有）。
     expect(document.querySelector(".tt-save-card")).toBeNull();
@@ -92,7 +94,7 @@ describe("TouTouOrb", () => {
 
   it("shows a status dot in the title row and a ball-anchored tail on the save card", () => {
     vi.useFakeTimers();
-    render(<TouTouOrb onOpen={vi.fn()} />);
+    renderOrb(<TouTouOrb onOpen={vi.fn()} />);
 
     act(() => {
       setProfileSaveControl({ onSave: vi.fn(), onCancel: vi.fn() });
@@ -113,7 +115,7 @@ describe("TouTouOrb", () => {
 
   it("shows the loading state on the save button while saving", () => {
     vi.useFakeTimers();
-    render(<TouTouOrb onOpen={vi.fn()} />);
+    renderOrb(<TouTouOrb onOpen={vi.fn()} />);
 
     act(() => {
       setProfileSaveControl({ onSave: vi.fn(), onCancel: vi.fn(), saving: true });
@@ -126,7 +128,7 @@ describe("TouTouOrb", () => {
   it("opens the assistant from click, Enter and Space", () => {
     vi.useFakeTimers();
     const onOpen = vi.fn();
-    render(<TouTouOrb onOpen={onOpen} />);
+    renderOrb(<TouTouOrb onOpen={onOpen} />);
     const button = screen.getByRole("button", { name: "打开求职助手" });
 
     // 单击要等双击判窗（280ms）过去才打开；键盘没有双击手势，立即打开。
@@ -146,7 +148,7 @@ describe("TouTouOrb", () => {
     vi.useFakeTimers();
     const onOpen = vi.fn();
     const onOpenClipboard = vi.fn();
-    render(<TouTouOrb onOpen={onOpen} onOpenClipboard={onOpenClipboard} />);
+    renderOrb(<TouTouOrb onOpen={onOpen} onOpenClipboard={onOpenClipboard} />);
     const button = screen.getByRole("button", { name: "打开求职助手" });
 
     fireEvent.click(button);
@@ -163,7 +165,7 @@ describe("TouTouOrb", () => {
   it("falls back to opening the assistant when clipboard entry is not wired", () => {
     vi.useFakeTimers();
     const onOpen = vi.fn();
-    render(<TouTouOrb onOpen={onOpen} />);
+    renderOrb(<TouTouOrb onOpen={onOpen} />);
     const button = screen.getByRole("button", { name: "打开求职助手" });
 
     fireEvent.click(button);
@@ -177,7 +179,7 @@ describe("TouTouOrb", () => {
 
   it("keeps the error face until the caller changes the status", () => {
     vi.useFakeTimers();
-    render(<TouTouOrb status="error" />);
+    renderOrb(<TouTouOrb status="error" />);
 
     act(() => {
       vi.advanceTimersByTime(120_000);
@@ -190,7 +192,7 @@ describe("TouTouOrb", () => {
 
   it("keeps a keyboard-accessible edge sliver after inactivity", () => {
     vi.useFakeTimers();
-    render(<TouTouOrb />);
+    renderOrb(<TouTouOrb />);
 
     act(() => {
       vi.advanceTimersByTime(12_000);
@@ -204,7 +206,7 @@ describe("TouTouOrb", () => {
   it("drags with pointer events and snaps to the nearest edge", () => {
     vi.useFakeTimers();
     const onOpen = vi.fn();
-    render(<TouTouOrb onOpen={onOpen} />);
+    renderOrb(<TouTouOrb onOpen={onOpen} />);
     const button = screen.getByRole("button", { name: "打开求职助手" });
 
     fireEvent.pointerDown(button, {
@@ -223,7 +225,7 @@ describe("TouTouOrb", () => {
 
   it("can snap to the top and bottom edges instead of only the sides", () => {
     vi.useFakeTimers();
-    render(<TouTouOrb />);
+    renderOrb(<TouTouOrb />);
     const button = screen.getByRole("button", { name: "打开求职助手" });
 
     fireEvent.pointerDown(button, {
@@ -265,7 +267,7 @@ describe("TouTouOrb", () => {
     });
 
     try {
-      render(<TouTouOrb />);
+      renderOrb(<TouTouOrb />);
       expect(screen.getByRole("button", { name: "打开求职助手" })).toBeInTheDocument();
       expect(document.querySelectorAll(".tt-face")).toHaveLength(1);
 

@@ -27,7 +27,7 @@ import {
   SaveOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
-import { Button, Popconfirm, Tooltip, Typography } from "antd";
+import { Button, Popconfirm, Typography } from "antd";
 import type { MessageKey } from "../../i18n";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -208,16 +208,14 @@ export default function ResumeWorkbenchActionBar({
       {/* 列宽复位：双击分隔条也能复位，但双击是"知道才找得到"的隐藏操作；用户明确要
           一个"全界面一键恢复默认宽度"的显式入口，所以放在动作条上。 */}
       {onResetColumnWidths ? (
-        <Tooltip title={t("workbench.widths.reset")}>
-          <Button
-            size="small"
-            type="text"
-            icon={<ColumnWidthOutlined />}
-            onClick={onResetColumnWidths}
-          >
-            {t("workbench.widths.reset")}
-          </Button>
-        </Tooltip>
+        <Button
+          size="small"
+          type="text"
+          icon={<ColumnWidthOutlined />}
+          onClick={onResetColumnWidths}
+        >
+          {t("workbench.widths.reset")}
+        </Button>
       ) : null}
       {/* 自绘的 ×：弹窗 `closable={false}` 之后这是唯一能"就地"问一句的地方——卡片就长在
           用户刚点的那颗按钮上。干净时它就是个普通关闭，不弹任何东西。 */}

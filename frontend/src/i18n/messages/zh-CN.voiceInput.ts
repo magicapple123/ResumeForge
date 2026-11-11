@@ -12,6 +12,8 @@ const voiceInput = {
   "voiceInput.aria.start": "开始语音输入",
   "voiceInput.aria.stop": "结束录音",
   "voiceInput.status.transcribing": "识别中",
+  /** #8：申请麦克风是异步的，这一态负责把"点一下没反应"变成"明确在打开"。 */
+  "voiceInput.status.starting": "正在打开麦克风…",
   "voiceInput.tooltip.start": "点击开始语音输入（单段最长 {seconds} 秒）",
 
   "voiceInput.hint.privacy": "音频会发送到 {host}",
@@ -29,6 +31,10 @@ const voiceInput = {
   "voiceInput.error.serviceFailed": "语音服务暂时不可用，请稍后重试",
   /** 后端还是旧进程（/api/transcribe 返回 404/405）：不要让用户看到英文的 Not Found。 */
   "voiceInput.error.backendTooOld": "当前后端版本不支持语音，重启后再试",
+  /** #8 的三道闸门：任一命中都不上传，直接给出可行动的原因。 */
+  "voiceInput.error.tooShort": "录音太短，请说完再点「结束录音」",
+  "voiceInput.error.noSound": "没有检测到声音（峰值 {peak}），请检查麦克风设备",
+  "voiceInput.error.noHeard": "没有听清，请再说一遍",
 
   "voiceInput.action.submitBlocked": "请先结束录音",
 
@@ -68,6 +74,34 @@ const voiceInput = {
   "voiceInput.settings.badge.notConfigured": "未配置",
   "voiceInput.settings.limitHint": "单段上限 3 分钟 / 10 MB；面试作答 3 分钟、复盘追问 1 分钟。",
   "voiceInput.settings.privacyNote": "保存后，录音会发送到 {host}；本应用不保存音频。",
+
+  /**
+   * 麦克风设备选择（#8.2）：Chrome/Edge 会按站点记住首次授权时选的设备，而前端一直
+   * 只传 `audio:true`，用户无从改选——错选成虚拟声卡/显示器麦克风时会一直"没声音"。
+   */
+  "voiceInput.settings.device.label": "麦克风",
+  "voiceInput.settings.device.aria": "选择麦克风设备",
+  "voiceInput.settings.device.default": "系统默认",
+  "voiceInput.settings.device.unnamed": "麦克风 {index}",
+  "voiceInput.settings.device.empty": "没有读到设备列表，授权后再点刷新",
+  "voiceInput.settings.device.refresh": "刷新麦克风列表",
+  "voiceInput.settings.device.hint": "首次授权后才会显示设备名称",
+  "voiceInput.settings.device.lost": "原来的麦克风不在了，已切回系统默认",
+
+  /** 「测试麦克风」（#8.3）：只做电平，不上传、不依赖语音服务额度。 */
+  "voiceInput.settings.micTest.open": "测试麦克风",
+  "voiceInput.micTest.title": "测试麦克风",
+  "voiceInput.micTest.intro": "录 3 秒看电平，不上传、不消耗语音额度",
+  "voiceInput.micTest.start": "开始测试",
+  "voiceInput.micTest.stop": "结束测试",
+  "voiceInput.micTest.remaining": "录音中，还剩 {seconds} 秒",
+  "voiceInput.micTest.device": "设备：{name}",
+  "voiceInput.micTest.deviceDefault": "系统默认麦克风",
+  "voiceInput.micTest.peak": "峰值 {peak}",
+  "voiceInput.micTest.idle": "点开始测试，说一句话看看电平",
+  "voiceInput.micTest.result.silent": "几乎没有声音，检查麦克风设备与系统输入",
+  "voiceInput.micTest.result.ok": "电平正常",
+  "voiceInput.micTest.noSupport": "当前浏览器不支持录音",
 
   /** 服务商卡片层（条目 03）：预设只填默认值，保存与测试仍走真请求。 */
   "voiceInput.settings.cardHint": "音频只发给所选服务商，本应用不保存录音",

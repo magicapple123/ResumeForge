@@ -43,7 +43,12 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
   const [dirty, setDirty] = useState(false);
   const toast = useToast();
   // 资料库条目是「关联资料条目」的选项来源：只在弹窗打开时拉，且与编辑对象无关。
-  const workspace = useApi(() => getWorkspace(), [open], { enabled: open });
+  // `refreshOnRequest: false`：这是**编辑弹窗**——品牌图标双击的整页刷新若把这份数据换掉，
+  // 宿主里"选项变了"的 effect 会连带重算表单，把用户正在写的草稿冲掉。
+  const workspace = useApi(() => getWorkspace(), [open], {
+    enabled: open,
+    refreshOnRequest: false,
+  });
   const entryGroups = buildClaimEntryGroups(workspace.data);
   // 草稿只进 sessionStorage，且按"编辑对象"分作用域（12 号与 13 号各一份）。
   const watched = Form.useWatch<FormValues>([], form) as FormValues | undefined;

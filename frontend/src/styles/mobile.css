@@ -170,10 +170,10 @@
   }
 
   /* antd 6.6.5 的容器类名是 .ant-modal-container（旧 content 容器类名已删除）。
-     手机上几乎不留垂直边距：一屏本来就矮，弹窗要尽量把高度用满。 */
+     手机上几乎不留垂直边距：一屏本来就矮，弹窗要尽量把高度用满。
+     高度读 --rf-viewport-h（P1-3），dvh 优先在该令牌内部已处理。 */
   .ant-modal-container {
-    max-height: calc(100vh - 32px);
-    max-height: calc(100dvh - 32px);
+    max-height: calc(var(--rf-viewport-h) - 32px);
   }
 
   .ant-modal-header,

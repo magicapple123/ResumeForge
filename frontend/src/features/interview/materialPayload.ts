@@ -14,6 +14,7 @@
  * 同类的坑在 `PUT /api/apply/config` 上已经踩过一次（把 GET 的 `defaults` 回传 → 422），
  * 决策与理由见 `docs/architecture.md` 的决策表。
  */
+import { parseResumeValue } from "../../hooks/useInterviewResumeSelect";
 import type { InterviewMaterialExtract, InterviewMaterialPayload } from "../../types";
 
 /** 只挑写端点接受的字段；没有材料时返回 `undefined`（JSON 序列化后即缺省）。 */
@@ -21,4 +22,16 @@ export function toMaterialPayload(
   material: InterviewMaterialExtract | null | undefined,
 ): InterviewMaterialPayload | undefined {
   return material ? { name: material.name, text: material.text } : undefined;
+}
+
+/**
+ * 「关联简历」的表单值 → 写端点的 `resume_id`（#25）。同一个边界上的第二个投影。
+ *
+ * 下拉的 value 是带前缀的字符串：`r:12` 才是内部简历的 id；`e:7`（外部简历）**没有**内部
+ * id —— 它的正文由 `resume_material` 承载，这里给 `undefined`。少走这一步会把 `"r:12"`
+ * 当数字发出去（TS 拦得住）或静默发 `undefined`（拦不住，界面上还显示"已选"）。
+ */
+export function toInternalResumeId(raw: string | null | undefined): number | undefined {
+  const parsed = parseResumeValue(raw);
+  return parsed?.kind === "internal" ? parsed.id : undefined;
 }

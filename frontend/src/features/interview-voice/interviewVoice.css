@@ -1,0 +1,88 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 模拟面试实时语音条（#26 P0）：常开指示 + 波形 + 模式切换。
+   颜色只走 --rf-* 变量；不手贴 .ant-* 类名。 */
+
+.interview-voice-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--rf-text-secondary) 4%, transparent);
+}
+
+.interview-voice-bar__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* 常开指示：红点。不做夸张动画，只用轻微呼吸提醒"麦克风在开着"。 */
+.interview-voice-bar__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rf-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rf-danger) 18%, transparent);
+  animation: interview-voice-pulse 1.6s ease-in-out infinite;
+}
+
+.interview-voice-bar__dot--idle {
+  background: var(--rf-text-secondary);
+  box-shadow: none;
+  animation: none;
+}
+
+@keyframes interview-voice-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* 24 根能量柱：高度由内联 style 给（0–1 的快照电平）。 */
+.interview-voice-bar__waveform {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 20px;
+}
+
+.interview-voice-bar__bar {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--rf-info);
+  opacity: 0.75;
+  transition: height 80ms linear;
+}
+
+.interview-voice-bar__hint {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.interview-voice-bar__error {
+  flex-basis: 100%;
+}
+
+.interview-voice-bar__hold {
+  min-width: 96px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .interview-voice-bar__dot {
+    animation: none;
+  }
+  .interview-voice-bar__bar {
+    transition: none;
+  }
+}

@@ -50,7 +50,7 @@ vi.mock("./interview/SetupTab", () => ({
       onClick={() =>
         onStart({
           jobId: 3,
-          resumeId: 5,
+          resumeId: "r:5",
           interviewType: "综合面",
           difficulty: "中级",
           interviewerStyle: "严谨专业",

@@ -30,13 +30,13 @@ import ResumeColorControls from "./ResumeColorControls";
 import ResumeLanguageSelect from "./ResumeLanguageSelect";
 import ContactBreaksControl from "../../features/resume-layout/ContactBreaksControl";
 import HistoryPanel from "./history/HistoryPanel";
-import StructurePanel from "./structure/StructurePanel";
-import EntryLayoutPanel from "./EntryLayoutPanel";
+import StructureTab from "./structure/StructureTab";
 import DocumentModePanel from "./DocumentModePanel";
 import SectionPaginationPanel from "./pagination/SectionPaginationPanel";
 import PageThumbnailStrip from "./pagination/PageThumbnailStrip";
 import ChipStylePopover, { type ChipStylePopoverState } from "../resume-editor/ChipStylePopover";
-import { usePanelScrollAnchor } from "./entryLayout/usePanelScrollAnchor";
+import WorkbenchLayoutStatusBar from "./WorkbenchLayoutStatusBar";
+import WorkbenchRationaleEntry from "./WorkbenchRationaleEntry";
 import { usePaginationReport } from "../../features/resume-pagination/usePaginationReport";
 import { usePaginationReportMarkers } from "../../features/resume-pagination/paginationPageMarkers";
 import { setPaginationReportRefresh } from "../../features/resume-pagination/paginationRefreshStore";
@@ -120,6 +120,17 @@ export interface WorkbenchParamsColumnV2Props {
    */
   multiSelectedPaths?: string[];
   onMultiSelectedPathsChange?: (paths: string[]) => void;
+  /**
+   * 中栏正文是否改过（外壳的 `save.dirty`）。**只影响**版面状态条上那颗「未保存」标记：
+   * 版式改动这一层自己就能判（`draftLayoutKey(layout) !== draftLayoutKey(baseline)`），
+   * 而正文脏只有外壳知道。不传时按版式判据走——宁可少标，不谎报。
+   */
+  dirty?: boolean;
+  /**
+   * #24 24F：生成说明原文（`detail.rationale`）。空 / 缺省时「查看生成说明」入口整块不渲染。
+   * 与 24D 的未收录清单、24E 的来源徽标来自**同一份**详情：这一层不发请求。
+   */
+  rationale?: string | null;
 }
 
 export default function WorkbenchParamsColumnV2({
@@ -155,6 +166,8 @@ export default function WorkbenchParamsColumnV2({
   sourcesPanel,
   multiSelectedPaths,
   onMultiSelectedPathsChange,
+  dirty,
+  rationale = null,
 }: WorkbenchParamsColumnV2Props) {
   useLocale();
   const [tab, setTab] = useState<LeftTab>("params");
@@ -163,8 +176,6 @@ export default function WorkbenchParamsColumnV2({
    * `ChipStylePopover`（范围由路径推出：条目路径 = 整条 → `objects[<entryId>]`）。
    */
   const [entryStyleRequest, setEntryStyleRequest] = useState<ChipStylePopoverState | null>(null);
-  /** R-10：结构页签面板的滚动锚定（改动后重排时把 scrollTop 写回去，内容不上下跳）。 */
-  const structureScrollRef = usePanelScrollAnchor<HTMLDivElement>(document);
   /**
    * 问题 22 ①：「新页」区块的展开态（默认收起，会话内记住）。
    *
@@ -288,6 +299,24 @@ export default function WorkbenchParamsColumnV2({
             />
           </ResumeParamGroup>
           <ResumeParamGroup title={t("workbench.group.page")} storageKey="page">
+            {/* #24 24A：常驻版面状态条（占用率 / 需要几页 / 超出几页）。它必须在**滑块
+                上方**：拖动「行距」「字号」时眼睛盯的是同一行数字在变，藏在组底部就回到
+                "盲改"了。数字只本地算（`layoutStatusSummary`），点开弹层才问后端。 */}
+            <WorkbenchLayoutStatusBar
+              layout={layout}
+              baseline={baseline}
+              resumeId={resumeId}
+              // 版本号前进了而版式没变 = 刚存过，`未保存` 随之消失（判据见组件内的钩子）。
+              revision={revision ?? null}
+              previewRef={previewRef}
+              relayouting={relayouting}
+              dirty={dirty}
+              onApplyLayout={onChange}
+            />
+            {/* #24 24F：「查看生成说明」入口（正文用现有的 `RationaleParagraphs`）。
+                紧挨状态条：两块回答的是同一类问题——眼前这一版是怎么来的、它占了几页。
+                没有 rationale 时组件自己整块不渲染，不留死链。 */}
+            <WorkbenchRationaleEntry rationale={rationale} />
             {resumeId ? (
               <DocumentModePanel
                 resumeId={resumeId}
@@ -420,53 +449,28 @@ export default function WorkbenchParamsColumnV2({
           ) : null}
         </>
       ) : tab === "structure" ? (
-        <div
-          ref={structureScrollRef}
-          className="resume-wb-v2-panel resume-wb-structure-tab"
-          data-panel-scroll="structure"
-        >
-          <StructurePanel
-            document={document}
-            onChange={onDocumentChange}
-            selectedPath={selectedPath}
-            onSelectPath={onSelectPath}
-            pickTarget={pickTarget}
-            canvasContainer={canvasContainer}
-            onNotify={onNotify}
-            pagesNeeded={pagesNeeded}
-            // #7：条目行右键「排版整条…」→ 本组件的浮层状态（范围整条）。
-            onRequestEntryStyle={(path, x, y) => setEntryStyleRequest({ path, x, y })}
-            // 只读宿主（无正文的生成预览）：结构树不渲染勾选框，也不能改文档。
-            readOnly={!editorEnabled}
-            multiSelectedPaths={multiSelectedPaths}
-            onMultiSelectedPathsChange={onMultiSelectedPathsChange}
-            // Q20：结构树在字段没有值时显示字段目录里的中文标签。
-            fieldCatalog={fieldCatalog}
-            profileSectionOrder={profileSectionOrder}
-            isMaterialOnlyField={(key) => {
-              if (!fieldCatalog) return false;
-              for (const section of fieldCatalog.sections) {
-                const field = section.fields.find((candidate) => candidate.key === key);
-                if (field) return field.material_only;
-              }
-              return false;
-            }}
-          />
-          {/* T7b/U1：条目与字段排版并入结构页签（原独立「条目字段排版」分组已删除），
-              结构树选中条目后这里跟随同一 selectedPath。 */}
-          <section className="resume-wb-structure-layout" aria-label={t("structure.layout.title")}>
-            <Typography.Text strong>{t("structure.layout.title")}</Typography.Text>
-            <EntryLayoutPanel
-              document={document}
-              onChange={onDocumentChange}
-              selectedPath={selectedPath}
-              onSelectPath={onSelectPath}
-              fieldCatalog={fieldCatalog}
-              onNotice={onNotify}
-              disabled={relayouting}
-            />
-          </section>
-        </div>
+        <StructureTab
+          document={document}
+          onChange={onDocumentChange}
+          selectedPath={selectedPath}
+          onSelectPath={onSelectPath}
+          pickTarget={pickTarget}
+          canvasContainer={canvasContainer}
+          onNotify={onNotify}
+          pagesNeeded={pagesNeeded}
+          // #7：条目行右键「排版整条…」→ 本组件的浮层状态（范围整条）。
+          onRequestEntryStyle={(path, x, y) => setEntryStyleRequest({ path, x, y })}
+          // 只读宿主（无正文的生成预览）：结构树不渲染勾选框，也不能改文档。
+          readOnly={!editorEnabled}
+          multiSelectedPaths={multiSelectedPaths}
+          onMultiSelectedPathsChange={onMultiSelectedPathsChange}
+          fieldCatalog={fieldCatalog}
+          profileSectionOrder={profileSectionOrder}
+          relayouting={relayouting}
+          // 24D：未收录清单与「补进简历」的条件写要记录 id / 版本。
+          resumeId={resumeId}
+          revision={revision}
+        />
       ) : tab === "bilingual" && bilingualPanel ? (
         <div className="resume-wb-v2-panel">{bilingualPanel}</div>
       ) : tab === "assets" && assetsPanel ? (

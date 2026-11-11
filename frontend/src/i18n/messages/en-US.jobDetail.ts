@@ -48,6 +48,10 @@ const jobDetail = {
   "jobDetail.empty.extra": "No other recruiting information yet",
   "jobDetail.empty.note": "No notes yet",
   "jobDetail.section.noteImages": "Note images",
+  // #29D related knowledge on the job detail (entries saved by #29B link by company).
+  "jobDetail.relatedKnowledge.title": "Related knowledge ({count})",
+  "jobDetail.relatedKnowledge.aria": "Related knowledge",
+  "jobDetail.relatedKnowledge.viewAll": "View all related knowledge",
   "jobDetail.alt.noteImage": "Note image {index}",
 } as const;
 

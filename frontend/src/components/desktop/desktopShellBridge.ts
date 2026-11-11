@@ -10,10 +10,14 @@
  * stub 一个同形状对象即可。
  */
 
-/** 主进程推送的窗口状态：菜单里"最大化 / 还原"的文案与全屏隐藏标题栏都读它。 */
+/** 主进程推送 / 快照的窗口状态：菜单文案、全屏隐藏、置顶勾选与撤销置灰都读它。 */
 export interface DesktopWindowState {
   maximized: boolean;
   fullscreen: boolean;
+  /** 窗口是否置顶（#34A）。旧壳没有该字段，缺省按 false。 */
+  alwaysOnTop?: boolean;
+  /** 焦点是否在可编辑区（#34F）。菜单打开前重新读一次，见 useDesktopWindowState。 */
+  editableFocus?: boolean;
 }
 
 /** 「关于」弹窗需要的静态信息（由主进程 about.getInfo 动作返回）。 */
@@ -42,12 +46,30 @@ export interface DesktopShellBridge {
   getWindowState?: () => Promise<DesktopWindowState | undefined>;
   onWindowState?: (callback: (state: DesktopWindowState) => void) => void;
   setTheme?: (theme: "light" | "dark") => void;
+  /**
+   * 把"焦点在不在可编辑区"报给主进程（#34F）。
+   * 菜单打开前会从主进程读回这份实态，撤销/重做的置灰与实际能不能执行必须同源。
+   */
+  setEditableFocus?: (editable: boolean) => void;
 }
 
 /** 「帮助 → 使用指南」：标题栏与引导弹窗分属两棵组件树，用窗口事件对接。 */
 export const OPEN_USER_GUIDE_EVENT = "resumeforge:open-user-guide";
 
 type DesktopShellWindow = Window & { desktopShell?: DesktopShellBridge };
+
+/**
+ * 是否跑在桌面壳里。
+ *
+ * **分流只能看 splash**：`window.splash.isDesktop` 是主进程从第一个版本就注入的标记，
+ * 所有壳版本都有；`desktopShell` 是 2.1 才加的自绘标题栏桥。把它当作"是不是桌面壳"
+ * 的判据，旧壳就会被判成浏览器版 —— 标题栏不渲染、32px 不占位，系统三颗按钮直接
+ * 浮在页面内容上（P1-1）。占位与菜单能力必须分开判断。
+ */
+export function isDesktopShell(): boolean {
+  if (typeof window === "undefined") return false;
+  return Boolean(window.splash?.isDesktop);
+}
 
 /** 桌面壳里返回桥；浏览器（没有 splash.isDesktop）或旧壳（没有桥）返回 null。 */
 export function getDesktopShellBridge(): DesktopShellBridge | null {

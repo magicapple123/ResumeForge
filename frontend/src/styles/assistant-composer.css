@@ -416,3 +416,78 @@
   display: inline-flex;
   align-items: center;
 }
+
+/* ---------------------------------------------------------------------------
+   设置页「数据权限」卡的四档选项：2×2（11-1，2026-11-10）
+
+   改之前：卡片内容宽约 1050px，四个选项只有左侧 ~280px 在用——`.assistant-permission-option`
+   有 `max-width: 280px`，外层 `Radio.Group` 是 antd 的 `display: inline-block`，里面再套
+   一层纵向 `Space` 四行竖直堆叠，右侧 700+px 全空。
+
+   三条约束决定了写法：
+   - 网格挂在 TSX 里的 `.assistant-permission-grid` 上，四个 `Radio` 直接是网格项。
+     **不用** `display: contents` 去摊平 antd 的 `.ant-space`：那是宽选择器，`.settings-card`
+     里将来任何一张卡的 Space 都会被顺手摊平，副作用面远超这张卡。
+   - 阈值必须是**容器**宽度而不是视口：卡片两侧还有侧栏与内边距，同一视口宽度下卡片能窄
+     200px。容器是 `.assistant-permission-stack`（`Radio.Group` 的父级 Space），查询用
+     `@container rf-permission`（参考 `modules-interview-setup.css` 的写法）。
+   - 容器那层 Space 是 `inline-flex`（按内容收缩），必须显式 `width: 100%`：否则网格只有
+     内容宽（实测 514px，两列各 245px），右侧照样空着——等于把"一列窄"换成"两列都窄"。 */
+.assistant-permission-stack {
+  width: 100%;
+  min-width: 0;
+  container-type: inline-size;
+  container-name: rf-permission;
+}
+
+/* 网格挂在 `Radio.Group` 上（TSX 的 className）：四个 `Radio` 直接是网格项。
+   选择器写两级（`.assistant-permission-stack` 下）而不是单独一个类名——antd 的
+   `.ant-radio-group { display: inline-block }` 同为一类选择器，谁在后谁赢，而 antd
+   的样式是运行时注入到 `head` 末尾的，单类名会被它压回去。 */
+.assistant-permission-stack .assistant-permission-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 24px;
+  align-items: start;
+}
+
+/* 网格内每个选项：占满自己的轨道（`max-width: none` 撤掉输入区下拉那条 280px 上限），
+   文字左对齐、不截断（`min-width: 0` 允许说明句在轨道内换行）。 */
+.assistant-permission-grid > .ant-radio-wrapper {
+  margin-inline-end: 0;
+  display: flex;
+  align-items: flex-start;
+}
+
+.assistant-permission-grid .ant-radio-label {
+  display: block;
+  min-width: 0;
+}
+
+.assistant-permission-grid .assistant-permission-option {
+  max-width: none;
+}
+
+/* 窄容器塌单列：620px 以下是这张卡的实际可用宽度（视口 620 时容器实测 528px）。 */
+@container rf-permission (max-width: 620px) {
+  .assistant-permission-stack .assistant-permission-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ===== 短视口紧凑输入区（#1 的 A3）=====
+ * ≤720 高的窗口里，把 textarea 从 104 收到 72、内边距 12→10，省下约 36px 还给消息区。
+ * `!important` 是必须的：`autoSize` 会把 height/min-height 写成**行内样式**，
+ * 不加就压不动（assistant-composer.css 上文已记录过这个坑）。
+ * 与 A2 的 700px 阈值成对：只改其中一个，700–720 区间会重新溢出。
+ */
+@media (min-width: 1093px) and (max-height: 720px) {
+  .assistant-composer {
+    padding: 10px;
+  }
+
+  .assistant-composer textarea.ant-input {
+    min-height: 72px !important;
+    max-height: 72px !important;
+  }
+}

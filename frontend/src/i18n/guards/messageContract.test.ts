@@ -30,6 +30,8 @@ const EXEMPT_FIXTURES = {
   "interviewPage.interviewerName": "Jane",
   // 品牌名：两种语言写法相同（登记在 equalityExemptions）。
   "searchCard.source.deepseek": "DeepSeek",
+  "searchCard.source.tavily": "Tavily",
+  "searchCard.source.jina": "Jina",
   // 版本号是记号（v1 / v2 …），两种语言写法相同。
   "writing.version.label": "v{index}",
 } satisfies Record<keyof typeof EQUALITY_EXEMPT_KEYS, string>;

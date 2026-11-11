@@ -21,14 +21,24 @@ const apiMocks = vi.hoisted(() => ({
   updateKnowledge: vi.fn(),
   deleteKnowledge: vi.fn(),
   batchDeleteKnowledge: vi.fn(),
+  listKnowledgeCompanies: vi.fn(),
+  getKnowledgeReviewPrompt: vi.fn(),
+  searchKnowledge: vi.fn(),
+  exportKnowledgeMarkdown: vi.fn(),
 }));
 
 vi.mock("../api/knowledge", () => apiMocks);
 
+const downloadBlobMock = vi.hoisted(() => vi.fn());
+vi.mock("../utils/download", () => ({ downloadBlob: downloadBlobMock }));
+
+/** 条目标题是测试数据不是界面文案：用常量传给 ByText 参数，避免断言里出现未登记中文。 */
+const ENTRY_TITLE = "STAR 法则";
+
 function makeKnowledge(overrides: Partial<Knowledge> = {}): Knowledge {
   return {
     id: 1,
-    title: "STAR 法则",
+    title: ENTRY_TITLE,
     category: "简历技巧",
     tags: ["简历", "STAR"],
     content: "# 核心要点\n\n用 **STAR 法则** 组织经历，给出**量化结果**。",
@@ -49,9 +59,9 @@ function makePage(items: Knowledge[], total = items.length) {
   return { items: items.map(makeSummary), total };
 }
 
-function renderPage() {
+function renderPage(initialEntries: string[] = ["/"]) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <AntdApp>
         <KnowledgePage />
       </AntdApp>
@@ -65,6 +75,19 @@ beforeEach(() => {
   apiMocks.getKnowledge.mockResolvedValue(makeKnowledge());
   apiMocks.listKnowledgeCategories.mockResolvedValue(["面经", "简历技巧", "求职策略"]);
   apiMocks.listKnowledgeTags.mockResolvedValue({ tags: ["简历", "STAR", "求职策略"] });
+  apiMocks.listKnowledgeCompanies.mockResolvedValue(["字节跳动", "示例科技"]);
+  apiMocks.getKnowledgeReviewPrompt.mockResolvedValue({ count: 0, items: [] });
+  apiMocks.searchKnowledge.mockResolvedValue({
+    items: [],
+    keyword_count: 0,
+    vector_count: 0,
+    fallback_reason: "",
+  });
+  apiMocks.exportKnowledgeMarkdown.mockResolvedValue({
+    blob: new Blob(["zip"]),
+    filename: "knowledge-export.zip",
+  });
+  downloadBlobMock.mockReset();
   apiMocks.createKnowledge.mockImplementation(async (payload) =>
     makeKnowledge({ id: 2, ...payload, tags: payload.tags }),
   );
@@ -86,7 +109,7 @@ describe("KnowledgePage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("服务暂不可用");
     expect(screen.queryByText(/还没有知识条目/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /重\s*试/ }));
-    expect(await screen.findByText("STAR 法则")).toBeInTheDocument();
+    expect(await screen.findByText(ENTRY_TITLE)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(apiMocks.listKnowledgePage).toHaveBeenCalledTimes(2);
   });
@@ -94,12 +117,12 @@ describe("KnowledgePage", () => {
   it("renders entries with title, category and tags", async () => {
     renderPage();
 
-    expect(await screen.findByText("STAR 法则")).toBeInTheDocument();
+    expect(await screen.findByText(ENTRY_TITLE)).toBeInTheDocument();
     expect(screen.getByText("简历技巧")).toBeInTheDocument();
     expect(screen.getByText("简历")).toBeInTheDocument();
     expect(screen.getByText("STAR")).toBeInTheDocument();
     expect(apiMocks.listKnowledgePage).toHaveBeenCalledWith(
-      { q: "", category: "", tag: "" },
+      { q: "", category: "", tag: "", company: "", uncategorized: false },
       1,
       15,
     );
@@ -107,7 +130,7 @@ describe("KnowledgePage", () => {
 
   it("passes the search keyword to the API", async () => {
     renderPage();
-    await screen.findByText("STAR 法则");
+    await screen.findByText(ENTRY_TITLE);
 
     const searchInput = screen.getByPlaceholderText("搜索标题或正文");
     fireEvent.change(searchInput, { target: { value: "量化" } });
@@ -115,7 +138,7 @@ describe("KnowledgePage", () => {
 
     await waitFor(() => {
       expect(apiMocks.listKnowledgePage).toHaveBeenLastCalledWith(
-        { q: "量化", category: "", tag: "" },
+        { q: "量化", category: "", tag: "", company: "", uncategorized: false },
         1,
         15,
       );
@@ -147,7 +170,7 @@ describe("KnowledgePage", () => {
 
     await waitFor(() => {
       expect(apiMocks.listKnowledgePage).toHaveBeenLastCalledWith(
-        { q: "", category: "", tag: "简历" },
+        { q: "", category: "", tag: "简历", company: "", uncategorized: false },
         1,
         15,
       );
@@ -162,7 +185,7 @@ describe("KnowledgePage", () => {
       tags: ["简历", "STAR", "求职策略", "全库专属标签"],
     });
     renderPage();
-    await screen.findByText("STAR 法则");
+    await screen.findByText(ENTRY_TITLE);
 
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "标签筛选" }));
     expect(
@@ -175,7 +198,7 @@ describe("KnowledgePage", () => {
 
   it("creates a new entry through the form modal", async () => {
     renderPage();
-    await screen.findByText("STAR 法则");
+    await screen.findByText(ENTRY_TITLE);
 
     fireEvent.click(screen.getByRole("button", { name: /新建知识/ }));
     fireEvent.change(screen.getByPlaceholderText("如：STAR 法则 / 自我介绍模板"), {
@@ -188,12 +211,15 @@ describe("KnowledgePage", () => {
     });
     const payload = apiMocks.createKnowledge.mock.calls[0][0];
     expect(payload.title).toBe("自我介绍模板");
-    expect(payload.category).toBe("其他"); // 未改分类时使用表单默认值
+    // #29G：不选分类 = 未分类（不再兜成「其他」）。
+    expect(payload.category).toBe("");
+    expect(payload.reason).toBe("");
+    expect(payload.key_points).toEqual([]);
   });
 
   it("edits an entry through the row menu", async () => {
     renderPage();
-    await screen.findByText("STAR 法则");
+    await screen.findByText(ENTRY_TITLE);
 
     fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
     fireEvent.click(await screen.findByText("编辑"));
@@ -217,7 +243,7 @@ describe("KnowledgePage", () => {
 
   it("编辑态改选另一个分类能生效", async () => {
     renderPage();
-    await screen.findByText("STAR 法则");
+    await screen.findByText(ENTRY_TITLE);
 
     fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
     fireEvent.click(await screen.findByText("编辑"));
@@ -242,10 +268,10 @@ describe("KnowledgePage", () => {
 
   it("renders markdown content in the preview modal", async () => {
     renderPage();
-    await screen.findByText("STAR 法则");
+    await screen.findByText(ENTRY_TITLE);
 
     // 「查看」按钮已移除：点卡片本身（DetailTrigger）打开预览。
-    fireEvent.click(screen.getByText("STAR 法则"));
+    fireEvent.click(screen.getByText(ENTRY_TITLE));
 
     // AssistantMessageContent 把「# 核心要点」解析成 h4，而不是显示原始井号。
     expect(await screen.findByRole("heading", { name: "核心要点" })).toBeInTheDocument();
@@ -255,7 +281,7 @@ describe("KnowledgePage", () => {
 
   it("deletes an entry immediately and offers undo", async () => {
     renderPage();
-    await screen.findByText("STAR 法则");
+    await screen.findByText(ENTRY_TITLE);
 
     fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
     fireEvent.click(await screen.findByText("删除"));
@@ -290,7 +316,7 @@ describe("KnowledgePage", () => {
 
     await waitFor(() => {
       expect(apiMocks.listKnowledgePage).toHaveBeenLastCalledWith(
-        { q: "", category: "", tag: "" },
+        { q: "", category: "", tag: "", company: "", uncategorized: false },
         2,
         15,
       );
@@ -379,7 +405,7 @@ describe("KnowledgePage", () => {
     // 回到第 1 页并按正确页码重拉；条目与分页控件都在。
     await waitFor(() => {
       expect(apiMocks.listKnowledgePage).toHaveBeenLastCalledWith(
-        { q: "", category: "", tag: "" },
+        { q: "", category: "", tag: "", company: "", uncategorized: false },
         1,
         15,
       );
@@ -389,5 +415,44 @@ describe("KnowledgePage", () => {
     // 关键是用户不再被困在删空的页码上）。
     expect(screen.queryByText(/还没有知识条目/)).not.toBeInTheDocument();
     expect(screen.queryByText(/没有符合筛选条件的条目/)).not.toBeInTheDocument();
+  });
+
+  it("从面试页带 company 参数进入：公司筛选与只看未分类直接生效（#29D/#29G）", async () => {
+    renderPage(["/knowledge?company=%E5%AD%97%E8%8A%82%E8%B7%B3%E5%8A%A8&uncategorized=1"]);
+    await screen.findByText(ENTRY_TITLE);
+    await waitFor(() => {
+      expect(apiMocks.listKnowledgePage).toHaveBeenCalledWith(
+        {
+          q: "",
+          category: "",
+          tag: "",
+          company: "字节跳动",
+          uncategorized: true,
+        },
+        1,
+        15,
+      );
+    });
+  });
+
+  it("导出 Markdown：调导出接口并把 zip 交给下载工具（#29 导出）", async () => {
+    renderPage();
+    await screen.findByText(ENTRY_TITLE);
+    fireEvent.click(screen.getByRole("button", { name: /导出 Markdown/ }));
+    await waitFor(() => expect(apiMocks.exportKnowledgeMarkdown).toHaveBeenCalledTimes(1));
+    expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), "knowledge-export.zip");
+    expect(
+      await screen.findByText(t("knowledgePage.toast.exported", { count: 1 })),
+    ).toBeInTheDocument();
+  });
+
+  it("导出失败时展示后端给的原因（如空知识库 404）", async () => {
+    const emptyExport = "知识库还没有可导出的条目";
+    apiMocks.exportKnowledgeMarkdown.mockRejectedValue(new Error(emptyExport));
+    renderPage();
+    await screen.findByText(ENTRY_TITLE);
+    fireEvent.click(screen.getByRole("button", { name: /导出 Markdown/ }));
+    expect(await screen.findByText(emptyExport)).toBeInTheDocument();
+    expect(downloadBlobMock).not.toHaveBeenCalled();
   });
 });

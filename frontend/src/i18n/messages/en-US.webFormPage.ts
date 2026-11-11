@@ -61,8 +61,6 @@ const webFormPage = {
   "webFormPage.urlBar.deleteAria": "Delete URL {url}",
   "webFormPage.urlBar.placeholder": "Enter the target web form URL to fill (http:// or https://)",
   "webFormPage.urlBar.inputAria": "Web form URL",
-  "webFormPage.urlBar.openTooltip":
-    "Opens in the dedicated web form browser without replacing the pages you have open",
   "webFormPage.urlBar.open": "Open target page",
   "webFormPage.urlBar.history": "URL history",
   "webFormPage.pending.controlFallback": "Control {index}",
@@ -123,20 +121,12 @@ const webFormPage = {
   "webFormPage.browserCard.stopTooltip":
     "Close this controlled browser window. Logins inside it are kept, so the next start does not need them again",
   "webFormPage.browserCard.stop": "Close browser",
-  "webFormPage.browserCard.startTooltip":
-    "Launch this controlled browser window, separate from the browser you use day to day",
   "webFormPage.browserCard.startAria": "Start the dedicated browser",
   "webFormPage.browserCard.start": "Start dedicated browser",
-  "webFormPage.browserCard.settingsTooltip":
-    "Only changes which browser is used; it never starts or closes it - close and start again for the change to take effect",
   "webFormPage.browserCard.settings": "Browser settings",
-  "webFormPage.browserCard.refreshTooltip":
-    "Read the running state again. It already refreshes every 0.6 seconds; use this right after closing or starting the window",
+  "webFormPage.browserCard.refreshTooltip": "Refresh now",
   "webFormPage.browserCard.refreshAria": "Refresh status",
-  "webFormPage.browserCard.refresh": "Refresh status",
-  "webFormPage.browserCard.diagnosticsTooltip":
-    "Export diagnostics without resume content, form values or keys - handy to attach together with a screenshot",
-  "webFormPage.browserCard.diagnostics": "Export diagnostics",
+  "webFormPage.browserCard.diagnostics": "Export diagnostics (no secrets)",
   "webFormPage.browserCard.endTooltip":
     "End this web form session: the panel is put away and nothing is cleared. Click Read current form to start again",
   "webFormPage.browserCard.end": "End this session",

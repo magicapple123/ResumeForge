@@ -50,7 +50,6 @@ const webFormPage = {
   "webFormPage.urlBar.deleteAria": "删除网址 {url}",
   "webFormPage.urlBar.placeholder": "输入要填写网申的目标网址（http:// 或 https://）",
   "webFormPage.urlBar.inputAria": "网申投递网址",
-  "webFormPage.urlBar.openTooltip": "在网申专用浏览器中打开，不会覆盖已有网页",
   "webFormPage.urlBar.open": "打开目标页",
   "webFormPage.urlBar.history": "历史网址",
   "webFormPage.pending.controlFallback": "第 {index} 个控件",
@@ -106,19 +105,12 @@ const webFormPage = {
   "webFormPage.browserCard.stopTooltip":
     "停掉这个受控浏览器窗口。里面的登录态会保留，下次启动不用重新登录",
   "webFormPage.browserCard.stop": "关闭浏览器",
-  "webFormPage.browserCard.startTooltip": "拉起这个受控浏览器窗口（独立于你日常用的浏览器）",
   "webFormPage.browserCard.startAria": "开启专用浏览器",
   "webFormPage.browserCard.start": "开启专用浏览器",
-  "webFormPage.browserCard.settingsTooltip":
-    "只改「用哪个浏览器」这类配置，不会启动或关闭它——改完要关掉再启动一次才生效",
   "webFormPage.browserCard.settings": "浏览器设置",
-  "webFormPage.browserCard.refreshTooltip":
-    "重新读一次运行状态。平时它每 0.6 秒自己会刷；你刚关掉窗口或刚启动时可以用它立刻确认",
+  "webFormPage.browserCard.refreshTooltip": "立即刷新状态",
   "webFormPage.browserCard.refreshAria": "刷新状态",
-  "webFormPage.browserCard.refresh": "刷新状态",
-  "webFormPage.browserCard.diagnosticsTooltip":
-    "导出不含简历内容、表单值和密钥的诊断信息，适合连同截图提交排查",
-  "webFormPage.browserCard.diagnostics": "导出诊断",
+  "webFormPage.browserCard.diagnostics": "导出诊断（不含密钥）",
   "webFormPage.browserCard.endTooltip":
     "结束这一次网申填写：收起面板、不清理资料，下次点「读取当前表单」重来",
   "webFormPage.browserCard.end": "结束本次填写",

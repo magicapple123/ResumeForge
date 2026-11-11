@@ -8,11 +8,11 @@ const core = {
   "resume.language.zh-CN": "Chinese",
   "resume.language.en-US": "English",
   "update.method.desktop":
-    "Download the Setup.exe installer and run it to replace the older version.",
+    "The app checks and installs updates itself; Setup.exe is downloadable from the release page.",
   "update.method.in-app": "Download in the app, then approve replacement and restart (Windows).",
-  "update.desktop.title": "Update the desktop app using the installer",
+  "update.desktop.title": "The desktop app checks for updates itself",
   "update.desktop.description":
-    "Download and run Setup.exe. The app will quit automatically and replace the older version.",
+    "The desktop app checks for updates on its own: once after launch, then every 6 hours.",
   "update.downloaded.title": "Update package downloaded",
   "update.check.available": "New version {version} available",
   "update.check.latest": "Already on the latest version: {version}",

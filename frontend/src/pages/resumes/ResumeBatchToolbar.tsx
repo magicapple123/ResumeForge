@@ -5,7 +5,7 @@
  * 形态对齐岗位广场：原来独立的「批量删除」按钮收进下拉，和「批量导出」放在同一个入口；
  * 计数用次要文字色、按钮同一尺寸，不再与岗位广场各长一套。
  */
-import { Button, Dropdown, Tooltip } from "antd";
+import { Button, Dropdown } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import BatchActionBar from "../../components/common/BatchActionBar";
@@ -35,11 +35,9 @@ export default function ResumeBatchToolbar({
     <div style={{ marginTop: 16 }}>
       <BatchActionBar count={count} onExit={onExit}>
         {total > 0 ? (
-          <Tooltip title={t("resumesPage.selectAll.tooltip", { count: total })}>
-            <Button loading={selectAllLoading} disabled={busy} onClick={onSelectAll}>
-              {t("resumesPage.selectAll.button", { count: total })}
-            </Button>
-          </Tooltip>
+          <Button loading={selectAllLoading} disabled={busy} onClick={onSelectAll}>
+            {t("resumesPage.selectAll.button", { count: total })}
+          </Button>
         ) : null}
         <Dropdown
           disabled={count === 0 || busy}

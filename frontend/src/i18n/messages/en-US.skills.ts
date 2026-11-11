@@ -98,6 +98,50 @@ const skills = {
     "Created skill “{name}”; tick it in the skill menu of a conversation to use it",
   "skills.editor.saved":
     "Saved skill “{name}”; tick it in the skill menu of a conversation to use it",
+  // #31D/E/F skill learning: drafts from conversations, pending badge, 90-day archive hint
+  "skills.learning.title": "Create a skill from a conversation",
+  "skills.learning.intro":
+    "The assistant can spot a reusable workflow in your latest conversation and draft a skill with all four sections. It is saved as Pending validation and never takes effect automatically; review it before ticking it in a conversation.",
+  "skills.learning.detect": "Scan latest conversation",
+  "skills.learning.detectHint":
+    "A draft is offered only when at least one holds: the same workflow appeared in two conversations, you said to always do it this way, or one task completed five consecutive successful steps.",
+  "skills.learning.noConversation": "No conversations yet. Chat with the assistant first.",
+  "skills.learning.noSignal":
+    "No reusable pattern in this conversation (not enough evidence, so nothing is proposed).",
+  "skills.learning.detectFailed": "Scan failed. Please try again.",
+  "skills.learning.trigger.repeat_workflow": "The same workflow appeared in multiple conversations",
+  "skills.learning.trigger.persistent_rule": "You said to always do it this way",
+  "skills.learning.trigger.long_success_trajectory":
+    "One task completed five consecutive successful steps",
+  "skills.learning.modal.title": "Review the skill draft",
+  "skills.learning.modal.intro":
+    "All four sections are editable. Saved drafts stay Pending validation and never take effect automatically.",
+  "skills.learning.modal.triggers": "Why this was suggested",
+  "skills.learning.modal.ok": "Save as pending skill",
+  "skills.learning.modal.cancel": "Cancel",
+  "skills.learning.form.name": "Skill name",
+  "skills.learning.form.nameRequired": "Please enter a skill name",
+  "skills.learning.form.description": "One-line summary",
+  "skills.learning.form.descriptionRequired": "Please write when this applies",
+  "skills.learning.form.whenToUse": "When to use",
+  "skills.learning.form.whenToUseRequired": "Please write the trigger condition",
+  "skills.learning.form.steps": "Steps (one per line)",
+  "skills.learning.form.stepsRequired": "Write at least one step",
+  "skills.learning.form.pitfalls": "Pitfalls and counter-examples (one per line)",
+  "skills.learning.accepted":
+    "Saved skill “{name}” (pending validation; not enabled automatically)",
+  "skills.learning.saveFailed": "Could not save the skill",
+  "skills.learning.pendingBadge": "Pending validation",
+  "skills.learning.action.validate": "Mark as validated",
+  "skills.learning.validateConfirm":
+    "Confirm this skill was actually used and worked correctly? It will be marked as validated.",
+  "skills.learning.validated": "Marked as validated",
+  "skills.learning.validateFailed": "Could not mark it as validated. Please try again.",
+  "skills.learning.archive.title": "{count} generated skills have not been loaded for 90 days",
+  "skills.learning.archive.body":
+    "These skills have been idle for a long time: keep them or delete them from the list. Nothing is deleted automatically.",
+  "skills.learning.archive.item": "{name} (last loaded: {time})",
+  "skills.learning.archive.neverLoaded": "never loaded",
 } as const;
 
 export default skills;

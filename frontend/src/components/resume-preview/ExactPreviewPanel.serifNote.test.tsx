@@ -15,21 +15,13 @@ import { clearPreviewCache } from "./exactPreviewCache";
 
 const fetchPreview = vi.hoisted(() => vi.fn());
 
-vi.mock("../../api/resumes", () => ({
-  fetchResumePreviewPdf: fetchPreview,
+vi.mock("./previewPagesApi", () => ({
+  fetchResumePreviewPages: fetchPreview,
 }));
 
 beforeEach(() => {
   fetchPreview.mockReset();
   clearPreviewCache();
-  Object.defineProperty(URL, "createObjectURL", {
-    configurable: true,
-    value: () => "blob:preview-1",
-  });
-  Object.defineProperty(URL, "revokeObjectURL", {
-    configurable: true,
-    value: () => undefined,
-  });
 });
 
 afterEach(() => {
@@ -43,10 +35,13 @@ function waitForRequest() {
 
 function pdf(pages = 1) {
   return {
-    blob: new Blob(["%PDF-1.3"], { type: "application/pdf" }),
-    pages,
+    token: `token-${pages}`,
+    pages: Array.from({ length: pages }, (_, index) => ({
+      index,
+      width: 1800,
+      height: 2546,
+    })),
     pagesNeeded: pages,
-    pageLimit: pages,
     overflow: false,
   };
 }

@@ -1,10 +1,50 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* AI 求职助手：历史侧栏固定宽度，主区将消息与输入区分层。 */
+/* AI 求职助手：历史侧栏固定宽度，主区将消息与输入区分层。
+   高度上限一律读 --rf-viewport-h（P1-3）：桌面外壳里它已经扣掉了 32px 标题栏，
+   写死 100vh 会让助手页多出一整条标题栏高的溢出。 */
 .assistant-page {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 20px;
-  min-height: calc(100vh - 116px);
+  min-height: calc(var(--rf-viewport-h) - 116px);
+}
+
+/* ===== 高度链路（#1）=====
+ * 只对双栏形态生效：≤1092 是单栏，整页滚动是设计内的（V8-1092×614 实测溢出 61px），
+ * 不能把页面钉死成一屏高，否则历史横条 + 消息区会被压成一条缝。
+ *
+ * 三处叠加造成那条"只能滚 1px"的滚动条：
+ * 1. `min-height: calc(... - 116px)` 的 116 与 token 脱钩：pad=24 → 实际 112（矮 4px）、
+ *    pad=32（≥1920）→ 实际 128（高 12px，无提示条也必出滚动条）；
+ * 2. `.assistant-workspace` 的 `max-height` 只限盒子、`overflow` 仍 visible，
+ *    681−652=29.4px 的绘制溢出继续上抛给 `.app-content`（`overflow-y: auto`）；
+ * 3. 消息区 320px 下限没有对手能吸收，工作区想缩也缩不动。
+ *
+ * 换成"页面高度 = 视口 − 页头 − 上下内边距"，再让 workspace 吃满 100% 且不再溢出。
+ */
+@media (min-width: 1093px) {
+  .assistant-page {
+    height: calc(var(--rf-viewport-h) - var(--rf-header-height) - var(--rf-content-pad) * 2);
+    min-height: 0;
+  }
+
+  .assistant-workspace {
+    height: 100%;
+    max-height: none;
+  }
+
+  /* 先允许消息区被压缩，再由下一个媒体查询在"够高"的视口把 320 下限加回来。 */
+  .assistant-messages {
+    min-height: 0;
+  }
+}
+
+/* 阈值 700 不是拍的：可用 = H − 112，消息区 = H − 112 − 67.4 − 输入区。
+   A3 后输入区约 190，H=700 时消息区 330.6 ≥ 320，正好还能保住下限；再矮就交给内容。 */
+@media (min-width: 1093px) and (min-height: 700px) {
+  .assistant-messages {
+    min-height: 320px;
+  }
 }
 
 .assistant-sidebar {
@@ -23,7 +63,7 @@
  * 再嵌一层内滚会出现双滚动条，故排除。
  */
 .assistant-sidebar:not(.assistant-sidebar--floating) .assistant-conversation-list {
-  max-height: calc(100vh - 300px);
+  max-height: calc(var(--rf-viewport-h) - 300px);
   overflow-y: auto;
 }
 
@@ -134,7 +174,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  max-height: calc(100vh - 116px);
+  max-height: calc(var(--rf-viewport-h) - 116px);
   /* 「回到底部」悬浮按钮（问题 A）以工作区为定位基准。 */
   position: relative;
 }

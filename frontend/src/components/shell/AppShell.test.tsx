@@ -14,10 +14,11 @@
  */
 import { App as AntdApp } from "antd";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AppShell from "./AppShell";
 import { t } from "../../i18n";
+import { getViewRefreshVersion, resetViewRefreshForTests } from "../../features/shell/viewRefresh";
 import { PRIMARY_NAVIGATION_ITEMS } from "../navigation/navigationConfig";
 
 /**
@@ -137,6 +138,34 @@ function renderShell() {
   );
 }
 
+/** 当前路由的快照（`AppShell` 自己不渲染路由内容，跳转只能用这种方式观测）。 */
+function PathProbe() {
+  const { pathname } = useLocation();
+  return <span data-testid="path">{pathname}</span>;
+}
+
+function renderShellAt(path: string) {
+  return render(
+    <AntdApp>
+      <MemoryRouter initialEntries={[path]}>
+        <AppShell />
+        <PathProbe />
+      </MemoryRouter>
+    </AntdApp>,
+  );
+}
+
+/** 侧栏品牌图标按钮（手势的唯一落点）。 */
+function brandMark(): HTMLElement {
+  const node = document.querySelector<HTMLElement>(".app-brand-mark-button");
+  if (!node) throw new Error("brand mark button not rendered");
+  return node;
+}
+
+function currentPath(): string {
+  return screen.getByTestId("path").textContent ?? "";
+}
+
 /** 首屏 800ms + 每批 200ms（18 个 chunk / 3 个一批）。 */
 async function warmAll(): Promise<void> {
   await act(async () => {
@@ -154,6 +183,9 @@ beforeEach(() => {
   vi.useFakeTimers();
   stubIdleFallback();
   registryMock.reset();
+  resetViewRefreshForTests();
+  // jsdom 没实现 window.scrollTo：默认桩掉，免得每次点击都往控制台写 "Not implemented"。
+  vi.stubGlobal("scrollTo", vi.fn());
 });
 
 afterEach(() => {
@@ -220,5 +252,88 @@ describe("AppShell · 空闲预热（A04）", () => {
     expect(registryMock.preloadCalls.get("HomePage")).toBe(3);
     expect(registryMock.loads.get("HomePage")).toBe(1);
     expect(screen.getAllByText(t(home.labelKey)).length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * 品牌图标手势（P5-1 / P5-2 / P5-3 · 13-1·13-2·13-3）。
+ *
+ * 断言的数字口径：刷新用 `viewRefresh` 的版本号计数（等于"广播了几次"），
+ * 跳转用 `PathProbe` 读真实 pathname。文案一律走 `t()` / `tShellGesture()`，
+ * 不写字面量（`cjkRatchet` 的 tests 口径）。
+ */
+describe("AppShell · 品牌图标手势（P5-1 / P5-2 / P5-3）", () => {
+  it("单击立刻回顶部，且不触发刷新", async () => {
+    const scrollTo = vi.fn();
+    vi.stubGlobal("scrollTo", scrollTo);
+    renderShellAt("/tracker");
+
+    fireEvent.click(brandMark());
+    // 单击的滚动是**立即**的：不能被 400ms 结算窗口拖慢。
+    expect(scrollTo).toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(getViewRefreshVersion()).toBe(0);
+  });
+
+  it("双击在 400ms 静默结算后只广播一次刷新", async () => {
+    renderShellAt("/tracker");
+    const button = brandMark();
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    // 静默窗口内先不刷：用户可能还要点第三下，提前刷新会白跑一轮请求。
+    expect(getViewRefreshVersion()).toBe(0);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(getViewRefreshVersion()).toBe(1);
+
+    // 结算之后不会再多刷一次。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(getViewRefreshVersion()).toBe(1);
+  });
+
+  it('三击回首页：从别的页面跳到 "/"，不等静默窗口', async () => {
+    renderShellAt("/tracker");
+    const button = brandMark();
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(currentPath()).toBe("/");
+    expect(getViewRefreshVersion()).toBe(0);
+  });
+
+  it("已经在首页时三击等价于刷新（pathname 不变，广播 +1）", async () => {
+    renderShellAt("/");
+    const button = brandMark();
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(currentPath()).toBe("/");
+    expect(getViewRefreshVersion()).toBe(1);
+  });
+
+  it("品牌图标不再有手势提示：hover 后无浮层，aria-label 仍只描述单击", async () => {
+    renderShellAt("/");
+
+    await act(async () => {
+      fireEvent.mouseEnter(brandMark());
+      await vi.advanceTimersByTimeAsync(600);
+    });
+
+    // 手势是彩蛋（#22）：hover 不该出现任何浮层。这条是反向断言——
+    // 谁把 Tooltip 加回来，它会立刻变红。全局延迟 0.6s，等满 600ms 仍为空才算数。
+    expect(document.querySelector(".ant-tooltip")).toBeNull();
+    expect(brandMark().getAttribute("aria-label")).toBe(t("navigation.shell.scrollTop"));
   });
 });

@@ -59,6 +59,15 @@ export const JOB_STATUS_OPTIONS = Object.entries(JOB_STATUS_META).map(([value, m
   label: meta.label,
 }));
 
+/**
+ * 岗位状态的**落库数据值**（后端 Job.status 同值）。
+ *
+ * 从 META 的键派生而不是再写一遍中文字面量：界面比较状态时必须用数据值，
+ * 但新文件里出现裸中文会被 cjkRatchet 判成"未登记的产品文案"——数据值不是文案。
+ */
+export const JOB_STATUS_OPEN = Object.keys(JOB_STATUS_META)[0];
+export const JOB_STATUS_CLOSED = Object.keys(JOB_STATUS_META)[1];
+
 export interface Job {
   id: number;
   title: string;
@@ -84,6 +93,15 @@ export interface Job {
    */
   origin_source: string;
   favorite: boolean;
+  /**
+   * 收藏时间（0013 / #28E）：null = 从未收藏或已取消。
+   *
+   * 老数据由迁移用 updated_at 回填，回填值不可当精确时间展示（updated_at 会被后续
+   * 编辑刷新）—— 于是另有 favorited_at_estimated 标志，界面据此标「时间不详」。
+   */
+  favorited_at?: string | null;
+  /** 回填的近似收藏时间（旧数据）。true 时界面显示「时间不详」。 */
+  favorited_at_estimated?: boolean;
   /**
    * 这个岗位能不能用「投递台」自动投递：来源 / 投递链接必须能归属到某个招聘网站。
    *
@@ -112,6 +130,40 @@ export interface Job {
 export type JobList = Omit<Job, "description"> & {
   has_description: boolean;
 };
+
+/**
+ * 收藏夹行（GET /api/jobs/favorites，#28B）。
+ *
+ * 在岗位列表字段之上补生命周期徽标：已投递（投递记录成功或进度表有行）与在队列
+ * （投递队列里 status=pending）。两个标记由后端一次批量查询算好下发，前端不逐行请求。
+ */
+export type FavoriteJob = JobList & {
+  applied: boolean;
+  applied_at?: string | null;
+  queued: boolean;
+};
+
+/** 收藏夹排序（#28A）：收藏时间 / 发布时间 / 匹配度。 */
+export type FavoriteSort = "favorited_desc" | "posted_desc" | "match_desc";
+
+/** 收藏夹列表参数（与后端 /api/jobs/favorites 同源）。 */
+export interface FavoriteJobParams {
+  keyword?: string;
+  status?: string;
+  /** true=已投递，false=未投递，不传=不限（与徽标同一份判据）。 */
+  applied?: boolean;
+  sort?: FavoriteSort;
+  order?: "asc" | "desc";
+  page?: number;
+  page_size?: number;
+}
+
+/** 按 id 批量查生命周期（行内按钮用它判断是否禁用）。 */
+export interface FavoriteLifecycleItem {
+  job_id: number;
+  applied: boolean;
+  queued: boolean;
+}
 
 /** 一次粘贴里含多份招聘信息时的解析结果；只有一个元素表示没识别出多份。 */
 export interface JobMultiParseResult {

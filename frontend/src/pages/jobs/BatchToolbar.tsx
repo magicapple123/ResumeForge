@@ -7,7 +7,7 @@
  * 删除要走撤销 Toast，这些都留在各自的既有实现里，工具栏不再各持一份状态。
  */
 import { CheckOutlined, ClearOutlined, CloseCircleOutlined } from "@ant-design/icons";
-import { Button, Progress, Select, Space, Tooltip, Typography } from "antd";
+import { Button, Progress, Select, Space, Typography } from "antd";
 import { t } from "../../i18n";
 import { JOB_STATUS_LABEL_KEYS } from "../../i18n/enum/jobs";
 import { useLocale } from "../../i18n/i18nContext";
@@ -66,11 +66,14 @@ export function BatchToolbar({
           {t("jobsPage.toolbar.selectedCount", { count: selectedJobIds.length })}
         </Typography.Text>
         {onSelectAllPages && totalCount > 0 && (
-          <Tooltip title={t("jobsPage.toolbar.selectAllTooltip", { count: totalCount })}>
+          <>
             <Button disabled={busy} loading={selectAllPagesLoading} onClick={onSelectAllPages}>
               {t("jobsPage.toolbar.selectAllButton", { count: totalCount })}
             </Button>
-          </Tooltip>
+            <Typography.Text type="secondary">
+              {t("jobsPage.toolbar.selectAllTooltip", { count: totalCount })}
+            </Typography.Text>
+          </>
         )}
         <Button icon={<CloseCircleOutlined />} disabled={busy} onClick={exitSelectionMode}>
           {t("jobsPage.toolbar.exitSelection")}

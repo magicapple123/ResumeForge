@@ -1,0 +1,7 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * 收藏夹（#28B）：已关闭的行整行降饱和。
+ * 用 --rf-* 变量而不是颜色字面量；只做不透明度，不换文字/边框颜色。
+ */
+.favorites-row-closed > td {
+  opacity: 0.55;
+}

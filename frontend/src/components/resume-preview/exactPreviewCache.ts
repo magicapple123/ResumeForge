@@ -1,73 +1,38 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 精确预览结果缓存（模块级 LRU）：同一份 PDF 只排一次。
+ * 精确预览结果缓存（模块级 LRU）：同一份版式只问服务端一次。
  *
- * 一份精确预览要服务端用 fpdf2 重排一遍（本机实测 ~450ms，其中字体解析 ~310ms），
- * 而下面三种动作问的都是**同一份**字节：
+ * 一份精确预览要服务端重排一遍 PDF 再光栅化成位图（本机数百毫秒），而下面三种动作问的
+ * 都是**同一版**：
  *
  * - 草稿 ↔ 精确来回切（一个参数都没改）；
  * - 打开 / 关闭「简历制作台」（另一个面板实例，同一组参数）；
  * - 把滑块拖回刚才那个值。
  *
- * 不缓存的话，每切一次就白等一次服务端重排——2026-10-21 用户反馈的正是第一条：
+ * 不缓存的话，每切一次就白等一次排版——2026-10-21 用户反馈的正是第一条：
  * "跳到草稿再跳回精确，什么都没改却还要重排一次"。
  *
- * 这里只存 **Blob**，不存 objectURL：URL 的生命周期归面板（只有它知道哪一层正在显示、
- * 哪一层在预加载），缓存只回答"这份字节算过没有"。面板的双缓冲与 URL 释放逻辑因此
- * 一行都不用改，`卸载时释放 objectURL` 这条既有约束继续成立。
+ * 2026-11 起缓存的是**清单**（token + 逐页尺寸），不再存 PDF 字节：图片由服务端的
+ * `GET …/{token}/{index}.webp` 提供，地址完全可以重算，浏览器 HTTP 缓存还会再兜一层
+ * （服务端对 token 地址回 `immutable`）。所以这里既不需要 `Blob`，也不需要 objectURL
+ * 生命周期——面板因此少了一整类"忘释放就泄漏"的坑。
  *
- * key 由调用方给（内容签名 + 整组版式参数）：内容或参数一变 key 就变，所以**不需要
- * 失效逻辑**。容量按条数与总字节双限，淘汰最久未用的一份。
+ * key 由调用方给（内容签名 + 整组版式参数 + 宽高桶）：内容或参数一变 key 就变，所以
+ * **不需要失效逻辑**。容量按条数上限淘汰最久未用的一份。
  */
+import type { PreviewPagesMeta } from "./previewPages";
 
-export interface CachedPreview {
-  blob: Blob;
-  pages: number | null;
-  pagesNeeded: number | null;
-  overflow: boolean;
-}
-
-/**
- * 面板手上的一份"已经排好的那一版"：这份是按哪组参数排的 + 面板持有的 objectURL +
- * 缓存里那三个数量。字段与 `CachedPreview` 同名同义，但**多出 `key` / `url`、没有 `blob`**
- * （字节已经在面板手里变成 URL 了），所以是并列的类型而不是继承。
- *
- * 定义放在这里而不是面板里（2026-11）：`ExactPreviewPanel` 贴着 500 行预算，而这个类型
- * 就是"缓存的读结果 + URL"这一组合。URL 的生命周期仍归面板，本模块一行都不碰。
- */
-export interface PreviewShot {
-  /** 这份是按哪一组参数排的（面板的 `formatKey`）：切回同一组参数时据此判定"已经有图了"。 */
-  key: string;
-  /** 面板持有的 objectURL；释放时机由面板决定。 */
-  url: string;
-  /**
-   * 这份 PDF 的原始字节。存它是因为**缩放要换一个新的 objectURL**：`#zoom=<百分比>`
-   * 只在"重新导航"时被查看器读取，只改 hash 不会重新加载（Chrome 实测），而 blob URL
-   * 不能再拼查询串。字节本来就跟着缓存活（`CachedPreview.blob`），这里只是同引用。
-   */
-  blob: Blob;
-  pages: number | null;
-  /** 按当时那份版式真实需要的页数（未截断）。 */
-  pagesNeeded: number | null;
-  overflow: boolean;
-}
+/** 缓存里存的那一份：清单本体，不含 `key`（它就是字典的键）与任何 URL。 */
+export type CachedPreviewPages = PreviewPagesMeta;
 
 /** 最多留几份：一轮"改字号 → 改行距 → 改回来"最多用到 3~4 份。 */
 const MAX_ENTRIES = 8;
-/** 总字节上限：单份约 100–400KB，8 份仍在 3MB 内；字体/照片多的简历也不会失控。 */
-const MAX_BYTES = 24 * 1024 * 1024;
 
 /** `Map` 的迭代顺序就是插入顺序：删了再插 = 移到队尾（最近使用）。 */
-const entries = new Map<string, CachedPreview>();
-
-function totalBytes(): number {
-  let total = 0;
-  for (const entry of entries.values()) total += entry.blob.size;
-  return total;
-}
+const entries = new Map<string, CachedPreviewPages>();
 
 /** 读一份，并把它标成"最近用过"；没有就返回 null。 */
-export function readCachedPreview(key: string): CachedPreview | null {
+export function readCachedPreview(key: string): CachedPreviewPages | null {
   const hit = entries.get(key);
   if (!hit) return null;
   entries.delete(key);
@@ -75,12 +40,11 @@ export function readCachedPreview(key: string): CachedPreview | null {
   return hit;
 }
 
-/** 存一份（同 key 覆盖），随后按条数 / 总字节淘汰最久未用的。 */
-export function writeCachedPreview(key: string, value: CachedPreview): void {
+/** 存一份（同 key 覆盖），随后按条数淘汰最久未用的。 */
+export function writeCachedPreview(key: string, value: CachedPreviewPages): void {
   entries.delete(key);
   entries.set(key, value);
-  // 至少留一份：哪怕它自己就超过字节上限，也不该刚存完就删掉。
-  while (entries.size > MAX_ENTRIES || (entries.size > 1 && totalBytes() > MAX_BYTES)) {
+  while (entries.size > MAX_ENTRIES) {
     const oldest = entries.keys().next().value;
     if (oldest === undefined) break;
     entries.delete(oldest);
@@ -92,7 +56,9 @@ export function clearPreviewCache(): void {
   entries.clear();
 }
 
-/** 可观察量：条数与总字节（调试与测试断言用）。 */
-export function previewCacheStats(): { entries: number; bytes: number } {
-  return { entries: entries.size, bytes: totalBytes() };
+/** 可观察量：条数与总页数（调试与测试断言用）。 */
+export function previewCacheStats(): { entries: number; pages: number } {
+  let pages: number = 0;
+  for (const entry of entries.values()) pages += entry.pages.length;
+  return { entries: entries.size, pages };
 }

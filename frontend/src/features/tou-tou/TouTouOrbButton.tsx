@@ -13,6 +13,11 @@ interface Props {
   buttonClasses: string;
   activeFace: TouTouFaceKey;
   onPointerDown: (event: PointerEvent<HTMLButtonElement>) => void;
+  /** 长按判定用：松手/移出/取消都要撤掉 400ms 计时器，否则会"按着拖一半弹面板"。 */
+  onPointerMove?: (event: PointerEvent<HTMLButtonElement>) => void;
+  onPointerUp?: () => void;
+  onPointerLeave?: () => void;
+  onPointerCancel?: () => void;
   onClick: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
   onFocus: () => void;
@@ -25,6 +30,10 @@ export function TouTouOrbButton({
   buttonClasses,
   activeFace,
   onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerLeave,
+  onPointerCancel,
   onClick,
   onKeyDown,
   onFocus,
@@ -49,6 +58,10 @@ export function TouTouOrbButton({
         className={buttonClasses}
         aria-label={t("touTou.orb.ariaLabel")}
         onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerLeave}
+        onPointerCancel={onPointerCancel}
         onClick={onClick}
         onKeyDown={onKeyDown}
         onFocus={onFocus}

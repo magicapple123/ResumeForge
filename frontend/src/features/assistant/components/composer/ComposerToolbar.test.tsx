@@ -184,6 +184,44 @@ describe("右侧只剩一枚可点 chip", () => {
   });
 });
 
+describe("上下文用量 chip", () => {
+  const USAGE = {
+    buckets: [
+      { key: "system", tokens: 12_000, percent: 12 },
+      { key: "tools", tokens: 6_000, percent: 6 },
+      { key: "conversation", tokens: 4_000, percent: 4 },
+      { key: "connectors", tokens: 2_000, percent: 2 },
+      { key: "skills", tokens: 1_500, percent: 1.5 },
+    ],
+    total: 25_500,
+    window: 100_000,
+    percent: 25.5,
+    partial: false,
+    usage_actual: 12_345,
+  };
+
+  it("有用量时显示整数百分比（没有数据时显示「—」，不猜数字）", () => {
+    const { unmount } = renderToolbar({ contextUsage: USAGE });
+    const chip = screen.getByRole("button", { name: t("contextUsage.aria.chip") });
+    expect(chip.textContent).toContain("26%");
+    expect(chip.textContent).toContain(t("contextUsage.chip"));
+    unmount();
+
+    renderToolbar();
+    const empty = screen.getByRole("button", { name: t("contextUsage.aria.chip") });
+    expect(empty.textContent).toContain("—");
+  });
+
+  it("窗口未设置（0）时 chip 也不显示 0%（没有分母）", () => {
+    renderToolbar({
+      contextUsage: { ...USAGE, window: 0, percent: null },
+    });
+    const chip = screen.getByRole("button", { name: t("contextUsage.aria.chip") });
+    expect(chip.textContent).toContain("—");
+    expect(chip.textContent).not.toContain("0%");
+  });
+});
+
 describe("发送键图标化", () => {
   it("按钮内没有任何文字节点，无障碍名照旧在", () => {
     renderToolbar();

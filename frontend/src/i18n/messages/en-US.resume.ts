@@ -27,6 +27,25 @@ const resume = {
   "resume.diagnostics.aria.evidence": "Content sources: {count} items",
   "resume.diagnostics.aria.rationale": "Why this Resume was generated this way",
 
+  "workbench.layoutStatus.measuring": "Measuring the layout…",
+  "workbench.layoutStatus.summary": "Used {percent}% · {pages} pages of {limit} allowed",
+  "workbench.layoutStatus.summaryOverflow":
+    "Used {percent}% · {pages} pages of {limit} allowed · {over} over the limit",
+  "workbench.layoutStatus.summaryUnlimited": "Needs {pages} pages (no limit)",
+  "workbench.layoutStatus.unsaved": "Unsaved",
+  "workbench.layoutStatus.dirtyHint":
+    "These figures measure your unsaved changes; they match the preview after saving.",
+
+  "workbench.coverage.savedHint":
+    'Counted from the saved version. "Add to Resume" writes to the record, so save your workbench changes first.',
+  "workbench.coverage.reviseHint":
+    "Rewrite this content in the matching section of the middle column.",
+
+  "resume.factSource.profile": "Profile",
+  "resume.factSource.ai": "AI written",
+  "resume.factSource.manual": "Typed in",
+  "resume.factSource.aria": "Content source: {source}. Open to see the source text.",
+
   "resume.footer.edit": "Edit manually",
   // 页脚主按钮的五个标签按"格子装得下"重定（问题 20b）：五个按钮平分弹窗宽度，
   // 英文界面每格约 176px，原标签最长的 26 字符会溢出到隔壁按钮上。

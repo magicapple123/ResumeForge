@@ -45,6 +45,10 @@ const llmRecord = {
   "llmRecord.hint.maxTokens":
     "Caps the tokens in a single reply. Higher costs more; too low truncates content. This is not the model's context window.",
   "llmRecord.aria.maxTokens": "About max output tokens",
+  "llmRecord.field.contextWindow": "Context window",
+  "llmRecord.hint.contextWindow":
+    "How many tokens this model can hold at once (DeepSeek 64K, GPT 128K, Claude 200K). 0 = unknown: the assistant skips cumulative limits and the context panel hides the percentage. Stored locally, never sent to the provider.",
+  "llmRecord.aria.contextWindow": "About context window",
   "llmRecord.hint.unlimited":
     "When ticked, max_tokens is no longer sent and the provider decides the cap. This eases the case where a reasoning model counts its thinking against the output budget and squeezes the reply empty — but it is not truly unlimited: some providers default to a value smaller than what you set by hand.",
   "llmRecord.label.unlimited": "No limit",

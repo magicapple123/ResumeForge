@@ -10,7 +10,7 @@
  * "换个页面"免疫：任务由登记表追踪，不是由某个组件的生命周期持有。
  */
 import { CloseCircleOutlined, LoadingOutlined, QuestionCircleOutlined } from "@ant-design/icons";
-import { App, Badge, Button, Popover, Space, Tooltip, Typography } from "antd";
+import { App, Badge, Button, Popover, Space, Typography } from "antd";
 import { useState } from "react";
 import { useBackgroundTasks } from "../hooks/useBackgroundTasks";
 import { useJobMatchBackgroundTasks } from "../hooks/useJobMatchBackgroundTasks";
@@ -250,25 +250,19 @@ export default function BackgroundTasksIndicator() {
       trigger="click"
       placement="bottomRight"
     >
-      <Tooltip
-        title={t("backgroundTasks.tooltip.running", {
-          count: tasks.length + matchTasks.length + analyses.length,
-        })}
+      <Button
+        className="background-tasks-button"
+        type="text"
+        aria-label={t("backgroundTasks.aria.viewTasks")}
       >
-        <Button
-          className="background-tasks-button"
-          type="text"
-          aria-label={t("backgroundTasks.aria.viewTasks")}
+        <Badge
+          count={tasks.length + matchTasks.length + analyses.length}
+          size="small"
+          offset={[2, -2]}
         >
-          <Badge
-            count={tasks.length + matchTasks.length + analyses.length}
-            size="small"
-            offset={[2, -2]}
-          >
-            <LoadingOutlined /> {t("backgroundTasks.label")}
-          </Badge>
-        </Button>
-      </Tooltip>
+          <LoadingOutlined /> {t("backgroundTasks.label")}
+        </Badge>
+      </Button>
     </Popover>
   );
 }

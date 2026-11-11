@@ -12,35 +12,34 @@ import { clearPreviewCache } from "./exactPreviewCache";
 
 const fetchPreview = vi.hoisted(() => vi.fn());
 
-vi.mock("../../api/resumes", () => ({
-  fetchResumePreviewPdf: fetchPreview,
+vi.mock("./previewPagesApi", () => ({
+  fetchResumePreviewPages: fetchPreview,
 }));
 
 beforeEach(() => {
   fetchPreview.mockReset();
   clearPreviewCache();
-  Object.defineProperty(URL, "createObjectURL", {
-    configurable: true,
-    value: () => "blob:preview",
-  });
-  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: () => undefined });
 });
 
 afterEach(() => {
   cleanup();
 });
 
-/** 等过去抖窗口（与主测试文件同一档）。 */
+/**
+ * 等一次请求落地（与主测试文件同一档）。
+ *
+ * 620ms = 500ms 合并窗口（#23 X2）+ 请求与渲染的余量；改 `DEBOUNCE_MS` 要同步这里，
+ * 否则"第二次请求"的断言会变成看起来像状态机坏了的 `expected 2 times, got 1`。
+ */
 function waitForRequest() {
-  return new Promise((resolve) => setTimeout(resolve, 420));
+  return new Promise((resolve) => setTimeout(resolve, 620));
 }
 
 function pdf() {
   return {
-    blob: new Blob(["%PDF-1.3"], { type: "application/pdf" }),
-    pages: 1,
+    token: "token-1",
+    pages: [{ index: 0, width: 1800, height: 2546 }],
     pagesNeeded: 1,
-    pageLimit: 1,
     overflow: false,
   };
 }

@@ -81,9 +81,14 @@
   border-bottom: 0;
 }
 
-/* 长列表每 10 行一条 2px 细分隔（13.5 风险）：长列表的视觉分段靠它，不重新加回卡片。 */
-.track-card.is-group-start {
-  border-top: 2px solid var(--rf-border-strong);
+/* 长列表每 10 行一条分段标记（13.5 风险）：长列表的视觉分段靠它，不重新加回卡片。
+   2026-11-10（08-1）：线落在**上一条的底边**，不再给分段行加上边框——旧写法与上一条的
+   `border-bottom: 1px` 紧贴，实测边界 3px 两段色（上一条 rgb(231,235,240) +
+   分段行 rgb(217,217,217)），设计值是 1px。现在边界仍是 1px，只把颜色换成更深的
+   `--rf-border-strong`（比原分隔线深一档，取值见主题 token）。`.is-group-start` 类名保留：
+   它是行组件的定位锚点，`TrackerPage` 与 `tracker-redesign.test.ts` 都靠它认分段起点。 */
+.track-card:has(+ .track-card.is-group-start) {
+  border-bottom-color: var(--rf-border-strong);
 }
 
 .track-card:hover {

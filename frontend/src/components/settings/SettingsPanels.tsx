@@ -26,6 +26,8 @@ import SettingsProvenanceSection from "./SettingsProvenanceSection";
 import SearchCard from "./SearchCard";
 import BatchOperationCard from "./BatchOperationCard";
 import AssistantRelaxedModeCard from "./AssistantRelaxedModeCard";
+import AssistantLimitCard from "./AssistantLimitCard";
+import AssistantMemoryCard from "./AssistantMemoryCard";
 import AgentTaskEventsCard from "./AgentTaskEventsCard";
 import JobPreferenceCard from "../../features/job-preference/JobPreferenceCard";
 import AsrSettingsCard from "../voice/AsrSettingsCard";
@@ -111,6 +113,10 @@ export function AssistantPanel({ skillsCard }: AssistantPanelProps) {
       <SearchCard />
       {/* 助手的数据可见范围开关：放宽模式（默认关，开启前有明确告知）。 */}
       <AssistantRelaxedModeCard />
+      {/* 运行上限（需求 #5）：轮次上限与整链时间预算，DB 优先、缺省回默认。 */}
+      <AssistantLimitCard />
+      {/* 助手记忆（#31C/#18D）：七类求职事实的可见可改列表 + 手填画像；自动抽取默认关。 */}
+      <AssistantMemoryCard />
       {/* 提醒到期自动生成任务卡（T26，默认关：只建卡、不执行写操作）。 */}
       <AgentTaskEventsCard />
       {/* 语音转写（T12）：独立 ASR 服务，地址与 Key 不跟大模型配置共用。 */}

@@ -18,6 +18,7 @@ import { candidateImportSource } from "../utils/jobSource";
 import CandidateJobsDrawer from "../components/jobs/CandidateJobsDrawer";
 import { candidateToJobPayload } from "../components/jobs/candidate/candidatePayload";
 import { JobImportModal } from "../components/jobs/JobImportModal";
+import { ImportFromUrlLauncher } from "../components/jobs/ImportFromUrlLauncher";
 import JobTable from "../components/jobs/JobTable";
 import ErrorState from "../components/common/ErrorState";
 import type { CandidateJobDetail, Job, JobList } from "../types";
@@ -346,6 +347,11 @@ export default function JobsPage() {
         applySort={applySort}
         selectionMode={selectionMode}
       />
+
+      {/* 从链接导入（#16C）：按钮+弹窗自包含；导入后停在岗位广场、只刷新列表，不自动入队。 */}
+      <div style={{ marginBottom: 12 }}>
+        <ImportFromUrlLauncher onImported={() => void reload()} />
+      </div>
 
       <BatchToolbar
         selectionMode={selectionMode}

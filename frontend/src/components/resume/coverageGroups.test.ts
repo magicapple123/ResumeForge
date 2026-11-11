@@ -276,9 +276,11 @@ describe("resolveCoverageAction decision table (3-A)", () => {
 });
 
 describe("display thresholds", () => {
-  it("keeps 5 rows visible by default and ellipsises above 48 characters", () => {
+  it("keeps 5 rows visible by default and ellipsises above 30 characters", () => {
     // Both numbers are product decisions from 5-A; pin them so a refactor cannot drift.
+    // 2026-11-10（05-1）：阈值 48 → 30，与弹层 560px 内容盒的单行容量对齐——
+    // 超过阈值的一律挂 Tooltip，否则 40–48 字符档"有省略号、点开没有全文"。
     expect(DEFAULT_VISIBLE_ITEMS).toBe(5);
-    expect(LONG_ITEM_CHARS).toBe(48);
+    expect(LONG_ITEM_CHARS).toBe(30);
   });
 });

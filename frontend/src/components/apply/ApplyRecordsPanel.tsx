@@ -14,12 +14,16 @@
  * 后端给的中文分类说明与可操作诊断，用户可以直接把这条信息回传给我们定位站点改版。
  */
 import { EyeOutlined, RedoOutlined } from "@ant-design/icons";
-import { App, Button, Empty, Pagination, Space, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Empty, Pagination, Space, Tag, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import type { TableColumnsType } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import ApplyRecordDetailDrawer from "./ApplyRecordDetailDrawer";
+import ApplyRecordTrackButton from "./ApplyRecordTrackButton";
 import ApplyRecordsToolbar from "./ApplyRecordsToolbar";
+import ApplyStaleBanner from "./ApplyStaleBanner";
+import ApplyStoppingPointTip from "./insights/ApplyStoppingPointTip";
+import JdChangeBadge from "./insights/JdChangeBadge";
 import BatchGroup from "./ApplyRecordsBatchGroup";
 import {
   batchDeleteRecords,
@@ -55,11 +59,23 @@ import { useLocale } from "../../i18n/i18nContext";
 interface Props {
   disabled: boolean;
   onRetried: (task: ApplyTask) => void;
+  /**
+   * #14F 页头漏斗条下钻：要预设的结果筛选（空 = 不过滤）。
+   * 与 `presetNonce` 一起用——只有 nonce 变了才覆盖用户当前的筛选，避免与手动筛选打架。
+   */
+  presetResult?: string;
+  /** 每次下钻自增；不传表示没有下钻来源。 */
+  presetNonce?: number;
 }
 
 const BATCH_PAGE_SIZE = 10;
 
-export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
+export default function ApplyRecordsPanel({
+  disabled,
+  onRetried,
+  presetResult,
+  presetNonce,
+}: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
   useLocale();
   const { message } = App.useApp();
@@ -103,6 +119,14 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
   useEffect(() => {
     if (error) message.error(error);
   }, [error, message]);
+
+  // #14F 下钻：nonce 变化才算"新的一次下钻"，之后再手动改筛选不会被它反复覆盖。
+  const [appliedNonce, setAppliedNonce] = useState<number | undefined>(undefined);
+  if (presetNonce !== undefined && presetNonce !== appliedNonce) {
+    setAppliedNonce(presetNonce);
+    setResult(presetResult ?? "");
+    setPage(1);
+  }
 
   const onBatchError = useCallback((error: string) => void message.error(error), [message]);
   const { batchItems, fetchBatchItems } = useApplyBatchItems(
@@ -226,6 +250,8 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
               {record.company}
             </Typography.Text>
           )}
+          {/* #15B JD 变更（被动式）：徽标与抽屉整块在组件里，本文件只挂一行。 */}
+          <JdChangeBadge record={record} />
         </Space>
       ),
     },
@@ -300,20 +326,20 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
     {
       title: t("applyRecords.column.actions"),
       key: "actions",
-      width: 160,
+      width: 220,
       render: (_, record) => (
         <Space size={4}>
-          <Tooltip title={t("applyRecords.retryHint")}>
-            <Button
-              size="small"
-              icon={<RedoOutlined />}
-              loading={retrying === record.id}
-              disabled={disabled || record.job_id == null}
-              onClick={() => void retry(record)}
-            >
-              {t("applyRecords.action.retry")}
-            </Button>
-          </Tooltip>
+          <Button
+            size="small"
+            icon={<RedoOutlined />}
+            loading={retrying === record.id}
+            disabled={disabled || record.job_id == null}
+            onClick={() => void retry(record)}
+          >
+            {t("applyRecords.action.retry")}
+          </Button>
+          {/* #14C 跟进闭环：投出去之后的事在求职进度里，这里一键把它写进去。 */}
+          <ApplyRecordTrackButton record={record} />
           {/* 「查看详情」与「删除」都收进「···」菜单：整行点击本来就能看详情，
               独立的「详 情」按钮与「···」并排是重复入口（用户反馈）。 */}
           <RowActions
@@ -374,6 +400,14 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
 
   return (
     <div className="apply-records-panel">
+      {/* #14C 静默提醒：7 天以上没有回音的记录（0 条时不渲染）。 */}
+      <ApplyStaleBanner />
+      {/* #15E 边际收益停止线：`past` 才出黄条 + 两个动作，`ok` 整条不渲染。 */}
+      <ApplyStoppingPointTip />
+      {/* 重试仍会走去重与每日上限（#35E）：原来只在按钮悬停里，用户容易以为重试能绕过上限。 */}
+      <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
+        {t("applyRecords.retryHint")}
+      </Typography.Text>
       <ApplyRecordsToolbar
         searchText={searchText}
         result={result}

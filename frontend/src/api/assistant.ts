@@ -2,6 +2,7 @@
 /** AI 求职助手：会话历史、附件和流式消息。 */
 import type {
   AssistantAttachmentInput,
+  AssistantCompactionResult,
   AssistantConversationBrief,
   AssistantConversationDetail,
   AssistantConversationForkPayload,
@@ -9,6 +10,7 @@ import type {
   AssistantSurface,
   AssistantStreamEvent,
   AssistantWriteProposal,
+  ContextUsage,
   ReasoningEffort,
 } from "../types";
 import type { Material } from "../types";
@@ -262,6 +264,81 @@ export function sendAssistantMessage(
     onEvent,
     signal,
   );
+}
+
+/**
+ * 重新生成最后一条助手回答（#13A）。
+ *
+ * 与发送不同：不插入新的用户消息（问题与上下文由后端从原消息里取），旧回答会被标成
+ * 已被取代——会话列表过滤它，DB 行保留。生成期间按钮由调用方置灰，避免两条流同时写
+ * 同一个会话。
+ */
+export function regenerateAssistantMessage(
+  conversationId: number,
+  messageId: number,
+  payload: {
+    reasoning_effort?: ReasoningEffort;
+    /** T11 数据权限解算后的两轴：与发送同一口径（后端传）。 */
+    relaxed_mode?: boolean | null;
+    allow_write?: boolean;
+  },
+  onEvent: (event: AssistantStreamEvent) => void,
+  signal?: AbortSignal,
+  surface: AssistantSurface = "page",
+): Promise<void> {
+  return consumeSSE(
+    `/api/assistant/conversations/${conversationId}/messages/${messageId}/regenerate?${surfaceQuery(surface)}`,
+    payload,
+    onEvent,
+    signal,
+  );
+}
+
+/**
+ * 这个对话最近一轮的上下文用量（需求 #6，输入区 chip 的弹层用）。
+ *
+ * 会话不存在时后端返回 404；旧消息没有落过用量时返回 `partial: true` 的估算值
+ * ——调用方不要把它当成完整口径（弹层里标「部分数据」）。
+ */
+export function getAssistantContextUsage(
+  conversationId: number,
+  surface: AssistantSurface = "page",
+): Promise<ContextUsage> {
+  return request(
+    `/assistant/conversations/${conversationId}/context-usage?${surfaceQuery(surface)}`,
+  );
+}
+
+/**
+ * 压缩这段对话的上下文（问题清单 #10）。
+ *
+ * `dryRun=true` 只出预估（后端不写库、不调模型）；真跑会消耗一次全量输入的模型调用，
+ * 所以界面先 dry-run 给用户看「预计从 28% 降到 9%，覆盖 17 轮」再确认。
+ */
+export function compactAssistantConversation(
+  conversationId: number,
+  dryRun: boolean,
+  surface: AssistantSurface = "page",
+): Promise<AssistantCompactionResult> {
+  return request(`/assistant/conversations/${conversationId}/compact?${surfaceQuery(surface)}`, {
+    method: "POST",
+    body: JSON.stringify({ dry_run: dryRun }),
+  });
+}
+
+/**
+ * 还原：清空压缩状态，下次请求就按原文发送。
+ *
+ * **原文从来没被删除过**——压缩只影响"发给模型的视图"，所以这里不需要任何确认之外的
+ * 补偿动作。
+ */
+export function restoreAssistantConversation(
+  conversationId: number,
+  surface: AssistantSurface = "page",
+): Promise<void> {
+  return request(`/assistant/conversations/${conversationId}/compact?${surfaceQuery(surface)}`, {
+    method: "DELETE",
+  });
 }
 
 /** 批准并执行一条写入提案（后端在同一次请求里完成"批准→核销→执行"）。 */

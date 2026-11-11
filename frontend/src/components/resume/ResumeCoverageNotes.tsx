@@ -112,7 +112,11 @@ export function ResumeCoverageNotesBody({
   };
 
   return (
-    <div style={{ display: "grid", gap: 4 }}>
+    // 05-1：列模板必须显式写 `minmax(0, 1fr)`。只写 `display: grid` 时隐式列是
+    // `auto`，nowrap 的条目会把轨道撑到 742px（弹层 clientWidth 560 → scrollWidth 742），
+    // 横向溢出后 `max-width: 100%` 也跟着失效。配合 `.resume-coverage-group{min-width:0}`
+    // 双保险：一个管轨道上限，一个管子项最小宽度。
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 4 }}>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         {t("resume.coverage.intro")}
       </Typography.Text>

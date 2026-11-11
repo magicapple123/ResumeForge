@@ -14,4 +14,6 @@ export * from "./tasks";
 export * from "./failures";
 export * from "./config";
 export * from "./queue";
+export * from "./extras";
+export * from "./insights";
 export * from "./sites";

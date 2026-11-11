@@ -97,6 +97,8 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
   const { data, loading, error, reload } = useApi(
     () => listWebFormRecordsPage(page, RECORD_PAGE_SIZE),
     [page],
+    // 展开的那条记录可能正在核对/补填：整页刷新不许把列表连同展开态一起换掉。
+    { refreshOnRequest: false },
   );
   const [selected, setSelected] = useState<number | null>(null);
   const [detail, setDetail] = useState<WebFormFillRecord | null>(null);

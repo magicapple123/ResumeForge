@@ -21,6 +21,7 @@ const preview = {
     "The draft preview is unaffected — switch back to Draft to keep editing. Exporting the PDF likely fails for the same reason (most often the Chinese font is missing on this machine).",
   "preview.exact.typesetting": "Typesetting with the export engine...",
   "preview.exact.frameTitle": "Exact resume preview (exported PDF)",
+  "preview.exact.pageAlt": "Page {page}",
   "preview.exact.pendingFrameTitle": "Exact preview loading",
   "preview.exact.loadTimeoutTitle": "Embedded preview timed out",
   "preview.exact.loadTimeoutBody":

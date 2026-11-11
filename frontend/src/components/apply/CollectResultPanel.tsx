@@ -11,7 +11,7 @@
  * 然后去岗位广场里数不出来。
  */
 import { LinkOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { Alert, App, Button, Space, Table, Tag, Typography } from "antd";
 import EmptyState from "../common/EmptyState";
 import type { TableColumnsType } from "antd";
 import { useState } from "react";
@@ -303,17 +303,15 @@ export default function CollectResultPanel({
               >
                 {importLabel(selectedIds.length)}
               </Button>
-              <Tooltip title={t("collectResult.queue.tooltip")}>
-                <Button
-                  icon={<SendOutlined />}
-                  loading={importing}
-                  disabled={disabled || selectedIds.length === 0}
-                  aria-label={t("collectResult.queue.aria", { count: selectedIds.length })}
-                  onClick={() => void doImportAndQueue()}
-                >
-                  {t("collectResult.queue.label")}
-                </Button>
-              </Tooltip>
+              <Button
+                icon={<SendOutlined />}
+                loading={importing}
+                disabled={disabled || selectedIds.length === 0}
+                aria-label={t("collectResult.queue.aria", { count: selectedIds.length })}
+                onClick={() => void doImportAndQueue()}
+              >
+                {t("collectResult.queue.label")}
+              </Button>
               <Button
                 aria-label={t("collectResult.action.selectAll")}
                 disabled={disabled || importing}
@@ -328,6 +326,7 @@ export default function CollectResultPanel({
               >
                 {t("collectResult.action.clearSelection")}
               </Button>
+              <Typography.Text type="secondary">{t("collectResult.queue.tooltip")}</Typography.Text>
               <Typography.Text type="secondary">{t("collectResult.footnote")}</Typography.Text>
             </Space>
           </>

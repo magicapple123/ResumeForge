@@ -1,0 +1,47 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* #29D 面试房间「这家公司面经 N 条」：一行辅助信息，不抢面试进度条的注意力。
+   颜色只走 --rf-* 变量；不手贴 .ant-* 类名。 */
+
+.interview-company-knowledge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 4px;
+  margin: 4px 0 8px;
+  padding: 2px 8px;
+  border-left: 2px solid var(--rf-border-subtle);
+}
+
+.interview-company-knowledge__hint {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.interview-company-knowledge__count {
+  padding-inline: 6px;
+  font-size: 12px;
+}
+
+.interview-company-knowledge__titles {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* 标题可能很长（面经标题是自由文本）：单行截断，不把房间头部撑成两行。 */
+.interview-company-knowledge__title {
+  max-width: 220px;
+  padding-inline: 4px;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 767px) {
+  .interview-company-knowledge__title {
+    max-width: 140px;
+  }
+}

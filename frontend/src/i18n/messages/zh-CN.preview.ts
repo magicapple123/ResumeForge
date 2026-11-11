@@ -46,6 +46,13 @@ const preview = {
   "preview.exact.typesetting": "正在按导出引擎排版…",
   /** 内嵌 PDF 的 iframe 标题（读屏用）。 */
   "preview.exact.frameTitle": "简历精确预览（导出 PDF）",
+  /**
+   * 逐页位图的读屏文案（P3-2）：精确预览改成 `<img>` 之后每张纸都要有名字。
+   *
+   * `{page}` = 1 起始的页号，与导出 PDF 的页序一致——读屏用户翻到第几张要与"导出后有
+   * 几页"对得上。
+   */
+  "preview.exact.pageAlt": "第 {page} 页",
   /** 透明预加载层的 iframe 标题（读屏隐藏，仅调试与测试可辨识）。 */
   "preview.exact.pendingFrameTitle": "正在加载的精确预览",
   /** 环境里没有内置 PDF 查看器时的标题。 */

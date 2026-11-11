@@ -8,9 +8,10 @@
  * 说明卡（查什么、发不发模型、大概多久），点「开始扫描」才发。这样预览页不再为一次
  * 打开就白跑一次模型调用，也让"关掉窗口继续扫"成为可能（面板卸载不影响模块级请求）。
  */
-import { ReloadOutlined } from "@ant-design/icons";
+import { BookOutlined, ReloadOutlined } from "@ant-design/icons";
 import {
   Alert,
+  App,
   Button,
   Card,
   Collapse,
@@ -22,6 +23,7 @@ import {
   Tooltip,
   Typography,
 } from "antd";
+import { createKnowledgeFromSource } from "../api/knowledge";
 import LoadingBlock from "./common/LoadingBlock";
 import { ListyItem } from "./common/ListyItem";
 import { useEffect, useMemo, useState } from "react";
@@ -120,8 +122,29 @@ function initialEnhancePreference(): boolean {
 
 export default function ResumeRiskPanel({ resumeId, contentSignature }: Props) {
   useLocale();
+  const { message } = App.useApp();
+  const [savingKnowledge, setSavingKnowledge] = useState(false);
   const [enhance, setEnhance] = useState(initialEnhancePreference);
   const state = useRiskScan(resumeId);
+
+  /** #29B：把诊断结论沉淀为一条经验（服务端重跑本地规则并生成正文）。 */
+  const saveDiagnosisExperience = async () => {
+    if (savingKnowledge) return;
+    setSavingKnowledge(true);
+    try {
+      const saved = await createKnowledgeFromSource("resume_diagnosis", resumeId);
+      if (saved.created) {
+        message.success(t("knowledgePage.capture.saved", { title: saved.title }));
+      } else {
+        message.info(t("knowledgePage.capture.exists", { title: saved.title }));
+      }
+      window.location.assign("/knowledge");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t("knowledgePage.capture.failed"));
+    } finally {
+      setSavingKnowledge(false);
+    }
+  };
 
   // 声明"面板正开着"：watcher 据此决定要不要弹全局通知（返回 detach 由 effect 清理）。
   useEffect(() => markRiskPanelAttached(resumeId), [resumeId]);
@@ -192,6 +215,15 @@ export default function ResumeRiskPanel({ resumeId, contentSignature }: Props) {
           {data.llm_used && <Tag color="geekblue">{t("riskPanel.llmUsed")}</Tag>}
           <Button size="small" icon={<ReloadOutlined />} onClick={beginScan}>
             {t("riskPanel.action.rescan")}
+          </Button>
+          {/* #29B 回流：诊断结论 → 「求职策略」经验；正文由服务端从简历重算生成。 */}
+          <Button
+            size="small"
+            icon={<BookOutlined />}
+            loading={savingKnowledge}
+            onClick={() => void saveDiagnosisExperience()}
+          >
+            {t("knowledgePage.capture.experience")}
           </Button>
           {data.remote_enhancement_available && (
             <EnhanceToggle checked={enhance} onChange={changeEnhance} />

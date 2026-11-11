@@ -2,6 +2,11 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
+import {
+  getViewRefreshVersion,
+  requestViewRefresh,
+  resetViewRefreshForTests,
+} from "../features/shell/viewRefresh";
 import { resetFocusRefreshForTests } from "./focusRefresh";
 import { useApi } from "./useApi";
 
@@ -26,12 +31,14 @@ function fireVisibilityChange(): void {
 
 beforeEach(() => {
   resetFocusRefreshForTests();
+  resetViewRefreshForTests();
   setVisibility("visible");
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   resetFocusRefreshForTests();
+  resetViewRefreshForTests();
 });
 
 describe("useApi", () => {
@@ -227,6 +234,74 @@ describe("useApi", () => {
 
       await act(async () => first.resolve("v1"));
       expect(result.current.data).toBe("v1");
+    });
+  });
+
+  describe("viewRefresh（品牌图标双击 / Alt+R，P5-1）", () => {
+    it("广播一次就重取一次，且保留旧数据、不置 loading（静默刷新）", async () => {
+      const fetcher = vi
+        .fn<() => Promise<string>>()
+        .mockResolvedValueOnce("v1")
+        .mockResolvedValueOnce("v2");
+      const { result } = renderHook(() => useApi(fetcher, []));
+      await waitFor(() => expect(result.current.data).toBe("v1"));
+      expect(fetcher).toHaveBeenCalledTimes(1);
+
+      await act(async () => requestViewRefresh());
+
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      // 静默：不置 loading（否则长列表页会闪骨架屏、滚动位置被带回顶部）。
+      expect(result.current.loading).toBe(false);
+      await waitFor(() => expect(result.current.data).toBe("v2"));
+    });
+
+    it("同一页多个 useApi 各重取恰好一次（广播不放大请求数）", async () => {
+      const first = vi.fn(async () => "a");
+      const second = vi.fn(async () => "b");
+      renderHook(() => {
+        useApi(first, []);
+        useApi(second, []);
+        return null;
+      });
+      await waitFor(() => {
+        expect(first).toHaveBeenCalledTimes(1);
+        expect(second).toHaveBeenCalledTimes(1);
+      });
+
+      await act(async () => requestViewRefresh());
+
+      expect(first).toHaveBeenCalledTimes(2);
+      expect(second).toHaveBeenCalledTimes(2);
+    });
+
+    it("refreshOnRequest: false 的调用点不随广播重取（未保存草稿不被覆盖）", async () => {
+      const fetcher = vi.fn(async () => "server");
+      const { result } = renderHook(() => useApi(fetcher, [], { refreshOnRequest: false }));
+      await waitFor(() => expect(result.current.data).toBe("server"));
+
+      await act(async () => requestViewRefresh());
+
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(result.current.data).toBe("server");
+    });
+
+    it("订阅本身不发请求：挂载后到第一次广播之间只有一次请求", async () => {
+      const fetcher = vi.fn(async () => "v1");
+      const { result } = renderHook(() => useApi(fetcher, []));
+      await waitFor(() => expect(result.current.data).toBe("v1"));
+      expect(getViewRefreshVersion()).toBe(0);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    });
+
+    it("未挂载的订阅点不会被广播牵连（退订后不再收到）", async () => {
+      const fetcher = vi.fn(async () => "v1");
+      const { result, unmount } = renderHook(() => useApi(fetcher, []));
+      await waitFor(() => expect(result.current.data).toBe("v1"));
+      unmount();
+
+      await act(async () => requestViewRefresh());
+
+      expect(fetcher).toHaveBeenCalledTimes(1);
     });
   });
 });

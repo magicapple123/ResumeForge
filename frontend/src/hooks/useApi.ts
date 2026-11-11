@@ -2,6 +2,7 @@
 /** 通用数据加载 Hook：管理 loading / error / data 三态。 */
 import { DependencyList, useCallback, useEffect, useRef, useState } from "react";
 import { isCancellation } from "../api/client";
+import { subscribeViewRefresh } from "../features/shell/viewRefresh";
 import { useDependencyVersion } from "./useDependencyVersion";
 import { isPageVisible, subscribeFocusRefresh } from "./focusRefresh";
 
@@ -54,6 +55,14 @@ export interface UseApiOptions {
    * 打成错误态。
    */
   refetchOnFocus?: FocusRefetchOptions;
+  /**
+   * 「视图刷新」广播（品牌图标双击 / `Alt+R`）是否让本 hook 重取，默认 `true`。
+   *
+   * 有**未保存草稿**的详情/编辑器 hook 必须传 `false`：广播重取会把服务端那份数据写回
+   * `data`，宿主里"数据变了就同步表单"的 effect 随即覆盖用户正在编辑的内容——这正是
+   * 简历详情里 `setDetail(updated)` 那个坑。宁可少刷一次，也不要吞掉用户输入。
+   */
+  refreshOnRequest?: boolean;
 }
 
 export function useApi<T>(
@@ -61,7 +70,7 @@ export function useApi<T>(
   deps: DependencyList = [],
   options: UseApiOptions = {},
 ): ApiState<T> {
-  const { enabled = true, refetchOnFocus } = options;
+  const { enabled = true, refetchOnFocus, refreshOnRequest = true } = options;
   const dependencyVersion = useDependencyVersion(deps);
   const activeDependencyVersion = useRef(dependencyVersion);
   const [data, setDataState] = useState<T>();
@@ -137,6 +146,24 @@ export function useApi<T>(
       abortRef.current?.abort();
     };
   }, [enabled, reload]);
+
+  // 品牌图标双击 / Alt+R 的「刷新这一页」：订阅广播，**只在收到广播时**静默重取。
+  // 为什么不把版本号并进 `deps`：并进 deps 会走非静默分支，把 `loading` 置真——长列表页
+  // 会闪骨架屏、内容高度塌一下、滚动位置被带回顶部，与验收要求的"双击刷新不白屏、
+  // 滚动位置不归零"直接冲突。静默语义与 `refetchOnFocus` 一致：保留旧数据、失败不进
+  // 错误态，用户看到的是数字原地更新，而不是整页闪一下。
+  const refreshOptionsRef = useRef(refreshOnRequest);
+  useEffect(() => {
+    refreshOptionsRef.current = refreshOnRequest;
+  });
+  useEffect(() => {
+    if (!refreshOnRequest) return undefined;
+    // 订阅时不会立刻回调（见 `features/shell/viewRefresh.ts`），所以挂载不会多打一次请求。
+    return subscribeViewRefresh(() => {
+      if (!refreshOptionsRef.current || !enabled) return;
+      void run(true);
+    });
+  }, [refreshOnRequest, enabled, run]);
 
   // focus 重拉：对象可能每次渲染都是新的字面量，所以只按「有没有开」订阅，开关值走 ref。
   // 否则每次渲染都退订/重订一次，白折腾。

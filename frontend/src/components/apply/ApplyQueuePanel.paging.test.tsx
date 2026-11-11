@@ -8,10 +8,13 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyQueueItem } from "../../types";
 import { ContextMenuHost } from "../../features/context-menu/ContextMenuHost";
+import { t } from "../../i18n";
 import ApplyQueuePanel from "./ApplyQueuePanel";
+import { APPLY_GUIDE_SEEN_KEY } from "./queue/ApplyQueueGuide";
 
 const apiMocks = vi.hoisted(() => ({
   listQueue: vi.fn(),
@@ -37,6 +40,19 @@ vi.mock("../../api/apply", () => ({
 
 vi.mock("../../api/resumes", () => ({
   listResumes: apiMocks.listResumes,
+}));
+
+/** #14 的补充接口：分页/筛选用例不关心体检与话术，给一组"干净"的默认值。 */
+const extrasMocks = vi.hoisted(() => ({
+  runQueuePreflight: vi.fn(),
+  getGreetingTemplates: vi.fn(),
+  getApplySummary: vi.fn(),
+}));
+
+vi.mock("../../api/applyExtras", () => ({
+  runQueuePreflight: extrasMocks.runQueuePreflight,
+  getGreetingTemplates: extrasMocks.getGreetingTemplates,
+  getApplySummary: extrasMocks.getApplySummary,
 }));
 
 const BASE_ITEM: ApplyQueueItem = {
@@ -71,7 +87,28 @@ beforeEach(() => {
   apiMocks.listResumes.mockResolvedValue({ items: [], total: 0 });
   // 浏览器默认已启动：绝大多数用例不关心浏览器前置检查这一层。
   apiMocks.getBrowserStatus.mockResolvedValue({ state: "running" });
+  // 体检默认"干净"：这些用例不测体检，但要保证"开始投递"不会被确认弹层拦住。
+  extrasMocks.runQueuePreflight.mockResolvedValue({
+    items: [],
+    summary: { blocking: 0, warnings: 0 },
+  });
+  extrasMocks.getGreetingTemplates.mockResolvedValue({ templates: [] });
+  // #14G 的四步引导默认视为"已看过"：首次进入会展开一次 Popover，会盖住断言范围。
+  window.localStorage.setItem(APPLY_GUIDE_SEEN_KEY, "1");
 });
+
+/** 统一挂载方式：空态与体检抽屉都含 `<Link>`，必须有 Router 上下文。 */
+function renderPanel() {
+  return render(
+    <MemoryRouter>
+      <AntdApp>
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
+      </AntdApp>
+    </MemoryRouter>,
+  );
+}
 
 afterEach(() => {
   cleanup();
@@ -92,13 +129,7 @@ describe("ApplyQueuePanel 分页与刷新", () => {
       ),
     );
 
-    render(
-      <AntdApp>
-        <ContextMenuHost>
-          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
-        </ContextMenuHost>
-      </AntdApp>,
-    );
+    renderPanel();
 
     expect(await screen.findByText("岗位 1")).toBeInTheDocument();
     expect(document.querySelectorAll(".ant-table-tbody tr.ant-table-row")).toHaveLength(10);
@@ -114,13 +145,7 @@ describe("ApplyQueuePanel 分页与刷新", () => {
       () => new Promise<ReturnType<typeof queueList>>((resolve) => (resolveQueue = resolve)),
     );
 
-    render(
-      <AntdApp>
-        <ContextMenuHost>
-          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
-        </ContextMenuHost>
-      </AntdApp>,
-    );
+    renderPanel();
 
     // 首次加载走骨架屏（data 为空），按钮随后才出现。
     resolveQueue(queueList([{ ...BASE_ITEM }]));
@@ -153,13 +178,7 @@ describe("ApplyQueuePanel 筛选、跨页全选与批量移出", () => {
       queueList([withStatus(1, "待投岗位", "pending"), withStatus(2, "已投岗位", "done")]),
     );
 
-    render(
-      <AntdApp>
-        <ContextMenuHost>
-          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
-        </ContextMenuHost>
-      </AntdApp>,
-    );
+    renderPanel();
 
     expect(await screen.findByText("待投岗位")).toBeInTheDocument();
     expect(screen.getByText(/共 2 个岗位/)).toBeInTheDocument();
@@ -187,13 +206,7 @@ describe("ApplyQueuePanel 筛选、跨页全选与批量移出", () => {
       ]),
     );
 
-    render(
-      <AntdApp>
-        <ContextMenuHost>
-          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
-        </ContextMenuHost>
-      </AntdApp>,
-    );
+    renderPanel();
 
     await screen.findByText("未分析岗位");
 
@@ -219,13 +232,7 @@ describe("ApplyQueuePanel 筛选、跨页全选与批量移出", () => {
       ),
     );
 
-    render(
-      <AntdApp>
-        <ContextMenuHost>
-          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
-        </ContextMenuHost>
-      </AntdApp>,
-    );
+    renderPanel();
 
     fireEvent.click(await screen.findByRole("button", { name: "全选队列" }));
     expect(await screen.findByText(/已选 11 个/)).toBeInTheDocument();
@@ -237,13 +244,7 @@ describe("ApplyQueuePanel 筛选、跨页全选与批量移出", () => {
     );
     apiMocks.removeQueueItem.mockResolvedValue(undefined);
 
-    render(
-      <AntdApp>
-        <ContextMenuHost>
-          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
-        </ContextMenuHost>
-      </AntdApp>,
-    );
+    renderPanel();
 
     await screen.findByText("移出甲");
     fireEvent.click(screen.getByRole("button", { name: "全选队列" }));
@@ -260,5 +261,28 @@ describe("ApplyQueuePanel 筛选、跨页全选与批量移出", () => {
     await waitFor(() => expect(apiMocks.removeQueueItem).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("已把 2 个岗位移出队列")).toBeInTheDocument();
     expect(screen.getByText(/已选 0 个/)).toBeInTheDocument();
+  });
+
+  it("「只看收藏」开关只留下收藏的条目（14B）", async () => {
+    apiMocks.listQueue.mockResolvedValue(
+      queueList([
+        { ...BASE_ITEM, id: 1, job_id: 1, job_title: "收藏岗位", favorite: true },
+        { ...BASE_ITEM, id: 2, job_id: 2, job_title: "普通岗位", favorite: false },
+      ]),
+    );
+
+    renderPanel();
+
+    // 行文本从 DOM 读，不用 ByText 写中文（i18n 棘轮只降不升）。
+    const rowTexts = () =>
+      [...document.querySelectorAll(".ant-table-tbody tr.ant-table-row")].map(
+        (row) => row.textContent ?? "",
+      );
+    await waitFor(() => expect(rowTexts()).toHaveLength(2));
+
+    fireEvent.click(screen.getByRole("switch", { name: t("applyQueue.filter.favoriteOnly") }));
+
+    await waitFor(() => expect(rowTexts()).toHaveLength(1));
+    expect(rowTexts()[0]).toContain("收藏岗位");
   });
 });
