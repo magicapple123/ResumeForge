@@ -778,6 +778,71 @@ while ($true) {
         -Condition ($deadRecordStatus -eq "not-running" -and -not (Test-Path -LiteralPath $deadRecordPath)) `
         -Message "记录指向已死进程时必须返回 not-running 并删除过期记录。"
 
+    # ---- P2-3：启动器版本一致性（health.version vs 磁盘 app_version / 代码 mtime） ----
+    #
+    # 2026-11-10 的实测形态：8005 上跑着 12:33:35 启动的 2.0.0，健康、命令行也对，老逻辑
+    # 于是原样沿用，而代码早已 2.1.0 —— 设置页永远显示旧版本，新前端配旧后端。判定拆成
+    # 纯函数，三条分支（版本不同 / 代码更新 / 两者一致）都在这里离线断言，不需要真的起一个
+    # 旧版本后端，也不许在用例里 Stop-Process 真实进程。
+    $backendDirectoryForVersion = Join-Path $ProjectRoot "backend"
+    $sourceVersion = Get-ResumeForgeSourceVersion -BackendDirectory $backendDirectoryForVersion
+    Assert-LauncherTest `
+        -Condition ($null -ne $sourceVersion -and $sourceVersion -match '^\d+\.\d+\.\d+') `
+        -Message "必须能从 backend\app\config.py 读出 app_version（读到的是 '$sourceVersion'）。"
+    $sourceMtime = Get-ResumeForgeBackendSourceMtime -BackendDirectory $backendDirectoryForVersion
+    Assert-LauncherTest `
+        -Condition ($sourceMtime -is [datetime]) `
+        -Message "必须能算出 backend\app\**（含 templates/prompts）的最新修改时刻。"
+
+    $processStartedUtc = [datetime]::new(2026, 11, 10, 4, 33, 35, [DateTimeKind]::Utc)
+
+    # ① 运行中 2.0.0、磁盘 2.1.0 → 停旧起新，理由里两个版本号都要出现（便于日志定位）。
+    $staleVersionReason = Compare-ResumeForgeBackendFreshness `
+        -RunningVersion "2.0.0" -SourceVersion "2.1.0" `
+        -SourceMtimeUtc $processStartedUtc.AddHours(-3) -ProcessStartUtc $processStartedUtc
+    Assert-LauncherTest `
+        -Condition ($staleVersionReason -match "2\.0\.0" -and $staleVersionReason -match "2\.1\.0") `
+        -Message "运行中版本与磁盘版本不同必须判定为需要重启（实际：'$staleVersionReason'）。"
+
+    # ② 版本号一样、但代码比进程新（git checkout / 解压覆盖之后没重启）→ 同样要重启。
+    $staleMtimeReason = Compare-ResumeForgeBackendFreshness `
+        -RunningVersion "2.1.0" -SourceVersion "2.1.0" `
+        -SourceMtimeUtc $processStartedUtc.AddMinutes(1) -ProcessStartUtc $processStartedUtc
+    Assert-LauncherTest `
+        -Condition ($null -ne $staleMtimeReason) `
+        -Message "代码改动晚于进程启动时间时必须判定为需要重启。"
+
+    # ③ 版本一致、代码也不比进程新 → 什么都不做（绝不能每次双击都重启一遍）。
+    $freshReason = Compare-ResumeForgeBackendFreshness `
+        -RunningVersion "2.1.0" -SourceVersion "2.1.0" `
+        -SourceMtimeUtc $processStartedUtc.AddHours(-1) -ProcessStartUtc $processStartedUtc
+    Assert-LauncherTest `
+        -Condition ($null -eq $freshReason) `
+        -Message "版本与代码时间都一致时不得重启（实际：'$freshReason'）。"
+
+    # 版本号带 v 前缀（health 里可能写成 v2.1.0）不该被当成"版本不同"。
+    $prefixedReason = Compare-ResumeForgeBackendFreshness `
+        -RunningVersion "v2.1.0" -SourceVersion "2.1.0" `
+        -SourceMtimeUtc $processStartedUtc.AddHours(-1) -ProcessStartUtc $processStartedUtc
+    Assert-LauncherTest `
+        -Condition ($null -eq $prefixedReason) `
+        -Message "只有 v 前缀差异时不得重启（实际：'$prefixedReason'）。"
+
+    # 读到一半的信息（健康检查没给 version / 代码目录读不到）时不许重启：猜错的代价是
+    # 打断一个正在正常服务用户的进程。
+    $unknownReason = Compare-ResumeForgeBackendFreshness `
+        -RunningVersion "" -SourceVersion "2.1.0" `
+        -SourceMtimeUtc $null -ProcessStartUtc $null
+    Assert-LauncherTest `
+        -Condition ($null -eq $unknownReason) `
+        -Message "信息不足时不得判定为需要重启（实际：'$unknownReason'）。"
+
+    # 函数写得再好，启动器不调用也不会生效——钉住接线。
+    $processScriptContent = Get-Content -LiteralPath (Join-Path $ProjectRoot "scripts\ResumeForge.Process.ps1") -Raw -Encoding utf8
+    Assert-LauncherTest `
+        -Condition ($processScriptContent -match 'Get-StaleBackendReason') `
+        -Message "Start-ResumeForge 必须在沿用已运行的后端之前调用 Get-StaleBackendReason（否则旧版本会被一直沿用）。"
+
     # ---- 一台什么都没装的电脑：引导分支 -----------------------------------------
     # 覆盖参与判断的函数，断言"找不到 Python / Node 时"走的是哪条路。**真下载**由
     # windows-runtimes 作业负责（它会真的下 portable Node 与 Python 安装包并校验摘要）；

@@ -519,3 +519,115 @@ function Stop-RecordedProcess {
         }
     }
 }
+
+<#
+P2-3：启动器版本一致性。
+
+现象（2026-11-10 实测）：8005 上跑着 12:33:35 启动的进程，`/api/health` 返回 2.0.0，而磁盘
+代码已经 2.1.0（发布提交 15:32:02、dist 构建 16:54）。双击 start.cmd 之所以没有任何动作，
+是因为健康检查只问"status 是否 ok"、归属校验只看 PID/启动时间/命令行——**旧进程两关都过**，
+于是被原样沿用，设置页永远显示旧版本。新前端 + 旧后端这种半新半旧状态最难排查。
+
+判定只看两件事，任一成立就停旧起新：
+  1. 运行中进程自报的版本 ≠ 磁盘 `backend/app/config.py` 的 `app_version`；
+  2. `backend/app/**`（含 templates/prompts）里最新的一次改动时间晚于该进程的启动时间。
+
+第 2 条正是"git checkout 之后忘重启"的那种形态；代价是 checkout 会让文件时间变新、导致一次
+误重启——可以接受，因为用户双击 start.cmd 本来就是想拿到最新的一份。
+#>
+function Get-ResumeForgeSourceVersion {
+    param([Parameter(Mandatory = $true)][string]$BackendDirectory)
+
+    # 版本号的唯一真相是 `backend/app/config.py` 里的 `app_version: str = "2.1.0"`。
+    # 用正则读而不是 import Python：这个函数在"venv 还没建"的时刻也要能给出答案。
+    $configPath = Join-Path $BackendDirectory "app\config.py"
+    if (-not (Test-Path -LiteralPath $configPath)) {
+        return $null
+    }
+    try {
+        $content = Get-Content -LiteralPath $configPath -Raw -Encoding utf8
+    }
+    catch {
+        return $null
+    }
+    $match = [regex]::Match($content, 'app_version\s*:\s*str\s*=\s*"([^"]+)"')
+    if (-not $match.Success) {
+        $match = [regex]::Match($content, "app_version\s*:\s*str\s*=\s*'([^']+)'")
+    }
+    if (-not $match.Success) {
+        return $null
+    }
+    return $match.Groups[1].Value.Trim()
+}
+
+function Get-ResumeForgeBackendSourceMtime {
+    param([Parameter(Mandatory = $true)][string]$BackendDirectory)
+
+    # backend/app/** 的最新修改时刻（UTC）。取不到（目录没了/没有读权限）时返回 $null：
+    # 宁可不判断，也不要因为读不到时间就误停一个正在正常服务用户的进程。
+    $appDirectory = Join-Path $BackendDirectory "app"
+    if (-not (Test-Path -LiteralPath $appDirectory)) {
+        return $null
+    }
+    $newest = Get-ChildItem -LiteralPath $appDirectory -Recurse -File -ErrorAction SilentlyContinue |
+        Sort-Object -Property LastWriteTimeUtc -Descending |
+        Select-Object -First 1
+    if ($null -eq $newest) {
+        return $null
+    }
+    return $newest.LastWriteTimeUtc
+}
+
+function Compare-ResumeForgeBackendFreshness {
+    param(
+        [AllowNull()][string]$RunningVersion,
+        [AllowNull()][string]$SourceVersion,
+        [AllowNull()][object]$SourceMtimeUtc,
+        [AllowNull()][object]$ProcessStartUtc
+    )
+
+    # 纯比较：返回"为什么不新鲜"的一句话；一致 / 信息不足时返回 $null。
+    # 单独成函数是为了让三条判定（版本不同 / 代码更新 / 两者一致）都能离线断言，
+    # 不需要真的起一个旧版本后端。
+    $running = if ($null -eq $RunningVersion) { "" } else { ([string]$RunningVersion).Trim().TrimStart("vV") }
+    $disk = if ($null -eq $SourceVersion) { "" } else { ([string]$SourceVersion).Trim().TrimStart("vV") }
+    if ($running.Length -gt 0 -and $disk.Length -gt 0 -and $running -ne $disk) {
+        return "运行中的版本是 $running，磁盘上的代码是 $disk"
+    }
+    if ($null -ne $SourceMtimeUtc -and $null -ne $ProcessStartUtc) {
+        $sourceTime = ([datetime]$SourceMtimeUtc).ToUniversalTime()
+        $startTime = ([datetime]$ProcessStartUtc).ToUniversalTime()
+        if ($sourceTime -gt $startTime) {
+            return ("后端代码比运行中的进程新（代码最后改动 {0:yyyy-MM-dd HH:mm:ss}Z，进程启动 {1:yyyy-MM-dd HH:mm:ss}Z）" -f $sourceTime, $startTime)
+        }
+    }
+    return $null
+}
+
+function Get-StaleBackendReason {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][string]$BackendDirectory,
+        [AllowNull()][System.Diagnostics.Process]$Process = $null
+    )
+
+    # 健康检查都拿不到时不猜：那种情况由调用方的"端口被占"分支处理。
+    $health = Get-ResumeForgeHealth -Url $Url
+    if ($null -eq $health) {
+        return $null
+    }
+    $processStart = $null
+    if ($null -ne $Process) {
+        try {
+            $processStart = $Process.StartTime.ToUniversalTime()
+        }
+        catch {
+            $processStart = $null
+        }
+    }
+    return Compare-ResumeForgeBackendFreshness `
+        -RunningVersion ([string](Get-ProcessRecordField -Record $health -Name "version")) `
+        -SourceVersion (Get-ResumeForgeSourceVersion -BackendDirectory $BackendDirectory) `
+        -SourceMtimeUtc (Get-ResumeForgeBackendSourceMtime -BackendDirectory $BackendDirectory) `
+        -ProcessStartUtc $processStart
+}

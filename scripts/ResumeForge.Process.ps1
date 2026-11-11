@@ -192,6 +192,21 @@ function Start-ResumeForge {
         if ($backendRunning) {
             Assert-RunningServiceIsOwned -DisplayName "后端" -RecordPath $BackendPidPath `
                 -CommandPattern $backendRecordPattern -Port $BackendPort -PortOption "-BackendPort"
+            # P2-3：端口上那个进程健康、是"自己人"，但它可能是**旧版本**——2026-11-10 实测
+            # 就是 12:33 起的 2.0.0 一直被沿用，而代码早已 2.1.0，于是设置页显示旧版本、
+            # 新前端配旧后端。老逻辑只问 status 与 PID，两关都过，所以什么都没做。这里再
+            # 比对版本号与代码改动时间，不一致就停旧起新（判定细节见 Common.ps1 的注释）。
+            $staleReason = Get-StaleBackendReason -Url $BackendUrl -BackendDirectory $BackendDirectory `
+                -Process (Get-ProcessRecordMatch -RecordPath $BackendPidPath -CommandPattern $backendRecordPattern)
+            if (-not [string]::IsNullOrWhiteSpace($staleReason)) {
+                Write-Warning "后端跑的不是当前这份代码（$staleReason），先停掉它再启动新的。"
+                $null = Stop-RecordedProcess -DisplayName "backend" -RecordPath $BackendPidPath -CommandPattern $backendRecordPattern
+                Start-Sleep -Milliseconds 800
+                $backendRunning = $false
+            }
+        }
+
+        if ($backendRunning) {
             Write-Host "后端已经在运行：$BackendUrl"
         }
         else {
