@@ -126,15 +126,19 @@ def commit_from_url_route(
     这一条**不把异常原文回给前端**：``commit_rows`` 自己不抛可读的 ``ValueError``，
     能落到这里的都是 pydantic / SQLAlchemy 内部错误，原文会带出表名、路径与栈帧摘要
     （CodeQL ``py/stack-trace-exposure``）。细节进日志，前端只拿到固定文案。
+
+    抛出动作必须**在 except 块之外**：Python 会自动给"handler 里抛出的异常"挂上
+    ``__context__``，那条链就是 CodeQL 判定的泄露路径——``from exc`` 报一次、
+    ``from None`` 还报一次（后者只影响显示，``__context__`` 照样在）。
     """
+    failure: HTTPException | None = None
     try:
         return commit_rows(db, payload.rows, fill_empty_only=payload.fill_empty_only)
     except ValueError:
-        # `from None`：显式断掉异常链。CodeQL 的 `py/stack-trace-exposure` 把"被链接
-        # 进 HTTPException 的原始异常"也当作可达栈路径（`from exc` 就因此报了第二次）；
-        # 前端只该看到固定文案，原始异常留在日志里。
         logger.warning("从链接导入的提交失败", exc_info=True)
-        raise HTTPException(status_code=422, detail="导入数据不合法") from None
+        failure = HTTPException(status_code=422, detail="导入数据不合法")
+    assert failure is not None  # 走到这里只可能是上面那个 except 命中
+    raise failure
 
 
 __all__ = [
