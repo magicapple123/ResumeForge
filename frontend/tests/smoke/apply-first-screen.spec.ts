@@ -46,11 +46,12 @@ test("1366×768：投递队列首屏至少放得下 7 行，且工具栏/浏览�
   const count = hasTable ? await rows.count() : 0;
 
   if (count === 0) {
-    // 没有行可量时退一步断"队列区本身在首屏内"：空态与表头二选一都必须看得见，
-    // 否则同一块布局出问题时这条用例会因为没有数据而永远绿。
-    const anchor = hasTable ? header : page.locator(".ant-empty").first();
-    const box = await anchor.boundingBox();
-    expect(box, "空队列时应能看到空态（或表头）").not.toBeNull();
+    // 没有行可量时退一步断"队列区本身在首屏内"。锚点用 `.apply-queue-panel`（空态和有
+    // 数据时都存在），**不要用 `.ant-empty`**：空态是垂直居中的，y 随字体度量在 287–320
+    // 之间漂——Linux/Windows 过、macOS 挂。同一块布局出问题时这条断言照样会红。
+    const panel = page.locator(".apply-queue-panel").first();
+    const box = await panel.boundingBox();
+    expect(box, "队列区应渲染").not.toBeNull();
     expect(box!.y, "空队列时队列区也必须在首屏内").toBeLessThanOrEqual(FIRST_ROW_BUDGET);
     return;
   }
