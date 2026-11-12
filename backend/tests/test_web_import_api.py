@@ -304,27 +304,26 @@ def test_commit_rejects_empty_rows(client):
     assert response.status_code == 422
 
 
-def test_commit_never_echoes_internal_exception_text(client, monkeypatch):
-    """提交失败只回固定文案：内部异常原文可能带表名/路径/栈帧（CodeQL stack-trace-exposure）。
+def test_commit_failed_row_never_echoes_internal_exception_text(db_session, monkeypatch):
+    """单行失败只回固定文案：内部异常原文可能带表名/路径（CodeQL stack-trace-exposure）。
 
-    这条钉的是**回给前端的内容**，不是状态码：`commit_rows` 自己不抛可读 `ValueError`，
-    能到这儿的都是内部错误，原文一条都不许漏出去。
+    根因修在服务层：`commit_rows` 的逐行容错此前把 `str(exc)` 放进响应的
+    ``failed[].message``——"异常文本 → 响应"这条链就是 CodeQL 判的泄露。这里钉住：
+    原文一个字都不许出现在结果里，行号 + 标题足够定位是哪一条。
     """
     leak = "INSERT INTO user_secret (path=/home/runner/.env) failed"
 
     def boom(*_args, **_kwargs):
         raise ValueError(leak)
 
-    monkeypatch.setattr("app.api.job_import_url.commit_rows", boom)
-    response = client.post(
-        "/api/jobs/import/from-url/commit",
-        json={"rows": [{"data": {"title": "后端开发"}}]},
-    )
+    monkeypatch.setattr(import_service, "create_job_record", boom)
+    result = import_service.commit_rows(db_session, [{"data": {"title": "后端开发"}}])
 
-    assert response.status_code == 422
-    assert response.json()["detail"] == "导入数据不合法"
-    assert leak not in response.text
-    assert "user_secret" not in response.text
+    assert result["imported"] == 0
+    assert len(result["failed"]) == 1
+    assert result["failed"][0]["message"] == "这一条导入失败"
+    assert "user_secret" not in str(result)
+    assert leak not in str(result)
 
 
 def test_routes_are_registered_before_the_jobs_router():

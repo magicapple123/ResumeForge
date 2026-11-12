@@ -378,9 +378,13 @@ def commit_rows(
                 continue
             create_job_record(db, JobCreate(**payload))
             imported += 1
-        except Exception as exc:  # noqa: BLE001 - 单行失败不拖垮整批
+        except Exception:  # noqa: BLE001 - 单行失败不拖垮整批
             db.rollback()
-            failed.append({"index": index, "title": title, "message": str(exc) or "这一条导入失败"})
+            # 不回传异常原文：ValueError / IntegrityError 的消息里常见表名、列名与 SQL 片段，
+            # 这些会直接出现在导入结果里（CodeQL `py/stack-trace-exposure` 追的就是这条
+            # "异常文本 → 响应"的链）。行号 + 标题足够定位是哪一条，原文进日志。
+            logger.warning("从链接导入：第 %s 条（%s）失败", index, title, exc_info=True)
+            failed.append({"index": index, "title": title, "message": "这一条导入失败"})
     return {"imported": imported, "updated": updated, "skipped": skipped, "failed": failed}
 
 

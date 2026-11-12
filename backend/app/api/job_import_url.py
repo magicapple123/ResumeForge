@@ -123,25 +123,10 @@ def commit_from_url_route(
 ) -> dict[str, Any]:
     """确认导入：新建 / 仅补空字段 / 跳过已在库的行，逐行容错。
 
-    这一条**不把异常原文回给前端**：``commit_rows`` 自己不抛可读的 ``ValueError``，
-    能落到这里的都是 pydantic / SQLAlchemy 内部错误，原文会带出表名、路径与栈帧摘要
-    （CodeQL ``py/stack-trace-exposure``）。细节进日志，前端只拿到固定文案。
-
-    抛出动作必须**在 except 块之外**，而且 handler 里**不构造异常对象**：Python 会给
-    "在 handler 里抛出的异常"自动挂 ``__context__``，那条链就是 CodeQL 判定的泄露路径
-    ——``from exc`` 报一次、``from None`` 还报一次（后者只影响显示），连"在 handler 里
-    造好、外面再抛"也被算进去（对象在 handler 里诞生）。所以只记一个布尔位。
+    逐行的失败原因由 `commit_rows` 统一收口（固定文案，异常原文只进日志），所以这里
+    不再包一层 try/except：真出现整批级异常就让它冒到框架的 500，响应体里不带栈信息。
     """
-    failed = False
-    try:
-        return commit_rows(db, payload.rows, fill_empty_only=payload.fill_empty_only)
-    except ValueError:
-        logger.warning("从链接导入的提交失败", exc_info=True)
-        failed = True
-    if failed:
-        raise HTTPException(status_code=422, detail="导入数据不合法")
-    # 上面 try 要么返回、要么把 failed 置 True；这行只是给类型检查一个终点。
-    raise HTTPException(status_code=500, detail="导入失败")  # pragma: no cover
+    return commit_rows(db, payload.rows, fill_empty_only=payload.fill_empty_only)
 
 
 __all__ = [
