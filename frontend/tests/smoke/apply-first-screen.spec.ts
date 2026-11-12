@@ -35,18 +35,28 @@ test("1366×768：投递队列首屏至少放得下 7 行，且工具栏/浏览�
   expect(toolbar, "队列工具栏应渲染").not.toBeNull();
   expect(toolbar!.height, "队列工具栏必须是一行（#14H）").toBeLessThanOrEqual(44);
 
-  const header = await page.locator(".ant-table-thead").first().boundingBox();
-  expect(header, "表头应渲染").not.toBeNull();
+  const header = page.locator(".ant-table-thead").first();
+
+  // **空队列时整张表都不渲染**（换成 `<Empty>` 空态），所以不能一上来就等 `.ant-table-thead`：
+  // CI 的 e2e 用干净数据目录，等 90s 也不会出现表头。先看表在不在，再分两条路量。
+  const hasTable = (await header.count()) > 0;
+  if (hasTable) await header.waitFor({ state: "visible" });
 
   const rows = page.locator(".ant-table-tbody tr.ant-table-row");
-  const count = await rows.count();
+  const count = hasTable ? await rows.count() : 0;
 
   if (count === 0) {
-    // 空队列时没有行可量，退一步断"表头本身也在首屏内"——否则同一块布局出问题时
-    // 这条用例会因为没有数据而永远绿。
-    expect(header!.y, "空队列时表头也必须在首屏内").toBeLessThanOrEqual(FIRST_ROW_BUDGET);
+    // 没有行可量时退一步断"队列区本身在首屏内"：空态与表头二选一都必须看得见，
+    // 否则同一块布局出问题时这条用例会因为没有数据而永远绿。
+    const anchor = hasTable ? header : page.locator(".ant-empty").first();
+    const box = await anchor.boundingBox();
+    expect(box, "空队列时应能看到空态（或表头）").not.toBeNull();
+    expect(box!.y, "空队列时队列区也必须在首屏内").toBeLessThanOrEqual(FIRST_ROW_BUDGET);
     return;
   }
+
+  const headerBox = await header.boundingBox();
+  expect(headerBox, "表头应渲染").not.toBeNull();
 
   const first = await rows.first().boundingBox();
   expect(first, "首行应可测量").not.toBeNull();

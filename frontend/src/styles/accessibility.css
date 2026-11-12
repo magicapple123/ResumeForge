@@ -58,6 +58,17 @@
   color: var(--rf-warning-text);
 }
 
+/*
+ * 投递台「投递专用浏览器」的扫码提示：内层是 antd Typography `type="warning"`，取
+ * colorWarning #faad14，白底 ~1.9:1，过不了 axe color-contrast 的 AA —— CI 的
+ * `a11y.spec.ts` / `ui-quality.spec.ts` 会在 /apply 判 serious。外层
+ * `.apply-browser-login-hint` 早就用了站内 warning 文字 token（#875300），但内层
+ * Typography 自带 color 把它盖掉了。这里压回 token（与上面两条同一套口径）。
+ */
+.apply-browser-login-hint .ant-typography {
+  color: var(--rf-warning-text);
+}
+
 .tt-profile-prompt-card-title {
   color: var(--rf-text-secondary);
 }

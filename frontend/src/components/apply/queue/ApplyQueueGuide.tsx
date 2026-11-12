@@ -46,9 +46,19 @@ export function ApplyQueueGuide() {
   return (
     <Popover
       trigger="click"
-      placement="bottomLeft"
+      // 右对齐而不是左对齐：触发按钮在工具栏最右端，`bottomLeft` 会把 402px 宽的气泡
+      // 从右端往右推，document 因此多出 16px 横向滚动（CI 的 ui-quality 在 /apply 上
+      // 判 document overflow，1200×900 也复现）。气泡宽度同时夹到视口内，窄屏不至于
+      // 把左边挤出屏幕。
+      placement="bottomRight"
       open={open}
       onOpenChange={handleOpenChange}
+      // 宽度夹在视口内：`content` 只约束正文（还要加上气泡自身 24px 内边距），`root` 才
+      // 是外层那个可能超出视口的盒子——375 宽实测右缘会多出 8px（CI 判 document overflow）。
+      styles={{
+        root: { maxWidth: "calc(100vw - 32px)" },
+        content: { maxWidth: "100%" },
+      }}
       title={t("applyQueue.guide.title")}
       content={
         <ol className="apply-queue-guide-steps">

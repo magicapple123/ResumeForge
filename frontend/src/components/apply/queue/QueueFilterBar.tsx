@@ -111,110 +111,116 @@ export function QueueFilterBar({
 
   return (
     <div className="apply-queue-head">
-      <Space wrap={false} size={8} align="center" className="apply-queue-head-main">
-        <Select
-          allowClear
-          placeholder={t("applyQueue.filter.byStatus")}
-          style={{ width: 116 }}
-          value={statusFilter}
-          onChange={(value) => onStatusChange(value as QueueStatus | undefined)}
-          options={statusFilterOptions()}
-          aria-label={t("applyQueue.filter.byStatus")}
-        />
-        <Select
-          allowClear
-          placeholder={t("applyQueue.filter.byAdmission")}
-          style={{ width: 116 }}
-          value={admissionFilter}
-          onChange={(value) => onAdmissionChange(value as AdmissionFilterValue | undefined)}
-          options={admissionFilterOptions()}
-          aria-label={t("applyQueue.filter.byAdmission")}
-        />
-        {/* 收藏是用户的强意图信号，做成独立开关而不是第三个下拉（只有开/关两态）。 */}
-        <Space size={6}>
-          <Switch
-            size="small"
-            checked={favoriteOnly}
-            onChange={onFavoriteOnlyChange}
-            aria-label={t("applyQueue.filter.favoriteOnly")}
+      {/* 只有**筛选**这一半进横向滚动容器：右侧那组（批量动作 + 使用说明）必须常驻。
+          两者同在一个滚动容器里时，内容比容器宽 50px（1200×900 实测），最右的「?」
+          会被裁掉一截；而它 402px 的说明气泡会按被裁后的坐标定位，document 因此多出
+          16px 横向滚动（CI 的 ui-quality 在 /apply 判 document overflow）。 */}
+      <div className="apply-queue-head-scroll">
+        <Space wrap={false} size={8} align="center" className="apply-queue-head-main">
+          <Select
+            allowClear
+            placeholder={t("applyQueue.filter.byStatus")}
+            style={{ width: 116 }}
+            value={statusFilter}
+            onChange={(value) => onStatusChange(value as QueueStatus | undefined)}
+            options={statusFilterOptions()}
+            aria-label={t("applyQueue.filter.byStatus")}
           />
-          <Typography.Text>{t("applyQueue.filter.favoriteOnly")}</Typography.Text>
-        </Space>
-        <Typography.Text type="secondary">
-          {filterActive
-            ? t("applyQueue.filter.countFiltered", {
-                total: queueTotal,
-                shown: filteredCount,
-                selected: selectedCount,
-              })
-            : t("applyQueue.filter.count", { total: queueTotal, selected: selectedCount })}
-        </Typography.Text>
-        {/* 「跨页」属于条件信息：只在悬停里等于大多数人永远看不到（#35E）——挂 Tooltip 后
+          <Select
+            allowClear
+            placeholder={t("applyQueue.filter.byAdmission")}
+            style={{ width: 116 }}
+            value={admissionFilter}
+            onChange={(value) => onAdmissionChange(value as AdmissionFilterValue | undefined)}
+            options={admissionFilterOptions()}
+            aria-label={t("applyQueue.filter.byAdmission")}
+          />
+          {/* 收藏是用户的强意图信号，做成独立开关而不是第三个下拉（只有开/关两态）。 */}
+          <Space size={6}>
+            <Switch
+              size="small"
+              checked={favoriteOnly}
+              onChange={onFavoriteOnlyChange}
+              aria-label={t("applyQueue.filter.favoriteOnly")}
+            />
+            <Typography.Text>{t("applyQueue.filter.favoriteOnly")}</Typography.Text>
+          </Space>
+          <Typography.Text type="secondary">
+            {filterActive
+              ? t("applyQueue.filter.countFiltered", {
+                  total: queueTotal,
+                  shown: filteredCount,
+                  selected: selectedCount,
+                })
+              : t("applyQueue.filter.count", { total: queueTotal, selected: selectedCount })}
+          </Typography.Text>
+          {/* 「跨页」属于条件信息：只在悬停里等于大多数人永远看不到（#35E）——挂 Tooltip 后
             不再占一整行文字（#14G 第二版）。 */}
-        <Tooltip title={t("applyQueue.filter.selectAllHint")}>
-          <Button disabled={busy || selectableCount === 0} onClick={onSelectAll}>
-            {t("applyQueue.filter.selectAll")}
-          </Button>
-        </Tooltip>
-        <Popconfirm
-          // 标题只留动作 + 对象：加数量会顶到「弹窗标题 ≤12 字」上限（§1.5），而选中几条
-          // 在工具栏「已选 N 个」里就写着；后果与可逆性进正文（§4.4 三段式）。
-          title={t("applyQueue.confirm.removeSelectedTitle")}
-          description={t("applyQueue.confirm.removeBody")}
-          okText={t("applyQueue.action.removeShort")}
-          cancelText={t("common.action.cancel")}
-          okButtonProps={{ danger: true }}
-          disabled={busy || selectedCount === 0 || batchRemoving}
-          onConfirm={onRemoveSelected}
-        >
-          <Button danger disabled={busy || selectedCount === 0} loading={batchRemoving}>
-            {t("applyQueue.action.removeSelected")}
-          </Button>
-        </Popconfirm>
-        {/* #14I：来源不支持的清理入口。它是"一条就会卡住整队列投递"的硬问题，
-            所以常驻工具栏（而不是藏在行菜单里），但只在真的有这类条目时出现。 */}
-        {unsupportedCount > 0 && (
-          <Tooltip title={t("applyQueue.unsupported.chipHint")}>
-            <Popconfirm
-              title={t("applyQueue.unsupported.chipTitle", { count: unsupportedCount })}
-              description={t("applyQueue.unsupported.chipBody")}
-              okText={t("applyQueue.action.removeShort")}
-              cancelText={t("common.action.cancel")}
-              okButtonProps={{ danger: true }}
-              disabled={busy}
-              onConfirm={onRemoveUnsupported}
-            >
-              <Button size="small" danger className="apply-queue-chip" disabled={busy}>
-                {t("applyQueue.unsupported.chip", { count: unsupportedCount })}
-              </Button>
-            </Popconfirm>
+          <Tooltip title={t("applyQueue.filter.selectAllHint")}>
+            <Button disabled={busy || selectableCount === 0} onClick={onSelectAll}>
+              {t("applyQueue.filter.selectAll")}
+            </Button>
           </Tooltip>
-        )}
-        {/* #14A：体检是只读的，随时可点；不阻塞开始投递（blocking 只在开始时确认一次）。
+          <Popconfirm
+            // 标题只留动作 + 对象：加数量会顶到「弹窗标题 ≤12 字」上限（§1.5），而选中几条
+            // 在工具栏「已选 N 个」里就写着；后果与可逆性进正文（§4.4 三段式）。
+            title={t("applyQueue.confirm.removeSelectedTitle")}
+            description={t("applyQueue.confirm.removeBody")}
+            okText={t("applyQueue.action.removeShort")}
+            cancelText={t("common.action.cancel")}
+            okButtonProps={{ danger: true }}
+            disabled={busy || selectedCount === 0 || batchRemoving}
+            onConfirm={onRemoveSelected}
+          >
+            <Button danger disabled={busy || selectedCount === 0} loading={batchRemoving}>
+              {t("applyQueue.action.removeSelected")}
+            </Button>
+          </Popconfirm>
+          {/* #14I：来源不支持的清理入口。它是"一条就会卡住整队列投递"的硬问题，
+            所以常驻工具栏（而不是藏在行菜单里），但只在真的有这类条目时出现。 */}
+          {unsupportedCount > 0 && (
+            <Tooltip title={t("applyQueue.unsupported.chipHint")}>
+              <Popconfirm
+                title={t("applyQueue.unsupported.chipTitle", { count: unsupportedCount })}
+                description={t("applyQueue.unsupported.chipBody")}
+                okText={t("applyQueue.action.removeShort")}
+                cancelText={t("common.action.cancel")}
+                okButtonProps={{ danger: true }}
+                disabled={busy}
+                onConfirm={onRemoveUnsupported}
+              >
+                <Button size="small" danger className="apply-queue-chip" disabled={busy}>
+                  {t("applyQueue.unsupported.chip", { count: unsupportedCount })}
+                </Button>
+              </Popconfirm>
+            </Tooltip>
+          )}
+          {/* #14A：体检是只读的，随时可点；不阻塞开始投递（blocking 只在开始时确认一次）。
             图标按钮 + aria-label：文字按钮比图标宽 ~60px，第二行就是这么被挤出来的。 */}
-        <Tooltip title={t("applyQueue.action.preflight")}>
-          <Button
-            icon={<SafetyCertificateOutlined />}
-            aria-label={t("applyQueue.action.preflight")}
-            loading={preflightLoading}
-            disabled={busy}
-            onClick={onPreflight}
-          />
-        </Tooltip>
-        {/* loading 直接挂 reload 的请求态：本地接口虽快，转圈一闪也是「点到了」的确认
+          <Tooltip title={t("applyQueue.action.preflight")}>
+            <Button
+              icon={<SafetyCertificateOutlined />}
+              aria-label={t("applyQueue.action.preflight")}
+              loading={preflightLoading}
+              disabled={busy}
+              onClick={onPreflight}
+            />
+          </Tooltip>
+          {/* loading 直接挂 reload 的请求态：本地接口虽快，转圈一闪也是「点到了」的确认
             （此前点击毫无反馈，用户会以为没点上而连点好几次）。 */}
-        <Tooltip title={t("common.action.refresh")}>
-          <Button
-            icon={<ReloadOutlined />}
-            aria-label={t("common.action.refresh")}
-            loading={loading}
-            onClick={onReload}
-          />
-        </Tooltip>
-        <Dropdown menu={{ items: moreItems }} trigger={["click"]} placement="bottomRight">
-          <Button icon={<MoreOutlined />} aria-label={t("applyQueue.more.aria")} />
-        </Dropdown>
-      </Space>
+          <Tooltip title={t("common.action.refresh")}>
+            <Button
+              icon={<ReloadOutlined />}
+              aria-label={t("common.action.refresh")}
+              loading={loading}
+              onClick={onReload}
+            />
+          </Tooltip>
+          <Dropdown menu={{ items: moreItems }} trigger={["click"]} placement="bottomRight">
+            <Button icon={<MoreOutlined />} aria-label={t("applyQueue.more.aria")} />
+          </Dropdown>
+        </Space>
+      </div>
       <Space size={4} align="center" wrap={false}>
         {selectedCount > 0 && (
           <>

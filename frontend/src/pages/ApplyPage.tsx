@@ -157,8 +157,10 @@ export default function ApplyPage() {
           </Tooltip>
         </Space>
         {/* 右侧一行：当前站点 + 最近 7 天执行量 + 设置。
-            站点行原本是页头的兄弟块（再吃 22px + 4px 间距），并入同排后首屏多一行表格。 */}
-        <Space size={12} align="center" wrap={false}>
+            站点行原本是页头的兄弟块（再吃 22px + 4px 间距），并入同排后首屏多一行表格。
+            允许换行：这几块合起来 489px，375/768 下 `wrap={false}` 会把整页撑出横向滚动
+            （CI 的 ui-quality 在 /apply 判 document/clipped overflow）。宽屏仍然是一行。 */}
+        <Space size={12} align="center">
           <CurrentSiteBar refreshKey={collectRefreshKey} />
           <ApplyFunnelBar onDrill={drillFunnel} />
           <Button icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)}>

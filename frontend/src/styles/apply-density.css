@@ -53,6 +53,9 @@
   gap: 4px;
   align-items: center;
   min-width: 0;
+  /* `inline-flex` 按内容定宽（实测 604px），父项收窄时它会**溢出**而不是被裁：
+     只有 max-width: 100% 才能把它夹回父项宽度，内层 ellipsis 才真的出省略号。 */
+  max-width: 100%;
   overflow: hidden;
   color: var(--rf-warning-text);
   font-size: 12px;
@@ -62,6 +65,14 @@
 
 .apply-browser-row > .ant-space:first-child {
   flex: 1;
+  min-width: 0;
+}
+
+/* antd 的 Space 把每个子项都变成 flex item，而 flex item 默认 `min-width: auto`：
+   长文案（扫码提示）因此**拒绝收缩**，整行被顶到 800px，375/768 下直接把 main 撑出
+   横向滚动（CI 的 ui-quality 在 /apply 判 document/clipped overflow）。给子项 0，
+   里面那条 `ellipsis + nowrap` 才会真的在"装不下"时出省略号。 */
+.apply-browser-row > .ant-space:first-child > .ant-space-item {
   min-width: 0;
 }
 
@@ -95,10 +106,20 @@
 .apply-queue-head {
   flex-wrap: nowrap;
   margin-bottom: 4px;
+}
+
+/* 筛选区自己滚，右侧的批量动作与「?」常驻：同处一个滚动容器时，1200×900 下内容比
+   容器宽 50px，最右的「?」被裁一截，它的说明气泡也按被裁坐标定位，document 多出
+   16px 横向滚动。`.ant-space` 默认 `flex: 0 1 auto` + `min-width: auto`，不加 min-width: 0
+   连滚动都不会发生，而是直接把父容器撑宽。 */
+.apply-queue-head-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: thin;
 }
 
+.apply-queue-head-scroll > .ant-space,
 .apply-queue-head > .ant-space {
   flex-wrap: nowrap;
   white-space: nowrap;

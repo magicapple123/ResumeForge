@@ -430,6 +430,14 @@
     flex-direction: column;
     align-items: stretch;
   }
+
+  /* 变成一列之后，子项默认按内容定宽（`inline-flex` + `Space` 的 items 全 nowrap），
+     页头右侧那组会以 489px 撑破 375 的容器。夹到 100% 并允许换行，长文案由各自
+     的 ellipsis 收尾（CI 的 ui-quality 在 /apply 375 判 document/clipped overflow）。 */
+  .apply-page-head > .ant-space {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
 }
 
 /* 「未生效条件」/「站点筛选账目」等 Alert 与上面的条件表单之间留白：成功/警告框不再和

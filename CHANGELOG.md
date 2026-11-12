@@ -48,6 +48,11 @@
 
 ### Fixed
 
+- **投递台在 375 / 768 / 1200 下的横向溢出（CI 的 ui-quality 判 document / clipped overflow）。** 三处根因：① 浏览器状态卡那一行的 `.ant-space-item` 是 `min-width: auto`，604px 的扫码提示拒绝收缩，整行把 `main` 撑到 805px——给子项 0 并给提示 `max-width: 100%`，省略号才真的出现；② 队列工具栏的筛选区与右侧批量动作同处一个滚动容器，1200 下内容比容器宽 50px，最右的「?」被裁一截，它 402px 的说明气泡按被裁坐标定位，document 因此多出 16px——筛选区单独成滚动容器，右侧常驻；③ 375 下的页头右侧那组按内容定宽（489px），窄屏改为 `max-width: 100%` 并允许换行。
+- **队列使用说明气泡会顶出视口。** 首次进 /apply 默认展开，`bottomLeft` + 402px 宽让右缘落在视口外（1200 下 +16px、375 下 +8px）。改为右对齐并把外层盒子夹到 `calc(100vw - 32px)`。
+- **投递台扫码提示的对比度不够（axe serious）。** 内层是 antd `Typography type="warning"`（#faad14，白底 ~1.9:1），外层早就用站内 warning 文字 token，但被内层自带 color 盖掉；压回 `--rf-warning-text`（#875300，≥6:1）。
+- **从链接导入的提交失败会回传异常原文（CodeQL `py/stack-trace-exposure`）。** `commit_rows` 自己不抛可读的 `ValueError`，能到那里的都是 pydantic / SQLAlchemy 内部错误，原文会带出表名与路径；改为固定文案 + 日志留详情。
+- **精确预览的取图 / 取 PDF 端点按请求参数拼路径（CodeQL `py/path-injection` ×4）。** 改成白名单查找：先从缓存根枚举目录名（只有十几个）匹配 token，命中的 `Path` 不来自输入；形状校验同时收紧到 `[0-9a-f]{32}`（token 本就是 `sha256[:32]`）。
 - **桌面形态出现两条滚动条（P1-2）。** 有公告条时 `.app-main` 的 `scrollHeight` 比 `clientHeight` 多 31px；现在外层不滚、只留 `.app-content` 一条，滚到底页头位移 0px。
 - **精确预览放大后多一条纵向滚动条、纸边有深色描边（P3-2 / P3-3）。** 相框高度与画出来的页改用同一套「宽度 / 间距 / 取整」函数后，11 档缩放全部 `scrollHeight == clientHeight`；`::after` 的 4px 白内描边删除（`content` 现为 `none`）。
 - **无头浏览器截不到精确预览（P3-2）。** 旧实现依赖 `iframe.onload`，在 headless 下**永远不触发**（实测 `-1`），截图是空白；改逐页 `<img>` 后可整页截图，3 页 A4 首屏 101ms（旧 PDF 路径 193ms，且那还是下界）。
