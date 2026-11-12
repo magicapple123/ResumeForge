@@ -6,7 +6,7 @@
 - pause 后 runner 停，resume 从 resume_cursor 继续且不重复副作用；
 - cancel 保留已完成、其余 skipped；
 - 失败 → step failed + task failed + error 可读；
-- run_task_once 幂等、单例 start 并发只跑一个。
+- run_task_once 幂等、单例 start 并发时排队（同 id 去重、前一个结束后自动跑下一个）。
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from app.models.resume import ResumeRecord
 from app.models.versions import VERSION_SOURCE_ASSISTANT, ResumeVersion
 from app.services import agent_task_service
 from app.services import assistant_task_runner as runner_module
-from app.services.assistant_task_handler_common import clear_all_task_state
+from app.services.assistant_task_handler_common import StepResult, clear_all_task_state
 from app.services.assistant_task_handlers import execute_step
 from app.services.web_fetch import import_service
 from assistant_task_fixtures import (
@@ -50,6 +50,16 @@ def _use_provider(monkeypatch, responses: list[object]) -> ScriptedProvider:
 
 def _step_states(task) -> list[str]:
     return [step.status for step in task.steps]
+
+
+def _wait_until(predicate, timeout: float = 2.0, step: float = 0.01) -> bool:
+    """轮询直到 predicate 为真（线程用例专用：避免依赖固定 sleep 的运气）。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(step)
+    return predicate()
 
 
 @pytest.fixture(autouse=True)
@@ -321,11 +331,101 @@ def test_runner_start_single_flight(monkeypatch):
     runner = runner_module.AssistantTaskRunner()
     assert runner.start(11) is True
     assert entered.wait(2) is True
-    assert runner.start(12) is False
+    # #18A-FIX：忙时第二个 start 不再被丢弃——返回 True（"已接受"）并排队。
+    assert runner.start(12) is True
+    assert runner.pending_ids() == (12,)
     assert calls == [11]
     release.set()
-    for _ in range(200):
-        if not runner.is_running():
-            break
-        time.sleep(0.01)
-    assert runner.is_running() is False
+    # 先等第二个任务真的被拉起，再等执行器空闲：`is_running()` 在"上一个线程已清空、
+    # 下一个还没登记"的极小窗口里会读到 False，先看 calls 才不会误判。
+    assert _wait_until(lambda: calls == [11, 12]) is True, calls
+    assert _wait_until(lambda: not runner.is_running()) is True
+    assert runner.pending_ids() == ()
+
+
+def test_starting_the_same_task_twice_while_busy_queues_it_once(monkeypatch):
+    """同 id 重复 start 只入队一次：去重否则会跑两遍（第二次是幂等空转但白唤醒线程）。"""
+    release = threading.Event()
+    entered = threading.Event()
+    calls: list[int] = []
+
+    def blocking_run(_db, task_id):
+        calls.append(task_id)
+        entered.set()
+        release.wait(2)
+        return SimpleNamespace(status="done", resume_cursor=0)
+
+    monkeypatch.setattr(runner_module, "run_task_once", blocking_run)
+    runner = runner_module.AssistantTaskRunner()
+    assert runner.start(11) is True
+    assert entered.wait(2) is True
+    assert runner.start(12) is True
+    assert runner.start(12) is True
+    assert runner.pending_ids() == (12,)
+    release.set()
+    assert _wait_until(lambda: calls == [11, 12]) is True, calls
+    assert _wait_until(lambda: not runner.is_running()) is True
+    assert runner.pending_ids() == ()
+    assert calls == [11, 12]
+
+
+def test_queued_task_cancelled_before_its_turn_does_not_run(db_session, monkeypatch):
+    """排队期间被取消的任务：仍会被拉起，但 run_task_once 见状态非 running 立即返回。
+
+    证明排队不会复活已取消的任务（零副作用），也不会因为"入队后状态变了"而卡住队列。
+    """
+    entered = threading.Event()
+    release = threading.Event()
+    calls: list[int] = []
+
+    def blocking_execute(_db, task, _step):
+        calls.append(int(task.id))
+        entered.set()
+        release.wait(2)
+        return StepResult(ok=True)
+
+    monkeypatch.setattr(runner_module, "execute_step", blocking_execute)
+    # 记录"被拉起过"的 task_id：既证明队列真的把 B 送上执行器，又用 calls 证明 B 零副作用。
+    real_run_once = runner_module.run_task_once
+    pulled: list[int] = []
+
+    def recording_run(db, task_id):
+        pulled.append(int(task_id))
+        return real_run_once(db, task_id)
+
+    monkeypatch.setattr(runner_module, "run_task_once", recording_run)
+    task_a = agent_task_service.start(
+        db_session,
+        agent_task_service.create_task(
+            db_session,
+            title="排在前面的任务",
+            steps=[{"title": "一步", "kind": "noop"}],
+            source="assistant",
+            params={"kind": "noop"},
+        ).id,
+    )
+    task_b = agent_task_service.create_task(
+        db_session,
+        title="排队时被取消的任务",
+        steps=[{"title": "一步", "kind": "noop"}],
+        source="assistant",
+        params={"kind": "noop"},
+    )
+    runner = runner_module.AssistantTaskRunner()
+    assert runner.start(task_a.id) is True
+    assert entered.wait(2) is True
+    agent_task_service.start(db_session, task_b.id)
+    assert runner.start(task_b.id) is True
+    assert runner.pending_ids() == (task_b.id,)
+    # 释放前取消 B：它已被置 running，取消是允许的迁移。
+    agent_task_service.cancel(db_session, task_b.id)
+    release.set()
+    assert _wait_until(lambda: pulled == [task_a.id, task_b.id]) is True, pulled
+    assert _wait_until(lambda: not runner.is_running()) is True
+    assert runner.pending_ids() == ()
+    assert calls == [task_a.id], "已取消的排队任务不得产生任何副作用"
+    db_session.expire_all()
+    latest_b = agent_task_service.get_task(db_session, task_b.id)
+    assert latest_b.status == "cancelled"
+    assert [step.status for step in latest_b.steps] == ["skipped"]
+    assert agent_task_service.get_task(db_session, task_a.id).status == "done"

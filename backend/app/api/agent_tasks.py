@@ -32,7 +32,10 @@ _ASSISTANT_TASK_SOURCE = "assistant"
 
 
 def _kick_assistant_runner(task: Any) -> None:
-    """助手任务进入 running 后拉起后台执行器（单例线程；已在跑则忽略）。
+    """助手任务进入 running 后拉起后台执行器（单例线程；已在跑则排队）。
+
+    不丢弃这个调用：任务此刻已是 running，若执行器忙就不管它，就没有任何线程会推进它。
+    执行器忙时把任务 id 排队，前一个任务到终态/暂停后自动开始下一个。
 
     局部导入：执行器会 import 四个 handler（连带岗位/简历/抓取服务），放在模块顶层会让
     所有只读任务接口都背上这份 import 成本。

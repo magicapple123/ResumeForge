@@ -7,14 +7,25 @@
 from __future__ import annotations
 
 import json
+import time
 
 from app.models.agent_task import AgentTask
 from app.services import agent_task_service
 from app.services import assistant_task_runner as runner_module
-from app.services.assistant_task_handler_common import clear_all_task_state
+from app.services.assistant_task_handler_common import StepResult, clear_all_task_state
 from app.services.assistant_task_handlers import execute_step
 from app.services.assistant_tools import task_tools
 from assistant_task_fixtures import create_job, create_resume, make_task
+
+
+def _wait_until(predicate, timeout: float = 5.0, step: float = 0.02) -> bool:
+    """轮询直到 predicate 为真（线程用例专用：不用固定 sleep 赌时序）。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(step)
+    return predicate()
 
 
 def test_task_create_persists_execution_params_for_four_kinds(client, db_session):
@@ -136,3 +147,36 @@ def test_recovery_pauses_then_resume_continues_and_progress_is_readable(
     assert final.status == "done", final.error
     assert final.steps[0].output_ref == read_result.output_ref
     clear_all_task_state()
+
+
+def test_start_endpoint_really_runs_the_task_in_a_thread(client, db_session, monkeypatch):
+    """HTTP start → 单例线程 → 独立 SessionLocal → mark/advance → done。
+
+    这条是之前缺的胶水：既有用例把 `runner.start` 整个替换成记录调用，只能证明"接口调了
+    runner"，证明不了"真的跑完一个任务"。这里只替换步骤 handler（noop 步没有真实副作用），
+    `runner.start` 与线程本体、SessionLocal、mark_step_running / advance_step 全部是真的。
+    """
+    monkeypatch.setattr(
+        runner_module, "execute_step", lambda _db, _task, _step: StepResult(ok=True)
+    )
+    task = agent_task_service.create_task(
+        db_session,
+        title="端到端两步任务",
+        steps=[{"title": "一", "kind": "noop"}, {"title": "二", "kind": "noop"}],
+        source="assistant",
+        params={"kind": "noop"},
+    )
+    started = client.post(f"/api/agent-tasks/{task.id}/start")
+    assert started.status_code == 200, started.text
+
+    def _detail() -> dict:
+        return client.get(f"/api/agent-tasks/{task.id}").json()
+
+    assert _wait_until(lambda: _detail()["status"] == "done") is True, _detail()
+    detail = _detail()
+    assert [step["status"] for step in detail["steps"]] == ["done", "done"]
+    assert detail["resume_cursor"] == 2
+    assert detail["error"] == ""
+    # 执行器回到空闲，且没有遗留排队项（否则会污染后续用例的单例状态）。
+    assert _wait_until(lambda: not runner_module.runner.is_running()) is True
+    assert runner_module.runner.pending_ids() == ()
