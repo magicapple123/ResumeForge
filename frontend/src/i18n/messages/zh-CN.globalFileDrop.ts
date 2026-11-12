@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 全应用拖入导入（`components/GlobalFileDrop.tsx`）：投放遮罩、`.zip` 备份导入确认、
+ * 全应用拖入导入（`features/shell/GlobalFileDrop.tsx`）：投放遮罩、`.zip` 备份导入确认、
  * `.json` 新建简历、`.csv` 转去岗位页，以及拖入多个文件 / 不支持的类型时的提示。
  *
  * 为什么 `.csv` 只负责带路：解析与逐行预览都在岗位页，这里再实现一套会变成两份逻辑。

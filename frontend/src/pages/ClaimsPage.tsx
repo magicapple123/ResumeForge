@@ -26,9 +26,9 @@ import {
   listClaimsPage,
   updateClaim,
 } from "../api/claims";
-import ClaimCard from "../components/claims/ClaimCard";
-import ClaimDraftModal from "../components/claims/ClaimDraftModal";
-import ClaimFormModal from "../components/claims/ClaimFormModal";
+import ClaimCard from "../features/claims/ClaimCard";
+import ClaimDraftModal from "../features/claims/ClaimDraftModal";
+import ClaimFormModal from "../features/claims/ClaimFormModal";
 import { RowContextMenu } from "../components/common/RowActions";
 import { formatErrorGuidance } from "../api/errorGuidance";
 import BatchActionBar from "../components/common/BatchActionBar";

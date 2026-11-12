@@ -13,7 +13,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
 import { TRACK_STATUS_LABEL_KEYS } from "../i18n/enum/tracker";
-import { daysOverdue } from "../components/tracker/trackDates";
+import { daysOverdue } from "../features/tracker/trackDates";
 import {
   cleanupTrackerPage,
   makePage,

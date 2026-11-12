@@ -29,7 +29,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ApiError, isCancellation, request } from "../api/client";
-import { readPreferredDeviceId, savePreferredDeviceId } from "../components/voice/voicePrefs";
+import {
+  readPreferredDeviceId,
+  savePreferredDeviceId,
+} from "../features/interview-voice/voicePrefs";
 import { t } from "../i18n";
 import { errorOf, microphoneErrorFor, type VoiceError } from "./voiceErrors";
 import {

@@ -18,7 +18,7 @@
  *
  * ## 两个必须排除的"同名但不是 antd"（它们不是豁免，是判定范围）
  *
- * 1. `fireWebNotification(payload.message, …)`（`components/TaskCompletionNotifier.tsx`）：
+ * 1. `fireWebNotification(payload.message, …)`（`features/shell/TaskCompletionNotifier.tsx`）：
  *    浏览器原生 `Notification`，参数名恰好也叫 message。判定只认 `notification.` /
  *    `notification[...]` 这种**成员访问**，`fireWebNotification(` 是别的函数名，因此天然
  *    不在范围内——本文件的 `(?<![\w.$])` 前视就是在钉这件事。

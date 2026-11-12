@@ -6,7 +6,7 @@
  * 重新读一次——用户很可能刚在设置里改完就切回来，缓存一份"没配置"只会让他再点一次。
  *
  * 这里不再有「必须先配置」的守卫：触发点改成直接弹「本次参数」弹窗（见
- * `components/batch/BatchConfigModal`），未配置时用默认值开局即可。真正的拒绝仍在后端
+ * `features/batch/BatchConfigModal`），未配置时用默认值开局即可。真正的拒绝仍在后端
  * （既没传本次参数、全局也没配置时，批量导出接口返回 409）。
  */
 import { useCallback, useState } from "react";

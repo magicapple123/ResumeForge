@@ -23,7 +23,6 @@ from sqlalchemy.orm import Session
 
 from ...database import get_db
 from ...middleware.loopback_origin import is_non_cross_site_request
-from ...models.claim import ClaimRecord
 from ...schemas.preflight import (
     ExportCheckSummary,
     PreflightOut,
@@ -31,7 +30,7 @@ from ...schemas.preflight import (
     PreflightSnapshot,
 )
 from ...schemas.resume_generation import mode_page_limit
-from ...services import trash
+from ...services.claims import live_claim_records
 from ...services.export_pipeline import (
     ExportRequest,
     RenderContext,
@@ -325,7 +324,7 @@ def preflight_resume(
         template = export_template
         redact = False
 
-    claims = db.query(ClaimRecord).filter(trash.live_only(ClaimRecord)).all()
+    claims = live_claim_records(db)
     result = run_preflight(
         document,
         request=payload,

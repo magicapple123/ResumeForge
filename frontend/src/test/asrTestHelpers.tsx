@@ -7,7 +7,7 @@
  */
 import { fireEvent, screen, within } from "@testing-library/react";
 import { t } from "../i18n";
-import type { AsrProfile, AsrProfilesState } from "../components/voice/asrApi";
+import type { AsrProfile, AsrProfilesState } from "../features/interview-voice/asrApi";
 
 /** 造一条已配置的语音配置；用 overrides 覆盖需要变化的字段。 */
 export function makeAsrProfile(overrides: Partial<AsrProfile> = {}): AsrProfile {

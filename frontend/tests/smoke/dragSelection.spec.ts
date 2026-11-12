@@ -21,9 +21,9 @@ import type { Page } from "@playwright/test";
  */
 
 const STYLES = [
-  "components/resume-editor/document-editor.css",
-  "components/resume-editor/document-item-editor.css",
-  "components/resume/structure/structure.css",
+  "features/resume/editor/document-editor.css",
+  "features/resume/editor/document-item-editor.css",
+  "features/resume/outline/structure.css",
 ]
   .map((relative) => readFileSync([process.cwd(), "src", ...relative.split("/")].join("/"), "utf8"))
   .join("\n");

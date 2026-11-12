@@ -426,7 +426,7 @@ CREATE INDEX ix_job_preference_kind_state ON job_preference (dataset_key, kind, 
 | --- | --- | --- |
 | `frontend/src/features/followup/{FollowupCard.tsx,useFollowupDecisions.ts}` | 新建：三类卡 + 三按钮 | 新 |
 | `frontend/src/features/assistant/tasks/{AgentTaskRow.tsx,agentTaskView.ts}` | 按 `source` + `kind` 分支渲染 | 134 / 122，够 |
-| `frontend/src/components/apply/ApplyRecordDetailDrawer.tsx` | 加「我已提交」按钮（期一上半）；加交付单段（期一下半） | 191 → 约 230 |
+| `frontend/src/features/apply/ApplyRecordDetailDrawer.tsx` | 加「我已提交」按钮（期一上半）；加交付单段（期一下半） | 191 → 约 230 |
 | `frontend/src/features/apply/receipt/{DeliveryReceipt.tsx,receiptContract.test.ts}` | 新建：渲染 + 契约测试 | 新 |
 | `frontend/src/features/job-preference/*` | 新建：列表、行、确认卡、hook、api | 新 |
 | `frontend/src/i18n/messages/{zh-CN,en-US}.{followupSweep,deliveryReceipt,jobPreference}.ts` | 新 key；命名空间只改 `namespaces.ts` | 新 |

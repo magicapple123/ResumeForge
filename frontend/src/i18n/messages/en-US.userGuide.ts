@@ -3,7 +3,7 @@
  * User guide: the title, intro, points and action button of each of the eight steps, plus the
  * first-launch “Quick start” cards and the dialog's own buttons.
  *
- * The data files (components/user-guide/*.ts, quickStartPaths.ts) only hold `userGuide.*` keys.
+ * The data files (features/user-guide/*.ts, quickStartPaths.ts) only hold `userGuide.*` keys.
  * The `**emphasis**` markers are kept as written — `UserGuideModal` renders them as bold — and
  * names of on-screen controls are quoted with “ ” to match how the UI labels them.
  */

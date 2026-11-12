@@ -16,8 +16,8 @@ import { diffResume } from "../api/resumeWriting";
 import ResumeBatchToolbar from "./resumes/ResumeBatchToolbar";
 import ErrorState from "../components/common/ErrorState";
 import { useBatchSelection } from "../hooks/useBatchSelection";
-import ManualResumeModal from "../components/ManualResumeModal";
-import ResumeDetailModal from "../components/ResumeDetailModal";
+import ManualResumeModal from "../features/resume/list/ManualResumeModal";
+import ResumeDetailModal from "../features/resume/list/ResumeDetailModal";
 import ResumeCenterAiEntry from "../features/career-scenarios/ResumeCenterAiEntry";
 import ResumeScenarioSuggestion from "../features/career-scenarios/ResumeScenarioSuggestion";
 import { registerNewResumeHandler } from "../features/shortcuts/runtimeTargets";
@@ -37,7 +37,7 @@ import {
   type ResumeSortState,
 } from "../utils/resumeSort";
 import ResumeResultList from "./resumes/ResumeResultList";
-import DeliveryArchiveModal from "../components/resume/DeliveryArchiveModal";
+import DeliveryArchiveModal from "../features/resume/delivery/DeliveryArchiveModal";
 import ResumeRenameModal from "./resumes/ResumeRenameModal";
 import ResumeNoteModal from "./resumes/ResumeNoteModal";
 import ResumeDiffModal from "./resumes/ResumeDiffModal";
@@ -46,7 +46,7 @@ import ResumeSearchInput from "./resumes/ResumeSearchInput";
 import { useSelectAllResumes } from "./resumes/useSelectAllResumes";
 import { useResumeBatchActions } from "./resumes/useResumeBatchActions";
 import { buildResumeBatchRowActions } from "./resumes/resumeBatchActions";
-import BatchConfigModal from "../components/batch/BatchConfigModal";
+import BatchConfigModal from "../features/batch/BatchConfigModal";
 import ExternalResumeEntry from "./resumes/ExternalResumeEntry";
 
 export default function ResumesPage() {

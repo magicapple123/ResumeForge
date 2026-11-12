@@ -17,10 +17,10 @@ import { listResumes, updateResumeFavorite } from "../api/resumes";
 import { RowActions, RowContextMenu, type RowActionItem } from "../components/common/RowActions";
 import EmptyState from "../components/common/EmptyState";
 import ErrorState from "../components/common/ErrorState";
-import FavoriteJobsTable from "../components/favorites/FavoriteJobsTable";
-import FavoritesBatchBar from "../components/favorites/FavoritesBatchBar";
-import FavoritesToolbar, { type StatusFilter } from "../components/favorites/FavoritesToolbar";
-import ResumeDetailModal from "../components/ResumeDetailModal";
+import FavoriteJobsTable from "../features/favorites/FavoriteJobsTable";
+import FavoritesBatchBar from "../features/favorites/FavoritesBatchBar";
+import FavoritesToolbar, { type StatusFilter } from "../features/favorites/FavoritesToolbar";
+import ResumeDetailModal from "../features/resume/list/ResumeDetailModal";
 import { useApi } from "../hooks/useApi";
 import {
   JOB_STATUS_CLOSED,

@@ -22,7 +22,7 @@ ResumeForge/
 │   ├── tests/                  测试（文件数 / 用例数以 pytest 汇总行为准）
 │   └── data/                   ★ 运行时数据：数据集、备份、浏览器登录态、legacy-archive（.gitignore）
 ├── frontend/                 React 19.3 + antd 6 + Vite 8（Rolldown）
-│   ├── src/pages/              页面（菜单在 components/navigation/navigationConfig.ts，
+│   ├── src/pages/              页面（菜单在 features/shell/navigationConfig.ts，
 │   │                           路由表在 src/appRoutes.tsx；App.tsx 只 re-export MENU_ITEMS）
 │   ├── src/components/         组件（跨模块交互原语在 common/）
 │   ├── src/api/  src/types/    接口封装与类型
@@ -96,7 +96,7 @@ ResumeForge/
 |---|---|
 | 任何用户可见行为 | `CHANGELOG.md` 的 Unreleased 段 |
 | 功能增删 | `README.md` 功能表（第一列逐字锁定）+ `docs/user-guide.md` |
-| 界面/流程 | `frontend/src/components/userGuideSteps.ts` + `feature_catalog*.py`（门面 + 数据段，四方被测试钉着） |
+| 界面/流程 | `frontend/src/features/user-guide/userGuideSteps.ts` + `feature_catalog*.py`（门面 + 数据段，四方被测试钉着） |
 | 架构/模块 | `docs/architecture.md` / `docs/PROJECT_MAP.md` |
 
 ### ⑤ 提交

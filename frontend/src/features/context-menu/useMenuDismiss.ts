@@ -2,7 +2,7 @@
 /**
  * 右键菜单/浮层的统一关闭路径：滚动（捕获）、resize、窗口失焦、以及可选的"点空白"。
  *
- * 从 `components/resume-editor/useChipMenuDismiss.ts` 提升而来（2026-11-04）：那份实现
+ * 从 `features/resume/editor/useChipMenuDismiss.ts` 提升而来（2026-11-04）：那份实现
  * 同时服务字段 chip 菜单、页签菜单与排版浮层，问题 25 起由四个右键实现共用。
  *
  * `closeOnOutsidePointer` 默认关（**必须保留这个默认**）：`ChipStylePopover` 复用本 hook

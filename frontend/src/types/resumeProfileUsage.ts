@@ -6,7 +6,7 @@
  * 与 ResumeDetail 分开成文件的原因很实际：types/resume.ts 贴着 500 行预算，而这两个
  * 形状只服务详情里的一条只读元信息；放进主文件会把"简历正文契约"和"追溯元数据"混在一起。
  */
-import type { EditorSchemaOut } from "../features/profile-library/types";
+import type { EditorSchemaOut } from "../features/profile/library/types";
 
 /** 快照里冻结的一个参与大字段（key 稳定、name 是当时的显示名）。 */
 export interface ProfileUsageParticipating {

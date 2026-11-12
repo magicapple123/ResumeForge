@@ -93,11 +93,7 @@ def record_session_only(proposal_id: str, db: Session = Depends(get_db)):
     - 用条件 UPDATE（pending → executed）占用提案，双击并发只有一个能成功；
     - 参数校验与落库复用服务层，session_note 永不进系统提示注入块。
     """
-    proposal = (
-        db.query(AssistantWriteProposal)
-        .filter(AssistantWriteProposal.proposal_id == proposal_id)
-        .one_or_none()
-    )
+    proposal = service.find_proposal(db, proposal_id)
     if proposal is None:
         raise HTTPException(status_code=404, detail="提案不存在或已失效")
     if proposal.dataset_key != service.current_dataset_key():

@@ -129,8 +129,8 @@ def _run_list_format_templates(db: Session, payload: ListFormatTemplatesInput) -
 
 
 def _run_create_format_template(db: Session, payload: Any) -> ActionOutcome:
-    from ....api.resume_templates import STYLE_OFFLINE_DETAIL, _to_detail
     from ...resume.resume_template_store import TemplateError, create_user_template
+    from ...resume.resume_template_views import STYLE_OFFLINE_DETAIL, template_detail
 
     tool_only = set(FORMAT_FIELD_KEYS) & set(payload.model_fields_set)
     if tool_only:
@@ -154,7 +154,7 @@ def _run_create_format_template(db: Session, payload: Any) -> ActionOutcome:
     return ActionOutcome(
         summary=f"新建了版式「{template.name}」",
         changed=True,
-        data=_to_detail(template),
+        data=template_detail(template),
     )
 
 

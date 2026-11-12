@@ -2,8 +2,9 @@
 """
 语义检索命名配置的端点（清单第 1/16 条）：列表随 /status 下发，这里放写操作。
 
-路由挂在 settings_embedding.router 下（同一前缀 /api/settings/embedding），这样
-application_routers 不需要为拆分而改动。所有错误按服务层的 status_code 翻译：
+路由由装配层 application_routers 直接挂载（前缀与父模块相同：/api/settings/embedding），
+父模块只在函数内惰性提供 loopback 守卫与状态/校验/切换的薄壳——两个 api 模块之间
+只剩单向依赖，不再构成兄弟环。所有错误按服务层的 status_code 翻译：
 重名 409、配置不存在 404、名称/上限/激活失败 400。
 """
 
@@ -19,7 +20,7 @@ from ..services.llm import embedding_activation, embedding_profiles, embedding_p
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(prefix="/api/settings/embedding", tags=["settings"])
 
 
 class ProfileConfigIn(BaseModel):
@@ -51,7 +52,7 @@ class ProfileTestIn(BaseModel):
 
 
 def _core() -> Any:
-    """父路由模块（状态载荷/校验/loopback 守卫都在那里）；惰性 import 防循环。"""
+    """父路由模块（loopback 守卫与状态/校验/切换薄壳）；惰性 import 保持单向依赖。"""
     from . import settings_embedding
 
     return settings_embedding

@@ -42,6 +42,36 @@ from ..services.assistant.assistant_context_usage import build_context_usage
 from ..services.assistant.assistant_context_usage import (
     conversation_text as usage_conversation_text,
 )
+from ..services.assistant.assistant_conversations import (
+    DEFAULT_TITLE,
+    conversation_messages,
+    conversation_or_404,
+)
+from ..services.assistant.assistant_conversations import (
+    create_conversation as create_conversation_record,
+)
+from ..services.assistant.assistant_conversations import (
+    delete_conversation as delete_conversation_record,
+)
+from ..services.assistant.assistant_conversations import (
+    delete_messages as delete_message_records,
+)
+from ..services.assistant.assistant_conversations import (
+    fork_conversation as fork_conversation_record,
+)
+from ..services.assistant.assistant_conversations import (
+    list_conversations as list_conversation_records,
+)
+from ..services.assistant.assistant_conversations import (
+    read_conversation as read_conversation_record,
+)
+from ..services.assistant.assistant_conversations import (
+    read_earlier_messages as read_earlier_messages_record,
+)
+from ..services.assistant.assistant_conversations import (
+    update_conversation as update_conversation_record,
+)
+from ..services.assistant.assistant_persistence import latest_assistant_message
 from ..services.assistant.assistant_service import (
     conversation_title,
     history_messages_for_model,
@@ -83,34 +113,6 @@ from ..services.user_files import save_from_data_url
 from .assistant_compaction_api import register_compaction_routes
 from .assistant_context import load_local_context
 from .assistant_conversation_skills import register_conversation_skill_routes
-from .assistant_conversations import (
-    DEFAULT_TITLE,
-    conversation_or_404,
-)
-from .assistant_conversations import (
-    create_conversation as create_conversation_record,
-)
-from .assistant_conversations import (
-    delete_conversation as delete_conversation_record,
-)
-from .assistant_conversations import (
-    delete_messages as delete_message_records,
-)
-from .assistant_conversations import (
-    fork_conversation as fork_conversation_record,
-)
-from .assistant_conversations import (
-    list_conversations as list_conversation_records,
-)
-from .assistant_conversations import (
-    read_conversation as read_conversation_record,
-)
-from .assistant_conversations import (
-    read_earlier_messages as read_earlier_messages_record,
-)
-from .assistant_conversations import (
-    update_conversation as update_conversation_record,
-)
 from .assistant_regenerate_api import register_regenerate_routes
 from .assistant_stream import history_snapshot, stream_message_events
 
@@ -242,13 +244,7 @@ def read_context_usage(
     compaction_state = compaction_state_out(load_compaction(db, conversation_id)) or None
     # 分母取当前生效配置：用户刚改过窗口，面板下次打开就该按新值算。
     window_tokens = int(getattr(get_llm_config(db), "context_window_tokens", 0) or 0)
-    latest = (
-        db.query(ChatMessage)
-        .filter(ChatMessage.conversation_id == conversation_id, ChatMessage.role == "assistant")
-        .order_by(ChatMessage.id.desc())
-        .first()
-    )
-    stored = _stored_context_usage(latest)
+    stored = _stored_context_usage(latest_assistant_message(db, conversation_id))
     if stored is not None:
         return ContextUsageOut.model_validate({**stored, "compaction": compaction_state})
     system_text = build_system_prompt_parts(
@@ -289,13 +285,7 @@ def fork_conversation(
     return fork_conversation_record(conversation_id, payload, db, surface)
 
 
-def _conversation_messages(db: Session, conversation_id: int) -> list[ChatMessage]:
-    return (
-        db.query(ChatMessage)
-        .filter(ChatMessage.conversation_id == conversation_id)
-        .order_by(ChatMessage.id)
-        .all()
-    )
+
 
 
 @router.get("/conversations/{conversation_id}/export")
@@ -312,7 +302,7 @@ def export_conversation(
     """
     conversation = conversation_or_404(db, conversation_id, surface)
     media_type, builder = EXPORT_FORMATS[format]
-    body = builder(conversation, _conversation_messages(db, conversation_id))
+    body = builder(conversation, conversation_messages(db, conversation_id))
     filename = build_conversation_filename(conversation, format)
     return Response(
         body,
@@ -337,7 +327,7 @@ def conversation_to_material(
     存进去的是导出的 Markdown：助手之后能直接读它、总结它，或按用户要求整理进个人资料。
     """
     conversation = conversation_or_404(db, conversation_id, surface)
-    markdown = conversation_to_markdown(conversation, _conversation_messages(db, conversation_id))
+    markdown = conversation_to_markdown(conversation, conversation_messages(db, conversation_id))
     truncated = len(markdown) > MAX_MATERIAL_CONTENT_CHARS
     if truncated:
         markdown = markdown[:MAX_MATERIAL_CONTENT_CHARS]

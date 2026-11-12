@@ -224,6 +224,68 @@ def find_material_file(db: Session, material_id: int, name: str) -> UserFile | N
             return row
     return rows[0] if len(rows) == 1 else None
 
+def _file_out(row: UserFile) -> dict:
+    """回显结构：刻意不含 sha256 与 disk_name——它们是实现细节，不是给界面的。"""
+    return {
+        "id": row.id,
+        "original_name": row.original_name,
+        "mime": row.mime,
+        "size": row.size,
+        "source_type": row.source_type,
+        "source_ref": row.source_ref,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def list_file_copies(
+    db: Session,
+    *,
+    page: int,
+    page_size: int,
+    source_type: str = "",
+    keyword: str = "",
+) -> dict:
+    """文件副本库的分页列表（分页 / 来源过滤 / 原名模糊匹配 / 视图组装都在这里）。
+
+    为什么放服务层：GET /api/user-files 只该做参数校验，而"分页 + 过滤"的口径
+    与副本域其他读取入口是同一份，放在路由里等于让服务层再写一遍。
+    """
+    query = db.query(UserFile)
+    if source_type.strip():
+        query = query.filter(UserFile.source_type == source_type.strip())
+    if keyword.strip():
+        query = query.filter(UserFile.original_name.like(f"%{keyword.strip()}%"))
+    total = query.count()
+    rows = (
+        query.order_by(UserFile.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    )
+    return {"items": [_file_out(row) for row in rows], "total": total}
+
+
+def lookup_file_copies(
+    db: Session,
+    *,
+    source_type: str,
+    source_ref: str = "",
+    name: str = "",
+) -> dict:
+    """按来源精确反查文件副本（供岗位备注图等原入口直接取 raw 链接）。
+
+    为什么放服务层：source_ref 同时匹配首次来源列与 sources_json 是副本表的唯一
+    反查口径，路由只该把查询参数原样交下来。
+    """
+    query = db.query(UserFile).filter(UserFile.source_type == source_type.strip())
+    if source_ref.strip():
+        ref = source_ref.strip()
+        query = query.filter(
+            or_(UserFile.source_ref == ref, UserFile.sources_json.contains(f'"{ref}"'))
+        )
+    if name.strip():
+        query = query.filter(UserFile.original_name == name.strip())
+    rows = query.order_by(UserFile.id.asc()).all()
+    return {"items": [{"id": row.id, "original_name": row.original_name} for row in rows]}
+
+
 def backfill_missing_copies(db: Session) -> int:
     """幂等回填：扫描各表里的 data URL 字段补齐磁盘副本，返回处理的条目数。
 

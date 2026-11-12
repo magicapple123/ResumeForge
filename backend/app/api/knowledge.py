@@ -17,7 +17,6 @@ from ..models.knowledge_entry import KnowledgeEntry
 from ..schemas.common import Page
 from ..schemas.knowledge import (
     KNOWLEDGE_CATEGORIES,
-    KNOWLEDGE_CONTENT_EXCERPT_CHARS,
     KnowledgeBatchDeleteResult,
     KnowledgeBatchRequest,
     KnowledgeEntrySummary,
@@ -35,12 +34,16 @@ from ..services.actions.domains.knowledge import knowledge_actions
 from ..services.knowledge_rag import chunk_embedding_text, entry_chunks, hybrid_search
 from ..services.knowledge_service import (
     delete_knowledge,
+    export_entries,
     knowledge_categories,
     knowledge_companies,
     list_knowledge_page,
     list_knowledge_tags,
     related_knowledge,
     review_candidates,
+)
+from ..services.knowledge_service import (
+    knowledge_entry_summary as _knowledge_summary,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,31 +55,6 @@ router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 # T28 Batch B：GET /api/knowledge 由契约层生成（ActionSpec 是参数/权限唯一真源）。
 # 注册位置仍由本文件里的调用点显式决定（原来的装饰器位置，保持注册顺序）。
 add_action_route(router, knowledge_actions()["list_knowledge"])
-
-
-def _knowledge_summary(entry: KnowledgeEntry) -> KnowledgeEntrySummary:
-    """列表行的摘要视图：``content`` 只带 200 字截断，全文走详情端点。
-
-    截断留在 API 层（service 不依赖响应 DTO 的组装细节），长度上限由
-    :data:`KNOWLEDGE_CONTENT_EXCERPT_CHARS` 与 schema 的 ``Field(max_length=...)``
-    共同钉住——两处用的是同一个常量，不会漂移。
-    """
-    return KnowledgeEntrySummary(
-        id=entry.id,
-        title=entry.title,
-        category=entry.category,
-        tags=list(entry.tags or []),
-        source=entry.source,
-        content_excerpt=(entry.content or "")[:KNOWLEDGE_CONTENT_EXCERPT_CHARS],
-        # 0014：列表卡片直接显示 reason（#29C）与 summary/key_points（#29E）。
-        reason=entry.reason or "",
-        company=entry.company or "",
-        job_id=entry.job_id,
-        summary=entry.summary or "",
-        key_points=list(entry.key_points or []),
-        created_at=entry.created_at,
-        updated_at=entry.updated_at,
-    )
 
 
 @router.get("/page", response_model=Page[KnowledgeEntrySummary])
@@ -253,8 +231,6 @@ def read_knowledge_tags(db: Session = Depends(get_db)):
 
 # ===== #29 知识库 Markdown 目录导出（#34C 桌面菜单的数据源之一）=====
 
-#: 单次导出最多多少条：本地单用户够用，同时避免一次把超大知识库全读进内存。
-MAX_EXPORT_ENTRIES = 2000
 #: zip 成员文件名里不允许出现的字符（Windows/macOS/Linux 三平台取交集）。
 _FILENAME_BAD_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 #: 文件名里标题的最大长度（给序号与 .md 后缀留余量）。
@@ -326,13 +302,7 @@ def export_knowledge_markdown(db: Session = Depends(get_db)):
     空知识库返回 404（前端据此给「还没有可导出的条目」而不是下载一个空 zip）。
     只导出未删除条目；按 updated_at 倒序编号，与列表排序一致。
     """
-    entries = (
-        db.query(KnowledgeEntry)
-        .filter(trash.live_only(KnowledgeEntry))
-        .order_by(KnowledgeEntry.updated_at.desc(), KnowledgeEntry.id.desc())
-        .limit(MAX_EXPORT_ENTRIES)
-        .all()
-    )
+    entries = export_entries(db)
     if not entries:
         raise HTTPException(status_code=404, detail="知识库还没有可导出的条目")
     buffer = io.BytesIO()

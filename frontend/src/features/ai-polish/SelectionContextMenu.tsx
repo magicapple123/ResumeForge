@@ -36,7 +36,7 @@ export interface SelectionContextMenuProps {
    * 打开「写作增强」；`null` = 当前没有归属的简历（不在简历详情里），这一项不渲染。
    *
    * 写作增强的四个动作都要 `resume_id`，而右键菜单是全局的——没有简历作用域时
-   * 摆出来也点不动，不如不显示（见 `features/resume-writing/activeResume`）。
+   * 摆出来也点不动，不如不显示（见 `features/resume/writing/activeResume`）。
    */
   onWriting: (() => void) | null;
 }

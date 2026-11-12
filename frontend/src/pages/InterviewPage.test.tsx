@@ -43,9 +43,15 @@ vi.mock("../api/interview", async (importOriginal) => ({
   ...apiMocks,
 }));
 vi.mock("../api/stream", () => streamMocks);
-vi.mock("../components/QuestionBankPanel", () => ({ default: () => <div>题库面板</div> }));
-vi.mock("../components/InterviewExperiencePanel", () => ({ default: () => <div>面经面板</div> }));
-vi.mock("../components/InterviewReviewPanel", () => ({ default: () => <div>复盘面板</div> }));
+vi.mock("../features/questionbank/QuestionBankPanel", () => ({
+  default: () => <div>题库面板</div>,
+}));
+vi.mock("../features/interview/InterviewExperiencePanel", () => ({
+  default: () => <div>面经面板</div>,
+}));
+vi.mock("../features/interview/InterviewReviewPanel", () => ({
+  default: () => <div>复盘面板</div>,
+}));
 vi.mock("./interview/ReportCard", () => ({ ReportCard: () => <div>评分报告</div> }));
 
 // SetupTab 桩：`roundsMode` 必须与真实模块一致（InterviewPage 靠它分流「自动 / 指定轮数」）。

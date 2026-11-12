@@ -13,20 +13,15 @@
  */
 import { App, Form } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { normalizeSectionOrder } from "../../components/profile/ProfileSectionConfig";
+import { normalizeSectionOrder } from "./ProfileSectionConfig";
 import { useToast } from "../../hooks/useToast";
 import { t } from "../../i18n";
-import { deleteEntry, getWorkspace, patchFieldPreference } from "../profile-library/api";
-import { profileErrorMessage } from "../profile-library/errors";
-import { invalidateProjectionCache } from "../profile-library/projectionCache";
-import { makeTempEntryKey } from "../profile-library/tempEntryKey";
-import { restoreRecentlyDeleted } from "../profile-library/trashUndo";
-import type {
-  FieldOut,
-  ProfileEntryDraft,
-  ProfileFormValues,
-  WorkspaceOut,
-} from "../profile-library/types";
+import { deleteEntry, getWorkspace, patchFieldPreference } from "./library/api";
+import { profileErrorMessage } from "./library/errors";
+import { invalidateProjectionCache } from "./library/projectionCache";
+import { makeTempEntryKey } from "./library/tempEntryKey";
+import { restoreRecentlyDeleted } from "./library/trashUndo";
+import type { FieldOut, ProfileEntryDraft, ProfileFormValues, WorkspaceOut } from "./library/types";
 import {
   collectEntryChanges,
   isTempEntryKey,
@@ -37,7 +32,7 @@ import { useProfileRecognition } from "./useProfileRecognition";
 import { useProfileSaveCoordinator, type ProfileSaveOutcome } from "./useProfileSaveCoordinator";
 import { useProfileSectionReorder } from "./useProfileSectionReorder";
 
-export type { ProfileFormValues } from "../profile-library/types";
+export type { ProfileFormValues } from "./library/types";
 
 /** workspace 重取口径；保存成功后必须用 `discardDrafts`（见 reloadWorkspace 注释）。 */
 export interface WorkspaceReloadOptions {
@@ -82,7 +77,7 @@ export function useProfilePage(options: Options) {
   const [loadToken, setLoadToken] = useState(0);
   const [editing, setEditing] = useState(false);
   /**
-   * 照片读取进行中的标记：真正的照片选择/读取/上传在 `components/profile/ProfilePhotoPanel.tsx`
+   * 照片读取进行中的标记：真正的照片选择/读取/上传在 `features/profile/fields/ProfilePhotoPanel.tsx`
    * （5 MB 口径），本 hook 只负责把选中的照片回填进表单（`setPhoto`），不再自己读文件，
    * 因此恒为 `false`。字段保留是因为页面拿它做按钮 disabled 与拖拽阻塞判据。
    */

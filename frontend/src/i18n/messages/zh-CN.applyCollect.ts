@@ -2,7 +2,7 @@
 /**
  * 采集页签里的采集条件表单、采集账目提示与历史条件下拉标签。
  *
- * 覆盖 `components/apply/collect/` 下的 `CollectConfigForm`、`CollectOutcomeAlerts`
+ * 覆盖 `features/apply/collect/` 下的 `CollectConfigForm`、`CollectOutcomeAlerts`
  * 与 `collectConfigHistory`；「按招聘网站的条件筛」那一块仍由 `collectFilters` 包负责。
  */
 const applyCollect = {

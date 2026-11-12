@@ -18,12 +18,9 @@
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { useSyncExternalStore } from "react";
 import { vi } from "vitest";
-import {
-  DEFAULT_SECTION_ORDER,
-  SECTION_LABELS,
-} from "../../components/profile/ProfileSectionConfig";
-import type { ProfileSectionKey } from "../../components/profile/ProfileSectionConfig";
-import { resetScrollAnchoringStateForTests } from "../../components/profile/dragAutoScroll";
+import { DEFAULT_SECTION_ORDER, SECTION_LABELS } from "./ProfileSectionConfig";
+import type { ProfileSectionKey } from "./ProfileSectionConfig";
+import { resetScrollAnchoringStateForTests } from "./dragAutoScroll";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { useProfileSectionReorder } from "./useProfileSectionReorder";

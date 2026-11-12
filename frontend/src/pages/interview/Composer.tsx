@@ -16,8 +16,8 @@
 import { StopOutlined } from "@ant-design/icons";
 import { Button, Input, Space, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
-import { appendTranscript } from "../../components/voice/appendTranscript";
-import { VoiceButton } from "../../components/voice/VoiceButton";
+import { appendTranscript } from "../../features/interview-voice/appendTranscript";
+import { VoiceButton } from "../../features/interview-voice/VoiceButton";
 import type { EndpointMode } from "../../features/interview-voice/endpoint";
 import { InterviewVoiceBar } from "../../features/interview-voice/InterviewVoiceBar";
 import { useInterviewVoice } from "../../features/interview-voice/useInterviewVoice";

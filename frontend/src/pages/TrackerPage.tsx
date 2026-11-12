@@ -4,7 +4,7 @@
  *
  * 页面的判断很少——状态怎么合并、这次识别会改变什么，全在后端算好随数据下发，
  * 前端只负责展示与把用户的选择送回去。顶部「指标带 + 阶段构成条」在
- * components/tracker/TrackerSummary.tsx（12.2/13）：构成条是纯 CSS 画的，没有引入
+ * features/tracker/TrackerSummary.tsx（12.2/13）：构成条是纯 CSS 画的，没有引入
  * 图表库；本页只保留筛选、列表与弹窗编排。
  */
 import {
@@ -29,17 +29,17 @@ import {
   Typography,
 } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
-import TrackerSummary from "../components/tracker/TrackerSummary";
+import TrackerSummary from "../features/tracker/TrackerSummary";
 import ErrorState from "../components/common/ErrorState";
 import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getJob } from "../api/jobs";
 import { deleteTrack, exportTracks, listTrackStats, listTracksPage } from "../api/tracker";
-import ReminderPanel from "../components/ReminderPanel";
-import TrackCard from "../components/tracker/TrackCard";
-import TrackFormModal from "../components/tracker/TrackFormModal";
-import TrackImportModal from "../components/tracker/TrackImportModal";
+import ReminderPanel from "../features/tracker/ReminderPanel";
+import TrackCard from "../features/tracker/TrackCard";
+import TrackFormModal from "../features/tracker/TrackFormModal";
+import TrackImportModal from "../features/tracker/TrackImportModal";
 import { useApi } from "../hooks/useApi";
 import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import { downloadBlob } from "../utils/download";

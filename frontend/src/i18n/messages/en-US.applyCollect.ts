@@ -4,7 +4,7 @@
  * saved condition snapshot in the history dropdown.
  *
  * Covers `CollectConfigForm`, `CollectOutcomeAlerts` and `collectConfigHistory` under
- * `components/apply/collect/`; "filter by job site conditions" stays in `collectFilters`.
+ * `features/apply/collect/`; "filter by job site conditions" stays in `collectFilters`.
  */
 const applyCollect = {
   "applyCollect.field.keywords": "Keywords",

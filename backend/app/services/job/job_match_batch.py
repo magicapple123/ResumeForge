@@ -307,6 +307,33 @@ def persist_batch(
     return row
 
 
+def persist_batch_in_new_session(
+    run: BatchMatchRun,
+    *,
+    requested_count: int | None = None,
+    comparison: JobComparisonResult | None = None,
+) -> JobMatchBatch:
+    """在**独立会话**里落库一次批量匹配结果。
+
+    路由会在模型调用期间关掉请求会话（不能占着连接池），调用回来时手里已经没有可用
+    会话——"另开一个、保证关掉"是服务层职责，路由不该直接摸 ``SessionLocal``。
+    语义与 ``persist_batch`` 完全一致：失败先回滚，再原样抛给调用方决定错误文案。
+    """
+    # 延迟导入：``app.database`` 会在导入期读配置，服务模块顶层引它没有必要。
+    from ...database import SessionLocal
+
+    session = SessionLocal()
+    try:
+        return persist_batch(
+            session, run, requested_count=requested_count, comparison=comparison
+        )
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def batch_summary(
     row: JobMatchBatch, comparison: JobComparisonResult | None = None
 ) -> JobMatchBatchSummary:

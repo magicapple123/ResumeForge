@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ...database import SessionLocal, get_db
+from ...database import get_db
 from ...schemas.webform import (
     WebFormLiveEnabledIn,
     WebFormLiveIn,
@@ -20,6 +20,7 @@ from ...schemas.webform import (
 )
 from ...services import diagnostics
 from ...services import webform as webform_service
+from ...services.session_scope import open_session
 from ...services.settings_service import get_webform_relaxed_mode
 from ...services.ui_locale import get_ui_locale
 from ._shared import _raise
@@ -143,7 +144,7 @@ def _start_live_session(
         第三个返回值是范围与被组过滤的板块——三者出自同一次取数，面板开关、空态原因
         与清单内容才不会互相矛盾。
         """
-        session = SessionLocal()
+        session = open_session()
         try:
             view = webform_service.build_webform_view(
                 session, live=True, scope=scope_holder["value"]
@@ -162,7 +163,7 @@ def _start_live_session(
 
     def load_autofill_data() -> dict[str, str]:
         """快捷整页填充复用主界面的批量资料口径（同一个范围）。"""
-        session = SessionLocal()
+        session = open_session()
         try:
             return webform_service.build_form_data(session, scope=scope_holder["value"])
         finally:
@@ -170,7 +171,7 @@ def _start_live_session(
 
     def load_ui_locale() -> str | None:
         """注入脚本的文案语言：每次装脚本现读，切了界面语言不用重启会话。"""
-        session = SessionLocal()
+        session = open_session()
         try:
             return get_ui_locale(session)
         finally:
@@ -178,7 +179,7 @@ def _start_live_session(
 
     def load_relaxed_mode() -> bool:
         """「放宽模式」开关每次聚焦现读：设置页改完立刻生效，不用重启会话。"""
-        session = SessionLocal()
+        session = open_session()
         try:
             return get_webform_relaxed_mode(session)
         finally:
@@ -186,7 +187,7 @@ def _start_live_session(
 
     def load_memory_targets() -> list[dict[str, Any]]:
         """每次打开逐框记忆编辑器时读取最新的完整资料目标。"""
-        session = SessionLocal()
+        session = open_session()
         try:
             return webform_service.profile_targets.build_memory_targets(session)
         finally:
@@ -194,7 +195,7 @@ def _start_live_session(
 
     def load_live_clients() -> list[tuple[str, Any]]:
         """每轮同步网申浏览器的标签页，并为每个页面绑定独立 CDP 客户端。"""
-        session = SessionLocal()
+        session = open_session()
         try:
             browser = webform_service.browser.get_browser_manager(session)
             clients: list[tuple[str, Any]] = []
@@ -211,7 +212,7 @@ def _start_live_session(
     # 用的是单字段写入（只动用户选中的一条）而不是整体 PUT——后者是**整份覆盖**，
     # 在后台线程里用它会把用户这一屏之外的资料全删掉。
     def store_remember(entry: dict[str, str]) -> bool:
-        session = SessionLocal()
+        session = open_session()
         try:
             target_id = str(entry.get("target_id") or "").strip()
             label = str(entry.get("label") or "").strip()

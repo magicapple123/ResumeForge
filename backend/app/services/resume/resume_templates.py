@@ -56,6 +56,7 @@ from .resume_template_market import (
     font_scale_spec,
     market_options,
 )
+from .resume_template_views import STYLE_OFFLINE_DETAIL, template_detail
 
 __all__ = [
     "DEFAULT_FONT_SCALE",
@@ -80,6 +81,7 @@ __all__ = [
     "PHOTO_SCALE_MIN",
     "PHOTO_SCALE_STEP",
     "RESUME_TEMPLATES",
+    "STYLE_OFFLINE_DETAIL",
     "TEMPLATE_MARKET_PRESETS",
     "TEMPLATE_LAYOUT_DEFAULTS",
     "TEMPLATES_DIR",
@@ -100,5 +102,6 @@ __all__ = [
     "template_options_with_custom",
     "template_spec",
     "template_layout_defaults",
+    "template_detail",
     "validated_format_config",
 ]

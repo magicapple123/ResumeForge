@@ -65,6 +65,20 @@ def history_snapshot(
     return selected
 
 
+def latest_assistant_message(db: Session, conversation_id: int) -> ChatMessage | None:
+    """该对话最近一条**助手消息**（上下文用量面板读它落库的 context.context_usage）。
+
+    为什么放服务层：最新助手消息的取数口径（role + id 倒序）是上下文用量与重生成
+    共用的消息读取收口，放在路由里会把"哪条算最新"的语义复制到多个入口。
+    """
+    return (
+        db.query(ChatMessage)
+        .filter(ChatMessage.conversation_id == conversation_id, ChatMessage.role == "assistant")
+        .order_by(ChatMessage.id.desc())
+        .first()
+    )
+
+
 def update_message_context(
     message_id: int, context: dict[str, Any], *, factory: Any = None
 ) -> None:
@@ -130,5 +144,6 @@ __all__ = [
     "finish_assistant_message",
     "format_sse",
     "history_snapshot",
+    "latest_assistant_message",
     "update_message_context",
 ]

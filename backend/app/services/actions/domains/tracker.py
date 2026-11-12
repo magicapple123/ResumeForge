@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Literal, get_args
 
+from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from ....models.tracker import STATUS_APPLIED, STATUSES
@@ -171,11 +172,11 @@ class UpdateApplicationTrackInput(TrackUpdate):
 
 
 def _run_list_application_tracks(db: Session, payload: ListApplicationTracksInput) -> ActionOutcome:
-    from ....api.tracker import _track_brief as _route_track_brief
     from ...assistant_tools._shared import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT
     from ...assistant_tools.tracker_tools import _track_brief as _tool_track_brief
     from ...tracker import MAX_LIST_LIMIT as ROUTE_LIST_LIMIT
     from ...tracker import count_tracks, list_tracks, summarize
+    from ...tracker import track_brief as _route_track_brief
 
     # 路由是 500 条兜底（旧行为），把上限下推 SQL，不能为了工具侧"总数"把全表拖进内存。
     # 工具的总数走同一过滤口径的 count（旧工具也是全量计数），行取同一排序的前 limit 条。
@@ -256,21 +257,26 @@ def _run_create_application_track(
 def _run_update_application_track(
     db: Session, payload: UpdateApplicationTrackInput
 ) -> ActionOutcome:
-    """路由侧：委托既有 save_track（整份替换语义），TrackUpdate 重建失败转 invalid_input。
+    """整份替换一条进度记录，服务层 ``save_track_record`` 是唯一实现。
 
-    不用 legacy.route_runner 的原因：api.tracker 顶层有 from __future__ import annotations，
-    handler 的参数注解是字符串，route_runner 的签名适配无法识别 TrackUpdate 模型参数
-    （会报"无法提供参数 payload"）。这里显式重建同一个 TrackUpdate 再调用同一个 handler，
-    业务逻辑仍只有一份；错误映射只把 schema 校验失败转成 invalid_input（旧路由 422）。
+    不用 legacy.route_runner 的原因：它按 handler 签名适配参数，而路由侧要重建
+    ``TrackUpdate``（旧路由 body 校验失败是 422、这里是 invalid_input），所以显式
+    重建同一个模型再调同一份业务函数；不存在时路由给 404、工具侧给 not_found。
     """
-    from ....api.tracker import save_track
     from ....schemas.tracker import TrackUpdate
+    from ...tracker import save_track_record
 
     try:
         track_payload = TrackUpdate.model_validate(
             payload.model_dump(exclude={"track_id"}, exclude_unset=True, mode="json")
         )
-        return ActionOutcome(data=save_track(payload.track_id, track_payload, db))
+        result = save_track_record(db, payload.track_id, track_payload)
+        if result is None:
+            # 404 的**形状**沿用旧路由（HTTPException，detail 就是那句中文），
+            # test_actions_core_batch 钉着"路由与 run 抛出同一个 HTTP 错误"。
+            # 换成 ActionError 会把 detail 变成 {code,message}，属于对外契约变更。
+            raise HTTPException(status_code=404, detail="进度记录不存在或已被删除")
+        return ActionOutcome(data=result)
     except ValidationError as exc:
         message = "；".join(
             f"{'.'.join(str(item) for item in error.get('loc', ())) or 'arguments'}: "

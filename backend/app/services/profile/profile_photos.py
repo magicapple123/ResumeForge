@@ -119,10 +119,34 @@ def delete_photo(db: Session, photo_id: int) -> bool:
     return True
 
 
+def photo_resolver(db: Session):
+    """照片资源引用 → data URL（投影层自己透传 data URL，这里只解析库内照片 id）。
+
+    支持 "profile_photo:<id>" / "photo:<id>" / 纯数字 id；解析不了返回 None，让投影层
+    记 photo_unresolved warning，而不是阻塞整份投影（照片坏一张不该让简历打不开）。
+
+    原先长在 ``api/profile_workspace.py``：``services/resume/manual_creation.py`` 的
+    "带照片的资料来源快照"要复用同一份解析（两端拿到的 content 必须逐字一致，否则
+    token 永远过期），只好反向 import 路由模块。解析逻辑只读库内照片，属服务层。
+    """
+
+    def resolve(reference: str) -> str | None:
+        value = str(reference or "").strip()
+        if value.startswith(("profile_photo:", "photo:")):
+            value = value.split(":", 1)[1].strip()
+        if not value.isdigit():
+            return None
+        photo = db.get(ProfilePhoto, int(value))
+        return photo.image if photo is not None and photo.image else None
+
+    return resolve
+
+
 __all__ = [
     "add_photo",
     "delete_photo",
     "list_photos",
+    "photo_resolver",
     "rename_photo",
     "set_primary_photo",
 ]

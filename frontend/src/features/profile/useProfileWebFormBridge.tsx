@@ -12,7 +12,7 @@ import type { ReactElement } from "react";
 import { updateWebFormExtraProfile } from "../../api/webform";
 import WebFormProfileWorkspace, {
   type WebFormProfileWorkspaceHandle,
-} from "../../components/profile/WebFormProfileWorkspace";
+} from "./fields/WebFormProfileWorkspace";
 import { t } from "../../i18n";
 import type { WebFormExtraProfile } from "../../types";
 import { WEBFORM_CUSTOM_GROUP } from "../../features/webform/groupIdentity";

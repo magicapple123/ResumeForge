@@ -4,10 +4,10 @@
  *
  * 为什么放在 `src/test/`：
  * - 组件/页面测试要造的是"API 会返回的 `ResumeDetail`"与"最小但真实形状的
- *   `ResumeDocument`"，关注点与 `features/resume-document/documentFixtures.ts` 的纯函数
+ *   `ResumeDocument`"，关注点与 `features/resume/document/documentFixtures.ts` 的纯函数
  *   夹具不同（那份刻意只造"三种 kind 齐全"的最小文档，配合 normalize/placement 用例）。
  * - 这里不带 `.test.` 后缀，不会被 vitest 收集；也不进 i18n 棘轮与产品文案扫描的统计口径。
- * - 复用 `features/resume-document/defaults` 的默认值工厂：默认位置/格式只有一份实现，
+ * - 复用 `features/resume/document/defaults` 的默认值工厂：默认位置/格式只有一份实现，
  *   测试造数与生产"新建一条"不会各写一套默认值。
  *
  * 2026-10-30 v2 迁移完成：制作台/预览/导出全部消费 `ResumeDocument`，v1 形状的过渡桥
@@ -23,7 +23,7 @@ import {
   defaultSectionLayout,
   defaultTextItem,
   emptyDocument,
-} from "../features/resume-document/defaults";
+} from "../features/resume/document/defaults";
 import type { ResumeDetail } from "../types";
 import type {
   HeaderItem,

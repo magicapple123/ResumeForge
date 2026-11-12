@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * App-wide file drop (`components/GlobalFileDrop.tsx`): the drop overlay, the
+ * App-wide file drop (`features/shell/GlobalFileDrop.tsx`): the drop overlay, the
  * `.zip` backup import confirmation, `.json` resume creation, the `.csv`
  * hand-off to the Jobs page, and the prompts for several files or unsupported types.
  *

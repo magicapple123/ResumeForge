@@ -17,8 +17,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { useLocation } from "react-router-dom";
 import { listQueue } from "../../api/apply";
 import { getProfile } from "../../api/profile";
-import { useWorkbenchLayoutSnapshot } from "../../components/resume/workbenchLayoutStore";
-import type { WorkbenchLayoutSnapshot } from "../../components/resume/workbenchLayoutStore";
+import { useWorkbenchLayoutSnapshot } from "../resume/editor/workbenchLayoutStore";
+import type { WorkbenchLayoutSnapshot } from "../resume/editor/workbenchLayoutStore";
 import { pagesNeededFor } from "../../utils/resumeLayoutMeasure";
 import {
   getProfileSaveControl,

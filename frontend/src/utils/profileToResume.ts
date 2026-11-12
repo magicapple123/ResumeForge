@@ -7,8 +7,8 @@
  * 2. 岗位模式把求职意向覆盖成岗位名（其余字段逐字来自投影，前端不维护第二份字段映射）。
  */
 import type { Job, ResumeDocument } from "../types";
-import type { PaperProjectionOut } from "../features/profile-library/types";
-import { ensureIds, normalizeDocument } from "../features/resume-document/normalize";
+import type { PaperProjectionOut } from "../features/profile/library/types";
+import { ensureIds, normalizeDocument } from "../features/resume/document/normalize";
 
 /** 投影内容 -> v2 文档（岗位模式覆盖 header 里 placement=subtitle 的意向字段）。 */
 export function projectionToResumeDocument(

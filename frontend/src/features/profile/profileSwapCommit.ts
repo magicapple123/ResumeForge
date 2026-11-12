@@ -21,9 +21,9 @@
  * 滑到新位置；被拖卡不参与动画，保持 1:1 跟手。
  */
 
-import type { DragStackGeometry } from "../../components/profile/dragReorder";
-import { moveWithin } from "../../components/profile/dragReorder";
-import { captureFlipTops, playSwapFlip } from "../../components/profile/swapFlip";
+import type { DragStackGeometry } from "./dragReorder";
+import { moveWithin } from "./dragReorder";
+import { captureFlipTops, playSwapFlip } from "./swapFlip";
 import { flushSync } from "react-dom";
 import type { ProfileSectionOrderStore } from "./sectionOrderStore";
 

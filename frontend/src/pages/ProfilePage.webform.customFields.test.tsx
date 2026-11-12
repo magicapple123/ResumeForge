@@ -8,7 +8,7 @@
  */
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_SECTION_ORDER } from "../components/profile/ProfileSectionConfig";
+import { DEFAULT_SECTION_ORDER } from "../features/profile/ProfileSectionConfig";
 import {
   makeAllSections,
   makeEntry,
@@ -73,8 +73,8 @@ const workspaceMocks = vi.hoisted(() => {
     ReturnType<typeof vi.fn>
   >;
 });
-vi.mock("../features/profile-library/api", () => ({ ...workspaceMocks }));
-vi.mock("../features/profile-groups/api", () => ({ ...workspaceMocks }));
+vi.mock("../features/profile/library/api", () => ({ ...workspaceMocks }));
+vi.mock("../features/profile/groups/api", () => ({ ...workspaceMocks }));
 vi.mock("../api/photo", () => ({ ...workspaceMocks }));
 
 vi.mock("../api/webform", async (importOriginal) => ({

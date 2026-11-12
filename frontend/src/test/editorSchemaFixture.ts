@@ -9,7 +9,7 @@ import type {
   EditorFieldOut,
   EditorSchemaOut,
   EditorSectionOut,
-} from "../features/profile-library/types";
+} from "../features/profile/library/types";
 
 /** 一个可见字段；`resumeAttr` 缺省与 key 相同。 */
 export function editorField(key: string, resumeAttr: string | null = key): EditorFieldOut {

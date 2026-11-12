@@ -1,0 +1,497 @@
+// SPDX-License-Identifier: Apache-2.0
+/** 与简历中心的预览弹窗同一套滚动口径：右留 12px 防贴滚动条，负 margin 借回宽度。 */
+const SCROLL_BODY_STYLES = {
+  body: {
+    maxHeight: "var(--rf-modal-body-max-h)",
+    overflowY: "auto",
+    overflowX: "hidden",
+    paddingRight: 12,
+    marginRight: -12,
+  },
+} as const;
+/** AI 生成简历弹窗：配置岗位导向美化/篇幅 -> 流式生成 -> 预览结果（自动保存历史）。 */
+import { App, Button, Modal, Space } from "antd";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { attachTaskUi, resumeTaskKey, watchResumeTask } from "../../../utils/backgroundTasks";
+import { isDocumentHidden, onVisibilityChange } from "../../../utils/visibility";
+import {
+  cancelResumeGenerateTask,
+  fetchResumeTemplates,
+  getResumeGenerateTask,
+  renderResume,
+  startResumeGeneration,
+  updateResume,
+  updateResumeLayout,
+} from "../../../api/resumes";
+import { getLLMConfig } from "../../../api/settings";
+import { useGenerationExtras } from "../../career-scenarios/useGenerationExtras";
+import { newResumeLayout, withCreationLanguage } from "../document/newResumeLayout";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
+import { formatErrorGuidance } from "../../../api/errorGuidance";
+import type {
+  EnhancementLevel,
+  Job,
+  RagRetrieval,
+  ResumeDocument,
+  ResumeDetail,
+  ResumeGenerateTask,
+  ResumeLayout,
+} from "../../../types";
+import type { ResumeFormatConfig } from "../../../types/resumeFormat";
+import type { LayoutMeasure } from "../../../utils/resumeLayoutMeasure";
+import { DEFAULT_RESUME_SECTION_ORDER } from "../../../utils/resumeSectionOrder";
+import { useResumeRelayout } from "../useResumeRelayout";
+import type { ResumePreviewHandle } from "../preview/ResumePreview";
+import GenerationConfigStage from "./GenerationConfigStage";
+import GenerationProgressStage from "./GenerationProgressStage";
+import GenerationErrorStage from "./GenerationErrorStage";
+import GenerationPreviewStage from "./GenerationPreviewStage";
+import type { GenerateResult } from "./GenerationPreviewStage";
+import { useGenerationPreviewLoader } from "./useGenerationPreviewLoader";
+import { buildGenerateRequest } from "./generateRequest";
+import { readTemplateCatalogDefaults } from "./templateCatalogDefaults";
+
+type Stage = "config" | "generating" | "preview" | "error";
+
+interface Props {
+  /** null 表示生成**通用简历**（不针对任何岗位）。 */
+  job: Job | null;
+  open: boolean;
+  /** 通用简历的初始名称，留空则后端按「姓名-通用简历-时间戳」命名。 */
+  initialTitle?: string;
+  onClose: () => void;
+}
+
+export default function GenerateResumeModal({ job, open, initialTitle = "", onClose }: Props) {
+  useLocale();
+  const { message, notification } = App.useApp();
+  const navigate = useNavigate();
+  const [stage, setStage] = useState<Stage>("config");
+  const [title, setTitle] = useState("");
+  const [enhance, setEnhance] = useState(false);
+  const [enhancementLevel, setEnhancementLevel] = useState<EnhancementLevel>("balanced");
+  const [layout, setLayout] = useState<ResumeLayout>(newResumeLayout);
+  const [sectionOptions, setSectionOptions] = useState<{ key: string; label: string }[]>([]);
+  const [builtInSectionOrder, setBuiltInSectionOrder] = useState(DEFAULT_RESUME_SECTION_ORDER);
+  const [profileSectionOrder, setProfileSectionOrder] = useState(DEFAULT_RESUME_SECTION_ORDER);
+  const [customInstruction, setCustomInstruction] = useState("");
+  // 文档模式 / 生成场景（契约 §5、§2.5）：默认不发送，关弹窗时复位。
+  const generation = useGenerationExtras();
+  const [layoutStatus, setLayoutStatus] = useState<{
+    pages: number;
+    overflow: boolean;
+  } | null>(null);
+  const [measure, setMeasure] = useState<LayoutMeasure | null>(null);
+  const [pdfDirectAvailable, setPdfDirectAvailable] = useState(true);
+  const [modelName, setModelName] = useState("");
+  const [llmReady, setLlmReady] = useState(true);
+  // 生成改为后台任务：taskId 驱动轮询，task 是最近一次轮询到的状态。
+  const [taskId, setTaskId] = useState<number | null>(null);
+  const [task, setTask] = useState<ResumeGenerateTask | null>(null);
+  // #30：任务终态会被清空（下面收尾会把 task 置 null），审计行要在那之前捕获下来。
+  const [ragAudit, setRagAudit] = useState<RagRetrieval | null>(null);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [result, setResult] = useState<GenerateResult | null>(null);
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [suggestionsGenerated, setSuggestionsGenerated] = useState(false);
+  const [suggestionsResetKey, setSuggestionsResetKey] = useState(0);
+  // 生成开始时的版式快照：后台完成后的预览用它，避免用户中途改配置导致不一致。
+  const generationLayoutRef = useRef<ResumeLayout>(layout);
+  const previewRef = useRef<ResumePreviewHandle>(null);
+
+  /**
+   * 版式重排：尾随合并（`useResumeRelayout`，项 6 / D11）。
+   * 与 `ResumeDetailModal` 的差异只有 `render` 里的最后一步：这里记录已经落库，所以
+   * 重渲染成功后还要把版式写回记录。但**写回失败不回滚 layout**——画面与记录的一致性是
+   * "下次打开才看得见"的问题，此刻把版面弹回旧值只会让用户更困惑；失败用 message 说明。
+   */
+  const { relayouting, request: requestLayout } = useResumeRelayout({
+    render: async (next) => {
+      const detail = result?.detail;
+      if (!detail) return;
+      setPreviewHtml(await renderResume(detail.content, next));
+      if (!detail.id) return;
+      try {
+        await updateResumeLayout(detail.id, next);
+      } catch (err) {
+        // 只提示、不回滚：版式已渲染成功，弹旧版式会让「刚调好的」凭空消失。
+        message.error(err instanceof Error ? err.message : t("generate.saveLayoutFailed"));
+      }
+    },
+    onRendered: (next) => setLayout(next),
+    onError: (err) => {
+      message.error(err instanceof Error ? err.message : t("generate.relayoutFailed"));
+      // D13：探针是「我看到的」，渲染失败必须清掉，不能呈现不存在的状态。
+      previewRef.current?.setLiveProbe("");
+    },
+  });
+
+  // 后台生成是否仍在进行：生成中关掉弹窗（后台继续）不 reset，stage 留在 generating；
+  // 跑到终态后 taskId 清空、stage 改写，这里跟着变 false。
+  const generatingInBackground = stage === "generating" && taskId != null;
+  const generatingRef = useRef(generatingInBackground);
+  useEffect(() => {
+    generatingRef.current = generatingInBackground;
+  }, [generatingInBackground]);
+
+  // 打开时把资料页填的名称带进来（reset() 只在关闭时跑）。
+  const [prevTitleSync, setPrevTitleSync] = useState<{
+    open: boolean;
+    initialTitle: string;
+  } | null>(null);
+  if (
+    prevTitleSync === null ||
+    prevTitleSync.open !== open ||
+    prevTitleSync.initialTitle !== initialTitle
+  ) {
+    if (open && !prevTitleSync?.open && !generatingInBackground) setLayout(withCreationLanguage);
+    setPrevTitleSync({ open, initialTitle });
+    if (open) setTitle(initialTitle);
+  }
+
+  // 重新打开时回配置页；唯一例外是后台生成还在跑——保持 generating 接着看进度。
+  useEffect(() => {
+    if (!open) return;
+    if (generatingRef.current) return;
+    setStage("config");
+    setResult(null);
+    setPreviewHtml("");
+    setErrorMsg("");
+  }, [open]);
+
+  // 打开弹窗时检查 LLM 配置并展示当前模型
+  useEffect(() => {
+    if (!open) return;
+    void getLLMConfig()
+      .then((config) => {
+        setModelName(config.model || "");
+        setLlmReady(!!config.base_url && !!config.model);
+      })
+      .catch(() => setLlmReady(false));
+  }, [open]);
+
+  // 每次打开按后端默认值重置版式，并记录服务端能否直接生成 PDF。
+  // 「目录 → 默认值 / 板块顺序」的口径在 `generate-resume/templateCatalogDefaults`（纯函数）。
+  useEffect(() => {
+    if (!open) return;
+    void fetchResumeTemplates()
+      .then((catalog) => {
+        const defaults = readTemplateCatalogDefaults(catalog);
+        setPdfDirectAvailable(defaults.pdfDirectAvailable);
+        setSectionOptions(defaults.sectionOptions);
+        setBuiltInSectionOrder(defaults.builtInSectionOrder);
+        setProfileSectionOrder(defaults.profileSectionOrder);
+        setLayout(defaults.applyTo);
+      })
+      .catch(() => {
+        // 取不到目录就用内置默认值，不影响生成。
+      });
+  }, [open]);
+
+  const reset = useCallback(() => {
+    setStage("config");
+    setTitle(initialTitle);
+    setTaskId(null);
+    setTask(null);
+    setRagAudit(null);
+    setErrorMsg("");
+    setResult(null);
+    setPreviewHtml("");
+    setSuggestionsGenerated(false);
+    setSuggestionsResetKey((value) => value + 1);
+    setLayoutStatus(null);
+    setMeasure(null);
+    setCustomInstruction("");
+    generation.resetExtras();
+  }, [generation, initialTitle]);
+
+  const loadPreview = useGenerationPreviewLoader({
+    layoutRef: generationLayoutRef,
+    setResult,
+    setPreviewHtml,
+    setStage,
+    setErrorMsg,
+  });
+
+  const startGenerate = async () => {
+    if (!open) return;
+    generationLayoutRef.current = layout;
+    setStage("generating");
+    setTaskId(null);
+    setTask(null);
+    setRagAudit(null);
+    setErrorMsg("");
+    setResult(null);
+    setSuggestionsGenerated(false);
+    setSuggestionsResetKey((value) => value + 1);
+    try {
+      // 请求体组装在 `generate-resume/generateRequest`（纯函数，含"默认不发新字段"的口径）。
+      const started = await startResumeGeneration(
+        buildGenerateRequest({
+          job,
+          title,
+          enhance,
+          enhancementLevel,
+          layout,
+          customInstruction,
+          generation,
+        }),
+      );
+      setTaskId(started.id);
+      setTask(started);
+      // 登记到模块级登记表：关掉弹窗后仍会被追踪，完成时统一弹窗 + 响铃。
+      watchResumeTask(
+        started,
+        job ? t("generate.taskTitle", { job: job.title }) : t("generate.taskTitleGeneral"),
+      );
+    } catch (err) {
+      setStage("error");
+      // RF-20：失败不只显示原始异常——给「原因 + 建议 + 编号」指引。
+      setErrorMsg(formatErrorGuidance(err, t("generate.startFailed")));
+    }
+  };
+
+  // 轮询后台任务：进入终态前每 1.5s 拉一次状态（弹窗内的进度显示用它）。
+  // 与 `utils/backgroundTasks` 的分工：**这一份只管弹窗里的进度显示**，"关掉弹窗之后
+  // 仍然被追踪、并在完成时统一提醒"由登记表的轮询负责。两边各拉一次是有意的取舍——
+  // 共享同一份 React 状态会让"完成时把任务从列表里删掉"和"弹窗还要读终态"互相打架
+  // （实测会陷入无限更新）。两条轮询互不依赖，任一条断掉都不影响另一条。
+  useEffect(() => {
+    if (taskId == null) return;
+    let disposed = false;
+    const poll = async () => {
+      try {
+        const updated = await getResumeGenerateTask(taskId);
+        if (!disposed) setTask(updated);
+      } catch {
+        // 轮询失败（后端短暂不可用）不打断，等下一轮自愈。
+      }
+    };
+    void poll();
+    // 页面在后台时跳过本轮 tick；回到前台由 visibilitychange 立即补一次。
+    const timer = window.setInterval(() => {
+      if (isDocumentHidden()) return;
+      void poll();
+    }, 1500);
+    const unsubscribeVisibility = onVisibilityChange(() => {
+      if (isDocumentHidden()) return;
+      void poll();
+    });
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      unsubscribeVisibility();
+    };
+  }, [taskId]);
+
+  // 弹窗开着时声明"界面在看这个任务"：完成后用右上角卡片提醒，不弹居中弹窗打断用户。
+  // detach 只跟随弹窗关闭，不跟随 taskId 置空：任务进入终态时弹窗收尾会把 taskId
+  // 置空（见下面的完成分支），但弹窗仍开着展示预览——若跟着 detach，registry 稍后
+  // 的完成通知会误判"用户已经走开"，给正看着预览的用户升级成居中弹窗。React 19 的
+  // 被动副作用落点让这个竞态从偶发变成确定性发生，"在看"的生命周期必须跟随弹窗。
+  const detachTaskUiRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!open) {
+      detachTaskUiRef.current?.();
+      detachTaskUiRef.current = null;
+      return;
+    }
+    if (taskId == null || detachTaskUiRef.current) return;
+    detachTaskUiRef.current = attachTaskUi(resumeTaskKey(taskId));
+  }, [open, taskId]);
+  useEffect(() => {
+    // 组件卸载兜底释放，防止登记表泄漏。
+    return () => detachTaskUiRef.current?.();
+  }, []);
+
+  // 任务进入终态后的收尾：完成→取简历进预览并提醒；取消→回配置；失败→错误。
+  // 本质是"派生事件"（后台任务轮询到达终态后的收尾扇出）：状态收尾与 loadPreview
+  // 副作用在此汇合，改为回调直连需要重构轮询器，故按书面理由豁免 Compiler 规则。
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!task) return;
+    if (task.status === "completed") {
+      const resumeId = task.resume_id;
+      setRagAudit(task.rag ?? null);
+      setTaskId(null);
+      setTask(null);
+      if (resumeId == null) {
+        // 完成却没回填记录 id：理论上不会发生（完成一定先落库），防御性当作失败处理，
+        // 避免卡在"完成"状态却永远拿不到预览。
+        setErrorMsg(t("generate.resultMissing"));
+        setStage("error");
+        return;
+      }
+      // 完成提醒（弹窗 + 提示音）由 `utils/backgroundTasks` 统一发：只有它知道用户
+      // 是"还在看弹窗"还是"已经走开了"，也只有它能保证关掉弹窗后仍然提醒。
+      void loadPreview(resumeId);
+    } else if (task.status === "cancelled") {
+      setTaskId(null);
+      setTask(null);
+      setStage("config");
+      message.info(t("generate.cancelled"));
+    } else if (task.status === "failed") {
+      setTaskId(null);
+      setErrorMsg(task.error || t("generate.failed"));
+      setStage("error");
+    }
+  }, [task, notification, message, navigate, loadPreview]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const handleCancelGenerate = async () => {
+    if (taskId == null) return;
+    try {
+      const cancelled = await cancelResumeGenerateTask(taskId);
+      setTask(cancelled);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : t("generate.cancelFailed"));
+    }
+  };
+
+  const handleClose = () => {
+    // 生成中关弹窗 = 后台继续（不是取消）：任务继续跑，完成后提醒；其余阶段照旧复位。
+    if (stage === "generating" && taskId != null) {
+      onClose();
+      // 后台登记表已接管（start 时 watchResumeTask）。弹窗自己的任务上下文必须清掉，
+      // 否则下次打开（可能是另一个岗位）还停在上一个任务的生成态，发不起第二份。
+      setTaskId(null);
+      setTask(null);
+      setStage("config");
+      return;
+    }
+    reset();
+    onClose();
+  };
+
+  const saveEditedResume = async (content: ResumeDocument) => {
+    const recordId = result?.detail.id;
+    if (!recordId) {
+      throw new Error(t("generate.recordNotSaved"));
+    }
+    const updated = await updateResume(recordId, content);
+    const html = await renderResume(updated.content, layout);
+    setResult({ detail: updated });
+    setPreviewHtml(html);
+    setSuggestionsGenerated(false);
+    setSuggestionsResetKey((value) => value + 1);
+    message.success(t("generate.changesSaved"));
+  };
+
+  /**
+   * AI 修订（采纳建议）成功后的刷新：修订已在服务端落库，这里按新内容重渲染预览。
+   * 生成弹窗不显示「AI 修改 / 重新生成」入口（``showReviseAction={false}``）——
+   * extraActions 里已有走完整生成流程的「重新生成」，两个同名按钮会互相混淆。
+   */
+  const applyRevisedDetail = async (updated: ResumeDetail) => {
+    const html = await renderResume(updated.content, layout);
+    setResult({ detail: updated });
+    setPreviewHtml(html);
+    setSuggestionsGenerated(false);
+    setSuggestionsResetKey((value) => value + 1);
+  };
+
+  /**
+   * 「自动一页」已由诊断卡写回配置，这里只需按新配置重渲染一次（同一条重排通道）。
+   * 换模板/加页数/改字号直接走 `requestLayout`（不再需要包装函数）。
+   */
+  const applyFittedFormat = (formatConfig: ResumeFormatConfig) => {
+    requestLayout({ ...layout, format_config: formatConfig });
+  };
+
+  const configFooter = (
+    <div style={{ textAlign: "right" }}>
+      <Space>
+        <Button onClick={handleClose}>{t("common.action.cancel")}</Button>
+        <Button type="primary" disabled={!llmReady} onClick={() => void startGenerate()}>
+          {t("generate.config.start")}
+        </Button>
+      </Space>
+    </div>
+  );
+
+  return (
+    <Modal
+      title={job ? t("generate.taskTitle", { job: job.title }) : t("generate.taskTitleGeneral")}
+      open={open}
+      onCancel={handleClose}
+      // 宽度与 body 限高对齐简历中心的预览弹窗（ResumeDetailModal）：预览阶段渲染的是
+      // 同一个 ResumeDetailPreview，两边布局应一致；限高让超长的预览只滚弹窗内部，
+      // 卡片整体始终完整呈现在视口内。
+      width="min(960px, 96vw)"
+      footer={stage === "config" ? configFooter : null}
+      styles={SCROLL_BODY_STYLES}
+      destroyOnHidden
+    >
+      {stage === "config" && (
+        <GenerationConfigStage
+          job={job}
+          title={title}
+          setTitle={setTitle}
+          generation={generation}
+          enhance={enhance}
+          setEnhance={setEnhance}
+          enhancementLevel={enhancementLevel}
+          setEnhancementLevel={setEnhancementLevel}
+          layout={layout}
+          setLayout={setLayout}
+          sectionOptions={sectionOptions}
+          builtInSectionOrder={builtInSectionOrder}
+          profileSectionOrder={profileSectionOrder}
+          customInstruction={customInstruction}
+          setCustomInstruction={setCustomInstruction}
+          llmReady={llmReady}
+          modelName={modelName}
+          onClose={handleClose}
+          onStart={() => void startGenerate()}
+        />
+      )}
+
+      {stage === "generating" && (
+        <GenerationProgressStage
+          task={task}
+          taskId={taskId}
+          onClose={handleClose}
+          onCancel={() => void handleCancelGenerate()}
+          onOpenSettings={() => navigate("/settings")}
+        />
+      )}
+
+      {stage === "preview" && result && (
+        <GenerationPreviewStage
+          result={result}
+          previewHtml={previewHtml}
+          layout={layout}
+          layoutStatus={layoutStatus}
+          measure={measure}
+          pdfDirectAvailable={pdfDirectAvailable}
+          relayouting={relayouting}
+          previewRef={previewRef}
+          setLayoutStatus={setLayoutStatus}
+          setMeasure={setMeasure}
+          applyLayout={requestLayout}
+          applyFittedFormat={applyFittedFormat}
+          saveEditedResume={(content) => saveEditedResume(content)}
+          applyRevisedDetail={(updated) => applyRevisedDetail(updated)}
+          suggestionsGenerated={suggestionsGenerated}
+          suggestionsResetKey={suggestionsResetKey}
+          setSuggestionsGenerated={setSuggestionsGenerated}
+          onGoResumes={() => navigate("/resumes")}
+          onRegenerate={() => void startGenerate()}
+          onClose={handleClose}
+          ragAudit={ragAudit}
+          onOpenProfile={() => navigate("/profile")}
+        />
+      )}
+
+      {stage === "error" && (
+        <GenerationErrorStage
+          errorMsg={errorMsg}
+          onReset={reset}
+          onRegenerate={() => void startGenerate()}
+        />
+      )}
+    </Modal>
+  );
+}

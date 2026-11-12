@@ -15,7 +15,7 @@ import { memo } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { BROWSER_STATE_LABEL_KEYS } from "../../i18n/enum/apply";
-import WebFormBrowserUrlBar from "../../components/webform/WebFormBrowserUrlBar";
+import WebFormBrowserUrlBar from "../../features/webform/WebFormBrowserUrlBar";
 import { BROWSER_STATE_META } from "../../types";
 import type { BrowserState, WebFormUrlHistory } from "../../types";
 import type { WebFormBusyState } from "./constants";

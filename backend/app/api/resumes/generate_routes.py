@@ -28,7 +28,7 @@ from app.api import resumes as _api  # patch 锚点：调用期从包命名空�
 
 from ...database import get_db
 from ...models.job import Job
-from ...models.resume import GENERATE_ACTIVE_STATUSES, ResumeGenerateTask
+from ...models.resume import ResumeGenerateTask
 from ...runtime import dataset_scope
 from ...runtime.dataset_scope import DatasetScopeError
 from ...runtime.log_redact import log_exception_redacted
@@ -62,6 +62,7 @@ from ...services.resume.resume_generate_runner import (
 from ...services.resume.resume_generation_levels import generation_token_budget
 from ...services.resume.resume_generator import ResumeGenerator
 from ...services.resume.resume_record import save_record
+from ...services.resume.resume_task_state import active_task_for_job
 from ...services.resume.scenario_context import (
     build_scenario_prompt_block,
     scenario_section_order,
@@ -409,17 +410,8 @@ def start_resume_generation(payload: GenerateRequest, db: Session = Depends(get_
     # 不同岗位放行；通用简历（job_id=None）不受这条守卫影响，可同时生成多份。
     # 「查重 → 建任务 → commit」必须在同一把短锁里，否则两个并发请求都能查到"没有活动任务"。
     with _START_LOCK:
-        if payload.job_id is not None:
-            active_same_job = (
-                db.query(ResumeGenerateTask)
-                .filter(
-                    ResumeGenerateTask.status.in_(GENERATE_ACTIVE_STATUSES),
-                    ResumeGenerateTask.job_id == payload.job_id,
-                )
-                .first()
-            )
-            if active_same_job is not None:
-                raise HTTPException(status_code=409, detail="这个岗位已有一份简历正在进行中")
+        if payload.job_id is not None and active_task_for_job(db, payload.job_id) is not None:
+            raise HTTPException(status_code=409, detail="这个岗位已有一份简历正在进行中")
 
         # F3 §1：冻结当前组消费快照（入队前），并随任务一起提交。
         frozen = freeze_generation_snapshot(db)

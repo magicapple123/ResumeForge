@@ -94,7 +94,7 @@ export interface ApplyTrackResult {
  * 一条招呼语模板。
  *
  * `body` 支持 `{company}` / `{job_title}` / `{name}` 三个变量，渲染时缺值回落空串
- * （渲染逻辑在 `components/apply/queue/greetingTemplate.ts`，纯函数）。
+ * （渲染逻辑在 `features/apply/queue/greetingTemplate.ts`，纯函数）。
  * `uses` 是使用次数（首版只累计次数，不做面试率）。
  */
 export interface GreetingTemplate {

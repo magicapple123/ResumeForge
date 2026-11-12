@@ -35,10 +35,14 @@ from ..services.resume.resume_template_store import (
     update_user_template,
 )
 from ..services.resume.resume_templates import (
+    STYLE_OFFLINE_DETAIL,
     font_scale_spec,
     template_options,
     template_spec,
     validated_format_config,
+)
+from ..services.resume.resume_templates import (
+    template_detail as _to_detail,
 )
 from ..services.settings_service import get_llm_config  # noqa: F401 - legacy monkeypatch surface
 
@@ -48,10 +52,6 @@ logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/resume-templates", tags=["resume-templates"])
-
-# 自制样式模板（kind='style'）已下线（2026-11）。错误文案只写**原因**，动作由前端拼
-# （见 docs/ui-copy-guide.md §2.4 与 tests/test_detail_copy.py）。
-STYLE_OFFLINE_DETAIL = "自制模板已下线，只能创建版式"
 
 # Jinja 报错原文对用户没有意义（"…ResumeContent object has no attribute 'basic'"），
 # 而这类错误在自制模板里最常见——写在右侧的字段名与真实字段名差一个词。所以把
@@ -72,10 +72,6 @@ def _template_error_detail(exc: Exception) -> str:
             '各分区正文建议直接用 {% include "_resume_sections.j2" %}。'
         )
     return f"模板渲染失败：{text}（请检查 Jinja 语法与 include 路径）"
-
-
-def _to_detail(template) -> ResumeTemplateDetail:
-    return ResumeTemplateDetail.model_validate(template)
 
 
 def _template_or_404(db: Session, template_id: int):

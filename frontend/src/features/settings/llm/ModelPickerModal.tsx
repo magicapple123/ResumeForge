@@ -1,0 +1,66 @@
+// SPDX-License-Identifier: Apache-2.0
+/**
+ * 选模型弹窗：展示「获取可用模型」拉到的模型列表，点「使用」回填表单。
+ * （自 LLMConfigCard 拆出，逐字搬运，行为等价。）
+ */
+import { Button, Listy, Modal, Typography } from "antd";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
+import { ListyItem } from "../../../components/common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "../../../components/common/listyPadding";
+
+export function ModelPickerModal({
+  open,
+  modelsMessage,
+  modelOptions,
+  onPick,
+  onClose,
+}: {
+  open: boolean;
+  modelsMessage: string;
+  modelOptions: string[];
+  onPick: (model: string) => void;
+  onClose: () => void;
+}) {
+  useLocale();
+  return (
+    <Modal
+      title={t("llmUi.picker.title")}
+      aria-label={t("llmUi.picker.title")}
+      open={open}
+      destroyOnHidden
+      footer={null}
+      onCancel={onClose}
+    >
+      <Typography.Paragraph type="secondary">{modelsMessage}</Typography.Paragraph>
+      <Listy
+        height={360}
+        items={modelOptions}
+        rowKey={(model) => model}
+        styles={{
+          root: { overflowX: "hidden" },
+          item: { ...LISTY_ITEM_PADDING_SMALL },
+        }}
+        itemRender={(model) => (
+          <ListyItem
+            actions={[
+              <Button
+                key="pick"
+                type="link"
+                size="small"
+                onClick={() => {
+                  onPick(model);
+                  onClose();
+                }}
+              >
+                {t("llmUi.picker.action.use")}
+              </Button>,
+            ]}
+          >
+            <Typography.Text code>{model}</Typography.Text>
+          </ListyItem>
+        )}
+      />
+    </Modal>
+  );
+}

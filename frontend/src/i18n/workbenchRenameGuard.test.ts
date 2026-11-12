@@ -43,7 +43,7 @@ const OLD_SHORT_NAME = "\u67e5\u770b\u5927\u56fe";
 const NEW_NAME = "\u7b80\u5386\u5236\u4f5c\u53f0";
 
 /** 模板画廊的「查看大图」（另一个功能，PRD §8「重名风险」要求保留）。 */
-const GALLERY_FILE = "components/resume/TemplateGalleryModal.tsx";
+const GALLERY_FILE = "features/resume/template-trial/TemplateGalleryModal.tsx";
 
 const I18N_DIR = dirname(fileURLToPath(import.meta.url));
 const SRC_ROOT = resolve(I18N_DIR, "..");

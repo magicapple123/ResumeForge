@@ -14,7 +14,7 @@
  */
 import { useContext, useEffect, useRef, useState } from "react";
 import { UNSAFE_DataRouterContext, useBlocker } from "react-router-dom";
-import { useBeforeUnloadGuard } from "../../components/resume/useBeforeUnloadGuard";
+import { useBeforeUnloadGuard } from "../resume/editor/useBeforeUnloadGuard";
 
 /** 程序触发离开的种类：取消编辑 / 切换当前组（离页由路由 blocker 覆盖）。 */
 export type ProfileLeaveKind = "cancel" | "switch-group" | "navigate";

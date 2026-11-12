@@ -22,7 +22,7 @@ declare const process: { cwd(): string };
 
 function css(): string {
   return readFileSync(
-    [process.cwd(), "src", "components", "resume-editor", "document-editor.css"].join("/"),
+    [process.cwd(), "src", "features", "resume", "editor", "document-editor.css"].join("/"),
     "utf8",
   );
 }

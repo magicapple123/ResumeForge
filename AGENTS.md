@@ -202,7 +202,7 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 2. `message` / `notification` / `modal` 一律取自 `App.useApp()`；**禁止** `import { message }` 与 `Modal.confirm` 等静态方法 —— 静态调用不读 React `ConfigProvider`，深色主题下会退回默认浅色 token。为此渲染的测试必须包 `<AntdApp>`。
 3. `LoadingBlock` 是**块级**加载态的唯一出口（`spinning` 或 `children` 模式）。无 children、无 `spinning` 的裸 `<Spin />` 仍允许出现在 **Modal 内、表格单元格、卡片内嵌的局部刷新位**等空间受限处（`LoadingBlock` 的 `min-height` 会把容器撑高）；`size="small"` 行内转圈与 `<Spin fullscreen>`（启动期全屏遮罩）照旧。
 4. 空态：页级 / Tab 面板主体 / 承担整块信息的 Card 用 `EmptyState`；紧凑容器（表格空数据、Drawer / Modal 内、侧栏列表、`Listy`）用 `EmptyState inline`（不渲染 `.rf-state` 外壳，避免 `min-height:192px` 凭空撑高）。**保留默认大插图、或带富 `description`（含自定义子节点）的站点可以继续用裸 `<Empty>`** —— 换成 `EmptyState` 会改掉插图尺寸与排版。两句冲突时**以插图形态优先**：页级位置但如果该站点刻意保留默认大插图，就继续用裸 `<Empty>`，不要为了"位置对"去换成一个更小的插图。
-5. 禁用语义只传 `true` 或 `undefined`：`disabled={flag || undefined}`。**禁止 `disabled={flag}`** —— 显式 `false` 会短路 `Form disabled` / `ConfigProvider componentDisabled`（正范式样板：`components/profile/PartialDateSelect.tsx:62-63`）。
+5. 禁用语义只传 `true` 或 `undefined`：`disabled={flag || undefined}`。**禁止 `disabled={flag}`** —— 显式 `false` 会短路 `Form disabled` / `ConfigProvider componentDisabled`（正范式样板：`features/profile/fields/PartialDateSelect.tsx:62-63`）。
 6. 不用裸 `button`/`select`/`textarea`/`dialog` 替代 `Button`/`Select`/`Input.TextArea`/`Modal`；**禁止手贴 `.ant-*` 类名**。
 7. `.ant-*` 覆写只允许四种理由：布局无 token、无障碍补偿、私有形态、antd 类名版本迁移。外观/颜色一律走 `theme.components` 或 `--rf-*` 变量，并在注释里写明理由。
 8. 改 `.ant-*` 前先 `grep src/styles/*.test.ts` —— `input-focus-ring.test.ts` / `profile-disabled-select.test.ts` / `color-regression.test.ts` 直接读 CSS 原文断言选择器，删改即断。
@@ -333,7 +333,7 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 **界面文案改了，必须同一提交改五处**，否则"文档与界面互相矛盾"本身就是 P1：
 
 - `frontend/src/i18n/messages/zh-CN.<命名空间>.ts`（+ 对应的 `en-US.*`）——**文案本体在这里**，已迁移领域尤其注意
-- `frontend/src/components/userGuideSteps.ts`（就地改那一步的措辞，**不要为新功能随手加一步**）
+- `frontend/src/features/user-guide/userGuideSteps.ts`（就地改那一步的措辞，**不要为新功能随手加一步**）
 - `docs/user-guide.md`（对应章节 + 常见问题排查）
 - `README.md`（功能表受影响时；注意 `## ✨ 功能特性` 的行数守卫）
 - `CHANGELOG.md`
@@ -341,7 +341,7 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 ### 守卫（不许豁免、不许调阈值）
 
 - `frontend/src/i18n/cjkRatchet.test.ts`：存量中文只降不升（基线在 `i18nBaseline.json`）。**已迁移领域的新文案走语言包**（见本节「界面已双语化」）；只有「永远不该翻」的三类才用 `// i18n-ok: 理由`。
-- `frontend/src/components/userGuideCopyRef.test.ts`（本轮新增，与 `userGuideSteps.ts` 同目录）：把 `userGuideSteps.ts` 里每个「…」引号内容抽出来，断言它作为字面量存在于 `src/**/*.tsx`。只能证明"字符串出现过"，检不出动态拼接——**动态文案要么改成静态全名，要么显式豁免并写明理由**。
+- `frontend/src/features/user-guide/userGuideCopyRef.test.ts`（本轮新增，与 `userGuideSteps.ts` 同目录）：把 `userGuideSteps.ts` 里每个「…」引号内容抽出来，断言它作为字面量存在于 `src/**/*.tsx`。只能证明"字符串出现过"，检不出动态拼接——**动态文案要么改成静态全名，要么显式豁免并写明理由**。
 - `frontend/src/theme/antdDeprecatedProp.test.ts`（本轮新增，与既有 `antdStaticGuard` / `antdOverrideGuard` 同目录）：按 `docs/ui-copy-guide.md` §4.14 的判定表扫 `Alert` / `notification` 的 `message=`。
 
 ### 一条成本常识
@@ -362,7 +362,7 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 - 想压进一页请改参数：加页数、收紧行距/页边距、或「版面诊断 → 自动一页」（它把参数写回滑杆，用户看得见改了
   什么）。**不要**替用户做隐式降级。
 
-守卫：`frontend/src/components/resume-preview/noAutoShrinkGuard.test.ts`（扫整个 `src/`，去注释后不得出现
+守卫：`frontend/src/features/resume/preview/noAutoShrinkGuard.test.ts`（扫整个 `src/`，去注释后不得出现
 `--fit-scale`）+ `backend/tests/test_resume_templates.py`（逐模板断言 `--fs` 是字面量、脚本里没有
 `setProperty("--fit-scale"`）。注意 `geometry.ts` 的 `fitScale` 是**视口缩放**（整张 A4 等比缩到看得见），
 与"缩字号塞进一页"不是一回事，别把它当违例删掉。
@@ -423,11 +423,11 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 
 ## 使用指南同步
 
-应用内的使用指南是 `frontend/src/components/userGuideSteps.ts`（侧栏「使用指南」，也是首次启动时自动弹出的那份）。`docs/user-guide.md` 更完整，但**只有这一份是用户会主动打开的**，所以它必须跟着功能一起变，不能只更新 CHANGELOG：
+应用内的使用指南是 `frontend/src/features/user-guide/userGuideSteps.ts`（侧栏「使用指南」，也是首次启动时自动弹出的那份）。`docs/user-guide.md` 更完整，但**只有这一份是用户会主动打开的**，所以它必须跟着功能一起变，不能只更新 CHANGELOG：
 
 - 新增**用户可见的能力**时，先问"用户会不会因为不知道而用错或用不上"：会，就要更新 `userGuideSteps.ts`；不会（纯重构、内部性能、开发流程、只影响开发者的配置）则不必，但在交付说明里写清楚为什么不必。
 - 已存在对应步骤的功能，**就地改那一步的措辞**，不要为新功能随手加一步——这是一个流程向导，不是发行说明。加一步的前提是它确实是一个新的阶段（例如"数据备份"）。
-- 指南里每一步的 `path` 必须指向 `frontend/src/appRoutes.tsx` 中真实存在的路由（菜单项另见 `components/navigation/navigationConfig.ts`）；改路由名时 `UserGuideModal.test.tsx` 会失败并指出是哪一步，照着改。
+- 指南里每一步的 `path` 必须指向 `frontend/src/appRoutes.tsx` 中真实存在的路由（菜单项另见 `features/shell/navigationConfig.ts`）；改路由名时 `UserGuideModal.test.tsx` 会失败并指出是哪一步，照着改。
 - `docs/user-guide.md` 的对应章节与「常见问题排查」要一起改：两者讲的是同一批功能，只改一处会互相矛盾。
 
 ## README（项目主页）与截图

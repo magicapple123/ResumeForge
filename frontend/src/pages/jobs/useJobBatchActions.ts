@@ -8,7 +8,7 @@
 import { App } from "antd";
 import type { Dispatch, SetStateAction } from "react";
 import { batchDeleteJobs, batchUpdateJobStatus } from "../../api/jobs";
-import { bulkEnqueueJobs, bulkEnqueueSummary } from "../../components/apply/queue/bulkEnqueue";
+import { bulkEnqueueJobs, bulkEnqueueSummary } from "../../features/apply/queue/bulkEnqueue";
 import { t } from "../../i18n";
 import type { Job, JobList, Page } from "../../types";
 

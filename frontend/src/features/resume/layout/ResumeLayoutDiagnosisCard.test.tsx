@@ -1,0 +1,392 @@
+// SPDX-License-Identifier: Apache-2.0
+/**
+ * 版面诊断面板：结论展示、自动一页的逐档搜索、以及"收到底也放不下"时的如实回报。
+ *
+ * 自动一页有两处最容易做错，两条都测：
+ * 1. **够放下就停**——一步把字号缩到最小是最省事的写法，但那不是用户要的；
+ * 2. **保存时原样回传版式参数**——`PATCH /layout` 是整体替换，传空模板名会把用户
+ *    选好的样式模板和字号悄悄改掉。
+ */
+import { App as AntdApp } from "antd";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { t } from "../../../i18n";
+import { createRef } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ResumeFitCandidate, ResumeLayoutAnalysis } from "../../../types";
+import type { ResumePreviewHandle } from "../preview/ResumePreview";
+import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
+
+const apiMocks = vi.hoisted(() => ({
+  analyzeResumeLayout: vi.fn(),
+  updateResumeLayout: vi.fn(),
+}));
+
+vi.mock("../../../api/resumes", () => apiMocks);
+
+const LAYOUT = {
+  template: "elegant",
+  format_name: "compact",
+  page_limit: 1,
+  font_scale: "large" as const,
+};
+
+const MEASURE = { usedHeight: 2800, pageContentHeight: 2600, pageLimit: 1 };
+
+function candidate(key: string, label: string, config: Record<string, number>): ResumeFitCandidate {
+  return { key, label, config, css: `${key}:${JSON.stringify(config)}` };
+}
+
+function analysis(overrides: Partial<ResumeLayoutAnalysis> = {}): ResumeLayoutAnalysis {
+  return {
+    diagnosis: {
+      status: "overflow",
+      status_label: "超出所选页数",
+      summary: "内容按当前版式需要 2 页，超过所选的 1 页。",
+      fill: 1.08,
+      pages_needed: 2,
+      page_limit: 1,
+      pages: [],
+      suggestions: [
+        { kind: "restructure", title: "先看能不能靠重排放下", detail: "把最相关的经历提到前面。" },
+      ],
+    },
+    fit_ladder: [],
+    fit_room: {
+      has_room: true,
+      steps: 3,
+      font_floor_px: 12,
+      font_adjust_floor: 0.88,
+      font_floor_note: "正文字号最多缩到 11px。",
+    },
+    ...overrides,
+  };
+}
+
+/** 造一个逐档测量的假预览：按 css 决定这一档放不放得下。 */
+function fakePreview(
+  fitsAt: string | null,
+  measurements: Record<string, number> = {},
+): React.RefObject<ResumePreviewHandle | null> {
+  const ref = createRef<ResumePreviewHandle>();
+  (ref as { current: ResumePreviewHandle | null }).current = {
+    measureWithProbe(css: string) {
+      if (!css) return null;
+      if (fitsAt !== null && css.includes(fitsAt)) {
+        return { usedHeight: 2500, pageContentHeight: 2600, pageLimit: 1 };
+      }
+      return { usedHeight: measurements[css] ?? 2800, pageContentHeight: 2600, pageLimit: 1 };
+    },
+    // 拖动字号的即时反馈与诊断卡无关，给个空实现满足接口即可。
+    setLiveProbe() {},
+  };
+  return ref;
+}
+
+function cardElement(props: Partial<React.ComponentProps<typeof ResumeLayoutDiagnosisCard>> = {}) {
+  return (
+    <AntdApp>
+      <ResumeLayoutDiagnosisCard
+        resumeId={7}
+        measure={MEASURE}
+        overflow
+        previewRef={fakePreview(null)}
+        layout={LAYOUT}
+        onApplied={vi.fn()}
+        onAddPage={vi.fn()}
+        {...props}
+      />
+    </AntdApp>
+  );
+}
+
+function renderCard(
+  props: Partial<React.ComponentProps<typeof ResumeLayoutDiagnosisCard>> = {},
+  { expand = true }: { expand?: boolean } = {},
+) {
+  const view = render(cardElement(props));
+  if (!expand) return view;
+  // 详情默认收起（2026-10-28）：关心正文的用例先点一下展开；"默认收起"本身由
+  // 专门的一条用例守着。
+  const toggle = screen.queryByRole("button", { name: t("resume.diagnosis.expand") });
+  if (toggle) fireEvent.click(toggle);
+  return view;
+}
+
+/**
+ * 详情默认收起（2026-10-28）：标题与占用率一直可见，结论正文与优化候选要点一下才出来。
+ * 断言正文的用例先点这一次——顺手把"默认收起"这条口径钉在这里。
+ */
+function expandDetails() {
+  fireEvent.click(screen.getByRole("button", { name: t("resume.diagnosis.expand") }));
+}
+
+beforeEach(() => {
+  apiMocks.analyzeResumeLayout.mockReset();
+  apiMocks.updateResumeLayout.mockReset();
+});
+
+afterEach(cleanup);
+
+describe("ResumeLayoutDiagnosisCard", () => {
+  it("shows the diagnosis and the ordered suggestions", async () => {
+    apiMocks.analyzeResumeLayout.mockResolvedValue(analysis());
+    renderCard();
+
+    expect(await screen.findByText("超出所选页数")).toBeInTheDocument();
+    expect(screen.getByText("内容按当前版式需要 2 页，超过所选的 1 页。")).toBeInTheDocument();
+    expect(screen.getByText("先看能不能靠重排放下")).toBeInTheDocument();
+    expect(screen.getByText(/把最相关的经历提到前面/)).toBeInTheDocument();
+  });
+
+  it("把草稿版式一起送过去：诊断不能按记录里的旧值算", async () => {
+    apiMocks.analyzeResumeLayout.mockResolvedValue(analysis());
+    renderCard();
+
+    await waitFor(() => expect(apiMocks.analyzeResumeLayout).toHaveBeenCalled());
+    const [, measure, layout] = apiMocks.analyzeResumeLayout.mock.calls[0];
+    expect(measure).toMatchObject({
+      used_height: 2800,
+      page_content_height: 2600,
+      page_limit: 1,
+    });
+    // 拖完滑块还没保存时，屏幕上这一版就是草稿值：`fit_room` 与「自动一页」清单都是
+    // "从当前版式再往紧收一档"，基准必须与用户看到的一致。
+    expect(layout).toMatchObject({
+      template: "elegant",
+      format_name: "compact",
+      font_scale: "large",
+    });
+  });
+
+  it("高度没变、版式变了也要重算（否则面板整块不动）", async () => {
+    apiMocks.analyzeResumeLayout.mockResolvedValue(analysis());
+    const view = renderCard();
+    await waitFor(() => expect(apiMocks.analyzeResumeLayout).toHaveBeenCalledTimes(1));
+
+    // 同一份测量，只把页边距 14 → 12：高度可能一点没变，但基准变了结论就得跟着变。
+    // 2026-10-21 用户实测的"改参数、诊断不动"就发生在这一格。
+    view.rerender(cardElement({ layout: { ...LAYOUT, format_config: { page_padding: 12 } } }));
+
+    await waitFor(() => expect(apiMocks.analyzeResumeLayout).toHaveBeenCalledTimes(2), {
+      timeout: 3000,
+    });
+    expect(apiMocks.analyzeResumeLayout.mock.calls[1][2]).toMatchObject({
+      format_config: { page_padding: 12 },
+    });
+  });
+
+  it("最小页边距参与阶梯生成：改了它要带着 min_padding_mm 重算诊断（问题 17）", async () => {
+    apiMocks.analyzeResumeLayout.mockResolvedValue(analysis());
+    renderCard();
+    await waitFor(() => expect(apiMocks.analyzeResumeLayout).toHaveBeenCalledTimes(1));
+    // 边距是**阶梯下界**（后端据此截断页边距档位），不能只在面板本地丢档。
+    fireEvent.change(screen.getByLabelText(t("optimizer.minMargin")), {
+      target: { value: "20" },
+    });
+    await waitFor(() => expect(apiMocks.analyzeResumeLayout).toHaveBeenCalledTimes(2), {
+      timeout: 3000,
+    });
+    expect(apiMocks.analyzeResumeLayout.mock.calls[1][3]).toBe(20);
+  });
+
+  it("默认收起详情：标题与占用率可见，结论正文要点一下才出来", async () => {
+    const healthy = analysis();
+    apiMocks.analyzeResumeLayout.mockResolvedValue({
+      ...healthy,
+      diagnosis: {
+        ...healthy.diagnosis!,
+        status: "healthy",
+        status_label: "合适",
+        fill: 0.9,
+        summary: "占用 90%，留有余量。",
+      },
+    });
+    renderCard({ overflow: false }, { expand: false });
+
+    // 标题与状态一直在：用户得先知道"现在到底行不行"（用容器断言，避免新增中文 ByText）。
+    await waitFor(() => expect(document.querySelector(".resume-diagnosis-head")).not.toBeNull());
+    // 正文不在，直到点「展开详情」。
+    expect(document.querySelector(".resume-diagnosis-summary")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: t("resume.diagnosis.expand") }));
+    expect(document.querySelector(".resume-diagnosis-summary")?.textContent).toContain("留有余量");
+  });
+
+  it("hides the whole card when the diagnosis is unavailable and nothing looks wrong", async () => {
+    // 诊断接口打不通、预览也没判定溢出时，整块消失——留一个只有标题的空面板
+    // 只会让用户以为功能坏了。
+    apiMocks.analyzeResumeLayout.mockRejectedValue(new Error("接口不可用"));
+    renderCard({ overflow: false });
+
+    await waitFor(() => expect(apiMocks.analyzeResumeLayout).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText("版面诊断")).not.toBeInTheDocument(), {
+      timeout: 3000,
+    });
+  });
+
+  it("keeps showing when the layout is healthy, because that answers 'is this OK'", async () => {
+    apiMocks.analyzeResumeLayout.mockResolvedValue(
+      analysis({
+        diagnosis: {
+          status: "healthy",
+          status_label: "合适",
+          summary: "正文占了 90%，版面合适。",
+          fill: 0.9,
+          pages_needed: 1,
+          page_limit: 1,
+          pages: [],
+          suggestions: [
+            { kind: "restructure", title: "占用 90%，保持即可", detail: "直接导出就好。" },
+          ],
+        },
+      }),
+    );
+    renderCard({ overflow: false });
+
+    expect(await screen.findByText("合适")).toBeInTheDocument();
+    // 诊断是异步到的：这张卡在结果回来之前整块不渲染，所以"展开"只能等它出现后再点。
+    expandDetails();
+    expect(screen.getByText("占用 90%，保持即可")).toBeInTheDocument();
+    // 放得下就不该出现「自动一页」。
+    expect(screen.queryByRole("button", { name: /自动一页/ })).not.toBeInTheDocument();
+  });
+
+  it("does not offer auto-fit when it already fits", async () => {
+    apiMocks.analyzeResumeLayout.mockResolvedValue(
+      analysis({
+        diagnosis: {
+          status: "healthy",
+          status_label: "合适",
+          summary: "版面合适。",
+          fill: 0.9,
+          pages_needed: 1,
+          page_limit: 1,
+          pages: [],
+          suggestions: [{ kind: "restructure", title: "保持即可", detail: "直接导出就好。" }],
+        },
+      }),
+    );
+    renderCard({ overflow: false });
+
+    await screen.findByText("合适");
+    expect(screen.queryByRole("button", { name: /自动一页/ })).not.toBeInTheDocument();
+  });
+
+  it("stops at the first rung that fits instead of shrinking to the smallest", async () => {
+    const ladder = [
+      candidate("padding", "页边距收到 12mm", { page_padding: 12 }),
+      candidate("line_height", "行高收到 1.55", { line_height: 1.55 }),
+      candidate("font_scale_adjust", "字号收到 0.88 倍", { font_scale_adjust: 0.88 }),
+    ];
+    apiMocks.analyzeResumeLayout.mockResolvedValue(analysis({ fit_ladder: ladder }));
+    // 只有第二档放得下。
+    apiMocks.updateResumeLayout.mockResolvedValue({ format_config: ladder[1].config });
+    const onApplied = vi.fn();
+
+    renderCard({ previewRef: fakePreview("1.55"), onApplied });
+    // 等按钮出现再点：「超出所选页数」这句在 ladder 到位前后都在，
+    // 拿它当同步点会在 fit_ladder 还是空的时候就去点，于是什么也不会发生。
+    fireEvent.click(await screen.findByRole("button", { name: /自动一页/ }));
+
+    await waitFor(() => expect(apiMocks.updateResumeLayout).toHaveBeenCalledTimes(1));
+    // 停在第二档，而不是一路缩到 0.88。
+    expect(apiMocks.updateResumeLayout.mock.calls[0][1].format_config).toEqual(ladder[1].config);
+    expect(onApplied).toHaveBeenCalledWith(ladder[1].config);
+  });
+
+  it("passes the current layout through so the template is not reset", async () => {
+    const ladder = [candidate("padding", "页边距收到 12mm", { page_padding: 12 })];
+    apiMocks.analyzeResumeLayout.mockResolvedValue(analysis({ fit_ladder: ladder }));
+    apiMocks.updateResumeLayout.mockResolvedValue({ format_config: ladder[0].config });
+
+    renderCard({ previewRef: fakePreview("12") });
+    fireEvent.click(await screen.findByRole("button", { name: /自动一页/ }));
+
+    await waitFor(() => expect(apiMocks.updateResumeLayout).toHaveBeenCalled());
+    const [, payload] = apiMocks.updateResumeLayout.mock.calls[0];
+    // PATCH 是整体替换：漏一个字段就等于把它重置成默认值。
+    expect(payload.template).toBe("elegant");
+    expect(payload.format_name).toBe("compact");
+    expect(payload.font_scale).toBe("large");
+    expect(payload.page_limit).toBe(1);
+  });
+
+  it("改完版式立刻点「自动一页」：先按这一版重算，绝不用上一版留下的清单", async () => {
+    // 2026-10-24 用户实测"点了没变"的根因：`fit_ladder` 是 250ms 防抖之前那一版 layout
+    // 算出来的，而 autoFit 直接拿它去实测、再把结果落库——落库的参数与实测那一版不是
+    // 同一套。这条用例把"陈旧清单不会被使用"钉住。
+    const stale = [candidate("padding", "页边距收到 12mm", { page_padding: 12 })];
+    const fresh = [candidate("line_height", "行高收到 1.55", { line_height: 1.55 })];
+    apiMocks.analyzeResumeLayout
+      .mockResolvedValueOnce(analysis({ fit_ladder: stale }))
+      .mockResolvedValue(analysis({ fit_ladder: fresh }));
+    apiMocks.updateResumeLayout.mockResolvedValue({ format_config: fresh[0].config });
+
+    const view = renderCard({ previewRef: fakePreview("1.55") });
+    // 等第一次诊断落地——此刻清单是按**旧版式**算的。
+    await screen.findByRole("button", { name: /自动一页/ });
+
+    // 换一版版式，但**不等**防抖那 250ms，立刻点按钮（用户就是这么操作的）。
+    view.rerender(
+      cardElement({
+        previewRef: fakePreview("1.55"),
+        layout: { ...LAYOUT, format_config: { page_padding: 10 } },
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /自动一页/ }));
+
+    await waitFor(() => expect(apiMocks.updateResumeLayout).toHaveBeenCalledTimes(1));
+    // 重算用的是当前这一版：诊断调用的第二个参数就是它。
+    expect(apiMocks.analyzeResumeLayout.mock.calls[1][2]).toMatchObject({
+      format_config: { page_padding: 10 },
+    });
+    // 落库的是新清单里放得下的那一档（叠在当前的排版覆盖之上），不是旧清单那一档。
+    expect(apiMocks.updateResumeLayout.mock.calls[0][1].format_config).toEqual({
+      page_padding: 10,
+      ...fresh[0].config,
+    });
+  });
+
+  it("says it plainly when nothing fits, instead of pretending it worked", async () => {
+    const ladder = [
+      candidate("font_scale_adjust", "字号收到 0.88 倍", { font_scale_adjust: 0.88 }),
+    ];
+    apiMocks.analyzeResumeLayout.mockResolvedValue(analysis({ fit_ladder: ladder }));
+
+    // 每一档都放不下。
+    renderCard({ previewRef: fakePreview(null) });
+    fireEvent.click(await screen.findByRole("button", { name: /自动一页/ }));
+
+    expect(await screen.findByText(/排版参数已经收到最紧了/)).toBeInTheDocument();
+    // 没成功就不能写库，也不能告诉父组件"已应用"。
+    expect(apiMocks.updateResumeLayout).not.toHaveBeenCalled();
+  });
+
+  it("keeps telling the user about overflow when the diagnosis request fails", async () => {
+    apiMocks.analyzeResumeLayout.mockRejectedValue(new Error("接口不可用"));
+    renderCard({ overflow: true });
+
+    // 只是静默地不显示面板，用户会以为版面没问题。
+    expect(await screen.findByText(/内容超出了 1 页/)).toBeInTheDocument();
+  });
+
+  it("disables auto-fit while another render is in flight", async () => {
+    const ladder = [candidate("padding", "页边距收到 12mm", { page_padding: 12 })];
+    apiMocks.analyzeResumeLayout.mockResolvedValue(analysis({ fit_ladder: ladder }));
+    renderCard({ previewRef: fakePreview("12"), disabled: true });
+
+    await screen.findByRole("button", { name: /自动一页/ });
+    expect(screen.getByRole("button", { name: /自动一页/ })).toBeDisabled();
+  });
+
+  it("offers adding a page with the floor note", async () => {
+    const ladder = [candidate("padding", "页边距收到 12mm", { page_padding: 12 })];
+    apiMocks.analyzeResumeLayout.mockResolvedValue(analysis({ fit_ladder: ladder }));
+    const onAddPage = vi.fn();
+    renderCard({ previewRef: fakePreview("12"), onAddPage });
+
+    await screen.findByRole("button", { name: /自动一页/ });
+    expect(screen.getByText(/最多缩到 11px/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /增加到 2 页/ }));
+    expect(onAddPage).toHaveBeenCalled();
+  });
+});

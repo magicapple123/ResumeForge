@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyQueueItem, ApplyTask, ApplyTaskDetail, CollectConfigOut } from "../types";
 import ApplyPage from "./ApplyPage";
-import CollectPanel from "../components/apply/CollectPanel";
+import CollectPanel from "../features/apply/CollectPanel";
 
 const apiMocks = vi.hoisted(() => ({
   getBrowserStatus: vi.fn(),

@@ -12,7 +12,7 @@
  */
 import type { ReactElement } from "react";
 import { Navigate, Route } from "react-router-dom";
-import AppShell from "./components/shell/AppShell";
+import AppShell from "./features/shell/AppShell";
 import {
   AnalyticsPage,
   ApplyPage,

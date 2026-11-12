@@ -27,8 +27,8 @@ import {
   UNLIMITED_MAX_TOKENS,
   configFromRecord,
   matchingPreset,
-} from "../../components/settings/SettingsConfig";
-import { EFFORT_LABEL_KEYS, FALLBACK_EFFORTS } from "../../components/settings/llm/thinkingMeta";
+} from "./SettingsConfig";
+import { EFFORT_LABEL_KEYS, FALLBACK_EFFORTS } from "./llm/thinkingMeta";
 
 /** 新增/编辑共用弹窗的表单值。api_key 留空 = 保持原密钥（原样回传脱敏引用）。
  *

@@ -7,7 +7,7 @@
  */
 import { useState } from "react";
 import type { DocumentFieldCatalog, ResumeDocument } from "../types/resumeDocument";
-import EntryLayoutPanel from "../components/resume/EntryLayoutPanel";
+import EntryLayoutPanel from "../features/resume/layout/EntryLayoutPanel";
 
 export function Harness({
   initial,

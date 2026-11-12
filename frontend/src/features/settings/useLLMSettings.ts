@@ -19,11 +19,7 @@ import {
   listLLMConfigRecords,
 } from "../../api/settings";
 import { t } from "../../i18n";
-import {
-  configFromRecord,
-  summaryFromConfig,
-  type LLMConfigSummary,
-} from "../../components/settings/SettingsConfig";
+import { configFromRecord, summaryFromConfig, type LLMConfigSummary } from "./SettingsConfig";
 import type { LLMConfigRecord } from "../../types";
 
 export function useLLMSettings() {

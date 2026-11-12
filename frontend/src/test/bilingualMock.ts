@@ -2,7 +2,7 @@
 /**
  * 双语版本的**离线样例**（v2 文档模型）：给组件测试与离线演示宿主用。
  *
- * 纪律与 `features/resume-assets/mockPhrases.ts` 相同：`src/` 下的样例正文一律用英文
+ * 纪律与 `features/resume/assets/mockPhrases.ts` 相同：`src/` 下的样例正文一律用英文
  * （新增文件里写中文会撞 `cjkRatchet` 基线 0）；"另一语言"的值也用 ASCII 占位，
  * 只用来体现"两侧不同"这一事实。
  */
@@ -11,7 +11,7 @@ import type {
   GlossaryTerm,
   LanguageVariant,
   TranslationCandidate,
-} from "../features/resume-bilingual/types";
+} from "../features/resume/bilingual/types";
 
 function document(overrides: Partial<ResumeDocument> = {}): ResumeDocument {
   return {

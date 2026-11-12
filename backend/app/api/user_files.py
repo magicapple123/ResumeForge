@@ -16,7 +16,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -25,7 +24,11 @@ from ..services.actions import add_action_route
 from ..services.actions.catalog import all_actions
 from ..services.document_text import preview_text_of_file
 from ..services.system_reveal import reveal_path
-from ..services.user_files import user_files_dir
+from ..services.user_files import (
+    list_file_copies,
+    lookup_file_copies,
+    user_files_dir,
+)
 
 router = APIRouter(prefix="/api/user-files", tags=["user-files"])
 logger = logging.getLogger(__name__)
@@ -34,19 +37,6 @@ logger = logging.getLogger(__name__)
 _MAX_PAGE_SIZE = 100
 # 文本预览的体积上限：再大就不是"预览"而是"打开大文件"，读进内存也不划算。
 _MAX_TEXT_PREVIEW_BYTES = 50 * 1024 * 1024
-
-
-def _file_out(row: UserFile) -> dict:
-    """回显结构：刻意不含 sha256 与 disk_name——它们是实现细节，不是给界面的。"""
-    return {
-        "id": row.id,
-        "original_name": row.original_name,
-        "mime": row.mime,
-        "size": row.size,
-        "source_type": row.source_type,
-        "source_ref": row.source_ref,
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-    }
 
 
 add_action_route(router, all_actions()["list_user_files"], route_path="")
@@ -58,14 +48,13 @@ def list_user_files(
     db: Session = Depends(get_db),
 ) -> dict:
     """分页列出副本；``keyword`` 模糊匹配原名，``source_type`` 精确过滤来源。"""
-    query = db.query(UserFile)
-    if source_type.strip():
-        query = query.filter(UserFile.source_type == source_type.strip())
-    if keyword.strip():
-        query = query.filter(UserFile.original_name.like(f"%{keyword.strip()}%"))
-    total = query.count()
-    rows = query.order_by(UserFile.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
-    return {"items": [_file_out(row) for row in rows], "total": total}
+    return list_file_copies(
+        db,
+        page=page,
+        page_size=page_size,
+        source_type=source_type,
+        keyword=keyword,
+    )
 
 
 @router.get("/lookup")
@@ -81,16 +70,12 @@ def lookup_user_files(
     入口再次保存时，反查仍能命中。结果按 id 升序——与各入口按数组顺序保存的
     顺序一致，调用方可按下标对应到原图。
     """
-    query = db.query(UserFile).filter(UserFile.source_type == source_type.strip())
-    if source_ref.strip():
-        ref = source_ref.strip()
-        query = query.filter(
-            or_(UserFile.source_ref == ref, UserFile.sources_json.contains(f'"{ref}"'))
-        )
-    if name.strip():
-        query = query.filter(UserFile.original_name == name.strip())
-    rows = query.order_by(UserFile.id.asc()).all()
-    return {"items": [{"id": row.id, "original_name": row.original_name} for row in rows]}
+    return lookup_file_copies(
+        db,
+        source_type=source_type,
+        source_ref=source_ref,
+        name=name,
+    )
 
 
 def _resolved_copy_path(row: UserFile, db: Session) -> Path:

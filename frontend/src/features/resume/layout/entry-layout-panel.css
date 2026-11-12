@@ -1,0 +1,277 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「条目字段排版」面板（features/resume/layout/EntryLayoutPanel.tsx）。
+   紧凑参数面板：顶部对象卡片 + 三个分组（条目标题布局 / 分栏 / 断页）；颜色走 --rf-*。
+
+   审计 R-11（结构）与 R-33（窄栏四条规则）的落点都在这个文件：
+   - R1：`.rf-entry-layout*` 全链每一层 flex/grid 子项都补 `min-width: 0`，否则
+     最长的"正文后灰字"或某个不换行的英文 key 会把整列顶宽，右边被裁掉；
+   - R2：`@container wb-params (max-width: 420px)` 下标签与控件竖排、Segmented 竖排、
+     按钮组靠右换行——判据是"这一栏有多宽"（左栏 360–640 由用户拖动），不是视口宽。 */
+
+.rf-entry-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  /* #15：滚到底时最后一条提示完整可见（此前只露上半行）。 */
+  padding-bottom: 12px;
+}
+
+.rf-entry-layout-hint,
+.rf-entry-layout-fields-hint {
+  min-width: 0;
+  font-size: var(--rf-font-size-xs, 12px);
+  color: var(--rf-text-secondary);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* R-11-1：板块 / 应用范围 / 条目 —— 一块浅底卡片，和下面的参数区分开。 */
+.rf-entry-layout-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control, 8px);
+  background: var(--rf-surface-alt);
+}
+
+/* R-11-3：统一分组 + 1px 分隔（分组标题只写一次，行内不再重复标签）。 */
+.rf-entry-layout-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  border-top: 1px solid var(--rf-border-subtle);
+  padding-top: 8px;
+}
+
+.rf-entry-layout-group-title {
+  min-width: 0;
+  font-size: var(--rf-font-size-xs, 12px);
+  font-weight: 600;
+  color: var(--rf-text-body);
+  line-height: 1.5;
+}
+
+.rf-entry-layout-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rf-entry-layout-label {
+  flex: none;
+  width: 72px;
+  min-width: 0;
+  font-size: var(--rf-font-size-xs, 12px);
+  color: var(--rf-text-secondary);
+}
+
+/* 行内控件（Segmented）：吃掉剩余宽度，但不许撑破容器。 */
+.rf-entry-layout-control {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* ===== 逐列宽度 / 逐间隔（任务 13）=====
+   一行里要放 N 个数字框 + 应用 + 恢复，360px 栏放不下：数字框固定 56px、整体允许换行，
+   换行后仍然左对齐（不要让 antd 的包装 span 自己撑成一列）。 */
+.rf-entry-layout-stack {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rf-entry-layout-number-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rf-entry-layout-number-row .ant-input-number {
+  flex: none;
+  width: 56px;
+}
+
+.rf-entry-layout-note {
+  font-size: var(--rf-font-size-xs, 12px);
+  line-height: 18px;
+  color: var(--rf-text-tertiary);
+}
+
+/* 合计不等于 100% 时那一行标红：应用按钮同时是禁用的，颜色只是提前说明原因。 */
+.rf-entry-layout-note[data-width-sum]:not([data-width-sum="100"]) {
+  color: var(--rf-warning-text, var(--rf-text-secondary));
+}
+
+.rf-entry-layout-locked {
+  font-size: var(--rf-font-size-xs, 12px);
+  color: var(--rf-warning-text, var(--rf-text-secondary));
+  background: var(--rf-warning-bg);
+  border-radius: var(--rf-radius-sm, 4px);
+  padding: 4px 8px;
+}
+
+/* Q08：条目级「断页」小分组（R-11 起复用统一分组样式，标题由组件给出）。 */
+.rf-entry-layout-pagination {
+  min-width: 0;
+}
+
+.rf-entry-layout-actions {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.rf-entry-layout-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  border-top: 1px solid var(--rf-border-subtle);
+  padding-top: 8px;
+}
+
+.rf-entry-layout-fields-title {
+  min-width: 0;
+  font-size: var(--rf-font-size-xs, 12px);
+  font-weight: 600;
+  color: var(--rf-text-body);
+}
+
+.rf-entry-layout-field-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* R-10：一行 = 标签 + 三组控件（[前|后] / ↑↓ / ⋯）。 */
+.rf-entry-layout-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 2px 4px;
+  border-radius: var(--rf-radius-sm, 4px);
+  background: var(--rf-fill-quaternary);
+}
+
+.rf-entry-layout-field.is-hidden .rf-entry-layout-field-label {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+/* R3：省略号配 title（组件里已挂）。 */
+.rf-entry-layout-field-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--rf-font-size-xs, 12px);
+}
+
+.rf-entry-layout-field-controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rf-entry-layout-field-placement {
+  flex: none;
+  min-width: 0;
+}
+
+.rf-entry-layout-field-move {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* antd-override: 私有形态 —— 行高 30px，默认 small 按钮的最小宽度会把 [前|后] 挤走 */
+.rf-entry-layout-field-move .ant-btn,
+.rf-entry-layout-field-more.ant-btn {
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+.rf-entry-layout-empty {
+  padding: 12px;
+  font-size: var(--rf-font-size-xs, 12px);
+  color: var(--rf-text-secondary);
+}
+
+/* ===== R2：窄档（≤420px）标签与控件竖排、Segmented 竖排 =====
+   左栏最窄 360px：一行里放不下「4 字标签 + 4 段 Segmented + 读数」，
+   继续并排只会把标签压成省略号、把分段控件挤成两行（更难认）。 */
+@container wb-params (max-width: 420px) {
+  .rf-entry-layout-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .rf-entry-layout-label {
+    width: auto;
+    flex: none;
+  }
+
+  .rf-entry-layout-control {
+    width: 100%;
+  }
+
+  /* 分段控件的竖排由 antd 的 `vertical` 属性负责（见 `usePanelNarrow`）：
+     纯 CSS 改 `flex-direction` 会让选中项失去高亮，所以这里不碰 antd 的内部结构。 */
+
+  /* 行内直接挂的开关（条目断页）不跟着拉伸成整条灰条。 */
+  .rf-entry-layout-row > .ant-switch {
+    align-self: flex-start;
+  }
+
+  /* 竖排的分段控件在浅底卡片上对比度偏低：选中项加一圈边框 + 加粗，一眼能看出选了哪个。 */
+  .rf-entry-layout .ant-segmented-item-selected {
+    box-shadow: inset 0 0 0 1px var(--rf-border-strong);
+    color: var(--rf-text-body);
+    font-weight: 600;
+  }
+
+  /* 字段行：标签独占一行，三组控件排到下一行并靠右。 */
+  .rf-entry-layout-field {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .rf-entry-layout-field-label {
+    flex: 1 0 100%;
+  }
+
+  .rf-entry-layout-field-controls {
+    flex: 1 0 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* #16：灰字段列表的组分隔行（正文前/正文后），轻量小标题、不占行高。 */
+.rf-entry-layout-group-sep {
+  list-style: none;
+  margin: 4px 0 2px;
+  font-size: var(--rf-font-size-xs, 12px);
+  color: var(--rf-text-tertiary);
+}

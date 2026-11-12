@@ -153,18 +153,18 @@ def _run_get_candidate_job(db: Session, payload: GetCandidateJobInput) -> Action
 
 
 def _run_create_candidate_job(db: Session, payload: CreateCandidateJobInput) -> ActionOutcome:
-    from ....api.candidate_jobs import _save_image_copies
+    from ...candidate_job_media import save_image_copies
     from ...candidate_jobs import create_candidate_job
 
     candidate = create_candidate_job(db, payload)
     # 路由既有副作用：截图的 data URL 落一份磁盘副本（工具侧此前的声明没有 images，
     # tool_fields 已把它排除，因此工具调用这里永远是空列表 = no-op）。
-    _save_image_copies(db, candidate.id, payload.images)
+    save_image_copies(db, candidate.id, payload.images)
     return ActionOutcome(changed=True, data=CandidateJobOut.model_validate(candidate))
 
 
 def _run_update_candidate_job(db: Session, payload: UpdateCandidateJobInput) -> ActionOutcome:
-    from ....api.candidate_jobs import _save_image_copies
+    from ...candidate_job_media import save_image_copies
     from ...candidate_jobs import candidate_or_none, update_candidate_job
 
     candidate = candidate_or_none(db, payload.candidate_id)
@@ -174,7 +174,7 @@ def _run_update_candidate_job(db: Session, payload: UpdateCandidateJobInput) -> 
     update_payload = CandidateJobUpdate.model_validate(fields)
     updated = update_candidate_job(db, candidate, update_payload)
     if "images" in update_payload.model_fields_set:
-        _save_image_copies(db, updated.id, update_payload.images)
+        save_image_copies(db, updated.id, update_payload.images)
     return ActionOutcome(changed=True, data=CandidateJobOut.model_validate(updated))
 
 

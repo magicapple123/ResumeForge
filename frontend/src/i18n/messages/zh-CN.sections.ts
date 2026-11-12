@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * 简历版式控件 · 第一组「结构类」的界面文案：模板 / 版式 / 板块顺序 / 最大篇幅
- * （components/resume/ResumeTemplateControls.tsx）。
+ * （features/resume/layout/ResumeTemplateControls.tsx）。
  *
  * 既有 sections.*（「按我的资料顺序排列」按钮与它的悬停说明）住在 zh-CN.fontDownload.ts；
  * 本文件新增的 key 一律带 templateControls 二级前缀，与它们区分开，不会重名。

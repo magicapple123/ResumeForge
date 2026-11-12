@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from datetime import date
 from typing import Any
 
-from sqlalchemy import case, func
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Query, Session
 
 from ..models.tracker import (
@@ -34,6 +34,19 @@ def track_or_none(db: Session, track_id: int) -> ApplicationTrack | None:
     if record is None or trash.is_deleted(record):
         return None
     return record
+
+
+def existing_track_ids(db: Session, track_ids: list[int]) -> set[int]:
+    """这批进度记录里真实存在的 id（**不排除回收站**：历史决策与恢复后语义一致）。
+
+    为什么放服务层：跟进决策要按 id 集合做外键存在性校验，而"哪些 id 存在"属于
+    求职进度域的读取口径，不该由路由自己拼 SQL。
+    """
+    if not track_ids:
+        return set()
+    return set(
+        db.scalars(select(ApplicationTrack.id).where(ApplicationTrack.id.in_(track_ids))).all()
+    )
 
 
 def _filtered_query(
@@ -200,6 +213,7 @@ def count_tracks(
 __all__ = [
     "MAX_LIST_LIMIT",
     "count_tracks",
+    "existing_track_ids",
     "iter_tracks",
     "list_tracks",
     "list_tracks_page",

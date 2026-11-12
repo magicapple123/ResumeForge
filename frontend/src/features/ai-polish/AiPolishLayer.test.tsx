@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { t } from "../../i18n";
 import { ContextMenuHost } from "../context-menu/ContextMenuHost";
 import { resetContextMenuForTests } from "../context-menu/contextMenuStore";
-import { setActiveWritingResume } from "../resume-writing/activeResume";
+import { setActiveWritingResume } from "../resume/writing/activeResume";
 import AiPolishLayer from "./AiPolishLayer";
 import { getLLMConfig } from "../../api/settings";
 import { polishSelection } from "../../api/writing";

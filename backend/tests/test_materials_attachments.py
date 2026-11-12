@@ -215,7 +215,7 @@ def test_file_id_round_trips_through_material_crud(client):
 
 def test_historical_image_gets_file_id_only_in_the_response(client, db_session):
     """旧版只给图片存了副本、files 里没有 file_id：详情响应补上，但不写库。"""
-    from app.api.materials import _save_file_copies
+    from app.services.material_files import save_file_copies as _save_file_copies
 
     legacy = Material(
         title="历史图片",

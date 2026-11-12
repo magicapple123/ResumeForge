@@ -116,5 +116,5 @@ DB 恢复完全正常，只是附件缺失——这与老版本本来就没有"�
 `app/services/data_backup/{asset_manifest,export,manifest,paths,import_archive,
 auto_backup,scheduler}.py`、`app/services/datasets.py`、
 `app/services/storage_stats.py`、
-`frontend/src/components/settings/BackupStatusCard.tsx`、
+`frontend/src/features/settings/BackupStatusCard.tsx`、
 `backend/tests/test_backup_asset_manifest.py`、`backend/tests/test_storage_stats.py`。

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Site-wide search (`components/GlobalSearch.tsx`): the header magnifier, the
+ * Site-wide search (`features/shell/GlobalSearch.tsx`): the header magnifier, the
  * Ctrl/⌘+K overlay chrome, the input hints, the four result states and the
  * group headings.
  *

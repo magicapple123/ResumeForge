@@ -4,7 +4,7 @@
  * edit entry, selection hint and the dialog footer actions.
  *
  * Link names (Job board, Resume center, …) come from `MENU_ITEMS` in
- * `components/navigation/navigationConfig.ts` and belong to the navigation namespace,
+ * `features/shell/navigationConfig.ts` and belong to the navigation namespace,
  * so they are not duplicated here. The Save button reuses `common.action.save`.
  */
 const shortcutsCard = {

@@ -15,7 +15,7 @@
 import { readFileSync } from "node:fs";
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import FunnelChart from "../components/analytics/FunnelChart";
+import FunnelChart from "../features/analytics/FunnelChart";
 import { CHART_PALETTES } from "./chartPalette";
 
 declare const process: { cwd(): string };

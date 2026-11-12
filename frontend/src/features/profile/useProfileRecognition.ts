@@ -16,13 +16,13 @@ import { useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import { isCancellation } from "../../api/client";
 import { parseProfileText } from "../../api/profile";
-import type ProfileTextModal from "../../components/profile/ProfileTextModal";
-import type { RecognitionReviewRow } from "../../components/profile/RecognitionReviewList";
+import type ProfileTextModal from "./fields/ProfileTextModal";
+import type { RecognitionReviewRow } from "./fields/RecognitionReviewList";
 import { attachmentInputs, useRecognitionFiles } from "../../hooks/useRecognitionFiles";
 import { t } from "../../i18n";
 import type { ProfileTextParseResult, RecognitionSource } from "../../types";
-import { makeTempEntryKey } from "../profile-library/tempEntryKey";
-import type { ProfileEntryDraft, ProfileFormValues, WorkspaceOut } from "../profile-library/types";
+import { makeTempEntryKey } from "./library/tempEntryKey";
+import type { ProfileEntryDraft, ProfileFormValues, WorkspaceOut } from "./library/types";
 
 interface Options {
   form: FormInstance<ProfileFormValues>;

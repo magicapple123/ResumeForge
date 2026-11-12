@@ -12,8 +12,8 @@
  */
 import type { ResumeContent } from "../types";
 import type { ResumeDocument } from "../types/resumeDocument";
-import { isDocument, entryValue } from "../features/resume-document/view";
-import { buildFallbackCatalog } from "../features/resume-document/fieldCatalog";
+import { isDocument, entryValue } from "../features/resume/document/view";
+import { buildFallbackCatalog } from "../features/resume/document/fieldCatalog";
 import { t } from "../i18n";
 import type { MessageKey } from "../i18n";
 

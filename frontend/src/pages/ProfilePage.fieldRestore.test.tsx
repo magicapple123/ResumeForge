@@ -29,8 +29,8 @@ const apiMocks = vi.hoisted(() => ({
   updateWebFormExtraProfile: vi.fn(),
 }));
 
-vi.mock("../features/profile-library/api", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../features/profile-library/api")>()),
+vi.mock("../features/profile/library/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../features/profile/library/api")>()),
   getWorkspace: apiMocks.getWorkspace,
   patchFieldPreference: apiMocks.patchFieldPreference,
 }));

@@ -15,7 +15,7 @@
  * 3. **比率必须带分子/分母**：12 条样本下任何百分比都不可靠，small_sample 徽标与
  *    "N / M"副文案是诚实的一部分（第 17 条验收红线）。
  *
- * 第 17 条（2026-11-10）把既有区块拆到 components/analytics/AnalyticsSections.tsx，
+ * 第 17 条（2026-11-10）把既有区块拆到 features/analytics/AnalyticsSections.tsx，
  * 页面只保留编排与加载态——本文件已接近 500 行预算，不要再往里塞展示逻辑。
  */
 import { Col, Empty, Row, Typography } from "antd";
@@ -23,11 +23,11 @@ import PageSkeleton from "../components/common/PageSkeleton";
 import ErrorState from "../components/common/ErrorState";
 import { useState } from "react";
 import { getAnalyticsDashboard } from "../api/analytics";
-import ChannelConversionBlock from "../components/analytics/ChannelConversionBlock";
-import CompanyRepeatBlock from "../components/analytics/CompanyRepeatBlock";
-import GoalCostBlock from "../components/analytics/GoalCostBlock";
-import ResumeEffectBlock from "../components/analytics/ResumeEffectBlock";
-import StatusDurationBlock from "../components/analytics/StatusDurationBlock";
+import ChannelConversionBlock from "../features/analytics/ChannelConversionBlock";
+import CompanyRepeatBlock from "../features/analytics/CompanyRepeatBlock";
+import GoalCostBlock from "../features/analytics/GoalCostBlock";
+import ResumeEffectBlock from "../features/analytics/ResumeEffectBlock";
+import StatusDurationBlock from "../features/analytics/StatusDurationBlock";
 import {
   ChannelsSection,
   CohortSection,
@@ -35,7 +35,7 @@ import {
   OverviewSection,
   ResumeSection,
   TrendSection,
-} from "../components/analytics/AnalyticsSections";
+} from "../features/analytics/AnalyticsSections";
 import { useApi } from "../hooks/useApi";
 import { FUNNEL_STATUSES } from "../types";
 import type { AnalyticsDashboard, FunnelStage } from "../types";

@@ -14,7 +14,7 @@ import { UndoOutlined } from "@ant-design/icons";
 import { App, Button, Descriptions, Typography } from "antd";
 import { useState } from "react";
 import type { AssistantToolCall, AssistantToolWritePreview } from "../../../types";
-import { restoreVersion } from "../../resume-versions/versionsApi";
+import { restoreVersion } from "../../resume/versions/versionsApi";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 

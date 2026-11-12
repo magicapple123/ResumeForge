@@ -6,7 +6,7 @@
  */
 import { Modal, Select, Space, Typography } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
-import ResumeFieldDiffView from "../../components/ResumeFieldDiffView";
+import ResumeFieldDiffView from "../../features/resume/versions/ResumeFieldDiffView";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { DiffViewData } from "../../types/resumeFieldDiff";

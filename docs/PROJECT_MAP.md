@@ -7,7 +7,7 @@
 
 项目是严格的三层结构，任何功能都按同一条路走。记住这三条，就不会迷路：
 
-1. **界面在前端 `pages/`，菜单与路由在 `components/navigation/navigationConfig.ts` / `appRoutes.tsx`。** 想改页面外观 → 先找对应的 `pages/XxxPage.tsx`。
+1. **界面在前端 `pages/`，菜单与路由在 `features/shell/navigationConfig.ts` / `appRoutes.tsx`。** 想改页面外观 → 先找对应的 `pages/XxxPage.tsx`。
 2. **HTTP 契约在后端 `api/`。** 想改接口返回 → 找 `backend/app/api/xxx.py`，它只做"校验参数 → 调服务 → 组装响应"。
 3. **真正的逻辑在 `services/`。** 想改算法、规则、业务判断 → 都在这里，与 FastAPI 框架解耦，可离线测试。
 
@@ -30,12 +30,12 @@
 | 收藏夹 | `pages/FavoritesPage.tsx` | `jobs.ts` `resumes.ts` | `/api/jobs` `/api/resumes` | 复用 `job/job_service.py` / 简历服务 | `job.py` `resume.py` |
 | 简历中心 | `pages/ResumesPage.tsx` | `resumes.ts` `resumeTemplates.ts` `resumeWriting.ts` `resumeRisk.ts` | `/api/resumes` `/api/resume-templates` | `resume/resume_generator.py` `resume/resume_content.py` `resume/resume_grounding.py` `resume/resume_layout.py` `pdf_exporter/` `docx_exporter.py` `export_pipeline.py` | `resume.py` `resume_template.py` |
 | 投递台 | `pages/ApplyPage.tsx` | `apply.ts` `candidateJob.ts` | `/api/apply` `/api/collect` `/api/candidate-jobs` | `services/apply/*` `services/sites/*` `services/browser/*` | `apply.py` `material.py`(CandidateJob) |
-| 网申填表 | `pages/WebFormPage.tsx` + `components/webform/*` | `webform.ts` | `/api/webform` | `services/webform/*`（引擎、匹配、字段目录、快照仓、填充记录、网申资料、实时会话、AI 兜底） | `profile.py`(UserProfile 的网申字段) `web_form_record.py` `web_form_profile.py` |
+| 网申填表 | `pages/WebFormPage.tsx` + `features/webform/*` | `webform.ts` | `/api/webform` | `services/webform/*`（引擎、匹配、字段目录、快照仓、填充记录、网申资料、实时会话、AI 兜底） | `profile.py`(UserProfile 的网申字段) `web_form_record.py` `web_form_profile.py` |
 | 求职进度 | `pages/TrackerPage.tsx` | `tracker.ts` | `/api/tracker` | `tracker.py` `tracker_extract.py` | `tracker.py` |
 | 求职统计 | `pages/AnalyticsPage.tsx` | `analytics.ts` | `/api/analytics` | `analytics.py` `ratios.py` `resume/resume_health.py` | 只读派生 |
 | 模拟面试 | `pages/InterviewPage.tsx` | `interview.ts` `interviewExperiences.ts` | `/api/interview` `/api/interview-experiences` | `interview/interview.py` `interview/interview_questions.py` `interview/interview_experience_service.py` | `interview.py` `interview_experience.py` `question_bank_record.py` `interview_review_record.py` |
 | 求职助手 | `pages/AssistantPage.tsx` + `features/assistant/*` | `assistant.ts` | `/api/assistant*` | `assistant/assistant_service.py` `assistant_tools/` `assistant/assistant_skills.py` `assistant/assistant_web_search.py` `feature_catalog*.py`（门面 + 三个数据段） | `assistant.py`(ChatConversation/ChatMessage/AssistantSkill) |
-| 我的资料 | `pages/ProfilePage.tsx` + `features/profile-library/*` `features/profile-groups/*`（13 板块、自建板块/字段设置、当前方案与方案管理、升级提示）；`features/profile-facts/*` 已在 2.0 随模块一并删除 | `profile.ts` `photo.ts` `features/profile-library/types.ts` `features/profile-groups/types.ts` `api/material.ts` | `/api/profile/workspace` `/api/profile/sections` `/api/profile/section-order` `/api/profile/groups` `/api/profile/current-group` `/api/profile/field-preferences` `/api/profile/current/projection` `/api/profile/upgrade-status` `/api/materials` | `profile/definition_catalog.py`（13 项与 106 个默认字段的唯一目录）`profile/definition_store.py` `profile/entry_store.py` `profile/group_store.py` `profile/field_preferences.py` `profile/group_scope.py` `profile/profile_reader.py`（消费快照）`profile/legacy_status.py`（升级检测）`profile/paper_policy.py` `profile/paper_projection.py` `profile/language_projection.py` `profile_text_parser.py` `services/profile_parser/*` | `profile_definition.py` `profile_entry.py` `profile_group.py` `profile_usage_snapshot.py` `profile.py`（旧表保留） |
+| 我的资料 | `pages/ProfilePage.tsx` + `features/profile/library/*` `features/profile/groups/*`（13 板块、自建板块/字段设置、当前方案与方案管理、升级提示）；`features/profile-facts/*` 已在 2.0 随模块一并删除 | `profile.ts` `photo.ts` `features/profile/library/types.ts` `features/profile/groups/types.ts` `api/material.ts` | `/api/profile/workspace` `/api/profile/sections` `/api/profile/section-order` `/api/profile/groups` `/api/profile/current-group` `/api/profile/field-preferences` `/api/profile/current/projection` `/api/profile/upgrade-status` `/api/materials` | `profile/definition_catalog.py`（13 项与 106 个默认字段的唯一目录）`profile/definition_store.py` `profile/entry_store.py` `profile/group_store.py` `profile/field_preferences.py` `profile/group_scope.py` `profile/profile_reader.py`（消费快照）`profile/legacy_status.py`（升级检测）`profile/paper_policy.py` `profile/paper_projection.py` `profile/language_projection.py` `profile_text_parser.py` `services/profile_parser/*` | `profile_definition.py` `profile_entry.py` `profile_group.py` `profile_usage_snapshot.py` `profile.py`（旧表保留） |
 | 资料箱 | `pages/MaterialsPage.tsx` | `material.ts` | `/api/materials` | `materials.py` `document_text.py` `text_extraction.py` | `material.py` |
 | 知识库 | `pages/KnowledgePage.tsx` | `knowledge.ts` | `/api/knowledge` | `knowledge_service.py` | `knowledge_entry.py` |
 | 工作台（技能） | `pages/SkillsPage.tsx` | `skill.ts` | `/api/assistant/skills` | `assistant/assistant_skills.py` `skill_archive.py` | `assistant.py`(AssistantSkill) |
@@ -48,13 +48,13 @@
 
 | 功能 | 前端组件 | 前端 API | 后端路由 | 核心逻辑 |
 | ---- | ---- | ---- | ---- | ---- |
-| 内推 | `components/ReferralPanel.tsx` | `referrals.ts` | `/api/referrals` | `referral_service.py` |
-| 提醒 | `components/ReminderPanel.tsx` | `reminders.ts` | `/api/reminders` | `reminder_service.py` |
-| 离线分享包 | `components/SharePackageModal.tsx` | `sharePackages.ts` | `/api/share-packages` | `share_package.py` |
-| ATS 检测 | `components/AtsCheckPanel.tsx` | `ats.ts` | `/api/resumes/...` | `ats_check.py` |
-| 匹配度分析 | `components/JobMatchModal.tsx` | `jobs.ts` | `/api/jobs/.../match` | `job/job_match.py` |
+| 内推 | `features/referral/ReferralPanel.tsx` | `referrals.ts` | `/api/referrals` | `referral_service.py` |
+| 提醒 | `features/tracker/ReminderPanel.tsx` | `reminders.ts` | `/api/reminders` | `reminder_service.py` |
+| 离线分享包 | `features/resume/delivery/SharePackageModal.tsx` | `sharePackages.ts` | `/api/share-packages` | `share_package.py` |
+| ATS 检测 | `features/resume/preview/AtsCheckPanel.tsx` | `ats.ts` | `/api/resumes/...` | `ats_check.py` |
+| 匹配度分析 | `features/jobs/JobMatchModal.tsx` | `jobs.ts` | `/api/jobs/.../match` | `job/job_match.py` |
 | 投投悬浮球 | `features/tou-tou/*` + `App.tsx` 的 `MainLayout` | `settings.ts` `assistant.ts` | `/api/settings/assistant-orb` `/api/assistant*?surface=floating` | `settings_service.py`（`AppSetting` 键值）`assistant_conversations.py` `assistant_stream.py`；数据表 `setting.py` `assistant.py`（surface 隔离） |
-| 职业场景 | `features/career-scenarios/*`（页头选择器 + 生成弹窗控制 + 制作台上下文条 + `components/resume/versions/ScenarioVariantSection.tsx`：派生/候选/采纳） | `features/career-scenarios/api.ts` `features/resume-versions/versionsApi.ts` | `/api/career-scenarios` `/api/resumes/{id}/scenario-variants` `…/scenario-preview` `…/scenario-adopt` | `career_scenarios/catalog.py`（内置目录）`career_scenarios/store.py`（条件写/归档/限额）`career_scenarios/resolve.py`（冻结快照/裁剪/哈希）`resume/scenario_context.py`（提示词区块）`resume/scenario_variant.py`（变体候选/双条件写）；数据表 `career_scenario.py`，快照另存于 `resume_generate_task/record/version/variant.context_snapshot` |
+| 职业场景 | `features/career-scenarios/*`（页头选择器 + 生成弹窗控制 + 制作台上下文条 + `features/resume/versions/ScenarioVariantSection.tsx`：派生/候选/采纳） | `features/career-scenarios/api.ts` `features/resume/versions/versionsApi.ts` | `/api/career-scenarios` `/api/resumes/{id}/scenario-variants` `…/scenario-preview` `…/scenario-adopt` | `career_scenarios/catalog.py`（内置目录）`career_scenarios/store.py`（条件写/归档/限额）`career_scenarios/resolve.py`（冻结快照/裁剪/哈希）`resume/scenario_context.py`（提示词区块）`resume/scenario_variant.py`（变体候选/双条件写）；数据表 `career_scenario.py`，快照另存于 `resume_generate_task/record/version/variant.context_snapshot` |
 
 ## 后端目录速览（backend/app/）
 
@@ -84,9 +84,9 @@
 
 | 目录 | 职责 |
 | ---- | ---- |
-| `pages/` | 每个菜单项一个页面；菜单在 `components/navigation/navigationConfig.ts`（`App.tsx` 仅 re-export `MENU_ITEMS`），路由表在 `appRoutes.tsx`，两者是唯一路由源 |
-| `components/` | 页面内可复用组件；`components/common/` 是跨模块交互原语（行操作、右键菜单、详情抽屉） |
-| `features/` | 按领域组织（30 余个领域目录），以纯函数与 hooks 为主，UI 在 `components/` 的子目录里 |
+| `pages/` | 每个菜单项一个页面；菜单在 `features/shell/navigationConfig.ts`（`App.tsx` 仅 re-export `MENU_ITEMS`），路由表在 `appRoutes.tsx`，两者是唯一路由源 |
+| `components/` | 只保留 `components/common/`：跨模块交互原语（行操作、右键菜单、详情抽屉、空态/错误态等）；业务组件已全部按领域迁入 `features/` |
+| `features/` | 按领域组织（38 个领域目录）：业务组件、纯函数与 hooks 都在这里（`resume/` 下再按 editor/preview/document/layout 等 16 簇分层，`profile/` 下有 library/groups/fields） |
 | `api/` | 所有 HTTP 请求的封装，前端唯一发起请求的地方 |
 | `types/` | TypeScript 类型，枚举与后端常量逐字镜像 |
 | `hooks/` | 通用 hooks（`useApi.ts` 等） |
@@ -100,7 +100,7 @@
 | 我要做 | 先看 | 然后 |
 | ---- | ---- | ---- |
 | 改一个页面的布局/样式 | `pages/XxxPage.tsx` + `styles/` | `components/` 里它引用的子组件 |
-| 加一个新页面 | `components/navigation/navigationConfig.ts`（`MENU_ITEMS`）+ `appRoutes.tsx`（路由表） | 新建 `pages/`，同步 `userGuideSteps.ts` |
+| 加一个新页面 | `features/shell/navigationConfig.ts`（`MENU_ITEMS`）+ `appRoutes.tsx`（路由表） | 新建 `pages/`，同步 `userGuideSteps.ts` |
 | 改一个接口的返回字段 | `api/xxx.py` | `schemas/xxx.py` + 前端 `types/` + `api/xxx.ts` |
 | 改一段业务规则/算法 | `services/` 里对应文件 | 对应 `tests/`，先加可复现测试 |
 | 加一张表/一个字段 | 新建 Alembic 迁移 | 注册进 `models/__init__.py`，同步 `trash.TRASH_SPECS`（若软删） |
@@ -108,7 +108,7 @@
 | 加一个新 LLM 服务商 | `services/llm/` | `config.ts` 的 `LLM_PRESETS` |
 | 加一个招聘站点适配器（投递） | `services/sites/` 实现 `base.py` 契约 + `registry.py` 注册 | 前端不用改 |
 | 改助手的"能力" | `services/feature_catalog_profile.py` / `_resume.py` / `_workflow.py`（门面 `feature_catalog.py` 只负责拼回与渲染） | 同步 `assistant_tools/_registry.py` 的 `_TOOLS`、README 功能表与 `test_assistant_knowledge_audit.py` 的映射表 |
-| 改应用内使用指南 | `components/userGuideSteps.ts` | `docs/user-guide.md` 一起改 |
+| 改应用内使用指南 | `features/user-guide/userGuideSteps.ts` | `docs/user-guide.md` 一起改 |
 
 > 注意：这个项目刻意保持**"一处逻辑只留一份实现"**（如投递准入 `models/apply.py::admission_of`、状态合并 `models/tracker.py::resolve_status`）。改这类逻辑前先 `grep` 确认只有一处，改完不要再另写一份。
 

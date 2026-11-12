@@ -29,11 +29,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from ...database import get_db
-from ...models.resume import ResumeRecord
 from ...schemas.batch_operation import BatchExportConfig
-from ...services import trash
 from ...services.batch_operation import read_batch_operation_config, validate_batch_template
 from ...services.export_pipeline import ExportRequest
+from ...services.resume.resume_read_service import live_resumes_by_ids
 from .export_routes import _export_record, _require_local_export_request
 
 logger = logging.getLogger(__name__)
@@ -112,18 +111,13 @@ def batch_export_resumes(
     _require_local_export_request(request)
     export_config = _resolve_export_config(db, payload)
     resume_ids = list(dict.fromkeys(payload.resume_ids))
-    rows = (
-        db.query(ResumeRecord)
-        .filter(trash.live_only(ResumeRecord), ResumeRecord.id.in_(resume_ids))
-        .all()
-    )
-    found = {row.id: row for row in rows}
-    missing = [resume_id for resume_id in resume_ids if resume_id not in found]
+    rows, missing = live_resumes_by_ids(db, resume_ids)
     if missing:
         raise HTTPException(
             status_code=404,
             detail=f"以下简历不存在或已在回收站：{'、'.join(map(str, missing))}",
         )
+    found = {row.id: row for row in rows}
 
     archive_bytes = BytesIO()
     used: set[str] = set()

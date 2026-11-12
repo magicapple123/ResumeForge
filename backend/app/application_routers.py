@@ -61,6 +61,7 @@ from .api import (
     resumes,
     search,
     settings_embedding,
+    settings_embedding_profiles,
     settings_llm_global,
     settings_locale,
     share_packages,
@@ -164,6 +165,10 @@ ROUTERS = (
     settings_api.router,
     # RAG v3：语义检索 provider 配置（/api/settings/embedding/*，独立前缀）。
     settings_embedding.router,
+    # 同前缀的命名配置写端点（/api/settings/embedding/profiles*）。原先由
+    # settings_embedding 内部 include，父子互相依赖形成 2 模块兄弟环；改由装配层
+    # 直接挂载后两个模块只剩单向惰性依赖（环复测：含 app.api 的 SCC = 0）。
+    settings_embedding_profiles.router,
     settings_llm_global.router,
     settings_locale.router,
     # 必须排在 fonts_api 之前：fonts_api 有 DELETE/PATCH /fonts/{name} 的参数段，

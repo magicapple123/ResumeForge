@@ -23,7 +23,6 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.profile import ProfilePhoto
 from ..schemas.profile_projection import (
     PaperProjectionOut,
     UpgradeStatusOut,
@@ -55,6 +54,7 @@ from ..services.profile import (
 )
 from ..services.profile.group_scope import resolve_current_group_scope
 from ..services.profile.paper_projection import build_projection
+from ..services.profile.profile_photos import photo_resolver as _photo_resolver
 from .profile_definitions import section_out
 from .profile_groups import group_brief_out, state_out
 
@@ -83,25 +83,6 @@ def _limits() -> LimitsOut:
         single_line_chars=value_validation.MAX_SINGLE_LINE_CHARS,
         multi_line_chars=value_validation.MAX_MULTI_LINE_CHARS,
     )
-
-
-def _photo_resolver(db: Session):
-    """照片资源引用 → data URL（投影层自己透传 data URL，这里只解析库内照片 id）。
-
-    支持 "profile_photo:<id>" / "photo:<id>" / 纯数字 id；解析不了返回 None，让投影层
-    记 photo_unresolved warning，而不是阻塞整份投影（照片坏一张不该让简历打不开）。
-    """
-
-    def resolve(reference: str) -> str | None:
-        value = str(reference or "").strip()
-        if value.startswith(("profile_photo:", "photo:")):
-            value = value.split(":", 1)[1].strip()
-        if not value.isdigit():
-            return None
-        photo = db.get(ProfilePhoto, int(value))
-        return photo.image if photo is not None and photo.image else None
-
-    return resolve
 
 
 def _workspace_out(db: Session) -> WorkspaceOut:

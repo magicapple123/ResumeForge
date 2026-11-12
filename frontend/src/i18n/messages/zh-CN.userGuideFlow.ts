@@ -3,9 +3,9 @@
 /**
  * 使用指南：八步的标题、导语、要点与动作按钮，以及首启动「快速开始」与弹窗自身的按钮文案。
  *
- * 数据文件（components/user-guide/*.ts、quickStartPaths.ts）只存 `userGuide.*` key，
+ * 数据文件（features/user-guide/*.ts、quickStartPaths.ts）只存 `userGuide.*` key，
  * 正文里的 `**强调**` 与「引用控件名」原样保留：前者由 `UserGuideModal` 渲染成粗体，
- * 后者由 `components/userGuideCopyRef.test.ts` 校验它确实存在于源码里。
+ * 后者由 `features/user-guide/userGuideCopyRef.test.ts` 校验它确实存在于源码里。
  */
 const userGuideFlow = {
   // ── 第 1 步 · 制作简历（resumeSteps.ts） ──

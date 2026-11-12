@@ -11,8 +11,8 @@ import type {
   LimitsOut,
   SectionOut,
   WorkspaceOut,
-} from "../features/profile-library/types";
-import type { GroupBriefOut } from "../features/profile-groups/types";
+} from "../features/profile/library/types";
+import type { GroupBriefOut } from "../features/profile/groups/types";
 
 export function makeField(
   sectionKey: string,

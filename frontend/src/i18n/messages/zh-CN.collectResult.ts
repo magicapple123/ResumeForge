@@ -16,7 +16,7 @@
  *
  * ## `{summary}` 是另一条语言包拼出来的聚合账目
  *
- * 它来自 `components/apply/queue/bulkEnqueue.ts::bulkEnqueueSummary()`，分句与分隔符都在
+ * 它来自 `features/apply/queue/bulkEnqueue.ts::bulkEnqueueSummary()`，分句与分隔符都在
  * `bulkEnqueue.*` 语言包里（2026-10-27 已迁移）。这里当参数接收，不重复存一份。
  */
 const collectResult = {

@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: Apache-2.0
+/** 简历改进建议卡片：反向优化产出的建议列表（优先级标签 + 依据）。
+ *
+ * 从 InterviewReviewPanel 拆出（2026-10-07，接近 500 行预算的预防性拆分）。
+ * 只负责渲染；建议的生成与写回历史由父组件处理。
+ */
+import { BulbOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Listy, Space, Tag, Typography } from "antd";
+import { ListyItem, ListyMeta } from "../../components/common/ListyItem";
+import { normalizeSuggestions } from "./normalizeReview";
+import type { InterviewOptimizeResult } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
+import { priorityMeta } from "../../utils/priorityMeta";
+
+interface Props {
+  suggestions: InterviewOptimizeResult["suggestions"];
+  /** 提供时显示「去简历中心对照修改」入口。 */
+  onGoToResume?: () => void;
+}
+
+/**
+ * 三档优先级的标签与颜色走共享映射（`utils/priorityMeta`）：颜色与其它三个面板一致，
+ * 文案用本面板自己的命名空间。旧实现只有 `priorityColor()`、没有文案，于是标签直接把
+ * `high / medium / low` 原文打在了中文界面上。
+ */
+const PRIORITY = priorityMeta({
+  high: "interview.suggestions.priority.high",
+  medium: "interview.suggestions.priority.medium",
+  low: "interview.suggestions.priority.low",
+});
+
+export default function SuggestionsCard({ suggestions, onGoToResume }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
+  // 入参在这里再兜一层（父组件也会过一遍）：历史记录里的建议可能缺 evidence，渲染
+  // `item.evidence.length` 会直接崩；归一化后每一项都是完整结构。
+  const items = normalizeSuggestions(suggestions);
+  return (
+    <Card size="small" title={t("interview.suggestions.title")}>
+      {items.length === 0 ? (
+        <Alert type="info" showIcon title={t("interview.suggestions.empty")} />
+      ) : (
+        <Listy
+          items={items}
+          rowKey={(item) => `${item.section}|${item.issue}|${item.suggestion}`}
+          itemRender={(item) => (
+            <ListyItem>
+              <ListyMeta
+                title={
+                  <Space size={6} wrap>
+                    <Tag color={PRIORITY[item.priority].color}>
+                      {t(PRIORITY[item.priority].labelKey)}
+                    </Tag>
+                    <span>{item.section}</span>
+                    <Typography.Text type="secondary">{item.issue}</Typography.Text>
+                  </Space>
+                }
+                description={
+                  <Space orientation="vertical" size={2} style={{ width: "100%" }}>
+                    <span>
+                      <BulbOutlined /> {item.suggestion}
+                    </span>
+                    {(item.evidence?.length ?? 0) > 0 && (
+                      <Typography.Text type="secondary">
+                        {t("interview.suggestions.evidence", {
+                          evidence: item.evidence.join(t("interview.listSeparator")),
+                        })}
+                      </Typography.Text>
+                    )}
+                  </Space>
+                }
+              />
+            </ListyItem>
+          )}
+        />
+      )}
+      {onGoToResume && (
+        <Button type="link" style={{ paddingLeft: 0 }} onClick={onGoToResume}>
+          {t("interview.suggestions.goToResume")}
+        </Button>
+      )}
+    </Card>
+  );
+}

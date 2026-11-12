@@ -4,7 +4,7 @@
  *
  * 页面只负责「取数与页面级动作」（加载、删除/批量删除、打开详情/编辑、导出）；
  * 筛选与 URL 状态、卡片网格、语义检索结果、复习提醒、表单与详情分别住在
- * components/knowledge/ 下——原页面已 440 行贴线，新能力一律拆文件再加。
+ * features/knowledge/ 下——原页面已 440 行贴线，新能力一律拆文件再加。
  */
 import { PlusOutlined } from "@ant-design/icons";
 import { App, Button, Pagination, Typography } from "antd";
@@ -26,13 +26,13 @@ import BatchDeleteButton from "../components/common/BatchDeleteButton";
 import EmptyState from "../components/common/EmptyState";
 import ErrorState from "../components/common/ErrorState";
 import LoadingBlock from "../components/common/LoadingBlock";
-import KnowledgeCardGrid from "../components/knowledge/KnowledgeCardGrid";
-import KnowledgeFilterBar from "../components/knowledge/KnowledgeFilterBar";
-import KnowledgeFormModal from "../components/knowledge/KnowledgeFormModal";
-import KnowledgeViewerModal from "../components/knowledge/KnowledgeViewerModal";
-import ReviewPromptBanner from "../components/knowledge/ReviewPromptBanner";
-import SemanticSearchPanel from "../components/knowledge/SemanticSearchPanel";
-import { useKnowledgeFilters } from "../components/knowledge/useKnowledgeFilters";
+import KnowledgeCardGrid from "../features/knowledge/KnowledgeCardGrid";
+import KnowledgeFilterBar from "../features/knowledge/KnowledgeFilterBar";
+import KnowledgeFormModal from "../features/knowledge/KnowledgeFormModal";
+import KnowledgeViewerModal from "../features/knowledge/KnowledgeViewerModal";
+import ReviewPromptBanner from "../features/knowledge/ReviewPromptBanner";
+import SemanticSearchPanel from "../features/knowledge/SemanticSearchPanel";
+import { useKnowledgeFilters } from "../features/knowledge/useKnowledgeFilters";
 import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { useApi } from "../hooks/useApi";

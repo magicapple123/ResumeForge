@@ -60,6 +60,18 @@ def list_apply_tasks_page(
     return rows, total
 
 
+def list_apply_tasks(db: Session, *, kind: str = "", limit: int = 20) -> list[ApplyTask]:
+    """按时间倒序列出历史批次（默认最近 limit 个），kind 为空表示不限。
+
+    为什么放服务层：批次历史的过滤（kind）与排序（id desc）是投递台主读路径，
+    路由只该做 kind 白名单校验。
+    """
+    query = db.query(ApplyTask)
+    if kind:
+        query = query.filter(ApplyTask.kind == kind)
+    return query.order_by(ApplyTask.id.desc()).limit(limit).all()
+
+
 def current_task(db: Session, *, kind: str | None = None) -> ApplyTask | None:
     query = db.query(ApplyTask).filter(ApplyTask.status.in_(ACTIVE_TASK_STATUSES))
     if kind is not None:

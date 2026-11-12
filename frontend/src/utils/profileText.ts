@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-import { SECTION_LABELS } from "../components/profile/ProfileSectionConfig";
-import type { RecognitionReviewRow } from "../components/profile/RecognitionReviewList";
+import { SECTION_LABELS } from "../features/profile/ProfileSectionConfig";
+import type { RecognitionReviewRow } from "../features/profile/fields/RecognitionReviewList";
 import type {
   Profile,
   ProfileTextParseResult,

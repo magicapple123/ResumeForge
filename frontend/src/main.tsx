@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-import NotifyHostBridge from "./components/NotifyHostBridge";
+import NotifyHostBridge from "./features/shell/NotifyHostBridge";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { createBrowserRouter, createRoutesFromElements, RouterProvider } from "react-router-dom";
 import { Route } from "react-router-dom";
 import { APP_ROOT_ROUTE } from "./appRoutes";
-import AppErrorBoundary from "./components/AppErrorBoundary";
-import RootLayout from "./components/shell/RootLayout";
-import ThemeProvider from "./components/ThemeProvider";
+import AppErrorBoundary from "./features/shell/AppErrorBoundary";
+import RootLayout from "./features/shell/RootLayout";
+import ThemeProvider from "./features/theme/ThemeProvider";
 import I18nProvider from "./i18n/I18nProvider";
 import "./index.css";
 

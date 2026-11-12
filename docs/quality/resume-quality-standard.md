@@ -117,7 +117,7 @@ Word 的正文与 PDF 是同一份内容。
 
 **检查方法**
 
-1. A：`frontend/src/components/resume-preview/noAutoShrinkGuard.test.ts` 扫源码，
+1. A：`frontend/src/features/resume/preview/noAutoShrinkGuard.test.ts` 扫源码，
    禁止 `--fit-scale` 系数挂钩；`backend/tests/test_resume_templates.py` 逐模板断言
    `--fs` 是字面量、模板脚本没有 `setProperty("--fit-scale"`。
 2. A：`test_pdf_exporter_scale_geometry.py` 断言字号档位对应真实像素；样例 check

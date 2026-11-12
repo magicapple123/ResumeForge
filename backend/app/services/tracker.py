@@ -25,6 +25,8 @@ from sqlalchemy.orm import Session
 from ..models.resume import ResumeRecord
 from ..models.tracker import SOURCE_APPLY, SOURCE_MANUAL, STATUS_APPLIED, ApplicationTrack
 from ..schemas.tracker import (
+    TRACK_EVIDENCE_PREVIEW_CHARS,
+    TRACK_NOTE_PREVIEW_CHARS,
     TrackCreate,
     TrackOut,
     TrackRecordIn,
@@ -66,9 +68,11 @@ __all__ = [
     "plan_merges",
     "preview_merges",
     "record_applied",
+    "save_track_record",
     "summarize",
     "to_csv",
     "to_json",
+    "track_brief",
     "track_or_none",
     "track_out",
     "update_track",
@@ -300,3 +304,31 @@ def record_applied(
 
 def track_out(record: ApplicationTrack) -> TrackOut:
     return TrackOut.model_validate(record)
+
+
+def track_brief(record: ApplicationTrack) -> TrackOut:
+    """列表行只带 note / evidence 的**预览**：超长截断加省略号。
+
+    求职看板的主读路径一次拖几十条，note 上限 4000 字（evidence 500），全文随列表
+    下发等于白拖几百 KB。卡片上显示预览足够；编辑表单打开时前端会调
+    ``GET /{track_id}`` 拿全文回填（TrackFormModal），PUT 的整体替换也是以全文为准，
+    不会把截断文本写回库。导出与助手工具走服务层 ``list_tracks``，不经这里，全文不受影响。
+    """
+    item = track_out(record)
+    if len(item.note) > TRACK_NOTE_PREVIEW_CHARS:
+        item.note = item.note[:TRACK_NOTE_PREVIEW_CHARS] + "…"
+    if len(item.evidence) > TRACK_EVIDENCE_PREVIEW_CHARS:
+        item.evidence = item.evidence[:TRACK_EVIDENCE_PREVIEW_CHARS] + "…"
+    return item
+
+
+def save_track_record(db: Session, track_id: int, payload: TrackUpdate) -> TrackOut | None:
+    """整份替换一条进度记录；``None`` 表示记录不存在，由调用方各自映射 404。
+
+    路由与助手动作共用这一份（原先动作直接调路由 handler ``save_track``，
+    服务层因此反向依赖 api）。判据只有"存在与否"一条，不需要额外异常类型。
+    """
+    record = track_or_none(db, track_id)
+    if record is None:
+        return None
+    return track_out(update_track(db, record, payload))

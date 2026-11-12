@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../api/client";
 import { makeEntry, makeSection, makeWorkspace } from "../../test/profileWorkspaceFixture";
 import { makeField } from "../../test/profileWorkspaceFixture";
-import type { ProfileFormValues, WorkspaceOut } from "../profile-library/types";
+import type { ProfileFormValues, WorkspaceOut } from "./library/types";
 import { useProfileSaveCoordinator } from "./useProfileSaveCoordinator";
 
 function makeForm(validate: () => Promise<unknown> = async () => ({ sections: {} })) {

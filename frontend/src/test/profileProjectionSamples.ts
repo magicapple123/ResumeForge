@@ -5,7 +5,7 @@
  * 与 profileProjectionFixture.ts 拆开只为一个原因：那个文件要同时装"空投影 / 按 content
  * 构造 / 旧 Profile 兼容层"，已贴 500 行预算；样例只被少量用例引用，独立成文件后两份都有余量。
  */
-import type { PaperProjectionOut } from "../features/profile-library/types";
+import type { PaperProjectionOut } from "../features/profile/library/types";
 import { projectionOf } from "./profileProjectionFixture";
 
 /** F8（R-81）投影夹具：content 条目带资料小字段的新可选属性（导师/研究方向/成绩排名等）。 */

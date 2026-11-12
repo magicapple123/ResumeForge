@@ -12,7 +12,7 @@
  * 2. 按空白拆 token，**只守项目自有前缀**（antd 的 `ant-*`、CSS-in-JS 的 `css-*` 不归我们管）。
  * 3. token 必须作为选择器出现在**项目 CSS** 里（`.token` 后不能紧跟字母数字或 `-`）。扫描面是
  *    `src/**\/*.css` 而不只是 `src/styles/**`：本仓库既有集中分片，也有与组件同目录的样式
- *    （`components/resume-editor/document-editor.css` 承载全部 `document-*` 类名），只扫
+ *    （`features/resume/editor/document-editor.css` 承载全部 `document-*` 类名），只扫
  *    `styles/` 会把 200 多个有样式的类名误判成零样式。
  * 4. 以分隔符结尾的 token（`` `rf-announcement-${severity}` ``）是**动态修饰符**，改查基类
  *    `rf-announcement` 是否存在——这样拼错前缀仍然会红，但不会误伤合法的动态拼接。

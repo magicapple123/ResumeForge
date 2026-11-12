@@ -18,10 +18,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from ..database import get_db, session_engine
-from ..models.assistant import AssistantSkill
 from ..schemas.skill import (
-    MAX_SKILL_DETAIL_FILE_CHARS,
-    AssistantSkillDetail,
     AssistantSkillOut,
     AssistantSkillUpdate,
 )
@@ -34,6 +31,7 @@ from ..services.assistant.assistant_skills import (
     set_skill_enabled,
     upsert_skill,
 )
+from ..services.assistant.skill_views import skill_out as _to_out
 from ..services.data_backup import restore_directory
 from ..services.skill_archive import SkillImportError, parse_markdown_skill, parse_zip_skill
 
@@ -67,47 +65,6 @@ def _source_name(request: Request) -> str | None:
     name = unquote(raw).replace("\\", "/").rsplit("/", 1)[-1]
     name = "".join(char for char in name if char.isprintable()).strip().strip(".")
     return name[:MAX_SOURCE_NAME_CHARS] or None
-
-
-def _to_out(skill) -> AssistantSkillOut:
-    return AssistantSkillOut(
-        id=skill.id,
-        name=skill.name,
-        description=skill.description,
-        enabled=skill.enabled,
-        source_name=skill.source_name,
-        prompt_chars=len(skill.prompt),
-        files=[item.path for item in skill.files],
-        updated_at=skill.updated_at,
-        # 0016（#31D/E）：技能学习四段内容 / 版本 / 验证状态，前端据此显示「待验证」徽标。
-        when_to_use=skill.when_to_use or "",
-        steps=skill.steps or "",
-        pitfalls=skill.pitfalls or "",
-        version=int(skill.version or 1),
-        generated=bool(skill.generated),
-        validation_status=skill.validation_status or "",
-        last_loaded_at=skill.last_loaded_at,
-    )
-
-
-def _to_detail(skill: AssistantSkill) -> AssistantSkillDetail:
-    """详情视图：带上知识文件正文，但按总量上限截断并标记 ``files_truncated``。"""
-    budget = MAX_SKILL_DETAIL_FILE_CHARS
-    truncated = False
-    file_details = []
-    for item in skill.files:
-        content = item.content or ""
-        if len(content) > budget:
-            content = content[: max(budget, 0)]
-            truncated = True
-        budget -= len(content)
-        file_details.append({"path": item.path, "size_bytes": item.size_bytes, "content": content})
-    return AssistantSkillDetail(
-        **_to_out(skill).model_dump(),
-        prompt=skill.prompt,
-        file_details=file_details,
-        files_truncated=truncated,
-    )
 
 
 add_action_route(router, all_actions()["list_skills"], route_path="")

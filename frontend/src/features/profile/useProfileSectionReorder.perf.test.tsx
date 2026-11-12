@@ -26,12 +26,9 @@ import {
   type ReactNode,
 } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  DEFAULT_SECTION_ORDER,
-  SECTION_LABELS,
-} from "../../components/profile/ProfileSectionConfig";
-import type { ProfileSectionKey } from "../../components/profile/ProfileSectionConfig";
-import { SortableProfileSection } from "../../components/profile/ProfileSectionShell";
+import { DEFAULT_SECTION_ORDER, SECTION_LABELS } from "./ProfileSectionConfig";
+import type { ProfileSectionKey } from "./ProfileSectionConfig";
+import { SortableProfileSection } from "./fields/ProfileSectionShell";
 import type { ReorderRenderCounters } from "./useProfileSectionReorder";
 import { useProfileSectionReorder } from "./useProfileSectionReorder";
 

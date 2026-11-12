@@ -96,6 +96,15 @@ def _claims_query(
     return query.order_by(ClaimRecord.updated_at.desc(), ClaimRecord.id.desc())
 
 
+def live_claim_records(db: Session) -> list[ClaimRecord]:
+    """全部未删除的事实台账（不给筛选，供整本读取的体检/导出前检查用）。
+
+    为什么放服务层：简历体检与导出前统一检查都要读整本台账，两份"全量存活条目"
+    的查询写两遍迟早漂移，收在台账域的同一个过滤口径里。
+    """
+    return _claims_query(db).all()
+
+
 def list_claims(
     db: Session,
     *,
@@ -373,6 +382,7 @@ __all__ = [
     "delete_claim",
     "list_claims",
     "list_claims_page",
+    "live_claim_records",
     "summarize",
     "summarize_query",
     "update_claim",

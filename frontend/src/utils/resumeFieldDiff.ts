@@ -10,7 +10,7 @@
  */
 import type { ResumeContent } from "../types/resume";
 import type { ResumeDocument } from "../types/resumeDocument";
-import { isDocument } from "../features/resume-document/view";
+import { isDocument } from "../features/resume/document/view";
 import { compareDocumentFields } from "./documentFieldDiff";
 import type { DiffToken } from "../types/resumeWriting";
 import type {

@@ -209,7 +209,7 @@ def _tool_get_profile(db: Session, _arguments: dict) -> ToolResult:
     用户在设置里开启「助手放宽模式」后返回未脱敏视图（含姓名/电话/邮箱；照片
     二进制任何模式都不发送）。这是用户知情显式扩权，见 settings_service。
     """
-    from ...api.assistant_context import profile_context
+    from ...services.assistant.assistant_context import profile_context
     from ...services.settings_service import get_assistant_relaxed_mode
 
     relaxed = get_assistant_relaxed_mode(db)

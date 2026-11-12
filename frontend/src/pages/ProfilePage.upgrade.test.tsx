@@ -30,7 +30,7 @@ const apiMocks = vi.hoisted(() => ({
   listPhotos: vi.fn(),
 }));
 
-vi.mock("../features/profile-library/api", () => ({
+vi.mock("../features/profile/library/api", () => ({
   getWorkspace: apiMocks.getWorkspace,
   saveEntries: apiMocks.saveEntries,
   setSectionOrder: apiMocks.setSectionOrder,
@@ -48,7 +48,7 @@ vi.mock("../features/profile-library/api", () => ({
   getCurrentProjection: apiMocks.getCurrentProjection,
 }));
 
-vi.mock("../features/profile-groups/api", () => ({
+vi.mock("../features/profile/groups/api", () => ({
   listGroups: vi.fn(),
   createGroup: vi.fn(),
   renameGroup: vi.fn(),

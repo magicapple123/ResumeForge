@@ -12,7 +12,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ..database import SessionLocal, get_db
+from ..database import get_db
 from ..models.job import Job
 from ..models.job_match_batch import JobMatchBatch
 from ..models.profile import utcnow
@@ -24,7 +24,6 @@ from ..schemas.job_match_batch import (
     JobMatchBatchOut,
     JobMatchBatchRequest,
 )
-from ..services import trash
 from ..services.actions import add_action_route
 from ..services.actions.catalog import all_actions
 from ..services.apply import apply_service
@@ -46,11 +45,12 @@ from ..services.job.job_match_background import (
 from ..services.job.job_match_batch import (
     build_batch_inputs,
     list_batch_summaries,
-    persist_batch,
+    persist_batch_in_new_session,
     run_batch_comparison,
     run_batch_match,
 )
 from ..services.job.job_match_context import match_source_texts, profile_is_empty
+from ..services.job.job_queries import jobs_by_ids
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.match_scoring import score_match_result
@@ -90,16 +90,13 @@ async def create_match_batch(
     """对用户选中的岗位批量分析，并按参考分保存一份可回看的快照。"""
     job_ids = list(dict.fromkeys(payload.job_ids))
     _validate_mode(job_ids, payload.mode)
-    jobs = db.query(Job).filter(trash.live_only(Job), Job.id.in_(job_ids)).all()
-    found = {job.id: job for job in jobs}
-    missing = [job_id for job_id in job_ids if job_id not in found]
+    jobs, missing = jobs_by_ids(db, job_ids)
     if missing:
         raise HTTPException(
             status_code=404, detail=f"以下岗位不存在或已被删除：{'、'.join(map(str, missing))}"
         )
-    ordered_jobs = [found[job_id] for job_id in job_ids]
     try:
-        inputs = build_batch_inputs(db, ordered_jobs, force=payload.force)
+        inputs = build_batch_inputs(db, jobs, force=payload.force)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     config = get_llm_config(db)
@@ -109,15 +106,11 @@ async def create_match_batch(
     comparison = (
         await run_batch_comparison(inputs, run, config) if payload.mode == "compare" else None
     )
-    session = SessionLocal()
     try:
-        row = persist_batch(session, run, comparison=comparison)
+        row = persist_batch_in_new_session(run, comparison=comparison)
     except Exception as exc:  # noqa: BLE001 - 记录失败要返回可理解的错误，不泄露堆栈
-        session.rollback()
         logger.exception("保存批量岗位匹配记录失败")
         raise HTTPException(status_code=500, detail="保存批量匹配记录失败") from exc
-    finally:
-        session.close()
     return _batch_out(row, comparison)
 
 
@@ -129,16 +122,14 @@ def create_match_batch_task(
     """创建后台批量分析任务；任务结果完成后仍写入同一份历史快照。"""
     job_ids = list(dict.fromkeys(payload.job_ids))
     _validate_mode(job_ids, payload.mode)
-    jobs = db.query(Job).filter(trash.live_only(Job), Job.id.in_(job_ids)).all()
-    found = {job.id: job for job in jobs}
-    missing = [job_id for job_id in job_ids if job_id not in found]
+    jobs, missing = jobs_by_ids(db, job_ids)
     if missing:
         raise HTTPException(
             status_code=404, detail=f"以下岗位不存在或已被删除：{'、'.join(map(str, missing))}"
         )
     try:
         # 在创建任务前先做资料准入校验，避免用户关闭弹窗后才发现资料为空。
-        build_batch_inputs(db, [found[job_id] for job_id in job_ids], force=payload.force)
+        build_batch_inputs(db, jobs, force=payload.force)
         task = create_job_match_background_task(db, job_ids, force=payload.force, mode=payload.mode)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -237,13 +228,7 @@ async def create_match_analysis(
             raise HTTPException(status_code=502, detail="生成匹配分析失败") from exc
         model_name = config.model
 
-    session = SessionLocal()
-    try:
-        stored_job = session.get(Job, job_id)
-        if stored_job is not None:
-            apply_service.persist_match(session, stored_job, result, model=model_name)
-    finally:
-        session.close()
+    apply_service.persist_match_in_new_session(job_id, result, model=model_name)
     return result
 
 

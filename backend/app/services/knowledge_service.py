@@ -20,7 +20,12 @@ from sqlalchemy import bindparam, func, literal, literal_column, or_, select, te
 from sqlalchemy.orm import Query, Session
 
 from ..models.knowledge_entry import KnowledgeEntry
-from ..schemas.knowledge import KnowledgeCreate, KnowledgeUpdate
+from ..schemas.knowledge import (
+    KNOWLEDGE_CONTENT_EXCERPT_CHARS,
+    KnowledgeCreate,
+    KnowledgeEntrySummary,
+    KnowledgeUpdate,
+)
 from . import trash
 from .search_matching import LIKE_ESCAPE, like_pattern, match_expression, normalized_term
 
@@ -171,6 +176,25 @@ def list_knowledge_page(
     return rows, total
 
 
+#: 单次导出最多多少条：本地单用户够用，同时避免一次把超大知识库全读进内存。
+MAX_EXPORT_ENTRIES = 2000
+
+
+def export_entries(db: Session) -> list[KnowledgeEntry]:
+    """整本知识库的导出条目（未删除、按更新时间倒序，最多 MAX_EXPORT_ENTRIES 条）。
+
+    为什么放服务层：导出的筛选与排序必须与列表口径同源（updated_at desc, id desc），
+    路由只该负责把条目打包成 zip。
+    """
+    return (
+        db.query(KnowledgeEntry)
+        .filter(trash.live_only(KnowledgeEntry))
+        .order_by(KnowledgeEntry.updated_at.desc(), KnowledgeEntry.id.desc())
+        .limit(MAX_EXPORT_ENTRIES)
+        .all()
+    )
+
+
 def list_knowledge_tags(db: Session) -> list[str]:
     """全库（未删除条目）标签的去重集合，按**字典序**升序返回。
 
@@ -297,10 +321,42 @@ def review_candidates(
     )
 
 
+def knowledge_entry_summary(entry: KnowledgeEntry) -> KnowledgeEntrySummary:
+    """列表行的摘要视图：``content`` 只带 200 字截断，全文走详情端点。
+
+    长度上限由 :data:`KNOWLEDGE_CONTENT_EXCERPT_CHARS` 与 schema 的
+    ``Field(max_length=...)`` 共同钉住——两处用的是同一个常量，不会漂移。
+
+    位置说明：它原来长在 ``api/knowledge.py``（当时的理由写的是"service 不依赖响应
+    DTO 的组装细节"），但 ``services/actions`` 的 ``read_knowledge`` 也要同一份摘要，
+    只能反向 import 路由模块。摘要是"这条记录对外长什么样"的唯一实现，跟着服务走
+    才能让工具侧与路由侧永远是同一个形状；纯 DTO 组装的代价小于反向依赖。
+    """
+    return KnowledgeEntrySummary(
+        id=entry.id,
+        title=entry.title,
+        category=entry.category,
+        tags=list(entry.tags or []),
+        source=entry.source,
+        content_excerpt=(entry.content or "")[:KNOWLEDGE_CONTENT_EXCERPT_CHARS],
+        # 0014：列表卡片直接显示 reason（#29C）与 summary/key_points（#29E）。
+        reason=entry.reason or "",
+        company=entry.company or "",
+        job_id=entry.job_id,
+        summary=entry.summary or "",
+        key_points=list(entry.key_points or []),
+        created_at=entry.created_at,
+        updated_at=entry.updated_at,
+    )
+
+
 __all__ = [
+    "MAX_EXPORT_ENTRIES",
     "create_knowledge",
     "delete_knowledge",
+    "export_entries",
     "knowledge_categories",
+    "knowledge_entry_summary",
     "knowledge_or_none",
     "list_knowledge",
     "list_knowledge_page",

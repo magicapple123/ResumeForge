@@ -57,10 +57,22 @@ from .review import (
     parse_review as parse_review,
 )
 from .session import (
+    drop_empty_session as drop_empty_session,
+)
+from .session import (
     finish_session as finish_session,
 )
 from .session import (
+    list_sessions as list_sessions,
+)
+from .session import (
+    loaded_for_model as loaded_for_model,
+)
+from .session import (
     pending_contract as pending_contract,
+)
+from .session import (
+    session_out as session_out,
 )
 from .session import (
     session_summary as session_summary,
@@ -73,11 +85,14 @@ __all__ = [
     "build_contract_messages",
     "build_evaluate_messages",
     "build_review_messages",
+    "drop_empty_session",
     "evaluate_answer",
     "finish_session",
     "generate_plan",
     "load_prompt",
+    "loaded_for_model",
     "generate_review",
+    "list_sessions",
     "local_review",
     "open_contract",
     "parse_plan",
@@ -85,5 +100,6 @@ __all__ = [
     "parse_verdict",
     "pending_contract",
     "select_claims",
+    "session_out",
     "session_summary",
 ]

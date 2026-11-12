@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 内存 Storage 夹具：专业视图的偏好/最近使用/裁剪桥都允许注入 storage 以便离线测试。 */
-import type { StorageLike } from "../features/resume-proview/preferences";
+import type { StorageLike } from "../features/resume/preview/preferences";
 
 export interface MemoryStorage extends StorageLike {
   data: Map<string, string>;

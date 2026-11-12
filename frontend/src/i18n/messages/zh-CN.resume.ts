@@ -56,7 +56,7 @@ const resume = {
   /**
    * 还没量到版面时那一行（首帧 / iframe 尚未排版完）。
    * 这几条挂在 `resume.*` 包里是因为它们与上面「版面诊断」是同一件事的两种形态：
-   * 数字与句式的来源在 `components/resume/layoutStatusSummary.ts`，与诊断条共用。
+   * 数字与句式的来源在 `features/resume/layout/layoutStatusSummary.ts`，与诊断条共用。
    */
   "workbench.layoutStatus.measuring": "正在测量版面…",
   /** 放得下时的整行：占用率 + 需要几页 + 页数上限。 */

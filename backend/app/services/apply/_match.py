@@ -103,6 +103,23 @@ def persist_match(
     return row
 
 
+def persist_match_in_new_session(job_id: int, result: JobMatchResult, *, model: str = "") -> None:
+    """在**独立会话**里写入某岗位最近一次匹配结论（岗位已被删除则静默跳过）。
+
+    路由在模型调用期间会关掉请求会话，回来后拿不到那一条会话了；"开一个一次性会话、
+    保证关掉"属于服务层职责，路由不再直接摸 ``SessionLocal``。
+    """
+    from ...database import SessionLocal
+
+    session = SessionLocal()
+    try:
+        stored_job = session.get(Job, job_id)
+        if stored_job is not None:
+            persist_match(session, stored_job, result, model=model)
+    finally:
+        session.close()
+
+
 def delete_match(db: Session, job_id: int) -> None:
     row = latest_match(db, job_id)
     if row is not None:

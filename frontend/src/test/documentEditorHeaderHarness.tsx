@@ -16,13 +16,13 @@ import { t } from "../i18n";
 import type { ResumeLayout } from "../types/resume";
 import type { ResumeDocument } from "../types/resumeDocument";
 import type { ResumeFormatConfig } from "../types/resumeFormat";
-import { makeDocument } from "../features/resume-document/documentFixtures";
+import { makeDocument } from "../features/resume/document/documentFixtures";
 import {
   photoSha256,
   readPhotoCropFromFormatConfig,
   withPhotoCrop,
-} from "../features/resume-proview/photoCrop";
-import DocumentEditor from "../components/resume-editor/DocumentEditor";
+} from "../features/resume/preview/photoCrop";
+import DocumentEditor from "../features/resume/editor/DocumentEditor";
 
 export const PHOTO = "data:image/png;base64,iVBORw0KGgo=";
 export const CUSTOM_NAME = "Expected city";

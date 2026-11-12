@@ -4,7 +4,7 @@ import { APP_ROOT_ROUTE } from "./appRoutes";
 
 // 保留原来的导出位置：首页快捷入口（ShortcutsCard）与在线演示测试从这里取完整导航清单。
 // 直接从 navigationConfig 再导出，避免 App.tsx 为了"顺手带一个常量"重新依赖导航实现。
-export { MENU_ITEMS } from "./components/navigation/navigationConfig";
+export { MENU_ITEMS } from "./features/shell/navigationConfig";
 
 /**
  * 测试与嵌入场景的声明式路由外壳。

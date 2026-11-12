@@ -74,8 +74,8 @@ const workspaceMocks = vi.hoisted(() => {
     ReturnType<typeof vi.fn>
   >;
 });
-vi.mock("../features/profile-library/api", () => ({ ...workspaceMocks }));
-vi.mock("../features/profile-groups/api", () => ({ ...workspaceMocks }));
+vi.mock("../features/profile/library/api", () => ({ ...workspaceMocks }));
+vi.mock("../features/profile/groups/api", () => ({ ...workspaceMocks }));
 vi.mock("../api/photo", () => ({ ...workspaceMocks }));
 
 vi.mock("../api/webform", async (importOriginal) => ({

@@ -19,13 +19,11 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from ..database import SessionLocal, get_db
-from ..models.tracker import STATUSES, ApplicationTrack
+from ..database import get_db
+from ..models.tracker import STATUSES
 from ..schemas.common import Page
 from ..schemas.resume import DeliverySummary
 from ..schemas.tracker import (
-    TRACK_EVIDENCE_PREVIEW_CHARS,
-    TRACK_NOTE_PREVIEW_CHARS,
     TrackApplyOut,
     TrackApplyRequest,
     TrackOut,
@@ -46,6 +44,7 @@ from ..services.attachments import (
 from ..services.document_text import extract_documents_text
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
+from ..services.session_scope import fresh_session
 from ..services.settings_service import get_llm_config
 from ..services.text_extraction import llm_is_configured
 from ..services.tracker import (
@@ -57,14 +56,16 @@ from ..services.tracker import (
     list_tracks,
     list_tracks_page,
     preview_merges,
+    save_track_record,
     summarize,
     to_json,
     track_or_none,
-    track_out,
-    update_track,
 )
 from ..services.tracker import (
     list_track_deliveries as list_track_delivery_records,
+)
+from ..services.tracker import (
+    track_brief as _track_brief,
 )
 from ..services.tracker_extract import extract_tracker_records, local_tracker_records
 from ._disconnect import client_gone, run_until_disconnect
@@ -72,21 +73,6 @@ from ._disconnect import client_gone, run_until_disconnect
 router = APIRouter(prefix="/api/tracker", tags=["tracker"])
 logger = logging.getLogger(__name__)
 
-
-def _track_brief(record: ApplicationTrack) -> TrackOut:
-    """列表行只带 note / evidence 的**预览**：超长截断加省略号。
-
-    求职看板的主读路径一次拖几十条，note 上限 4000 字（evidence 500），全文随列表
-    下发等于白拖几百 KB。卡片上显示预览足够；编辑表单打开时前端会调
-    ``GET /{track_id}`` 拿全文回填（TrackFormModal），PUT 的整体替换也是以全文为准，
-    不会把截断文本写回库。导出与助手工具走服务层 ``list_tracks``，不经这里，全文不受影响。
-    """
-    item = track_out(record)
-    if len(item.note) > TRACK_NOTE_PREVIEW_CHARS:
-        item.note = item.note[:TRACK_NOTE_PREVIEW_CHARS] + "…"
-    if len(item.evidence) > TRACK_EVIDENCE_PREVIEW_CHARS:
-        item.evidence = item.evidence[:TRACK_EVIDENCE_PREVIEW_CHARS] + "…"
-    return item
 
 
 # T28 Batch B：GET /api/tracker 由契约层生成（ActionSpec 是参数/权限的唯一真源）。
@@ -244,7 +230,7 @@ async def parse_tracks(payload: TrackParseRequest, request: Request, db: Session
             "如果确实是一封进度通知，可以手动添加，或把邮件正文完整一些再试。"
         )
     # 合并预览要读现有记录，所以必须用**新的**会话——上面那个已经关掉了。
-    with SessionLocal() as preview_db:
+    with fresh_session() as preview_db:
         items = preview_merges(preview_db, records)
     return TrackParseOut(items=items, parse_engine=engine, notes=[*notes, *extra])
 
@@ -280,10 +266,11 @@ def list_track_deliveries(track_id: int, db: Session = Depends(get_db)):
 
 add_action_route(router, all_actions()["update_application_track"], route_path="/{track_id}")
 def save_track(track_id: int, payload: TrackUpdate, db: Session = Depends(get_db)):
-    record = track_or_none(db, track_id)
-    if record is None:
+    """整份替换一条进度记录（实现见 ``services.tracker.save_track_record``）。"""
+    result = save_track_record(db, track_id, payload)
+    if result is None:
         raise HTTPException(status_code=404, detail="进度记录不存在或已被删除")
-    return track_out(update_track(db, record, payload))
+    return result
 
 
 @router.delete("/{track_id}", status_code=204)

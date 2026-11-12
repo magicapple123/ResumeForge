@@ -2,7 +2,7 @@
 """R40 用量任务类型守卫：每个任务类型都有中文/英文标签，协议码不漏到界面上。
 
 「模型用量 → 按任务」按 ``task`` 字符串分组；前端通过
-``frontend/src/features/resume-provenance/usageTaskLabels.ts`` 的
+``frontend/src/features/resume/provenance/usageTaskLabels.ts`` 的
 ``TASK_TYPE_MESSAGE_KEY`` 把码翻译成文案。这条测试是硬判据（与
 ``test_assistant_knowledge_audit.py`` 读前端源文件静态断言同一手法）：
 
@@ -23,7 +23,7 @@ from app.services.llm import usage_tasks
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = REPO_ROOT / "frontend"
-LABELS_TS = FRONTEND_DIR / "src" / "features" / "resume-provenance" / "usageTaskLabels.ts"
+LABELS_TS = FRONTEND_DIR / "src" / "features" / "resume" / "provenance" / "usageTaskLabels.ts"
 ZH_MESSAGES = FRONTEND_DIR / "src" / "i18n" / "messages" / "zh-CN.provenance.ts"
 EN_MESSAGES = FRONTEND_DIR / "src" / "i18n" / "messages" / "en-US.provenance.ts"
 

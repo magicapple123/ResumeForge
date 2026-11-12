@@ -22,7 +22,7 @@ import {
   type AsrProfileTestPayload,
   type AsrProfilesState,
   type AsrTestResult,
-} from "../../components/voice/asrApi";
+} from "../interview-voice/asrApi";
 
 const EMPTY_STATE: AsrProfilesState = { active_profile_id: "", profiles: [] };
 

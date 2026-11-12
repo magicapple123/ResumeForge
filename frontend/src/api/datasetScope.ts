@@ -16,7 +16,7 @@ let scopeToken: string | null = null;
  * 当前数据集身份（只读出口）。
  *
  * 给**内存缓存**用：同 id 的简历在不同数据集里是两条记录，缓存必须能判断"这份结果属于
- * 哪个数据集"（`features/resume-preflight/preflightCache.ts`）。只读、不触发同步——
+ * 哪个数据集"（`features/resume/preflight/preflightCache.ts`）。只读、不触发同步——
  * 这里故意不提供写入口，`scopeToken` 的更新时机仍只有启动与显式切换两处（见文件头）。
  */
 export function currentDatasetScope(): string | null {

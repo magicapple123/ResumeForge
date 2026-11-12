@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 批量「直接加入投递队列」的聚合账目（`components/apply/queue/bulkEnqueue.ts`）。
+ * 批量「直接加入投递队列」的聚合账目（`features/apply/queue/bulkEnqueue.ts`）。
  *
  * ## 这里只有一句给用户看的话
  *

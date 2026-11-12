@@ -20,7 +20,7 @@
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SortableProfileSection } from "../../components/profile/ProfileSectionShell";
+import { SortableProfileSection } from "./fields/ProfileSectionShell";
 import {
   captureAnimationFrames,
   COMPACT_CLASS,

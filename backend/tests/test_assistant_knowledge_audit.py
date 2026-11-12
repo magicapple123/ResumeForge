@@ -33,11 +33,14 @@ from app.services.feature_catalog import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = REPO_ROOT / "frontend"
-NAVIGATION_CONFIG_TSX = FRONTEND_DIR / "src" / "components" / "navigation" / "navigationConfig.ts"
-GUIDE_STEPS_TS = FRONTEND_DIR / "src" / "components" / "userGuideSteps.ts"
-# FE3（2026-10-25）把指南步骤数据拆到 components/user-guide/*.ts，userGuideSteps.ts 只剩
-# ≤100 行门面（类型再导出 + 组装）。标题从分域模块提取；门面里已没有 title 字面量。
-GUIDE_MODULES_DIR = FRONTEND_DIR / "src" / "components" / "user-guide"
+NAVIGATION_CONFIG_TSX = (
+    FRONTEND_DIR / "src" / "features" / "shell" / "navigationConfig.ts"
+)
+GUIDE_STEPS_TS = FRONTEND_DIR / "src" / "features" / "user-guide" / "userGuideSteps.ts"
+# FE3（2026-10-25）把指南步骤数据拆到 user-guide/*.ts，userGuideSteps.ts 只剩 ≤100 行门面
+# （类型再导出 + 组装）；B1 目录合并后指南整域（含门面）移到 features/user-guide/。
+# 标题从分域模块提取；门面里已没有 title 字面量。
+GUIDE_MODULES_DIR = FRONTEND_DIR / "src" / "features" / "user-guide"
 ZH_MESSAGES_DIR = FRONTEND_DIR / "src" / "i18n" / "messages"
 # GitHub 默认展示英文 README（README.md）；能力清单与功能 key 的对应关系写在中文版，
 # 审计对象因此是 README.zh-CN.md（两版功能表逐行同构，英文版由人工镜像）。
@@ -242,7 +245,7 @@ def _menu_labels() -> set[str]:
 
 
 def _guide_titles() -> set[str]:
-    """指南步骤标题：FE3 起从 components/user-guide/ 的分域数据模块提取。
+    """指南步骤标题：FE3 起从 user-guide 分域数据模块提取（B1 后位于 features/user-guide/）。
 
     双语化后数据模块只存 `titleKey`，这里经 zh 语言包还原成标题原文再比对。
     """

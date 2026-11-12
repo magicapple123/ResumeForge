@@ -25,7 +25,7 @@ import type {
   BulkEntriesResult,
   EntryOut,
   WorkspaceOut,
-} from "../features/profile-library/types";
+} from "../features/profile/library/types";
 import ProfilePage from "./ProfilePage";
 
 const apiMocks = vi.hoisted(() => {
@@ -65,12 +65,12 @@ const apiMocks = vi.hoisted(() => {
   >;
 });
 
-vi.mock("../features/profile-library/api", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../features/profile-library/api")>()),
+vi.mock("../features/profile/library/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../features/profile/library/api")>()),
   ...apiMocks,
 }));
-vi.mock("../features/profile-groups/api", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../features/profile-groups/api")>()),
+vi.mock("../features/profile/groups/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../features/profile/groups/api")>()),
   ...apiMocks,
 }));
 vi.mock("../api/photo", async (importOriginal) => ({

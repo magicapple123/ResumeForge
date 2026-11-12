@@ -15,6 +15,8 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from ...models.profile import utcnow
 from ...models.resume import (
     GENERATE_ACTIVE_STATUSES,
@@ -26,6 +28,22 @@ from ...models.resume import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def active_task_for_job(db: Session, job_id: int) -> ResumeGenerateTask | None:
+    """同一岗位是否已有 pending/running 的生成任务（创建前的同岗位查重）。
+
+    为什么放服务层：查重用的状态集合与任务终态仲裁是同两个常量，路由只该把命中
+    映射成 409，不该自己拼任务表查询。
+    """
+    return (
+        db.query(ResumeGenerateTask)
+        .filter(
+            ResumeGenerateTask.status.in_(GENERATE_ACTIVE_STATUSES),
+            ResumeGenerateTask.job_id == job_id,
+        )
+        .first()
+    )
 
 
 def finalize_task(session: Any, task: ResumeGenerateTask, status: str, error: str = "") -> None:
@@ -108,4 +126,4 @@ def set_cancelled(task_id: int, *, open_session: Callable[[], Any]) -> None:
         session.close()
 
 
-__all__ = ["claim_completed", "finalize_task", "set_cancelled"]
+__all__ = ["active_task_for_job", "claim_completed", "finalize_task", "set_cancelled"]

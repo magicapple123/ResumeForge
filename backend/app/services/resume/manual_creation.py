@@ -160,12 +160,13 @@ def _current_snapshot_token(db: Session, frozen: GenerationSnapshot) -> str:
     """重算当前投影 token（与 GET /api/profile/current/projection 完全同源）。
 
     照片解析器复用投影端点的实现：带照片的资料来源在两端必须得到同一份 content，
-    否则 token 永远是过期。延迟导入是为了不在模块加载期把 api 层拉进服务层。
+    否则 token 永远是过期。解析器已下沉到 ``services/profile/profile_photos``，
+    服务层不再需要延迟导到 api。
     """
-    from ...api.profile_workspace import _photo_resolver
     from ..profile.paper_projection import project_paper_content, snapshot_token
+    from ..profile.profile_photos import photo_resolver
 
-    content = project_paper_content(frozen.consumed, resolve_photo=_photo_resolver(db))
+    content = project_paper_content(frozen.consumed, resolve_photo=photo_resolver(db))
     return snapshot_token(frozen.consumed, content)
 
 

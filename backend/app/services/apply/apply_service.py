@@ -33,7 +33,7 @@ from ._config import (
     save_apply_config,
     save_collect_config,
 )
-from ._match import delete_match, latest_match, persist_match
+from ._match import delete_match, latest_match, persist_match, persist_match_in_new_session
 from ._queue import (
     add_to_queue,
     build_apply_data,
@@ -81,6 +81,7 @@ from ._tasks import (
     current_task,
     fail_orphaned_tasks,
     get_task_detail,
+    list_apply_tasks,
     list_apply_tasks_page,
 )
 
@@ -115,6 +116,7 @@ __all__ = [
     "get_collect_config",
     "count_queue",
     "get_task_detail",
+    "list_apply_tasks",
     "list_apply_tasks_page",
     "latest_match",
     "list_batch_items",
@@ -127,6 +129,7 @@ __all__ = [
     "refresh_browser",
     "restart_browser",
     "persist_match",
+    "persist_match_in_new_session",
     "remove_queue_item",
     "reorder_queue",
     "reset_browser_manager",

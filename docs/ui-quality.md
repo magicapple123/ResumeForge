@@ -12,8 +12,8 @@
 | `frontend/src/styles/foundation.css` | 焦点、通用状态与可滚动容器 | 少于 250 行 |
 | `frontend/src/styles/accessibility.css` | 对比度与卡片键盘焦点 | 少于 150 行 |
 | `frontend/src/styles/mobile.css` | 手机页头、表单和操作栏适配 | 少于 250 行 |
-| `components/navigation/MobileNavigation.tsx` | 手机抽屉菜单与宽屏恢复 | 少于 100 行 |
-| `components/navigation/RouteAccessibility.tsx` | 跳过导航、页面播报、标签标题 | 少于 100 行 |
+| `features/shell/MobileNavigation.tsx` | 手机抽屉菜单与宽屏恢复 | 少于 100 行 |
+| `features/shell/RouteAccessibility.tsx` | 跳过导航、页面播报、标签标题 | 少于 100 行 |
 | `components/common/*State.tsx` | 空态、错误和重试反馈 | 单个少于 100 行 |
 | `utils/formKeyboard.ts` | 编辑器内的保存快捷键 | 少于 50 行 |
 

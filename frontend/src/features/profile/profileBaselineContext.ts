@@ -11,7 +11,7 @@
  * 查找函数给它开 3 个 prop 不划算；provider 只出现在资料页的根上。
  */
 import { createContext, useContext } from "react";
-import type { WorkspaceOut } from "../profile-library/types";
+import type { WorkspaceOut } from "./library/types";
 
 /** `entry_id` → 该条目已保存的字段值（`field_id` → 原值）。查不到返回 null（新条目）。 */
 export type ProfileBaselineLookup = (entryKey: unknown) => Record<string, unknown> | null;

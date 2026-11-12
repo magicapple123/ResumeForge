@@ -24,7 +24,7 @@ export type JobRecognitionSource = "" | (typeof JOB_RECOGNITION_SOURCES)[number]
 /**
  * 岗位类型选项（唯一来源）。
  *
- * 定义放这里而不是放在 `components/jobs/form/jobFormOptions.ts` 或
+ * 定义放这里而不是放在 `features/jobs/form/jobFormOptions.ts` 或
  * `pages/jobs/jobFilterOptions.ts`：那两个文件过去各写一份逐字相同的定义，改一处就会分叉；
  * `types/` 是 `pages/` 与 `components/` 都合法依赖的唯一公共层。选项值就是落库值。
  */

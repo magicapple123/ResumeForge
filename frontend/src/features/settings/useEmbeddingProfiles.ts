@@ -22,10 +22,7 @@ import { formatErrorGuidance } from "../../api/errorGuidance";
 import { t } from "../../i18n";
 import { emptyRemoteConfig, profileConfigFromProfile } from "./embeddingHelpers";
 import type { EmbeddingActionId } from "./useEmbeddingActionRunner";
-import {
-  CUSTOM_PRESET_ID,
-  EMBEDDING_REMOTE_PRESETS,
-} from "../../components/settings/embeddingRemotePresets";
+import { CUSTOM_PRESET_ID, EMBEDDING_REMOTE_PRESETS } from "./embeddingRemotePresets";
 
 interface Params {
   status: EmbeddingStatus | null;

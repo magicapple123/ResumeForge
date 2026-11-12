@@ -15,7 +15,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from ..database import SessionLocal, get_db
+from ..database import get_db
 from ..models.drill import (
     DRILL_STATUS_ACTIVE,
     DRILL_STATUS_FINISHED,
@@ -30,32 +30,38 @@ from ..models.job import Job
 from ..schemas.drill import (
     DrillAnswerRequest,
     DrillAnswerResult,
-    DrillContractOut,
     DrillCreate,
     DrillRehearseOut,
     DrillRehearseRequest,
     DrillSessionBrief,
     DrillSessionOut,
-    DrillTurnOut,
 )
 from ..services.actions import add_action_route
 from ..services.actions.catalog import all_actions
 from ..services.drill import (
     apply_verdict,
     current_question,
+    drop_empty_session,
     evaluate_answer,
     finish_session,
     generate_plan,
     generate_review,
     load_prompt,
+    loaded_for_model,
     local_review,
     open_contract,
     pending_contract,
     select_claims,
-    session_summary,
+)
+from ..services.drill import (
+    list_sessions as list_drill_sessions,
+)
+from ..services.drill import (
+    session_out as _session_out,
 )
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
+from ..services.session_scope import fresh_session
 from ..services.settings_service import get_llm_config
 from ..services.text_extraction import llm_is_configured
 from ._disconnect import run_or_gone
@@ -71,52 +77,17 @@ def _session_or_404(db: Session, session_id: int) -> DrillSession:
     return record
 
 
-def _session_out(record: DrillSession) -> DrillSessionOut:
-    pending = pending_contract(record)
-    return DrillSessionOut(
-        id=record.id,
-        title=record.title,
-        job_id=record.job_id,
-        job_title=record.job_title,
-        company=record.company,
-        status=record.status,
-        feedback_policy=record.feedback_policy,
-        max_questions=record.max_questions,
-        current_index=record.current_index,
-        created_at=record.created_at,
-        contracts=[DrillContractOut.model_validate(item) for item in record.contracts],
-        turns=[
-            DrillTurnOut(
-                id=turn.id,
-                contract_id=turn.contract_id,
-                question=turn.question,
-                answer=turn.answer,
-                status=turn.status,
-                feedback=turn.feedback,
-                created_at=turn.created_at,
-            )
-            for turn in record.turns
-        ],
-        review=record.review or {},
-        summary=session_summary(record),
-        pending=DrillContractOut.model_validate(pending) if pending else None,
-    )
-
-
 add_action_route(router, all_actions()["list_drill_sessions"], route_path="")
 def list_sessions(
     status: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
     """列出深挖记录；``status`` 可选 active / finished。"""
-    query = db.query(DrillSession)
-    if status:
-        if status not in (DRILL_STATUS_ACTIVE, DRILL_STATUS_FINISHED):
-            raise HTTPException(status_code=422, detail="未知的会话状态")
-        query = query.filter(DrillSession.status == status)
+    if status and status not in (DRILL_STATUS_ACTIVE, DRILL_STATUS_FINISHED):
+        raise HTTPException(status_code=422, detail="未知的会话状态")
     return [
         DrillSessionBrief.model_validate(item)
-        for item in query.order_by(DrillSession.created_at.desc()).all()
+        for item in list_drill_sessions(db, status=status)
     ]
 
 
@@ -172,31 +143,22 @@ async def create_session(payload: DrillCreate, request: Request, db: Session = D
     session_id = session.id
     db.close()  # 模型调用期间不要占着连接池
 
-    async def _drop_session() -> None:
-        """第一题没生成出来时把这条空会话删掉。
-
-        用户会看到"一场问不出题的记录"，那比报错更让人困惑。删的时候必须**另开一个
-        会话**——原请求会话已经关掉了。
-        """
-        with SessionLocal() as cleanup_db:
-            stored = cleanup_db.get(DrillSession, session_id)
-            if stored is not None:
-                cleanup_db.delete(stored)
-                cleanup_db.commit()
-
+    # 第一题没生成出来时把这条空会话删掉（实现见 services/drill.drop_empty_session：
+    # 用户会看到"一场问不出题的记录"，那比报错更让人困惑；删的时候必须另开一条会话，
+    # 原请求会话在上面已经关了）。
     try:
         plan_coro = generate_plan(provider, claims[0], job_title=job_title, company=company)
         plan = await run_or_gone(request, plan_coro, what="深挖第一题")
     except LLMError as exc:
         logger.warning("生成面试深挖契约失败：%s", exc)
-        await _drop_session()
+        drop_empty_session(session_id)
         raise HTTPException(status_code=502, detail=f"生成第一题失败：{exc}") from exc
     except Exception:  # noqa: BLE001 - 外部模型异常不能变成 500
         logger.exception("生成面试深挖契约发生内部错误")
-        await _drop_session()
+        drop_empty_session(session_id)
         raise HTTPException(status_code=502, detail="生成第一题失败") from None
 
-    with SessionLocal() as write_db:
+    with fresh_session() as write_db:
         stored = write_db.get(DrillSession, session_id)
         if stored is None:  # pragma: no cover - 只在并发删除时发生
             raise HTTPException(status_code=404, detail="这场深挖记录不存在或已被删除")
@@ -237,9 +199,11 @@ async def answer(
 
     # ★ 判定要读契约与问答记录，两者都必须来自**重载后**的会话：请求会话已经关掉，
     #   继续用它上面挂着的对象会 detached（访问 JSON 字段就抛异常，最后被翻成
-    #   一句含糊的"内部错误"）。
-    read_db, reloaded = _load_session_for_model(session_id)
-    try:
+    #   一句含糊的"内部错误"）。会话的开关由 loaded_for_model 负责——它在 with 期间
+    #   一直开着，正好盖住下面的模型调用。
+    with loaded_for_model(session_id) as reloaded:
+        if reloaded is None:  # pragma: no cover - 并发删除
+            raise HTTPException(status_code=404, detail="这场深挖记录不存在或已被删除")
         live_contract = (
             reloaded.contracts[-1]
             if reloaded.contracts and reloaded.contracts[-1].id == contract.id
@@ -256,10 +220,8 @@ async def answer(
         except Exception:  # noqa: BLE001 - 外部模型异常不能变成 500
             logger.exception("面试深挖判定发生内部错误")
             raise HTTPException(status_code=502, detail="判定这一轮失败") from None
-    finally:
-        read_db.close()
 
-    with SessionLocal() as write_db:
+    with fresh_session() as write_db:
         stored = write_db.get(DrillSession, session_id)
         if stored is None:  # pragma: no cover
             raise HTTPException(status_code=404, detail="这场深挖记录不存在或已被删除")
@@ -342,35 +304,6 @@ async def answer(
     )
 
 
-def _load_session_for_model(session_id: int):
-    """打开一个**由调用方负责关闭**的会话，返回其中的深挖记录。
-
-    不能用 `with` 块：模型调用要读 ``record.contracts`` / ``record.turns``，而这些关系是
-    延迟加载的——会话一关，访问它们就抛 ``DetachedInstanceError``，最后会被翻成一句
-    含糊的"内部错误"，排查时很容易走偏。所以这里把生命周期交给调用方，
-    在模型调用**结束之后**再关。
-    """
-    db = SessionLocal()
-    try:
-        record = db.get(DrillSession, session_id)
-        if record is None:  # pragma: no cover - 并发删除
-            raise HTTPException(status_code=404, detail="这场深挖记录不存在或已被删除")
-        # 主动读一遍，把契约与轮次都装进内存，避免调用方在 await 期间触发懒加载。
-        for contract in record.contracts:
-            _ = (
-                contract.required_evidence,
-                contract.followup_triggers,
-                contract.evidence_found,
-                contract.missing,
-                contract.contradictions,
-            )
-        _ = [turn.question for turn in record.turns]
-        return db, record
-    except Exception:
-        db.close()
-        raise
-
-
 @router.post("/{session_id}/finish", response_model=DrillSessionOut)
 async def finish(session_id: int, request: Request, db: Session = Depends(get_db)):
     """提前结束并出复盘。已经结束的再调一次不会重复生成。"""
@@ -387,8 +320,9 @@ async def finish(session_id: int, request: Request, db: Session = Depends(get_db
 
     provider = create_provider(config)
     db.close()
-    read_db, reloaded = _load_session_for_model(session_id)
-    try:
+    with loaded_for_model(session_id) as reloaded:
+        if reloaded is None:  # pragma: no cover - 并发删除
+            raise HTTPException(status_code=404, detail="这场深挖记录不存在或已被删除")
         try:
             review_coro = generate_review(provider, reloaded)
             review = await run_or_gone(request, review_coro, what="深挖复盘生成")
@@ -398,10 +332,8 @@ async def finish(session_id: int, request: Request, db: Session = Depends(get_db
         except Exception:  # noqa: BLE001
             logger.exception("生成复盘发生内部错误，改用本地汇总")
             review = local_review(reloaded)
-    finally:
-        read_db.close()
 
-    with SessionLocal() as write_db:
+    with fresh_session() as write_db:
         stored = write_db.get(DrillSession, session_id)
         if stored is None:  # pragma: no cover
             raise HTTPException(status_code=404, detail="这场深挖记录不存在或已被删除")

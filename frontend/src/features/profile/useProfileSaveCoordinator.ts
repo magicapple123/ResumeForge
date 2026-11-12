@@ -9,16 +9,16 @@
 import type { FormInstance } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
-import { normalizeSectionOrder } from "../../components/profile/ProfileSectionConfig";
+import { normalizeSectionOrder } from "./ProfileSectionConfig";
 import { t } from "../../i18n";
-import { reorderEntries, saveEntries, setSectionOrder } from "../profile-library/api";
-import { profileErrorMessage } from "../profile-library/errors";
+import { reorderEntries, saveEntries, setSectionOrder } from "./library/api";
+import { profileErrorMessage } from "./library/errors";
 import type {
   BulkEntriesResult,
   BulkEntryItem,
   ProfileFormValues,
   WorkspaceOut,
-} from "../profile-library/types";
+} from "./library/types";
 
 export type ProfileSaveOutcome = "saved" | "invalid" | "skipped" | "conflict" | "failed";
 

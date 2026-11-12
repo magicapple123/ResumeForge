@@ -5,19 +5,19 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import ErrorState from "../components/common/ErrorState";
 import PageSkeleton from "../components/common/PageSkeleton";
-import ProfilePageHeader from "../components/profile/ProfilePageHeader";
-import ProfileEditActionBar from "../components/profile/ProfileEditActionBar";
-import ProfileLeaveConfirmModal from "../components/profile/ProfileLeaveConfirmModal";
-import ProfilePageModals from "../components/profile/ProfilePageModals";
-import ProfileSectionStack from "../components/profile/ProfileSectionStack";
+import ProfilePageHeader from "../features/profile/fields/ProfilePageHeader";
+import ProfileEditActionBar from "../features/profile/fields/ProfileEditActionBar";
+import ProfileLeaveConfirmModal from "../features/profile/fields/ProfileLeaveConfirmModal";
+import ProfilePageModals from "../features/profile/fields/ProfilePageModals";
+import ProfileSectionStack from "../features/profile/fields/ProfileSectionStack";
 import ProfileWorkspaceTabs, {
   type ProfileWorkspaceKey,
-} from "../components/profile/ProfileWorkspaceTabs";
-import ProfileGroupControl from "../features/profile-groups/ProfileGroupControl";
-import ProfileGroupManagerModal from "../features/profile-groups/ProfileGroupManagerModal";
-import { useCurrentProfileGroup } from "../features/profile-groups/useCurrentProfileGroup";
-import ProfilePlacementGuide from "../features/profile-library/ProfilePlacementGuide";
-import ProfileUpgradeNotice from "../features/profile-library/ProfileUpgradeNotice";
+} from "../features/profile/fields/ProfileWorkspaceTabs";
+import ProfileGroupControl from "../features/profile/groups/ProfileGroupControl";
+import ProfileGroupManagerModal from "../features/profile/groups/ProfileGroupManagerModal";
+import { useCurrentProfileGroup } from "../features/profile/groups/useCurrentProfileGroup";
+import ProfilePlacementGuide from "../features/profile/library/ProfilePlacementGuide";
+import ProfileUpgradeNotice from "../features/profile/library/ProfileUpgradeNotice";
 import ProfileDeepLinkNotice from "../features/profile/ProfileDeepLinkNotice";
 import { useProfileDeepLink } from "../features/profile/useProfileDeepLink";
 import {
@@ -33,7 +33,7 @@ import {
   setProfileEditControl,
   setProfileSaveControl,
 } from "../features/tou-tou/profileSaveBridge";
-import { profileSectionLabel } from "../features/profile-library/profileLabels";
+import { profileSectionLabel } from "../features/profile/library/profileLabels";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 

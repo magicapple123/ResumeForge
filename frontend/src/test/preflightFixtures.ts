@@ -6,7 +6,7 @@ import type {
   CheckSeverity,
   PreflightOut,
   PreflightSnapshot,
-} from "../features/resume-preflight/types";
+} from "../features/resume/preflight/types";
 
 export function makeSnapshot(overrides: Partial<PreflightSnapshot> = {}): PreflightSnapshot {
   return {

@@ -8,10 +8,7 @@
  * `useSyncExternalStore` 的引用稳定性要求；编译器视角这是纯外部可变量，正是
  * 该协议的标准形态。
  */
-import {
-  DEFAULT_SECTION_ORDER,
-  type ProfileSectionKey,
-} from "../../components/profile/ProfileSectionConfig";
+import { DEFAULT_SECTION_ORDER, type ProfileSectionKey } from "./ProfileSectionConfig";
 
 /** store 快照：顺序 + 拖拽态（拖拽态要给分区壳加 `is-section-reordering` / `is-dragging`）。 */
 export interface ProfileSectionOrderSnapshot {

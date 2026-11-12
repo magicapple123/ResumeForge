@@ -312,7 +312,7 @@
 }
 
 /* 深色主题的草稿纸（问题 19 方案 A）：整张纸反色，照片/图标由 iframe 内部注入的样式
-   抵消一次（见 `components/resume-preview/paperTheme.ts`）。为什么是滤镜而不是改模板
+   抵消一次（见 `features/resume/preview/paperTheme.ts`）。为什么是滤镜而不是改模板
    的 `--bg`：那会覆盖用户自选的「页面背景色」，且要给 9 个模板各写一套深色映射。
    **这里只影响屏幕**——导出走服务端渲染，打印另有 `@media print` 关闭。 */
 .resume-iframe.is-dark-paper {

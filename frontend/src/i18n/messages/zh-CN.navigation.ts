@@ -3,7 +3,7 @@
  * 侧栏、移动端导航抽屉、「我的空间」菜单与「界面与导航」设置卡：导航入口名、页面标题、
  * 品牌文案与外壳上的无障碍说明。
  *
- * 入口名以 `labelKey` 的形式放在 `components/navigation/navigationConfig.ts`，渲染处再
+ * 入口名以 `labelKey` 的形式放在 `features/shell/navigationConfig.ts`，渲染处再
  * `t()`；模块作用域不求值 `t()`，切语言时由消费组件订阅后重新渲染。
  */
 const navigation = {

@@ -11,7 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { RouterProvider, createMemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
-import { setGroupMembers } from "../features/profile-groups/api";
+import { setGroupMembers } from "../features/profile/groups/api";
 import ProfilePage from "./ProfilePage";
 import {
   makeAllSections,
@@ -42,7 +42,7 @@ const apiMocks = vi.hoisted(() => ({
   listPhotos: vi.fn(),
 }));
 
-vi.mock("../features/profile-library/api", () => ({
+vi.mock("../features/profile/library/api", () => ({
   getWorkspace: apiMocks.getWorkspace,
   saveEntries: apiMocks.saveEntries,
   setSectionOrder: apiMocks.setSectionOrder,
@@ -60,7 +60,7 @@ vi.mock("../features/profile-library/api", () => ({
   getCurrentProjection: apiMocks.getCurrentProjection,
 }));
 
-vi.mock("../features/profile-groups/api", () => ({
+vi.mock("../features/profile/groups/api", () => ({
   listGroups: vi.fn(),
   createGroup: vi.fn(),
   renameGroup: vi.fn(),

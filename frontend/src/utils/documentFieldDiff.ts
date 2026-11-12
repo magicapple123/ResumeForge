@@ -3,8 +3,8 @@
 import type { ResumeContent, ResumeDocument } from "../types";
 import type { DiffToken } from "../types/resumeWriting";
 import type { FieldDiffResult, SectionDiff } from "../types/resumeFieldDiff";
-import { isDocument, itemValue } from "../features/resume-document/view";
-import { buildFallbackCatalog } from "../features/resume-document/fieldCatalog";
+import { isDocument, itemValue } from "../features/resume/document/view";
+import { buildFallbackCatalog } from "../features/resume/document/fieldCatalog";
 import { t } from "../i18n";
 
 type Tokens = (before: string, after: string) => { oldTokens: DiffToken[]; newTokens: DiffToken[] };

@@ -14,7 +14,7 @@ import dayjs from "dayjs";
 import { useState } from "react";
 import { exportJobsCsv } from "../../api/jobs";
 import { startBulkAi, stopBulkAi, useBulkAiState } from "../../features/jobs/jobBulkAiRunner";
-import type { BatchConfigValues } from "../../components/batch/BatchConfigModal";
+import type { BatchConfigValues } from "../../features/batch/BatchConfigModal";
 import { t } from "../../i18n";
 import type { JobList, Page } from "../../types";
 import { downloadBlob } from "../../utils/download";

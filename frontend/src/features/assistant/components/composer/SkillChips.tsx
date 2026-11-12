@@ -20,7 +20,7 @@ import { CloseOutlined, ExperimentOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Tag, Tooltip, Typography } from "antd";
 import { t } from "../../../../i18n";
 import { useLocale } from "../../../../i18n/i18nContext";
-import { formatCount } from "../../../../components/skills/skillLimits";
+import { formatCount } from "../../../skills/skillLimits";
 import type {
   ConversationSkillBudget,
   ConversationSkillItem,

@@ -49,6 +49,7 @@ from ..services.interview.interview import (
     session_persona,
 )
 from ..services.interview.interview_context import _claims_json
+from ..services.interview.interview_read import list_sessions as list_session_records
 from ..services.interview.interview_report_markdown import _report_markdown
 from ..services.llm.base import LLMError
 from ..services.materials import create_material as create_material_record
@@ -167,10 +168,7 @@ def _has_closing_remark(session: InterviewSession) -> bool:
 
 add_action_route(router, all_actions()["list_interview_sessions"], route_path="")
 def list_sessions(limit: int = Query(default=50, ge=1, le=200), db: Session = Depends(get_db)):
-    sessions = (
-        db.query(InterviewSession).order_by(InterviewSession.created_at.desc()).limit(limit).all()
-    )
-    return [_to_out(item) for item in sessions]
+    return [_to_out(item) for item in list_session_records(db, limit)]
 
 
 @router.post("", response_model=InterviewDetail, status_code=201)

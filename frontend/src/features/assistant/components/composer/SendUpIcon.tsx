@@ -7,7 +7,7 @@
  * ② 它的视觉重心不在几何中心，转完会偏出圆形按钮的中心；
  * ③ 折痕方向转过来后是歪的，放大看很别扭。
  *
- * 为什么放在 `composer/` 而不是做全局图标层：项目里只有 `components/ThemeSwitch.tsx`
+ * 为什么放在 `composer/` 而不是做全局图标层：项目里只有 `features/theme/ThemeSwitch.tsx`
  * 一处内联 SVG 的先例，没有图标层。为一个按钮开一层框架不划算，也不该由这个改动开先例。
  *
  * `width/height="1em"` + `verticalAlign: -0.125em` 是与 antd 图标对齐的写法（antd 的 Icon

@@ -9,8 +9,8 @@
  * 滚动只平移几何（见 `dragReorder.applyScrollShift`），不重新测量。
  */
 
-import { stackBottomOf, type DragStackGeometry } from "../../components/profile/dragReorder";
-import type { ProfileSectionKey } from "../../components/profile/ProfileSectionConfig";
+import { stackBottomOf, type DragStackGeometry } from "./dragReorder";
+import type { ProfileSectionKey } from "./ProfileSectionConfig";
 
 /** 拖拽期挂在每个分区上的类（强制真实布局，见 useProfileSectionReorder 文件头说明）。 */
 export const SECTION_REORDERING_CLASS = "is-section-reordering";

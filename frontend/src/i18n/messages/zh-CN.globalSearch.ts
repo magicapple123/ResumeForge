@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 全站搜索（`components/GlobalSearch.tsx`）：页头放大镜、⌘/Ctrl+K 浮层的标题与
+ * 全站搜索（`features/shell/GlobalSearch.tsx`）：页头放大镜、⌘/Ctrl+K 浮层的标题与
  * 无障碍名、输入框提示、初始/加载/空/错误四种状态，以及结果分组的标题。
  *
  * 命中条目里的岗位名、简历名、摘要与数据域名都来自接口，属于数据，不在这里。

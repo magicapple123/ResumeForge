@@ -7,7 +7,7 @@ import type { AssistantToolCall } from "../../../types";
 import { t } from "../../../i18n";
 
 const restoreVersion = vi.fn();
-vi.mock("../../resume-versions/versionsApi", () => ({
+vi.mock("../../resume/versions/versionsApi", () => ({
   restoreVersion: (...args: unknown[]) => restoreVersion(...args),
 }));
 

@@ -21,7 +21,6 @@ from ..schemas.material import (
     MaterialAttachmentOut,
     MaterialBatchDeleteResult,
     MaterialBatchRequest,
-    MaterialOut,
     MaterialSummary,
 )
 from ..services import trash
@@ -40,37 +39,13 @@ from ..services.materials import (
     list_materials_page,
     material_categories,
 )
-from ..services.user_files import find_material_file, save_from_bytes, save_from_data_url
+from ..services.user_files import save_from_bytes
 
 logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/materials", tags=["materials"])
 
-
-def _save_file_copies(db: Session, material) -> None:
-    """best-effort：把资料附件里的 data URL 落一份磁盘副本（失败只记日志）。"""
-    try:
-        for item in material.files or []:
-            if not isinstance(item, dict):
-                continue
-            # 新链路（POST /attachments）上传时已存过原件并带了 file_id：
-            # 这里再按 data_url 存一次只是白跑 IO，跳过。
-            if item.get("file_id"):
-                continue
-            data_url = str(item.get("data_url") or "")
-            if not data_url:
-                continue
-            save_from_data_url(
-                db,
-                data_url,
-                source_type="material",
-                source_ref=f"material:{material.id}",
-                fallback_name=str(item.get("name") or ""),
-                fallback_mime=str(item.get("mime_type") or ""),
-            )
-    except Exception:  # noqa: BLE001 - 副本是锦上添花，绝不能挡住资料保存
-        logger.warning("资料附件磁盘副本保存失败 material:%s", material.id, exc_info=True)
 
 
 # 单份附件上限：与 document_text.MAX_MATERIAL_FILE_BYTES（面试材料）同一个数。
@@ -203,31 +178,6 @@ async def upload_material_attachment(
         data_url=parsed.data_url,
         warnings=parsed.warnings,
     )
-
-
-def enrich_material_file_ids(db: Session, material: Material) -> MaterialOut:
-    """详情响应里给历史附件补 file_id（**只读，不写库**）。
-
-    旧版只给图片存了磁盘副本、material.files 里没有 file_id。按来源 + 原名反查到
-    user_file 行就补在响应里，老图片因此也能用「另存为」；查不到（或历史文本附件
-    从来没有原件）保持 None，前端只显示「复制」——不做一个点了会 404 的按钮。
-    """
-    base = MaterialOut.model_validate(material)
-    files: list[dict] = []
-    changed = False
-    for item in material.files or []:
-        if not isinstance(item, dict):
-            continue
-        payload = dict(item)
-        if payload.get("file_id") is None and payload.get("data_url"):
-            found = find_material_file(db, material.id, str(payload.get("name") or ""))
-            if found is not None:
-                payload["file_id"] = found.id
-                changed = True
-        files.append(payload)
-    if not changed:
-        return base
-    return MaterialOut.model_validate({**base.model_dump(), "files": files})
 
 
 # T28 Batch B：GET /api/materials 由契约层生成（原 read_materials 装饰器位置）。

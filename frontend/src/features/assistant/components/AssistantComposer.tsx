@@ -22,8 +22,8 @@ import type {
   ConversationSkillItem,
 } from "../../../api/conversationSkills";
 import FileDropZone from "../../../components/common/FileDropZone";
-import { appendTranscript } from "../../../components/voice/appendTranscript";
-import { VoiceButton } from "../../../components/voice/VoiceButton";
+import { appendTranscript } from "../../interview-voice/appendTranscript";
+import { VoiceButton } from "../../interview-voice/VoiceButton";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import { useAssistantPermission } from "../assistantPermission";

@@ -44,10 +44,13 @@ from __future__ import annotations
 import hashlib
 import json
 
-from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, load_only
 
 from ...models.resume import ResumeRecord
 from ...models.resume_delivery import ResumeDeliveryRecord
+from ...schemas.common import Page
+from ...schemas.resume import DeliverySummary
 from ...schemas.resume_generation import (
     UNLIMITED_PAGE_LIMIT,
     UNLIMITED_RENDER_MAX_PAGES,
@@ -59,6 +62,7 @@ from ..export_pipeline import (
     build_export,
     render_config_fingerprint,
 )
+from ..search_matching import LIKE_ESCAPE, like_pattern
 from .resume_labels import DEFAULT_RESUME_LANGUAGE
 from .resume_record import record_format_config
 from .resume_template_store import resolve_style_config, resolve_style_template
@@ -232,6 +236,48 @@ def list_deliveries(db: Session, resume_id: int) -> list[ResumeDeliveryRecord]:
         .order_by(ResumeDeliveryRecord.created_at.desc(), ResumeDeliveryRecord.id.desc())
         .all()
     )
+
+
+def list_delivery_archive(
+    db: Session,
+    *,
+    keyword: str = "",
+    source: str = "",
+    page: int = 1,
+    page_size: int = 20,
+) -> Page[DeliverySummary]:
+    """历史交付档案的分页列表（关键词 LIKE + 来源精确过滤 + 视图组装）。
+
+    为什么放服务层：档案列表的过滤字段与排序是交付快照域的唯一读口径，路由只该做
+    查询参数校验与响应模型声明；load_only 只取摘要列，不为列表读 content 全文。
+    """
+    query = db.query(ResumeDeliveryRecord)
+    if source:
+        query = query.filter(ResumeDeliveryRecord.source == source)
+    if keyword:
+        pattern = like_pattern(keyword)
+        query = query.filter(
+            or_(
+                *(
+                    column.like(pattern, escape=LIKE_ESCAPE)
+                    for column in (
+                        ResumeDeliveryRecord.resume_title,
+                        ResumeDeliveryRecord.company,
+                        ResumeDeliveryRecord.job_title,
+                    )
+                )
+            )
+        )
+    total = query.count()
+    fields = [getattr(ResumeDeliveryRecord, name) for name in DeliverySummary.model_fields]
+    rows = (
+        query.options(load_only(*fields))
+        .order_by(ResumeDeliveryRecord.created_at.desc(), ResumeDeliveryRecord.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return Page(items=[DeliverySummary.model_validate(row) for row in rows], total=total)
 
 
 def get_delivery(db: Session, delivery_id: int) -> ResumeDeliveryRecord | None:

@@ -1,0 +1,186 @@
+// SPDX-License-Identifier: Apache-2.0
+/**
+ * W07 / P1-02 的角色级排版面板：五个段落角色（姓名 / 板块标题 / 条目标题 / 正文 / 日期与
+ * 元信息）各自一组属性。
+ *
+ * ## 作用范围与来源
+ *
+ * 写的是 `format_config.roles[role]`（L4）。每行右侧的来源胶囊显示这一属性现在来自哪里：
+ * 来自模板 / 来自版式 / 同类段落已调整；改过之后出现 ↺，点它 = **删键**回继承。
+ *
+ * ## 目录是可选输入
+ *
+ * `role_fields` / `template_role_defaults` 由后端 W07-BE 下发（wave2 契约 §2.8）。
+ * 目录缺这两项时：行集合回落到契约表、继承值用中性兜底（界面明确提示"起点为中性值"），
+ * 面板仍然可写——只是"来自模板"的具体数值不显示。
+ *
+ * ## 挂载归 shell
+ *
+ * 本组件只接收 `layout / catalog / previewRef / onChange`；挂载到左栏由 wb-core 落笔
+ * （契约 §2.5 的挂载点约定），这里不 import 任何 shell 文件。
+ */
+import { Collapse, Typography } from "antd";
+import { useState } from "react";
+import type { RefObject } from "react";
+import type { ResumeLayout, ResumeTemplateCatalog } from "../../../types";
+import type { ResumePreviewHandle } from "../preview/ResumePreview";
+import { t } from "../../../i18n";
+import { styleProbeCss } from "../../../utils/resumeFormatProbe";
+import { STYLE_PROP_LABELS, type StylePropKey } from "../../../utils/resumeStyleParams";
+import { RESUME_ROLES, ROLE_LABELS, type ResumeRoleKey } from "./styleCatalog";
+import { readStyleCatalog, roleStyleProps, templateRoleDefaults } from "./styleCatalogExtensions";
+import {
+  clearRole,
+  readRoleStyle,
+  readStyleDomains,
+  resolvedPropValue,
+  roleBaseRatio,
+  storedStyleValue,
+  styleSourceOf,
+  withRoleProp,
+  type ResumeStyleValue,
+} from "./styleOverrides";
+import StyleValueRow from "./StyleValueRow";
+import { useLocale } from "../../../i18n/i18nContext";
+
+interface Props {
+  layout: ResumeLayout;
+  catalog?: ResumeTemplateCatalog;
+  disabled?: boolean;
+  previewRef?: RefObject<ResumePreviewHandle | null>;
+  onChange: (layout: ResumeLayout) => void;
+  /** 默认展开的角色（宿主/测试可指定；不传则打开前两个高频角色）。 */
+  defaultOpenRoles?: readonly ResumeRoleKey[];
+}
+
+/** 「上次展开到哪儿」只存角色 key 数组；用户偏好，存 localStorage（不是简历数据）。 */
+const OPEN_ROLES_STORAGE_KEY = "resumeforge.typography.openRoles.v1";
+
+function readStoredOpenRoles(): string[] | null {
+  try {
+    const raw = window.localStorage.getItem(OPEN_ROLES_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const known = new Set<string>(RESUME_ROLES);
+    return parsed.filter((item): item is string => typeof item === "string" && known.has(item));
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredOpenRoles(keys: readonly string[]): void {
+  try {
+    window.localStorage.setItem(OPEN_ROLES_STORAGE_KEY, JSON.stringify(keys));
+  } catch {
+    // 隐私模式 / 配额满：偏好存不进去不影响面板本身。
+  }
+}
+
+export default function RoleStylePanel({
+  layout,
+  catalog,
+  disabled = false,
+  previewRef,
+  onChange,
+  defaultOpenRoles,
+}: Props) {
+  useLocale();
+  // 展开状态跨挂载保留：局部排版每次重新打开不该又回到"姓名 + 正文"，
+  // 用户上次展开到哪儿，回来还是哪儿（偏好存 localStorage，不写进简历）。
+  const [openRoles, setOpenRoles] = useState<string[]>(
+    () => readStoredOpenRoles() ?? [...(defaultOpenRoles ?? ["name", "body"])],
+  );
+  const config = layout.format_config;
+  const domains = readStyleDomains(config);
+  const styleCatalog = readStyleCatalog(catalog);
+  const basePx = catalog?.font_scales?.find((scale) => scale.name === layout.font_scale)?.base_px;
+
+  const applyProbe = (css: string) => {
+    previewRef?.current?.setLiveProbe(css);
+  };
+
+  const commit = (role: ResumeRoleKey, prop: StylePropKey, next: ResumeStyleValue | null) => {
+    onChange({ ...layout, format_config: withRoleProp(config, role, prop, next) });
+  };
+
+  const items = RESUME_ROLES.map((role) => {
+    const defaults = templateRoleDefaults(styleCatalog, layout.template, role);
+    const baseRatio = roleBaseRatio(defaults);
+    const ownStyle = readRoleStyle(domains, role);
+    const ownCount = Object.keys(ownStyle).length;
+    const rows = roleStyleProps(styleCatalog, role).map((prop) => (
+      <StyleValueRow
+        key={prop}
+        prop={prop}
+        label={t(STYLE_PROP_LABELS[prop])}
+        value={resolvedPropValue(domains, { role, prop, templateDefaults: defaults })}
+        own={ownStyle[prop]}
+        source={styleSourceOf(config, { role, prop })}
+        disabled={disabled}
+        basePx={basePx}
+        toProbeCss={(value) =>
+          styleProbeCss({ role }, { [prop]: value }, { baseRatios: { [role]: baseRatio } })
+        }
+        onProbe={applyProbe}
+        onCommit={(next) =>
+          commit(role, prop, next === null ? null : storedStyleValue(prop, next, baseRatio))
+        }
+        testId={`style-row-${role}-${prop}`}
+      />
+    ));
+    return {
+      key: role,
+      // 角色名 + 「N 项已调整」小胶囊：裸数字脱离上下文读不通，也分不清是"几项"
+      // （2026-10-25 截图 2：header 里只有一个 3）。胶囊样式见 controls.css 同名段。
+      label: (
+        <span className="resume-typography-role-label">
+          <span className="resume-typography-role-name">{t(ROLE_LABELS[role])}</span>
+          {ownCount > 0 ? (
+            <span className="resume-typography-own-count">
+              {t("typography.role.ownCount", { count: ownCount })}
+            </span>
+          ) : null}
+        </span>
+      ),
+      extra:
+        ownCount > 0 ? (
+          <Typography.Link
+            role="button"
+            tabIndex={0}
+            aria-label={t("typography.role.clearAria", { role: t(ROLE_LABELS[role]) })}
+            onClick={() => onChange({ ...layout, format_config: clearRole(config, role) })}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              onChange({ ...layout, format_config: clearRole(config, role) });
+            }}
+          >
+            {t("typography.role.clear")}
+          </Typography.Link>
+        ) : null,
+      // 行间距由容器的 8px gap 给（数字行自身体内两行只隔 4px，见 controls.css）。
+      children: <div className="resume-typography-rows">{rows}</div>,
+    };
+  });
+
+  return (
+    <section className="resume-typography-panel" aria-label={t("typography.role.groupAria")}>
+      <Typography.Text type="secondary">{t("typography.panel.hint")}</Typography.Text>
+      {!styleCatalog.hasTemplateDefaults ? (
+        <Typography.Text type="warning">{t("typography.catalog.missing")}</Typography.Text>
+      ) : null}
+      <Collapse
+        size="small"
+        items={items}
+        activeKey={openRoles}
+        onChange={(keys) => {
+          const next = (Array.isArray(keys) ? keys : [keys]).map(String);
+          setOpenRoles(next);
+          writeStoredOpenRoles(next);
+        }}
+      />
+      <Typography.Text type="secondary">{t("typography.capability.pdf")}</Typography.Text>
+    </section>
+  );
+}

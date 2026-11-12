@@ -408,7 +408,7 @@ def test_runtime_self_check_falls_back_and_warns(db_session, monkeypatch, caplog
 def test_followup_thresholds_single_source(client, db_session, monkeypatch):
     """一处定义：看板的"卡住"与巡检的"跟进"必须是同一个阈值。
 
-    两个消费点各自在**模块命名空间**里持有绑定值（``api/stats.py`` import 的
+    两个消费点各自在**模块命名空间**里持有绑定值（``services/stats.py`` 的
     ``STALLED_DAYS`` 与巡检 import 的 ``FOLLOWUP_SILENCE_DAYS``），所以验证"同步
     变化"必须 monkeypatch 这两个消费点本身，而不是只改 ``models/tracker`` 的定义——
     只改定义不会回流到模块级绑定，那恰恰是"消费者各自绑定"的边界，不是缺陷。
@@ -434,7 +434,7 @@ def test_followup_thresholds_single_source(client, db_session, monkeypatch):
     assert client.get("/api/stats").json()["stalled_application_count"] == 0
     assert _scan(db_session, now=moment)["created"] == 0
 
-    monkeypatch.setattr("app.api.stats.STALLED_DAYS", 6)
+    monkeypatch.setattr("app.services.stats.STALLED_DAYS", 6)
     monkeypatch.setattr(followup_sweep, "FOLLOWUP_SILENCE_DAYS", 6)
     assert client.get("/api/stats").json()["stalled_application_count"] == 1
     assert _scan(db_session, now=moment)["created"] == 1

@@ -42,7 +42,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
 /**
- * CJK 判据：与 `components/analytics/barLabelLayout.ts` 的"宽字符"口径**逐字相同**
+ * CJK 判据：与 `features/analytics/barLabelLayout.ts` 的"宽字符"口径**逐字相同**
  * （汉字 + 兼容区 + 全角形式 + CJK 标点）。
  *
  * 复用同一个字符类而不是另写一份：两处判定必须一致，否则会出现"宽度计算认为是中文、
@@ -88,7 +88,7 @@ export type ScanMode = "src" | "tests";
  * 真实写法上会把**代码整段吞掉**：块注释之后出现含块注释起始符的 MIME 字符串时——
  * 先例是 `const mime = file.type || "image/<星号>"`（星号是半角），紧接着后面还有一处
  * JSX 注释的收尾符，两者一配，中间几十行真实代码连同其中的中文全部消失。
- * `components/materials/MaterialFormModal.tsx` 就是这个形状（ISSUES ③-1）。
+ * `features/materials/MaterialFormModal.tsx` 就是这个形状（ISSUES ③-1）。
  * 正则没法区分"字符串里的起始符"与"真的注释开头"，所以改为按**引号状态**走。
  *
  * 两条不变量（`countCjkLines` 依赖它们）：

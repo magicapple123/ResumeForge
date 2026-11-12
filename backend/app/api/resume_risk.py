@@ -16,10 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.claim import ClaimRecord
 from ..models.resume import ResumeRecord
 from ..schemas.resume_risk import RiskScanOut, RiskScanRequest
 from ..services import trash
+from ..services.claims import live_claim_records
 from ..services.llm import create_provider
 from ..services.resume import document_io
 from ..services.resume.resume_risk import scan_resume_risks
@@ -49,7 +49,7 @@ async def risk_scan(
 ):
     record = _load_record(db, resume_id)
     content = _to_content(record)
-    claims = db.query(ClaimRecord).filter(trash.live_only(ClaimRecord)).all()
+    claims = live_claim_records(db)
     config = get_llm_config(db)
     configured = bool(config.base_url.strip() and config.model.strip())
     # 没有请求体 = 老调用方（保持原行为）；显式 enhance=false 时连 provider 都不建，

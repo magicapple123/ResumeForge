@@ -24,9 +24,9 @@ import {
   listInterviews,
   updateInterviewDuration,
 } from "../api/interview";
-import InterviewExperiencePanel from "../components/InterviewExperiencePanel";
-import InterviewReviewPanel from "../components/InterviewReviewPanel";
-import QuestionBankPanel from "../components/QuestionBankPanel";
+import InterviewExperiencePanel from "../features/interview/InterviewExperiencePanel";
+import InterviewReviewPanel from "../features/interview/InterviewReviewPanel";
+import QuestionBankPanel from "../features/questionbank/QuestionBankPanel";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { toInternalResumeId, toMaterialPayload } from "../features/interview/materialPayload";
 import { useInterviewTimer } from "../features/interview/useInterviewTimer";

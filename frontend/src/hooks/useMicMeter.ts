@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readPreferredDeviceId } from "../components/voice/voicePrefs";
+import { readPreferredDeviceId } from "../features/interview-voice/voicePrefs";
 import { errorOf, microphoneErrorFor, type VoiceError } from "./voiceErrors";
 import { PEAK_SAMPLE_INTERVAL_MS } from "./voiceGates";
 import { LevelMeter } from "./voiceMeter";

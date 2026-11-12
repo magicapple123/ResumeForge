@@ -27,7 +27,7 @@ from ..database import get_db
 from ..schemas.assistant import ConversationSurface
 from ..services import assistant_digest
 from ..services.assistant import assistant_personas
-from .assistant_conversations import conversation_or_404
+from ..services.assistant.assistant_conversations import conversation_or_404
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 

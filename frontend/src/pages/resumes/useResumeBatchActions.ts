@@ -13,7 +13,7 @@ import { useState } from "react";
 import { batchDeleteResumes } from "../../api/resumes";
 import { batchExportResumes } from "../../api/resumeBatchExport";
 import type { BatchExportConfig } from "../../api/settingsBatch";
-import type { BatchConfigValues } from "../../components/batch/BatchConfigModal";
+import type { BatchConfigValues } from "../../features/batch/BatchConfigModal";
 import { t } from "../../i18n";
 import { downloadBlob } from "../../utils/download";
 import type { ResumeBatchAction } from "./resumeBatchActions";

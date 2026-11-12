@@ -9,7 +9,7 @@
 import { t } from "../../i18n";
 import type { ClaimCategory } from "../../types";
 import { CLAIM_CATEGORIES } from "../../types";
-import type { EntryOut, SectionOut, WorkspaceOut } from "../profile-library/types";
+import type { EntryOut, SectionOut, WorkspaceOut } from "../profile/library/types";
 
 // 台账分类是提交后端的协议值（中文），从 types 里取唯一真源，本文件不重复写一份中文——
 // 复制一份既会漂移，也会让"新文件里出现界面中文"的棘轮守卫误报。

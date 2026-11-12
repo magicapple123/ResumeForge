@@ -13,7 +13,7 @@
  * `order` 落到 DOM）要到下一帧才生效，同步聚焦会落到旧的视觉位置上。
  */
 
-import type { ProfileSectionKey } from "../../components/profile/ProfileSectionConfig";
+import type { ProfileSectionKey } from "./ProfileSectionConfig";
 
 /** 把焦点送回被移动的分区（下一帧执行，此时新顺序已落到 DOM）。 */
 export function focusReorderedSection(sectionKey: ProfileSectionKey): void {

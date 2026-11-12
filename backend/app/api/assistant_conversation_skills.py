@@ -25,13 +25,13 @@ from ..schemas.assistant import (
     ConversationSkillsUpdate,
     ConversationSurface,
 )
+from ..services.assistant.assistant_conversations import conversation_or_404
 from ..services.assistant.assistant_skills import (
     PendingSkillError,
     conversation_skill_budget,
     list_conversation_skills,
     set_conversation_skills,
 )
-from .assistant_conversations import conversation_or_404
 
 
 def _payload(db: Session, conversation_id: int) -> dict[str, Any]:

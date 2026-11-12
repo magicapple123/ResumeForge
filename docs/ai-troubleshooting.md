@@ -31,7 +31,7 @@ ResumeForge/
 │   └── data/             # 运行时数据：resume_forge.db、datasets/、backups/、captures/、browser-profile/
 ├── frontend/
 │   └── src/
-│       ├── components/navigation/navigationConfig.ts  # 侧栏菜单 MENU_ITEMS（功能入口的权威来源）
+│       ├── features/shell/navigationConfig.ts  # 侧栏菜单 MENU_ITEMS（功能入口的权威来源）
 │       ├── appRoutes.tsx # 路由表（页面路径的唯一来源）
 │       ├── App.tsx       # 仅 re-export MENU_ITEMS 并组装壳层
 │       ├── pages/        # 各页面
@@ -58,12 +58,12 @@ ResumeForge/
 
 1. **功能目录（能力地图的单一事实来源）**：`backend/app/services/feature_catalog.py` —— 机器可读的功能域 `FUNCTIONAL_DOMAINS` 与界面功能 `FEATURES`。功能数据按拆分前顺序放在三个数据段里（`feature_catalog_profile.py` / `feature_catalog_resume.py` / `feature_catalog_workflow.py`），门面按原顺序拼回并 re-export；每条写明"在哪个界面、怎么用"；能力地图在运行时由它渲染进系统提示。
 2. **助手系统提示**：`backend/app/prompts/assistant_system.md` —— 只保留角色定位 / 行为准则 / 安全规则 / 各模块用法（工具语义），**不含手写功能清单**（避免与功能目录漂移）。
-3. **功能入口（以它为准）**：`frontend/src/components/navigation/navigationConfig.ts` 的 `MENU_ITEMS` —— 侧栏菜单的真实入口与顺序（`App.tsx` 只 re-export 它）。**判断"有没有这个菜单 / 叫什么名"一律以此为准**；页面路径看 `frontend/src/appRoutes.tsx`（路由表）。
-4. **操作细节（以它们为准）**：`frontend/src/components/userGuideSteps.ts`（应用内使用指南）与 `docs/user-guide.md`（完整使用说明）—— 判断"某功能具体怎么操作"时以这两处为准。
+3. **功能入口（以它为准）**：`frontend/src/features/shell/navigationConfig.ts` 的 `MENU_ITEMS` —— 侧栏菜单的真实入口与顺序（`App.tsx` 只 re-export 它）。**判断"有没有这个菜单 / 叫什么名"一律以此为准**；页面路径看 `frontend/src/appRoutes.tsx`（路由表）。
+4. **操作细节（以它们为准）**：`frontend/src/features/user-guide/userGuideSteps.ts`（应用内使用指南）与 `docs/user-guide.md`（完整使用说明）—— 判断"某功能具体怎么操作"时以这两处为准。
 5. **版本变化**：`CHANGELOG.md` —— 判断"某能力是哪个版本加的、行为是否变更过"。
 6. 需要更细的架构/接口判断时再读 `docs/architecture.md`。
 
-**优先级**：功能入口以 `components/navigation/navigationConfig.ts` 的 `MENU_ITEMS`（`App.tsx` 仅 re-export）为准，页面路径以 `appRoutes.tsx` 为准；操作细节以 `userGuideSteps` / `user-guide.md` 为准；`feature_catalog.py` 门面（及其三个数据段）是功能目录的单一事实来源（能力地图由它动态渲染）。四者应当一致；若发现不一致，按「入口看菜单、细节看指南」处理，并在结论里注明你依据的是哪一份文件。
+**优先级**：功能入口以 `features/shell/navigationConfig.ts` 的 `MENU_ITEMS`（`App.tsx` 仅 re-export）为准，页面路径以 `appRoutes.tsx` 为准；操作细节以 `userGuideSteps` / `user-guide.md` 为准；`feature_catalog.py` 门面（及其三个数据段）是功能目录的单一事实来源（能力地图由它动态渲染）。四者应当一致；若发现不一致，按「入口看菜单、细节看指南」处理，并在结论里注明你依据的是哪一份文件。
 
 ## 4. 常见问题排查路径
 

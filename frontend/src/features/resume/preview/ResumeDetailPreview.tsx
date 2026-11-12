@@ -1,0 +1,401 @@
+// SPDX-License-Identifier: Apache-2.0
+/**
+ * 简历详情预览（B3）：简历中心与「生成简历」预览阶段共用的统一界面——头部元信息、版式控件、
+ * 版面诊断卡、预览、底部操作与各自挂载的子弹窗。导出只有一个入口（统一导出面板），
+ * 脱敏/水印/页数/字号/行距都在面板里；W19 起制作台「导出」另开「导出交付包」弹层。
+ *
+ * 只依赖子组件与 `api/resumes`，不 import 两个宿主 Modal，避免循环依赖（设计 §9 ⑨）。
+ */
+import type { Props } from "./ResumeDetailPreview.types";
+import { Button, Popover, Space, Tooltip, Typography } from "antd";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
+import { useNavigate } from "react-router-dom";
+import { contentSignature } from "../../../utils/contentSignature";
+import { pagesNeededFor } from "../../../utils/resumeLayoutMeasure";
+import ExportOptionsModal from "../delivery/ExportOptionsModal";
+import ExportConfigModal from "../delivery/ExportConfigModal";
+import { createExportDeliveryApi } from "../delivery";
+import { getResume } from "../../../api/resumes";
+import ResumeWorkbenchV2 from "../editor/ResumeWorkbenchV2";
+import { useResumeTemplateCatalog } from "../../../hooks/useResumeTemplateCatalog";
+import ResumeMeasureControls from "../layout/ResumeMeasureControls";
+import ResumeTemplateControls from "../layout/ResumeTemplateControls";
+import { normalizeDocumentMode, pageLimitOptions } from "../research/documentMode";
+import { useShortcut } from "../../shortcuts/useShortcutKeymap";
+import ResumeQualityModal from "./ResumeQualityModal";
+import ResumeSuggestionsModal from "./ResumeSuggestionsModal";
+import ResumeReviseModal from "../editor/ResumeReviseModal";
+import SharePackageModal from "../delivery/SharePackageModal";
+import ResumePreview, { type ExactPreviewOptions, type ResumePreviewHandle } from "./ResumePreview";
+import type { PreviewMode } from "./config";
+import { buildExactPreviewOptions } from "./exactPreviewOptions";
+import ResumeDetailFooter from "./ResumeDetailFooter";
+import ResumeDetailHead from "./ResumeDetailHead";
+import { documentHasPhoto } from "../document/view";
+import { useFieldPlacementCatalog } from "../../profile/library/fieldPlacement";
+import { useVariants } from "../versions/useVariants";
+/** W19 导出交付包：模块级单例（与 DeliveryArchiveModal 同一注入模式，测试可替换）。 */
+const deliveryApi = createExportDeliveryApi();
+export default function ResumeDetailPreview({
+  detail,
+  html,
+  layout,
+  layoutStatus,
+  measure,
+  pdfDirectAvailable,
+  relayouting,
+  previewRef,
+  onLayoutStatus,
+  onMeasure,
+  onApplyLayout,
+  onCommitLayout,
+  layoutSaving = false,
+  onPublishDraft,
+  documentPipeline,
+  onApplyFittedFormat,
+  onSaveEditedResume,
+  autoOpenWorkbench = false,
+  suggestionsGenerated,
+  suggestionsResetKey,
+  onSuggestionsGenerated,
+  onResumeRevised,
+  showReviseAction,
+  extraActions,
+  metaExtra,
+  exportFlow = "delivery",
+  onDocumentSynced,
+  onReplaceDocument,
+}: Props) {
+  useLocale();
+  const navigate = useNavigate();
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [reviseOpen, setReviseOpen] = useState(false);
+  const [reviseInstructions, setReviseInstructions] = useState("");
+  const [qualityOpen, setQualityOpen] = useState(false);
+  const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
+  // W19：制作台动作条的「导出」打开「导出交付包」弹层（旧面板仍留给主预览入口）。
+  const [deliveryExportOpen, setDeliveryExportOpen] = useState(false);
+  // 导出入口按内容是否已定稿分流：已保存 → 交付包；生成/未保存预览 → 旧导出选项。
+  const openExportByFlow = () => {
+    if (exportFlow === "legacy") setExportOptionsOpen(true);
+    else setDeliveryExportOpen(true);
+  };
+  // R8：预览打开时按 Ctrl/⌘+Shift+E 直接拉起导出面板——导出是这一步最常做的事。
+  useShortcut("exportPdf", (event) => {
+    event.preventDefault();
+    setExportOptionsOpen(true);
+  });
+  const [zoomOpen, setZoomOpen] = useState(autoOpenWorkbench);
+  // 制作台中栏有没有未保存的内容：有值时禁用底部「手动调整」（两个编辑器同时开会互相覆盖草稿）。
+  // 预览口径（草稿 / 精确）住在这一层：主预览与「简历制作台」共用它，任何一处切换，
+  // 另一处和制作台都会跟着走（2026-10-21 用户要求）。
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("draft");
+  /**
+   * 画布上报的页数（问题 3）。左栏结构面板的「按当前设置约需 N 页」必须与黄条、画布同源，
+   * 而页数的口径从"浏览器测量"换成了"服务端分页报告"——报告只有画布那条链路在取，
+   * 所以这里接住它上报的数字再传给左栏，不要在本层另算一份。
+   */
+  const [canvasPages, setCanvasPages] = useState<{ needed: number; rendered: number } | null>(null);
+  const handleLayoutStatus = useCallback(
+    (status: {
+      pages: number;
+      overflow: boolean;
+      pagesNeeded?: number;
+      pagesRendered?: number;
+    }) => {
+      if (typeof status.pagesNeeded === "number") {
+        setCanvasPages({
+          needed: status.pagesNeeded,
+          rendered: status.pagesRendered ?? status.pagesNeeded,
+        });
+      }
+      onLayoutStatus(status);
+    },
+    [onLayoutStatus],
+  );
+  const [sharePackageOpen, setSharePackageOpen] = useState(false);
+  /**
+   * v2 文档 → v1 只读投影（唯一一处转换）：版面诊断卡、事实来源面板与导出核对还按 v1 形状
+   * 读内容，它们不渲染纸面、也不写库；等这些组件迁到 v2 后本投影随之删除。
+   */
+  // 内部再包一层引用：父组件可能传 null（尚未量到），子组件需要一份稳定的 ref 传入 ResumePreview。
+  const fallbackRef = useRef<ResumePreviewHandle>(null);
+  const resolvedPreviewRef = previewRef ?? fallbackRef;
+  // 版式目录：**只取一次**，工具栏两行的两组控件共用（见 `useResumeTemplateCatalog`）。
+  const { catalog } = useResumeTemplateCatalog();
+  // 资料字段目录（纸面位置 / 仅素材）：制作台的「仅素材」徽标与添加字段菜单都读它。
+  // 会话级缓存；接口失败时保持 null，编辑器退回内置 fallback（不阻塞编辑）。
+  const { catalog: fieldCatalog } = useFieldPlacementCatalog();
+  const variantsState = useVariants({ resumeId: detail.id }); // W16 导出变体选择器数据源
+  // 缺省跟随 onResumeRevised：能刷新预览就有意义，不能刷新就不该摆出这个入口。
+  const showRevise = showReviseAction ?? Boolean(onResumeRevised);
+  // 风险扫描的"内容签名"：只随 content 变化重算，用来判断"扫描之后正文是不是改过了"。
+  const riskContentSignature = useMemo(() => contentSignature(detail.content), [detail.content]);
+  /** 警告分级（#3）：疑似虚构与岗位未选上性质不同；新记录用 coverage_notes，旧记录按特征句拆。 */
+  const { fabricationWarnings, legacyCoverageWarnings } = useMemo(() => {
+    // i18n-ok: 后端警告原文，按特征句区分新旧覆盖说明（协议值，不翻）
+    const legacy = detail.warnings.filter((warning) => warning.includes("没有出现在这份简历里"));
+    // i18n-ok: 同上
+    const rest = detail.warnings.filter((warning) => !warning.includes("没有出现在这份简历里"));
+    return { fabricationWarnings: rest, legacyCoverageWarnings: legacy };
+  }, [detail.warnings]);
+  const coverageNotes = detail.coverage_notes ?? [];
+  // 精确预览上下文只在这里构造一次：主预览与制作台必须拿到同一份（各拼一份必然漂）。
+  // `catalog` 一并传进去：衬线标题的说明（P1-2）只需要目录里那一个布尔值，目录本身已经取过了。
+  const exactPreview = useMemo<ExactPreviewOptions>(
+    () => buildExactPreviewOptions(detail, layout, riskContentSignature, catalog),
+    [catalog, detail, layout, riskContentSignature],
+  );
+  // 事实来源标注（RF-13）：证据面板用它列出"这条内容从哪来"；预览上的悬停角标随编辑模式一起去掉了（2026-10-21），标注数据本身仍然有效。
+  const factAnnotations = useMemo(() => detail.fact_annotations ?? [], [detail.fact_annotations]);
+  return (
+    <div className="resume-detail-preview">
+      {/* 元信息一行 + 诊断条一行（问题 8）：12 段元信息压成两行，纸面回到首屏。
+          内容一块没删——次要项降级成小字，四段诊断进弹层（详见 ResumeDetailHead）。 */}
+      <ResumeDetailHead
+        detail={detail}
+        measure={measure}
+        layoutStatus={layoutStatus}
+        layout={layout}
+        relayouting={relayouting}
+        previewRef={resolvedPreviewRef}
+        metaExtra={metaExtra}
+        coverageNotes={coverageNotes}
+        legacyCoverageWarnings={legacyCoverageWarnings}
+        factAnnotations={factAnnotations}
+        onApplyLayout={onApplyLayout}
+        onApplyFittedFormat={onApplyFittedFormat}
+        onRevise={(instructions) => {
+          setReviseInstructions(instructions);
+          setReviseOpen(true);
+        }}
+        // 预览里不再提供手动编辑：这条提示指向「简历制作台」，详细编辑都在那边做。
+        onOpenEditor={() => setZoomOpen(true)}
+        // 3-A：覆盖度清单的「补进简历」要简历 id；补入成功后按"简历已修订"同一条路刷新
+        // （服务端已修剪 coverage_notes，刷新后这一条自然消失）。
+        resumeId={detail.id}
+        onAppended={(next) => onResumeRevised?.(next)}
+      />
+      <ResumePreview
+        ref={resolvedPreviewRef}
+        // 2026-10-28：预览里不再提供「草稿模式编辑」，详细编辑去制作台。
+        showClickToEdit={false}
+        // 具名插槽（P2/D4）：结构类第一行、度量类第二行；目录本组件取一次两组共用。
+        // 渲染中不禁用（D12）：禁用会让用户以为坏了；边距合并保证最后一次生效。
+        templateControls={
+          <Space size={8} wrap>
+            {/* 与「岗位详情 → AI 生成」同一套控件（非 compact）：分组/尺寸/排布必须一致。 */}
+            <ResumeTemplateControls
+              layout={layout}
+              catalog={catalog}
+              // 篇幅上限的选项按记录/草稿的文档模式给全：普通 1–3 + 不限、长 CV 1–10 + 不限。
+              // 缺省的 `RESUME_PAGE_LIMITS`（1–3）没有「不限」档——用户在这条工具栏上
+              // 根本选不到 0，而"选不到"看起来就像"这个功能没做"。
+              pageLimitOptions={pageLimitOptions(normalizeDocumentMode(detail.document_mode))}
+              // R-03：模板试用通道与制作台同一套接线（「我的内容」/「采用模板默认」）。
+              // 这里是「预览 / 导出」入口，没有撤销栈——采纳一次即写 layout，由宿主保存。
+              resumeId={detail.id}
+              content={detail.content}
+              onTrialAdopt={({ template, formatConfig }) =>
+                onApplyLayout({ ...layout, template, format_config: formatConfig })
+              }
+              onChange={(next) => onApplyLayout(next)}
+            />
+            {/* 「更多排版」（问题 8）：行距 / 页边距 / 字号 / 字体收进弹层，工具栏从两行
+                （≈90px）降到一行。控件本身一行没改，只是换了挂载位置——弹层一打开就是
+                原来那一整块。 */}
+            <Tooltip title={t("resume.measure.moreHint")}>
+              <span className="resume-more-typography">
+                <Popover
+                  trigger="click"
+                  placement="bottomRight"
+                  content={
+                    <div className="resume-more-typography-body">
+                      <ResumeMeasureControls
+                        layout={layout}
+                        catalog={catalog}
+                        previewRef={resolvedPreviewRef}
+                        // 没有照片时照片滑杆禁用并说明原因：photo_scale 在没有照片时完全惰性，
+                        // 让用户拖一个"什么都没发生"的滑杆是最差的反馈。
+                        hasPhoto={documentHasPhoto(detail.content)}
+                        // 显式写 false：分边页边距只在「简历制作台」里出现（那一栏有纵向空间）。
+                        showMarginSides={false}
+                        // 照片大小滑杆只留在简历制作台：主预览这一栏只放"改一下就能在纸面上
+                        // 看出差别"的高频项（2026-10-23 用户口径："预览界面只展示部分功能"）。
+                        showPhotoScale={false}
+                        onChange={(next) => onApplyLayout(next)}
+                      />
+                      {/* 「正在按新设置重新排版…」跟着控件留在弹层里：它说明的是"你刚拖的
+                          那个值正在生效"，离开控件就没有指代对象了。 */}
+                      {relayouting ? (
+                        <Typography.Text type="secondary">
+                          {t("appConfig.detail.relayouting")}
+                        </Typography.Text>
+                      ) : null}
+                    </div>
+                  }
+                >
+                  <Button size="small" aria-label={t("resume.measure.moreAria")}>
+                    {t("resume.measure.more")}
+                  </Button>
+                </Popover>
+              </span>
+            </Tooltip>
+          </Space>
+        }
+        html={html}
+        pages={layout.page_limit}
+        // 精确预览（方案 A）：拿得到记录 id 就能用真实导出 PDF 渲染。
+        // 草稿值（页数/字号/版式）一并传进去——"拖完滑块还没保存"的版式正是最需要
+        // 在导出里核对的东西，只传记录值就等于让它看不见。
+        exactPreview={exactPreview}
+        previewMode={previewMode}
+        onPreviewModeChange={setPreviewMode}
+        // 点纸面字段 → 打开「手动调整」并定位；右键加粗只在制作台提供（主预览没有保存入口）。
+        warnings={fabricationWarnings}
+        onLayoutStatus={handleLayoutStatus}
+        onMeasure={onMeasure}
+      />
+      {/* 固定在弹窗底部：内容长（版面诊断 + 预览）时不必一路翻到最后才够得着这些按钮。 */}
+      <ResumeDetailFooter
+        resumeId={detail.id}
+        layout={layout}
+        pdfDirectAvailable={pdfDirectAvailable}
+        extraActions={extraActions}
+        showRevise={showRevise}
+        suggestionsGenerated={suggestionsGenerated}
+        jobId={detail.job_id ?? null}
+        onOpenZoom={() => setZoomOpen(true)}
+        onOpenRevise={() => setReviseOpen(true)}
+        onOpenSuggestions={() => setSuggestionsOpen(true)}
+        // 没岗位时按钮本身已禁用；守卫留在跳转这一侧，避免将来有第二个入口时忘了判空。
+        onOpenJob={() => {
+          if (detail.job_id) navigate(`/jobs?job_id=${detail.job_id}`);
+        }}
+        onOpenAssistant={() => navigate(`/assistant?resume_id=${detail.id}&new=1`)}
+        onOpenQuality={() => setQualityOpen(true)}
+        onOpenSharePackage={() => setSharePackageOpen(true)}
+        onOpenExportOptions={openExportByFlow}
+        // 问题 8 的配套：核对项压成一行后，用户可能不展开就直接导出——导出按钮上的
+        // 琥珀点把"还有东西没看"留在视野里。
+        pendingReview={fabricationWarnings.length}
+      />
+
+      <ResumeSuggestionsModal
+        open={suggestionsOpen}
+        recordId={detail.id}
+        resetKey={suggestionsResetKey}
+        onClose={() => setSuggestionsOpen(false)}
+        onGenerated={onSuggestionsGenerated}
+        onApplied={(detail) => onResumeRevised?.(detail)}
+      />
+      {/* 修订弹窗只看 onResumeRevised：生成预览虽藏底部按钮，但「AI 补上这段」仍要能弹出。 */}
+      {onResumeRevised ? (
+        <ResumeReviseModal
+          open={reviseOpen}
+          recordId={detail.id}
+          initialInstructions={reviseInstructions}
+          onClose={() => setReviseOpen(false)}
+          onApplied={(detail) => onResumeRevised?.(detail)}
+        />
+      ) : null}
+      <ResumeQualityModal
+        open={qualityOpen}
+        resumeId={detail.id}
+        contentSignature={riskContentSignature}
+        jobId={detail.job_id ?? undefined}
+        onClose={() => setQualityOpen(false)}
+      />
+      {exportFlow === "delivery" ? (
+        <ExportConfigModal
+          open={deliveryExportOpen}
+          onClose={() => setDeliveryExportOpen(false)}
+          api={deliveryApi}
+          resumeId={detail.id}
+          content={detail.content}
+          revision={documentPipeline?.revision ?? null}
+          resumeTitle={detail.title}
+          company={detail.company}
+          jobTitle={detail.job_title}
+          template={layout.template}
+          formatName={layout.format_name}
+          language={layout.language}
+          documentMode={detail.document_mode}
+          variants={variantsState.variants}
+          variantLoading={variantsState.loading}
+          // 未保存的草稿版式也进同快照（不传则后端用记录里那份）。
+          pageLimit={layout.page_limit}
+          fontScale={layout.font_scale}
+          formatConfig={layout.format_config}
+          onReloadRevision={async () => (await getResume(detail.id)).revision ?? null}
+        />
+      ) : null}
+      {exportFlow === "legacy" ? (
+        <ExportOptionsModal
+          recordId={detail.id}
+          open={exportOptionsOpen}
+          initialPageLimit={layout.page_limit}
+          initialFontScale={layout.font_scale}
+          initialFormatConfig={layout.format_config}
+          initialLanguage={layout.language ?? "zh-CN"}
+          pdfDirectAvailable={pdfDirectAvailable}
+          onClose={() => setExportOptionsOpen(false)}
+        />
+      ) : null}
+      <ResumeWorkbenchV2
+        open={zoomOpen}
+        html={html}
+        warnings={detail.warnings}
+        pages={layout.page_limit}
+        layout={layout}
+        resumeId={detail.id}
+        resumeTitle={detail.title}
+        resumeLanguage={detail.language}
+        relayouting={relayouting}
+        hasPhoto={documentHasPhoto(detail.content)}
+        // 页数与右栏黄条**同源**（Q20）：以前传的是 `layoutStatus.pages`——那是版式诊断
+        // 在**当前 page_limit 之下**跑出来的页数，天然被夹在上限内，于是同一屏出现
+        // 「约需 3 页」（左栏）与「约需 7 页（上限 3 页）」（右栏）两个数。
+        // 2026-11-02（问题 3）起页数的口径换成服务端分页报告：画布把 `pagesNeeded` 上报
+        // 回来，这里直接用它；还没上报时退回预览实测的 `measure`（与黄条同一个
+        // `pagesNeededFor`），量不到时传 null 让结构面板走「未知」，不要回落成
+        // `page_limit`（那就又变成"内容需求 = 上限"）。
+        pagesNeeded={canvasPages?.needed ?? (measure ? pagesNeededFor(measure) : null)}
+        onApplyLayout={onApplyLayout}
+        onCommitLayout={onCommitLayout}
+        layoutSaving={layoutSaving}
+        // 草稿靠这两个把「保存」常驻（刚建出来的草稿内容与版式都没动过，0051）。
+        isDraft={Boolean(detail.draft)}
+        onPublishDraft={onPublishDraft}
+        documentPipeline={documentPipeline}
+        previewMode={previewMode}
+        onPreviewModeChange={setPreviewMode}
+        exactPreview={exactPreview}
+        // v2 文档就是中栏编辑与保存的唯一内容；转换摘要在第一次读旧简历时显示。
+        document={detail.content}
+        fieldCatalog={fieldCatalog}
+        documentMode={detail.document_mode}
+        onDocumentModeSaved={onDocumentSynced}
+        onAdoptDocument={onReplaceDocument}
+        onSaveContent={onSaveEditedResume}
+        conversion={detail.document_conversion ?? null}
+        contextSnapshot={detail.context_snapshot ?? null}
+        // #24 24E / 24F：这里已经取过一次详情——标注与生成说明直接复用上面那份
+        // `factAnnotations` 与 `detail.rationale`，中栏徽标 / 左栏入口**不再发请求**。
+        factAnnotations={factAnnotations}
+        rationale={detail.rationale ?? null}
+        onClose={() => {
+          setZoomOpen(false);
+        }}
+        onExport={openExportByFlow}
+      />
+      <SharePackageModal
+        recordId={detail.id}
+        open={sharePackageOpen}
+        onClose={() => setSharePackageOpen(false)}
+      />
+    </div>
+  );
+}

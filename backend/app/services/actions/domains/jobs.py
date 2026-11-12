@@ -86,9 +86,10 @@ class UpdateJobInput(JobUpdate):
 
 
 def _run_list_jobs(db: Session, payload: ListJobsInput) -> ActionOutcome:
-    from ....api.jobs import _filtered_query, _to_list_out
     from ...assistant_tools._shared import _job_brief
+    from ...job.job_queries import filtered_query
     from ...job.job_sorting import job_order_by
+    from ...job.job_views import job_list_out
 
     if payload.limit is not None:
         # 工具侧：历史行为是"最近更新倒序 + limit 条"；默认值由 tool_defaults 注入。
@@ -102,7 +103,7 @@ def _run_list_jobs(db: Session, payload: ListJobsInput) -> ActionOutcome:
             payload.sort,
             payload.order,
         )
-    query = _filtered_query(
+    query = filtered_query(
         db,
         payload.keyword,
         payload.job_type,
@@ -130,7 +131,7 @@ def _run_list_jobs(db: Session, payload: ListJobsInput) -> ActionOutcome:
         summary=summary,
         text=text,
         link="/jobs",
-        data=Page(items=[_to_list_out(job) for job in jobs], total=total),
+        data=Page(items=[job_list_out(job) for job in jobs], total=total),
     )
 
 
@@ -142,18 +143,19 @@ def _preview_create_job(db: Session, payload: CreateJobInput) -> WritePreview:
 
 
 def _run_create_job(db: Session, payload: CreateJobInput) -> ActionOutcome:
-    from ....api.jobs import _save_note_image_copies, _to_out
+    from ...job.job_note_images import save_note_image_copies
     from ...job.job_service import create_job_record
+    from ...job.job_views import job_out
 
     job = create_job_record(db, payload)
     if payload.note_images:
-        _save_note_image_copies(db, job.id, payload.note_images)
+        save_note_image_copies(db, job.id, payload.note_images)
     return ActionOutcome(
         summary=f"新增岗位「{job.title}」",
         text=json.dumps({"id": job.id, "title": job.title}, ensure_ascii=False),
         link="/jobs",
         changed=True,
-        data=_to_out(job),
+        data=job_out(job),
     )
 
 
@@ -166,10 +168,11 @@ def _preview_update_job(db: Session, payload: UpdateJobInput) -> WritePreview:
 
 
 def _run_update_job(db: Session, payload: UpdateJobInput) -> ActionOutcome:
-    from ....api.jobs import _save_note_image_copies, _to_out
     from ....models.job import Job
     from ... import trash
+    from ...job.job_note_images import save_note_image_copies
     from ...job.job_service import update_job_record
+    from ...job.job_views import job_out
 
     job = trash.get_live(db, Job, payload.job_id)
     if job is None:
@@ -183,18 +186,18 @@ def _run_update_job(db: Session, payload: UpdateJobInput) -> ActionOutcome:
             text=json.dumps({"id": job.id, "updated": []}, ensure_ascii=False),
             link="/jobs",
             changed=False,
-            data=_to_out(job),
+            data=job_out(job),
         )
     update_payload = JobUpdate.model_validate(fields)
     updated = update_job_record(db, job, update_payload)
     if "note_images" in update_payload.model_fields_set:
-        _save_note_image_copies(db, job.id, update_payload.note_images)
+        save_note_image_copies(db, job.id, update_payload.note_images)
     return ActionOutcome(
         summary=f"修改了岗位「{updated.title}」",
         text=json.dumps({"id": updated.id, "updated": sorted(fields)}, ensure_ascii=False),
         link="/jobs",
         changed=True,
-        data=_to_out(updated),
+        data=job_out(updated),
     )
 
 
@@ -220,7 +223,7 @@ def job_actions() -> dict[str, ActionSpec]:
             permission=Permission.READ_ONLY,
             run=_run_list_jobs,
             service_entry=None,
-            service_reason="内联 ORM 查询/组装，复用 api.jobs._filtered_query（T27 收口候选）",
+            service_reason="分页/筛选/排序是路由形状（service_entry 无对应服务函数），筛选器在 services/job/job_queries",
             tool_defaults=(("limit", _DEFAULT_LIST_LIMIT),),
             ignore_unknown_arguments=True,
             http=HttpRoute("GET", "/api/jobs", Page[JobListOut], tags=("jobs",)),

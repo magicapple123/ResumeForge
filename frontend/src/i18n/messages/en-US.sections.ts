@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Resume template controls, structural group: template, layout preset, section order
- * and page limit (components/resume/ResumeTemplateControls.tsx).
+ * and page limit (features/resume/layout/ResumeTemplateControls.tsx).
  */
 const sections = {
   "sections.templateControls.templateLabel": "Template",

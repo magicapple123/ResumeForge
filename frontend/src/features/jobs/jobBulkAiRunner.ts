@@ -13,7 +13,7 @@ import { useSyncExternalStore } from "react";
 import { getJobAnalysisState, startJobAnalysis } from "./jobAnalysisStore";
 import { getResumeGenerateTask, startResumeGeneration } from "../../api/resumes";
 import type { BatchGenerationConfig } from "../../api/settingsBatch";
-import { newResumeLayout } from "../resume-document/newResumeLayout";
+import { newResumeLayout } from "../resume/document/newResumeLayout";
 import { t } from "../../i18n";
 import { notifyTaskDone } from "../../utils/taskNotify";
 

@@ -2,7 +2,7 @@
 /**
  * 投递台：投递队列、自动采集、执行进度与投递记录。
  *
- * 页面只负责编排（谁在跑、把任务交给进度面板），具体交互拆在 `components/apply/` 下的子组件里。
+ * 页面只负责编排（谁在跑、把任务交给进度面板），具体交互拆在 `features/apply/` 下的子组件里。
  * 执行采用**轮询**模型：`useTaskPolling` 按 1.5s 拉取批次详情，任务进入终态后自动停止。
  */
 import { InfoCircleOutlined, SettingOutlined } from "@ant-design/icons";
@@ -18,16 +18,16 @@ import {
   resumeTask,
   stopTask,
 } from "../api/apply";
-import ReferralPanel from "../components/ReferralPanel";
-import ApplyProgressPanel from "../components/apply/ApplyProgressPanel";
-import ApplyFunnelBar, { type FunnelDrill } from "../components/apply/ApplyFunnelBar";
-import ApplyQueuePanel from "../components/apply/ApplyQueuePanel";
-import ApplyRecordsPanel from "../components/apply/ApplyRecordsPanel";
-import ApplySettingsModal from "../components/apply/ApplySettingsModal";
-import BrowserStatusBar from "../components/apply/BrowserStatusBar";
-import CollectPanel from "../components/apply/CollectPanel";
-import CollectRecordsPanel from "../components/apply/CollectRecordsPanel";
-import CurrentSiteBar from "../components/apply/CurrentSiteBar";
+import ReferralPanel from "../features/referral/ReferralPanel";
+import ApplyProgressPanel from "../features/apply/ApplyProgressPanel";
+import ApplyFunnelBar, { type FunnelDrill } from "../features/apply/ApplyFunnelBar";
+import ApplyQueuePanel from "../features/apply/ApplyQueuePanel";
+import ApplyRecordsPanel from "../features/apply/ApplyRecordsPanel";
+import ApplySettingsModal from "../features/apply/ApplySettingsModal";
+import BrowserStatusBar from "../features/apply/BrowserStatusBar";
+import CollectPanel from "../features/apply/CollectPanel";
+import CollectRecordsPanel from "../features/apply/CollectRecordsPanel";
+import CurrentSiteBar from "../features/apply/CurrentSiteBar";
 import { isActiveTaskStatus, useTaskPolling } from "../hooks/useTaskPolling";
 import { formatErrorGuidance } from "../api/errorGuidance";
 import type { ApplyTask } from "../types";

@@ -40,7 +40,7 @@ vi.mock("../api/resumes", async (importOriginal) => ({
 }));
 
 // 预览主体是重渲染路径，由它自己的测试负责；本文件只关心筛选与 URL。
-vi.mock("../components/resume/ResumeDetailPreview", () => ({
+vi.mock("../features/resume/preview/ResumeDetailPreview", () => ({
   default: () => <div data-testid="resume-preview-stub" />,
 }));
 

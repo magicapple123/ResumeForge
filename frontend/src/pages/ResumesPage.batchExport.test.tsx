@@ -44,7 +44,7 @@ vi.mock("../api/settingsBatch", async (importOriginal) => ({
   getBatchOperationConfig: batchSettingsMocks.getBatchOperationConfig,
 }));
 vi.mock("../utils/download", () => downloadMocks);
-vi.mock("../components/resume/ResumeDetailPreview", () => ({
+vi.mock("../features/resume/preview/ResumeDetailPreview", () => ({
   default: () => <div data-testid="resume-preview-stub" />,
 }));
 

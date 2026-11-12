@@ -2,7 +2,7 @@
 /**
  * 设置页外壳：只做三件事——持有需要跨页签共享的 hooks、算好各卡片的 props、渲染六个页签。
  *
- * 页签内"哪张卡放哪一页"全部在 `components/settings/SettingsPanels.tsx`（那份文件就是
+ * 页签内"哪张卡放哪一页"全部在 `features/settings/SettingsPanels.tsx`（那份文件就是
  * 页面结构表）。这样拆的原因：设置项从 21 张卡、3 个页签扩到 6 个页签后，如果编排还留在
  * 这里，本文件会顶到 500 行预算并且再也没法加东西。
  *
@@ -16,9 +16,9 @@ import { useSettingsDatasets } from "../features/settings/useSettingsDatasets";
 import { useSettingsSkills } from "../features/settings/useSettingsSkills";
 import { useLLMSettings } from "../features/settings/useLLMSettings";
 import { useLLMRecordTools } from "../features/settings/useLLMRecordTools";
-import LLMConfigCard from "../components/settings/LLMConfigCard";
-import DatasetsCard from "../components/settings/DatasetsCard";
-import SkillsCard from "../components/settings/SkillsCard";
+import LLMConfigCard from "../features/settings/LLMConfigCard";
+import DatasetsCard from "../features/settings/DatasetsCard";
+import SkillsCard from "../features/settings/SkillsCard";
 import {
   AboutPanel,
   AppearancePanel,
@@ -26,10 +26,10 @@ import {
   BackupPanel,
   DataPanel,
   ModelPanel,
-} from "../components/settings/SettingsPanels";
+} from "../features/settings/SettingsPanels";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
-import SkillEditorModal from "../components/skills/SkillEditorModal";
+import SkillEditorModal from "../features/skills/SkillEditorModal";
 
 /** 设置分页：六页各自装同一类东西——改模型配置不用先翻过整套数据备份。 */
 export type SettingsTabKey = "model" | "assistant" | "appearance" | "data" | "backup" | "about";

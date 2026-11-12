@@ -6,9 +6,9 @@
  */
 import { Col, Empty, Row, Tag, Typography } from "antd";
 import { Link } from "react-router-dom";
-import DataGapNotice from "../../components/analytics/DataGapNotice";
-import HorizontalBarChart from "../../components/analytics/HorizontalBarChart";
-import StatCard from "../../components/analytics/StatCard";
+import DataGapNotice from "../../features/analytics/DataGapNotice";
+import HorizontalBarChart from "../../features/analytics/HorizontalBarChart";
+import StatCard from "../../features/analytics/StatCard";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { AnalyticsDashboard, TrackCohort } from "../../types";

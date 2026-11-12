@@ -15,7 +15,7 @@ import {
   getAssistantStreamState,
   subscribeAssistantStream,
 } from "../assistant/hooks/assistantStreamStore";
-import { restoreVersion } from "../resume-versions/versionsApi";
+import { restoreVersion } from "../resume/versions/versionsApi";
 import type { AssistantToolCall } from "../../types";
 import {
   draftFromToolCall,

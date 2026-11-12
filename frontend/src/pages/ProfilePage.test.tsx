@@ -37,7 +37,7 @@ vi.mock("../api/profile", () => ({
   parseProfileText: apiMocks.parseProfileText,
 }));
 
-// F6 页面数据源已换成 workspace（features/profile-library + profile-groups），
+// F6 页面数据源已换成 workspace（features/profile/library + features/profile/groups），
 // 旧 getProfile 只保留给识别/旧接口回退；这里把新数据源按最小 workspace 夹具假掉。
 // F6 页面数据源：workspace（GET /api/profile/workspace）。按真实接口名造 mock 工厂；
 // vi.mock 工厂只认具名导出，这里用表驱动一次性生成，避免 20+ 行手工重复。
@@ -72,8 +72,8 @@ const workspaceMocks = vi.hoisted(() => {
     ReturnType<typeof vi.fn>
   >;
 });
-vi.mock("../features/profile-library/api", () => ({ ...workspaceMocks }));
-vi.mock("../features/profile-groups/api", () => ({ ...workspaceMocks }));
+vi.mock("../features/profile/library/api", () => ({ ...workspaceMocks }));
+vi.mock("../features/profile/groups/api", () => ({ ...workspaceMocks }));
 vi.mock("../api/photo", () => ({ ...workspaceMocks }));
 
 // 「网申资料」走自己的接口（独立的表），这里一并假掉——不假的话这一页会去真发请求。
@@ -94,8 +94,9 @@ vi.mock("../api/webform", async (importOriginal) => ({
 // 两者合起来钉住「网申资料打字不再惊动整页与简历资料子树」这条性质。
 const renderProbes = vi.hoisted(() => ({ header: 0, dateSelect: 0 }));
 
-vi.mock("../components/profile/ProfilePageHeader", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../components/profile/ProfilePageHeader")>();
+vi.mock("../features/profile/fields/ProfilePageHeader", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../features/profile/fields/ProfilePageHeader")>();
   const React = await import("react");
   return {
     ...actual,
@@ -107,8 +108,9 @@ vi.mock("../components/profile/ProfilePageHeader", async (importOriginal) => {
   };
 });
 
-vi.mock("../components/profile/PartialDateSelect", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../components/profile/PartialDateSelect")>();
+vi.mock("../features/profile/fields/PartialDateSelect", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../features/profile/fields/PartialDateSelect")>();
   const React = await import("react");
   return {
     ...actual,

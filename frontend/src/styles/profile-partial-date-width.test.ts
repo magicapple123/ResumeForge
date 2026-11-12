@@ -49,7 +49,7 @@ function declaredMinWidth(css: string, selector: string): number | null {
 
 const LAYOUT_CSS = read("src/styles/profile-layout.css");
 const PROFILE_CSS = read("src/styles/profile.css");
-const PARTIAL_DATE_TSX = read("src/components/profile/PartialDateSelect.tsx");
+const PARTIAL_DATE_TSX = read("src/features/profile/fields/PartialDateSelect.tsx");
 
 const CONTROLS = ".profile-partial-date-select__controls";
 const SELECTS = ".profile-partial-date-select__controls > .ant-select";

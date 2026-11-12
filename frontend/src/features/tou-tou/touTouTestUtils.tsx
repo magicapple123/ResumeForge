@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, vi } from "vitest";
 import { resetTouTouContextRegistry } from "./touTouPageContext";
 import { resetTouTouProposal } from "./touTouProposalStore";
-import { resetWorkbenchLayout } from "../../components/resume/workbenchLayoutStore";
+import { resetWorkbenchLayout } from "../resume/editor/workbenchLayoutStore";
 import { setProfileEditControl, setProfileSaveControl } from "./profileSaveBridge";
 import { INTERVENTION_STORAGE_KEY } from "./touTouIntervention";
 

@@ -12,7 +12,7 @@
  * 路由清单与 `appRoutes.tsx` 的一致性由测试从 `APP_ROOT_ROUTE` 反推：新增路由却
  * 忘了登记动作，测试会直接点名。
  */
-import { navigationPageLabelKey } from "../../components/navigation/navigationConfig";
+import { navigationPageLabelKey } from "../shell/navigationConfig";
 import type { TouTouActionId } from "./touTouActions";
 import { resolveTouTouActions } from "./touTouActions";
 import type { TouTouPageContext } from "./touTouPageContext";

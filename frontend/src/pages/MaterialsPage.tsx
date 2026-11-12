@@ -33,10 +33,10 @@ import {
   listMaterialsPage,
   updateMaterial,
 } from "../api/material";
-import AttachmentList from "../components/materials/AttachmentList";
-import AttachmentPreviewModal from "../components/materials/AttachmentPreviewModal";
-import MaterialFormModal from "../components/materials/MaterialFormModal";
-import UserFilesPanel from "../components/materials/UserFilesPanel";
+import AttachmentList from "../features/materials/AttachmentList";
+import AttachmentPreviewModal from "../features/materials/AttachmentPreviewModal";
+import MaterialFormModal from "../features/materials/MaterialFormModal";
+import UserFilesPanel from "../features/materials/UserFilesPanel";
 import { DetailTrigger, RecordDetailDrawer } from "../components/common/RecordDetail";
 import { RowActions, RowContextMenu } from "../components/common/RowActions";
 import BatchActionBar from "../components/common/BatchActionBar";

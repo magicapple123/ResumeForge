@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from starlette.responses import Response
 
 from ..database import get_db
-from ..models.material import CANDIDATE_JOB_STATUSES, CandidateJob
+from ..models.material import CANDIDATE_JOB_STATUSES
 from ..schemas.common import Page
 from ..schemas.material import (
     CandidateCsvExportRequest,
@@ -21,7 +21,6 @@ from ..schemas.material import (
     CandidateJobBulkImportRequest,
     CandidateJobOut,
 )
-from ..services import trash
 from ..services.actions import add_action_route
 from ..services.actions.catalog import all_actions
 from ..services.candidate_csv import (
@@ -36,36 +35,13 @@ from ..services.candidate_jobs import (
     list_candidate_job_ids,
     list_candidate_jobs_page,
 )
+from ..services.candidate_jobs_read import candidates_by_ids
 from ..services.csv_io import MAX_IMPORT_FILE_CHARS
-from ..services.user_files import save_from_data_url
 
 logger = logging.getLogger(__name__)
 
 
-
-
 router = APIRouter(prefix="/api/candidate-jobs", tags=["candidate-jobs"])
-
-
-def _save_image_copies(db: Session, candidate_id: int, images: list[str] | None) -> None:
-    """best-effort：把备选岗位截图 data URL 落一份磁盘副本（失败只记日志）。
-
-    ``CandidateJobUpdate.images`` 允许显式传 ``null``（区分"没提这个字段"与"清空"），
-    本函数对 ``None`` 与空列表同样按"没有图"处理。
-    """
-    for index, data_url in enumerate(images or []):
-        if not data_url:
-            continue
-        try:
-            save_from_data_url(
-                db,
-                str(data_url),
-                source_type="candidate_image",
-                source_ref=f"candidate_job:{candidate_id}",
-                fallback_name=f"candidate-{candidate_id}-{index + 1}",
-            )
-        except Exception:  # noqa: BLE001 - 副本是锦上添花，绝不能挡住暂存
-            logger.warning("备选岗位截图副本保存失败 candidate_job:%s", candidate_id, exc_info=True)
 
 
 def _parse_collect_task_ids(raw: str) -> list[int]:
@@ -157,13 +133,9 @@ def read_candidate_job_ids(
 @router.post("/csv/export")
 def export_candidate_jobs_csv(payload: CandidateCsvExportRequest, db: Session = Depends(get_db)):
     """把勾选的候选导出成 CSV（列集与导入共用，导出的文件可以直接改完再导回）。"""
-    candidates = _get_candidates_or_404(db, payload.candidate_ids)
     # 按用户选择的顺序导出，而不是数据库顺序：导出文件里行的次序与界面勾选一致。
-    by_id = {candidate.id: candidate for candidate in candidates}
-    ordered = [
-        by_id[candidate_id] for candidate_id in payload.candidate_ids if candidate_id in by_id
-    ]
-    text = candidates_to_csv_text(ordered)
+    candidates = _get_candidates_or_404(db, payload.candidate_ids)
+    text = candidates_to_csv_text(candidates)
     return Response(
         content=text,
         media_type="text/csv; charset=utf-8",
@@ -213,13 +185,7 @@ def _get_candidates_or_404(db: Session, candidate_ids: list[int]) -> list:
     已在回收站里的候选算"不存在"：列表里看不到它就勾不到它，能拿到 id 只可能来自
     过期页面——导出一份用户以为已经删掉的数据是更糟的结果。
     """
-    candidates = (
-        db.query(CandidateJob)
-        .filter(CandidateJob.id.in_(candidate_ids), trash.live_only(CandidateJob))
-        .all()
-    )
-    found_ids = {candidate.id for candidate in candidates}
-    missing = [candidate_id for candidate_id in candidate_ids if candidate_id not in found_ids]
+    candidates, missing = candidates_by_ids(db, candidate_ids)
     if missing:
         shown = "、".join(str(candidate_id) for candidate_id in missing)
         raise HTTPException(status_code=404, detail=f"以下备选岗位不存在：{shown}")

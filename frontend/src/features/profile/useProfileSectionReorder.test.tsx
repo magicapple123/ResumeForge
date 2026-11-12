@@ -13,7 +13,7 @@
 
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_SECTION_ORDER } from "../../components/profile/ProfileSectionConfig";
+import { DEFAULT_SECTION_ORDER } from "./ProfileSectionConfig";
 import { useProfileSectionReorder } from "./useProfileSectionReorder";
 import {
   currentOrder,

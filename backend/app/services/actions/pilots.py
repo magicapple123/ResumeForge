@@ -200,9 +200,9 @@ def _preview_update_skill(db: Session, payload: UpdateSkillInput) -> WritePrevie
 
 
 def _run_update_skill(db: Session, payload: UpdateSkillInput) -> ActionOutcome:
-    from ...api.skills import _to_detail
     from ..assistant.assistant_skills import PendingSkillError
     from ..assistant.assistant_skills import update_skill as update_skill_record
+    from ..assistant.skill_views import skill_detail
     from ..assistant_tools.data_tools.skills import _skill_files_from_arguments
 
     arguments = payload.model_dump(exclude_unset=True, mode="json")
@@ -251,7 +251,7 @@ def _run_update_skill(db: Session, payload: UpdateSkillInput) -> ActionOutcome:
         text=json.dumps({"id": skill.id, "updated": sorted(updated)}, ensure_ascii=False),
         link="/skills",
         changed=True,
-        data=_to_detail(skill),
+        data=skill_detail(skill),
     )
 
 
@@ -267,22 +267,22 @@ class GetJobInput(BaseModel):
 
 
 def _run_get_job(db: Session, payload: GetJobInput) -> ActionOutcome:
-    from ...api.jobs import _to_out
     from ...models.job import Job
     from .. import trash
     from ..assistant_tools.job_tools import _tool_get_job
+    from ..job.job_views import job_out
 
     job = trash.get_live(db, Job, payload.job_id)
     if job is None:
         raise ActionError("not_found", f"岗位 {payload.job_id} 不存在")
-    # 工具侧文案沿用既有 handler（它把 JD 正文与元信息都组装好了），路由侧用既有 _to_out：
+    # 工具侧文案沿用既有 handler（它把 JD 正文与元信息都组装好了），路由侧用服务层视图：
     # 两个视图各自保持原样，契约层只负责"同一份入参 + 同一条错误映射"。
     legacy = _tool_get_job(db, {"job_id": payload.job_id})
     return ActionOutcome(
         summary=legacy.summary,
         text=legacy.text,
         link=legacy.link,
-        data=_to_out(job),
+        data=job_out(job),
     )
 
 

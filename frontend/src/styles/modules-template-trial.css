@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /*
- * 模板「试用与对比」视图（`components/resume/template-trial/*`）的样式。
+ * 模板「试用与对比」视图（`features/resume/template-trial/*`）的样式。
  *
  * 为什么要单独一片：`modules-templates.css` 已经 465 行（单文件 500 行零豁免），
  * 这批规则加进去会超预算。拆法与 `modules-settings-fonts.css` 相同：纯新增分片，

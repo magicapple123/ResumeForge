@@ -9,17 +9,14 @@ import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import String, cast, func, or_
 from sqlalchemy.orm import Session
 
 from ...database import get_db
-from ...models.resume import ResumeRecord, saved_only
-from ...schemas.common import Page
+from ...models.resume import ResumeRecord
 from ...schemas.resume import (
     ManualResumeRequest,
     ResumeBatchDeleteResult,
     ResumeBatchRequest,
-    ResumeBrief,
     ResumeContentSave,
     ResumeFavoriteUpdate,
     ResumeNoteUpdate,
@@ -42,6 +39,12 @@ from ...services.resume.manual_creation import (
 )
 from ...services.resume.profile_usage import profile_usage_for_resume
 from ...services.resume.resume_labels import normalize_language
+from ...services.resume.resume_read_service import (
+    list_resume_ids as list_resume_ids_query,
+)
+from ...services.resume.resume_read_service import (
+    list_resumes_page as list_resumes_page_query,
+)
 from ._shared import _get_live_resume, _mark_saved, _to_resume_out, _validated_content
 
 logger = logging.getLogger(__name__)
@@ -91,105 +94,6 @@ def batch_delete_resumes(payload: ResumeBatchRequest, db: Session = Depends(get_
     return ResumeBatchDeleteResult(deleted=len(records))
 
 
-def _filtered_query(
-    db: Session,
-    *,
-    keyword: str = "",
-    job_id: int | None = None,
-    favorite: bool | None = None,
-    has_job: bool | None = None,
-    include_general: bool = False,
-):
-    """list_resumes 与 list_resume_ids **共用的过滤口径**。
-
-    四个筛选参数（keyword/job_id/favorite/has_job）与旧 list_resumes 内联逻辑逐行
-    同源：两处各写一遍迟早会改漏一边（``jobs`` 域的 ``_filtered_query`` 同一模式）。
-    keyword 仍走标题/岗位/公司/正文 LIKE——content 是 JSON 文本（cast 后整段扫描），
-    不适合 FTS 分词，与全局搜索的简历分支口径一致，保持不动。
-
-    **一律排除草稿**（0051）：制作台草稿是"用户点进去看过、还没保存"的落脚点，
-    出现在简历中心里等于凭空多出一份空白简历。
-
-    ``include_general`` 只与 ``job_id`` 组合生效（面试关联简历：本岗位的 + 通用的）：
-    真实的投递/面试既可能用专为这个岗位写的简历，也可能用一份通用简历，所以下拉里
-    两类都要给。不传或 ``job_id`` 为空时口径与以前完全一致。
-    """
-    query = db.query(ResumeRecord).filter(trash.live_only(ResumeRecord), saved_only())
-    if job_id is not None:
-        if include_general:
-            # 「本岗位的简历」+「通用简历（没关联任何岗位）」，两者都在面试可选的范围内。
-            query = query.filter(
-                or_(ResumeRecord.job_id == job_id, ResumeRecord.job_id.is_(None))
-            )
-        else:
-            query = query.filter(ResumeRecord.job_id == job_id)
-    if has_job is not None:
-        query = query.filter(
-            ResumeRecord.job_id.is_not(None) if has_job else ResumeRecord.job_id.is_(None)
-        )
-    if favorite is not None:
-        query = query.filter(ResumeRecord.favorite == favorite)
-    if keyword:
-        like = f"%{keyword}%"
-        query = query.filter(
-            or_(
-                ResumeRecord.title.like(like),
-                ResumeRecord.job_title.like(like),
-                ResumeRecord.company.like(like),
-                cast(ResumeRecord.content, String).like(like),
-            )
-        )
-    return query
-
-
-# 列表排序的取值 → ORDER BY。默认「最近修改」：用户更常找"我刚改过的那份"，
-# 而不是"最久以前生成的那份"。``coalesce`` 兜住 0047 之前的旧行（updated_at 为空时
-# 用创建时间），迁移失败或历史库残留也不会把它们排到最后。
-#
-# T2：每个键都配一个反向键（列头三态排序需要"再点一次反向"）。两条硬约束：
-# 1. 反向键的主排序与二级排序**方向全反**，但 collation 不变（拼音仍是拼音）；
-# 2. 每个键都以 ``id`` 收尾，且方向与主排序一致——同一时刻创建的记录跨页时
-#    才不会重复/漏行（分页稳定性）。company_*/job_title_* 原本没有末位 tie-breaker，
-#    这次一并补上（纯增强，主排序口径未变）。
-RESUME_SORT_ORDERS = {
-    "updated_desc": (
-        func.coalesce(ResumeRecord.updated_at, ResumeRecord.created_at).desc(),
-        ResumeRecord.id.desc(),
-    ),
-    "updated_asc": (
-        func.coalesce(ResumeRecord.updated_at, ResumeRecord.created_at).asc(),
-        ResumeRecord.id.asc(),
-    ),
-    "created_desc": (ResumeRecord.created_at.desc(), ResumeRecord.id.desc()),
-    "created_asc": (ResumeRecord.created_at.asc(), ResumeRecord.id.asc()),
-    # 按标题排序时先按公司/岗位归类更有意义。中文按**拼音**、英文按字母、数字按大小
-    # （`rf_pinyin`，见 services/text_sort.py）：SQLite 默认的 BINARY collation 会把
-    # 所有 ASCII 标题排在中文之前，于是「UI 设计师」永远第一（2026-10 用户反馈）。
-    "title_asc": (ResumeRecord.title.collate("rf_pinyin").asc(), ResumeRecord.id.asc()),
-    "title_desc": (ResumeRecord.title.collate("rf_pinyin").desc(), ResumeRecord.id.desc()),
-    "company_asc": (
-        ResumeRecord.company.collate("rf_pinyin").asc(),
-        ResumeRecord.title.collate("rf_pinyin").asc(),
-        ResumeRecord.id.asc(),
-    ),
-    "company_desc": (
-        ResumeRecord.company.collate("rf_pinyin").desc(),
-        ResumeRecord.title.collate("rf_pinyin").desc(),
-        ResumeRecord.id.desc(),
-    ),
-    "job_title_asc": (
-        ResumeRecord.job_title.collate("rf_pinyin").asc(),
-        ResumeRecord.title.collate("rf_pinyin").asc(),
-        ResumeRecord.id.asc(),
-    ),
-    "job_title_desc": (
-        ResumeRecord.job_title.collate("rf_pinyin").desc(),
-        ResumeRecord.title.collate("rf_pinyin").desc(),
-        ResumeRecord.id.desc(),
-    ),
-}
-
-
 add_action_route(router, all_actions()["list_resumes"], route_path="")
 def list_resumes(
     db: Session = Depends(get_db),
@@ -224,22 +128,17 @@ def list_resumes(
     ``job_id`` + ``include_general=true``：面试关联简历用——返回**本岗位的 + 通用的**
     简历，其它岗位的简历不出现。
     """
-    query = _filtered_query(
+    return list_resumes_page_query(
         db,
         keyword=keyword,
+        page=page,
+        page_size=page_size,
         job_id=job_id,
         favorite=favorite,
         has_job=has_job,
         include_general=include_general,
+        sort=sort,
     )
-    total = query.count()
-    records = (
-        query.order_by(*RESUME_SORT_ORDERS[sort])
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-    return Page(items=[ResumeBrief.model_validate(r) for r in records], total=total)
 
 
 @router.get("/ids", response_model=list[int])
@@ -256,12 +155,12 @@ def list_resume_ids(
 ):
     """当前筛选下**全部**简历的 id（不分页）：批量选择「全选全部简历」用。
 
-    与 ``GET /api/jobs/ids`` 同一模式：筛选参数与列表端点完全同源（共用
-    :func:`_filtered_query`），id 列表本身很轻，把筛选逻辑交给前端分页拉取反而
+    与 ``GET /api/jobs/ids`` 同一模式：筛选参数与列表端点完全同源（共用服务层的
+    过滤口径），id 列表本身很轻，把筛选逻辑交给前端分页拉取反而
     要多轮请求；批量操作 500 的上限由前端在拿到列表后裁决——这里如实返回全量。
     **声明在 ``/{resume_id}`` 之前**：字面量段必须排在参数段前面。
     """
-    query = _filtered_query(
+    return list_resume_ids_query(
         db,
         keyword=keyword,
         job_id=job_id,
@@ -269,12 +168,6 @@ def list_resume_ids(
         has_job=has_job,
         include_general=include_general,
     )
-    return [
-        resume_id
-        for (resume_id,) in query.order_by(ResumeRecord.created_at.desc())
-        .with_entities(ResumeRecord.id)
-        .all()
-    ]
 
 
 add_action_route(router, all_actions()["get_resume"], route_path="/{resume_id}")

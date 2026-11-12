@@ -107,7 +107,7 @@ export interface LLMPreset {
  * Groq/Perplexity 换模型。
  *
  * **改这里的模型名时，记得同步两处**：
- * 1. 设置页的「各服务商协议支持」矩阵（components/settings/LLMProtocolSupportMatrix.tsx）；
+ * 1. 设置页的「各服务商协议支持」矩阵（features/settings/LLMProtocolSupportMatrix.tsx）；
  * 2. 后端 services/llm/thinking.py 的能力表（它按主机 + 模型名判断思考写法）。
  */
 export const LLM_PRESETS: LLMPreset[] = [

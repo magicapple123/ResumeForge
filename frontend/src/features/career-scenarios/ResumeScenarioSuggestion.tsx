@@ -9,7 +9,7 @@
 import { Alert, Button, Space } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import GenerateResumeModal from "../../components/GenerateResumeModal";
+import GenerateResumeModal from "../resume/generate/GenerateResumeModal";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import {

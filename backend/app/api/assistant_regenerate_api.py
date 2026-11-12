@@ -26,6 +26,12 @@ from ..database import get_db
 from ..models.assistant import ChatMessage
 from ..models.profile import utcnow
 from ..schemas.assistant import AssistantMessageCreate, ConversationSurface
+from ..services.assistant.assistant_conversations import (
+    SUPERSEDED_STATUS,
+    conversation_or_404,
+    next_message_after,
+    previous_user_message,
+)
 from ..services.assistant.assistant_persistence import history_snapshot
 from ..services.assistant.assistant_system_prompt import _system_prompt
 from ..services.llm import create_provider
@@ -37,7 +43,6 @@ from ..services.llm.usage_tasks import (
 from ..services.settings_service import get_llm_config, resolve_assistant_relaxed_mode
 from ..services.ui_locale import get_ui_locale
 from .assistant_context import load_local_context
-from .assistant_conversations import SUPERSEDED_STATUS, conversation_or_404
 from .assistant_stream import stream_message_events
 
 logger = logging.getLogger(__name__)
@@ -66,28 +71,9 @@ def _regenerable_pair(
         raise HTTPException(status_code=409, detail="这条回答已经被重新生成过")
     # 必须是时间线上最后一条对话消息：后面还有用户提问时重跑旧回答，会把新问题
     # 挤出上下文；proposal_result 是写入终态回写，不参与对话先后，不算"后面"。
-    later = (
-        db.query(ChatMessage)
-        .filter(
-            ChatMessage.conversation_id == conversation_id,
-            ChatMessage.id > message_id,
-            ChatMessage.status != SUPERSEDED_STATUS,
-            ChatMessage.kind != "proposal_result",
-        )
-        .first()
-    )
-    if later is not None:
+    if next_message_after(db, conversation_id, message_id) is not None:
         raise HTTPException(status_code=409, detail="只能重新生成最后一条回答")
-    user_message = (
-        db.query(ChatMessage)
-        .filter(
-            ChatMessage.conversation_id == conversation_id,
-            ChatMessage.role == "user",
-            ChatMessage.id < message_id,
-        )
-        .order_by(ChatMessage.id.desc())
-        .first()
-    )
+    user_message = previous_user_message(db, conversation_id, message_id)
     if user_message is None:
         raise HTTPException(status_code=409, detail="这条回答前没有对应的问题，无法重新生成")
     return target, user_message

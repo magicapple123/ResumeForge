@@ -17,12 +17,10 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from sqlalchemy import or_
-from sqlalchemy.orm import Session, load_only
+from sqlalchemy.orm import Session
 
 from ...database import get_db
 from ...models.resume import ResumeRecord
-from ...models.resume_delivery import ResumeDeliveryRecord
 from ...schemas.common import Page
 from ...schemas.resume import DeliveryDetail, DeliverySummary
 from ...services import trash
@@ -31,7 +29,9 @@ from ...services.resume.resume_delivery import (
     list_deliveries,
     replay_delivery_export,
 )
-from ...services.search_matching import LIKE_ESCAPE, like_pattern
+from ...services.resume.resume_delivery import (
+    list_delivery_archive as list_delivery_archive_page,
+)
 
 router = APIRouter()
 
@@ -44,33 +44,13 @@ def list_delivery_archive(
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    query = db.query(ResumeDeliveryRecord)
-    if source:
-        query = query.filter(ResumeDeliveryRecord.source == source)
-    if keyword:
-        pattern = like_pattern(keyword)
-        query = query.filter(
-            or_(
-                *(
-                    column.like(pattern, escape=LIKE_ESCAPE)
-                    for column in (
-                        ResumeDeliveryRecord.resume_title,
-                        ResumeDeliveryRecord.company,
-                        ResumeDeliveryRecord.job_title,
-                    )
-                )
-            )
-        )
-    total = query.count()
-    fields = [getattr(ResumeDeliveryRecord, name) for name in DeliverySummary.model_fields]
-    rows = (
-        query.options(load_only(*fields))
-        .order_by(ResumeDeliveryRecord.created_at.desc(), ResumeDeliveryRecord.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+    return list_delivery_archive_page(
+        db,
+        keyword=keyword,
+        source=source,
+        page=page,
+        page_size=page_size,
     )
-    return Page(items=[DeliverySummary.model_validate(row) for row in rows], total=total)
 
 @router.get("/{resume_id}/deliveries", response_model=list[DeliverySummary])
 def list_resume_deliveries(resume_id: int, db: Session = Depends(get_db)):

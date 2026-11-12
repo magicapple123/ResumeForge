@@ -11,7 +11,7 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import type { ReminderUpcoming } from "../../types";
 import { formatDateTime } from "../../utils/format";
-import CalendarView from "../../components/tracker/CalendarView";
+import CalendarView from "../../features/tracker/CalendarView";
 import { t } from "../../i18n";
 import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";

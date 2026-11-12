@@ -170,8 +170,8 @@ class UpdateKnowledgeInput(CreateKnowledgeInput):
 
 
 def _run_list_knowledge(db: Session, payload: ListKnowledgeInput) -> ActionOutcome:
-    from ....api.knowledge import _knowledge_summary
     from ...assistant_tools.report_tools import _tool_list_knowledge
+    from ...knowledge_service import knowledge_entry_summary as _knowledge_summary
     from ...knowledge_service import list_knowledge
 
     rows = list_knowledge(db, q=payload.q, category=payload.category)

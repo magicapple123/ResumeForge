@@ -34,9 +34,11 @@ vi.mock("../api/interview", async (importOriginal) => ({
   ...apiMocks,
 }));
 vi.mock("../api/stream", () => streamMocks);
-vi.mock("../components/QuestionBankPanel", () => ({ default: () => <div>bank</div> }));
-vi.mock("../components/InterviewExperiencePanel", () => ({ default: () => <div>exp</div> }));
-vi.mock("../components/InterviewReviewPanel", () => ({ default: () => <div>review</div> }));
+vi.mock("../features/questionbank/QuestionBankPanel", () => ({ default: () => <div>bank</div> }));
+vi.mock("../features/interview/InterviewExperiencePanel", () => ({
+  default: () => <div>exp</div>,
+}));
+vi.mock("../features/interview/InterviewReviewPanel", () => ({ default: () => <div>review</div> }));
 vi.mock("./interview/ReportCard", () => ({ ReportCard: () => <div>report</div> }));
 
 const setupStubs = vi.hoisted(() => {

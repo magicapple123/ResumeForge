@@ -202,6 +202,19 @@ def _ensure_source(
         raise PreferenceSourceError(f"提案 {record.tool_name} 不是求职偏好写入")
 
 
+def find_proposal(db: Session, proposal_id: str) -> AssistantWriteProposal | None:
+    """按提案 id 取一条写入提案（查不到返回 None）。
+
+    为什么放服务层：提案的读取口径已收在本模块（见 find_executing_proposal），
+    路由只该做状态判定与错误映射，不该自己拼 ORM 查询。
+    """
+    return (
+        db.query(AssistantWriteProposal)
+        .filter(AssistantWriteProposal.proposal_id == proposal_id)
+        .one_or_none()
+    )
+
+
 def find_executing_proposal(db: Session, tool_name: str, target_fingerprint: str) -> str:
     """找出**正在执行**的那条已批准提案（approve 端点执行 handler 时的来源证据）。
 
@@ -403,6 +416,7 @@ __all__ = [
     "current_dataset_key",
     "delete_preference",
     "find_executing_proposal",
+    "find_proposal",
     "has_previous",
     "list_active_preferences",
     "list_preferences",

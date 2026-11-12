@@ -10,7 +10,7 @@ const parseProfileText = vi.hoisted(() => vi.fn());
 vi.mock("../../api/profile", () => ({ parseProfileText }));
 
 import { makeField, makeSection, makeWorkspace } from "../../test/profileWorkspaceFixture";
-import type { ProfileFormValues } from "../profile-library/types";
+import type { ProfileFormValues } from "./library/types";
 import { useProfileRecognition } from "./useProfileRecognition";
 import type { ProfileDraftSection } from "./useProfileRecognition";
 

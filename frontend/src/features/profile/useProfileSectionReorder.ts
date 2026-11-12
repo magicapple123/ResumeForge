@@ -12,7 +12,7 @@
  */
 import { useCallback, useState } from "react";
 import type { RefObject } from "react";
-import type { ProfileSectionKey } from "../../components/profile/ProfileSectionConfig";
+import type { ProfileSectionKey } from "./ProfileSectionConfig";
 import { useProfileSectionDragSession } from "./profileSectionDragSession";
 import { stepSectionOrder } from "./profileSectionMove";
 import { createSectionOrderStore } from "./sectionOrderStore";

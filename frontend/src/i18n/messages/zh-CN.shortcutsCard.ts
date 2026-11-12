@@ -2,7 +2,7 @@
 /**
  * 首页快捷入口卡与它的「自定义快捷入口」弹窗：卡片标题、编辑入口、勾选说明，以及弹窗底部按钮。
  *
- * 卡片里的入口名（岗位广场、简历中心…）来自 `components/navigation/navigationConfig.ts`
+ * 卡片里的入口名（岗位广场、简历中心…）来自 `features/shell/navigationConfig.ts`
  * 的 `MENU_ITEMS`，属于导航命名空间，这里不重复一份。
  *
  * 「保存」按钮复用 `common.action.save`，不再新建一条同义 key。

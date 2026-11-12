@@ -39,7 +39,7 @@ vi.mock("../api/resumes", async (importOriginal) => ({
   fetchResumeTemplates: vi.fn().mockResolvedValue(TEMPLATE_CATALOG),
 }));
 
-vi.mock("../components/resume/ResumeDetailPreview", () => ({
+vi.mock("../features/resume/preview/ResumeDetailPreview", () => ({
   default: () => <div data-testid="resume-preview-stub" />,
 }));
 

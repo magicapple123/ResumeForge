@@ -14,8 +14,8 @@
  */
 import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { ProfileWorkspaceKey } from "../../components/profile/ProfileWorkspaceTabs";
-import type { WorkspaceOut } from "../profile-library/types";
+import type { ProfileWorkspaceKey } from "./fields/ProfileWorkspaceTabs";
+import type { WorkspaceOut } from "./library/types";
 
 const SECTION_ATTR = "data-profile-section-key";
 const ENTRY_ATTR = "data-profile-entry-key";

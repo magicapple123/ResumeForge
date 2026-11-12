@@ -33,7 +33,7 @@ from ..services.assistant.assistant_compaction_store import (
     run_manual_compaction,
     save_compaction_settings,
 )
-from .assistant_conversations import conversation_or_404
+from ..services.assistant.assistant_conversations import conversation_or_404
 
 
 def register_compaction_routes(router: APIRouter) -> None:

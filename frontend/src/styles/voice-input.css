@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* 语音听写（T12）的麦克风按钮与提示行：全站共用控件。
    面试页的布局（录音中禁提交、追问 Compact 里的位置）放在 interview-voice.css。
-   voice-input.css 由 components/voice/VoiceButton.tsx 直接 import，不进 index.css
+   voice-input.css 由 features/interview-voice/VoiceButton.tsx 直接 import，不进 index.css
    聚合（那两处聚合点是共享文件，语音线别去动）。 */
 
 /* R06-C：提示行**脱离文档流**。

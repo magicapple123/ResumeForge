@@ -43,7 +43,7 @@ import {
   takeWebFormSnapshot,
   updateWebFormExtraProfile,
 } from "../api/webform";
-import BrowserSettingsModal from "../components/apply/BrowserSettingsModal";
+import BrowserSettingsModal from "../features/apply/BrowserSettingsModal";
 import { useWebFormSession } from "../features/webform/useWebFormSession";
 import type { WebFormSessionState } from "../features/webform/webFormSessionStorage";
 import { readActiveDatasetId } from "../utils/datasetScope";
@@ -55,12 +55,12 @@ import {
 } from "../features/webform/stagedAiPreview";
 import WebFormLearningDialog, {
   type LearningSelection,
-} from "../components/webform/WebFormLearningDialog";
+} from "../features/webform/WebFormLearningDialog";
 import WebFormMemoryDialog, {
   type WebFormMemorySelection,
-} from "../components/webform/WebFormMemoryDialog";
-import WebFormPendingPanel from "../components/webform/WebFormPendingPanel";
-import WebFormRecordsPanel from "../components/webform/WebFormRecordsPanel";
+} from "../features/webform/WebFormMemoryDialog";
+import WebFormPendingPanel from "../features/webform/WebFormPendingPanel";
+import WebFormRecordsPanel from "../features/webform/WebFormRecordsPanel";
 import { useBrowserStatus } from "../hooks/useBrowserStatus";
 import { AiAssistCard } from "./webform/AiAssistCard";
 import { BrowserControlCard } from "./webform/BrowserControlCard";

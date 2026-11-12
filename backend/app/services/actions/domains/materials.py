@@ -130,7 +130,7 @@ def _run_list_materials(db: Session, payload: ListMaterialsInput) -> ActionOutco
 
 
 def _run_get_material(db: Session, payload: GetMaterialInput) -> ActionOutcome:
-    from ....api.materials import enrich_material_file_ids
+    from ...material_files import enrich_material_file_ids
     from ...materials import material_detail_text, material_or_none
 
     material = material_or_none(db, payload.material_id)
@@ -172,7 +172,7 @@ def _create_payload(payload: CreateMaterialInput) -> MaterialCreate:
 
 def _run_create_material(db: Session, payload: CreateMaterialInput) -> ActionOutcome:
     """路由语义：整份 MaterialCreate + 附件落盘副本。"""
-    from ....api.materials import _save_file_copies
+    from ...material_files import save_file_copies as _save_file_copies
     from ...materials import create_material as create_material_record
 
     material = create_material_record(db, _create_payload(payload))
@@ -209,7 +209,7 @@ def _merged_update_payload(material, payload: UpdateMaterialInput):
 
 def _run_update_material(db: Session, payload: UpdateMaterialInput) -> ActionOutcome:
     """路由语义：PUT 整份替换 + 每次保存都落附件副本。工具侧走 run_tool（旧合并语义）。"""
-    from ....api.materials import _save_file_copies
+    from ...material_files import save_file_copies as _save_file_copies
     from ...materials import material_or_none
     from ...materials import update_material as update_material_record
 

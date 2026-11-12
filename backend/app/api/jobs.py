@@ -4,7 +4,6 @@
 import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
@@ -12,8 +11,6 @@ from starlette.responses import Response
 from ..database import get_db
 from ..models.job import JOB_STATUSES, Job
 from ..schemas.job import (
-    RECOGNITION_SOURCE_AUTO,
-    RECOGNITION_SOURCE_OFFICIAL,
     JobBatchDeleteResult,
     JobBatchRequest,
     JobBatchStatusRequest,
@@ -23,9 +20,7 @@ from ..schemas.job import (
     JobImportRequest,
     JobImportResult,
     JobImportRow,
-    JobListOut,
     JobMultiTextParseResult,
-    JobOut,
     JobTextParseRequest,
     JobTextParseResult,
 )
@@ -48,6 +43,8 @@ from ..services.job.job_csv import (
     row_to_payload,
 )
 from ..services.job.job_multi_parser import extract_multiple_jobs, local_multi_drafts
+from ..services.job.job_queries import filtered_query as _filtered_query
+from ..services.job.job_queries import jobs_by_ids
 from ..services.job.job_service import create_job_record, find_job_by_identity
 from ..services.job.job_sorting import JobSort, JobSortOrder, job_order_by
 from ..services.job_text_parser import parse_job_text
@@ -62,42 +59,13 @@ from ..services.text_extraction import (
     mark_local_fallback,
     no_model_warning,
 )
-from ..services.user_files import save_from_data_url
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 logger = logging.getLogger(__name__)
 
 
-def _save_note_image_copies(db: Session, job_id: int, note_images: list[str]) -> None:
-    """best-effort：把岗位备注图 data URL 落一份磁盘副本（失败只记日志）。"""
-    for index, data_url in enumerate(note_images or []):
-        if not data_url:
-            continue
-        try:
-            save_from_data_url(
-                db,
-                str(data_url),
-                source_type="job_note",
-                source_ref=f"job:{job_id}",
-                fallback_name=f"job-{job_id}-note-{index + 1}",
-            )
-        except Exception:  # noqa: BLE001 - 副本是锦上添花，绝不能挡住岗位保存
-            logger.warning("岗位备注图磁盘副本保存失败 job:%s", job_id, exc_info=True)
-
-
-def _to_out(job: Job) -> JobOut:
-    return JobOut.model_validate(job)
-
-
-def _to_list_out(job: Job) -> JobListOut:
-    # 列表响应不带 JD 全文（体积审计 PR-17）；详情仍走 _to_out，JD 全文可达。
-    return JobListOut.model_validate(job)
-
-
 def _get_jobs_or_404(db: Session, job_ids: list[int]) -> list[Job]:
-    jobs = db.query(Job).filter(trash.live_only(Job), Job.id.in_(job_ids)).all()
-    found_ids = {job.id for job in jobs}
-    missing_ids = [job_id for job_id in job_ids if job_id not in found_ids]
+    jobs, missing_ids = jobs_by_ids(db, job_ids)
     if missing_ids:
         missing = "、".join(str(job_id) for job_id in missing_ids)
         raise HTTPException(status_code=404, detail=f"以下岗位不存在或已被删除：{missing}")
@@ -110,52 +78,6 @@ def _commit_batch(db: Session) -> None:
     except Exception:
         db.rollback()
         raise
-
-
-def _filtered_query(
-    db: Session,
-    keyword: str,
-    job_type: str,
-    status: str,
-    favorite: bool | None,
-    source_kind: str,
-):
-    """列表页的共用筛选器：``/jobs``（分页列表）与 ``/jobs/ids``（跨页全选）同吃这一份，
-    保证"看到的筛选结果"和"一键全选拿到的 id"永远是对同一批岗位的两种视图。"""
-    query = db.query(Job).filter(trash.live_only(Job))
-    if keyword:
-        like = f"%{keyword}%"
-        query = query.filter(
-            or_(
-                Job.title.like(like),
-                Job.company.like(like),
-                Job.location.like(like),
-                Job.description.like(like),
-                Job.additional_info.like(like),
-                Job.note.like(like),
-            )
-        )
-    if job_type:
-        query = query.filter(Job.job_type == job_type)
-    if status:
-        query = query.filter(Job.status == status)
-    if favorite is not None:
-        query = query.filter(Job.favorite == favorite)
-    if source_kind == "collected":
-        query = query.filter(
-            or_(
-                Job.recognition_source.in_(RECOGNITION_SOURCE_AUTO),
-                Job.source == RECOGNITION_SOURCE_OFFICIAL,
-            )
-        )
-    elif source_kind == "manual":
-        query = query.filter(
-            or_(
-                Job.recognition_source.is_(None),
-                ~Job.recognition_source.in_(RECOGNITION_SOURCE_AUTO),
-            )
-        ).filter(Job.source != RECOGNITION_SOURCE_OFFICIAL)
-    return query
 
 
 add_action_route(router, job_actions()["list_jobs"])

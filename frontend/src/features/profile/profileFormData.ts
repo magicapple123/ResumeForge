@@ -12,14 +12,14 @@
  *   判空按空串处理——直接 trim 会在保存时抛异常中断整条链路；
  * - collectEntryChanges：已有条目只提交变化的 field_id（带 expected_revision），新建条目整条提交。
  */
-import { makeTempEntryKey } from "../profile-library/tempEntryKey";
+import { makeTempEntryKey } from "./library/tempEntryKey";
 import type {
   BulkEntryItem,
   ProfileEntryDraft,
   ProfileFormValues,
   SectionOut,
   WorkspaceOut,
-} from "../profile-library/types";
+} from "./library/types";
 
 /** 是否为尚未保存的新条目（new: 前缀的临时键）。 */
 export function isTempEntryKey(entryKey: unknown): boolean {

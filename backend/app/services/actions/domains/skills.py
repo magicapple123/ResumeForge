@@ -60,15 +60,15 @@ class CreateSkillInput(AssistantSkillCreate):
 
 
 def _run_list_skills(db: Session, payload: ListSkillsInput) -> ActionOutcome:
-    from ....api.skills import _to_out
     from ...assistant.assistant_skills import list_skills
+    from ...assistant.skill_views import skill_out
 
-    return ActionOutcome(data=[_to_out(skill) for skill in list_skills(db)])
+    return ActionOutcome(data=[skill_out(skill) for skill in list_skills(db)])
 
 
 def _run_get_skill(db: Session, payload: GetSkillInput) -> ActionOutcome:
-    from ....api.skills import _to_detail
     from ....models.assistant import AssistantSkill
+    from ...assistant.skill_views import skill_detail
 
     # 与旧路由 _skill_or_404 同一读取口径：db.get 取不到即 404。
     skill = db.get(AssistantSkill, payload.skill_id)
@@ -76,13 +76,13 @@ def _run_get_skill(db: Session, payload: GetSkillInput) -> ActionOutcome:
         raise ActionError("not_found", "技能不存在或已被删除")
     return ActionOutcome(
         summary=f"查看了技能「{skill.name}」",
-        data=_to_detail(skill),
+        data=skill_detail(skill),
     )
 
 
 def _run_create_skill(db: Session, payload: CreateSkillInput) -> ActionOutcome:
-    from ....api.skills import _to_detail
     from ...assistant.assistant_skills import create_skill as create_skill_record
+    from ...assistant.skill_views import skill_detail
 
     try:
         # 与旧路由同一处校验：提示词正文必填（旧路由把它转成 HTTPException(400)）。
@@ -102,7 +102,7 @@ def _run_create_skill(db: Session, payload: CreateSkillInput) -> ActionOutcome:
     return ActionOutcome(
         summary=f"创建了助手技能「{skill.name}」",
         changed=True,
-        data=_to_detail(skill),
+        data=skill_detail(skill),
     )
 
 

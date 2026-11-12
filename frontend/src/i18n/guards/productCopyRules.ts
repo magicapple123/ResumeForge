@@ -110,7 +110,7 @@ export function isTranslationCall(expression: ts.Expression): boolean {
 
 /**
  * 后端排版角色的**枚举值**（与 `backend/app/services/resume/resume_style_schema.ROLES`
- * 及前端 `features/resume-layout/styleCatalog.ts` 的 `RESUME_ROLES` 逐字相等的五值全集）。
+ * 及前端 `features/resume/layout/styleCatalog.ts` 的 `RESUME_ROLES` 逐字相等的五值全集）。
  *
  * 为什么排除它们：`textLevels.ts` 的 `FIELD_PATH_SCOPE`（`data-resume-path` 叶子 →
  * 作用范围角色）这类映射表里，`description: "body"` / `summary: "body"` 的右侧值是

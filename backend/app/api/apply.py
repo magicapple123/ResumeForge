@@ -305,10 +305,7 @@ def list_tasks(
     """
     if kind and kind not in (TASK_KIND_APPLY, TASK_KIND_COLLECT):
         raise HTTPException(status_code=422, detail="无效的批次类型")
-    query = db.query(ApplyTask)
-    if kind:
-        query = query.filter(ApplyTask.kind == kind)
-    return query.order_by(ApplyTask.id.desc()).limit(limit).all()
+    return apply_service.list_apply_tasks(db, kind=kind, limit=limit)
 
 
 @router.get("/tasks/current", response_model=ApplyTaskOut | None)

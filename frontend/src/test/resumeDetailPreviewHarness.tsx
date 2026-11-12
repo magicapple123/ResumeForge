@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import type { ResumeDetail, ResumeLayout } from "../types";
-import ResumeDetailPreview from "../components/resume/ResumeDetailPreview";
+import ResumeDetailPreview from "../features/resume/preview/ResumeDetailPreview";
 import { makeResumeDocument } from "./documentHarness";
 
 /**

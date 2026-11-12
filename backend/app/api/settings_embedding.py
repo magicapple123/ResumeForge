@@ -8,7 +8,9 @@
 provider / 模型 / 维度切换时主动清空向量索引并记 ``rag event provider_switched``。
 
 下载/探测/模板解析分别在 ``rag_local_setup`` / ``rag_remote_setup`` /
-``rag_embedding_endpoint``；命名配置写端点拆在 ``settings_embedding_profiles``。
+``rag_embedding_endpoint``；命名配置写端点拆在 ``settings_embedding_profiles``，
+与该模块共享的状态载荷/模板校验/切换日志在 ``services/llm/embedding_status``。
+两个 api 模块的挂载都由 ``application_routers`` 显式决定（消除兄弟 import 环）。
 """
 
 from __future__ import annotations
@@ -28,11 +30,19 @@ from ..services.llm.embedding_settings import (
     configured_hosts,
     endpoint_host,
     mark_host_confirmed,
-    mask_embedding_config,
     read_embedding_config,
     replace_config,
     revoke_host_confirmed,
     write_active_embedding_config,
+)
+from ..services.llm.embedding_status import (
+    log_switch as _log_switch_impl,
+)
+from ..services.llm.embedding_status import (
+    status_payload as _status_payload_impl,
+)
+from ..services.llm.embedding_status import (
+    validate_template as _validate_template_impl,
 )
 from ..services.rag.rag_index import get_rag_index
 
@@ -122,9 +132,8 @@ async def _fetch_remote_models(config: EmbeddingProviderConfig) -> list[str]:
 
 
 def _validate_template(body_template: str, response_path: str) -> None:
-    from ..services.rag.rag_embedding_endpoint import validate_template
-
-    validate_template(body_template=body_template, response_path=response_path)
+    """薄壳：实现已下沉 services/llm/embedding_status；本模块同名符号是用例的打桩点。"""
+    _validate_template_impl(body_template, response_path)
 
 
 def _runtime_available(local: dict[str, Any]) -> bool:
@@ -134,86 +143,24 @@ def _runtime_available(local: dict[str, Any]) -> bool:
         return bool(local.get("state") == "ready")
 
 
-def _compose_state(config: EmbeddingProviderConfig | None, local: dict[str, Any]) -> str:
-    supported = bool(local.get("supported"))
-    local_state = str(local.get("state") or "")
-    if config is None or not config.provider:
-        return "not_configured"
-    if config.provider == "local-onnx":
-        if not supported:
-            return "unsupported"
-        if config.enabled:
-            if local_state == "ready":
-                return "ready"
-            if local_state in {"downloading", "verifying", "extracting"}:
-                return "downloading"
-            if local_state == "failed" or config.last_error:
-                return "failed"
-            return "not_downloaded"
-        return "disabled" if local_state == "ready" else "not_downloaded"
-    if config.provider == "openai-http":
-        if not config.enabled:
-            return "disabled"
-        return "failed" if config.last_error else "ready"
-    return "disabled" if config.enabled else "not_configured"
-
-
-def _remote_payload(config: EmbeddingProviderConfig | None) -> dict[str, Any]:
-    hosts = list(config.confirmed_hosts) if config is not None else configured_hosts()
-    if config is not None and config.provider == "openai-http":
-        return {
-            "configured": True,
-            "enabled": config.enabled,
-            "host": config.host(),
-            "model": config.model,
-            "dim": config.dim,
-            "endpoint_mode": config.endpoint_mode,
-            "batch_size": config.batch_size,
-            "confirmed_hosts": hosts,
-            "pending_host": "",
-            "error": config.last_error,
-        }
-    return {
-        "configured": False,
-        "enabled": False,
-        "host": "",
-        "model": "",
-        "dim": 0,
-        "endpoint_mode": "openai",
-        "batch_size": 25,
-        "confirmed_hosts": hosts,
-        "pending_host": "",
-        "error": "",
-    }
-
-
 def _status_payload() -> dict[str, Any]:
-    """设置页与生成链共用的唯一状态源；首次调用顺带把旧扁平配置迁移成命名配置。"""
-    embedding_profiles_store.migrate_legacy_once()
-    config = read_embedding_config()
-    local = _local_status()
-    # 本地已下载但还没启用过时也要有可激活的本地 profile（ready 态一键切换用）。
-    embedding_profiles_store.ensure_local_profile(local)
-    meta = embedding_profiles.active_meta()
-    provider = config.provider if config is not None else ""
-    return {
-        "state": _compose_state(config, local),
-        "provider": provider,
-        "last_error": config.last_error if config is not None else "",
-        "local": local,
-        "remote": _remote_payload(config),
-        "runtime": {"available": _runtime_available(local), "version": "1.31.1"},
-        "config": mask_embedding_config(config) if config is not None else None,
-        "profiles": embedding_profiles.list_profiles(),
-        "active_profile_id": meta["active_profile_id"],
-        "active_profile_updated_at": meta["active_profile_updated_at"],
-        "local_profile_id": meta["local_profile_id"],
-    }
+    """设置页与生成链共用的唯一状态源（实现在 services/llm/embedding_status）。
+
+    这里保留薄壳并注入本模块的 _local_status / _runtime_available：既有用例
+    monkeypatch 的是本模块这两个符号，绕开它打桩会静默失效。
+    """
+    return _status_payload_impl(
+        local_status=_local_status,
+        runtime_available=_runtime_available,
+    )
 
 
 def _log_switch(provider: str, model: str = "", dim: int = 0) -> None:
-    get_rag_index().clear()
-    logger.info("rag event provider_switched provider=%s model=%s dim=%s", provider, model, dim)
+    """切换副作用（实现在 services/llm/embedding_status）。
+
+    clear_index 在调用期从本模块 get_rag_index 取：该符号是既有用例的打桩点。
+    """
+    _log_switch_impl(provider, model, dim, clear_index=get_rag_index().clear)
 
 
 def _settings_allow_private() -> bool:
@@ -491,9 +438,7 @@ def clear_embedding_provider(request: Request) -> dict[str, Any]:
     return _status_payload()
 
 
-# 命名配置端点单独成模块（守住 500 行预算）；子模块只在函数内 import 本模块。
-from .settings_embedding_profiles import router as _profiles_router  # noqa: E402
-
-router.include_router(_profiles_router)
-
+# 命名配置端点单独成模块（守住 500 行预算）：它的挂载由装配层
+# app/application_routers.py 显式决定，本模块不再 import 它——两个 api 模块之间
+# 只剩子模块对父模块的惰性单向依赖，AST 兄弟环因此消失。
 __all__ = ["router"]

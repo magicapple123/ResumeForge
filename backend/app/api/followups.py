@@ -18,7 +18,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -30,13 +29,12 @@ from ..models.agent_task import (
 )
 from ..models.followup import ApplicationFollowUp
 from ..models.profile import utcnow
-from ..models.tracker import ApplicationTrack
 from ..schemas.followup import (
     FollowupDecisionsOut,
     FollowupDecisionsRequest,
     FollowupDecisionStepOut,
 )
-from ..services import agent_task_service
+from ..services import agent_task_service, tracker_query
 from ..services.agent_task_service import AgentTaskNotFound
 
 router = APIRouter(prefix="/api/followups", tags=["followups"])
@@ -81,11 +79,7 @@ def decide_followups(payload: FollowupDecisionsRequest, db: Session = Depends(ge
 
     # 外键要求进度记录存在；已软删的仍允许（历史决策与回收站恢复后语义一致）。
     decided_track_ids = [item.track_id for item in payload.decisions]
-    existing_ids = set(
-        db.scalars(
-            select(ApplicationTrack.id).where(ApplicationTrack.id.in_(decided_track_ids))
-        ).all()
-    )
+    existing_ids = tracker_query.existing_track_ids(db, decided_track_ids)
     missing = [track_id for track_id in decided_track_ids if track_id not in existing_ids]
     if missing:
         raise HTTPException(

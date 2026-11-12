@@ -23,8 +23,8 @@ def _read(relative: str) -> str:
 
 
 def test_frontend_switch_only_calls_activate_endpoint() -> None:
-    card = _read("frontend/src/components/settings/EmbeddingProviderCard.tsx")
-    ready = _read("frontend/src/components/settings/EmbeddingReadyPanel.tsx")
+    card = _read("frontend/src/features/settings/EmbeddingProviderCard.tsx")
+    ready = _read("frontend/src/features/settings/EmbeddingReadyPanel.tsx")
     assert "activateEmbeddingProfile" in card
     # 常规切换不能再调用「启用远程」这条整段写入路径。
     assert "enableEmbeddingRemote" not in card

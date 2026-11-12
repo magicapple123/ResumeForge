@@ -29,10 +29,10 @@ const EXEMPTIONS: Record<string, Exemption> = {
   "utils/serverTime.ts": {
     reason: "工具自身：它正是补 Z 与格式化的唯一实现。",
   },
-  "components/settings/ManualBackupsCard.tsx": {
+  "features/settings/ManualBackupsCard.tsx": {
     reason: "`modified_at` 是备份文件的 epoch 秒（文件系统 mtime），不是服务端 ISO 字符串。",
   },
-  "components/settings/BackupStatusCard.tsx": {
+  "features/settings/BackupStatusCard.tsx": {
     reason: "同上：`modified_at` 是备份文件的 epoch 秒，不是服务端时间戳。",
   },
 };

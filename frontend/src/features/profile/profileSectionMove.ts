@@ -11,8 +11,8 @@
  *   执行，此时新 order 已落 DOM）。
  */
 
-import type { ProfileSectionKey } from "../../components/profile/ProfileSectionConfig";
-import { moveWithin } from "../../components/profile/dragReorder";
+import type { ProfileSectionKey } from "./ProfileSectionConfig";
+import { moveWithin } from "./dragReorder";
 import { focusReorderedSection } from "./profileSectionFocus";
 import type { ProfileSectionOrderStore } from "./sectionOrderStore";
 

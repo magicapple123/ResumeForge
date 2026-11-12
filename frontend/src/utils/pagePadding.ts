@@ -5,7 +5,7 @@
  * 与后端 `FORMAT_FIELDS.page_padding` 的 min/max **逐字一致**——两边不一致的表现是
  * "设了 30mm，导出还是默认值"（越界值被后端白名单整条丢弃），最难被发现的一类失败。
  *
- * T5 起入口从导出面板搬到预览的排版栏（`components/resume/PagePaddingControl`），
+ * T5 起入口从导出面板搬到预览的排版栏（`features/resume/layout/PagePaddingControl`），
  * 落点仍是 `format_config.page_padding`：预览、保存、导出读的是同一个键。
  */
 

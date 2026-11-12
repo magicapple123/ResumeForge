@@ -312,7 +312,7 @@ key 命名沿用既有规则：`<领域>.<对象>.<用途>`、全小写 kebab、
 
 ## 2.1 核心冲突实证：不是"一个概念两种叫法"，而是"三层被两两混用"
 
-`frontend/src/components/resume/ResumeTemplateControls.tsx` 同一控件组，横排相邻两个控件：
+`frontend/src/features/resume/layout/ResumeTemplateControls.tsx` 同一控件组，横排相邻两个控件：
 
 | 界面元素 | 位置 | 实际指向 | 用词 |
 |---|---|---|---|
@@ -388,7 +388,7 @@ key 命名沿用既有规则：`<领域>.<对象>.<用途>`、全小写 kebab、
 | 22 | L3 | 「版式写回记录失败」 | `GenerateResumeModal.tsx:106` | 保存排版设置失败 | P2 |
 | 23 | 统称 | 「后端版式引擎」 | `StyleTemplateEditorModal.tsx:207` | 后端排版引擎 | P2 |
 | 24 | 统称 | 「导出前可以在版式里选「简历语言」」 | `userGuideSteps.ts:376` | 在排版设置里选「简历语言」 | P2 |
-| 25 | 统称 | **历史**：「八套样式模板…另有只调版式的格式模板」（该句已作废） | `userGuideSteps.ts:420`（旧快照；现已拆到 `components/user-guide/`，该句不存在） | 2.0 起下线 `technical` / `editorial` / `split` 三套，可选模板为**六套**；无需再改，本条只作记录 | — |
+| 25 | 统称 | **历史**：「八套样式模板…另有只调版式的格式模板」（该句已作废） | `userGuideSteps.ts:420`（旧快照；现已拆到 `features/user-guide`，该句不存在） | 2.0 起下线 `technical` / `editorial` / `split` 三套，可选模板为**六套**；无需再改，本条只作记录 | — |
 | 26 | 统称 | 「版式栏」「版式浮层」（各 3 处） | `docs/user-guide.md` | 排版栏 / 排版浮层 | P2 |
 | 27 | 统称 | 「版式参数即呈现」（章节标题与正文） | `AGENTS.md:238–250` | 排版参数即呈现 | P2（**规则文件，须用户/维护者确认；确认入口见 §7 第 5 行**。执行方不得擅改，也不得跳过不提） |
 | 28 | L4 | 「版面诊断」 | `ResumeLayoutDiagnosisCard.tsx:196` | **保留** | — |
@@ -588,7 +588,7 @@ key 命名沿用既有规则：`<领域>.<对象>.<用途>`、全小写 kebab、
   1. 改之前，用**当前文本片段** grep 一遍，把全部命中列出来，逐条判定是"引用常量"还是"手写副本"；
   2. 改完用**新文本** grep 一次（确认引用都跟上了），再用**旧文本** grep 一次（确认没有漏网副本）；
   3. 找不到该元素真名时，改用**任务语**（"导出后…"），不要硬编一个名字，也不要退回方位词。
-  - 实例：`components/resume-preview/config.ts` 的 `OVERFLOW_NOTE` 已改成「先收紧**排版**或增加页数才能看全」，但 `ExactPreviewPanel.tsx:346` 里有一份手写的**前缀变体**（带动态页数）仍是「先收紧**版式**」——同一个弹窗里两种写法。成因是改的时候以"常量"为单位搜索而不是以"句子"为单位：常量改完，旧文本已经搜不到了，漏掉的副本反而隐形。
+  - 实例：`features/resume/preview/config.ts` 的 `OVERFLOW_NOTE` 已改成「先收紧**排版**或增加页数才能看全」，但 `ExactPreviewPanel.tsx:346` 里有一份手写的**前缀变体**（带动态页数）仍是「先收紧**版式**」——同一个弹窗里两种写法。成因是改的时候以"常量"为单位搜索而不是以"句子"为单位：常量改完，旧文本已经搜不到了，漏掉的副本反而隐形。
 
 ### 4.8 占位符
 - 模板（搜索）：`搜索<字段1>、<字段2>或<字段3>`；（输入）：`<名词短语>` 或 `输入<对象>`。不加句号、不加冒号、不写规则说明（说明进 `extra`）。
@@ -628,10 +628,10 @@ key 命名沿用既有规则：`<领域>.<对象>.<用途>`、全小写 kebab、
 
 | 位置 | 实际文本 | 事实 |
 |---|---|---|
-| `components/settings/HelpDiagnosticsCard.tsx:61` | 按钮 `导出诊断包` | 调 `api/system.ts:53 exportDiagnostics()`，产出 **zip 包**（含脱敏事件、系统信息、近期日志），旁边还有"包内约 N 条脱敏事件"预览 |
+| `features/settings/HelpDiagnosticsCard.tsx:61` | 按钮 `导出诊断包` | 调 `api/system.ts:53 exportDiagnostics()`，产出 **zip 包**（含脱敏事件、系统信息、近期日志），旁边还有"包内约 N 条脱敏事件"预览 |
 | `pages/webform/BrowserControlCard.tsx:140` | 按钮 `导出诊断` | 页内手搓：`getDiagnostics()` + `clientDiagnosticSnapshot()` → 单个 **JSON 快照**，不是包 |
 | `pages/WebFormPage.tsx:410` | 失败提示 `导出诊断信息失败` | 第三个名字，指的还是上面那个 JSON |
-| `components/userGuideSteps.ts:289` | `可点「导出诊断」` | **引号正确**（U+300C/U+300D，已逐字节核对），指的是网申页那颗 → **与按钮一致，这句本身不算错** |
+| `features/user-guide/userGuideSteps.ts:289` | `可点「导出诊断」` | **引号正确**（U+300C/U+300D，已逐字节核对），指的是网申页那颗 → **与按钮一致，这句本身不算错** |
 | `api/errorGuidance.ts:36,92,98` | `请导出诊断包` 反馈 | **这才是真违规**：`errorGuidance` 是全站通用兜底（超时/网络/未知），但在网申页上没有任何叫「导出诊断包」的按钮 → R-2 违规 |
 
 **裁决**：两个 artifact 不同，必须给**两个正名**，而不是强行统一成一个词：
@@ -791,7 +791,7 @@ key 命名沿用既有规则：`<领域>.<对象>.<用途>`、全小写 kebab、
 - 例外：内部名会经异常消息泄到界面时，在边界处映射成中文正名，不改内部名。
 
 ### R5 已被 README / 用户指南 / 官网引用过的文案
-- 判据：`grep` 到 `README.md`、`docs/user-guide.md`、`frontend/src/components/userGuideSteps.ts` 有同一说法。
+- 判据：`grep` 到 `README.md`、`docs/user-guide.md`、`frontend/src/features/user-guide/userGuideSteps.ts` 有同一说法。
 - 处理：**以正名为准，文档跟着界面改**，不迁就存量。理由：文档与界面各叫一个名字，本身是 P1（用户会以为两个功能）。
 - 允许的文档写法：`正名` 或 `正名 + 技术/英文括注`（`版式（format preset）`，便于开发者与搜索）。
 - **禁止**：`正名（旧别名）` 并列写法（`格式模板（版式）` 就是现存违例）。
@@ -855,7 +855,7 @@ key 命名沿用既有规则：`<领域>.<对象>.<用途>`、全小写 kebab、
 | 7 | **推翻**附录原判：`Alert title` 不是错误，`message` 才是废弃项；级别 P1 → **P3** | **成员按 antd 4/5 经验判断，实测 antd 6.6.5 已把 `title` 提为正选、`message` 标 deprecated，故结论反向。** 证据：`node_modules/antd/es/alert/Alert.d.ts:48`（`title?: React.ReactNode`）与 `:49-52`（`@deprecated please use \`title\` instead`）。v1.3 逐元素扫描结果：`<Alert>` 135 个，`title=` 131、`message=` **4**（`ResumeChangeReviewModal:152,176`、`ResumeDetailPreview:240`、`ResumeReviseModal:102`）；同类 `notification.message` 还有 1 处（`TaskCompletionNotifier:36`）。共 **5 处 P3**，不是"41 处 P1" |
 | 8 | 新增 §4.14「文案载体属性」与 §4.15「API 记忆陷阱的一般化」 | #7 暴露的不是一条文案错，而是**规范缺一条"文案写在哪"的约束**：§1.6 管标点大小写、§4.1–4.13 管句式，都不管"属性是否已被废弃"。且这类问题 `tsc`/eslint 均不报（`@deprecated` 仅 JSDoc），必须有独立判据 + 守卫，否则反复踩 |
 | 9 | §2.5 N1 补充代码证据（挂载点与路由） | 原裁决依赖"工作台里确实有两个模块"这一事实，但没给出可复核的出处。v1.3 补：`pages/SkillsPage.tsx:276` 是 `TemplateWorkbench` 的**唯一渲染点**（`grep -rn TemplateWorkbench` 全库仅此一处），位于 `templates` Tab（label「简历模板」，**2.0 起页签 label 改为「版式」**）；该页由 `App.tsx:438` 的 `<Route path="/skills">` 挂载。结论不变：`ResumeTemplateControls.tsx:183` 的「在工作台里自制更多版式」**方向正确**（只需补路径），改名「技能」会把它改错 |
-| 10 | 记录一处**内部命名漂移**（不改，仅留档） | `pages/AssistantPage.tsx:97` 内部函数名 `openSkillWorkbench`、`components/GlobalShortcuts.tsx:26` 注释都直接用"skill/workbench"指 `/skills`。这解释了为什么"工作台=技能"的心智在开发侧很稳，但在用户侧不稳（页面里还有「简历模板」）。属 R4 的"内部命名不强制与界面一致"，**不修**，但它是 N1 结论的重要背景 |
+| 10 | 记录一处**内部命名漂移**（不改，仅留档） | `pages/AssistantPage.tsx:97` 内部函数名 `openSkillWorkbench`、`features/shell/GlobalShortcuts.tsx:26` 注释都直接用"skill/workbench"指 `/skills`。这解释了为什么"工作台=技能"的心智在开发侧很稳，但在用户侧不稳（页面里还有「简历模板」）。属 R4 的"内部命名不强制与界面一致"，**不修**，但它是 N1 结论的重要背景 |
 | 11 | v1.4 新增 §2.1.1「核实后保留、不要改」；§2.5 N1 的 Tooltip 处置改为**保留原文**（补路径降为 P3 可选）；§7 第 5 行改为**给用户的明确确认项**，并与 §2.2 映射表 #27 互相指向；§8 标题行同步 | 三处都是**防误改**。审查时最容易发生的错误不是漏掉问题，而是把已经正确的写法"顺手统一"掉：`ResumeTemplateControls:183` 的「工作台」指路正确、`SkillsPage` 两个 tab 正确、`errorGuidance` 的「导出诊断包」文本正确（缺的是路径不是词）。三者都必须显式写进规范，否则执行方在新会话里只能凭推断 |
 | 12 | **v1.7**：术语表 56 → **64**（新增 #57–#64：大字段 / 小字段 / 自建大字段 / 组 / 当前组 / 默认收起 / 用户隐藏 / 个人资料库）；新增 **§2.7 资料大字段 / 组模型口径**；#51–#54 标为历史，**#52 正名由「资格证照」改为「证书资质」** | F1–F6 把资料页从「补充事实 + 旧分区」改成「13 个大字段 + 组 + 当前组」，并改名 学术成果 / 知识产权 / 证书资质。旧术语若不显式标历史，新文案会继续写「补充事实 / 资格证照 / 论文发表 / 专利」，与 R-70「旧名只出现在历史说明」和 §1.6「禁止正名（旧别名）并列」直接冲突 |
 | 13 | **v1.8（2026-10-26，F9 验收修复）**：§2.7 新增「在资料页显示 / 隐藏」「新建组默认隐藏全部大字段」「新建简历分区跟随当前组」三行；不新增术语表条目（仍是 64 条） | 用户验收提出：大字段要能单独隐藏、新组默认隐藏、新建简历与当前组同步。旧 §2.7 只写了小字段的「默认收起 / 用户隐藏」，没有大字段显示开关与组默认状态的口径，新文案会与「用户隐藏」混用 |
@@ -883,14 +883,14 @@ node_modules/antd/es/alert/Alert.d.ts:49-52
 |---|---|---|
 | `components/resume/ResumeChangeReviewModal.tsx:152` | `message={` | **P3**（仍兼容、能渲染，仅不一致 + 触发 deprecation 警告） |
 | `components/resume/ResumeChangeReviewModal.tsx:176` | `message={` | P3 |
-| `components/resume/ResumeDetailPreview.tsx:240` | `message="…"` | P3 |
-| `components/resume/ResumeReviseModal.tsx:102` | `message={error}` | P3 |
+| `features/resume/preview/ResumeDetailPreview.tsx:240` | `message="…"` | P3 |
+| `features/resume/editor/ResumeReviseModal.tsx:102` | `message={error}` | P3 |
 
 同类问题不止 `Alert`——同一版本 `notification` 也把 `message` 标了 deprecated（`node_modules/antd/es/notification/interface.d.ts:40`）：
 
 | 位置 | 现状 | 级别 |
 |---|---|---|
-| `components/TaskCompletionNotifier.tsx:36` | `notification[type]({ message: payload.message, … })` | **P3** |
+| `features/shell/TaskCompletionNotifier.tsx:36` | `notification[type]({ message: payload.message, … })` | **P3** |
 | `components/RiskScanWatcher.tsx`、`SuggestionScanWatcher.tsx` | 已用 `title:`（正例，可参照） | — |
 
 **判定口径**：这不是"文案不渲染"，而是"文案写在了已废弃的载体上"。**不影响功能、不影响可读性** → 按 §5.1 第 5 问，**P3**（顺手改，不单独排期）。原判 P1 是我判错了。

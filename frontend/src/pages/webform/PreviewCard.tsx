@@ -7,7 +7,7 @@ import { Button, Card, Space } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import EmptyState from "../../components/common/EmptyState";
-import WebFormPreviewTable from "../../components/webform/WebFormPreviewTable";
+import WebFormPreviewTable from "../../features/webform/WebFormPreviewTable";
 import type { WebFormPreview } from "../../types";
 import type { WebFormBusyState } from "./constants";
 

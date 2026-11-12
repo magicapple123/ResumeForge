@@ -122,7 +122,7 @@ backend/app/
 
 入口层只负责装配，不承载业务规则：`app/application.py` 提供 `create_app()`、生命周期、路由注册和统一异常响应，`app/main.py` 保留原有 `app.main:app` 启动路径及历史导出符号。早期 SQLite 兼容列集中在 `database_compat.py`，正式结构仍以 Alembic 为唯一来源。这样可以在测试中独立创建应用，同时避免路由、迁移和兼容逻辑互相耦合。
 
-前端页面按领域组件拆分：资料、设置、岗位和简历编辑器的字段编辑器位于各自 `components/*` 目录，共享类型位于 `types/`，样式按视觉域位于 `styles/`；全局投投悬浮球作为独立的 `features/tou-tou/*` 功能模块挂在 `MainLayout`，浮窗直接复用 `AssistantPage` / `AssistantComposer` / `AssistantMessageList` 与助手流式 hook，只在界面层隐藏附件、技能、岗位 / 简历关联等复杂控件，不复制助手业务逻辑；`types/index.ts` 继续 re-export 旧路径，避免外部组件一次性迁移。助手会话通过 `chat_conversation.surface` 区分 `page` 与 `floating`，两种入口共用工具、权限和系统提示，但历史查询、读写、删除、导出和发送接口都按作用域过滤。
+前端页面按领域组件拆分：资料、设置、岗位和简历编辑器的字段编辑器位于各自 `features/<领域>/` 目录（`components/` 只保留 `common/` 通用交互原语），共享类型位于 `types/`，样式按视觉域位于 `styles/`；全局投投悬浮球作为独立的 `features/tou-tou/*` 功能模块挂在 `MainLayout`，浮窗直接复用 `AssistantPage` / `AssistantComposer` / `AssistantMessageList` 与助手流式 hook，只在界面层隐藏附件、技能、岗位 / 简历关联等复杂控件，不复制助手业务逻辑；`types/index.ts` 继续 re-export 旧路径，避免外部组件一次性迁移。助手会话通过 `chat_conversation.surface` 区分 `page` 与 `floating`，两种入口共用工具、权限和系统提示，但历史查询、读写、删除、导出和发送接口都按作用域过滤。
 
 ## 岗位管理与个人资料
 
@@ -191,7 +191,7 @@ flowchart LR
 以「变体内容指纹 + 场景上下文哈希」双条件写只改变体。改动基准是这条变体的旧内容（不是母版），
 `lock_content` 违规 409 且一个字段都不写；源简历的内容、revision、锁与来源标注全程不变。
 实现见 `services/resume/scenario_variant.py`、`api/resumes/scenario_variant_routes.py`，
-前端 `components/resume/versions/ScenarioVariantSection.tsx`。
+前端 `features/resume/versions/ScenarioVariantSection.tsx`。
 
 **补充事实容器（1.x 历史，2.0 已下线）**：1.x 曾用 `profile_fact`（九类补充资料容器）与 `profile_fact_field_pref`（字段设置：隐藏默认字段、自定义字段定义）承载论文 / 科研 / 专利 / 证照 / 语言 / 培训等资料，并由 `fact_context.py` / `fact_mapping.py` 把它们映射进生成候选、由 `services/webform/facts.py` 以 `CUSTOM_FACT_` 条目并入网申候选。2.0 已把这条链整套删除（模型 / 表 / 路由 / 服务 / 前端模块），能力由「资料板块」承担（见下节）。本节不再描述其当前行为。
 
@@ -926,7 +926,7 @@ flowchart LR
   仍是无条件写并推进一版——于是旧客户端写完后，新客户端下一次条件写必然 409，用户**看见**
   "别处改过"而不是被静默覆盖。冲突响应为 `409 + {"detail","code":"resume_revision_conflict","revision"}`
   （与既有 `dataset_scope_changed` 同一形状，前端 `ApiError.businessCode` 已能读取）。
-- **前端**：`features/resume-document/useDocumentSave.ts` 是唯一保存状态机（单飞、token 丢弃过时
+- **前端**：`features/resume/document/useDocumentSave.ts` 是唯一保存状态机（单飞、token 丢弃过时
   回包、失败保留草稿、`conflict` 态不自动重试）；`ResumeWorkbenchConflict` 提供"用最新的 / 比较 /
   另存副本"三选一——不允许"再点一次保存硬覆盖"。`useResumeDocument` 收敛唯一 dirty。
 - **迁移与备份**：0052 与后续 0053（来源/事实锁/用量）、0054（长 CV 文档模式）都是"只加表/只加列、
@@ -1267,7 +1267,7 @@ flowchart LR
     （见 `tests/fixtures/webform/README.md`）。
     改这条边界要同时动：`skip_reason`、`test_webform_engine_*` 的边界用例、语料里
     `forbidden` 的期待、`docs/user-guide.md` 的「它不会做什么」与
-    `frontend/src/components/userGuideSteps.ts`。
+    `frontend/src/features/user-guide/userGuideSteps.ts`。
 
 28. **放宽模式——「只填不点」唯一的受控例外**（默认关闭；开关存在 `settings_service` 的
     `webform_relaxed_mode`，`/api/webform/preview` 与实时两条路读同一个开关值）：开启后

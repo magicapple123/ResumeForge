@@ -21,8 +21,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.ai_task import AI_TASK_ACTIVE_STATUSES, AiTask
+from ..models.ai_task import AiTask
 from ..schemas.ai_task import AiTaskCreateRequest, AiTaskOut
+from ..services.ai_task_read import list_active_tasks
 from ..services.ai_task_registry import get_ai_task_handler
 from ..services.ai_task_runner import (
     AiTaskNotFoundError,
@@ -58,14 +59,7 @@ def create_ai_task(payload: AiTaskCreateRequest, db: Session = Depends(get_db)):
 @router.get("/active", response_model=list[AiTaskOut])
 def list_active_ai_tasks(db: Session = Depends(get_db)):
     """当前还在跑的任务（前端刷新后据此恢复页头任务面板与轮询）。"""
-    rows = (
-        db.query(AiTask)
-        .filter(AiTask.status.in_(AI_TASK_ACTIVE_STATUSES))
-        .order_by(AiTask.id.desc())
-        .limit(50)
-        .all()
-    )
-    return [AiTaskOut.model_validate(row) for row in rows]
+    return [AiTaskOut.model_validate(row) for row in list_active_tasks(db)]
 
 
 @router.get("/{task_id}", response_model=AiTaskOut)

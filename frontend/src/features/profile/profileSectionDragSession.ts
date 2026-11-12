@@ -19,10 +19,7 @@
 import { flushSync } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import {
-  SECTION_DRAG_THRESHOLD_PX,
-  type ProfileSectionKey,
-} from "../../components/profile/ProfileSectionConfig";
+import { SECTION_DRAG_THRESHOLD_PX, type ProfileSectionKey } from "./ProfileSectionConfig";
 import {
   applyScrollShift,
   canScrollTowards,
@@ -33,7 +30,7 @@ import {
   swapLatchOpen,
   TRAVEL_STEP_PX,
   type DragStackGeometry,
-} from "../../components/profile/dragReorder";
+} from "./dragReorder";
 import {
   compensateReleaseShift,
   createEdgeAutoScroller,
@@ -41,7 +38,7 @@ import {
   layoutTopWithoutTransform,
   resolveScrollParent,
   type EdgeAutoScroller,
-} from "../../components/profile/dragAutoScroll";
+} from "./dragAutoScroll";
 import {
   centerElementInContainer,
   resolveCompactGrabOffset,

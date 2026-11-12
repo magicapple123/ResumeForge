@@ -9,7 +9,7 @@
  * 页面这一侧的契约：收到广播 → 重取；关弹窗但没保存 → 什么都不发生。
  */
 import { projectionOf } from "../test/profileProjectionFixture";
-import { invalidateProjectionCache } from "../features/profile-library/projectionCache";
+import { invalidateProjectionCache } from "../features/profile/library/projectionCache";
 import { App as AntdApp } from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -51,11 +51,11 @@ vi.mock("../api/resumes", async (importOriginal) => ({
 
 // 手写简历弹窗一打开就读**当前组投影**（F4 起不再读旧资料接口）；不桩掉会在 jsdom 里真发 fetch。
 vi.mock("../api/profile", () => ({ getProfile: apiMocks.getProfile }));
-vi.mock("../features/profile-library/api", () => ({
+vi.mock("../features/profile/library/api", () => ({
   getCurrentProjection: apiMocks.getCurrentProjection,
 }));
 
-vi.mock("../components/resume/ResumeDetailPreview", () => ({
+vi.mock("../features/resume/preview/ResumeDetailPreview", () => ({
   default: () => <div data-testid="resume-preview-stub" />,
 }));
 

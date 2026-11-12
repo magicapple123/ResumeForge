@@ -85,8 +85,7 @@ def _referral_tool_text(referral, summary: str) -> ActionOutcome:
 
 
 def _run_create_referral(db: Session, payload: ReferralCreate) -> ActionOutcome:
-    from ....api.referrals import referral_out
-    from ...referral_service import create_referral
+    from ...referral_service import create_referral, referral_out
 
     referral = create_referral(db, payload)
     outcome = _referral_tool_text(

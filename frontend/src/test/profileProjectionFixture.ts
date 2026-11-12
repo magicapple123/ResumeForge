@@ -18,7 +18,7 @@ import type {
   ProjectionCandidateOut,
   ProjectionScopeOut,
   ProjectionSourceSectionOut,
-} from "../features/profile-library/types";
+} from "../features/profile/library/types";
 import type { ResumeDocument, ResumeEntry, ResumeSection } from "../types/resumeDocument";
 import { v1ContentToV2Document } from "./projectionDocumentConverter";
 
