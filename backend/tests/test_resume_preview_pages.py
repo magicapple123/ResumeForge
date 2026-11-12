@@ -303,3 +303,56 @@ def test_endpoint_rejects_unknown_body_fields(client):
     """`width`/`dpr` 之外多写字段一律 422（父类的 `extra="forbid"` 必须继承下来）。"""
     response = client.post(PAGES.format(id=1), json={"width": 900, "nope": 1})
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "..",
+        "../..",
+        "..%2f..",
+        "%2e%2e%2f",
+        "/etc/passwd",
+        "A" * 32,  # 大写十六进制：token 只可能是小写
+        "0123456789abcdef0123456789abcdef/../x",
+        "0" * 31,  # 长度不足
+        "g" * 32,  # 非十六进制
+    ],
+)
+def test_lookup_never_leaves_the_cache_root(tmp_path, monkeypatch, token):
+    """token 只是"要找的目录名"，任何形状都不许被解释成路径。
+
+    CodeQL 的 `py/path-injection` 盯着这两条 GET：它们把请求参数交给文件系统。这里钉住
+    实现口径——白名单匹配（`_find_bundle`），不做"校验后拼路径"。哪怕缓存根外真的存在
+    同名文件，也必须拿不到。
+    """
+    root = tmp_path / "cache"
+    (root / "real").mkdir(parents=True)
+    decoy = tmp_path / "secret.pdf"
+    decoy.write_bytes(b"%PDF-1.4 decoy")
+
+    monkeypatch.setattr(pages, "cache_root", lambda: root)
+
+    assert pages.lookup_page(token, 0) is None
+    assert pages.lookup_pdf(token) is None
+
+
+def test_lookup_finds_a_real_bundle_and_404s_otherwise(tmp_path, monkeypatch, client):
+    """白名单查找仍然要命中真实缓存；不存在的 token 与越界 index 都是 404。"""
+    root = tmp_path / "cache"
+    token = "a" * 32
+    bundle = root / token
+    bundle.mkdir(parents=True)
+    (bundle / "0.webp").write_bytes(b"RIFF")
+    (bundle / "document.pdf").write_bytes(b"%PDF-1.4")
+
+    monkeypatch.setattr(pages, "cache_root", lambda: root)
+
+    assert pages.lookup_page(token, 0) == bundle / "0.webp"
+    assert pages.lookup_pdf(token) == bundle / "document.pdf"
+    assert pages.lookup_page(token, 9) is None
+
+    assert client.get(f"{PAGES.format(id=1)}/{token}/0.webp").status_code == 200
+    assert client.get(f"{PAGES.format(id=1)}/{token}/9.webp").status_code == 404
+    assert client.get(f"{PAGES.format(id=1)}/{token}/document.pdf").status_code == 200
+    assert client.get(f"{PAGES.format(id=1)}/{'b' * 32}/document.pdf").status_code == 404

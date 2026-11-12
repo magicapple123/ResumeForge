@@ -129,11 +129,13 @@ def create_preview_pages(
 
 @router.get("/{resume_id}/preview-pages/{token}/{index}.webp")
 def get_preview_page(resume_id: int, token: str, index: int):
-    """一页位图。token 是内容哈希，可以放心长缓存（`immutable`）。"""
-    if not token.isalnum() or len(token) != 32:
-        raise HTTPException(status_code=404, detail="预览页不存在")
-    path = pages_service.page_path(token, index)
-    if not path.is_file():
+    """一页位图。token 是内容哈希，可以放心长缓存（`immutable`）。
+
+    路径由服务层按 token 做**白名单查找**得到，不用请求里的字符串拼路径
+    （见 `preview_pages._find_bundle`）。
+    """
+    path = pages_service.lookup_page(token, index)
+    if path is None:
         # 目录可能已被 LRU 回收 / 服务重启后重建：前端拿到 404 会退回"重新请求清单"。
         raise HTTPException(status_code=404, detail="预览页不存在")
     return FileResponse(
@@ -146,10 +148,8 @@ def get_preview_page(resume_id: int, token: str, index: int):
 @router.get("/{resume_id}/preview-pages/{token}/document.pdf")
 def get_preview_document(resume_id: int, token: str):
     """「在新标签打开」用的 PDF：与位图同一份字节，直接读缓存目录，不重排。"""
-    if not token.isalnum() or len(token) != 32:
-        raise HTTPException(status_code=404, detail="预览文件不存在")
-    path = pages_service.pdf_path(token)
-    if not path.is_file():
+    path = pages_service.lookup_pdf(token)
+    if path is None:
         raise HTTPException(status_code=404, detail="预览文件不存在")
     return FileResponse(
         str(path),

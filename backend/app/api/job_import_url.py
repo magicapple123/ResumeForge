@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -33,6 +34,8 @@ from ..services.web_fetch.import_service import (
     preview_from_url,
 )
 from ..services.web_fetch.url_policy import UrlRejected
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/jobs/import/from-url", tags=["jobs"])
 
@@ -118,11 +121,17 @@ async def fetch_details_route(
 def commit_from_url_route(
     payload: FromUrlCommitRequest, db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    """确认导入：新建 / 仅补空字段 / 跳过已在库的行，逐行容错。"""
+    """确认导入：新建 / 仅补空字段 / 跳过已在库的行，逐行容错。
+
+    这一条**不把异常原文回给前端**：``commit_rows`` 自己不抛可读的 ``ValueError``，
+    能落到这里的都是 pydantic / SQLAlchemy 内部错误，原文会带出表名、路径与栈帧摘要
+    （CodeQL ``py/stack-trace-exposure``）。细节进日志，前端只拿到固定文案。
+    """
     try:
         return commit_rows(db, payload.rows, fill_empty_only=payload.fill_empty_only)
     except ValueError as exc:
-        raise _map_error(exc) from exc
+        logger.warning("从链接导入的提交失败", exc_info=True)
+        raise HTTPException(status_code=422, detail="导入数据不合法") from exc
 
 
 __all__ = [

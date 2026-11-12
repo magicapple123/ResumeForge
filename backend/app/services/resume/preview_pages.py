@@ -61,6 +61,7 @@ import io
 import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 import threading
@@ -105,6 +106,8 @@ CACHE_ROOT_NAME = "resumeforge-preview-pages"
 MANIFEST_NAME = "manifest.json"
 PDF_NAME = "document.pdf"
 PAGE_MEDIA_TYPE = "image/webp"
+#: token 的**唯一**合法形状：`sha256(...).hexdigest()[:32]`，即 32 位小写十六进制。
+_TOKEN_RE = re.compile(r"[0-9a-f]{32}")
 
 
 class PreviewPagesError(RuntimeError):
@@ -184,6 +187,45 @@ def page_path(token: str, index: int) -> Path:
 
 def pdf_path(token: str) -> Path:
     return cache_dir(token) / PDF_NAME
+
+
+def _find_bundle(token: str) -> Path | None:
+    """按名字在缓存根下找 token 目录；形状不合或不存在返回 ``None``。
+
+    **只做白名单查找，不用请求里的字符串拼路径**：命中的 ``Path`` 来自 ``iterdir()``，
+    请求参数只是"要找的目录名"。这样即使调用方忘了校验，路径也不可能被输入左右——
+    CodeQL 的 ``py/path-injection`` 认的正是"路径不来自输入"，而不是"输入看起来像个哈希"。
+    目录数被 ``MAX_TOKENS`` 限制在十几个，逐个比名字的代价可以忽略。
+    """
+    if not _TOKEN_RE.fullmatch(token):
+        return None
+    root = cache_root()
+    try:
+        children = list(root.iterdir())
+    except OSError:  # 目录还没建（从未渲染过）或没有读权限
+        return None
+    for child in children:
+        if child.name == token and child.is_dir():
+            return child
+    return None
+
+
+def lookup_page(token: str, index: int) -> Path | None:
+    """GET 用：``(token, index)`` 对应的那页位图；不存在返回 ``None``（调用方回 404）。"""
+    bundle = _find_bundle(token)
+    if bundle is None:
+        return None
+    page = bundle / f"{int(index)}.webp"
+    return page if page.is_file() else None
+
+
+def lookup_pdf(token: str) -> Path | None:
+    """GET 用：``token`` 对应的那份 PDF（「在新标签打开」）；不存在返回 ``None``。"""
+    bundle = _find_bundle(token)
+    if bundle is None:
+        return None
+    document = bundle / PDF_NAME
+    return document if document.is_file() else None
 
 
 def _write_atomic(target: Path, payload: bytes) -> None:
