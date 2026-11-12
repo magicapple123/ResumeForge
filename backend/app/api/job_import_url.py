@@ -129,9 +129,12 @@ def commit_from_url_route(
     """
     try:
         return commit_rows(db, payload.rows, fill_empty_only=payload.fill_empty_only)
-    except ValueError as exc:
+    except ValueError:
+        # `from None`：显式断掉异常链。CodeQL 的 `py/stack-trace-exposure` 把"被链接
+        # 进 HTTPException 的原始异常"也当作可达栈路径（`from exc` 就因此报了第二次）；
+        # 前端只该看到固定文案，原始异常留在日志里。
         logger.warning("从链接导入的提交失败", exc_info=True)
-        raise HTTPException(status_code=422, detail="导入数据不合法") from exc
+        raise HTTPException(status_code=422, detail="导入数据不合法") from None
 
 
 __all__ = [
