@@ -6,7 +6,6 @@ import logging
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db, session_engine
@@ -19,6 +18,7 @@ from ..schemas.batch_operation import (
     BatchOperationConfigOut,
 )
 from ..schemas.setting import (
+    AgentTaskEventsSetting,
     AssistantLimitSetting,
     AssistantOrbSetting,
     AssistantRelaxedModeSetting,
@@ -101,12 +101,6 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 register_compaction_setting_routes(router)
 # 「模型窗口参考」只读列表（R-18 的旁路展示）：同样只留注册一行。
 register_model_window_routes(router)
-
-
-class AgentTaskEventsSetting(BaseModel):
-    """提醒到期自动生成任务卡开关（默认关；只建卡、不执行任何写操作）。"""
-
-    enabled: bool = False
 
 
 def _is_loopback_request(request: Request) -> bool:

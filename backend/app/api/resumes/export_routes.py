@@ -15,7 +15,6 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from ...database import get_db
-from ...middleware.loopback_origin import is_non_cross_site_request
 from ...models.resume import ResumeRecord
 from ...schemas.export import (
     ExportRequest as ExportRequestSchema,
@@ -56,7 +55,6 @@ from ...services.resume.resume_template_store import (
 )
 from ...services.settings_service import get_export_save_location
 from ...services.watermark import WatermarkError
-from .. import settings as settings_api
 from ._shared import (
     PDF_ENGINE_HEADER,
     PDF_ENGINE_NAME,
@@ -64,8 +62,9 @@ from ._shared import (
     PDF_PAGES_HEADER,
     PDF_PAGES_NEEDED_HEADER,
     RESUME_OVERFLOW_HEADER,
+    _document_for_request,
     _get_live_resume,
-    document_or_422,
+    _require_local_export_request,
     page_limit_header_value,
 )
 
@@ -80,25 +79,6 @@ router = APIRouter()
 # 读到的是 null。
 RESUME_TRUNCATED_HEADER = "X-Resume-Truncated"
 RESUME_TRUNCATED_AT_HEADER = "X-Resume-Truncated-At"
-
-
-def _require_local_export_request(request: HTTPRequest) -> None:
-    """Resume exports expose private profile data and are a loopback-only capability."""
-    if not settings_api._is_loopback_request(request) or not is_non_cross_site_request(request):
-        raise HTTPException(status_code=403, detail="简历导出仅允许从本机前端访问")
-
-
-def _document_for_request(db: Session, record: ResumeRecord, content_override: dict | None) -> dict:
-    """导出输入的版本收口：v2 直通；旧记录/旧草稿一次性转换（不写库）。
-
-    结构不合法（例如非法照片 data URL）统一 422 + 可读提示，不冒泡成 500。
-    """
-    return document_or_422(
-        content_override if content_override is not None else record.content,
-        db,
-        language=record.language or DEFAULT_RESUME_LANGUAGE,
-        format_config=record.format_config or {},
-    )
 
 
 def _export_record(

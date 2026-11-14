@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""简历接口子模块共享件：PDF 响应头常量与三个跨域 helper。
+"""简历接口子模块共享件：PDF 响应头常量、导出准入/版本收口与序列化 helper。
 
 从原 ``api/resumes.py`` 原样搬运（Wave5 拆分）：常量与 helper 的实现逻辑零改动，
 仅随文件移动改变导入路径。
@@ -8,9 +8,10 @@
 import json
 from typing import Any, Literal, get_args
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
+from ...middleware.loopback_origin import is_non_cross_site_request
 from ...models.resume import ResumeRecord
 from ...schemas.resume import (
     FactAnnotation,
@@ -21,8 +22,9 @@ from ...schemas.resume_document import DocumentValidationError
 from ...services import trash
 from ...services.resume import document_io
 from ...services.resume.document_conversion_types import ConversionError
-from ...services.resume.resume_labels import normalize_language
+from ...services.resume.resume_labels import DEFAULT_RESUME_LANGUAGE, normalize_language
 from ...services.resume.resume_templates import DEFAULT_FONT_SCALE, DEFAULT_TEMPLATE
+from .. import settings as settings_api
 
 # 与 ResumeBrief 对应字段上的 Literal 保持一致（schema 里未起别名，这里就近镜像）。
 ResumeSource = Literal["ai", "manual"]
@@ -92,6 +94,25 @@ def page_limit_header_value(page_limit: int | None, *, is_unlimited: bool) -> st
     if page_limit is None:
         return None
     return "0" if is_unlimited else str(page_limit)
+
+
+def _require_local_export_request(request: Request) -> None:
+    """Resume exports expose private profile data and are a loopback-only capability."""
+    if not settings_api._is_loopback_request(request) or not is_non_cross_site_request(request):
+        raise HTTPException(status_code=403, detail="简历导出仅允许从本机前端访问")
+
+
+def _document_for_request(db: Session, record: ResumeRecord, content_override: dict | None) -> dict:
+    """导出输入的版本收口：v2 直通；旧记录/旧草稿一次性转换（不写库）。
+
+    结构不合法（例如非法照片 data URL）统一 422 + 可读提示，不冒泡成 500。
+    """
+    return document_or_422(
+        content_override if content_override is not None else record.content,
+        db,
+        language=record.language or DEFAULT_RESUME_LANGUAGE,
+        format_config=record.format_config or {},
+    )
 
 
 def _format_sse(payload: dict) -> str:

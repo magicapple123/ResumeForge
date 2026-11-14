@@ -79,6 +79,16 @@ from .resume_identity import OptionalEmptyListMixin, OptionalIdentityMixin
 from .resume_profile_usage import ProfileUsageOut
 from .resume_research import ResumePatent, ResumePublication, ResumeResearchProject
 
+# 待审变更预检（RF-13）模型已迁至 ``schemas/resume_review.py``；这里 re-export，
+# 保持 ``from app.schemas.resume import ReviewChangeIn`` 等既有导入路径不变。
+from .resume_review import (  # noqa: F401  (re-export：保持既有导入路径)
+    ReviewChangeIn,
+    ReviewChangeOrigin,
+    ReviewChangeVerdictOut,
+    ReviewPrepareOut,
+    ReviewPrepareRequest,
+)
+
 # 简历备注的上限：列表默认可见（ellipsis + tooltip）、详情可编辑。
 MAX_RESUME_NOTE_CHARS = 2000
 
@@ -427,43 +437,6 @@ class ResumeLayoutUpdate(BaseModel):
     # 版式与正文共用一个 ``revision``：拖动滑杆也是"改了这份简历"，两个窗口各自存一半
     # 版式同样会互相覆盖，所以版式保存也要参与版本判定。
     expected_revision: int | None = Field(default=None, ge=0)
-
-
-# ===== 待审变更预检（RF-13）：编辑器里的 AI 改写/手填，先过三把既有闸门再落表单 =====
-
-ReviewChangeOrigin = Literal["ai_rewrite", "user_added"]
-
-
-class ReviewChangeIn(BaseModel):
-    """一条待审变更：``path`` 是 data-resume-path 写法的字段路径。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    path: str = Field(min_length=1, max_length=256)
-    before: str = Field(default="", max_length=MAX_RESUME_TEXT_CHARS)
-    after: str = Field(default="", max_length=MAX_RESUME_TEXT_CHARS)
-    origin: ReviewChangeOrigin = "ai_rewrite"
-    instruction: str = Field(default="", max_length=MAX_CUSTOM_INSTRUCTION_CHARS)
-
-
-class ReviewPrepareRequest(BaseModel):
-    """预检请求：**不落库、不改 content**——纯审阅预检。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    changes: list[ReviewChangeIn] = Field(default_factory=list, max_length=50)
-
-
-class ReviewChangeVerdictOut(BaseModel):
-    """一条变更的预检结论：``ok`` / ``fact_check_needed`` / ``blocked`` + 原因。"""
-
-    path: str
-    verdict: Literal["ok", "fact_check_needed", "blocked"]
-    reasons: list[str] = Field(default_factory=list)
-
-
-class ReviewPrepareOut(BaseModel):
-    results: list[ReviewChangeVerdictOut] = Field(default_factory=list)
 
 
 class ResumeBatchRequest(BaseModel):
