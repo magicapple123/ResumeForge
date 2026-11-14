@@ -131,8 +131,10 @@ def test_pdf_draws_styled_runs_without_leaking_markers():
     assert "{@" not in text and "\ue000" not in text
     assert "8 人" in text and "红字" in text
     assert styled.pages == plain.pages
-    # 只有带样式的那份出现红色像素。
-    assert _red_pixels(styled.content) > 100  # noqa: PLR2004
+    # 只有带样式的那份出现红色像素。阈值不能按"本机字体"定：同一份 PDF 在
+    # Linux（Noto/WQY）与 Windows（思源黑体）上笔画粗细不同，实测 58 vs 200+。
+    # 无样式那份必须是 0，所以只要有稳定的一片红就足以证明颜色生效。
+    assert _red_pixels(styled.content) > 20  # noqa: PLR2004
     assert _red_pixels(plain.content) == 0
 
 
