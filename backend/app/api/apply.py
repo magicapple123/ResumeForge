@@ -28,7 +28,6 @@ from ..schemas.apply import (
     ApplyTaskDetailOut,
     ApplyTaskItemOut,
     ApplyTaskOut,
-    BrowserStatusOut,
     CollectBackfillIn,
     CollectConfigIn,
     CollectConfigOut,
@@ -52,6 +51,7 @@ from ..services.llm.base import LLMError
 from ..services.settings_service import get_llm_config
 from ..services.site_health import site_health_overview
 from ._disconnect import client_gone, run_until_disconnect
+from .apply_browser_routes import router as apply_browser_router
 from .apply_extra import register_apply_extra_routes
 from .apply_queue import router as apply_queue_router
 from .apply_record_items import router as apply_record_items_router
@@ -139,66 +139,9 @@ def list_sites(db: Session = Depends(get_db)):
     return apply_service.list_sites(db)
 
 
-# ===== 投递专用浏览器 =====
-
-
-@router.get("/browser/status", response_model=BrowserStatusOut)
-def browser_status(db: Session = Depends(get_db)):
-    return apply_service.browser_status(db)
-
-
-@router.post("/browser/start", response_model=BrowserStatusOut)
-def browser_start(open_entry: bool = True, db: Session = Depends(get_db)):
-    """启动专用浏览器。
-
-    ``open_entry=false`` 时**不打开任何站点页面**（停在空白页）。投递台保持默认——它要那个
-    页面来让用户登录；把浏览器当渲染引擎借用的调用方则传 ``false``，否则用户会莫名其妙
-    跳出一个他这次没打算访问的招聘网站。
-    """
-    try:
-        return apply_service.start_browser(db, open_entry=open_entry)
-    except apply_service.ApplyServiceError as exc:
-        _raise(exc)
-
-
-@router.post("/browser/open", response_model=BrowserStatusOut)
-def browser_open(db: Session = Depends(get_db)):
-    """在已启动的专用浏览器里重新打开招聘网站入口（标签页被关掉或跳走后使用）。"""
-    try:
-        return apply_service.open_browser_url(db)
-    except apply_service.ApplyServiceError as exc:
-        _raise(exc)
-
-
-@router.post("/browser/refresh", response_model=BrowserStatusOut)
-def browser_refresh(db: Session = Depends(get_db)):
-    try:
-        return apply_service.refresh_browser(db)
-    except apply_service.ApplyServiceError as exc:
-        _raise(exc)
-
-
-@router.post("/browser/restart", response_model=BrowserStatusOut)
-def browser_restart(db: Session = Depends(get_db)):
-    try:
-        return apply_service.restart_browser(db)
-    except apply_service.ApplyServiceError as exc:
-        _raise(exc)
-
-
-@router.post("/browser/stop", status_code=204)
-def browser_stop(db: Session = Depends(get_db)):
-    """关闭专用浏览器。
-
-    关不掉时（窗口是上一次运行留下的）必须给出可展示的中文提示，不能静默成功——
-    与 /browser/start、/browser/open 用同一套错误映射。
-    """
-    try:
-        apply_service.stop_browser(db)
-    except apply_service.ApplyServiceError as exc:
-        _raise(exc)
-    return None
-
+# 投递专用浏览器端点（T8 拆分）：实现与路由都在 apply_browser_routes.py；
+# 挂载位置与拆分前一致（在 /sites 之后、招呼语预览之前）。
+router.include_router(apply_browser_router)
 
 # ===== 招呼语预览 =====
 

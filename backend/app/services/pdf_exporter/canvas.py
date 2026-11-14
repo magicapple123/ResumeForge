@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from fpdf import FPDF
 
 from ..resume.resume_rich_text import has_bold
+from .canvas_drawers import _CanvasDrawersMixin
 from .fonts import FONT_FAMILY
 from .layout import (
     _BODY_TEXT,
@@ -19,8 +19,6 @@ from .layout import (
     PAGE_HEIGHT_MM,
     ResumeLayout,
 )
-from .meta_columns import draw_meta_columns
-from .meta_lines import draw_meta_line
 from .rich_text import (
     disable_markdown_links,
     prepare_cjk_line,
@@ -29,16 +27,11 @@ from .rich_text import (
     render_singleline,
     to_fpdf_markup,
 )
-from .skill_tags import draw_skill_tags, soft_accent
+from .skill_tags import soft_accent
 from .style_blocks import (
     _BULLET_MARK as _BULLET_MARK,
 )
-from .style_blocks import (
-    draw_bullets,
-    draw_entry_head,
-    draw_section_title,
-    section_title_total_height,
-)
+from .style_blocks import section_title_total_height
 
 # 列表项符号（含它后面那个空格）现在定义在 `style_blocks`（与绘制在一起）；这里 re-export，
 # 既有测试与调用方 `canvas._BULLET_MARK` 的导入路径不变。
@@ -68,7 +61,7 @@ class DrawnSpan:
     text: str = ""
 
 
-class _ResumePDF(FPDF):
+class _ResumePDF(_CanvasDrawersMixin, FPDF):
     """PDF 画布。所有行距/页边距都从 ``self.layout`` 取，模块里没有第二份系数。"""
 
     def __init__(
@@ -381,115 +374,3 @@ class _ResumePDF(FPDF):
         if choice == "muted":
             return self.muted_text
         return self.body_text
-
-    def section_title(
-        self,
-        text: str,
-        base: float,
-        *,
-        leading_gap: float,
-        style=None,
-        section: str = "",
-        keep_lines: int = 0,
-    ) -> None:
-        """区块标题：绘制在 style_blocks（W07 起消费角色/对象覆盖），本方法保留原签名。"""
-        draw_section_title(
-            self,
-            text,
-            base,
-            leading_gap=leading_gap,
-            style=style,
-            section=section,
-            keep_lines=keep_lines,
-        )
-
-    def bullets(
-        self,
-        items: list[str],
-        base: float,
-        *,
-        style=None,
-        section: str = "",
-        object_id=None,
-        split_ok: bool = False,
-    ) -> None:
-        """列表项：绘制在 style_blocks（缩进/符号/行高/对齐可被覆盖），分页口径不变。"""
-        draw_bullets(
-            self, items, base, style=style, section=section, object_id=object_id, split_ok=split_ok
-        )
-
-    def entry_head(
-        self,
-        left: str,
-        right: str,
-        base: float,
-        *,
-        style=None,
-        meta_style=None,
-        section: str = "",
-        object_id=None,
-        keep_lines: int = 0,
-    ) -> None:
-        """条目头：绘制在 style_blocks（字号/颜色/粗体/对齐/段前距可被覆盖）。"""
-        draw_entry_head(
-            self,
-            left,
-            right,
-            base,
-            style=style,
-            meta_style=meta_style,
-            section=section,
-            object_id=object_id,
-            keep_lines=keep_lines,
-        )
-
-    def meta_line(
-        self, text: str, base: float, *, style=None, first: bool = True, last: bool = True
-    ) -> None:
-        """条目副行：绘制在 meta_lines。``first`` / ``last`` = 灰字段组的首/末条（问题 17），
-        组级段距只在首尾出现；默认都为 True = 旧行为（一条一组时逐像素不变）。
-        """
-        draw_meta_line(self, text, base, style=style, first=first, last=last)
-
-    def meta_columns(
-        self,
-        cells,
-        widths: Sequence[float],
-        gap: float,
-        base: float,
-        *,
-        style=None,
-        first: bool = True,
-        last: bool = True,
-    ) -> None:
-        """W4 条目字段多列：一行按**预算好的列宽**并排绘制（几何与 meta_line 同口径）。
-
-        ``widths`` 是 ``meta_columns.column_widths`` 按该 entry 每列最宽内容算出的结果（mm），
-        同一个 entry 的所有行共用一份，跨行列起点才对得齐。``first`` / ``last`` 的语义
-        与 ``meta_line`` 相同（问题 17：一行多个 cell 属于**同一行**，组语义落在行上）。
-        """
-        draw_meta_columns(self, cells, widths, gap, base, style=style, first=first, last=last)
-
-    def skill_tags(self, labels: list[str], base: float, *, style=None) -> None:
-        """把专业技能画成**模板真实的标签形状**，与 HTML 预览一致。
-
-        以前这里是用「、」连起来的**一行纯文本**（用户实测反馈："预览里是蓝色小框，导出 PDF
-        后没有了"）；后来补成标签，但把 8 个模板统一画成"带底色的圆角框 + 强调色文字"——预览
-        里 classic 是硬编码浅灰底、modern 是描边胶囊、technical 是左侧色条、compact 用「·」
-        分隔、minimal 是纯文字，导出的 PDF 全长得一样。现在形状由 `layout.tag_style` 驱动，
-        五种形态各画各的。
-
-        绘制主体在 `skill_tags.draw_skill_tags`：标签几何本属那个模块，而本类已经贴着 500 行
-        预算（见 `tests/test_file_size_budget.py`）。
-        """
-        draw_skill_tags(
-            self,
-            labels,
-            base,
-            layout=self.layout,
-            accent=self.accent,
-            line_color=self.line_color,
-            body_text=self.body_text,
-            muted_text=self.muted_text,
-            style=style,
-        )

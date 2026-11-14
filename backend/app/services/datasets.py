@@ -7,14 +7,15 @@
 指针与目录始终相对 **DATABASE_URL 所在的目录**（见 :mod:`app.dataset_registry`），
 所以切换只影响"连哪个文件"，不会让数据集列表本身跟着漂移。
 
-模块分工（PR-18 拆分批，纯搬迁无行为变化）：导入链路（``import_dataset``）与
-切换链路（prepare/commit/compensate、``recover_startup_pointer``）留在本文件——测试
+模块分工（PR-18 / T8 拆分批，纯搬迁无行为变化）：导入链路（``import_dataset``）与
+切换链路（prepare/commit/compensate）留在本文件——测试
 在 ``datasets`` 模块命名空间上 monkeypatch（``_DRAIN_TIMEOUT_SECONDS``/``extract_database``
 /``run_database_migrations`` 等），落点不能动；列表/重命名/删除/导出，以及数据集
 文件的落盘（``place_packaged_datasets``）与失败回收（``discard_created_datasets``）
 在 ``datasets_admin.py``；附件的先验后发布在
-``data_backup/asset_restore.py``（RR-03，见 ADR-0005）。本文件同时是对外门面：
-下面的 re-export 保证既有消费方（``api/datasets.py`` 等）与测试的 import 路径不变。
+``data_backup/asset_restore.py``（RR-03，见 ADR-0005）；新建空数据集与启动指针恢复
+在 ``datasets_lifecycle.py``，这里再导出。本文件同时是对外门面：下面的 re-export
+保证既有消费方（``api/datasets.py`` 等）与测试的 import 路径不变。
 """
 
 from __future__ import annotations
@@ -37,11 +38,9 @@ from ..dataset_registry import (
     datasets_directory,
     is_valid_dataset_id,
     new_dataset_id,
-    read_active_dataset_id,
     write_active_dataset_id,
     write_metadata,
 )
-from ..runtime.log_fields import safe_log_text
 from . import schema_epoch
 from .data_backup import (
     ARCHIVE_DATASETS_DIRNAME,
@@ -71,6 +70,12 @@ from .datasets_admin import (
     list_datasets,
     place_packaged_datasets,
     rename_dataset,
+)
+from .datasets_lifecycle import (
+    create_dataset as create_dataset,
+)
+from .datasets_lifecycle import (
+    recover_startup_pointer as recover_startup_pointer,
 )
 
 logger = logging.getLogger(__name__)
@@ -308,40 +313,6 @@ def import_dataset(
             _remove_candidate_files(candidate)
 
 
-def create_dataset(name: str, bind: Engine) -> dict[str, Any]:
-    """新建一份**空数据集**：全新 SQLite 文件 + 迁移到当前 head + 写元信息。
-
-    空库直接跑迁移（``0001`` → head），不必先 ``create_all``：create_all + stamp + upgrade
-    会把 ``0002`` 起的加索引/加列动作在已经建好的表上重复执行一遍而失败。
-    """
-    cleaned = name.strip()
-    if not cleaned:
-        raise DatasetError("名称不能为空")
-    if len(cleaned) > 64:
-        raise DatasetError("名称过长（最多 64 个字符）")
-
-    dataset_id = new_dataset_id()
-    target = dataset_database_file(dataset_id)
-    target.parent.mkdir(parents=True, exist_ok=True)
-
-    new_engine = database.build_engine(database.database_url_for(target))
-    try:
-        run_database_migrations(new_engine)
-    finally:
-        new_engine.dispose()
-
-    write_metadata(
-        dataset_id,
-        {
-            "name": cleaned,
-            "source": "新建",
-            "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        },
-    )
-    logger.info("已新建空数据集 id=%s", safe_log_text(dataset_id))
-    return _describe(dataset_id, target)
-
-
 def _wait_for_idle(bind: Engine) -> None:
     """两段式排空（RF-03）：先等逻辑租约清零，再兜底等短请求把连接还回池子。
 
@@ -392,7 +363,7 @@ def _commit_switch(dataset_id: str, target: Path) -> None:
       引擎已被拆掉；这里新引擎确认可用之后才释放旧引擎。
     - 指针写入失败时新引擎还没接管，失败保持原状态；指针写入成功后的
       ``adopt/publish`` 是纯内存操作不再失败。若进程恰在"指针已写、引擎未换"
-      的崩溃窗口退出，重启由 :func:`recover_startup_pointer` 做确定性恢复。
+      的崩溃窗口退出，重启由 ``datasets_lifecycle.recover_startup_pointer`` 做确定性恢复。
     """
     from ..runtime import dataset_scope
 
@@ -424,39 +395,6 @@ def _commit_switch(dataset_id: str, target: Path) -> None:
     database.adopt_engine(new_engine)
     previous_engine.dispose()
     dataset_scope.publish_switch(dataset_id, new_engine)
-
-
-def recover_startup_pointer() -> None:
-    """启动时校验数据集指针与可用库的一致性（PR-03 崩溃窗口的确定性恢复）。
-
-    极端崩溃窗口：指针已写成目标库、进程在引擎接管完成前退出。重启后若指针
-    指向的库已不可用（文件丢失/损坏到打不开），记录并回退主数据；可用则保持
-    用户的选择——切换意图在预检通过之后才落盘，保持它是安全的。
-    """
-    dataset_id = read_active_dataset_id()
-    if dataset_id == MAIN_DATASET_ID:
-        return
-    try:
-        target = dataset_database_file(dataset_id)
-        if not target.exists():
-            raise DatasetError(f"数据集文件已不存在：{target.name}")
-        # 只用探针连接验证"这个文件真的打得开"：SQLite 惰性建连，坏文件要到
-        # 第一条 PRAGMA 才暴露，这里主动触发一次。
-        probe = database.build_engine(database.database_url_for(target))
-        try:
-            with probe.connect() as connection:
-                connection.exec_driver_sql("SELECT 1")
-        finally:
-            probe.dispose()
-    except Exception as exc:  # noqa: BLE001 - 指针不可用就要恢复，不能让启动失败
-        logger.warning("启动恢复：指针指向的数据集 %s 不可用（%s），已回退主数据", dataset_id, exc)
-        write_active_dataset_id(MAIN_DATASET_ID)
-        main_file = dataset_database_file(MAIN_DATASET_ID)
-        current = database.engine.url.database
-        if current is None or Path(str(current)).resolve() != main_file.resolve():
-            database.rebind(main_file)
-        return
-    logger.info("启动恢复：数据集指针一致性校验通过 id=%s", dataset_id)
 
 
 def activate_dataset(dataset_id: str, bind: Engine) -> dict[str, Any]:

@@ -30,6 +30,15 @@ from .base import (
 )
 from .client_pool import get_shared_client as get_shared_client
 from .context_length_error import with_context_length_flag
+from .openai_compat_helpers import (
+    _MAX_STREAM_CHARS as _MAX_STREAM_CHARS,
+)
+from .openai_compat_helpers import (
+    _MIN_STREAM_CHARS as _MIN_STREAM_CHARS,
+)
+from .openai_compat_helpers import (
+    _InternalToolsMixin,
+)
 from .openai_stream_frames import (
     _accumulate_tool_calls,
     _extract_reasoning,
@@ -72,14 +81,12 @@ def _status_error(status: int) -> LLMError:
 
 _CONNECT_TIMEOUT = 10.0  # 建连超时（秒），与业务超时分开配置
 _MAX_CHAT_RESPONSE_BYTES = 2 * 1024 * 1024
-_MIN_STREAM_CHARS = 64_000
-_MAX_STREAM_CHARS = 2_000_000
 
 # 状态码文案表（_STATUS_MESSAGES/http_error_message）、Base URL 规则与覆盖参数
 # 白名单（_OVERRIDABLE_KEYS）均已下沉到 payload 模块（协议静态规则），见其模块说明。
 
 
-class OpenAICompatProvider(OpenAITransport):
+class OpenAICompatProvider(_InternalToolsMixin, OpenAITransport):
     def __init__(
         self,
         config: LLMConfig,
@@ -444,54 +451,3 @@ class OpenAICompatProvider(OpenAITransport):
             # 流中途（已可能产出 delta）不重试：安全点规则（§2.4-2），只做文案转换。
             log_llm_failure("disconnect", type(exc).__name__)
             raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
-
-    # ===== 内部工具 =====
-
-    def _stream_char_limit(self) -> int:
-        # 不限制输出时 max_tokens 为 0，按乘法派生会落到下界，反而成为最严格的
-        # 限制；这种情况直接用允许的最大值。
-        if self.config.uses_unlimited_output:
-            return _MAX_STREAM_CHARS
-        return min(
-            _MAX_STREAM_CHARS,
-            max(_MIN_STREAM_CHARS, self.config.max_tokens * 8),
-        )
-
-    def _build_payload(
-        self,
-        messages: list[dict],
-        stream: bool,
-        tools: list[dict] | None = None,
-        *,
-        thinking: bool = True,
-    ) -> dict:
-        # 请求体构造（含覆盖参数白名单与 stream_options 守门）下沉到 payload 模块：
-        # 本方法保留为调用点，测试与调用方仍按 `_build_payload` 访问。
-        return payload_rules.build_payload(
-            self.config, self.request_overrides, messages, stream, tools, thinking=thinking
-        )
-
-    def _apply_request_overrides(self, payload: dict, *, thinking: bool = True) -> None:
-        """合并单次请求的覆盖参数；实现下沉到 payload 模块，本方法保留为调用点。"""
-        payload_rules._apply_request_overrides(self.request_overrides, payload, thinking=thinking)
-
-    @staticmethod
-    def _extract_content(data: dict) -> str:
-        if not isinstance(data, dict):
-            raise LLMError("模型返回了无法解析的响应格式")
-        try:
-            content = data["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise LLMError("模型返回了无法解析的响应格式") from exc
-        if content is None:
-            return ""
-        if not isinstance(content, str):
-            raise LLMError("模型返回了无法解析的响应格式")
-        return content
-
-    @staticmethod
-    def _http_error(response: httpx.Response) -> LLMError:
-        status = response.status_code
-        # 上游正文可能回显请求或敏感资料，只记录状态码。
-        logger.warning("LLM 调用失败 status=%s", status)
-        return payload_rules.status_error(status)
