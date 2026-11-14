@@ -24,7 +24,7 @@ ResumeForge/
 ├── frontend/                 React 19.3 + antd 6 + Vite 8（Rolldown）
 │   ├── src/pages/              页面（菜单在 features/shell/navigationConfig.ts，
 │   │                           路由表在 src/appRoutes.tsx；App.tsx 只 re-export MENU_ITEMS）
-│   ├── src/components/         组件（跨模块交互原语在 common/）
+│   ├── src/components/common/  跨模块交互原语；其余按领域在 src/features/<domain>/
 │   ├── src/api/  src/types/    接口封装与类型
 │   ├── src/utils/  src/hooks/  纯工具与 hooks（测试与被测文件同目录）
 │   └── src/…*.test.tsx         前端测试（规模以 vitest 汇总行为准）

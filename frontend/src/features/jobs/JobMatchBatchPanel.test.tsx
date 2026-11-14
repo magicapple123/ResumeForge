@@ -159,10 +159,6 @@ describe("JobMatchBatchPanel", () => {
     ]);
     renderPanel();
 
-    console.log("DEBUG-3 phase text:", document.querySelector(".ant-tabs-tab-active")?.textContent);
-    console.log("DEBUG-3 has alert:", !!screen.queryByText(/正在后台分析/));
-    const alertEl = document.querySelector(".ant-alert-title, .ant-alert-message");
-    console.log("DEBUG-3 alert text:", JSON.stringify(alertEl?.textContent ?? null));
     expect(await screen.findByText(/正在后台分析，关闭这个窗口也不会中断/)).toBeInTheDocument();
     expect(screen.getByText(/已完成 1 \/ 2 个岗位/)).toBeInTheDocument();
     expect(screen.getByText(/正在分析：产品助理/)).toBeInTheDocument();
