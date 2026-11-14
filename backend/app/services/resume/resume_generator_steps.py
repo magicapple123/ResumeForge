@@ -67,9 +67,10 @@ _T = TypeVar("_T")
 def _require(value: _T | None, name: str) -> _T:
     """取步骤间不变式字段：进入某步前上游步骤必须已填好，None 只可能是编排错误。
 
-    pragma: no cover —— 正常流水线不会走到；错误消息只进异常，不作为 SSE 用户文案。
+    正常流水线不会走到；错误消息只进异常、不作为 SSE 用户文案。失败路径由
+    ``tests/test_resume_generate_steps.py`` 直接覆盖（不是不可达分支）。
     """
-    if value is None:  # pragma: no cover - 不变式：上游步骤已产出该状态
+    if value is None:  # 不变式：上游步骤已产出该状态
         raise RuntimeError(f"生成步骤状态缺失：{name}")
     return value
 

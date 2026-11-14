@@ -63,6 +63,7 @@
 | `api/` | 路由层（68 个路由模块，另有 `resumes/`、`webform/` 两个子包） | 只做参数校验与编排，不写业务 |
 | `models/` | ORM 模型（42 个文件；表数以基线迁移 `0001_baseline_v2` 为准） | 一张表一个文件；**新增表必须注册进 `models/__init__.py`** |
 | `schemas/` | Pydantic 契约 | 前后端共用的请求/响应结构 |
+| `vocabulary/` | 领域词表层（11 个域模块） | 状态常量 / 白名单 / 纯函数唯一真源：只依赖标准库，`models` re-export、`schemas` 直接取 |
 | `services/` | 业务层（最大） | 核心逻辑，与框架解耦、可离线测试 |
 | `services/resume/` `services/profile/` | 简历域 / 资料域 | 生成落地、一致性、版式、模板；读写、相关性、上下文、照片 |
 | `services/job/` `services/jd/` | 岗位域 / JD 规则 | 服务、匹配、需求解读；技能学历年限规则 |
@@ -93,6 +94,8 @@ T2 分层（8 个业务函数下沉后新增的服务模块；路由只做装配
 | `services/job_preference_proposals.py` | 求职偏好「只在这次对话」提案（条件 UPDATE + session_note） |
 
 复用既有模块：`services/followup_sweep.py`（跟进卡整卡决策）、`services/job_preference_service.py`（偏好状态机与唯一读取入口）。
+
+T8 纯搬迁拆分（2026-11-14）：85 个 ≥480 行文件按域拆成**同目录** `<stem>_<主题>.py` 分片，原模块保留公开符号 / re-export 与既有 import 路径（入口不搬家）。找分片时以「原模块所在目录 + 主题后缀」为准；语义上值得单列的新模块：`services/webform/live_control_script.py`（网申实时控件的内嵌 JS 载荷，`live_control.py` 只留资源加载与安装入口）。
 
 ## 前端目录速览（frontend/src/）
 

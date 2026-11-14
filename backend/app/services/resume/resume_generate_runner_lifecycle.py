@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import sessionmaker
 
@@ -32,6 +32,13 @@ class ResumeGenerateRunnerError(Exception):
 
 class _RunnerLifecycle:
     """单任务 worker 的生命周期：构造 / 启动 / 取消 / 关闭 / 任务会话。"""
+
+    if TYPE_CHECKING:
+        # 执行体与终态写入由宿主 ResumeGenerateRunner 提供（本 mixin 只做生命周期编排，
+        # 声明在这里是为了 pyright 能解析 self._run / self._set_cancelled）。
+        def _run(self, task_id: int) -> None: ...
+
+        def _set_cancelled(self, task_id: int) -> None: ...
 
     def __init__(self, *, session_factory: Callable[[], Any] | None = None) -> None:
         # session_factory 默认 None：启动时按值冻结 engine（RF-03，rebind 仍写旧库）；显式传入（测试注入）优先。

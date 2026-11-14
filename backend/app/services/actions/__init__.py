@@ -14,7 +14,7 @@
 （reason + review_after 双向校验）；新增动作一律走 ``define_action``，不要再写静态声明。
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .registry import (
     action_names,
@@ -38,6 +38,9 @@ from .spec import (
     validate_input,
 )
 from .tool_adapter import as_tool, to_tool_schema
+
+if TYPE_CHECKING:  # pragma: no cover - 仅供类型检查；运行期由 __getattr__ 惰性解析
+    from .spec import Permission
 
 
 def __getattr__(name: str) -> Any:

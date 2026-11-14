@@ -13,9 +13,9 @@ from alembic import command
 from app.database_migrations import build_alembic_config
 from app.services.data_backup.manifest import build_manifest, current_head_revision
 from sqlalchemy import create_engine
-from tests.migration_refs import head_revision
+from tests.migration_refs import LEGACY_0075_REVISION, head_revision
 
-_OLD_LIBRARY_REVISION = "0075_profile_section_job_filter"
+_OLD_LIBRARY_REVISION = LEGACY_0075_REVISION
 
 
 def _memory_bind():

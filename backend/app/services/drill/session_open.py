@@ -130,10 +130,10 @@ async def open_drill_session(
 
     with fresh_session() as write_db:
         stored = write_db.get(DrillSession, session_id)
-        if stored is None:  # pragma: no cover - 只在并发删除时发生
+        if stored is None:  # 并发删除窗口：模型返回前会话行被删（tests/test_drill_api.py 有覆盖）
             raise DrillSessionOpenError(404, "这场深挖记录不存在或已被删除")
         claim = write_db.get(type(draft.claims[0]), draft.claims[0].id)
-        if claim is None:  # pragma: no cover - 与上面的 stored 同一并发删除窗口
+        if claim is None:  # 与上面的 stored 同一并发删除窗口（tests/test_drill_api.py 有覆盖）
             raise DrillSessionOpenError(404, "这道题的事实台账不存在或已被删除")
         open_contract(stored, claim, plan)
         # 立刻 flush：契约的 id 要给后续轮次做外键，None 会让"这轮属于哪道题"对不上。

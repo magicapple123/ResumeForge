@@ -11,11 +11,16 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import TYPE_CHECKING, cast
 
 from .meta_columns import draw_meta_columns
 from .meta_lines import draw_meta_line
 from .skill_tags import draw_skill_tags
 from .style_blocks import draw_bullets, draw_entry_head, draw_section_title
+
+if TYPE_CHECKING:
+    # 宿主类 _ResumePDF 提供画布状态；本 mixin 只做转发，运行期不 import（否则成环）。
+    from .canvas import _ResumePDF
 
 
 class _CanvasDrawersMixin:
@@ -30,8 +35,9 @@ class _CanvasDrawersMixin:
         keep_lines: int = 0,
     ) -> None:
         """区块标题：绘制在 style_blocks（W07 起消费角色/对象覆盖），本方法保留原签名。"""
+        pdf = cast("_ResumePDF", self)
         draw_section_title(
-            self,
+            pdf,
             text,
             base,
             leading_gap=leading_gap,
@@ -51,8 +57,9 @@ class _CanvasDrawersMixin:
         split_ok: bool = False,
     ) -> None:
         """列表项：绘制在 style_blocks（缩进/符号/行高/对齐可被覆盖），分页口径不变。"""
+        pdf = cast("_ResumePDF", self)
         draw_bullets(
-            self, items, base, style=style, section=section, object_id=object_id, split_ok=split_ok
+            pdf, items, base, style=style, section=section, object_id=object_id, split_ok=split_ok
         )
 
     def entry_head(
@@ -68,8 +75,9 @@ class _CanvasDrawersMixin:
         keep_lines: int = 0,
     ) -> None:
         """条目头：绘制在 style_blocks（字号/颜色/粗体/对齐/段前距可被覆盖）。"""
+        pdf = cast("_ResumePDF", self)
         draw_entry_head(
-            self,
+            pdf,
             left,
             right,
             base,
@@ -86,7 +94,7 @@ class _CanvasDrawersMixin:
         """条目副行：绘制在 meta_lines。``first`` / ``last`` = 灰字段组的首/末条（问题 17），
         组级段距只在首尾出现；默认都为 True = 旧行为（一条一组时逐像素不变）。
         """
-        draw_meta_line(self, text, base, style=style, first=first, last=last)
+        draw_meta_line(cast("_ResumePDF", self), text, base, style=style, first=first, last=last)
 
     def meta_columns(
         self,
@@ -105,7 +113,9 @@ class _CanvasDrawersMixin:
         同一个 entry 的所有行共用一份，跨行列起点才对得齐。``first`` / ``last`` 的语义
         与 ``meta_line`` 相同（问题 17：一行多个 cell 属于**同一行**，组语义落在行上）。
         """
-        draw_meta_columns(self, cells, widths, gap, base, style=style, first=first, last=last)
+        draw_meta_columns(
+            cast("_ResumePDF", self), cells, widths, gap, base, style=style, first=first, last=last
+        )
 
     def skill_tags(self, labels: list[str], base: float, *, style=None) -> None:
         """把专业技能画成**模板真实的标签形状**，与 HTML 预览一致。
@@ -119,15 +129,16 @@ class _CanvasDrawersMixin:
         绘制主体在 `skill_tags.draw_skill_tags`：标签几何本属那个模块，而本类已经贴着 500 行
         预算（见 `tests/test_file_size_budget.py`）。
         """
+        pdf = cast("_ResumePDF", self)
         draw_skill_tags(
-            self,
+            pdf,
             labels,
             base,
-            layout=self.layout,
-            accent=self.accent,
-            line_color=self.line_color,
-            body_text=self.body_text,
-            muted_text=self.muted_text,
+            layout=pdf.layout,
+            accent=pdf.accent,
+            line_color=pdf.line_color,
+            body_text=pdf.body_text,
+            muted_text=pdf.muted_text,
             style=style,
         )
 

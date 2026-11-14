@@ -6,7 +6,9 @@
 
 ### Added
 
-- **依赖锁定文件 `backend/requirements.lock.txt`（带哈希）。** `requirements-dev.txt` 的全量传递依赖在 CPython 3.11 / Linux 上用 `pip-compile --generate-hashes` 锁定；CI 的 backend 矩阵在 3.11 / 3.12 / 3.13 上各执行一次 `pip install --require-hashes -r requirements.lock.txt` 做一致性校验。`requirements.txt` 与 `requirements-dev.txt` 一个字节未改。
+- **桌面壳层文案跟随「设置 → 界面语言」（批 2 A）。** 此前壳层固定中文：英文用户在 Linux 上会看到中文托盘菜单、关闭卡片、启动失败 / 数据迁移 / 更新安装对话框。现在渲染进程把应用内语言经 `desktop:set-locale` 推给主进程（`desktop/lib/shell-locale.js` 是唯一消息表，规则与前端 `detectPreferredLocale` 同源），托盘菜单、tooltip、应用菜单、窗口标题兜底与关闭卡片（`?locale=` 参数）即时重建；中文环境仍是「简历通」，其它环境用英文。首帧静态标题改为中性的 `ResumeForge`，运行时标题仍由 `RouteAccessibility` 按页面名 + 本地化应用名接管。
+- **`generate` 输出加跨平台规范化 JSON 哈希金标。** 新增 `backend/tests/test_resume_generate_golden.py`：用 FakeProvider 真实跑「定向岗位 / 通用简历」两条生成链，把响应里时间戳、自动 id、绝对路径等易变字段剔除后取 sha256，存 `tests/fixtures/generate_golden/manifest.json`（缺失即生成、存在即比对，规则版本变化会明确报错）。不对 PDF 字节做金标（跨平台字体差异会假红）。
+- **依赖锁定文件 `backend/requirements.lock.txt` 改为 uv 通用锁（带哈希）。** 由 `uv pip compile --universal --python-version 3.11 --generate-hashes` 生成：一份锁同时覆盖 Linux 的 `uvloop` / `httptools` 与 Windows 的 `colorama` 等平台专属依赖（用 PEP 508 marker 表达），CI 的 ubuntu 3.11 / ubuntu 3.13 / windows 3.12 三格都执行 `pip install --require-hashes -r requirements.lock.txt` 真装校验。`requirements.txt` 一个字节未改。
 - **新增静态守卫：async 路由禁同步查询。** `backend/tests/test_async_routes_no_blocking_db.py` 用 AST 扫描 `app/api/**` 的 async 路由，函数体内出现 `select(...)` / `db.query(...)` / `db.execute(...)` 即失败（落地时 73 个 async 路由、0 处违规）；另有一条守卫守住路由层不再构造查询（T2 同批引入）。
 
 - **划词动作条有了独立开关（Q9）。** 设置 → 助手 →「投投悬浮球」新增第三个开关「选中文字后浮出动作条」：关掉后选网页文字不再弹改写 / 复制 / 存资料等动作，而悬浮球本身、点球打开助手、长按动作面板都不受影响——此前只有总开关，想关划词只能连球一起关掉。默认开，存量数据（裸 bool 或缺少该字段）读回时补成 `True`，与升级前一致；零迁移（值仍在 `AppSetting` 的 KV 里）。
@@ -20,6 +22,10 @@
 
 ### Changed
 
+- **领域词表下沉 `app/vocabulary/`（D8 收口）。** `schemas` 此前从 `models` 取 13 条 import / 约 29 个状态常量与 `has_placeholder` 这类纯函数，导致契约层依赖实现层。现在这些词表按 11 个域搬到 `backend/app/vocabulary/`（只允许标准库 import），`models` 逐个显式 re-export 并保留 `__all__`，`schemas` 改从 vocabulary 取；`test_import_direction.py` 新增 `schemas-no-models`（空表存证）与 `vocabulary-stdlib-only` 两条守卫。
+- **桌面发行物语言一致性（批 2 B/C）。** 便携链桌面快捷方式按系统 UI 语言命名（中文系统「简历通.lnk」、其它系统「ResumeForge.lnk」，删除/首启判断同时识别两种历史名字）；Linux AppImage 产物名去掉冗余 `-linux-` 段，改为 `ResumeForge-<version>-x86_64.AppImage` / `-arm64.AppImage`，README、`release-assets.yml` 与打包边车 glob 同步。
+- **T8：85 个贴线文件纯搬迁拆分。** 未豁免且 ≥480 物理行的 85 个文件（后端 46 / 前端 39，含样式表）全部拆到 <480、新文件 ≤400，按 8–12 个文件一批提交。拆分只搬内聚单元：被 monkeypatch 的符号留在原模块并 re-export，`autouse` 夹具跟着模块走；CSS 分片平铺在 `frontend/src/styles/` 并由聚合文件 `@import` 保持层叠顺序；前端 CJK / product-copy 预算从旧文件等量迁到新文件（`i18nBaseline.json` 各 section 的 total 不变）。`update_download.py`（468）与 `api/settings.py`（476）留有余量偏薄，后续改动需先拆。
+- **`live_control.py` 内嵌 JS 载荷拆到同目录模块（撤销行数豁免）。** `services/webform/live_control_script.py` 承载 `render_live_control_script`，`live_control.py` 保留 `_ASSET_DIR` / `_load_face_data_uri`（被 patch）/ `apply_copy`，`install_live_control_script` 收成 4 行；同一入参渲染出的脚本文本 sha256 逐字节不变（canary 契约不变）。
 - **首启语言跟随系统语言，桌面发行物同步双语化。** 系统是中文 → 界面、安装器、桌面快捷方式全用中文（「简历通」）；系统非中文（含 C locale、日语、德语）→ 界面**默认语言**为英文（`ResumeForge`），已翻译的词条全部走英文语言包，语言包尚未覆盖的少量存量文案仍是中文（`i18nBaseline.json` 的 `src.total = 192`，棘轮只降不升）；用户手动切换过语言就以用户选择为准（服务端存过值时首启探测不再生效）。具体三处：`desktop/splash.html` 按 `navigator.language` 二选一（它在主应用加载前就显示，是截图能拍到的第一屏）；Windows 快捷方式名改成运行期解析的 `$(RF_SHORTCUT)` LangString（26 种打包语言逐条定义——实测未定义的语言会解析成空串，快捷方式变成 `.lnk`）；Linux 菜单条目补 `Name[zh_CN]` / `Comment[zh_CN]`，默认值与 `synopsis` / `description` 改英文。起因是 AppImage 官方目录的收录检查在非中文环境截图，判 `ERROR: The screenshot shows text mostly not in English but in Chinese script`（AppImage/appimage.github.io#11983）。
 - **技术债治理 T1：助手流式回复拆步骤。** `services/assistant/assistant_stream_turns.py` 的 404 行 async generator 拆成按阶段命名的步骤函数，4 个 `except` 分支重复的收尾动作（关闭 trace / 记预算 / 结束消息）收敛到一处；对外 SSE 事件序列与取消语义不变。
 - **技术债治理 T2：路由层业务函数下沉服务层。** `app/api/**` 里 8 个业务编排函数（简历生成编排、提案审批状态机、面试会话初始化、批量决策等，合计约 840 行）搬进 services 层，路由只保留 HTTP 职责；新增守卫禁止路由层再构造查询。
@@ -57,6 +63,8 @@
 
 ### Fixed
 
+- **pyright 归零（T9）。** 修掉 T8 拆分引入的 18 处 mixin 类型可见性错误（`_InternalToolsMixin` / `_CanvasDrawersMixin` / `_RunnerLifecycle` 的宿主属性与执行体改用 `TYPE_CHECKING` 声明 / `cast`）；`actions/__init__.py` 的 `Permission` 补 `TYPE_CHECKING` 导入；`embeddings_local.py` 的 `onnxruntime` / `tokenizers` 两行加 `pyright: ignore[reportMissingImports]` 并注明由 rag-assets 运行时提供。
+- **回补上一批 `pragma: no cover` 中可覆盖的防御分支（T9）。** 深挖开场的「并发删除窗口」（会话行 / 主张行在模型返回前被删 → 404）与生成步骤不变式助手 `_require` 的失败路径补了确定性用例，两处不再用 `pragma: no cover`；其余 5 处 `pragma: no cover` 经复核确属不可达（取消/异常后不会再执行的伪 provider `yield`、异步生成器形态占位、轮询等待失败兜底），保留并保留原有理由注释。
 - **测试残留清理：** 删除 `frontend/src/features/jobs/JobMatchBatchPanel.test.tsx` 里 3 行 `console.log("DEBUG-3 …")` 调试输出（连同只为其服务的临时变量），断言未改。
 - **过期 TODO 清理：** 删除 `ResumePreview.fillSources.test.tsx` 里已不成立的 `TODO(v2 补位, 2026-10-30)` 注释（「从资料填入」入口早已接线，用例一直通过）。
 - **文档旧路径更正：** `docs/maintenance.md` 的 `src/components/` 目录说明改成「`common/` 跨模块交互原语，其余按领域在 `src/features/<domain>/`」；`docs/system_design.md` 顶部提示里的 `components/navigation/navigationConfig.ts` 更正为 `features/shell/navigationConfig.ts`。
@@ -163,6 +171,7 @@
 
 ### Security
 
+- **依赖安装改为带哈希校验（T2）。** backend CI 三格矩阵都执行 `pip install --require-hashes -r requirements.lock.txt`，锁由 uv `--universal` 生成、平台专属依赖用 PEP 508 marker 表达；相比无锁安装，依赖被替换 / 投毒的窗口显著收窄。
 - **备份「不含 API Key」的剥离名单补齐两个搜索密钥：** `search_tavily_api_key`、`search_jina_api_key` 现已登记（此前只有 ASR 与 DeepSeek 搜索的两个 Key）。
 
 ## 2.1.0 - 2026-11-10

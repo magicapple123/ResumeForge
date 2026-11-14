@@ -100,6 +100,7 @@ jobs:
         shell: powershell
         run: |
           .\scripts\tests\Test-Start-ResumeForge.ps1
+          .\scripts\tests\Test-DesktopShortcut.ps1
           .\scripts\tests\Test-Update-ResumeForge.ps1
           .\scripts\tests\Test-Build-Release.ps1
           .\scripts\tests\Test-PythonRuntimeGuard.ps1

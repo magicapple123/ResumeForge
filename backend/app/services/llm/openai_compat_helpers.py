@@ -10,11 +10,15 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from . import payload as payload_rules
 from .base import LLMError
+
+if TYPE_CHECKING:
+    from ...schemas.setting import LLMConfig
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +27,12 @@ _MAX_STREAM_CHARS = 2_000_000
 
 
 class _InternalToolsMixin:
+    if TYPE_CHECKING:
+        # 实例状态由宿主 OpenAICompatProvider（openai_compat.py）持有，本 mixin 不持有；
+        # 声明在这里是为了 pyright 能解析 self.config / self.request_overrides。
+        config: LLMConfig
+        request_overrides: dict[str, Any]
+
     # ===== 内部工具 =====
 
     def _stream_char_limit(self) -> int:

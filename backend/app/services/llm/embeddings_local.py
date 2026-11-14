@@ -86,8 +86,10 @@ def _load_model(model_dir: Path, pooling: str, dim: int) -> _LoadedModel:
     except RuntimeUnavailable as exc:
         raise EmbeddingError(str(exc)) from exc
     # 下面的导入只能发生在 ensure_runtime() 之后（模块 docstring 的硬约束）。
-    import onnxruntime as ort  # noqa: PLC0415
-    from tokenizers import Tokenizer  # noqa: PLC0415
+    # onnxruntime / tokenizers 由 rag-assets 运行时提供，不在 requirements 里；静态分析
+    # 看不到安装，故显式忽略 reportMissingImports（运行期缺失由 ensure_runtime 兜底报错）。
+    import onnxruntime as ort  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+    from tokenizers import Tokenizer  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
     tokenizer_path = model_dir / "tokenizer.json"
     if not tokenizer_path.is_file():

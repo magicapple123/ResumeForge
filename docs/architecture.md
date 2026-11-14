@@ -50,6 +50,7 @@ flowchart LR
 - **开发**：Vite dev server（5173）把 `/api` 代理到 FastAPI（默认 8000）；
 - **生产**：由 Web 服务器托管 `frontend/dist`，把 `/api` 反向代理到 FastAPI，并把非静态文件的前端路由回退到 `index.html`（SPA 回退）；
 - **发布包 / 桌面版**：后端同源托管 `frontend/dist`，运行期不再需要 Node。
+- **桌面壳语言跟随应用内语言**：渲染进程把当前界面语言经 `desktop:set-locale` 推给主进程（`desktop/lib/shell-locale.js` 是唯一消息表，规则与前端 `detectPreferredLocale` 同源），托盘 / 应用菜单 / 关闭卡片 / 启动与迁移对话框随之重建；窗口标题由渲染进程 `RouteAccessibility` 依据本地化应用名接管，壳层只保留中性英文兜底。
 
 ![架构与数据边界：React 前端 → 同源 /api → FastAPI 后端 → 本地 SQLite / 你配置的模型服务商 / 本机浏览器](images/architecture.png)
 
@@ -75,6 +76,7 @@ backend/app/
 ├── database_migrations.py # Alembic 编排与 SQLite 升级前备份
 ├── models/            # ORM 模型（profile/profile_definition/profile_entry/profile_group/profile_usage_snapshot/job/resume/setting/assistant/apply/claim/tracker/drill/referral/reminder/interview_experience/share_package/official）
 ├── schemas/           # Pydantic 数据结构（前后端契约；resume_document.py 是 v2 简历文档模型）
+├── vocabulary/        # 领域词表层（11 个域模块，只依赖标准库；models 逐个 re-export，schemas 从这里取）
 ├── api/               # 路由层：校验参数、编排服务、组装响应
 ├── middleware/        # 请求关联 ID 与请求体大小限制
 ├── services/          # 业务层：核心逻辑，与框架解耦
@@ -129,6 +131,12 @@ T2 把 8 个业务函数从 `app/api` 下沉到 `app/services` 之后，路由�
 - **禁止**：在路由函数体内构造查询（`select(...)`、`db.query(...)`、`db.execute(...)`）——查询构造是服务层的唯一职责，放回路由就等于同一查询语义有第二份实现。
 - **禁止**：service 结束"路由持有的请求会话"的事务——请求会话的 `commit()` 留在路由。流式 / 多会话链路（SSE 保存段、深挖契约落库、提案执行段）按原实现保留提交点，各自模块注释写明理由。
 - **服务签名**：`(db: Session, ...) -> 领域对象`（ORM 对象或 dataclass），不返回 pydantic 响应模型；HTTP 状态码映射留在路由。
+
+### 领域词表层与分层方向（D8 收口）
+
+- `app/vocabulary/` 是**叶子层**：只允许 import 标准库，不得 import 任何 `app.*`（守卫 `backend/tests/test_import_direction.py` 的 `vocabulary-stdlib-only`）。
+- 领域状态常量 / 白名单 / 纯函数（如 `JOB_STATUSES`、`REMINDER_KINDS`、`CLAIM_CATEGORIES`、`has_placeholder`）唯一实现放在这里；`app/models/*.py` 逐个显式 re-export 并保留 `__all__`（历史 import 路径不断），`app/schemas/**` 直接从 vocabulary 取。
+- `schemas → models` 已清零并加守卫（`schemas-no-models`，`ALLOW_SCHEMAS_MODELS` 为空表存证）；schemas 仍允许对 `services` 的 3 处登记例外（见 `ALLOW_MODELS_SCHEMAS`，均为判据唯一实现的延迟导入或偏好词表，待评估搬迁）。
 
 入口层只负责装配，不承载业务规则：`app/application.py` 提供 `create_app()`、生命周期、路由注册和统一异常响应，`app/main.py` 保留原有 `app.main:app` 启动路径及历史导出符号。早期 SQLite 兼容列集中在 `database_compat.py`，正式结构仍以 Alembic 为唯一来源。这样可以在测试中独立创建应用，同时避免路由、迁移和兼容逻辑互相耦合。
 

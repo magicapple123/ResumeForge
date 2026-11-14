@@ -24,6 +24,9 @@ from sqlalchemy.exc import SQLAlchemyError
 BASELINE_REVISION = "0001_baseline_v2"
 # 已发行 ResumeForge 1.0.2 的迁移 head：构造「1.x 库 / 1.x 备份包」样本用。
 LEGACY_1X_REVISION = "0046_search_fts"
+# pre-2.0 历史链上的一条 revision（2.0 之前的分段迁移，现已不在当前链里）。
+# 只用于构造「清单记录的 revision 必须取快照库实际值」的回归样本，不代表当前 head。
+LEGACY_0075_REVISION = "0075_profile_section_job_filter"
 
 
 def head_revision() -> str:
@@ -93,6 +96,7 @@ def alembic_version_of(db: Any) -> str | None:
 
 __all__ = [
     "BASELINE_REVISION",
+    "LEGACY_0075_REVISION",
     "LEGACY_1X_REVISION",
     "alembic_version_of",
     "head_revision",

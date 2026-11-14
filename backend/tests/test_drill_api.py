@@ -449,3 +449,44 @@ def test_claim_content_is_marked_untrusted_in_the_prompt(db_session, monkeypatch
     messages = build_contract_messages(record)
     assert "<CLAIM>" in messages[1]["content"]
     assert "不可信数据" in messages[1]["content"]
+
+def test_a_concurrently_deleted_session_returns_404(client, monkeypatch):
+    """并发删除窗口：模型返回前会话行被删 -> 404，而不是 500 或落一条孤儿契约。"""
+    from app.models.drill import DrillSession
+    from app.services.session_scope import fresh_session
+
+    _make_claim(client)
+    _configure_llm(monkeypatch, ScriptedProvider([json.dumps(PLAN, ensure_ascii=False)]))
+
+    async def _plan_then_session_vanishes(*_args, **_kwargs):
+        with fresh_session() as db:
+            for row in db.query(DrillSession).all():
+                db.delete(row)
+            db.commit()
+        return PLAN
+
+    monkeypatch.setattr("app.services.drill.session_open.generate_plan", _plan_then_session_vanishes)
+    response = client.post("/api/drill", json={"max_questions": 3})
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "这场深挖记录不存在或已被删除"
+
+
+def test_a_concurrently_deleted_claim_returns_404(client, monkeypatch):
+    """并发删除窗口：会话还在、主张行被删 -> 404（与 stored 同一窗口的另一半）。"""
+    from app.models.claim import ClaimRecord
+    from app.services.session_scope import fresh_session
+
+    _make_claim(client)
+    _configure_llm(monkeypatch, ScriptedProvider([json.dumps(PLAN, ensure_ascii=False)]))
+
+    async def _plan_then_claim_vanishes(*_args, **_kwargs):
+        with fresh_session() as db:
+            for row in db.query(ClaimRecord).all():
+                db.delete(row)
+            db.commit()
+        return PLAN
+
+    monkeypatch.setattr("app.services.drill.session_open.generate_plan", _plan_then_claim_vanishes)
+    response = client.post("/api/drill", json={"max_questions": 3})
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "这道题的事实台账不存在或已被删除"
