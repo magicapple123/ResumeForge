@@ -77,6 +77,7 @@ from ..services.assistant.assistant_conversations import (
 from ..services.assistant.assistant_conversations import (
     update_conversation as update_conversation_record,
 )
+from ..services.assistant.assistant_error_detail import attachment_detail, context_detail
 from ..services.assistant.assistant_persistence import latest_assistant_message
 from ..services.assistant.assistant_service import (
     conversation_title,
@@ -398,7 +399,10 @@ async def send_message(
     try:
         attachments = normalize_attachments(payload.attachments)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        # CodeQL py/stack-trace-exposure：异常文本只用来**选**一条常量，见
+        # `assistant_error_detail`（原文可能带内部路径，绝不拼进 detail）。
+        logger.warning("附件校验失败 conversation_id=%s：%s", conversation_id, exc)
+        raise HTTPException(status_code=422, detail=attachment_detail(str(exc))) from None
     # 放宽模式：请求覆盖优先（None = 沿用全局设置）；流式期间请求会话已关闭，值绑进闭包。
     relaxed_mode = resolve_assistant_relaxed_mode(db, payload.relaxed_mode)
     # #35：助手入口的输入边界——放宽模式决定是否带身份字段（masked = 非放宽）。
@@ -416,7 +420,8 @@ async def send_message(
     try:
         context_blocks, context_metadata = load_local_context(db, payload, relaxed=relaxed_mode)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        logger.warning("引用的本地上下文不存在 conversation_id=%s：%s", conversation_id, exc)
+        raise HTTPException(status_code=404, detail=context_detail(str(exc))) from None
     config = get_llm_config(db)
     if not config.base_url or not config.model:
         raise HTTPException(status_code=400, detail="尚未配置大模型 API")

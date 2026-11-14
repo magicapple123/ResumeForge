@@ -32,6 +32,7 @@ from ..services.assistant.assistant_conversations import (
     next_message_after,
     previous_user_message,
 )
+from ..services.assistant.assistant_error_detail import context_detail
 from ..services.assistant.assistant_persistence import history_snapshot
 from ..services.assistant.assistant_system_prompt import _system_prompt
 from ..services.llm import create_provider
@@ -123,7 +124,9 @@ def register_regenerate_routes(router: APIRouter) -> None:
         try:
             context_blocks, context_metadata = load_local_context(db, replay, relaxed=relaxed_mode)
         except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            # CodeQL py/stack-trace-exposure：见 `assistant_error_detail`，文案是常量。
+            logger.warning("重新生成引用的上下文不存在 message_id=%s：%s", message_id, exc)
+            raise HTTPException(status_code=404, detail=context_detail(str(exc))) from None
         config = get_llm_config(db)
         if not config.base_url or not config.model:
             raise HTTPException(status_code=400, detail="尚未配置大模型 API")
