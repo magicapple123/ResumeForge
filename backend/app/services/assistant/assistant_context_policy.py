@@ -25,6 +25,11 @@ from .assistant_context_usage import _consistent_percents
 SAFE_WINDOW_RATIO = 0.9
 
 
+# 文案只留一份：抛出点与 SSE 事件共用，事件里不写 `str(error)`（异常对象进响应会被
+# CodeQL 判成 stack-trace-exposure）。
+CONTEXT_WINDOW_EXCEEDED_MESSAGE = "当前模型窗口不足，压缩后仍无法容纳，请新建对话"
+
+
 class ContextWindowExceeded(LLMError):
     """The current model cannot safely accept this conversation."""
 
@@ -39,7 +44,11 @@ def stored_context_usage(message: Any) -> dict[str, Any] | None:
 
 def model_error_event(error: LLMError) -> dict[str, Any]:
     if isinstance(error, ContextWindowExceeded):
-        return {"type": "error", "message": str(error), "code": "context_window"}
+        return {
+            "type": "error",
+            "message": CONTEXT_WINDOW_EXCEEDED_MESSAGE,
+            "code": "context_window",
+        }
     if getattr(error, "context_length_error", False):
         return {
             "type": "error",
@@ -93,7 +102,7 @@ def ensure_context_fits(
     messages: list[dict[str, Any]], window_tokens: int, extra_tokens: int = 0
 ) -> None:
     if messages_tokens(messages) + extra_tokens > int(window_tokens * SAFE_WINDOW_RATIO):
-        raise ContextWindowExceeded("当前模型窗口不足，压缩后仍无法容纳，请新建对话")
+        raise ContextWindowExceeded(CONTEXT_WINDOW_EXCEEDED_MESSAGE)
 
 
 async def compact_turn_context(

@@ -49,8 +49,15 @@ async def stream_message_events(
     """
     try:
         lease = dataset_scope.acquire_lease("assistant-stream")
-    except DatasetScopeError as exc:
-        yield format_sse({"type": "error", "message": exc.public_message})
+    except DatasetScopeError:
+        # 不读 `exc.public_message`：异常对象进响应会被 CodeQL 判成 stack-trace-exposure。
+        # 四种闸门失败对用户是同一件事（刷新后重试），用一条固定文案覆盖。
+        yield format_sse(
+            {
+                "type": "error",
+                "message": "数据集已切换或正在切换，请保留草稿并刷新页面后重试",
+            }
+        )
         return
     # 租约在手：身份不会再变（切换会被排空挡住），此刻冻结的就是流全程的库。
     factory = dataset_scope.frozen_session_factory()
