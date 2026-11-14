@@ -57,11 +57,10 @@ jobs:
           python -m pip install -r requirements-dev.txt
 
       - name: Verify requirements.lock.txt installs with hashes
-        # T5-a：锁文件只做一致性校验，不替换上面的安装链路。锁由 Linux + CPython 3.11
-        # 生成（pip-compile 只解析当前平台的 marker），Windows 专属的传递依赖
-        # （colorama 等）不在锁里，因此只在 Linux 矩阵项上校验；3.12 由本地
-        # docker python:3.12 验证。锁文件不嵌入 index 地址，这里走 runner 默认 PyPI。
-        if: runner.os == 'Linux'
+        # 锁为 uv --universal 生成，三平台矩阵都必须用 --require-hashes 真装：同一份
+        # 锁通过环境 marker 同时覆盖 Linux（uvloop / httptools）与 Windows（colorama）
+        # 的专属依赖分支，任何一格装不上就说明"通用锁"没真正通用。锁只做一致性
+        # 校验，不替换上面的安装链路；锁文件不嵌入 index 地址，这里走 runner 默认 PyPI。
         run: python -m pip install --require-hashes -r requirements.lock.txt
 
       - name: Install a CJK font for PDF export tests
