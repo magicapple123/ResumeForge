@@ -100,9 +100,18 @@ Write-Host ""
 Write-Host "Removing:" -ForegroundColor Cyan
 foreach ($relative in $DependencyTargets) { Remove-Target -Relative $relative }
 
-# The desktop shortcut created by Create-DesktopShortcut.cmd (named 简历通).
-$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "简历通.lnk"
-if (Test-Path $desktopShortcut) {
+# The desktop shortcut created by Create-DesktopShortcut.cmd. Its file name
+# follows the Windows UI language (简历通.lnk on a Chinese system, ResumeForge.lnk
+# everywhere else), and the display language may have changed between creating
+# and removing the shortcut -- so delete BOTH names. This list mirrors
+# Create-DesktopShortcut.ps1::Resolve-ShortcutFileName; the two files ship
+# separately, so scripts/tests/Test-DesktopShortcut.ps1 pins the sets equal.
+$desktopDirectory = [Environment]::GetFolderPath("Desktop")
+foreach ($shortcutName in @("简历通.lnk", "ResumeForge.lnk")) {
+    $desktopShortcut = Join-Path $desktopDirectory $shortcutName
+    if (-not (Test-Path -LiteralPath $desktopShortcut)) {
+        continue
+    }
     try {
         Remove-Item -LiteralPath $desktopShortcut -Force -ErrorAction Stop
         Write-Host "Removed desktop shortcut: $desktopShortcut"

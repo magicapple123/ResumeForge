@@ -162,6 +162,30 @@ try {
     New-ShortcutFile -Directory $emptyDirectory -FileName $EnglishShortcutName
     Assert-ShortcutTest -Condition (Test-DesktopShortcutExists -DesktopDirectory $emptyDirectory) -Message "-IfMissing must exit silently when the English shortcut exists (created before a display-language switch)."
 
+    # --- the uninstaller removes the same set of names ---
+    #
+    # Uninstall-ResumeForge.ps1 ships on its own in the portable zip, so it cannot
+    # dot-source the launcher and repeats the two names instead. The repetition is
+    # only safe while both sides agree: compare the .lnk literals each file mentions.
+    # A renamed language branch added on one side alone turns this red instead of
+    # silently leaving an orphan shortcut behind.
+    $uninstallScript = Join-Path $ProjectRoot "scripts\Uninstall-ResumeForge.ps1"
+    Assert-ShortcutTest -Condition (Test-Path -LiteralPath $uninstallScript) -Message "Uninstall-ResumeForge.ps1 is missing: $uninstallScript"
+
+    $uninstallBytes = [IO.File]::ReadAllBytes($uninstallScript)
+    $uninstallHasBom = $uninstallBytes.Length -ge 3 -and $uninstallBytes[0] -eq 0xEF -and $uninstallBytes[1] -eq 0xBB -and $uninstallBytes[2] -eq 0xBF
+    Assert-ShortcutTest -Condition $uninstallHasBom -Message "Uninstall-ResumeForge.ps1 must keep its UTF-8 BOM: it contains the Chinese shortcut name, which PowerShell 5.1 would decode with the ANSI code page."
+
+    $uninstallContent = [System.Text.Encoding]::UTF8.GetString($uninstallBytes)
+    $uninstallNames = @(
+        [regex]::Matches($uninstallContent, '"([^"\r\n]+\.lnk)"') |
+            ForEach-Object { $_.Groups[1].Value } |
+            Sort-Object -Unique
+    )
+    $expectedShortcutNames = @($allNames | Sort-Object -Unique)
+    $nameDifference = @(Compare-Object -ReferenceObject $expectedShortcutNames -DifferenceObject $uninstallNames)
+    Assert-ShortcutTest -Condition ($uninstallNames.Count -eq $expectedShortcutNames.Count -and $nameDifference.Count -eq 0) -Message "Uninstall-ResumeForge.ps1 must remove exactly the shortcut names Create-DesktopShortcut.ps1 can create; launcher creates '$($expectedShortcutNames -join ', ')' but the uninstaller mentions '$($uninstallNames -join ', ')'."
+
     Write-Host "Desktop shortcut tests passed."
 }
 finally {
