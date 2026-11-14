@@ -16,7 +16,7 @@ from fpdf.enums import XPos, YPos
 
 from .fonts import FONT_FAMILY
 from .layout import _PX_TO_PT
-from .style_blocks import _bold, _color, _line_height, _scale, _wrapmode_args
+from .style_blocks import _bold, _color, _line_height, _scale
 
 if TYPE_CHECKING:  # pragma: no cover - 只为类型检查，运行期不能导入 canvas（会循环导入）
     from ..resume.resume_style import RoleStyle
@@ -89,7 +89,6 @@ def draw_meta_line(
         align="L",
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
-        **_wrapmode_args(pdf, text, pdf.frame_width, size * _PX_TO_PT),
     )
     if gap_bottom:
         pdf.ln(gap_bottom)

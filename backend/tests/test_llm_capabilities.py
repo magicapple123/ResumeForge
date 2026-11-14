@@ -26,27 +26,29 @@ def _config(base_url: str, model: str) -> LLMConfig:
 
 
 @pytest.mark.parametrize(
-    ("base_url", "model"),
+    ("base_url", "model", "vision"),
     [
-        ("https://api.deepseek.com/v1", "deepseek-flash"),
-        ("https://api.moonshot.cn/v1", "kimi-k3"),
-        ("https://open.bigmodel.cn/api/paas/v4", "glm-5"),
-        ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
-        ("https://api.openai.com/v1", "gpt-5.2"),
-        ("https://openrouter.ai/api/v1", "some/model"),
-        ("http://localhost:11434/v1", "llama3"),
-        ("https://unknown.gateway.example/v1", "whatever"),
+        ("https://api.deepseek.com/v1", "deepseek-flash", False),
+        ("https://api.moonshot.cn/v1", "kimi-k3", False),
+        ("https://open.bigmodel.cn/api/paas/v4", "glm-5", False),
+        ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", False),
+        # F18 起 vision 按 host + 型号声明：支持图像输入的型号为 True。
+        ("https://api.openai.com/v1", "gpt-5.2", True),
+        ("https://openrouter.ai/api/v1", "some/model", True),
+        ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-vl-max", True),
+        ("http://localhost:11434/v1", "llama3", False),
+        ("https://unknown.gateway.example/v1", "whatever", False),
     ],
 )
-def test_resolve_is_pure_declaration_and_matches_thinking_authority(base_url, model):
+def test_resolve_is_pure_declaration_and_matches_thinking_authority(base_url, model, vision):
     config = _config(base_url, model)
     capabilities = resolve_capabilities(config)
 
-    # 现状口径（§2.3 表格）：stream 恒 True；structured_output / vision 默认 False；
+    # 现状口径（§2.3 表格）：stream 恒 True；structured_output 默认 False；
     # tools unknown 默认 True——不因 (host, model) 不同而漂移。
     assert capabilities.stream is True
     assert capabilities.structured_output is False
-    assert capabilities.vision is False
+    assert capabilities.vision is vision
     assert capabilities.tools is True
 
     # reasoning 委托 thinking_support 现有权威实现：对拍一致（不另立第二张思考表）。

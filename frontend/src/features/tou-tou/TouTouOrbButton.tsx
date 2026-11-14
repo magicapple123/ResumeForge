@@ -6,6 +6,8 @@ import type { KeyboardEvent, PointerEvent, RefObject } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { layer } from "../../theme/tokens";
+import { formatShortcut } from "../shortcuts/matchShortcut";
+import { useShortcutSettings } from "../shortcuts/useShortcutKeymap";
 import { TOU_TOU_FACE_SOURCES, type TouTouFaceKey } from "./touTouFaces";
 
 interface Props {
@@ -41,9 +43,13 @@ export function TouTouOrbButton({
   onMouseMove,
 }: Props) {
   useLocale();
+  const shortcuts = useShortcutSettings();
+  const shortcut = (shortcuts.bindings.selectionPanel ?? [])
+    .map((key) => formatShortcut(key))
+    .join(" / ");
   return (
     <Tooltip
-      title={t("touTou.orb.tooltip")}
+      title={t("touTou.orb.tooltip", { shortcut })}
       placement="top"
       /*
        * 球（.tt-shell）已提到 3650，antd Tooltip 默认的 1070 会被盖住；

@@ -23,6 +23,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
+from .field_style_target import field_entry_id, is_field_path
 from .resume_style_schema import (
     PROP_KEYS,
     ROLES,
@@ -116,11 +117,15 @@ class ResolvedStyle:
         ``obj:<role>`` 是 W3 新增的最高层：用户把「文字级别」限定到某个字段后，
         同一条目其它角色仍走对象层/角色层，互不污染。
         """
-        return (
+        parent = field_entry_id(object_id)
+        inherited = (
             self.role(role)
+            .merged_with(self.entry(parent))
+            .merged_with(self.entry_role(role, parent))
             .merged_with(self.entry(object_id))
             .merged_with(self.entry_role(role, object_id))
         )
+        return inherited
 
     def source_of(
         self, prop: str, *, role: str | None = None, object_id: str | None = None
@@ -130,13 +135,15 @@ class ResolvedStyle:
         L2（具名版式）与 L3（简历覆盖）在调用方已经合成进同一份 format_config，这里
         无法再区分——两者都报 ``resume``，属性面板文案按"已调整"处理（契约 §2.5 三态）。
         """
-        if (
-            object_id
-            and role
-            and getattr(self.entry_role(role, object_id), prop, None) is not None
-        ):
+        if object_id and role and getattr(self.entry_role(role, object_id), prop, None) is not None:
             return "object"
         if object_id and getattr(self.entry(object_id), prop, None) is not None:
+            return "object"
+        parent = field_entry_id(object_id)
+        if parent and (
+            (role and getattr(self.entry_role(role, parent), prop, None) is not None)
+            or getattr(self.entry(parent), prop, None) is not None
+        ):
             return "object"
         if role and getattr(self.role(role), prop, None) is not None:
             return "role"
@@ -435,7 +442,19 @@ def entry_style_css(style: ResolvedStyle) -> str:
     #    选择器与第 3 步同权重（0,2,0）且注入在其后：同权重时本段生效，不需要 !important。
     for key in sorted(style.object_roles):
         object_id, _, role = key.partition(":")
-        if role not in _OBJECT_ROLES:
+        if is_field_path(object_id):
+            field_style = style.object_roles[key]
+            prefix = f'[data-resume-path="{object_id}"]:not([data-resume-path] [data-resume-path])'
+            if role == "field_label":
+                prefix = f'[data-resume-path="{object_id}"][data-role="field_label"]'
+            else:
+                prefix += ':not([data-role="field_label"])'
+            rules.append(_rule(prefix, _declarations(field_style, ratio=ratios.get(role, 1.0))))
+            # Paragraph spacing belongs on the block carrying this exact path.
+            if field_style.space_before is not None or field_style.space_after is not None:
+                rules.append(_rule(prefix + ":is(span,strong,em)", ["display: inline-block;"]))
+            continue
+        if role not in (*_OBJECT_ROLES, "field_label"):
             # name / section_title 不在对象子树里出现（模板契约），跳过而不是写一条永远
             # 匹配不到的选择器。
             continue

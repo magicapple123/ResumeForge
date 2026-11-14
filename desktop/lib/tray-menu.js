@@ -11,9 +11,28 @@
 
 const TRAY_LABELS = {
   open: "打开简历通",
+  openDataDir: "打开数据目录",
+  openLogDir: "打开日志目录",
+  diagnostics: "复制诊断信息",
+  checkUpdate: "检查更新",
   askOnClose: "关闭窗口时询问",
   quit: "退出",
 };
+
+/**
+ * 托盘新增的四项（Q11）：**不重写实现**，全部走 `registerDesktopShellIpc` 返回的
+ * `menu.run(id)`——那是渲染层菜单的同一条链路，动作 id 也就必须是它认的那些。
+ *
+ * 「检查更新」特殊：现有链路把结果交回渲染层的「关于」弹窗，托盘侧没有消费者。
+ * 所以先 `showWindow()` 把主窗口唤到前台再走既有流程，否则用户点了像没反应。
+ */
+const TRAY_ACTIONS = [
+  { label: TRAY_LABELS.openDataDir, action: "file.openDataDir" },
+  { label: TRAY_LABELS.openLogDir, action: "help.openLogDir" },
+  { label: TRAY_LABELS.diagnostics, action: "help.getDiagnostics" },
+  // `focusWindow: true` 的项＝结果要在界面上看，必须先唤起窗口。
+  { label: TRAY_LABELS.checkUpdate, action: "help.checkUpdate", focusWindow: true },
+];
 
 /**
  * 构造托盘菜单模板。
@@ -26,7 +45,7 @@ const TRAY_LABELS = {
  * @param {function(): void} deps.refresh 重建托盘菜单
  */
 function buildTrayTemplate(deps) {
-  const { getWindow, app, getRemembered, clearRemembered, refresh } = deps;
+  const { getWindow, app, getRemembered, clearRemembered, refresh, runMenuAction } = deps;
 
   const showWindow = () => {
     const win = getWindow();
@@ -39,8 +58,20 @@ function buildTrayTemplate(deps) {
     }
   };
 
+  const actionItems =
+    typeof runMenuAction === "function"
+      ? TRAY_ACTIONS.map((item) => ({
+          label: item.label,
+          click: () => {
+            if (item.focusWindow) showWindow();
+            runMenuAction(item.action);
+          },
+        }))
+      : [];
+
   return [
     { label: TRAY_LABELS.open, click: showWindow },
+    ...(actionItems.length > 0 ? [{ type: "separator" }, ...actionItems] : []),
     { type: "separator" },
     {
       label: TRAY_LABELS.askOnClose,
@@ -85,7 +116,17 @@ function buildTrayTemplate(deps) {
  * @param {function(string): void} [deps.logLine]
  */
 function createTrayManager(deps) {
-  const { Tray, Menu, iconPath, app, getWindow, getRemembered, clearRemembered, logLine = () => {} } = deps;
+  const {
+    Tray,
+    Menu,
+    iconPath,
+    app,
+    getWindow,
+    getRemembered,
+    clearRemembered,
+    runMenuAction,
+    logLine = () => {},
+  } = deps;
   let tray = null;
 
   function refresh() {
@@ -93,7 +134,14 @@ function createTrayManager(deps) {
     try {
       tray.setContextMenu(
         Menu.buildFromTemplate(
-          buildTrayTemplate({ getWindow, app, getRemembered, clearRemembered, refresh }),
+          buildTrayTemplate({
+            getWindow,
+            app,
+            getRemembered,
+            clearRemembered,
+            refresh,
+            runMenuAction,
+          }),
         ),
       );
     } catch (err) {
@@ -137,4 +185,4 @@ function createTrayManager(deps) {
   return { create, refresh, destroy, getTray: () => tray };
 }
 
-module.exports = { TRAY_LABELS, buildTrayTemplate, createTrayManager };
+module.exports = { TRAY_ACTIONS, TRAY_LABELS, buildTrayTemplate, createTrayManager };

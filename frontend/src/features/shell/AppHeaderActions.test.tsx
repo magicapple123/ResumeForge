@@ -43,11 +43,13 @@ describe("AppHeaderActions", () => {
     renderActions();
 
     expect(screen.queryByRole("button", { name: t("common.exitApp.aria") })).toBeNull();
-    // GitHub 入口仍在（页头其它动作一律不动，§18.2-A）。
-    expect(
-      screen.getByRole("link", {
-        name: t("appConfig.header.repoAria", { name: t("appConfig.brand.name") }),
-      }),
-    ).toBeInTheDocument();
+    // GitHub 入口仍在（页头其它动作一律不动，§18.2-A）。F28 起它是**按钮**：
+    // 点击只弹 Star 提示，跳转由弹窗里的「去点 Star」负责。
+    const repo = screen.getByRole("button", {
+      name: t("appConfig.header.repoAria", { name: t("appConfig.brand.name") }),
+    });
+    expect(repo).toBeInTheDocument();
+    expect(repo).not.toHaveAttribute("href");
+    expect(repo).toHaveAttribute("aria-haspopup", "dialog");
   });
 });

@@ -213,7 +213,7 @@ export default function DrillPage() {
           >
             {t("drill.action.back")}
           </Button>
-          <Typography.Title level={4} style={{ margin: 0 }}>
+          <Typography.Title level={3} style={{ margin: 0 }}>
             {t("drill.page.title")}
           </Typography.Title>
           <Typography.Text type="secondary">{t("drill.page.subtitle")}</Typography.Text>

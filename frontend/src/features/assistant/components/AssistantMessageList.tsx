@@ -1,30 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 对话消息、流式回复和加载状态展示。 */
 
-import {
-  CheckSquareOutlined,
-  CommentOutlined,
-  CopyOutlined,
-  DeleteOutlined,
-  UpOutlined,
-} from "@ant-design/icons";
-import { Alert, App, Button, Checkbox, Typography } from "antd";
+import { UpOutlined } from "@ant-design/icons";
+import { Alert, Button, Checkbox, Tag, Typography } from "antd";
 import { memo } from "react";
 import type { RefObject } from "react";
 import type {
   AssistantConversationDetail,
   AssistantMessage,
+  AssistantMessageReferences,
+  AssistantReferenceKind,
   AssistantSource,
   AssistantSourceNumber,
   AssistantToolCall,
 } from "../../../types";
-import { copyText } from "../../../utils/clipboard";
 import { formatDateTime } from "../../../utils/format";
-import { RowContextMenu, type RowActionItem } from "../../../components/common/RowActions";
+import { RowContextMenu } from "../../../components/common/RowActions";
 import PageSkeleton from "../../../components/common/PageSkeleton";
 import AssistantEmptyState from "./AssistantEmptyState";
-import AssistantMessageActions from "./AssistantMessageActions";
+import MessageActionsMore from "./MessageActionsMore";
 import MessageCollapse from "./MessageCollapse";
+import MessageReferences from "./MessageReferences";
+import { useMessageMenuItems } from "./useMessageMenuItems";
+import { useSaveKnowledge } from "./useSaveKnowledge";
 import ProposalResultNote from "./ProposalResultNote";
 import {
   AssistantMessageContent,
@@ -51,6 +49,8 @@ interface Props {
   /** 正在发送的那条消息的发出时刻（服务端时间戳还没有）。 */
   pendingSentAt: string;
   pendingUserAttachments: PendingAttachment[];
+  /** 正在发送的那条用户消息引用了哪个岗位/简历（发送后输入区已清空，靠这份快照显示）。 */
+  pendingUserRefs?: AssistantMessageReferences | null;
   streamingText: string;
   /** 正在流式产出的思考内容（开启思考强度时才有）。 */
   streamingReasoning: string;
@@ -86,6 +86,8 @@ interface Props {
   messagesScrollRef?: RefObject<HTMLDivElement | null>;
   /** 用户滚动容器时回调：页面侧据此判断是否吸底。 */
   onMessagesScroll?: () => void;
+  /** 点击气泡里的岗位/简历引用片（F36）；缺省不可点。 */
+  onOpenReference?: (kind: AssistantReferenceKind, id: number) => void;
 }
 
 interface BubbleProps {
@@ -101,6 +103,8 @@ interface BubbleProps {
   onRegenerate?: (message: AssistantMessage) => void;
   /** 右键菜单「批量选择」的动作：进入消息多选模式（页头按钮已收进这里，R8）。 */
   onEnterSelecting: () => void;
+  /** 点击气泡里的岗位/简历引用片（F36）；缺省不可点。 */
+  onOpenReference?: (kind: AssistantReferenceKind, id: number) => void;
 }
 
 /**
@@ -123,9 +127,23 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
   onDeleteMessage,
   onRegenerate,
   onEnterSelecting,
+  onOpenReference,
 }: BubbleProps) {
   useLocale();
-  const { message } = App.useApp();
+  // #29B：保存弹窗与「已存」链接挂在这条气泡上，菜单项只负责调 openModal。
+  const knowledge = useSaveKnowledge(item);
+  // 每条消息的操作只在右键 / 窄档「⋯」里出现（F37）；菜单项一份实现，两处共用。
+  const menuItems = useMessageMenuItems({
+    message: item,
+    showRegenerate: item.role === "assistant" && showRegenerate,
+    regenerateDisabled,
+    onQuote,
+    onDelete: onDeleteMessage,
+    onRegenerate,
+    onEnterSelecting,
+    onSaveKnowledge:
+      item.role === "assistant" && item.content.trim() ? knowledge.openModal : undefined,
+  });
 
   // T01-A：写操作终态的派生回写渲染成一行状态提示，不再是普通助手气泡——
   // 它不代表模型说话，只代表"那次写入最后怎么样了"。
@@ -134,45 +152,8 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
     return <ProposalResultNote result={proposalResult} />;
   }
 
-  /** 每条消息的操作：整块右键即可唤出（和岗位卡片、会话列表一致）。 */
-  const actionsFor = (): RowActionItem[] => [
-    {
-      key: "batch_select",
-      label: t("common.action.batchSelect"),
-      icon: <CheckSquareOutlined />,
-      onClick: onEnterSelecting,
-    },
-    {
-      key: "quote",
-      label: t("assistantUi.messageList.action.quote"),
-      icon: <CommentOutlined />,
-      onClick: () => onQuote(item),
-    },
-    {
-      key: "copy",
-      label: t("assistantUi.messageList.action.copy"),
-      icon: <CopyOutlined />,
-      onClick: () => {
-        void copyText(item.content).then((ok) =>
-          ok
-            ? message.success(t("assistantUi.messageList.toast.copied"))
-            : message.warning(t("assistantUi.messageList.toast.copyFailed")),
-        );
-      },
-    },
-    {
-      key: "delete",
-      label: t("assistantUi.messageList.action.delete"),
-      icon: <DeleteOutlined />,
-      danger: true,
-      // 删除不可撤销；引用它的消息保留引用快照，所以这里明确说一下影响范围。
-      confirm: t("assistantUi.messageList.confirm.delete"),
-      onClick: () => onDeleteMessage(item),
-    },
-  ];
-
   return (
-    <RowContextMenu items={actionsFor()}>
+    <RowContextMenu items={menuItems}>
       <article
         className={`assistant-message assistant-message--${item.role}${
           selected ? " assistant-message--selected" : ""
@@ -196,6 +177,10 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
             <span className="assistant-quoted-text">{item.context.quoted.excerpt}</span>
           </div>
         ) : null}
+        {/* F36：本轮引用的岗位/简历（快照标题，可点击跳到岗位/简历详情）。 */}
+        {item.role === "user" ? (
+          <MessageReferences refs={item.context} onOpenReference={onOpenReference} />
+        ) : null}
         {/* 思考过程置顶（A2）：先给思考，再给正文——用户最关心"它想清楚没"。 */}
         <MessageReasoning
           reasoning={item.context.reasoning}
@@ -208,26 +193,26 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
         <MessageAttachments attachments={item.attachments} />
         <MessageSources sources={item.context.sources ?? []} />
         <MessageToolCalls calls={item.context.tool_calls ?? []} />
-        {/* T14 可追溯：这一轮实际注入了哪些技能（只记名字，不含提示词正文）。 */}
+        {/* T14 可追溯：这一轮实际注入了哪些技能（只记名字，不含提示词正文）。
+            F36：与「本轮引用」同款 chip；技能属于整段对话，所以前缀写「本对话启用」。 */}
         {item.context.skills && item.context.skills.length > 0 ? (
-          <div className="assistant-message-skills">
-            <Typography.Text type="secondary" className="assistant-message-skills-line">
-              {t("conversationSkills.message.used", {
-                names: item.context.skills.join(t("conversationSkills.message.separator")),
-              })}
-            </Typography.Text>
+          <div className="assistant-message-skills assistant-message-refs">
+            <span className="assistant-message-refs-label">
+              {t("conversationSkills.message.enabledLabel")}
+            </span>
+            {item.context.skills.map((name) => (
+              <Tag key={name} className="assistant-ref-chip">
+                <span className="assistant-ref-chip-text">{name}</span>
+              </Tag>
+            ))}
           </div>
         ) : null}
         {item.status === "error" && item.error && <Alert type="error" title={item.error} />}
-        {/* #13A 消息操作条：hover / focus-within 显示，≤767px 触屏常显。 */}
-        <AssistantMessageActions
-          message={item}
-          showRegenerate={item.role === "assistant" && showRegenerate}
-          regenerateDisabled={regenerateDisabled}
-          onQuote={onQuote}
-          onDelete={onDeleteMessage}
-          onRegenerate={onRegenerate}
-        />
+        {/* #29B 保存结果：一行「已存：标题」链接，不是操作行。 */}
+        {knowledge.savedLink}
+        {/* F37 窄档（≤767px）的操作入口：桌面只用右键，触屏没有右键。 */}
+        <MessageActionsMore items={menuItems} />
+        {knowledge.modal}
       </article>
     </RowContextMenu>
   );
@@ -243,6 +228,7 @@ export default function AssistantMessageList({
   pendingUserText,
   pendingSentAt,
   pendingUserAttachments,
+  pendingUserRefs = null,
   streamingText,
   streamingReasoning,
   streamingSources,
@@ -268,6 +254,7 @@ export default function AssistantMessageList({
   onToggleSelected,
   messagesScrollRef,
   onMessagesScroll,
+  onOpenReference,
 }: Props) {
   useLocale();
   // 页面总会传已翻译的显示名；缺省时按整页形态的「求职助手」兜底。
@@ -332,6 +319,7 @@ export default function AssistantMessageList({
                 onDeleteMessage={onDeleteMessage}
                 onRegenerate={onRegenerate}
                 onEnterSelecting={onEnterSelecting}
+                onOpenReference={onOpenReference}
               />
             );
             // 多选时不挂右键菜单：那套操作（引用、复制）此时都用不上，右键还要和勾选抢交互。
@@ -363,6 +351,8 @@ export default function AssistantMessageList({
               {formatDateTime(pendingSentAt)}
             </Typography.Text>
           </div>
+          {/* F36 乐观气泡：发送后输入区已清空，引用的岗位/简历靠发送瞬间的快照显示。 */}
+          <MessageReferences refs={pendingUserRefs ?? {}} onOpenReference={onOpenReference} />
           <AssistantMessageContent content={pendingUserText} />
           <MessageAttachments attachments={pendingUserAttachments} />
         </article>

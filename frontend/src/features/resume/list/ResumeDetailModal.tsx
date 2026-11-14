@@ -10,7 +10,7 @@ import { Alert, App, Button, Modal, Popconfirm, Space, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  fetchResumeHtml,
+  fetchResumePreviewHtml,
   fetchResumeTemplates,
   getResume,
   renderResume,
@@ -48,6 +48,7 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
   const [detail, setDetail] = useState<ResumeDetail | null>(null);
   const [html, setHtml] = useState("");
   const [error, setError] = useState("");
+  const [htmlError, setHtmlError] = useState("");
   const [layout, setLayout] = useState<ResumeLayout>(DEFAULT_RESUME_LAYOUT);
   const [savedLayout, setSavedLayout] = useState<ResumeLayout>(DEFAULT_RESUME_LAYOUT);
   const [layoutStatus, setLayoutStatus] = useState<{
@@ -156,10 +157,23 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     setDetail(null);
     setHtml("");
     setError("");
+    setHtmlError("");
     setLayoutStatus(null);
     // 换一份简历：上一份留下的"要不要丢弃排版"卡片不能跟过来。
     setCloseConfirmOpen(false);
   }
+
+  const loadPreviewHtml = useCallback(async (id: number, version: number) => {
+    setHtmlError("");
+    try {
+      const rendered = await fetchResumePreviewHtml(id, { includeOverflowPages: true });
+      if (version === requestVersion.current) setHtml(rendered);
+    } catch (cause) {
+      if (version === requestVersion.current) {
+        setHtmlError(cause instanceof Error ? cause.message : t("resume.detail.loadFailed"));
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const currentRequest = ++requestVersion.current;
@@ -172,15 +186,12 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
       setSuggestionsResetKey((value) => value + 1);
     }
     // includeOverflowPages：草稿预览要把**超出篇幅上限的页**也画出来（红框 + 不计入
-    // 导出），所以这里要完整正文；打印/下载 HTML 的调用点一律不传（见 fetchResumeHtml）。
-    void Promise.all([
-      getResume(recordId),
-      fetchResumeHtml(recordId, false, { includeOverflowPages: true }),
-    ])
-      .then(([data, rendered]) => {
+    // 导出），所以这里要完整正文。两条请求独立，HTML 失败仍保留编辑入口。
+    void loadPreviewHtml(recordId, currentRequest);
+    void getResume(recordId)
+      .then((data) => {
         if (currentRequest !== requestVersion.current) return;
         setDetail(data);
-        setHtml(rendered);
         // 版式跟着记录走：上次用的是哪套，这次打开还是哪套（字段兜底只在 layoutFromDetail 一处）。
         const nextLayout = layoutFromDetail(data);
         setLayout(nextLayout);
@@ -194,7 +205,7 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     return () => {
       if (currentRequest === requestVersion.current) requestVersion.current += 1;
     };
-  }, [recordId]);
+  }, [recordId, loadPreviewHtml]);
 
   // 只有第一次打开时才去问后端的模板目录（能不能直接生成 PDF）。
   useEffect(() => {
@@ -335,91 +346,105 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     >
       {error ? (
         <Alert type="error" showIcon title={error} />
-      ) : !detail || !html ? (
+      ) : !detail ? (
         <PageSkeleton rows={8} card={false} />
       ) : (
-        <ResumeDetailPreview
-          detail={detail}
-          html={html}
-          layout={layout}
-          autoOpenWorkbench={autoOpenWorkbench}
-          layoutStatus={layoutStatus}
-          measure={measure}
-          pdfDirectAvailable={pdfDirectAvailable}
-          relayouting={relayouting}
-          previewRef={previewRef}
-          // 关联上下文（RF-11）+ 本次使用（R-33）+ 版本血缘 / 投递记录（RF-17）全部并进
-          // 顶部**同一行元信息**（2026-11 问题 8）：原来这三块各占一段，把纸面推到首屏之外。
-          // 只换形态，三块内容与它们各自的取数逻辑都没动。
-          metaExtra={
-            <div className="resume-detail-meta-extra">
-              {detail.job_id ? (
-                <Space size={8}>
-                  <Link to={`/jobs?job_id=${detail.job_id}`}>{t("resume.detail.link.job")}</Link>
-                  <Typography.Text type="secondary">·</Typography.Text>
-                  <Link to={`/tracker?job_id=${detail.job_id}`}>
-                    {t("resume.detail.link.progress")}
-                  </Link>
-                  <Typography.Text type="secondary">·</Typography.Text>
-                  <Link to={`/interview?job_id=${detail.job_id}`}>
-                    {t("resume.detail.link.interview")}
-                  </Link>
-                </Space>
-              ) : null}
-              {/* 本次使用（R-33）：保存/生成时的组与参与大字段；资料/定义变了提示需重新生成。
+        <>
+          {htmlError ? (
+            <Alert
+              type="error"
+              showIcon
+              title={htmlError}
+              action={
+                <Button onClick={() => void loadPreviewHtml(detail.id, requestVersion.current)}>
+                  {t("common.retry")}
+                </Button>
+              }
+            />
+          ) : null}
+          <ResumeDetailPreview
+            detail={detail}
+            html={html}
+            layout={layout}
+            autoOpenWorkbench={autoOpenWorkbench}
+            layoutStatus={layoutStatus}
+            measure={measure}
+            pdfDirectAvailable={pdfDirectAvailable}
+            relayouting={relayouting}
+            previewRef={previewRef}
+            // 关联上下文（RF-11）+ 本次使用（R-33）+ 版本血缘 / 投递记录（RF-17）全部并进
+            // 顶部**同一行元信息**（2026-11 问题 8）：原来这三块各占一段，把纸面推到首屏之外。
+            // 只换形态，三块内容与它们各自的取数逻辑都没动。
+            metaExtra={
+              <div className="resume-detail-meta-extra">
+                {detail.job_id ? (
+                  <Space size={8}>
+                    <Link to={`/jobs?job_id=${detail.job_id}`}>{t("resume.detail.link.job")}</Link>
+                    <Typography.Text type="secondary">·</Typography.Text>
+                    <Link to={`/tracker?job_id=${detail.job_id}`}>
+                      {t("resume.detail.link.progress")}
+                    </Link>
+                    <Typography.Text type="secondary">·</Typography.Text>
+                    <Link to={`/interview?job_id=${detail.job_id}`}>
+                      {t("resume.detail.link.interview")}
+                    </Link>
+                  </Space>
+                ) : null}
+                {/* 本次使用（R-33）：保存/生成时的组与参与大字段；资料/定义变了提示需重新生成。
                   纯只读，读取失败时整块隐藏（不阻断下面的正文预览）。 */}
-              <ResumeProfileUsage recordId={detail.id} />
-              {/* 版本信息位（RF-17）：血缘 + 投递记录，弹窗打开时按需拉取一次。 */}
-              <ResumeDeliveryInfo
-                recordId={detail.id}
-                parentRevisionId={detail.parent_revision_id ?? null}
-              />
-            </div>
-          }
-          onLayoutStatus={setLayoutStatus}
-          onMeasure={setMeasure}
-          onApplyLayout={(next) => requestLayout(next)}
-          // 制作台顶部「保存修改」要落库版式：把这条已有的 PATCH 链路直接交给它。
-          // 底部那颗「保存」按钮仍在（定位不同：它只存版式，不动内容），两者共用本函数
-          // 内部的 `layoutDirty / layoutSaving` 守卫，谁先点都不会发两次请求。
-          onCommitLayout={saveLayout}
-          // W02 条件写 + 409 冲突三选一：见 `documentPipeline`。
-          documentPipeline={documentPipeline}
-          onDocumentSynced={handleDocumentSynced}
-          onReplaceDocument={handleReplaceDocument}
-          // 草稿且什么都没脏时点「保存到简历中心」：见 `publishDraft`。
-          onPublishDraft={publishDraft}
-          // 版式 PATCH 在飞时制作台顶部的「保存修改」必须禁用：这条链路此刻返回 `false`
-          // （同一时刻不许发两次 PATCH），若按钮还能点，用户会看到"点了、按钮还在、没有提示"，
-          // 而内容其实一次都没存。
-          layoutSaving={layoutSaving}
-          onApplyFittedFormat={(formatConfig) =>
-            // 「自动一页」也只写入当前草稿：同一条重排通道，不另开一份"正在重排"口径。
-            requestLayout({ ...layout, format_config: formatConfig })
-          }
-          extraActions={
-            layoutDirty ? (
-              <Space size={8}>
-                <Button onClick={cancelLayout} disabled={relayouting || layoutSaving}>
-                  {t("common.action.cancel")}
-                </Button>
-                <Button
-                  type="primary"
-                  loading={layoutSaving}
-                  disabled={relayouting}
-                  onClick={() => void saveLayout()}
-                >
-                  {t("common.action.save")}
-                </Button>
-              </Space>
-            ) : null
-          }
-          onSaveEditedResume={saveEditedResume}
-          onResumeRevised={(updated) => applyRevisedDetail(updated)}
-          suggestionsGenerated={suggestionsGenerated}
-          suggestionsResetKey={suggestionsResetKey}
-          onSuggestionsGenerated={() => setSuggestionsGenerated(true)}
-        />
+                <ResumeProfileUsage recordId={detail.id} />
+                {/* 版本信息位（RF-17）：血缘 + 投递记录，弹窗打开时按需拉取一次。 */}
+                <ResumeDeliveryInfo
+                  recordId={detail.id}
+                  parentRevisionId={detail.parent_revision_id ?? null}
+                />
+              </div>
+            }
+            onLayoutStatus={setLayoutStatus}
+            onMeasure={setMeasure}
+            onApplyLayout={(next) => requestLayout(next)}
+            // 制作台顶部「保存修改」要落库版式：把这条已有的 PATCH 链路直接交给它。
+            // 底部那颗「保存」按钮仍在（定位不同：它只存版式，不动内容），两者共用本函数
+            // 内部的 `layoutDirty / layoutSaving` 守卫，谁先点都不会发两次请求。
+            onCommitLayout={saveLayout}
+            // W02 条件写 + 409 冲突三选一：见 `documentPipeline`。
+            documentPipeline={documentPipeline}
+            onDocumentSynced={handleDocumentSynced}
+            onReplaceDocument={handleReplaceDocument}
+            // 草稿且什么都没脏时点「保存到简历中心」：见 `publishDraft`。
+            onPublishDraft={publishDraft}
+            // 版式 PATCH 在飞时制作台顶部的「保存修改」必须禁用：这条链路此刻返回 `false`
+            // （同一时刻不许发两次 PATCH），若按钮还能点，用户会看到"点了、按钮还在、没有提示"，
+            // 而内容其实一次都没存。
+            layoutSaving={layoutSaving}
+            onApplyFittedFormat={(formatConfig) =>
+              // 「自动一页」也只写入当前草稿：同一条重排通道，不另开一份"正在重排"口径。
+              requestLayout({ ...layout, format_config: formatConfig })
+            }
+            extraActions={
+              layoutDirty ? (
+                <Space size={8}>
+                  <Button onClick={cancelLayout} disabled={relayouting || layoutSaving}>
+                    {t("common.action.cancel")}
+                  </Button>
+                  <Button
+                    type="primary"
+                    loading={layoutSaving}
+                    disabled={relayouting}
+                    onClick={() => void saveLayout()}
+                  >
+                    {t("common.action.save")}
+                  </Button>
+                </Space>
+              ) : null
+            }
+            onSaveEditedResume={saveEditedResume}
+            onResumeRevised={(updated) => applyRevisedDetail(updated)}
+            suggestionsGenerated={suggestionsGenerated}
+            suggestionsResetKey={suggestionsResetKey}
+            onSuggestionsGenerated={() => setSuggestionsGenerated(true)}
+          />
+        </>
       )}
     </Modal>
   );

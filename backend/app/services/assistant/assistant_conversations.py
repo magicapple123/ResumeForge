@@ -115,6 +115,7 @@ def _to_brief(conversation: ChatConversation, message_count: int = 0) -> ChatCon
         favorite=conversation.favorite,
         archived=conversation.archived,
         group_name=conversation.group_name,
+        memory_off=conversation.memory_off,
         message_count=message_count,
         created_at=conversation.created_at,
         updated_at=conversation.updated_at,
@@ -341,6 +342,9 @@ def update_conversation(
             conversation.pinned = False
     if payload.group_name is not None:
         conversation.group_name = payload.group_name
+    if payload.memory_off is not None:
+        # 只切换"以后读不读/写不写"，不动 assistant_memory 里的任何一行。
+        conversation.memory_off = payload.memory_off
     # 标记变化不改变会话的时间排序，取消置顶后仍回到原位置。
     if payload.title is not None:
         conversation.updated_at = utcnow()

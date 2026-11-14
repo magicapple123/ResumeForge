@@ -27,12 +27,16 @@ interface Props {
   /** 提交关键词：页面负责写 keyword 状态并把分页回到第 1 页（不动其它筛选）。 */
   onCommit: (value: string) => void;
   debounceMs?: number;
+  placeholder?: string;
+  width?: number;
 }
 
 export default function ResumeSearchInput({
   keyword,
   onCommit,
   debounceMs = SEARCH_DEBOUNCE_MS,
+  placeholder,
+  width = 300,
 }: Props) {
   useLocale();
   const [draft, setDraft] = useState(keyword);
@@ -57,9 +61,9 @@ export default function ResumeSearchInput({
 
   return (
     <Input.Search
-      placeholder={t("resumes.search.placeholder")}
+      placeholder={placeholder ?? t("resumes.search.placeholder")}
       allowClear
-      style={{ width: 300 }}
+      style={{ width }}
       value={draft}
       onChange={(event) => {
         const value = event.target.value;

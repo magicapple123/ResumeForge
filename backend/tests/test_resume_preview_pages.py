@@ -118,13 +118,8 @@ def test_long_edge_is_capped_at_3000px(tmp_path, monkeypatch):
     assert 1.40 < page.height / page.width < 1.43
 
 
-def test_pages_render_in_parallel_with_one_pdf_handle_each(tmp_path, monkeypatch):
-    """逐页并发（#23 P2）的两条契约：**页序不变** + **每页各开一份文档**。
-
-    第二条不是风格问题：pypdfium2 的 `PdfDocument` 不是线程安全的，多线程共用一个对象
-    会崩在 C 层——那不是能被捕获的 Python 异常，表现为进程直接消失。所以这里数
-    `_open_document` 的调用次数（页数探针 1 次 + 每页 1 次），少一次就说明有共享。
-    """
+def test_pages_render_in_order_with_one_pdf_handle_each(tmp_path, monkeypatch):
+    """串行渲染保持页序，并在每页落盘后关闭独立句柄。"""
     monkeypatch.setattr(pages, "cache_root", lambda: tmp_path)
     opened: list[int] = []
     original = pages._open_document
@@ -136,10 +131,10 @@ def test_pages_render_in_parallel_with_one_pdf_handle_each(tmp_path, monkeypatch
     monkeypatch.setattr(pages, "_open_document", counting)
     rendered = pages.render_preview_pages(_a4_pdf(4), width_px=900, dpr=1.0)
 
-    # 4 页全部出图，且顺序就是导出 PDF 的页序（线程完成顺序不参与结果排序）。
+    # 4 页全部出图，且顺序就是导出 PDF 的页序。
     assert [page.index for page in rendered.pages] == [0, 1, 2, 3]
     assert len(opened) == 1 + 4
-    # 每页都真的落了盘：并发写不同文件，不会互相覆盖。
+    # 每页都真的落了盘。
     for page in rendered.pages:
         assert pages.page_path(rendered.token, page.index).is_file()
 

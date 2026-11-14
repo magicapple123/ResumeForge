@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""PDF 文字宽度/折行的纯函数（条目头截断 + 正文折行模式的唯一判定点）。
+"""PDF 条目头的宽度预算与截断纯函数。
 
 为什么单独一层：这两件事此前都没有"名字"——
 
@@ -7,54 +7,15 @@
   画出格子：左标题溢出会盖住右栏，右栏（右对齐）溢出会向左压到标题上。修法只能是
   "先量宽、放不下就截断 + 省略号"，而量宽必须用 pdf.get_string_width 的量纲
   （mm/pt 都行，只要与传入的 max_width 同一单位）。
-* **正文段落**走 multi_cell。fpdf2 默认 wrapmode="WORD" 只在空格处断行；中文与
-  中英混排里"一段没有空格的长片段"会把整行提前截短，出现"有 2 / 段数据…"这种碎行。
-  含 CJK 时改用 wrapmode="CHAR" 按字断行；纯 ASCII 仍用 WORD——否则英文单词会被
-  劈在两行，既有纯英文产物的观感也跟着变。
-
-两个函数都只做判断、不持有排版状态，单测不需要字体/画布（宽度函数可注入）。
+正文折行由 line_break 统一处理；这里不持有排版状态，宽度函数可注入。
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Literal
 
 # 截断后补的省略号（U+2026）。用单字符而不是三个点：宽度固定、不会被当成句号。
 ELLIPSIS = "…"
-
-WrapModeChoice = Literal["CHAR", "WORD"]
-
-# 含这些区段的字符就认为"需要按字折行"。范围按 Unicode 区块给，而不是用
-# unicodedata.east_asian_width：后者把全角标点、韩文、CJK 部首都算 East Asian Width，
-# 但同时也把一些非 CJK 的宽字符算进去；这里要的是"没有空格可断行的文字"，所以只列
-# CJK 家族（含日文假名与谚文，它们与汉字一样按字断行）。
-_CJK_RANGES: tuple[tuple[int, int], ...] = (
-    (0x2E80, 0x2FFF),  # CJK 部首补充 / 康熙部首 / 表意文字描述符
-    (0x3000, 0x303F),  # CJK 符号与标点
-    (0x3040, 0x30FF),  # 平假名 / 片假名
-    (0x3400, 0x4DBF),  # CJK 扩展 A
-    (0x4E00, 0x9FFF),  # CJK 统一表意文字
-    (0xAC00, 0xD7AF),  # 谚文音节
-    (0xF900, 0xFAFF),  # CJK 兼容表意文字
-    (0xFE30, 0xFE4F),  # CJK 兼容形式
-    (0xFF00, 0xFFEF),  # 全角 ASCII / 半角片假名 / 全角标点
-)
-
-
-def _is_cjk(char: str) -> bool:
-    """单个字符是否属于 CJK 家族（可以用"按字断行"兜底的那批文字）。"""
-    code = ord(char)
-    return any(start <= code <= end for start, end in _CJK_RANGES)
-
-
-def wrap_mode_for(text: str) -> WrapModeChoice:
-    """这段文本该用哪种折行模式：含 CJK → CHAR，其余 → WORD。
-
-    只影响 multi_cell 的断行策略，不改变字号、行距或任何版式参数；纯 ASCII 文本仍
-    走 fpdf2 的默认模式，既有英文产物的折行逐行不变。
-    """
-    return "CHAR" if any(_is_cjk(char) for char in str(text)) else "WORD"
 
 
 def truncate_to_width(
@@ -121,8 +82,6 @@ def entry_head_columns(available: float, left_text_width: float, gap: float) -> 
 
 __all__ = [
     "ELLIPSIS",
-    "WrapModeChoice",
     "entry_head_columns",
     "truncate_to_width",
-    "wrap_mode_for",
 ]

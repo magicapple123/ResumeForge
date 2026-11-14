@@ -10,11 +10,13 @@
 ``_same_value``（冲突判定）同时服务规则预览与 AI 采纳两条路径，随采纳语义放在
 这里，由 ``preview.py`` 再导出。
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Any
 
+from ..ai_candidates import MIN_AI_CONFIDENCE, FieldCandidates
 from ..engine import (
     Control,
     FieldMapping,
@@ -100,7 +102,7 @@ async def enrich_preview_with_ai(
     try:
         matches = await identify_fields(provider, targets)
     except Exception as error:  # noqa: BLE001 - AI 是兜底，挂了不该让预览打不开
-        logger.warning("网申表单的 AI 字段识别失败，已回落为本地规则：%s", error)
+        logger.warning("网申表单的 AI 字段识别失败，已回落为本地规则：%s", type(error).__name__)
         return 0
 
     accepted_matches: dict[int, tuple[str, ...]] = {}
@@ -137,11 +139,28 @@ async def enrich_preview_with_ai(
             # 放宽候选：命中后按代选语义采纳；采纳不了（值装不下 / 事实类勾选
             # 自述对不上）就留在 blocked，与"AI 不识别"同一结果。
             _adopt_ai_relaxed_match(report, control, candidates[0], data)
-            continue
         # 批量模式一行只能有一个字段，取模型排在第一的那个。**其余候选不是丢掉**——
         # 用户在预览里可以改这一行的字段，而「换个资料…」在实时模式下也给得到全部可能。
         # 把第二名也铺成一行会让同一份资料在预览里出现两次，勾选行为就没法解释了。
-        _adopt_ai_match(report, control, candidates[0], data)
+        else:
+            _adopt_ai_match(report, control, candidates[0], data)
+        original = matches[index]
+        assessment = (
+            original.assessments.get(candidates[0])
+            if isinstance(original, FieldCandidates)
+            else None
+        )
+        if assessment is not None:
+            for item in report.items:
+                if item.index == index:
+                    item.confidence = assessment.confidence
+                    item.evidence = assessment.evidence
+                    if (
+                        assessment.confidence is not None
+                        and assessment.confidence < MIN_AI_CONFIDENCE
+                        and item.status != STATUS_CONFLICT
+                    ):
+                        item.status = STATUS_LOW_CONFIDENCE
     # 返回值是"成功送到模型面前的控件数"，**不是"命中的数量"**——模型答 `__none__` 也是
     # 问过了，把它算成 0 会让调用方以为这次没帮上忙而给出误导性的提示。
     return len(targets)

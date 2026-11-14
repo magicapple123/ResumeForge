@@ -170,6 +170,9 @@ def should_schedule(db: Session, conversation_id: int) -> bool:
     # 无会话（conversation_id=None）的调用路径（系统提示被独立装配的测试/场景）直接不调度。
     if not conversation_id or int(conversation_id) <= 0:
         return False
+    # 临时对话（F34）：这段对话不产生任何新记忆，空闲多久都不排抽取。
+    if memory.conversation_memory_off(db, conversation_id):
+        return False
     if not memory.auto_extract_enabled(db):
         return False
     last_assistant = (
@@ -224,6 +227,22 @@ def schedule_extraction(db: Session, conversation_id: int) -> AiTask | None:
     db.add(task)
     db.commit()
     db.refresh(task)
+    # **登记完必须真的启动执行器**（2026-11-13 修）：只写一行 pending 而不 `start`，
+    # 任务永远不会跑——页头那条「正在进行 · 整理助手记忆 · 生成中…」会永久停在那里，
+    # 用户点取消也只是把它标成 canceled，看起来像"关不掉"。`POST /ai-tasks` 建完也
+    # 是同一句 `start`，这里漏了纯粹是两处写法不一致。
+    try:
+        # 局部导入：执行器会反过来 import handler 注册表，模块顶层引会绕成环。
+        from ..ai_task_runner import get_ai_task_runner
+
+        get_ai_task_runner().start(task.id)
+    except Exception:  # noqa: BLE001 - 启动失败不能挡住本轮对话
+        logger.warning("助手记忆抽取任务启动失败 conversation=%s", conversation_id, exc_info=True)
+        # 不留幽灵行：否则它既不会被跑，也不会自己终态，页头一直挂着。
+        try:
+            get_ai_task_runner().mark_failed(task.id, "后台执行器启动失败")
+        except Exception:  # noqa: BLE001 - 连收尾都失败时只记日志
+            logger.warning("助手记忆抽取任务收尾失败 task=%s", task.id, exc_info=True)
     logger.info("已登记助手记忆抽取任务 conversation=%s", conversation_id)
     return task
 
@@ -234,6 +253,10 @@ async def run_extraction(db: Session, *, conversation_id: int, provider: Any) ->
     provider 只要有 ``async def chat(messages) -> str`` 即可；测试用假 provider。
     解析失败返回 ``{"parsed": False}`` —— 由调用方决定是否算任务失败。
     """
+    # 第二道闸（F34）：任务是空闲时入队的，用户可能在执行前把「本次不记忆」打开。
+    # 与开关同理，执行体必须自己再判一次，否则"开了临时对话仍写进记忆"。
+    if memory.conversation_memory_off(db, conversation_id):
+        return {"parsed": False, "reason": "memory_off"}
     turns = recent_turns(db, conversation_id)
     if not turns:
         return {"parsed": False, "reason": "empty_conversation"}

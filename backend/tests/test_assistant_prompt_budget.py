@@ -244,7 +244,11 @@ def test_worst_case_prompt_estimate_stays_bounded(client, db_session):
         f"系统提示固定成本回涨到 {len(system_prompt)} 字符"
         "（2026-11-11 剩余 11 条三轮能力进提示后应 ≤ 26,700）"
     )
-    assert len(tools_text) <= 45_000
+    # 2026-11-14：工具 schema 实测 46,413（`_tools_specs_document` 与 document_support 的
+    # 参数说明扩写）。45,000 是上一批的实测 + 余量，不是硬上限；按同一口径上调到 **47,000**
+    # （实测 + 587 ≈ 1.3% 余量）。真正的成本闸门仍是 MAX_PROMPT_TOKENS_ESTIMATE：
+    # 46.4k 字符约 12k token，距离 60k token 的上限还很远。
+    assert len(tools_text) <= 47_000
     # 去重但**不丢功能覆盖**：每个功能域与每个界面功能名都还必须能在系统提示里找到。
     from app.services.feature_catalog import FEATURES, FUNCTIONAL_DOMAINS
 

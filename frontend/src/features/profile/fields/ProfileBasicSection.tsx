@@ -35,8 +35,8 @@ export default function ProfileBasicSection({
   onSetPreference,
 }: Props) {
   useLocale();
-  const singleLineMax = limits?.single_line_chars ?? 200;
-  const multiLineMax = limits?.multi_line_chars ?? 2000;
+  const singleLineMax = limits?.single_line_chars ?? 500;
+  const multiLineMax = limits?.multi_line_chars ?? 20000;
   return (
     <Row gutter={[16, 16]} align="top" className="profile-basic-section">
       <Col xs={{ span: 24, order: 2 }} xl={{ span: 18, order: 1 }}>

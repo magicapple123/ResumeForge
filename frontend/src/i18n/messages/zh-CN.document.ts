@@ -125,8 +125,12 @@ const document = {
   // ── 字段编辑器 ─────────────────────────────────────────────
   "document.field.value": "内容",
   "document.field.valuePlaceholder": "输入内容",
+  "document.inlineFormat": "行内格式",
   "document.field.label": "标签",
   "document.field.labelPlaceholder": "字段标签",
+  /** F22：字段名可改可清；清空 = 跟随目录（同时恢复「字段语言」联动）。 */
+  "document.field.labelReset": "恢复默认字段名",
+  "document.field.labelResetHint": "清空后跟随目录与字段语言；填了就不再跟随切换",
   "document.field.dateStart": "开始日期",
   "document.field.dateEnd": "结束日期",
   "document.field.datePresent": "至今",

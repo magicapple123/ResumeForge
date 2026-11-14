@@ -97,6 +97,28 @@ export interface InterviewReportDimension {
   comment: string;
 }
 
+export interface InterviewCameraAnalysis {
+  score: number | null;
+  visible_frames: number;
+  analyzed_frames: number;
+  insufficient: boolean;
+  metrics: Record<string, number>;
+  notes: string[];
+  weights: Record<string, number>;
+  count_in_total_weight?: number;
+  count_in_total?: boolean;
+  combined_score?: number | null;
+  reason?: string;
+  error?: string;
+}
+
+export interface InterviewRecordingMeta {
+  bytes: number;
+  created_at: number;
+  retention_days: number;
+  expires_at: number | null;
+}
+
 export interface InterviewReport {
   score?: number;
   dimensions?: InterviewReportDimension[];
@@ -105,6 +127,8 @@ export interface InterviewReport {
   summary?: string;
   /** 报告生成失败时后端留下说明，界面按"无报告"处理并展示原因。 */
   error?: boolean;
+  /** F18 镜头表现：独立于四维评分的一段，默认不计入总分。 */
+  camera?: InterviewCameraAnalysis;
 }
 
 export interface InterviewBrief {
@@ -211,6 +235,7 @@ export interface QuestionBankOut {
   job_title: string;
   company: string;
   resume_id: number | null;
+  resume_title?: string;
   groups: QuestionBankGroup[];
   llm_used: boolean;
   notes: string[];
@@ -219,6 +244,9 @@ export interface QuestionBankOut {
 export interface QuestionBankPayload {
   job_id?: number | null;
   resume_id?: number | null;
+  job_text?: string;
+  resume_text?: string;
+  resume_title?: string;
 }
 
 export interface InterviewAnalysisPayload {
@@ -226,6 +254,12 @@ export interface InterviewAnalysisPayload {
   job_id?: number | null;
   resume_id?: number | null;
   context?: string;
+  /**
+   * 外部简历 / 导入文件的正文（Q3）：没有内部 `resume_id` 时后端靠它拼「候选人简历」。
+   * 两者都给时 `resume_id` 优先——内部记录是唯一事实来源。
+   */
+  resume_text?: string;
+  resume_title?: string;
 }
 
 export interface InterviewAnalysis {
@@ -270,14 +304,19 @@ export interface InterviewAnswerReviewPayload {
 }
 
 export interface InterviewOptimizePayload {
-  resume_id: number;
+  /** 内部简历的 id；外部简历 / 导入文件时为 `null`，正文走下面两个字段。 */
+  resume_id?: number | null;
   job_id?: number | null;
   weaknesses?: string[];
   follow_ups?: string[];
+  /** 外部简历 / 导入文件的正文与名称（Q3）：与 `resume_id` 至少给一个。 */
+  resume_text?: string;
+  resume_title?: string;
 }
 
 export interface InterviewOptimizeResult {
-  resume_id: number;
+  /** **契约变更（Q3）**：外部简历没有内部 id，`null` 就是"没有"，不再拿 0 冒充。 */
+  resume_id: number | null;
   suggestions: ResumeSuggestion[];
   llm_used: boolean;
   notes: string[];

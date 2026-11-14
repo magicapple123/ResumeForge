@@ -79,7 +79,8 @@ function createPreferenceStore({ app }) {
  *
  * @param {object} deps
  * @param {object} deps.app Electron app（只用于 quit()）
- * @param {object} deps.dialog Electron dialog（showMessageBox 必须带父窗口）
+ * @param {function(object, object): Promise<{action: string, remember: boolean}>} deps.promptClose
+ *   自绘关闭卡片（lib/close-dialog.js）。**决策仍在本模块**：它只返回用户点了什么。
  * @param {function(): (object|null)} deps.getWindow 当前主窗口
  * @param {function(): boolean} deps.isQuitting 是否已在退出流程中
  * @param {function(boolean): void} deps.setQuitting 写 main.js 的 quitting 标志
@@ -93,7 +94,7 @@ function createPreferenceStore({ app }) {
 function createCloseBehavior(deps) {
   const {
     app,
-    dialog,
+    promptClose,
     getWindow,
     isQuitting,
     setQuitting,
@@ -133,51 +134,22 @@ function createCloseBehavior(deps) {
     app.quit();
   }
 
-  /** 选「退出应用」且勾了「记住」时的二次确认：误勾一次会长期失去保护。 */
-  async function confirmRememberQuit(win) {
-    const { response } = await dialog.showMessageBox(win, {
-      type: "warning",
-      title: "简历通",
-      message: "以后关闭窗口将直接退出应用，不再询问",
-      detail: "正在进行的生成或采集会被中断。随时可以在托盘菜单里重新打开「关闭窗口时询问」。",
-      buttons: ["退出并记住", "只退出这次"],
-      defaultId: 1,
-      cancelId: 1,
-      noLink: true,
-    });
-    return response === 0;
-  }
-
+  /**
+   * 问一次用户。
+   *
+   * **二次确认已折叠进自绘卡片的视图 2**（勾了记住 + 选退出时才出现），所以这里只处理
+   * "用户最终选了什么 / 要不要记住"——决策逻辑与自绘前逐字一致。
+   */
   async function prompt(win) {
     const isMac = platform === "darwin";
-    // Windows / Linux 用"最小化到托盘"；macOS 没有这种托盘惯例，按平台说明退化为
-    // "关闭窗口"（应用留在 Dock，菜单栏图标仍可重新打开）。
-    const options = {
-      type: "question",
-      title: "简历通",
-      message: isMac ? "关闭简历通？" : "关闭简历通？",
-      detail: isMac
-        ? "关闭窗口后应用仍会留在 Dock 与菜单栏，可重新打开；退出应用会停止本地服务，正在进行的生成/采集会中断。"
-        : "最小化后仍会继续在后台运行，可从托盘图标重新打开；退出应用会停止本地服务，正在进行的生成/采集会中断。",
-      buttons: isMac ? ["关闭窗口", "退出应用"] : ["最小化到托盘", "退出应用"],
-      // Esc = 第一项（最小化 / 关闭窗口）：安全默认，不会误退。
-      defaultId: 0,
-      cancelId: 0,
-      checkboxLabel: "记住我的选择",
-      checkboxChecked: false,
-      noLink: true,
-    };
-    const result = await dialog.showMessageBox(win, options);
-    const quit = result.response === 1;
+    // Windows / Linux 用"最小化到托盘"；macOS 没有这种托盘惯例，退化为"关闭窗口"
+    //（应用留在 Dock，菜单栏图标仍可重新打开）。口径由卡片按 `isMac` 自己渲染。
+    const result = await promptClose(win, { isMac });
+    const quit = Boolean(result && result.action === "quit");
     let remembered = false;
-    if (result.checkboxChecked) {
-      if (!quit) {
-        remembered = store.save(REMEMBER_MINIMIZE);
-      } else {
-        // 只有二次确认通过才落盘；取消时尊重"这次先退出、别记住"。
-        const confirmed = await confirmRememberQuit(win);
-        if (confirmed) remembered = store.save(REMEMBER_QUIT);
-      }
+    if (result && result.remember) {
+      // 卡片只在"记住 + 退出"时走二次确认，所以能到这里就是用户确认过了。
+      remembered = store.save(quit ? REMEMBER_QUIT : REMEMBER_MINIMIZE);
       if (remembered) onPreferenceChanged();
     }
     if (quit) quitNow();

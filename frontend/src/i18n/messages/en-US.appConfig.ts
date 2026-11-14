@@ -93,9 +93,9 @@ const appConfig = {
   "appConfig.star.action": "Star on GitHub",
 
   // ── Header source link ─────────────────────────────────────
-  "appConfig.header.repoTooltip": "View the source code or report issues on GitHub",
+  "appConfig.header.repoTooltip": "Star this project on GitHub to support it",
   /** `{name}` is the app name (`appConfig.brand.name`). */
-  "appConfig.header.repoAria": "View the {name} source on GitHub",
+  "appConfig.header.repoAria": "Support {name} (star it on GitHub)",
 
   // ── Resume detail preview header ────────────────────────────
   /** `{job}` is the filled job title; callers fall back to `appConfig.detail.notFilled`. */

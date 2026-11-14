@@ -17,7 +17,8 @@
  */
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { Button, Flex } from "antd";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import type { ExternalResumeFilters } from "../features/external-resume/useExternalResumes";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import ExternalResumePanel from "./resumes/ExternalResumePanel";
@@ -25,6 +26,23 @@ import ExternalResumePanel from "./resumes/ExternalResumePanel";
 export default function ExternalResumesPage() {
   useLocale();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawJobId = searchParams.get("job_id");
+  const parsedJobId = Number(rawJobId);
+  const filters: ExternalResumeFilters = {
+    keyword: searchParams.get("keyword") ?? "",
+    jobId:
+      rawJobId && Number.isSafeInteger(parsedJobId) && parsedJobId > 0 ? parsedJobId : undefined,
+  };
+  const onFiltersChange = (next: ExternalResumeFilters) => {
+    const params = new URLSearchParams(searchParams);
+    const keyword = next.keyword?.trim() ?? "";
+    if (keyword) params.set("keyword", keyword);
+    else params.delete("keyword");
+    if (next.jobId != null) params.set("job_id", String(next.jobId));
+    else params.delete("job_id");
+    setSearchParams(params, { replace: true });
+  };
   /**
    * 返回简历中心：优先退历史（保留来时的筛选/页码），没有历史（直接刷新或深链打开）时
    * 落到 `/resumes`。`history.state.idx` 是 data router 记录的栈深度，刷新后仍有效。
@@ -45,7 +63,7 @@ export default function ExternalResumesPage() {
       >
         {t("resumesPage.external.back")}
       </Button>
-      <ExternalResumePanel variant="bare" />
+      <ExternalResumePanel variant="bare" filters={filters} onFiltersChange={onFiltersChange} />
     </Flex>
   );
 }

@@ -25,6 +25,7 @@ from ...services import webform as webform_service
 from ...services.actions import add_action_route
 from ...services.actions.catalog import all_actions
 from ...services.settings_service import get_webform_relaxed_mode
+from ...services.webform.review_highlights import highlight_review
 from ._shared import _raise, logger
 
 router = APIRouter(prefix="/api/webform", tags=["webform"])
@@ -68,9 +69,7 @@ async def preview(payload: WebFormPreviewIn, db: Session = Depends(get_db)):
         # 下沉线程池避免阻塞事件循环；db 会话按 resume_template_import 的既有
         # 模式直接作为参数传入线程池。
         # 一次取数冻结一份快照：data / 自定义标签同源（F5 契约 §2），旧补充事实已退出取数。
-        view = await run_in_threadpool(
-            webform_service.build_webform_view, db, scope=payload.scope
-        )
+        view = await run_in_threadpool(webform_service.build_webform_view, db, scope=payload.scope)
         data = view.data
         custom_labels = view.custom_labels
         # 「放宽模式」是用户设置（默认关）：开着时，点选类控件若匹配到字段+值会以
@@ -92,13 +91,30 @@ async def preview(payload: WebFormPreviewIn, db: Session = Depends(get_db)):
         _raise(exc)
     # provider 要拿 db 配置，模型调用要等网络——**先取配置、关连接，再 await**。
     provider = webform_service.ai.build_provider(db) if payload.ai else None
+    review_client = None
+    try:
+        manager = webform_service.browser.get_browser_manager(db)
+        if manager.is_active():
+            review_client = manager.client()
+    except Exception as error:  # noqa: BLE001 - computed preview remains usable
+        diagnostics.record_event("webform.review_browser_unavailable", error=type(error).__name__)
     db.close()
-    if provider is not None:
-        # relaxed 与 build_preview 用同一个开关值：开启时放宽候选（点选类、规则没认出
-        # 字段）也一并交给模型，命中后按放宽代选语义采纳。
-        await webform_service.enrich_preview_with_ai(
-            snapshot, data, report, provider, relaxed=relaxed
-        )
+    try:
+        if provider is not None:
+            # relaxed 与 build_preview 用同一个开关值：开启时放宽候选（点选类、规则没认出
+            # 字段）也一并交给模型，命中后按放宽代选语义采纳。
+            await webform_service.enrich_preview_with_ai(
+                snapshot, data, report, provider, relaxed=relaxed
+            )
+        await run_in_threadpool(highlight_review, review_client, snapshot, report)
+    finally:
+        if review_client is not None:
+            try:
+                await run_in_threadpool(review_client.close)
+            except Exception as error:  # noqa: BLE001 - preview remains usable if cleanup fails
+                diagnostics.record_event(
+                    "webform.review_browser_close_failed", error=type(error).__name__
+                )
     diagnostics.record_event(
         "webform.preview",
         control_count=len(snapshot.controls),
@@ -246,6 +262,8 @@ def _record_fill(
 
 
 add_action_route(router, all_actions()["list_web_form_fills"], route_path="/records")
+
+
 def list_records(
     limit: int = Query(
         default=webform_service.history.DEFAULT_LIST_LIMIT,
@@ -259,6 +277,8 @@ def list_records(
 
 
 add_action_route(router, all_actions()["get_web_form_fill"], route_path="/records/{record_id}")
+
+
 def read_record(record_id: int, db: Session = Depends(get_db)):
     record = webform_service.history.record_or_none(db, record_id)
     if record is None:

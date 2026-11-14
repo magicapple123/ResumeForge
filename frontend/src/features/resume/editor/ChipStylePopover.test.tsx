@@ -91,6 +91,26 @@ function renderPopover() {
   return { onLayoutChange };
 }
 
+function renderWith(state: ChipStylePopoverState, layout: ResumeLayout) {
+  const onLayoutChange = vi.fn();
+  render(
+    <I18nProvider>
+      <DocumentExpandContext.Provider
+        value={{ expandedPath: null, toggleExpand: () => {}, setExpanded: () => {} }}
+      >
+        <ChipStylePopover
+          state={state}
+          document={makeDoc()}
+          layout={layout}
+          onClose={() => {}}
+          onLayoutChange={onLayoutChange}
+        />
+      </DocumentExpandContext.Provider>
+    </I18nProvider>,
+  );
+  return { onLayoutChange };
+}
+
 describe("ChipStylePopover（#7 排版并入右键）", () => {
   it("范围按右键命中的位置自动推断（title → 条目标题），且无范围选择器", () => {
     renderPopover();
@@ -99,14 +119,17 @@ describe("ChipStylePopover（#7 排版并入右键）", () => {
     expect(scopeBlock).toBeNull();
     // 标题按右键命中的位置自动推断：title 位置 → 「正在改：条目头」。
     const dialog = screen.getByRole("dialog");
-    expect(dialog.getAttribute("aria-label") ?? "").toContain("条目头");
+    expect(dialog.getAttribute("aria-label") ?? "").toContain(
+      t("typography.entryStyle.scope.field"),
+    );
     expect(
       screen.getByText(
         t("document.editor.stylePopoverTitle", {
-          scope: t("typography.entryStyle.scope.entry_title"),
+          scope: t("typography.entryStyle.scope.field"),
         }),
       ),
     ).toBeInTheDocument();
+    expect(screen.queryByText(t("typography.object.levelHint"))).toBeNull();
   });
 
   it("改动走 layout 通道（onLayoutChange），不碰 document", () => {
@@ -128,5 +151,47 @@ describe("ChipStylePopover（#7 排版并入右键）", () => {
       </I18nProvider>,
     );
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it('字段路径 → 只改这个字段：清空的是 object_roles["<路径>:<角色>"]', () => {
+    const key = "education.ob_entry001.ob_item0001:entry_title";
+    const layout = {
+      template: "classic",
+      font_scale: "standard",
+      format_config: { object_roles: { [key]: { color: "#c0392b" } } },
+    } as unknown as ResumeLayout;
+    const { onLayoutChange } = renderWith(STATE, layout);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: t("typography.entryStyle.restore", {
+          scope: t("typography.entryStyle.scope.field"),
+        }),
+      }),
+    );
+
+    const next = onLayoutChange.mock.calls[0][0] as ResumeLayout;
+    expect(next.format_config?.object_roles ?? {}).not.toHaveProperty(key);
+  });
+
+  it("条目行路径（「排版整条…」）→ 整条范围，清空的是 objects[<entryId>]", () => {
+    const layout = {
+      template: "classic",
+      font_scale: "standard",
+      format_config: { objects: { ob_entry001: { color: "#c0392b" } } },
+    } as unknown as ResumeLayout;
+    const { onLayoutChange } = renderWith({ ...STATE, path: "education.ob_entry001" }, layout);
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.getAttribute("aria-label") ?? "").toContain(
+      t("typography.entryStyle.scope.object"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: t("typography.object.clear") }));
+
+    const next = onLayoutChange.mock.calls[0][0] as ResumeLayout;
+    const objects = next.format_config?.objects ?? {};
+    // 关键：写的是条目 id，不是 "education.ob_entry001" 这种没人读的路径键。
+    expect(objects).not.toHaveProperty("ob_entry001");
+    expect(objects).not.toHaveProperty("education.ob_entry001");
   });
 });

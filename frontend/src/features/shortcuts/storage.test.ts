@@ -92,6 +92,7 @@ describe("默认值与坏数据", () => {
         "redo",
         "save",
         "search",
+        "selectionPanel",
         "switchDataset",
         "toggleTheme",
         "undo",

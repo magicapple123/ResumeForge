@@ -2,8 +2,16 @@
 import { t } from "../../i18n";
 import type { MessageKey } from "../../i18n";
 
-/** Stable API field key to locale message key; custom field names stay user-provided. */
+/**
+ * 网申字段的「稳定 API key → 界面文案」映射。
+ *
+ * 为什么只映射已知 key：自定义字段名是站点/用户给的，必须原样显示——翻译它等于另一种猜测。
+ * 未知 key 回退到原始标签，而不是显示空白。新增字段时 en/zh 两份 messages 要一起补，
+ * 否则英文界面会掉回中文。
+ */
 const WEBFORM_FIELD_LABEL_KEYS: ReadonlyMap<string, MessageKey> = new Map([
+  ["given_name", "webformFields.given_name"],
+  ["family_name", "webformFields.family_name"],
   ["academic_author_order", "webformFields.academic_author_order"],
   ["academic_book_details", "webformFields.academic_book_details"],
   ["academic_book_name", "webformFields.academic_book_name"],

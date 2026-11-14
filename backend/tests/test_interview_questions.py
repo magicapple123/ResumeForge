@@ -66,9 +66,12 @@ class _FakeProvider:
     def __init__(self, reply: str) -> None:
         self.reply = reply
         self.calls = 0
+        # 记下每次请求的消息，便于断言"简历正文真的进了提示词"（Q3 的外部简历分支）。
+        self.messages: list[list[dict]] = []
 
-    async def chat(self, _messages, *, thinking: bool = True):
+    async def chat(self, messages, *, thinking: bool = True):
         self.calls += 1
+        self.messages.append(list(messages))
         return self.reply
 
 
@@ -226,6 +229,15 @@ def _configure_provider(monkeypatch, reply: str) -> None:
     )
 
 
+def _capture_provider(monkeypatch, reply: str) -> _FakeProvider:
+    """同一个 monkeypatch，但把 provider 实例交回来，供断言提示词内容。"""
+    from app.api import interview as interview_api
+
+    provider = _FakeProvider(reply)
+    monkeypatch.setattr(interview_api, "_require_provider", lambda _db: (provider, "test-model"))
+    return provider
+
+
 def test_question_bank_endpoint_requires_model(client):
     response = client.post("/api/interview/questions", json={"resume_id": 1})
     assert response.status_code == 400
@@ -310,6 +322,107 @@ def test_optimize_endpoint_does_not_mutate_resume(client, db_session, monkeypatc
     # 反向优化只出建议，简历正文必须原样。
     db_session.refresh(resume)
     assert resume.content == original
+
+
+# ===== 外部简历 / 导入文件（Q3）：没有内部 id 时走 resume_text =====
+
+_EXTERNAL_SUGGESTIONS_JSON = json.dumps(
+    {
+        "suggestions": [
+            {
+                "priority": "high",
+                "section": "项目经历",
+                "issue": "外部简历也没写清指标口径",
+                "suggestion": "补一条可验证的数字",
+                "evidence": ["外部简历正文"],
+            }
+        ]
+    },
+    ensure_ascii=False,
+)
+_EXTERNAL_RESUME_TEXT = "外部简历：负责订单系统，QPS 从 800 提升到 3000"
+
+
+async def test_optimize_resume_service_uses_resume_text_without_record():
+    """没有内部记录时，``resume_text`` 必须真的进提示词（不是空串占位）。"""
+    provider = _FakeProvider(_EXTERNAL_SUGGESTIONS_JSON)
+    suggestions = await optimize_resume(
+        provider,
+        resume_text=_EXTERNAL_RESUME_TEXT,
+        job_text="",
+        weaknesses=["指标说不清"],
+        follow_ups=[],
+    )
+    assert len(suggestions) == 1
+    prompt = provider.messages[-1][-1]["content"]
+    assert _EXTERNAL_RESUME_TEXT in prompt
+
+
+def test_optimize_endpoint_accepts_external_resume_text(client, monkeypatch):
+    _configure_provider(monkeypatch, _EXTERNAL_SUGGESTIONS_JSON)
+
+    response = client.post(
+        "/api/interview/optimize-resume",
+        json={
+            "resume_text": _EXTERNAL_RESUME_TEXT,
+            "resume_title": "external-a.pdf",
+            "weaknesses": ["指标说不清"],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["suggestions"]) == 1
+    # 契约变更（Q3）：没有内部 id 就如实返回 null。
+    assert body["resume_id"] is None
+
+
+def test_optimize_endpoint_requires_a_resume(client):
+    """既没有 resume_id 也没有 resume_text：422，而不是拿空简历去问模型。"""
+    response = client.post(
+        "/api/interview/optimize-resume", json={"weaknesses": ["指标说不清"]}
+    )
+    assert response.status_code == 422
+
+
+def test_analyze_endpoint_accepts_external_resume_text(client, monkeypatch):
+    provider = _capture_provider(monkeypatch, _ANALYSIS_JSON)
+
+    response = client.post(
+        "/api/interview/analyze",
+        json={
+            "question": "这个指标怎么算的",
+            "resume_text": _EXTERNAL_RESUME_TEXT,
+            "resume_title": "external-a.pdf",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert "STAR" in response.json()["framework"]
+    # 与题库同一写法：「## 候选人简历」+ 正文，提示词不用分两套。
+    prompt = provider.messages[-1][-1]["content"]
+    assert "## 候选人简历" in prompt
+    assert _EXTERNAL_RESUME_TEXT in prompt
+
+
+def test_analyze_endpoint_prefers_resume_id_over_text(client, db_session, monkeypatch):
+    """内部记录优先：同时给了 id 与文本时，以记录里的正文为准（客户端副本不可信）。"""
+    _job, resume = _make_job_and_resume(db_session)
+    provider = _capture_provider(monkeypatch, _ANALYSIS_JSON)
+
+    response = client.post(
+        "/api/interview/analyze",
+        json={
+            "question": "这个指标怎么算的",
+            "resume_id": resume.id,
+            "resume_text": "这段文本不该被采用",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    prompt = provider.messages[-1][-1]["content"]
+    assert "交易系统" in prompt
+    assert "这段文本不该被采用" not in prompt
 
 
 # ===== 自答批改（打分 + 解析 + 修改建议 + 改写示范）=====

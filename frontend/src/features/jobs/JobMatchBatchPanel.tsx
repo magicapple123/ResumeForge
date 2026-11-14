@@ -17,6 +17,7 @@ import LoadingBlock from "../../components/common/LoadingBlock";
 import { ListyItem, ListyMeta } from "../../components/common/ListyItem";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { BatchResultView } from "./JobMatchBatchResult";
+import JobMatchResumeSelect from "./JobMatchResumeSelect";
 import JobMatchBatchRunning from "./JobMatchBatchRunning";
 import {
   getJobMatchBatch,
@@ -71,6 +72,7 @@ export default function JobMatchBatchPanel({
    *  （注册表在任务进入终态的瞬间就会把它移除，靠订阅会错过"完成"这一刻）。 */
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
   const [force, setForce] = useState(false);
+  const [resumeId, setResumeId] = useState<number | undefined>();
   const [batch, setBatch] = useState<JobMatchBatchOut | null>(null);
   const [history, setHistory] = useState<JobMatchBatchSummary[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -185,6 +187,7 @@ export default function JobMatchBatchPanel({
         const task = await startJobMatchBatchTask({
           job_ids: jobIds,
           force: overrideForce,
+          ...(resumeId ? { resume_id: resumeId } : {}),
           mode,
         });
         watchJobMatchBatchTask(
@@ -206,7 +209,7 @@ export default function JobMatchBatchPanel({
         setStarting(false);
       }
     },
-    [jobIds, loadHistory, message, mode],
+    [jobIds, loadHistory, message, mode, resumeId],
   );
 
   const cancelRunning = async () => {
@@ -270,6 +273,11 @@ export default function JobMatchBatchPanel({
       <Checkbox checked={force} onChange={(event) => setForce(event.target.checked)}>
         {t("jobMatchBatch.setup.force")}
       </Checkbox>
+      <JobMatchResumeSelect
+        value={resumeId}
+        onChange={setResumeId}
+        disabled={starting || undefined}
+      />
     </Space>
   );
 
@@ -345,6 +353,7 @@ export default function JobMatchBatchPanel({
     <>
       <Modal
         open={open}
+        mask={{ closable: false }}
         title={
           <Space>
             <RobotOutlined />

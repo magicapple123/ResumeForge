@@ -27,6 +27,7 @@
  */
 import { Input } from "antd";
 import type { CSSProperties } from "react";
+import { registerInlineMarkField } from "./useInlineMarkRange";
 import "./resizable-value-textarea.css";
 
 interface Props {
@@ -61,6 +62,7 @@ export default function ResizableValueTextArea({
       value={value}
       disabled={disabled || undefined}
       style={TEXTAREA_STYLE}
+      onFocus={registerInlineMarkField}
       onChange={(event) => onChange(event.target.value)}
       onKeyDown={(event) => {
         if (event.key !== "Enter") return;

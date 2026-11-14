@@ -33,6 +33,13 @@ const settingsUi = {
   /** 关掉标语后仍保留哪些行为：只说被影响的，不吓唬用户。 */
   "settingsUi.orb.tipsHint":
     "关闭后悬浮球不再弹出提示语，也不会在「我的资料」页提示你去改资料，其余功能不受影响。",
+  /** 划词浮条开关（Q9）的无障碍名。 */
+  "settingsUi.orb.selectionAria": "开启投投划词浮条",
+  "settingsUi.orb.selectionOnToast": "选中文字后会浮出投投划词浮条",
+  "settingsUi.orb.selectionOffToast": "选中文字后不再浮出划词浮条",
+  /** 关掉划词浮条后仍保留哪些行为：入口、提示标语与动作面板的长按都不受影响。 */
+  "settingsUi.orb.selectionHint":
+    "关闭后选中网页文字不再浮出动作条（改写、复制、存资料等），点悬浮球打开助手与长按动作面板不受影响。",
   "settingsUi.orb.loadFailed": "加载投投悬浮球设置失败",
   "settingsUi.orb.saveFailed": "保存投投悬浮球设置失败",
 

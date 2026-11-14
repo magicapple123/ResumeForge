@@ -1,0 +1,51 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 面试房间的头部布局与「暂停」态。
+   单独一个文件：`modules-interview.css` 已经 492 行、预算 500，往那儿加任何规则都会贴线；
+   而这两块都是 2026-13 这一批新增/修正的房间级样式，搬出来既守预算也不动既有规则。 */
+
+/* 头部两组（左：身份 Tag 行 / 右：轮次 + 计时 + 按钮组）在 1440 与 1366 下都必须同行。
+   原来是 `flex-wrap: wrap`：1366 时右侧按钮组被挤到第二行，整条头部从 30px 涨到 86px。
+   实测左侧 636.5 + 右侧 538.9 > 容器 1092，所以**同时**要让左侧那排 Tag 自己横向滚。
+
+   ⚠️ 必须写成 `.interview-room .interview-room-head`（两个类）：`modules-interview.css` 里
+   同名的单类规则带 `flex-wrap: wrap`，两份样式表的加载顺序由打包器决定，单类对单类会看顺序。 */
+.interview-room .interview-room-head {
+  flex-wrap: nowrap;
+}
+
+/* 左侧：一行内横向滚动，不换行、不裁字（Tag 是"这场面试基于什么材料"的凭证，
+   裁掉会让用户以为材料选错了）。
+
+   注：antd 的 `<Space wrap>` 写的是**行内样式**，任何选择器都压不住；所以
+   `RoomHeader` 左侧那排 Tag 已经不传 `wrap`，这里只负责"放不下就横向滚"。 */
+.interview-room-head > .ant-space:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+/* 每个 Tag 自己不许被压窄：容器收缩后 `flex: 1 1 auto` 会把第一项（面试标题）压到
+   92px 宽、文字折成三行，整条头部反而更高（实测 67.2px）。不换行 + 不收缩，
+   放不下就由父级横向滚动。 */
+.interview-room-head > .ant-space:first-child .ant-space-item {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 右侧：轮次 / 计时 / 按钮组整体不收缩，保证「结束并出报告」永远完整可点。 */
+.interview-room-head > .ant-space:last-child {
+  flex: 0 0 auto;
+}
+
+/* 读数保留但灰化：整块消失会让用户以为累计时长被清零。
+   只降透明度、不改字号，暂停前后行宽不变，头部不会因为状态切换而折行。 */
+.interview-timer.is-paused {
+  opacity: 0.55;
+}
+
+/* 「已暂停」后缀：不换行，避免窄屏把「已暂停」拆成两行。 */
+.interview-timer__paused {
+  font-size: 12px;
+  white-space: nowrap;
+}

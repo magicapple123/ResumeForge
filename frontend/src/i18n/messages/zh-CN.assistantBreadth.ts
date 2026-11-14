@@ -15,6 +15,11 @@ const assistantBreadth = {
   "assistantBreadth.tasks.aria": "助手创建的任务",
 
   "assistantBreadth.digest.title": "今日简报",
+  "assistantBreadth.digest.summary.empty": "暂无新变化",
+  "assistantBreadth.digest.summary.stale": "无回答 {count}",
+  "assistantBreadth.digest.summary.expired": "已过期 {count}",
+  "assistantBreadth.digest.summary.expand": "展开",
+  "assistantBreadth.digest.summary.collapse": "收起",
   "assistantBreadth.digest.refresh": "重新生成",
   "assistantBreadth.digest.refreshing": "正在生成…",
   "assistantBreadth.digest.generatedAt": "更新于 {time}",

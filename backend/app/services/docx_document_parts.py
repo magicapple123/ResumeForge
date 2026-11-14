@@ -8,17 +8,16 @@ docx_document_render.py 贴着 500 行预算，这里放与"分区/条目语义"
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Sequence
 from functools import partial
 from io import BytesIO
 
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
 from docx.shared import Mm
 
-from ..schemas.resume_document import EntryLayout, RowLayout
-from ..schemas.resume_document_plan import BlockPlan, CellPlan, DocumentPlan, Inline
+from ..schemas.resume_document import RowLayout
+from ..schemas.resume_document_plan import CellPlan, DocumentPlan, Inline
 from .docx_blocks import (
     DocxTheme,
     decorate_paragraph,
@@ -27,14 +26,21 @@ from .docx_blocks import (
     paragraph,
     set_run_font,
 )
+from .docx_column_geometry import apply_column_geometry as apply_column_geometry
 from .docx_decorate import border_sz_from_px
+from .docx_document_body import apply_field_spacing
+from .docx_document_body import draw_blocks as draw_blocks
+from .docx_photo import outline_picture
 from .docx_rich import add_rich_runs
 from .docx_text_measure import make_text_measure
-from .pdf_exporter import _PX_TO_MM, _PX_TO_PT, PAGE_WIDTH_MM, _photo_bytes, fit_photo_size
+from .pdf_exporter import _PX_TO_PT, PAGE_WIDTH_MM, _photo_bytes, fit_photo_size
 from .pdf_exporter.theme import _hex_to_rgb
-from .resume.column_geometry import resolved_column_geometry
+from .resume.document_label_styles import has_styled_labels
+from .resume.field_style_target import is_field_path
 from .resume.resume_contact import WORD_SEPARATOR, pack_contact_lines
 from .resume.resume_style import RoleStyle
+
+logger = logging.getLogger(__name__)
 
 #: 角色/对象覆盖查询函数（与 PDF / HTML 同一形态）；None = 模板默认。
 RoleStyleQuery = Callable[..., RoleStyle | None]
@@ -99,6 +105,7 @@ def role_ratio(layout, role: str) -> float:
         "section_title": layout.section_title_ratio,
         "entry_title": layout.entry_title_ratio,
         "meta": layout.entry_meta_ratio,
+        "field_label": layout.entry_meta_ratio,
         "body": 1.0,
     }
     return float(ratios.get(role, 1.0))
@@ -115,6 +122,7 @@ def add_segments(
     default_role: str,
     object_id: str | None = None,
     bold_default: bool = False,
+    ratio_override: float | None = None,
 ) -> None:
     """把 plan 的 Inline 段写成一段多 run 文本；每段按自己的 role 取字号/颜色。"""
     set_font = partial(set_run_font, font_name=theme.font_name)
@@ -123,8 +131,9 @@ def add_segments(
         if not text:
             continue
         role = str(getattr(segment, "role", "") or default_role)
-        style = style_of(role_style, role, object_id)
-        size = base * role_ratio(layout, role) * scale_of(style)
+        target = segment.path if is_field_path(segment.path) else object_id
+        style = style_of(role_style, role, target)
+        size = base * (ratio_override or role_ratio(layout, role)) * scale_of(style)
         fallback = theme.body_text if role == "body" else theme.muted_text
         # Q11：run 吃角色/对象覆盖的加粗与字距——此前只认段内的 ** ** / ❗标记，
         # 面板里调「正文 → 加粗 / 字距」对 Word 完全无效。
@@ -160,6 +169,7 @@ def draw_header(
     accent: tuple[int, int, int],
     accent_soft: tuple[int, int, int],
     font_key: str | None = None,
+    role_style: RoleStyleQuery | None = None,
 ) -> None:
     """页眉：姓名 + 姓名附带字段 + 意向 + 联系方式（planner 已给好每行）+ 浮动照片。
 
@@ -202,25 +212,71 @@ def draw_header(
             draw_w, draw_h = fit_photo_size(photo, photo_w, photo_h)
             picture_run = name_node.add_run()
             picture_run.add_picture(BytesIO(photo), width=Mm(draw_w))
+            # R-10：偏移换算成"照片左沿相对版心左缘"的绝对位置；没设偏移时仍走
+            # align（旧产物的 XML 逐字节不变）。
+            header_left = float(layout.margin_left) + layout.gap_mm(layout.header_pad_x)
+            inner_width_mm = (
+                PAGE_WIDTH_MM
+                - float(layout.margin_left)
+                - float(layout.margin_right)
+                - 2 * layout.gap_mm(layout.header_pad_x)
+            )
+            natural_x = (
+                header_left
+                if layout.header_photo_side == "left"
+                else header_left + inner_width_mm - photo_w
+            )
+            shifted_x = min(
+                max(natural_x + layout.photo_offset_x, header_left),
+                header_left + inner_width_mm - photo_w,
+            )
             float_picture(
                 picture_run,
                 align="left" if layout.header_photo_side == "left" else "right",
-                vertical_offset_mm=max(0.0, (photo_h - draw_h) / 2),
+                vertical_offset_mm=max(0.0, (photo_h - draw_h) / 2) + layout.photo_offset_y,
+                horizontal_offset_mm=(
+                    None
+                    if abs(layout.photo_offset_x) < 1e-6
+                    else shifted_x - float(layout.margin_left)
+                ),
             )
+            # R-07：边框与圆角（与 PDF 的 rect 同口径；边框贴图片而不是照片框，
+            # 因为 Word 的图片边框只能作用于图片本身——已在报告里披露）。
+            if layout.photo_border_width > 0:
+                outline_picture(
+                    picture_run,
+                    width_px=layout.photo_border_width,
+                    color_hex=layout.photo_border_color or theme.line_text,
+                    radius_px=layout.photo_radius,
+                    width_mm=draw_w,
+                    height_mm=draw_h,
+                )
             photo_box_mm = photo_w + 6
         except Exception:  # noqa: BLE001 - 照片坏了不能阻断导出
-            pass
+            logger.warning("简历照片无法写入 Word，已跳过", exc_info=True)
 
     if subtitle_text:
         subtitle_node = paragraph(doc)
         header_paragraphs.append(subtitle_node)
-        add_rich_runs(
-            subtitle_node,
-            subtitle_text,
-            set_font,
-            size_pt=base * layout.intent_ratio * _PX_TO_PT,
-            color=theme.muted_text,
-        )
+        if has_styled_labels(plan.header.subtitle, role_style):
+            add_segments(
+                subtitle_node,
+                plan.header.subtitle,
+                base=base,
+                layout=layout,
+                theme=theme,
+                role_style=role_style,
+                default_role="meta",
+                ratio_override=layout.intent_ratio,
+            )
+        else:
+            add_rich_runs(
+                subtitle_node,
+                subtitle_text,
+                set_font,
+                size_pt=base * layout.intent_ratio * _PX_TO_PT,
+                color=theme.muted_text,
+            )
 
     # 联系方式：**与 PDF 同一套装行算法**（2026-11 #9）。此前把 planner 分好的每组字段
     # 拼成一个段落交给 Word 自己度量，行分布与预览/PDF 必然不同（字段间隔 2em 时代更明显）。
@@ -239,8 +295,9 @@ def draw_header(
             - photo_box_mm
         )
         measure = make_text_measure(base * layout.contact_ratio, font_key)
-        packed = pack_contact_lines(contact_groups, contact_width_mm, measure, WORD_SEPARATOR)
-        contact_lines = [WORD_SEPARATOR.join(line) for line in packed]
+        separator = plan.header.contact_separator or WORD_SEPARATOR
+        packed = pack_contact_lines(contact_groups, contact_width_mm, measure, separator)
+        contact_lines = [separator.join(line) for line in packed]
     else:
         contact_lines = []
     if contact_lines:
@@ -284,124 +341,6 @@ def draw_header(
         )
 
 
-def draw_blocks(
-    doc,
-    blocks: Sequence[BlockPlan],
-    *,
-    base: float,
-    layout,
-    theme: DocxTheme,
-    role_style: RoleStyleQuery | None,
-    object_id: str | None,
-) -> None:
-    """正文块：连续要点合并成一次 bullets；段落逐段写。"""
-    from .docx_blocks import bullets
-
-    body_style = style_of(role_style, "body", object_id)
-    pending: list[str] = []
-
-    def flush() -> None:
-        if not pending:
-            return
-        bullets(
-            doc,
-            list(pending),
-            base=base,
-            indent_mm=layout.gap_mm(layout.li_indent),
-            theme=theme,
-            style=body_style,
-        )
-        pending.clear()
-
-    for block in blocks:
-        text = rich_text(block.segments).strip()
-        if not text:
-            continue
-        if block.kind == "bullet":
-            pending.append(text)
-            continue
-        flush()
-        # 段落块自身不跨页（与 v1 摘要的 w:keepLines 同口径；Word 没有 CSS 的 break-inside）。
-        # Q11：段落缩进与正文对齐此前被 Word 忽略（缩进固定 0、对齐永远左对齐）。
-        indent_mm = (
-            base * _PX_TO_MM * float(body_style.indent)
-            if body_style is not None and body_style.indent is not None
-            else 0.0
-        )
-        node = paragraph(doc, indent_mm=indent_mm, keep_together=True)
-        if body_style is not None and body_style.align is not None:
-            node.paragraph_format.alignment = align_value(body_style.align)
-        if body_style is not None and body_style.line_height:
-            node.paragraph_format.line_spacing = float(body_style.line_height)
-        add_segments(
-            node,
-            block.segments,
-            base=base,
-            layout=layout,
-            theme=theme,
-            role_style=role_style,
-            default_role="body",
-            object_id=object_id,
-        )
-    flush()
-
-
-def apply_column_geometry(
-    table, doc, columns: int, layout: EntryLayout | RowLayout, *, base: float
-) -> None:
-    """把逐列宽度 / 逐间隔 / 分布写进 Word 表格（任务 13 + 问题 4）。
-
-    - 宽度：百分比按**扣掉间隔后的可用宽**折算，保证 40/30/30 与 HTML 的口径一致
-      （HTML 里百分比是相对网格内容宽，间隔由 padding 表达，不占百分比）；
-    - 间隔：Word 没有逐列 `column-gap`，只能落到每个单元格的右边距（`w:tcMar/w:right`）；
-    - 分布 = 两端（`justify="between"`）：Word 的表格没有 `space-between`，只能"表格铺满
-      版心 + 每列等宽"来近似（列宽无法按内容量），最后一列由 `draw_cell_rows` 右对齐，
-      于是最后一段文字的右缘同样落在版心右边界；
-    - 三者都没给（或长度对不上）就直接返回，不改表格任何属性——旧文档产物逐字节不变。
-    """
-    widths, gaps = resolved_column_geometry(columns, layout.column_widths, layout.column_gaps)
-    between = (getattr(layout, "justify", None) or "start") == "between" and widths is None
-    if widths is None and gaps is None and not between:
-        return
-    section = doc.sections[-1]
-    total_emu = int(section.page_width - section.left_margin - section.right_margin)
-    gap_mm = [float(gap) * base * _PX_TO_MM for gap in (gaps or [])]
-    usable_emu = total_emu - int(Mm(sum(gap_mm)))
-    if between:
-        # 铺满版心：每列均分（Word 没有"按内容量宽"，等宽是唯一稳定的近似）。
-        widths = [100.0 / columns for _ in range(columns)]
-    if widths is not None:
-        table.autofit = False
-        for index, share in enumerate(widths):
-            table.columns[index].width = int(usable_emu * share / 100.0)
-        for row in table.rows:
-            for index, cell in enumerate(row.cells):
-                if index < columns:
-                    cell.width = table.columns[index].width
-    if gaps is not None:
-        for row in table.rows:
-            for index, cell in enumerate(row.cells):
-                if index < len(gap_mm):
-                    set_cell_right_margin(cell, gap_mm[index])
-
-
-def set_cell_right_margin(cell, millimetres: float) -> None:
-    """单个单元格的右边距（twips）。python-docx 没有暴露 tcMar，只能碰 XML。"""
-    if millimetres <= 0:
-        return
-    tc_pr = cell._tc.get_or_add_tcPr()
-    margins = tc_pr.find(qn("w:tcMar"))
-    if margins is None:
-        margins = OxmlElement("w:tcMar")
-        tc_pr.append(margins)
-    right = margins.find(qn("w:right"))
-    if right is None:
-        right = OxmlElement("w:right")
-        margins.append(right)
-    right.set(qn("w:w"), str(int(Mm(millimetres).twips)))
-    right.set(qn("w:type"), "dxa")
-
-
 def draw_cell_rows(
     doc,
     rows: Sequence[Sequence[CellPlan]],
@@ -435,6 +374,23 @@ def draw_cell_rows(
         for row in rows:
             if not row:
                 continue
+            segments = [segment for cell in row for segment in cell.segments]
+            if has_styled_labels(segments, role_style, object_id) or any(
+                is_field_path(seg.path) and style_of(role_style, "meta", seg.path) != meta_style
+                for seg in segments
+            ):
+                node = paragraph(doc)
+                add_segments(
+                    node,
+                    segments,
+                    base=base,
+                    layout=page_layout,
+                    theme=theme,
+                    role_style=role_style,
+                    default_role="meta",
+                    object_id=object_id,
+                )
+                continue
             meta_line(
                 doc,
                 "".join(rich_text(cell.segments) for cell in row),
@@ -457,6 +413,10 @@ def draw_cell_rows(
             if between and not (len(row) == 1 and columns > 1) and index == len(cells) - 1:
                 node.alignment = WD_ALIGN_PARAGRAPH.RIGHT
             segments = row[min(index, len(row) - 1)].segments if row else []
+            if segments and is_field_path(segments[0].path):
+                field_style = style_of(role_style, "meta", segments[0].path)
+                if field_style != meta_style:
+                    apply_field_spacing(node, field_style, page_layout)
             add_segments(
                 node,
                 segments,

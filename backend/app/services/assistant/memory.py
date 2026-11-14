@@ -23,7 +23,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ...models.assistant import ChatMessage
+from ...models.assistant import ChatConversation, ChatMessage
 from ...models.assistant_memory import (
     MEMORY_KIND_LABELS,
     MEMORY_KINDS,
@@ -33,10 +33,20 @@ from ...models.assistant_memory import (
     MEMORY_STATUS_ACTIVE,
     MEMORY_STATUS_DELETED,
     MEMORY_STATUS_SUPERSEDED,
+    MEMORY_STATUS_SUPPRESSED,
     AssistantMemory,
+)
+from ...models.assistant_memory_event import (
+    MEMORY_EVENT_CREATE,
+    MEMORY_EVENT_DELETE,
+    MEMORY_EVENT_RESTORE,
+    MEMORY_EVENT_SUPERSEDE,
+    MEMORY_EVENT_SUPPRESS,
+    MEMORY_EVENT_UPDATE,
 )
 from ...models.profile import utcnow
 from ...models.setting import AppSetting
+from . import memory_events
 
 #: 单条记忆内容上限（一句话事实，不是笔记）。
 MAX_MEMORY_VALUE_CHARS = 200
@@ -128,6 +138,20 @@ def _find_active(db: Session, kind: str, key: str) -> AssistantMemory | None:
     return query.order_by(AssistantMemory.id.desc()).first()
 
 
+def _find_suppressed(
+    db: Session, kind: str, key: str, value: str
+) -> AssistantMemory | None:
+    """同类同键同值、且被用户停用的行（用于"停用过的别再抽出来"）。"""
+    query = db.query(AssistantMemory).filter(
+        AssistantMemory.kind == kind,
+        AssistantMemory.status == MEMORY_STATUS_SUPPRESSED,
+        AssistantMemory.value == value,
+    )
+    if key:
+        query = query.filter(AssistantMemory.key == key)
+    return query.order_by(AssistantMemory.id.desc()).first()
+
+
 def _supersede(old: AssistantMemory, *, now: datetime) -> None:
     old.status = MEMORY_STATUS_SUPERSEDED
     old.updated_at = now
@@ -183,6 +207,21 @@ def create_memory(
             db.refresh(existing)
             return existing
         _supersede(existing, now=now)
+        memory_events.record_event(
+            db, existing.id, MEMORY_EVENT_SUPERSEDE, before=existing.value, after=cleaned_value
+        )
+    else:
+        # 手填的正是之前被「永不使用」的那条同一事实：恢复它，别新开一行。
+        suppressed = _find_suppressed(db, cleaned_kind, cleaned_key, cleaned_value)
+        if suppressed is not None:
+            suppressed.status = MEMORY_STATUS_ACTIVE
+            suppressed.updated_at = now
+            memory_events.record_event(
+                db, suppressed.id, MEMORY_EVENT_RESTORE, after=suppressed.value
+            )
+            db.commit()
+            db.refresh(suppressed)
+            return suppressed
     memory = _add(
         db,
         kind=cleaned_kind,
@@ -193,6 +232,8 @@ def create_memory(
         conversation_id=conversation_id,
         message_id=message_id,
     )
+    db.flush()  # 拿到 id 才能写事件
+    memory_events.record_event(db, memory.id, MEMORY_EVENT_CREATE, after=cleaned_value)
     db.commit()
     db.refresh(memory)
     return memory
@@ -210,8 +251,13 @@ def update_memory(
     target_value = memory.value if value is None else value
     target_key = memory.key if key is None else key
     _kind, cleaned_key, cleaned_value = validate_memory(memory.kind, target_value, target_key)
+    previous_value = memory.value
     memory.key = cleaned_key
     memory.value = cleaned_value
+    if previous_value != cleaned_value:
+        memory_events.record_event(
+            db, memory.id, MEMORY_EVENT_UPDATE, before=previous_value, after=cleaned_value
+        )
     if confidence is not None:
         memory.confidence = max(0.0, min(1.0, float(confidence)))
     memory.updated_at = utcnow()
@@ -221,14 +267,35 @@ def update_memory(
 
 
 def delete_memory(db: Session, memory: AssistantMemory) -> None:
-    """用户删除 / 标「永不使用」：软删（status=deleted），不物理删除。
+    """用户删除：软删（status=deleted），不物理删除。
 
-    删除与「永不使用」都只是不再注入；区别仅在设置页展示（删除从列表消失）。
-    保留行是为了"当时助手记过什么"可回溯，符合 #31E 的版本可追溯要求。
+    「永不使用」不再是删除的别名（F33）——那会把"停用"和"忘记"混成一件事，
+    用户既看不出区别，也没法把停用的条目恢复回来。停用走 `suppress_memory`。
     """
     memory.status = MEMORY_STATUS_DELETED
     memory.updated_at = utcnow()
+    memory_events.record_event(db, memory.id, MEMORY_EVENT_DELETE, before=memory.value)
     db.commit()
+
+
+def suppress_memory(db: Session, memory: AssistantMemory) -> AssistantMemory:
+    """「永不使用」：停用但保留在列表（status=suppressed），之后可恢复。"""
+    memory.status = MEMORY_STATUS_SUPPRESSED
+    memory.updated_at = utcnow()
+    memory_events.record_event(db, memory.id, MEMORY_EVENT_SUPPRESS, before=memory.value)
+    db.commit()
+    db.refresh(memory)
+    return memory
+
+
+def restore_memory(db: Session, memory: AssistantMemory) -> AssistantMemory:
+    """「恢复使用」：只对 suppressed 生效；deleted 行不允许复活（与删除语义一致）。"""
+    memory.status = MEMORY_STATUS_ACTIVE
+    memory.updated_at = utcnow()
+    memory_events.record_event(db, memory.id, MEMORY_EVENT_RESTORE, after=memory.value)
+    db.commit()
+    db.refresh(memory)
+    return memory
 
 
 def apply_operations(
@@ -269,6 +336,10 @@ def apply_operations(
             counts["noop"] += 1
             continue
         existing = _find_active(db, kind, key)
+        # 停用过的同一事实不许被再次抽取出来：否则「永不使用」只生效到下一次对话。
+        if existing is None and _find_suppressed(db, kind, key, value) is not None:
+            counts["noop"] += 1
+            continue
         if op == "UPDATE" and existing is not None:
             existing.value = value
             existing.confidence = max(existing.confidence, float(confidence or 0.6))
@@ -283,6 +354,9 @@ def apply_operations(
             continue
         if existing is not None:
             _supersede(existing, now=now)
+            memory_events.record_event(
+                db, existing.id, MEMORY_EVENT_SUPERSEDE, before=existing.value, after=value
+            )
         _add(
             db,
             kind=kind,
@@ -341,12 +415,27 @@ def latest_user_message(db: Session, conversation_id: int | None) -> ChatMessage
     )
 
 
+def conversation_memory_off(db: Session, conversation_id: int | None) -> bool:
+    """这段会话是否「本次不记忆」（F34）：注入与抽取两条链路的唯一判定入口。
+
+    会话不存在（草稿 / 已被彻底删除）按"正常记忆"处理：这时没有可归属的记忆来源，
+    挡住的收益为零；真正需要挡的是用户明确打开开关的那段对话。
+    """
+    if not conversation_id or int(conversation_id) <= 0:
+        return False
+    conversation = db.get(ChatConversation, int(conversation_id))
+    return bool(conversation is not None and conversation.memory_off)
+
+
 def render_memory_block(db: Session, conversation_id: int | None) -> str:
     """把相关记忆渲染成系统提示里的固定区块；没有相关记忆时返回空串。
 
     位置在系统提示的 base 段（求职偏好之后、本地时间之前）：它是"用户说过的事实"，
     不是系统规则，也不是技能规范。
     """
+    # 临时对话（F34）：不注入任何已有记忆；已保存的记忆一行都不动。
+    if conversation_memory_off(db, conversation_id):
+        return ""
     message = latest_user_message(db, conversation_id)
     if message is None:
         return ""
@@ -397,6 +486,7 @@ __all__ = [
     "active_memories",
     "apply_operations",
     "auto_extract_enabled",
+    "conversation_memory_off",
     "create_memory",
     "delete_memory",
     "latest_user_message",

@@ -46,7 +46,7 @@ const touTou = {
 
   // ── Orb button (TouTouOrbButton) ────────────────────────────
   "touTou.orb.tooltip":
-    "Click: open the job assistant; double-click: open the Toutou clipboard; long-press: open the action panel; with text selected, Ctrl/Cmd+K opens the selection actions",
+    "Click: open the job assistant; double-click: open the Toutou clipboard; long-press: open the action panel; with text selected, {shortcut} opens the selection actions",
   "touTou.orb.ariaLabel": "Open the Job assistant",
   "touTou.orb.signals": "{count} things Toutou can help with here",
 

@@ -16,10 +16,10 @@ import { RecordDetailDrawer } from "../../components/common/RecordDetail";
 
 interface Props {
   detail: Reminder | null;
-  /** 关联对象在下拉里查不到时的占位（与列表同口径）。 */
-  trackLabel: string;
-  jobLabel: string;
-  resumeLabel: string;
+  /** 关联对象在下拉里查不到时的占位（与列表同口径）；未关联时传 undefined，整行不渲染。 */
+  trackLabel: string | undefined;
+  jobLabel: string | undefined;
+  resumeLabel: string | undefined;
   onMarkDone: () => void;
   onEdit: () => void;
   onClose: () => void;
@@ -75,12 +75,7 @@ export default function ReminderDetailDrawer({
       }
       sections={
         detail
-          ? [
-              {
-                title: t("reminder.field.note"),
-                content: detail.note || t("reminder.detail.none"),
-              },
-            ]
+          ? [...(detail.note ? [{ title: t("reminder.field.note"), content: detail.note }] : [])]
           : []
       }
       actions={

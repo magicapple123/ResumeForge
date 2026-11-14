@@ -125,3 +125,14 @@
   display: block;
   margin-top: 4px;
 }
+
+/* 岗位侧的出口（Q3）：没有合适岗位时去岗位广场从链接导入。
+   与上方字段同一个节奏（6px），但克制在一行内——它是引导，不是第二个主操作，
+   所以用次要色与 12px，并且靠 `flex-start` 左对齐（父容器是 block 时它自然就左对齐）。 */
+.interview-job-link-hint {
+  display: block;
+  align-self: flex-start;
+  margin-top: 6px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}

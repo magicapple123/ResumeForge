@@ -172,8 +172,11 @@ describe("ApplyQueuePanel 准入徽标", () => {
 
     renderPanel();
 
-    expect(await screen.findByText("需确认")).toBeInTheDocument();
-    expect(screen.getByText("需逐条确认")).toBeInTheDocument();
+    // 合并成「匹配」列后，结论与「需逐条确认」在同一行内（一个 12px 文本节点，
+    // 用「·」连接）：既保留原来两条信息，也顺带钉住 tone 落到 warn 档。
+    const admission = await screen.findByText("需确认 · 需逐条确认");
+    expect(admission).toBeInTheDocument();
+    expect(admission.dataset.tone).toBe("needs_confirm");
   });
 
   it("队列里没有待投条目时禁用开始投递", async () => {

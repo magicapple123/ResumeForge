@@ -20,13 +20,13 @@ from ...models.job import Job
 from ...models.profile import UserProfile
 from ...schemas.profile import ProfileOut
 from ...schemas.profile_projection import ConsumedProfile
-from ..apply import apply_service
 from ..profile.ai_profile import load_ai_profile
 from ..profile.profile_service import (
     legacy_profile_is_empty,
     project_legacy_profile_from_consumed,
     to_profile_out,
 )
+from .job_match_sources import resolve_match_resume, serialize_resume
 
 
 def _is_empty_user_profile(profile: UserProfile) -> bool:
@@ -65,26 +65,24 @@ def profile_text(profile: ProfileOut | UserProfile | ConsumedProfile) -> str:
     )
 
 
-def job_resume_text(db: Session, job: Job) -> str:
+def job_resume_text(db: Session, job: Job, resume_id: int | None = None) -> str:
     """岗位对应简历（绑定/默认）的序列化文本；没有简历时是空串。
 
     单岗匹配与批量匹配共用这一处序列化，避免两条链路对"模型看到的简历"出现差异。
     """
-    resume = apply_service.resolve_resume(db, job.id, None)
-    if resume is None:
-        return ""
-    return json.dumps(
-        {"title": resume.title, "job_title": resume.job_title, "content": resume.content},
-        ensure_ascii=False,
-    )
+    return serialize_resume(resolve_match_resume(db, job, resume_id))
 
 
 def match_source_texts(
-    db: Session, job: Job, *, profile: ProfileOut | UserProfile | None = None
+    db: Session,
+    job: Job,
+    *,
+    profile: ProfileOut | UserProfile | None = None,
+    resume_id: int | None = None,
 ) -> tuple[ProfileOut | UserProfile, str, str]:
     """返回岗位匹配所需的资料文本与岗位对应简历文本（当前组 + 去隐藏）。"""
     current = profile or load_ai_profile(db)
-    return current, profile_text(current), job_resume_text(db, job)
+    return current, profile_text(current), job_resume_text(db, job, resume_id)
 
 
 __all__ = ["job_resume_text", "match_source_texts", "profile_is_empty", "profile_text"]

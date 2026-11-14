@@ -28,6 +28,14 @@ files:
   - lib/preflight.js
   # 窗口 × 二选一 + 记住选择的关闭行为（§18）：main.js 顶层 require。
   - lib/close-behavior.js
+  # Q11：自绘关闭卡片（无边框窗口 + 视图 2 二次确认）。**这三个文件漏一个就是
+  # dev 能跑、安装版白窗**——main.js 顶层 require close-dialog.js，该文件再按
+  # 相对路径加载 html 与 preload。
+  - lib/close-dialog.js
+  - close-dialog.html
+  - close-dialog-preload.js
+  # Q11：关闭行为 + 托盘装配（main.js 只剩一次调用），顶层 require。
+  - lib/window-shell.js
   # 自绘标题栏的窗口壳层（§19）：titleBarStyle / titleBarOverlay 配色与窗口状态推送。
   - lib/titlebar.js
   # 标题栏菜单的主进程动作表（§19）：编辑/视图/窗口/目录/外链，只认固定动作 id。

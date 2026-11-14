@@ -32,9 +32,11 @@ const {
 const { createQuitLifecycle } = require("./lib/quit-lifecycle");
 // 桌面自绘标题栏 / 托盘 / 关闭行为 / 启动失败出口（§18 §19）：决策都在 lib/ 下，
 // 本文件只保留装配与 Electron 事件注册，500 行预算不会被这些分支吃光。
-const { createCloseBehavior, createPreferenceStore } = require("./lib/close-behavior");
+const { createPreferenceStore } = require("./lib/close-behavior");
+const { createClosePrompt } = require("./lib/close-dialog");
+const { createWindowShell } = require("./lib/window-shell");
 const { createTitleBarController, installTitleBarFallbackOnLoad } = require("./lib/titlebar");
-const { createTrayManager } = require("./lib/tray-menu");
+
 const { registerDesktopShellIpc } = require("./lib/desktop-shell-ipc");
 const { createStartupFailureReporter } = require("./lib/startup-failure");
 const { installerWaitCommand, runManualUpdateCheck, scheduleUpdateCheck, wantsManualUpdateCheck } = require("./updater");
@@ -184,32 +186,25 @@ function sendStage(stage, detail) {
 /** 窗口尺寸 / 位置 / 缩放的读写（纯函数在 lib/window-state.js，有离线用例）。 */
 const windowState = createWindowStateStore({ app, getWindow: () => mainWindow });
 
-// 窗口壳（§18 §19）：托盘 / 关闭行为 / 标题栏覆盖层全部在 lib/ 下，决策可离线断言。
+// 窗口壳（§18 §19 + Q11）：托盘 / 关闭卡片 / 标题栏覆盖层全部在 lib/ 下，决策可离线断言。
 const titleBar = createTitleBarController({ getWindow: () => mainWindow, logLine });
-let trayManager = null;
-const closeBehavior = createCloseBehavior({
-  app,
-  dialog,
+// Q11：关闭提示改成**自绘无边框窗口**（原生 MessageBox 的外观没有任何可调参数）。
+// 决策逻辑仍在 lib/close-behavior.js：这里只把"怎么弹"注入进去。
+const promptClose = createClosePrompt({
+  BrowserWindow,
+  ipcMain,
+  getWindow: () => mainWindow,
+  dirname: __dirname,
+  logLine,
+});
+let desktopShellMenu = null;
+const { closeBehavior, trayManager } = createWindowShell({
+  app, Tray, Menu, iconPath: shellIcon(), promptClose,
   getWindow: () => mainWindow,
   isQuitting: () => quitting,
-  setQuitting: (value) => {
-    quitting = value;
-  },
+  setQuitting: (value) => { quitting = value; },
   store: createPreferenceStore({ app }),
-  logLine,
-  // 记忆变化后刷新托盘「关闭窗口时询问」的勾选态。
-  onPreferenceChanged: () => {
-    if (trayManager) trayManager.refresh();
-  },
-});
-trayManager = createTrayManager({
-  Tray,
-  Menu,
-  iconPath: shellIcon(),
-  app,
-  getWindow: () => mainWindow,
-  getRemembered: () => closeBehavior.getRemembered(),
-  clearRemembered: () => closeBehavior.clearRemembered(),
+  getMenu: () => desktopShellMenu,
   logLine,
 });
 
@@ -480,7 +475,7 @@ ipcMain.on("app:quit-request", () => app.quit());
 // 自绘标题栏的 IPC（§19）：动作表在 lib/desktop-menu.js，注册与发送方校验在
 // lib/desktop-shell-ipc.js。动作只认固定 id；「关闭窗口」走 mainWindow.close()，
 // 触发第 18 条那条 close handler，绝不直接 destroy()。
-registerDesktopShellIpc({
+desktopShellMenu = registerDesktopShellIpc({
   ipcMain,
   app,
   getWindow: () => mainWindow,

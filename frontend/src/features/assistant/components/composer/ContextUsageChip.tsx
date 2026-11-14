@@ -17,7 +17,11 @@ import { Button, Popover } from "antd";
 import { useState } from "react";
 import { t } from "../../../../i18n";
 import { useLocale } from "../../../../i18n/i18nContext";
-import { formatPercentShort } from "../../contextUsageFormat";
+import {
+  contextArcPercent,
+  contextUsageLevel,
+  formatPercentShort,
+} from "../../contextUsageFormat";
 import type { ContextUsage } from "../../../../types";
 import ContextUsagePopover from "./ContextUsagePopover";
 
@@ -42,6 +46,8 @@ export default function ContextUsageChip({
   // 窗口 0 = 没有分母：chip 上显示「—」，弹层里给「未设置上下文窗口」+ 去设置。
   const percent = usage && usage.window > 0 ? usage.percent : null;
   const percentText = formatPercentShort(percent);
+  const level = contextUsageLevel(percent);
+  const aria = t("contextUsage.aria.chip");
 
   return (
     <Popover
@@ -63,13 +69,44 @@ export default function ContextUsageChip({
         type="text"
         size="small"
         className="assistant-context-usage-chip"
-        aria-label={t("contextUsage.aria.chip")}
+        aria-label={aria}
+        title={aria}
         aria-expanded={open}
       >
-        <span className="assistant-context-usage-chip-inner">
-          {/* 细环是纯装饰：语义由 aria-label 提供，读屏不多念一个空图形。 */}
-          <span className="assistant-context-usage-ring" aria-hidden="true" />
-          <span className="assistant-context-usage-chip-label">{t("contextUsage.chip")}</span>
+        <span className={`assistant-context-usage-chip-inner is-${level}`}>
+          {/* 环形进度是纯装饰：语义由 aria-label 提供，读屏不多念一个空图形。
+              弧长走 pathLength=100，这样 dasharray 直接写百分比，不用算周长。 */}
+          <svg
+            className="assistant-context-usage-ring"
+            viewBox="0 0 16 16"
+            width="16"
+            height="16"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <circle
+              className="assistant-context-usage-ring-track"
+              cx="8"
+              cy="8"
+              r="7"
+              fill="none"
+              strokeWidth="2"
+            />
+            {percent === null ? null : (
+              <circle
+                className="assistant-context-usage-ring-arc"
+                cx="8"
+                cy="8"
+                r="7"
+                fill="none"
+                strokeWidth="2"
+                strokeLinecap="round"
+                pathLength={100}
+                strokeDasharray={`${contextArcPercent(percent)} 100`}
+                transform="rotate(-90 8 8)"
+              />
+            )}
+          </svg>
           <span className="assistant-context-usage-chip-value">{percentText}</span>
         </span>
       </Button>

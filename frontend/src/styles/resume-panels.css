@@ -3,9 +3,11 @@
 拆分自 resume.css，纯搬迁、规则内容与顺序不变。
 2026-11 问题 20：版面诊断 / 自动一页 / 板块顺序 / 缩放提示另切成
 `resume-panels-diagnostics.css`（见下方 @import，纯搬迁）。
+2026-11 F21：照片「边框与位置」弹层切成 `resume-panels-photo.css`（同批加滑杆后放不下）。
 @import 必须位于任何规则之前，所以分片在本文件顶部生效——两段的类名互不相交，
 层叠顺序对它们没有影响。 */
 @import "./resume-panels-diagnostics.css";
+@import "./resume-panels-photo.css";
 @import "./resume-writing.css";
 @import "./resume-coverage.css";
 

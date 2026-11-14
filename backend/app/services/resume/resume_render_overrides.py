@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .document_identity import ENTRY_FIELDS
+from .field_style_target import content_field_paths
 from .resume_config_domains import DOMAIN_KEYS
 from .resume_pagination import PaginationPlan, pagination_css, resolve_pagination
 from .resume_photo_crop import (
@@ -143,6 +144,7 @@ def prune_overrides(content: dict | None, format_config: dict | None) -> dict | 
     result = dict(format_config)
     changed = False
     valid_ids = _content_object_ids(content)
+    valid_role_targets = valid_ids | content_field_paths(content)
 
     objects = result.get("objects")
     if isinstance(objects, dict):
@@ -169,7 +171,7 @@ def prune_overrides(content: dict | None, format_config: dict | None) -> dict | 
                 continue
             if isinstance(key, str):
                 object_id, sep, _role = key.rpartition(":")
-                if sep and object_id in valid_ids:
+                if sep and object_id in valid_role_targets:
                     kept_role_keys[key] = value
         if kept_role_keys != object_roles:
             changed = True

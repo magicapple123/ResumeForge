@@ -15,6 +15,8 @@
 
 export type Placement = "title" | "meta" | "lead" | "trail" | "body" | "hidden";
 export type HeaderPlacement = "name" | "name_meta" | "subtitle" | "contact" | "photo" | "hidden";
+/** F20：页眉字段名三态。`auto` = 按字段类型自动决定（默认，与改动前逐字节一致）。 */
+export type LabelMode = "auto" | "show" | "hide";
 export type ItemFormat =
   "text" | "date" | "date_range" | "list" | "enum" | "url" | "authors" | "number";
 export type SectionKind = "entries" | "inline" | "text";
@@ -118,6 +120,9 @@ export interface HeaderItem {
   value: string;
   placement: HeaderPlacement;
   format: ItemFormat;
+  show_label?: boolean;
+  /** F20 三态；缺省时后端按 `show_label === false ? "hide" : "auto"` 回落。 */
+  label_mode?: LabelMode;
 }
 
 export interface ResumeHeader {

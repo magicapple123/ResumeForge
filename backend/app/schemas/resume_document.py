@@ -40,6 +40,8 @@ from .resume_research import MAX_AUTHORS, ResumeAuthor
 
 Placement = Literal["title", "meta", "lead", "trail", "body", "hidden"]
 HeaderPlacement = Literal["name", "name_meta", "subtitle", "contact", "photo", "hidden"]
+#: F20：页眉字段名的三态。`auto` 是默认值，也是存量文档的等价行为。
+LabelMode = Literal["auto", "show", "hide"]
 Format = Literal["text", "date", "date_range", "list", "enum", "url", "authors", "number"]
 SectionKind = Literal["entries", "inline", "text"]
 HeadLayout = Literal["split", "stacked", "meta_first"]
@@ -231,6 +233,11 @@ class HeaderItem(BaseModel):
     value: str = Field(default="", max_length=MAX_HEADER_VALUE_CHARS)
     placement: HeaderPlacement = "contact"
     format: Format = "text"
+    #: 兼容字段：新代码只读 `label_mode`，这里保留是为了旧文档/旧客户端能照常反序列化。
+    show_label: bool = True
+    #: F20 三态：auto = 按字段类型自动决定（默认，现状逐字节不变）；show = 印「电话：」；
+    #: hide = 只印值。**旧文档**没有这个键时按 `show_label === false ? "hide" : "auto"` 回落。
+    label_mode: LabelMode = "auto"
 
     @field_validator("id", mode="before")
     @classmethod
@@ -253,7 +260,7 @@ class ResumeHeader(BaseModel):
     contact_breaks: list[str] = Field(default_factory=list, max_length=MAX_CONTACT_BREAKS)
 
 
-MAX_COLUMN_GAP = 16.0
+MAX_COLUMN_GAP = 30.0
 """逐间隔上限（字号倍数），与制作台「列间距」同一个口径。
 
 任务 10 从 4 放宽到 8；本轮（问题 4）配合 UI 的 `MAX_GAP` 再放宽到 16——"两端"分布下
@@ -261,16 +268,14 @@ MAX_COLUMN_GAP = 16.0
 下调会让旧内容校验失败。
 """
 
-MAX_ENTRY_GAP = 16.0
+MAX_ENTRY_GAP = 30.0
 """条目级「列间距」上限（字号倍数）。分区级仍是 30（`SectionLayout.gap`），不下调。"""
 
 WIDTH_SUM_TOLERANCE = 0.5
 """逐列宽度合计的容差（百分比）。前端会按 0.1 取整，浮点累加难免 99.99/100.01。"""
 
 
-def _check_column_geometry(
-    widths: list[float] | None, gaps: list[float] | None
-) -> None:
+def _check_column_geometry(widths: list[float] | None, gaps: list[float] | None) -> None:
     """逐列宽度 / 逐间隔的自洽性校验（模型层只管自身，列数是否匹配交给 planner）。
 
     为什么不在模型里校验"长度 == columns"：条目级 `columns` 常为 `None`（继承分区），
@@ -325,6 +330,7 @@ class RowLayout(BaseModel):
 
 class SectionLayout(BaseModel):
     """分区级默认版式：lead/trail 列布局 + 分页/标题开关（条目可覆盖列布局）。"""
+
     model_config = ConfigDict(extra="ignore")
 
     columns: Literal[1, 2, 3] = 1

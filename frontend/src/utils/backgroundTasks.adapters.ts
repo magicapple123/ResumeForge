@@ -288,9 +288,57 @@ export function registerBackgroundTaskAdapter(adapter: BackgroundTaskAdapter): v
   ADAPTERS.set(adapter.kind, adapter);
 }
 
-/** 取适配器；没登记返回 `null`（主循环据此跳过，而不是崩）。 */
-export function getBackgroundTaskAdapter(kind: BackgroundTaskKind): BackgroundTaskAdapter | null {
-  return ADAPTERS.get(kind) ?? null;
+/**
+ * 兜底适配器：**任何** `/ai-tasks` 类型都先按"能拉、能停"处理，再谈文案。
+ *
+ * 2026-11-13 的真实故障：助手记忆整理（`assistant_memory_extract`）与索引预热
+ * （`rag_index_warmup`）都会出现在 `/ai-tasks/active` 里，但前端只登记了六个"有界面入口"
+ * 的 kind。于是页头「正在进行」把它们显示出来之后：
+ * 1. `tick()` 拿不到适配器 → 直接 return → **永不轮询**，chip 永久冻在「生成中…」；
+ * 2. `cancelBackgroundTask()` 拿不到适配器 → **静默返回**，调用方照样弹「已取消」——
+ *    用户点了取消、看到"已取消"，任务却原样躺在那里。
+ *
+ * 拉与停这两个动作对所有 AI 任务都是同一对端点（同一张表），唯一的差别是通知文案；
+ * 所以兜底只需要"通用 fetch/cancel"，文案由 `finish()` 里的 `fallbackNotices(task)`
+ * 用任务自己的 label 拼（那里才知道 label）。
+ */
+function genericAiTaskAdapter(kind: BackgroundTaskKind): BackgroundTaskAdapter {
+  return {
+    kind,
+    async fetch(id) {
+      return updateFromAiTask(await getAiTask(id));
+    },
+    async cancel(id) {
+      return updateFromAiTask(await cancelAiTask(id));
+    },
+    notices() {
+      // 实际不会走到这里（未登记的 kind 在 `finish()` 里优先用 fallbackNotices(task)），
+      // 但接口要求四个成员齐全：给一组最保守的通用文案。
+      return {
+        doneTitle: t("backgroundTasks.notice.done.title"),
+        doneDescription: "",
+        failedTitle: t("backgroundTasks.notice.done.title"),
+        failedDescription: "",
+        cancelledTitle: t("backgroundTasks.toast.cancelled", { name: "" }),
+        viewLabel: t("backgroundTasks.action.view"),
+      };
+    },
+  };
+}
+
+/** 取适配器：登记过的用登记的，没登记的走通用兜底（保证轮询与取消都真的会发生）。 */
+export function getBackgroundTaskAdapter(kind: BackgroundTaskKind): BackgroundTaskAdapter {
+  return ADAPTERS.get(kind) ?? genericAiTaskAdapter(kind);
+}
+
+/**
+ * 这个 kind 是否有专属适配器（决定了完成通知用专属文案还是 label 兜底）。
+ *
+ * 单独一个判据，是因为兜底适配器的 `notices()` 拿不到任务 label——通知要走
+ * `fallbackNotices(task)` 才能说出"「整理助手记忆」已完成"。
+ */
+export function hasRegisteredBackgroundTaskAdapter(kind: BackgroundTaskKind): boolean {
+  return ADAPTERS.has(kind);
 }
 
 /** 已登记的 kind（"这个任务类型有人认领"的判据，也用于测试断言）。 */

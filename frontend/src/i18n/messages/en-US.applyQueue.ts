@@ -45,6 +45,7 @@ const applyQueue = {
 
   "applyQueue.startBar.count": "{selected} selected / {eligible} applicable",
   "applyQueue.startBar.hint": "Select nothing to apply the whole queue in order",
+  "applyQueue.action.startCount": "Start applications ({count})",
 
   "applyQueue.empty.title": "The queue is empty — pick a few Jobs in Job Square first.",
   "applyQueue.empty.action": "Pick Jobs in Job Square",
@@ -71,9 +72,10 @@ const applyQueue = {
   "applyQueue.column.job": "Job",
   "applyQueue.column.admission": "Admission",
   "applyQueue.column.status": "Status",
-  "applyQueue.column.assets": "Resume / Greeting",
+  "applyQueue.column.assets": "Application materials",
   "applyQueue.column.actions": "Actions",
   "applyQueue.column.score": "Score",
+  "applyQueue.column.match": "Match",
   "applyQueue.score.disclaimer":
     "This reference score is estimated by local rules and meant only for display and self-assessment; it is not a real ATS parsing result or a probability of success. Eligibility still follows the five match verdicts.",
   "applyQueue.score.unanalyzed": "Not analyzed",
@@ -97,7 +99,6 @@ const applyQueue = {
   "applyQueue.filter.selectAllHint":
     "Tick every applicable Job in the current list (works across pages); ticking nothing applies the whole queue in order",
   "applyQueue.filter.selectAll": "Select all in queue",
-  "applyQueue.more.aria": "More queue actions (clear selection)",
   "applyQueue.filter.clearSelection": "Clear selection",
   "applyQueue.confirm.removeSelectedTitle": "Remove the selected Jobs from the queue?",
   "applyQueue.action.removeSelected": "Remove selected",

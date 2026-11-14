@@ -61,6 +61,22 @@ def _html(client, resume_id: int, *, preview: bool):
     )
 
 
+def test_incomplete_resume_is_previewable_but_still_blocked_from_export(client):
+    content = _resume().model_dump()
+    content["summary"] = "Experience: \u3010\u5f85\u8865\u3011"
+    created = client.post(
+        "/api/resumes/manual",
+        json={"title": "Incomplete preview", "content": content, "job_id": None},
+    )
+    assert created.status_code == 201, created.text
+    resume_id = created.json()["id"]
+    preview = _html(client, resume_id, preview=True)
+    assert preview.status_code == 200, preview.text
+    exported = _html(client, resume_id, preview=False)
+    assert exported.status_code == 409, exported.text
+    assert "\u672a\u5b8c\u6210\u6807\u8bb0" in exported.json()["detail"]
+
+
 def test_preview_request_neither_saves_a_copy_nor_reports_a_location(client, tmp_path):
     resume_id = _create_resume(client)
     with SessionLocal() as db:

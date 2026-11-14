@@ -21,10 +21,16 @@
   box-shadow: 0 2px 8px rgb(22 119 255 / 12%);
 }
 
+.record-detail-meta {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .record-detail-fields {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   margin-top: 16px;
 }
 
@@ -43,17 +49,32 @@
   flex: 1 1 auto;
   min-width: 0;
   font-size: 13px;
+  line-height: 1.6;
   overflow-wrap: anywhere;
+}
+
+/* 章节标题与正文同字号、只差字重：13px 正文配 level={5} 的 16px 粗体，
+   标题会把正文压成"注释"；层级靠字重与间距，不靠字号跳两档。 */
+.record-detail-section-title {
+  margin: 0 0 6px;
+  color: var(--rf-text-body);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 .record-detail-section-body {
   font-size: 13px;
+  line-height: 1.7;
+  /* 正文行长上限：抽屉 520 宽时约 60–66 字符，长段落不会一眼读到行尾。 */
+  max-width: 66ch;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .record-detail-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
   margin-top: 24px;

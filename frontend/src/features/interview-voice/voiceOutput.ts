@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 26F 语音输出接口位：``InterviewVoiceOutput { enqueue / duck / flush / stop }``。
+ * 26F 语音输出接口：``InterviewVoiceOutput { enqueue / duck / flush / stop }``。
  *
- * 用户要求 TTS **延后单独处理**，本轮不选型，所以默认实现是 **no-op**（纯文字模式），
- * 业务代码照常调用这四个方法、行为一行不变。等定了 TTS，只需换一个实现：
+ * 实时通话模式使用浏览器本机 SpeechSynthesis；不需要语音输出的上下文继续使用 **no-op**，
+ * 所有插话、停止和清理都通过同一接口完成：
  *
  * - ``enqueue(text)``：按**句**入队（流式 TTS 边出字边合成，入队单位必须是句而不是整段）；
- * - ``duck(depthDb)``：插话时压音量（-24dB），``duck(0)`` 表示恢复；
+ * - ``duck(depthDb)``：插话时压低或暂停输出，``duck(0)`` 表示恢复；
  * - ``flush()``：打断时清空播放队列；
  * - ``stop()``：彻底停止（结束面试 / 关闭语音时）。
  *
- * P1 的 ``createDuckingVoiceOutput`` 是本文件里的参考实现：它把 ``duck`` 换算成线性增益，
- * 恢复时按 150ms 淡入（26C 要求），enqueue/flush/stop 留给真正的 TTS 层接。
+ * ``createDuckingVoiceOutput`` 是基于播放器增益的参考实现；浏览器 SpeechSynthesis 没有标准
+ * 的播放增益节点，因此它在插话检测期间暂停当前 utterance。
  */
 
 export interface InterviewVoiceOutput {
   /** 按句入队（P1 的流式 TTS 在播放前一句时并行合成下一句）。 */
   enqueue(text: string): void;
-  /** 压音量（负 dB）；传 0 恢复。实现负责淡入。 */
+  /** 压低或暂停输出（负 dB）；传 0 恢复。 */
   duck(depthDb: number): void;
   /** 打断时清空播放队列（已合成未播的句子全部丢弃）。 */
   flush(): void;

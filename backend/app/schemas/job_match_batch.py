@@ -22,6 +22,7 @@ class JobMatchBatchRequest(BaseModel):
 
     job_ids: list[int] = Field(min_length=1, max_length=50)
     force: bool = False
+    resume_id: int | None = Field(default=None, gt=0)
     mode: BatchMode = "match"
 
 

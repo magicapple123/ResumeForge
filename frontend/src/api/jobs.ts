@@ -160,12 +160,18 @@ export function getJobAnalysis(id: number): Promise<JobAnalysisCache> {
  * 与岗位需求解读（只读 JD 那条）是两条不同的链路——这里会读取用户资料，
  * 因此生成的是"我够不够"的结论；`force` 为真时忽略已有结论强制重算。
  */
-export function generateJobMatch(id: number, force = false): Promise<JobMatchResult> {
-  return request(`/jobs/${id}/match-analysis${force ? "?force=true" : ""}`, { method: "POST" });
+export function generateJobMatch(
+  id: number,
+  force = false,
+  resumeId?: number,
+): Promise<JobMatchResult> {
+  return request(`/jobs/${id}/match-analysis${buildQuery({ force, resume_id: resumeId })}`, {
+    method: "POST",
+  });
 }
 
-export function getJobMatch(id: number): Promise<JobMatchOut> {
-  return request(`/jobs/${id}/match-analysis`);
+export function getJobMatch(id: number, resumeId?: number): Promise<JobMatchOut> {
+  return request(`/jobs/${id}/match-analysis${buildQuery({ resume_id: resumeId })}`);
 }
 
 export function deleteJobMatch(id: number): Promise<void> {
@@ -179,6 +185,7 @@ export function listJobMatchBatches(limit = 30): Promise<JobMatchBatchSummary[]>
 export function startJobMatchBatchTask(payload: {
   job_ids: number[];
   force?: boolean;
+  resume_id?: number;
   /** 省略即逐岗匹配（旧行为）；compare = 逐岗结论之后再横向排序并解释原因。 */
   mode?: JobMatchBatchMode;
 }): Promise<JobMatchBackgroundTask> {

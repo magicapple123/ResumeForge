@@ -170,10 +170,10 @@ describe("SetupTab 关联岗位与关联简历都必选（0066）", () => {
     expect(onStart).not.toHaveBeenCalled();
   });
 
-  it("岗位未选时关联简历下拉是禁用的（候选要有岗位才有意义）", () => {
+  it("岗位未选时仍可选择简历材料（R28）", () => {
     renderSetup();
 
-    expect(screen.getByLabelText(t("interviewPage.setup.resumeLabel"))).toBeDisabled();
+    expect(screen.getByLabelText(t("interviewPage.setup.resumeLabel"))).not.toBeDisabled();
   });
 
   it("选好岗位后候选变成「该岗位的 + 通用的」简历，提交时两项一起带出", async () => {

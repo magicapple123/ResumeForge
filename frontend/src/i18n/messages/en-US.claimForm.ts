@@ -63,9 +63,11 @@ const claimForm = {
   "claimForm.evidence.private": "Private",
   "claimForm.evidence.removeAria": "Remove this evidence",
   "claimForm.evidence.add": "Add evidence source",
+  "claimForm.evidence.notePlaceholder": "Note (optional)",
 
   "claimForm.interview.title":
     "Interview details (the parts you can defend under follow-up questions; essential for strong claims)",
+  "claimForm.interview.filledCount": "{count} filled",
   "claimForm.field.decisions": "Decisions you made",
   "claimForm.field.difficulties": "Difficulties",
   "claimForm.field.howVerified": "How it was verified",

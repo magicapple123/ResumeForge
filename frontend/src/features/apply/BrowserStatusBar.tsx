@@ -17,15 +17,17 @@
  */
 import {
   ChromeOutlined,
+  DownOutlined,
   LinkOutlined,
   MoreOutlined,
   PlayCircleOutlined,
   QuestionCircleOutlined,
   ReloadOutlined,
   StopOutlined,
+  UpOutlined,
   WarningFilled,
 } from "@ant-design/icons";
-import { App, Button, Dropdown, Modal, Space, Tag, Tooltip, Typography } from "antd";
+import { App, Badge, Button, Dropdown, Modal, Space, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import { getBrowserStatus, openBrowserSite, startBrowser, stopBrowser } from "../../api/apply";
 import { BROWSER_STATUS_POLL_INTERVAL_MS, useBrowserStatus } from "../../hooks/useBrowserStatus";
@@ -33,6 +35,15 @@ import { BROWSER_STATE_META } from "../../types";
 import { t } from "../../i18n";
 import { BROWSER_STATE_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
+
+export const BROWSER_HINT_SEEN_KEY = "resumeforge.apply.browser_hint_seen";
+function hasSeenHint() {
+  try {
+    return localStorage.getItem(BROWSER_HINT_SEEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export default function BrowserStatusBar() {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
@@ -42,6 +53,8 @@ export default function BrowserStatusBar() {
   const [busy, setBusy] = useState(false);
   /** 「使用说明」弹窗：说明不进流，首屏高度与它无关。 */
   const [helpOpen, setHelpOpen] = useState(false);
+  const [hintSeen, setHintSeen] = useState(hasSeenHint);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const handleStart = async () => {
     setBusy(true);
@@ -93,6 +106,18 @@ export default function BrowserStatusBar() {
   // 关不掉时得把原因**写在页面上**，不能只挂在悬停提示里：antd 的 Tooltip 不会特殊处理
   // 禁用子元素，而浏览器不给 disabled 按钮派发鼠标事件——悬停上去什么都不会弹。
   const adopted = Boolean(data) && !data?.owned && (running || state === "starting");
+  const compact = running && !error && hintSeen && !detailsOpen;
+  const toggleDetails = () => {
+    setDetailsOpen(compact);
+    if (!hintSeen) {
+      setHintSeen(true);
+      try {
+        localStorage.setItem(BROWSER_HINT_SEEN_KEY, "1");
+      } catch {
+        /* Optional preference. */
+      }
+    }
+  };
 
   /** 「使用说明」的内容：三段说明整段搬进来（弹窗里可以放开写，不再抢首屏高度）。 */
   const helpContent = (
@@ -133,6 +158,17 @@ export default function BrowserStatusBar() {
    * 但**不能藏进悬停**——禁用原因（上一次运行留下的窗口关不掉）写在页面上，不靠提示。
    */
   const moreItems = [
+    ...(compact
+      ? [
+          {
+            key: "open-site",
+            label: t("browserStatus.action.openSite"),
+            icon: <LinkOutlined />,
+            disabled: !canOpenSite || busy,
+            onClick: () => void handleOpenSite(),
+          },
+        ]
+      : []),
     {
       key: "stop",
       label: t("browserStatus.action.stop"),
@@ -167,64 +203,99 @@ export default function BrowserStatusBar() {
   ];
 
   return (
-    <div className="apply-browser-bar">
+    <div
+      className={`apply-browser-bar ${compact ? "apply-browser-compact" : "apply-browser-expanded"}`}
+    >
+      {/* 两行结构（2026-11-13 用户反馈「单独一张窄卡片不好看」）：
+          第一行是身份（图标 + 标题 + 状态），第二行是细节（端口 / 扫码提示 / 沿用说明），
+          右侧按钮固定在右上角。此前所有东西平铺在一行里，琥珀色整句和主按钮抢视线，
+          而且这一条被拉满页宽后没有任何边界感。 */}
       <div className="apply-browser-row">
-        <Space size={8} align="center" wrap={false}>
+        <span className="apply-browser-tile" aria-hidden>
           <ChromeOutlined />
-          <Typography.Text strong>{t("browserStatus.title")}</Typography.Text>
-          <Tag color={meta.color} style={{ marginInlineEnd: 0 }}>
-            {t(BROWSER_STATE_LABEL_KEYS[state])}
-          </Tag>
-          {data && (
-            <Typography.Text type="secondary" className="apply-browser-port">
-              {t("browserStatus.port", { port: data.port })}
-            </Typography.Text>
-          )}
-          {data?.logged_in_hint && (
-            // 首次使用的扫码提示：琥珀色 + 图标，和旁边纯说明性的灰字区分开。
-            // 与状态同一行、超出省略（全文在悬停里）——它常驻但绝不换行，
-            // 因为"多一行"就等于首屏少一行表格。
-            <Tooltip title={data.logged_in_hint}>
-              <span className="apply-browser-login-hint">
-                <WarningFilled />
-                <Typography.Text type="warning" ellipsis>
-                  {data.logged_in_hint}
+        </span>
+        <div className="apply-browser-main">
+          <div className="apply-browser-title">
+            <Typography.Text strong>{t("browserStatus.title")}</Typography.Text>
+            {/* 状态用「圆点 + 文字」：色块标签在这一行里比主按钮还抢眼，
+                而它只是"能不能点"的前提信息。 */}
+            <Badge
+              status={meta.color as "default" | "processing" | "success" | "warning"}
+              text={
+                <Typography.Text className="apply-browser-state">
+                  {t(BROWSER_STATE_LABEL_KEYS[state])}
                 </Typography.Text>
-              </span>
-            </Tooltip>
+              }
+            />
+          </div>
+          {/* 第二行只在**有内容**时渲染：没有提示、没有沿用说明时，卡片就是单行。 */}
+          {data && (
+            <div className="apply-browser-meta">
+              {data && (
+                <Typography.Text type="secondary" className="apply-browser-port">
+                  {t("browserStatus.port", { port: data.port })}
+                </Typography.Text>
+              )}
+              {!compact && data?.logged_in_hint && (
+                <Tooltip title={data.logged_in_hint}>
+                  <span className="apply-browser-login-hint">
+                    <WarningFilled />
+                    <Typography.Text className="apply-browser-login-text" ellipsis>
+                      {data.logged_in_hint}
+                    </Typography.Text>
+                  </span>
+                </Tooltip>
+              )}
+            </div>
           )}
-        </Space>
-        <Space size={8} align="center" wrap={false}>
+        </div>
+        <Space size={8} align="center" wrap={false} className="apply-browser-actions">
           {/* 主按钮只留一个，且随状态换语义：没启动时唯一该点的是「启动浏览器」，
               运行中唯一该点的是「打开招聘网站」——两个同时常驻等于让用户自己判断。 */}
-          {running ? (
-            <Tooltip
-              title={
-                canOpenSite
-                  ? t("browserStatus.tooltip.openSite")
-                  : t("browserStatus.tooltip.openSiteDisabled")
-              }
-            >
+          {!compact &&
+            (running ? (
+              <Tooltip
+                title={
+                  canOpenSite
+                    ? t("browserStatus.tooltip.openSite")
+                    : t("browserStatus.tooltip.openSiteDisabled")
+                }
+              >
+                <Button
+                  type="primary"
+                  icon={<LinkOutlined />}
+                  loading={busy}
+                  disabled={!canOpenSite || busy || undefined}
+                  onClick={() => void handleOpenSite()}
+                >
+                  {t("browserStatus.action.openSite")}
+                </Button>
+              </Tooltip>
+            ) : (
               <Button
                 type="primary"
-                icon={<LinkOutlined />}
+                icon={<PlayCircleOutlined />}
                 loading={busy}
-                disabled={!canOpenSite || busy}
-                onClick={() => void handleOpenSite()}
+                disabled={running || busy || undefined}
+                onClick={() => void handleStart()}
               >
-                {t("browserStatus.action.openSite")}
+                {t("browserStatus.action.start")}
               </Button>
-            </Tooltip>
-          ) : (
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              loading={busy}
-              disabled={running || busy}
-              onClick={() => void handleStart()}
+            ))}
+          {running && !error && (
+            <Tooltip
+              title={t(compact ? "browserStatus.hint.expand" : "browserStatus.hint.collapse")}
             >
-              {t("browserStatus.action.start")}
-            </Button>
+              <Button
+                size="small"
+                type="text"
+                icon={compact ? <DownOutlined /> : <UpOutlined />}
+                aria-label={t(
+                  compact ? "browserStatus.hint.expand" : "browserStatus.hint.collapse",
+                )}
+                onClick={toggleDetails}
+              />
+            </Tooltip>
           )}
           <Dropdown menu={{ items: moreItems }} trigger={["click"]} placement="bottomRight">
             <Button icon={<MoreOutlined />} aria-label={t("browserStatus.more.aria")} />
@@ -232,7 +303,7 @@ export default function BrowserStatusBar() {
         </Space>
       </div>
 
-      {adopted && (
+      {!compact && adopted && (
         <Typography.Text type="secondary" className="apply-browser-adopted">
           {t("browserStatus.adopted")}
         </Typography.Text>

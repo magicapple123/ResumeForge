@@ -12,11 +12,10 @@ from .repeated_profile_catalog import REPEATED_FIELD_PREFERRED_TYPES
 # 只收录**有把握**的映射。像 `address-level1`（省/州）这种，我们这边没有对应字段
 # （`native_place` 是籍贯、`city` 是现居地），**宁可不要**——拿不准就不填。
 AUTOCOMPLETE_FIELDS: dict[str, str] = {
-    # 姓名（合称与分称都归到姓名）
+    # Split names require separately saved values; never infer from a full name.
     "name": "name",
-    "given-name": "name",
-    "family-name": "name",
-    "additional-name": "name",
+    "given-name": "given_name",
+    "family-name": "family_name",
     "nickname": "name",
     # 联系方式
     "email": "email",
@@ -62,6 +61,8 @@ AUTOCOMPLETE_OFF = "off"
 # 字段 → 负向词。命中即跳过该控件（宁可漏填，不可错填）。
 FIELD_EXCLUDE_HINTS: dict[str, tuple[str, ...]] = {
     "name": RELATIVE_HINTS + ("拼音", "英文名", "曾用名"),
+    "given_name": RELATIVE_HINTS,
+    "family_name": RELATIVE_HINTS,
     "phone": RELATIVE_HINTS,
     "email": RELATIVE_HINTS,
     "wechat": RELATIVE_HINTS,
@@ -99,6 +100,22 @@ FIELD_DENYLIST: tuple[str, ...] = (
     "银行账号",
     "银行卡号",
     "支付",
+    # Eligibility answers are decisions, including in the relaxed mode.
+    "work authorization",
+    "authorization to work",
+    "authorisation to work",
+    "authorized to work",
+    "authorised to work",
+    "visa sponsorship",
+    "years of experience",
+    "willing to relocate",
+    "relocation requirement",
+    "professional license",
+    "professional licence",
+    "工作许可",
+    "工作年限",
+    "是否愿意",
+    "职业执照",
 )
 
 # 需要**你本人**确认的勾选项：隐私政策、用户协议、信息推送、简历真实性承诺…
@@ -139,6 +156,7 @@ def is_claim_label(label: str) -> bool:
     """
     label = label.strip()
     return label.startswith(CLAIM_PREFIXES) and ("经历" in label or "信息" in label)
+
 
 # 下拉里的占位项：永远不选。规范化后逐字比对（见 ``matching.normalize_option_text``）。
 #

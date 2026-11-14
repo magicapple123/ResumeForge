@@ -34,7 +34,7 @@ vi.mock("../api/resumes", async (importOriginal) => ({
   listResumes: apiMocks.listResumes,
   updateResumeFavorite: apiMocks.updateResumeFavorite,
   getResume: vi.fn(),
-  fetchResumeHtml: vi.fn(),
+  fetchResumePreviewHtml: vi.fn(),
   renderResume: vi.fn(),
   updateResume: vi.fn(),
   fetchResumeTemplates: vi.fn().mockResolvedValue(TEMPLATE_CATALOG),

@@ -378,9 +378,7 @@ class LiveSession(LiveRememberMixin):
         self._refresh_data()
         self._attach()
 
-    def adopt_scope(
-        self, scope: str, scope_setter: Callable[[str], None] | None = None
-    ) -> None:
+    def adopt_scope(self, scope: str, scope_setter: Callable[[str], None] | None = None) -> None:
         """复用已有会话时对齐范围持有者（不重取数——调用方紧接着会 update_data）。"""
         if scope_setter is not None:
             self._scope_setter = scope_setter
@@ -999,6 +997,8 @@ class LiveSession(LiveRememberMixin):
         source: str = "",
         field_label: str = "",
         field_key: str = "",
+        confidence: float | None = None,
+        evidence: str = "",
     ) -> None:
         """ "这个框没认出来"的统一出口——面板上永远留着一个「换个资料…」，不会是死路。"""
         self._publish(
@@ -1008,6 +1008,8 @@ class LiveSession(LiveRememberMixin):
                 "remember_field_key": field_key,
                 "note": ui_text(self._locale(), "note.pickFromList", note=note),
                 "source": source,
+                "confidence": confidence,
+                "evidence": evidence,
             }
         )
 
@@ -1029,6 +1031,7 @@ class LiveSession(LiveRememberMixin):
     def _run_ai(self, seq: int, control: Control, relaxed: bool = False) -> None:
         # 惰性导入：``ai`` 会连带拉起 ``services/llm``，而本模块是「网申」包的导入入口之一。
         from .ai import MAX_CUSTOM_FIELDS, identify_fields
+        from .ai_candidates import FieldCandidates
 
         try:
             matches = asyncio.run(
@@ -1054,12 +1057,20 @@ class LiveSession(LiveRememberMixin):
             # 用户已经点到别的框了（或模式已经停用）。丢掉的这一份不能推——否则面板上会
             # 显示上一个框的答案，而那看起来就像是程序答错了。
             return
+        candidates = matches.get(control.index, ())
+        assessment = (
+            candidates.assessments.get(candidates[0])
+            if isinstance(candidates, FieldCandidates) and candidates
+            else None
+        )
         if relaxed:
-            self._publish_ai_relaxed(control, matches.get(control.index, ()))
+            self._publish_ai_relaxed(control, candidates, assessment=assessment)
         else:
-            self._publish_ai(control, matches.get(control.index, ()))
+            self._publish_ai(control, candidates, assessment=assessment)
 
-    def _publish_ai_relaxed(self, control: Control, candidates: tuple[str, ...]) -> None:
+    def _publish_ai_relaxed(
+        self, control: Control, candidates: tuple[str, ...], *, assessment: Any = None
+    ) -> None:
         """放宽候选的 AI 回答：按**放宽代选**语义落成面板上的一行。
 
         与 ``_publish_ai`` 的分工：那边服务普通文本框，这边服务被 ``skip_reason`` 挡住的
@@ -1095,6 +1106,8 @@ class LiveSession(LiveRememberMixin):
                     # AI 给的答案必须标明是猜的；程序又将代点——两层都交代。
                     "note": f"{AI_NOTE}；{RELAXED_NOTE}",
                     "source": SOURCE_AI,
+                    "confidence": assessment.confidence if assessment else None,
+                    "evidence": assessment.evidence if assessment else "",
                     "alternatives": [
                         {"label": alt_label, "value": alt_value}
                         for _key, alt_label, alt_value in fillable[1:]
@@ -1112,6 +1125,8 @@ class LiveSession(LiveRememberMixin):
                 source=SOURCE_AI,
                 field_label=self._field_display_label(shown_key),
                 field_key=shown_key,
+                confidence=assessment.confidence if assessment else None,
+                evidence=assessment.evidence if assessment else "",
             )
             return
 
@@ -1131,7 +1146,9 @@ class LiveSession(LiveRememberMixin):
             }
         )
 
-    def _publish_ai(self, control: Control, candidates: tuple[str, ...]) -> None:
+    def _publish_ai(
+        self, control: Control, candidates: tuple[str, ...], *, assessment: Any = None
+    ) -> None:
         """把模型的候选落成面板上的一行主推 + 若干备选。
 
         **能不能填仍由本地决定**：每个候选都过一遍 ``resolve_value_for``，装不下这个控件的
@@ -1175,6 +1192,8 @@ class LiveSession(LiveRememberMixin):
                 source=SOURCE_AI,
                 field_label=self._field_display_label(shown_key) if shown_key else "",
                 field_key=shown_key,
+                confidence=assessment.confidence if assessment else None,
+                evidence=assessment.evidence if assessment else "",
             )
             return
 
@@ -1188,6 +1207,8 @@ class LiveSession(LiveRememberMixin):
                 # 这一条可能纯粹是上下文推的，用户核对时的怀疑程度应当不同。
                 "note": AI_NOTE,
                 "source": SOURCE_AI,
+                "confidence": assessment.confidence if assessment else None,
+                "evidence": assessment.evidence if assessment else "",
                 "alternatives": [
                     {"label": alt_label, "value": alt_value} for alt_label, alt_value in rest
                 ],
@@ -1230,6 +1251,8 @@ class LiveSession(LiveRememberMixin):
             "value": str(panel.get("value", "")),
             "note": str(panel.get("note", "")),
             "source": str(panel.get("source", "")),
+            "confidence": panel.get("confidence"),
+            "evidence": str(panel.get("evidence", "")),
             "remember_field_key": str(panel.get("remember_field_key", "")),
             "alternatives": list(panel.get("alternatives", [])),
             "remember_pending": panel.get("remember_pending"),
@@ -1386,8 +1409,7 @@ class LiveSession(LiveRememberMixin):
                     failed=1,
                     reason=REASON_INTERNAL,
                     message=(
-                        f"自动填写内部错误（{type(error).__name__}: {error}），"
-                        "请把这句话反馈给我们"
+                        f"自动填写内部错误（{type(error).__name__}: {error}），请把这句话反馈给我们"
                     ),
                 )
             )

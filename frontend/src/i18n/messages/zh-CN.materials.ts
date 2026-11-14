@@ -46,7 +46,6 @@ const materials = {
   "materials.detail.updatedAt": "更新时间",
   "materials.detail.body": "正文",
   "materials.detail.note": "备注",
-  "materials.detail.none": "（无）",
   "materials.detail.attachmentsTitle": "附件（{count}）",
   "materials.file.image": "图片 · {size} KB",
   "materials.file.text": "文字 {count} 字",

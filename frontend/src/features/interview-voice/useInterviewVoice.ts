@@ -15,7 +15,7 @@ import {
   type VoiceSessionSnapshot,
   type VoiceSessionErrorCode,
 } from "./voiceSession";
-import type { EndpointMode } from "./endpoint";
+import type { EndpointMode, EndpointTiming } from "./endpoint";
 import type { InterviewVoiceOutput } from "./voiceOutput";
 import { cancelInterviewVoiceTurn, transcribeSegment } from "./transcribe";
 
@@ -31,6 +31,10 @@ export interface UseInterviewVoiceOptions {
   onBargeIn: () => void;
   /** 26F 接口位；默认 no-op（纯文字模式）。 */
   output?: InterviewVoiceOutput;
+  /** 断句时长覆盖（Q1-D，来自通话设置）；不传 = `endpoint.ts` 的默认常量。 */
+  endpointTiming?: EndpointTiming;
+  /** 插话灵敏度覆盖（Q1-D）：最小连续语音时长。 */
+  bargeInMinSpeechMs?: number;
   /** 测试注入点：不打开真麦克风也能跑状态机。 */
   deps?: {
     createCapture?: (options: {
@@ -73,6 +77,8 @@ export function useInterviewVoice({
   onTranscript,
   onBargeIn,
   output,
+  endpointTiming,
+  bargeInMinSpeechMs,
   deps,
 }: UseInterviewVoiceOptions): InterviewVoiceController {
   const supported = useMemo(() => isMicCaptureSupported(), []);
@@ -82,11 +88,26 @@ export function useInterviewVoice({
   const [snapshot, setSnapshot] = useState<VoiceSessionSnapshot>(IDLE_SNAPSHOT);
   const captureRef = useRef<MicCapture | null>(null);
   const sessionRef = useRef<InterviewVoiceSession | null>(null);
-  const callbacksRef = useRef({ onTranscript, onBargeIn, deps, output });
+  const startRequestRef = useRef(0);
+  const callbacksRef = useRef({
+    onTranscript,
+    onBargeIn,
+    deps,
+    output,
+    endpointTiming,
+    bargeInMinSpeechMs,
+  });
   // 最新回调镜像放到 effect 里更新（渲染期写 ref 会被 react-hooks/refs 拦）。
   useEffect(() => {
-    callbacksRef.current = { onTranscript, onBargeIn, deps, output };
-  }, [onTranscript, onBargeIn, deps, output]);
+    callbacksRef.current = {
+      onTranscript,
+      onBargeIn,
+      deps,
+      output,
+      endpointTiming,
+      bargeInMinSpeechMs,
+    };
+  }, [onTranscript, onBargeIn, deps, output, endpointTiming, bargeInMinSpeechMs]);
 
   const teardown = useCallback(() => {
     captureRef.current?.stop();
@@ -98,6 +119,8 @@ export function useInterviewVoice({
 
   const start = useCallback(async () => {
     if (!supported || captureRef.current) return;
+    const startRequest = startRequestRef.current + 1;
+    startRequestRef.current = startRequest;
     setStarting(true);
     setError(null);
     const current = callbacksRef.current;
@@ -119,6 +142,9 @@ export function useInterviewVoice({
       // 单段识别失败不关闭语音：会话内部已复位，用户再说一次即可。
       onError: (code) => setError(code),
       onUpdate: (next) => setSnapshot(next),
+      // 通话设置（Q1-D）：断句时长与插话灵敏度都是"这次通话怎么听"的偏好。
+      endpointTiming: current.endpointTiming,
+      bargeInMinSpeechMs: current.bargeInMinSpeechMs,
     });
     const createCapture =
       current.deps?.createCapture ??
@@ -135,19 +161,27 @@ export function useInterviewVoice({
     captureRef.current = capture;
     try {
       await capture.start();
+      if (startRequestRef.current !== startRequest) {
+        capture.stop();
+        return;
+      }
       setEnabled(true);
     } catch (microphoneError) {
-      setError(micErrorCode(microphoneError));
-      teardown();
-      setEnabled(false);
+      if (startRequestRef.current === startRequest) {
+        setError(micErrorCode(microphoneError));
+        teardown();
+        setEnabled(false);
+      }
     } finally {
-      setStarting(false);
+      if (startRequestRef.current === startRequest) setStarting(false);
     }
   }, [supported, teardown]);
 
   const stop = useCallback(() => {
+    startRequestRef.current += 1;
     teardown();
     setEnabled(false);
+    setStarting(false);
   }, [teardown]);
 
   const toggle = useCallback(() => {
@@ -168,7 +202,13 @@ export function useInterviewVoice({
     sessionRef.current?.setMode(mode);
   }, [mode]);
 
-  useEffect(() => () => teardown(), [teardown]);
+  useEffect(
+    () => () => {
+      startRequestRef.current += 1;
+      teardown();
+    },
+    [teardown],
+  );
 
   return {
     supported,

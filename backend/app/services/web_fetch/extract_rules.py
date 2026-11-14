@@ -384,6 +384,7 @@ def rows_from_html_anchors(html: str, *, page_url: str, page_text: str) -> list[
         rows.append(
             {
                 "data": {"title": title, "source_url": absolute},
+                "anchor_fallback": True,
                 "detail_url": absolute,
                 "evidence": {"title": title},
                 "summary": title,

@@ -66,14 +66,14 @@ test("普通 close：走 lib/close-behavior 弹二选一；选「退出应用」
     window.handlers.close(event);
     assert.equal(event.prevented, 1, "close 必须先被拦住（否则窗口直接关掉）");
     await flush();
-    assert.equal(loaded.events.messageBoxPrompts.length, 1);
+    assert.equal(loaded.events.closeDialogPrompts.length, 1);
     assert.equal(loaded.events.quitCalls.length, 1, "选退出必须 app.quit()");
 
     // quitting 已置位：同一窗口的下一次 close 直接放行（不会再弹第二个框）。
     const again = closeEvent();
     window.handlers.close(again);
     assert.equal(again.prevented, 0, "退出流程中的 close 必须放行（否则无限弹窗）");
-    assert.equal(loaded.events.messageBoxPrompts.length, 1);
+    assert.equal(loaded.events.closeDialogPrompts.length, 1);
   } finally {
     loaded.cleanup();
   }
@@ -119,7 +119,7 @@ test("记住「最小化」：写 userData/close-behavior.json，下次 close �
     const next = closeEvent();
     window.handlers.close(next);
     await flush();
-    assert.equal(loaded.events.messageBoxPrompts.length, 1, "已记住时不得再弹窗");
+    assert.equal(loaded.events.closeDialogPrompts.length, 1, "已记住时不得再弹窗");
     assert.equal(next.prevented, 1);
     assert.equal(window.hidden, 2);
     assert.equal(loaded.menuHolder.setCount, setCount, "直接执行路径不该重建菜单");
@@ -136,7 +136,7 @@ test("记忆文件里是 quit：下次 close 直接退出、不弹窗", async ()
     const window = loaded.windowInstances[0];
     window.handlers.close(closeEvent());
     await flush();
-    assert.equal(loaded.events.messageBoxPrompts.length, 0);
+    assert.equal(loaded.events.closeDialogPrompts.length, 0);
     assert.equal(loaded.events.quitCalls.length, 1);
   } finally {
     loaded.cleanup();
@@ -153,7 +153,7 @@ test("记忆文件损坏：当作未记住，恢复询问", async () => {
     window.handlers.close(event);
     await flush();
     assert.equal(event.prevented, 1);
-    assert.equal(loaded.events.messageBoxPrompts.length, 1);
+    assert.equal(loaded.events.closeDialogPrompts.length, 1);
   } finally {
     loaded.cleanup();
   }
@@ -170,12 +170,12 @@ test("托盘「关闭窗口时询问」勾上：清掉记忆并重建菜单，�
     window.handlers.close(closeEvent());
     await flush();
     assert.equal(readMemory(loaded), "minimize");
-    assert.equal(loaded.events.messageBoxPrompts.length, 1);
+    assert.equal(loaded.events.closeDialogPrompts.length, 1);
 
     // 已记住 → 再次 close 直接隐藏，不弹窗。
     window.handlers.close(closeEvent());
     await flush();
-    assert.equal(loaded.events.messageBoxPrompts.length, 1);
+    assert.equal(loaded.events.closeDialogPrompts.length, 1);
 
     const before = loaded.menuHolder.setCount;
     const ask = trayAskItem(loaded);
@@ -184,10 +184,10 @@ test("托盘「关闭窗口时询问」勾上：清掉记忆并重建菜单，�
     assert.equal(readMemory(loaded), null, "勾上 = 清掉记忆");
     assert.equal(loaded.menuHolder.setCount, before + 1, "清掉记忆后要重建菜单让勾选态回到真相");
 
-    const promptsBefore = loaded.events.messageBoxPrompts.length;
+    const promptsBefore = loaded.events.closeDialogPrompts.length;
     window.handlers.close(closeEvent());
     await flush();
-    assert.equal(loaded.events.messageBoxPrompts.length, promptsBefore + 1,
+    assert.equal(loaded.events.closeDialogPrompts.length, promptsBefore + 1,
       "记忆清掉后必须恢复询问");
   } finally {
     loaded.cleanup();
@@ -207,7 +207,7 @@ test("菜单「关闭窗口」走 window.close() 与第 18 条 handler（不是 
     assert.equal(window.destroyCalls, 0, "绝不能直接 destroy()");
     assert.equal(window.destroyed, false, "close 被第 18 条拦住，窗口还在");
     await flush();
-    assert.equal(loaded.events.messageBoxPrompts.length, 1,
+    assert.equal(loaded.events.closeDialogPrompts.length, 1,
       "菜单「关闭窗口」必须触发第 18 条的二选一对话框");
 
     // 对照：动作 id 白名单之外的东西一律拒绝。

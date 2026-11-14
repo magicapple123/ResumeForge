@@ -132,7 +132,7 @@ def conversation_text(messages: list[dict[str, Any]]) -> str:
 
 
 def tools_text(tools: Any, messages: list[dict[str, Any]]) -> str:
-    """工具及子智能体桶：本轮工具 schema + 已经回填进 messages 的工具结果。
+    """工具定义与结果桶：本轮工具 schema + 已经回填进 messages 的工具结果。
 
     ``json.dumps(tools)`` 在这里按"一次调用 = 一轮"的粒度做：同一轮里 schema 不变，
     调用方每轮算一次并复用，绝不在每个 delta 里重算（工具 schema 是上下文中最大的
@@ -162,7 +162,7 @@ def connectors_text(
     model_context: list[str],
     attachments: list[dict[str, Any]] | None,
 ) -> str:
-    """连接器及 MCP 桶 = 界面上下文块 + 项目上下文块 + 附件文本（空部件跳过）。
+    """界面上下文与附件桶 = 界面上下文块 + 项目上下文块 + 附件文本（空部件跳过）。
 
     这三样在最终 ``messages`` 里都拼进了当前 user 消息，事后切字符串分不出来；按构造
     分别取数才说得清"这段是连接器带的资料，不是用户打的字"。

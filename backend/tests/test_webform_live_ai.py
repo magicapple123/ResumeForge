@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """实时链路的 AI 兜底（从 test_webform_live.py 拆出）。
 
-FakeLiveClient/raw_control 留在 test_webform_live.py；语义缓存的 autouse 清理
-fixture 在本文件内重声明（import 不会传播 autouse 语义）。
+FakeLiveClient/raw_control 留在原文件；autouse 清理 fixture 在这里重声明（import 不传播 autouse）。
 """
 
 import asyncio
@@ -24,11 +23,9 @@ from test_webform_live import FakeLiveClient, raw_control
 
 AI_DATA = {"name": "张三", "research_direction": "分布式系统", "advisor": "王教授"}
 # 一个**任何目录字段的同义词都够不到**的标签——规则认不出、留给 AI 的典型。
-#
-# 原先这里写的是「实验室名称」。2026-09-27 给「实验室」补了同义词之后它变得认得出了，
-# 于是这五条"AI 兜底"的测试全都悄悄改了走法（不再问模型），红成一片。
-# **换成一个没被收录的标签、而不是把同义词撤掉**：要测的是"认不出时交给 AI"这条机制，
-# 机制没变，变的是"什么算认不出"。
+# 原先写的是「实验室名称」，2026-09-27 补了「实验室」同义词后它变得认得出，五条
+# "AI 兜底"用例于是悄悄改了走法（不再问模型）并红成一片。**换成没被收录的标签、而不是
+# 撤掉同义词**：要测的是"认不出时交给 AI"这条机制，变的是"什么算认不出"。
 UNKNOWN_LABEL = "所在部门意见"
 
 
@@ -79,7 +76,6 @@ def test_the_model_is_asked_only_when_the_rules_come_up_empty():
     try:
         client.focus_on(raw_control(label="姓名"))
         session._tick()
-
         assert client.panels[-1]["status"] == "matched"
         assert provider.calls == 0
     finally:
@@ -127,7 +123,18 @@ def test_ambiguous_name_context_is_not_presented_as_a_name_value():
 
 
 def test_an_ai_answer_becomes_the_panel_suggestion():
-    provider = ScriptedProvider({"matches": [{"index": 0, "field": "research_direction"}]})
+    provider = ScriptedProvider(
+        {
+            "matches": [
+                {
+                    "index": 0,
+                    "field": "research_direction",
+                    "confidence": 0.69,
+                    "evidence": "Topic of study",
+                }
+            ]
+        }
+    )
     client = FakeLiveClient()
     session = _ai_session(client, provider)
     session.start()
@@ -142,6 +149,8 @@ def test_an_ai_answer_becomes_the_panel_suggestion():
         assert panel["source"] == "ai"
         assert panel["field_label"] == "研究方向"
         assert panel["value"] == "分布式系统"
+        assert panel["confidence"] == 0.69
+        assert panel["evidence"] == "Topic of study"
         assert "核对" in panel["note"]
         assert session.state["source"] == "ai"
     finally:

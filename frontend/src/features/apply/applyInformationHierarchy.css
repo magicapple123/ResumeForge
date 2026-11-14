@@ -1,0 +1,391 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 整页基准字号与全站一致（theme/appTheme.ts 的 fontSize: 14）。
+   早先这里是 13px——配一个页面级 `ConfigProvider` 的 `fontSize: 13` 一起用，
+   是「投递台比别的页面小一号」的源头；2026-11-13 两处一起退回全站口径。 */
+.apply-page {
+  font-size: 14px;
+}
+/* antd-override: local hierarchy and table geometry have no equivalent layout token. */
+/* 页头标题不在这里改：投递台已改用全站同一档 <Typography.Title level={3}>（24px / 600），
+   与模拟面试、求职进度、资料库等页面同一套 token。 */
+.apply-page .apply-page-head {
+  min-height: 32px;
+  margin-bottom: 8px;
+}
+/* 左侧「标题 + 站点行」竖排：与模拟面试、求职进度、资料库的页头同构。
+   `gap: 0`：那几处是「Title 后紧跟一个行内 Text」，标题行盒与副标题之间实测 1px；
+   这里如果给 4px，同一屏里就会比别的页面松一格。
+   `min-width: 0` 是给站点行里那句省略文本留的收缩余地——否则它会按内容宽度
+   把右侧的漏斗与按钮顶到第二行。 */
+.apply-page .apply-page-head-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  min-width: 0;
+}
+.apply-page .apply-funnel-item + .apply-funnel-item {
+  border-inline-start: 1px solid var(--rf-border-subtle);
+}
+.apply-page .apply-funnel-item .ant-statistic-content {
+  font-weight: 500;
+}
+/* ===== 投递专用浏览器：两行卡片（2026-11-13 用户反馈「单独一张窄卡片不美观」）=====
+ * 此前所有元素平铺在一行（图标 / 标题 / 状态标签 / 端口 / 整句琥珀提示 / 按钮 / ⋯），
+ * 拉满页宽后没有边界感，琥珀那句比主按钮还抢眼。现在：
+ *   第一行 = 图标 + 标题 + 状态（圆点）+ 右侧按钮；
+ *   第二行 = 端口 +（有则）扫码提示 +（有则）沿用说明。
+ * 卡片外观与队列表格、采集表单同一套：1px 边 + 8px 圆角（不加左侧色条、不加彩色底）。 */
+.apply-page .apply-browser-bar {
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: var(--rf-surface);
+}
+
+.apply-page .apply-browser-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 0;
+}
+
+/* 图标砖：中性底 + 细边，只用来"认出这是浏览器"，不承载状态。 */
+.apply-page .apply-browser-tile {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-top: 2px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-brand);
+  font-size: 15px;
+}
+
+.apply-page .apply-browser-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.apply-page .apply-browser-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 状态文字跟着 antd 的 Badge 语义色走，这里只压字号：它是前提信息，不该和标题一样重。 */
+.apply-page .apply-browser-state {
+  font-size: 12px;
+}
+
+.apply-page .apply-browser-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+/* 提示：只有感叹号是琥珀色，正文回到次要色——整句染黄会让"待办提示"变成"警告"。 */
+.apply-page .apply-browser-login-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--rf-warning-text);
+}
+
+.apply-page .apply-browser-login-text {
+  font-size: 12px;
+}
+
+/* 提示正文回次要色、只有感叹号是琥珀：
+   它是一条「首次使用做一次」的待办，不该整句染黄（整句黄=警告，会让用户以为出错了）。
+   对比度：`--rf-text-secondary` 在白底约 5.9:1，仍过 AA；图标用深琥珀同样过 3:1。
+   （`styles/accessibility.css` 里那条把内层 Typography 压成 warning 文字的规则
+   是为了修 `type="warning"` 的 1.9:1，这里已经不用那个 type，靠更高特异性覆盖。） */
+.apply-page .apply-browser-login-hint > .anticon {
+  color: var(--rf-warning-text);
+}
+
+.apply-page .apply-browser-login-hint .ant-typography {
+  color: var(--rf-text-secondary);
+}
+
+.apply-page .apply-browser-actions {
+  flex: 0 0 auto;
+}
+
+.apply-page .apply-browser-compact {
+  padding: 6px 12px;
+}
+
+.apply-page .apply-browser-adopted {
+  display: block;
+  margin-top: 6px;
+  white-space: normal;
+}
+/* ===== F09：队列头部三组，宽屏并成一行 =====
+ * 原来是两个各自 `space-between` 的整行容器（筛选+图标 / 计数+批量动作），
+ * 直接并排会把右侧图标插到行中间，所以只能占两行、白吃一行高度。
+ * 现在 DOM 分三组，由 Grid 命名区域决定排布：
+ *   默认（容器 < 1120）`"filters tools" / "batch batch"` —— 与旧形态一致；
+ *   `@container rf-queue (min-width: 1166px)` 时 `"filters batch tools"` 一行三组，
+ *   组间用左竖线替代 batch 的上边线（那正是"两行"的视觉证据）。
+ * 阈值挂在 `.apply-queue-panel` 的 inline-size 上：侧栏折叠、页签内边距都会改变可用
+ * 宽度，视口宽只是它的近似值（实测 1440 视口 → 1166，1080 视口 → 974）。 */
+.apply-page .apply-queue-panel {
+  container-type: inline-size;
+  container-name: rf-queue;
+}
+.apply-page .apply-queue-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-areas:
+    "filters tools"
+    "batch batch";
+  align-items: center;
+  gap: 12px 10px;
+  margin-bottom: 10px;
+}
+.apply-queue-filters,
+.apply-queue-batch,
+.apply-queue-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+/* 只有筛选组进横向滚动容器：工具组里的说明气泡不能按被裁后的坐标定位。 */
+.apply-queue-filters {
+  grid-area: filters;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.apply-queue-batch {
+  grid-area: batch;
+  border-top: 1px solid var(--rf-border-subtle);
+  padding-top: 8px;
+}
+.apply-queue-tools {
+  grid-area: tools;
+  justify-content: flex-end;
+}
+@container rf-queue (min-width: 1166px) {
+  .apply-page .apply-queue-head {
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    grid-template-areas: "filters batch tools";
+  }
+  .apply-page .apply-queue-batch,
+  .apply-page .apply-queue-tools {
+    border-top: 0;
+    border-inline-start: 1px solid var(--rf-border-subtle);
+    padding-top: 0;
+    padding-inline-start: 10px;
+  }
+}
+.apply-page .apply-queue-panel .ant-table-tbody > tr > td {
+  padding: 0 8px !important;
+}
+.apply-page .apply-queue-panel .ant-table-tbody .table-text-link {
+  height: 18px;
+  line-height: 18px;
+  max-width: 100%;
+}
+.apply-page .apply-queue-panel .ant-table-tbody .ant-space {
+  row-gap: 0 !important;
+}
+.apply-page .apply-queue-panel .ant-table-tbody .ant-space-horizontal {
+  flex-wrap: nowrap;
+  max-width: 100%;
+}
+.apply-page .apply-queue-panel .ant-table-tbody .ant-space-item {
+  min-width: 0;
+}
+.apply-page .apply-queue-panel .ant-table-tbody .ant-typography {
+  line-height: 16px;
+}
+/* 吸底操作条：从「浮动卡片」改成**表格页脚**（2026-11-13 用户反馈「单独一个卡片有点奇怪」）。
+   原来它有 8px 圆角 + 四周描边 + 向上投影 + 10px 外边距，而队列表格本身是**无边框**的裸表——
+   于是这条在白色内容区里显得像一张贴着的独立卡片。现在只留一条上边线贴住最后一行，
+   滚动时靠「实底 + 上边线」把内容挡住，不再需要圆角和投影。 */
+.apply-page .apply-queue-startbar {
+  padding: 8px 60px 8px 12px;
+  margin-top: 0;
+  border: 0;
+  border-top: 1px solid var(--rf-border-subtle);
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--rf-surface);
+}
+.apply-collect-flow-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.apply-collect-config {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* F10：搜索条件按**这一块自己的宽度**切一行/两行（不是视口宽度——侧栏折叠、页签内边距
+     都会改变可用宽度）。阈值 1020 写在使用处（applyCollectForm.css 的 @container）。 */
+  container-type: inline-size;
+  container-name: rf-collect;
+}
+.apply-collect-group,
+.apply-collect-config .apply-collect-site-filters {
+  padding: 16px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: var(--rf-surface);
+}
+.apply-collect-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+/* 注（F10）：`.apply-collect-search-grid` 的列宽只在 applyCollectForm.css 定义一次。
+   这里原本还有一条 `minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)`，与那边的等分栅格
+   列宽不一致——改一份不生效。现在搜索条件是 flex 四字段，这里不再给列宽。 */
+.apply-collect-site-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.apply-collect-config .ant-form-item {
+  margin-bottom: 0;
+  min-width: 0;
+}
+.apply-collect-config .ant-form-item-label {
+  padding-bottom: 4px;
+}
+.apply-collect-site-help {
+  max-width: min(620px, calc(100vw - 48px));
+}
+.apply-collect-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+@media (max-width: 768px) {
+  /* F09：手机档三组各占一行（2 列网格在 375 宽会把筛选组挤成横向滚动）。 */
+  .apply-page .apply-queue-head {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "filters"
+      "batch"
+      "tools";
+  }
+  .apply-queue-batch,
+  .apply-queue-tools,
+  .apply-collect-group-head {
+    flex-wrap: wrap;
+  }
+  /* 工具组在 320 宽下比容器宽约 23px（6 个图标 + 说明入口），与筛选组同一处理：
+     自己横向滚，不把页面撑宽。 */
+  .apply-page .apply-queue-tools {
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .apply-queue-tools {
+    justify-content: flex-start;
+  }
+  /* 搜索条件的手机档规则也只剩 applyCollectForm.css 一份（F10）；这里只管站点筛选。 */
+  .apply-collect-site-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+/*
+ * ===== 尺寸：与全站同一套（2026-11-13 二次调整）=====
+ *
+ * 第一版是「默认档压到 13px / gap 4px，只在 ≥1536 恢复」，理由是给 1366×768
+ * 算「首屏 7 行」。实测下来用户反馈更直接：**投递台整页比别的页面小一号**，
+ * 12–13px 的字与 0 padding 的单元格读起来累。全站基准字号是 14（theme/appTheme.ts），
+ * 投递台是唯一一个把它改小的页面——这个"省"不划算。
+ *
+ * 所以现在**所有宽度**都用全站同一套尺寸，只保留两处真正的密度优化（浏览器状态条压成一行、
+ * 表格次要信息用 13px）。代价是 1440×900 首屏从 7 行降到 6 行——可读性优先。
+ *
+ * 为什么这些规则放在本文件：它由 ApplyPage 静态 import，而 ApplyPage 是懒加载页面
+ * （pages/registry.ts 的 lazy 工厂），所以一定在 styles/apply-density.css
+ * （index.css 顶部 @import，入口即加载）之后生效。凡是密度档用了 `!important` 的
+ * （表头/单元格 padding、页签 padding、Space 行距），这里保留 `!important`
+ * 并把特异性抬高一档（加 `.apply-page` 前缀）。
+ */
+/* 1. 整页基准字号。注意：它**不是**表内字号的来源，见下一条。 */
+.apply-page {
+  font-size: 14px;
+  gap: 16px;
+}
+
+/* 1b. 队列表格是 `size="small"`：antd 6 给 `.ant-table-wrapper .ant-table-small` 直接写了
+   `font-size: 12px`（node_modules/antd/es/table/style/size.js），表内文字因此不从
+   `.apply-page` 继承——只改上面那条，单元格仍然是 12px。 */
+.apply-page .apply-queue-panel .ant-table-small {
+  font-size: 14px;
+}
+
+/* 2. 页头标题：**不再覆盖**。等级改成 `<Typography.Title level={3}>` 之后，字号与字重
+   都由全站 token 决定（24px / 600 / 行高 32px），与模拟面试、求职进度完全一致；
+   早先这里写 24px、文件顶部写 15px/500，两处都在跟 token 打架。 */
+
+/* 3. 页签：默认档 margin-bottom 4 / padding 4 0。 */
+.apply-page .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+.apply-page .ant-tabs-tab {
+  padding: 10px 0 !important;
+}
+
+/* 4. 表头单元格：密度档 2px 8px。 */
+.apply-page .apply-queue-panel .ant-table-thead > tr > th {
+  padding: 6px 8px !important;
+}
+
+/* 5. 表体单元格：密度档 2px 8px（更早一版是 0 8px）。 */
+.apply-page .apply-queue-panel .ant-table-tbody > tr > td {
+  padding: 6px 8px !important;
+}
+
+/* 6. 次要行（公司名 / 招呼语首行）：跟着主行一起回到正常行高。 */
+.apply-page .apply-queue-panel .ant-table-tbody .ant-typography {
+  font-size: 13px;
+  line-height: 1.5714;
+}
+
+/* 7. 两行内容之间的呼吸：Space 的 `row-gap` 来自 JSX 的 size={0} 内联样式，
+   只有 `!important` 能盖过内联值（密度档正是这么压到 0 的）。 */
+.apply-page .apply-queue-panel .ant-table-tbody .ant-space {
+  row-gap: 4px !important;
+}
+
+.apply-page .apply-queue-panel .ant-table-tbody .table-text-link {
+  height: auto;
+  line-height: inherit;
+}
+
+/* 8. 漏斗标题：密度档 12px。 */
+.apply-page .apply-funnel-bar .ant-statistic-title {
+  font-size: 13px;
+}
+
+/* 9. 浏览器状态条：密度档把它压成 32px 一行（`3px 12px`）。为了和全站一致放到
+   正常内边距，但仍保持**一行**——多行状态条会把首屏吃掉一整行。 */
+
+/* 队列头部的行距（两行模式下两条基线之间 12px）已写在 F09 那条网格规则里：
+   这里再给一份 `gap` 会按"同特异性、后出现"覆盖掉列距，改阈值时容易漏看。 */

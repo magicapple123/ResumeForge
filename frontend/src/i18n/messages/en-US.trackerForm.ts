@@ -61,6 +61,7 @@ const trackerForm = {
   "trackerForm.toast.saved": "Saved",
   "trackerForm.toast.added": "Added",
   "trackerForm.error.saveFailed": "Could not save",
+  "trackerForm.toast.existing": "Opened the existing tracking record",
 } as const;
 
 export default trackerForm;

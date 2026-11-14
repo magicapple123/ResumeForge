@@ -7,7 +7,7 @@
  * ——这对应 PRD 的"显式选择岗位"安全前提。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyQueueItem, ApplyTask, ApplyTaskDetail } from "../types";
@@ -149,8 +149,16 @@ describe("ApplyPage 暂停 / 继续 交互", () => {
       </MemoryRouter>,
     );
 
-    const pause = await screen.findByRole("button", { name: /暂停/ });
+    await screen.findByRole("button", { name: /开始投递/ });
+    const startBar = document.querySelector(".apply-queue-startbar") as HTMLElement;
+    const pause = await within(startBar).findByRole("button", { name: /暂停/ });
     expect(pause).toBeEnabled();
+    expect(within(startBar).getByRole("button", { name: /开始投递/ })).toBeDisabled();
+    expect(
+      within(document.querySelector(".apply-progress-panel") as HTMLElement).queryByRole("button", {
+        name: /暂停/,
+      }),
+    ).not.toBeInTheDocument();
     // 运行中不能点"继续"。
     expect(screen.getByRole("button", { name: /继续/ })).toBeDisabled();
 
@@ -171,9 +179,11 @@ describe("ApplyPage 暂停 / 继续 交互", () => {
       </MemoryRouter>,
     );
 
-    const resume = await screen.findByRole("button", { name: /继续/ });
+    await screen.findByRole("button", { name: /开始投递/ });
+    const startBar = document.querySelector(".apply-queue-startbar") as HTMLElement;
+    const resume = await within(startBar).findByRole("button", { name: /继续/ });
     expect(resume).toBeEnabled();
-    expect(screen.getByRole("button", { name: /暂停/ })).toBeDisabled();
+    expect(within(startBar).getByRole("button", { name: /暂停/ })).toBeDisabled();
 
     fireEvent.click(resume);
     await waitFor(() => expect(apiMocks.resumeTask).toHaveBeenCalledWith(7));
@@ -207,7 +217,8 @@ describe("投递队列准入拦截分支", () => {
     );
 
     expect(await screen.findByText("不投")).toBeInTheDocument();
-    expect(await screen.findByText("需逐条确认")).toBeInTheDocument();
+    // 「匹配」列合并后，准入结论与「需逐条确认」在同一节点内（「·」连接）。
+    expect(await screen.findByText("需确认 · 需逐条确认")).toBeInTheDocument();
     expect(await screen.findByText("未分析")).toBeInTheDocument();
   });
 

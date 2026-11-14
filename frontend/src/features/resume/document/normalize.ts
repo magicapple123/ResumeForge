@@ -254,6 +254,16 @@ export function normalizeSection(value: unknown): ResumeSection | null {
 
 function normalizeHeaderItem(value: unknown, factory: IdFactory): HeaderItem | null {
   if (!isRecord(value)) return null;
+  const showLabel = value.show_label !== false;
+  // F20：旧文档没有 `label_mode`，按后端的同一条规则回落；显式值只接受三态。
+  const labelMode: HeaderItem["label_mode"] =
+    value.label_mode === "show" || value.label_mode === "hide"
+      ? value.label_mode
+      : value.label_mode === "auto"
+        ? "auto"
+        : showLabel
+          ? "auto"
+          : "hide";
   return {
     kind: "field",
     id: keepOrCreateId(value.id, factory),
@@ -262,6 +272,8 @@ function normalizeHeaderItem(value: unknown, factory: IdFactory): HeaderItem | n
     value: asText(value.value),
     placement: asHeaderPlacement(value.placement),
     format: asItemFormat(value.format),
+    show_label: showLabel,
+    label_mode: labelMode,
   };
 }
 

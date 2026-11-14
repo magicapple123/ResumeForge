@@ -21,7 +21,12 @@
 
 import { type InterviewVoiceOutput, createNoopVoiceOutput } from "./voiceOutput";
 import { concatFloat32, floatToPcm16 } from "./audio";
-import { type EndpointMode, decideEndpoint, shouldUploadSegment } from "./endpoint";
+import {
+  type EndpointMode,
+  type EndpointTiming,
+  decideEndpoint,
+  shouldUploadSegment,
+} from "./endpoint";
 import {
   DEFAULT_VAD_CONFIG,
   createVadGate,
@@ -73,6 +78,10 @@ export interface VoiceSessionDeps {
   onUpdate?: (snapshot: VoiceSessionSnapshot) => void;
   telemetry?: (event: VoiceTelemetryEvent, fields?: VoiceTelemetryFields) => void;
   vadConfig?: VadConfig;
+  /** 断句时长覆盖（Q1-D）：不传 = `endpoint.ts` 的默认常量。 */
+  endpointTiming?: EndpointTiming;
+  /** 插话灵敏度覆盖（Q1-D）：不传 = 300ms。 */
+  bargeInMinSpeechMs?: number;
 }
 
 function clamp01(value: number): number {
@@ -117,6 +126,7 @@ export class InterviewVoiceSession {
     this.vad = createVadGate(deps.vadConfig);
     this.bargeRunner = new BargeInRunner({
       output: this.output,
+      minSpeechMs: deps.bargeInMinSpeechMs,
       onBargeIn: deps.onBargeIn,
       cancelTurn: deps.cancelTurn,
       telemetry: this.telemetry,
@@ -268,6 +278,7 @@ export class InterviewVoiceSession {
         uploadRequested: this.awaitingAsr,
         silenceMs,
         released: this.released,
+        timing: this.deps.endpointTiming,
       })
     ) {
       void this.uploadSegment();
@@ -316,6 +327,7 @@ export class InterviewVoiceSession {
     const lastSpeechAt = this.lastSpeechAt ?? at;
     const silenceMs = Math.max(0, at - lastSpeechAt);
     const decision = decideEndpoint({
+      timing: this.deps.endpointTiming,
       text: this.turnTranscript,
       silenceMs,
       atMs: at,

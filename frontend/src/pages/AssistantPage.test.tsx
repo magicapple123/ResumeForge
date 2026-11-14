@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistantMessage } from "../types";
 import AssistantPage from "./AssistantPage";
+import { t } from "../i18n";
 import { resetAssistantStreamForTests } from "../features/assistant/hooks/assistantStreamStore";
 import {
   CONVERSATIONS,
@@ -212,9 +213,36 @@ describe("助手新对话入口", () => {
   it("?new=1 进入草稿：不建记录、不恢复最近会话", async () => {
     renderPage("/assistant?new=1");
 
+    // i18n-ok: 断言测试夹具里的欢迎语，不是产品文案
     expect(await screen.findByText("你好，我是投投")).toBeInTheDocument();
     expect(apiMocks.createAssistantConversation).not.toHaveBeenCalled();
     expect(apiMocks.getAssistantConversation).not.toHaveBeenCalled();
+  });
+
+  it("草稿态连点「新对话」不发请求、也不建记录（F32）", async () => {
+    renderPage("/assistant?new=1");
+    await screen.findByText("你好，我是投投");
+
+    const button = screen.getByRole("button", { name: /新对话/ });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(apiMocks.createAssistantConversation).not.toHaveBeenCalled();
+    expect(
+      (await screen.findAllByText(t("assistantUi.sidebar.toast.alreadyNew"))).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("从已有会话点「新对话」只切草稿，不新建记录（F32）", async () => {
+    renderPage();
+    await openFirstConversation();
+    expect(await screen.findByRole("heading", { name: "会话一" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /新对话/ }));
+
+    // i18n-ok: 断言测试夹具里的欢迎语，不是产品文案
+    expect(await screen.findByText("你好，我是投投")).toBeInTheDocument();
+    expect(apiMocks.createAssistantConversation).not.toHaveBeenCalled();
   });
 
   it("草稿里发出第一条消息时才创建对话记录", async () => {

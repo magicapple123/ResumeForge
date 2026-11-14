@@ -105,6 +105,22 @@ def live_claim_records(db: Session) -> list[ClaimRecord]:
     return _claims_query(db).all()
 
 
+def distinct_allowed_uses(db: Session) -> list[str]:
+    """台账里已经出现过的「可用范围」取值（去重、排序，排除回收站）。
+
+    表单把它当下拉候选：`allowed_uses` 是生成时的硬约束，让用户凭记忆重打既容易
+    拼错，也会把同一个范围拆成"AI 岗简历" / "AI岗简历" 两个变体。
+    """
+    rows = db.query(ClaimRecord.allowed_uses).filter(trash.live_only(ClaimRecord)).all()
+    values: set[str] = set()
+    for (uses,) in rows:
+        for item in uses or []:
+            text = str(item or "").strip()
+            if text:
+                values.add(text)
+    return sorted(values)
+
+
 def list_claims(
     db: Session,
     *,

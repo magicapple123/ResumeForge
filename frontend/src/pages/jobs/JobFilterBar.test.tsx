@@ -9,7 +9,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 import { JobFilterBar } from "./JobFilterBar";
-import { DEFAULT_JOB_SORT_STATE } from "../../utils/jobSort";
 import { t } from "../../i18n";
 import { looseButtonName } from "../../test/profilePageHarness";
 
@@ -22,9 +21,11 @@ function matchHistoryButton(): HTMLElement | null {
 function StatefulHarness({
   onKeywordChange,
   selectionMode,
+  extraActions,
 }: {
   onKeywordChange?: (value: string) => void;
   selectionMode?: boolean;
+  extraActions?: React.ReactNode;
 }) {
   const [keyword, setKeyword] = useState("");
   const updateKeyword = (value: string) => {
@@ -50,9 +51,8 @@ function StatefulHarness({
       setCandidatesOpen={vi.fn()}
       setFormOpen={vi.fn()}
       onImportCsv={vi.fn()}
-      sortState={DEFAULT_JOB_SORT_STATE}
-      applySort={vi.fn()}
       selectionMode={selectionMode}
+      extraActions={extraActions}
     />
   );
 }
@@ -77,8 +77,6 @@ function ControlledHarness({ keyword }: { keyword: string }) {
       setCandidatesOpen={vi.fn()}
       setFormOpen={vi.fn()}
       onImportCsv={vi.fn()}
-      sortState={DEFAULT_JOB_SORT_STATE}
-      applySort={vi.fn()}
     />
   );
 }
@@ -95,6 +93,13 @@ afterEach(() => {
 });
 
 describe("JobFilterBar 搜索框（受控化）", () => {
+  it("附加导入入口位于同一工具栏内且先于 CSV", () => {
+    render(<StatefulHarness extraActions={<span data-testid="link-import">Link import</span>} />);
+    const extra = screen.getByTestId("link-import");
+    const csv = screen.getByRole("button", { name: /导入 CSV/ });
+    expect(extra.closest(".jobs-filter-bar")).toBe(csv.closest(".jobs-filter-bar"));
+    expect(extra.compareDocumentPosition(csv) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
   it("点 × 清空后输入框与关键词筛选同步清空", () => {
     const onKeywordChange = vi.fn();
     render(<StatefulHarness onKeywordChange={onKeywordChange} />);
@@ -141,5 +146,45 @@ describe("JobFilterBar · 分析记录入口随多选态收放", () => {
     expect(
       screen.getByRole("button", { name: looseButtonName(t("jobsPage.filter.analyzeMatch")) }),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * F04：10 个控件按「筛选｜AI｜导入｜新增」四簇分组，簇内 6px、簇间 8px + 竖线。
+ *
+ * jsdom 不排版，所以这里只钉**结构**：簇数、分隔线数、primary 只出现在一处。
+ * 间距是否真被拉开、1440 是否仍是一行，由 1440/1080 的截图确认——元素存在证明不了这两点。
+ */
+describe("JobFilterBar · 四簇分组", () => {
+  it("筛选/AI/导入/新增 四簇，簇间三条竖分隔线", () => {
+    const { container } = render(
+      <StatefulHarness extraActions={<span data-testid="link-import">Link import</span>} />,
+    );
+
+    expect(container.querySelectorAll(".jobs-filter-group")).toHaveLength(4);
+    expect(container.querySelectorAll(".jobs-filter-divider")).toHaveLength(3);
+    // 分组不能把控件搬走：搜索框仍在筛选簇内，导入入口仍在导入簇内。
+    expect(
+      container.querySelector(
+        ".jobs-filter-group-filters .jobs-search-input",
+      ),
+    ).not.toBeNull();
+    expect(
+      screen.getByTestId("link-import").closest(".jobs-filter-group-import"),
+    ).not.toBeNull();
+  });
+
+  it("全栏只有「手动添加」是主按钮（AI 对比选岗降为普通按钮）", () => {
+    render(<StatefulHarness />);
+
+    const analyze = screen.getByRole("button", {
+      name: looseButtonName(t("jobsPage.filter.analyzeMatch")),
+    });
+    const addManual = screen.getByRole("button", {
+      name: looseButtonName(t("jobsPage.filter.addManual")),
+    });
+
+    expect(analyze.className).not.toContain("ant-btn-primary");
+    expect(addManual.className).toContain("ant-btn-primary");
   });
 });

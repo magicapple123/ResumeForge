@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 字符级标记按钮（W07）：加粗 / 斜体 / 链接。
+ * 字符级格式工具条（W07 / R-11 / F22）：加粗 / 字号菜单 / 颜色 / 链接。
  *
- * 守五件事：①按 textarea 选区插入成对标记并回传新选区；②空选区/无目标/非法 URL
- * 都给出 t() 提示且**不写回**（不制造空改动）；③已有成对加粗时斜体不拆标记、不产生空提交；
- * ④按钮是受控禁用（宿主保存中/只读时一致置灰）；
- * ⑤**选区降级**：实时选区为空时用宿主记住的最近一次非空选区（2026-10-29 用户反馈"添加
- * 链接还需要选取文字"），链接在没有选区时按"光标处插入、URL 当链接文字"处理。
+ * 守六件事：①按输入框选区插入成对标记并回传新选区；②空选区/无目标/非法 URL
+ * 都给出 t() 提示且**不写回**（不制造空改动）；③字号走菜单（F22：不再固定 0.9），
+ * 100% 档是"清除"；④按钮是受控禁用（宿主保存中/只读时一致置灰）；
+ * ⑤**选区降级**：实时选区为空时用宿主记住的最近一次非空选区，链接在没有选区时
+ * 按"光标处插入、URL 当链接文字"处理；⑥强调色控件存在且可禁用（取色面板本身由
+ * `inlineMarks` 的纯规则测试覆盖：rgba → hex）。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -20,12 +21,12 @@ interface HarnessProps {
   initial?: string;
   noTarget?: boolean;
   disabled?: boolean;
-  /** 宿主"记住的最近一次非空选区"（模拟 useWorkbenchInlineMarks 的 getRememberedRange）。 */
+  /** 宿主"记住的最近一次非空选区"（模拟 `useInlineMarkRange` 的 getRange）。 */
   remembered?: InlineRange | null;
   onCommit?: (next: InlineMarkCommit) => void;
 }
 
-/** 最小宿主：真实 textarea + "最近聚焦的文本框"读取器（与 shell 的接法同型）。 */
+/** 最小宿主：真实 textarea + "最近聚焦的输入框"读取器（与 shell 的接法同型）。 */
 function Harness({
   initial = "abcdef",
   noTarget = false,
@@ -61,6 +62,12 @@ function renderHarness(props: HarnessProps = {}) {
   return { ...view, onCommit };
 }
 
+/** 打开字号菜单并点某一档（菜单渲染在 body 的弹层里）。 */
+function pickSize(step: string) {
+  fireEvent.click(screen.getByRole("button", { name: t("typography.inline.sizeAria") }));
+  fireEvent.click(screen.getByText(step));
+}
+
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
@@ -75,7 +82,40 @@ describe("InlineMarkButtons", () => {
     expect(onCommit).toHaveBeenCalledWith({ text: "ab**cd**ef", selection: { start: 4, end: 6 } });
   });
 
-  // #5d：斜体按钮已整体移除（工具区只剩加粗与链接两颗）。
+  it("F22：字号从菜单选档，写进对应系数（不再是固定 0.9）", () => {
+    const { container, onCommit } = renderHarness();
+    select(container, 2, 4);
+    pickSize("110%");
+    expect(onCommit).toHaveBeenCalledWith({
+      text: "ab{@size=1.1}cd{@}ef",
+      selection: { start: 13, end: 15 },
+    });
+
+    onCommit.mockClear();
+    select(container, 0, 2);
+    pickSize("125%");
+    expect(onCommit).toHaveBeenCalledWith({
+      text: "{@size=1.25}ab{@}cdef",
+      selection: { start: 12, end: 14 },
+    });
+  });
+
+  it("F22：100% 档是「清除字号」，把选区上的字号去掉", () => {
+    const { container, onCommit } = renderHarness({ initial: "ab{@size=1.1}cd{@}ef" });
+    select(container, 13, 15);
+    pickSize(t("typography.inline.sizeClear"));
+    expect(onCommit).toHaveBeenCalledWith({
+      text: "abcdef",
+      selection: { start: 2, end: 4 },
+    });
+  });
+
+  // #5d：斜体按钮已整体移除（工具区只有加粗 / 字号 / 颜色 / 链接）。
+
+  it("颜色控件存在（取色面板的值由纯规则测试覆盖）", () => {
+    renderHarness();
+    expect(screen.getByLabelText(t("typography.inline.color"))).toBeInTheDocument();
+  });
 
   it("链接：输入合法地址后插入 [label](url)", () => {
     const { container, onCommit } = renderHarness();
@@ -163,9 +203,9 @@ describe("InlineMarkButtons", () => {
     });
   });
 
-  it("disabled 时两颗按钮都不可点", () => {
+  it("disabled 时加粗 / 字号 / 链接都不可点", () => {
     renderHarness({ disabled: true });
-    for (const key of ["boldAria", "linkAria"] as const) {
+    for (const key of ["boldAria", "sizeAria", "linkAria"] as const) {
       expect(screen.getByRole("button", { name: t(`typography.inline.${key}`) })).toBeDisabled();
     }
   });

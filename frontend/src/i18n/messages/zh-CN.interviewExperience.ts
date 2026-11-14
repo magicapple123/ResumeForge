@@ -26,8 +26,6 @@ const interviewExperience = {
   "interviewExperience.field.updatedAt": "更新时间",
   "interviewExperience.section.content": "正文",
   "interviewExperience.section.questions": "真实问题（{count}）",
-  "interviewExperience.empty.content": "（无）",
-  "interviewExperience.empty.questions": "（还没有记录问题）",
   "interviewExperience.toast.updated": "已更新面经",
   "interviewExperience.toast.created": "已新建面经",
   "interviewExperience.toast.deleted": "已删除这条面经",

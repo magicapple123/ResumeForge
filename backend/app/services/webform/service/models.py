@@ -58,6 +58,8 @@ class PreviewItem:
     note: str = ""
     # rule | ai —— 界面据此打「AI 建议」标签，并且**不默认勾选**。
     source: str = SOURCE_RULE
+    confidence: float | None = None
+    evidence: str = ""
 
 
 @dataclass

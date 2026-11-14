@@ -37,6 +37,8 @@ from __future__ import annotations
 import html as _html
 from dataclasses import dataclass
 
+from .resume_inline_style import expand_runs, inline_style_css, mask_inline_styles
+
 # 兼容旧名：MARKER 一直指加粗标记，既有导入（测试/编辑器）不因协议 v2 改名而断。
 MARKER = "**"
 BOLD_MARKER = MARKER
@@ -64,6 +66,10 @@ class RichSpan:
     text: str
     bold: bool = False
     link: str | None = None
+    #: 行内字号系数（相对当前 run，1.0 = 不变）与颜色（`#rgb`/`#rrggbb`）。
+    #: R-11：由 `{@size=0.9,color=#c00}…{@}` 产生，四个出口各自投影。
+    size: float | None = None
+    color: str | None = None
 
     def readable(self, *, with_link: bool = False) -> str:
         """可读文本：默认只留 label；with_link=True 追加 " (URL)"（PDF/Word 的口径）。"""
@@ -238,10 +244,15 @@ def parse_rich_runs(text: str) -> list[RichSpan]:
     """
     if not text:
         return []
-    runs = _bold_runs(text)
+    # R-11：先把样式区间换成起止占位符，三层解析照常跑，最后按占位符切开并贴回样式。
+    masked, styles = mask_inline_styles(text)
+    runs = _bold_runs(masked)
     runs = [piece for run in runs for piece in _italic_runs(run)]
     runs = [piece for run in runs for piece in _link_runs(run)]
-    return [RichSpan(run.text, run.bold, run.link) for run in runs if run.text]
+    return [
+        RichSpan(text, bold, link, style.size if style else None, style.color if style else None)
+        for text, bold, link, style in expand_runs(runs, styles)
+    ]
 
 
 def parse_runs(text: str) -> list[tuple[str, bool]]:
@@ -257,7 +268,7 @@ def strip_markers(text: str) -> str:
 
     幂等：strip_markers(strip_markers(x)) == strip_markers(x)。
     """
-    if "*" not in text and "[" not in text:
+    if "*" not in text and "[" not in text and "{@" not in text:
         return text
     return "".join(span.text for span in parse_rich_runs(text))
 
@@ -333,6 +344,10 @@ def _href_of(escaped_url: str) -> str:
 
 def _span_html(span: RichSpan) -> str:
     body = span.text
+    if span.size is not None or span.color:
+        css = inline_style_css(span.size, span.color)
+        if css:
+            body = f'<span style="{css}">{body}</span>'
     if span.link is not None:
         # label 与 URL 都来自文本段（已被上游转义），label 原样作为可见文本。
         body = f'<a href="{_href_of(span.link)}" rel="noopener noreferrer">{body}</a>'
@@ -347,7 +362,7 @@ def apply_rich_html(html: str) -> str:
     只处理文本段：标签、属性值、注释、CDATA 与 style/script 的内容一律跳过。
     标记天然不跨标签（每段独立配对），所以"已经包在 strong 里"的内容不会被再包一层。
     """
-    if "*" not in html and "[" not in html:
+    if "*" not in html and "[" not in html and "{@" not in html:
         return html
     pieces: list[str] = []
     depth = 0

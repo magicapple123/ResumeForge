@@ -1,27 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 设置页「助手记忆」卡（#31C 可见可改 + #18D 结构化画像手填入口）。
+ * 设置页「助手记忆」卡（#31C 可见可改 + #18D 结构化画像手填入口 + F33 停用语义）。
  *
  * 一张表两个来源：source=manual（这里手填的画像）与 source=extracted（#31A 自动抽取）。
  * 为什么必须是同一张卡：两份「目标岗位」会互相打架（见 models/assistant_memory 的模块注释）。
  *
  * 三条产品红线（本卡是唯一人工维护入口）：
- * 1. **可见可改**：列表逐条展示内容/类型/来源/时间/置信度，可编辑、删除、标「永不使用」；
+ * 1. **可见可改**：列表逐条展示内容/类型/来源/时间/来源摘录，可编辑、删除、停用、恢复；
  * 2. **自动抽取默认关**：开关写在后端 AppSetting，默认 false；开启前用户已经能看见并修改，
  *    才不存在"不可见不可改的记忆"；
  * 3. **敏感信息不记**：手机号/身份证/密钥由后端 422 拒绝，表单只做提示，不复制第二套校验。
  *
- * 删除与「永不使用」都是软删（后端 status=deleted，不再注入、列表不再显示，后台可回溯）。
+ * F33 起「永不使用」= `suppressed`（置灰留在列表、可恢复），与删除（从列表消失）分开；
+ * 置信度不再外露（四家官方产品都不显示），但仍留在库里参与排序。
+ * 行内展示与历史弹窗在 `AssistantMemoryRow`，本文件只管取数、筛选与弹层编排。
  */
-import { App, Alert, Button, Card, Space, Switch, Tag, Typography } from "antd";
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { App, Alert, Button, Card, Input, Select, Space, Switch, Typography } from "antd";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ErrorState from "../../components/common/ErrorState";
 import EmptyState from "../../components/common/EmptyState";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import { formatDateTime } from "../../utils/format";
 import {
   MEMORY_KINDS,
   createAssistantMemory,
@@ -30,33 +30,27 @@ import {
   listAssistantMemories,
   listMemoryKinds,
   neverUseAssistantMemory,
+  restoreAssistantMemory,
   saveAssistantMemorySettings,
   updateAssistantMemory,
   type AssistantMemory,
   type MemoryKindOption,
 } from "./assistantMemoryApi";
 import AssistantMemoryEditModal from "./AssistantMemoryEditModal";
+import AssistantMemoryRow from "./AssistantMemoryRow";
 import { memoryKindLabel } from "./assistantMemoryLabels";
 
 type ModalState = { mode: "create" } | { mode: "edit"; memory: AssistantMemory } | null;
+type SortMode = "recent" | "kind";
 
 const FALLBACK_KIND_OPTIONS: MemoryKindOption[] = MEMORY_KINDS.map((kind) => ({
   kind,
   label: "",
 }));
 
-function sourceLabel(memory: AssistantMemory): string {
-  return t(
-    memory.source === "extracted"
-      ? "assistantMemory.source.extracted"
-      : "assistantMemory.source.manual",
-  );
-}
-
 export default function AssistantMemoryCard() {
   useLocale();
   const { message, modal } = App.useApp();
-  const navigate = useNavigate();
   const [memories, setMemories] = useState<AssistantMemory[]>([]);
   const [kindOptions, setKindOptions] = useState<MemoryKindOption[]>(FALLBACK_KIND_OPTIONS);
   const [autoExtract, setAutoExtract] = useState(false);
@@ -64,6 +58,8 @@ export default function AssistantMemoryCard() {
   const [loadError, setLoadError] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [modalState, setModalState] = useState<ModalState>(null);
+  const [query, setQuery] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("recent");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,6 +95,26 @@ export default function AssistantMemoryCard() {
       cancelled = true;
     };
   }, [load]);
+
+  const visible = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    const rows = keyword
+      ? memories.filter((item) =>
+          `${item.value} ${memoryKindLabel(item.kind, item.kind_label)}`
+            .toLowerCase()
+            .includes(keyword),
+        )
+      : [...memories];
+    if (sortMode === "kind") {
+      rows.sort((left, right) =>
+        memoryKindLabel(left.kind, left.kind_label).localeCompare(
+          memoryKindLabel(right.kind, right.kind_label),
+          "zh-CN",
+        ),
+      );
+    }
+    return rows;
+  }, [memories, query, sortMode]);
 
   const onToggleAutoExtract = async (checked: boolean) => {
     if (savingSettings) return;
@@ -177,6 +193,16 @@ export default function AssistantMemoryCard() {
     });
   };
 
+  const restore = async (memory: AssistantMemory) => {
+    try {
+      await restoreAssistantMemory(memory.id);
+      message.success(t("assistantMemory.toast.restored"));
+      await load();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : t("assistantMemory.toast.failed"));
+    }
+  };
+
   /** 清空全部：后端没有批量端点，逐条软删（数量上限 200，列表很小）。 */
   const confirmClearAll = () => {
     const count = memories.length;
@@ -213,7 +239,7 @@ export default function AssistantMemoryCard() {
         {t("assistantMemory.intro")}
       </Typography.Paragraph>
       <LoadingBlock spinning={loading}>
-        <Space orientation="vertical" size={12} style={{ width: "100%" }}>
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <Space size={8} wrap>
             <Typography.Text strong>{t("assistantMemory.autoExtract.label")}</Typography.Text>
             <Switch
@@ -241,6 +267,29 @@ export default function AssistantMemoryCard() {
             </Button>
           </Space>
 
+          {memories.length > 0 ? (
+            <Space size={8} wrap>
+              <Input.Search
+                allowClear
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("assistantMemory.search.placeholder")}
+                aria-label={t("assistantMemory.search.placeholder")}
+                style={{ width: 240 }}
+              />
+              <Select<SortMode>
+                value={sortMode}
+                onChange={setSortMode}
+                style={{ width: 150 }}
+                aria-label={t("assistantMemory.sort.label")}
+                options={[
+                  { value: "recent", label: t("assistantMemory.sort.recent") },
+                  { value: "kind", label: t("assistantMemory.sort.kind") },
+                ]}
+              />
+            </Space>
+          ) : null}
+
           {loadError ? (
             <ErrorState description={t("assistantMemory.loadFailed")} onRetry={() => void load()} />
           ) : memories.length === 0 ? (
@@ -250,65 +299,19 @@ export default function AssistantMemoryCard() {
               actionLabel={t("assistantMemory.action.add")}
               onAction={() => setModalState({ mode: "create" })}
             />
+          ) : visible.length === 0 ? (
+            <EmptyState inline description={t("assistantMemory.empty")} />
           ) : (
             <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10 }}>
-              {memories.map((memory) => (
-                <li
+              {visible.map((memory) => (
+                <AssistantMemoryRow
                   key={memory.id}
-                  data-testid={`assistant-memory-${memory.id}`}
-                  style={{ display: "grid", gap: 4 }}
-                >
-                  <Space size={8} wrap>
-                    <Tag color="blue">{memoryKindLabel(memory.kind, memory.kind_label)}</Tag>
-                    <Typography.Text>{memory.value}</Typography.Text>
-                    {memory.status === "superseded" ? (
-                      <Tag color="default">{t("assistantMemory.status.superseded")}</Tag>
-                    ) : null}
-                    <Tag color={memory.source === "extracted" ? "purple" : "green"}>
-                      {sourceLabel(memory)}
-                    </Tag>
-                    <Typography.Text type="secondary">
-                      {t("assistantMemory.confidence", {
-                        percent: Math.round(Number(memory.confidence) * 100),
-                      })}
-                    </Typography.Text>
-                    <Typography.Text type="secondary">
-                      {t("assistantMemory.updatedAt", {
-                        time: formatDateTime(memory.updated_at),
-                      })}
-                    </Typography.Text>
-                  </Space>
-                  <Space size={4} wrap>
-                    {memory.source === "extracted" && memory.source_conversation_id ? (
-                      <Button
-                        type="link"
-                        size="small"
-                        onClick={() =>
-                          navigate(`/assistant?conversation=${memory.source_conversation_id}`)
-                        }
-                      >
-                        {t("assistantMemory.openConversation")}
-                      </Button>
-                    ) : null}
-                    {memory.status === "active" ? (
-                      <Button
-                        type="link"
-                        size="small"
-                        onClick={() => setModalState({ mode: "edit", memory })}
-                      >
-                        {t("assistantMemory.action.edit")}
-                      </Button>
-                    ) : null}
-                    {memory.status === "active" ? (
-                      <Button type="link" size="small" onClick={() => confirmNeverUse(memory)}>
-                        {t("assistantMemory.action.neverUse")}
-                      </Button>
-                    ) : null}
-                    <Button type="link" size="small" danger onClick={() => confirmDelete(memory)}>
-                      {t("assistantMemory.action.delete")}
-                    </Button>
-                  </Space>
-                </li>
+                  memory={memory}
+                  onEdit={(item) => setModalState({ mode: "edit", memory: item })}
+                  onNeverUse={confirmNeverUse}
+                  onRestore={(item) => void restore(item)}
+                  onDelete={confirmDelete}
+                />
               ))}
             </ul>
           )}

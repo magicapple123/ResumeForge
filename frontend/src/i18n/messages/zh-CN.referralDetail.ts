@@ -21,7 +21,6 @@ const referralDetail = {
   "referralDetail.field.updatedAt": "更新时间",
   "referralDetail.value.notRecorded": "未记录",
   "referralDetail.value.unknown": "未知",
-  "referralDetail.value.empty": "（无）",
   "referralDetail.section.note": "备注",
   "referralDetail.section.images": "图片备注（{count}）",
   "referralDetail.image.noteAlt": "备注图",

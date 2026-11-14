@@ -210,6 +210,37 @@ def test_put_without_entry_ids_keeps_existing_links(client):
     assert updated.json()["entry_ids"] == [ENTRY_A], "没传 entry_ids 的更新不能顺手清空关联"
 
 
+def test_allowed_uses_are_deduped_sorted_and_skip_trash(client):
+    """表单候选来自真实台账：同一范围只出现一次，回收站里的不再推荐。"""
+    client.post(
+        "/api/claims",
+        json={**VALID, "allowed_uses": ["HR 开场白", "AI 岗简历"]},
+    )
+    client.post(
+        "/api/claims",
+        json={**VALID, "title": "第二条", "allowed_uses": ["AI 岗简历", "  内推介绍  "]},
+    )
+    trashed = client.post(
+        "/api/claims",
+        json={**VALID, "title": "回收站里的一条", "allowed_uses": ["只该出现在回收站"]},
+    )
+    assert client.delete(f"/api/claims/{trashed.json()['id']}").status_code == 204
+
+    response = client.get("/api/claims/allowed-uses")
+    assert response.status_code == 200
+    assert response.json() == ["AI 岗简历", "HR 开场白", "内推介绍"]
+
+
+def test_allowed_uses_route_is_not_swallowed_by_the_id_route(client):
+    """`/allowed-uses` 必须命中自己的处理函数，而不是被当成 claim_id 解析成 422。"""
+    client.post("/api/claims", json={**VALID, "allowed_uses": ["AI 岗简历"]})
+
+    response = client.get("/api/claims/allowed-uses")
+    assert response.status_code == 200, "固定路径排到了 /{claim_id} 后面"
+    assert isinstance(response.json(), list)
+    assert response.json() == ["AI 岗简历"]
+
+
 def test_page_rows_report_link_state(client, db_session):
     """列表卡片要能标出「不会进入生成」与「已自动关联，请核对」，判据由服务端算。"""
     from app.models.profile_entry import ProfileEntry

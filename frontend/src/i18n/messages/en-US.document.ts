@@ -119,8 +119,12 @@ const document = {
   // ── Field editors ───────────────────────────────────────────
   "document.field.value": "Value",
   "document.field.valuePlaceholder": "Enter a value",
+  "document.inlineFormat": "Inline format",
   "document.field.label": "Label",
   "document.field.labelPlaceholder": "Field label",
+  "document.field.labelReset": "Restore default field name",
+  "document.field.labelResetHint":
+    "Cleared, it follows the catalog and field language; once filled it stops following language switches",
   "document.field.dateStart": "Start date",
   "document.field.dateEnd": "End date",
   "document.field.datePresent": "Present",

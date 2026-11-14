@@ -249,7 +249,6 @@ def _select_tag_font(pdf: _ResumePDF, metrics: SkillTagMetrics, *, mono: bool) -
         pdf.set_font(FONT_FAMILY, "", metrics.font_pt)
 
 
-
 def _draw_tag_grid(
     pdf: _ResumePDF,
     items: list[str],
@@ -280,9 +279,7 @@ def _draw_tag_grid(
         row = list(range(start, min(start + columns, len(items))))
         # 先量这一行每格的高度：单行标签的高度就是标签行盒，长标签按单元格宽度折行。
         heights = [
-            pdf.text_block_height(
-                f"{_TAG_BULLET} {items[index]}", width=cell_width, size_px=tag_px
-            )
+            pdf.text_block_height(f"{_TAG_BULLET} {items[index]}", width=cell_width, size_px=tag_px)
             for index in row
         ]
         row_height = max([metrics.height, *heights])
@@ -303,6 +300,38 @@ def _draw_tag_grid(
             )
         pdf.set_y(top + row_height)
         pdf.set_x(pdf.frame_left)
+
+
+def pack_rows_by_columns(
+    widths: list[float], available: float, gap: float, columns: int
+) -> list[list[int]]:
+    """按"每行最多 `columns` 个"装行（纯函数）。
+
+    每个标签**至少**按 `(available - gap * (columns - 1)) / columns` 记账：这正是
+    HTML 侧 `max-width` 的效果（第 N+1 个标签放不下）。比该值更宽的标签按真实宽度记账，
+    因此长标签会挤掉同行的短标签、必要时独占一行。
+
+    与 `wrap_skill_tags` 的分工：这个函数管"数量上限"，那个管"宽度上限"，两者互不替代。
+    """
+    if columns < 1 or not widths:
+        return []
+    unit = max(0.0, (available - gap * (columns - 1)) / columns)
+    rows: list[list[int]] = []
+    current: list[int] = []
+    used = 0.0
+    for index, width in enumerate(widths):
+        occupy = max(float(width), unit)
+        needed = occupy if not current else gap + occupy
+        if current and used + needed > available + 1e-6:
+            rows.append(current)
+            current = [index]
+            used = occupy
+            continue
+        current.append(index)
+        used += needed
+    if current:
+        rows.append(current)
+    return rows
 
 
 def draw_skill_tags(
@@ -408,7 +437,16 @@ def draw_skill_tags(
 
     available = pdf.frame_width
     center = layout.tag_align == "center"
-    for row in wrap_skill_tags(widths, max_width=available, gap=metrics.gap_x):
+    columns = int(getattr(layout, "skill_columns", 0) or 0)
+    if columns >= 1:
+        # 「每行最多 N 个」（R-08）：每个标签至少按"一行的 N 等分"记账，
+        # 第 N+1 个必然换行；比 N 等分更长的标签按自身宽度记账，于是长标签会独占一行。
+        # **只压折行、不压绘制**——单个超长标签仍按自身宽度画出来并如实溢出，
+        # 与 HTML 侧 `max-width` 允许长标签独占一行同义。
+        packed_rows = pack_rows_by_columns(widths, available, metrics.gap_x, columns)
+    else:
+        packed_rows = wrap_skill_tags(widths, max_width=available, gap=metrics.gap_x)
+    for row in packed_rows:
         pdf.ensure_space(metrics.height + metrics.gap_y)
         top = pdf.get_y()
         left = pdf.frame_left
@@ -419,7 +457,9 @@ def draw_skill_tags(
             left += max(0.0, (available - row_width) / 2.0)
         for index in row:
             width = widths[index]
-            _draw_tag_shape(pdf, left, top, width, metrics, style=tag_style, fill=fill, accent=accent)
+            _draw_tag_shape(
+                pdf, left, top, width, metrics, style=tag_style, fill=fill, accent=accent
+            )
             _select_tag_font(pdf, metrics, mono=use_mono[index])
             pdf.set_text_color(*text_color)
             pdf.set_xy(left + _text_offset(metrics, tag_style), top)

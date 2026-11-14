@@ -16,6 +16,7 @@ import type {
   LLMModelsResult,
   LLMTestResult,
   LLMThinkingResult,
+  ModelWindowReference,
   NavigationVisibility,
   ReminderPopupSetting,
   SearchConfig,
@@ -29,6 +30,15 @@ import type { RequestBudgetKind } from "./client";
 
 export function getLLMConfig(): Promise<LLMConfig> {
   return request("/settings/llm");
+}
+
+/**
+ * 「模型窗口参考」：内置窗口表 + 当前模型命中的是哪一条。
+ *
+ * 纯只读：表是代码里的常量，改表要发版；用户手填的窗口仍在模型配置里。
+ */
+export function getModelWindowReference(): Promise<ModelWindowReference> {
+  return request("/settings/model-windows");
 }
 
 /**

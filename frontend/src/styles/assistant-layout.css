@@ -62,6 +62,13 @@
   overflow-y: auto;
 }
 
+/* 有视角行时不允许被压缩：面板本身仍可收缩（R4-a），但压到 20px 时
+   40px 高的视角行只剩一半，用户看不出那里还能滚。
+   只对「带视角行」的形态生效：全局改成不收缩会把空库首屏 277px 的溢出找回来。 */
+.assistant-breadth:has(.assistant-persona) {
+  flex-shrink: 0;
+}
+
 .assistant-sidebar {
   min-width: 0;
   padding-right: 12px;

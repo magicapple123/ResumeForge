@@ -1,0 +1,114 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* ===== 投递队列表格（2026-11-13 排版优化）=====
+ * 用户反馈「队列排版不好看」。根因不是信息不足，而是**信息在抢视线**：
+ * 每行一个红色「来源不支持」、四个「未分析」重复、招呼语被截成两行反而成了最长的一列、
+ * 操作列还是两块描边小方块。下面这些规则配合 QueueTable 的列合并一起看。 */
+
+/* 匹配列：分数在上、准入结论在下（同一格里两级）。 */
+.apply-page .apply-queue-match {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+}
+
+.apply-page .apply-queue-match .apply-queue-score {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+/* 未分析只有一个破折号，别加粗（加粗会把"没有结论"读成"重点"）。 */
+.apply-page .apply-queue-match .apply-queue-score[data-band="none"] {
+  font-weight: 400;
+}
+
+/* 准入结论：12px 文字，色仍取 `ADMISSION_META` 的语义（这里只做色值落地）。 */
+.apply-page .apply-queue-admission {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--rf-text-tertiary);
+}
+
+.apply-page .apply-queue-admission[data-tone="allow"] {
+  color: var(--rf-success-text);
+}
+
+.apply-page .apply-queue-admission[data-tone="needs_confirm"],
+.apply-page .apply-queue-admission[data-tone="warn"] {
+  color: var(--rf-warning-text);
+}
+
+.apply-page .apply-queue-admission[data-tone="block"] {
+  color: var(--rf-danger);
+}
+
+/* 「来源不支持」：灰描边小标记。它是既定事实，不是待办告警——
+   红实底会在六行里重复六次，把整张表的注意力拽到"投不出去"这件事上。 */
+.apply-page .apply-queue-unsupported {
+  margin-inline-end: 0;
+  padding-inline: 5px;
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--rf-text-tertiary);
+  background: var(--rf-surface);
+  border-color: var(--rf-border);
+}
+
+/* 状态：圆点 + 文字。Badge 自带 6px 圆点与语义色，这里只把文字压回正文色。 */
+.apply-page .apply-queue-status {
+  font-size: 13px;
+  color: var(--rf-text-secondary);
+}
+
+/* 投递材料：一行（简历名中性小标签 + 招呼语单行省略）。 */
+.apply-page .apply-queue-assets {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.apply-page .apply-queue-assets .apply-queue-resume-tag {
+  flex: 0 0 auto;
+  margin-inline-end: 0;
+  font-size: 11px;
+  line-height: 17px;
+  padding-inline: 5px;
+  color: var(--rf-text-secondary);
+  background: var(--rf-surface);
+  border-color: var(--rf-border);
+}
+
+.apply-page .apply-queue-greeting {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 行内动作：默认只露「⋯」，鼠标悬停整行（或键盘聚焦）时才显形「体检」。
+   两枚描边小方块并排时，每行的视觉重量和岗位名一样高——它们是低频操作用不着常驻。 */
+.apply-page .apply-queue-actions {
+  gap: 2px;
+}
+
+.apply-page .apply-queue-row-action {
+  opacity: 0;
+  transition: opacity 0.12s ease-in-out;
+}
+
+.apply-page .apply-queue-row-action.is-always {
+  opacity: 1;
+}
+
+.apply-page .ant-table-tbody tr:hover .apply-queue-row-action,
+.apply-page .apply-queue-row-action:focus-visible {
+  opacity: 1;
+}
+
+/* 触摸设备没有悬停：直接常驻，否则「体检」永远点不到。 */
+@media (hover: none) {
+  .apply-page .apply-queue-row-action {
+    opacity: 1;
+  }
+}

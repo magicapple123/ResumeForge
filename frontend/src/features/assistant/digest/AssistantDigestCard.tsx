@@ -5,14 +5,16 @@
  * 内容全部来自既有数据；卡片上只做展示与「重新生成」——
  * 不新增采集、不调模型、不做常驻调度（启动时才补算，设计取舍见问题清单 #18B）。
  */
-import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Space, Tag, Typography } from "antd";
+import { DownOutlined, ReloadOutlined, UpOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Popover, Space, Tag, Typography } from "antd";
 import EmptyState from "../../../components/common/EmptyState";
 import LoadingBlock from "../../../components/common/LoadingBlock";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { DigestItem, DigestSection } from "./digestApi";
 import { useAssistantDigest } from "./useAssistantDigest";
+import { useDigestDisclosure } from "./useDigestDisclosure";
+import "./assistantDigest.css";
 
 const SECTION_LABEL_KEYS: Record<string, Parameters<typeof t>[0]> = {
   worth_jobs: "assistantBreadth.digest.section.worth_jobs",
@@ -109,6 +111,7 @@ function SectionBlock({ section }: { section: DigestSection }) {
 export default function AssistantDigestCard({ enabled = true }: { enabled?: boolean }) {
   useLocale();
   const { digest, loading, refreshing, failed, refresh } = useAssistantDigest(enabled);
+  const { open, changeOpen } = useDigestDisclosure();
   if (!enabled) return null;
 
   const visibleSections = (digest?.sections ?? []).filter(
@@ -117,47 +120,104 @@ export default function AssistantDigestCard({ enabled = true }: { enabled?: bool
   const nothingToDo =
     digest !== null && visibleSections.every((section) => section.key === "funnel");
 
-  return (
-    <Card
-      size="small"
-      className="assistant-digest-card"
-      title={t("assistantBreadth.digest.title")}
-      extra={
-        <Button
-          type="text"
-          size="small"
-          icon={<ReloadOutlined />}
-          loading={refreshing}
-          onClick={() => void refresh()}
-        >
-          {t(refreshing ? "assistantBreadth.digest.refreshing" : "assistantBreadth.digest.refresh")}
-        </Button>
-      }
-    >
-      {failed ? <Alert type="warning" showIcon title={t("assistantBreadth.digest.error")} /> : null}
-      {loading && digest === null ? <LoadingBlock minHeight={96} /> : null}
-      {digest !== null ? (
-        <div style={{ display: "grid", gap: 10 }}>
-          <Space size={8} wrap>
-            <Tag color={(digest.changes.count ?? 0) > 0 ? "warning" : "default"}>
-              {t("assistantBreadth.digest.changes", { count: digest.changes.count })}
-            </Tag>
-            <Typography.Text type="secondary" data-testid="digest-generated-at">
-              {t("assistantBreadth.digest.generatedAt", {
-                time: shortTime(digest.generated_at),
-              })}
+  const changes = digest?.changes.count ?? 0;
+  const countFor = (key: string) =>
+    digest?.sections.find((section) => section.key === key)?.count ?? 0;
+  const hasItems = (digest?.sections ?? []).some(
+    (section) => section.key !== "funnel" && section.count > 0,
+  );
+  const content = (
+    <div className="assistant-digest-popover" onClick={(event) => event.stopPropagation()}>
+      <Card
+        size="small"
+        className="assistant-digest-card"
+        title={t("assistantBreadth.digest.title")}
+        extra={
+          <Button
+            type="text"
+            size="small"
+            icon={<ReloadOutlined />}
+            loading={refreshing}
+            onClick={(event) => {
+              event.stopPropagation();
+              void refresh();
+            }}
+          >
+            {t(
+              refreshing ? "assistantBreadth.digest.refreshing" : "assistantBreadth.digest.refresh",
+            )}
+          </Button>
+        }
+      >
+        {failed ? (
+          <Alert type="warning" showIcon title={t("assistantBreadth.digest.error")} />
+        ) : null}
+        {loading && digest === null ? <LoadingBlock minHeight={96} /> : null}
+        {digest !== null ? (
+          <div style={{ display: "grid", gap: 10 }}>
+            <Space size={8} wrap>
+              <Tag color={(digest.changes.count ?? 0) > 0 ? "warning" : "default"}>
+                {t("assistantBreadth.digest.changes", { count: digest.changes.count })}
+              </Tag>
+              <Typography.Text type="secondary" data-testid="digest-generated-at">
+                {t("assistantBreadth.digest.generatedAt", {
+                  time: shortTime(digest.generated_at),
+                })}
+              </Typography.Text>
+            </Space>
+            {nothingToDo ? (
+              <EmptyState inline description={t("assistantBreadth.digest.empty")} />
+            ) : (
+              visibleSections.map((section) => <SectionBlock key={section.key} section={section} />)
+            )}
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {t("assistantBreadth.digest.hint")}
             </Typography.Text>
-          </Space>
-          {nothingToDo ? (
-            <EmptyState inline description={t("assistantBreadth.digest.empty")} />
+          </div>
+        ) : null}
+      </Card>
+    </div>
+  );
+  return (
+    <Popover
+      open={open}
+      onOpenChange={changeOpen}
+      trigger="click"
+      placement="bottomLeft"
+      styles={{ content: { padding: 0 } }}
+      content={content}
+    >
+      <Button
+        type="text"
+        className="assistant-digest-summary"
+        aria-expanded={open}
+        aria-label={t("assistantBreadth.digest.title")}
+      >
+        {changes > 0 ? <span className="assistant-digest-change-dot" aria-hidden="true" /> : null}
+        <strong>{t("assistantBreadth.digest.title")}</strong>
+        <span className="assistant-digest-summary-counts">
+          {hasItems ? (
+            <>
+              {t("assistantBreadth.digest.changes", { count: changes })} ·{" "}
+              {t("assistantBreadth.digest.summary.stale", {
+                count: countFor("stale_applications"),
+              })}{" "}
+              · {t("assistantBreadth.digest.summary.expired", { count: countFor("expired_jobs") })}
+            </>
           ) : (
-            visibleSections.map((section) => <SectionBlock key={section.key} section={section} />)
+            t("assistantBreadth.digest.summary.empty")
           )}
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {t("assistantBreadth.digest.hint")}
-          </Typography.Text>
-        </div>
-      ) : null}
-    </Card>
+        </span>
+        {digest ? <time>{shortTime(digest.generated_at)}</time> : null}
+        <span>
+          {t(
+            open
+              ? "assistantBreadth.digest.summary.collapse"
+              : "assistantBreadth.digest.summary.expand",
+          )}
+        </span>
+        {open ? <UpOutlined /> : <DownOutlined />}
+      </Button>
+    </Popover>
   );
 }

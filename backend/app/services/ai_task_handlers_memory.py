@@ -46,6 +46,12 @@ def handle_memory_extract(ctx: Any) -> None:
     # #31 开关复查：任务是空闲时入队的，用户可能在执行前就把开关关掉了。
     # 入队侧（should_schedule）已检查一次，这里是**执行体**的第二道闸——否则
     # "关了开关，任务仍把记忆抽完"会让开关在用户看来完全失效。
+    # F34 同一道闸也覆盖「本次不记忆」：会话在排队后被切成临时对话时同样要跳过。
+    if memory.conversation_memory_off(ctx.session, conversation_id):
+        logger.info("会话已开启本次不记忆，跳过抽取 conversation=%s", conversation_id)
+        ctx.set_progress(100, "本次对话不记忆，已跳过")
+        ctx.set_result({"conversation_id": conversation_id, "skipped": "memory_off"})
+        return
     if not memory.auto_extract_enabled(ctx.session):
         logger.info("助手记忆抽取已关闭，跳过本次任务 conversation=%s", conversation_id)
         ctx.set_progress(100, "自动整理已关闭，本次跳过")

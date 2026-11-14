@@ -23,21 +23,24 @@ from fpdf.enums import XPos, YPos
 
 from ...schemas.resume_document import RowLayout
 from ...schemas.resume_document_plan import (
-    BlockPlan,
     CellPlan,
     DocumentPlan,
     EntryPlan,
-    Inline,
     SectionPlan,
 )
 from ..resume.document_html import default_cell_gap, join_cell_texts
+from ..resume.field_style_target import is_field_path
 from ..resume.resume_style import RoleStyle
 from .canvas import _ResumePDF
+from .document_body import _draw_body_blocks
+from .document_body import _draw_paragraph as _draw_paragraph
+from .document_fields import draw_field_flow, draw_field_head, draw_label_row
+from .document_inline import inline_text as inline_text
 from .fonts import FONT_FAMILY
 from .header import draw_header
 from .layout import _PX_TO_PT
 from .meta_columns import draw_meta_columns, justify_gap, resolve_cell_widths, set_meta_font
-from .style_blocks import _bold, _color, _letter_spacing_mm, _line_height, _scale
+from .style_blocks import _color, _scale
 
 if TYPE_CHECKING:  # pragma: no cover - 只为类型检查
     pass
@@ -45,117 +48,9 @@ if TYPE_CHECKING:  # pragma: no cover - 只为类型检查
 #: 角色/对象覆盖查询函数（与 header / style_blocks 同一形态）；None = 模板默认。
 RoleStyleQuery = Callable[..., RoleStyle | None]
 
-_ALIGN = {"left": "L", "center": "C", "right": "R", "justify": "J"}
-
-
-def inline_text(segments: Sequence[Inline]) -> str:
-    """行内段拼成纸面字符串：strong 段投影成加粗标记（fpdf2 markdown 口径）。"""
-    parts: list[str] = []
-    for segment in segments:
-        text = str(getattr(segment, "text", "") or "")
-        if not text:
-            continue
-        if getattr(segment, "strong", False) and not text.startswith("**"):
-            text = "**" + text + "**"
-        parts.append(text)
-    return "".join(parts)
-
 
 def _role_style(style: RoleStyleQuery | None, role: str, object_id: str | None = None):
     return style(role, object_id=object_id) if style is not None else None
-
-
-def _draw_paragraph(
-    pdf: _ResumePDF,
-    text: str,
-    *,
-    base: float,
-    style: RoleStyle | None,
-    section: str = "",
-    object_id: str | None = None,
-) -> None:
-    """一段正文（multi_cell）：字号/行高/字色/对齐可被 body 角色/对象覆盖。"""
-    if not text.strip():
-        return
-    layout = pdf.layout
-    size = base * _scale(style)
-    line_height = _line_height(pdf, style, size)
-    align = _ALIGN.get(str(style.align) if style is not None and style.align else "left", "L")
-    # Q11：正文加粗用 B 字重；段落缩进按 indent 偏移左缘与可用宽度；字距用
-    # fpdf2 set_char_spacing（文档单位 mm，画完复位，不影响后续段落）。
-    bold = _bold(pdf, style, False)
-    letter_spacing = _letter_spacing_mm(base, style)
-    indent_mm = (
-        layout.gap_mm(float(style.indent))
-        if style is not None and style.indent is not None
-        else 0.0
-    )
-    pdf.set_font(FONT_FAMILY, "B" if bold else "", size * _PX_TO_PT)
-    pdf.set_text_color(*_color(style, pdf.body_text))
-    if style is not None and style.space_before is not None:
-        pdf.ln(layout.gap_mm(float(style.space_before)))
-    pdf.ensure_space(line_height)
-    top = pdf.get_y()
-    pdf.set_x(pdf.frame_left + indent_mm)
-    width = max(1.0, pdf.frame_width - indent_mm)
-    if letter_spacing:
-        pdf.set_char_spacing(letter_spacing)
-    from .style_blocks import _wrapmode_args
-
-    pdf.multi_cell(
-        width,
-        line_height,
-        text,
-        align=align,
-        new_x=XPos.LMARGIN,
-        new_y=YPos.NEXT,
-        **_wrapmode_args(pdf, text, width, size * _PX_TO_PT),
-    )
-    if letter_spacing:
-        pdf.set_char_spacing(0)
-    if style is not None and style.space_after is not None:
-        pdf.ln(layout.gap_mm(float(style.space_after)))
-    pdf.set_text_color(*pdf.body_text)
-    if section:
-        pdf.record(kind="point", section=section, y_top=top, object_id=object_id, text=text)
-
-
-def _draw_body_blocks(
-    pdf: _ResumePDF,
-    blocks: Sequence[BlockPlan],
-    *,
-    base: float,
-    style: RoleStyle | None,
-    section: str,
-    object_id: str | None,
-    split_ok: bool = False,
-) -> None:
-    """正文块：连续要点合成一批 bullets（行内格式/分页口径与既有实现一致），段落单独画。"""
-    pending: list[str] = []
-
-    def flush() -> None:
-        if not pending:
-            return
-        pdf.bullets(
-            list(pending),
-            base,
-            style=style,
-            section=section,
-            object_id=object_id,
-            split_ok=split_ok,
-        )
-        pending.clear()
-
-    for block in blocks:
-        text = inline_text(block.segments).strip()
-        if not text:
-            continue
-        if block.kind == "bullet":
-            pending.append(text)
-        else:
-            flush()
-            _draw_paragraph(pdf, text, base=base, style=style, section=section, object_id=object_id)
-    flush()
 
 
 def _draw_head(
@@ -167,6 +62,8 @@ def _draw_head(
     role_style: RoleStyleQuery | None,
 ) -> None:
     """条目头：split 用左右两段（右侧右对齐）；stacked / meta_first 用上下两行。"""
+    if draw_field_head(pdf, entry, base=base, role_style=role_style, section_key=section_key):
+        return
     head = entry.head
     title_style = _role_style(role_style, "entry_title", entry.id)
     meta_style = _role_style(role_style, "meta", entry.id)
@@ -202,8 +99,6 @@ def _draw_head(
         pdf.set_font(FONT_FAMILY, "B" if bold else "", size_px * _PX_TO_PT)
         pdf.set_text_color(*_color(style, fallback))
         pdf.set_x(pdf.frame_left)
-        from .style_blocks import _wrapmode_args
-
         pdf.multi_cell(
             pdf.frame_width,
             pdf.line_advance(size_px),
@@ -211,7 +106,6 @@ def _draw_head(
             align="L",
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
-            **_wrapmode_args(pdf, text, pdf.frame_width, size_px * _PX_TO_PT),
         )
 
     bold_title = (
@@ -260,17 +154,20 @@ def _draw_cell_rows(
     columns = layout.columns or 1
     gap_ratio = layout.gap if layout.gap is not None else default_cell_gap(align)
     gap_mm = pdf.layout.gap_mm(gap_ratio)
-    texts = [
-        [inline_text(cell.segments) for cell in row if inline_text(cell.segments)] for row in rows
-    ]
+    cells = [[cell for cell in row if inline_text(cell.segments)] for row in rows]
+    cells = [row for row in cells if row]
+    texts = [[inline_text(cell.segments) for cell in row] for row in cells]
     texts = [row for row in texts if row]
     if not texts:
         return
     if align == "flow":
         # flow 的 HTML 是"一行一个 .sub"，每行各自带上下 margin，所以逐行都加段距才对
-        #（问题 17 的组语义只适用于 equal 的一个网格容器）。
-        for row in texts:
-            pdf.meta_line("".join(row), base, style=style)
+        # （问题 17 的组语义只适用于 equal 的一个网格容器）。
+        for row, planned in zip(texts, cells, strict=True):
+            if not draw_field_flow(
+                pdf, planned, base=base, role_style=role_style, entry_id=entry_id
+            ):
+                pdf.meta_line("".join(row), base, style=style)
         return
     set_meta_font(pdf, base, style)
     # 逐列宽度 / 逐间隔（任务 13）：与 HTML 同一份判据，长度对不上就整体作废。
@@ -283,11 +180,43 @@ def _draw_cell_rows(
     for position, row in enumerate(texts):
         first = position == 0
         last = position == last_index
+        if draw_label_row(
+            pdf,
+            cells[position],
+            widths,
+            gap_arg,
+            base=base,
+            role_style=role_style,
+            entry_id=entry_id,
+            first=first,
+            last=last,
+        ):
+            continue
+        field_styles = [
+            _role_style(role_style, "meta", cell.segments[0].path)
+            if cell.segments and is_field_path(cell.segments[0].path)
+            else style
+            for cell in cells[position]
+        ]
+        changed = any(candidate != style for candidate in field_styles)
         if len(row) <= 1:
-            pdf.meta_line(row[0], base, style=style, first=first, last=last)
+            current = field_styles[0] if changed else style
+            if changed and current and current.space_before is not None:
+                pdf.ln(pdf.layout.gap_mm(float(current.space_before)))
+            pdf.meta_line(row[0], base, style=current, first=first, last=last)
+            if changed and current and current.space_after is not None:
+                pdf.ln(pdf.layout.gap_mm(float(current.space_after)))
         else:
             draw_meta_columns(
-                pdf, row, widths, gap_arg, base, style=style, first=first, last=last
+                pdf,
+                row,
+                widths,
+                gap_arg,
+                base,
+                style=style,
+                first=first,
+                last=last,
+                field_styles=field_styles if changed else None,
             )
 
 
@@ -318,6 +247,7 @@ def _draw_entry(
         section=section_key,
         object_id=entry.id,
         split_ok=split_ok,
+        role_style=role_style,
     )
     _draw_cell_rows(
         pdf,
@@ -429,6 +359,7 @@ def _draw_section(
             style=_role_style(role_style, "body"),
             section=section.key,
             object_id=section.entries[0].id,
+            role_style=role_style,
         )
         return True
     if not section.entries:

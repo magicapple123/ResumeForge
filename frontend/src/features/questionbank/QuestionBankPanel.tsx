@@ -13,9 +13,9 @@ import {
   SaveOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Alert, App, Button, Card, Empty, Select, Space, Tag, Typography } from "antd";
+import { Alert, App, Breadcrumb, Button, Card, Empty, Flex, Space, Tag, Typography } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   deleteQuestionBank,
   generateQuestionBank,
@@ -27,16 +27,21 @@ import AbortButton from "../../components/common/AbortButton";
 import { errorText, useAbortableRequest } from "../../hooks/useAbortableRequest";
 import { useApi } from "../../hooks/useApi";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
-import { useJobSearchSelect, useResumeSearchSelect } from "../../hooks/remoteSearchOptions";
 import type { QuestionBankOut, QuestionBankRecord } from "../../types";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { formatServerTime } from "../../utils/serverTime";
 import QuestionGroupCards from "./QuestionGroupCards";
 import BankHistoryCard from "./BankHistoryCard";
+import QuestionBankMaterialBar from "./QuestionBankMaterialBar";
+import { useQuestionBankHistoryView } from "./useQuestionBankHistoryView";
+import {
+  useQuestionBankMaterials,
+  type QuestionBankInterviewContext,
+} from "./useQuestionBankMaterials";
 
 interface Props {
-  onStartSession?: (questions: string[]) => void;
+  onStartSession?: (questions: string[], context?: QuestionBankInterviewContext) => void;
   /** 历史记录富还原：传入一条已保存的题库记录后，用完全相同的渲染路径展示并允许"参考答案"回写。 */
   record?: QuestionBankRecord | null;
   /** 点击历史条目里的「查看详情」时回调，由父组件接管选中。 */
@@ -54,18 +59,13 @@ export default function QuestionBankPanel({
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
   useLocale();
   const { message, modal } = App.useApp();
-  // 岗位 / 简历下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
-  const jobSelect = useJobSearchSelect();
-  const resumeSelect = useResumeSearchSelect();
-  // 下拉常驻可见：挂载时预拉第一页候选，输入关键词再搜（与旧首屏体验对齐）。
-  useEffect(() => {
-    void jobSelect.reload();
-    void resumeSelect.reload();
-    // hook 的回调引用稳定，只在挂载时执行一次。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const [jobId, setJobId] = useState<number | undefined>();
-  const [resumeId, setResumeId] = useState<number | undefined>();
+  const materials = useQuestionBankMaterials();
+  const { historyRef, openRecord, closeRecord } = useQuestionBankHistoryView(
+    record,
+    onOpenRecord,
+    onCloseRecord,
+  );
+  const [generatedContext, setGeneratedContext] = useState<QuestionBankInterviewContext>({});
   // 生成题库是一次「点一下等十几秒」的请求：用统一的中止能力，面板上就有「停止」。
   const generateRequest = useAbortableRequest();
   const loading = generateRequest.loading;
@@ -83,6 +83,7 @@ export default function QuestionBankPanel({
         job_title: record.job_title,
         company: record.company,
         resume_id: record.resume_id,
+        resume_title: record.resume_title,
         groups: record.groups as QuestionBankOut["groups"],
         llm_used: true,
         notes: [],
@@ -104,17 +105,19 @@ export default function QuestionBankPanel({
 
   const generate = async () => {
     if (generateRequest.loading) return;
-    if (!record && !jobId && !resumeId) {
+    if (!record && !materials.hasTarget) {
       setError(t("questionBankPanel.validate.needJobOrResume"));
       setData(null);
       return;
     }
     setError("");
+    const context = materials.context;
     const outcome = await generateRequest.run((signal) =>
-      generateQuestionBank({ job_id: jobId ?? null, resume_id: resumeId ?? null }, signal),
+      generateQuestionBank(materials.payload, signal),
     );
     if (outcome.status === "ok") {
       setData(outcome.data);
+      setGeneratedContext(context);
       // 生成完成自动保存为历史（无需用户手点保存）。
       await autoSaveBank(outcome.data);
     } else if (outcome.status === "error") {
@@ -128,7 +131,7 @@ export default function QuestionBankPanel({
     setSaving(true);
     try {
       const resumeTitle =
-        resumeSelect.options.find((option) => option.value === result.resume_id)?.label ?? "";
+        result.resume_title ?? materials.resumeSelect.labelFor(materials.resumeValue) ?? "";
       const created = await saveQuestionBank({
         job_id: result.job_id ?? null,
         job_title: result.job_title,
@@ -157,7 +160,7 @@ export default function QuestionBankPanel({
   const startSession = () => {
     if (!data || !onStartSession) return;
     const questions = data.groups.flatMap((group) => group.questions.map((item) => item.question));
-    onStartSession(questions);
+    onStartSession(questions, generatedContext);
   };
 
   const batch = useBatchSelection<number>();
@@ -211,8 +214,8 @@ export default function QuestionBankPanel({
   const answers = useQuestionBankAnswers({
     groups: viewData?.groups ?? null,
     targetId: record?.id ?? savedRecordId,
-    jobId: record?.job_id ?? jobId ?? null,
-    resumeId: record?.resume_id ?? resumeId ?? null,
+    jobId: record ? record.job_id : data ? data.job_id : (materials.payload.job_id ?? null),
+    resumeId: record ? record.resume_id : data ? data.resume_id : (materials.resumeId ?? null),
     writeBackFailedText: t("questionBankPanel.error.answerWriteBack"),
     generateFailedText: t("questionBankPanel.error.answer"),
     reviewFailedText: t("questionBankPanel.error.reviewAnswer"),
@@ -226,42 +229,30 @@ export default function QuestionBankPanel({
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       {record && (
-        <Alert
-          type="info"
-          showIcon
-          title={t("questionBankPanel.history.viewingTitle", {
-            id: record.id,
-            time: formatServerTime(record.created_at),
-          })}
-          action={
-            onCloseRecord && (
-              <Button size="small" onClick={onCloseRecord}>
-                {t("common.action.back")}
-              </Button>
-            )
-          }
-        />
+        <Flex justify="space-between" align="center" gap={12} wrap>
+          <Space orientation="vertical" size={4}>
+            <Breadcrumb
+              items={[
+                { title: t("interview.tab.questionBank") },
+                { title: t("questionBankPanel.history.breadcrumb", { id: record.id }) },
+              ]}
+            />
+            <Typography.Text type="secondary">
+              {formatServerTime(record.created_at)}
+            </Typography.Text>
+          </Space>
+          {closeRecord && (
+            <Button size="small" onClick={closeRecord}>
+              {t("questionBankPanel.history.back")}
+            </Button>
+          )}
+        </Flex>
       )}
 
       {!record && (
         <Card size="small" title={t("questionBankPanel.page.title")}>
+          <QuestionBankMaterialBar materials={materials} disabled={loading} />
           <Space wrap>
-            <Select
-              allowClear
-              style={{ minWidth: 240 }}
-              placeholder={t("questionBankPanel.select.jobPlaceholder")}
-              value={jobId}
-              onChange={setJobId}
-              {...jobSelect.selectProps}
-            />
-            <Select
-              allowClear
-              style={{ minWidth: 240 }}
-              placeholder={t("questionBankPanel.select.resumePlaceholder")}
-              value={resumeId}
-              onChange={setResumeId}
-              {...resumeSelect.selectProps}
-            />
             <Button
               type="primary"
               icon={<ThunderboltOutlined />}
@@ -276,7 +267,7 @@ export default function QuestionBankPanel({
               <>
                 <Button
                   icon={<PlayCircleOutlined />}
-                  disabled={total === 0}
+                  disabled={total === 0 || undefined}
                   onClick={() => void startSession()}
                 >
                   {t("questionBankPanel.action.startSession")}
@@ -324,6 +315,12 @@ export default function QuestionBankPanel({
           ))}
           {answers.answerError && <Alert type="error" showIcon title={answers.answerError} />}
           <Space wrap>
+            {viewData.job_title && (
+              <Tag>{t("questionBankPanel.summary.job", { name: viewData.job_title })}</Tag>
+            )}
+            {viewData.resume_title && (
+              <Tag>{t("questionBankPanel.summary.resume", { name: viewData.resume_title })}</Tag>
+            )}
             <Typography.Text strong>
               {t("questionBankPanel.summary.total", { count: total })}
             </Typography.Text>
@@ -359,13 +356,20 @@ export default function QuestionBankPanel({
         </>
       )}
 
-      <BankHistoryCard
-        banks={banks}
-        batch={batch}
-        onOpenRecord={onOpenRecord}
-        onRemoveBank={removeBank}
-        removeSelected={removeSelected}
-      />
+      <div
+        key="history"
+        ref={historyRef}
+        hidden={Boolean(record)}
+        data-testid="question-bank-history"
+      >
+        <BankHistoryCard
+          banks={banks}
+          batch={batch}
+          onOpenRecord={openRecord}
+          onRemoveBank={removeBank}
+          removeSelected={removeSelected}
+        />
+      </div>
     </Space>
   );
 }

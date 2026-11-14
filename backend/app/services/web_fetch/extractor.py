@@ -29,10 +29,13 @@ from .field_rules import (
     infer_status,
     split_jd_sections,
 )
+from .page_intent import classify_page_intent, navigation_only, page_heading
+from .platform_adapters import platform_detail_fields
 from .row import ExtractedRow
 
 #: 列表页一次最多接受多少条（16E 硬上限 200）。
 MAX_ROWS = 200
+NAVIGATION_ONLY_WARNING = "页面仅识别到导航链接，未找到岗位信息；可按单条详情重新抓取"
 #: 详情页正文短于此长度时，本地规则不敢当 JD，交给模型兜底（或如实留空）。
 MIN_DETAIL_CHARS = 200
 #: 详情页正文里的「正文结束」标记：命中后不再往下读（相关推荐/页脚噪声）。
@@ -50,6 +53,10 @@ _DETAIL_STOP_MARKERS = (
     "举报该职位",
     "公司信息",
     "工商信息",
+    "注册协议",
+    "隐私协议",
+    "Copyright ©",
+    "ICP备",
 )
 _LABELED_FIELDS = {
     "company": r"(?:公司名称|公司全称|企业名称|公司)\s*[:：]\s*([^\n]{1,64})",
@@ -127,10 +134,28 @@ def _build_row(raw: dict[str, Any], *, page: Any) -> ExtractedRow | None:
     return row
 
 
-def _title_from_page(page: Any) -> str:
+def _title_from_page(page: Any, *, fallback: str = "") -> str:
     """详情页兜底标题：优先页面第一行像岗位名的文本，其次 URL 末段。"""
+    heading = page_heading(page)
+    if heading:
+        return heading
     text = _page_text(page)
-    for line in split_lines(text)[:8]:
+    lines = split_lines(text)
+    for index, line in enumerate(lines[:40]):
+        labeled = re.match(r"(?:职位名称|岗位名称)\s*[:：]\s*(.+)", line)
+        if labeled:
+            return labeled.group(1).strip()[:128]
+        if index and _LABELED_RE["location"].match(line):
+            candidate = lines[index - 1].strip()
+            if (
+                2 <= len(candidate) <= 128
+                and not re.search(r"[:：]", candidate)
+                and candidate not in {"职位列表", "岗位列表", "职位详情", "岗位详情"}
+            ):
+                return candidate
+    if fallback:
+        return fallback
+    for line in lines[:8]:
         candidate = line.strip()
         if 2 <= len(candidate) <= 128 and not re.search(r"[:：]$", candidate):
             return candidate
@@ -152,6 +177,9 @@ def extract_rules_result(page: Any, *, limit: int = MAX_ROWS) -> ExtractionResul
     result = ExtractionResult()
     capped_limit = max(1, min(int(limit or MAX_ROWS), MAX_ROWS))
     raw_rows = extract_rules(page)
+    if navigation_only(raw_rows):
+        result.warnings.append(NAVIGATION_ONLY_WARNING)
+        return result
     if raw_rows:
         result.method = "rules"
     rows: list[ExtractedRow] = []
@@ -172,7 +200,7 @@ async def extract_rows(
     page: Any,
     *,
     provider: Any = None,
-    intent: str = "job_list",
+    intent: str = "auto",
     limit: int = MAX_ROWS,
 ) -> ExtractionResult:
     """抽取一页岗位；intent 决定按列表还是单条详情处理。"""
@@ -181,14 +209,19 @@ async def extract_rows(
     raw_rows = extract_rules(page)
     if raw_rows:
         result.method = "rules"
+    effective_intent = classify_page_intent(page) if intent == "auto" else intent
+    if effective_intent == "job_detail":
+        return await _extract_single_detail(page, raw_rows, provider=provider, result=result)
+    if navigation_only(raw_rows):
+        result.method = "none"
+        result.warnings.append(NAVIGATION_ONLY_WARNING)
+        return result
     if not raw_rows and provider is not None:
         try:
             raw_rows = await model_extract_list(provider, page)
             result.method = "model"
         except WebExtractError as exc:
             result.warnings.append(str(exc))
-    if intent == "job_detail":
-        return await _extract_single_detail(page, raw_rows, provider=provider, result=result)
     rows: list[ExtractedRow] = []
     for raw in raw_rows[:capped_limit]:
         row = _build_row(raw, page=page)
@@ -210,7 +243,13 @@ async def _extract_single_detail(
 ) -> ExtractionResult:
     """单条详情页：规则行优先，否则用页面自身构造一条（标题 + 页面 URL）。"""
     base: ExtractedRow | None = None
-    for raw in raw_rows[:1]:
+    page_url = _page_url(page)
+    candidates = [
+        raw
+        for raw in raw_rows
+        if str(raw.get("detail_url") or (raw.get("data") or {}).get("source_url") or "") == page_url
+    ]
+    for raw in candidates[:1]:
         base = _build_row(raw, page=page)
         if base is not None:
             break
@@ -225,6 +264,8 @@ async def _extract_single_detail(
             require_detail=False,
         )
         result.method = result.method if raw_rows else "none"
+    # A same-URL anchor can still be a navigation label; structural title evidence wins.
+    base.data["title"] = _title_from_page(page, fallback=base.title)
     detail = await extract_detail(page, provider=provider)
     base.apply_detail(
         detail.fields,
@@ -237,6 +278,8 @@ async def _extract_single_detail(
     if detail.fields.get("status"):
         base.field_states["status"] = FILLED
     result.rows = [base]
+    if result.method == "none" and detail.fields.get("description"):
+        result.method = "rules"
     result.warnings.extend(detail.warnings)
     return result
 
@@ -247,6 +290,8 @@ class DetailResult:
     evidence: dict[str, str] = field(default_factory=dict)
     jd_split: bool = False
     warnings: list[str] = field(default_factory=list)
+    #: 平台适配器认出来的 ATS 名（R-15 B：greenhouse / lever / workday）；空串 = 通用路径。
+    platform: str = ""
 
 
 def trim_detail_text(text: str) -> str:
@@ -303,6 +348,16 @@ async def extract_detail(page: Any, *, provider: Any = None) -> DetailResult:
     """抽一条详情：本地规则优先；正文太短/没有小标题且配了模型时用模型兜底。"""
     text = _page_text(page)
     local, has_heading = _local_detail(text)
+    # R-15 B：平台详情页优先用平台容器取正文（通用规则会把导航/相似岗位混进来）。
+    platform, platform_fields = platform_detail_fields(
+        getattr(page, "url", ""), getattr(page, "html", "")
+    )
+    if platform_fields.get("description"):
+        merged = {**local.fields, **platform_fields}
+        local.fields = merged
+        local.platform = platform
+        local.evidence["description"] = "平台适配器"
+        return local
     needs_model = provider is not None and (
         len(str(local.fields.get("description", ""))) < MIN_DETAIL_CHARS and not has_heading
     )

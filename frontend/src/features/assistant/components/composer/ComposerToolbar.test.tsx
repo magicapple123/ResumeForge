@@ -204,7 +204,8 @@ describe("上下文用量 chip", () => {
     const { unmount } = renderToolbar({ contextUsage: USAGE });
     const chip = screen.getByRole("button", { name: t("contextUsage.aria.chip") });
     expect(chip.textContent).toContain("26%");
-    expect(chip.textContent).toContain(t("contextUsage.chip"));
+    // R-25：环形进度取代了文字标签，chip 文案里不该再出现「上下文」三个字。
+    expect(chip.textContent).not.toContain(t("contextUsage.chip"));
     unmount();
 
     renderToolbar();

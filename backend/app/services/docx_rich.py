@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from .resume.resume_inline_style import hex_to_rgb
 from .resume.resume_rich_text import parse_rich_runs
 
 # _set_run_font(run, *, size_pt, bold=False, italic=False, color=None) 这类可调用对象的统一形状。
@@ -53,10 +54,18 @@ def add_rich_runs(
         # 链接：可见文本 = label (URL)，与 PDF 的近似口径一致（不可点击但信息不丢）。
         body = span.readable(with_link=True) if span.link else span.text
         run = paragraph.add_run(body)
+        # R-11：行内字号是**相对系数**，乘在本段已有的 size_pt 上；颜色只在设过时覆盖。
+        run_font = dict(font_kwargs)
+        if span.size and isinstance(run_font.get("size_pt"), (int, float)):
+            run_font["size_pt"] = float(run_font["size_pt"]) * span.size
+        if span.color:
+            rgb = hex_to_rgb(span.color)
+            if rgb is not None:
+                run_font["color"] = rgb
         set_font(
             run,
             bold=bold or span.bold,
-            **font_kwargs,
+            **run_font,
         )
 
 

@@ -100,12 +100,15 @@ async def upload_external_resume(
 @router.get("", response_model=ExternalResumeListOut)
 def list_external_resumes(
     keyword: str = Query(default=""),
+    job_id: int | None = Query(default=None, ge=1),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=_MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
 ):
-    """按创建时间倒序列出未删除的外部简历（支持名称关键词）。"""
-    rows, total = service.list_external_resumes(db, keyword=keyword, page=page, page_size=page_size)
+    """List live snapshots by name, live job title/company, and optional job."""
+    rows, total = service.list_external_resumes(
+        db, keyword=keyword, job_id=job_id, page=page, page_size=page_size
+    )
     titles = service.job_titles(db, [row.job_id for row in rows if row.job_id is not None])
     mimes = service.user_file_mimes(db, [row.file_id for row in rows])
     items = [

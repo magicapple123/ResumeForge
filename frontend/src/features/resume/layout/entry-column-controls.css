@@ -1,0 +1,90 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+.rf-entry-column-split {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rf-entry-column-split-track {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 38px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-sm, 4px);
+}
+
+.rf-entry-column-split-cell {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  overflow: hidden;
+  background: var(--rf-fill-secondary);
+  color: var(--rf-text-body);
+  font-size: var(--rf-font-size-xs, 12px);
+}
+
+.rf-entry-column-split-cell.is-alt {
+  background: var(--rf-fill-quaternary);
+}
+
+.rf-entry-column-split-divider {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  margin-left: -8px;
+  touch-action: none;
+  cursor: col-resize;
+}
+
+.rf-entry-column-split-divider::before {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 7px;
+  width: 2px;
+  background: var(--rf-border-strong);
+  content: "";
+}
+
+.rf-entry-column-split-divider:hover::before,
+.rf-entry-column-split-divider:focus-visible::before,
+.rf-entry-column-split-track.is-dragging .rf-entry-column-split-divider::before {
+  background: var(--rf-focus-visible);
+}
+
+.rf-entry-column-split-divider:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: -2px;
+}
+
+.rf-entry-column-gap-row {
+  display: grid;
+  grid-template-columns: minmax(60px, 1fr) 66px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.rf-entry-column-gap-value {
+  color: var(--rf-text-tertiary);
+  font-size: var(--rf-font-size-xs, 12px);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rf-entry-column-gap-warning {
+  margin-top: 4px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--rf-warning-bg);
+  color: var(--rf-warning-text);
+  font-size: var(--rf-font-size-xs, 12px);
+  line-height: 18px;
+}

@@ -136,13 +136,10 @@ _EXEMPTIONS: dict[str, Exemption] = {
         "页面组合层（编排职责单一）", _STRUCTURED_BACKSTOP
     ),
     # 2026-10-12 AI 提速批接入共享连接池（client_pool）后各 +9 行（511/512 vs 500）。
-    # 两文件是协议编排热点：monkeypatch 落点密集（payload/_build_payload/_client/
+    # Anthropic 是协议编排热点：monkeypatch 落点密集（payload/_build_payload/_client/
     # 模块级 retry 等），拆出"HTTP 调用层"会把重试/降级/用量接线的上下文切成两半。
     # 触发条件：>600 行或下次功能改动时先把传输层（_client/_timeout/_headers/_endpoint）
     # 迁入独立模块（届时本豁免撤销）。
-    "backend/app/services/llm/openai_compat.py": Exemption(
-        "过线 12 行，协议编排热点 + patch 落点密集", _STRUCTURED_BACKSTOP
-    ),
     "backend/app/services/llm/anthropic.py": Exemption(
         "过线 11 行，协议编排热点 + patch 落点密集", _STRUCTURED_BACKSTOP
     ),

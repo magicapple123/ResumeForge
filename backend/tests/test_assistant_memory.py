@@ -193,9 +193,20 @@ def test_api_create_list_edit_delete_and_never_use(client):
     assert edited.json()["value"] == "杭州、上海"
     assert edited.json()["confidence"] == 0.9
 
+    # F33：永不使用 = 停用（suppressed），条目仍留在列表里，可恢复；不是删除。
     never_used = client.post(f"/api/assistant/memories/{body['id']}/never-use")
     assert never_used.status_code == 200
-    assert never_used.json()["status"] == "deleted"
+    assert never_used.json()["status"] == "suppressed"
+    listed = client.get("/api/assistant/memories").json()
+    assert [item["id"] for item in listed] == [body["id"]]
+    assert listed[0]["status"] == "suppressed"
+
+    restored = client.post(f"/api/assistant/memories/{body['id']}/restore")
+    assert restored.status_code == 200
+    assert restored.json()["status"] == "active"
+
+    # 删除才是从列表消失（仍可回溯，不再注入）。
+    assert client.delete(f"/api/assistant/memories/{body['id']}").status_code == 204
     assert client.get("/api/assistant/memories").json() == []
 
 
@@ -297,3 +308,63 @@ def test_should_schedule_blocks_when_a_task_is_already_running(db_session):
 def test_memory_extract_handler_is_registered():
     """#31A 接 ai_task 执行器：kind 必须已登记（否则 API 层会 400）。"""
     assert AI_TASK_KIND_ASSISTANT_MEMORY in registered_ai_task_kinds()
+
+
+def test_suppressed_is_not_reinjected_and_blocks_reextraction(db_session):
+    """F33 最关键的一条：停用后不再注入，且同一事实不会被再次抽取出来。"""
+    created = memory.create_memory(db_session, kind="city", value="杭州", source="manual")
+    memory.suppress_memory(db_session, created)
+
+    assert memory.active_memories(db_session) == []
+    # 抽取器再看到同一句「我只考虑杭州」：必须当 NOOP，而不是把停用条目又变回生效。
+    counts = memory.apply_operations(
+        db_session,
+        [{"op": "ADD", "kind": "city", "value": "杭州", "confidence": 0.9}],
+    )
+    assert counts["add"] == 0
+    assert counts["noop"] == 1
+    db_session.refresh(created)
+    assert created.status == "suppressed"
+
+    memory.restore_memory(db_session, created)
+    assert [item.value for item in memory.active_memories(db_session)] == ["杭州"]
+
+
+def test_memory_history_records_each_action_in_reverse_order(client):
+    """历史按时间倒序：create → update → suppress → restore。"""
+    created = client.post("/api/assistant/memories", json={"kind": "city", "value": "杭州"}).json()
+    mid = created["id"]
+    client.patch(f"/api/assistant/memories/{mid}", json={"value": "杭州、上海"})
+    client.post(f"/api/assistant/memories/{mid}/never-use")
+    client.post(f"/api/assistant/memories/{mid}/restore")
+
+    history = client.get(f"/api/assistant/memories/{mid}/history")
+    assert history.status_code == 200, history.text
+    actions = [item["action"] for item in history.json()]
+    assert actions == ["restore", "suppress", "update", "create"]
+    update = history.json()[2]
+    assert update["before"] == "杭州"
+    assert update["after"] == "杭州、上海"
+
+
+def test_source_excerpt_is_returned_for_extracted_memory(client, db_session):
+    """来源摘录：让人看见"这句话是从哪儿学来的"，最多 60 字。"""
+    conversation = _conversation(db_session)
+    message = _message(
+        db_session,
+        conversation,
+        "user",
+        "我只考虑杭州的机会，最好离地铁近一点，通勤别超过四十分钟，谢谢。",
+    )
+    record = memory.create_memory(
+        db_session,
+        kind="city",
+        value="杭州",
+        source="extracted",
+        conversation_id=conversation.id,
+        message_id=message.id,
+    )
+    listed = client.get("/api/assistant/memories").json()
+    row = next(item for item in listed if item["id"] == record.id)
+    assert row["source_excerpt"].startswith("我只考虑杭州")
+    assert len(row["source_excerpt"]) <= 60

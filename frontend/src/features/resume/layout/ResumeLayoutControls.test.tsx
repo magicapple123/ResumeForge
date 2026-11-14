@@ -207,10 +207,11 @@ describe("生成配置页 · 分边页边距只在制作台出现（P0-6）", ()
     // 分边控件（折叠标题 + 四条支路）整块不出现。
     expect(document.querySelector(".resume-margin-sides")).toBeNull();
 
-    // 五个度量行：行距 / 页边距 / 字号 / 字体 / 照片。分边若被渲染出来会是第 6 个直接子项。
+    // 六个度量行：行距 / 页边距 / 字号 / 字体 / 照片缩放 / 照片框（F21 把照片拆成两行：
+    // 缩放与"边框 + 位置"分开，前者影响纸面排版、后者只改照片本身）。分边若被渲染出来会是第 7 个。
     const grid = document.querySelector(".resume-measure-grid");
     expect(grid).not.toBeNull();
-    expect(grid!.children).toHaveLength(5);
+    expect(grid!.children).toHaveLength(6);
 
     // 能力没被删掉：总页边距滑杆仍在（读屏名来自 i18n，不写死中文）。
     // 无障碍名取 `resume.pagePadding.label`：rc-slider 用的是 `ariaLabelForHandle`，

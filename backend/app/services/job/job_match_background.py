@@ -92,7 +92,12 @@ def list_active_job_match_background_tasks(db: Session) -> list[JobMatchBackgrou
 
 
 def create_job_match_background_task(
-    db: Session, job_ids: list[int], *, force: bool, mode: str = "match"
+    db: Session,
+    job_ids: list[int],
+    *,
+    force: bool,
+    mode: str = "match",
+    resume_id: int | None = None,
 ) -> JobMatchBackgroundTask:
     current = _read_task(db)
     if current is not None and current.status in ACTIVE_JOB_MATCH_BACKGROUND_STATUSES:
@@ -103,6 +108,7 @@ def create_job_match_background_task(
         status="pending",
         job_ids=job_ids,
         force=force,
+        resume_id=resume_id,
         mode="compare" if mode == "compare" else "match",
         requested_count=len(job_ids),
         created_at=now,
@@ -335,7 +341,10 @@ class JobMatchBackgroundRunner:
             if any(job_id not in found for job_id in task.job_ids):
                 raise ValueError("部分岗位已不存在或已被删除，请刷新岗位列表后重试")
             inputs = build_batch_inputs(
-                db, [found[job_id] for job_id in task.job_ids], force=task.force
+                db,
+                [found[job_id] for job_id in task.job_ids],
+                force=task.force,
+                resume_id=task.resume_id,
             )
             config = get_llm_config(db)
             _write_task(

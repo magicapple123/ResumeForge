@@ -431,12 +431,12 @@ class AssistantRelaxedModeSetting(BaseModel):
 
 
 class AssistantOrbSetting(BaseModel):
-    """「投投」悬浮球的用户设置（入口默认开，提示标语默认弹）。"""
+    """「投投」悬浮球的用户设置（入口默认开，提示标语与划词浮条默认也开）。"""
 
     enabled: bool = True
-    # 是否弹出悬浮球的轮换提示标语。**默认开以兼容老数据**：存量库存的是裸 bool，读回时
-    # 会被补成 `tips_enabled=True`，老用户的体验与升级前一致。
+    # 两个子开关都默认开以兼容老数据：存量裸 bool（与缺该字段的旧对象）读回时补 True。
     tips_enabled: bool = True
+    selection_enabled: bool = True  # 选中文字后浮出动作条（Q9）。
 
 
 class AutoBackupIntervalSetting(BaseModel):

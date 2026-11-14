@@ -54,6 +54,11 @@ export function batchDeleteClaims(claimIds: number[]): Promise<{ deleted: number
   });
 }
 
+/** 台账里已有的「可用范围」取值（去重排序、排除回收站），表单用它做候选。 */
+export function listAllowedUses(): Promise<string[]> {
+  return request("/claims/allowed-uses");
+}
+
 /** 当前可用于生成的事实基线（已确认事实 + 必须避开的未确认说法）。 */
 export function getClaimBaseline(): Promise<ClaimDigest> {
   return request("/claims/baseline");

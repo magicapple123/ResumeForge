@@ -59,6 +59,7 @@ import {
 } from "./styleOverrides";
 import StyleValueRow from "./StyleValueRow";
 import { useLocale } from "../../../i18n/i18nContext";
+import type { ResumeRoleKey } from "./styleCatalog";
 
 interface Props {
   layout: ResumeLayout;
@@ -73,6 +74,7 @@ interface Props {
   pickedPath?: string | null;
   /** 宿主从纸面路径推出的默认范围（`scopeForDocumentPath`）；缺省 = 整条。 */
   defaultScope?: EntryStyleScope;
+  fieldRole?: ResumeRoleKey;
   /** #7：右键浮层里锁定范围——不提供范围切换（浮层只改右键命中那一块）。 */
   lockScope?: boolean;
   disabled?: boolean;
@@ -90,6 +92,7 @@ export default function ObjectStylePanel({
   entry = null,
   pickedPath = null,
   defaultScope = "object",
+  fieldRole = "body",
   lockScope = false,
   disabled = false,
   previewRef,
@@ -110,7 +113,7 @@ export default function ObjectStylePanel({
   }
 
   const scope = manual && manual.path === pickedPath ? manual.scope : defaultScope;
-  const scopeRole = entryStyleScopeRole(scope);
+  const scopeRole = entryStyleScopeRole(scope, fieldRole);
   // 整条范围沿用"按正文继承"的既有读法（四出口的 effective(role, object_id) 同口径）。
   const role = scopeRole ?? "body";
   const config = layout.format_config;
@@ -129,7 +132,7 @@ export default function ObjectStylePanel({
   const known = entry !== null;
   const availability = entryStyleAvailability(entry);
 
-  const rows = entryStyleScopeProps(scope).filter((prop) => {
+  const rows = entryStyleScopeProps(scope, fieldRole).filter((prop) => {
     if (prop !== "meta_align") return true;
     // Q12：无日期/元信息字段 → 不显示「日期位置」。
     return !known || availability.hasMeta;
@@ -174,7 +177,7 @@ export default function ObjectStylePanel({
             <Segmented
               size="small"
               value={scope}
-              disabled={disabled}
+              disabled={disabled || undefined}
               aria-label={t("typography.entryStyle.scope.aria")}
               options={ENTRY_STYLE_SCOPES.map((value) => ({
                 value,
@@ -206,7 +209,7 @@ export default function ObjectStylePanel({
               })}
               own={ownStyle[prop]}
               source={styleSourceOf(config, { role, prop, objectId })}
-              disabled={disabled || bulletUnavailable}
+              disabled={disabled || bulletUnavailable || undefined}
               basePx={basePx}
               toProbeCss={(value) =>
                 styleProbeCss(scopeRole ? { objectId, role: scopeRole } : { objectId }, {
@@ -225,9 +228,9 @@ export default function ObjectStylePanel({
       {known && scope === "body" && !availability.hasBullets ? (
         <Typography.Text type="secondary">{t("typography.entryStyle.noBullets")}</Typography.Text>
       ) : null}
-      {/* 字号 / 加粗 / 段前 / 段后为什么不在这一区：级别已经管住它们，再列一遍会互相
-          覆盖。把去处写出来，用户不会以为功能被删。 */}
-      <Typography.Text type="secondary">{t("typography.object.levelHint")}</Typography.Text>
+      {scope !== "field" ? (
+        <Typography.Text type="secondary">{t("typography.object.levelHint")}</Typography.Text>
+      ) : null}
       <Space size={8} wrap>
         <Tag
           color={ownCount > 0 ? "blue" : undefined}
@@ -245,7 +248,7 @@ export default function ObjectStylePanel({
             <Button
               size="small"
               icon={<BgColorsOutlined />}
-              disabled={disabled}
+              disabled={disabled || undefined}
               aria-label={t("typography.painter.freeze")}
               onClick={() => {
                 applyProbe("");

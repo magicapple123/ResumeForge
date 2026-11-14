@@ -1,0 +1,164 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 设置页外壳：左侧九组竖向导航 + 右侧内容区（F38，2026-11）。
+   原先是一条横排的 antd Tabs；九组之后一行放不下，改成"目录式"浏览。
+
+   两档形态：
+   - 宽档（容器 > 900px）：左 180px 导航常驻，搜索框压在导航上方；
+   - 窄档（容器 ≤ 900px）：导航换成一个 Select、叠在内容之上，右侧单列。
+   断点挂在 `.settings-page` 的容器查询上，不是视口宽度——设置页在侧栏折叠、
+   任务条展开时可用宽度会变，用视口判断会在这些中间态错档。 */
+
+.settings-page {
+  /* 容器查询的锚点：容器查询只认最近的容器祖先的 inline-size。 */
+  container-type: inline-size;
+}
+
+.settings-shell {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+/* 导航常驻：滚动容器是 `.app-content`（base-shell.css 的 P1-2 两层高度链），
+   侧栏在它里面吸顶，往下翻卡片时仍能看见当前分组与搜索框。 */
+.settings-sidebar {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.settings-search {
+  width: 100%;
+}
+
+/* 设置项搜索是常驻可输入的框，不属于"未点编辑前不显示占位符"的只读表单；
+   form-state.css 里 `.settings-page:not(.is-editing)` 的隐藏规则会一并命中它，
+   这里把占位符恢复成三级文字色。 */
+/* antd-override: 只覆盖 antd 占位符的可见性，无对应 token */
+.settings-page .settings-search .ant-select-placeholder {
+  color: var(--rf-text-tertiary) !important;
+  opacity: 1 !important;
+}
+
+/* 导航本体：三档分组标题 + 九项，没有边框和底色——它是一份"目录"，不该和右侧的
+   卡片抢视觉重量。当前项靠浅品牌底 + 加粗标识，与选中页签的观感一致。 */
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-nav-group-title {
+  margin-bottom: 2px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--rf-text-tertiary);
+}
+
+.settings-nav-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--rf-text-body);
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.settings-nav-item:hover {
+  background: var(--rf-fill-secondary);
+}
+
+.settings-nav-item[aria-current="page"] {
+  font-weight: 600;
+  color: var(--rf-brand);
+  background: var(--rf-brand-tint);
+}
+
+.settings-nav-item:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 1px;
+}
+
+/* 窄档的 Select 形态：宽档恒藏，避免出现两套同时可点的导航。 */
+.settings-nav-mobile {
+  display: none;
+}
+
+.settings-nav-mobile-select {
+  width: 100%;
+}
+
+.settings-body {
+  min-width: 0;
+  /* 切组时内容区会滚到顶部：留一点余量，分组标题不会被滚动容器上沿切掉。 */
+  scroll-margin-top: 16px;
+}
+
+/* 分组标题 + 一句说明：与原先每页顶部的说明同一位置，只是标题从页签搬到了内容区。 */
+.settings-section-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+/* 未选中的分组用 `hidden` 属性留在 DOM 里（保留各自的取数状态与未保存输入）。
+   显式写这条规则：一旦某张卡自己声明了 `display`，UA 的 `[hidden]{display:none}`
+   会被作者样式盖掉，那一组就会在下面继续显示。 */
+.settings-section[hidden] {
+  display: none;
+}
+
+/* 搜索命中后的 2 秒高亮：只描一圈边，不改盒模型（否则整页会轻微跳动）。 */
+.settings-card-target {
+  border-radius: 10px;
+  animation: settings-card-target 2s ease-out;
+}
+
+@keyframes settings-card-target {
+  from {
+    box-shadow: 0 0 0 3px var(--rf-focus-ring);
+  }
+
+  to {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+@container (max-width: 900px) {
+  .settings-shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  /* 窄档是单列：导航换成顶部一个 Select，跟着内容一起滚走。
+     吸顶会让卡片从它下面穿过（侧栏没有底色，文字会透出来叠在一起）。 */
+  .settings-sidebar {
+    position: static;
+  }
+
+  .settings-nav {
+    display: none;
+  }
+
+  .settings-nav-mobile {
+    display: block;
+  }
+}

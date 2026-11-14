@@ -38,7 +38,7 @@ DOCUMENT_TOOLS: tuple[Tool, ...] = (
         name="get_entry",
         description=(
             "按 path 读取简历里的**单条**内容（一个条目或一个字段）。path 形如 "
-            "education.<条目id>.<字段id>；也可以只用条目序号：education.1 表示教育经历第 1 条。"
+            "education.<条目id>.<字段id>；条目序号从 1 开始：education.1 表示教育经历第 1 条。"
             "返回该条目的 id/序号/条目布局、字段的当前位置与类型，以及值。"
             "用户只问某一条（例如「第二条教育经历的绩点是多少」）或改之前要先确认 id 时用它。"
         ),
@@ -48,7 +48,7 @@ DOCUMENT_TOOLS: tuple[Tool, ...] = (
                 "resume_id": {"type": "integer", "description": "简历 id"},
                 "path": {
                     "type": "string",
-                    "description": "内容路径，如 education.1 或 education.<条目id>.<字段id>",
+                    "description": "内容路径，条目序号从 1 开始，如 education.1 或 education.<条目id>.<字段id>",
                 },
             },
             "required": ["resume_id", "path"],
@@ -62,7 +62,7 @@ DOCUMENT_TOOLS: tuple[Tool, ...] = (
         name="update_resume_field",
         description=(
             "修改简历里**已存在的一个字段**的值（正文某一条的一个字段，不是版式）。"
-            "需要先 get_entry 确认 path（或直接用条目序号路径如 education.1.gpa）。"
+            "需要先 get_entry 确认 path（条目序号从 1 开始，如 education.1.gpa）。"
             + _STATELESS_READ_NOTE
             + "这是写入工具：会先给用户看 before/after 差异，用户确认后才执行；执行前自动留"
             "「助手修改前」版本，可在版本面板恢复。"
@@ -154,7 +154,7 @@ DOCUMENT_TOOLS: tuple[Tool, ...] = (
         description=(
             "设置简历里**某一条条目**的条目级布局：head（split/stacked/meta_first）、"
             "columns（1/2/3）、align（equal/flow）、gap、start_on_new_page（该条另起一页）、"
-            "keep_together（整条不跨页）。path 传条目路径（如 education.1 或 education.<条目id>）。"
+            "keep_together（整条不跨页）。path 传条目路径，序号从 1 开始（如 education.1 或 education.<条目id>）。"
             "用户说「让这一条从新页开始」「这条别被拆到两页」时用。"
             "写入前给差异预览，用户确认后才执行；不改全局版式参数。"
         ),

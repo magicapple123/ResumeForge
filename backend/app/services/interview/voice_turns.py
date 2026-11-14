@@ -289,10 +289,60 @@ def record_barge_in(
     return stored
 
 
+class AnswerNotReviseable(ValueError):
+    """这条回答不能改：不存在，或者不是最后一条。"""
+
+
+def revise_answer_for_turn(
+    session: InterviewSession,
+    message_id: int,
+    content: str,
+) -> tuple[InterviewMessage, list[InterviewMessage]]:
+    """把自己已提交的一条回答改成新文字，并返回**需要作废**的面试官消息。
+
+    只允许改**最后一条**正式回答：中间某一轮被改掉之后，后面几轮的上下文与"第 N 轮"
+    编号一起错位，而真实场景就是"刚说完发现说错了、想改一下重问"。
+
+    作废方式是把这条回答之后、下一条用户消息之前的面试官消息交给调用方删除，
+    然后走**同一条**生成链路重新出题——不新写一套"重新生成"逻辑。
+
+    返回待删列表而不是直接删，是因为这一层没有 db（与文件里其它纯逻辑函数一致）。
+    """
+    answers = [
+        item
+        for item in session.messages
+        if item.role == "user" and message_phase(item) == MESSAGE_PHASE_INTERVIEW
+    ]
+    target = next((item for item in answers if item.id == message_id), None)
+    if target is None:
+        raise AnswerNotReviseable("这条回答不存在")
+    if not answers or target.id != answers[-1].id:
+        raise AnswerNotReviseable("只能修改最后一条回答")
+
+    stale: list[InterviewMessage] = []
+    seen_target = False
+    for item in session.messages:
+        if item.id == target.id:
+            seen_target = True
+            continue
+        if not seen_target:
+            continue
+        # 下一条用户消息之后的内容属于后面几轮，不能动。
+        if item.role == "user":
+            break
+        if item.role == "interviewer" and message_phase(item) == MESSAGE_PHASE_INTERVIEW:
+            stale.append(item)
+
+    target.content = content.strip()
+    target.error = ""
+    return target, stale
+
+
 __all__ = [
     "CLIENT_TURN_ID_MAX_CHARS",
     "INTERRUPTED_MARKER",
     "MAX_ROLLED_BACK_CHARS",
+    "AnswerNotReviseable",
     "append_interruption_notice",
     "build_interruption_notice",
     "find_turn_answer",
@@ -302,6 +352,7 @@ __all__ = [
     "record_answer_for_turn",
     "record_barge_in",
     "response_after",
+    "revise_answer_for_turn",
     "rollback_text",
     "store_interrupted_response",
     "turn_completed",

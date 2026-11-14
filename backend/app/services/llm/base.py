@@ -52,6 +52,9 @@ class LLMError(Exception):
     def __init__(self, message: str, *, retryable: bool = False) -> None:
         super().__init__(message)
         self.retryable = retryable
+        #: 由 `context_length_error.with_context_length_flag` 在确认是"上下文超长"时置 True。
+        #: 默认值写在这里而不是只在检测处赋值：读方（`getattr` 之外）能直接访问该属性。
+        self.context_length_error = False
 
 
 def log_llm_failure(category: str, detail: str) -> None:

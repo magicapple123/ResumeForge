@@ -17,6 +17,7 @@
 // 只借一个数据形状（`{ top, right, bottom, left }`）：`pageMargins.ts` 不 import 本文件，
 // 所以这条依赖是单向的，不会形成循环。
 import type { PageMargins } from "./pageMargins";
+import { isFieldStylePath } from "../features/resume/layout/fieldStyleTarget";
 import { DEFAULT_SCALE, SCALE_CSS_VARS, type ScaleKey } from "./resumeScaleParams";
 
 /**
@@ -87,6 +88,45 @@ export function photoScaleProbeCss(scale: number): string {
   const value = Number.isFinite(scale) ? scale : 1;
   if (Math.abs(value - 1) < 1e-9) return "";
   return `:root { --photo-scale: ${formatG(value)}; }`;
+}
+
+/** 照片框五项（未设过的键由调用方按模板默认填入）。 */
+export interface PhotoFrameProbeValues {
+  width: number;
+  color: string;
+  radius: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+/**
+ * 照片框探针：`.profile-photo { border: …; border-radius: …; transform: … }`。
+ *
+ * 与后端 `format_css()` 的照片分支**逐字同形**（`resume_template_format.py:359-381`）：
+ * 声明顺序是 `border` → `border-radius` → `transform`，分隔符是 `"; "`，
+ * 数字走 `f"{value:g}"` ↔ `formatG`。
+ *
+ * 为什么需要它：偏移的产物是 `.profile-photo` 上的静态 `transform`，不像照片大小有
+ * `--photo-scale` 变量可写；没有探针，拖动要等防抖 + 后端重排才动，滑杆会显得"拖了没反应"。
+ *
+ * 四项全是模板默认（1px / 跟随线色 / 4px / 无偏移）时返回空串：后端在"一个键都没设过"
+ * 时**一条规则都不写**，探针写一遍会让拖动前后出现无意义的 DOM 差异。
+ */
+export function photoFrameProbeCss(frame: PhotoFrameProbeValues): string {
+  const width = Number.isFinite(frame.width) ? frame.width : 1;
+  const radius = Number.isFinite(frame.radius) ? frame.radius : 4;
+  const offsetX = Number.isFinite(frame.offsetX) ? frame.offsetX : 0;
+  const offsetY = Number.isFinite(frame.offsetY) ? frame.offsetY : 0;
+  const color = frame.color.trim();
+  if (width === 1 && radius === 4 && !color && offsetX === 0 && offsetY === 0) return "";
+  const declarations = [`border-radius: ${formatG(radius)}px`];
+  if (width <= 0) declarations.unshift("border: 0");
+  else if (color) declarations.unshift(`border: ${formatG(width)}px solid ${color}`);
+  else declarations.unshift(`border: ${formatG(width)}px solid var(--line)`);
+  if (offsetX || offsetY) {
+    declarations.push(`transform: translate(${formatG(offsetX)}mm, ${formatG(offsetY)}mm)`);
+  }
+  return `.profile-photo { ${declarations.join("; ")} }`;
 }
 
 /**
@@ -207,6 +247,10 @@ interface ProbeSelectors {
 function styleProbeSelectors(target: StyleProbeTarget): ProbeSelectors | null {
   const role = target.role && PROBE_ROLE.test(target.role) ? target.role : null;
   if (target.objectId) {
+    if (isFieldStylePath(target.objectId)) {
+      const field = `[data-resume-path="${target.objectId}"]:not([data-resume-path] [data-resume-path])`;
+      return { text: field, bullet: field, indent: field, metaAlign: field };
+    }
     if (!PROBE_OBJECT_ID.test(target.objectId)) return null;
     const prefix = `[data-object-id="${target.objectId}"]`;
     return {

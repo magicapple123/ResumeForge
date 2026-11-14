@@ -59,7 +59,7 @@ interface PanelItem {
   selectionAction?: TouTouSelectionActionId;
 }
 
-const FOCUSABLE = "input, textarea, button:not([disabled])";
+const FOCUSABLE = 'input, textarea, button:not([disabled]), [role="option"][tabindex]';
 
 /** 面板分区的固定顺序与标题 key。分区 id 是内部协议值（不是界面文案）。 */
 const SECTION_ORDER: readonly PanelItem["section"][] = ["selection", "page", "search"];
@@ -95,9 +95,24 @@ export default function TouTouActionPanel({
   const autoAskStartedRef = useRef(false);
 
   useEffect(() => {
-    // 打开后把焦点放进面板：键盘用户从第一个可操作元素开始。
     searchRef.current?.focus();
-  }, []);
+    // 长按松手可能把焦点还给球按钮：下一帧再移入，并在捕获阶段保证 Esc 可关闭。
+    const frame = requestAnimationFrame(() => {
+      dialogRef.current?.focus();
+      searchRef.current?.focus();
+    });
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    };
+    document.addEventListener("keydown", onEscape, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", onEscape, true);
+    };
+  }, [onClose]);
 
   const items = useMemo<PanelItem[]>(() => {
     const list: PanelItem[] = [];
@@ -194,12 +209,6 @@ export default function TouTouActionPanel({
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      onClose();
-      return;
-    }
     if (event.key === "Tab") {
       event.preventDefault();
       cycleFocus(event.shiftKey);
@@ -242,12 +251,18 @@ export default function TouTouActionPanel({
                 key={item.key}
                 id={itemId(index)}
                 role="option"
+                tabIndex={-1}
                 aria-selected={index === active}
                 aria-label={t(item.labelKey)}
                 className={`tt-panel-item${index === active ? " is-active" : ""}`}
                 onMouseEnter={() => setActiveIndex(index)}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runItem(item)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  runItem(item);
+                }}
               >
                 {t(item.labelKey)}
               </div>
@@ -264,6 +279,7 @@ export default function TouTouActionPanel({
         ref={dialogRef}
         className="tt-panel"
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-label={t("touTou.panel.title")}
         onKeyDown={handleKeyDown}

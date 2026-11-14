@@ -38,7 +38,7 @@ from ..resume.column_geometry import resolved_column_geometry
 from .fonts import FONT_FAMILY
 from .layout import _PX_TO_PT
 from .meta_lines import draw_meta_line, sub_gaps
-from .style_blocks import _color, _line_height, _scale, _wrapmode_args
+from .style_blocks import _color, _line_height, _scale
 
 if TYPE_CHECKING:  # pragma: no cover - 只为类型检查，运行期不能导入 canvas（会循环导入）
     from ..resume.resume_style import RoleStyle
@@ -171,6 +171,7 @@ def draw_meta_columns(
     style: RoleStyle | None = None,
     first: bool = True,
     last: bool = True,
+    field_styles: Sequence[RoleStyle | None] | None = None,
 ) -> None:
     """一行 ``cells`` 按预算好的 ``widths`` 并排绘制（几何与 ``draw_meta_line`` 同口径）。
 
@@ -201,18 +202,28 @@ def draw_meta_columns(
         draw_meta_line(pdf, _ROW_SEPARATOR.join(texts), base, style=style, first=first, last=last)
         return
 
-    size = base * layout.entry_sub_ratio * _scale(style)
-    line_height = _line_height(pdf, style, size)
     # 问题 17：段距只在组的两端出现（与 draw_meta_line 共用 `sub_gaps` 一份判据）。
     gap_top, gap_bottom = sub_gaps(layout, first=first, last=last)
     # 量宽与绘制同一个字体（见 `set_meta_font` 的 docstring）。
     set_meta_font(pdf, base, style)
     # 整行高度取各列折行后的最大值：否则高的一列会压到下一行（行距由最高的列决定）。
-    row_height = max(
-        # 量高与绘制用同一个 `multi_cell` 口径（canvas 在那一层统一投影行内标记）。
-        pdf._dry_run_height(width, line_height, text)
-        for width, text in zip(used, texts, strict=True)
-    )
+    heights = []
+    line_heights = []
+    top_offsets = []
+    for position, (width, text) in enumerate(zip(used, texts, strict=True)):
+        cell_style = field_styles[position] if field_styles else style
+        set_meta_font(pdf, base, cell_style)
+        height = _line_height(pdf, cell_style, base * layout.entry_sub_ratio * _scale(cell_style))
+        before = (
+            layout.gap_mm(float(cell_style.space_before or 0)) if field_styles and cell_style else 0
+        )
+        after = (
+            layout.gap_mm(float(cell_style.space_after or 0)) if field_styles and cell_style else 0
+        )
+        line_heights.append(height)
+        top_offsets.append(before)
+        heights.append(before + pdf._dry_run_height(width, height, text) + after)
+    row_height = max(heights)
     pdf.ensure_space(gap_top + row_height)
     if gap_top:
         pdf.ln(gap_top)
@@ -222,19 +233,27 @@ def draw_meta_columns(
     # 而不是"容器一半"（后者会让 gap 变化时只有半个位移，与预览观感对不上）。
     x = pdf.frame_left
     for position, (text, width) in enumerate(zip(texts, used, strict=True)):
-        pdf.set_xy(x, y_top)
+        cell_style = field_styles[position] if field_styles else style
+        set_meta_font(pdf, base, cell_style)
+        pdf.set_text_color(*_color(cell_style, pdf.muted_text))
+        pdf.set_xy(x, y_top + top_offsets[position])
         pdf.multi_cell(
             width,
-            line_height,
+            line_heights[position],
             text,
             align="L",
             new_x=XPos.RIGHT,
             new_y=YPos.TOP,
-            **_wrapmode_args(pdf, text, width, size * _PX_TO_PT),
         )
         # 逐间隔（任务 13）：给了标量就所有列共用一个间距，否则取第 position 个。
         # 正向 isinstance 收窄（pyright 无法从「非 list/tuple」排除任意 Sequence[float]）。
-        step = float(gap) if isinstance(gap, (int, float)) else float(gap[position])
+        step = (
+            float(gap)
+            if isinstance(gap, (int, float))
+            else float(gap[position])
+            if position < len(gap)
+            else 0.0
+        )
         x += width + step
     # 行高按"最高列"落定，光标的 y 才是下一行的起点（multi_cell 的 TOP 定位不改 y）。
     pdf.set_y(y_top + row_height)

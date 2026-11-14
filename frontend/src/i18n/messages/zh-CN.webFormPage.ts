@@ -7,6 +7,7 @@
  * 与「卡片标题」两类；填表引擎自身的文案仍不在这里。
  */
 const webFormPage = {
+  "webFormPage.preview.aiEvidence": "置信度 {confidence} · 依据：{evidence}",
   "webFormPage.notice.title": "这个功能只负责把资料填进页面，不会替你提交",
   "webFormPage.notice.body":
     "填充完成后请回到浏览器窗口逐项核对，确认无误后由你自己点击页面上的提交按钮。",

@@ -95,9 +95,11 @@ describe("WorkbenchParamsColumnV2 · 结构树多选宿主接线", () => {
     fireEvent.click(entryRow(container, "experience.exp_entry_01"), { shiftKey: true });
     // 宿主仍持有这两条多选（结构面板的高亮由它驱动）。
     expect(container.querySelectorAll(".rf-structure-row.is-multi-selected")).toHaveLength(2);
-    // 切回排版参数页签：左栏不再有「局部排版工具」面板，也就没有批量条（#7 已下线）。
+    // 切回排版参数页签：批量排版条（`.resume-typography-multi`）不出现——#7 已下线。
+    // 注意别拿 `.resume-typography-panel` 当代言：R-11 起排版页签里有一个只列「字段名」
+    // 角色的紧凑面板（RoleStylePanel visibleRoles=["field_label"]），它用的是同一个 section 类。
     fireEvent.click(screen.getByRole("tab", { name: t("responsive.action.params") }));
-    expect(container.querySelectorAll(".resume-typography-panel")).toHaveLength(0);
+    expect(container.querySelectorAll(".resume-typography-multi")).toHaveLength(0);
     expect(screen.queryByText(t("typography.multi.count", { count: 2 }))).toBeNull();
     expect(onLayoutChange).not.toHaveBeenCalled();
     expect(onDocumentChange).not.toHaveBeenCalled();

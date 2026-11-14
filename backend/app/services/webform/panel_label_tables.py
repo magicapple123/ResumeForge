@@ -326,6 +326,8 @@ FORM_FIELD_LABELS: dict[str, str] = {
 # 那边。这些键的英文**逐条取自同一批已校对词表**（来源写在行尾），不另起措辞。
 FORM_FIELD_FALLBACKS: dict[str, str] = {
     "name": "Name",  # profileField.basic_info.name
+    "given_name": "Given name",
+    "family_name": "Family name",
     "gender": "Gender",  # profileField.basic_info.gender
     "email": "Email",  # profileField.basic_info.email
     "github": "GitHub",  # profileField.basic_info.github

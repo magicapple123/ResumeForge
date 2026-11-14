@@ -360,9 +360,8 @@ function readCountHeader(value: string | null): number | null {
  * 边界：**任何"打印 / 下载 HTML"的调用必须显式传 false（或省略）**，否则会把超额页
  * 一起打出来；目前只有简历详情预览一个调用点传 true。
  */
-export async function fetchResumeHtml(
+export async function fetchResumePreviewHtml(
   id: number,
-  allowIncomplete = false,
   options: { includeOverflowPages?: boolean } = {},
 ): Promise<string> {
   const resp = await requestRaw(`/resumes/${id}/export`, {
@@ -371,7 +370,7 @@ export async function fetchResumeHtml(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       format: "html",
-      allow_incomplete: allowIncomplete,
+      allow_incomplete: true,
       preview: true,
       include_overflow_pages: options.includeOverflowPages === true,
     }),

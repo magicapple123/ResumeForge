@@ -72,7 +72,6 @@ const reminder = {
   "reminder.detail.resume": "Resume",
   "reminder.detail.createdAt": "Created",
   "reminder.detail.updatedAt": "Updated",
-  "reminder.detail.none": "(None)",
   "reminder.action.markDone": "Mark as done",
   "reminder.action.edit": "Edit",
 } as const;

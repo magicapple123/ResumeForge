@@ -21,8 +21,8 @@ from ...schemas.date_format import normalize_partial_date
 from ...schemas.profile import MAX_PROFILE_PHOTO_BYTES
 from .definition_catalog import get_field
 
-MAX_SINGLE_LINE_CHARS = 200
-MAX_MULTI_LINE_CHARS = 2000
+MAX_SINGLE_LINE_CHARS = 500
+MAX_MULTI_LINE_CHARS = 20000
 # 照片值同时承载两种形态：资源引用（`profile_photo:<id>`）与 data URL（纸面投影原样
 # 透传、AI 生成直接把 resume.photo 当 img src 用）。上限必须覆盖上传侧
 # MAX_PROFILE_PHOTO_BYTES 的 base64 膨胀（5 MB → 约 6.99 M 字符，见

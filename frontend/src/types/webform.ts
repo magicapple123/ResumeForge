@@ -144,6 +144,8 @@ export interface WebFormSelectOption {
 }
 
 export interface WebFormPreviewItem {
+  confidence?: number | null;
+  evidence?: string;
   index: number;
   field: string;
   field_label: string;
@@ -249,6 +251,8 @@ export interface WebFormLive {
   note: string;
   /** 这条建议是规则给的还是模型给的。空串表示还没有建议（或已填完）。 */
   source: "" | "rule" | "ai";
+  confidence?: number | null;
+  evidence?: string;
   /** 主推之外的候选，按把握从大到小。**不含主推那一条**（它在 field_label/value 里）。 */
   alternatives: WebFormLiveAlternative[];
   /** 这次会话里已经填了几个框。 */

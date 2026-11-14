@@ -21,7 +21,6 @@ from fpdf.enums import XPos, YPos
 from .bullet_dot import dot_circle_geometry
 from .fonts import FONT_FAMILY
 from .layout import _PX_TO_MM, _PX_TO_PT
-from .rich_text import drawn_text
 from .text_fit import entry_head_columns, truncate_to_width
 
 if TYPE_CHECKING:  # pragma: no cover - 只为类型检查，运行期不能导入 canvas（会循环导入）
@@ -98,24 +97,6 @@ def _letter_spacing_mm(base: float, style: RoleStyle | None) -> float:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return 0.0
     return float(base) * float(value) * _PX_TO_MM
-
-
-def _wrapmode_args(pdf: _ResumePDF, text: str, width: float, size_pt: float) -> dict:
-    """超长不可断词（长 URL / 长英文词）时启用 CHAR 断行；普通文本保持默认断行。
-
-    fpdf2 默认只按空格断行，一个比栏宽还长的 token 会**越过右边距**（W08 契约要求长链接
-    断行）。只在确实存在超宽 token 时切换 wrapmode，避免改变普通文本的既有折行。
-    """
-    saved = (pdf.font_family, pdf.font_style, pdf.font_size_pt)
-    pdf.set_font(FONT_FAMILY, "", size_pt)
-    try:
-        # 按**纸面上真正出现**的字符判断（斜体/链接标记不占宽度，链接的 URL 会展成文字）。
-        for token in drawn_text(str(text)).split():
-            if pdf.get_string_width(token) > width:
-                return {"wrapmode": "CHAR"}
-    finally:
-        pdf.set_font(saved[0], saved[1], saved[2])
-    return {}
 
 
 def start_forced_page(pdf: _ResumePDF, plan, *, margin_top: float) -> None:
@@ -200,7 +181,9 @@ def draw_section_title(
     shape = layout.section_title_style
     bar_w = 4 * _PX_TO_MM
     pdf.ensure_space(
-        section_title_total_height(pdf, base, leading_gap=leading_gap, style=style, keep_lines=keep_lines)
+        section_title_total_height(
+            pdf, base, leading_gap=leading_gap, style=style, keep_lines=keep_lines
+        )
     )
     pdf.ln(gap_before)
     top = pdf.get_y()
@@ -344,7 +327,6 @@ def draw_bullets(
             align=align,
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
-            **_wrapmode_args(pdf, text, width, font_size * _PX_TO_PT),
         )
         if section:
             pdf.record(
@@ -416,7 +398,11 @@ def draw_entry_head(
     left_cell_width = (
         (left_width + _ENTRY_HEAD_GAP_MM)
         if inline_meta and meta_width_inline > 0
-        else (title_width if inline_meta else entry_head_columns(available, left_width, _ENTRY_HEAD_GAP_MM)[0])
+        else (
+            title_width
+            if inline_meta
+            else entry_head_columns(available, left_width, _ENTRY_HEAD_GAP_MM)[0]
+        )
     )
     pdf.set_x(pdf.frame_left)
     pdf.cell(
@@ -457,7 +443,6 @@ def draw_entry_head(
     pdf.set_text_color(*pdf.body_text)
     if section:
         pdf.record(kind="entry", section=section, y_top=entry_top, object_id=object_id, text=left)
-
 
 
 __all__ = [

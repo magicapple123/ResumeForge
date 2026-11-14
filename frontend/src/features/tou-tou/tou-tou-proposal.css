@@ -2,6 +2,7 @@
 /* 投投写操作提案卡（#27F）：改前/改后 + 执行/撤销。颜色只走 --rf-* token。 */
 
 .tt-proposal {
+  pointer-events: auto;
   position: fixed;
   right: var(--rf-space-3);
   bottom: 84px;

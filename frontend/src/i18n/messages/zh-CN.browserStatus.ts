@@ -10,6 +10,9 @@
  */
 const browserStatus = {
   "browserStatus.title": "投递专用浏览器",
+  "browserStatus.ready": "已就绪",
+  "browserStatus.hint.collapse": "收起说明",
+  "browserStatus.hint.expand": "展开说明",
   "browserStatus.port": "调试端口 {port}",
   "browserStatus.action.start": "启动浏览器",
   "browserStatus.action.openSite": "打开招聘网站",

@@ -157,7 +157,9 @@ export default function BatchGroup({
       <div className={`apply-records-batch-body-wrap${expanded ? " is-expanded" : ""}`}>
         <div className="apply-records-batch-body">
           {expanded && (
-            <>
+            // F11：padding 挂在"只在展开时存在"的内层——留在 body 上时，0fr 轨道压不掉
+            // 上下 padding，收起后仍会空出约 20px。
+            <div className="apply-records-batch-body-inner">
               {selecting && batchToolbar}
               <Table<ApplyRecord>
                 rowKey="id"
@@ -198,7 +200,7 @@ export default function BatchGroup({
                     : t("applyUi.batch.emptyItems"),
                 }}
               />
-            </>
+            </div>
           )}
         </div>
       </div>

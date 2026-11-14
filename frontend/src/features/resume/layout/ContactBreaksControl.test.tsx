@@ -24,6 +24,11 @@ import {
   readContactBreaks,
   withContactBreaks,
 } from "./contactBreaks";
+import {
+  CONTACT_SEPARATOR_KEY,
+  readContactSeparator,
+  withContactSeparator,
+} from "./contactSeparator";
 
 afterEach(() => {
   cleanup();
@@ -148,5 +153,64 @@ describe("联系方式换行控件（排版参数）", () => {
     expect(next.template).toBe(layout.template);
     expect(next.page_limit).toBe(layout.page_limit);
     expect(next.format_config).toEqual({ accent: "#123456", [CONTACT_BREAKS_KEY]: ["github"] });
+  });
+});
+
+describe("联系方式同行分隔符（R-05）", () => {
+  it("读：合法三档原样返回，未知/非字符串回落到 space", () => {
+    expect(readContactSeparator({ [CONTACT_SEPARATOR_KEY]: "bar" })).toBe("bar");
+    expect(readContactSeparator({ [CONTACT_SEPARATOR_KEY]: "dot" })).toBe("dot");
+    expect(readContactSeparator({ [CONTACT_SEPARATOR_KEY]: "space" })).toBe("space");
+    expect(readContactSeparator({ [CONTACT_SEPARATOR_KEY]: "pipe" })).toBe("space");
+    expect(readContactSeparator({ [CONTACT_SEPARATOR_KEY]: 1 })).toBe("space");
+    expect(readContactSeparator({})).toBe("space");
+    expect(readContactSeparator(null)).toBe("space");
+  });
+
+  it("写：space 删键（与改动前逐字节一致），bar/dot 保留其余覆盖", () => {
+    expect(withContactSeparator({ accent: "#123456" }, "bar")).toEqual({
+      accent: "#123456",
+      [CONTACT_SEPARATOR_KEY]: "bar",
+    });
+    const withBar = withContactSeparator({ accent: "#123456" }, "bar");
+    expect(withContactSeparator(withBar, "space")).toEqual({ accent: "#123456" });
+    // 与 contact_breaks 互不影响：两者是正交的两件事。
+    const both = withContactBreaks(withBar, ["github"]);
+    expect(both).toEqual({
+      accent: "#123456",
+      [CONTACT_SEPARATOR_KEY]: "bar",
+      [CONTACT_BREAKS_KEY]: ["github"],
+    });
+  });
+
+  it("选「竖线」→ onChange 收到 contact_separator: bar", async () => {
+    const onChange = renderControl({ accent: "#123456" });
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: t("workbench.contactSeparator.label") }));
+    fireEvent.click(await screen.findByText(t("contactSeparator.option.bar")));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    expect(onChange).toHaveBeenCalledWith({
+      accent: "#123456",
+      [CONTACT_SEPARATOR_KEY]: "bar",
+    });
+  });
+});
+
+describe("F26：分隔符是独立一行", () => {
+  it("两个可见行标签各自渲染，分隔下拉挂在第二行里", () => {
+    render(<ContactBreaksControl formatConfig={{}} onChange={vi.fn()} />);
+
+    const breakRow = screen.getByText(t("workbench.contactBreak.label")).closest(".resume-wb-field-row");
+    const separatorRow = screen
+      .getByText(t("workbench.contactSeparator.label"))
+      .closest(".resume-wb-field-row");
+
+    expect(breakRow).not.toBeNull();
+    expect(separatorRow).not.toBeNull();
+    expect(breakRow).not.toBe(separatorRow);
+    // 分隔下拉只在第二行；第一行只有「在哪换行」那一个多选。
+    expect(separatorRow!.querySelector('[aria-label="' + t("workbench.contactSeparator.label") + '"]')).not.toBeNull();
+    expect(breakRow!.querySelector('[aria-label="' + t("workbench.contactSeparator.label") + '"]')).toBeNull();
   });
 });

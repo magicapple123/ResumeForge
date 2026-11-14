@@ -2,6 +2,7 @@
 import { cleanup, render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
+import ShortcutProvider from "../shortcuts/ShortcutProvider";
 import { afterEach, vi } from "vitest";
 import { resetTouTouContextRegistry } from "./touTouPageContext";
 import { resetTouTouProposal } from "./touTouProposalStore";
@@ -33,10 +34,15 @@ afterEach(() => {
  * `rerender` 也包一层 MemoryRouter——否则测试里换 context 会把 Router 一起换掉。
  */
 export function renderOrb(ui: ReactElement) {
-  const result = render(<MemoryRouter>{ui}</MemoryRouter>);
+  const wrap = (next: ReactElement) => (
+    <MemoryRouter>
+      <ShortcutProvider>{next}</ShortcutProvider>
+    </MemoryRouter>
+  );
+  const result = render(wrap(ui));
   return {
     ...result,
-    rerender: (next: ReactElement) => result.rerender(<MemoryRouter>{next}</MemoryRouter>),
+    rerender: (next: ReactElement) => result.rerender(wrap(next)),
   };
 }
 

@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import type { RefObject } from "react";
-import type { AssistantSurface, ReasoningEffort } from "../../../types";
+import type { AssistantMessageReferences, AssistantSurface, ReasoningEffort } from "../../../types";
 import type { PendingAttachment } from "../assistantUtils";
 import { useTouTou } from "../../tou-tou/touTouContext";
 import {
@@ -32,6 +32,8 @@ interface Options {
   attachmentsRef: RefObject<PendingAttachment[]>;
   jobId: number | undefined;
   resumeId: number | undefined;
+  /** 发送成功后清空输入区的关联选择（F36）。 */
+  clearContextRefs?: () => void;
   webSearch: boolean;
   reasoningEffort: ReasoningEffort;
   surface?: AssistantSurface;
@@ -52,6 +54,7 @@ export function useAssistantStream(options: Options) {
     attachmentsRef,
     jobId,
     resumeId,
+    clearContextRefs,
     webSearch,
     reasoningEffort,
     surface = "page",
@@ -66,7 +69,7 @@ export function useAssistantStream(options: Options) {
     [activeIdRef, loadDetail, reloadConversations],
   );
   const send = useCallback(
-    (text: string, clearContent: () => void) =>
+    (text: string, clearContent: () => void, contextRefs?: AssistantMessageReferences) =>
       sendAssistantStreamMessage(text, clearContent, {
         activeIdRef,
         reloadConversations,
@@ -78,6 +81,8 @@ export function useAssistantStream(options: Options) {
         setTouTouStatus,
         jobId,
         resumeId,
+        contextRefs,
+        clearContextRefs,
         webSearch,
         reasoningEffort,
         surface,
@@ -89,6 +94,7 @@ export function useAssistantStream(options: Options) {
       attachmentReadsRef,
       attachmentsRef,
       clearAttachments,
+      clearContextRefs,
       clearQuote,
       createConversation,
       jobId,

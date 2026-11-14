@@ -56,7 +56,9 @@ test("main.js 注册了打印通道（并交出主窗口取值函数），通道
 
 test("前端在桌面壳里用这条桥，浏览器里回落到 window.print", () => {
   const modal = readFileSync(
-    path.join(ROOT, "..", "frontend", "src", "components", "ExportOptionsModal.tsx"),
+    // 该文件在 62edf920「前端目录架构债」那批里移到了 features/resume/delivery/，
+    // 用例路径没跟上（既有红灯，与本批改动无关，顺手修正）。
+    path.join(ROOT, "..", "frontend", "src", "features", "resume", "delivery", "ExportOptionsModal.tsx"),
     "utf8",
   );
   assert.match(modal, /window\.resumeForge\?\.printPdf/);

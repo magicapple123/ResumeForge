@@ -153,6 +153,22 @@ describe("数据权限一次性确认卡（#12）", () => {
     expect(modal()).toBeNull();
   });
 
+  it("新对话继承全局「完全权限」不弹卡，也不写会话覆盖（F30）", async () => {
+    permissionApiMocks.getAssistantPermission.mockResolvedValue({ permission: "write_full" });
+
+    renderComposer({ conversationId: 8 });
+
+    await waitFor(() => expect(permissionApiMocks.getAssistantPermission).toHaveBeenCalled());
+    expect(modal()).toBeNull();
+    // 跟随全局时不该把继承来的档位固化成会话覆盖。
+    expect(window.localStorage.getItem(permissionStorageKey(8))).toBeNull();
+
+    // 同一会话里手动选「完全权限」仍要弹（扩权确认只发生在会话内切换这一条路径）。
+    fireEvent.click(screen.getByRole("button", { name: /跟随全局/ }));
+    fireEvent.click(await screen.findByText(t("assistantPermission.level.write_full")));
+    await waitFor(() => expect(modal()).not.toBeNull());
+  });
+
   it("新会话（无 conversationId）回到「跟随全局」且不可改", async () => {
     renderComposer({ conversationId: null });
 

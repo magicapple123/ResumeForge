@@ -69,6 +69,7 @@ from .assistant_memory import (
     MEMORY_STATUSES,
     AssistantMemory,
 )
+from .assistant_memory_event import AssistantMemoryEvent
 from .career_scenario import CareerScenario
 from .claim import (
     CLAIM_CATEGORIES,
@@ -277,6 +278,7 @@ __all__ = [
     "AssistantSkillFile",
     # 0015 助手语义记忆（#31A / #18D 合并模型）：kind 白名单 + 状态 + 来源 + 模型。
     "AssistantMemory",
+    "AssistantMemoryEvent",
     "MEMORY_KINDS",
     "MEMORY_KIND_TARGET_ROLE",
     "MEMORY_KIND_CITY",

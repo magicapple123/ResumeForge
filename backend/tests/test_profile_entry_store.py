@@ -141,17 +141,17 @@ def test_unknown_and_overlong_values_are_rejected(db_session):
         _create(db_session, "projects", {"projects.name": "x" * 201})
     assert too_long.value.code == "value_too_long"
     with pytest.raises(ValidationError) as multi_too_long:
-        _create(db_session, "projects", {"projects.description": "x" * 2001})
+        _create(db_session, "projects", {"projects.description": "x" * 20001})
     assert multi_too_long.value.code == "value_too_long"
     # 日期宽松归一：可识别格式统一成短横线，不因无法识别而报错。
     entry = _create(db_session, "educations", {"educations.start_date": "2024.09"})
     assert entry.values["educations.start_date"] == "2024-09"
     loose = _create(db_session, "educations", {"educations.end_date": "至今"})
     assert loose.values["educations.end_date"] == "至今"
-    # 自定义字段按 DB 里的真实类型校验（single_line 200，不回落成 multi_line）。
+    # 自定义字段按 DB 里的真实类型校验（single_line 500，不回落成 multi_line）。
     field = definition_store.create_custom_field(db_session, "skills", "自定义单行", "single_line")
     with pytest.raises(ValidationError) as custom_too_long:
-        _create(db_session, "skills", {field.field_id: "x" * 201})
+        _create(db_session, "skills", {field.field_id: "x" * 501})
     assert custom_too_long.value.code == "value_too_long"
 
 

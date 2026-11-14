@@ -84,7 +84,9 @@ describe("QueueTable 横向滚动区（a11y）", () => {
     expect(
       container.querySelector(".ant-table")?.classList.contains("ant-table-scroll-horizontal"),
     ).toBe(true);
-    expect(container.querySelector<HTMLElement>(".ant-table table")?.style.width).toBe("900px");
+    // 列宽之和（300+132+104+300+72 = 908）：合并「参考分 + 准入」后重算，
+    // 断言与 `QueueTable` 里的 `scroll.x` 必须同步，否则横向滚动区会与列宽脱节。
+    expect(container.querySelector<HTMLElement>(".ant-table table")?.style.width).toBe("908px");
   });
 
   it("悬停「来源不支持」标签只弹一个提示，不与岗位提示叠在一起", async () => {

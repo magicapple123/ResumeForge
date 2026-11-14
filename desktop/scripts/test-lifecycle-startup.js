@@ -260,15 +260,13 @@ test("control: before any failure, closing the window asks instead of hiding sil
     assert.strictEqual(prevented, 1, "a plain window close must be held for the ask dialog");
 
     await flush();
-    const prompt = loaded.events.messageBoxPrompts[0];
+    // Q11 起关闭提示是**自绘无边框窗口**（lib/close-dialog.js）：观测面从
+    // messageBoxPrompts 换成"卡片被弹出了几次 + 是否带父窗口"。
+    // 卡片内部的按钮文案与 Esc 口径在 close-dialog.html，由 test-close-behavior.js 覆盖。
+    const prompt = loaded.events.closeDialogPrompts[0];
     assert.ok(prompt, "a plain window close must open the ask-on-close dialog");
-    // 跨 realm 的数组不能 deepStrictEqual，展开再比。
-    assert.deepStrictEqual([...prompt.options.buttons], ["最小化到托盘", "退出应用"]);
-    // 对话框必须带父窗口（§18.5：不带父窗口在 Windows 上可能出现在主窗口后面）。
+    // 必须带父窗口（§18.5：无父窗口在 Windows 上可能落到主窗口后面）。
     assert.strictEqual(prompt.parent, window);
-    assert.strictEqual(prompt.options.defaultId, 0);
-    assert.strictEqual(prompt.options.cancelId, 0);
-    assert.strictEqual(prompt.options.checkboxLabel, "记住我的选择");
     // 默认选「最小化到托盘」：对话框返回默认 response 后窗口被隐藏，应用不退出。
     assert.strictEqual(window.hidden, 1);
     assert.strictEqual(loaded.events.quitCalls.length, 0,

@@ -270,6 +270,13 @@ export interface AssistantOrbSetting {
   enabled: boolean;
   /** 悬浮球是否弹出轮换提示标语；默认开，兼容老数据。 */
   tips_enabled: boolean;
+  /**
+   * 选中文字后是否浮出动作条（Q9）；默认开，兼容老数据。
+   *
+   * 可选：更早的后端响应里没有这个字段，此时界面按「开」处理（`!== false`），
+   * 且保存时不凭空补一个值——缺字段的那一侧本来就存不下它。
+   */
+  selection_enabled?: boolean;
 }
 
 /** 求职助手「放宽模式」：开启后助手可读取完整资料（含敏感信息），默认关。 */
@@ -441,4 +448,35 @@ export interface BackupStatus {
    * 旧后端没有这个字段，界面按旧字段推断；disabled 时 protected 必须为假。
    */
   state?: "protected" | "overdue" | "never" | "empty" | "unreadable" | "failing" | "disabled";
+}
+
+/**
+ * 「模型窗口参考」列表（只读）。
+ *
+ * 数据来自后端内置表 `model_context_windows.MODEL_WINDOWS`：窗口是模型的能力常数，
+ * 不是用户数据；这里只负责把它显示出来，并提供官方文档链接供核对。
+ */
+export interface ModelWindowEntry {
+  /** 显示用型号名（同窗口的几个型号可能合成一条）。 */
+  label: string;
+  /** 上下文窗口（token）。 */
+  tokens: number;
+  /** 官方文档链接。 */
+  reference: string;
+}
+
+/** 当前生效模型在表里的位置；`label` 为空表示表里没有，按保守值估算。 */
+export interface CurrentModelWindow {
+  model: string;
+  label: string | null;
+  tokens: number;
+  /** manual = 用户手填；reference = 命中表；fallback = 未知型号的保守值。 */
+  source: "manual" | "reference" | "fallback";
+}
+
+export interface ModelWindowReference {
+  /** 表里没有的型号使用的保守值。 */
+  default_tokens: number;
+  entries: ModelWindowEntry[];
+  current: CurrentModelWindow;
 }

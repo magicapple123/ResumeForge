@@ -24,12 +24,12 @@
  * 相等）；本模块只做"按域写值"与"三层读取"，不定义第二份数字。
  */
 import type { ResumeFormatConfig } from "../../../types/resumeFormat";
+import { fieldStyleEntryId, isFieldStylePath } from "./fieldStyleTarget";
 import {
   coerceStylePropValue,
   isStylePropSet,
   readStylePropValue,
   styleIsEmpty,
-  STYLE_PROP_FALLBACKS,
   type StylePropKey,
 } from "../../../utils/resumeStyleParams";
 import { domainEntries, readFormatDomain, withFormatDomain } from "./formatDomains";
@@ -39,6 +39,12 @@ import {
   ROLE_STYLE_PROPS,
   type ResumeRoleKey,
 } from "./styleCatalog";
+export {
+  roleBaseRatio,
+  displayStyleValue,
+  storedStyleValue,
+  resolvedPropValue,
+} from "./styleValueResolution";
 
 /**
  * 属性来源：来自模板 / 已按排版参数调整（扁平键）/ 同类段落已调整 / 本条已调整。
@@ -89,7 +95,7 @@ function splitObjectRoleKey(key: string): { objectId: string; role: ResumeRoleKe
   if (separator <= 0 || key.indexOf(":", separator + 1) !== -1) return null;
   const objectId = key.slice(0, separator);
   const role = key.slice(separator + 1);
-  if (!OBJECT_ID.test(objectId)) return null;
+  if (!OBJECT_ID.test(objectId) && !isFieldStylePath(objectId)) return null;
   if (!(RESUME_ROLES as readonly string[]).includes(role)) return null;
   return { objectId, role: role as ResumeRoleKey };
 }
@@ -296,7 +302,10 @@ export function withObjectRoleProp(
   prop: StylePropKey,
   value: ResumeStyleValue | null,
 ): ResumeFormatConfig {
-  if (!OBJECT_ID.test(objectId) || !ROLE_STYLE_PROPS[role].includes(prop)) {
+  if (
+    (!OBJECT_ID.test(objectId) && !isFieldStylePath(objectId)) ||
+    !ROLE_STYLE_PROPS[role].includes(prop)
+  ) {
     return (config ?? {}) as ResumeFormatConfig;
   }
   const domains = readStyleDomains(config);
@@ -326,7 +335,7 @@ export function withObjectRoleProps(
   const objectRoles = { ...domains.objectRoles };
   const allowed = ROLE_STYLE_PROPS[role];
   for (const objectId of objectIds) {
-    if (!OBJECT_ID.test(objectId)) continue;
+    if (!OBJECT_ID.test(objectId) && !isFieldStylePath(objectId)) continue;
     const key = objectRoleKey(objectId, role);
     const style = { ...readObjectRoleStyle(domains, objectId, role) };
     for (const prop of allowed) {
@@ -371,7 +380,13 @@ export function styleSourceOf(
     ? domains.objectRoles[objectRoleKey(params.objectId, params.role)]
     : undefined;
   if (isStylePropSet(objectRoleStyle, params.prop)) return "object";
-  const objectStyle = params.objectId ? domains.objects[params.objectId] : undefined;
+  const parent = fieldStyleEntryId(params.objectId);
+  if (
+    parent &&
+    isStylePropSet(domains.objectRoles[objectRoleKey(parent, params.role)], params.prop)
+  )
+    return "object";
+  const objectStyle = params.objectId ? domains.objects[parent ?? params.objectId] : undefined;
   if (isStylePropSet(objectStyle, params.prop)) return "object";
   if (isStylePropSet(domains.roles[params.role], params.prop)) return "role";
   const flatKeys = FLAT_PROP_KEYS[params.prop] ?? [];
@@ -388,73 +403,6 @@ export function styleSourceOf(
  * - **显示**的生效比例 = 系数 × 基准（用户看到"1.86×"而不是"1.00×"）。
  * 两者不能混用（把 1.86 当系数写回去会把字号翻倍）。
  */
-export function roleBaseRatio(templateDefaults: ResumeRoleStyle | null | undefined): number {
-  const base = templateDefaults?.["font_scale"];
-  return typeof base === "number" && Number.isFinite(base) && base > 0 ? base : 1;
-}
-
-/**
- * 存值 → 显示值：只有 `font_scale` 需要乘基准，其余属性存什么显示什么。
- *
- * `stored` 为 `undefined` 时返回继承显示值（基准本身）；因此"来自模板"的读数不是 1.00。
- */
-export function displayStyleValue(
-  prop: StylePropKey,
-  stored: ResumeStyleValue | undefined,
-  baseRatio: number,
-): ResumeStyleValue | undefined {
-  if (prop !== "font_scale") return stored;
-  const coefficient = typeof stored === "number" ? stored : 1;
-  return Math.round(coefficient * baseRatio * 100) / 100;
-}
-
-/** 显示值 → 存值：`font_scale` 除以基准；未设置保持 undefined。 */
-export function storedStyleValue(
-  prop: StylePropKey,
-  displayed: ResumeStyleValue | null,
-  baseRatio: number,
-): ResumeStyleValue | null {
-  if (displayed === null) return null;
-  if (prop !== "font_scale") return displayed;
-  if (typeof displayed !== "number" || !Number.isFinite(displayed) || !(baseRatio > 0)) {
-    return null;
-  }
-  // 4 位小数：显示值 2 位小数除以基准后仍能精确还原（1.88 / 1.86 → 1.0108）。
-  return Math.round((displayed / baseRatio) * 10000) / 10000;
-}
-
-/**
- * 生效值（**显示口径**）：对象角色 > 对象 > 角色 > 目录模板基准 > 中性兜底。
- *
- * `font_scale` 返回的是"系数 × 基准"的显示比例；写回时必须经
- * `storedStyleValue` 转回系数，否则会把基准重复乘一次。
- */
-export function resolvedPropValue(
-  domains: ResumeStyleDomains,
-  params: {
-    role: ResumeRoleKey;
-    prop: StylePropKey;
-    objectId?: string | null;
-    templateDefaults?: ResumeRoleStyle | null;
-  },
-): ResumeStyleValue | undefined {
-  const base = roleBaseRatio(params.templateDefaults);
-  const objectRoleStyle = params.objectId
-    ? domains.objectRoles[objectRoleKey(params.objectId, params.role)]
-    : undefined;
-  const objectRoleValue = coerceStylePropValue(params.prop, objectRoleStyle?.[params.prop]);
-  if (objectRoleValue !== null) return displayStyleValue(params.prop, objectRoleValue, base);
-  const objectStyle = params.objectId ? domains.objects[params.objectId] : undefined;
-  const objectValue = coerceStylePropValue(params.prop, objectStyle?.[params.prop]);
-  if (objectValue !== null) return displayStyleValue(params.prop, objectValue, base);
-  const roleValue = coerceStylePropValue(params.prop, domains.roles[params.role]?.[params.prop]);
-  if (roleValue !== null) return displayStyleValue(params.prop, roleValue, base);
-  const templateValue = coerceStylePropValue(params.prop, params.templateDefaults?.[params.prop]);
-  // 模板默认本身就是"基准"：字号显示为基准比例，其余属性显示默认值。
-  if (templateValue !== null) return templateValue;
-  return STYLE_PROP_FALLBACKS[params.prop];
-}
-
 /**
  * 一条显式覆盖里"哪些属性是用户设过的"（格式刷差集与来源标签共用）。
  *

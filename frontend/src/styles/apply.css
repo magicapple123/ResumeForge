@@ -420,6 +420,12 @@
 }
 
 .apply-records-batch-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* F11：padding 只跟着"展开时才有"的内容走，收起态不再留 20px 空白。 */
+.apply-records-batch-body-inner {
   padding: 8px 12px 12px;
 }
 

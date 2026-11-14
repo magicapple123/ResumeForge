@@ -14,6 +14,8 @@ const assistantLimits = {
   "assistantLimits.settings.title": "求职助手 · 运行上限与上下文压缩",
   "assistantLimits.settings.intro":
     "轮次上限决定一次回复里最多几轮工具调用；时间预算决定整条回复最多跑多少秒。改动随时生效，不必重启应用。",
+  "assistantLimits.settings.section.limits": "运行上限",
+  "assistantLimits.settings.dirty": "有未保存的修改",
   "assistantLimits.settings.rounds.label": "工具调用轮次上限",
   "assistantLimits.settings.rounds.unit": "轮",
   "assistantLimits.settings.rounds.hint":

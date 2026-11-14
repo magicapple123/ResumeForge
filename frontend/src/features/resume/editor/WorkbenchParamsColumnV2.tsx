@@ -11,8 +11,7 @@
  * 等面板依赖 v1 正文字段路径，本批暂不挂在 v2 工作台（见计划执行记录的风险项）。
  */
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { RefObject } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { DownOutlined } from "@ant-design/icons";
 import { Tooltip, Typography } from "antd";
 import type { ResumeDetail, ResumeLayout, ResumeTemplateCatalog } from "../../../types";
@@ -27,8 +26,10 @@ import ResumeTemplateControls from "../layout/ResumeTemplateControls";
 import ResumeMeasureControls from "../layout/ResumeMeasureControls";
 import ResumeSpacingControls from "../layout/ResumeSpacingControls";
 import ResumeColorControls from "../layout/ResumeColorControls";
+import RoleStylePanel from "../layout/RoleStylePanel";
 import ResumeLanguageSelect from "../layout/ResumeLanguageSelect";
 import ContactBreaksControl from "../layout/ContactBreaksControl";
+import SkillColumnsControl from "../layout/SkillColumnsControl";
 import HistoryPanel from "../versions/HistoryPanel";
 import StructureTab from "../outline/StructureTab";
 import DocumentModePanel from "../research/DocumentModePanel";
@@ -351,6 +352,11 @@ export default function WorkbenchParamsColumnV2({
               disabled={relayouting}
               onChange={(format_config) => onChange({ ...layout, format_config })}
             />
+            <SkillColumnsControl
+              formatConfig={layout.format_config}
+              disabled={relayouting}
+              onChange={(format_config) => onChange({ ...layout, format_config })}
+            />
             {/* 问题 22 ①：16 个板块的「从新页开始」开关默认收起（实测展开态 477px =
                 1000px 视口的 47.7%，把「页面概览」「获取分页报告」挤到折叠线以下）。
                 收起态只留一行：「分页：N 个板块设了新页」+ 折叠箭头。
@@ -441,6 +447,15 @@ export default function WorkbenchParamsColumnV2({
               catalog={catalog}
               disabled={relayouting}
               previewRef={previewRef}
+              onChange={onChange}
+            />
+            <RoleStylePanel
+              layout={layout}
+              catalog={catalog}
+              previewRef={previewRef}
+              disabled={relayouting || undefined}
+              visibleRoles={["field_label"]}
+              compact
               onChange={onChange}
             />
           </ResumeParamGroup>

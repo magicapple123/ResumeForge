@@ -54,9 +54,8 @@ export default function AppHeaderActions({ hiddenKeys, onStarClick }: Props) {
             className="app-repo-button"
             type="text"
             icon={<GithubOutlined />}
-            href={GITHUB_REPO}
-            target="_blank"
-            rel="noopener noreferrer"
+            // F28：这里只弹 Star 提示，**不再**同时开新标签页；真正的跳转在弹窗里。
+            aria-haspopup="dialog"
             aria-label={t("appConfig.header.repoAria", { name: t("appConfig.brand.name") })}
             onClick={onStarClick}
           />

@@ -32,7 +32,24 @@
     width: 94%;
   }
 
-  .jobs-filter-bar > .ant-space-item:first-child,
+  /* F04：四簇在手机档各自换行（分组靠换行表达，竖线没有意义，隐掉）；
+     搜索框独占一行——它原先靠「筛选栏的第一个 .ant-space-item」拿到 100%，
+     现在多了一层筛簇，按簇内的搜索项取。 */
+  .jobs-filter-divider {
+    display: none;
+  }
+
+  .jobs-filter-bar > .ant-space-item,
+  .jobs-filter-actions,
+  .jobs-filter-group {
+    width: 100%;
+  }
+
+  .jobs-filter-group-filters > .ant-space-item:has(> .jobs-search-input) {
+    flex: 1 1 100%;
+    max-width: 100% !important;
+  }
+
   .jobs-search-input {
     width: 100%;
   }

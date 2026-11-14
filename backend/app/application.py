@@ -201,6 +201,19 @@ async def lifespan(_app: FastAPI):
     # 上次运行若中途退出，可能留下未应用的备份包与导出产物，它们不会再用到。
     startup_logger.info("启动自检：清理临时目录")
     cleanup_temp_directories(bind)
+    # F18：面试录像按"单场保留天数"到期清理（0 = 不自动删）。放在启动阶段而不是
+    # 定时任务：本地应用常年只在用的时候开着，定时器多半不会准点醒。清理失败不阻断启动
+    # ——最坏是旧文件多留一阵，比"打不开应用"轻得多。
+    try:
+        from .services.interview.interview_camera import (
+            cleanup_expired as cleanup_expired_recordings,
+        )
+
+        expired_recordings = cleanup_expired_recordings()
+        if expired_recordings:
+            startup_logger.info("清理过期面试录像 %d 个", expired_recordings)
+    except Exception:  # noqa: BLE001 - 清理失败不应阻断启动
+        startup_logger.warning("清理过期面试录像失败", exc_info=True)
     # 应用重启后，把仍停留在"进行中"的投递/采集/匹配/简历生成任务标记为失败，
     # 避免出现幽灵进度（简历任务还会占住"只跑一个"的生成入口，见 RF-02）。
     startup_logger.info("启动自检：清理中断的投递任务")

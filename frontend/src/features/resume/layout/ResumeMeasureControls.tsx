@@ -23,6 +23,7 @@ import FontSizeControl from "./FontSizeControl";
 import LineHeightControl from "./LineHeightControl";
 import PageMarginSidesControl from "./PageMarginSidesControl";
 import PagePaddingControl from "./PagePaddingControl";
+import PhotoFrameControl from "./PhotoFrameControl";
 import PhotoScaleControl from "./PhotoScaleControl";
 import ResumeFontControl from "./ResumeFontControl";
 import { t } from "../../../i18n";
@@ -421,7 +422,7 @@ export default function ResumeMeasureControls({
       )}
       <div className="resume-measure-cell">
         <span className="resume-measure-label">{t("resume.measure.fontLabel")}</span>
-        {/* 字体（项 14）：它写的是**这一份简历**的 `format_config.font`，与「设置 → 外观与交互 →
+        {/* 字体（项 14）：它写的是**这一份简历**的 `format_config.font`，与「设置 → 外观与语言 →
             简历字体」那个设备级选择是两件事（见 ResumeFontControl 头注释）。
             `alignWithSlider` 只在弹窗里开：上面那一行就是页边距滑杆，
             下拉要与它同宽、同起点，两行才像一组控件。 */}
@@ -452,6 +453,17 @@ export default function ResumeMeasureControls({
           hasPhoto={hasPhoto}
           onProbe={applyProbe}
           onChange={applyPhotoScale}
+        />
+      ) : null}
+      {/* R-07 / R-10：照片边框与位置。折进弹层，不占左栏纵向空间。
+          与「照片大小」同一处宿主条件（showPhotoScale），主预览栏不受影响。 */}
+      {showPhotoScale && !fontOnly ? (
+        <PhotoFrameControl
+          formatConfig={layout.format_config}
+          disabled={disabled}
+          hasPhoto={hasPhoto}
+          onProbe={applyProbe}
+          onChange={(format_config) => onChange({ ...layout, format_config })}
         />
       ) : null}
     </div>

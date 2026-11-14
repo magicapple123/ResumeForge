@@ -15,7 +15,11 @@ import {
   clipboardImages,
   type PendingAttachment,
 } from "../assistantUtils";
-import type { AssistantQuotedMessage, AssistantSkill } from "../../../types";
+import type {
+  AssistantMessageReferences,
+  AssistantQuotedMessage,
+  AssistantSkill,
+} from "../../../types";
 import type { ContextUsage, ReasoningEffort } from "../../../types/assistant";
 import type {
   ConversationSkillBudget,
@@ -31,6 +35,7 @@ import ComposerToolbar from "./composer/ComposerToolbar";
 import ContextChips from "./composer/ContextChips";
 import PermissionConfirmModal from "./composer/PermissionConfirmModal";
 import SkillChips from "./composer/SkillChips";
+import { useContextLabels } from "./composer/useContextLabels";
 
 /** 文档按扩展名区分图标：pdf 和 docx 混在一串标签里时，图标比文件名更好认。 */
 function attachmentIcon(attachment: PendingAttachment) {
@@ -80,7 +85,7 @@ interface Props {
   onContextWindowSaved?: (windowTokens: number) => void;
   /** 压缩或还原成功后让上层重取用量（#10）。 */
   onContextChanged?: () => void;
-  onSend: () => void;
+  onSend: (refs?: AssistantMessageReferences) => void;
   onStop: () => void;
 }
 
@@ -122,6 +127,9 @@ export default function AssistantComposer({
   const { message } = App.useApp();
   // 数据权限（D19/D20）：默认「跟随全局」，有会话时按会话覆盖。
   const permission = useAssistantPermission(conversationId ?? null);
+  // 岗位/简历的展示口径与「本轮引用」快照（F36 一处实现）：发送时随消息带上，
+  // 发送后页面清空选择，乐观气泡仍能显示这段引用。
+  const { jobLabel, resumeLabel, refs: contextRefs } = useContextLabels(jobId, resumeId);
 
   /**
    * 直接往输入框里粘贴截图。
@@ -155,6 +163,8 @@ export default function AssistantComposer({
           <ContextChips
             jobId={jobId}
             resumeId={resumeId}
+            jobLabel={jobLabel}
+            resumeLabel={resumeLabel}
             onJobChange={onJobChange}
             onResumeChange={onResumeChange}
           />
@@ -237,7 +247,7 @@ export default function AssistantComposer({
           onPressEnter={(event) => {
             if (!event.shiftKey) {
               event.preventDefault();
-              onSend();
+              onSend(contextRefs);
             }
           }}
         />
@@ -292,7 +302,7 @@ export default function AssistantComposer({
           onContextWindowSaved={onContextWindowSaved}
           contextConversationId={conversationId ?? null}
           onContextChanged={onContextChanged}
-          onSend={onSend}
+          onSend={() => onSend(contextRefs)}
           onStop={onStop}
         />
       </div>

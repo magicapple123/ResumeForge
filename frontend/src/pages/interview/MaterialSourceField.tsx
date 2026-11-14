@@ -15,6 +15,10 @@
  *   原样弹出即可，不在这里改写文案。
  *
  * 从记录选那一路的下拉框仍在 `SetupTab` 里（候选走远程搜索 hook），这里只提供模式开关。
+ *
+ * **岗位侧没有文件这一路**（Q3）：`allowFile={false}` 时整个 Radio.Group 与文件区都不渲染。
+ * 岗位的正经入口是「去岗位广场从链接导入」，再给一个上传 JD 的入口就是同一件事两个入口；
+ * 简历侧相反——用户手里常常就是一份现成的 PDF/Word，所以那边保留上传。
  */
 import { DeleteOutlined, FileTextOutlined, PaperClipOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Radio, Space, Tag, Typography, Upload } from "antd";
@@ -60,6 +64,7 @@ export function MaterialSourceField({
   mode,
   material,
   disabled = false,
+  allowFile = true,
   onModeChange,
   onMaterialChange,
 }: {
@@ -69,6 +74,12 @@ export function MaterialSourceField({
   material: InterviewMaterialExtract | null;
   /** 正在开场：上传与切换都停掉，避免和提交抢状态。 */
   disabled?: boolean;
+  /**
+   * 是否允许「导入文件」这一路（Q3）：岗位侧只保留「从记录选」——真实岗位几乎都是从岗位广场
+   * 按链接导入的，再给一个上传 JD 的入口只会让同一件事有两个入口。`false` 时**整个
+   * Radio.Group 不渲染**，也不再有文件区，只留记录侧的下拉。
+   */
+  allowFile?: boolean;
   onModeChange: (mode: MaterialSourceMode) => void;
   onMaterialChange: (material: InterviewMaterialExtract | null) => void;
 }) {
@@ -130,20 +141,22 @@ export function MaterialSourceField({
     <div className="interview-material-source">
       {/* 次级开关：`outline` 而不是 `solid`——深蓝实心留给页面唯一的主操作「开始面试」，
           否则页面上会出现两个同等权重的焦点。`size="small"` 也刻意不追平 32px 的 Select：
-          靠间距分层，不靠高度对齐。 */}
-      <Radio.Group
-        size="small"
-        optionType="button"
-        buttonStyle="outline"
-        disabled={disabled}
-        value={mode}
-        onChange={(event) => onModeChange(event.target.value as MaterialSourceMode)}
-        options={[
-          { value: "record", label: t("interviewPage.setup.material.fromRecord") },
-          { value: "file", label: t("interviewPage.setup.material.fromFile") },
-        ]}
-      />
-      {mode === "file" ? (
+          靠间距分层，不靠高度对齐。岗位侧（`allowFile={false}`）整块不渲染。 */}
+      {allowFile && (
+        <Radio.Group
+          size="small"
+          optionType="button"
+          buttonStyle="outline"
+          disabled={disabled}
+          value={mode}
+          onChange={(event) => onModeChange(event.target.value as MaterialSourceMode)}
+          options={[
+            { value: "record", label: t("interviewPage.setup.material.fromRecord") },
+            { value: "file", label: t("interviewPage.setup.material.fromFile") },
+          ]}
+        />
+      )}
+      {allowFile && mode === "file" ? (
         <Space size={6} wrap className="interview-material-file">
           <Upload
             accept={MATERIAL_ACCEPT}
@@ -191,7 +204,7 @@ export function MaterialSourceField({
         </Space>
       ) : null}
       {/* 解析成功但带警告：常驻在材料块里（而不是只闪一条 Toast）。 */}
-      {mode === "file" && material && material.warnings.length > 0 ? (
+      {allowFile && mode === "file" && material && material.warnings.length > 0 ? (
         <Alert
           type="warning"
           showIcon

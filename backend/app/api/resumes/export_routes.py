@@ -38,7 +38,7 @@ from ...services.pdf_preview_cache import CachedPreviewPdf
 from ...services.pdf_preview_cache import get as get_cached_preview
 from ...services.pdf_preview_cache import put as put_cached_preview
 from ...services.privacy import RedactionOptions as PrivacyRedactionOptions
-from ...services.privacy import plain_text_document, redact_document
+from ...services.privacy import redact_document
 from ...services.resume.export_bundle import resolve_variant_export_options
 from ...services.resume.resume_completeness import find_incomplete_document, incomplete_detail
 from ...services.resume.resume_delivery import (
@@ -252,10 +252,12 @@ def _export_record(
     if record_delivery:
         # 实际导出的那份内容（PR-09）：脱敏导出存脱敏内容，保证存档与下载产物同源——
         # 与管线内部 ``build_export`` 的脱敏前置是同一条规则、同一份实现（privacy.redact）。
+        # 与渲染用的那一份**同一口径**：不再额外剥行内标记，否则存档重放会丢掉
+        # 加粗/字号/颜色（存档的意义就是"能重放出同一份文件"）。
         effective_content = (
             redact_document(document, request.redact_options)
             if request.redact
-            else plain_text_document(document)
+            else document
         )
         # 实际生效的渲染上下文（PR-09）：请求覆盖值按 build_export 的生效规则折算——
         # 修复"请求 page_limit=2、存档里却是记录默认 1"的错位。
@@ -396,7 +398,7 @@ def export_resume_with_options(
         db,
         record,
         export_options,
-        allow_incomplete=payload.allow_incomplete,
+        allow_incomplete=True if payload.preview else payload.allow_incomplete,
         record_delivery=payload.record_delivery,
         # 预览（`preview=true`）：只服务"屏幕上的一次查看"，不落盘副本、结果进缓存。
         # 两个开关必须成对：`cache_result` 只在 `save_copy=False` 时生效（否则落盘副本

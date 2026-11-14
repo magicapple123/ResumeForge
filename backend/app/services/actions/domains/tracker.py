@@ -40,6 +40,7 @@ from ....schemas.tracker import (
     MAX_TRACK_STAGE_NOTE_CHARS,
     MAX_TRACK_TITLE_CHARS,
     TrackCreate,
+    TrackCreateOut,
     TrackListOut,
     TrackOut,
     TrackUpdate,
@@ -241,8 +242,18 @@ def _run_create_application_track(
     db: Session, payload: CreateApplicationTrackInput
 ) -> ActionOutcome:
     from ...assistant_tools.tracker_tools import _track_brief as _tool_track_brief
-    from ...tracker import create_track, track_out
+    from ...tracker import _find_by_key, create_track, track_out
 
+    # job_id 预查会漏掉未关联岗位的同公司/岗位记录，归一化键在动作层兜底。
+    existing = _find_by_key(db, payload)
+    if existing is not None:
+        return ActionOutcome(
+            summary="已在求职进度中",
+            text=json.dumps(_tool_track_brief(existing), ensure_ascii=False),
+            link="/tracker",
+            changed=False,
+            data=TrackCreateOut(**track_out(existing).model_dump(), created=False),
+        )
     # create_track 负责记录 + 首个状态事件 + 投递快照的同一事务（业务逻辑只此一份）。
     record = create_track(db, payload)
     return ActionOutcome(
@@ -250,7 +261,7 @@ def _run_create_application_track(
         text=json.dumps(_tool_track_brief(record), ensure_ascii=False),
         link="/tracker",
         changed=True,
-        data=track_out(record),
+        data=TrackCreateOut(**track_out(record).model_dump(), created=True),
     )
 
 
@@ -345,7 +356,9 @@ def tracker_actions() -> dict[str, ActionSpec]:
             run=_run_create_application_track,
             preview=_preview_create_application_track,
             service_entry="tracker.create_track",
-            http=HttpRoute("POST", "/api/tracker", TrackOut, status_code=201, tags=("tracker",)),
+            http=HttpRoute(
+                "POST", "/api/tracker", TrackCreateOut, status_code=201, tags=("tracker",)
+            ),
         )
     )
     update_track_action = define_action(

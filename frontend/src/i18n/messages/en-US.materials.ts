@@ -41,7 +41,6 @@ const materials = {
   "materials.detail.updatedAt": "Updated",
   "materials.detail.body": "Content",
   "materials.detail.note": "Notes",
-  "materials.detail.none": "(None)",
   "materials.detail.attachmentsTitle": "Attachments ({count})",
   "materials.file.image": "Image · {size} KB",
   "materials.file.text": "{count} characters",

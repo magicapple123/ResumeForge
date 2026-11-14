@@ -181,6 +181,12 @@ describe("ReferralPanel", () => {
     expect(await screen.findByText("联系方式")).toBeInTheDocument();
     expect(screen.getByText("微信 zs")).toBeInTheDocument();
     expect(screen.getByText("REF-888")).toBeInTheDocument();
+    // 没填的字段整行不渲染：详情里不再有 "-" 占位（这一条只填了部分字段）。
+    expect(
+      Array.from(document.querySelectorAll(".record-detail-value")).some(
+        (element) => element.textContent === "-",
+      ),
+    ).toBe(false);
   });
 
   it("详情里的图片备注用弹层预览，不是开新页面（与其他地方的图片一致）", async () => {

@@ -51,7 +51,7 @@ export function getTrack(id: number): Promise<Track> {
   return request(`/tracker/${id}`);
 }
 
-export function createTrack(payload: TrackPayload): Promise<Track> {
+export function createTrack(payload: TrackPayload): Promise<Track & { created: boolean }> {
   return request("/tracker", { method: "POST", body: JSON.stringify(payload) });
 }
 
@@ -114,4 +114,86 @@ export async function exportTracks(
     getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ??
     t("apiErrors.download.trackerFilename", { format });
   return { blob: await resp.blob(), filename };
+}
+
+// ===== 申请状态回读（R-15 C）=====
+
+export interface TrackProbeItem {
+  track_id: number;
+  company: string;
+  title: string;
+  url: string;
+  platform: string;
+  outcome: "changed" | "unchanged" | "skipped" | "failed";
+  before: string;
+  before_label: string;
+  after: string;
+  after_label: string;
+  note: string;
+}
+
+export interface TrackProbeResult {
+  items: TrackProbeItem[];
+  changed: number;
+  unchanged: number;
+  skipped: number;
+  failed: number;
+  ran: boolean;
+  due: boolean;
+}
+
+export interface TrackProbeSettings {
+  enabled: boolean;
+  has_cookie: boolean;
+  last_run: string;
+  due: boolean;
+  interval_hours: number;
+  /** 常用的投递记录页（空串 = 没配，只用逐条岗位页回读）。 */
+  page_url: string;
+}
+
+/**
+ * 回读一批进度：抓取是串行的，单批最多 8 条。
+ *
+ * 超时给到 `analysis` 档（180s）：门户慢的时候一条能拖十几秒，
+ * 默认 15s 会让整批直接判超时，而失败信息看起来像"功能坏了"。
+ */
+export function probeTracks(trackIds: number[], limit = 8): Promise<TrackProbeResult> {
+  return request("/tracker/probe", {
+    method: "POST",
+    body: JSON.stringify({ track_ids: trackIds, limit }),
+    budget: "analysis",
+  });
+}
+
+/** 每日自动回读：未到期时后端返回 `ran: false`，不需要前端判断时间。 */
+export function probeDaily(): Promise<TrackProbeResult> {
+  return request("/tracker/probe/daily", { method: "POST", budget: "analysis" });
+}
+
+export function getProbeSettings(): Promise<TrackProbeSettings> {
+  return request("/tracker/probe/settings");
+}
+
+/**
+ * 读**一次**用户提供的投递记录页，把页面上的进度分给各条记录。
+ *
+ * 与 `probeTracks` 的区别：那个是每条记录抓一个岗位页（N 次请求），这个只抓一次。
+ * 页面上没找到的记录会以 `skipped` 返回，由调用方再逐条补。
+ */
+export function probePage(url: string, trackIds: number[] = []): Promise<TrackProbeResult> {
+  return request("/tracker/probe/page", {
+    method: "POST",
+    body: JSON.stringify({ url, track_ids: trackIds }),
+    budget: "analysis",
+  });
+}
+
+/** 只改传了的字段；`cookie` / `page_url` 传空串即清除。 */
+export function saveProbeSettings(payload: {
+  enabled?: boolean;
+  cookie?: string;
+  page_url?: string;
+}): Promise<TrackProbeSettings> {
+  return request("/tracker/probe/settings", { method: "PUT", body: JSON.stringify(payload) });
 }

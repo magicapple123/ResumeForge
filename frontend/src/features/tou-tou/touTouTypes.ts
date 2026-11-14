@@ -9,10 +9,12 @@ export type TouTouEdge = "left" | "right" | "top" | "bottom";
 /**
  * 设置页派发的悬浮球设置变更事件。
  *
- * `tips_enabled` 是**可选**字段：缺省时消费方不得改动现值——这保证旧的生产方
- * （只派发 `enabled` 的老代码）不会把标语开关意外打回默认。
+ * `tips_enabled` 与 `selection_enabled` 都是**可选**字段：缺省时消费方不得改动现值——
+ * 这保证旧的生产方（只派发 `enabled` 的老代码）不会把标语 / 划词浮条开关意外打回默认。
  */
 export interface TouTouSettingEventDetail {
   enabled: boolean;
   tips_enabled?: boolean;
+  /** 划词浮条开关（Q9）；缺省 = 保持现值。 */
+  selection_enabled?: boolean;
 }

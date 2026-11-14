@@ -93,6 +93,9 @@ class HeaderPlan(BaseModel):
     name_meta: list[Inline] = Field(default_factory=list)
     subtitle: list[Inline] = Field(default_factory=list)
     contact_lines: list[list[Inline]] = Field(default_factory=list)
+    # 联系方式同一行里字段之间的可见分隔文本（空串 = 各出口的历史分隔符）。
+    # 由 `format_config.contact_separator` 决定，见 `resume_contact.contact_separator_text`。
+    contact_separator: str = ""
     photo: str | None = None
 
 

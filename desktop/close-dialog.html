@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <!-- 自绘关闭卡片（Q11）：原生 MessageBox 的标题栏/图标/按钮全由系统画，
+         参数里没有任何旋钮能改外观，所以只能自己开一个无边框窗口。
+         这里只有一个窗口、两个视图：视图 1 主问，视图 2 二次确认（只在"勾了记住 + 选退出"时出现）。 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>关闭简历通</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #1f2328;
+        --muted: #5c6672;
+        --border: #e3e6ea;
+        --primary: #1668dc;
+        --primary-fg: #ffffff;
+        --danger: #d4380d;
+        --surface: #f6f7f9;
+      }
+      /* 深色：跟随系统（与 nativeTheme.shouldUseDarkColors 同源）。 */
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1c1f24;
+          --fg: #e6e8eb;
+          --muted: #9aa4b2;
+          --border: #2f343c;
+          --primary: #3c89f0;
+          --primary-fg: #0b1220;
+          --danger: #ff7a45;
+          --surface: #23272e;
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 22px 24px;
+        font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+        user-select: none;
+      }
+      h1 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+      p { margin: 0 0 16px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+      .row { display: flex; gap: 10px; justify-content: flex-end; }
+      button {
+        min-width: 96px;
+        padding: 7px 14px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 13px;
+        color: var(--fg);
+        background: var(--surface);
+        cursor: pointer;
+      }
+      button:hover { border-color: var(--primary); }
+      button.primary {
+        border-color: var(--primary);
+        color: var(--primary-fg);
+        background: var(--primary);
+      }
+      button.danger { border-color: var(--danger); color: var(--danger); background: transparent; }
+      .remember {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 14px 0 4px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .hint { margin-top: 10px; font-size: 12px; color: var(--muted); }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <!-- 视图 1：主问 -->
+    <section id="ask">
+      <h1 id="ask-title">关闭简历通？</h1>
+      <p id="ask-detail"></p>
+      <div class="row">
+        <button id="hide" class="primary"></button>
+        <button id="quit" class="danger"></button>
+      </div>
+      <label class="remember">
+        <input id="remember" type="checkbox" />
+        <span id="remember-label">记住我的选择</span>
+      </label>
+      <div class="hint" id="ask-hint"></div>
+    </section>
+
+    <!-- 视图 2：二次确认（勾了记住 + 选了退出） -->
+    <section id="confirm" hidden>
+      <h1>以后关闭窗口将直接退出应用</h1>
+      <p>正在进行的生成或采集会被中断。随时可以在托盘菜单里重新打开「关闭窗口时询问」。</p>
+      <div class="row">
+        <button id="confirm-quit" class="danger">退出并记住</button>
+        <button id="confirm-once" class="primary">只退出这次</button>
+      </div>
+    </section>
+
+    <script>
+      const api = window.closeDialog;
+      const ask = document.getElementById("ask");
+      const confirm = document.getElementById("confirm");
+      let action = "hide";
+
+      // 平台口径由主进程给：macOS 没有"最小化到托盘"的惯例，退化为「关闭窗口」。
+      api
+        .platform()
+        .then((isMac) => {
+          document.getElementById("hide").textContent = isMac ? "关闭窗口" : "最小化到托盘";
+          document.getElementById("quit").textContent = "退出应用";
+          document.getElementById("ask-title").textContent = "关闭简历通？";
+          document.getElementById("ask-detail").textContent = isMac
+            ? "关闭窗口后应用仍会留在 Dock 与菜单栏，可重新打开；退出应用会停止本地服务，正在进行的生成/采集会中断。"
+            : "最小化后仍会继续在后台运行，可从托盘图标重新打开；退出应用会停止本地服务，正在进行的生成/采集会中断。";
+          document.getElementById("ask-hint").textContent = "按 Esc 等于最小化到托盘";
+        })
+        .catch(() => undefined);
+
+      function finish(payload) {
+        api.resolve(payload);
+      }
+
+      document.getElementById("hide").addEventListener("click", () => finish({ action: "hide", remember: false }));
+      document.getElementById("quit").addEventListener("click", () => {
+        const remember = document.getElementById("remember").checked;
+        if (!remember) {
+          finish({ action: "quit", remember: false });
+          return;
+        }
+        // 视图 2：误勾一次会长期失去保护，所以"记住 + 退出"必须再确认一遍。
+        action = "quit";
+        ask.hidden = true;
+        confirm.hidden = false;
+        document.getElementById("confirm-once").focus();
+      });
+      document.getElementById("confirm-quit").addEventListener("click", () =>
+        finish({ action, remember: true }),
+      );
+      document.getElementById("confirm-once").addEventListener("click", () =>
+        finish({ action, remember: false }),
+      );
+
+      // Esc = 安全默认（最小化 / 关闭窗口），绝不等于退出。
+      window.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        finish({ action: "hide", remember: false });
+      });
+    </script>
+  </body>
+</html>

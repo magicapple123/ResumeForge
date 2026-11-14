@@ -41,7 +41,9 @@ export function useAssistantSidebarActions({
   groupValue,
 }: Options) {
   const {
-    createConversation,
+    activeId,
+    detail,
+    startDraft,
     forkConversation,
     reloadConversations,
     removeConversation,
@@ -74,10 +76,25 @@ export function useAssistantSidebarActions({
 
   // 会话列表的操作回调全部 useCallback：ConversationSidebar 包了 memo，流式期间
   // 页面级 state（streamingText）每个 delta 都在变，props 引用不稳定的话 memo 形同虚设。
+  /**
+   * 「新对话」= 进入草稿态，**不发请求**（F32）。
+   *
+   * 三支：已在草稿 → 只提示；当前就是一条空会话 → 留在原地；其余 → 切草稿。
+   * 会话记录由第一条消息懒创建，连点五次不会在历史里堆出五条「新对话 · 0 条」。
+   */
   const handleSidebarCreate = useCallback(() => {
     setHistoryOpen(false);
-    void createConversation();
-  }, [createConversation, setHistoryOpen]);
+    if (activeId === null && detail === null) {
+      message.info(t("assistantUi.sidebar.toast.alreadyNew"));
+      return;
+    }
+    const empty =
+      activeId !== null &&
+      detail !== null &&
+      (detail.messages_total ?? detail.messages.length) === 0;
+    if (empty) return;
+    startDraft();
+  }, [activeId, detail, message, setHistoryOpen, startDraft]);
 
   const handleSidebarSelect = useCallback(
     (id: number) => {
@@ -118,6 +135,29 @@ export function useAssistantSidebarActions({
     [updateConversation],
   );
 
+  /**
+   * 临时对话（F34）：切换「本次不记忆」。
+   *
+   * 只改会话的开关，不动 assistant_memory 里的任何一行——关闭开关会恢复后续读写，
+   * 已经存下的记忆要删得去设置页逐条删。提示语必须把这一点说清（Toast 带对象）。
+   */
+  const handleMemoryOffChange = useCallback(
+    async (conversationId: number | null, off: boolean) => {
+      if (conversationId === null) return;
+      const updated = await updateConversation(conversationId, { memory_off: off });
+      if (updated) {
+        message.success(
+          t(
+            off
+              ? "assistantHooks.sidebar.success.memoryOff"
+              : "assistantHooks.sidebar.success.memoryOn",
+          ),
+        );
+      }
+    },
+    [message, updateConversation],
+  );
+
   const handleSidebarFork = useCallback(
     (conversation: AssistantConversationBrief) => void forkConversation(conversation.id),
     [forkConversation],
@@ -155,6 +195,7 @@ export function useAssistantSidebarActions({
     handleSidebarToggleFlag,
     handleSidebarArchive,
     handleSidebarFork,
+    handleMemoryOffChange,
     openGroupModal,
     confirmGroup,
   };

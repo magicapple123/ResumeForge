@@ -9,6 +9,7 @@
  * wording.
  */
 const webFormPage = {
+  "webFormPage.preview.aiEvidence": "Confidence {confidence} · Evidence: {evidence}",
   "webFormPage.notice.title":
     "This feature only fills your data into the page; it never submits for you",
   "webFormPage.notice.body":

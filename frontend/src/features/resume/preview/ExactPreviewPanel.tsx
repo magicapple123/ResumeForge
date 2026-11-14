@@ -20,7 +20,8 @@
  * 纸面与双缓冲在 `ExactPreviewPages` 里，相框测量在 `usePreviewFrame` 里——这个文件只剩
  * "把它们串起来"。
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "antd";
 import type { ReactNode } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -32,6 +33,7 @@ import { A4_WIDTH_PX } from "./config";
 import { previewPagesHeight, previewPdfUrl } from "./previewPages";
 import { useDevicePixelRatio, usePreviewFrame } from "./usePreviewFrame";
 import { usePreviewPages } from "./usePreviewPages";
+import { fetchPreviewFallbackPdf } from "./previewPagesApi";
 
 /**
  * PDF 里相邻两页之间的间距（px），计入相框高度。
@@ -187,7 +189,7 @@ export default function ExactPreviewPanel({
    */
   const statusNode = useMemo(
     () =>
-      shot ? (
+      shot && !error ? (
         <ExactPreviewStatus
           current={shot}
           busy={busy}
@@ -201,17 +203,15 @@ export default function ExactPreviewPanel({
           }
         />
       ) : null,
-    [active, busy, content, headingSerif, pageLimit, resumeId, shot],
+    [active, busy, content, error, headingSerif, pageLimit, resumeId, shot],
   );
   useEffect(() => {
     onStatus?.(statusNode);
   }, [onStatus, statusNode]);
 
-  if (error) return <ExactPreviewError error={error} />;
-
   return (
     <>
-      <ExactPreviewAlerts current={shot} busy={busy} pageLimit={pageLimit} />
+      {error ? null : <ExactPreviewAlerts current={shot} busy={busy} pageLimit={pageLimit} />}
       {/* `is-zoomed` 只在**放大**（scale > 1）时挂上：100% 时纸宽恰好等于相框宽，
           半像素误差会让 `overflow-x: auto` 凭空多出一条横向滚动条。放大时那一条横向滚动
           是**唯一允许**存在的滚动条，纵向永远交给按页数算好的高度（见 P3-3）。 */}
@@ -220,12 +220,29 @@ export default function ExactPreviewPanel({
         ref={frameRef}
         style={stackHeight > 0 ? { height: stackHeight } : undefined}
       >
+        {error ? (
+          <PreviewPdfFallback
+            error={error}
+            active={active}
+            resumeId={resumeId}
+            height={height}
+            options={{
+              template,
+              format_name: formatName,
+              page_limit: pageLimit,
+              font_scale: fontScale,
+              language,
+              format_config: formatConfig,
+              content,
+            }}
+          />
+        ) : null}
         {/* 只在这个口径可见时才摆加载占位：草稿模式下这块是隐藏的，占位没有意义
             （而且会让每份简历的弹窗里都多一个空壳）。 */}
-        {active && busy && !shot ? (
+        {!error && active && busy && !shot ? (
           <LoadingBlock tip={t("preview.exact.typesetting")} minHeight={height} />
         ) : null}
-        {shot ? (
+        {!error && shot ? (
           <ExactPreviewPages
             resumeId={resumeId}
             current={shot}
@@ -243,5 +260,65 @@ export default function ExactPreviewPanel({
           宿主没接（`onStatus` 缺省）时仍按老位置渲染在这里——单测与只读宿主不用改 */}
       {onStatus ? null : statusNode}
     </>
+  );
+}
+
+function PreviewPdfFallback({
+  error,
+  active,
+  resumeId,
+  height,
+  options,
+}: {
+  error: string;
+  active: boolean;
+  resumeId: number;
+  height: number;
+  options: Parameters<typeof fetchPreviewFallbackPdf>[1];
+}) {
+  useLocale();
+  const [result, setResult] = useState<{ signature: string; url: string } | null>(null);
+  const [failure, setFailure] = useState<{ signature: string; error: string } | null>(null);
+  const signature = JSON.stringify([resumeId, options]);
+  const url = result?.signature === signature ? result.url : null;
+  const fallbackError = failure?.signature === signature ? failure.error : null;
+  useEffect(() => {
+    if (!active) return;
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    void fetchPreviewFallbackPdf(resumeId, JSON.parse(signature)[1], controller.signal)
+      .then(({ blob }) => {
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setResult({ signature, url: objectUrl });
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) {
+          setFailure({ signature, error: cause instanceof Error ? cause.message : String(cause) });
+        }
+      });
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [active, resumeId, signature]);
+  return (
+    <div className="exact-preview-pdf-fallback">
+      <ExactPreviewError error={fallbackError ?? error} />
+      {url ? (
+        <>
+          <Button type="link" onClick={() => window.open(url, "_blank", "noopener,noreferrer")}>
+            {t("exact.openNewTab")}
+          </Button>
+          <iframe
+            src={url}
+            title={t("resume.detail.titleFallback")}
+            style={{ width: "100%", height }}
+          />
+        </>
+      ) : fallbackError ? null : (
+        <LoadingBlock minHeight={height} />
+      )}
+    </div>
   );
 }

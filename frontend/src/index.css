@@ -8,6 +8,7 @@
 @import "./styles/assistant-message-actions.css";
 @import "./styles/assistant-composer.css";
 @import "./styles/assistant-context.css";
+@import "./styles/assistant-limits.css";
 @import "./styles/form-state.css";
 @import "./styles/recognition.css";
 @import "./styles/jobs.css";
@@ -28,6 +29,8 @@
 @import "./styles/settings-update.css";
 @import "./styles/usage-summary.css";
 @import "./styles/settings-search.css";
+/* F38 设置页外壳（左侧九组导航）：与上面的设置分片同批，独立成片以便按需增长。 */
+@import "./styles/settings-shell.css";
 @import "./styles/responsive-narrow.css";
 @import "./styles/responsive.css";
 @import "./styles/foundation.css";

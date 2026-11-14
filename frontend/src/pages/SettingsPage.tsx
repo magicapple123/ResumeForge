@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 设置页外壳：只做三件事——持有需要跨页签共享的 hooks、算好各卡片的 props、渲染六个页签。
+ * 设置页外壳：左侧九组导航 + 右侧单组内容。
  *
- * 页签内"哪张卡放哪一页"全部在 `features/settings/SettingsPanels.tsx`（那份文件就是
- * 页面结构表）。这样拆的原因：设置项从 21 张卡、3 个页签扩到 6 个页签后，如果编排还留在
- * 这里，本文件会顶到 500 行预算并且再也没法加东西。
+ * 三件事：持有需要跨组共享的 hooks、算好各卡片的 props、根据当前分组渲染对应的面板。
+ * "哪张卡放在哪一组"全部在 `features/settings/SettingsPanels.tsx`；"哪一组叫什么、
+ * 属于哪一档、深链怎么解析"全部在 `settingsSections.ts`。
  *
- * 默认停留在 `model`：多数人进设置页是为了改模型或看用量，切页签不改变任何已存设置。
+ * 为什么不再用 antd `Tabs`：九组之后页签横排一行放不下，而设置项是"目录式"的浏览
+ * 而不是"一层里切页"，左侧竖向导航能一次看到全部九个分组。`?tab=` 深链仍然可用，
+ * 旧键 `assistant` 会映射到 `assistant-behavior`。
  */
-import { Tabs, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { Typography } from "antd";
+import { useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useSettingsDatasets } from "../features/settings/useSettingsDatasets";
@@ -19,42 +21,48 @@ import { useLLMRecordTools } from "../features/settings/useLLMRecordTools";
 import LLMConfigCard from "../features/settings/LLMConfigCard";
 import DatasetsCard from "../features/settings/DatasetsCard";
 import SkillsCard from "../features/settings/SkillsCard";
+import SettingsNav from "../features/settings/SettingsNav";
+import SettingsSearch from "../features/settings/SettingsSearch";
+import { parseSettingsSection, settingsSection } from "../features/settings/settingsSections";
+import type { SettingsSectionKey } from "../features/settings/settingsSections";
+import { revealSettingsCard } from "../features/settings/settingsFocus";
+import type { SettingsIndexEntry } from "../features/settings/settingsIndex";
 import {
   AboutPanel,
   AppearancePanel,
-  AssistantPanel,
+  AssistantBehaviorPanel,
   BackupPanel,
   DataPanel,
+  InteractionPanel,
+  MemorySkillsPanel,
   ModelPanel,
+  VoicePanel,
 } from "../features/settings/SettingsPanels";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import SkillEditorModal from "../features/skills/SkillEditorModal";
 
-/** 设置分页：六页各自装同一类东西——改模型配置不用先翻过整套数据备份。 */
-export type SettingsTabKey = "model" | "assistant" | "appearance" | "data" | "backup" | "about";
-
-const SETTINGS_TAB_KEYS: SettingsTabKey[] = [
-  "model",
-  "assistant",
-  "appearance",
-  "data",
-  "backup",
-  "about",
-];
-
-/** 深链 `?tab=` 的解析：不在清单里就回默认页（不报错，也不接受任意字符串）。 */
-function parseSettingsTab(value: string | null): SettingsTabKey {
-  return SETTINGS_TAB_KEYS.find((key) => key === value) ?? "model";
+/** 搜索选中后要定位的那张卡：`nonce` 让"同一张卡连点两次"也能再触发一次 effect。 */
+interface PendingJump {
+  title: string;
+  nonce: number;
 }
 
 export default function SettingsPage() {
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<SettingsTabKey>(() =>
-    parseSettingsTab(searchParams.get("tab")),
-  );
+  const initialSection = parseSettingsSection(searchParams.get("tab"));
+  const [activeSection, setActiveSection] = useState<SettingsSectionKey>(initialSection);
+  // 去过的分组不卸载：切回来时输入到一半的表单、已取到的数据都还在（原来 antd Tabs 的行为）。
+  const [visited, setVisited] = useState<SettingsSectionKey[]>([initialSection]);
+  const [pendingJump, setPendingJump] = useState<PendingJump | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  /** 上一次已渲染的分组：用来区分"用户切了组"和"首次挂载"。 */
+  const prevSectionRef = useRef<SettingsSectionKey | null>(null);
 
-  // 带锚点进来（例如批量操作未配置时从岗位广场跳来）要落到那张卡，而不是停在页签顶部。
+  // 本页用模块级 t() 取文案：必须订阅语言变化，否则切到英文后这一页仍是中文。
+  useLocale();
+
+  // 带锚点进来（例如批量操作未配置时从岗位广场跳来）要落到那张卡，而不是停在分组顶部。
   useEffect(() => {
     const hash = window.location.hash;
     if (!hash) return;
@@ -65,7 +73,7 @@ export default function SettingsPage() {
       return;
     }
     target?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [activeTab]);
+  }, [activeSection]);
 
   const {
     records,
@@ -78,9 +86,6 @@ export default function SettingsPage() {
     applyRecord,
     removeRecord,
   } = useLLMSettings();
-
-  // 本页用模块级 t() 取文案：必须订阅语言变化，否则切到英文后这一页仍是中文。
-  useLocale();
 
   // 记录卡动作（卡上测试连接 / 新增与编辑共用弹窗）拆在独立 hook：保持 useLLMSettings 精简。
   const {
@@ -120,7 +125,6 @@ export default function SettingsPage() {
   };
 
   // 这里只读技能摘要：技能的新建 / 导入 / 启用停用 / 删除全在工作台（/skills）。
-  // useSettingsSkills 已收成只读 hook（A2 收权），写路径在本页没有消费方，所以已删除。
   const { skills, skillsLoading, loadSkillList } = useSettingsSkills();
   const [skillEditorOpen, setSkillEditorOpen] = useState(false);
   const [skillEditorId, setSkillEditorId] = useState<number | null>(null);
@@ -239,6 +243,65 @@ export default function SettingsPage() {
     },
   };
 
+  const activeMeta = settingsSection(activeSection);
+
+  /** 切分组：记进 visited，并把右侧内容滚回顶部（首次挂载不滚，避免进页面就跳一下）。 */
+  const handleSectionChange = (next: SettingsSectionKey) => {
+    setActiveSection(next);
+    if (!visited.includes(next)) setVisited((prev) => [...prev, next]);
+  };
+
+  // 只有真的换了分组才把内容区滚回顶部：首次挂载不滚（否则页头会被顶出视口）。
+  // 用"上一次分组"而不是 mounted 布尔量判断——StrictMode 下 effect 会跑两次，
+  // 布尔量在第二次已经把挂载期当成切换期，页面一进就上滚一屏。
+  useEffect(() => {
+    if (prevSectionRef.current === null) {
+      prevSectionRef.current = activeSection;
+      return;
+    }
+    if (prevSectionRef.current === activeSection) return;
+    prevSectionRef.current = activeSection;
+    contentRef.current?.scrollIntoView?.({ block: "start", behavior: "auto" });
+  }, [activeSection]);
+
+  // 搜索命中：先切分组，等这一帧把目标卡渲染出来后再滚动 + 高亮。
+  useEffect(() => {
+    if (pendingJump === null) return;
+    revealSettingsCard(pendingJump.title);
+  }, [pendingJump]);
+
+  const handleJump = (entry: SettingsIndexEntry) => {
+    handleSectionChange(entry.section);
+    setPendingJump({ title: t(entry.titleKey), nonce: Date.now() });
+  };
+
+  const provenanceTarget = configSummary
+    ? t(configSummary.presetLabelKey) + " · " + configSummary.model
+    : undefined;
+
+  const panelFor = (key: SettingsSectionKey) => {
+    switch (key) {
+      case "model":
+        return <ModelPanel llmCard={llmCard} provenanceTarget={provenanceTarget} />;
+      case "assistant-behavior":
+        return <AssistantBehaviorPanel />;
+      case "memory-skills":
+        return <MemorySkillsPanel skillsCard={skillsCard} />;
+      case "voice":
+        return <VoicePanel />;
+      case "appearance":
+        return <AppearancePanel />;
+      case "interaction":
+        return <InteractionPanel />;
+      case "data":
+        return <DataPanel datasetsCard={datasetsCard} />;
+      case "backup":
+        return <BackupPanel />;
+      case "about":
+        return <AboutPanel />;
+    }
+  };
+
   return (
     <div className="settings-page">
       <div className="settings-page-header">
@@ -250,55 +313,27 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* 设置项按"你改的是什么"分页，而不是全部平铺一页：功能变多之后一整页排下来找起来
-          很费劲（想改数据备份得先翻过整套模型参数）。六页的分法与顺序见 SettingsPanels
-          的文件头说明。 */}
-      <Tabs
-        className="settings-tabs"
-        activeKey={activeTab}
-        onChange={(key) => setActiveTab(key as SettingsTabKey)}
-        items={[
-          {
-            key: "model",
-            label: t("settings.tab.model"),
-            children: (
-              <ModelPanel
-                llmCard={llmCard}
-                provenanceTarget={
-                  configSummary
-                    ? t(configSummary.presetLabelKey) + " · " + configSummary.model
-                    : undefined
-                }
-              />
-            ),
-          },
-          {
-            key: "assistant",
-            label: t("settings.tab.assistant"),
-            children: <AssistantPanel skillsCard={skillsCard} />,
-          },
-          {
-            key: "appearance",
-            label: t("settings.tab.appearance"),
-            children: <AppearancePanel />,
-          },
-          {
-            key: "data",
-            label: t("settings.tab.data"),
-            children: <DataPanel datasetsCard={datasetsCard} />,
-          },
-          {
-            key: "backup",
-            label: t("settings.tab.backup"),
-            children: <BackupPanel />,
-          },
-          {
-            key: "about",
-            label: t("settings.tab.about"),
-            children: <AboutPanel />,
-          },
-        ]}
-      />
+      {/* 九组的分法与顺序见 settingsSections.ts：AI 与助手 → 界面与操作 → 数据与应用。 */}
+      <div className="settings-shell">
+        <div className="settings-sidebar">
+          <SettingsSearch onJump={handleJump} />
+          <SettingsNav active={activeSection} onChange={handleSectionChange} />
+        </div>
+
+        <div className="settings-body" ref={contentRef}>
+          <div className="settings-section-intro">
+            <Typography.Title level={4} style={{ margin: 0 }}>
+              {t(activeMeta.titleKey)}
+            </Typography.Title>
+            <Typography.Text type="secondary">{t(activeMeta.introKey)}</Typography.Text>
+          </div>
+          {visited.map((key) => (
+            <div key={key} className="settings-section" hidden={key !== activeSection}>
+              {panelFor(key)}
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* 设置页里点技能名只读查看详情：技能的改动统一在工作台做，弹窗不给保存。 */}
       <SkillEditorModal

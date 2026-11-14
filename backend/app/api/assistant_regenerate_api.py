@@ -19,7 +19,7 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -54,6 +54,7 @@ class AssistantRegenerateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reasoning_effort: str = ""
+    compaction_threshold_tokens: int | None = Field(default=None, ge=1, le=2_000_000)
     relaxed_mode: bool | None = None
     allow_write: bool = False
 
@@ -92,6 +93,7 @@ def _replay_payload(
         allow_write=request_payload.allow_write,
         relaxed_mode=request_payload.relaxed_mode,
         reasoning_effort=request_payload.reasoning_effort,
+        compaction_threshold_tokens=request_payload.compaction_threshold_tokens,
         quoted_message_id=user_message.quoted_message_id,
     )
 

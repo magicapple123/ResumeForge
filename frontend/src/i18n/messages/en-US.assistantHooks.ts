@@ -40,6 +40,8 @@ const assistantHooks = {
   "assistantHooks.sidebar.error.toggleSkill": "Could not toggle the skill",
   "assistantHooks.sidebar.success.movedToGroup": "Moved to “{name}”",
   "assistantHooks.sidebar.success.removedFromGroup": "Removed from its group",
+  "assistantHooks.sidebar.success.memoryOff": "Memory is off for this conversation",
+  "assistantHooks.sidebar.success.memoryOn": "Memory reads and writes are back on",
   "assistantHooks.url.info.outOfRange":
     "The conversation in this link is not in the list, which only covers the latest 100 conversations.",
 } as const;

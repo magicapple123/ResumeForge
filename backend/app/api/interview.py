@@ -48,14 +48,17 @@ from ..services.interview.interview import (
     mark_finished,
     session_persona,
 )
+from ..services.interview.interview_camera import delete_recording, has_real_report
 from ..services.interview.interview_context import _claims_json
 from ..services.interview.interview_read import list_sessions as list_session_records
 from ..services.interview.interview_report_markdown import _report_markdown
 from ..services.llm.base import LLMError
 from ..services.materials import create_material as create_material_record
 from ._disconnect import client_gone, run_until_disconnect
+from .interview_camera import register_camera_routes
 from .interview_material_routes import register_followup_routes, register_material_routes
 from .interview_question_routes import register_question_routes
+from .interview_revise import register_revise_routes
 from .interview_shared import (
     MAX_JOB_CONTEXT_FOR_INTERVIEW,  # noqa: F401  (re-export：interview_answer_review 从本模块取)
     _default_title,
@@ -111,13 +114,21 @@ async def _ensure_report(db: Session, session: InterviewSession, provider) -> No
     报告失败时留下说明而不是让整场面试不可用：重试要再烧一次整场转录的 token，而用户
     真正需要的是"记录还在、能复盘"。所以错误报告也算"已有报告"，不重复生成。
     """
-    if session.report:
+    # 只带 ``camera`` 段的 report 不算"已有报告"：镜头分析可以在出报告之前完成
+    # （用户先开镜头跑完整场、再点生成报告），那时若直接返回就会漏掉分数与维度。
+    if has_real_report(session.report):
         return
+    # 出报告会整体替换 report：镜头段是独立写入的，不在这里带过去就被冲掉。
+    camera = (session.report or {}).get("camera")
     try:
         session.report = await generate_report(provider, session)
+        if camera:
+            session.report["camera"] = camera
     except LLMError as exc:
         logger.warning("面试报告生成失败 session=%s：%s", session.id, exc)
         session.report = {"summary": f"报告生成失败：{exc}", "error": True}
+        if camera:
+            session.report["camera"] = camera
     # 兜一层：调用方可能只要求出报告、还没收盘（历史数据 / 直连测试）。
     mark_finished(session)
     db.commit()
@@ -374,7 +385,9 @@ async def finish_session(session_id: int, request: Request, db: Session = Depend
     · 已有报告 → 直接返回。重复点是幂等的，不会生成第二份。
     """
     session = _session_or_404(db, session_id)
-    if session.report:
+    # 只有 ``camera`` 段的 report 不算"已有报告"（F18）：镜头分析可能先于报告完成，
+    # 若这里按真值判断就会直接返回一份没有分数与维度的报告。
+    if has_real_report(session.report):
         return _to_detail(session)
     if answered_rounds(session) == 0:
         raise HTTPException(status_code=400, detail="还没有回答任何问题，无法生成报告")
@@ -398,6 +411,9 @@ async def finish_session(session_id: int, request: Request, db: Session = Depend
 @router.delete("/{session_id}", status_code=204)
 def delete_session(session_id: int, db: Session = Depends(get_db)):
     session = _session_or_404(db, session_id)
+    # 录像文件不随数据库行级联：先删文件再删记录，避免留下无主的面部画面
+    # （录像不进回收站，删除确认框里已写明不可恢复）。
+    delete_recording(session_id)
     db.delete(session)
     db.commit()
 
@@ -458,6 +474,15 @@ async def submit_answer_stream(
     )
 
 
+register_revise_routes(
+    router,
+    session_or_404=_session_or_404,
+    require_provider=lambda db: _require_provider(db),
+    stream_events=_answer_stream_events,
+    answered_rounds=answered_rounds,
+    status_active=INTERVIEW_STATUS_ACTIVE,
+)
+
 register_question_routes(
     router,
     lambda db: _require_provider(db),
@@ -466,9 +491,10 @@ register_question_routes(
     lambda db: _claims_json(db),
 )
 
-# #41：材料上传（multipart）与面试结束后的追问。挂到同一个 router 上，前缀与鉴权
-# 完全一致；两块的校验与错误文案各自留在自己的模块里（见模块文档）。
+# #41：材料上传与面试后追问同一个 router、同样前缀与鉴权；校验与文案各自留在模块里。
 register_material_routes(router, lambda db: _require_provider(db))
 register_followup_routes(router, lambda db: _require_provider(db))
 # #26 P0：语音取消端点（插话 → 中止生成 + 回滚）；
 register_voice_routes(router)
+# F18：镜头抽帧分析 + 录像上传/回放/删除；录像不进备份（见 interview_camera 与 coverage）。
+register_camera_routes(router)

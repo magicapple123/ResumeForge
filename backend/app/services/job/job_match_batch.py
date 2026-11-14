@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from ...models.job import Job
 from ...models.job_match_batch import JobMatchBatch
 from ...schemas.job_comparison import JobComparisonResult
-from ...schemas.job_match import JobMatchResult
+from ...schemas.job_match import JobMatchResult, JobMatchSource
 from ...schemas.job_match_batch import (
     JobMatchBatchItem,
     JobMatchBatchSummary,
@@ -39,6 +39,7 @@ from .job_match import (
     local_match_result,
 )
 from .job_match_context import job_resume_text, profile_is_empty, profile_text
+from .job_match_sources import match_source_snapshot, source_matches
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ class BatchMatchInput:
     resume_text: str
     existing_result: JobMatchResult | None
     existing_model: str
+    source: JobMatchSource | None = None
 
 
 @dataclass(frozen=True)
@@ -70,7 +72,9 @@ class BatchMatchCancelled(Exception):
         self.model = model
 
 
-def build_batch_inputs(db: Session, jobs: list[Job], *, force: bool) -> list[BatchMatchInput]:
+def build_batch_inputs(
+    db: Session, jobs: list[Job], *, force: bool, resume_id: int | None = None
+) -> list[BatchMatchInput]:
     """在数据库连接仍可用时准备所有匹配输入，随后即可安全释放连接等待模型。
 
     资料口径与单岗匹配完全一致（当前组 + 去隐藏）：这里直接复用
@@ -80,12 +84,13 @@ def build_batch_inputs(db: Session, jobs: list[Job], *, force: bool) -> list[Bat
     personal_text = profile_text(profile)
     inputs: list[BatchMatchInput] = []
     for job in jobs:
-        resume_text = job_resume_text(db, job)
+        resume_text = job_resume_text(db, job, resume_id)
+        source = match_source_snapshot(db, job, resume_id, personal_text=personal_text)
         existing_result: JobMatchResult | None = None
         existing_model = ""
         if not force:
             existing = apply_service.latest_match(db, job.id)
-            if existing is not None and isinstance(existing.result, dict) and existing.result:
+            if existing is not None and source_matches(existing.result, source):
                 try:
                     existing_result = JobMatchResult.model_validate(existing.result)
                     existing_model = existing.model or ""
@@ -101,6 +106,7 @@ def build_batch_inputs(db: Session, jobs: list[Job], *, force: bool) -> list[Bat
                 resume_text=resume_text,
                 existing_result=existing_result,
                 existing_model=existing_model,
+                source=source,
             )
         )
     if profile_is_empty(profile) and not any(item.resume_text.strip() for item in inputs):
@@ -222,6 +228,7 @@ async def run_batch_match(
             source = "new"
             model = str(getattr(config, "model", ""))
 
+        result = result.model_copy(update={"source": item.source})
         reference_score = score_match_result(
             result, item.payload, item.profile_text, item.resume_text
         )
@@ -324,9 +331,7 @@ def persist_batch_in_new_session(
 
     session = SessionLocal()
     try:
-        return persist_batch(
-            session, run, requested_count=requested_count, comparison=comparison
-        )
+        return persist_batch(session, run, requested_count=requested_count, comparison=comparison)
     except Exception:
         session.rollback()
         raise

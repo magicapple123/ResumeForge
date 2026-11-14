@@ -5,6 +5,7 @@
  */
 import { LinkOutlined } from "@ant-design/icons";
 import { Button } from "antd";
+import type { ButtonProps } from "antd";
 import { useEffect, useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -14,9 +15,10 @@ import { ImportFromUrlModal } from "./ImportFromUrlModal";
 interface Props {
   onImported: () => void;
   disabled?: boolean;
+  buttonSize?: ButtonProps["size"];
 }
 
-export function ImportFromUrlLauncher({ onImported, disabled }: Props) {
+export function ImportFromUrlLauncher({ onImported, disabled, buttonSize }: Props) {
   useLocale();
   const [open, setOpen] = useState(false);
 
@@ -38,6 +40,7 @@ export function ImportFromUrlLauncher({ onImported, disabled }: Props) {
   return (
     <>
       <Button
+        size={buttonSize}
         icon={<LinkOutlined />}
         disabled={disabled || undefined}
         onClick={() => setOpen(true)}

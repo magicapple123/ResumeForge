@@ -17,11 +17,19 @@ const interviewReview = {
   /** 历史视图顶部提示；`{id}` 是记录号，`{time}` 是格式化后的时间。 */
   "interviewReview.alert.viewing": "正在查看历史复盘 #{id}（{time}）",
 
+  /** 查看态卡片头（替代原来那条整宽 Alert）：返回入口 + 「时间 · 岗位/简历」。 */
+  "interviewReview.header.back": "返回复盘列表",
+  "interviewReview.header.meta": "{time} · {target}",
+
   "interviewReview.card.setup": "面试复盘",
   "interviewReview.placeholder.question":
     "录入面试里真实被问的问题，例如：你这个项目的难点是怎么解决的？",
   "interviewReview.placeholder.job": "关联岗位（选填，输入关键词搜索）",
   "interviewReview.placeholder.resume": "关联简历（反向优化必选，输入关键词搜索）",
+  /** 简历来源这一块的标签与说明：下拉本身含内部/外部两组，文件走同一块的「导入文件」。 */
+  "interviewReview.resume.label": "简历",
+  "interviewReview.resume.hint":
+    "下拉里有两组：本应用的简历、外部简历（上传的）；也可以直接导入一份简历文件",
   "interviewReview.action.analyze": "分析答题思路",
 
   "interviewReview.card.analysis": "答题思路",
@@ -49,12 +57,18 @@ const interviewReview = {
   "interviewReview.legacy.title": "此为旧版记录，仅可查看",
   "interviewReview.legacy.body": "旧版历史以纯文本保存，无法还原为结构化复盘，仅展示原始内容。",
 
+  // ===== 历史列表的折叠摘要（展开只看摘要，完整内容点进详情） =====
+  "interviewReview.history.summary.suggestions": "{count} 条改进建议",
+  "interviewReview.history.summary.empty": "这条记录没有可摘要的内容，点「查看详情」看原文",
+
   "interviewReview.error.needQuestion": "请先录入真实被问的问题",
   "interviewReview.error.analyzeFailed": "分析答题思路失败",
   "interviewReview.error.needResume": "请先选择要优化的简历",
   "interviewReview.error.needAnalysis": "请先分析答题思路",
   "interviewReview.error.autoSaveFailed": "自动保存复盘历史失败",
   "interviewReview.error.writeBackFailed": "建议已生成，但写回历史失败",
+  "interviewReview.error.notPersisted":
+    "建议已生成，但这条复盘还没保存成功，先点「保存复盘」再试写回。",
   "interviewReview.error.optimizeFailed": "反向优化失败",
   "interviewReview.deleted": "已删除复盘历史",
   "interviewReview.error.deleteFailed": "删除复盘历史失败",

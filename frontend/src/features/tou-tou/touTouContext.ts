@@ -8,6 +8,8 @@ export interface TouTouContextValue {
   enabled: boolean;
   /** 悬浮球是否弹出轮换提示标语；与 `enabled` 分开——关标语不该连助手入口一起关掉。 */
   tipsEnabled: boolean;
+  /** 选中文字后是否浮出动作条（Q9）；与 `enabled` 分开——关划词浮条不该连入口一起关。 */
+  selectionEnabled: boolean;
   edge: TouTouEdge;
   status: TouTouStatus;
   setEdge: (edge: TouTouEdge) => void;
@@ -17,6 +19,7 @@ export interface TouTouContextValue {
 export const defaultTouTouContext: TouTouContextValue = {
   enabled: true,
   tipsEnabled: true,
+  selectionEnabled: true,
   edge: "right",
   status: "idle",
   setEdge: () => undefined,

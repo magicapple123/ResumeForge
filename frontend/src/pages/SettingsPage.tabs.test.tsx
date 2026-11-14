@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 设置页的**页签结构**守卫：六个顶层页签都在、默认停在「AI 模型」、以及
- * "语言 / 简历字体 / 界面与导航三张卡在外观页签里同级连续排列"。
+ * 设置页的**分组结构**守卫：九个分组都在、分成三档导航标题、默认落在「AI 模型」、
+ * "语言 / 简历字体 / 界面与导航三张卡在外观组里同级连续排列"，以及深链与搜索的落点。
  *
  * 为什么要单独一条：用户提的原始诉求就是"语言要单独成一张卡、和字体、导航平级"。
- * 卡片摆在哪一页、和谁挨着，是这一页设计的一部分，光靠人眼看截图守不住。
+ * 卡片摆在哪一组、和谁挨着，是这一页设计的一部分，光靠人眼看截图守不住。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -151,7 +151,7 @@ beforeEach(() => {
     installable: false,
     message: "",
   });
-  // 有待汇报的更新结果时 UpdateCard 会弹确认框，把页签用例搅乱。
+  // 有待汇报的更新结果时 UpdateCard 会弹确认框，把用例搅乱。
   apiMocks.getUpdateInstallResult.mockResolvedValue(null);
   apiMocks.acknowledgeUpdateInstallResult.mockResolvedValue(undefined);
   skillMocks.listSkills.mockResolvedValue([]);
@@ -162,9 +162,9 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderPage() {
+function renderPage(entry = "/settings") {
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[entry]}>
       <AntdApp>
         <SettingsPage />
       </AntdApp>
@@ -172,56 +172,75 @@ function renderPage() {
   );
 }
 
+/** 左侧导航项的文案（按 DOM 顺序）。 */
+function navLabels(): string[] {
+  return Array.from(document.querySelectorAll(".settings-nav-item")).map((node) =>
+    (node.textContent ?? "").trim(),
+  );
+}
+
 /**
- * 当前页签里所有 `settings-card` 的标题（按 DOM 顺序）。
+ * 当前显示的那一组里所有 `settings-card` 的标题（按 DOM 顺序）。
  *
- * 页签容器在 antd 6 里的类名是 `.ant-tabs-content` + `-active`（不是旧版的
- * `-tabpane`），且**非当前页签的内容仍留在 DOM 里**（只是 hidden），所以必须按
- * active 那一层限定，否则会把别的页签的卡一起数进来。
+ * 分组切换不再卸载旧面板（保留各自的取数状态），所以必须按 `:not([hidden])` 限定，
+ * 否则会把别的组的卡一起数进来。
  */
 function activeCardTitles(): string[] {
-  const pane = document.querySelector(".ant-tabs-content-active");
+  const pane = document.querySelector(".settings-section:not([hidden])");
   if (pane === null) return [];
   return Array.from(pane.querySelectorAll(".settings-card > .ant-card-head .ant-card-head-title"))
     .map((node) => (node.textContent ?? "").trim())
     .filter((text) => text.length > 0);
 }
 
-describe("SettingsPage 页签结构", () => {
-  it("renders the six top-level tabs", async () => {
+describe("SettingsPage 分组导航", () => {
+  it("renders the nine sections under three nav groups", async () => {
     renderPage();
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
 
-    const labels = screen.getAllByRole("tab").map((node) => (node.textContent ?? "").trim());
-    expect(labels).toEqual([
+    expect(navLabels()).toEqual([
       t("settings.tab.model"),
       t("settings.tab.assistant"),
+      t("settings.tab.memorySkills"),
+      t("settings.tab.voice"),
       t("settings.tab.appearance"),
+      t("settings.tab.interaction"),
       t("settings.tab.data"),
       t("settings.tab.backup"),
       t("settings.tab.about"),
     ]);
-  });
 
-  it("starts on the model tab", async () => {
-    renderPage();
-    await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
-
-    expect(screen.getByRole("tab", { name: t("settings.tab.model") })).toHaveAttribute(
-      "aria-selected",
-      "true",
+    // 三档分组标题：导航是"目录"，标题本身也要在。
+    const groupTitles = Array.from(document.querySelectorAll(".settings-nav-group-title")).map(
+      (node) => (node.textContent ?? "").trim(),
     );
-    // 模型页的第一张卡就是模型配置卡（不依赖"人去点一下才有内容"）。
-    expect(await screen.findByText(t("settings.model.group.title"))).toBeInTheDocument();
+    expect(groupTitles).toEqual([
+      t("settings.nav.group.ai"),
+      t("settings.nav.group.interface"),
+      t("settings.nav.group.data"),
+    ]);
   });
 
-  it("keeps language, font and navigation cards side by side in the appearance tab", async () => {
+  it("starts on the model section", async () => {
     renderPage();
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
 
-    fireEvent.click(screen.getByRole("tab", { name: t("settings.tab.appearance") }));
+    expect(screen.getByRole("button", { name: t("settings.tab.model") })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    // 内容区顶部是这一组的标题，第一张卡是模型配置卡（不依赖"人去点一下才有内容"）。
+    expect(await screen.findByText(t("llmConfigCard.card.title"))).toBeInTheDocument();
+    expect(activeCardTitles()[0]).toBe(t("llmConfigCard.card.title"));
+  });
 
-    // 语言卡现在有自己的 Card 外壳，因此这三张（以及快捷键）都是同级 .settings-card。
+  it("keeps language, font and navigation cards side by side in the appearance section", async () => {
+    renderPage();
+    await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole("button", { name: t("settings.tab.appearance") }));
+
+    // 语言卡现在有自己的 Card 外壳，因此这三张（以及悬浮球）都是同级 .settings-card。
     await waitFor(() => expect(apiMocks.listResumeFonts).toHaveBeenCalled());
 
     const titles = activeCardTitles();
@@ -235,16 +254,83 @@ describe("SettingsPage 页签结构", () => {
     expect(navigationIndex).toBe(languageIndex + 2);
   });
 
-  it("shows the search and skills cards on the assistant tab, not on the model tab", async () => {
+  it("puts the search card in assistant behavior and the skills card in memory & skills", async () => {
     renderPage();
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
 
-    // 模型页只有模型配置与外发用量：搜索与技能已经搬走。
+    // 模型组只有模型配置、窗口参考、语义检索与外发用量：搜索与技能已经搬走。
     expect(activeCardTitles()).not.toContain(t("searchCard.title"));
 
-    fireEvent.click(screen.getByRole("tab", { name: t("settings.tab.assistant") }));
-
-    await waitFor(() => expect(skillMocks.listSkills).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: t("settings.tab.assistant") }));
     expect(await screen.findByText(t("searchCard.title"))).toBeInTheDocument();
+    expect(activeCardTitles()).not.toContain(t("settingsUi.skills.title"));
+
+    fireEvent.click(screen.getByRole("button", { name: t("settings.tab.memorySkills") }));
+    await waitFor(() => expect(skillMocks.listSkills).toHaveBeenCalled());
+    expect(activeCardTitles()).toContain(t("settingsUi.skills.title"));
+  });
+
+  it("maps the legacy ?tab=assistant deep link to assistant behavior", async () => {
+    renderPage("/settings?tab=assistant");
+    await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
+
+    expect(screen.getByRole("button", { name: t("settings.tab.assistant") })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(await screen.findByText(t("searchCard.title"))).toBeInTheDocument();
+  });
+
+  it("keeps the ?tab=backup deep link working after the regrouping", async () => {
+    renderPage("/settings?tab=backup");
+    await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
+
+    expect(screen.getByRole("button", { name: t("settings.tab.backup") })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  // 旧六个页签键一个都不能落空：assistant 走别名，其余五个与正式分组同名。
+  it.each([
+    ["model", "settings.tab.model"],
+    ["assistant", "settings.tab.assistant"],
+    ["appearance", "settings.tab.appearance"],
+    ["data", "settings.tab.data"],
+    ["backup", "settings.tab.backup"],
+    ["about", "settings.tab.about"],
+  ] as const)(
+    "resolves the legacy ?tab=%s deep link to a non-empty group",
+    async (tab, titleKey) => {
+      renderPage(`/settings?tab=${tab}`);
+      await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
+
+      expect(screen.getByRole("button", { name: t(titleKey) })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      // 不能只是导航选中了：右侧那一组里必须真的有卡片。
+      expect(activeCardTitles().length).toBeGreaterThan(0);
+    },
+  );
+
+  it("jumps to the voice section and highlights the card when searching 音色", async () => {
+    renderPage();
+    await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
+
+    // 窄档的 Select 也叫 combobox，搜索框按它自己的容器取。
+    const search = document.querySelector(".settings-search input") as HTMLInputElement;
+    fireEvent.change(search, { target: { value: "音色" } });
+    // 下拉项按分组归并，命中项就是「面试语音」那张卡。
+    const option = await screen.findByText(t("interviewVoice.settings.cardTitle"));
+    fireEvent.click(option);
+
+    await waitFor(() => expect(document.querySelector(".settings-card-target")).not.toBeNull());
+    const target = document.querySelector(".settings-card-target") as HTMLElement;
+    expect(target.textContent).toContain(t("interviewVoice.settings.cardTitle"));
+    expect(screen.getByRole("button", { name: t("settings.tab.voice") })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 });

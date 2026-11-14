@@ -30,12 +30,13 @@ from ..assistant_tools import tool_definitions
 from ..llm.base import BaseLLMProvider, LLMError
 from ..llm.tool_messages import assistant_tool_call_message
 from ..llm.usage import FINISH_BUDGET_EXHAUSTED
+from ..model_context_windows import configured_model_window
 from ..settings_service import (
     get_llm_config,
     get_search_config,
     resolve_assistant_relaxed_mode,
 )
-from .assistant_compaction_store import compact_before_model
+from .assistant_context_policy import compact_turn_context, model_error_event
 from .assistant_context_usage import connectors_text, conversation_text, turn_usage
 from .assistant_persistence import (
     cancel_pending_assistant_message,
@@ -167,15 +168,11 @@ async def _stream_message_events(
             # 百分比分母：当前生效模型的上下文窗口。优先用 provider 带的那份配置；测试
             # 替身或自定义 provider 没有它时回落到设置里的当前生效配置——与 api 层建
             # provider 用的是同一个 get_llm_config，两处取到的不会是两个值。
-            window_tokens = int(
-                getattr(getattr(provider, "config", None), "context_window_tokens", 0) or 0
-            )
-            if window_tokens == 0:
-                window_tokens = int(getattr(get_llm_config(db), "context_window_tokens", 0) or 0)
+            config = getattr(provider, "config", None) or get_llm_config(db)
+            window = configured_model_window(config)
+            window_tokens = window.tokens
         # 连接器及 MCP 桶 = 界面上下文块 + 项目上下文块 + 附件文本（没有文本就跳过）。
-        connectors_source = connectors_text(
-            prompt_parts["client"], model_context, attachments
-        )
+        connectors_source = connectors_text(prompt_parts["client"], model_context, attachments)
         conversation_source = conversation_text([*history_messages, user_message])
 
         tool_records: list[dict[str, Any]] = []
@@ -237,22 +234,23 @@ async def _stream_message_events(
                 window_tokens=window_tokens,
                 usage_actual=budget.last_prompt_tokens,
             )
-            # 同一个 dict 累积、整体写回：工具轮之后与收尾各写一次，历史回看能读到它。
-            assistant_context["context_usage"] = context_usage
-            yield format_sse({"type": "context_usage", "usage": context_usage})
-            # #10 上下文压缩：装配完、调模型前——先遮蔽旧工具结果，仍超阈值再结构化摘要。
-            # 决策、变换与落库全在 services/assistant/assistant_compaction*；本文件只剩二十
-            # 余行余量，这里只接线并把失败标记写进 context（失败绝不阻断发送）。
-            messages, compaction_flags = await compact_before_model(
+            messages, compaction_flags, context_usage = await compact_turn_context(
                 messages,
+                usage=context_usage,
+                window=window,
+                threshold_tokens=payload.compaction_threshold_tokens,
                 history=history,
                 history_count=len(history_messages),
                 factory=factory,
                 conversation_id=conversation_id,
                 provider=provider,
-                window_tokens=window_tokens,
-                percent=context_usage.get("percent"),
             )
+            assistant_context["context_usage"] = {
+                key: value
+                for key, value in context_usage.items()
+                if not key.endswith("trigger_tokens")
+            }
+            yield format_sse({"type": "context_usage", "usage": context_usage})
             if compaction_flags.get("failed"):
                 assistant_context["compaction_failed"] = True
             # 面板上的「对话消息」桶按**真正发出去的**那份算：压缩后它变小了，数字要跟着变。
@@ -457,19 +455,20 @@ async def _stream_message_events(
             usage=budget.usage_summary(),
         )
         raise
-    except LLMError:
+    except LLMError as exc:
         logger.warning("AI 助手模型调用失败（用户可见错误已固定脱敏）")
         close_run_trace(trace, assistant_context, assistant_message_id, factory, "failed")
         budget.record_round(provider)
+        event = model_error_event(exc)
         finish_assistant_message(
             assistant_message_id,
             content="".join(parts),
             status="error",
-            error="模型服务暂时无法处理本次请求，请稍后重试",
+            error=event["message"],
             factory=factory,
             usage=budget.usage_summary(),
         )
-        yield format_sse({"type": "error", "message": "模型服务暂时无法处理本次请求，请稍后重试"})
+        yield format_sse(event)
     except Exception:  # noqa: BLE001 - 流式响应必须转换内部异常
         logger.exception("AI 助手流式回复发生内部错误")
         close_run_trace(trace, assistant_context, assistant_message_id, factory, "failed")

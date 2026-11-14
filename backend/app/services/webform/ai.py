@@ -53,6 +53,7 @@ from ..llm import create_provider
 from ..llm.base import BaseLLMProvider
 from ..llm.structured_output import parse_json_object
 from ..settings_service import get_llm_config
+from .ai_candidates import MAX_CANDIDATES, FieldCandidates, parse_matches
 from .engine import Control
 from .fields import FIELD_KEYS, FIELD_LABELS, FORM_FIELDS
 
@@ -75,7 +76,6 @@ MAX_OPTIONS = 30
 
 # 一个控件最多留几个候选。**给多了等于把"猜"的负担又推回给用户**——三个以外的可能性，
 # 「换个资料…」那条路本来就覆盖得到。
-MAX_CANDIDATES = 3
 
 # 一次最多把几个**有值的自定义字段**（``CUSTOM_*``）列进候选。它们没有同义词表，
 # 只有标签本身一个信号，列太多既稀释提示词、也抬高模型挑错的概率；目录字段永远
@@ -90,7 +90,7 @@ MAX_CUSTOM_FIELDS = 15
 # 与页面无关——"研究方向"在哪家公司都是 research_direction。含 host 反而会让换一家公司
 # 后重复付一次同样的调用。含 ``nearby_text`` 已经足够把不同表单上同名的框区分开。
 _CACHE_MAX = 128
-_cache: OrderedDict[str, tuple[str, ...]] = OrderedDict()
+_cache: OrderedDict[str, FieldCandidates] = OrderedDict()
 _cache_lock = threading.Lock()
 
 # 不可信输入护栏。与 ``services/resume/resume_writing.py`` 的同名常量是同一套措辞
@@ -156,7 +156,7 @@ def clear_cache() -> None:
         _cache.clear()
 
 
-def _cache_get(key: str) -> tuple[str, ...] | None:
+def _cache_get(key: str) -> FieldCandidates | None:
     """``None`` = 没问过；``()`` = 问过、模型说都不像。两者必须分得开。"""
     with _cache_lock:
         value = _cache.get(key)
@@ -167,7 +167,7 @@ def _cache_get(key: str) -> tuple[str, ...] | None:
 
 def _cache_put(key: str, value: tuple[str, ...]) -> None:
     with _cache_lock:
-        _cache[key] = value
+        _cache[key] = value if isinstance(value, FieldCandidates) else FieldCandidates(value, {})
         _cache.move_to_end(key)
         while len(_cache) > _CACHE_MAX:
             _cache.popitem(last=False)
@@ -225,29 +225,8 @@ def _parse_matches(
       矛盾会自然收敛到那条真的字段上，不需要额外分支；
     - 同一个 ``index`` 的多条按出现顺序当作**候选排序**，去重并截到 ``MAX_CANDIDATES``。
     """
-    if not isinstance(raw, list):
-        return {}
-    known = frozenset(allowed_fields) if allowed_fields is not None else frozenset(FIELD_LABELS)
-    ranked: dict[int, list[str]] = {}
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        raw_index = item.get("index")
-        if raw_index is None:
-            continue
-        try:
-            index = int(raw_index)
-        except (TypeError, ValueError):
-            continue
-        if index not in allowed:
-            continue
-        field_name = str(item.get("field") or "").strip()
-        if field_name not in known:
-            continue
-        bucket = ranked.setdefault(index, [])
-        if field_name not in bucket and len(bucket) < MAX_CANDIDATES:
-            bucket.append(field_name)
-    return {index: tuple(fields) for index, fields in ranked.items()}
+    known = FIELD_LABELS if allowed_fields is None else allowed_fields
+    return parse_matches(raw, allowed, known)
 
 
 # 网络/解析失败时的重试次数（含首次）。**只治"调用挂了"与"响应不是合法 JSON"**：
@@ -280,7 +259,7 @@ async def _ask(
         except Exception as error:  # noqa: BLE001 - 重试后仍失败就交给调用方降级
             if attempt == _ASK_ATTEMPTS:
                 raise
-            logger.info("网申字段识别的模型调用失败，重试一次：%s", error)
+            logger.info("网申字段识别的模型调用失败，重试一次：%s", type(error).__name__)
             # 重试要留痕：只写异常类名，不进消息正文（可能含服务商返回的 URL 等）。
             record_event("webform.ai_retry", error=type(error).__name__)
             continue

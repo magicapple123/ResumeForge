@@ -116,7 +116,7 @@ describe("W07 对拍 · 前端属性表 = 后端 STYLE_PROPS", () => {
   });
 
   it("五个角色与每角色可用属性逐项相等", () => {
-    expect([...RESUME_ROLES]).toHaveLength(5);
+    expect([...RESUME_ROLES]).toHaveLength(6);
     for (const role of RESUME_ROLES) {
       const expected = backend
         .filter((prop) => prop.roles.includes(role))

@@ -5,6 +5,7 @@
 不经过这两个接口（边界的主断言在主文件与 tests/test_webform_extra_profile.py）。
 共享桩见 ``test_webform_api.py``。
 """
+
 from app.services.webform import FormEngine, get_snapshot_store
 from test_webform_api import HEIGHT_CONTROLS, browser_port
 
@@ -44,7 +45,9 @@ def test_extra_profile_round_trips(client, browser_port):
 
 def test_extra_profile_put_is_a_full_overwrite(client, browser_port):
     """整份覆盖：没提到的 key 被删除——用户清空某一格时"删除"才是他要的语义。"""
-    client.put("/api/webform/extra-profile", json={"values": {"student_id": "2022012345", "height": "178"}})
+    client.put(
+        "/api/webform/extra-profile", json={"values": {"student_id": "2022012345", "height": "178"}}
+    )
     client.put("/api/webform/extra-profile", json={"values": {"student_id": "2022012345"}})
 
     assert client.get("/api/webform/extra-profile").json()["values"] == {"student_id": "2022012345"}
@@ -72,9 +75,7 @@ def test_extra_profile_put_rolls_back_single_value_changes_when_repeated_save_fa
 
     assert response.status_code == 422
     assert response.json()["detail"] == "重复资料无效"
-    assert client.get("/api/webform/extra-profile").json()["values"] == {
-        "student_id": "旧学号"
-    }
+    assert client.get("/api/webform/extra-profile").json()["values"] == {"student_id": "旧学号"}
 
 
 def test_extra_profile_drops_keys_outside_the_catalog(client, browser_port):
@@ -92,9 +93,21 @@ def test_extra_profile_values_reach_the_webform_fill_data(client, browser_port, 
     """录进去的资料要能被网申填表读到——不然录了也白录。"""
     from app.services.webform.data import build_form_data
 
-    client.put("/api/webform/extra-profile", json={"values": {"student_id": "2022012345"}})
+    client.put(
+        "/api/webform/extra-profile",
+        json={
+            "values": {
+                "student_id": "2022012345",
+                "given_name": "Ada",
+                "family_name": "Lovelace",
+            }
+        },
+    )
 
-    assert build_form_data(db_session)["student_id"] == "2022012345"
+    form_data = build_form_data(db_session)
+    assert form_data["student_id"] == "2022012345"
+    assert form_data["given_name"] == "Ada"
+    assert form_data["family_name"] == "Lovelace"
 
 
 # ===== 学到的（2026-09-27）=====
@@ -198,9 +211,7 @@ def test_preview_proposes_a_value_already_known_to_the_webform_profile(
     assert [(item["field"], item["value"]) for item in body["items"]] == [("height", "178")]
 
 
-def test_preview_proposes_a_field_the_profile_has_no_value_for(
-    client, browser_port, db_session
-):
+def test_preview_proposes_a_field_the_profile_has_no_value_for(client, browser_port, db_session):
     """**正面用例**：规则认出来、这次也填了一个值，而这个字段在库里没有 → 提案。
 
     要凑出这个场景必须让"值有来源、字段又不在库里"同时成立，所以这里模拟的是**AI 兜底

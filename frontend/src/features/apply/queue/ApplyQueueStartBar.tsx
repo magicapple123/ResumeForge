@@ -7,8 +7,10 @@
  * （`.app-main` 只是 flex 列，见 base-tasks.css 的 P1-2 注释），所以这条必须留在
  * Tab 内容里（也就是 `.app-content` 的后代），不能挂到任何 `position: fixed` 的浮层上。
  */
-import { PlayCircleOutlined } from "@ant-design/icons";
+import { PauseOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import { Button, Space, Typography } from "antd";
+import type { ApplyTask } from "../../../types";
+import { isActiveTaskStatus } from "../../../hooks/useTaskPolling";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 
@@ -18,6 +20,9 @@ export function ApplyQueueStartBar({
   busy,
   startDisabled,
   onStart,
+  task,
+  onPause,
+  onResume,
 }: {
   /** 当前勾选的队列条目数。 */
   selectedCount: number;
@@ -27,9 +32,16 @@ export function ApplyQueueStartBar({
   /** 有任务在跑或没有待投条目时为真。 */
   startDisabled: boolean;
   onStart: () => void;
+  task?: ApplyTask | null;
+  onPause?: () => void;
+  onResume?: () => void;
 }) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后计数说明停在旧文案。
   useLocale();
+  const activeApplyTask = task?.kind === "apply" && isActiveTaskStatus(task.status) ? task : null;
+  const canPause = activeApplyTask?.status === "running";
+  const canResume =
+    activeApplyTask?.status === "paused" || activeApplyTask?.status === "breaker_paused";
   return (
     <div className="apply-queue-startbar">
       <Space size={8} wrap>
@@ -38,15 +50,36 @@ export function ApplyQueueStartBar({
         </Typography.Text>
         <Typography.Text type="secondary">{t("applyQueue.startBar.hint")}</Typography.Text>
       </Space>
-      <Button
-        type="primary"
-        icon={<PlayCircleOutlined />}
-        loading={busy}
-        disabled={startDisabled}
-        onClick={onStart}
-      >
-        {t("applyQueue.action.start")}
-      </Button>
+      <Space size={6} wrap>
+        <Button
+          type={activeApplyTask ? "default" : "primary"}
+          icon={<PlayCircleOutlined />}
+          loading={busy && !activeApplyTask}
+          disabled={startDisabled || undefined}
+          onClick={onStart}
+        >
+          {t("applyQueue.action.startCount", { count: selectedCount || eligibleCount })}
+        </Button>
+        {activeApplyTask && (
+          <>
+            <Button
+              icon={<PauseOutlined />}
+              disabled={!canPause || busy || undefined}
+              onClick={onPause}
+            >
+              {t("applyProgress.action.pause")}
+            </Button>
+            <Button
+              type={canResume ? "primary" : "default"}
+              icon={<PlayCircleOutlined />}
+              disabled={!canResume || busy || undefined}
+              onClick={onResume}
+            >
+              {t("applyProgress.action.resume")}
+            </Button>
+          </>
+        )}
+      </Space>
     </div>
   );
 }

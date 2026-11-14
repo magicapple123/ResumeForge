@@ -7,6 +7,20 @@
  * `features/apply/collect/`; "filter by job site conditions" stays in `collectFilters`.
  */
 const applyCollect = {
+  "applyCollect.group.search": "Search conditions",
+  "applyCollect.group.rhythm": "Collection timing",
+  "applyCollect.group.searchHint":
+    "Fill in at least one of keywords and city; results land in Collected records first, and only checked ones enter the job board.",
+  "applyCollect.group.rhythmHint":
+    "Shorter intervals hit rate limits sooner; jitter keeps the gaps from looking mechanical.",
+  "applyCollect.field.history": "Saved conditions",
+  "applyCollect.unit.perBatch": "per batch",
+  "applyCollect.unit.seconds": "s",
+  "applyCollect.footer.summary":
+    "About {count} jobs · every {interval} ± {jitter}s · roughly {minutes} min",
+  "applyCollect.filters.selected": "{count} selected",
+  "applyCollect.flow.summary": "Collect results → Import jobs → Add to application queue",
+  "applyCollect.flow.instructions": "View instructions",
   "applyCollect.field.keywords": "Keywords",
   "applyCollect.hint.keywords": "Up to 10; fill in at least one keyword or a city.",
   "applyCollect.placeholder.keywords": "e.g. marketing, finance and accounting",

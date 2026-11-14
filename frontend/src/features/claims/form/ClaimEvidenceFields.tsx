@@ -9,6 +9,7 @@
  */
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Form, Input, Select, Space, Switch, Typography } from "antd";
+import { useRef } from "react";
 import { t } from "../../../i18n";
 import { SOURCE_TYPE_LABEL_KEYS } from "../../../i18n/enum/claims";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -25,6 +26,8 @@ interface Props {
   entriesEmpty: boolean;
   /** 编辑的那条带迁移期自动关联标记：提示用户核对。 */
   autoLinked: boolean;
+  /** 新增一条关联后回调首个新 entry_id（新建时用来回填主体与分类）。 */
+  onEntryAdded?: (entryId: string) => void;
 }
 
 export default function ClaimEvidenceFields({
@@ -33,8 +36,11 @@ export default function ClaimEvidenceFields({
   entriesFailed,
   entriesEmpty,
   autoLinked,
+  onEntryAdded,
 }: Props) {
   useLocale();
+  // 记住上一次的值，才能从"多选后的整组值"里找出这次真正新增的那一条。
+  const previousIds = useRef<string[]>([]);
   const entryExtra = entriesFailed ? (
     <Typography.Text type="danger">{t("claimForm.entryIds.loadFailed")}</Typography.Text>
   ) : entriesEmpty ? (
@@ -61,6 +67,12 @@ export default function ClaimEvidenceFields({
           disabled={entriesFailed || undefined}
           placeholder={t("claimForm.placeholder.entryIds")}
           options={entryGroups}
+          onChange={(next: string[] | undefined) => {
+            const values = next ?? [];
+            const added = values.filter((id) => !previousIds.current.includes(id));
+            previousIds.current = values;
+            if (added.length > 0) onEntryAdded?.(added[0]);
+          }}
         />
       </Form.Item>
 
@@ -71,40 +83,50 @@ export default function ClaimEvidenceFields({
         {(fields, { add, remove }) => (
           <div className="claim-source-list">
             {fields.map((field) => (
-              <Space key={field.key} size={8} align="start" className="claim-source-row">
-                <Form.Item name={[field.name, "type"]} initialValue="link" noStyle>
-                  <Select
-                    className="claim-source-type"
-                    options={SOURCE_TYPES.map((value: SourceType) => ({
-                      value,
-                      label: t(SOURCE_TYPE_LABEL_KEYS[value]),
-                    }))}
+              <div key={field.key} className="claim-source-item">
+                <Space size={8} align="start" className="claim-source-row">
+                  <Form.Item name={[field.name, "type"]} initialValue="link" noStyle>
+                    <Select
+                      className="claim-source-type"
+                      options={SOURCE_TYPES.map((value: SourceType) => ({
+                        value,
+                        label: t(SOURCE_TYPE_LABEL_KEYS[value]),
+                      }))}
+                    />
+                  </Form.Item>
+                  <Form.Item name={[field.name, "location"]} noStyle>
+                    <Input
+                      className="claim-source-location"
+                      placeholder={t("claimForm.placeholder.evidence")}
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name={[field.name, "public"]}
+                    valuePropName="checked"
+                    initialValue={false}
+                    noStyle
+                  >
+                    <Switch
+                      checkedChildren={t("claimForm.evidence.public")}
+                      unCheckedChildren={t("claimForm.evidence.private")}
+                    />
+                  </Form.Item>
+                  <Button
+                    type="text"
+                    icon={<DeleteOutlined />}
+                    onClick={() => remove(field.name)}
+                    aria-label={t("claimForm.evidence.removeAria")}
                   />
-                </Form.Item>
-                <Form.Item name={[field.name, "location"]} noStyle>
+                </Space>
+                {/* 备注注册成 fields 里的真实字段：只写在草稿里的说明会在提交时丢掉。 */}
+                <Form.Item name={[field.name, "note"]} className="claim-source-note">
                   <Input
-                    className="claim-source-location"
-                    placeholder={t("claimForm.placeholder.evidence")}
+                    maxLength={500}
+                    placeholder={t("claimForm.evidence.notePlaceholder")}
+                    aria-label={t("claimForm.evidence.notePlaceholder")}
                   />
                 </Form.Item>
-                <Form.Item
-                  name={[field.name, "public"]}
-                  valuePropName="checked"
-                  initialValue={false}
-                  noStyle
-                >
-                  <Switch
-                    checkedChildren={t("claimForm.evidence.public")}
-                    unCheckedChildren={t("claimForm.evidence.private")}
-                  />
-                </Form.Item>
-                <Button
-                  type="text"
-                  icon={<DeleteOutlined />}
-                  onClick={() => remove(field.name)}
-                  aria-label={t("claimForm.evidence.removeAria")}
-                />
-              </Space>
+              </div>
             ))}
             <Button
               type="dashed"

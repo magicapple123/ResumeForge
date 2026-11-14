@@ -8,6 +8,7 @@ test_assistant_task_runner.py 与 test_assistant_task_runner_api.py 共用。
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 
 from app.models.agent_task import AgentTask
 from app.services import agent_task_service
@@ -127,8 +128,19 @@ class FakeFetcher:
             raise value
         return value  # type: ignore[return-value]
 
-    def fetch_pages(self, url: str, *, pages: int = 1, engine: str | None = None) -> FetchedPages:
+    def fetch_pages(
+        self,
+        url: str,
+        *,
+        pages: int = 1,
+        engine: str | None = None,
+        stop_after_first: Callable[[FetchedPage], bool] | None = None,
+    ) -> FetchedPages:
+        # `stop_after_first` 是导入服务判断"列表页已够用就不翻页"的钩子；夹具只有一页，
+        # 回调仍按真实契约调用一次，避免"夹具签名落后于生产调用"再次把用例变成失败。
         first = self.fetch(url, engine=engine)
+        if stop_after_first is not None:
+            stop_after_first(first)
         return FetchedPages(pages=(first,), pages_fetched=1, truncated=False, stop_reason="no_next")
 
 

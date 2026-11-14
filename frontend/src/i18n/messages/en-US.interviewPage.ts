@@ -18,6 +18,16 @@ const interviewPage = {
   "interviewPage.interviewerName": "Jane",
   // Author name shown on interviewer bubbles.
 
+  // ===== Page subtitle, one per tab (the old interview.page.subtitle stays for the session tab) =====
+  "interview.page.subtitle.session":
+    "An AI interviewer asks questions at the type and difficulty you set, then gives a score report and improvement suggestions.",
+  "interview.page.subtitle.bank":
+    "Generate three kinds of questions from a job and a resume, and practice the approach and a sample answer for each.",
+  "interview.page.subtitle.experiences":
+    "Write down the questions you were actually asked, keep them by company and job, and reread them before the next interview.",
+  "interview.page.subtitle.review":
+    "Log a question you were really asked, analyze the approach, then turn the gaps into resume rewrite suggestions.",
+
   // ===== Interview history card =====
   "interviewPage.history.cardTitle": "Interview history",
   "interviewPage.history.deleteOne": "Delete this interview",
@@ -54,12 +64,22 @@ const interviewPage = {
   "interviewPage.ready.hint":
     "The timer starts when you click, and the final report includes how long this interview took.",
 
+  // ===== Pausing an interview (Q2) =====
+  "interviewPage.paused.action": "Pause interview",
+  "interviewPage.paused.badge": "Paused",
+  "interviewPage.paused.title": "Interview paused",
+  "interviewPage.paused.body":
+    "The timer is stopped and the microphone and narration are off. Paused time does not count toward the interview; click below to continue.",
+  "interviewPage.paused.resume": "Continue interview",
+
   // ===== Interviewer setup card =====
   "interviewPage.setup.title": "Interviewer setup",
   "interviewPage.setup.greeting": "Hi, I'm Jane and I'll be interviewing you today.",
   "interviewPage.setup.jobLabel": "Job material",
   "interviewPage.setup.jobPlaceholder": "Questions follow this job's JD (type keywords to search)",
   "interviewPage.setup.jobRequired": "Select the related job",
+  /** The job side only picks a saved record now; this is the way out when none fits. */
+  "interviewPage.setup.jobFromLink": "No suitable job? Import one from a link in the job board →",
   "interviewPage.setup.resumeLabel": "Resume material",
   "interviewPage.setup.resumePlaceholder":
     "Resumes linked to this job plus general ones (type keywords to search)",
@@ -181,6 +201,7 @@ const interviewPage = {
 
   // External-resume prefill from the resume center (item 21).
   "interviewPage.setup.external.prefilled": "Loaded external resume “{name}”",
+  "interviewPage.setup.jobFileResumeHint": "Choose a resume separately",
   "interviewPage.setup.external.loadFailed":
     "Could not read that external resume; choose or upload one manually",
   "interviewPage.setup.external.noText":

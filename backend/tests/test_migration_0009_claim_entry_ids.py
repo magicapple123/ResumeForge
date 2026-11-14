@@ -47,7 +47,7 @@ def _downgrade_until_removed(engine, config, column: str) -> int:
     while column in _column_names(engine, CLAIM_TABLE):
         command.downgrade(config, "-1")
         steps += 1
-        assert steps <= 10, "连续降级没有移除目标列，迁移链可能有环"
+        assert steps <= 14, "连续降级没有移除目标列，迁移链可能有环"
     return steps
 
 

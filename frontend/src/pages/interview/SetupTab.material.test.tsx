@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 面试材料「二选一」（#41）：从记录选，或导入文件。
+ * 面试材料来源（#41 / Q3）：**岗位只从记录选，简历才是「从记录选 / 导入文件」二选一**。
  *
- * 这里钉住三件事：
- * 1. 默认走"从记录选"，切换后才出现"选择文件"入口（两种来源互斥，不会同时生效）；
- * 2. 上传成功后**当场**显示文件名与读取到的字数——用户不必等到点"开始面试"才知道
+ * 这里钉住四件事：
+ * 1. 岗位侧没有来源开关，也没有文件入口——没有合适岗位时给一句去岗位广场的引导；
+ * 2. 简历侧切到"导入文件"后才出现"选择文件"入口（两种来源互斥，不会同时生效）；
+ * 3. 上传成功后**当场**显示文件名与读取到的字数——用户不必等到点"开始面试"才知道
  *    这份文件能不能用；
- * 3. 选了"导入文件"却没上传就提交：**不回调** onStart（否则会开出一场没有材料的面试）。
+ * 4. 简历选了"导入文件"却没上传就提交：**不回调** onStart（否则会开出一场没有材料的面试）。
  *
  * 断言一律用 `t()` 或 role 定位（不用中文 `*ByText`）：测试里的中文断言也属于将来要
  * 迁移的存量，守卫会盯着。
@@ -35,7 +36,7 @@ vi.mock("../../api/jobs", () => jobsMocks);
 vi.mock("../../api/resumes", () => resumesMocks);
 vi.mock("../../api/interview", () => interviewMocks);
 
-const JOB_TEXT = "Backend JD: Python and SQL";
+const JOB_OPTIONS = [{ id: 7, title: "market-ops", company: "" }];
 const RESUME_TEXT = "Alex, backend engineer";
 
 function SetupHarness(props: { onStart: (values: SetupForm) => void }) {
@@ -56,16 +57,14 @@ function renderSetup() {
   return { onStart };
 }
 
-/** 取某一侧的来源开关（岗位侧在前、简历侧在后，两侧各一组按钮式 Radio）。 */
-function sourceRadio(side: "job" | "resume", label: string) {
-  const radios = screen.getAllByRole("radio", { name: label });
-  expect(radios.length).toBe(2);
-  return radios[side === "job" ? 0 : 1];
+/** 简历侧唯一的来源开关（岗位侧已经没有这一组了）。 */
+function resumeSourceRadio(label: string) {
+  return screen.getByRole("radio", { name: label });
 }
 
-/** 切到某一侧的"导入文件"来源。 */
-function pickFileSource(side: "job" | "resume") {
-  fireEvent.click(sourceRadio(side, t("interviewPage.setup.material.fromFile")));
+/** 把简历侧切到"导入文件"。 */
+function pickResumeFileSource() {
+  fireEvent.click(resumeSourceRadio(t("interviewPage.setup.material.fromFile")));
 }
 
 /** 「选择文件 / 换一份」按钮：按钮里带图标，accessible name 会被图标的 aria-label 前缀污染。 */
@@ -73,18 +72,34 @@ function fileButton(label: string) {
   return screen.getByRole("button", { name: new RegExp(label) });
 }
 
-/** 给第 index 个文件输入框喂一个文件（antd Upload 的 beforeUpload 会在 change 时触发）。 */
-async function upload(index: number, file: File) {
-  const inputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]');
-  expect(inputs.length).toBeGreaterThan(index);
-  Object.defineProperty(inputs[index], "files", { value: [file], configurable: true });
-  fireEvent.change(inputs[index]);
+/** 给文件输入框喂一个文件（antd Upload 的 beforeUpload 会在 change 时触发）。 */
+async function upload(file: File) {
+  const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+  expect(input).not.toBeNull();
+  Object.defineProperty(input!, "files", { value: [file], configurable: true });
+  fireEvent.change(input!);
   await waitFor(() => expect(interviewMocks.extractInterviewMaterial).toHaveBeenCalled());
 }
 
+/** 打开岗位下拉并按文案点选项（材料开关只在右侧，不影响岗位这一侧）。 */
+async function pickJob(title: string) {
+  fireEvent.mouseDown(screen.getByLabelText(t("interviewPage.setup.jobLabel")));
+  await waitFor(() =>
+    expect(document.querySelectorAll(".ant-select-item-option").length).toBeGreaterThan(0),
+  );
+  const options = Array.from(document.querySelectorAll<HTMLElement>(".ant-select-item-option"));
+  const target = options.find((option) => option.textContent?.includes(title));
+  if (!target) throw new Error(`option not found: ${title}`);
+  fireEvent.click(target);
+}
+
+function submitClick() {
+  fireEvent.click(screen.getByRole("button", { name: new RegExp(t("interviewPage.setup.start")) }));
+}
+
 beforeEach(() => {
-  jobsMocks.listJobs.mockReset().mockResolvedValue({ items: [], total: 0 });
-  jobsMocks.getJob.mockReset().mockResolvedValue(null);
+  jobsMocks.listJobs.mockReset().mockResolvedValue({ items: JOB_OPTIONS, total: 1 });
+  jobsMocks.getJob.mockReset().mockResolvedValue(JOB_OPTIONS[0]);
   resumesMocks.listResumes.mockReset().mockResolvedValue({ items: [], total: 0 });
   resumesMocks.getResume.mockReset().mockResolvedValue(null);
   interviewMocks.extractInterviewMaterial.mockReset();
@@ -95,11 +110,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("面试材料二选一", () => {
-  it("默认从记录选：没有文件入口", () => {
+describe("面试材料来源（Q3：岗位只从记录选）", () => {
+  it("默认从记录选：岗位与简历都没有文件入口", () => {
     renderSetup();
 
-    // 默认来源是"从记录选"：记录下拉可用，文件入口不出现。
     expect(screen.getByLabelText(t("interviewPage.setup.jobLabel"))).not.toBeDisabled();
     expect(
       screen.queryByRole("button", {
@@ -108,28 +122,42 @@ describe("面试材料二选一", () => {
     ).toBeNull();
   });
 
-  it("切到导入文件后出现入口，并说明接受哪些格式", () => {
+  it("岗位侧没有来源开关：整页只剩简历那一组（两个按钮）", () => {
     renderSetup();
 
-    pickFileSource("job");
+    // 岗位侧不渲染 Radio.Group，所以"导入文件"只剩简历侧那一个。
+    expect(
+      screen.getAllByRole("radio", { name: t("interviewPage.setup.material.fromFile") }),
+    ).toHaveLength(1);
+    expect(
+      screen.getAllByRole("radio", { name: t("interviewPage.setup.material.fromRecord") }),
+    ).toHaveLength(1);
+  });
+
+  it("岗位侧给一句去岗位广场的引导（不再让用户上传 JD）", () => {
+    renderSetup();
+
+    expect(screen.getByText(t("interviewPage.setup.jobFromLink"))).toBeInTheDocument();
+  });
+
+  it("简历切到导入文件后出现入口，并说明接受哪些格式", () => {
+    renderSetup();
+
+    pickResumeFileSource();
 
     expect(fileButton(t("interviewPage.setup.material.pickFile"))).toBeInTheDocument();
     expect(screen.getByText(t("interviewPage.setup.material.fileHint"))).toBeInTheDocument();
   });
 
-  it("两侧的 accept 完全一致：图片 / PDF / TXT / Word / Markdown 都能选", () => {
+  it("accept 覆盖图片 / PDF / TXT / Word / Markdown", () => {
     renderSetup();
 
-    pickFileSource("job");
-    pickFileSource("resume");
+    pickResumeFileSource();
 
-    const inputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]');
-    expect(inputs.length).toBe(2);
-    const [jobAccept, resumeAccept] = [inputs[0].accept, inputs[1].accept];
-    // 同一个常量供 accept 与上传前检查共用：两处各写一份就会慢慢漂开。
-    expect(resumeAccept).toBe(jobAccept);
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
     for (const suffix of [".pdf", ".txt", ".md", ".markdown", ".docx", ".png", ".jpg", ".webp"]) {
-      expect(jobAccept).toContain(suffix);
+      expect(input!.accept).toContain(suffix);
     }
   });
 
@@ -142,8 +170,8 @@ describe("面试材料二选一", () => {
     });
     renderSetup();
 
-    pickFileSource("resume");
-    await upload(0, new File([RESUME_TEXT], "resume.md", { type: "text/markdown" }));
+    pickResumeFileSource();
+    await upload(new File([RESUME_TEXT], "resume.md", { type: "text/markdown" }));
 
     expect(interviewMocks.extractInterviewMaterial).toHaveBeenCalledWith(
       "resume",
@@ -155,13 +183,13 @@ describe("面试材料二选一", () => {
   it("选到 .doc 时前端就拒绝，并提示另存为 .docx（不再等服务端）", async () => {
     renderSetup();
 
-    pickFileSource("job");
-    const inputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]');
-    Object.defineProperty(inputs[0], "files", {
+    pickResumeFileSource();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    Object.defineProperty(input!, "files", {
       value: [new File(["legacy"], "old.doc", { type: "application/msword" })],
       configurable: true,
     });
-    fireEvent.change(inputs[0]);
+    fireEvent.change(input!);
 
     expect(
       await screen.findByText(t("interviewPage.setup.material.legacyDoc")),
@@ -171,85 +199,92 @@ describe("面试材料二选一", () => {
 
   it("上传成功后立刻显示文件名与读取到的字数", async () => {
     interviewMocks.extractInterviewMaterial.mockResolvedValue({
-      name: "jd.txt",
-      text: JOB_TEXT,
+      name: "cv.txt",
+      text: RESUME_TEXT,
       warnings: [],
     });
     renderSetup();
 
-    pickFileSource("job");
-    await upload(0, new File([JOB_TEXT], "jd.txt", { type: "text/plain" }));
+    pickResumeFileSource();
+    await upload(new File([RESUME_TEXT], "cv.txt", { type: "text/plain" }));
 
-    expect(interviewMocks.extractInterviewMaterial).toHaveBeenCalledWith("job", expect.any(File));
-    await waitFor(() => expect(screen.getByText("jd.txt")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("cv.txt")).toBeInTheDocument());
     expect(
-      screen.getByText(t("interviewPage.setup.material.parsed", { chars: JOB_TEXT.length })),
+      screen.getByText(t("interviewPage.setup.material.parsed", { chars: RESUME_TEXT.length })),
     ).toBeInTheDocument();
   });
 
   it("字数文案按实际解析路径选词，不按左右侧（问题 6）", async () => {
     interviewMocks.extractInterviewMaterial
-      .mockResolvedValueOnce({ name: "jd.txt", text: JOB_TEXT, warnings: [], parser: "vision" })
-      .mockResolvedValueOnce({ name: "jd.txt", text: JOB_TEXT, warnings: [], parser: "text" });
+      .mockResolvedValueOnce({
+        name: "shot.png",
+        text: RESUME_TEXT,
+        warnings: [],
+        parser: "vision",
+      })
+      .mockResolvedValueOnce({ name: "shot.png", text: RESUME_TEXT, warnings: [], parser: "text" });
     renderSetup();
 
-    pickFileSource("job");
-    await upload(0, new File([JOB_TEXT], "jd.txt", { type: "text/plain" }));
+    pickResumeFileSource();
+    await upload(new File([RESUME_TEXT], "shot.png", { type: "image/png" }));
     expect(
       await screen.findByText(
-        t("interviewPage.setup.material.recognized", { chars: JOB_TEXT.length }),
+        t("interviewPage.setup.material.recognized", { chars: RESUME_TEXT.length }),
       ),
     ).toBeInTheDocument();
 
-    await upload(0, new File([JOB_TEXT], "jd.txt", { type: "text/plain" }));
+    // 换一份同类文件：同一个输入框，重新上传。
+    await upload(new File([RESUME_TEXT], "shot.png", { type: "image/png" }));
     expect(
-      await screen.findByText(t("interviewPage.setup.material.parsed", { chars: JOB_TEXT.length })),
+      await screen.findByText(
+        t("interviewPage.setup.material.parsed", { chars: RESUME_TEXT.length }),
+      ),
     ).toBeInTheDocument();
   });
 
-  it("两侧都用导入文件：提交时把材料一起带出，且不再传记录 id", async () => {
-    interviewMocks.extractInterviewMaterial
-      .mockResolvedValueOnce({ name: "jd.txt", text: JOB_TEXT, warnings: [] })
-      .mockResolvedValueOnce({ name: "shot.png", text: RESUME_TEXT, warnings: [] });
+  it("岗位从记录选 + 简历用导入文件：提交带 resumeMaterial，jobMaterial 恒为 null", async () => {
+    interviewMocks.extractInterviewMaterial.mockResolvedValue({
+      name: "shot.png",
+      text: RESUME_TEXT,
+      warnings: [],
+    });
     const { onStart } = renderSetup();
 
-    pickFileSource("job");
-    pickFileSource("resume");
-    await upload(0, new File([JOB_TEXT], "jd.txt", { type: "text/plain" }));
-    await waitFor(() => expect(screen.getByText("jd.txt")).toBeInTheDocument());
-    await upload(1, new File([RESUME_TEXT], "shot.png", { type: "image/png" }));
+    await pickJob("market-ops");
+    pickResumeFileSource();
+    await upload(new File([RESUME_TEXT], "shot.png", { type: "image/png" }));
     await waitFor(() => expect(screen.getByText("shot.png")).toBeInTheDocument());
 
-    fireEvent.click(
-      screen.getByRole("button", { name: new RegExp(t("interviewPage.setup.start")) }),
-    );
+    submitClick();
 
     await waitFor(() => expect(onStart).toHaveBeenCalled());
     const values = onStart.mock.calls[0][0] as SetupForm;
-    expect(values.jobMaterial?.name).toBe("jd.txt");
     expect(values.resumeMaterial?.name).toBe("shot.png");
-    expect(values.jobId).toBeUndefined();
     expect(values.resumeId).toBeUndefined();
+    expect(values.jobId).toBe(7);
+    // 岗位侧已没有文件这一路：这个字段永远是 null。
+    expect(values.jobMaterial).toBeNull();
   });
 
   /**
    * 问题 5 的回归点：**提交边界**只放行写端点接受的字段。
    *
-   * 上传接口返回的是读取 DTO（带 `warnings`），写端点 `extra="forbid"`；整份回传时
-   * 两侧各报一条「包含不支持的字段」，面试开不起来。这里同时钉两件事：警告条照常
-   * 显示（state 保留 warnings），而投影结果里一个 warnings 都不剩。
+   * 上传接口返回的是读取 DTO（带 `warnings`），写端点 `extra="forbid"`；整份回传会报
+   * 「包含不支持的字段」，面试开不起来。这里同时钉两件事：警告条照常显示（state 保留
+   * warnings），而投影结果里一个 warnings 都不剩。
    */
   it("带警告的材料：警告条仍在材料块里，投影后的请求体只有 name / text", async () => {
     const warning = "only the first part was read";
-    interviewMocks.extractInterviewMaterial
-      .mockResolvedValueOnce({ name: "jd.txt", text: JOB_TEXT, warnings: [warning] })
-      .mockResolvedValueOnce({ name: "shot.png", text: RESUME_TEXT, warnings: [] });
+    interviewMocks.extractInterviewMaterial.mockResolvedValue({
+      name: "cv.txt",
+      text: RESUME_TEXT,
+      warnings: [warning],
+    });
     const { onStart } = renderSetup();
 
-    // 两侧都切到文件：记录下拉整条不渲染，表单校验只剩这里的材料校验。
-    pickFileSource("job");
-    pickFileSource("resume");
-    await upload(0, new File([JOB_TEXT], "jd.txt", { type: "text/plain" }));
+    await pickJob("market-ops");
+    pickResumeFileSource();
+    await upload(new File([RESUME_TEXT], "cv.txt", { type: "text/plain" }));
 
     expect(
       await screen.findByText(t("interviewPage.setup.material.warningTitle")),
@@ -261,35 +296,30 @@ describe("面试材料二选一", () => {
       ),
     ).toEqual([warning]);
 
-    await upload(1, new File([RESUME_TEXT], "shot.png", { type: "image/png" }));
-    await waitFor(() => expect(screen.getByText("shot.png")).toBeInTheDocument());
-
-    fireEvent.click(
-      screen.getByRole("button", { name: new RegExp(t("interviewPage.setup.start")) }),
-    );
+    submitClick();
     await waitFor(() => expect(onStart).toHaveBeenCalled());
 
     // SetupTab 交出去的仍是完整读取结果（简历侧那条校验要读它）……
     const values = onStart.mock.calls[0][0] as SetupForm;
-    expect(values.jobMaterial?.warnings).toEqual([warning]);
+    expect(values.resumeMaterial?.warnings).toEqual([warning]);
 
     // ……而真正进写端点的是投影结果：键集合恰好是 name + text。
-    const payload = toMaterialPayload(values.jobMaterial);
+    const payload = toMaterialPayload(values.resumeMaterial);
     expect(Object.keys(payload ?? {})).toEqual(["name", "text"]);
     expect(JSON.stringify(payload)).not.toContain("warnings");
   });
 
-  it("选了导入文件却没上传：不回调 onStart", async () => {
+  it("简历选了导入文件却没上传：不回调 onStart", async () => {
     const { onStart } = renderSetup();
 
-    pickFileSource("job");
-    pickFileSource("resume");
-    fireEvent.click(
-      screen.getByRole("button", { name: new RegExp(t("interviewPage.setup.start")) }),
-    );
+    await pickJob("market-ops");
+    pickResumeFileSource();
+    submitClick();
 
     await waitFor(() =>
-      expect(screen.getByText(t("interviewPage.setup.material.jobRequired"))).toBeInTheDocument(),
+      expect(
+        screen.getByText(t("interviewPage.setup.material.resumeRequired")),
+      ).toBeInTheDocument(),
     );
     expect(onStart).not.toHaveBeenCalled();
   });
@@ -300,11 +330,11 @@ describe("面试材料二选一", () => {
       .mockRejectedValueOnce(new Error(t("interviewPage.setup.material.parseFailed")));
     renderSetup();
 
-    pickFileSource("resume");
-    await upload(0, new File([RESUME_TEXT], "shot.png", { type: "image/png" }));
+    pickResumeFileSource();
+    await upload(new File([RESUME_TEXT], "shot.png", { type: "image/png" }));
     await waitFor(() => expect(screen.getByText("shot.png")).toBeInTheDocument());
 
-    await upload(0, new File([RESUME_TEXT], "blur.png", { type: "image/png" }));
+    await upload(new File([RESUME_TEXT], "blur.png", { type: "image/png" }));
 
     await waitFor(() => expect(screen.queryByText("shot.png")).toBeNull());
     expect(fileButton(t("interviewPage.setup.material.pickFile"))).toBeInTheDocument();

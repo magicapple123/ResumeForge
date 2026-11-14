@@ -4,7 +4,7 @@
  * 面试官生成期间麦克风自动进入插话检测（assistantActive 跟随 submitting）。
  */
 import { App as AntdApp } from "antd";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UseInterviewVoiceOptions } from "../../features/interview-voice/useInterviewVoice";
 import { t } from "../../i18n";
@@ -56,6 +56,7 @@ import { Composer } from "./Composer";
 function renderComposer(props: { value?: string; submitting?: boolean } = {}) {
   const onChange = vi.fn();
   const onSubmit = vi.fn();
+  const onSubmitText = vi.fn();
   const onStop = vi.fn();
   render(
     <AntdApp>
@@ -64,11 +65,17 @@ function renderComposer(props: { value?: string; submitting?: boolean } = {}) {
         submitting={props.submitting ?? false}
         onChange={onChange}
         onSubmit={onSubmit}
+        onSubmitText={onSubmitText}
         onStop={onStop}
+        interviewerReply={null}
+        interviewerStyle="严谨专业"
+        messages={[]}
+        pendingAnswer={null}
+        streamingQuestion={null}
       />
     </AntdApp>,
   );
-  return { onChange, onSubmit, onStop };
+  return { onChange, onSubmit, onSubmitText, onStop };
 }
 
 beforeEach(() => {
@@ -96,11 +103,29 @@ describe("Composer + 实时语音（#26 P0）", () => {
     expect(onStop).toHaveBeenCalledTimes(1);
   });
 
-  it("纯文字模式下不传输出实现也是 no-op：不出现语音控件以外的行为变化", () => {
-    const { onSubmit } = renderComposer();
-    expect(realtime.options?.output).toBeUndefined();
+  it("通话内的语音转写直接提交，不写入下方输入框", () => {
+    const { onChange, onSubmitText } = renderComposer();
+    fireEvent.click(screen.getByRole("button", { name: t("interviewVoice.room.enter") }));
+    realtime.options?.onTranscript("我负责过一个推荐系统项目");
+    expect(onSubmitText).toHaveBeenCalledWith("我负责过一个推荐系统项目");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: t("interviewVoice.room.exit") })).toBeInTheDocument();
+  });
+
+  it("Escape 退出通话后将焦点还给入口", async () => {
+    renderComposer();
+    const trigger = screen.getByRole("button", { name: t("interviewVoice.room.enter") });
+    fireEvent.click(trigger);
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: t("interviewVoice.room.enter") })).toHaveFocus(),
+    );
+  });
+
+  it("通话外仍保留文字输入与手动提交", () => {
+    const { onSubmit } = renderComposer({ value: "回答内容" });
     expect(screen.getByText(t("interviewVoice.mode.alwaysOn"))).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: t("interview.action.submit") }));
-    expect(onSubmit).not.toHaveBeenCalled(); // 空内容不提交（既有行为）
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 });

@@ -34,6 +34,9 @@ export interface BoldContextMenuProps {
   isBold: boolean;
   /** 切换加粗（写入新的源串，并由宿主把内容标脏）。 */
   onToggle: () => void;
+  /** R-11：把选区缩小一号 / 改成强调色（同样是"写入新源串 + 标脏"）。 */
+  onToggleSmall?: () => void;
+  onToggleEmphasis?: () => void;
   /** 等价于左键点击那一栏：打开中栏/弹窗里对应的输入框。 */
   onPick: () => void;
   /** 浮层被关掉（Esc / 点外部 / 点某一项）时回调，父级据此卸载本组件。 */
@@ -45,6 +48,8 @@ export default function BoldContextMenu({
   y,
   isBold,
   onToggle,
+  onToggleSmall,
+  onToggleEmphasis,
   onPick,
   onClose,
 }: BoldContextMenuProps) {
@@ -56,11 +61,17 @@ export default function BoldContextMenu({
         label: isBold ? t("rich.menu.unbold") : t("rich.menu.bold"),
         onClick: onToggle,
       },
+      ...(onToggleSmall
+        ? [{ key: "small", label: t("rich.menu.small"), onClick: onToggleSmall }]
+        : []),
+      ...(onToggleEmphasis
+        ? [{ key: "emphasis", label: t("rich.menu.emphasis"), onClick: onToggleEmphasis }]
+        : []),
       { key: "divider", type: "divider" },
       { key: "edit", label: t("rich.menu.edit"), onClick: onPick },
     ],
     // `locale` 只为在切语言后重建文案；`t()` 本身是模块级的。
-    [isBold, onToggle, onPick, locale],
+    [isBold, onToggle, onToggleSmall, onToggleEmphasis, onPick, locale],
   );
 
   useEffect(() => {

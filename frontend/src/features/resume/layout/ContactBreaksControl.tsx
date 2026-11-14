@@ -20,6 +20,12 @@ import {
   withContactBreaks,
   type ContactFieldKey,
 } from "./contactBreaks";
+import {
+  CONTACT_SEPARATOR_STYLES,
+  readContactSeparator,
+  withContactSeparator,
+  type ContactSeparatorStyle,
+} from "./contactSeparator";
 
 /** 字段键 → 语言包 key（与 backend resume_contact.CONTACT_FIELDS 顺序一致）。 */
 const FIELD_LABEL_KEYS: Record<ContactFieldKey, MessageKey> = {
@@ -49,6 +55,11 @@ export default function ContactBreaksControl({
 }: Props) {
   const { t } = useI18n();
   const value = readContactBreaks(formatConfig);
+  const separator = readContactSeparator(formatConfig);
+  const separatorOptions = CONTACT_SEPARATOR_STYLES.map((style) => ({
+    value: style,
+    label: t(`contactSeparator.option.${style}`),
+  }));
   const options = CONTACT_FIELD_KEYS.map((key) => ({
     value: key,
     label: t(FIELD_LABEL_KEYS[key]),
@@ -63,6 +74,24 @@ export default function ContactBreaksControl({
    * 104px 与同一行「版式」下拉同宽，四个中文字符放得下；多选的已选标签由
    * `maxTagCount="responsive"` 收成 +N，`maxWidth: 100%` 让窄栏按容器收窄。
    */
+  /* 分隔符与"在哪换行"是两件事，但必须挨在一起：用户改完换行就会想调分隔符。 */
+  const separatorControl = (
+    <Tooltip title={t("contactSeparator.hint")}>
+      <Select
+        size="small"
+        aria-label={t("workbench.contactSeparator.label")}
+        className="resume-contact-separator-select"
+        style={{ width: 76 }}
+        disabled={disabled || undefined}
+        value={separator}
+        options={separatorOptions}
+        onChange={(next: ContactSeparatorStyle) =>
+          onChange(withContactSeparator(formatConfig, next))
+        }
+      />
+    </Tooltip>
+  );
+
   const control = (
     <Tooltip title={t("workbench.contactBreak.hint")}>
       <span style={{ display: "inline-block", width: 104, maxWidth: "100%" }}>
@@ -86,14 +115,27 @@ export default function ContactBreaksControl({
 
   // compact 分支（工具栏在用）保持原样：那里没有「版面」组的标签列，多一个标签格会留白。
   if (compact) {
-    return <Space size={6}>{control}</Space>;
+    return (
+      <Space size={6}>
+        {control}
+        {separatorControl}
+      </Space>
+    );
   }
 
-  /* 任务 4：非 compact 分支进「版面」组的两列网格——控件列与其他三行同一条竖线。 */
+  /* 任务 4：非 compact 分支进「版面」组的两列网格——控件列与其他三行同一条竖线。
+     F26：分隔符不再藏在「联系方式换行」这一行的第二个下拉里，改成独立一行并带可见标签；
+     行名只讲换行、下拉又没有标签时，用户会以为"分隔符"这个功能没做。 */
   return (
-    <div className="resume-wb-field-row">
-      <span className="resume-wb-field-label">{t("workbench.contactBreak.label")}</span>
-      {control}
-    </div>
+    <>
+      <div className="resume-wb-field-row">
+        <span className="resume-wb-field-label">{t("workbench.contactBreak.label")}</span>
+        <Space size={6}>{control}</Space>
+      </div>
+      <div className="resume-wb-field-row">
+        <span className="resume-wb-field-label">{t("workbench.contactSeparator.label")}</span>
+        <Space size={6}>{separatorControl}</Space>
+      </div>
+    </>
   );
 }

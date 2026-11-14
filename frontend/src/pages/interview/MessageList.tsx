@@ -16,7 +16,7 @@ import type { RefObject } from "react";
 import { Button, Space, Typography } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import LoadingBlock from "../../components/common/LoadingBlock";
-import MarkdownBlock from "../../components/common/MarkdownBlock";
+import { InterviewMessageBubble } from "../../features/interview/InterviewMessageBubble";
 import type { InterviewMessage } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { t } from "../../i18n";
@@ -89,39 +89,24 @@ export function InterviewMessageList({
             {item.content}
           </div>
         ) : (
-          <div
+          // F16：消息气泡与实时语音房间共用同一组件，两处"刚才说了什么"长得一样。
+          <InterviewMessageBubble
             key={item.id}
-            className={`interview-message interview-message--${item.role === "interviewer" ? "interviewer" : "me"}`}
+            role={item.role === "interviewer" ? "interviewer" : "user"}
+            name={
+              item.role === "interviewer"
+                ? t("interviewPage.interviewerName")
+                : t("interview.role.you")
+            }
+            time={formatDateTime(item.created_at)}
+            content={item.content}
+            feedback={item.context.feedback}
+            faceSrc={
+              item.role === "interviewer"
+                ? JANE_FACE_SOURCES[janeFaceForStyle(interviewerStyle)]
+                : undefined
+            }
           >
-            <div className="interview-message-head">
-              {item.role === "interviewer" ? (
-                <img
-                  className="jane-avatar"
-                  src={JANE_FACE_SOURCES[janeFaceForStyle(interviewerStyle)]}
-                  alt=""
-                  aria-hidden="true"
-                />
-              ) : null}
-              <b>
-                {item.role === "interviewer"
-                  ? t("interviewPage.interviewerName")
-                  : t("interview.role.you")}
-              </b>
-              <Typography.Text type="secondary" className="assistant-message-time">
-                {formatDateTime(item.created_at)}
-              </Typography.Text>
-            </div>
-            {/* 面试官的回答是模型输出，本身就是 Markdown（分点、加粗、表格）：
-                交给公共渲染器，正文里的 `**` / `-` 才不会是裸露的字符。 */}
-            <div className="interview-message-body">
-              <MarkdownBlock content={item.content} />
-            </div>
-            {item.context.feedback ? (
-              <div className="interview-feedback">
-                <b>{t("interview.role.comment")}</b>
-                {item.context.feedback}
-              </div>
-            ) : null}
             {item.role === "user" && item.status === "interrupted" ? (
               // 上次没答完的那一轮：刷新回来也认得出，并可以原样重答一次。
               <InterruptedNotice
@@ -129,39 +114,30 @@ export function InterviewMessageList({
                 onRetry={() => onRetry(item.content)}
               />
             ) : null}
-          </div>
+          </InterviewMessageBubble>
         ),
       )}
       {pendingAnswer ? (
         // 本地占位气泡：服务端回包后被 setActive 的真实消息取代（同一句话不会留两条）。
         // 不带时间戳——它不是服务端记录，写"刚刚"反而是假信息。
-        <div className="interview-message interview-message--me">
-          <div className="interview-message-head">
-            <b>{t("interview.role.you")}</b>
-          </div>
-          {/* 占位气泡也走同一渲染器：`pre-wrap` 已随块级渲染撤掉，不切过来多行回答会先挤成一行。 */}
-          <div className="interview-message-body">
-            <MarkdownBlock content={pendingAnswer} />
-          </div>
+        <InterviewMessageBubble role="user" name={t("interview.role.you")} content={pendingAnswer}>
           {pendingInterrupted ? (
             <InterruptedNotice
               retryDisabled={retryDisabled}
               onRetry={() => onRetry(pendingAnswer)}
             />
           ) : null}
-        </div>
+        </InterviewMessageBubble>
       ) : null}
       {finished && !messages.some((item) => item.context?.closing) ? (
         // 服务端那次"收尾回应"没生成出来：用本地化的一句话补上。语气保持中性——
         // 编不出他对最后一答的具体点评，就不假装有。
-        <div className="interview-message interview-message--interviewer">
-          <div className="interview-message-head">
-            <b>{t("interviewPage.interviewerName")}</b>
-          </div>
-          <div className="interview-message-body">
-            <MarkdownBlock content={t("interviewPage.closing.fallback")} />
-          </div>
-        </div>
+        <InterviewMessageBubble
+          role="interviewer"
+          name={t("interviewPage.interviewerName")}
+          content={t("interviewPage.closing.fallback")}
+          faceSrc={JANE_FACE_SOURCES[janeFaceForStyle(interviewerStyle)]}
+        />
       ) : null}
       {thinking ? (
         <div className="interview-message interview-message--interviewer">

@@ -6,6 +6,7 @@
 重建）；``ctx=None`` 的缺省路径仅供受信调用方（既有测试、非模型内部工具）使用，
 文档化的信任边界，不构成模型可利用的旁路。
 """
+
 from __future__ import annotations
 
 import inspect
@@ -34,21 +35,29 @@ logger = logging.getLogger(__name__)
 # （T29 只读质检：质量检测/ATS/统一检查/版本对比）→ diagnosis（T31 只读错误诊断）。
 # 顺序是行为契约
 # （tool_definitions 输出顺序 = 发给模型的工具列表顺序），不得重排。
-_TOOLS: tuple[Tool, ...] = (
-    *CORE_TOOLS,
-    *DATA_TOOLS,
-    *RELAXED_TOOLS,
-    *REPORT_TOOLS,
-    *SEARCH_TOOLS,
-    *DOCUMENT_TOOLS,
-    *QUALITY_TOOLS,
-    *DIAGNOSIS_TOOLS,
+_TOOL_GROUPS: tuple[tuple[str, tuple[Tool, ...]], ...] = (
+    ("core", CORE_TOOLS),
+    ("data", DATA_TOOLS),
+    ("relaxed", RELAXED_TOOLS),
+    ("report", REPORT_TOOLS),
+    ("search", SEARCH_TOOLS),
+    ("document", DOCUMENT_TOOLS),
+    ("quality", QUALITY_TOOLS),
+    ("diagnosis", DIAGNOSIS_TOOLS),
     # #16 链接抓取/导入（web_extract 只读 / import_jobs_from_url 写，走提案卡）；
     # 追加在末尾，不重排既有分组（顺序是发给模型的工具列表契约）。
-    *WEB_TOOLS,
+    ("web", WEB_TOOLS),
     # 18A 长任务工具（task_create / task_status / task_cancel），同样追加在末尾。
-    *TASK_TOOLS,
+    ("tasks", TASK_TOOLS),
 )
+_TOOLS: tuple[Tool, ...] = tuple(tool for _, group in _TOOL_GROUPS for tool in group)
+
+
+def tool_category(name: str) -> str:
+    """Stable category derived from the same ordered groups as model definitions."""
+    return next(
+        (category for category, group in _TOOL_GROUPS if any(t.name == name for t in group)), "core"
+    )
 
 
 def tool_definitions(

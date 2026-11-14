@@ -58,7 +58,7 @@ export interface PreviewPayload {
   url: string;
   engine: FetchEngine;
   limit: number;
-  intent: "job_list" | "job_detail";
+  intent: "auto" | "job_list" | "job_detail";
   /** #16 分页：1–10 页；只跟随页面声明的「下一页」，不猜 URL 模板。 */
   pages: number;
 }

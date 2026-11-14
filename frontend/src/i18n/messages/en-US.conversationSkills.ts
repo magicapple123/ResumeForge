@@ -23,8 +23,7 @@ const conversationSkills = {
     "Nothing from this skill was loaded; turn off other skills to load it",
   "conversationSkills.row.aria": "Skills enabled in this conversation",
   "conversationSkills.error.tooMany": "A conversation can enable at most 8 skills",
-  "conversationSkills.message.used": "Skills this turn: {names}",
-  "conversationSkills.message.separator": ", ",
+  "conversationSkills.message.enabledLabel": "Enabled in this chat",
   "conversationSkills.page.intro":
     "Skills are enabled inside a conversation, not globally in the library; tick them in the skill menu of the assistant composer.",
 } as const;

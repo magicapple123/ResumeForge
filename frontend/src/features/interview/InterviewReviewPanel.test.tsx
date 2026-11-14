@@ -12,6 +12,8 @@ const apiMocks = vi.hoisted(() => ({
   listReviews: vi.fn(),
   saveReview: vi.fn(),
   deleteReview: vi.fn(),
+  // 复盘支持「上传文件」（Q3）：解析结果由用例决定，组件只负责把文本交给提交载荷。
+  extractInterviewMaterial: vi.fn(),
 }));
 
 vi.mock("../../api/interview", () => apiMocks);
@@ -25,9 +27,15 @@ const resumesMocks = vi.hoisted(() => ({
   listResumes: vi.fn(),
   getResume: vi.fn(),
 }));
+// 复盘支持外部简历（Q3）：下拉里的「外部简历」分组走这两个接口。
+const externalResumeMocks = vi.hoisted(() => ({
+  listExternalResumes: vi.fn(),
+  getExternalResume: vi.fn(),
+}));
 
 vi.mock("../../api/jobs", () => jobsMocks);
 vi.mock("../../api/resumes", () => resumesMocks);
+vi.mock("../../api/externalResumes", () => externalResumeMocks);
 
 const ANALYSIS = {
   question: "这个项目难点怎么解决？",
@@ -55,6 +63,22 @@ const OPTIMIZE = {
 /** Mock resume title, escape-encoded so the CJK ratchet does not count a new line. */
 const RESUME_LABEL = "\u6211\u7684\u7b80\u5386";
 
+/** 外部简历的正文与文件名（Q3）：没有内部 id，正文只能随请求带上去。 */
+const EXTERNAL_TEXT = "External resume body";
+const EXTERNAL_ITEM = {
+  id: 7,
+  file_id: 70,
+  name: "external-a.pdf",
+  mime: "application/pdf",
+  text_chars: EXTERNAL_TEXT.length,
+  has_text: true,
+  job_id: null,
+  job_title: "",
+  created_at: "2026-11-11T00:00:00",
+  updated_at: "2026-11-11T00:00:00",
+  warnings: [],
+};
+
 function renderPanel() {
   return render(
     <AntApp>
@@ -79,6 +103,16 @@ beforeEach(() => {
     total: 1,
   });
   resumesMocks.getResume.mockReset().mockResolvedValue({ id: 1, title: "我的简历" });
+  externalResumeMocks.listExternalResumes.mockReset().mockResolvedValue({
+    items: [EXTERNAL_ITEM],
+    total: 1,
+    page: 1,
+    page_size: 50,
+  });
+  externalResumeMocks.getExternalResume
+    .mockReset()
+    .mockResolvedValue({ ...EXTERNAL_ITEM, text: EXTERNAL_TEXT });
+  apiMocks.extractInterviewMaterial.mockReset();
 });
 
 afterEach(() => {
@@ -299,6 +333,135 @@ describe("InterviewReviewPanel", () => {
           weaknesses: twentyFive.slice(0, 20),
         }),
         expect.anything(),
+      ),
+    );
+  });
+});
+
+/**
+ * Q3：复盘支持**外部简历**与**上传文件**。
+ *
+ * 这两种来源都没有内部简历 id，正文只能随请求带上去（`resume_text` + `resume_title`），
+ * 历史里也写 `resume_id: null`。一条硬约束：没有内部 id 时**不出现**「去简历中心对照
+ * 修改」——那份建议指向的简历在简历中心里根本不存在。
+ */
+describe("InterviewReviewPanel 外部简历与上传文件（Q3）", () => {
+  /** 录入问题并分析出思路（这是反向优化的前置）。 */
+  async function analyzeFirst() {
+    fireEvent.change(screen.getByPlaceholderText(t("interviewReview.placeholder.question")), {
+      target: { value: "How did you solve the hard part?" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.analyze")) }),
+    );
+    await screen.findByText(ANALYSIS.framework);
+  }
+
+  it("选外部简历：分析与反向优化都带 resume_text，且不显示去简历中心", async () => {
+    const onGoToResume = vi.fn();
+    render(
+      <AntApp>
+        <InterviewReviewPanel onGoToResume={onGoToResume} />
+      </AntApp>,
+    );
+    await analyzeFirst();
+
+    // 下拉里的外部简历分组（`e:` 前缀）：选中即取正文。
+    const resumeSelect = screen
+      .getByText(t("interviewReview.placeholder.resume"))
+      .closest(".ant-select-content");
+    fireEvent.mouseDown(resumeSelect!);
+    fireEvent.click(await screen.findByText("external-a.pdf"));
+    await waitFor(() => expect(externalResumeMocks.getExternalResume).toHaveBeenCalledWith(7));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.optimize")) }),
+    );
+
+    await waitFor(() =>
+      expect(apiMocks.optimizeResumeFromInterview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resume_id: null,
+          resume_text: EXTERNAL_TEXT,
+          resume_title: "external-a.pdf",
+        }),
+        expect.anything(),
+      ),
+    );
+    // 与内部简历同一套建议渲染，但没有「去简历中心对照修改」这个出口。
+    // （用 textContent 断言建议正文：这条断言不该再给 CJK 棘轮加一行。）
+    await waitFor(() => expect(document.body.textContent).toContain("补充指标与对比"));
+    expect(screen.queryByText(t("interview.suggestions.goToResume"))).toBeNull();
+    expect(onGoToResume).not.toHaveBeenCalled();
+  });
+
+  it("选外部简历后重新分析：请求带 resume_text 与 resume_title", async () => {
+    renderPanel();
+    await analyzeFirst();
+
+    const resumeSelect = screen
+      .getByText(t("interviewReview.placeholder.resume"))
+      .closest(".ant-select-content");
+    fireEvent.mouseDown(resumeSelect!);
+    fireEvent.click(await screen.findByText("external-a.pdf"));
+    await waitFor(() => expect(externalResumeMocks.getExternalResume).toHaveBeenCalledWith(7));
+
+    // 改了问题再分析一次：这次的请求必须带上外部简历的正文。
+    fireEvent.change(screen.getByPlaceholderText(t("interviewReview.placeholder.question")), {
+      target: { value: "Why did you pick that design?" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.analyze")) }),
+    );
+
+    await waitFor(() =>
+      expect(apiMocks.analyzeInterviewQuestion).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          resume_id: null,
+          resume_text: EXTERNAL_TEXT,
+          resume_title: "external-a.pdf",
+        }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("上传简历文件：解析出的正文进 resume_text，标题取文件名", async () => {
+    apiMocks.extractInterviewMaterial.mockResolvedValue({
+      name: "cv.txt",
+      text: "Uploaded resume body",
+      warnings: [],
+      parser: "text",
+    });
+    renderPanel();
+
+    fireEvent.click(
+      screen.getByRole("radio", { name: t("interviewPage.setup.material.fromFile") }),
+    );
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    Object.defineProperty(input!, "files", {
+      value: [new File(["Uploaded resume body"], "cv.txt", { type: "text/plain" })],
+      configurable: true,
+    });
+    fireEvent.change(input!);
+    await waitFor(() => expect(screen.getByText("cv.txt")).toBeInTheDocument());
+
+    await analyzeFirst();
+
+    await waitFor(() =>
+      expect(apiMocks.analyzeInterviewQuestion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resume_id: null,
+          resume_text: "Uploaded resume body",
+          resume_title: "cv.txt",
+        }),
+        expect.anything(),
+      ),
+    );
+    // 自动保存的那条历史同样写 resume_id: null + resume_title。
+    await waitFor(() =>
+      expect(apiMocks.saveReview).toHaveBeenCalledWith(
+        expect.objectContaining({ resume_id: null, resume_title: "cv.txt" }),
       ),
     );
   });

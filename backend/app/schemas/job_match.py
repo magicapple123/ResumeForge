@@ -7,6 +7,7 @@
 2. **禁止任何百分比 / 评分字段**：所有模型都设 ``extra="forbid"``，模型若吐出 ``score``
    或 ``percent`` 之类的字段会在校验阶段直接被拒，而不是悄悄渲染成一个数字给用户。
 """
+
 from datetime import datetime
 from typing import Literal
 
@@ -44,6 +45,18 @@ class MatchCondition(BaseModel):
     evidence: str = Field(default="", max_length=MAX_EVIDENCE_CHARS)
 
 
+class JobMatchSource(BaseModel):
+    """Server-generated snapshot of the actual matching inputs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    resume_id: int | None = None
+    resume_title: str = ""
+    resume_revision: int | None = None
+    content_hash: str = ""
+    fingerprint: str = ""
+
+
 class JobMatchResult(BaseModel):
     """岗位匹配度分析的完整结论（也直接落进 ``job_match_analysis.result``）。"""
 
@@ -58,6 +71,7 @@ class JobMatchResult(BaseModel):
     admission: AdmissionResult = "needs_confirm"
     advice: str = Field(default="", max_length=MAX_ADVICE_CHARS)
     notes: list[str] = Field(default_factory=list, max_length=20)
+    source: JobMatchSource | None = None
 
 
 class MatchScoreDimension(BaseModel):
@@ -99,6 +113,7 @@ class JobMatchOut(BaseModel):
     updated_at: datetime
     # 参考分：派生值，只读、仅展示、带免责；未分析时为 None，不落库。
     reference_score: MatchReferenceScore | None = None
+    stale: bool = False
 
 
 __all__ = [

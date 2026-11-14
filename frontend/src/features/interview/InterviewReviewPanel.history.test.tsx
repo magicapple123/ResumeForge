@@ -107,7 +107,9 @@ describe("InterviewReviewPanel 自动保存与历史富还原", () => {
     fireEvent.change(screen.getByPlaceholderText(/录入面试里真实被问的问题/), {
       target: { value: "这个项目难点怎么解决？" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /分析答题思路/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.analyze")) }),
+    );
 
     await waitFor(() => expect(apiMocks.saveReview).toHaveBeenCalled());
     expect(apiMocks.saveReview).toHaveBeenCalledWith(
@@ -120,9 +122,13 @@ describe("InterviewReviewPanel 自动保存与历史富还原", () => {
     const onOpenRecord = vi.fn();
     renderPanel({ onOpenRecord });
 
-    expect(await screen.findByText("复盘")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("复盘"));
-    fireEvent.click(screen.getByRole("button", { name: "查看详情" }));
+    expect(await screen.findByText(t("interview.reviewHistory.fallbackTitle"))).toBeInTheDocument();
+    fireEvent.click(screen.getByText(t("interview.reviewHistory.fallbackTitle")));
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: new RegExp(t("interview.reviewHistory.action.detail")),
+      })[0],
+    );
 
     await waitFor(() => expect(onOpenRecord).toHaveBeenCalledWith(RECORD));
   });
@@ -135,12 +141,15 @@ describe("InterviewReviewPanel 自动保存与历史富还原", () => {
 
     // 选简历后点击「反向优化简历」。
     const resumeSelect = screen
-      .getByText("关联简历（反向优化必选，输入关键词搜索）")
+      .getByText(t("interviewReview.placeholder.resume"))
       .closest(".ant-select-content");
     fireEvent.mouseDown(resumeSelect!);
+    // i18n-ok: 断言测试夹具里的简历标题，不是产品文案
     fireEvent.click(await screen.findByText("我的简历"));
 
-    fireEvent.click(screen.getByRole("button", { name: /反向优化简历/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.optimize")) }),
+    );
 
     expect(await screen.findByText(/补充指标与对比/)).toBeInTheDocument();
     expect(apiMocks.optimizeResumeFromInterview).toHaveBeenCalledWith(
@@ -171,7 +180,7 @@ describe("InterviewReviewPanel 自动保存与历史富还原", () => {
       record: { ...RECORD, analysis: "旧版纯文本复盘内容……" } as unknown as typeof RECORD,
     });
 
-    expect(await screen.findByText("此为旧版记录，仅可查看")).toBeInTheDocument();
+    expect(await screen.findByText(t("interviewReview.legacy.title"))).toBeInTheDocument();
     expect(screen.getByText(/旧版纯文本复盘内容/)).toBeInTheDocument();
   });
 });
@@ -294,5 +303,163 @@ describe("InterviewReviewPanel 半成品历史记录不再白屏", () => {
     expect(await screen.findByText(framework)).toBeInTheDocument();
     // 建议区因为"没有可展示的建议"而不渲染，同样不该崩。
     expect(screen.queryByText(t("interview.suggestions.title"))).toBeNull();
+  });
+});
+
+/**
+ * Q3：历史列表与查看态。
+ *
+ * 三条都是"屏幕上只该有一份内容"的直接后果：查看某条记录时列表要消失、列表的操作不用先
+ * 展开、展开后也只是摘要（完整内容点进去看）。
+ */
+describe("InterviewReviewPanel 历史列表与查看态（Q3）", () => {
+  it("查看某条记录时历史列表不再渲染（不会出现两份内容）", async () => {
+    apiMocks.listReviews.mockResolvedValue([RECORD]);
+    renderPanel({ record: RECORD, onOpenRecord: vi.fn(), onCloseRecord: vi.fn() });
+
+    expect(await screen.findByText(RECORD.analysis.framework)).toBeInTheDocument();
+    // 历史列表整张卡（标题、查看详情、删除）都不在。
+    expect(screen.queryByText(t("interview.reviewHistory.title"))).toBeNull();
+    expect(screen.queryByText(t("interview.reviewHistory.action.detail"))).toBeNull();
+    expect(screen.queryByText(t("interview.reviewHistory.action.delete"))).toBeNull();
+    // 退出入口在卡片头上（按钮里带图标，accessible name 会带图标前缀，按前缀匹配）。
+    expect(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.header.back")) }),
+    ).toBeInTheDocument();
+  });
+
+  it("行尾「查看详情」不用先展开就能点", async () => {
+    apiMocks.listReviews.mockResolvedValue([{ ...RECORD, job_title: "Backend" }]);
+    const onOpenRecord = vi.fn();
+    renderPanel({ onOpenRecord });
+
+    const detail = await screen.findByRole("button", {
+      name: t("interview.reviewHistory.action.detail"),
+    });
+    expect(detail).toBeInTheDocument();
+    // 没有点过折叠头，也没有任何问题正文出现在屏幕上——操作就在行尾。
+    expect(screen.queryByText(RECORD.analysis.framework)).toBeNull();
+
+    fireEvent.click(detail);
+    await waitFor(() =>
+      expect(onOpenRecord).toHaveBeenCalledWith(expect.objectContaining({ id: 9 })),
+    );
+  });
+
+  it("折叠内容降级为摘要：只给问题首句、framework 前段与建议条数", async () => {
+    const longFramework = "先讲背景，再讲取舍与结果。".repeat(8);
+    apiMocks.listReviews.mockResolvedValue([
+      {
+        ...RECORD,
+        job_title: "Backend",
+        analysis: { ...ANALYSIS, framework: longFramework },
+        suggestions: OPTIMIZE.suggestions,
+      },
+    ]);
+    renderPanel();
+
+    // 列表要等 listReviews 落地才渲染，先等标题出现再点折叠头。
+    expect(await screen.findByText("Backend")).toBeInTheDocument();
+    fireEvent.click(document.querySelector(".ant-collapse-header")!);
+
+    expect(
+      await screen.findByText(t("interviewReview.history.summary.suggestions", { count: 1 })),
+    ).toBeInTheDocument();
+    // 建议正文属于详情，不该在折叠区里再出现一遍。
+    expect(document.body.textContent).not.toContain("补充指标与对比");
+    // framework 被截断（不是完整的 8 遍）。
+    expect(screen.queryByText(longFramework)).toBeNull();
+  });
+});
+
+/**
+ * F01 / F02 / F03：记录态与工作区必须彼此隔离，自动保存必须留下"已入库"凭据。
+ *
+ * 三条缺陷同源：历史记录的内容被灌进工作区 state、自动保存的返回值被丢掉。
+ */
+describe("InterviewReviewPanel 记录态隔离与写回（F01–F03）", () => {
+  it("往返历史后工作区不被污染：答题思路卡消失、录入卡与历史列表回来", async () => {
+    apiMocks.listReviews.mockResolvedValue([RECORD]);
+    const { rerender } = renderPanel();
+
+    // 工作态：录入卡在、历史列表在。
+    expect(screen.getByText(t("interview.reviewHistory.title"))).toBeInTheDocument();
+    expect(screen.queryByText(/先讲背景/)).toBeNull();
+
+    // 打开记录：只显示记录内容，列表让位。
+    rerender(
+      <AntApp>
+        <InterviewReviewPanel onGoToResume={() => {}} record={RECORD} />
+      </AntApp>,
+    );
+    expect(await screen.findByText(/先讲背景/)).toBeInTheDocument();
+    expect(screen.queryByText(t("interview.reviewHistory.title"))).toBeNull();
+
+    // 返回：记录内容不得"冒充"成工作区结果（旧实现会留下答题思路卡）。
+    rerender(
+      <AntApp>
+        <InterviewReviewPanel onGoToResume={() => {}} />
+      </AntApp>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText(t("interview.reviewHistory.title"))).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/先讲背景/)).toBeNull();
+    expect(screen.queryByText(/只讲过程不讲结果/)).toBeNull();
+  });
+
+  it("自动保存后「保存复盘」收起，不会二次入库（F02）", async () => {
+    apiMocks.saveReview.mockResolvedValue({ ...RECORD, id: 42 });
+
+    renderPanel();
+    fireEvent.change(screen.getByPlaceholderText(/录入面试里真实被问的问题/), {
+      target: { value: "这个项目难点怎么解决？" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.analyze")) }),
+    );
+
+    await waitFor(() => expect(apiMocks.saveReview).toHaveBeenCalledTimes(1));
+    // 自动保存已入库 → 按钮收起；页面上没有第二颗可点的保存入口。
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: new RegExp(t("interviewReview.action.save")) }),
+      ).toBeNull(),
+    );
+    expect(apiMocks.saveReview).toHaveBeenCalledTimes(1);
+  });
+
+  it("工作态反向优化写回自动保存的那一条（F03）", async () => {
+    apiMocks.saveReview.mockResolvedValue({ ...RECORD, id: 42 });
+
+    renderPanel();
+    fireEvent.change(screen.getByPlaceholderText(/录入面试里真实被问的问题/), {
+      target: { value: "这个项目难点怎么解决？" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.analyze")) }),
+    );
+    await waitFor(() => expect(apiMocks.saveReview).toHaveBeenCalledTimes(1));
+
+    // 工作态的简历下拉（记录态才有「关联简历」卡，这里的占位符是同一份文案）。
+    const select = screen
+      .getByText(t("interviewReview.placeholder.resume"))
+      .closest(".ant-select-content");
+    fireEvent.mouseDown(select!);
+    // i18n-ok: 断言测试夹具里的简历标题，不是产品文案
+    fireEvent.click(await screen.findByText("我的简历"));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.optimize")) }),
+    );
+
+    await waitFor(() =>
+      expect(apiMocks.updateReview).toHaveBeenCalledWith(
+        42,
+        expect.objectContaining({ suggestions: OPTIMIZE.suggestions }),
+      ),
+    );
+    // 工作区不新增第二条记录。
+    expect(apiMocks.saveReview).toHaveBeenCalledTimes(1);
   });
 });

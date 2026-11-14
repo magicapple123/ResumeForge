@@ -24,6 +24,8 @@ from docx.shared import Mm
 
 from ..schemas.resume_document_plan import DocumentPlan, EntryPlan, Inline, SectionPlan
 from .docx_blocks import DocxTheme, entry_head, paragraph, section_title, section_title_gap_mm
+from .docx_document_body import apply_field_spacing
+from .docx_document_fields import draw_field_split_head
 from .docx_document_parts import (
     RoleStyleQuery,
     add_segments,
@@ -36,6 +38,7 @@ from .docx_document_parts import (
 )
 from .docx_skill_tags import draw_inline_section
 from .pdf_exporter import _PX_TO_MM
+from .resume.field_style_target import is_field_path
 
 
 def _head_line(
@@ -58,6 +61,11 @@ def _head_line(
         node.paragraph_format.alignment = (
             align_value(style.align) or node.paragraph_format.alignment
         )
+    for segment in segments:
+        if is_field_path(segment.path):
+            field_style = style_of(role_style, role, segment.path)
+            if field_style != style:
+                apply_field_spacing(node, field_style, layout)
     add_segments(
         node,
         segments,
@@ -87,17 +95,26 @@ def _draw_entry(
     title = plain_text(head.title)
     meta = plain_text(head.meta)
     if head.layout == "split":
-        entry_head(
+        if not draw_field_split_head(
             doc,
-            title,
-            meta,
+            entry,
             base=base,
             layout=layout,
             theme=theme,
-            space_before_extra_mm=space_before_mm,
-            style=title_style,
-            meta_style=meta_style,
-        )
+            role_style=role_style,
+            space_before_mm=space_before_mm,
+        ):
+            entry_head(
+                doc,
+                title,
+                meta,
+                base=base,
+                layout=layout,
+                theme=theme,
+                space_before_extra_mm=space_before_mm,
+                style=title_style,
+                meta_style=meta_style,
+            )
     elif head.layout == "meta_first":
         _head_line(
             doc,
@@ -415,6 +432,7 @@ def draw_document(
         accent=accent,
         accent_soft=accent_soft,
         font_key=font_key,
+        role_style=role_style,
     )
     for section in plan.sections:
         _draw_section(

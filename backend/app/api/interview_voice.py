@@ -26,10 +26,11 @@ import time
 from dataclasses import dataclass
 from threading import Lock
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..models.interview import InterviewMessage, InterviewSession
+from ..services.interview import interview_tts
 from ..services.interview.voice_turns import record_answer_for_turn
 
 logger = logging.getLogger(__name__)
@@ -144,6 +145,29 @@ class _TurnCancelResult(BaseModel):
     rolled_back_chars: int = 0
 
 
+class _TtsPayload(BaseModel):
+    """一句待合成的文本。**按句调用**：整段一次合成要等十秒以上（见 interview_tts 文件头）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=interview_tts.MAX_TEXT_LENGTH)
+    voice: str = Field(default=interview_tts.DEFAULT_VOICE, max_length=32)
+
+
+class _TtsVoiceOption(BaseModel):
+    id: str
+    label: str
+
+
+class _TtsStatus(BaseModel):
+    """房间进来先问一次：能不能合成、有哪些音色。同时顺手预热一次。"""
+
+    available: bool
+    model: str
+    default_voice: str
+    voices: list[_TtsVoiceOption]
+
+
 def register_voice_routes(router: APIRouter) -> None:
     """把语音取消端点挂到既有的 /api/interview router 上（不新开 prefix）。"""
 
@@ -175,6 +199,40 @@ def register_voice_routes(router: APIRouter) -> None:
             generated_chars=generated,
             played_chars=played,
             rolled_back_chars=max(0, generated - played),
+        )
+
+    @router.get("/voice/tts/status", response_model=_TtsStatus)
+    def tts_status() -> _TtsStatus:
+        """合成能力与音色清单（**只读配置，不发合成请求**）。
+
+        顺手预热一次：首次冷启动实测 6.4s，而进房间到面试官开口之间通常有几秒，
+        正好用来把模型焐热。预热是后台线程、失败静默（见 ``interview_tts.prewarm``）。
+        """
+        available = interview_tts.available()
+        if available:
+            interview_tts.prewarm()
+        return _TtsStatus(
+            available=available,
+            model=interview_tts.MODEL,
+            default_voice=interview_tts.DEFAULT_VOICE,
+            voices=[_TtsVoiceOption(id=key, label=label) for key, label in interview_tts.VOICES],
+        )
+
+    @router.post("/voice/tts")
+    def tts_synthesize(payload: _TtsPayload) -> Response:
+        """合成一句，返回修好 RIFF 头的 WAV。
+
+        失败一律 503 + 原因：前端据此回落到浏览器音色，并把原因显示在界面上——
+        "合成失败"不许表现成"没声音"（那样无从排查）。
+        """
+        try:
+            audio = interview_tts.synthesize(payload.text, payload.voice)
+        except interview_tts.TtsUnavailable as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+        return Response(
+            content=audio,
+            media_type="audio/wav",
+            headers={"Cache-Control": "no-store"},
         )
 
 

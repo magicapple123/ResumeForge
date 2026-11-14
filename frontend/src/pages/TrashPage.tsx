@@ -296,7 +296,7 @@ export default function TrashPage() {
     <div className="trash-page">
       <div className="trash-page-head">
         <Space orientation="vertical" size={0}>
-          <Typography.Title level={4} style={{ margin: 0 }}>
+          <Typography.Title level={3} style={{ margin: 0 }}>
             {t("trash.page.title")}
           </Typography.Title>
           <Typography.Text type="secondary">{t("trash.page.subtitle")}</Typography.Text>

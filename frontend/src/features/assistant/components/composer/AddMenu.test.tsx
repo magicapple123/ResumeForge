@@ -296,6 +296,11 @@ describe("AddMenu skills flyout", () => {
     await waitFor(() => expect(flyout()).not.toBeNull());
     // 一级没有被替换掉（悬停浮出与点击替换是两套形态）
     expect(screen.getByText(t("composerAddMenu.section.job"))).toBeInTheDocument();
+    // 浮出层是一级的子元素：一级的 `overflow-y: auto`（高度上限）会把它裁没，
+    // 所以浮出期间必须让出一级面板的裁切（见 assistant-composer-flyout.css）。
+    expect(
+      document.querySelector(".composer-add-panel")?.classList.contains("is-flyout-open"),
+    ).toBe(true);
   });
 
   it("entering the flyout cancels the 300ms close, so crossing the gap does not flicker", async () => {
@@ -354,5 +359,37 @@ describe("AddMenu skills flyout", () => {
     expect(screen.getByText(t("composerAddMenu.section.skills"))).toBeInTheDocument();
     expect(screen.queryByText(t("composerAddMenu.section.job"))).toBeNull();
     expect(flyout()).toBeNull();
+  });
+
+  it("short viewport stacks in place and never renders the flyout (F35)", async () => {
+    // 只让高度查询命中：宽度仍按宽屏，证明"矮"单独就能触发整块替换。
+    // setup 里的桩用 defineProperty 定义（不可直接赋值），所以这里也用 defineProperty 换掉。
+    const stub = (query: string) => ({
+      matches: query.includes("max-height"),
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    });
+    const original = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", { configurable: true, value: stub });
+    try {
+      renderMenu({ skillCatalog: [COACH] });
+      fireEvent.click(trigger());
+      const row = await screen.findByText(t("assistantComposer.skills.count", { count: 0 }));
+      const anchor = row.closest(".composer-add-skills-anchor") as HTMLElement;
+      fireEvent.mouseOver(anchor);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      expect(flyout()).toBeNull();
+
+      fireEvent.click(row);
+      expect(screen.getByText(t("composerAddMenu.section.skills"))).toBeInTheDocument();
+      expect(screen.queryByText(t("composerAddMenu.section.job"))).toBeNull();
+    } finally {
+      Object.defineProperty(window, "matchMedia", { configurable: true, value: original });
+    }
   });
 });

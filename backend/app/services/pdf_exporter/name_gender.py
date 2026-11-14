@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from fpdf.enums import XPos, YPos
 
+from ..resume.resume_rich_text import strip_markers
 from .canvas import _ResumePDF
 from .fonts import FONT_FAMILY
 from .layout import _PX_TO_MM, _PX_TO_PT
@@ -47,6 +48,10 @@ def plan_name_gender(
     ``name_size`` / ``extra_size`` 是字号（px），分别乘 `name_ratio` / `name_extra_ratio`
     得到（调用方从 `ResumeLayout` 取，本函数不碰注册表）。
     """
+    # 姓名也走同一份标记协议：`**张三**` / `{@color=…}` 不能把标记原样印在纸面上。
+    # 姓名本身已按 `name_bold` 画粗体，所以这里只需剥壳（行内字号/颜色不在此处生效，
+    # 姓名的粗体/字号/颜色由版式参数统一决定）。
+    name = strip_markers(name)
     name_height = pdf.text_block_height(name, width=width, size_px=name_size, bold=True)
     gender_text = (gender or "").strip()
     if not gender_text:
@@ -97,6 +102,8 @@ def draw_name_gender(
     left = pdf.get_x()
     top = pdf.get_y()
     centered = align == "center"
+    # 与 `plan_name_gender` 同一份剥壳结果，保证"量的就是画的"。
+    name = strip_markers(name)
     pdf.set_text_color(*(name_color or pdf.accent))
     if plan.same_line:
         pdf.set_font(FONT_FAMILY, "B" if name_bold else "", name_size * _PX_TO_PT)

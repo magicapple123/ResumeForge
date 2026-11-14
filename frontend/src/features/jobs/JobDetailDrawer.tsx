@@ -23,9 +23,12 @@ import {
   Typography,
 } from "antd";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Job } from "../../types";
+import type { Job, Track } from "../../types";
+import { listTracksPage } from "../../api/tracker";
+import TrackFormModal from "../tracker/TrackFormModal";
+import { todayIsoDate } from "../../utils/format";
 import { getMatchAnalyzingIds, subscribeMatchAnalysis } from "../../utils/jobMatchAnalysisState";
 import RelatedKnowledgeBlock from "./RelatedKnowledgeBlock";
 import SkillTags from "./SkillTags";
@@ -104,6 +107,41 @@ export default function JobDetailDrawer({
 }: Props) {
   useLocale();
   const navigate = useNavigate();
+  const [trackFormJobId, setTrackFormJobId] = useState<number | null>(null);
+  const [trackRefresh, setTrackRefresh] = useState(0);
+  const [trackLink, setTrackLink] = useState<{ jobId: number; record: Track | null } | null>(null);
+  const [trackLoadFailed, setTrackLoadFailed] = useState(false);
+  const trackFormOpen = job != null && trackFormJobId === job.id;
+  const initialTrack = useMemo(
+    () =>
+      job
+        ? {
+            company: job.company,
+            title: job.title,
+            job_id: job.id,
+            status: "applied" as const,
+            applied_at: todayIsoDate(),
+            channel: "unknown" as const,
+          }
+        : undefined,
+    [job],
+  );
+  useEffect(() => {
+    if (!job) return;
+    let cancelled = false;
+    listTracksPage({ jobId: job.id }, 1, 1)
+      .then((page) => {
+        if (cancelled) return;
+        setTrackLoadFailed(false);
+        setTrackLink({ jobId: job.id, record: page.items[0] ?? null });
+      })
+      .catch(() => {
+        if (!cancelled) setTrackLoadFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [job, trackRefresh]);
   // 匹配分析在弹窗（或用户已关掉弹窗）里后台进行时，这里也要看得见：
   // 订阅全局登记表，按钮转圈 + 文案点名，避免"后台在跑但界面毫无迹象"。
   const [matchAnalyzingIds, setMatchAnalyzingIds] =
@@ -117,248 +155,282 @@ export default function JobDetailDrawer({
   );
   const matchAnalyzing = job != null && matchAnalyzingIds.has(job.id);
   return (
-    <Drawer
-      title={t("jobDetail.title")}
-      size="min(640px, 100vw)"
-      open={!!job}
-      onClose={onClose}
-      // 操作栏交给抽屉的 footer 插槽：它由抽屉布局常驻底部，内容不足一屏时
-      // 也不会浮在正文中间；正文仍由 body 独立滚动。
-      // 分两行是负载问题：主行承载会改变当前页状态的动作（生成 / 编写 / 查看简历），
-      // 辅助行承载分析、投递与纯跳页。新增按钮请先判断它属于哪一行，别再往主行塞。
-      styles={{ footer: { padding: "12px 24px" } }}
-      footer={
-        job && (
-          <div className="job-detail-actions">
-            <Space className="job-detail-actions-primary" wrap>
-              <Button type="primary" icon={<FileTextOutlined />} onClick={() => onGenerate(job)}>
-                {t("jobDetail.action.generate")}
-              </Button>
-              <Button icon={<EditOutlined />} onClick={() => onWrite(job)}>
-                {t("jobDetail.action.write")}
-              </Button>
-              <Button icon={<FolderOpenOutlined />} onClick={() => onViewResumes(job)}>
-                {t("jobDetail.action.viewResume")}
-              </Button>
-            </Space>
-            {/* 辅助行统一 size="small" type="text" 且不带图标：6 个入口才放得下一行，
+    <>
+      {!trackFormOpen && (
+        <Drawer
+          title={t("jobDetail.title")}
+          size="min(640px, 100vw)"
+          open={!!job && !trackFormOpen}
+          onClose={onClose}
+          // 操作栏交给抽屉的 footer 插槽：它由抽屉布局常驻底部，内容不足一屏时
+          // 也不会浮在正文中间；正文仍由 body 独立滚动。
+          // 分两行是负载问题：主行承载会改变当前页状态的动作（生成 / 编写 / 查看简历），
+          // 辅助行承载分析、投递与纯跳页。新增按钮请先判断它属于哪一行，别再往主行塞。
+          styles={{ footer: { padding: "12px 24px" } }}
+          footer={
+            job && (
+              <div className="job-detail-actions">
+                <Space className="job-detail-actions-primary" wrap>
+                  <Button
+                    type="primary"
+                    icon={<FileTextOutlined />}
+                    onClick={() => onGenerate(job)}
+                  >
+                    {t("jobDetail.action.generate")}
+                  </Button>
+                  <Button icon={<EditOutlined />} onClick={() => onWrite(job)}>
+                    {t("jobDetail.action.write")}
+                  </Button>
+                  <Button icon={<FolderOpenOutlined />} onClick={() => onViewResumes(job)}>
+                    {t("jobDetail.action.viewResume")}
+                  </Button>
+                </Space>
+                {/* 辅助行统一 size="small" type="text" 且不带图标：6 个入口才放得下一行，
                 也避免和主行抢注意力。「加入投递台」禁用时只剩灰字，不再像一个坏按钮。 */}
-            <div className="job-detail-actions-secondary">
-              {/* 两个"解读"性质不同，按钮相邻但用 Tooltip 讲清区别：需求解读只读 JD，
+                <div className="job-detail-actions-secondary">
+                  {/* 两个"解读"性质不同，按钮相邻但用 Tooltip 讲清区别：需求解读只读 JD，
                   匹配分析会读取你的资料与简历。 */}
-              <Tooltip title={t("jobDetail.hint.readRequirement")}>
-                <Button size="small" type="text" onClick={() => onAnalyze(job)}>
-                  {t("jobDetail.action.readRequirement")}
-                </Button>
-              </Tooltip>
-              <Tooltip
-                title={
-                  matchAnalyzing ? t("jobDetail.hint.matchRunning") : t("jobDetail.hint.matchIdle")
-                }
-              >
-                <Button
-                  size="small"
-                  type="text"
-                  loading={matchAnalyzing}
-                  onClick={() => onMatch(job)}
-                >
-                  {matchAnalyzing ? t("jobDetail.action.analyzing") : t("jobDetail.action.match")}
-                </Button>
-              </Tooltip>
-              <Tooltip
-                title={
-                  job.apply_supported === false
-                    ? t("jobDetail.hint.unsupported")
-                    : t("jobDetail.hint.applyDesk")
-                }
-              >
-                <Button
-                  size="small"
-                  type="text"
-                  loading={queueLoading}
-                  disabled={queueLoading || job.apply_supported === false}
-                  onClick={() => onAddToQueue(job)}
-                >
-                  {t("jobDetail.action.applyDesk")}
-                </Button>
-              </Tooltip>
-              <Button size="small" type="text" onClick={() => onAskAssistant(job)}>
-                {t("jobDetail.action.askAssistant")}
-              </Button>
-              {/* 带 id 的跨模块动作（RF-11）：目标页按 job_id 自行过滤/预填，
-                  不必到了那边再选一遍岗位。纯跳页，无回调 prop。 */}
-              <Button
-                size="small"
-                type="text"
-                onClick={() => navigate(`/tracker?job_id=${job.id}`)}
-              >
-                {t("jobDetail.section.progress")}
-              </Button>
-              <Button
-                size="small"
-                type="text"
-                onClick={() => navigate(`/interview?job_id=${job.id}`)}
-              >
-                {t("jobDetail.action.interview")}
-              </Button>
-              {job.source_url && (
-                <Button
-                  size="small"
-                  type="text"
-                  loading={webFormLoading}
-                  disabled={webFormLoading}
-                  onClick={() => onOpenWebForm(job)}
-                >
-                  {t("jobDetail.action.goApply")}
-                </Button>
-              )}
-            </div>
-          </div>
-        )
-      }
-    >
-      {job && (
-        <>
-          <div className="job-detail-title-row">
-            <Typography.Title level={4} style={{ margin: 0 }}>
-              {job.title}
-            </Typography.Title>
-            <Tooltip
-              title={
-                job.favorite ? t("jobDetail.action.unfavorite") : t("jobDetail.action.favorite")
-              }
-            >
-              <Button
-                type="text"
-                aria-label={
-                  job.favorite ? t("jobDetail.action.unfavorite") : t("jobDetail.action.favorite")
-                }
-                className={`job-favorite-button${job.favorite ? " is-favorite" : ""}`}
-                icon={job.favorite ? <StarFilled /> : <StarOutlined />}
-                loading={favoriteLoading}
-                disabled={favoriteLoading}
-                onClick={() => onFavorite(job)}
-              />
-            </Tooltip>
-          </div>
-
-          {/* 把原因写在页面上而不是只禁用按钮：用户是"手动录了一个岗位"，看到灰按钮会以为是 bug。 */}
-          {job.apply_supported === false && (
-            <Alert
-              type="info"
-              showIcon
-              style={{ marginTop: 12 }}
-              title={t("jobDetail.unsupported.title")}
-              description={
-                <Typography.Text type="secondary">
-                  {t("jobDetail.unsupported.body")}
-                </Typography.Text>
-              }
-            />
-          )}
-
-          <Descriptions column={2} size="small" style={{ marginTop: 16, marginBottom: 16 }}>
-            <Descriptions.Item label={t("jobDetail.field.company")}>
-              {job.company || "-"}
-            </Descriptions.Item>
-            <Descriptions.Item label={t("jobDetail.field.location")}>
-              {job.location || "-"}
-            </Descriptions.Item>
-            <Descriptions.Item label={t("jobDetail.field.salary")}>
-              {job.salary || "-"}
-            </Descriptions.Item>
-            <Descriptions.Item label={t("jobDetail.field.jobType")}>
-              {protocolLabel(jobTypeLabelKey(job.job_type), job.job_type)}
-            </Descriptions.Item>
-            <Descriptions.Item label={t("jobDetail.field.status")}>
-              {protocolLabel(jobStatusLabelKey(job.status), job.status)}
-            </Descriptions.Item>
-            <Descriptions.Item label={t("jobDetail.field.postedAt")}>
-              {job.posted_at || "-"}
-            </Descriptions.Item>
-            {/* 「录入方式」是系统记录的这条岗位怎么进来的（手动填写/粘贴识别/采集…），
-                与用户可编辑的「来源」是两回事；标签分开写，避免两个"来源"互相打架。 */}
-            <Descriptions.Item label={t("jobDetail.field.recognitionSource")}>
-              {/* 录入方式是后端协议值（RECOGNITION_SOURCES），展示名走语言包；
-                  空值表示"没有记录"（旧数据），不再冒充「手动填写」。 */}
-              {protocolLabel(
-                jobRecognitionSourceLabelKey(job.recognition_source),
-                job.recognition_source,
-              )}
-            </Descriptions.Item>
-            {/* 0042 起「来源」是用户可编辑的独立字段（不再追加进备注）；没填就不占一行，
-                免得详情里出现一排"-"里唯一有内容的是录入方式，看着像重复。 */}
-            {job.origin_source && (
-              <Descriptions.Item label={t("jobDetail.field.source")}>
-                {job.origin_source}
-              </Descriptions.Item>
-            )}
-          </Descriptions>
-
-          {job.keywords.length > 0 && (
+                  <Tooltip title={t("jobDetail.hint.readRequirement")}>
+                    <Button size="small" type="text" onClick={() => onAnalyze(job)}>
+                      {t("jobDetail.action.readRequirement")}
+                    </Button>
+                  </Tooltip>
+                  <Tooltip
+                    title={
+                      matchAnalyzing
+                        ? t("jobDetail.hint.matchRunning")
+                        : t("jobDetail.hint.matchIdle")
+                    }
+                  >
+                    <Button
+                      size="small"
+                      type="text"
+                      loading={matchAnalyzing}
+                      onClick={() => onMatch(job)}
+                    >
+                      {matchAnalyzing
+                        ? t("jobDetail.action.analyzing")
+                        : t("jobDetail.action.match")}
+                    </Button>
+                  </Tooltip>
+                  <Tooltip
+                    title={
+                      job.apply_supported === false
+                        ? t("jobDetail.hint.unsupported")
+                        : t("jobDetail.hint.applyDesk")
+                    }
+                  >
+                    <Button
+                      size="small"
+                      type="text"
+                      loading={queueLoading}
+                      disabled={queueLoading || job.apply_supported === false}
+                      onClick={() => onAddToQueue(job)}
+                    >
+                      {t("jobDetail.action.applyDesk")}
+                    </Button>
+                  </Tooltip>
+                  <Button size="small" type="text" onClick={() => onAskAssistant(job)}>
+                    {t("jobDetail.action.askAssistant")}
+                  </Button>
+                  <Button
+                    size="small"
+                    type="text"
+                    loading={trackLink?.jobId !== job.id && !trackLoadFailed}
+                    onClick={() => {
+                      if (trackLoadFailed) {
+                        setTrackRefresh((value) => value + 1);
+                        return;
+                      }
+                      if (trackLink?.record) navigate(`/tracker?job_id=${job.id}`);
+                      else setTrackFormJobId(job.id);
+                    }}
+                  >
+                    {trackLoadFailed
+                      ? t("jobDetail.error.loadTrack")
+                      : trackLink?.record
+                        ? t("jobDetail.action.viewTrack")
+                        : t("jobDetail.action.addTrack")}
+                  </Button>
+                  <Button
+                    size="small"
+                    type="text"
+                    onClick={() => navigate(`/interview?job_id=${job.id}`)}
+                  >
+                    {t("jobDetail.action.interview")}
+                  </Button>
+                  {job.source_url && (
+                    <Button
+                      size="small"
+                      type="text"
+                      loading={webFormLoading}
+                      disabled={webFormLoading}
+                      onClick={() => onOpenWebForm(job)}
+                    >
+                      {t("jobDetail.action.goApply")}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          }
+        >
+          {job && (
             <>
-              <Divider titlePlacement="start" plain style={{ margin: "8px 0" }}>
-                {t("jobDetail.section.skills")}
-              </Divider>
-              <SkillTags tags={job.keywords} max={20} />
+              <div className="job-detail-title-row">
+                <Typography.Title level={4} style={{ margin: 0 }}>
+                  {job.title}
+                </Typography.Title>
+                <Tooltip
+                  title={
+                    job.favorite ? t("jobDetail.action.unfavorite") : t("jobDetail.action.favorite")
+                  }
+                >
+                  <Button
+                    type="text"
+                    aria-label={
+                      job.favorite
+                        ? t("jobDetail.action.unfavorite")
+                        : t("jobDetail.action.favorite")
+                    }
+                    className={`job-favorite-button${job.favorite ? " is-favorite" : ""}`}
+                    icon={job.favorite ? <StarFilled /> : <StarOutlined />}
+                    loading={favoriteLoading}
+                    disabled={favoriteLoading}
+                    onClick={() => onFavorite(job)}
+                  />
+                </Tooltip>
+              </div>
+
+              {/* 把原因写在页面上而不是只禁用按钮：用户是"手动录了一个岗位"，看到灰按钮会以为是 bug。 */}
+              {job.apply_supported === false && (
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ marginTop: 12 }}
+                  title={t("jobDetail.unsupported.title")}
+                  description={
+                    <Typography.Text type="secondary">
+                      {t("jobDetail.unsupported.body")}
+                    </Typography.Text>
+                  }
+                />
+              )}
+
+              <Descriptions column={2} size="small" style={{ marginTop: 16, marginBottom: 16 }}>
+                <Descriptions.Item label={t("jobDetail.field.company")}>
+                  {job.company || "-"}
+                </Descriptions.Item>
+                <Descriptions.Item label={t("jobDetail.field.location")}>
+                  {job.location || "-"}
+                </Descriptions.Item>
+                <Descriptions.Item label={t("jobDetail.field.salary")}>
+                  {job.salary || "-"}
+                </Descriptions.Item>
+                <Descriptions.Item label={t("jobDetail.field.jobType")}>
+                  {protocolLabel(jobTypeLabelKey(job.job_type), job.job_type)}
+                </Descriptions.Item>
+                <Descriptions.Item label={t("jobDetail.field.status")}>
+                  {protocolLabel(jobStatusLabelKey(job.status), job.status)}
+                </Descriptions.Item>
+                <Descriptions.Item label={t("jobDetail.field.postedAt")}>
+                  {job.posted_at || "-"}
+                </Descriptions.Item>
+                {/* 「录入方式」是系统记录的这条岗位怎么进来的（手动填写/粘贴识别/采集…），
+                与用户可编辑的「来源」是两回事；标签分开写，避免两个"来源"互相打架。 */}
+                <Descriptions.Item label={t("jobDetail.field.recognitionSource")}>
+                  {/* 录入方式是后端协议值（RECOGNITION_SOURCES），展示名走语言包；
+                  空值表示"没有记录"（旧数据），不再冒充「手动填写」。 */}
+                  {protocolLabel(
+                    jobRecognitionSourceLabelKey(job.recognition_source),
+                    job.recognition_source,
+                  )}
+                </Descriptions.Item>
+                {/* 0042 起「来源」是用户可编辑的独立字段（不再追加进备注）；没填就不占一行，
+                免得详情里出现一排"-"里唯一有内容的是录入方式，看着像重复。 */}
+                {job.origin_source && (
+                  <Descriptions.Item label={t("jobDetail.field.source")}>
+                    {job.origin_source}
+                  </Descriptions.Item>
+                )}
+              </Descriptions>
+
+              {job.keywords.length > 0 && (
+                <>
+                  <Divider titlePlacement="start" plain style={{ margin: "8px 0" }}>
+                    {t("jobDetail.section.skills")}
+                  </Divider>
+                  <SkillTags tags={job.keywords} max={20} />
+                </>
+              )}
+
+              {/* #29D：按公司回溯知识库里与这个岗位相关的条目；0 条时整块不渲染。 */}
+              <RelatedKnowledgeBlock company={job.company} jobId={job.id} />
+
+              <div className="job-detail-text-sections">
+                <TextSection
+                  title={t("jobDetail.section.description")}
+                  icon={<FileTextOutlined />}
+                  content={job.description}
+                  emptyText={t("jobDetail.empty.description")}
+                  variant="description"
+                />
+                <TextSection
+                  title={t("jobDetail.section.requirements")}
+                  icon={<CheckCircleOutlined />}
+                  content={job.requirements}
+                  emptyText={t("jobDetail.empty.requirements")}
+                  variant="requirements"
+                />
+                <TextSection
+                  title={t("jobDetail.section.extra")}
+                  icon={<InfoCircleOutlined />}
+                  content={job.additional_info}
+                  emptyText={t("jobDetail.empty.extra")}
+                  variant="additional"
+                />
+                <TextSection
+                  title={t("jobDetail.section.note")}
+                  icon={<PushpinOutlined />}
+                  content={job.note}
+                  emptyText={t("jobDetail.empty.note")}
+                  variant="note"
+                />
+                {(job.note_images?.length ?? 0) > 0 && (
+                  <section className="job-detail-text-section job-detail-text-section--note">
+                    <div className="job-detail-section-heading">
+                      <span className="job-detail-section-icon">
+                        <PictureOutlined />
+                      </span>
+                      <Typography.Text strong>{t("jobDetail.section.noteImages")}</Typography.Text>
+                    </div>
+                    <Space wrap>
+                      {job.note_images.map((source, index) => (
+                        <Image
+                          key={`${index}-${source.slice(-16)}`}
+                          src={source}
+                          alt={t("jobDetail.alt.noteImage", { index: index + 1 })}
+                          width={150}
+                        />
+                      ))}
+                    </Space>
+                  </section>
+                )}
+              </div>
             </>
           )}
-
-          {/* #29D：按公司回溯知识库里与这个岗位相关的条目；0 条时整块不渲染。 */}
-          <RelatedKnowledgeBlock company={job.company} jobId={job.id} />
-
-          <div className="job-detail-text-sections">
-            <TextSection
-              title={t("jobDetail.section.description")}
-              icon={<FileTextOutlined />}
-              content={job.description}
-              emptyText={t("jobDetail.empty.description")}
-              variant="description"
-            />
-            <TextSection
-              title={t("jobDetail.section.requirements")}
-              icon={<CheckCircleOutlined />}
-              content={job.requirements}
-              emptyText={t("jobDetail.empty.requirements")}
-              variant="requirements"
-            />
-            <TextSection
-              title={t("jobDetail.section.extra")}
-              icon={<InfoCircleOutlined />}
-              content={job.additional_info}
-              emptyText={t("jobDetail.empty.extra")}
-              variant="additional"
-            />
-            <TextSection
-              title={t("jobDetail.section.note")}
-              icon={<PushpinOutlined />}
-              content={job.note}
-              emptyText={t("jobDetail.empty.note")}
-              variant="note"
-            />
-            {(job.note_images?.length ?? 0) > 0 && (
-              <section className="job-detail-text-section job-detail-text-section--note">
-                <div className="job-detail-section-heading">
-                  <span className="job-detail-section-icon">
-                    <PictureOutlined />
-                  </span>
-                  <Typography.Text strong>{t("jobDetail.section.noteImages")}</Typography.Text>
-                </div>
-                <Space wrap>
-                  {job.note_images.map((source, index) => (
-                    <Image
-                      key={`${index}-${source.slice(-16)}`}
-                      src={source}
-                      alt={t("jobDetail.alt.noteImage", { index: index + 1 })}
-                      width={150}
-                    />
-                  ))}
-                </Space>
-              </section>
-            )}
-          </div>
-        </>
+        </Drawer>
       )}
-    </Drawer>
+      {job && trackFormOpen && (
+        <TrackFormModal
+          key={job.id}
+          open={trackFormOpen}
+          track={null}
+          initial={initialTrack}
+          onClose={() => setTrackFormJobId(null)}
+          onSaved={() => setTrackRefresh((value) => value + 1)}
+        />
+      )}
+    </>
   );
 }

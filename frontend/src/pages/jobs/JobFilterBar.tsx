@@ -9,16 +9,14 @@ import {
   InboxOutlined,
   PlusOutlined,
   ReloadOutlined,
-  UndoOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
-import { Button, Input, Select, Space, Tooltip } from "antd";
+import { Button, Divider, Input, Select, Space, Tooltip } from "antd";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { t } from "../../i18n";
 import { JOB_STATUS_LABEL_KEYS, JOB_TYPE_LABEL_KEYS } from "../../i18n/enum/jobs";
 import { useLocale } from "../../i18n/i18nContext";
-import type { JobSortState } from "../../utils/jobSort";
-import { DEFAULT_JOB_SORT_STATE, isDefaultJobSort } from "../../utils/jobSort";
 import type { BatchAction } from "./jobFilterOptions";
 import { SOURCE_KIND_OPTIONS } from "./jobFilterOptions";
 
@@ -40,9 +38,8 @@ export function JobFilterBar({
   setCandidatesOpen,
   setFormOpen,
   onImportCsv,
-  sortState,
-  applySort,
   selectionMode = false,
+  extraActions,
 }: {
   keyword: string;
   setKeyword: (value: string) => void;
@@ -61,9 +58,6 @@ export function JobFilterBar({
   setCandidatesOpen: (value: boolean) => void;
   setFormOpen: (value: boolean) => void;
   onImportCsv: () => void;
-  /** 当前排序（E）：只存在页面状态里，用于「恢复默认排序」的禁用态。 */
-  sortState: JobSortState;
-  applySort: (next: JobSortState) => void;
   /**
    * 是否处于多选态。默认 `false`（既有调用方与单测都不用改）。
    *
@@ -73,6 +67,7 @@ export function JobFilterBar({
    * 非多选态下这颗按钮照旧出现。
    */
   selectionMode?: boolean;
+  extraActions?: ReactNode;
 }) {
   useLocale();
   // 搜索框受控：本地镜像同步外部 keyword（URL 带参等外部变化能回填输入框），
@@ -97,140 +92,165 @@ export function JobFilterBar({
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <Space wrap className="jobs-filter-bar">
-        <Input.Search
-          className="jobs-search-input"
-          placeholder={t("jobsPage.filter.searchPlaceholder")}
-          allowClear
-          disabled={batchAction !== null}
-          value={searchText}
-          onChange={(event) => {
-            const value = event.target.value;
-            setSearchText(value);
-            if (value === "" && keyword !== "") {
-              setKeyword("");
+      {/* F04：10 个控件原本挤在一条 `size={2}` 的 Space 里，控件几乎相接、两个 primary
+          互相抢注意力。现在按「筛选｜AI｜导入｜新增」分成四簇：簇内 6px、簇间 8px + 一条
+          竖分隔线，读到哪一簇停在哪里由线来断句；全栏只留「手动添加」一个 primary。 */}
+      <Space wrap size={8} align="center" className="jobs-filter-bar">
+        <Space
+          wrap
+          size={6}
+          align="center"
+          className="jobs-filter-group jobs-filter-group-filters"
+        >
+          <Input.Search
+            size="small"
+            className="jobs-search-input"
+            placeholder={t("jobsPage.filter.searchPlaceholder")}
+            allowClear
+            disabled={batchAction !== null}
+            value={searchText}
+            onChange={(event) => {
+              const value = event.target.value;
+              setSearchText(value);
+              if (value === "" && keyword !== "") {
+                setKeyword("");
+                setPage(1);
+              }
+            }}
+            onSearch={(value) => {
+              setSearchText(value);
+              setKeyword(value);
               setPage(1);
-            }
-          }}
-          onSearch={(value) => {
-            setSearchText(value);
-            setKeyword(value);
-            setPage(1);
-          }}
-        />
-        <Select
-          aria-label={t("jobsPage.filter.jobTypeAria")}
-          placeholder={t("jobsPage.filter.jobTypePlaceholder")}
-          allowClear
-          disabled={batchAction !== null}
-          style={{ width: 110 }}
-          value={jobType || undefined}
-          onChange={(value) => {
-            setJobType(value ?? "");
-            setPage(1);
-          }}
-          options={jobTypeOptions}
-        />
-        <Select
-          aria-label={t("jobsPage.filter.statusAria")}
-          placeholder={t("jobsPage.filter.statusPlaceholder")}
-          allowClear
-          disabled={batchAction !== null}
-          style={{ width: 110 }}
-          value={status || undefined}
-          onChange={(value) => {
-            setStatus(value ?? "");
-            setPage(1);
-          }}
-          options={statusOptions}
-        />
-        <Select
-          aria-label={t("jobsPage.filter.sourceAria")}
-          placeholder={t("jobsPage.filter.sourcePlaceholder")}
-          allowClear
-          disabled={batchAction !== null}
-          style={{ width: 120 }}
-          value={sourceKind || undefined}
-          onChange={(value) => {
-            setSourceKind((value ?? "") as "" | "collected" | "manual");
-            setPage(1);
-          }}
-          options={SOURCE_KIND_OPTIONS.map((option) => ({
-            value: option.value,
-            label: t(option.labelKey),
-          }))}
-        />
-        {/* 进入选择模式的入口在行右键菜单的「批量选择」（R8）；退出选择已挪到
-            BatchToolbar 的「全选全部岗位」右侧（用户要求，两行各归其位）。 */}
-        {/* 开始分析在面板里确认（设置视图有「开始分析」按钮）；分析一律走后台任务，
-            关掉面板/切页都不会中断，无需单独的"后台运行"入口。 */}
-        <Button
-          type="primary"
-          disabled={batchAction !== null}
-          onClick={() => openMatchBatch("setup")}
-        >
-          {t("jobsPage.filter.analyzeMatch")}
-        </Button>
-        {/* 多选态不渲染「分析记录」（用户要求）：勾选中这一栏只服务批量动作，
-            历史记录请到「AI 对比选岗 / 批量匹配分析」界面看。非多选态保留入口（深链也仍然可达）。 */}
-        {selectionMode ? null : (
-          <Button
-            icon={<HistoryOutlined />}
+            }}
+          />
+          <Select
+            size="small"
+            aria-label={t("jobsPage.filter.jobTypeAria")}
+            placeholder={t("jobsPage.filter.jobTypePlaceholder")}
+            allowClear
             disabled={batchAction !== null}
-            onClick={() => openMatchBatch("history")}
-          >
-            {t("jobsPage.filter.matchHistory")}
-          </Button>
-        )}
-        <Button
-          icon={<InboxOutlined />}
-          disabled={batchAction !== null}
-          onClick={() => setCandidatesOpen(true)}
-        >
-          {t("jobsPage.filter.candidates")}
-        </Button>
-        {emptyDescriptionJobIds.length > 0 && (
-          // 只在有 JD 为空的岗位时才出现——否则按钮点了什么也不会发生。
-          // 显式 aria-label：antd 会给纯中文按钮做字距处理，用文本当查询条件可能找不到。
-          <Button
-            icon={<ReloadOutlined />}
-            aria-label={t("jobsPage.filter.backfill")}
+            style={{ width: 90 }}
+            value={jobType || undefined}
+            onChange={(value) => {
+              setJobType(value ?? "");
+              setPage(1);
+            }}
+            options={jobTypeOptions}
+          />
+          <Select
+            size="small"
+            aria-label={t("jobsPage.filter.statusAria")}
+            placeholder={t("jobsPage.filter.statusPlaceholder")}
+            allowClear
             disabled={batchAction !== null}
-            loading={backfilling}
-            onClick={() => void backfillDetails()}
-          >
-            {t("jobsPage.filter.backfill")}
-          </Button>
-        )}
-        <Button icon={<UploadOutlined />} disabled={batchAction !== null} onClick={onImportCsv}>
-          {t("jobsPage.filter.importCsv")}
-        </Button>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          disabled={batchAction !== null}
-          onClick={() => setFormOpen(true)}
-        >
-          {t("jobsPage.filter.addManual")}
-        </Button>
-        {/* 恢复默认排序（E）：排序一旦点上列头就没有"取消"的可视入口，这里给一个
-            明确的退路；点击同时回到第 1 页（停在第 3 页看默认排序的前几条没有意义）。 */}
-        <Tooltip
-          title={
-            isDefaultJobSort(sortState)
-              ? t("jobsPage.filter.sortResetHintDefault")
-              : t("jobsPage.filter.sortResetHint")
-          }
-        >
+            style={{ width: 90 }}
+            value={status || undefined}
+            onChange={(value) => {
+              setStatus(value ?? "");
+              setPage(1);
+            }}
+            options={statusOptions}
+          />
+          <Select
+            size="small"
+            aria-label={t("jobsPage.filter.sourceAria")}
+            placeholder={t("jobsPage.filter.sourcePlaceholder")}
+            allowClear
+            disabled={batchAction !== null}
+            style={{ width: 90 }}
+            value={sourceKind || undefined}
+            onChange={(value) => {
+              setSourceKind((value ?? "") as "" | "collected" | "manual");
+              setPage(1);
+            }}
+            options={SOURCE_KIND_OPTIONS.map((option) => ({
+              value: option.value,
+              label: t(option.labelKey),
+            }))}
+          />
+        </Space>
+        <Divider orientation="vertical" className="jobs-filter-divider" />
+        <Space wrap size={6} align="center" className="jobs-filter-group jobs-filter-group-ai">
+          {/* 进入选择模式的入口在行右键菜单的「批量选择」（R8）；退出选择已挪到
+              BatchToolbar 的「全选全部岗位」右侧（用户要求，两行各归其位）。 */}
+          {/* 开始分析在面板里确认（设置视图有「开始分析」按钮）；分析一律走后台任务，
+              关掉面板/切页都不会中断，无需单独的"后台运行"入口。 */}
+          {/* 它不是本页唯一的动作（旁边还有「手动添加」），所以不再用 primary——两个实心
+              按钮并排时用户看不出哪个是主路径。 */}
           <Button
-            icon={<UndoOutlined />}
-            aria-label={t("jobsPage.filter.sortReset")}
-            disabled={batchAction !== null || isDefaultJobSort(sortState)}
-            onClick={() => applySort(DEFAULT_JOB_SORT_STATE)}
+            size="small"
+            disabled={batchAction !== null}
+            onClick={() => openMatchBatch("setup")}
           >
-            {t("jobsPage.filter.sortReset")}
+            {t("jobsPage.filter.analyzeMatch")}
           </Button>
-        </Tooltip>
+          {/* 多选态不渲染「分析记录」（用户要求）：勾选中这一栏只服务批量动作，
+              历史记录请到「AI 对比选岗 / 批量匹配分析」界面看。非多选态保留入口（深链也仍然可达）。 */}
+          {selectionMode ? null : (
+            <Button
+              size="small"
+              icon={<HistoryOutlined />}
+              disabled={batchAction !== null}
+              onClick={() => openMatchBatch("history")}
+            >
+              {t("jobsPage.filter.matchHistory")}
+            </Button>
+          )}
+          <Button
+            size="small"
+            icon={<InboxOutlined />}
+            disabled={batchAction !== null}
+            onClick={() => setCandidatesOpen(true)}
+          >
+            {t("jobsPage.filter.candidates")}
+          </Button>
+          {emptyDescriptionJobIds.length > 0 && (
+            <Tooltip title={t("jobsPage.filter.backfill")}>
+              <Button
+                size="small"
+                icon={<ReloadOutlined />}
+                aria-label={t("jobsPage.filter.backfill")}
+                disabled={batchAction !== null || undefined}
+                loading={backfilling}
+                onClick={() => void backfillDetails()}
+              />
+            </Tooltip>
+          )}
+        </Space>
+        <Divider orientation="vertical" className="jobs-filter-divider" />
+        {/* 「导入」与「新增」合成一个 flex 项：两者都是"往库里添东西"，而且 1440 的可用宽
+            容不下四簇并排（实测合计 1241 > 1166）。合并成一项后整行按 2+2 折行——两行各
+            两簇，而不是把「手动添加」单独甩到第二行留一片空白。宽屏（≥1500）仍是一行四簇。 */}
+        <div className="jobs-filter-actions">
+          <Space
+            wrap
+            size={6}
+            align="center"
+            className="jobs-filter-group jobs-filter-group-import"
+          >
+            {extraActions}
+            <Button
+              size="small"
+              icon={<UploadOutlined />}
+              disabled={batchAction !== null || undefined}
+              onClick={onImportCsv}
+            >
+              {t("jobsPage.filter.importCsv")}
+            </Button>
+          </Space>
+          <Divider orientation="vertical" className="jobs-filter-divider" />
+          <Space wrap size={6} align="center" className="jobs-filter-group jobs-filter-group-add">
+            <Button
+              size="small"
+              type="primary"
+              icon={<PlusOutlined />}
+              disabled={batchAction !== null}
+              onClick={() => setFormOpen(true)}
+            >
+              {t("jobsPage.filter.addManual")}
+            </Button>
+          </Space>
+        </div>
       </Space>
     </div>
   );

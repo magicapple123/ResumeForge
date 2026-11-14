@@ -51,6 +51,8 @@ function loadMain() {
     // 自绘标题栏 / 关闭行为（§18 §19）的观测点。
     sent: [],
     messageBoxPrompts: [],
+    // Q11：自绘关闭卡片被弹出了几次（取代 messageBoxPrompts，作为弹没弹的观测面）。
+    closeDialogPrompts: [],
     ipcHandlers: {},
     themeCalls: [],
     // 媒体权限处理器（语音输入要麦克风）：main.js 在 createWindow 里装它。
@@ -93,7 +95,12 @@ function loadMain() {
 
   const browserWindowInstances = [];
   class BrowserWindowStub {
-    constructor() {
+    constructor(options) {
+      // Q11：自绘关闭卡片是**无边框子窗口**（frame:false + parent）。用例不真的跑
+      // 那个 HTML，而是在 loadURL 之后按 state 里预设的选择替用户点一下。
+      this.options = options ?? {};
+      this.isCloseDialog = this.options.frame === false;
+      if (this.isCloseDialog) events.closeDialogPrompts.push({ parent: this.options.parent });
       this.webContents = {
         send: (channel, payload) => {
           events.sent.push({ channel, payload });
@@ -135,8 +142,17 @@ function loadMain() {
       return Promise.resolve();
     }
     loadURL() {
+      if (this.isCloseDialog && typeof events.closeDialogResolve === "function") {
+        // 模拟"用户在卡片上点了按钮"：把结果从 IPC 送回主进程（与真实链路同一条通道）。
+        const payload = {
+          action: state.closeDialogResponse === 1 ? "quit" : "hide",
+          remember: Boolean(state.closeDialogCheckbox),
+        };
+        setImmediate(() => events.closeDialogResolve({ sender: this.webContents }, payload));
+      }
       return Promise.resolve();
     }
+    removeListener() {}
     once(name, handler) {
       this.handlers[name] = handler;
     }
@@ -249,19 +265,17 @@ function loadMain() {
       return state.messageBoxResponse ?? 1;
     },
     // 关闭行为（§18）的异步模态框：第一个参数是父窗口（必须带，见 §18.5 风险）。
+    // Q11 起关闭卡片是自绘窗口（lib/close-dialog.js），主进程不再走 showMessageBox；
+    // 这个桩只为"仍可能调用它的旧路径"保留，用例改用 state.closeDialogResponse 驱动。
     showMessageBox(...args) {
       const parent = args.length > 1 ? args[0] : null;
       const options = args.length > 1 ? args[1] : args[0];
       events.messageBoxPrompts.push({ parent, options });
       if (state.messageBoxRejects) return Promise.reject(new Error("dialog rejected"));
-      // 二次确认（记住退出）与主对话框用不同的字段区分：只有主对话框有 checkboxLabel。
-      if (options.checkboxLabel) {
-        return Promise.resolve({
-          response: state.closeDialogResponse,
-          checkboxChecked: Boolean(state.closeDialogCheckbox),
-        });
-      }
-      return Promise.resolve({ response: state.rememberQuitResponse, checkboxChecked: false });
+      return Promise.resolve({
+        response: state.closeDialogResponse,
+        checkboxChecked: Boolean(state.closeDialogCheckbox),
+      });
     },
   };
 
@@ -295,6 +309,8 @@ function loadMain() {
     on(name, handler) {
       if (name === "app:quit-request") events.quitRequestHandler = handler;
       if (name === "desktop:set-theme") events.setThemeHandler = handler;
+      // Q11：自绘关闭卡片的回执通道（渲染层点完按钮后 send 上来）。
+      if (name === "close-dialog:resolve") events.closeDialogResolve = handler;
     },
   };
 

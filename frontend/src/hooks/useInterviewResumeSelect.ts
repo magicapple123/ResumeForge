@@ -7,8 +7,8 @@
  *
  * 四条口径（方案详册 #25）：
  * 1. **两个数据源合并、分组**：内部走 `listResumes({ job_id, include_general })`，外部走
- *    `listExternalResumes({ keyword })`。该端点**没有 `job_id` 参数**，所以外部组不按岗位
- *    过滤，只对 `job_id === 当前岗位` 的条目打一个「关联此岗位」标签（只标记，不过滤）。
+ *    `listExternalResumes({ keyword })`。外部组保留跨岗位选择，只对
+ *    `job_id === 当前岗位` 的条目打一个「关联此岗位」标签（只标记，不过滤）。
  * 2. **value 带前缀**：`r:<id>` / `e:<id>`。前缀就是分派依据——同一次 `onChange` 里两种来源
  *    要做的事完全不同（内部只写表单，外部要落材料）。
  * 3. **选中外部简历 = 深链那一套**：统一交给 `applyExternalResume`。两条路径共用同一个函数，
@@ -220,7 +220,7 @@ export interface InterviewResumeGroup {
 /** 外部简历的展示名：名字 + （可选）岗位标签 + 无正文标记。 */
 function externalResumeLabel(item: ExternalResumeItem, jobId: number | null): string {
   const parts = [item.name];
-  // 只标记不过滤：外部简历没有按岗位查询的口径，全量给出来更好用。
+  // 只标记不过滤：面试材料允许复用其他岗位的外部简历。
   if (jobId !== null && item.job_id === jobId) parts.push(t("interviewPage.setup.resumeJobTag"));
   if (!item.has_text) parts.push(t("interviewPage.setup.resumeNoTextBadge"));
   return parts.join(" · ");

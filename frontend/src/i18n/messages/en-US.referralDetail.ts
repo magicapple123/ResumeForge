@@ -22,7 +22,6 @@ const referralDetail = {
   "referralDetail.field.updatedAt": "Updated",
   "referralDetail.value.notRecorded": "Not recorded",
   "referralDetail.value.unknown": "Unknown",
-  "referralDetail.value.empty": "(None)",
   "referralDetail.section.note": "Notes",
   "referralDetail.section.images": "Image notes ({count})",
   "referralDetail.image.noteAlt": "Image note",

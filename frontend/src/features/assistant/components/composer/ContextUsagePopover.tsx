@@ -1,22 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「上下文用量」弹层（需求 #6 + #10）：五段占比条 + 五行图例 + 上下文窗口 + 压缩状态。
+ * 「上下文用量」弹层（需求 #6 + #10）：读数层 + 折叠的设置层。
  *
  * 口径三件事，界面上分得很开，因为它们**不能合并**：
  *
  * 1. 主指标（大号占比、`已使用 x / y`、五段条、图例百分比）全部是**估算**
  *    （`estimate_tokens`，CJK 1 token/字、ASCII 4 字符/token），所以标题右侧标「估算」；
  * 2. 底栏单独一行是**实测**：服务商上一轮报告的 `prompt_tokens`，未报告就写「本次未报告」；
- * 3. 图例百分比的分母是**窗口**（不是已用），这样"五行相加 = 顶部总占比"才对。
+ * 3. 图例百分比的分母是**窗口**（不是已用），这样"各行相加 = 顶部总占比"才对。
  *
- * 窗口未设置（0）时不算占比：显示「未设置上下文窗口」+「去设置」，而不是 0%。
+ * 0 值行按**数据来源**分两种说法：`partial` 是"没参与本轮估算"，剩下的才是"真为 0"。
+ * 用 0.0% 表示"没估算"会被读成"一点都没用"——两种不同的事实不能共用一个写法。
  *
- * 压缩（#10）分两层动作，界面必须让用户看懂：
- *
- * - 「压缩上下文」**先 dry-run** 出预估再确认——真跑要消耗一次全量输入的模型调用，
- *   这是成本确认，不是不可逆确认；
- * - 「还原原文」是**无损**的（压缩只改"发给模型的视图"，原文从来没被删除），
- *   但仍然确认一次：清空摘要后重新压一次又要花钱。
+ * 窗口与压缩的设置项收在第二层（`ContextUsageSettingsSection`）：读数每轮都变，
+ * 配置几个月才动一次，挤一屏会把读数挤没。
  */
 
 import { CloseOutlined } from "@ant-design/icons";
@@ -31,18 +28,13 @@ import {
   formatExactTokens,
   formatPercent,
   formatTokenCount,
-  savedPercent,
 } from "../../contextUsageFormat";
 import {
   compactAssistantConversation,
   restoreAssistantConversation,
 } from "../../../../api/assistant";
-import type {
-  AssistantCompactionResult,
-  ContextCompactionState,
-  ContextUsage,
-} from "../../../../types";
-import ContextWindowSelect from "./ContextWindowSelect";
+import type { AssistantCompactionResult, ContextUsage } from "../../../../types";
+import ContextUsageSettingsSection from "./ContextUsageSettingsSection";
 
 /** 桶 key → 语言包 key（协议值不翻译，显示名按这张表取）。 */
 const BUCKET_LABEL_KEYS: Record<string, MessageKey> = {
@@ -52,6 +44,9 @@ const BUCKET_LABEL_KEYS: Record<string, MessageKey> = {
   connectors: "contextUsage.bucket.connectors",
   skills: "contextUsage.bucket.skills",
 };
+
+/** `partial` 时只有这两桶是估算出来的，其余桶"没参与"，不该按 0 画出来。 */
+const ESTIMATED_KEYS = new Set(["system", "conversation"]);
 
 /** 弹层里可能打开的两个确认框：压缩（先 dry-run）与还原。 */
 type CompactionDialog = "compact" | "restore" | null;
@@ -68,37 +63,6 @@ export interface ContextUsagePopoverProps {
   conversationId?: number | null;
   /** 压缩或还原成功后让上层重取用量（面板上的数字必须跟着变）。 */
   onContextChanged?: () => void;
-}
-
-/** 压缩状态那段正文（有状态说状态，没状态说「尚未压缩」）。 */
-function CompactionStatus({
-  compaction,
-  usage,
-}: {
-  compaction: ContextCompactionState;
-  usage: ContextUsage | null;
-}) {
-  const current = formatPercent(usage?.window ? (usage.percent ?? null) : null);
-  return (
-    <>
-      <p className="assistant-context-compaction-line">
-        {t("contextUsage.compaction.status", {
-          masked: compaction.masked_tool_results,
-          turns: compaction.turns,
-        })}
-      </p>
-      <p className="assistant-context-compaction-line">
-        {t("contextUsage.compaction.range", {
-          before: formatTokenCount(compaction.tokens_before),
-          after: formatTokenCount(compaction.tokens_after),
-        })}
-        {usage?.window ? ` · ${current}` : ""}
-      </p>
-      <p className="assistant-context-compaction-hint">
-        {t("contextUsage.compaction.keepOriginal")}
-      </p>
-    </>
-  );
 }
 
 export default function ContextUsagePopover({
@@ -119,6 +83,13 @@ export default function ContextUsagePopover({
   const [preview, setPreview] = useState<AssistantCompactionResult | null>(null);
   const [busy, setBusy] = useState(false);
   const canAct = conversationId !== null && !busy;
+
+  const buckets = usage?.buckets ?? [];
+  const visibleBuckets = usage?.partial
+    ? buckets.filter((bucket) => ESTIMATED_KEYS.has(bucket.key))
+    : buckets.filter((bucket) => bucket.tokens > 0);
+  const zeroCount = usage?.partial ? 0 : buckets.filter((bucket) => bucket.tokens <= 0).length;
+  const empty = !usage?.partial && buckets.length > 0 && visibleBuckets.length === 0;
 
   const closeDialog = () => {
     setDialog(null);
@@ -204,7 +175,7 @@ export default function ContextUsagePopover({
           </div>
           {/* 五段条：0 的段不画（画了会留一条看不见的缝），段间白缝靠 CSS gap。 */}
           <div className="assistant-context-usage-bar">
-            {(usage?.buckets ?? [])
+            {visibleBuckets
               .filter((bucket) => bucket.tokens > 0)
               .map((bucket) => (
                 <span
@@ -215,7 +186,7 @@ export default function ContextUsagePopover({
               ))}
           </div>
           <ul className="assistant-context-usage-legend">
-            {(usage?.buckets ?? []).map((bucket) => (
+            {visibleBuckets.map((bucket) => (
               <li key={bucket.key} className="assistant-context-usage-legend-row">
                 <span
                   className={`assistant-context-usage-dot assistant-context-usage-seg-${bucketColor(bucket.key)}`}
@@ -230,6 +201,18 @@ export default function ContextUsagePopover({
               </li>
             ))}
           </ul>
+          {/* 说明行只在"读数不全"时出现：它为被藏起来的行提供解释。 */}
+          {empty ? (
+            <p className="assistant-context-window-hint">{t("contextUsage.emptyNote")}</p>
+          ) : null}
+          {usage?.partial ? (
+            <p className="assistant-context-window-hint">{t("contextUsage.partialNote")}</p>
+          ) : null}
+          {!empty && zeroCount > 0 ? (
+            <p className="assistant-context-window-hint">
+              {t("contextUsage.zeroNote", { count: zeroCount })}
+            </p>
+          ) : null}
         </>
       ) : (
         /* 没有分母就不算百分比：给一句实话 + 一个能直接去的入口。 */
@@ -241,41 +224,20 @@ export default function ContextUsagePopover({
         </div>
       )}
 
-      <div className="assistant-context-usage-divider" />
-      <ContextWindowSelect windowTokens={windowTokens} onSaved={onWindowSaved ?? (() => {})} />
-
-      {/* 压缩状态（#10）：先说"压过什么"，再给两个动作。 */}
-      <div className="assistant-context-usage-divider" />
-      <section
-        className="assistant-context-compaction"
-        aria-label={t("contextUsage.compaction.title")}
-      >
-        <div className="assistant-context-compaction-head">
-          <span>{t("contextUsage.compaction.title")}</span>
-          {compaction ? (
-            <span className="assistant-context-compaction-badge">
-              {t("contextUsage.compaction.saved", {
-                percent: savedPercent(compaction.tokens_before, compaction.tokens_after),
-              })}
-            </span>
-          ) : null}
-        </div>
-        {compaction ? (
-          <CompactionStatus compaction={compaction} usage={usage} />
-        ) : (
-          <p className="assistant-context-compaction-line">{t("contextUsage.compaction.none")}</p>
-        )}
-        <div className="assistant-context-compaction-actions">
-          <Button size="small" disabled={!canAct} onClick={() => void openCompact()}>
-            {t("contextUsage.compaction.action.compact")}
-          </Button>
-          {compaction ? (
-            <Button size="small" disabled={!canAct} onClick={() => setDialog("restore")}>
-              {t("contextUsage.compaction.action.restore")}
-            </Button>
-          ) : null}
-        </div>
-      </section>
+      {/* F31：动作与状态并一行（左按钮、右状态），不再各占一行叠出空白。 */}
+      <div className="assistant-context-compaction-actions">
+        <Button size="small" disabled={!canAct || undefined} onClick={() => void openCompact()}>
+          {t("contextUsage.compaction.action.now")}
+        </Button>
+        <span className="assistant-context-compaction-line">
+          {compaction
+            ? t("contextUsage.compaction.status", {
+                masked: compaction.masked_tool_results,
+                turns: compaction.turns,
+              })
+            : t("contextUsage.compaction.none")}
+        </span>
+      </div>
 
       {/* 实测值单独一行：与上面的估算不合并、不换算。 */}
       <p className="assistant-context-usage-actual">
@@ -283,6 +245,15 @@ export default function ContextUsagePopover({
           ? t("contextUsage.actualUnknown")
           : t("contextUsage.actual", { tokens: formatExactTokens(usage.usage_actual) })}
       </p>
+
+      <ContextUsageSettingsSection
+        usage={usage}
+        conversationId={conversationId}
+        onWindowSaved={onWindowSaved}
+        compaction={compaction}
+        canAct={canAct}
+        onRestore={() => setDialog("restore")}
+      />
 
       {/* 压缩确认：先摆预估（从多少到多少、覆盖几轮），再让用户决定要不要花这次调用。 */}
       <Modal

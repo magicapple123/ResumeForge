@@ -134,7 +134,9 @@ export default function BackgroundTaskBar() {
           // 有深链就落到那条记录上（简历/岗位），没有就退回简历中心：
           // 地址由 taskDeepLinks 生成，这里不手拼。
           onView={task.deepLink ? () => navigate(task.deepLink ?? "/resumes") : undefined}
-          onCancel={() => void cancelResume(task)}
+          // 状态未知（后端都不认识这个任务了）不给取消：再发一次请求只会再吃一个错误，
+          // 该做的是从页头详情面板里移除它。
+          onCancel={task.unknown ? undefined : () => void cancelResume(task)}
         />
       ))}
       {matchTasks.map((task) => (

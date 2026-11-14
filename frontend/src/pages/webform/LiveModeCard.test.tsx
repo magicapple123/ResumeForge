@@ -84,4 +84,30 @@ describe("LiveModeCard", () => {
     expect(screen.getByText("已给出建议")).toBeInTheDocument();
     expect(screen.queryByText(/浏览器已关闭/)).not.toBeInTheDocument();
   });
+
+  it("shows AI confidence and evidence on an explicitly user-selected suggestion", () => {
+    render(
+      <LiveModeCard
+        live={liveState({
+          running: true,
+          enabled: true,
+          status: "matched",
+          source: "ai",
+          field_label: "Research focus",
+          value: "Distributed systems",
+          confidence: 0.69,
+          evidence: "Topic of study",
+        })}
+        liveEnabled
+        running
+        busy={null}
+        rememberPending={null}
+        alternatives={[]}
+        onToggle={vi.fn()}
+        onRequestMemoryDialog={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/69%.*Topic of study/)).toBeInTheDocument();
+  });
 });

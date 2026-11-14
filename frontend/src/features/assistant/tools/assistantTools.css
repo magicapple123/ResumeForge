@@ -1,0 +1,25 @@
+.assistant-tools-filters {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.assistant-tools-group {
+  margin-top: 20px;
+}
+.assistant-tool-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rf-border);
+}
+.assistant-tool-description {
+  margin: 6px 0;
+  color: var(--rf-text-secondary);
+  overflow-wrap: anywhere;
+}
+.assistant-tool-parameters {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

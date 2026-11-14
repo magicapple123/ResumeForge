@@ -36,6 +36,8 @@ FIELD_SYNONYMS: dict[str, tuple[str, ...]] = {
     # ⚠️ 这里**不写**英文 "name"：签名里包含 HTML 的 name 属性，而 `userName`、
     # `companyName`、`fileName` 都含 "name"，加进去会把它们全认成姓名。
     "name": ("真实姓名", "本人姓名", "你的名字", "姓名", "full name", "fullname", "your name"),
+    "given_name": ("first name", "given name", "firstname", "given_name"),
+    "family_name": ("last name", "family name", "surname", "lastname", "family_name"),
     "id_type": ("证件类型", "证件种类", "身份证件类型", "证件类别", "id type"),
     # 区号要排在 phone 之前，但要靠负向词把自己从"手机号（含区号）"上摘出去。
     "phone_country_code": (
@@ -69,7 +71,15 @@ FIELD_SYNONYMS: dict[str, tuple[str, ...]] = {
     # 顺序要紧：start 必须排在 end 前面（与下方多段经历字段同一条规矩）。2026-10-05
     # 字节跳动校招页实测：两个日期框证据同分时按 field_order 先后分配，end 定义在前面
     # 会先抢走 DOM 靠前的控件，入学/毕业整体写反。
-    "education_start": ("入学时间", "入学日期", "开始就读", "入学年月", "就读时间", "就读年月", "起止时间"),
+    "education_start": (
+        "入学时间",
+        "入学日期",
+        "开始就读",
+        "入学年月",
+        "就读时间",
+        "就读年月",
+        "起止时间",
+    ),
     "education_end": ("毕业时间", "毕业日期", "预计毕业", "毕业年月", "起止时间", "graduation"),
     "degree_type": ("学位类型", "所获学位", "学位名称", "学位"),
     # 「学历类型」的选项是统招/自考这类学习形式（真机取证 2026-10-06 字节页），

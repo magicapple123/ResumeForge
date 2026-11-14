@@ -257,7 +257,8 @@ describe("SettingsPage 提醒弹窗开关", () => {
     );
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
     // 提醒弹窗开关从「应用」迁到「更新与帮助」（它是应用行为，不是外观）。
-    fireEvent.click(screen.getByRole("tab", { name: "更新与帮助" }));
+    // F38 起导航是左侧竖向按钮，不再是 antd Tabs 的 role="tab"。
+    fireEvent.click(screen.getByRole("button", { name: "更新与帮助" }));
   }
 
   it("toggles the startup reminder popup switch", async () => {
@@ -283,8 +284,8 @@ describe("SettingsPage 投投悬浮球开关", () => {
       </MemoryRouter>,
     );
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
-    // 悬浮球属于"助手行为"，从「应用」迁到「助手与 AI 行为」。
-    fireEvent.click(screen.getByRole("tab", { name: "助手与 AI 行为" }));
+    // 悬浮球属于"界面上多一个球"，在「外观与语言」组里。
+    fireEvent.click(screen.getByRole("button", { name: "外观与语言" }));
   }
 
   it("toggles and persists the assistant orb switch", async () => {

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 const webformFields = {
+  "webformFields.given_name": "名",
+  "webformFields.family_name": "姓",
   "webformFields.academic_author_order": "作者顺序",
   "webformFields.academic_book_details": "学术专著资料",
   "webformFields.academic_book_name": "学术专著名称",

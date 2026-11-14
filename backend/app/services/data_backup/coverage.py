@@ -50,6 +50,11 @@ RUNTIME_ONLY = frozenset(
         "rag-runtime",
         # 升级时的一次性归档：ARCHIVE-README 已说明"不进包、不要删"，不应长期告警。
         "legacy-archive",
+        # F18 面试录像：**显式排除**（不是漏登记）。面部画面属敏感个人信息，单场可达
+        # 200MB；把它打进备份等于"导出备份顺带把脸拷到 U 盘"，也让包体积翻几倍。
+        # 恢复后报告卡会标注「录像未包含在备份中」，用户不会以为是丢了。
+        # 断言见 ``tests/test_interview_camera.py::test_recordings_dir_is_explicitly_excluded``。
+        "interview-recordings",
         ".trash",
     }
 )

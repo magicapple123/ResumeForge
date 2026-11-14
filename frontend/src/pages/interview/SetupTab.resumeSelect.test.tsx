@@ -21,12 +21,14 @@ import { SetupTab, type SetupForm } from "./SetupTab";
 
 const jobsMocks = vi.hoisted(() => ({ listJobs: vi.fn(), getJob: vi.fn() }));
 const resumesMocks = vi.hoisted(() => ({ listResumes: vi.fn(), getResume: vi.fn() }));
+const interviewMocks = vi.hoisted(() => ({ extractInterviewMaterial: vi.fn() }));
 const externalMocks = vi.hoisted(() => ({
   listExternalResumes: vi.fn(),
   getExternalResume: vi.fn(),
 }));
 
 vi.mock("../../api/jobs", () => jobsMocks);
+vi.mock("../../api/interview", () => interviewMocks);
 vi.mock("../../api/resumes", () => resumesMocks);
 vi.mock("../../api/externalResumes", () => externalMocks);
 
@@ -138,6 +140,12 @@ async function submit() {
 }
 
 beforeEach(() => {
+  interviewMocks.extractInterviewMaterial.mockReset().mockResolvedValue({
+    name: "job.txt",
+    text: "Agent product manager",
+    warnings: [],
+    parser: "text",
+  });
   jobsMocks.listJobs.mockReset().mockResolvedValue({ items: [JOB], total: 1 });
   jobsMocks.getJob.mockReset().mockResolvedValue(JOB);
   resumesMocks.listResumes.mockReset().mockResolvedValue({ items: [INTERNAL_RESUME], total: 1 });
@@ -154,6 +162,50 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+});
+
+describe("independent resume selection (R28)", () => {
+  it("allows an external resume before choosing a job and retains required job validation", async () => {
+    const { onStart } = renderSetup();
+    expect(resumeSelect()).not.toBeDisabled();
+    await pickOption(t("interviewPage.setup.resumeLabel"), "external-a.pdf");
+    await waitFor(() => expect(resumeSelect()).toBeDisabled());
+    await submit();
+    expect(await screen.findByText(t("interviewPage.setup.jobRequired"))).toBeInTheDocument();
+    expect(onStart).not.toHaveBeenCalled();
+    expect(resumesMocks.listResumes).toHaveBeenCalledWith(
+      expect.objectContaining({ job_id: undefined, include_general: true }),
+    );
+  });
+
+  it("starts with a resume record and a separately selected external resume", async () => {
+    const { onStart } = renderSetup();
+    // Q3：岗位侧没有"导入文件"这一路了，只剩简历那一组来源开关。
+    expect(
+      screen.getAllByRole("radio", { name: t("interviewPage.setup.material.fromFile") }),
+    ).toHaveLength(1);
+    await pickJob();
+    await pickOption(t("interviewPage.setup.resumeLabel"), "external-a.pdf");
+    await waitFor(() => expect(resumeSelect()).toBeDisabled());
+    await submit();
+    await waitFor(() =>
+      expect(onStart).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resumeId: undefined,
+          jobMaterial: null,
+          resumeMaterial: expect.objectContaining({ name: "external-a.pdf", text: EXTERNAL_TEXT }),
+        }),
+      ),
+    );
+  });
+
+  it("keeps the record selector disabled when the resume source is a file", () => {
+    renderSetup();
+    fireEvent.click(
+      screen.getAllByRole("radio", { name: t("interviewPage.setup.material.fromFile") })[0],
+    );
+    expect(resumeSelect()).toBeDisabled();
+  });
 });
 
 describe("简历材料下拉分组（#25）", () => {

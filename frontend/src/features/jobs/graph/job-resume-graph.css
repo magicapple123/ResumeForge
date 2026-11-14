@@ -1,0 +1,95 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+.rf-job-graph {
+  position: relative;
+  --graph-internal: var(--rf-info);
+  --graph-external: var(--rf-accent-violet);
+}
+.rf-job-graph-limit {
+  margin-bottom: 8px;
+}
+.rf-job-graph-viewport {
+  position: relative;
+  height: 480px;
+  max-height: 65vh;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: contain;
+  cursor: grab;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface-alt);
+}
+.rf-job-graph-viewport:active {
+  cursor: grabbing;
+}
+.rf-job-graph.is-wide .rf-job-graph-viewport {
+  height: calc(100vh - 260px);
+  max-height: none;
+}
+.rf-job-graph-viewport:focus-visible {
+  outline: 2px solid var(--rf-accent, #2563eb);
+  outline-offset: 2px;
+}
+.rf-job-graph-stage {
+  position: absolute;
+  transform-origin: 0 0;
+  user-select: none;
+}
+.rf-job-graph-edges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.rf-job-graph-edges path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--graph-internal) 45%, var(--rf-border));
+  stroke-width: 1.5;
+}
+.rf-job-graph-edges .is-external {
+  stroke: color-mix(in srgb, var(--graph-external) 55%, var(--rf-border));
+  stroke-dasharray: 6 4;
+}
+.rf-job-graph-job,
+.rf-job-graph-node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  text-align: left;
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+}
+.rf-job-graph-job {
+  border-color: var(--graph-internal);
+}
+.rf-job-graph-node {
+  cursor: pointer;
+}
+.rf-job-graph-node-title {
+  max-width: 100%;
+}
+.rf-job-graph-node-kind {
+  align-self: flex-start;
+  font-size: 11px;
+  line-height: 16px;
+}
+.rf-job-graph-node[data-resume-kind="internal"] .rf-job-graph-node-kind {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--graph-internal) 35%, var(--rf-border));
+  color: var(--rf-info-strong);
+}
+.rf-job-graph-node[data-resume-kind="external"] .rf-job-graph-node-kind {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--graph-external) 40%, var(--rf-border));
+  color: var(--graph-external);
+}
+.rf-job-graph-tools {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+}

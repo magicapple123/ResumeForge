@@ -12,22 +12,32 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..models.assistant import ChatMessage
 from ..models.assistant_memory import MEMORY_KIND_LABELS, MEMORY_KINDS
+from ..models.assistant_memory_event import AssistantMemoryEvent
 from ..schemas.assistant_memory import (
     AssistantMemoryCreate,
+    AssistantMemoryEventOut,
     AssistantMemoryOut,
     AssistantMemorySettings,
     AssistantMemoryUpdate,
 )
-from ..services.assistant import memory
+from ..services.assistant import memory, memory_events
 
 router = APIRouter(prefix="/api/assistant/memories", tags=["assistant"])
 
 
-def _out(record: memory.AssistantMemory) -> AssistantMemoryOut:
-    """ORM 行 -> 设置页视图；展示名在这里补（后端不翻译，前端按 kind 也有映射）。"""
+def _out(record: memory.AssistantMemory, db: Session) -> AssistantMemoryOut:
+    """ORM 行 -> 设置页视图；展示名与来源摘录在这里补（后端不翻译）。
+
+    摘录最多 60 字：它的用途是"这句话是从哪儿学来的"，不是把整段对话搬进列表。
+    """
     payload = AssistantMemoryOut.model_validate(record)
     payload.kind_label = MEMORY_KIND_LABELS.get(record.kind, record.kind)
+    if record.source_message_id:
+        message = db.get(ChatMessage, record.source_message_id)
+        if message is not None:
+            payload.source_excerpt = str(message.content or "").strip()[:60]
     return payload
 
 
@@ -53,9 +63,9 @@ def list_memories(
     limit: int = Query(default=200, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
-    """设置页列表：内容 / 来源（可点回对话）/ 时间 / 置信度 / 状态。"""
+    """设置页列表：内容 / 来源（可点回对话）/ 时间 / 状态（含已停用，不含已删除）。"""
     rows = memory.list_memories(db, status=status, kind=kind, limit=limit)
-    return [_out(row) for row in rows]
+    return [_out(row, db) for row in rows]
 
 
 @router.get("/kinds", response_model=list[dict])
@@ -80,7 +90,7 @@ def create_memory_endpoint(payload: AssistantMemoryCreate, db: Session = Depends
         )
     except memory.MemoryValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return _out(record)
+    return _out(record, db)
 
 
 @router.patch("/{memory_id}", response_model=AssistantMemoryOut)
@@ -97,7 +107,7 @@ def update_memory_endpoint(
         )
     except memory.MemoryValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return _out(updated)
+    return _out(updated, db)
 
 
 @router.delete("/{memory_id}", status_code=204)
@@ -111,17 +121,37 @@ def delete_memory_endpoint(memory_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{memory_id}/never-use", response_model=AssistantMemoryOut)
 def never_use_memory_endpoint(memory_id: int, db: Session = Depends(get_db)):
-    """标「永不使用」：与删除同一效果（不再注入），但作为显式动作单列一个端点。
+    """标「永不使用」：**停用**（status=suppressed）而不是删除（F33）。
 
-    migration 0015 的 status 只有 active/superseded/deleted 三态；"永不使用"在语义上是
-    "用户主动停用"，复用 deleted 而不新增状态——它在列表里仍可被 status=deleted 查到，
-    从而保留"助手记过什么"的可回溯性。
+    与删除的区别是用户能看见的：停用行仍在列表里、置灰并标「已停用」，可以随时
+    「恢复使用」；删除则从列表消失。之前两者都写 deleted，界面上没有任何差别，
+    用户既无法确认"它真的不再被使用"，也找不回误点的条目。
     """
     record = memory.memory_or_none(db, memory_id, include_deleted=False)
     if record is None:
         raise HTTPException(status_code=404, detail="这条记忆不存在或已被删除")
-    memory.delete_memory(db, record)
-    return _out(record)
+    memory.suppress_memory(db, record)
+    return _out(record, db)
+
+
+@router.post("/{memory_id}/restore", response_model=AssistantMemoryOut)
+def restore_memory_endpoint(memory_id: int, db: Session = Depends(get_db)):
+    """把「永不使用」的条目恢复成生效（只对 suppressed 有效）。"""
+    record = memory.memory_or_none(db, memory_id, include_deleted=False)
+    if record is None:
+        raise HTTPException(status_code=404, detail="这条记忆不存在或已被删除")
+    memory.restore_memory(db, record)
+    return _out(record, db)
+
+
+@router.get("/{memory_id}/history", response_model=list[AssistantMemoryEventOut])
+def read_memory_history(memory_id: int, db: Session = Depends(get_db)):
+    """逐条变更历史（时间倒序）：新建 / 编辑 / 取代 / 停用 / 恢复 / 删除。"""
+    record = memory.memory_or_none(db, memory_id, include_deleted=True)
+    if record is None:
+        raise HTTPException(status_code=404, detail="这条记忆不存在")
+    rows: list[AssistantMemoryEvent] = memory_events.list_events(db, memory_id)
+    return [AssistantMemoryEventOut.model_validate(row) for row in rows]
 
 
 __all__ = ["router"]

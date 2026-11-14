@@ -114,7 +114,11 @@ export function useShortcutKeymap(): void {
       if (recording) return;
       if (event.defaultPrevented || event.isComposing) return;
       if (hasAltGraph(event)) return;
-      const id = findBindingActionId(event, bindingsRef.current);
+      const id = findBindingActionId(event, bindingsRef.current, {
+        available: (actionId) => getShortcutHandlerCount(actionId) > 0,
+        // With the orb disabled, selection must not make global search unreachable.
+        fallbackActionId: getShortcutHandlerCount("selectionPanel") === 0 ? "search" : undefined,
+      });
       if (!id) return;
       // 输入框里的撤回/恢复交给原生撤销栈；其余动作照常拦截。
       if ((id === "undo" || id === "redo") && isEditableTarget(event.target)) return;

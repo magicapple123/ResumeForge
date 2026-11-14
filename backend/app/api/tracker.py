@@ -29,9 +29,16 @@ from ..schemas.tracker import (
     TrackOut,
     TrackParseOut,
     TrackParseRequest,
+    TrackProbeItem,
+    TrackProbeOut,
+    TrackProbePageRequest,
+    TrackProbeRequest,
+    TrackProbeSettingsIn,
+    TrackProbeSettingsOut,
     TrackStatsOut,
     TrackUpdate,
 )
+from ..services import track_probe
 from ..services.actions import add_action_route
 from ..services.actions.catalog import all_actions
 from ..services.actions.domains.tracker import tracker_actions
@@ -72,7 +79,6 @@ from ._disconnect import client_gone, run_until_disconnect
 
 router = APIRouter(prefix="/api/tracker", tags=["tracker"])
 logger = logging.getLogger(__name__)
-
 
 
 # T28 Batch B：GET /api/tracker 由契约层生成（ActionSpec 是参数/权限的唯一真源）。
@@ -172,6 +178,104 @@ def export_tracks(
     return StreamingResponse(content, media_type=media_type, headers=headers)
 
 
+# ===== 申请状态回读（R-15 C）=====
+#
+# 全部是 **同步** 路由：抓门户是阻塞 IO，写成 `async def` 会占住事件循环几十秒；
+# 同步路由由 FastAPI 丢进线程池，db 会话与抓取在同一个线程里，不需要跨线程传 Session。
+
+
+def _probe_settings_out(db: Session) -> TrackProbeSettingsOut:
+    settings = track_probe.read_settings(db)
+    return TrackProbeSettingsOut(
+        enabled=settings.enabled,
+        has_cookie=settings.has_cookie,
+        last_run=settings.last_run,
+        due=track_probe.due_for_daily(db),
+        interval_hours=track_probe.PROBE_INTERVAL_HOURS,
+        page_url=settings.page_url,
+    )
+
+
+def _probe_out(outcomes: list) -> TrackProbeOut:
+    counts = {"changed": 0, "unchanged": 0, "skipped": 0, "failed": 0}
+    for outcome in outcomes:
+        counts[outcome.outcome] = counts.get(outcome.outcome, 0) + 1
+    return TrackProbeOut(
+        items=[TrackProbeItem(**outcome.as_dict()) for outcome in outcomes],
+        changed=counts["changed"],
+        unchanged=counts["unchanged"],
+        skipped=counts["skipped"],
+        failed=counts["failed"],
+    )
+
+
+@router.get("/probe/settings", response_model=TrackProbeSettingsOut)
+def get_probe_settings(db: Session = Depends(get_db)):
+    return _probe_settings_out(db)
+
+
+@router.put("/probe/settings", response_model=TrackProbeSettingsOut)
+def put_probe_settings(payload: TrackProbeSettingsIn, db: Session = Depends(get_db)):
+    """只改传了的字段；Cookie 传空串即清除，**从不回传原值**。"""
+    track_probe.write_settings(
+        db, enabled=payload.enabled, cookie=payload.cookie, page_url=payload.page_url
+    )
+    return _probe_settings_out(db)
+
+
+@router.post("/probe", response_model=TrackProbeOut)
+def probe_tracks(payload: TrackProbeRequest, db: Session = Depends(get_db)):
+    """手动回读：显式传 `track_ids` 就只读这些，否则读所有未结束的记录（按批限量）。"""
+    tracks = track_probe.probe_candidates(db, payload.track_ids)
+    if not tracks:
+        return TrackProbeOut(items=[], ran=False)
+    outcomes = track_probe.refresh_tracks(
+        db,
+        tracks,
+        cookie=track_probe.read_cookie(db),
+        limit=min(payload.limit, track_probe.MAX_PROBE_PER_RUN),
+    )
+    return _probe_out(outcomes)
+
+
+@router.post("/probe/page", response_model=TrackProbeOut)
+def probe_page(payload: TrackProbePageRequest, db: Session = Depends(get_db)):
+    """读**一次**用户提供的投递记录页，把页面上的进度分给已知的各条记录。
+
+    与 ``/probe`` 的区别：那边是每条记录各抓一个岗位页（N 次请求），这边只抓一个页面
+    （1 次请求）。定位靠「公司 + 岗位」相邻出现，不依赖站点结构；找不到的记录一律跳过。
+    """
+    tracks = track_probe.probe_candidates(db, payload.track_ids or None)
+    if not tracks:
+        return TrackProbeOut(items=[], ran=False)
+    outcomes = track_probe.refresh_from_page(
+        db,
+        payload.url,
+        tracks,
+        cookie=track_probe.read_cookie(db),
+    )
+    return _probe_out(outcomes)
+
+
+@router.post("/probe/daily", response_model=TrackProbeOut)
+def probe_daily(db: Session = Depends(get_db)):
+    """每日自动回读的入口：未到期就直接返回 `ran=False`（与今日简报同一套懒补算）。"""
+    if not track_probe.due_for_daily(db):
+        return TrackProbeOut(items=[], ran=False, due=False)
+    tracks = track_probe.probe_candidates(db, None)
+    outcomes = track_probe.refresh_tracks(
+        db,
+        tracks,
+        cookie=track_probe.read_cookie(db),
+        limit=track_probe.MAX_PROBE_PER_RUN,
+    )
+    track_probe.mark_ran(db)
+    result = _probe_out(outcomes)
+    # 还有剩下的记录：告诉前端"今天还没刷完"，下次打开再接着补。
+    result.due = len(tracks) > track_probe.MAX_PROBE_PER_RUN
+    return result
+
+
 @router.post("/parse", response_model=TrackParseOut)
 async def parse_tracks(payload: TrackParseRequest, request: Request, db: Session = Depends(get_db)):
     """从一段通知材料里识别进度条目；**只返回预览，不写库**。"""
@@ -265,6 +369,8 @@ def list_track_deliveries(track_id: int, db: Session = Depends(get_db)):
 
 
 add_action_route(router, all_actions()["update_application_track"], route_path="/{track_id}")
+
+
 def save_track(track_id: int, payload: TrackUpdate, db: Session = Depends(get_db)):
     """整份替换一条进度记录（实现见 ``services.tracker.save_track_record``）。"""
     result = save_track_record(db, track_id, payload)

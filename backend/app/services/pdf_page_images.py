@@ -23,6 +23,8 @@ from typing import cast
 
 import pypdfium2 as pdfium
 
+from app.services.pdfium_guard import run_locked
+
 logger = logging.getLogger(__name__)
 
 # 约 150 DPI：让模型读清简历字号足够，再高只会白白消耗附件体积预算。
@@ -36,6 +38,7 @@ MAX_PDF_IMAGE_PAGES = 8
 PAGE_IMAGE_MIME = "image/jpeg"
 
 
+@run_locked
 def render_pdf_page_images(raw: bytes, page_numbers: Sequence[int]) -> list[tuple[int, bytes]]:
     """把指定页（1 起始编号）渲染成 JPEG，返回 ``[(页码, JPEG 字节)]``。
 

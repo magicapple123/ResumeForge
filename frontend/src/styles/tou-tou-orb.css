@@ -339,16 +339,20 @@ antdOverrideGuard 的非递归扫描能看见它；规则内容与顺序不变�
   }
 }
 
-.tt-shell.has-signals .tt {
-  animation: tt-signal-pulse 1.8s var(--tt-ease-soft) infinite;
-}
-
 .tt-shell.has-signals .tt:focus-visible {
   outline-offset: 6px;
 }
 
+/* 光晕跟着球体走：位移发生在 .tt-hide 上，而不是固定的 .tt 锚点。
+   `border-radius: 50%` 不能漏——box-shadow 铺在盒子的边框盒上，方形盒子会画出方环。
+   `.tt-hide` 也不能加 `overflow: hidden`：那会把 box-shadow 一起裁掉。 */
+.tt-shell.has-signals .tt-hide {
+  border-radius: 50%;
+  animation: tt-signal-pulse 1.8s var(--tt-ease-soft) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .tt-shell.has-signals .tt {
+  .tt-shell.has-signals .tt-hide {
     animation: none;
     outline: 2px dashed var(--rf-focus-ring);
     outline-offset: 4px;

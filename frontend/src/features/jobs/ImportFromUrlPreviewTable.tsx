@@ -7,12 +7,13 @@
  * 还没去抓」——前者补详情也没用，后者点「补齐详情」就能填上。四个值：
  * filled / not_on_page / not_fetched / fetch_failed（后端 field_states 原样返回）。
  */
-import { Button, Input, Table, Tag, Tooltip, Typography } from "antd";
+import { Button, ConfigProvider, Input, Table, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import type { FieldState, FromUrlRow } from "./importFromUrlApi";
 import { t } from "../../i18n";
 import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { useState } from "react";
 
 export interface EditableRow extends FromUrlRow {
   /** 前端本地稳定 key（用户编辑后行仍可对应）。 */
@@ -47,24 +48,37 @@ function FieldCell({
   onChange: (value: string) => void;
   placeholder?: string;
 }) {
+  useLocale();
+  const [editing, setEditing] = useState(false);
   const hint = stateHintKey(state);
+  if (!value && !editing) {
+    return (
+      <Button
+        type="text"
+        size="small"
+        onClick={() => setEditing(true)}
+        aria-label={t("jobsImport.action.editField")}
+        style={{ paddingInline: 0, maxWidth: "100%" }}
+      >
+        <Typography.Text type={state === "fetch_failed" ? "danger" : "secondary"} ellipsis>
+          {hint ? t(hint) : placeholder || "—"}
+        </Typography.Text>
+      </Button>
+    );
+  }
   return (
-    <div>
+    <Tooltip title={hint ? t(hint) : undefined}>
       <Input
         size="small"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
+        aria-label={t("jobsImport.action.editField")}
+        autoFocus={editing}
+        onBlur={() => setEditing(false)}
+        onPressEnter={() => setEditing(false)}
       />
-      {hint ? (
-        <Typography.Text
-          type={state === "fetch_failed" ? "danger" : "secondary"}
-          style={{ fontSize: 12 }}
-        >
-          {t(hint)}
-        </Typography.Text>
-      ) : null}
-    </div>
+    </Tooltip>
   );
 }
 
@@ -85,6 +99,8 @@ export function ImportFromUrlPreviewTable({
       title: t("jobsImport.column.title"),
       key: "title",
       width: 190,
+      fixed: "left",
+      ellipsis: true,
       render: (_value, row) => (
         <FieldCell
           value={dataOf(row).title ?? ""}
@@ -192,7 +208,7 @@ export function ImportFromUrlPreviewTable({
         const detailPending = Object.values(states).includes("not_fetched");
         const descriptionFilled = states.description === "filled";
         return (
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 4, whiteSpace: "nowrap", overflow: "hidden" }}>
             {row.existing_job_id != null ? (
               <Tag color="blue">{t("jobsImport.tag.existing")}</Tag>
             ) : null}
@@ -228,18 +244,25 @@ export function ImportFromUrlPreviewTable({
 
   return (
     <div>
-      <Table<EditableRow>
-        size="small"
-        rowKey="key"
-        columns={columns}
-        dataSource={rows}
-        pagination={false}
-        scroll={{ x: 1400, y: 360 }}
-        rowSelection={{
-          selectedRowKeys: selectedKeys,
-          onChange: (keys) => onSelectedChange(keys.map(Number)),
-        }}
-      />
+      <ConfigProvider theme={{ components: { Table: { cellPaddingBlockSM: 4 } } }}>
+        <Table<EditableRow>
+          size="small"
+          rowKey="key"
+          columns={columns}
+          dataSource={rows}
+          pagination={false}
+          scroll={{
+            x: columns.reduce((total, column) => total + Number(column.width ?? 0), 32),
+            y: 360,
+          }}
+          rowSelection={{
+            fixed: true,
+            columnWidth: 32,
+            selectedRowKeys: selectedKeys,
+            onChange: (keys) => onSelectedChange(keys.map(Number)),
+          }}
+        />
+      </ConfigProvider>
       {detailProgress ? (
         <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
           {t("jobsImport.progress.details", {

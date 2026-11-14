@@ -17,13 +17,19 @@ import { CameraOutlined, DeleteOutlined, ScissorOutlined } from "@ant-design/ico
 import Button from "antd/es/button";
 import Input from "antd/es/input";
 import Select from "antd/es/select";
+import Tooltip from "antd/es/tooltip";
 import Space from "antd/es/space";
 import Upload from "antd/es/upload";
 import { useState } from "react";
 import type { MessageKey } from "../../../i18n";
 import { useI18n } from "../../../i18n/i18nContext";
 import type { ResumeFormatConfig } from "../../../types/resumeFormat";
-import type { HeaderItem, HeaderPlacement, ResumeDocument } from "../../../types/resumeDocument";
+import type {
+  HeaderItem,
+  HeaderPlacement,
+  LabelMode,
+  ResumeDocument,
+} from "../../../types/resumeDocument";
 import {
   CUSTOM_HEADER_KEY_PREFIX,
   HEADER_PLACEMENT_LABEL_KEYS,
@@ -41,8 +47,13 @@ import { readAsDataUrl } from "../../../utils/attachments";
 import CroppedPhotoThumb from "./CroppedPhotoThumb";
 import PhotoCropDialog from "./PhotoCropDialog";
 import ResizableValueTextArea from "./ResizableValueTextArea";
+import { applyInlineEdit } from "./lastFocusedTextarea";
+import { registerInlineMarkField } from "./useInlineMarkRange";
+import InlineMarkContextMenu from "../layout/InlineMarkContextMenu";
 
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+//: 字段名开关适用的位置：name / photo 不提供（F20）。
+const LABEL_MODE_PLACEMENTS = new Set<HeaderPlacement>(["contact", "subtitle", "name_meta"]);
 const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
 interface Props {
@@ -192,45 +203,71 @@ export default function HeaderItemEditor({
     );
   }
 
+  /** F22：页眉字段的右键菜单与条目共用一套规则（页眉没有工具条，右键是这里的入口）。 */
+  const inlineCommit = (next: { text: string; selection: { start: number; end: number } }) =>
+    applyInlineEdit({ text: next.text, start: next.selection.start, end: next.selection.end });
+
   return (
-    <div className="document-item-editor document-header-editor" data-document-path={path}>
-      {isCustomHeaderItem(item) ? (
-        <Input
-          size="small"
-          aria-label={t("document.basic.customField")}
-          placeholder={t("document.basic.customField")}
-          value={item.label}
+    <InlineMarkContextMenu onCommit={inlineCommit} disabled={readOnly}>
+      <div className="document-item-editor document-header-editor" data-document-path={path}>
+        {isCustomHeaderItem(item) ? (
+          <Input
+            size="small"
+            aria-label={t("document.basic.customField")}
+            placeholder={t("document.basic.customField")}
+            value={item.label}
+            disabled={readOnly}
+            onFocus={registerInlineMarkField}
+            onChange={(event) => patch({ label: event.target.value })}
+          />
+        ) : null}
+        {/* 值输入：问题 8 起改成"单行语义、可拖高"的文本域（自定义标签那颗 Input 保持不动）。 */}
+        <ResizableValueTextArea
+          ariaLabel={label}
+          placeholder={t("document.field.valuePlaceholder")}
+          value={item.value}
           disabled={readOnly}
-          onChange={(event) => patch({ label: event.target.value })}
+          onChange={(value) => patch({ value })}
         />
-      ) : null}
-      {/* 值输入：问题 8 起改成"单行语义、可拖高"的文本域（自定义标签那颗 Input 保持不动）。 */}
-      <ResizableValueTextArea
-        ariaLabel={label}
-        placeholder={t("document.field.valuePlaceholder")}
-        value={item.value}
-        disabled={readOnly}
-        onChange={(value) => patch({ value })}
-      />
-      <PlacementSelect
-        value={item.placement}
-        disabled={readOnly}
-        onChange={(placement) => patch({ placement })}
-      />
-      {!readOnly ? (
-        <Button
-          size="small"
-          type="text"
-          danger
-          aria-label={t("document.item.remove")}
-          icon={<DeleteOutlined />}
-          onClick={() => {
-            onChange(removeHeaderItem(document, path));
-            onNotice(t("document.toast.fieldRemoved"), "info");
-          }}
+        <PlacementSelect
+          value={item.placement}
+          disabled={readOnly}
+          onChange={(placement) => patch({ placement })}
         />
-      ) : null}
-    </div>
+        {LABEL_MODE_PLACEMENTS.has(item.placement) ? (
+          // F20：三态改为「自动 / 显示字段名 / 隐藏字段名」。`auto` 是默认值，与存量行为
+          // 逐字节一致；入口只有这一处（版面参数组不再另设总开关，避免两个真源）。
+          <Tooltip title={t("structure.layout.labelMode.hint")}>
+            <Select
+              size="small"
+              className="document-header-label-mode"
+              aria-label={t("structure.layout.labelMode.aria")}
+              disabled={readOnly || undefined}
+              value={item.label_mode ?? (item.show_label === false ? "hide" : "auto")}
+              options={[
+                { value: "auto", label: t("structure.layout.labelMode.auto") },
+                { value: "show", label: t("structure.layout.labelMode.show") },
+                { value: "hide", label: t("structure.layout.labelMode.hide") },
+              ]}
+              onChange={(mode: LabelMode) => patch({ label_mode: mode })}
+            />
+          </Tooltip>
+        ) : null}
+        {!readOnly ? (
+          <Button
+            size="small"
+            type="text"
+            danger
+            aria-label={t("document.item.remove")}
+            icon={<DeleteOutlined />}
+            onClick={() => {
+              onChange(removeHeaderItem(document, path));
+              onNotice(t("document.toast.fieldRemoved"), "info");
+            }}
+          />
+        ) : null}
+      </div>
+    </InlineMarkContextMenu>
   );
 }
 

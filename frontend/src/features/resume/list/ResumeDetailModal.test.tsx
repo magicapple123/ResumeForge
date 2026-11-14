@@ -7,6 +7,7 @@ import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResumeDetail, ResumeLayout } from "../../../types";
+import { t } from "../../../i18n";
 import { makeResumeDocument } from "../../../test/documentHarness";
 import ResumeDetailModal from "./ResumeDetailModal";
 
@@ -14,7 +15,7 @@ const apiMocks = vi.hoisted(() => ({
   getResume: vi.fn(),
   // R-33「本次使用」块：本文件不测它，默认"无快照"保持既有断言不变。
   getResumeProfileUsage: vi.fn(),
-  fetchResumeHtml: vi.fn(),
+  fetchResumePreviewHtml: vi.fn(),
   fetchResumeTemplates: vi.fn(),
   renderResume: vi.fn(),
   updateResume: vi.fn(),
@@ -105,9 +106,38 @@ afterEach(() => {
 });
 
 describe("ResumeDetailModal 关联上下文行（RF-11）", () => {
+  it("keeps the preview shell and retries only HTML after a rendering error", async () => {
+    apiMocks.getResume.mockResolvedValue(makeDetail({}));
+    apiMocks.fetchResumePreviewHtml
+      .mockRejectedValueOnce(new Error("HTML unavailable"))
+      .mockResolvedValueOnce("<p>Recovered</p>");
+    renderModal(8);
+    expect(await screen.findByTestId("resume-preview-stub")).toBeInTheDocument();
+    expect(await screen.findByText("HTML unavailable")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: new RegExp(t("common.retry").split("").join(" *")),
+      }),
+    );
+    await waitFor(() => expect(screen.queryByText("HTML unavailable")).toBeNull());
+    expect(apiMocks.getResume).toHaveBeenCalledTimes(1);
+    expect(apiMocks.fetchResumePreviewHtml).toHaveBeenCalledTimes(2);
+    expect(apiMocks.fetchResumePreviewHtml).toHaveBeenLastCalledWith(8, {
+      includeOverflowPages: true,
+    });
+  });
+
+  it("shows only the record error when the record itself cannot be loaded", async () => {
+    apiMocks.getResume.mockRejectedValue(new Error("Record unavailable"));
+    apiMocks.fetchResumePreviewHtml.mockResolvedValue("<p>HTML</p>");
+    renderModal(8);
+    expect(await screen.findByText("Record unavailable")).toBeInTheDocument();
+    expect(screen.queryByTestId("resume-preview-stub")).toBeNull();
+  });
+
   it("有 job_id：三段直达链接都带着该岗位的 id", async () => {
     apiMocks.getResume.mockResolvedValue(makeDetail({}));
-    apiMocks.fetchResumeHtml.mockResolvedValue("<p>预览</p>");
+    apiMocks.fetchResumePreviewHtml.mockResolvedValue("<p>预览</p>");
 
     renderModal(8);
 
@@ -128,7 +158,7 @@ describe("ResumeDetailModal 关联上下文行（RF-11）", () => {
 
   it("通用简历（无 job_id）：不渲染上下文行", async () => {
     apiMocks.getResume.mockResolvedValue(makeDetail({ job_id: null }));
-    apiMocks.fetchResumeHtml.mockResolvedValue("<p>预览</p>");
+    apiMocks.fetchResumePreviewHtml.mockResolvedValue("<p>预览</p>");
 
     renderModal(8);
 
@@ -143,7 +173,7 @@ describe("ResumeDetailModal 关联上下文行（RF-11）", () => {
 describe("ResumeDetailModal 版本信息位（RF-17）", () => {
   it("无血缘无投递：显示「独立版本」，不臆造历史", async () => {
     apiMocks.getResume.mockResolvedValue(makeDetail({}));
-    apiMocks.fetchResumeHtml.mockResolvedValue("<p>预览</p>");
+    apiMocks.fetchResumePreviewHtml.mockResolvedValue("<p>预览</p>");
 
     renderModal(8);
 
@@ -153,7 +183,7 @@ describe("ResumeDetailModal 版本信息位（RF-17）", () => {
 
   it("有血缘：以 id 如实表述派生关系，不猜父简历标题", async () => {
     apiMocks.getResume.mockResolvedValue(makeDetail({ parent_revision_id: 5 }));
-    apiMocks.fetchResumeHtml.mockResolvedValue("<p>预览</p>");
+    apiMocks.fetchResumePreviewHtml.mockResolvedValue("<p>预览</p>");
 
     renderModal(8);
 
@@ -162,7 +192,7 @@ describe("ResumeDetailModal 版本信息位（RF-17）", () => {
 
   it("有投递记录：逐条显示「已投递给谁 · 来源 · 时间 · 指纹前 8 位」", async () => {
     apiMocks.getResume.mockResolvedValue(makeDetail({}));
-    apiMocks.fetchResumeHtml.mockResolvedValue("<p>预览</p>");
+    apiMocks.fetchResumePreviewHtml.mockResolvedValue("<p>预览</p>");
     apiMocks.listResumeDeliveries.mockResolvedValue([
       {
         id: 1,
@@ -211,7 +241,7 @@ describe("ResumeDetailModal 版式重排（P3）", () => {
 
   it("连续两次改版式：在飞时只渲染一次，渲染成功后草稿才是最后一次", async () => {
     apiMocks.getResume.mockResolvedValue(makeDetail({}));
-    apiMocks.fetchResumeHtml.mockResolvedValue("<p>预览</p>");
+    apiMocks.fetchResumePreviewHtml.mockResolvedValue("<p>预览</p>");
     const gate = deferred();
     apiMocks.renderResume.mockReturnValueOnce(gate.promise).mockResolvedValue("<p>新版式</p>");
 
@@ -244,7 +274,7 @@ describe("ResumeDetailModal 版式重排（P3）", () => {
 
   it("渲染失败：提示原因，不重试，草稿停在原处", async () => {
     apiMocks.getResume.mockResolvedValue(makeDetail({}));
-    apiMocks.fetchResumeHtml.mockResolvedValue("<p>预览</p>");
+    apiMocks.fetchResumePreviewHtml.mockResolvedValue("<p>预览</p>");
     apiMocks.renderResume.mockRejectedValueOnce(new Error("后端渲染失败"));
 
     // spy 必须在**首次 render 之前**装：组件在渲染时就 `App.useApp()` 取到 message 实例，

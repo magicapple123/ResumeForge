@@ -174,6 +174,7 @@
    `.ant-space-item`，flex 宽度落在内层就管不到真正的 flex 子项。 */
 .claim-form-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: flex-start;
   width: 100%;
@@ -198,6 +199,70 @@
   font-size: 13px;
 }
 
+/* 「面试细节」折叠头：Typography.Text 的 `display: block` 会把折叠头的 flex 顶掉，
+   所以头里单独收回 inline；内容区也不再叠一层内边距（字段自己已有 24px 间距）。 */
+.claim-form-collapse .claim-form-section {
+  display: inline;
+  margin: 0;
+}
+
+.claim-form-collapse .ant-collapse-header {
+  align-items: center;
+  padding: 4px 0;
+}
+
+.claim-form-collapse .ant-collapse-content-box {
+  padding: 0;
+}
+
+.claim-form-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+/* 「已填 N 项」：收起的折叠头里唯一能看出这一节有没有内容的线索。 */
+.claim-form-filled {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* 承担程度 / 核实状态的弹层：固定 320px，名称与解释各占一行。
+   跟着触发框（880 弹窗里约 274px）走会把整句压成一条被裁掉的横线。 */
+.claim-option-popup {
+  width: 320px;
+  max-width: calc(100vw - 32px);
+}
+
+.claim-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0;
+}
+
+.claim-option-label {
+  color: var(--rf-text-body);
+}
+
+.claim-option-hint {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+/* 窄屏（≤600）三列改单列：两个下拉加日期挤在同一行时，每个只剩 ~90px。 */
+@media (max-width: 600px) {
+  .claim-form-grow,
+  .claim-form-date {
+    flex: 1 1 100%;
+  }
+}
+
 .claim-source-list {
   display: flex;
   flex-direction: column;
@@ -208,6 +273,24 @@
 .claim-source-row {
   display: flex;
   width: 100%;
+}
+
+.claim-source-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 备注与「位置」输入框左对齐（来源类型 150px + 行内 gap 8px），读起来是同一条证据的第二行。 */
+.claim-source-note {
+  margin-bottom: 0;
+  padding-left: 158px;
+}
+
+@media (max-width: 600px) {
+  .claim-source-note {
+    padding-left: 0;
+  }
 }
 
 .claim-source-type {

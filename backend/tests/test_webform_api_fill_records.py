@@ -4,6 +4,7 @@
 预览的 404/默认勾选、填充的快照一致性校验、"不存在提交路由"的接口层守卫，以及
 填充必须留下记录、落记录失败不拖垮填充。共享桩见 ``test_webform_api.py``。
 """
+
 from app.services.profile import entry_store
 from app.services.webform import FormEngine, get_snapshot_store
 from test_webform_api import RAW_CONTROLS, browser_port
@@ -48,6 +49,40 @@ def test_preview_lists_a_required_field_without_data(client, browser_port, db_se
     assert [(item["index"], item["field"]) for item in body["missing_data"]] == [(1, "phone")]
 
 
+def test_preview_closes_its_review_client_when_highlighting_fails(
+    client, browser_port, db_session, monkeypatch
+):
+    from app.services import webform as webform_service
+
+    class ReviewClient:
+        closed = False
+
+        def evaluate(self, *_args, **_kwargs):
+            raise RuntimeError("fixture page unavailable")
+
+        def close(self):
+            self.closed = True
+
+    review_client = ReviewClient()
+
+    class BrowserManager:
+        def is_active(self):
+            return True
+
+        def client(self):
+            return review_client
+
+    monkeypatch.setattr(
+        webform_service.browser, "get_browser_manager", lambda _db: BrowserManager()
+    )
+    snapshot = get_snapshot_store().save(FormEngine().snapshot_controls(RAW_CONTROLS))
+
+    response = client.post("/api/webform/preview", json={"snapshot_id": snapshot.id})
+
+    assert response.status_code == 200
+    assert review_client.closed is True
+
+
 # ===== 填充 =====
 
 
@@ -56,7 +91,10 @@ def test_fill_without_a_running_browser_is_a_conflict(client, browser_port, db_s
 
     response = client.post(
         "/api/webform/fill",
-        json={"snapshot_id": snapshot.id, "items": [{"index": 0, "field": "name", "value": "张三"}]},
+        json={
+            "snapshot_id": snapshot.id,
+            "items": [{"index": 0, "field": "name", "value": "张三"}],
+        },
     )
 
     assert response.status_code == 409
@@ -69,7 +107,10 @@ def test_fill_rejects_an_index_that_is_not_in_the_snapshot(client, browser_port,
 
     response = client.post(
         "/api/webform/fill",
-        json={"snapshot_id": snapshot.id, "items": [{"index": 42, "field": "name", "value": "张三"}]},
+        json={
+            "snapshot_id": snapshot.id,
+            "items": [{"index": 42, "field": "name", "value": "张三"}],
+        },
     )
 
     assert response.status_code == 400
@@ -91,11 +132,7 @@ def test_there_is_no_submit_endpoint():
     """「只填不交」在接口层面的体现：**不存在**任何提交路由。"""
     from app.application import create_app
 
-    paths = {
-        path
-        for path in create_app().openapi()["paths"]
-        if path.startswith("/api/webform")
-    }
+    paths = {path for path in create_app().openapi()["paths"] if path.startswith("/api/webform")}
     assert not any("submit" in path or "apply-form" in path for path in paths), paths
 
 
@@ -157,7 +194,10 @@ def test_filling_writes_a_record(client, browser_port, db_session, monkeypatch):
 
     response = client.post(
         "/api/webform/fill",
-        json={"snapshot_id": snapshot.id, "items": [{"index": 0, "field": "name", "value": "张三"}]},
+        json={
+            "snapshot_id": snapshot.id,
+            "items": [{"index": 0, "field": "name", "value": "张三"}],
+        },
     )
     assert response.status_code == 200
 
@@ -195,7 +235,10 @@ def test_a_record_failure_never_fails_the_fill(client, browser_port, db_session,
 
     response = client.post(
         "/api/webform/fill",
-        json={"snapshot_id": snapshot.id, "items": [{"index": 0, "field": "name", "value": "张三"}]},
+        json={
+            "snapshot_id": snapshot.id,
+            "items": [{"index": 0, "field": "name", "value": "张三"}],
+        },
     )
 
     assert response.status_code == 200

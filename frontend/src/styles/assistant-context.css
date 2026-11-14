@@ -21,33 +21,35 @@
 
 .assistant-context-usage-chip-inner {
   display: inline-flex;
-  gap: 4px;
+  gap: 6px;
   align-items: center;
   font-size: 12px;
   line-height: 1;
   white-space: nowrap;
+  /* 常态：灰。弧与数字共用这一个 currentColor，分档时只改一处。 */
+  color: var(--rf-text-secondary);
 }
 
-/* 细环：视觉上"一圈未填满的用量"，不表达具体数值（数值在右侧文本里）。 */
-.assistant-context-usage-ring {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border: 2px solid var(--rf-cat-1);
-  border-radius: 50%;
-  opacity: 0.85;
+.assistant-context-usage-chip-inner.is-warn {
+  color: var(--rf-accent-amber);
+}
+
+.assistant-context-usage-chip-inner.is-danger {
+  color: var(--rf-danger);
+}
+
+/* 轨道恒为浅灰虚位：没有分母（未设窗口）时只画这一圈，不画弧。 */
+.assistant-context-usage-ring-track {
+  stroke: var(--rf-border);
+}
+
+.assistant-context-usage-ring-arc {
+  stroke: currentColor;
 }
 
 .assistant-context-usage-chip-value {
   font-variant-numeric: tabular-nums;
-  color: var(--rf-text-body);
-}
-
-/* 窄栏（输入区 ≤520px）：只留细环 + 百分比，隐藏「上下文」三个字。 */
-@container (max-width: 520px) {
-  .assistant-context-usage-chip-label {
-    display: none;
-  }
+  color: inherit;
 }
 
 /* ===== 弹层本体 ===== */
@@ -192,7 +194,7 @@
 /* ===== 上下文窗口选择器 ===== */
 .assistant-context-window {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .assistant-context-window-row {
@@ -223,7 +225,7 @@
 
 /* 底栏实测值：与上面的估算分开一行，两者不合并。 */
 .assistant-context-usage-actual {
-  margin: 10px 0 0;
+  margin: 4px 0 0;
   color: var(--rf-text-tertiary);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -269,5 +271,16 @@
 .assistant-context-compaction-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
+  justify-content: space-between;
   margin-top: 4px;
+}
+
+/* F31：折叠头的默认内边距会把这一区顶高，作用域限定在本卡内，不改全局 Collapse。 */
+.assistant-context-usage-settings .ant-collapse-header {
+  padding: 6px 0;
+}
+
+.assistant-context-usage-settings .ant-collapse-content-box {
+  padding-top: 4px;
 }

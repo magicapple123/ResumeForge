@@ -5,9 +5,9 @@
  * 两个刻意的选择：
  * - **不用百分比进度条**，只显示「已处理 N/M」——总数在运行时可能变化（队列被改、岗位被删），
  *   百分比会给人一个并不准确的确定性；设计也明确禁止渲染任何百分比（§9 ⑩）。
- * - 暂停/停止按钮**常驻**（按状态置灰而不是隐藏），用户不用去别处找停止入口。
+ * - 停止按钮常驻；暂停/继续由页面按容器布局放置（队列页在吸底条、采集页在进度卡）。
  */
-import { BookOutlined, PauseOutlined, PlayCircleOutlined, StopOutlined } from "@ant-design/icons";
+import { BookOutlined, PauseOutlined, StopOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Descriptions, Space, Spin, Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import { useState, type ReactNode } from "react";
@@ -37,6 +37,7 @@ import { useLocale } from "../../i18n/i18nContext";
 interface Props {
   task: ApplyTaskDetail;
   busy: boolean;
+  showPauseResume?: boolean;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
@@ -68,7 +69,14 @@ const KIND_LABEL_KEYS: Record<string, MessageKey> = {
   collect: "applyProgress.kind.collect",
 };
 
-export default function ApplyProgressPanel({ task, busy, onPause, onResume, onStop }: Props) {
+export default function ApplyProgressPanel({
+  task,
+  busy,
+  showPauseResume = true,
+  onPause,
+  onResume,
+  onStop,
+}: Props) {
   useLocale();
   const { message } = App.useApp();
   const [savingKnowledgeId, setSavingKnowledgeId] = useState<number | null>(null);
@@ -211,22 +219,26 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
           )}
         </Space>
         <Space wrap>
+          {showPauseResume && (
+            <>
+              <Button
+                icon={<PauseOutlined />}
+                disabled={!active || task.status !== "running" || busy || undefined}
+                onClick={onPause}
+              >
+                {t("applyProgress.action.pause")}
+              </Button>
+              <Button type="primary" disabled={!canResume || busy || undefined} onClick={onResume}>
+                {t("applyProgress.action.resume")}
+              </Button>
+            </>
+          )}
           <Button
-            icon={<PauseOutlined />}
-            disabled={!active || task.status !== "running" || busy}
-            onClick={onPause}
+            danger
+            icon={<StopOutlined />}
+            disabled={!active || busy || undefined}
+            onClick={onStop}
           >
-            {t("applyProgress.action.pause")}
-          </Button>
-          <Button
-            type="primary"
-            icon={<PlayCircleOutlined />}
-            disabled={!canResume || busy}
-            onClick={onResume}
-          >
-            {t("applyProgress.action.resume")}
-          </Button>
-          <Button danger icon={<StopOutlined />} disabled={!active || busy} onClick={onStop}>
             {t("applyProgress.action.stop")}
           </Button>
         </Space>

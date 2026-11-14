@@ -4,6 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 import TouTouOrb from "./TouTouOrb";
 import { setProfileSaveControl } from "./profileSaveBridge";
 import { activeFaceSrc, renderOrb } from "./touTouTestUtils";
+import {
+  getShortcutSettings,
+  saveShortcutSettings,
+  updateShortcutBinding,
+} from "../shortcuts/storage";
 
 describe("TouTouOrb", () => {
   it("renders an accessible assistant entry", () => {
@@ -29,7 +34,7 @@ describe("TouTouOrb", () => {
 
     const tooltip = screen.getByRole("tooltip");
     expect(tooltip).toHaveTextContent(
-      "单击：打开求职助手；双击：打开投投剪贴板；长按：打开动作面板；选中文字后按 Ctrl/Cmd+K：打开划词动作",
+      "单击：打开求职助手；双击：打开投投剪贴板；长按：打开动作面板；选中文字后按 Ctrl+K：打开划词动作",
     );
     // overlayStyle 落在 .ant-tooltip 根节点上（role=tooltip 的是内层内容节点）；
     // 3700 高于球的 3650——球被压住的 antd 默认 Tooltip（1070）等于没有。
@@ -50,6 +55,21 @@ describe("TouTouOrb", () => {
     });
 
     expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the configured selection shortcut in the orb tooltip", () => {
+    vi.useFakeTimers();
+    const original = getShortcutSettings();
+    try {
+      act(() => updateShortcutBinding(original, "selectionPanel", ["mod+shift+k"]));
+      renderOrb(<TouTouOrb onOpen={vi.fn()} />);
+      fireEvent.mouseEnter(screen.getByRole("button", { name: "打开求职助手" }));
+      act(() => vi.advanceTimersByTime(300));
+      expect(screen.getByRole("tooltip")).toHaveTextContent("Ctrl+Shift+K");
+      expect(screen.getByRole("tooltip")).not.toHaveTextContent("Ctrl+K");
+    } finally {
+      act(() => saveShortcutSettings(original));
+    }
   });
 
   it("renders the save/cancel card only while a profile save control is registered", () => {

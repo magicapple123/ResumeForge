@@ -37,9 +37,14 @@ export interface ContextWindowSelectProps {
   windowTokens: number;
   /** 保存成功后的新窗口（上层据此本地重算百分比）。 */
   onSaved: (windowTokens: number) => void;
+  contextMismatch?: boolean;
 }
 
-export default function ContextWindowSelect({ windowTokens, onSaved }: ContextWindowSelectProps) {
+export default function ContextWindowSelect({
+  windowTokens,
+  onSaved,
+  contextMismatch = false,
+}: ContextWindowSelectProps) {
   useLocale();
   const { message } = App.useApp();
   const [customizing, setCustomizing] = useState(false);
@@ -77,6 +82,7 @@ export default function ContextWindowSelect({ windowTokens, onSaved }: ContextWi
           className="assistant-context-window-select"
           value={selectValue}
           loading={saving}
+          status={contextMismatch ? "error" : undefined}
           options={[
             ...PRESETS.map((preset) => ({ value: preset.value, label: t(preset.labelKey) })),
             { value: CUSTOM, label: t("contextUsage.window.custom") },
@@ -98,6 +104,7 @@ export default function ContextWindowSelect({ windowTokens, onSaved }: ContextWi
           className="assistant-context-window-custom"
           min={1}
           max={MAX_WINDOW}
+          status={contextMismatch ? "error" : undefined}
           value={draft}
           placeholder={t("contextUsage.window.customPlaceholder")}
           onChange={(value) => setDraft(typeof value === "number" ? value : null)}
@@ -105,8 +112,8 @@ export default function ContextWindowSelect({ windowTokens, onSaved }: ContextWi
           onBlur={() => draft !== null && draft !== windowTokens && void save(draft)}
         />
       ) : null}
-      {/* 一行小字：窗口是模型级设置，不是这个对话的设置。 */}
-      <p className="assistant-context-window-hint">{t("contextUsage.window.hint")}</p>
+      {/* F31：这句「只影响使用这个模型的对话」已由外层与来源名合成一行，这里不再重复。 */}
+      {contextMismatch ? <p role="alert">{t("contextUsage.window.mismatch")}</p> : null}
     </div>
   );
 }

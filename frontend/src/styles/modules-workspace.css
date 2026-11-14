@@ -300,6 +300,22 @@
   font-size: 12px;
 }
 
+/* 临时对话（F34）：页头「本次不记忆」开关与侧栏状态图标。
+   图标只是状态标记（不是按钮），用次级色，避免和置顶/收藏的实心图标抢注意力。 */
+.assistant-memory-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-end: 8px;
+  font-size: 12px;
+}
+
+.assistant-conversation-memory-off {
+  margin-inline-start: 4px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
 .assistant-reasoning-control {
   display: inline-flex;
   align-items: center;

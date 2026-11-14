@@ -433,9 +433,11 @@ export default function InterviewExperiencePanel() {
             ? [
                 {
                   label: t("interviewExperience.field.job"),
+                  // 岗位可能已被删除：查不到就给 undefined，让这一行整行消失，
+                  // 而不是摆一个 "-" 让人以为是"岗位字段没填"。
                   value:
                     jobSelect.options.find((option) => option.value === detail.job_id)?.label ??
-                    "-",
+                    undefined,
                 },
                 {
                   label: t("interviewExperience.field.createdAt"),
@@ -451,26 +453,21 @@ export default function InterviewExperiencePanel() {
         sections={
           detail
             ? [
-                {
-                  title: t("interviewExperience.section.content"),
-                  content: detail.content || t("interviewExperience.empty.content"),
-                },
+                { title: t("interviewExperience.section.content"), content: detail.content },
                 {
                   title: t("interviewExperience.section.questions", {
                     count: detail.questions.length,
                   }),
                   content:
-                    detail.questions.length === 0 ? (
-                      t("interviewExperience.empty.questions")
-                    ) : (
+                    detail.questions.length > 0 ? (
                       <ol style={{ margin: 0, paddingLeft: 20 }}>
                         {detail.questions.map((question, index) => (
                           <li key={`${question}-${index}`}>{question}</li>
                         ))}
                       </ol>
-                    ),
+                    ) : undefined,
                 },
-              ]
+              ].filter((section) => section.content !== undefined && section.content !== "")
             : []
         }
         actions={

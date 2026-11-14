@@ -144,7 +144,8 @@ def get_assistant_orb_setting(db: Session) -> AssistantOrbSetting:
         logger.warning("投投悬浮球设置数据损坏，已重置为默认开启")
         return AssistantOrbSetting()
     if isinstance(value, bool):
-        return AssistantOrbSetting(enabled=value, tips_enabled=True)
+        # 裸 bool 只记录过入口开关：标语与划词浮条都补成默认开（老体验不变）。
+        return AssistantOrbSetting(enabled=value, tips_enabled=True, selection_enabled=True)
     if isinstance(value, dict):
         try:
             return AssistantOrbSetting.model_validate(value)

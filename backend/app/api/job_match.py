@@ -50,6 +50,7 @@ from ..services.job.job_match_batch import (
     run_batch_match,
 )
 from ..services.job.job_match_context import match_source_texts, profile_is_empty
+from ..services.job.job_match_sources import match_source_snapshot, source_matches
 from ..services.job.job_queries import jobs_by_ids
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
@@ -96,7 +97,7 @@ async def create_match_batch(
             status_code=404, detail=f"以下岗位不存在或已被删除：{'、'.join(map(str, missing))}"
         )
     try:
-        inputs = build_batch_inputs(db, jobs, force=payload.force)
+        inputs = build_batch_inputs(db, jobs, force=payload.force, resume_id=payload.resume_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     config = get_llm_config(db)
@@ -129,8 +130,10 @@ def create_match_batch_task(
         )
     try:
         # 在创建任务前先做资料准入校验，避免用户关闭弹窗后才发现资料为空。
-        build_batch_inputs(db, jobs, force=payload.force)
-        task = create_job_match_background_task(db, job_ids, force=payload.force, mode=payload.mode)
+        build_batch_inputs(db, jobs, force=payload.force, resume_id=payload.resume_id)
+        task = create_job_match_background_task(
+            db, job_ids, force=payload.force, mode=payload.mode, resume_id=payload.resume_id
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
@@ -171,6 +174,8 @@ def cancel_match_batch_task(task_id: str, db: Session = Depends(get_db)):
 
 
 add_action_route(router, all_actions()["list_match_analyses"], route_path="/match-batches")
+
+
 def get_match_batch_history(
     limit: int = Query(default=30, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -190,18 +195,23 @@ def get_match_batch(batch_id: int, db: Session = Depends(get_db)):
 async def create_match_analysis(
     job_id: int,
     force: bool = Query(default=False, description="为真时忽略已有结论，强制重算"),
+    resume_id: int | None = Query(default=None, gt=0),
     db: Session = Depends(get_db),
 ):
     job = db.get(Job, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
 
+    try:
+        profile, profile_text, resume_text = match_source_texts(db, job, resume_id=resume_id)
+        source = match_source_snapshot(db, job, resume_id, personal_text=profile_text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not force:
         existing = apply_service.latest_match(db, job_id)
-        if existing is not None and isinstance(existing.result, dict) and existing.result:
+        if existing is not None and source_matches(existing.result, source):
             return JobMatchResult.model_validate(existing.result)
 
-    profile, profile_text, resume_text = match_source_texts(db, job)
     if profile_is_empty(profile) and not resume_text.strip():
         raise HTTPException(status_code=400, detail="个人资料为空，无法做匹配分析")
 
@@ -228,12 +238,15 @@ async def create_match_analysis(
             raise HTTPException(status_code=502, detail="生成匹配分析失败") from exc
         model_name = config.model
 
+    result = result.model_copy(update={"source": source})
     apply_service.persist_match_in_new_session(job_id, result, model=model_name)
     return result
 
 
 @router.get("/{job_id}/match-analysis", response_model=JobMatchOut)
-def get_match_analysis(job_id: int, db: Session = Depends(get_db)):
+def get_match_analysis(
+    job_id: int, resume_id: int | None = Query(default=None, gt=0), db: Session = Depends(get_db)
+):
     job = db.get(Job, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
@@ -258,7 +271,14 @@ def get_match_analysis(job_id: int, db: Session = Depends(get_db)):
     # 参考分是派生值：只读、仅展示、不落库。每次现算，且用 admission_of 重推结论后再算，
     # 与准入逻辑完全解耦（参考分不参与、也不改变五类结论与准入闸门）。
     result = finalize_match_result(JobMatchResult.model_validate(row.result))
-    _profile, profile_text, resume_text = match_source_texts(db, job)
+    try:
+        _profile, profile_text, resume_text = match_source_texts(db, job, resume_id=resume_id)
+        source = match_source_snapshot(db, job, resume_id, personal_text=profile_text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    out.stale = not source_matches(row.result, source)
+    if out.stale:
+        return out
     out.reference_score = score_match_result(
         result,
         job_payload(job),

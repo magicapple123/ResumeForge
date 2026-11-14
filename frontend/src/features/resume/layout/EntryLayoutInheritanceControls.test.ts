@@ -15,7 +15,12 @@ import {
   equalWidths,
   gapGeometry,
   initialGaps,
-} from "./EntryLayoutInheritanceControls";
+  millimetersToRatio,
+  moveColumnDivider,
+  normalizeColumnWidths,
+  ratioToMillimeters,
+  snapColumnWidths,
+} from "./entryColumnGeometry";
 
 describe("逐列宽度 / 逐间隔的草稿口径（任务 13）", () => {
   it("等分宽度合计正好 100（3 列 34/33/33、2 列 50/50）", () => {
@@ -34,6 +39,34 @@ describe("逐列宽度 / 逐间隔的草稿口径（任务 13）", () => {
     expect(Math.abs(columnWidthSum([33, 33, 33.5]) - 100)).toBeLessThanOrEqual(0.5);
     // 33/33/33 合计 99，差 1 → 超出 0.5 容差，应用按钮必须禁用
     expect(Math.abs(columnWidthSum([33, 33, 33]) - 100)).toBeGreaterThan(0.5);
+  });
+
+  it("只在归一化时处理宽度总和，保留每列至少 10%", () => {
+    const normalized = normalizeColumnWidths([33, 33, 33]);
+    expect(normalized.reduce((sum, width) => sum + width, 0)).toBe(100);
+    expect(normalized).toEqual([33.34, 33.33, 33.33]);
+    expect(normalizeColumnWidths([90, 10, 10])).toEqual([80, 10, 10]);
+  });
+
+  it("分栏边界移动只调整相邻两列并守住 10% 下限", () => {
+    expect(moveColumnDivider([50, 50], 0, 20)).toEqual([70, 30]);
+    expect(moveColumnDivider([70, 30], 0, 50)).toEqual([90, 10]);
+    expect(moveColumnDivider([34, 33, 33], 0, 10)).toEqual([44, 23, 33]);
+    expect(moveColumnDivider([50, 50], 2, 1)).toEqual([50, 50]);
+  });
+
+  it("吸附等宽与两列 65:35 / 35:65 预设", () => {
+    expect(snapColumnWidths([50.5, 49.5])).toEqual([50, 50]);
+    expect(snapColumnWidths([64.5, 35.5])).toEqual([65, 35]);
+    expect(snapColumnWidths([34, 33, 33])).toEqual([34, 33, 33]);
+    expect(snapColumnWidths([70, 30])).toEqual([70, 30]);
+  });
+
+  it("毫米与字号倍数按真实基准字号双向换算", () => {
+    expect(ratioToMillimeters(1.5, 14)).toBeCloseTo(5.5566, 4);
+    expect(millimetersToRatio(5.5566, 14)).toBeCloseTo(1.5, 4);
+    expect(ratioToMillimeters(1.5, null)).toBeNull();
+    expect(millimetersToRatio(1.5, 0)).toBeNull();
   });
 });
 

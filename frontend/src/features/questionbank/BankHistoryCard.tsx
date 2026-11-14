@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 历史题库卡：历史条目 Collapse + 批量选择入口。
+/** 历史题库卡：单行摘要 + 批量选择入口。
  *
  * 纯展示组件——删除确认（removeSelected/removeBank）与 useApi 状态由 QuestionBankPanel
  * 传入；零 api 导入（白名单契约：新文件不得触碰 api/interview）。
  */
 import { CheckSquareOutlined, DeleteOutlined, HistoryOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Checkbox, Collapse, Pagination, Space, Typography } from "antd";
+import { Alert, Button, Card, Checkbox, Listy, Pagination, Space, Typography } from "antd";
 import EmptyState from "../../components/common/EmptyState";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
 import BatchActionBar from "../../components/common/BatchActionBar";
+import { ListyItem } from "../../components/common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import type { useApi } from "../../hooks/useApi";
 import { useClientPagination } from "../../hooks/useClientPagination";
-import { t, type MessageKey } from "../../i18n";
+import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { QuestionBankRecord } from "../../types";
 import { formatServerTime } from "../../utils/serverTime";
@@ -29,21 +31,6 @@ interface Props {
   removeSelected: () => void;
 }
 
-/**
- * 分组类型的显示名：键是 `types/` 里的中文协议值（协议值不改），值指向语言包 key。
- * 未登记的取值原样显示——历史记录里可能有旧版本写下的类型，别让它显示成一条裸 key。
- */
-const GROUP_TYPE_LABEL_KEYS: Record<string, MessageKey> = {
-  基础题: "questionBankPanel.group.basics", // i18n-ok: 协议值（types 中文枚举键）
-  项目深挖题: "questionBankPanel.group.projectDeepDive", // i18n-ok: 协议值（types 中文枚举键）
-  反问HR题: "questionBankPanel.group.askInterviewer", // i18n-ok: 协议值（types 中文枚举键）
-};
-
-function groupTypeLabel(type: string): string {
-  const labelKey: MessageKey | undefined = GROUP_TYPE_LABEL_KEYS[type];
-  return labelKey ? t(labelKey) : type;
-}
-
 export default function BankHistoryCard({
   banks,
   batch,
@@ -53,13 +40,23 @@ export default function BankHistoryCard({
 }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
   useLocale();
-  // 题库历史每次生成一份、持续累积，Collapse 一页 10 条（Collapse 没有内建分页）。
+  // The parent hides this mounted list during detail view, preserving the current page.
   const bankList = banks.data ?? [];
   const { page, setPage, paged: pagedBanks, total: bankTotal } = useClientPagination(bankList, 10);
-  const historyItems = pagedBanks.map((bank) => ({
-    key: String(bank.id),
-    label: (
-      // 右键菜单挂在折叠头标题上：批量选择（工具栏按钮已收进这里，R8）+ 删除。
+  const renderHistory = (bank: QuestionBankRecord) => {
+    const count = Array.isArray(bank.groups)
+      ? bank.groups.reduce((sum, group) => sum + group.questions.length, 0)
+      : 0;
+    const deleteAction: RowActionItem = {
+      key: "delete",
+      label: t("common.action.delete"),
+      danger: true,
+      icon: <DeleteOutlined />,
+      confirm: t("questionBankPanel.history.deleteTitle"),
+      confirmBody: t("common.note.trashRecovery"),
+      onClick: () => void onRemoveBank(bank.id),
+    };
+    return (
       <RowContextMenu
         items={
           batch.selecting
@@ -71,73 +68,42 @@ export default function BankHistoryCard({
                   icon: <CheckSquareOutlined />,
                   onClick: batch.enterSelecting,
                 },
-                {
-                  key: "delete",
-                  label: t("common.action.delete"),
-                  danger: true,
-                  icon: <DeleteOutlined />,
-                  confirm: t("questionBankPanel.history.deleteTitle"),
-                  confirmBody: t("common.note.trashRecovery"),
-                  onClick: () => void onRemoveBank(bank.id),
-                },
+                deleteAction,
               ] satisfies RowActionItem[])
         }
       >
-        <Space wrap>
-          <span>
-            {bank.resume_title || bank.job_title || t("questionBankPanel.history.fallbackTitle")}
-          </span>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {formatServerTime(bank.created_at)}
-          </Typography.Text>
-        </Space>
-      </RowContextMenu>
-    ),
-    children: (
-      <Space orientation="vertical" style={{ width: "100%" }}>
-        {bank.groups.map((group) => (
-          <div key={group.type}>
-            <Typography.Text strong>{groupTypeLabel(group.type)}</Typography.Text>
-            <ul style={{ paddingLeft: 20, margin: "4px 0" }}>
-              {group.questions.map((item) => (
-                <li key={item.question}>{item.question}</li>
-              ))}
-            </ul>
-          </div>
-        ))}
-        <Space wrap>
-          {batch.selecting ? (
-            <Checkbox
-              aria-label={t("questionBankPanel.history.selectAria", {
-                name: bank.resume_title || bank.job_title || bank.id,
-              })}
-              checked={batch.isSelected(bank.id)}
-              onChange={() => batch.toggle(bank.id)}
-            />
-          ) : (
+        <ListyItem
+          actions={[
             onOpenRecord && (
-              <Button size="small" onClick={() => onOpenRecord(bank)}>
+              <Button key="view" size="small" onClick={() => onOpenRecord(bank)}>
                 {t("questionBankPanel.action.viewDetail")}
               </Button>
-            )
-          )}
-          {/* 删除收进「···」菜单：除回收站外，删除不再以按钮裸露（全局约定）。 */}
-          <RowActions
-            more={[
-              {
-                key: "delete",
-                label: t("common.action.delete"),
-                danger: true,
-                confirm: t("questionBankPanel.history.deleteTitle"),
-                confirmBody: t("common.note.trashRecovery"),
-                onClick: () => void onRemoveBank(bank.id),
-              },
-            ]}
-          />
-        </Space>
-      </Space>
-    ),
-  }));
+            ),
+            <RowActions key="more" more={[deleteAction]} />,
+          ]}
+        >
+          <Space wrap>
+            {batch.selecting && (
+              <Checkbox
+                aria-label={t("questionBankPanel.history.selectAria", {
+                  name: bank.resume_title || bank.job_title || bank.id,
+                })}
+                checked={batch.isSelected(bank.id)}
+                onChange={() => batch.toggle(bank.id)}
+              />
+            )}
+            <Typography.Text strong>
+              {bank.resume_title || bank.job_title || t("questionBankPanel.history.fallbackTitle")}
+            </Typography.Text>
+            <Typography.Text type="secondary">{formatServerTime(bank.created_at)}</Typography.Text>
+            <Typography.Text type="secondary">
+              {t("questionBankPanel.history.questionCount", { count })}
+            </Typography.Text>
+          </Space>
+        </ListyItem>
+      </RowContextMenu>
+    );
+  };
 
   return (
     <Card
@@ -164,7 +130,7 @@ export default function BankHistoryCard({
               ),
           }}
         >
-          <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
+          <Button danger disabled={batch.selectedCount === 0 || undefined} onClick={removeSelected}>
             {t("questionBankPanel.action.deleteSelected")}
           </Button>
         </BatchActionBar>
@@ -177,7 +143,12 @@ export default function BankHistoryCard({
         <EmptyState inline description={t("questionBankPanel.empty.noHistory")} />
       ) : (
         <>
-          <Collapse items={historyItems} />
+          <Listy
+            items={pagedBanks}
+            rowKey={(bank) => bank.id}
+            styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+            itemRender={renderHistory}
+          />
           <div style={{ textAlign: "right", marginTop: 12 }}>
             <Pagination
               current={page}

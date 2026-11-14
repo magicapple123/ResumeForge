@@ -7,6 +7,8 @@ const assistantLimits = {
   "assistantLimits.settings.title": "Assistant · Runtime limits & context compaction",
   "assistantLimits.settings.intro":
     "The round limit caps how many tool-calling rounds one reply may use; the time budget caps how long the whole reply may run. Changes apply right away — no restart needed.",
+  "assistantLimits.settings.section.limits": "Runtime limits",
+  "assistantLimits.settings.dirty": "Unsaved changes",
   "assistantLimits.settings.rounds.label": "Tool-calling round limit",
   "assistantLimits.settings.rounds.unit": "rounds",
   "assistantLimits.settings.rounds.hint":

@@ -382,9 +382,10 @@ export default function ResumesPage() {
             {t("resumesPage.sort.reset")}
           </Button>
         </Tooltip>
+        {/* A2 场景建议入口：悬停/点击才浮出说明，只提供入口，不调用模型、不按场景
+            过滤任何已有简历。放在筛选栏末尾，不再单独占一行。 */}
+        <ResumeScenarioSuggestion />
       </Space>
-      {/* A2 场景建议卡：只提供入口，不调用模型、不按场景过滤任何已有简历。 */}
-      <ResumeScenarioSuggestion />
       {batch.selecting && (
         <ResumeBatchToolbar
           count={batch.selectedCount}

@@ -17,7 +17,7 @@
  * 绝不把整份设置判死：用户改坏一条不该让另外五条也用不了。
  */
 import { SHORTCUT_ACTIONS, defaultShortcutBindings, type ShortcutActionId } from "./registry";
-import { normalizeBinding, validateShortcut } from "./matchShortcut";
+import { findConflict, normalizeBinding, validateShortcut } from "./matchShortcut";
 
 export const SHORTCUT_STORAGE_KEY = "rf.shortcuts.v1";
 export const SHORTCUT_STORAGE_VERSION = 2;
@@ -73,7 +73,6 @@ export function defaultShortcutSettings(): ShortcutSettings {
 export function sanitizeShortcutBindings(input: unknown): ShortcutBindings {
   const defaults = defaultShortcutBindings();
   const source = isPlainObject(input) ? input : {};
-  const used = new Set<string>();
   const result = {} as ShortcutBindings;
   for (const action of SHORTCUT_ACTIONS) {
     const raw = source[action.id];
@@ -88,14 +87,15 @@ export function sanitizeShortcutBindings(input: unknown): ShortcutBindings {
       if (typeof candidate !== "string") continue;
       const validation = validateShortcut(candidate);
       if (!validation.ok) continue;
-      if (used.has(validation.binding)) continue;
-      used.add(validation.binding);
+      if (accepted.includes(validation.binding)) continue;
+      if (findConflict(result, validation.binding, action.id)) continue;
       accepted.push(validation.binding);
     }
     if (accepted.length === 0) {
       // 默认组合也要参与去重：用户可能把另一个动作改成了这个默认键。
-      const fallback = defaults[action.id].filter((binding) => !used.has(binding));
-      for (const binding of fallback) used.add(binding);
+      const fallback = defaults[action.id].filter(
+        (binding) => !findConflict(result, binding, action.id),
+      );
       result[action.id] = fallback;
     } else {
       result[action.id] = accepted;

@@ -27,7 +27,7 @@ import type { ResumePreviewHandle } from "../preview/ResumePreview";
 import { t } from "../../../i18n";
 import { styleProbeCss } from "../../../utils/resumeFormatProbe";
 import { STYLE_PROP_LABELS, type StylePropKey } from "../../../utils/resumeStyleParams";
-import { RESUME_ROLES, ROLE_LABELS, type ResumeRoleKey } from "./styleCatalog";
+import { RESUME_ROLES, ROLE_HINTS, ROLE_LABELS, type ResumeRoleKey } from "./styleCatalog";
 import { readStyleCatalog, roleStyleProps, templateRoleDefaults } from "./styleCatalogExtensions";
 import {
   clearRole,
@@ -51,6 +51,8 @@ interface Props {
   onChange: (layout: ResumeLayout) => void;
   /** 默认展开的角色（宿主/测试可指定；不传则打开前两个高频角色）。 */
   defaultOpenRoles?: readonly ResumeRoleKey[];
+  visibleRoles?: readonly ResumeRoleKey[];
+  compact?: boolean;
 }
 
 /** 「上次展开到哪儿」只存角色 key 数组；用户偏好，存 localStorage（不是简历数据）。 */
@@ -84,6 +86,8 @@ export default function RoleStylePanel({
   previewRef,
   onChange,
   defaultOpenRoles,
+  visibleRoles = RESUME_ROLES,
+  compact = false,
 }: Props) {
   useLocale();
   // 展开状态跨挂载保留：局部排版每次重新打开不该又回到"姓名 + 正文"，
@@ -104,7 +108,7 @@ export default function RoleStylePanel({
     onChange({ ...layout, format_config: withRoleProp(config, role, prop, next) });
   };
 
-  const items = RESUME_ROLES.map((role) => {
+  const items = visibleRoles.map((role) => {
     const defaults = templateRoleDefaults(styleCatalog, layout.template, role);
     const baseRatio = roleBaseRatio(defaults);
     const ownStyle = readRoleStyle(domains, role);
@@ -134,13 +138,19 @@ export default function RoleStylePanel({
       // 角色名 + 「N 项已调整」小胶囊：裸数字脱离上下文读不通，也分不清是"几项"
       // （2026-10-25 截图 2：header 里只有一个 3）。胶囊样式见 controls.css 同名段。
       label: (
+        /* 两行：角色名 + 计数胶囊 / 一句「控制纸面哪里」（收起态也在，见 F25）。
+           第二行不是提示气泡而是常驻小字——只有名字时用户分不清「字段名」调的是
+           值前面的「技术栈：」还是值本身。 */
         <span className="resume-typography-role-label">
-          <span className="resume-typography-role-name">{t(ROLE_LABELS[role])}</span>
-          {ownCount > 0 ? (
-            <span className="resume-typography-own-count">
-              {t("typography.role.ownCount", { count: ownCount })}
-            </span>
-          ) : null}
+          <span className="resume-typography-role-title">
+            <span className="resume-typography-role-name">{t(ROLE_LABELS[role])}</span>
+            {ownCount > 0 ? (
+              <span className="resume-typography-own-count">
+                {t("typography.role.ownCount", { count: ownCount })}
+              </span>
+            ) : null}
+          </span>
+          <span className="resume-typography-role-hint">{t(ROLE_HINTS[role])}</span>
         </span>
       ),
       extra:
@@ -166,8 +176,10 @@ export default function RoleStylePanel({
 
   return (
     <section className="resume-typography-panel" aria-label={t("typography.role.groupAria")}>
-      <Typography.Text type="secondary">{t("typography.panel.hint")}</Typography.Text>
-      {!styleCatalog.hasTemplateDefaults ? (
+      {!compact ? (
+        <Typography.Text type="secondary">{t("typography.panel.hint")}</Typography.Text>
+      ) : null}
+      {!compact && !styleCatalog.hasTemplateDefaults ? (
         <Typography.Text type="warning">{t("typography.catalog.missing")}</Typography.Text>
       ) : null}
       <Collapse
@@ -180,7 +192,9 @@ export default function RoleStylePanel({
           writeStoredOpenRoles(next);
         }}
       />
-      <Typography.Text type="secondary">{t("typography.capability.pdf")}</Typography.Text>
+      {!compact ? (
+        <Typography.Text type="secondary">{t("typography.capability.pdf")}</Typography.Text>
+      ) : null}
     </section>
   );
 }

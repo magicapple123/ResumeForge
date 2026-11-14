@@ -14,7 +14,7 @@
  * 体验很差。前端用与后端**同一口径**（1–99 且摘要 > 遮蔽）直接禁用保存并给 inline 提示，
  * 同时不做静默夹取——夹取会悄悄改掉用户填的数字。
  */
-import { App, Button, Card, Input, InputNumber, Space, Typography } from "antd";
+import { App, Button, Card, Input, InputNumber } from "antd";
 import { useEffect, useState } from "react";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import {
@@ -109,12 +109,11 @@ export default function AssistantLimitCard() {
     summaryPercent !== savedCompaction.summary_percent;
   const dirty = limitsDirty || compactionDirty;
 
-  // 与后端同口径的两条前端校验：范围 + 顺序。
-  const percentsInRange =
-    maskPercent >= PERCENT_MIN &&
-    maskPercent <= PERCENT_MAX &&
-    summaryPercent >= PERCENT_MIN &&
-    summaryPercent <= PERCENT_MAX;
+  // 与后端同口径的两条前端校验：范围 + 顺序。范围提示挂在**越界那个字段**下方，
+  // 顺序提示挂在摘要字段下方——错误出现在用户要改的那一格旁边，而不是按钮上方。
+  const maskOutOfRange = maskPercent < PERCENT_MIN || maskPercent > PERCENT_MAX;
+  const summaryOutOfRange = summaryPercent < PERCENT_MIN || summaryPercent > PERCENT_MAX;
+  const percentsInRange = !maskOutOfRange && !summaryOutOfRange;
   const percentsOrdered = summaryPercent > maskPercent;
   const thresholdsValid = percentsInRange && percentsOrdered;
 
@@ -162,135 +161,166 @@ export default function AssistantLimitCard() {
 
   return (
     <Card title={t("assistantLimits.settings.title")} className="settings-card">
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        {t("assistantLimits.settings.intro")}
-      </Typography.Paragraph>
       <LoadingBlock spinning={loading}>
-        <Space orientation="vertical" size={12}>
-          <label>
-            <Typography.Text strong style={{ marginRight: 8 }}>
-              {t("assistantLimits.settings.rounds.label")}
-            </Typography.Text>
-            <InputNumber
-              min={ROUNDS_MIN}
-              max={ROUNDS_MAX}
-              step={1}
-              precision={0}
-              value={rounds}
-              disabled={saving}
-              aria-label={t("assistantLimits.settings.rounds.label")}
-              onChange={(value) => setRounds(asNumber(value, rounds))}
-            />
-            <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
-              {t("assistantLimits.settings.rounds.unit")}
-            </Typography.Text>
-            <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
-              {t("assistantLimits.settings.rounds.hint")}
-            </Typography.Paragraph>
-          </label>
-          <label>
-            <Typography.Text strong style={{ marginRight: 8 }}>
-              {t("assistantLimits.settings.budget.label")}
-            </Typography.Text>
-            <InputNumber
-              min={BUDGET_MIN}
-              max={BUDGET_MAX}
-              step={60}
-              precision={0}
-              value={budget}
-              disabled={saving}
-              aria-label={t("assistantLimits.settings.budget.label")}
-              onChange={(value) => setBudget(asNumber(value, budget))}
-            />
-            <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
-              {t("assistantLimits.settings.budget.unit")}
-            </Typography.Text>
-            <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
-              {t("assistantLimits.settings.budget.hint")}
-            </Typography.Paragraph>
-          </label>
-          <div>
-            <Typography.Title level={5} style={{ margin: "8px 0 0" }}>
+        <div className="assistant-limits-sections">
+          <section className="assistant-limits-section">
+            <h3 className="assistant-limits-section-title">
+              {t("assistantLimits.settings.section.limits")}
+            </h3>
+            <div className="assistant-limits-rows">
+              <div className="assistant-limits-row">
+                <label className="assistant-limits-label" htmlFor="assistant-limit-rounds">
+                  {t("assistantLimits.settings.rounds.label")}
+                </label>
+                <div className="assistant-limits-field">
+                  <InputNumber
+                    id="assistant-limit-rounds"
+                    className="assistant-limits-number is-rounds"
+                    min={ROUNDS_MIN}
+                    max={ROUNDS_MAX}
+                    step={1}
+                    precision={0}
+                    value={rounds}
+                    disabled={saving}
+                    suffix={t("assistantLimits.settings.rounds.unit")}
+                    aria-label={t("assistantLimits.settings.rounds.label")}
+                    onChange={(value) => setRounds(asNumber(value, rounds))}
+                  />
+                  <p className="assistant-limits-hint">
+                    {t("assistantLimits.settings.rounds.hint")}
+                  </p>
+                </div>
+              </div>
+              <div className="assistant-limits-row">
+                <label className="assistant-limits-label" htmlFor="assistant-limit-budget">
+                  {t("assistantLimits.settings.budget.label")}
+                </label>
+                <div className="assistant-limits-field">
+                  <InputNumber
+                    id="assistant-limit-budget"
+                    className="assistant-limits-number is-budget"
+                    min={BUDGET_MIN}
+                    max={BUDGET_MAX}
+                    step={60}
+                    precision={0}
+                    value={budget}
+                    disabled={saving}
+                    suffix={t("assistantLimits.settings.budget.unit")}
+                    aria-label={t("assistantLimits.settings.budget.label")}
+                    onChange={(value) => setBudget(asNumber(value, budget))}
+                  />
+                  <p className="assistant-limits-hint">
+                    {t("assistantLimits.settings.budget.hint")}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="assistant-limits-section">
+            <h3 className="assistant-limits-section-title">
               {t("assistantLimits.settings.compaction.title")}
-            </Typography.Title>
-            <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
-              {t("assistantLimits.settings.compaction.intro")}
-            </Typography.Paragraph>
-          </div>
-          <label>
-            <Typography.Text strong style={{ marginRight: 8 }}>
-              {t("assistantLimits.settings.compaction.model.label")}
-            </Typography.Text>
-            <Input
-              style={{ width: 260 }}
-              value={model}
-              disabled={saving}
-              placeholder={t("assistantLimits.settings.compaction.model.placeholder")}
-              aria-label={t("assistantLimits.settings.compaction.model.label")}
-              onChange={(event) => setModel(event.target.value)}
-            />
-            <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
-              {t("assistantLimits.settings.compaction.model.hint")}
-            </Typography.Paragraph>
-          </label>
-          <label>
-            <Typography.Text strong style={{ marginRight: 8 }}>
-              {t("assistantLimits.settings.compaction.mask.label")}
-            </Typography.Text>
-            <InputNumber
-              min={PERCENT_MIN}
-              max={PERCENT_MAX}
-              step={1}
-              precision={0}
-              value={maskPercent}
-              disabled={saving}
-              aria-label={t("assistantLimits.settings.compaction.mask.label")}
-              onChange={(value) => setMaskPercent(asNumber(value, maskPercent))}
-            />
-            <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
-              {t("assistantLimits.settings.compaction.mask.unit")}
-            </Typography.Text>
-            <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
-              {t("assistantLimits.settings.compaction.mask.hint")}
-            </Typography.Paragraph>
-          </label>
-          <label>
-            <Typography.Text strong style={{ marginRight: 8 }}>
-              {t("assistantLimits.settings.compaction.summary.label")}
-            </Typography.Text>
-            <InputNumber
-              min={PERCENT_MIN}
-              max={PERCENT_MAX}
-              step={1}
-              precision={0}
-              value={summaryPercent}
-              disabled={saving}
-              aria-label={t("assistantLimits.settings.compaction.summary.label")}
-              onChange={(value) => setSummaryPercent(asNumber(value, summaryPercent))}
-            />
-            <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
-              {t("assistantLimits.settings.compaction.summary.unit")}
-            </Typography.Text>
-            <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
-              {t("assistantLimits.settings.compaction.summary.hint")}
-            </Typography.Paragraph>
-          </label>
-          {!percentsInRange && (
-            <Typography.Text type="danger" role="alert">
-              {t("assistantLimits.settings.compaction.rangeHint", {
-                min: PERCENT_MIN,
-                max: PERCENT_MAX,
-              })}
-            </Typography.Text>
-          )}
-          {percentsInRange && !percentsOrdered && (
-            <Typography.Text type="danger" role="alert">
-              {t("assistantLimits.settings.compaction.orderHint", {
-                mask: maskPercent,
-                summary: summaryPercent,
-              })}
-            </Typography.Text>
-          )}
+            </h3>
+            <div className="assistant-limits-rows">
+              <div className="assistant-limits-row">
+                <label className="assistant-limits-label" htmlFor="assistant-compaction-model">
+                  {t("assistantLimits.settings.compaction.model.label")}
+                </label>
+                <div className="assistant-limits-field">
+                  <Input
+                    id="assistant-compaction-model"
+                    className="assistant-limits-text"
+                    value={model}
+                    disabled={saving}
+                    placeholder={t("assistantLimits.settings.compaction.model.placeholder")}
+                    aria-label={t("assistantLimits.settings.compaction.model.label")}
+                    onChange={(event) => setModel(event.target.value)}
+                  />
+                  <p className="assistant-limits-hint">
+                    {t("assistantLimits.settings.compaction.model.hint")}
+                  </p>
+                </div>
+              </div>
+            </div>
+            {/* 两个阈值是一对：同组相邻，错误就近挂在各自字段下方。 */}
+            <div className="assistant-limits-rows is-tight" style={{ marginTop: 16 }}>
+              <div className="assistant-limits-row">
+                <label className="assistant-limits-label" htmlFor="assistant-compaction-mask">
+                  {t("assistantLimits.settings.compaction.mask.label")}
+                </label>
+                <div className="assistant-limits-field">
+                  <InputNumber
+                    id="assistant-compaction-mask"
+                    className="assistant-limits-number is-percent"
+                    min={PERCENT_MIN}
+                    max={PERCENT_MAX}
+                    step={1}
+                    precision={0}
+                    value={maskPercent}
+                    disabled={saving}
+                    suffix={t("assistantLimits.settings.compaction.mask.unit")}
+                    aria-label={t("assistantLimits.settings.compaction.mask.label")}
+                    onChange={(value) => setMaskPercent(asNumber(value, maskPercent))}
+                  />
+                  <p className="assistant-limits-hint">
+                    {t("assistantLimits.settings.compaction.mask.hint")}
+                  </p>
+                  {maskOutOfRange && (
+                    <p className="assistant-limits-error" role="alert">
+                      {t("assistantLimits.settings.compaction.rangeHint", {
+                        min: PERCENT_MIN,
+                        max: PERCENT_MAX,
+                      })}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="assistant-limits-row">
+                <label className="assistant-limits-label" htmlFor="assistant-compaction-summary">
+                  {t("assistantLimits.settings.compaction.summary.label")}
+                </label>
+                <div className="assistant-limits-field">
+                  <InputNumber
+                    id="assistant-compaction-summary"
+                    className="assistant-limits-number is-percent"
+                    min={PERCENT_MIN}
+                    max={PERCENT_MAX}
+                    step={1}
+                    precision={0}
+                    value={summaryPercent}
+                    disabled={saving}
+                    suffix={t("assistantLimits.settings.compaction.summary.unit")}
+                    aria-label={t("assistantLimits.settings.compaction.summary.label")}
+                    onChange={(value) => setSummaryPercent(asNumber(value, summaryPercent))}
+                  />
+                  <p className="assistant-limits-hint">
+                    {t("assistantLimits.settings.compaction.summary.hint")}
+                  </p>
+                  {summaryOutOfRange && (
+                    <p className="assistant-limits-error" role="alert">
+                      {t("assistantLimits.settings.compaction.rangeHint", {
+                        min: PERCENT_MIN,
+                        max: PERCENT_MAX,
+                      })}
+                    </p>
+                  )}
+                  {percentsInRange && !percentsOrdered && (
+                    <p className="assistant-limits-error" role="alert">
+                      {t("assistantLimits.settings.compaction.orderHint", {
+                        mask: maskPercent,
+                        summary: summaryPercent,
+                      })}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div className="assistant-limits-footer">
+          {dirty ? (
+            <span className="assistant-limits-dirty">{t("assistantLimits.settings.dirty")}</span>
+          ) : null}
           <Button
             type="primary"
             loading={saving}
@@ -299,7 +329,7 @@ export default function AssistantLimitCard() {
           >
             {t("assistantLimits.settings.save")}
           </Button>
-        </Space>
+        </div>
       </LoadingBlock>
     </Card>
   );

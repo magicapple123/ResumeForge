@@ -47,18 +47,28 @@ function makeMemoryStore(initial = null) {
   };
 }
 
-/** 假 dialog：按队列依次返回 {response, checkboxChecked}；队列空了给"最小化"。 */
-function makeDialog(queue = []) {
+/**
+ * 假的自绘关闭卡片：队列里仍按 `{response, checkboxChecked}` 写（0=最小化/关闭窗口、1=退出），
+ * 内部翻译成 `close-behavior` 现在收到的 `{action, remember}`。
+ *
+ * 为什么保留旧写法：这些用例断言的是"弹没弹 / 退没退 / 记没记"，与卡片长什么样无关；
+ * 卡片的文案与二次确认已经搬到 `desktop/close-dialog.html`（视图 2），不再从这里可断言。
+ */
+function makePromptDial(queue = []) {
   const calls = [];
   return {
     calls,
-    showMessageBox: (parent, options) => {
+    promptClose: (parent, options) => {
       calls.push({ parent, options });
       const next = queue.length > 0 ? queue.shift() : { response: 0, checkboxChecked: false };
-      return Promise.resolve(next);
+      return Promise.resolve({
+        action: next.response === 1 ? "quit" : "hide",
+        remember: Boolean(next.checkboxChecked),
+      });
     },
   };
 }
+const makeDialog = makePromptDial;
 
 function makeWindow() {
   return {
@@ -76,7 +86,7 @@ function makeWindow() {
 function makeBehavior(options = {}) {
   const win = options.win || makeWindow();
   const store = options.store || makeMemoryStore(options.remembered ?? null);
-  const dialog = options.dialog || makeDialog(options.queue || []);
+  const dialog = options.dialog || makePromptDial(options.queue || []);
   const events = { order: [], preferenceChanged: 0, log: [] };
   let quitting = false;
   const behavior = createCloseBehavior({
@@ -85,7 +95,8 @@ function makeBehavior(options = {}) {
         events.order.push("app.quit");
       },
     },
-    dialog,
+    // 用箭头包一层：假 dialog 里 `this.calls.push(...)` 依赖 this，解构出来会丢。
+    promptClose: (parent, opts) => dialog.promptClose(parent, opts),
     getWindow: () => win,
     isQuitting: () => quitting,
     setQuitting: (value) => {
@@ -136,12 +147,9 @@ test("普通 close：preventDefault + 带父窗口的二选一对话框（Esc = 
   assert.equal(dialog.calls.length, 1);
 
   const { parent, options } = dialog.calls[0];
-  assert.equal(parent, win, "showMessageBox 必须带父窗口（§18.5）");
-  assert.deepEqual([...options.buttons], ["最小化到托盘", "退出应用"]);
-  assert.equal(options.defaultId, 0, "默认 = 最小化（安全默认）");
-  assert.equal(options.cancelId, 0, "Esc = 最小化（安全默认）");
-  assert.equal(options.checkboxLabel, "记住我的选择");
-  assert.equal(options.checkboxChecked, false);
+  assert.equal(parent, win, "自绘卡片必须带父窗口（§18.5，父窗口关闭时连带销毁）");
+  // 卡片按平台渲染"最小化到托盘 / 关闭窗口"，并把 Esc 绑成安全默认（都在 close-dialog.html 里）。
+  assert.equal(options.isMac, false, "Windows 走「最小化到托盘」口径");
 
   await flush();
   assert.equal(win.hidden, 1, "默认响应 0 = 最小化到托盘");
@@ -166,7 +174,7 @@ test("弹窗未关闭时再次触发 close：不产生第二个 dialog", async (
   let release;
   const dialog = {
     calls: [],
-    showMessageBox(parent, options) {
+    promptClose(parent, options) {
       this.calls.push({ parent, options });
       return new Promise((resolve) => {
         release = resolve;
@@ -179,25 +187,24 @@ test("弹窗未关闭时再次触发 close：不产生第二个 dialog", async (
   behavior.handleClose(closeEvent());
   assert.equal(dialog.calls.length, 1, "连点 × 只能叠出一个对话框");
   assert.equal(behavior.isPromptOpen(), true);
-  release({ response: 0, checkboxChecked: false });
+  release({ action: "hide", remember: false });
   await flush();
   assert.equal(behavior.isPromptOpen(), false);
 });
 
-test("macOS：按钮退化为「关闭窗口 / 退出应用」，文案按平台分支", async () => {
-  const { behavior, dialog } = makeBehavior({ platform: "darwin" });
+test("macOS：交给卡片的是 isMac=true（口径退化为「关闭窗口」，不是托盘）", async () => {
+  const { behavior, dialog, win } = makeBehavior({ platform: "darwin" });
   behavior.handleClose(closeEvent());
   const { options } = dialog.calls[0];
-  assert.deepEqual([...options.buttons], ["关闭窗口", "退出应用"]);
-  assert.match(options.detail, /Dock/);
-  assert.doesNotMatch(options.detail, /托盘/);
+  assert.equal(options.isMac, true);
   await flush();
+  assert.equal(win.hidden, 1, "安全默认仍是隐藏/关闭窗口，不是退出");
 });
 
 test("对话框抛错：退化为最小化到托盘，绝不把窗口留在关不掉的状态", async () => {
   const dialog = {
     calls: [],
-    showMessageBox() {
+    promptClose() {
       return Promise.reject(new Error("dialog blocked by policy"));
     },
   };
@@ -230,12 +237,11 @@ test("记住 minimize：下次 close 不弹窗、直接 hide", async () => {
   assert.equal(behavior.isPromptOpen(), false);
 });
 
-test("记住 quit：二次确认通过才落盘；下次 close 直接退出不弹窗", async () => {
+test("记住 quit：卡片确认后落盘，下次 close 直接退出不弹窗", async () => {
+  // 二次确认现在折叠在卡片里（视图 2），close-behavior 只看最终结果：
+  // `{action:"quit", remember:true}` = 用户已经在卡片上确认过"退出并记住"。
   const { behavior, events, store, getQuitting } = makeBehavior({
-    queue: [
-      { response: 1, checkboxChecked: true },
-      { response: 0, checkboxChecked: false },
-    ],
+    queue: [{ response: 1, checkboxChecked: true }],
   });
   behavior.handleClose(closeEvent());
   await flush();
@@ -247,12 +253,9 @@ test("记住 quit：二次确认通过才落盘；下次 close 直接退出不�
   assert.equal(behavior.handleClose(closeEvent()), true);
 });
 
-test("记住 quit 的二次确认里选「只退出这次」：不写记忆，但仍然退出", async () => {
+test("卡片上选「只退出这次」：不写记忆，但仍然退出", async () => {
   const { behavior, store } = makeBehavior({
-    queue: [
-      { response: 1, checkboxChecked: true },
-      { response: 1, checkboxChecked: false },
-    ],
+    queue: [{ response: 1, checkboxChecked: false }],
   });
   behavior.handleClose(closeEvent());
   await flush();

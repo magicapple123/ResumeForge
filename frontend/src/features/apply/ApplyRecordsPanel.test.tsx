@@ -5,6 +5,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyRecord, ApplyRecordBatch, Page } from "../../types";
+// @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
+import { readFileSync } from "node:fs";
 import ApplyRecordsPanel from "./ApplyRecordsPanel";
 
 const apiMocks = vi.hoisted(() => ({
@@ -471,5 +473,20 @@ describe("明细请求竞态守卫（PR-14）", () => {
     // 若没有代次守卫，旧数据会在此刻覆盖新视图：旧岗位必须不出现。
     expect(screen.queryByText("高级后端工程师（高并发方向）")).not.toBeInTheDocument();
     expect(screen.getAllByText("全栈工程师").length).toBeGreaterThan(0);
+  });
+});
+
+describe("F11：批次卡折叠后不留 padding", () => {
+  it("padding 只挂在展开时才存在的内层，折叠态 body 没有 padding", () => {
+    // 行为断言看不出"少了 20px"，所以直接读样式表：body 只负责压高度，padding 归内层。
+    const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd();
+    const css = readFileSync([cwd, "src", "styles", "apply.css"].join("/"), "utf8");
+    const body = css.match(/\.apply-records-batch-body \{([^}]*)\}/)?.[1] ?? "";
+    const inner = css.match(/\.apply-records-batch-body-inner \{([^}]*)\}/)?.[1] ?? "";
+
+    expect(body).toContain("min-height: 0");
+    expect(body).toContain("overflow: hidden");
+    expect(body).not.toContain("padding:");
+    expect(inner).toContain("padding: 8px 12px 12px");
   });
 });

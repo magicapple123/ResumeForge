@@ -83,6 +83,14 @@ class ResumeLayout:
     # 缺省 `left` / `right` 与改动前逐字节等价，其余 7 个模板走原分支。
     header_align: str
     header_photo_side: str
+    # ===== 照片框（R-07 / R-10）=====
+    # 边框/圆角与模板 `.profile-photo` 的默认值一致（1px / 4px）；颜色空串 = 用 `line_color`。
+    # 偏移是**毫米**，由 `header.draw_header` 夹在页头范围内。
+    photo_border_width: float
+    photo_border_color: str
+    photo_radius: float
+    photo_offset_x: float
+    photo_offset_y: float
     # ===== 页头装饰（底边线 / modern 的浅底色块，见模板 `.header` 的 CSS）=====
     header_border_width: float
     header_border_color: str
@@ -125,6 +133,10 @@ class ResumeLayout:
     # scholar 是三列（`repeat(3, minmax(0, 1fr))`），其余模板是流式列表（1）。此前 scholar
     # 的三列只存在于 HTML，PDF 把同一批技能排成一行行文字，是最明显的"HTML/PDF 不一致"。
     tag_columns: int
+    # `skill_columns`：**用户选的**"技能标签一行最多几个"（0 = 没设过，沿用模板流式排法）。
+    # 与 `tag_columns` 是两件事：后者是模板写死的网格列数（scholar 三列），
+    # 前者是这次的格式覆盖，只影响"每行最多排几个"的折行上限。
+    skill_columns: int
     # ===== 正文分栏（来自模板 `.resume-sections` 的 CSS）=====
     # 草稿侧 `split` 是两栏网格（`exporter.py` 把 `column_count` 置 2），其余模板单栏。
     # `column_gap` 是栏间距（× 基准字号，= CSS `column-gap: calc(var(--fs) * 1.2)`）。
@@ -290,6 +302,12 @@ def resolve_layout(
         # 非 elegant 模板读到的就是"什么都不变"。
         header_align=str(defaults.get("header_align", "left")),
         header_photo_side=str(defaults.get("header_photo_side", "right")),
+        # 照片框：模板默认 1px 边框 + 4px 圆角 + 无偏移；用户设过才用用户值。
+        photo_border_width=template_float(overrides.get("photo_border_width", 1)),
+        photo_border_color=str(overrides.get("photo_border_color") or ""),
+        photo_radius=template_float(overrides.get("photo_radius", 4)),
+        photo_offset_x=template_float(overrides.get("photo_offset_x", 0)),
+        photo_offset_y=template_float(overrides.get("photo_offset_y", 0)),
         header_border_width=template_float(defaults["header_border_width"]),
         header_border_color=str(defaults["header_border_color"]),
         header_pad_bottom=template_float(defaults["header_pad_bottom"]),
@@ -322,6 +340,8 @@ def resolve_layout(
         tag_mono=bool(defaults["tag_mono"]),
         # 多列标签网格（scholar）：列数同样只来自模板 CSS，缺键时按 1 列（= 改动前的流式排法）。
         tag_columns=template_int(defaults.get("tag_columns", 1)),
+        # 用户覆盖：没设过就是 0（不改变任何折行行为）。
+        skill_columns=template_int(overrides.get("skill_columns", 0)),
         # 正文分栏：栏数决定 `_draw_resume` 走 `columns.render_sections` 还是顺序路径；
         # 栏间距参与半栏宽度的计算（见 `columns.column_frames`）。
         column_count=template_int(defaults["column_count"]),

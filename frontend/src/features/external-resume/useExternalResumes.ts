@@ -26,6 +26,11 @@ export interface ExternalResumeUploadOptions {
   jobId?: number | null;
 }
 
+export interface ExternalResumeFilters {
+  keyword?: string;
+  jobId?: number;
+}
+
 export interface ExternalResumesApi {
   items: ExternalResumeItem[];
   total: number;
@@ -37,8 +42,19 @@ export interface ExternalResumesApi {
   remove: (id: number) => Promise<void>;
 }
 
-export function useExternalResumes(): ExternalResumesApi {
-  const listing = useApi(() => listExternalResumes({ page_size: PAGE_SIZE }), []);
+export function useExternalResumes({
+  keyword = "",
+  jobId,
+}: ExternalResumeFilters = {}): ExternalResumesApi {
+  const listing = useApi(
+    () =>
+      listExternalResumes({
+        keyword: keyword.trim() || undefined,
+        job_id: jobId,
+        page_size: PAGE_SIZE,
+      }),
+    [keyword, jobId],
+  );
   const { reload } = listing;
   const [uploading, setUploading] = useState(false);
 

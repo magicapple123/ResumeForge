@@ -24,6 +24,8 @@ const rich = {
   "rich.menu.bold": "加粗",
   /** 第一项的反向态：选区已经整段加粗时显示。 */
   "rich.menu.unbold": "取消加粗",
+  "rich.menu.small": "小一号",
+  "rich.menu.emphasis": "强调色",
   /** 第三项：等价于左键点击那一栏（打开编辑器并定位）。 */
   "rich.menu.edit": "编辑这一栏",
 

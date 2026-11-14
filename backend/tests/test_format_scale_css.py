@@ -52,7 +52,13 @@ def test_color_fields_use_the_css_variables_the_frontend_probe_writes():
     （零网络往返）。而变量名在前端是**第二份**（目录接口只下发 ``label``，不下发 ``css``），
     后端一旦改名，用户就会看到"选了颜色预览没反应、松手后才变色"。这里钉住这份映射。
     """
-    colors = {field["key"]: field["css"] for field in FORMAT_FIELDS if field["type"] == "color"}
+    # `photo_border_color` 没有 css 变量：它由 format_css 直接写进
+    # `.profile-photo { border: … solid <color> }`，不参与探针的 :root 注入。
+    colors = {
+        field["key"]: field["css"]
+        for field in FORMAT_FIELDS
+        if field["type"] == "color" and "css" in field
+    }
     assert colors == {
         "accent": "--accent",
         "text_color": "--text",

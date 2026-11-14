@@ -31,8 +31,8 @@ from .assistant_compaction import (
 class CompactionLimits:
     """两个阈值（设置页可改；默认 60 / 75）。"""
 
-    mask_percent: int = DEFAULT_MASK_PERCENT
-    summary_percent: int = DEFAULT_SUMMARY_PERCENT
+    mask_percent: float = DEFAULT_MASK_PERCENT
+    summary_percent: float = DEFAULT_SUMMARY_PERCENT
 
 
 @dataclass(frozen=True)

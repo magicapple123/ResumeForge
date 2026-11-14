@@ -74,7 +74,7 @@ export interface ExternalResumeAnalysis {
 }
 
 export function listExternalResumes(
-  params: { keyword?: string; page?: number; page_size?: number } = {},
+  params: { keyword?: string; job_id?: number; page?: number; page_size?: number } = {},
 ): Promise<ExternalResumeList> {
   return request(`/external-resumes${buildQuery(params)}`);
 }

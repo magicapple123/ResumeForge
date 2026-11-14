@@ -13,6 +13,9 @@
  */
 const interviewReview = {
   "interviewReview.alert.viewing": "Viewing saved review #{id} ({time})",
+  /** The saved-review header replaced the old full-width alert: back link + "time · target". */
+  "interviewReview.header.back": "Back to saved reviews",
+  "interviewReview.header.meta": "{time} · {target}",
 
   "interviewReview.card.setup": "Interview review",
   "interviewReview.placeholder.question":
@@ -20,6 +23,10 @@ const interviewReview = {
   "interviewReview.placeholder.job": "Related job (optional, type keywords to search)",
   "interviewReview.placeholder.resume":
     "Related resume (required for reverse optimization, type keywords to search)",
+  /** The dropdown already merges in-app and uploaded resumes; a file can be imported here too. */
+  "interviewReview.resume.label": "Resume",
+  "interviewReview.resume.hint":
+    "The dropdown has two groups: in-app resumes and uploaded external resumes. You can also import a resume file.",
   "interviewReview.action.analyze": "Analyze the answer approach",
 
   "interviewReview.card.analysis": "Answer approach",
@@ -49,11 +56,18 @@ const interviewReview = {
   "interviewReview.legacy.body":
     "The legacy record was saved as plain text and cannot be restored into a structured review; only the original content is shown.",
 
+  /** A saved-review row expands to a summary only; the full content lives in the detail view. */
+  "interviewReview.history.summary.suggestions": "{count} improvement suggestions",
+  "interviewReview.history.summary.empty":
+    "This record has no summary content. Open the details to read it.",
+
   "interviewReview.error.needQuestion": "Enter a question you were actually asked first",
   "interviewReview.error.analyzeFailed": "Could not analyze the answer approach",
   "interviewReview.error.needResume": "Select the resume to optimize first",
   "interviewReview.error.needAnalysis": "Analyze the answer approach first",
   "interviewReview.error.autoSaveFailed": "Could not auto-save the review history",
+  "interviewReview.error.notPersisted":
+    "Suggestions are ready, but this review has not been saved yet. Save it first, then write back.",
   "interviewReview.error.writeBackFailed":
     "The suggestions were generated but could not be written back to the history",
   "interviewReview.error.optimizeFailed": "Could not optimize the resume",

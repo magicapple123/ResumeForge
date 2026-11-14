@@ -162,11 +162,16 @@ def test_column_widths_follow_the_side() -> None:
 # ── 校验范围 ──────────────────────────────────────────────────────
 
 
-def test_entry_gap_upper_bound_is_16_and_section_keeps_30() -> None:
-    """条目级放宽到 16；板块级**不下调**到 16（老数据可能 > 16）。"""
-    assert EntryLayout(gap=16).gap == 16
+def test_entry_gap_upper_bound_matches_section_at_thirty() -> None:
+    """条目级与板块级的上限统一到 30（F25：局部排版面板按同一档给值）。
+
+    历史：条目级曾是 16（"条目只是一行，不需要 30"），但同一条目在分侧行布局里
+    又允许 30，两套上限让面板滑杆的右端位置随上下文跳变；`test_column_geometry`
+    已把两者钉在 30，这里同步，避免两条守卫互相矛盾。
+    """
+    assert EntryLayout(gap=30).gap == 30
     with pytest.raises(ValueError):
-        EntryLayout(gap=16.5)
+        EntryLayout(gap=30.5)
     # 分区级仍接受更大的历史值
     assert SectionLayout(gap=30).gap == 30
     assert SectionLayout(gap=12).gap == 12

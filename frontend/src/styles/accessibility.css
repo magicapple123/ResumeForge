@@ -59,11 +59,12 @@
 }
 
 /*
- * 投递台「投递专用浏览器」的扫码提示：内层是 antd Typography `type="warning"`，取
- * colorWarning #faad14，白底 ~1.9:1，过不了 axe color-contrast 的 AA —— CI 的
- * `a11y.spec.ts` / `ui-quality.spec.ts` 会在 /apply 判 serious。外层
- * `.apply-browser-login-hint` 早就用了站内 warning 文字 token（#875300），但内层
- * Typography 自带 color 把它盖掉了。这里压回 token（与上面两条同一套口径）。
+ * 投递台「投递专用浏览器」的扫码提示：内层曾经是 antd Typography `type="warning"`
+ * （colorWarning #faad14，白底 ~1.9:1，过不了 axe color-contrast 的 AA）。
+ * 2026-11-13 起那条提示的正文改用次要色（页面层
+ * `features/apply/applyInformationHierarchy.css` 的 `.apply-browser-login-text`），
+ * 只有感叹号图标保留琥珀；这条规则留作**兜底**：万一有人再把 `type="warning"` 加回来，
+ * 也仍然是可读的深琥珀而不是 #faad14。
  */
 .apply-browser-login-hint .ant-typography {
   color: var(--rf-warning-text);

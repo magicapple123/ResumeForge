@@ -26,6 +26,7 @@ import {
 } from "antd";
 import { useRef, useState } from "react";
 import { isCancellation } from "../../api/client";
+import EmptyState from "../../components/common/EmptyState";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { commitFromUrl, fetchRowDetails, previewFromUrl } from "./importFromUrlApi";
@@ -91,7 +92,7 @@ export function ImportFromUrlModal({ open, onClose, onImported }: Props) {
     onClose();
   };
 
-  const fetchPreview = async () => {
+  const fetchPreview = async (intent: "auto" | "job_detail" = "auto") => {
     const trimmed = url.trim();
     if (!trimmed) {
       message.warning(t("jobsImport.error.urlRequired"));
@@ -103,8 +104,8 @@ export function ImportFromUrlModal({ open, onClose, onImported }: Props) {
         url: trimmed,
         engine,
         limit: limit ?? 0,
-        intent: "job_list",
-        pages,
+        intent,
+        pages: intent === "job_detail" ? 1 : pages,
       });
       const mapped = result.rows.map((row) => ({ ...row, key: nextKey.current++ }));
       setPreview(result);
@@ -283,74 +284,95 @@ export function ImportFromUrlModal({ open, onClose, onImported }: Props) {
         </Flex>
       }
     >
-      <Flex gap={12} wrap align="flex-end">
-        <div style={{ flex: "1 1 420px", minWidth: 300 }}>
-          <Typography.Text strong>{t("jobsImport.form.urlLabel")}</Typography.Text>
-          <Input
-            value={url}
-            prefix={<LinkOutlined />}
-            placeholder={t("jobsImport.form.urlPlaceholder")}
-            disabled={busy}
-            onChange={(event) => setUrl(event.target.value)}
-            onPressEnter={() => void fetchPreview()}
-          />
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {t("jobsImport.form.urlHint")}
-          </Typography.Text>
+      <div className="jobs-import-form">
+        {/* 第一行只放「输入 + 主按钮」：两者底边对齐，说明文字移到行外，
+            不再靠外层自动换行把按钮甩到第二行左侧。 */}
+        <div className="jobs-import-url-row">
+          <div className="jobs-import-field jobs-import-url">
+            <Typography.Text strong>{t("jobsImport.form.urlLabel")}</Typography.Text>
+            <Input
+              value={url}
+              prefix={<LinkOutlined />}
+              placeholder={t("jobsImport.form.urlPlaceholder")}
+              disabled={busy}
+              onChange={(event) => setUrl(event.target.value)}
+              onPressEnter={() => void fetchPreview()}
+            />
+          </div>
+          <Button
+            type="primary"
+            ghost
+            loading={fetching}
+            disabled={importing}
+            onClick={() => void fetchPreview()}
+          >
+            {rows.length > 0 ? t("jobsImport.action.refetch") : t("jobsImport.action.fetch")}
+          </Button>
         </div>
-        <div>
-          <Typography.Text strong>{t("jobsImport.form.engineLabel")}</Typography.Text>
-          <Select<FetchEngine>
-            value={engine}
-            style={{ width: 180, display: "block" }}
-            disabled={busy}
-            onChange={setEngine}
-            options={[
-              { value: "auto", label: t("jobsImport.form.engineAuto") },
-              { value: "browser", label: t("jobsImport.form.engineBrowser") },
-            ]}
-          />
+        <Typography.Text type="secondary" className="jobs-import-hint">
+          {t("jobsImport.form.urlHint")}
+        </Typography.Text>
+
+        {/* 第二行按栅格铺三个参数，每列「标签 → 控件 → 说明」纵向堆叠；
+            改变的是换行方式，不是信息量——三个说明各自跟着自己的控件。 */}
+        <div className="jobs-import-params">
+          <div className="jobs-import-field">
+            <Typography.Text strong>{t("jobsImport.form.engineLabel")}</Typography.Text>
+            <Select<FetchEngine>
+              value={engine}
+              style={{ width: "100%" }}
+              disabled={busy}
+              onChange={setEngine}
+              options={[
+                { value: "auto", label: t("jobsImport.form.engineAuto") },
+                { value: "browser", label: t("jobsImport.form.engineBrowser") },
+              ]}
+            />
+            <Typography.Text type="secondary" className="jobs-import-hint">
+              {t("jobsImport.form.engineHint")}
+            </Typography.Text>
+          </div>
+          <div className="jobs-import-field">
+            <Typography.Text strong>{t("jobsImport.form.limitLabel")}</Typography.Text>
+            <InputNumber
+              min={0}
+              max={MAX_PREVIEW_ROWS}
+              value={limit}
+              style={{ width: "100%" }}
+              placeholder={t("jobsImport.form.limitPlaceholder")}
+              disabled={busy}
+              onChange={(value) => setLimit(typeof value === "number" ? value : null)}
+            />
+            <Typography.Text type="secondary" className="jobs-import-hint">
+              {t("jobsImport.form.limitHint")}
+            </Typography.Text>
+          </div>
+          <div className="jobs-import-field">
+            <Typography.Text strong>{t("jobsImport.form.pagesLabel")}</Typography.Text>
+            <InputNumber
+              min={1}
+              max={10}
+              value={pages}
+              style={{ width: "100%" }}
+              disabled={busy}
+              aria-label={t("jobsImport.form.pagesLabel")}
+              onChange={(value) => setPages(typeof value === "number" ? value : 1)}
+            />
+            <Typography.Text type="secondary" className="jobs-import-hint">
+              {t("jobsImport.form.pagesHint")}
+            </Typography.Text>
+          </div>
         </div>
-        <div>
-          <Typography.Text strong>{t("jobsImport.form.limitLabel")}</Typography.Text>
-          <InputNumber
-            min={0}
-            max={MAX_PREVIEW_ROWS}
-            value={limit}
-            style={{ width: 220, display: "block" }}
-            placeholder={t("jobsImport.form.limitPlaceholder")}
-            disabled={busy}
-            onChange={(value) => setLimit(typeof value === "number" ? value : null)}
-          />
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {t("jobsImport.form.limitHint")}
-          </Typography.Text>
-        </div>
-        <div>
-          <Typography.Text strong>{t("jobsImport.form.pagesLabel")}</Typography.Text>
-          <InputNumber
-            min={1}
-            max={10}
-            value={pages}
-            style={{ width: 120, display: "block" }}
-            disabled={busy}
-            aria-label={t("jobsImport.form.pagesLabel")}
-            onChange={(value) => setPages(typeof value === "number" ? value : 1)}
-          />
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {t("jobsImport.form.pagesHint")}
-          </Typography.Text>
-        </div>
+      </div>
+      {preview && (
         <Button
-          type="primary"
-          ghost
-          loading={fetching}
-          disabled={importing}
-          onClick={() => void fetchPreview()}
+          type="link"
+          disabled={busy || undefined}
+          onClick={() => void fetchPreview("job_detail")}
         >
-          {rows.length > 0 ? t("jobsImport.action.refetch") : t("jobsImport.action.fetch")}
+          {t("jobsImport.action.refetchDetail")}
         </Button>
-      </Flex>
+      )}
 
       {preview && preview.warnings.length > 0 ? (
         <Alert
@@ -391,9 +413,20 @@ export function ImportFromUrlModal({ open, onClose, onImported }: Props) {
           ) : null}
         </>
       ) : (
-        <Typography.Text type="secondary" style={{ display: "block", marginTop: 12 }}>
-          {t("jobsImport.preview.empty")}
-        </Typography.Text>
+        <div className="jobs-import-empty">
+          <EmptyState
+            inline
+            description={
+              <>
+                <Typography.Text>{t("jobsImport.preview.empty")}</Typography.Text>
+                <br />
+                <Typography.Text type="secondary" className="jobs-import-hint">
+                  {t("jobsImport.preview.emptyHint")}
+                </Typography.Text>
+              </>
+            }
+          />
+        </div>
       )}
 
       {hasExisting ? (

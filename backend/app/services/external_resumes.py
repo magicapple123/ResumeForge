@@ -24,6 +24,7 @@ import logging
 from pathlib import Path
 from typing import NamedTuple
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from ..models.external_resume import ExternalResume
@@ -175,13 +176,27 @@ def create_external_resume(
 
 
 def list_external_resumes(
-    db: Session, *, keyword: str = "", page: int = 1, page_size: int = 20
+    db: Session, *, keyword: str = "", job_id: int | None = None, page: int = 1, page_size: int = 20
 ) -> tuple[list[ExternalResume], int]:
-    """按创建时间倒序分页列出未删除的外部简历。"""
-    query = db.query(ExternalResume).filter(trash.live_only(ExternalResume))
+    """Filter before paging; deleted jobs never contribute searchable metadata."""
+    query = (
+        db.query(ExternalResume)
+        .outerjoin(Job, and_(ExternalResume.job_id == Job.id, trash.live_only(Job)))
+        .filter(trash.live_only(ExternalResume))
+    )
+    if job_id is not None:
+        query = query.filter(ExternalResume.job_id == job_id)
     cleaned = (keyword or "").strip()
     if cleaned:
-        query = query.filter(ExternalResume.name.like(f"%{cleaned}%"))
+        # Preserve existing LIKE semantics: percent and underscore remain wildcards.
+        pattern = f"%{cleaned}%"
+        query = query.filter(
+            or_(
+                ExternalResume.name.like(pattern),
+                Job.title.like(pattern),
+                Job.company.like(pattern),
+            )
+        )
     total = query.count()
     rows = (
         query.order_by(ExternalResume.created_at.desc(), ExternalResume.id.desc())

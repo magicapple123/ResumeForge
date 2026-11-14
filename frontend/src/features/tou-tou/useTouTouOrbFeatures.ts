@@ -12,6 +12,7 @@ import { createMaterial } from "../../api/material";
 import { getProfile } from "../../api/profile";
 import { t, type MessageKey, type MessageParams } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { useShortcut } from "../shortcuts/useShortcutKeymap";
 import {
   buildSideAskQuestion,
   askTouTouSideQuestion,
@@ -26,12 +27,12 @@ import {
   type TouTouProposalDraft,
 } from "./touTouProposalStore";
 import {
-  hasSelectedText,
   readActiveSelection,
   type DomSelectionSnapshot,
   type TouTouSelectionActionId,
 } from "./touTouSelection";
 import type { TouTouActionPanelProps } from "./TouTouActionPanel";
+import { useTouTou } from "./touTouContext";
 import { useTouTouIntervention } from "./useTouTouIntervention";
 import { useTouTouPageContext } from "./useTouTouPageContext";
 import { useTouTouProposalBridge } from "./useTouTouProposalBridge";
@@ -70,6 +71,11 @@ export interface TouTouOrbFeaturesOptions {
   enabled: boolean;
   /** 设置里的「提示标语」开关：关掉只停气泡，pulse 与其余功能不受影响。 */
   tipsEnabled: boolean;
+  /**
+   * 设置里的「划词浮条」开关（Q9）：关掉后选中文字不再浮出动作条。
+   * 可选——不传时读 TouTou 上下文里的同名值（调用它的球体组件已贴 500 行预算）。
+   */
+  selectionEnabled?: boolean;
   /** 资料页的「去改资料」提示卡在场时压掉信号气泡（同一块地方会打架）。 */
   suppressAnnouncement: boolean;
   onOpenAssistant?: () => void;
@@ -106,11 +112,15 @@ export interface TouTouOrbFeatures {
 export function useTouTouOrbFeatures({
   enabled,
   tipsEnabled,
+  selectionEnabled,
   suppressAnnouncement,
   onOpenAssistant,
   onOpenClipboard,
 }: TouTouOrbFeaturesOptions): TouTouOrbFeatures {
   useLocale();
+  // 调用方没显式传时以设置上下文为准：划词浮条和入口、标语一样是用户可单独关掉的。
+  const { selectionEnabled: selectionFromContext } = useTouTou();
+  const selectionAllowed = selectionEnabled ?? selectionFromContext;
   const navigate = useNavigate();
   const pageContext = useTouTouPageContext();
   const signals = useTouTouSignals();
@@ -292,25 +302,8 @@ export function useTouTouOrbFeatures({
   }, []);
   useEffect(() => clearLongPress, [clearLongPress]);
 
-  // Ctrl/Cmd+K：**划词动作面板**的键盘入口（与长按同一条落点）。
-  //
-  // 为什么不无条件接管：全站搜索的既有快捷键就是 mod+k（R6 契约，GlobalSearch 有守卫测试）。
-  // 两个全局监听同时抢一个键时，浏览器里谁后注册谁生效、行为不可预期。所以这里只在
-  // **有选中文本**时接管（capture 阶段 + 阻止冒泡，避免全站搜索同时弹出）；没有选区时
-  // 原样让给全站搜索。页面级动作面板仍可用长按 400ms 打开。
-  useEffect(() => {
-    if (!enabled) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
-      if (event.key.toLowerCase() !== "k") return;
-      if (!hasSelectedText(window)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel();
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [enabled, openPanel]);
+  // Search and selection actions share one dispatcher and complementary context predicates.
+  useShortcut("selectionPanel", () => openPanel(), enabled);
 
   // 信号气泡：设置开关关掉就只保留 pulse；提示卡在场时不抢同一块地方。
   const signal = tipsEnabled && !suppressAnnouncement ? intervention.announce : null;
@@ -354,7 +347,7 @@ export function useTouTouOrbFeatures({
     signalCount: intervention.signals.length,
     tip,
     onTipClose: intervention.onTipDismiss,
-    selectionEnabled: enabled && panel === null,
+    selectionEnabled: enabled && selectionAllowed && panel === null,
     onSelectionAction: runSelectionAction,
     panelProps,
     panelKey: panel?.id ?? null,

@@ -40,6 +40,11 @@ class ChatConversation(Base):
     group_name: Mapped[str] = mapped_column(
         String(64), default="", nullable=False, server_default=""
     )
+    # 临时对话（F34）：为真时这一段对话既不注入也不抽取记忆（0019 迁移）。
+    # 关掉开关只是恢复后续读写，**不会删除**已经存下的记忆。
+    memory_off: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     # 上下文压缩状态（问题清单 #10，迁移 0011）：可空 JSON。NULL = 没压缩过（默认）。

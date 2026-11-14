@@ -98,11 +98,13 @@ describe("QueueTable 参考分列（14B）", () => {
     expect(cell.textContent).toBe("—");
   });
 
-  it("列头写着「参考分」，tooltip 原样给出后端免责文案", async () => {
+  it("列头写着「匹配」，tooltip 原样给出后端免责文案", async () => {
     renderTable([item(1, "后端开发", 80)]);
 
     const header = screen.getByRole("button", { name: /按参考分排序/ });
-    expect(header.textContent).toContain("参考分");
+    // 2026-11-13 起「参考分」与「准入」合并成「匹配」一列：分数仍是排序依据
+    // （aria-label 未变），列头名字跟着合并后的语义走。
+    expect(header.textContent).toContain("匹配");
 
     // tooltip 内容里必须能读到"不参与准入"的那句免责说明（后端规定原样展示）。
     fireEvent.mouseEnter(header);

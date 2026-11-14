@@ -5,8 +5,15 @@
  * 自 InterviewPage 拆出（0066 加计时器时顺手做的一次拆分）：页面本体已经贴着 500 行
  * 预算，头部这一段是自成一体的展示 + 两个回调，搬出来不影响任何行为。
  */
-import { ClockCircleOutlined, StopOutlined, ThunderboltOutlined } from "@ant-design/icons";
-import { Button, Space, Tag, Typography } from "antd";
+import {
+  ClockCircleOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  StopOutlined,
+  ThunderboltOutlined,
+} from "@ant-design/icons";
+import { Button, Space, Tag, Tooltip, Typography } from "antd";
+import type { RefObject } from "react";
 import type { InterviewDetail } from "../../types";
 import { t } from "../../i18n";
 import {
@@ -24,6 +31,9 @@ export function RoomHeader({
   submitting,
   timerLabel,
   showTimer,
+  paused = false,
+  pauseButtonRef,
+  onPause,
   onEndEarly,
   onNew,
 }: {
@@ -32,9 +42,15 @@ export function RoomHeader({
   /** 已答轮数（服务端算的）。 */
   answered: number;
   submitting: boolean;
-  /** `mm:ss` / `h:mm:ss`；`showTimer` 为假时不渲染（还没点「准备好了」）。 */
+  /** `mm:ss` / `h:mm:ss`；`showTimer` 为假时不渲染。 */
   timerLabel: string;
   showTimer: boolean;
+  /** 用户主动暂停中：计时读数灰化并标「已暂停」。 */
+  paused?: boolean;
+  /** 「恢复」时焦点回到这颗按钮（Q2 要求）。 */
+  pauseButtonRef?: RefObject<HTMLButtonElement | null>;
+  /** 不给就不渲染暂停按钮（既有调用方与单测无需改）。 */
+  onPause?: () => void;
   onEndEarly: () => void;
   onNew: () => void;
 }) {
@@ -50,7 +66,9 @@ export function RoomHeader({
   return (
     <>
       <div className="interview-room-head">
-        <Space size={6} wrap>
+        {/* 左侧身份 Tag 行**不换行**：antd 的 `wrap` 是行内样式，CSS 压不住它；
+            1366 下这排 Tag 会把右侧按钮组顶到第二行。窄屏由父级 `overflow-x` 横向滚动。 */}
+        <Space size={6}>
           <b>{session.title}</b>
           <Tag color="blue">{typeLabelKey ? t(typeLabelKey) : session.interview_type}</Tag>
           <Tag>{difficultyLabelKey ? t(difficultyLabelKey) : session.difficulty}</Tag>
@@ -72,11 +90,38 @@ export function RoomHeader({
               ? t("interview.round.withClosing", { current })
               : t("interview.round.progress", { current, total: session.rounds })}
           </Typography.Text>
-          {/* 计时器只在用户点过「准备好了」之后出现：没开始就不该有读数。 */}
+          {/* 计时器常显（Q2）：暂停时灰化并加「已暂停」后缀，**不要整块消失**——
+              读数一消失，用户会以为累计时长被清零了。 */}
           {showTimer ? (
-            <Typography.Text type="secondary" className="interview-timer">
+            <Typography.Text
+              type="secondary"
+              className={`interview-timer${paused ? " is-paused" : ""}`}
+            >
               <ClockCircleOutlined /> {t("interviewPage.timer.label")} {timerLabel}
+              {paused ? (
+                <span className="interview-timer__paused">
+                  {" · "}
+                  {t("interviewPage.paused.badge")}
+                </span>
+              ) : null}
             </Typography.Text>
+          ) : null}
+          {/* 暂停入口用**图标按钮**：1366 下右侧已经有两段文字 + 两个按钮，加一个文字按钮会折行。 */}
+          {!finished && onPause ? (
+            <Tooltip
+              title={paused ? t("interviewPage.paused.resume") : t("interviewPage.paused.action")}
+            >
+              <Button
+                ref={pauseButtonRef}
+                size="small"
+                aria-label={
+                  paused ? t("interviewPage.paused.resume") : t("interviewPage.paused.action")
+                }
+                icon={paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
+                onClick={onPause}
+                disabled={submitting && !paused}
+              />
+            </Tooltip>
           ) : null}
           {!finished && (
             <Button

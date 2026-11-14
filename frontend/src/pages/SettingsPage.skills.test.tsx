@@ -165,8 +165,8 @@ describe("SettingsPage skills", () => {
       </MemoryRouter>,
     );
     await waitFor(() => expect(skillMocks.listSkills).toHaveBeenCalled());
-    // 助手技能卡从「AI 模型」迁到「助手与 AI 行为」：不切过去这张卡还没挂载。
-    fireEvent.click(screen.getByRole("tab", { name: "助手与 AI 行为" }));
+    // 助手技能卡在「记忆与技能」组：不切过去这张卡还没挂载。
+    fireEvent.click(screen.getByRole("button", { name: "记忆与技能" }));
     return view;
   }
 

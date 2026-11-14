@@ -58,8 +58,10 @@ const claimForm = {
   "claimForm.evidence.private": "不公开",
   "claimForm.evidence.removeAria": "删除这条证据",
   "claimForm.evidence.add": "添加证据来源",
+  "claimForm.evidence.notePlaceholder": "备注（可选）",
 
   "claimForm.interview.title": "面试细节（能答上追问的部分；强主张尤其要填）",
+  "claimForm.interview.filledCount": "已填 {count} 项",
   "claimForm.field.decisions": "做过的决策",
   "claimForm.field.difficulties": "难点",
   "claimForm.field.howVerified": "怎么验证",

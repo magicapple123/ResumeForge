@@ -10,6 +10,7 @@
  * 会被代理截断；而且它本质上是"按这组参数排一版"，不是"取一个固定资源"。
  */
 import { request } from "../../../api/client";
+import { fetchResumePreviewPdf } from "../../../api/resumes";
 import type { ResumeDocument } from "../../../types/resumeDocument";
 import type { PreviewPagesMeta } from "./previewPages";
 
@@ -41,6 +42,9 @@ export interface PreviewPagesOptions {
   /** 设备像素比（服务端分桶并夹在 1–3）。 */
   dpr: number;
 }
+
+/** Rasterization failure must retain access to the same PDF artifact. */
+export const fetchPreviewFallbackPdf = fetchResumePreviewPdf;
 
 /**
  * 按一组参数排一版，返回逐页位图的清单。

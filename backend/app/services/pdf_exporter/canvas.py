@@ -21,7 +21,14 @@ from .layout import (
 )
 from .meta_columns import draw_meta_columns
 from .meta_lines import draw_meta_line
-from .rich_text import disable_markdown_links, drawn_text, to_fpdf_markup
+from .rich_text import (
+    disable_markdown_links,
+    prepare_cjk_line,
+    prepare_text_args,
+    render_multiline,
+    render_singleline,
+    to_fpdf_markup,
+)
 from .skill_tags import draw_skill_tags, soft_accent
 from .style_blocks import (
     _BULLET_MARK as _BULLET_MARK,
@@ -184,27 +191,7 @@ class _ResumePDF(FPDF):
         一套。取不到文本（`dry_run` 量高、`output=...`）时原样返回——量高与绘制因此
         用同一个投影结果。
         """
-        text = None
-        keyword = ""
-        if "text" in kwargs:
-            keyword, text = "text", kwargs["text"]
-        elif "txt" in kwargs:
-            keyword, text = "txt", kwargs["txt"]
-        elif len(args) > 2:
-            keyword, text = "pos", args[2]
-        if not isinstance(text, str) or not text:
-            return args, kwargs
-        markup, markdown = to_fpdf_markup(text)
-        # len() 再判一次：keyword == "pos" 与上面的 len(args) > 2 是同一条路径，但
-        # pyright 不会跨分支关联这两个条件；不补这个判断，args 会被收窄出空元组成员。
-        if keyword == "pos" and len(args) > 2:
-            args = (*args[:2], markup, *args[3:])
-        elif keyword:
-            kwargs = {**kwargs, keyword: markup}
-        kwargs = {**kwargs, "markdown": markdown}
-        # 字体子集只收"真正画出来的字"：加粗标记与转义反斜杠不进集合。
-        self.drawn_chars.update(drawn_text(text))
-        return args, kwargs
+        return prepare_text_args(self, args, kwargs)
 
     # ===== W08：孤行/寡行控制 =====
 
@@ -270,12 +257,14 @@ class _ResumePDF(FPDF):
         return float(self.get_string_width(markup, markdown=markdown))
 
     def cell(self, *args, **kwargs):  # noqa: ANN002, ANN003 - 只是转发并投影，签名随 fpdf2
-        args, kwargs = self._rich_text_args(args, kwargs)
-        return super().cell(*args, **kwargs)
+        return render_singleline(self, super().cell, args, kwargs)
 
     def multi_cell(self, *args, **kwargs):  # noqa: ANN002, ANN003 - 同上
-        args, kwargs = self._rich_text_args(args, kwargs)
-        return super().multi_cell(*args, **kwargs)
+        return render_multiline(self, super().multi_cell, args, kwargs)
+
+    def _render_styled_text_line(self, line, *args, **kwargs):
+        line = prepare_cjk_line(self, line, kwargs.get("padding"))
+        return super()._render_styled_text_line(line, *args, **kwargs)
 
     @property
     def content_width(self) -> float:
@@ -463,8 +452,15 @@ class _ResumePDF(FPDF):
         draw_meta_line(self, text, base, style=style, first=first, last=last)
 
     def meta_columns(
-        self, cells, widths: Sequence[float], gap: float, base: float, *, style=None,
-        first: bool = True, last: bool = True,
+        self,
+        cells,
+        widths: Sequence[float],
+        gap: float,
+        base: float,
+        *,
+        style=None,
+        first: bool = True,
+        last: bool = True,
     ) -> None:
         """W4 条目字段多列：一行按**预算好的列宽**并排绘制（几何与 meta_line 同口径）。
 

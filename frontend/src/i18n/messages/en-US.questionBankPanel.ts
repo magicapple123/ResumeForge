@@ -9,23 +9,29 @@
 const questionBankPanel = {
   "questionBankPanel.page.title": "Personalized question bank",
   "questionBankPanel.page.description":
-    "Questions are generated on the spot from the job description, your resume, and your confirmed fact ledger - covering basics, project deep-dives, and questions to ask the interviewer.",
+    "Choose a job, an internal or external resume, or upload materials to generate basics, project deep-dives, and questions for the interviewer.",
   "questionBankPanel.select.jobPlaceholder": "Related job (optional, type to search)",
   "questionBankPanel.select.resumePlaceholder": "Related resume (optional, type to search)",
   "questionBankPanel.action.generate": "Generate questions",
   "questionBankPanel.action.startSession": "Start mock interview",
   "questionBankPanel.action.save": "Save question bank",
   "questionBankPanel.action.regenerate": "Regenerate",
-  "questionBankPanel.empty.needSelection": "Pick a job or resume to generate questions",
+  "questionBankPanel.empty.needSelection":
+    "Choose a job, resume, or uploaded materials to generate questions",
   "questionBankPanel.empty.recordEmpty": "This saved record is empty",
   "questionBankPanel.history.title": "Question bank history",
+  "questionBankPanel.history.breadcrumb": "History #{id}",
+  "questionBankPanel.history.back": "Back to history",
+  "questionBankPanel.history.questionCount": "{count} questions",
+  "questionBankPanel.summary.resume": "Resume: {name}",
+  "questionBankPanel.summary.job": "Job: {name}",
   "questionBankPanel.history.viewingTitle": "Viewing saved question bank #{id} ({time})",
   "questionBankPanel.history.legacyTitle": "Legacy record - view only",
   "questionBankPanel.history.legacyBody":
     "This record was saved as plain text, so it cannot be restored as a structured question bank. Only the original content is shown.",
   "questionBankPanel.summary.total": "{count} questions in total",
   "questionBankPanel.validate.needJobOrResume":
-    "Pick at least one job or resume so the questions can be targeted",
+    "Choose a job, resume, or uploaded materials to generate questions",
   "questionBankPanel.error.generate": "Could not generate the question bank",
   "questionBankPanel.error.autoSave": "Could not save the question bank to history",
   "questionBankPanel.error.delete": "Could not delete the saved question bank",

@@ -50,6 +50,9 @@ const jobDetail = {
   "jobDetail.relatedKnowledge.aria": "相关知识",
   "jobDetail.relatedKnowledge.viewAll": "查看全部相关知识",
   "jobDetail.alt.noteImage": "备注图片 {index}",
+  "jobDetail.action.addTrack": "加入求职进度",
+  "jobDetail.action.viewTrack": "查看求职进度",
+  "jobDetail.error.loadTrack": "求职进度未加载，请重试",
 } as const;
 
 export default jobDetail;

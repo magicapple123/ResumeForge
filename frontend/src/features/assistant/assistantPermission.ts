@@ -342,11 +342,14 @@ export function useAssistantPermission(conversationId: number | null | undefined
   const effectiveLevel: AssistantPermissionLevel =
     choice === FOLLOW_GLOBAL ? (globalLevel ?? DEFAULT_ASSISTANT_PERMISSION) : choice;
 
-  // 全局默认（或切会话后继承的值）把高风险档位"带进来"时也要问一次——这属于
-  // "从别的地方再选到这个选项"。已确认过的档位不会再命中 needsConfirm，所以不会反复弹。
+  // F30：自动补弹只针对**会话级覆盖**（从别处继承/切回来时确认一次）；跟随全局一律不弹——
+  // 新对话继承全局不是"用户刚切到这个档位"，每开一次新对话都问一遍是纯噪音。
+  // 已确认过的档位不会再命中 needsConfirm，所以同一会话不会反复弹。
   useEffect(() => {
-    if (needsConfirm(conversationId, effectiveLevel)) setPendingLevel(effectiveLevel);
-  }, [conversationId, effectiveLevel]);
+    if (choice !== FOLLOW_GLOBAL && needsConfirm(conversationId, effectiveLevel)) {
+      setPendingLevel(effectiveLevel);
+    }
+  }, [conversationId, effectiveLevel, choice]);
 
   /**
    * 改档位的唯一入口（#12）：需要确认的档位**不立即生效**，先挂起等确认卡。

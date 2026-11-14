@@ -48,6 +48,7 @@ const applyQueue = {
 
   "applyQueue.startBar.count": "已选 {selected} / 可投 {eligible}",
   "applyQueue.startBar.hint": "不勾选时按顺序投整个队列",
+  "applyQueue.action.startCount": "开始投递（{count}）",
 
   "applyQueue.empty.title": "队列还是空的：先去「岗位广场」挑几个岗位。",
   "applyQueue.empty.action": "去岗位广场挑",
@@ -76,9 +77,10 @@ const applyQueue = {
   "applyQueue.column.job": "岗位",
   "applyQueue.column.admission": "准入",
   "applyQueue.column.status": "状态",
-  "applyQueue.column.assets": "简历 / 招呼语",
+  "applyQueue.column.assets": "投递材料",
   "applyQueue.column.actions": "操作",
   "applyQueue.column.score": "参考分",
+  "applyQueue.column.match": "匹配",
   "applyQueue.score.disclaimer":
     "本参考分由本地规则估算，仅供展示与自我评估，不代表真实 ATS 解析结果或投递成功概率；投递准入仍以五类匹配结论为准。",
   "applyQueue.score.unanalyzed": "未分析",
@@ -103,7 +105,6 @@ const applyQueue = {
   "applyQueue.filter.selectAllHint":
     "勾选当前列表里的全部可投岗位（跨页生效）；不勾选则整队列按顺序投递",
   "applyQueue.filter.selectAll": "全选队列",
-  "applyQueue.more.aria": "更多队列操作（清空选择）",
   "applyQueue.filter.clearSelection": "清空选择",
   "applyQueue.confirm.removeSelectedTitle": "把选中的岗位移出队列？",
   "applyQueue.action.removeSelected": "移出所选",

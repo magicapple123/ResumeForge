@@ -34,9 +34,15 @@ from ..schemas.material import (
 )
 from ..services.actions import add_action_route
 from ..services.actions.catalog import all_actions
+from ..services.assistant.assistant_compaction_settings import get_compaction_settings
 from ..services.assistant.assistant_compaction_store import (
     compaction_state_out,
     load_compaction,
+)
+from ..services.assistant.assistant_context_policy import (
+    request_compaction_limits,
+    stored_context_usage,
+    with_window_policy,
 )
 from ..services.assistant.assistant_context_usage import build_context_usage
 from ..services.assistant.assistant_context_usage import (
@@ -104,6 +110,7 @@ from ..services.llm.usage_tasks import (
     set_ambient_scope,
 )
 from ..services.materials import create_material as create_material_record
+from ..services.model_context_windows import configured_model_window
 from ..services.settings_service import (
     get_llm_config,
     resolve_assistant_relaxed_mode,
@@ -163,6 +170,8 @@ def create_conversation(payload: ChatConversationCreate, db: Session = Depends(g
 
 
 add_action_route(router, all_actions()["list_chat_conversations"], route_path="/conversations")
+
+
 def list_conversations(
     limit: int = Query(default=100, ge=1, le=500),
     keyword: str = Query(default="", max_length=200),
@@ -173,7 +182,11 @@ def list_conversations(
     return list_conversation_records(limit, db, surface, keyword=keyword)
 
 
-add_action_route(router, all_actions()["get_chat_conversation"], route_path="/conversations/{conversation_id}")
+add_action_route(
+    router, all_actions()["get_chat_conversation"], route_path="/conversations/{conversation_id}"
+)
+
+
 def read_conversation(
     conversation_id: int,
     surface: ConversationSurface = Query(default="page"),
@@ -213,15 +226,6 @@ def rename_conversation(
     return update_conversation_record(conversation_id, payload, db, surface)
 
 
-def _stored_context_usage(message: ChatMessage | None) -> dict[str, Any] | None:
-    """从消息 context 里取出落过库的用量（需求 #6）；旧消息没有该字段时返回 None。"""
-    if message is None:
-        return None
-    context = message.context if isinstance(message.context, dict) else {}
-    usage = context.get("context_usage")
-    return usage if isinstance(usage, dict) else None
-
-
 @router.get("/conversations/{conversation_id}/context-usage", response_model=ContextUsageOut)
 def read_context_usage(
     conversation_id: int,
@@ -243,22 +247,30 @@ def read_context_usage(
     # 「压过什么、还能不能还原」。没有压缩过就是 null。
     compaction_state = compaction_state_out(load_compaction(db, conversation_id)) or None
     # 分母取当前生效配置：用户刚改过窗口，面板下次打开就该按新值算。
-    window_tokens = int(getattr(get_llm_config(db), "context_window_tokens", 0) or 0)
-    stored = _stored_context_usage(latest_assistant_message(db, conversation_id))
+    window = configured_model_window(get_llm_config(db))
+    window_tokens = window.tokens
+    limits = request_compaction_limits(window_tokens, get_compaction_settings(db).limits)
+    stored = stored_context_usage(latest_assistant_message(db, conversation_id))
     if stored is not None:
-        return ContextUsageOut.model_validate({**stored, "compaction": compaction_state})
+        return ContextUsageOut.model_validate(
+            with_window_policy({**stored, "compaction": compaction_state}, window, limits)
+        )
     system_text = build_system_prompt_parts(
         db,
         relaxed=resolve_assistant_relaxed_mode(db, None),
         conversation_id=conversation_id,
     )["base"]
-    history_text = usage_conversation_text(history_messages_for_model(history_snapshot(db, conversation_id)))
+    history_text = usage_conversation_text(
+        history_messages_for_model(history_snapshot(db, conversation_id))
+    )
     estimated = build_context_usage(
         {"system": system_text, "conversation": history_text},
         window_tokens=window_tokens,
         partial=True,
     )
-    return ContextUsageOut.model_validate({**estimated, "compaction": compaction_state})
+    return ContextUsageOut.model_validate(
+        with_window_policy({**estimated, "compaction": compaction_state}, window, limits)
+    )
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)
@@ -283,9 +295,6 @@ def fork_conversation(
 ):
     """「在新对话中继续」：带着这段对话最近的上下文开一段新会话。"""
     return fork_conversation_record(conversation_id, payload, db, surface)
-
-
-
 
 
 @router.get("/conversations/{conversation_id}/export")

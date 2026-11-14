@@ -43,7 +43,7 @@ const touTou = {
 
   // ── 球体按钮（TouTouOrbButton） ─────────────────────────────
   "touTou.orb.tooltip":
-    "单击：打开求职助手；双击：打开投投剪贴板；长按：打开动作面板；选中文字后按 Ctrl/Cmd+K：打开划词动作",
+    "单击：打开求职助手；双击：打开投投剪贴板；长按：打开动作面板；选中文字后按 {shortcut}：打开划词动作",
   "touTou.orb.ariaLabel": "打开求职助手",
   "touTou.orb.signals": "{count} 件事可以帮你看看",
 

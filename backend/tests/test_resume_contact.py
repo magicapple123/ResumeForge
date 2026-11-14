@@ -17,8 +17,10 @@ from app.services.resume.resume_contact import (
     contact_groups,
     contact_items,
     contact_lines,
+    contact_separator_text,
     pack_contact_lines,
     validate_contact_breaks,
+    validate_contact_separator,
 )
 from app.services.resume.resume_labels import field_labels
 
@@ -156,3 +158,57 @@ def test_pack_contact_lines_without_a_measure_falls_back_to_one_line_per_group()
 def test_validate_contact_breaks_whitelists_and_normalizes(raw, expected):
     """脏输入一律白名单化：未知键丢弃、去重、按字段顺序输出（绝不 422 / 500）。"""
     assert validate_contact_breaks(raw) == expected
+
+
+# ===== 同行分隔符（R-05：`format_config.contact_separator`）================
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, "space"),
+        ("", "space"),
+        ("space", "space"),
+        ("bar", "bar"),
+        ("dot", "dot"),
+        (" BAR ", "bar"),
+        ("pipe", "space"),
+        (123, "space"),
+        (["bar"], "space"),
+    ],
+)
+def test_validate_contact_separator_falls_back_to_space(raw, expected):
+    """未知/脏输入一律回落到 `space`——它与"从未设置"同义，旧产物因此逐字节不变。"""
+    assert validate_contact_separator(raw) == expected
+
+
+def test_contact_separator_text_is_empty_for_space():
+    """`space` 不产生可见文本：三个出口继续用各自的历史分隔符。"""
+    assert contact_separator_text("space") == ""
+    assert contact_separator_text(None) == ""
+    assert contact_separator_text("nonsense") == ""
+    assert contact_separator_text("bar") == " | "
+    assert contact_separator_text("dot") == " \u00b7 "
+
+
+def _build_plan(format_config):
+    from app.services.resume.document_html import coerce_document, paper_document
+    from app.services.resume.document_plan import build_document_plan
+
+    content = {
+        "name": "张三",
+        "phone": "13800001234",
+        "email": "zhangsan@example.com",
+        "template": "classic",
+    }
+    return build_document_plan(paper_document(coerce_document(content)), format_config, "zh-CN")
+
+
+def test_plan_header_carries_the_separator_and_defaults_to_nothing():
+    """planner 是分隔符的唯一投射点：给 bar/dot 才有可见文本，默认逐字为空。"""
+    assert _build_plan(None).header.contact_separator == ""
+    assert _build_plan({"contact_separator": "space"}).header.contact_separator == ""
+    assert _build_plan({"contact_separator": "bar"}).header.contact_separator == " | "
+    assert _build_plan({"contact_separator": "dot"}).header.contact_separator == " \u00b7 "
+    # 未知值不 500、也不猜：与不设置完全一致。
+    assert _build_plan({"contact_separator": "pipe"}).header.contact_separator == ""

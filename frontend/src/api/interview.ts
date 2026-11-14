@@ -16,6 +16,8 @@ import type {
   InterviewAnalysisPayload,
   InterviewAnswerResult,
   InterviewBrief,
+  InterviewCameraAnalysis,
+  InterviewRecordingMeta,
   InterviewCreatePayload,
   InterviewDetail,
   InterviewFollowUpResult,
@@ -33,7 +35,7 @@ import type {
   QuestionBankRecord,
   QuestionBankRecordPayload,
 } from "../types";
-import { request } from "./client";
+import { request, uploadWithProgress } from "./client";
 import { consumeSSE } from "./stream";
 
 export function listInterviews(limit = 50): Promise<InterviewBrief[]> {
@@ -150,6 +152,45 @@ export async function submitInterviewAnswerStream(
   /** #26 P0 幂等键：同一轮重连/重试复用同一个 id，服务端不会重复计轮（可选）。 */
   clientTurnId?: string,
 ): Promise<InterviewAnswerResult> {
+  return streamAnswerTurn(
+    `/api/interview/${id}/answers/stream`,
+    { content, ...(clientTurnId ? { client_turn_id: clientTurnId } : {}) },
+    onQuestionDelta,
+    onPhase,
+    signal,
+  );
+}
+
+/**
+ * 「改文字重问」（Q1-L2）：改掉自己刚提交的那条回答，作废该轮回应并重新生成。
+ *
+ * 不能复用 `submitInterviewAnswerStream` + `client_turn_id`：那一轮**已经答完**时服务端
+ * 会直接回放 `done`（幂等语义本来如此），根本不会重新生成。
+ */
+export async function reviseInterviewAnswerStream(
+  id: number,
+  messageId: number,
+  content: string,
+  onQuestionDelta: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<InterviewAnswerResult> {
+  return streamAnswerTurn(
+    `/api/interview/${id}/answers/revise`,
+    { message_id: messageId, content },
+    onQuestionDelta,
+    undefined,
+    signal,
+  );
+}
+
+/** 两个入口共用的 SSE 消费实现（**一处逻辑一份实现**：解析、首字延迟、错误口径都不复制）。 */
+async function streamAnswerTurn(
+  path: string,
+  body: Record<string, unknown>,
+  onQuestionDelta: (text: string) => void,
+  onPhase: ((phase: "finishing") => void) | undefined,
+  signal: AbortSignal | undefined,
+): Promise<InterviewAnswerResult> {
   let result: InterviewAnswerResult | null = null;
   // 26H：LLM 首字延迟（第一个 question_delta 到达）。无 TTS 时它就是用户感知的首字延迟。
   const startedAt = performance.now();
@@ -157,8 +198,8 @@ export async function submitInterviewAnswerStream(
   // 注意必须带 `/api` 前缀：consumeSSE 拿到什么就 fetch 什么（不像 request() 会自动
   // 补前缀），漏了就会打到前端自身源上 → 404「请求失败（HTTP 404）」。
   await consumeSSE<InterviewAnswerStreamEvent>(
-    `/api/interview/${id}/answers/stream`,
-    { content, ...(clientTurnId ? { client_turn_id: clientTurnId } : {}) },
+    path,
+    body,
     (event) => {
       if (event.type === "phase" && event.phase) onPhase?.(event.phase);
       else if (event.type === "question_delta" && event.text) {
@@ -327,4 +368,45 @@ export function updateReview(
     method: "PATCH",
     body: JSON.stringify(payload),
   });
+}
+
+/** 镜头分析与录像（F18）。类型定义在 `types/interview`，这里只做 re-export。 */
+export type { InterviewCameraAnalysis, InterviewRecordingMeta };
+
+/** 抽帧分析：帧是 data URL（列表最多 12 张）。失败降级也返回 200，原因在 `camera.error`。 */
+export function analyzeInterviewCameraFrames(
+  id: number,
+  frames: string[],
+  countInScore: boolean,
+): Promise<{ camera: InterviewCameraAnalysis; base_score: number }> {
+  return request(`/interview/${id}/camera-frames`, {
+    method: "POST",
+    body: JSON.stringify({ frames, count_in_score: countInScore }),
+    budget: "analysis",
+  });
+}
+
+/** 上传录像（只录画面、不录声音）。服务端按字节数封顶 200MB。 */
+export function uploadInterviewRecording(
+  id: number,
+  blob: Blob,
+  retentionDays: number,
+  seconds: number,
+): Promise<InterviewRecordingMeta> {
+  return uploadWithProgress(`/interview/${id}/recording?retention_days=${retentionDays}`, blob, {
+    headers: { "X-Recording-Seconds": String(Math.max(0, Math.round(seconds))) },
+  });
+}
+
+export function getInterviewRecordingMeta(id: number): Promise<InterviewRecordingMeta | null> {
+  return request(`/interview/${id}/recording/meta`);
+}
+
+export function deleteInterviewRecording(id: number): Promise<void> {
+  return request(`/interview/${id}/recording`, { method: "DELETE" });
+}
+
+/** 回放地址：同源相对路径（开发走 Vite 代理、生产同源挂载），不拼绝对地址。 */
+export function interviewRecordingUrl(id: number): string {
+  return `/api/interview/${id}/recording`;
 }

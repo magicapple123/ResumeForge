@@ -13,3 +13,29 @@
 @import "./resume-workbench.css";
 @import "./resume-workbench-tabs.css";
 @import "./workbench-left-tabs.css";
+
+/* 简历中心筛选栏末尾的「场景建议」入口（Q6）：一枚 28×28 的圆形图标按钮。
+   antd 的 size="small" 是 30px，这里按设计稿固定 28px；选择器带上 .ant-btn 是为了
+   压过运行时注入的 .ant-btn 内边距与最小宽度（同 .assistant-skills-hint.ant-btn）。 */
+.resume-scenario-hint.ant-btn {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  /* F08：静止态是次要文字色（被动提示），悬停才升到信息蓝。 */
+  color: var(--rf-text-secondary);
+}
+
+.resume-scenario-hint.ant-btn:hover {
+  color: var(--rf-info);
+  /* antd 的 text button 不总是吃 shape="circle"，这里显式补圆角。 */
+  border-radius: 50%;
+}
+
+/* 窄窗（≤767px）下 mobile.css 会把筛选栏里的每个按钮拉成整行宽（带 !important），
+   这里只把这枚图标按钮钉回 28×28——否则圆形图标会被拉成一条横带。
+   选择器写全父级是为了在 !important 之间也压过那条规则，不依赖文件引入顺序。 */
+.rf-filter-bar > .ant-space-item > .resume-scenario-hint.ant-btn {
+  width: 28px !important;
+  min-width: 28px !important;
+}

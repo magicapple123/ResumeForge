@@ -10,6 +10,11 @@ const assistantBreadth = {
   "assistantBreadth.tasks.aria": "Tasks created by the assistant",
 
   "assistantBreadth.digest.title": "Today's brief",
+  "assistantBreadth.digest.summary.empty": "No new changes",
+  "assistantBreadth.digest.summary.stale": "No reply {count}",
+  "assistantBreadth.digest.summary.expired": "Expired {count}",
+  "assistantBreadth.digest.summary.expand": "Expand",
+  "assistantBreadth.digest.summary.collapse": "Collapse",
   "assistantBreadth.digest.refresh": "Regenerate",
   "assistantBreadth.digest.refreshing": "Regenerating…",
   "assistantBreadth.digest.generatedAt": "Updated {time}",

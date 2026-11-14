@@ -18,7 +18,8 @@ import { useChipMenuDismiss } from "./useChipMenuDismiss";
 import { placeMenu } from "../../context-menu/positioning";
 import { useI18n } from "../../../i18n/i18nContext";
 import { ENTRY_STYLE_SCOPE_LABELS, type EntryStyleScope } from "../layout/entryStyleScopes";
-import { entryIdFromPath, findEntryById, scopeForDocumentPath } from "../layout/v2Selection";
+import { isFieldStylePath } from "../layout/fieldStyleTarget";
+import { entryIdFromPath, findEntryById, roleForDocumentPath } from "../layout/v2Selection";
 import type { ResumeDocument } from "../../../types/resumeDocument";
 import type { ResumeLayout } from "../../../types";
 import type { ResumeTemplateCatalog } from "../../../types";
@@ -75,10 +76,18 @@ export default function ChipStylePopover({
   }, [state, onClose]);
 
   if (!state || !layout || !onLayoutChange) return null;
-  const objectId = entryIdFromPath(state.path);
-  if (!objectId) return null;
-  const scope: EntryStyleScope = scopeForDocumentPath(document, state.path);
-  const entry = findEntryById(document, objectId);
+  const entryId = entryIdFromPath(state.path);
+  if (!entryId) return null;
+  // 两个入口共用这个浮层，路径形态不同、落点也不同：
+  // - 字段右键（`section.entry.item`）：只改**这一个字段** → `field`，键用字段路径
+  //   （后端 `object_roles["<path>:<role>"]` 按 `[data-resume-path]` 出规则）；
+  // - 结构树条目行右键「排版整条…」（`section.entry`）：改**整条** → `object`，键用条目 id
+  //   （否则会写出一条没人读的 `objects["<路径>"]`，点了等于没改）。
+  const fieldLevel = isFieldStylePath(state.path);
+  const scope: EntryStyleScope = fieldLevel ? "field" : "object";
+  const objectId = fieldLevel ? state.path : entryId;
+  const fieldRole = fieldLevel ? roleForDocumentPath(document, state.path) : "body";
+  const entry = findEntryById(document, entryId);
   const titleValue = (entry?.items ?? [])
     .filter((item) => item.kind === "field" && item.placement === "title")
     .map((item) => (item.kind === "field" ? item.value : ""))
@@ -115,8 +124,9 @@ export default function ChipStylePopover({
         entry={entry}
         pickedPath={state.path}
         defaultScope={scope}
+        fieldRole={fieldRole}
         lockScope
-        disabled={disabled}
+        disabled={disabled || undefined}
         onChange={onLayoutChange}
       />
     </div>

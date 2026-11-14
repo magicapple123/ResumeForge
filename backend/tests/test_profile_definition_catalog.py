@@ -385,7 +385,7 @@ def test_import_time_validation_runs_on_import_and_checks_manifests(monkeypatch)
 
 
 def test_limits_names_name_key_and_field_types():
-    assert (vv.MAX_SINGLE_LINE_CHARS, vv.MAX_MULTI_LINE_CHARS) == (200, 2000)
+    assert (vv.MAX_SINGLE_LINE_CHARS, vv.MAX_MULTI_LINE_CHARS) == (500, 20000)
     assert (vv.MAX_FIELD_LABEL_CHARS, vv.MAX_SECTION_NAME_CHARS) == (40, 40)
     assert (vv.MAX_CUSTOM_FIELDS_PER_SECTION, vv.MAX_ENTRIES_PER_SECTION) == (20, 200)
     assert vv.MAX_GROUPS == 20 and vv.TEXT_FIELD_TYPES == ("single_line", "multi_line", "date_text")
@@ -422,11 +422,11 @@ def test_validate_value_by_field_type():
         vv.validate_value("single_line", None) == ""
         and vv.validate_value("single_line", 2024) == "2024"
     )
-    assert len(vv.validate_value("multi_line", "字" * 2000)) == 2000
+    assert len(vv.validate_value("multi_line", "字" * 20000)) == 20000
     for field_type, raw in (
-        ("single_line", "字" * 201),
-        ("multi_line", "字" * 2001),
-        ("date_text", "字" * 201),
+        ("single_line", "字" * 501),
+        ("multi_line", "字" * 20001),
+        ("date_text", "字" * 501),
         # 照片上限覆盖 data URL 的 base64 膨胀（见 value_validation.MAX_PHOTO_REFERENCE_CHARS），
         # 边界跟着常量走，不再写死旧的 2048 引用长度。
         ("photo", "a" * (vv.MAX_PHOTO_REFERENCE_CHARS + 1)),

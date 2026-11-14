@@ -83,6 +83,25 @@ describe("动作面板", () => {
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("closes on Escape even when the orb kept focus after pointer release", () => {
+    const { props } = setup();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    fireEvent.keyDown(outside, { key: "Escape" });
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("includes action items in the Tab loop and runs them from the keyboard", () => {
+    const { props } = setup();
+    const search = screen.getByRole("combobox");
+    search.focus();
+    fireEvent.keyDown(search, { key: "Tab" });
+    expect(screen.getAllByRole("option")[0]).toHaveFocus();
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Enter" });
+    expect(props.onRunAction).toHaveBeenCalledWith("open-assistant");
+  });
+
   it("Tab 不逃出面板：焦点始终在面板内循环", () => {
     setup();
     const inside = () => {

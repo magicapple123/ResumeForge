@@ -12,7 +12,8 @@
    白名单同时被抽取器、API 与设置页使用——只在代码里单源，不在 DB 建 CHECK。
 2. **冲突不删除**：同类不同值时旧条置 superseded、新条 active，两条都留着，
    必须能回溯「当时说的是什么」。
-3. **可见可改**：用户显式删除置 status=deleted（软删，不物理删除），
+3. **可见可改**：用户显式删除置 status=deleted（软删，不物理删除）；
+   「永不使用」置 status=suppressed——停用但仍留在列表里，可恢复（F33）；
    source_conversation_id / source_message_id 让设置页能点回原对话。
 """
 
@@ -57,10 +58,14 @@ MEMORY_KIND_LABELS: dict[str, str] = {
 # ===== 状态 =====
 MEMORY_STATUS_ACTIVE = "active"
 MEMORY_STATUS_SUPERSEDED = "superseded"
+# 用户主动「永不使用」：停用但**保留在列表**，可恢复。与 deleted 的区别是语义与可见性：
+# deleted 是"这条记忆不存在了"，suppressed 是"我不希望你再提这件事"（F33）。
+MEMORY_STATUS_SUPPRESSED = "suppressed"
 MEMORY_STATUS_DELETED = "deleted"
 MEMORY_STATUSES: tuple[str, ...] = (
     MEMORY_STATUS_ACTIVE,
     MEMORY_STATUS_SUPERSEDED,
+    MEMORY_STATUS_SUPPRESSED,
     MEMORY_STATUS_DELETED,
 )
 
@@ -116,5 +121,6 @@ __all__ = [
     "MEMORY_STATUS_ACTIVE",
     "MEMORY_STATUS_DELETED",
     "MEMORY_STATUS_SUPERSEDED",
+    "MEMORY_STATUS_SUPPRESSED",
     "AssistantMemory",
 ]

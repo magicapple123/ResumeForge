@@ -159,7 +159,8 @@
    （布局无 token），已用 `.resume-typography-panel` 限定作用域。 */
 .resume-typography-panel .ant-collapse-header {
   padding: 6px 10px !important;
-  /* 默认 `flex-start` 在标题两行时顶到箭头上面；这里只有一行标题，居中更稳。 */
+  /* 标题现在是两行（名字 + 说明）：居中让左侧箭头与右侧「恢复」都对齐两行块的中线，
+     改成 `flex-start` 会让它们贴在第一行上、看起来比标题低半行。 */
   align-items: center !important;
 }
 
@@ -167,8 +168,18 @@
   padding: 6px 10px 10px !important;
 }
 
-/* 角色名 13px/600；胶囊与右侧的「恢复这个段落类型」不跟着加粗 / 放大。 */
+/* 角色名 13px/600；胶囊与右侧的「恢复这个段落类型」不跟着加粗 / 放大。
+   F25 起是**两行**：第一行名字 + 计数胶囊，第二行一句「控制纸面哪里」。 */
 .resume-typography-role-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.resume-typography-role-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -183,6 +194,16 @@
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 第二行是常驻小字（收起态也在）：只有名字时用户分不清「字段名」调的是值前面的
+   「技术栈：」还是值本身。允许折行——窄栏里宁可两行，也不要被省略号吞掉后半句。 */
+.resume-typography-role-hint {
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 15px;
+  white-space: normal;
 }
 
 .resume-typography-panel .ant-collapse-extra {

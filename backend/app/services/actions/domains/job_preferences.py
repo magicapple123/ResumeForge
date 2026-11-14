@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
     from ...assistant_tools.authorization import WritePreview
 
-# 偏好页在「设置 → 助手与 AI 行为」下（前端路由 /settings）。
+# 偏好页在「设置 → 助手行为」下（前端路由 /settings）。
 _PREFERENCE_PAGE = "/settings"
 
 

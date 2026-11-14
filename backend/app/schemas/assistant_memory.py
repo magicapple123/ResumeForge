@@ -23,14 +23,28 @@ class AssistantMemoryOut(BaseModel):
     key: str = ""
     value: str
     confidence: float = 0.5
-    # active / superseded / deleted（取值见 models/assistant_memory.py）。
+    # active / superseded / suppressed / deleted（取值见 models/assistant_memory.py）。
     status: str = "active"
     # manual / extracted（#18D 手填与 #31A 自动抽取共用同一模型）。
     source: str = "manual"
     source_conversation_id: int | None = None
     source_message_id: int | None = None
+    # 来源消息的摘录（最多 60 字）：让用户看见"这句话是从哪儿学来的"，而不是只有一个 id。
+    source_excerpt: str = ""
     created_at: datetime
     updated_at: datetime
+
+
+class AssistantMemoryEventOut(BaseModel):
+    """一条变更历史：动作 + 变更前后的值（F33）。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    action: str
+    before: str = ""
+    after: str = ""
+    at: datetime
 
 
 class AssistantMemoryCreate(BaseModel):
@@ -61,6 +75,7 @@ class AssistantMemorySettings(BaseModel):
 
 __all__ = [
     "AssistantMemoryCreate",
+    "AssistantMemoryEventOut",
     "AssistantMemoryOut",
     "AssistantMemorySettings",
     "AssistantMemoryUpdate",

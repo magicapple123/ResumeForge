@@ -53,6 +53,14 @@ const jobMatch = {
   "jobMatch.hardGate.met": "硬性条件已满足",
   "jobMatch.hardGate.unmet": "硬性条件未满足",
   "jobMatch.hardGate.unknown": "硬性条件待确认",
+  "jobMatch.resume.label": "匹配简历",
+  "jobMatch.resume.default": "默认岗位简历",
+  "jobMatch.resume.loadError": "简历列表加载失败，请重试",
+  "jobMatch.resume.retry": "重载简历",
+  "jobMatch.resume.source": "分析简历：{title} · 第{revision}版",
+  "jobMatch.resume.profileOnly": "分析来源：我的资料",
+  "jobMatch.resume.unknownSource": "旧结果未记录简历来源",
+  "jobMatch.resume.stale": "简历或岗位已变化，请重新分析",
 } as const;
 
 export default jobMatch;

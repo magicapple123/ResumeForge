@@ -6,6 +6,18 @@
  * 与 `collectConfigHistory`；「按招聘网站的条件筛」那一块仍由 `collectFilters` 包负责。
  */
 const applyCollect = {
+  "applyCollect.group.search": "搜索条件",
+  "applyCollect.group.rhythm": "采集节奏",
+  "applyCollect.group.searchHint":
+    "关键词与城市至少填一个；结果先落到「采集记录」，勾选后才进岗位广场。",
+  "applyCollect.group.rhythmHint": "间隔太短更容易被限流；抖动让请求间隔不那么规律。",
+  "applyCollect.field.history": "历史条件",
+  "applyCollect.unit.perBatch": "条 / 批",
+  "applyCollect.unit.seconds": "秒",
+  "applyCollect.footer.summary": "预计 {count} 条 · 间隔 {interval} ± {jitter} 秒 · 约 {minutes} 分钟",
+  "applyCollect.filters.selected": "已选 {count} 项",
+  "applyCollect.flow.summary": "采集结果 → 导入岗位 → 加入投递队列",
+  "applyCollect.flow.instructions": "查看说明",
   "applyCollect.field.keywords": "关键词",
   "applyCollect.hint.keywords": "最多 10 个；与城市至少要填一个。",
   "applyCollect.placeholder.keywords": "例如：市场营销、财务会计",

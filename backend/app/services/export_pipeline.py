@@ -23,7 +23,7 @@ from ..schemas.resume_generation import UNLIMITED_PAGE_LIMIT, UNLIMITED_RENDER_M
 from .docx_exporter import build_resume_docx
 from .exporter import build_filename, export_json, export_markdown, render_html
 from .pdf_exporter import build_resume_pdf
-from .privacy import RedactionOptions, plain_text_document, redact, redact_document
+from .privacy import RedactionOptions, redact, redact_document
 from .resume.document_truncate import TruncationResult, truncate_for_format
 from .resume.resume_labels import DEFAULT_RESUME_LANGUAGE
 from .resume.resume_sections import resolved_section_order
@@ -299,7 +299,11 @@ def _prepare_for_render(
         if resume.get("version") == 2:
             if request.redact:
                 return redact_document(dict(resume), request.redact_options)
-            return plain_text_document(dict(resume))
+            # v2 **原样**交给渲染器：字符级样式（加粗 / 字号 / 颜色）由各出口自己投影
+            # （HTML 收口 apply_rich_html、PDF 走 has_bold、Word 拆 run、TXT 自己剥标记）。
+            # 这里再 `plain_text_document` 会把样式在入口就抹掉——R-11 的实机验证里，
+            # 导出件"看不到加粗/字号"正是这一句造成的。
+            return dict(resume)
         # 非 v2 的 dict = v1 内容的 dict 形式：``redact`` 只认 v1 模型，先按 v1 校验成模型。
         resume = ResumeContent.model_validate(dict(resume))
     return redact(resume, request.redact_options) if request.redact else resume

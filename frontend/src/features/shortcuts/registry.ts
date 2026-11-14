@@ -11,6 +11,7 @@
  */
 import type { MessageKey } from "../../i18n";
 import { SHELL_GESTURE_LABEL_KEYS } from "../shell/shellGestureMessages";
+import { hasSelectedText } from "../tou-tou/touTouSelection";
 
 /** 动作的作用域：只用于设置页展示与代码阅读，拦截判断由"有没有注册 handler"决定。 */
 export type ShortcutScope = "form" | "page" | "global" | "jobs";
@@ -21,6 +22,7 @@ export type ShortcutActionId =
   | "redo"
   | "save"
   | "search"
+  | "selectionPanel"
   | "assistant"
   | "newJob"
   | "toggleTheme"
@@ -43,6 +45,8 @@ export interface ShortcutAction {
   /** 默认组合（`mod` 在 macOS 上是 Command，其它平台是 Ctrl）。 */
   defaultKeys: string[];
   scope: ShortcutScope;
+  /** Only eligible while its runtime context is present. */
+  when?: () => boolean;
 }
 
 /** 作用域显示名（协议值是 `ShortcutScope`，这里的值只是语言包 key）。 */
@@ -67,6 +71,14 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
     labelKey: "shortcutSettings.action.search",
     defaultKeys: ["mod+k"],
     scope: "global",
+    when: () => !hasSelectedText(),
+  },
+  {
+    id: "selectionPanel",
+    labelKey: "touTou.panel.title",
+    defaultKeys: ["mod+k"],
+    scope: "global",
+    when: () => hasSelectedText(),
   },
   {
     id: "assistant",

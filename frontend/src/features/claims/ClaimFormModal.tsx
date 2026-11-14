@@ -17,9 +17,14 @@ import { useToast } from "../../hooks/useToast";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { getWorkspace } from "../profile/library/api";
-import { buildClaimEntryGroups } from "../../features/claims/entryOptions";
+import {
+  buildClaimEntryGroups,
+  claimCategoryForSection,
+  claimSubjectForEntry,
+  findClaimEntry,
+} from "../../features/claims/entryOptions";
 import { useApi } from "../../hooks/useApi";
-import { createClaim, updateClaim } from "../../api/claims";
+import { createClaim, listAllowedUses, updateClaim } from "../../api/claims";
 import type { Claim } from "../../types";
 import ClaimFactFields from "./form/ClaimFactFields";
 import ClaimVerifyFields from "./form/ClaimVerifyFields";
@@ -50,6 +55,19 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
     refreshOnRequest: false,
   });
   const entryGroups = buildClaimEntryGroups(workspace.data);
+  // 「可用范围」在生成时是硬约束（resume_generate_user.md），让用户凭记忆重打会造出
+  // "AI 岗简历" / "AI岗简历" 这种同义变体。候选来自台账历史，仍允许自由新增。
+  const allowedUses = useApi(() => listAllowedUses(), [open], {
+    enabled: open,
+    refreshOnRequest: false,
+  });
+  const hasInterviewDetails = Boolean(
+    claim &&
+    (claim.interview_details?.decisions?.length ||
+      claim.interview_details?.difficulties?.length ||
+      claim.interview_details?.verification?.length ||
+      claim.interview_details?.result),
+  );
   // 草稿只进 sessionStorage，且按"编辑对象"分作用域（12 号与 13 号各一份）。
   const watched = Form.useWatch<FormValues>([], form) as FormValues | undefined;
   const draft = useFormDraft({
@@ -68,10 +86,31 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
     form.setFieldsValue(claim ? toValues(claim) : EMPTY_VALUES);
   }, [open, claim, form]);
 
+  /**
+   * 新建时关联资料条目：按刚选中的那条回填主体与分类。
+   *
+   * 只在新建、主体为空、分类仍是默认值时才动——编辑态与用户已经填过的值一律不覆盖，
+   * 否则"补一条关联"会悄悄改掉一条已经核对过的台账。
+   */
+  const backfillFromEntry = (entryId: string) => {
+    if (editing) return;
+    if (String(form.getFieldValue("subject") ?? "").trim()) return;
+    if (form.getFieldValue("category") !== EMPTY_VALUES.category) return;
+    const found = findClaimEntry(workspace.data, entryId);
+    if (!found) return;
+    form.setFieldsValue({
+      subject: claimSubjectForEntry(found.section, found.entry),
+      category: claimCategoryForSection(found.section.key),
+    });
+  };
+
   const submit = async () => {
     let values: FormValues;
     try {
-      values = await form.validateFields();
+      const validated = await form.validateFields();
+      // 「面试细节」默认收起，折叠里的 Form.Item 未挂载时不会被 validateFields 取回；
+      // 合并整个 store（preserve 保留了它们的值），否则收起状态下保存会把这一节清空。
+      values = { ...(form.getFieldsValue(true) as FormValues), ...validated };
     } catch {
       return; // 校验失败时 antd 已在字段旁给出提示
     }
@@ -118,7 +157,7 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
             }
           : null
       }
-      width={760}
+      width={880}
     >
       <Form
         form={form}
@@ -127,15 +166,16 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
         onValuesChange={() => setDirty(true)}
       >
         <ClaimFactFields />
-        <ClaimVerifyFields />
+        <ClaimVerifyFields allowedUseOptions={allowedUses.data ?? []} />
         <ClaimEvidenceFields
           entryGroups={entryGroups}
           entriesLoading={workspace.loading}
           entriesFailed={Boolean(workspace.error)}
           entriesEmpty={!workspace.loading && !workspace.error && entryGroups.length === 0}
           autoLinked={Boolean(claim?.entry_ids_auto)}
+          onEntryAdded={backfillFromEntry}
         />
-        <ClaimInterviewFields />
+        <ClaimInterviewFields defaultOpen={hasInterviewDetails} />
       </Form>
     </FormModal>
   );

@@ -16,6 +16,7 @@ import { t, type MessageKey } from "../../i18n";
 import { ADMISSION_LABEL_KEYS, MATCH_STATUS_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 import JobComparisonResult from "./JobComparisonResult";
+import JobMatchSourceNotice from "./JobMatchSourceNotice";
 
 type BatchMatchResult = NonNullable<JobMatchBatchItem["result"]>;
 
@@ -76,6 +77,7 @@ function MatchDetail({ item }: { item: JobMatchBatchItem }) {
   const admission = ADMISSION_META[result.admission];
   return (
     <Space orientation="vertical" size="small" style={{ width: "100%" }}>
+      <JobMatchSourceNotice result={result} />
       <Space wrap>
         <Tag color={admission.color}>
           {t("jobMatchBatchResult.admission.tag", {

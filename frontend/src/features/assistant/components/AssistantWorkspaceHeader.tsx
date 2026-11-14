@@ -2,7 +2,7 @@
 /** 助手工作区页头：标题、说明与浮窗的历史按钮，多选工具条紧随其后。 */
 
 import { HistoryOutlined } from "@ant-design/icons";
-import { Button, Space, Typography } from "antd";
+import { Button, Space, Switch, Tooltip, Typography } from "antd";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import AssistantSelectBar from "./AssistantSelectBar";
@@ -21,6 +21,12 @@ interface Props {
   removeSelected: () => Promise<void>;
   exitSelecting: () => void;
   title: string;
+  /**
+   * 临时对话（F34）：会话标题区的「本次不记忆」开关。
+   * `undefined` = 草稿态（还没有会话），此时不渲染开关——没有可切换的对象。
+   */
+  memoryOff?: boolean;
+  onMemoryOffChange?: (value: boolean) => void;
 }
 
 export default function AssistantWorkspaceHeader({
@@ -33,6 +39,8 @@ export default function AssistantWorkspaceHeader({
   removeSelected,
   exitSelecting,
   title,
+  memoryOff,
+  onMemoryOffChange,
 }: Props) {
   useLocale();
   return (
@@ -45,6 +53,21 @@ export default function AssistantWorkspaceHeader({
         {/* 多选入口已收进消息右键菜单（R8）；浮窗这里只剩历史按钮。
             header 是 space-between 布局，只剩两个子元素时操作全部靠右。 */}
         <Space size={4} className="assistant-header-actions">
+          {memoryOff !== undefined && onMemoryOffChange ? (
+            <Tooltip title={t("assistantUi.memory.offTooltip")} placement="bottom">
+              <span className="assistant-memory-toggle">
+                <Typography.Text type="secondary">
+                  {t("assistantUi.memory.off")}
+                </Typography.Text>
+                <Switch
+                  size="small"
+                  checked={memoryOff}
+                  onChange={onMemoryOffChange}
+                  aria-label={t("assistantUi.memory.off")}
+                />
+              </span>
+            </Tooltip>
+          ) : null}
           {compact || showHistoryButton ? (
             <Button
               type="text"

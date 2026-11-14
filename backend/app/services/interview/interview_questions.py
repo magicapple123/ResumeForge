@@ -308,13 +308,24 @@ async def analyze_question(    provider: BaseLLMProvider,
 async def optimize_resume(
     provider: BaseLLMProvider,
     *,
-    resume: ResumeContent | dict,
+    resume: ResumeContent | dict | None = None,
+    resume_text: str = "",
     job_text: str,
     weaknesses: list[str],
     follow_ups: list[str],
 ) -> list[ResumeSuggestion]:
-    """把面试暴露的短板与高频追问反向转成简历改写建议（**只产出建议，不改正文**）。"""
-    resume_json = document_text(resume)[:12_000] if isinstance(resume, dict) else serialize_resume_prompt_data(resume)
+    """把面试暴露的短板与高频追问反向转成简历改写建议（**只产出建议，不改正文**）。
+
+    ``resume`` 是内部简历记录的正文（有记录就走它）；``resume_text``（Q3）是外部简历 /
+    导入文件的正文。两者只能来一个，取到的内容都截到 12k 字——一份简历的正文远超提示词
+    的需要，全塞进去只会把短板与追问挤出窗口。
+    """
+    if isinstance(resume, dict):
+        resume_json = document_text(resume)[:12_000]
+    elif resume is not None:
+        resume_json = serialize_resume_prompt_data(resume)
+    else:
+        resume_json = (resume_text or "").strip()[:12_000]
     prompt = (
         _load_prompt("interview_optimize_resume.md")
         .replace("{{ job_text }}", (job_text or "（未关联岗位）").strip())

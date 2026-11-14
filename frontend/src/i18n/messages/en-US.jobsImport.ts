@@ -9,13 +9,13 @@ const jobsImport = {
   "jobsImport.form.engineLabel": "Fetch engine",
   "jobsImport.form.engineAuto": "Auto (recommended)",
   "jobsImport.form.engineBrowser": "Browser",
+  "jobsImport.form.engineHint": "Detects list pages and detail pages automatically",
   "jobsImport.form.limitLabel": "How many to import",
-  "jobsImport.form.limitPlaceholder": "Empty = everything on this page (max 200)",
+  "jobsImport.form.limitPlaceholder": "Empty = all",
   "jobsImport.form.limitHint":
-    "No preset count: fetch a preview first, then tick the rows you want",
+    "Up to 200; leave it empty to preview first, then tick the rows you want",
   "jobsImport.form.pagesLabel": "Pages to fetch",
-  "jobsImport.form.pagesHint":
-    "Only follows the page's own Next link; stops at the current page when absent",
+  "jobsImport.form.pagesHint": "Only follows Next links, never guesses URL patterns",
   "jobsImport.preview.pages": "Fetched {fetched}/{requested} pages",
   "jobsImport.notice.truncatedLimit":
     "Page limit reached ({fetched}/{requested}); more pages exist — raise the page count or fetch in batches",
@@ -27,6 +27,8 @@ const jobsImport = {
 
   "jobsImport.action.fetch": "Fetch and preview",
   "jobsImport.action.refetch": "Fetch again",
+  "jobsImport.action.refetchDetail": "Fetch again as a single job",
+  "jobsImport.action.editField": "Edit field",
   "jobsImport.action.fetchDetails": "Fill details ({count})",
   "jobsImport.action.stopDetails": "Stop fetching",
   "jobsImport.action.import": "Import {count}",
@@ -37,6 +39,8 @@ const jobsImport = {
   "jobsImport.notice.warnings": "Fetch notes",
   "jobsImport.preview.total": "Found {count}; untick any you do not want",
   "jobsImport.preview.empty": "No preview yet",
+  "jobsImport.preview.emptyHint":
+    "Paste a job link, then choose Fetch and preview — recognised jobs appear here",
   "jobsImport.preview.meta": "{engine} engine · {method} · fetched {date}",
   "jobsImport.method.rules": "rule-based",
   "jobsImport.method.model": "model-assisted",

@@ -56,7 +56,13 @@ function renderComposer(props: {
         submitting={props.submitting ?? false}
         onChange={onChange}
         onSubmit={onSubmit}
+        onSubmitText={vi.fn()}
         onStop={vi.fn()}
+        interviewerReply={null}
+        interviewerStyle="严谨专业"
+        messages={[]}
+        pendingAnswer={null}
+        streamingQuestion={null}
       />
     </AntdApp>,
   );
@@ -101,7 +107,19 @@ describe("Composer 语音（T13）", () => {
     expect(voiceMock.controller.cancel).not.toHaveBeenCalled();
     rerender(
       <AntdApp>
-        <Composer value="" submitting onChange={vi.fn()} onSubmit={vi.fn()} onStop={vi.fn()} />
+        <Composer
+          value=""
+          submitting
+          onChange={vi.fn()}
+          onSubmit={vi.fn()}
+          onSubmitText={vi.fn()}
+          onStop={vi.fn()}
+          interviewerReply={null}
+          interviewerStyle="严谨专业"
+          messages={[]}
+          pendingAnswer={null}
+          streamingQuestion={null}
+        />
       </AntdApp>,
     );
     expect(voiceMock.controller.cancel).toHaveBeenCalledTimes(1);

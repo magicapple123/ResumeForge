@@ -1,0 +1,53 @@
+/* SPDX-License-Identifier: Apache-2.0
+   面试报告里的「镜头与表达」：独立成片的原因——modules-interview.css 已贴 500 行预算。
+   由 modules.css 在 modules-interview.css 之后引入，级联顺序与原位置一致。 */
+/* F18 报告里的「镜头与表达」：与四维评分分节展示，默认不计入总分。 */
+.interview-camera-report {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border);
+}
+
+.interview-camera-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 20px;
+}
+
+/* 指标条：标签在上、进度在下；`min-width:0` 防止长英文标签把网格顶宽。 */
+.interview-camera-metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.interview-camera-notes {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--rf-text-secondary);
+  line-height: 1.7;
+}
+
+.interview-camera-playback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.interview-camera-playback video {
+  display: block;
+  width: 100%;
+  max-width: 520px;
+  border-radius: 8px;
+  background: #000;
+}
+
+@media (max-width: 767px) {
+  .interview-camera-metrics {
+    grid-template-columns: 1fr;
+  }
+}

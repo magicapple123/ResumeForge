@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Resolve native identities and historical paths without projecting a v1 model.
+"""在内存里解析「原生身份」与历史路径，不投影回 v1 模型。
 
-Stable entry/item IDs take precedence. Historical indices retain the former visible
-analysis order; unresolved identities never fall back to another entry by index.
-All functions operate in memory. Persisted paths and database columns stay untouched.
+三条约定：
+
+- **稳定 id 优先**：有 entry/item id 就用它，历史索引只在没有 id 时兜底；
+- 历史索引按"当时可见的分析顺序"解释，隐藏条目不占位；
+- 身份解析不出来时**绝不按索引回退到另一条**——宁可返回空，也不把 A 的修改写到 B 上。
+
+所有函数只操作内存；已落库的路径与数据库列一个字节都不改。
 """
 
 from __future__ import annotations
@@ -241,6 +245,17 @@ def resolve_document_path(document: dict, path: str) -> DocumentPath | None:
             legacy_label=True,
         )
     return None
+
+
+def resolve_assistant_path(document: dict, path: str) -> DocumentPath | None:
+    """Resolve assistant entry ordinals without changing persisted 0-based paths."""
+    parts = str(path or "").split(".")
+    if len(parts) >= 2 and parts[1].isdigit() and parts[0] != "header":
+        ordinal = int(parts[1])
+        if ordinal < 1:
+            return None
+        parts[1] = str(ordinal - 1)
+    return resolve_document_path(document, ".".join(parts))
 
 
 def read_document_value(document: dict, path: str, default: Any = None) -> Any:

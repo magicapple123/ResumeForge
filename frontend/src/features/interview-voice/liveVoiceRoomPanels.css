@@ -1,0 +1,138 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 实时语音房间：右栏（对话记录，自己滚）+ 底栏（模式 / 麦克风 / 状态 + 摄像头 / 设置 / 暂停）
+   + 通话设置弹层。外壳与左栏在 `live-voice-room.css`。 */
+
+/* ===== 主栏下半部：对话记录 =====
+   高度接力：main(min-height:0) → aside(flex:1 + min-height:0) → 消息区(overflow-y:auto)。
+   F15/F16 去掉了 `border-left` 与 `padding-left`：原来它把主栏切成"问答 / 记录"两片，
+   而记录现在是一列聊天气泡，自带边界；那条竖线只会让右半边看起来像另一个面板。 */
+.interview-live-room__conversation {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.interview-live-room__conversation-title {
+  flex: 0 0 auto;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* 气泡容器直接复用对话页的 `.interview-messages`（F16）：这里只脱掉它的卡片外壳——
+   记录区在主栏里已经是整块，再套一层边框与浅底就是"框里套框"。 */
+.interview-live-room__conversation .interview-messages {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
+  padding: 2px 2px 12px;
+  border: 0;
+  background: transparent;
+}
+
+/* ===== 底栏 ===== */
+.interview-live-room__controls {
+  flex: 0 0 auto;
+  justify-content: space-between;
+  border-top: 1px solid var(--rf-border-subtle);
+  /* 右侧让出投投悬浮球的位置：球是**全局**浮层（z-index 更高），不 reserve 的话
+     底栏最后一个按钮会被它压住（实测「暂停面试」被盖掉一半）。
+     与投递台吸底条的 `padding-right: 60px` 同一条理由。 */
+  padding-right: 76px;
+}
+
+.interview-live-room__controls-left,
+.interview-live-room__controls-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.interview-live-room__controls-left {
+  flex-wrap: wrap;
+}
+
+.interview-live-room__controls-right {
+  flex: 0 0 auto;
+}
+
+/* 麦克风状态：此前挂在面试官名字下面，读起来像"面试官未开启"。
+   现在放底栏左侧，并以一个状态点开头明确归属。 */
+.interview-live-room__mic-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.interview-live-room__mic-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--rf-border);
+}
+
+.interview-live-room__mic-dot.is-live {
+  background: var(--rf-success-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rf-success-strong) 18%, transparent);
+}
+
+/* ===== 通话设置弹层 ===== */
+.interview-voice-settings {
+  width: 268px;
+}
+
+.interview-voice-settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* 标签不换行：弹层只有 268px 宽，「播报音色」会被挤成「播报音 / 色」两行。 */
+.interview-voice-settings__row > .ant-typography {
+  white-space: nowrap;
+}
+
+.interview-voice-settings__label {
+  display: block;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+}
+
+.interview-voice-settings__hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.interview-voice-settings .ant-slider {
+  margin: 4px 6px 0;
+}
+
+@media (max-width: 860px) {
+  .interview-live-room__conversation {
+    padding-top: 14px;
+    border-top: 1px solid var(--rf-border-subtle);
+  }
+
+  /* 上下排之后记录区不再是"视口剩下的高度"：给一个下限，否则会被内容压成 0。 */
+  .interview-live-room__conversation .interview-messages {
+    min-height: 160px;
+    max-height: 320px;
+  }
+
+  .interview-live-room__controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

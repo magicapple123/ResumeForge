@@ -2,7 +2,7 @@
 """planner：head 三布局 / lead-trail 装箱 / inline / text / header 换行 / 路径契约（计划 §5/§10.1）。
 
 路径契约（2026-10-31 Q27）的粒度是 **item**：同一 item 的多个值段（列表的每个值、
-作者的每个名字）共享同一 path；标签、分隔符、括号不是字段本体，path 为空。
+作者的每个名字）共享同一 path；字段名沿用字段路径并使用独立角色，分隔符与括号 path 为空。
 """
 
 from __future__ import annotations
@@ -203,6 +203,116 @@ def test_header_contact_breaks_and_photo() -> None:
     assert plan.header.photo is not None
 
 
+# ===== F20：页眉字段名三态 =====
+
+
+def _header_plan(*items: dict):
+    document = {
+        "version": 2,
+        "language": "zh-CN",
+        "header": {"items": list(items), "contact_breaks": []},
+        "sections": [],
+    }
+    return build_document_plan(document).header
+
+
+def _header_item(
+    key: str, value: str, placement: str = "contact", *, item_id: str = "hd_00000001", **extra
+) -> dict:
+    return {
+        "kind": "field",
+        "id": item_id,
+        "key": key,
+        "value": value,
+        "placement": placement,
+        **extra,
+    }
+
+
+def test_phone_label_mode_three_states() -> None:
+    """auto 只印值（存量行为）、show 印「电话：」、hide 仍只印值。"""
+    assert plain_text(_header_plan(_header_item("phone", "13800000000")).contact_lines[0]) == (
+        "13800000000"
+    )
+    assert plain_text(
+        _header_plan(_header_item("phone", "13800000000", label_mode="show")).contact_lines[0]
+    ) == ("电话：13800000000")
+    assert plain_text(
+        _header_plan(_header_item("phone", "13800000000", label_mode="hide")).contact_lines[0]
+    ) == ("13800000000")
+
+
+def test_github_and_custom_labels_follow_label_mode() -> None:
+    """GitHub / 自定义字段：auto 与 show 都印前缀，hide 只印裸值。"""
+    for mode, expected in (
+        ("auto", "GitHub：github.com/example"),
+        ("show", "GitHub：github.com/example"),
+        ("hide", "github.com/example"),
+    ):
+        header = _header_plan(_header_item("github", "github.com/example", label_mode=mode))
+        assert plain_text(header.contact_lines[0]) == expected
+
+    custom = _header_plan(_header_item("custom_portfolio", "x.dev", label="作品集"))
+    assert plain_text(custom.contact_lines[0]) == "作品集：x.dev"
+    custom_hide = _header_plan(
+        _header_item("custom_portfolio", "x.dev", label="作品集", label_mode="hide")
+    )
+    assert plain_text(custom_hide.contact_lines[0]) == "x.dev"
+
+
+def test_subtitle_and_gender_follow_label_mode() -> None:
+    header = _header_plan(_header_item("job_intent", "产品经理", placement="subtitle"))
+    assert plain_text(header.subtitle) == "求职意向：产品经理"
+    hidden = _header_plan(
+        _header_item("job_intent", "产品经理", placement="subtitle", label_mode="hide")
+    )
+    assert plain_text(hidden.subtitle) == "产品经理"
+
+    # 性别特例：auto 保持「（男）」；show 改「性别：男」且不再叠括号。
+    gender_auto = _header_plan(_header_item("gender", "男", placement="name_meta"))
+    assert plain_text(gender_auto.name_meta) == "（男）"
+    gender_show = _header_plan(
+        _header_item("gender", "男", placement="name_meta", label_mode="show")
+    )
+    assert plain_text(gender_show.name_meta) == "性别：男"
+    gender_hide = _header_plan(
+        _header_item("gender", "男", placement="name_meta", label_mode="hide")
+    )
+    assert plain_text(gender_hide.name_meta) == "男"
+
+
+def test_legacy_document_without_label_mode_falls_back_from_show_label() -> None:
+    """旧文档（只有 `show_label:false`、没有 `label_mode`）仍然不印前缀。"""
+    header = _header_plan(
+        _header_item("github", "github.com/example", show_label=False),
+        _header_item(
+            "job_intent", "产品经理", placement="subtitle", item_id="hd_00000002", show_label=False
+        ),
+    )
+
+    assert plain_text(header.contact_lines[0]) == "github.com/example"
+    assert plain_text(header.subtitle) == "产品经理"
+
+
+def test_font_subset_includes_every_header_label() -> None:
+    """F20 顺带修的缺口：planner 注入的「求职意向：」「电话：」必须在字体子集里。"""
+    from app.schemas.resume_document import parse_document
+    from app.services.resume.document_html import document_text_for_font
+
+    document = parse_document(
+        {
+            "version": 2,
+            "language": "zh-CN",
+            "header": {"items": [_header_item("phone", "13800000000")], "contact_breaks": []},
+            "sections": [],
+        }
+    )
+    text = document_text_for_font(document)
+
+    assert "求职意向" in text
+    assert "电话" in text
+
+
 def test_hidden_items_and_entries_are_skipped() -> None:
     document = _document()
     entry = document["sections"][0]["entries"][0]
@@ -226,7 +336,7 @@ def _collect_plan_paths(plan) -> list[str]:
 
     def collect(segments):
         for segment in segments:
-            if segment.path:
+            if segment.path and segment.role != "field_label":
                 paths.append(segment.path)
 
     collect(plan.header.name)
@@ -380,4 +490,3 @@ def test_custom_enum_field_without_catalog_kind_is_localized() -> None:
     assert enum_text(field("whatever", "ob_cust0003"), "", "zh-CN") == "whatever"
     # 已知 enum_kind 的旧路径不受影响（未知值仍按各自家族的兜底走）。
     assert enum_text(field("published", "ob_cust0004"), "publication_status", "zh-CN") == "已发表"
-

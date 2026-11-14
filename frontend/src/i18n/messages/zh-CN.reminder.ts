@@ -74,7 +74,6 @@ const reminder = {
   "reminder.detail.resume": "关联简历",
   "reminder.detail.createdAt": "创建时间",
   "reminder.detail.updatedAt": "更新时间",
-  "reminder.detail.none": "（无）",
   "reminder.action.markDone": "标记完成",
   "reminder.action.edit": "编辑",
 } as const;

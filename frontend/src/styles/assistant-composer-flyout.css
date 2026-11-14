@@ -45,3 +45,37 @@
 .composer-add-panel.is-empty .assistant-skill-menu-hint {
   display: none;
 }
+
+/*
+ * 高度预算（F35）：面板与技能二级同时展开、又没有高度上限时，两块叠起来会把输入框
+ * 和底部工具行顶出视口。两条分工：
+ * - 一级面板（含窄栏/矮视口的整块替换）内部滚动，最多 440px 或视口减 32px；
+ * - 浮出层**不能**加 overflow（12px 悬停桥是 `::before`，会被裁掉），所以只封顶；
+ *   真正的滚动落在 `.assistant-skill-picker-list` 内部（见 assistant-skills.css）。
+ */
+.composer-add-panel {
+  max-height: min(440px, calc(100dvh - 32px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/*
+ * 浮出期间一级面板必须停止滚动/裁切：二级层是「技能」行的**子元素**，而 `overflow-y: auto`
+ * 会裁掉绝对定位的后代——浮出层有 DOM、有尺寸，却整块看不见（2026-11-14 实机截图发现）。
+ * 一级面板的内容高度由 `max-height` 兜住，平时（1440×900 实测 274px）远小于 440px 上限，
+ * 所以这里让出裁切的代价为零；真撑满时宁可溢出可见，也不能让二级消失。
+ */
+.composer-add-panel.is-flyout-open {
+  overflow: visible;
+}
+
+.composer-add-flyout {
+  max-height: calc(100dvh - 24px);
+  overflow: visible;
+}
+
+/* 长标题不许把整行顶宽：grid 子项默认 min-width:auto，省略号会失效。 */
+.composer-add-row,
+.composer-add-select {
+  min-width: 0;
+}

@@ -391,48 +391,44 @@ export default function MaterialsPage() {
         open={detail !== null}
         title={detail?.title || t("materials.untitled")}
         tags={detail && <Tag color="blue">{materialCategoryLabel(detail.category)}</Tag>}
-        fields={
-          detail
-            ? [
-                { label: t("materials.link"), value: detail.url || "-" },
-                {
-                  label: t("materials.detail.attachments"),
-                  value:
-                    detail.files.length > 0
-                      ? t("materials.detail.fileCount", { count: detail.files.length })
-                      : "-",
-                },
-                {
-                  label: t("materials.detail.createdAt"),
-                  value: formatDateTime(detail.created_at),
-                },
-                {
-                  label: t("materials.detail.updatedAt"),
-                  value: formatDateTime(detail.updated_at),
-                },
-              ]
-            : []
+        // 时间 / 附件数 / 是否有链接都放在标题下一行：它们撑不满一行字段，
+        // 却各占 96px 标签 + 一整行，四条空行正是"详情里全是占位"的来源。
+        meta={
+          detail && (
+            <>
+              {t("materials.detail.updatedAt")} {formatDateTime(detail.updated_at)}
+              {" · "}
+              {t("materials.detail.attachmentsTitle", { count: detail.files.length })}
+              {detail.url && (
+                <>
+                  {" · "}
+                  <a href={detail.url} target="_blank" rel="noreferrer noopener">
+                    {t("materials.link")}
+                  </a>
+                </>
+              )}
+            </>
+          )
         }
         sections={
           detail
             ? [
-                {
-                  title: t("materials.detail.body"),
-                  content: detail.content || t("materials.detail.none"),
-                },
-                {
-                  title: t("materials.detail.note"),
-                  content: detail.note || t("materials.detail.none"),
-                },
-                {
-                  title: t("materials.detail.attachmentsTitle", { count: detail.files.length }),
-                  content:
-                    detail.files.length === 0 ? (
-                      t("materials.detail.none")
-                    ) : (
-                      <AttachmentList files={detail.files} onPreview={setPreviewFile} />
-                    ),
-                },
+                ...(detail.content
+                  ? [{ title: t("materials.detail.body"), content: detail.content }]
+                  : []),
+                ...(detail.note
+                  ? [{ title: t("materials.detail.note"), content: detail.note }]
+                  : []),
+                ...(detail.files.length > 0
+                  ? [
+                      {
+                        title: t("materials.detail.attachmentsTitle", {
+                          count: detail.files.length,
+                        }),
+                        content: <AttachmentList files={detail.files} onPreview={setPreviewFile} />,
+                      },
+                    ]
+                  : []),
               ]
             : []
         }

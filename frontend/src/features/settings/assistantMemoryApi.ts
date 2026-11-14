@@ -21,7 +21,7 @@ export const MEMORY_KINDS = [
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
 
 export type MemorySource = "manual" | "extracted";
-export type MemoryStatus = "active" | "superseded" | "deleted";
+export type MemoryStatus = "active" | "superseded" | "suppressed" | "deleted";
 
 export interface AssistantMemory {
   id: number;
@@ -35,6 +35,8 @@ export interface AssistantMemory {
   source: string;
   source_conversation_id: number | null;
   source_message_id: number | null;
+  /** 来源消息摘录（≤60 字）：显示"这句话是从哪儿学来的"。 */
+  source_excerpt?: string;
   created_at: string;
   updated_at: string;
 }
@@ -98,10 +100,33 @@ export function deleteAssistantMemory(memoryId: number): Promise<void> {
   });
 }
 
-/** 「永不使用」：与删除同一效果，单独一个端点便于语义区分。 */
+/** 「永不使用」：停用（status=suppressed），条目仍在列表里，可恢复；不是删除。 */
 export function neverUseAssistantMemory(memoryId: number): Promise<AssistantMemory> {
   return request<AssistantMemory>(`/assistant/memories/${memoryId}/never-use`, {
     method: "POST",
+    budget: MEMORY_BUDGET,
+  });
+}
+
+/** 「恢复使用」：把停用的条目改回 active，重新参与注入。 */
+export function restoreAssistantMemory(memoryId: number): Promise<AssistantMemory> {
+  return request<AssistantMemory>(`/assistant/memories/${memoryId}/restore`, {
+    method: "POST",
+    budget: MEMORY_BUDGET,
+  });
+}
+
+export interface AssistantMemoryEvent {
+  id: number;
+  action: string;
+  before: string;
+  after: string;
+  at: string;
+}
+
+/** 变更历史（时间倒序，最多 50 条）。 */
+export function getAssistantMemoryHistory(memoryId: number): Promise<AssistantMemoryEvent[]> {
+  return request<AssistantMemoryEvent[]>(`/assistant/memories/${memoryId}/history`, {
     budget: MEMORY_BUDGET,
   });
 }

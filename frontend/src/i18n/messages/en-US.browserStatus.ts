@@ -13,6 +13,9 @@
  */
 const browserStatus = {
   "browserStatus.title": "Apply-only browser",
+  "browserStatus.ready": "Ready",
+  "browserStatus.hint.collapse": "Collapse instructions",
+  "browserStatus.hint.expand": "Expand instructions",
   "browserStatus.port": "Debug port {port}",
   "browserStatus.action.start": "Start browser",
   "browserStatus.action.openSite": "Open job site",

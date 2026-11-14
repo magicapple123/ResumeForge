@@ -7,7 +7,7 @@
  * 生效了，实际却把不符合条件的岗位也采了进来。后端把这些条件写进
  * `task.config["unmapped_conditions"]`，界面据此显示。
  */
-import { Alert, App, Form, Select, Space } from "antd";
+import { Alert, App, Button, Form, Popover, Select, Typography } from "antd";
 import PageSkeleton from "../../components/common/PageSkeleton";
 import { RowActions } from "../../components/common/RowActions";
 import { useEffect, useState, type ReactNode } from "react";
@@ -134,51 +134,58 @@ export default function CollectPanel({ disabled, onStarted, collectTask, progres
           进岗位广场，所以这里把后面两步明确写出来，并指出每一步在哪个页签。
           内嵌强调（.apply-collect-flow-em / Typography.Text strong）收敛为「」：句子按整句
           进语言包，切成前后几段在英文里语序不通（同 zh-CN.browserStatus.ts 的先例）。 */}
-      <Alert
-        className="apply-collect-flow"
-        type="info"
-        showIcon
-        title={t("applyUi.collect.flowTitle")}
-        description={
-          <ol style={{ margin: 0, paddingLeft: 18 }}>
-            <li>{t("applyUi.collect.flowStepStage")}</li>
-            <li>{t("applyUi.collect.flowStepImport")}</li>
-            <li>{t("applyUi.collect.flowStepQueue")}</li>
-          </ol>
-        }
-      />
-
-      <Space size={8} wrap style={{ marginBottom: 12 }}>
-        <Select
-          aria-label={t("applyUi.collect.historyLabel")}
-          placeholder={t("applyUi.collect.historyLabel")}
-          allowClear
-          style={{ minWidth: 320 }}
-          value={historyValue}
-          onChange={(value) => {
-            if (value) applyHistory(value as string);
-            else setHistoryValue(undefined);
-          }}
-          options={history.map((entry) => ({
-            value: entry.savedAt,
-            label: historySummaryLabel(entry),
-          }))}
-        />
-        {/* 清空历史不可恢复，同样收进「···」菜单（全局约定：破坏性入口不裸露）。 */}
-        <RowActions
-          more={[
-            {
-              key: "clear-history",
-              label: t("applyUi.collect.clearHistory"),
-              danger: true,
-              confirm: t("applyUi.collect.clearHistoryConfirm"),
-              onClick: clearHistory,
-            },
-          ]}
-        />
-      </Space>
+      <div className="apply-collect-flow-summary">
+        <Typography.Text type="secondary">{t("applyCollect.flow.summary")}</Typography.Text>
+        <Popover
+          trigger="click"
+          placement="bottomLeft"
+          title={t("applyUi.collect.flowTitle")}
+          content={
+            <ol style={{ margin: 0, paddingLeft: 18 }}>
+              <li>{t("applyUi.collect.flowStepStage")}</li>
+              <li>{t("applyUi.collect.flowStepImport")}</li>
+              <li>{t("applyUi.collect.flowStepQueue")}</li>
+            </ol>
+          }
+        >
+          <Button type="link">{t("applyCollect.flow.instructions")}</Button>
+        </Popover>
+      </div>
 
       <CollectConfigForm
+        history={
+          // 2026-11-13：从「标题右侧的动作」挪进搜索栅格，成为一格可回填的输入。
+          // 因此宽度交回栅格（`flex: 1`），不再钉死 320px——钉死会在第二列留下半格空白。
+          <div className="apply-collect-history">
+            <Select
+              aria-label={t("applyUi.collect.historyLabel")}
+              placeholder={t("applyUi.collect.historyLabel")}
+              allowClear
+              style={{ flex: "1 1 auto", minWidth: 0 }}
+              value={historyValue}
+              onChange={(value) => {
+                if (value) applyHistory(value as string);
+                else setHistoryValue(undefined);
+              }}
+              options={history.map((entry) => ({
+                value: entry.savedAt,
+                label: historySummaryLabel(entry),
+              }))}
+            />
+            {/* 清空历史不可恢复，同样收进「···」菜单（全局约定：破坏性入口不裸露）。 */}
+            <RowActions
+              more={[
+                {
+                  key: "clear-history",
+                  label: t("applyUi.collect.clearHistory"),
+                  danger: true,
+                  confirm: t("applyUi.collect.clearHistoryConfirm"),
+                  onClick: clearHistory,
+                },
+              ]}
+            />
+          </div>
+        }
         form={form}
         getFilters={() => (form.getFieldValue("filters") as Record<string, string[]>) || {}}
         saveSamples={saveSamples}

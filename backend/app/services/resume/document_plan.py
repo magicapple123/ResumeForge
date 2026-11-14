@@ -34,8 +34,13 @@ from ...schemas.resume_document import (
     parse_document,
 )
 from . import document_catalog as catalog
-from .document_plan_format import body_style_of, item_inlines, plain_text, wants_paren
-from .resume_contact import validate_contact_breaks
+from .document_plan_format import body_style_of, item_inlines, wants_paren
+from .document_plan_text import plan_to_text
+from .resume_contact import (
+    CONTACT_SEPARATOR_KEY,
+    contact_separator_text,
+    validate_contact_breaks,
+)
 from .resume_labels import (
     field_labels,
     gender_text,
@@ -70,7 +75,14 @@ def build_document_plan(
         for section in doc.sections
         if (plan := plan_section(section, format_config, lang)) is not None
     ]
-    return DocumentPlan(language=lang, header=plan_header(doc.header, lang), sections=sections)
+    separator = contact_separator_text(
+        format_config.get(CONTACT_SEPARATOR_KEY) if isinstance(format_config, Mapping) else None
+    )
+    return DocumentPlan(
+        language=lang,
+        header=plan_header(doc.header, lang, separator),
+        sections=sections,
+    )
 
 
 def _as_document(document: ResumeDocument | Mapping[str, Any]) -> ResumeDocument:
@@ -84,8 +96,29 @@ def _as_document(document: ResumeDocument | Mapping[str, Any]) -> ResumeDocument
     raise ValueError("planner 输入必须是 ResumeDocument 或 v2 dict")
 
 
-def plan_header(header: ResumeHeader, language: str) -> HeaderPlan:
-    """页眉：name 行 / name_meta 行 / subtitle 行 / 联系方式的强制换行。"""
+def _label_mode(item: Any) -> str:
+    """页眉字段名的三态（F20）：auto / show / hide。
+
+    旧文档没有 `label_mode`：按 `show_label is False ? "hide" : "auto"` 回落。必须看
+    `model_fields_set` 而不是取值——Pydantic 会给缺失字段补默认 `"auto"`，只看值就分不出
+    "用户选了自动"和"老文档根本没有这个键"（后者带 `show_label:false` 时不许印前缀）。
+    """
+    if "label_mode" not in getattr(item, "model_fields_set", set()):
+        return "hide" if getattr(item, "show_label", True) is False else "auto"
+    mode = getattr(item, "label_mode", "auto")
+    return mode if mode in ("auto", "show", "hide") else "auto"
+
+
+def plan_header(header: ResumeHeader, language: str, contact_separator: str = "") -> HeaderPlan:
+    """页眉：name 行 / name_meta 行 / subtitle 行 / 联系方式的强制换行与同行分隔。
+
+    `contact_separator` 是**同行字段之间**的可见文本（空串 = 各出口沿用历史分隔符），
+    与 `contact_breaks`（强制换行）正交：换行决定哪几个字段同处一行，分隔符决定同一行
+    里它们之间印什么。
+
+    字段名前缀由 `label_mode` 三态决定（F20）：`auto` 保持历史行为（电话只印值、
+    GitHub/自定义/求职意向印前缀），`show` 一律印「标签：」，`hide` 一律只印值。
+    """
     labels = field_labels(language)
     name: list[Inline] = []
     name_meta: list[Inline] = []
@@ -94,9 +127,16 @@ def plan_header(header: ResumeHeader, language: str) -> HeaderPlan:
     photo: str | None = None
     for item in header.items:
         display = item.value
+        mode = _label_mode(item)
         if item.placement == "name_meta" and item.key == "gender":
             # v1 的「姓名（性别）」口径：gender 在自己的字段里，渲染时套语言括号。
-            display = gender_text(item.value, language)
+            # show 改「性别：男」并不再叠括号；hide 只印值（F20）。
+            if mode == "show" and item.value:
+                display = f"{labels.get('gender', '性别')}：{item.value}"
+            elif mode == "hide":
+                display = item.value
+            else:
+                display = gender_text(item.value, language)
         segments = [Inline(text=display, role="meta", path="header." + item.id)]
         if item.placement == "name":
             name.extend(segments)
@@ -107,8 +147,8 @@ def plan_header(header: ResumeHeader, language: str) -> HeaderPlan:
             # 四个出口都只画 plan，不各写一份）。标签段不带 path（点标签不定位字段）。
             spec = catalog.header_field_spec(item.key)
             prefix = labels.get(spec.label_key, "") if spec is not None else ""
-            if prefix:
-                subtitle.append(Inline(text=prefix + "：", role="meta"))
+            if prefix and (mode == "show" or (mode == "auto" and item.show_label)):
+                subtitle.append(Inline(text=prefix + "：", role="field_label"))
             subtitle.extend(segments)
         elif item.placement == "contact":
             contact_items.append(item)
@@ -121,20 +161,31 @@ def plan_header(header: ResumeHeader, language: str) -> HeaderPlan:
         if item.key in breaks and current:
             lines.append(current)
             current = []
+        mode = _label_mode(item)
         label_key = _LABELLED_CONTACT.get(item.key)
-        if label_key:
+        if mode == "hide":
+            # F20：hide 一律只印值——包括 GitHub/主页/自定义字段。
+            display = item.value
+        elif label_key:
             display = labels.get(label_key, label_key) + "：" + item.value
         elif item.label.strip():
             # #10：自定义页眉字段把用户起的名字印在值前面（与 github/website 同形），
             # 否则纸面上只剩裸值「13800000000」，看不出这项是什么。
             display = item.label.strip() + "：" + item.value
         else:
-            display = item.value
+            # auto 对电话/邮箱/城市/出生年份只印值（历史行为）；show 才补前缀。
+            prefix = labels.get(item.key, "") if mode == "show" else ""
+            display = prefix + "：" + item.value if prefix else item.value
         current.append(Inline(text=display, role="meta", path="header." + item.id))
     if current:
         lines.append(current)
     return HeaderPlan(
-        name=name, name_meta=name_meta, subtitle=subtitle, contact_lines=lines, photo=photo
+        name=name,
+        name_meta=name_meta,
+        subtitle=subtitle,
+        contact_lines=lines,
+        contact_separator=contact_separator,
+        photo=photo,
     )
 
 
@@ -219,9 +270,7 @@ def _effective_layout(section: ResumeSection, entry: ResumeEntry) -> EntryLayout
 _ROLES = ("lead", "trail")
 
 
-def _effective_row_layout(
-    section: ResumeSection, entry: ResumeEntry, side: str
-) -> RowLayout:
+def _effective_row_layout(section: ResumeSection, entry: ResumeEntry, side: str) -> RowLayout:
     """正文前 / 正文后各自的**生效**列布局（问题 4）。
 
     继承链（scope 由近到远）：
@@ -448,28 +497,3 @@ def _inline_rows(section: ResumeSection, language: str) -> list[list[CellPlan]]:
     return rows
 
 
-def plan_to_text(plan: DocumentPlan) -> list[str]:
-    """plan 展平成纯文本行（文本等价/对拍/测试用；Markdown/TXT 不直接用这个）。"""
-    lines: list[str] = []
-    header = plan.header
-    header_parts = [
-        plain_text(header.name),
-        plain_text(header.name_meta),
-        plain_text(header.subtitle),
-    ]
-    header_parts.extend(plain_text(line) for line in header.contact_lines)
-    lines.extend(part for part in header_parts if part.strip())
-    for section in plan.sections:
-        lines.append(section.title)
-        for row in section.rows:
-            lines.append(" ".join(plain_text(cell.segments) for cell in row))
-        for entry in section.entries:
-            head = [plain_text(entry.head.title), plain_text(entry.head.meta)]
-            lines.extend(part for part in head if part.strip())
-            for row in entry.lead_rows:
-                lines.append(" ".join(plain_text(cell.segments) for cell in row))
-            for block in entry.body:
-                lines.append(plain_text(block.segments))
-            for row in entry.trail_rows:
-                lines.append(" ".join(plain_text(cell.segments) for cell in row))
-    return [line for line in lines if line.strip()]

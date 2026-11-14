@@ -10,7 +10,7 @@
  * `findBy*`（它的 waitFor 也依赖定时器），改用 `act` 手动冲微任务 + `getBy*`。
  */
 import { App as AntdApp } from "antd";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
@@ -232,6 +232,48 @@ describe("InterviewPage 计时器与「准备好了」闸门", () => {
     expect(
       screen.getByRole("button", { name: named(t("interviewPage.ready.start")) }),
     ).toBeTruthy();
+  });
+
+  it("暂停 → 继续：暂停卡消失、作答区回来、计时从冻结点接着走（F13）", async () => {
+    renderPage();
+    await enterRoom();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: named(t("interviewPage.ready.start")) }));
+    });
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(timerNode()?.textContent).toContain("00:10");
+
+    // 暂停：作答区换成暂停卡，计时冻住（推进 30s 读数不动）。
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: named(t("interviewPage.paused.action")) }));
+    });
+    expect(screen.getByText(t("interviewPage.paused.title"))).toBeTruthy();
+    expect(screen.queryByPlaceholderText(t("interview.placeholder"))).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(timerNode()?.textContent).toContain("00:10");
+
+    // 继续：这一下必须真的撤掉 paused（F13 的回归点——修复前点了完全没反应）。
+    // 「继续面试」在头部暂停按钮上也有一份，这里限定在暂停卡里点。
+    const pauseCard = document.querySelector(".interview-ready-gate") as HTMLElement;
+    await act(async () => {
+      fireEvent.click(
+        within(pauseCard).getByRole("button", { name: named(t("interviewPage.paused.resume")) }),
+      );
+    });
+    await flushPromises();
+    expect(screen.queryByText(t("interviewPage.paused.title"))).toBeNull();
+    expect(screen.getByPlaceholderText(t("interview.placeholder"))).toBeTruthy();
+
+    // 从冻结点继续：00:10 + 5s = 00:15（不是从 0 重来，也不是把暂停的 30s 算进去）。
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(timerNode()?.textContent).toContain("00:15");
   });
 
   it("最后一答提交后不再提前宣称「正在生成报告」（报告改为等用户在决策卡上确认）", async () => {

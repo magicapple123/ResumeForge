@@ -20,6 +20,8 @@ const apiMocks = vi.hoisted(() => ({
   updateAssistantMemory: vi.fn(),
   deleteAssistantMemory: vi.fn(),
   neverUseAssistantMemory: vi.fn(),
+  restoreAssistantMemory: vi.fn(),
+  getAssistantMemoryHistory: vi.fn(),
   getAssistantMemorySettings: vi.fn(),
   saveAssistantMemorySettings: vi.fn(),
 }));
@@ -118,7 +120,11 @@ beforeEach(() => {
       ...(input as object),
     }));
   apiMocks.deleteAssistantMemory.mockReset().mockResolvedValue(undefined);
-  apiMocks.neverUseAssistantMemory.mockReset().mockResolvedValue({ ...MANUAL, status: "deleted" });
+  apiMocks.neverUseAssistantMemory
+    .mockReset()
+    .mockResolvedValue({ ...MANUAL, status: "suppressed" });
+  apiMocks.restoreAssistantMemory.mockReset().mockResolvedValue({ ...MANUAL, status: "active" });
+  apiMocks.getAssistantMemoryHistory.mockReset().mockResolvedValue([]);
 });
 
 afterEach(() => cleanup());
@@ -295,6 +301,49 @@ describe("AssistantMemoryCard 删除、永不使用与清空", () => {
     await waitFor(() => expect(apiMocks.deleteAssistantMemory).toHaveBeenCalledTimes(3));
     expect(
       await screen.findByText(t("assistantMemory.toast.cleared", { count: 3 })),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("AssistantMemoryCard 停用语义（F33）", () => {
+  it("停用的条目仍留在列表：置灰、标「已停用」、给「恢复使用」，不再显示编辑/永不使用", async () => {
+    apiMocks.listAssistantMemories.mockResolvedValue([
+      MANUAL,
+      { ...EXTRACTED, status: "suppressed" } as AssistantMemory,
+    ]);
+    renderCard();
+
+    const row = await screen.findByTestId("assistant-memory-2");
+    expect(within(row).getByText(t("assistantMemory.status.suppressed"))).toBeInTheDocument();
+    expect(within(row).getByText("Shanghai or Hangzhou")).toBeInTheDocument();
+    expect(
+      within(row).getByRole("button", { name: t("assistantMemory.action.restore") }),
+    ).toBeInTheDocument();
+    expect(
+      within(row).queryByRole("button", { name: t("assistantMemory.action.neverUse") }),
+    ).toBeNull();
+
+    fireEvent.click(within(row).getByRole("button", { name: t("assistantMemory.action.restore") }));
+    await waitFor(() => expect(apiMocks.restoreAssistantMemory).toHaveBeenCalledWith(2));
+  });
+
+  it("「历史」按时间倒序展示动作与前后值", async () => {
+    apiMocks.getAssistantMemoryHistory.mockResolvedValue([
+      { id: 3, action: "suppress", before: "Shanghai", after: "", at: "2026-11-12T03:00:00" },
+      { id: 2, action: "update", before: "Beijing", after: "Shanghai", at: "2026-11-11T03:00:00" },
+      { id: 1, action: "create", before: "", after: "Beijing", at: "2026-11-10T03:00:00" },
+    ]);
+    renderCard();
+
+    const row = await screen.findByTestId("assistant-memory-2");
+    fireEvent.click(within(row).getByRole("button", { name: t("assistantMemory.action.history") }));
+    await waitFor(() => expect(apiMocks.getAssistantMemoryHistory).toHaveBeenCalledWith(2));
+    expect(await screen.findByText(t("assistantMemory.history.title"))).toBeInTheDocument();
+    expect(screen.getByText(t("assistantMemory.history.action.suppress"))).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        t("assistantMemory.history.changed", { before: "Beijing", after: "Shanghai" }),
+      ),
     ).toBeInTheDocument();
   });
 });

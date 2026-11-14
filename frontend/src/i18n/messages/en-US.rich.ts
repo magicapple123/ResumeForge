@@ -3,6 +3,8 @@ const rich = {
   "rich.menu.label": "Text formatting",
   "rich.menu.bold": "Bold",
   "rich.menu.unbold": "Remove bold",
+  "rich.menu.small": "Smaller",
+  "rich.menu.emphasis": "Accent color",
   "rich.menu.edit": "Edit this Section",
   "rich.preview.updating": "Updating preview...",
   "rich.preview.stale": "Showing the last successful preview",

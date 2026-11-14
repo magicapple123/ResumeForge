@@ -183,7 +183,10 @@ describe("ApplyPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("需逐条确认")).toBeInTheDocument();
+    // 2026-11-13：「参考分 + 准入」合并成「匹配」列后，准入结论与「需逐条确认」
+    // 落在**同一个** 12px 文本节点里（用「·」连接），所以这里断言完整那句；
+    // 比原来的两条独立断言更强——同时钉住结论与逐条确认都还在。
+    expect(await screen.findByText("需确认 · 需逐条确认")).toBeInTheDocument();
     expect(screen.getAllByText("不投").length).toBeGreaterThan(0);
     expect(screen.getByText("未分析")).toBeInTheDocument();
   });

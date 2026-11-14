@@ -18,13 +18,24 @@ from ...schemas.setting import LLMConfig
 from . import payload as payload_rules
 from . import retry
 from .base import (
-    BaseLLMProvider,
+    BaseLLMProvider as BaseLLMProvider,
+)
+from .base import (
     LLMDelta,
     LLMError,
-    build_request_timeout,
     log_llm_failure,
 )
-from .client_pool import get_shared_client
+from .base import (
+    build_request_timeout as build_request_timeout,
+)
+from .client_pool import get_shared_client as get_shared_client
+from .context_length_error import with_context_length_flag
+from .openai_stream_frames import (
+    _accumulate_tool_calls,
+    _extract_reasoning,
+    _finalize_tool_calls,
+)
+from .openai_transport import OpenAITransport
 
 # 与"获取可用模型"接口（model_catalog）与 SearXNG 校验共用的请求侧规则：实现已
 # 下沉到 payload 模块（见其模块说明），这里按原路径再导出，既有导入方零改动。
@@ -54,60 +65,6 @@ from .usage import (
 logger = logging.getLogger(__name__)
 
 
-def _accumulate_tool_calls(pending: dict[int, dict], fragments: object) -> None:
-    """把碎片化的 tool_calls 增量按 index 累积起来。
-
-    协议里一个调用的 id / name / arguments 可能分散在多个帧里，帧与帧之间是
-    **拼接**关系而不是覆盖关系；index 用来区分同一次响应里的多个并行调用。
-    实测一个很短的 JSON 参数会用二十多帧、每帧一到两个字符地到达。
-    """
-    if not isinstance(fragments, list):
-        return
-    for fragment in fragments:
-        if not isinstance(fragment, dict):
-            continue
-        try:
-            index = int(fragment.get("index", 0))
-        except (TypeError, ValueError):
-            index = 0
-        slot = pending.setdefault(
-            index, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
-        )
-        if isinstance(fragment.get("id"), str) and fragment["id"]:
-            slot["id"] = fragment["id"]
-        if isinstance(fragment.get("type"), str) and fragment["type"]:
-            slot["type"] = fragment["type"]
-        function = fragment.get("function")
-        if isinstance(function, dict):
-            if isinstance(function.get("name"), str):
-                slot["function"]["name"] += function["name"]
-            if isinstance(function.get("arguments"), str):
-                slot["function"]["arguments"] += function["arguments"]
-
-
-def _finalize_tool_calls(pending: dict[int, dict]) -> list[dict]:
-    return [pending[index] for index in sorted(pending)]
-
-
-def _extract_reasoning(delta: dict) -> str:
-    """从流式帧里读出模型的思考内容片段。
-
-    **没有一个统一的字段名**，各家的兼容端点各写各的，所以要逐个容忍：
-
-    - ``reasoning_content``：DeepSeek 系（含自建/网关）的思考内容；
-    - ``reasoning``：部分 OpenAI 系与第三方网关用的名字。
-
-    两个都缺失就返回空串——**什么都不产出，绝不臆造**。这一点很关键：绝大多数普通
-    模型和不开思考的请求本来就没有思考内容，缺失是常态而非异常，静默跳过即可。
-    只有确实是字符串且非空时才返回。
-    """
-    for key in ("reasoning_content", "reasoning"):
-        value = delta.get(key)
-        if isinstance(value, str) and value:
-            return value
-    return ""
-
-
 def _status_error(status: int) -> LLMError:
     """状态码 → LLMError。实现下沉到 payload.status_error，保留为调用点。"""
     return payload_rules.status_error(status)
@@ -122,7 +79,7 @@ _MAX_STREAM_CHARS = 2_000_000
 # 白名单（_OVERRIDABLE_KEYS）均已下沉到 payload 模块（协议静态规则），见其模块说明。
 
 
-class OpenAICompatProvider(BaseLLMProvider):
+class OpenAICompatProvider(OpenAITransport):
     def __init__(
         self,
         config: LLMConfig,
@@ -187,8 +144,11 @@ class OpenAICompatProvider(BaseLLMProvider):
                                     )
                                     await retry.retry_sleep(delay)
                                     continue
-                                raise gate.final_error(
-                                    response.status_code, self._http_error(response)
+                                raise await with_context_length_flag(
+                                    response,
+                                    gate.final_error(
+                                        response.status_code, self._http_error(response)
+                                    ),
                                 )
                             body = bytearray()
                             async for chunk in response.aiter_bytes():
@@ -345,7 +305,9 @@ class OpenAICompatProvider(BaseLLMProvider):
         判断这次失败是否像"服务商不认某个可选参数"：可以降级就返回更新后的
         ``(drop_tools, drop_thinking)`` 让调用方重试一次，不能降级就原样抛出。
         """
-        if not payload_rules.looks_like_rejected_parameter(error):
+        if getattr(
+            error, "context_length_error", False
+        ) or not payload_rules.looks_like_rejected_parameter(error):
             raise error
         # 不少 OpenAI 兼容端点（本地小模型等）不支持 tools，会直接返回 400。
         if tools and not drop_tools:
@@ -385,6 +347,8 @@ class OpenAICompatProvider(BaseLLMProvider):
                     timeout=self._timeout(),
                 ) as response:
                     if response.status_code != 200:
+                        if response.status_code == 400:
+                            raise await with_context_length_flag(response, _status_error(400))
                         # 状态码阶段（尚未产出任何 delta）：交给 stream_chat_events 的重试
                         # 循环决定退避重试或按既有语义转成 LLMError（含 400 降级）。
                         raise StatusRetrySignal(
@@ -483,27 +447,6 @@ class OpenAICompatProvider(BaseLLMProvider):
 
     # ===== 内部工具 =====
 
-    def _endpoint(self) -> str:
-        """规范化接口地址：兼容用户填 Base URL 或完整接口地址两种情况。"""
-        base = self._validated_base_url()
-        if base.endswith("/chat/completions"):
-            return base
-        return f"{base}/chat/completions"
-
-    def _validated_base_url(self) -> str:
-        return validated_base_url(self.config.base_url)
-
-    def _headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
-        if self.config.api_key:
-            headers["Authorization"] = f"Bearer {self.config.api_key}"
-        return headers
-
-    def _client(self) -> httpx.AsyncClient:
-        # 连接池共享（AI 提速）：同一事件循环 + 同一传输层的请求复用连接，
-        # 省掉每次请求的 TCP/TLS 握手；超时按请求在 stream() 处传入。
-        return get_shared_client(transport=self._transport)
-
     def _stream_char_limit(self) -> int:
         # 不限制输出时 max_tokens 为 0，按乘法派生会落到下界，反而成为最严格的
         # 限制；这种情况直接用允许的最大值。
@@ -513,11 +456,6 @@ class OpenAICompatProvider(BaseLLMProvider):
             _MAX_STREAM_CHARS,
             max(_MIN_STREAM_CHARS, self.config.max_tokens * 8),
         )
-
-    def _timeout(self) -> httpx.Timeout:
-        # 分项 read 的"下限保护 + 预算上限压缩"两家同构，实现下沉到 base.build_request_timeout；
-        # 剩余按活预算重算（PR-07-1）：接了 OperationBudget 时 read 随时间递减。
-        return build_request_timeout(self.config, self._deadline_remaining())
 
     def _build_payload(
         self,

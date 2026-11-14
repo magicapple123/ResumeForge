@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """网申填表的请求/响应结构。"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -79,6 +80,8 @@ class PreviewItemOut(BaseModel):
     current_value: str = ""
     options: list[dict[str, str]] = Field(default_factory=list)
     note: str = ""
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    evidence: str = ""
 
 
 class PendingItemOut(BaseModel):
@@ -211,6 +214,8 @@ class WebFormLiveOut(BaseModel):
     note: str = ""
     # rule | ai —— 这条建议是规则给的还是模型给的。空串表示还没有建议（或已填完）。
     source: str = ""
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    evidence: str = ""
     # 主推之外的候选，按模型的把握从大到小。**不含主推那一条**（它在 field_label/value 里）。
     alternatives: list[WebFormLiveAlternativeOut] = Field(default_factory=list)
     filled: int = 0

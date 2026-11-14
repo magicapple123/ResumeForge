@@ -59,6 +59,19 @@ describe("纸面右键菜单", () => {
     expect(screen.queryByRole("menuitem", { name: t("rich.menu.bold") })).toBeNull();
   });
 
+  it("R-11：传入样式回调时多出「小一号」「强调色」两项，点了落到各自回调", () => {
+    const onToggleSmall = vi.fn();
+    const onToggleEmphasis = vi.fn();
+    renderMenu({ onToggleSmall, onToggleEmphasis });
+    fireEvent.click(screen.getByRole("menuitem", { name: t("rich.menu.small") }));
+    expect(onToggleSmall).toHaveBeenCalledTimes(1);
+    // 点任意一项都会关掉菜单（store 被清空），验第二项要重新挂一次。
+    cleanup();
+    renderMenu({ onToggleSmall, onToggleEmphasis });
+    fireEvent.click(screen.getByRole("menuitem", { name: t("rich.menu.emphasis") }));
+    expect(onToggleEmphasis).toHaveBeenCalledTimes(1);
+  });
+
   it("两项菜单 + 一条分隔线，落位贴着指针（不再锚元素左上角）", () => {
     renderMenu();
     const menu = screen.getByRole("menu");

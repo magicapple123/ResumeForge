@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/jobs/import/from-url", tags=["jobs"])
 
 EngineChoice = Literal["auto", "http", "browser"]
-ExtractIntent = Literal["job_list", "job_detail"]
+ExtractIntent = Literal["auto", "job_list", "job_detail"]
 
 
 class FromUrlPreviewRequest(BaseModel):
@@ -49,7 +49,7 @@ class FromUrlPreviewRequest(BaseModel):
     url: str = Field(min_length=1, max_length=2048)
     engine: EngineChoice = "auto"
     limit: int = Field(default=0, ge=0, le=MAX_PREVIEW_ROWS)
-    intent: ExtractIntent = "job_list"
+    intent: ExtractIntent = "auto"
     # #16 收尾任务 2：翻页数。只跟随页面声明的「下一页」，不猜 URL 模板；
     # 找不到下一页时只抓当前页并如实返回 pages_fetched=1 / stop_reason=no_next。
     pages: int = Field(default=1, ge=1, le=MAX_LIST_PAGES)

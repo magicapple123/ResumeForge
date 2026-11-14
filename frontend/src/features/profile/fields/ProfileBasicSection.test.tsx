@@ -21,6 +21,7 @@ afterEach(() => {
 const SECTION = makeSection("basic_info", "Basic Info", "singleton", [
   makeField("basic_info", "name", "Name"),
   makeField("basic_info", "gender", "Gender"),
+  makeField("basic_info", "notes", "Notes", { field_type: "multi_line" }),
   makeField("basic_info", "photo", "Photo", { field_type: "photo" }),
 ]);
 
@@ -56,6 +57,12 @@ describe("ProfileBasicSection（定义驱动）", () => {
     renderSection();
     expect(screen.getByText(t("profileLibrary.photo.title"))).toBeInTheDocument();
     expect(screen.getByText(t("profileLibrary.photo.hint"))).toBeInTheDocument();
+  });
+
+  it("uses 500 and 20000 when workspace limits are unavailable", () => {
+    renderSection();
+    expect(screen.getByLabelText("Name")).toHaveAttribute("maxlength", "500");
+    expect(screen.getByLabelText("Notes")).toHaveAttribute("maxlength", "20000");
   });
 
   it("旧网申专用字段（微信/QQ/证件号）不再出现在基本信息里", () => {

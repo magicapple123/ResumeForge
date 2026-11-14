@@ -92,12 +92,15 @@ from ..services.settings_service import (
 )
 from ..services.ui_locale import get_ui_locale
 from .assistant_compaction_api import register_compaction_setting_routes
+from .model_window_api import register_model_window_routes
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 # 上下文压缩的三个设置项（#10）单独一层模块：本文件已贴 500 行硬预算，只留注册一行。
 register_compaction_setting_routes(router)
+# 「模型窗口参考」只读列表（R-18 的旁路展示）：同样只留注册一行。
+register_model_window_routes(router)
 
 
 class AgentTaskEventsSetting(BaseModel):

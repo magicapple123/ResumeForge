@@ -28,6 +28,8 @@ export interface BargeInRunnerDeps {
   telemetry: (event: VoiceTelemetryEvent, fields?: VoiceTelemetryFields) => void;
   /** 状态变了（UI 要更新 ducked/插话提示）。 */
   onChange?: () => void;
+  /** 「插话灵敏度」覆盖（Q1-D）：不传 = 300ms 的默认档。 */
+  minSpeechMs?: number;
 }
 
 export class BargeInRunner {
@@ -62,6 +64,7 @@ export class BargeInRunner {
       speaking,
       speechDurationMs: durationMs,
       assistantActive,
+      minSpeechMs: this.deps.minSpeechMs,
     });
     this.state = step.state;
     if (step.action.kind === "duck") {

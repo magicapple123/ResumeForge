@@ -209,8 +209,10 @@ def test_list_and_author_values_render_with_item_paths():
         assert re.search(rf'data-resume-path="{course_path}"[^>]*>{value}<', html), value
     for author in ("张示例", "李示例"):
         assert re.search(rf'data-resume-path="{author_path}"[^>]*>{author}<', html), author
-    assert html.count(f'data-resume-path="{course_path}"') == 2
-    assert html.count(f'data-resume-path="{author_path}"') == 2
+    # 2 个值 + 1 个字段名「核心课程：」：标签也带同一路径（点标签同样定位到这一条）。
+    assert html.count(f'data-resume-path="{course_path}"') == 3
+    # 同上：2 个作者名 + 1 个字段名「作者：」。
+    assert html.count(f'data-resume-path="{author_path}"') == 3
     # 分隔符/星号不是可点击字段：不生成路径节点；路径最后一段必须是真实 item id。
     paths = re.findall(r'data-resume-path="([^"]*)"', html)
     assert all(paths)

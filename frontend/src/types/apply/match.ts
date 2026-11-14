@@ -13,6 +13,14 @@ export interface MatchCondition {
   evidence: string;
 }
 
+export interface JobMatchSource {
+  resume_id: number | null;
+  resume_title: string;
+  resume_revision: number | null;
+  content_hash: string;
+  fingerprint: string;
+}
+
 export interface JobMatchResult {
   hard_conditions: MatchCondition[];
   core_abilities: MatchCondition[];
@@ -21,6 +29,7 @@ export interface JobMatchResult {
   admission: AdmissionResult;
   advice: string;
   notes: string[];
+  source?: JobMatchSource | null;
 }
 
 /** 参考分的单个分项（0-100 分 + 权重 + 一句可读的依据）。 */
@@ -56,6 +65,7 @@ export interface JobMatchOut {
   updated_at: string;
   /** 派生值、仅展示、带免责；未分析过时为 null。 */
   reference_score: MatchReferenceScore | null;
+  stale?: boolean;
 }
 
 export type JobMatchBatchItemStatus = "completed" | "failed";
@@ -129,6 +139,7 @@ export interface JobMatchBackgroundTask {
   status: JobMatchBackgroundTaskStatus;
   job_ids: number[];
   force: boolean;
+  resume_id?: number | null;
   /** 老任务（本次改动之前写入的）没有这个字段，按逐岗匹配理解。 */
   mode?: JobMatchBatchMode;
   requested_count: number;

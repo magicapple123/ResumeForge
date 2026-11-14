@@ -83,7 +83,9 @@ describe("WorkbenchParamsColumnV2 · 分组归属（#7 / #13）", () => {
         <RecordHarness />
       </AntdApp>,
     );
-    expect(container.querySelectorAll(".resume-typography-panel")).toHaveLength(0);
+    expect(container.querySelectorAll(".resume-typography-panel")).toHaveLength(1);
+    expect(screen.getByText(t("typography.role.field_label"))).toBeInTheDocument();
+    expect(screen.queryByText(t("typography.role.body"))).toBeNull();
     expect(screen.queryByText(t("structure.typographyTools.title"))).toBeNull();
   });
 

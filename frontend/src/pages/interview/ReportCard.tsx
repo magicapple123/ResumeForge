@@ -14,6 +14,7 @@ import type { InterviewDetail } from "../../types";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { JANE_FACE_SOURCES, janeFaceForScore } from "./janeFaces";
+import { CameraReportSection } from "./CameraReportSection";
 
 export function ReportCard({
   session,
@@ -123,6 +124,8 @@ export function ReportCard({
               </ul>
             </div>
           </div>
+          {/* F18：镜头表现单独一节（实验性，默认不计入总分）。 */}
+          <CameraReportSection sessionId={session.id} camera={report.camera} />
         </>
       )}
       <Space wrap>

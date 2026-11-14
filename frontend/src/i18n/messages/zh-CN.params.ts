@@ -109,6 +109,7 @@ const params = {
   // ── 联系方式换行（#3）──────────────────────────────────────
   /** 排版参数里的控件名：可选"在某个字段前强制换行"。 */
   "workbench.contactBreak.label": "联系方式换行",
+  "workbench.contactSeparator.label": "联系方式分隔",
   /** 说明默认行为：字段整体不拆行，只在字段之间换行。 */
   "workbench.contactBreak.hint":
     "默认每个字段整体不拆行、字段之间自动换行；选中某个字段表示在它前面强制换行",

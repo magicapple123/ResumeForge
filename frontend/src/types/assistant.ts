@@ -11,6 +11,8 @@ export interface AssistantConversationBrief {
   archived: boolean;
   /** 分组名（"移动到项目"）；空串表示未分组。 */
   group_name: string;
+  /** 临时对话（F34）：为真时这段对话不注入也不抽取助手记忆；关闭不删已有记忆。 */
+  memory_off?: boolean;
   message_count: number;
   created_at: string;
   updated_at: string;
@@ -206,6 +208,23 @@ export interface AssistantQuotedMessage {
   excerpt: string;
 }
 
+/**
+ * 一条用户消息「本轮引用」的岗位/简历（F36）。
+ *
+ * 与 `AssistantMessage.context` 的同名字段同构：落库消息直接读 context，乐观气泡用
+ * 发送瞬间的标签快照（标题暂存在 `job_title` / `resume_title`，`job_company` 缺省）。
+ */
+export interface AssistantMessageReferences {
+  job_id?: number | null;
+  job_title?: string;
+  job_company?: string;
+  resume_id?: number | null;
+  resume_title?: string;
+}
+
+/** 引用片点击后的跳转目标。 */
+export type AssistantReferenceKind = "job" | "resume";
+
 export interface AssistantMessage {
   id: number;
   conversation_id: number;
@@ -217,6 +236,13 @@ export interface AssistantMessage {
   context: {
     job_id?: number | null;
     resume_id?: number | null;
+    /**
+     * 发送时选中的岗位/简历标题快照（F36）。后端只在查到对象时写入，所以历史消息里可能没有；
+     * 有它之后岗位改名/删除也能在气泡里显示当时引用的名字。
+     */
+    job_title?: string;
+    job_company?: string;
+    resume_title?: string;
     include_profile?: boolean;
     web_search?: boolean;
     sources?: AssistantSource[];
@@ -326,6 +352,9 @@ export interface ContextUsage {
   total: number;
   /** 百分比分母（当前模型的上下文窗口）；0 = 未设置。 */
   window: number;
+  window_source?: "manual" | "reference" | "fallback";
+  trigger_tokens?: number;
+  default_trigger_tokens?: number;
   percent: number | null;
   /** true = 这条会话的旧消息没落过用量，只有系统提示与对话两桶是估算出来的。 */
   partial: boolean;
@@ -390,4 +419,4 @@ export type AssistantStreamEvent =
   // 工具轮次到顶：后端先停下并如实上报轮数，前端据此给「继续」入口（需求 #5）。
   | { type: "round_limit"; rounds: number }
   | { type: "done"; message: AssistantMessage }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string; code?: string };

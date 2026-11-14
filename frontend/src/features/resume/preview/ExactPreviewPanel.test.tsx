@@ -20,7 +20,10 @@ import { previewPageImageUrl, previewPdfUrl } from "./previewPages";
 
 const fetchPages = vi.hoisted(() => vi.fn());
 
-vi.mock("./previewPagesApi", () => ({ fetchResumePreviewPages: fetchPages }));
+vi.mock("./previewPagesApi", () => ({
+  fetchResumePreviewPages: fetchPages,
+  fetchPreviewFallbackPdf: vi.fn(() => new Promise(() => undefined)),
+}));
 
 beforeEach(() => {
   fetchPages.mockReset();

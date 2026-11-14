@@ -19,12 +19,11 @@
  */
 import {
   FileTextOutlined,
-  MoreOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   SnippetsOutlined,
 } from "@ant-design/icons";
-import { Button, Dropdown, Popconfirm, Select, Space, Switch, Tooltip, Typography } from "antd";
+import { Button, Popconfirm, Select, Space, Switch, Tooltip, Typography } from "antd";
 import type { ReactNode } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -34,6 +33,7 @@ import {
   statusFilterOptions,
   type AdmissionFilterValue,
 } from "./filterOptions";
+import { UnsupportedQueueMenu } from "./UnsupportedQueueMenu";
 
 export function QueueFilterBar({
   statusFilter,
@@ -99,24 +99,17 @@ export function QueueFilterBar({
 }) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后工具栏停在旧文案。
   useLocale();
-  /** 低频动作收进「⋯」：清空选择（只在勾选后有意义）。 */
-  const moreItems = [
-    {
-      key: "clear",
-      label: t("applyQueue.filter.clearSelection"),
-      disabled: busy || selectedCount === 0,
-      onClick: onClearSelection,
-    },
-  ];
 
   return (
     <div className="apply-queue-head">
-      {/* 只有**筛选**这一半进横向滚动容器：右侧那组（批量动作 + 使用说明）必须常驻。
-          两者同在一个滚动容器里时，内容比容器宽 50px（1200×900 实测），最右的「?」
-          会被裁掉一截；而它 402px 的说明气泡会按被裁后的坐标定位，document 因此多出
-          16px 横向滚动（CI 的 ui-quality 在 /apply 判 document overflow）。 */}
-      <div className="apply-queue-head-scroll">
-        <Space wrap={false} size={8} align="center" className="apply-queue-head-main">
+      {/* F09：DOM 分三组（筛选 / 计数与批量动作 / 工具），由 CSS Grid 决定排布——
+          容器 ≥1120px 时 `"filters batch tools"` 一行三组，窄于此仍按今天的两行
+          （`"filters tools" / "batch batch"`）。分组是"能不能并排"的前提：原先两组
+          各自 `space-between`，直接并排会把右侧图标插到行中间。
+          只有**筛选**这一组进横向滚动容器：工具组（含 402px 说明气泡）必须常驻，
+          否则气泡按被裁后的坐标定位，document 会多出 16px 横向滚动。 */}
+      <div className="apply-queue-filters">
+        <Space wrap={false} size={8} align="center">
           <Select
             allowClear
             placeholder={t("applyQueue.filter.byStatus")}
@@ -145,6 +138,10 @@ export function QueueFilterBar({
             />
             <Typography.Text>{t("applyQueue.filter.favoriteOnly")}</Typography.Text>
           </Space>
+        </Space>
+      </div>
+      <div className="apply-queue-batch">
+        <Space size={8} wrap>
           <Typography.Text type="secondary">
             {filterActive
               ? t("applyQueue.filter.countFiltered", {
@@ -157,7 +154,7 @@ export function QueueFilterBar({
           {/* 「跨页」属于条件信息：只在悬停里等于大多数人永远看不到（#35E）——挂 Tooltip 后
             不再占一整行文字（#14G 第二版）。 */}
           <Tooltip title={t("applyQueue.filter.selectAllHint")}>
-            <Button disabled={busy || selectableCount === 0} onClick={onSelectAll}>
+            <Button disabled={busy || selectableCount === 0 || undefined} onClick={onSelectAll}>
               {t("applyQueue.filter.selectAll")}
             </Button>
           </Tooltip>
@@ -169,45 +166,44 @@ export function QueueFilterBar({
             okText={t("applyQueue.action.removeShort")}
             cancelText={t("common.action.cancel")}
             okButtonProps={{ danger: true }}
-            disabled={busy || selectedCount === 0 || batchRemoving}
+            disabled={busy || selectedCount === 0 || batchRemoving || undefined}
             onConfirm={onRemoveSelected}
           >
-            <Button danger disabled={busy || selectedCount === 0} loading={batchRemoving}>
+            <Button
+              danger
+              disabled={busy || selectedCount === 0 || undefined}
+              loading={batchRemoving}
+            >
               {t("applyQueue.action.removeSelected")}
             </Button>
           </Popconfirm>
-          {/* #14I：来源不支持的清理入口。它是"一条就会卡住整队列投递"的硬问题，
-            所以常驻工具栏（而不是藏在行菜单里），但只在真的有这类条目时出现。 */}
-          {unsupportedCount > 0 && (
-            <Tooltip title={t("applyQueue.unsupported.chipHint")}>
-              <Popconfirm
-                title={t("applyQueue.unsupported.chipTitle", { count: unsupportedCount })}
-                description={t("applyQueue.unsupported.chipBody")}
-                okText={t("applyQueue.action.removeShort")}
-                cancelText={t("common.action.cancel")}
-                okButtonProps={{ danger: true }}
-                disabled={busy}
-                onConfirm={onRemoveUnsupported}
-              >
-                <Button size="small" danger className="apply-queue-chip" disabled={busy}>
-                  {t("applyQueue.unsupported.chip", { count: unsupportedCount })}
-                </Button>
-              </Popconfirm>
-            </Tooltip>
-          )}
-          {/* #14A：体检是只读的，随时可点；不阻塞开始投递（blocking 只在开始时确认一次）。
-            图标按钮 + aria-label：文字按钮比图标宽 ~60px，第二行就是这么被挤出来的。 */}
+          {/* F06：「清空选择」只在勾选后才有意义，直接条件渲染成文字按钮——常驻一个
+              点开只有一条禁用项的「⋯」等于给用户一个空菜单。 */}
+          {selectedCount > 0 ? (
+            <Button
+              type="link"
+              size="small"
+              onClick={onClearSelection}
+              disabled={busy || undefined}
+            >
+              {t("applyQueue.filter.clearSelection")}
+            </Button>
+          ) : null}
+        </Space>
+      </div>
+      {/* 工具组：体检 / 刷新 / 两个批量动作 / 来源不支持 / 说明。它们都是"对本页或对
+          选中项做点什么"的入口，与计数、全选这类"读队列、改选择"分开成两组。 */}
+      <div className="apply-queue-tools">
+        <Space size={8} align="center" wrap={false}>
           <Tooltip title={t("applyQueue.action.preflight")}>
             <Button
               icon={<SafetyCertificateOutlined />}
               aria-label={t("applyQueue.action.preflight")}
               loading={preflightLoading}
-              disabled={busy}
+              disabled={busy || undefined}
               onClick={onPreflight}
             />
           </Tooltip>
-          {/* loading 直接挂 reload 的请求态：本地接口虽快，转圈一闪也是「点到了」的确认
-            （此前点击毫无反馈，用户会以为没点上而连点好几次）。 */}
           <Tooltip title={t("common.action.refresh")}>
             <Button
               icon={<ReloadOutlined />}
@@ -216,33 +212,33 @@ export function QueueFilterBar({
               onClick={onReload}
             />
           </Tooltip>
-          <Dropdown menu={{ items: moreItems }} trigger={["click"]} placement="bottomRight">
-            <Button icon={<MoreOutlined />} aria-label={t("applyQueue.more.aria")} />
-          </Dropdown>
+          {selectedCount > 0 && (
+            <>
+              {/* #15D：勾选后才出现的第二个批量动作——「优化指派」要给谁优化，得先有对象。 */}
+              <Tooltip title={t("applyQueue.insights.fit.action")}>
+                <Button
+                  icon={<FileTextOutlined />}
+                  aria-label={t("applyQueue.insights.fit.action")}
+                  onClick={onResumeFit}
+                />
+              </Tooltip>
+              <Tooltip title={t("applyQueue.template.batch")}>
+                <Button
+                  icon={<SnippetsOutlined />}
+                  aria-label={t("applyQueue.template.batch")}
+                  onClick={onBatchTemplate}
+                />
+              </Tooltip>
+            </>
+          )}
+          <UnsupportedQueueMenu
+            count={unsupportedCount}
+            busy={busy}
+            onRemove={onRemoveUnsupported}
+          />
+          {guide}
         </Space>
       </div>
-      <Space size={4} align="center" wrap={false}>
-        {selectedCount > 0 && (
-          <>
-            {/* #15D：勾选后才出现的第二个批量动作——「优化指派」要给谁优化，得先有对象。 */}
-            <Tooltip title={t("applyQueue.insights.fit.action")}>
-              <Button
-                icon={<FileTextOutlined />}
-                aria-label={t("applyQueue.insights.fit.action")}
-                onClick={onResumeFit}
-              />
-            </Tooltip>
-            <Tooltip title={t("applyQueue.template.batch")}>
-              <Button
-                icon={<SnippetsOutlined />}
-                aria-label={t("applyQueue.template.batch")}
-                onClick={onBatchTemplate}
-              />
-            </Tooltip>
-          </>
-        )}
-        {guide}
-      </Space>
     </div>
   );
 }

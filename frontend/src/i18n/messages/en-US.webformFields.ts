@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 const webformFields = {
+  "webformFields.given_name": "Given name",
+  "webformFields.family_name": "Family name",
   "webformFields.academic_author_order": "Author order",
   "webformFields.academic_book_details": "Academic book details",
   "webformFields.academic_book_name": "Academic book title",

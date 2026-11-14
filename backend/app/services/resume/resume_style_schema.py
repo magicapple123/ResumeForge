@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .field_style_target import is_field_path
 from .resume_config_domains import HEX_COLOR_RE, is_object_id
 from .resume_template_scalars import template_float
 
@@ -32,6 +33,7 @@ ROLES: tuple[str, ...] = (
     "entry_title",
     "body",
     "meta",
+    "field_label",
 )
 
 # 属性表：key → 类型 + 区间/枚举 + 可用角色。前端同名表必须逐键相等（测试钉住）。
@@ -92,7 +94,7 @@ STYLE_PROPS: tuple[dict[str, Any], ...] = (
         "step": 0.01,
         # Q11：字距放开到正文 / 条目头——四出口都能表达（HTML letter-spacing / Word
         # w:spacing / PDF set_char_spacing）；此前只允许姓名与板块标题，用户调不到。
-        "roles": ("name", "section_title", "body", "entry_title"),
+        "roles": ("name", "section_title", "body", "entry_title", "field_label"),
     },
 )
 
@@ -221,7 +223,11 @@ def validate_object_roles_domain(raw: object) -> dict | None:
         if name == "version":
             continue
         object_id, sep, role = name.rpartition(":")
-        if not sep or not is_object_id(object_id) or role not in ROLES:
+        if (
+            not sep
+            or not (is_object_id(object_id) or is_field_path(object_id))
+            or role not in ROLES
+        ):
             continue
         cleaned = _validate_style_payload(payload, allowed=ROLE_PROPS[role])
         if cleaned:
@@ -291,6 +297,7 @@ def template_role_defaults(template: str) -> dict[str, dict[str, float]]:
         "entry_title": {"font_scale": template_float(defaults["entry_title_ratio"])},
         "body": {"font_scale": 1.0, "line_height": template_float(defaults["line_height"])},
         "meta": {"font_scale": template_float(defaults["entry_meta_ratio"])},
+        "field_label": {"font_scale": template_float(defaults["entry_meta_ratio"])},
     }
     # R-34A：两项有模板来源的间距基准（其余不编，见函数 docstring）。
     result["section_title"]["space_after"] = template_float(defaults["section_title_gap"])

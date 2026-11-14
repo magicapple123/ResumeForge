@@ -22,6 +22,11 @@ import {
   type SendAssistantStreamOptions,
 } from "./assistantStreamStore";
 import { permissionStorageKey, resetAssistantPermissionForTests } from "../assistantPermission";
+import {
+  clearConversationContext,
+  getConversationContextState,
+  setConversationThreshold,
+} from "../conversationContextState";
 
 const CONVERSATION_ID = 7;
 
@@ -58,16 +63,19 @@ async function sendAndGetPayload(
 }
 
 beforeEach(() => {
+  clearConversationContext(CONVERSATION_ID);
   resetAssistantStreamForTests();
   resetAssistantPermissionForTests();
   window.localStorage.clear();
   assistantApiMocks.sendAssistantMessage.mockReset();
   assistantApiMocks.sendAssistantMessage.mockResolvedValue(undefined);
   permissionApiMocks.getAssistantPermission.mockReset();
+  permissionApiMocks.getAssistantPermission.mockResolvedValue({ permission: "read_only" });
   permissionApiMocks.saveAssistantPermission.mockReset();
 });
 
 afterEach(() => {
+  clearConversationContext(CONVERSATION_ID);
   resetAssistantStreamForTests();
   resetAssistantPermissionForTests();
   window.localStorage.clear();
@@ -133,5 +141,42 @@ describe("请求体两轴（四档解算）", () => {
     expect(call[0]).toBe(12);
     expect(call[1].relaxed_mode).toBe(true);
     expect(call[1].allow_write).toBe(false);
+  });
+});
+
+describe("transient context request wiring", () => {
+  it("sends A's threshold and leaves B on the global default", async () => {
+    setConversationThreshold(CONVERSATION_ID, 200_000);
+    const payload = await sendAndGetPayload();
+    expect(payload.compaction_threshold_tokens).toBe(200_000);
+    assistantApiMocks.sendAssistantMessage.mockClear();
+    const other = await sendAndGetPayload({ activeIdRef: { current: 8 } });
+    expect(other.compaction_threshold_tokens).toBeNull();
+  });
+
+  it("records typed SSE context errors and resets the counter after success", async () => {
+    assistantApiMocks.sendAssistantMessage.mockImplementation(async (_id, _payload, onEvent) => {
+      onEvent({ type: "error", code: "context_length", message: "context too long" });
+    });
+    await sendAssistantStreamMessage("first", vi.fn(), sendOptions());
+    await sendAssistantStreamMessage("second", vi.fn(), sendOptions());
+    expect(getConversationContextState(CONVERSATION_ID).contextErrors).toBe(2);
+    assistantApiMocks.sendAssistantMessage.mockImplementation(async (_id, _payload, onEvent) => {
+      onEvent({ type: "done" });
+    });
+    await sendAssistantStreamMessage("retry", vi.fn(), sendOptions());
+    expect(getConversationContextState(CONVERSATION_ID).contextErrors).toBe(0);
+  });
+
+  it("a transport failure breaks the consecutive provider-error sequence", async () => {
+    assistantApiMocks.sendAssistantMessage.mockImplementationOnce(
+      async (_id, _payload, onEvent) => {
+        onEvent({ type: "error", code: "context_length", message: "context too long" });
+      },
+    );
+    await sendAssistantStreamMessage("first", vi.fn(), sendOptions());
+    assistantApiMocks.sendAssistantMessage.mockRejectedValueOnce(new Error("network unavailable"));
+    await sendAssistantStreamMessage("second", vi.fn(), sendOptions());
+    expect(getConversationContextState(CONVERSATION_ID).contextErrors).toBe(0);
   });
 });

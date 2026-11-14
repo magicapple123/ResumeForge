@@ -99,7 +99,9 @@ class FakeFetcher:
             raise value
         return value  # type: ignore[return-value]
 
-    def fetch_pages(self, url: str, *, pages: int = 1, engine: str | None = None) -> FetchedPages:
+    def fetch_pages(
+        self, url: str, *, pages: int = 1, engine: str | None = None, stop_after_first=None
+    ) -> FetchedPages:
         from app.services.web_fetch.fetcher import FetchedPages
 
         page = self.fetch(url, engine=engine)

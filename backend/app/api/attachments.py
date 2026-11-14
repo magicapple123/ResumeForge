@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException
 from app.schemas.attachments import PdfPreviewOut, PdfPreviewPage, PdfPreviewRequest
 from app.services.attachments import document_source
 from app.services.pdf_page_images import page_image_data_url, render_pdf_page_images
+from app.services.pdfium_guard import run_locked
 
 router = APIRouter(prefix="/api/attachments", tags=["attachments"])
 
@@ -42,6 +43,12 @@ def _as_data_url(mime_type: str, data: str) -> str:
     if text.startswith("data:"):
         return text
     return f"data:{mime_type or 'application/pdf'};base64,{text}"
+
+
+@run_locked
+def _pdf_page_count(raw: bytes) -> int:
+    with pdfium.PdfDocument(io.BytesIO(raw)) as document:
+        return len(document)
 
 
 @router.post("/pdf-preview", response_model=PdfPreviewOut)
@@ -65,8 +72,7 @@ def preview_pdf(payload: PdfPreviewRequest) -> PdfPreviewOut:
         raise HTTPException(status_code=422, detail="这个文件不是 PDF，无法预览")
 
     try:
-        with pdfium.PdfDocument(io.BytesIO(raw)) as document:
-            total = len(document)
+        total = _pdf_page_count(raw)
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001 - 底层异常一律折算成用户能懂的 422

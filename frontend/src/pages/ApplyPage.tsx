@@ -25,6 +25,7 @@ import ApplyQueuePanel from "../features/apply/ApplyQueuePanel";
 import ApplyRecordsPanel from "../features/apply/ApplyRecordsPanel";
 import ApplySettingsModal from "../features/apply/ApplySettingsModal";
 import BrowserStatusBar from "../features/apply/BrowserStatusBar";
+import LoginStatusDrawer from "../features/apply/LoginStatusDrawer";
 import CollectPanel from "../features/apply/CollectPanel";
 import CollectRecordsPanel from "../features/apply/CollectRecordsPanel";
 import CurrentSiteBar from "../features/apply/CurrentSiteBar";
@@ -33,6 +34,7 @@ import { formatErrorGuidance } from "../api/errorGuidance";
 import type { ApplyTask } from "../types";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import "../features/apply/applyInformationHierarchy.css";
 
 /** 投递台的页签 key：URL ?tab= 的合法值域（白名单外回落 queue，不让 Tabs 激活态落空）。 */
 const APPLY_TAB_KEYS = ["queue", "collect", "collect-records", "records", "referrals"];
@@ -41,6 +43,8 @@ export default function ApplyPage() {
   useLocale();
   const { message } = App.useApp();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Q12：登录状态抽屉（默认关，打开时只读缓存）。
+  const [loginStatusOpen, setLoginStatusOpen] = useState(false);
   const [task, setTask] = useState<ApplyTask | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -140,29 +144,33 @@ export default function ApplyPage() {
 
   return (
     <div className="apply-page">
-      {/* #14G 第二版：标题与副标题原先竖排成 90px（副标题两行），实测把首屏表格挤到 2 行。
-          现在标题单行、副标题收进标题旁的「?」（真要读的人点一下就有），漏斗与设置同排。 */}
+      {/* 页头结构与其他页面一致：左边「标题 + 一行说明」，右边动作。
+          「当前招聘网站：…」原先并排在标题右侧，1440 下把页头挤成两行（40 → 80px），
+          挪到标题下面既和别的页面同构，也把右侧整块让给漏斗与按钮。 */}
       <div className="apply-page-head">
-        <Space size={6} align="center">
-          <Typography.Title level={4} style={{ margin: 0 }}>
-            {t("pagesMisc.applyPage.title")}
-          </Typography.Title>
-          <Tooltip title={t("pagesMisc.applyPage.subtitle")}>
-            <Button
-              type="text"
-              size="small"
-              icon={<InfoCircleOutlined />}
-              aria-label={t("pagesMisc.applyPage.subtitleAria")}
-            />
-          </Tooltip>
-        </Space>
-        {/* 右侧一行：当前站点 + 最近 7 天执行量 + 设置。
-            站点行原本是页头的兄弟块（再吃 22px + 4px 间距），并入同排后首屏多一行表格。
-            允许换行：这几块合起来 489px，375/768 下 `wrap={false}` 会把整页撑出横向滚动
-            （CI 的 ui-quality 在 /apply 判 document/clipped overflow）。宽屏仍然是一行。 */}
-        <Space size={12} align="center">
+        <div className="apply-page-head-main">
+          <Space size={6} align="center">
+            <Typography.Title level={3} style={{ margin: 0 }}>
+              {t("pagesMisc.applyPage.title")}
+            </Typography.Title>
+            <Tooltip title={t("pagesMisc.applyPage.subtitle")}>
+              <Button
+                type="text"
+                size="small"
+                icon={<InfoCircleOutlined />}
+                aria-label={t("pagesMisc.applyPage.subtitleAria")}
+              />
+            </Tooltip>
+          </Space>
           <CurrentSiteBar refreshKey={collectRefreshKey} />
+        </div>
+        {/* 右侧一行：最近 7 天执行量 + 登录状态 + 设置。 */}
+        <Space size={12} align="center">
           <ApplyFunnelBar onDrill={drillFunnel} />
+          {/* Q12：三处登录态的入口放在浏览器状态条旁——用户是在这条链路上撞到登录墙的。 */}
+          <Button onClick={() => setLoginStatusOpen(true)}>
+            {t("applyUi.loginStatus.button")}
+          </Button>
           <Button icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)}>
             {t("pagesMisc.applyPage.action.settings")}
           </Button>
@@ -172,11 +180,12 @@ export default function ApplyPage() {
       <BrowserStatusBar />
 
       {/* 采集批次的状态卡放在「自动采集」页签里、紧挨本次采集结果（用户实测：分离在
-          页面顶部时，正在跑的状态和结果离得太远）；投递批次保持在页面顶部。 */}
+        页面顶部时，正在跑的状态和结果离得太远）；投递批次保持在页面顶部。 */}
       {detail && task?.kind !== "collect" && (
         <ApplyProgressPanel
           task={detail}
           busy={busy}
+          showPauseResume={tab !== "queue"}
           onPause={() => void control("pause")}
           onResume={() => void control("resume")}
           onStop={() => void control("stop")}
@@ -188,7 +197,7 @@ export default function ApplyPage() {
         </Typography.Paragraph>
       )}
       {/* 任务记录已经不存在（被清理 / 后端重启）时如实说明并给「重试」——否则这里会
-          永远停在「正在读取任务进度…」，看起来像卡死。 */}
+        永远停在「正在读取任务进度…」，看起来像卡死。 */}
       {!detail && task && notFound && (
         <Space orientation="vertical" size={4} style={{ marginBottom: 8 }}>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
@@ -207,7 +216,16 @@ export default function ApplyPage() {
           {
             key: "queue",
             label: t("pagesMisc.applyPage.tab.queue"),
-            children: <ApplyQueuePanel disabled={running} onStarted={adoptTask} />,
+            children: (
+              <ApplyQueuePanel
+                disabled={running}
+                onStarted={adoptTask}
+                task={task?.kind === "apply" ? (detail ?? task) : null}
+                controlBusy={busy}
+                onPause={() => void control("pause")}
+                onResume={() => void control("resume")}
+              />
+            ),
           },
           {
             key: "collect",
@@ -268,6 +286,7 @@ export default function ApplyPage() {
       />
 
       <ApplySettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <LoginStatusDrawer open={loginStatusOpen} onClose={() => setLoginStatusOpen(false)} />
     </div>
   );
 }

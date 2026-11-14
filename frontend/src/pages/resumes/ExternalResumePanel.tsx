@@ -28,6 +28,8 @@ import ExternalResumeDetailDrawer from "../../features/resume/list/ExternalResum
 import type { ExternalResumeDetailTab } from "../../features/resume/list/ExternalResumeDetailDrawer";
 import ExternalResumeUploadModal from "../../features/resume/list/ExternalResumeUploadModal";
 import { useExternalResumes } from "../../features/external-resume/useExternalResumes";
+import type { ExternalResumeFilters } from "../../features/external-resume/useExternalResumes";
+import ExternalResumeFiltersBar from "./ExternalResumeFiltersBar";
 import { useToast } from "../../hooks/useToast";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -48,14 +50,22 @@ interface Props {
    * 默认值必须保持 `card`：将来若别处复用面板，默认值不能变成 `bare`，否则外观会被改掉。
    */
   variant?: "card" | "bare";
+  filters?: ExternalResumeFilters;
+  onFiltersChange?: (filters: ExternalResumeFilters) => void;
 }
 
-export default function ExternalResumePanel({ variant = "card" }: Props) {
+export default function ExternalResumePanel({
+  variant = "card",
+  filters = {},
+  onFiltersChange,
+}: Props) {
   useLocale();
   const navigate = useNavigate();
   const { message } = App.useApp();
   const toast = useToast();
-  const { items, loading, error, reload, uploading, upload, remove } = useExternalResumes();
+  const { items, total, loading, error, reload, uploading, upload, remove } =
+    useExternalResumes(filters);
+  const hasFilters = Boolean(filters.keyword?.trim() || filters.jobId != null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [detail, setDetail] = useState<DetailState | null>(null);
 
@@ -70,6 +80,10 @@ export default function ExternalResumePanel({ variant = "card" }: Props) {
       } else {
         // 扫描件不是失败：文件已保存，只是没有文本可检查/可复用。
         toast.warning(t("resumesPage.external.uploadedNoText", { name: record.name }));
+      }
+      if (hasFilters && onFiltersChange) {
+        onFiltersChange({});
+        toast.info(t("resumesPage.external.uploadFiltersCleared"));
       }
       return true;
     } catch (err) {
@@ -173,7 +187,7 @@ export default function ExternalResumePanel({ variant = "card" }: Props) {
             </Typography.Title>
             <Tag style={{ marginInlineEnd: 0 }}>{t("resumesPage.external.tag")}</Tag>
           </Flex>
-          {items.length > 0 ? uploadButton : null}
+          {items.length > 0 || hasFilters ? uploadButton : null}
         </Flex>
         <Typography.Text type="secondary">{t("resumesPage.external.subtitle")}</Typography.Text>
       </Flex>
@@ -184,6 +198,14 @@ export default function ExternalResumePanel({ variant = "card" }: Props) {
     if (loading) return <LoadingBlock minHeight={96} />;
     if (error) return <ErrorState description={error} onRetry={() => void reload()} />;
     if (items.length === 0) {
+      if (hasFilters)
+        return (
+          <EmptyState
+            description={t("resumesPage.external.noMatches")}
+            actionLabel={t("resumesPage.external.clearFilters")}
+            onAction={() => onFiltersChange?.({})}
+          />
+        );
       return (
         <EmptyState
           description={
@@ -245,6 +267,21 @@ export default function ExternalResumePanel({ variant = "card" }: Props) {
     );
   };
 
+  const content = (
+    <Flex vertical gap={12}>
+      {onFiltersChange ? (
+        <ExternalResumeFiltersBar
+          filters={filters}
+          onChange={onFiltersChange}
+          total={total}
+          shown={items.length}
+          loading={loading}
+        />
+      ) : null}
+      {body()}
+    </Flex>
+  );
+
   const modals = (
     <>
       <ExternalResumeUploadModal
@@ -270,7 +307,7 @@ export default function ExternalResumePanel({ variant = "card" }: Props) {
     return (
       <Flex vertical gap={11}>
         {bareHeader}
-        <Card size="small">{body()}</Card>
+        <Card size="small">{content}</Card>
         {modals}
       </Flex>
     );
@@ -292,7 +329,7 @@ export default function ExternalResumePanel({ variant = "card" }: Props) {
       }
       extra={uploadButton}
     >
-      {body()}
+      {content}
       {modals}
     </Card>
   );

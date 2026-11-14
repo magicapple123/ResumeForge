@@ -54,6 +54,7 @@ const trackerForm = {
   "trackerForm.channel.other": "其他",
   "trackerForm.toast.saved": "已保存",
   "trackerForm.toast.added": "已添加",
+  "trackerForm.toast.existing": "已打开已有求职进度",
   "trackerForm.error.saveFailed": "保存失败",
 } as const;
 

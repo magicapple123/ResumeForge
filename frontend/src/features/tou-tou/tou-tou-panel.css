@@ -3,6 +3,7 @@
    颜色全部走 --rf-* token（深色主题自动跟随），不使用 .ant-* 覆写。 */
 
 .tt-panel-overlay {
+  pointer-events: auto;
   position: fixed;
   inset: 0;
   z-index: var(--rf-layer-orb-tooltip);

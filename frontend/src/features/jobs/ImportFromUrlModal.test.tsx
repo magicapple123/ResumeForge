@@ -128,6 +128,15 @@ afterEach(() => {
 });
 
 describe("ImportFromUrlModal 预览", () => {
+  it("allows explicit detail recapture after an automatic preview", async () => {
+    await fetchPreview();
+    fireEvent.click(screen.getByRole("button", { name: t("jobsImport.action.refetchDetail") }));
+    await waitFor(() =>
+      expect(previewFromUrl).toHaveBeenLastCalledWith(
+        expect.objectContaining({ intent: "job_detail", pages: 1 }),
+      ),
+    );
+  });
   it("抓取后显示来源 URL、原文摘要、四态与已在库标记", async () => {
     await fetchPreview();
     expect(previewFromUrl).toHaveBeenCalledWith(
@@ -135,7 +144,7 @@ describe("ImportFromUrlModal 预览", () => {
         url: URL,
         engine: "auto",
         limit: 0,
-        intent: "job_list",
+        intent: "auto",
         pages: 1,
       }),
     );

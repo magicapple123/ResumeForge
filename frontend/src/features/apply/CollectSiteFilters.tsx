@@ -16,9 +16,26 @@
  * 「测试是否生效」按钮：把当前选中的项发到后端，在真实站点页面上逐项校验
  * （必要时会导航到筛选栏页读"这个账号可见"的清单），结果逐项展示。
  */
-import { ExperimentOutlined, InfoCircleOutlined, ReloadOutlined } from "@ant-design/icons";
+import {
+  ExperimentOutlined,
+  InfoCircleOutlined,
+  ReloadOutlined,
+  WarningFilled,
+} from "@ant-design/icons";
 import type { SelectProps } from "antd";
-import { Alert, App, Button, Form, Select, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import {
+  Alert,
+  App,
+  Button,
+  Form,
+  Popover,
+  Select,
+  Space,
+  Spin,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCollectFilterOptions, testCollectFilters } from "../../api/apply";
 import type {
@@ -107,6 +124,13 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
   // 联动只看「求职类型」：站点实测它决定薪资/结算方式/兼职时间哪些格子可见（§15.2）。
   const jobTypeValue = Form.useWatch(["filters", "jobType"], form);
   const currentJobType = toCodes(jobTypeValue)[0] ?? "";
+  // 「已选 N 项」：只数**有值的组**（多选按组算一项）。七个下拉全是「不限」时，
+  // 界面上没有任何进度感，用户不知道自己是"没设条件"还是"设了但没生效"。
+  const filtersValue = Form.useWatch("filters", form) as Record<string, unknown> | undefined;
+  const selectedCount = useMemo(
+    () => Object.values(filtersValue ?? {}).filter((value) => toCodes(value).length > 0).length,
+    [filtersValue],
+  );
   const [data, setData] = useState<CollectFilterOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -229,11 +253,18 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
     // 会误以为"没有站点筛选功能"（实测反馈）。
     return (
       <div className="apply-collect-site-filters">
-        <Space size={8} wrap style={{ marginBottom: 4 }}>
-          <Typography.Text strong>{t("collectFilters.section.title")}</Typography.Text>
-          <Spin size="small" />
-          <Typography.Text type="secondary">{t("collectFilters.section.loading")}</Typography.Text>
-        </Space>
+        {/* 结构与加载完成后的那一份保持一致（head > title > Text）：
+            否则占位树与正式树的首个子节点类型不同，React 会整块重建，
+            `findByText(title)` 拿到的是已被替换掉的旧节点（用例会报 detached）。 */}
+        <div className="apply-collect-site-head">
+          <Space size={8} wrap className="apply-collect-site-title">
+            <Typography.Text strong>{t("collectFilters.section.title")}</Typography.Text>
+            <Spin size="small" />
+            <Typography.Text type="secondary">
+              {t("collectFilters.section.loading")}
+            </Typography.Text>
+          </Space>
+        </div>
       </div>
     );
   }
@@ -243,59 +274,87 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
 
   return (
     <div className="apply-collect-site-filters">
-      <Space size={8} wrap style={{ marginBottom: 4 }}>
-        <Typography.Text strong>{t("collectFilters.section.title")}</Typography.Text>
-        {sources.map((source) => {
-          const meta = SOURCE_TAG[source] ?? SOURCE_TAG.unavailable;
-          return (
-            <Tooltip key={`tag-${source}`} title={t(meta.hintKey)}>
-              <Tag color={meta.color} style={{ marginInlineEnd: 0 }}>
-                {t(meta.textKey)}
-              </Tag>
-            </Tooltip>
-          );
-        })}
-        <Button
-          size="small"
-          type="link"
-          icon={<ReloadOutlined />}
-          loading={loading}
-          onClick={() => void load()}
-        >
-          {t("collectFilters.action.reload")}
-        </Button>
-        <Tooltip title={t("collectFilters.test.hint")}>
+      {/* 头部三块：身份（标题 + 来源标签 + 已选数）、右侧两个动作。
+          「已选 N 项」是这一块唯一的进度感来源——七个下拉全是「不限」时，
+          用户看不出自己到底设了几个条件。 */}
+      <div className="apply-collect-site-head">
+        <Space size={8} wrap className="apply-collect-site-title">
+          <Typography.Text strong>{t("collectFilters.section.title")}</Typography.Text>
+          {selectedCount > 0 && (
+            <span className="apply-collect-selected-chip">
+              {t("applyCollect.filters.selected", { count: selectedCount })}
+            </span>
+          )}
+          {sources.map((source) => {
+            const meta = SOURCE_TAG[source] ?? SOURCE_TAG.unavailable;
+            return (
+              <Tooltip key={`tag-${source}`} title={t(meta.hintKey)}>
+                <Tag color={meta.color} style={{ marginInlineEnd: 0 }}>
+                  {t(meta.textKey)}
+                </Tag>
+              </Tooltip>
+            );
+          })}
+        </Space>
+        <Space size={4} wrap={false}>
           <Button
             size="small"
             type="link"
-            icon={<ExperimentOutlined />}
-            loading={testing}
-            onClick={() => void runTest()}
+            icon={<ReloadOutlined />}
+            loading={loading}
+            onClick={() => void load()}
           >
-            {t("collectFilters.action.test")}
+            {t("collectFilters.action.reload")}
           </Button>
-        </Tooltip>
-      </Space>
+          <Tooltip title={t("collectFilters.test.hint")}>
+            <Button
+              size="small"
+              type="link"
+              icon={<ExperimentOutlined />}
+              loading={testing}
+              onClick={() => void runTest()}
+            >
+              {t("collectFilters.action.test")}
+            </Button>
+          </Tooltip>
+        </Space>
+      </div>
 
-      <Typography.Text type="secondary" style={{ display: "block", marginBottom: 4 }}>
-        <InfoCircleOutlined /> {t("collectFilters.intro")}
-      </Typography.Text>
-      <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
-        <InfoCircleOutlined /> {t("collectFilters.intro.rules")}
-      </Typography.Text>
-      <Typography.Text type="warning" style={{ display: "block", marginBottom: 12 }}>
-        {t("collectFilters.intro.breadth")}
-      </Typography.Text>
+      <>
+        <div className="apply-collect-site-intro">
+          {/* F05：整块只留一个 info 图标。第二行是它的缩进续行（不再重复图标，否则读起来像
+              「①①」）；「选得越多越杂」是取舍提醒而不是错误，降级成同行灰字，不再单独占一行。 */}
+          <Typography.Text type="secondary">
+            <InfoCircleOutlined /> {t("collectFilters.intro")}
+          </Typography.Text>
+          <div className="apply-collect-site-intro-rules">
+            <Typography.Text type="secondary">{t("collectFilters.intro.rules")}</Typography.Text>
+            <span>{t("collectFilters.intro.breadth")}</span>
+          </div>
+        </div>
 
-      {!sessionRead && (
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 12 }}
-          title={t("collectFilters.launch.title")}
-          description={t("collectFilters.launch.body")}
-        />
-      )}
+        {!sessionRead && (
+          // 启动提示：整块 Alert（标题 + 两段正文 + 图标，约 70px）压成一行内联提示。
+          // 标题仍是页面上的可见文本（用例也按它查），正文进 Popover——它是"为什么"，
+          // 首次读一次就够，不必常驻占掉首屏。
+          <div className="apply-collect-inline-note is-warn">
+            <WarningFilled />
+            <span>{t("collectFilters.launch.title")}</span>
+            <Popover
+              trigger="click"
+              placement="bottomLeft"
+              title={t("collectFilters.launch.title")}
+              content={
+                <div className="apply-collect-site-help">{t("collectFilters.launch.body")}</div>
+              }
+            >
+              <Button type="link" size="small">
+                {t("applyCollect.flow.instructions")}
+              </Button>
+            </Popover>
+          </div>
+        )}
+      </>
 
       {testing && <Spin size="small" style={{ marginBottom: 8 }} />}
 
@@ -347,7 +406,7 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
 
       {/* align="start"：说明文字换行会把某项撑高，居中对齐会让旁边的下拉"浮"在半空——
           顶边对齐后各列控件在同一水平线上。 */}
-      <Space size={16} wrap align="start">
+      <div className="apply-collect-site-grid">
         {groups.map((group) => (
           <Form.Item key={group.key} name={["filters", group.key]} label={group.label}>
             <Select
@@ -356,9 +415,9 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
               maxTagCount="responsive"
               allowClear
               showSearch
-              disabled={disabled}
+              disabled={disabled || undefined}
               placeholder={t("collectFilters.tag.any")}
-              style={{ width: group.key === "industry" ? 240 : group.multi ? 200 : 170 }}
+              style={{ width: "100%" }}
               optionFilterProp="label"
               // 选项多（行业 145 条）时要能搜；分组用 antd 的嵌套 options。
               options={buildOptions(group)}
@@ -366,7 +425,7 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
             />
           </Form.Item>
         ))}
-      </Space>
+      </div>
     </div>
   );
 }

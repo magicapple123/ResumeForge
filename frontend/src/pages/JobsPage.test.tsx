@@ -319,40 +319,42 @@ describe("JobsPage URL 状态化", () => {
     );
   });
 
-  it("点列头排序不写进 URL（排序只是本次浏览的视角）", async () => {
+  it("点列头排序不写进 URL（排序只是本次浏览的视角）", () => {
     renderPageWithProbe();
 
     // 表头标题在 antd 6 里会渲染多份（测量/克隆节点），统一点 `<th>` 本体。
-    const header = screen.getAllByText("岗位")[0]!;
-    fireEvent.click(header.closest("th") as HTMLElement);
+    const header = screen.getAllByText("岗位")[0]!.closest("th") as HTMLElement;
+    fireEvent.click(header);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "恢复默认排序" })).toBeEnabled());
+    // 先证明排序确实生效（否则下面"URL 没写"是空断言）：无排序时该属性不存在。
+    expect(header).toHaveAttribute("aria-sort", "ascending");
     expect(screen.getByTestId("location")).not.toHaveTextContent("sort=");
     expect(screen.getByTestId("location")).not.toHaveTextContent("order=");
   });
 
-  it("离开岗位广场再回来，排序恢复默认（按钮回到禁用）", async () => {
+  it("离开岗位广场再回来，排序恢复默认（列头没有箭头）", () => {
     const first = renderPageWithProbe();
-    const header = screen.getAllByText("岗位")[0]!;
-    fireEvent.click(header.closest("th") as HTMLElement);
-    await waitFor(() => expect(screen.getByRole("button", { name: "恢复默认排序" })).toBeEnabled());
+    const header = screen.getAllByText("岗位")[0]!.closest("th") as HTMLElement;
+    fireEvent.click(header);
+    expect(header).toHaveAttribute("aria-sort", "ascending");
     first.unmount();
 
     renderPageWithProbe();
-    expect(await screen.findByRole("button", { name: "恢复默认排序" })).toBeDisabled();
+    // 重进页面后没有任何列头带排序：无排序时 antd 6 不渲染 aria-sort（不是空串）。
+    expect(document.querySelector("th[aria-sort]")).toBeNull();
     expect(document.querySelector(".ant-table-column-sort")).toBeNull();
   });
 
-  it("「恢复默认排序」点击后回到默认排序并清除列头箭头", async () => {
+  it("列头点第三次取消排序：回到默认排序并清除箭头", () => {
     renderPageWithProbe();
-    const header = screen.getAllByText("公司")[0]!;
-    fireEvent.click(header.closest("th") as HTMLElement);
+    const header = screen.getAllByText("公司")[0]!.closest("th") as HTMLElement;
 
-    const reset = screen.getByRole("button", { name: "恢复默认排序" });
-    await waitFor(() => expect(reset).toBeEnabled());
-    fireEvent.click(reset);
-
-    await waitFor(() => expect(reset).toBeDisabled());
+    fireEvent.click(header);
+    expect(header).toHaveAttribute("aria-sort", "ascending");
+    fireEvent.click(header);
+    expect(header).toHaveAttribute("aria-sort", "descending");
+    fireEvent.click(header);
+    expect(header).not.toHaveAttribute("aria-sort");
     expect(document.querySelector(".ant-table-column-sort")).toBeNull();
   });
 

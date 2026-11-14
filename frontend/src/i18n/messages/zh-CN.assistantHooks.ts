@@ -36,6 +36,8 @@ const assistantHooks = {
   "assistantHooks.sidebar.error.toggleSkill": "切换技能失败",
   "assistantHooks.sidebar.success.movedToGroup": "已移动到「{name}」",
   "assistantHooks.sidebar.success.removedFromGroup": "已移出分组",
+  "assistantHooks.sidebar.success.memoryOff": "这段对话不再记忆",
+  "assistantHooks.sidebar.success.memoryOn": "已恢复记忆读写",
   "assistantHooks.url.info.outOfRange":
     "链接里的对话不在当前列表中，可能超出了最近 100 条对话的范围。",
 } as const;

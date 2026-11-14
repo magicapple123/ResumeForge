@@ -67,6 +67,8 @@ class DocxTheme:
     font_name: str = DOCX_FONT
     body_text: tuple[int, int, int] = _BODY_COLOR
     muted_text: tuple[int, int, int] = _MUTED_COLOR
+    # 分隔线色（模板 `--line`）：照片边框默认用它，与 HTML 的 `var(--line)` 同口径。
+    line_text: tuple[int, int, int] = _MUTED_COLOR
 
 
 DEFAULT_DOCX_THEME = DocxTheme()
@@ -116,13 +118,14 @@ def _style_letter_spacing_pt(base: float, style) -> float | None:
 
 def resolve_docx_theme(template: str, format_config: dict | None) -> DocxTheme:
     """一次导出的主题：字体族 + 正文/辅助色（颜色与 PDF 同一条解析：版式覆盖 → 模板 → 兜底）。"""
-    from .pdf_exporter import resolve_muted, resolve_text
+    from .pdf_exporter import resolve_line, resolve_muted, resolve_text
 
     overrides = format_config if isinstance(format_config, dict) else {}
     return DocxTheme(
         font_name=resolve_docx_font_name(overrides.get(FONT_KEY)),
         body_text=resolve_text(template, format_config),
         muted_text=resolve_muted(template, format_config),
+        line_text=resolve_line(template, format_config),
     )
 
 

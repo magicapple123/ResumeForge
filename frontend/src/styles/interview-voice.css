@@ -31,3 +31,81 @@
   max-width: none;
   text-align: left;
 }
+
+/* ===== 识别待确认气泡（Q1-C L1）=====
+   贴在作答区下方：识别完不自动发时，这一块就是"改完再发"的唯一入口。
+   只用一个浅底 + 细边，不加彩色条/大圆角（装饰被明确否决过）。 */
+.interview-pending-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface);
+}
+
+.interview-pending-bubble__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.interview-pending-bubble__hint {
+  font-size: 12px;
+}
+
+/* ===== 作答框（F14）=====
+   四行控件（输入 / 语音条 / 通话入口 / 操作行）此前是平级兄弟：语音条自带边框与
+   浅底、通话入口独占一行，中间还夹一段无归属的空白，整块看起来断成两截。收进同一个
+   容器后，层级是"一个输入区 + 一条分隔线 + 一排操作"。 */
+.interview-composer-shell {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border);
+  border-radius: 12px;
+  background: var(--rf-surface);
+  transition: border-color 120ms ease;
+}
+
+/* 焦点落在框内任意控件（输入框 / 语音按钮 / 通话入口）时整框提亮：
+   与 antd 的输入框焦点环不叠加，因为框内的 TextArea 本身已经没有边框。 */
+.interview-composer-shell:focus-within {
+  border-color: var(--rf-focus-ring);
+}
+
+/* antd-override: 私有形态——作答框内的 TextArea 去掉自带边框/底色/内边距，
+   由外壳统一表达"这是一个输入区"，否则叠加两层边框会让焦点位置看起来有两个。 */
+.interview-composer-shell .ant-input,
+.interview-composer-shell .ant-input:focus {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  resize: none;
+}
+
+/* 语音条压平：波形、错误 Alert、隐私提示都保留，只去掉第二层边框与浅底。 */
+.interview-composer-shell .interview-voice-bar {
+  margin-top: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+/* 语音条与操作行之间的分隔线：此前它们之间只有一段 8px 空白，看不出归谁。 */
+.interview-composer-shell .interview-composer-actions {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+/* ===== 进入实时通话的入口按钮 =====
+   F14 起这个入口移进操作行右侧（麦克风与提交之前），不再独占一行；
+   类名保留作行内锚点与测试/样式引用，不再是"次要入口独占一行"的形态。 */
+.interview-composer__live-room {
+  flex: 0 0 auto;
+}

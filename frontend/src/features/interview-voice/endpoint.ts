@@ -114,7 +114,31 @@ export function classifyTranscript(text: string): TranscriptClass {
 
 export type EndpointMode = "always-on" | "push-to-talk";
 
+/**
+ * 断句时长（Q1-D）：默认值就是上面那几个常量，界面只允许改前两个。
+ * 单独一个结构而不是改常量，是因为常量被纯函数用例逐字钉着，改了会同时松掉回归。
+ */
+export interface EndpointTiming {
+  /** 说完多久算说完（400–1500）。 */
+  continueMs: number;
+  /** 语气词/没说完时延长到多久（1000–2500）。 */
+  extendedMs: number;
+  /** "思考模式"的最长等待。 */
+  thinkingMs: number;
+  /** ASR 慢导致窗口已过时，至少再给多久。 */
+  graceMs: number;
+}
+
+export const DEFAULT_ENDPOINT_TIMING: EndpointTiming = {
+  continueMs: SILENCE_CONTINUE_MS,
+  extendedMs: EXTENDED_SILENCE_MS,
+  thinkingMs: THINKING_SILENCE_MS,
+  graceMs: EXTENDED_GRACE_MS,
+};
+
 export interface EndpointInput {
+  /** 断句时长覆盖（不传 = 用默认常量）。 */
+  timing?: EndpointTiming;
   /** 这一段（可能由多段转写拼起来）的文本。 */
   text: string;
   /** 距最后一次检测到语音的静音时长（ms）。 */
@@ -142,15 +166,16 @@ export type EndpointDecision =
  * 按"超时发出"处理，这与需求表里"最多 1.2–1.5s / 最多 5s"对应。
  */
 export function decideEndpoint(input: EndpointInput): EndpointDecision {
+  const timing = input.timing ?? DEFAULT_ENDPOINT_TIMING;
   const text = normalize(input.text);
   if (input.released) return { kind: "send", cause: "release" };
   // 静音 < 700ms：无论文字多完整都继续听（需求表第一行；VAD 到达 700ms 才会触发上传，
   // 这里是防御性兜底，避免调用方在静音中途提前把回答发出去）。
-  if (input.silenceMs < SILENCE_CONTINUE_MS) {
+  if (input.silenceMs < timing.continueMs) {
     return {
       kind: "wait",
       cause: "incomplete",
-      deadlineAt: input.lastSpeechAt + SILENCE_CONTINUE_MS,
+      deadlineAt: input.lastSpeechAt + timing.continueMs,
     };
   }
   if (!text) {
@@ -160,22 +185,22 @@ export function decideEndpoint(input: EndpointInput): EndpointDecision {
       kind: "wait",
       cause: "incomplete",
       deadlineAt: Math.max(
-        input.lastSpeechAt + EXTENDED_SILENCE_MS,
-        input.atMs + EXTENDED_GRACE_MS,
+        input.lastSpeechAt + timing.extendedMs,
+        input.atMs + timing.graceMs,
       ),
     };
   }
   const transcriptClass = classifyTranscript(text);
   if (transcriptClass === "thinking") {
-    const deadlineAt = input.lastSpeechAt + THINKING_SILENCE_MS;
+    const deadlineAt = input.lastSpeechAt + timing.thinkingMs;
     if (deadlineAt <= input.atMs) return { kind: "send", cause: "thinking-timeout" };
     return { kind: "thinking", deadlineAt };
   }
   if (transcriptClass === "complete") return { kind: "send", cause: "complete" };
   // 没说完：延长到 1.2–1.5s；ASR 慢导致窗口已过时至少再给 EXTENDED_GRACE_MS。
   const deadlineAt = Math.max(
-    input.lastSpeechAt + EXTENDED_SILENCE_MS,
-    input.atMs + EXTENDED_GRACE_MS,
+    input.lastSpeechAt + timing.extendedMs,
+    input.atMs + timing.graceMs,
   );
   if (deadlineAt <= input.atMs) return { kind: "send", cause: "extended-deadline" };
   return { kind: "wait", cause: endsWithFiller(text) ? "filler" : "incomplete", deadlineAt };
@@ -188,8 +213,10 @@ export function shouldUploadSegment(input: {
   uploadRequested: boolean;
   silenceMs: number;
   released?: boolean;
+  /** 与 `decideEndpoint` 同一份断句时长，避免"上传阈值"和"发送阈值"各调各的。 */
+  timing?: EndpointTiming;
 }): boolean {
   if (!input.hasAudio || input.uploadRequested) return false;
   if (input.mode === "push-to-talk") return Boolean(input.released);
-  return input.silenceMs >= SILENCE_CONTINUE_MS;
+  return input.silenceMs >= (input.timing ?? DEFAULT_ENDPOINT_TIMING).continueMs;
 }

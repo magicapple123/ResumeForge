@@ -106,6 +106,10 @@ def load_local_context(
         job = db.get(Job, payload.job_id)
         if job is None:
             raise ValueError("选择的岗位不存在或已被删除")
+        # 标题快照（F36）：context 里只有 id 时，岗位改名/删除后界面只能显示 `#12`。
+        # 这里只在查到对象时补写展示字段，`job_id` 保持原样供跳转与重放使用。
+        metadata["job_title"] = job.title
+        metadata["job_company"] = job.company
         job_out = JobOut.model_validate(job)
         summary = {
             "id": job.id,
@@ -123,6 +127,7 @@ def load_local_context(
         resume = db.get(ResumeRecord, payload.resume_id)
         if resume is None:
             raise ValueError("选择的简历不存在或已被删除")
+        metadata["resume_title"] = resume.title
         take(resume_context(resume, max_chars=min(MAX_RESUME_CONTEXT_CHARS, max(remaining, 0))))
     # 个人资料是助手的默认本地上下文，不再由前端开关控制。这样用户直接问“按我的资料…”
     # 时不会因为忘记勾选而得到一份脱离真实资料的回答。放宽模式时携带身份字段（见 profile_context）。

@@ -16,6 +16,14 @@ import type { ContextUsage } from "../../types";
 
 /** 百分比小数位。与后端一致，改要两边一起改。 */
 const PERCENT_DECIMALS = 1;
+/**
+ * chip 上环形进度的分档阈值（弧与数字**同时**变色）。
+ *
+ * 导出给测试用：85/95 这两个数字被断言写死，散在组件里改一个就悄悄失效。
+ * 100 不是分档线——>100% 仍按 danger 处理，弧只夹到整圈。
+ */
+export const CONTEXT_WARN_PERCENT = 85;
+export const CONTEXT_DANGER_PERCENT = 95;
 /** 千分位缩写：259500 → "259.5K"（1000000 也显示 "1000.0K"，不换算成 M）。 */
 const THOUSAND = 1000;
 /** 精确值的分组格式化：服务商实测 token 不大，直接用千分位更好核对。 */
@@ -67,6 +75,27 @@ export function formatPercent(percent: number | null): string {
 export function formatPercentShort(percent: number | null): string {
   if (percent === null || !Number.isFinite(percent)) return NO_PERCENT;
   return `${Math.round(percent)}%`;
+}
+
+/** chip 环形的三档：常态 / 提醒 / 危险。值即 CSS 类后缀。 */
+export type ContextUsageLevel = "normal" | "warn" | "danger";
+
+/** 按百分比分档；没有分母（null）算常态——空轨道不该是警告色。 */
+export function contextUsageLevel(percent: number | null): ContextUsageLevel {
+  if (percent === null || !Number.isFinite(percent)) return "normal";
+  if (percent >= CONTEXT_DANGER_PERCENT) return "danger";
+  if (percent >= CONTEXT_WARN_PERCENT) return "warn";
+  return "normal";
+}
+
+/**
+ * 环形的弧长（0–100），**只夹弧不夹数字**。
+ *
+ * 数字保留真实值（可以显示 120%，那是真事），弧最多画满一圈。
+ */
+export function contextArcPercent(percent: number | null): number {
+  if (percent === null || !Number.isFinite(percent)) return 0;
+  return Math.min(100, Math.max(0, percent));
 }
 
 /** 千分位缩写：`259.5K` / `985`。用于「已使用 / 窗口」这类头行。 */
@@ -132,6 +161,15 @@ export function withWindowTokens(usage: ContextUsage, windowTokens: number): Con
   return {
     ...usage,
     window: windowTokens,
+    window_source: "manual",
+    default_trigger_tokens: Math.min(
+      Math.round(
+        windowTokens *
+          ((usage.default_trigger_tokens ?? usage.trigger_tokens ?? usage.window * 0.75) /
+            Math.max(1, usage.window)),
+      ),
+      Math.floor(windowTokens * 0.9),
+    ),
     percent: total,
     buckets: usage.buckets.map((bucket, index) => ({ ...bucket, percent: percents[index] })),
   };

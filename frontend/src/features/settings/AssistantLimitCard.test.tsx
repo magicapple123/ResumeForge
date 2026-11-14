@@ -206,3 +206,41 @@ describe("AssistantLimitCard 上下文压缩", () => {
     expect(screen.queryByText(t("assistantLimits.settings.saved"))).toBeNull();
   });
 });
+
+describe("AssistantLimitCard 排版结构（R-32）", () => {
+  it("两个分区标题都在，卡头 intro 不再平铺（信息并入字段 hint）", async () => {
+    renderCard();
+    await waitFor(() => expect(roundsInput()).toHaveValue("30"));
+
+    expect(screen.getByText(t("assistantLimits.settings.section.limits"))).toBeInTheDocument();
+    expect(screen.getByText(t("assistantLimits.settings.compaction.title"))).toBeInTheDocument();
+    expect(screen.queryByText(t("assistantLimits.settings.intro"))).toBeNull();
+  });
+
+  it("dirty 提示只在有改动时出现，保存成功后消失", async () => {
+    const setting = { max_tool_rounds: 7, stream_budget_seconds: 1800 };
+    apiMocks.saveAssistantLimitSetting.mockResolvedValue(setting);
+    renderCard();
+    await waitFor(() => expect(roundsInput()).toHaveValue("30"));
+    expect(screen.queryByText(t("assistantLimits.settings.dirty"))).toBeNull();
+
+    fireEvent.change(roundsInput(), { target: { value: "7" } });
+    expect(screen.getByText(t("assistantLimits.settings.dirty"))).toBeInTheDocument();
+
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+      expect(screen.queryByText(t("assistantLimits.settings.dirty"))).toBeNull(),
+    );
+  });
+
+  it("阈值错误挂在对应字段内（不是堆在保存按钮上方）", async () => {
+    renderCard();
+    await waitFor(() => expect(maskInput()).toHaveValue("60"));
+
+    fireEvent.change(maskInput(), { target: { value: "80" } });
+
+    const alert = screen.getByRole("alert");
+    // 顺序错误说的是摘要必须大于遮蔽 → 必须紧挨摘要控件那一格。
+    expect(alert.closest(".assistant-limits-field")?.contains(summaryInput())).toBe(true);
+  });
+});

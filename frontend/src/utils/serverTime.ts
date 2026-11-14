@@ -116,3 +116,15 @@ export function formatServerTime(value: string, options: FormatServerTimeOptions
     : `${parts.hour}:${parts.minute}`;
   return `${dateText} ${clock}`;
 }
+
+
+/**
+ * 秒级时间戳 → 本地日期字符串（只给"到期/过期"这类只显示日期的场景）。
+ *
+ * 服务端预算里发的是 epoch 秒（如录像 7 天保留期的 `expires_at`），不是 ISO 串，
+ * 所以不能走 `formatServerTime`；但"裸 `new Date(...).toLocaleDateString()` 散落在页面里"
+ * 同样会让 `serverTime.guard` 变红——这里收口一份，页面只调它。
+ */
+export function formatEpochDate(seconds: number): string {
+  return new Date(seconds * 1000).toLocaleDateString();
+}

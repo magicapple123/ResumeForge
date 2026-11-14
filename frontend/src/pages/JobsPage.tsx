@@ -343,15 +343,9 @@ export default function JobsPage() {
         setCandidatesOpen={setCandidatesOpen}
         setFormOpen={setFormOpen}
         onImportCsv={() => setImportCsvOpen(true)}
-        sortState={sortState}
-        applySort={applySort}
         selectionMode={selectionMode}
+        extraActions={<ImportFromUrlLauncher buttonSize="small" onImported={() => void reload()} />}
       />
-
-      {/* 从链接导入（#16C）：按钮+弹窗自包含；导入后停在岗位广场、只刷新列表，不自动入队。 */}
-      <div style={{ marginBottom: 12 }}>
-        <ImportFromUrlLauncher onImported={() => void reload()} />
-      </div>
 
       <BatchToolbar
         selectionMode={selectionMode}

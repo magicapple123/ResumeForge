@@ -268,9 +268,12 @@ export default function ReminderPanel() {
     },
   ];
 
-  /** 关联对象在下拉里查不到时的占位（与列表同口径：不猜、显示 "-"）。 */
+  /**
+   * 关联对象的显示名。未关联（或下拉里查不到）时返回 undefined，而不是 "-"：
+   * 详情抽屉按"空白即不存在"整行不渲染，一条没关联任何东西的提醒不该占三行 "–"。
+   */
   const labelOf = (options: { value: number; label: string }[], id: number | null | undefined) =>
-    id == null ? "-" : (options.find((option) => option.value === id)?.label ?? "-");
+    id == null ? undefined : options.find((option) => option.value === id)?.label;
 
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">

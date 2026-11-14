@@ -64,8 +64,8 @@ LIMITS = {
     "max_entries_per_section": 200,
     "max_custom_fields_per_section": 20,
     "max_groups": 20,
-    "single_line_chars": 200,
-    "multi_line_chars": 2000,
+    "single_line_chars": 500,
+    "multi_line_chars": 20000,
 }
 
 

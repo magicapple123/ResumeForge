@@ -54,6 +54,8 @@ import {
   matchScoreDimensionKey,
 } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
+import JobMatchResumeSelect from "./JobMatchResumeSelect";
+import JobMatchSourceNotice from "./JobMatchSourceNotice";
 
 interface Props {
   job: Job | null;
@@ -127,6 +129,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
   const [starting, setStarting] = useState(false);
   const [taskId, setTaskId] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [resumeId, setResumeId] = useState<number | undefined>();
   const version = useRef(0);
   const lastJobId = useRef<number | null>(null);
 
@@ -146,6 +149,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
     setLoading(false);
     // 换岗位 = 换任务：旧任务的进度不该显示在新岗位上（旧任务仍在后台跑完并提醒）。
     setTaskId(null);
+    setResumeId(undefined);
   }, [job]);
 
   useEffect(() => {
@@ -160,7 +164,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
     setLoading(true);
     setError("");
     try {
-      const result = await getJobMatch(job.id);
+      const result = await (resumeId ? getJobMatch(job.id, resumeId) : getJobMatch(job.id));
       if (current === version.current) setData(result);
     } catch (loadError) {
       if (current === version.current) {
@@ -169,7 +173,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
     } finally {
       if (current === version.current) setLoading(false);
     }
-  }, [job]);
+  }, [job, resumeId]);
 
   // 打开弹窗即拉取匹配分析：与 load 的 loading 置位耦合。按"派生事件"书面
   // 理由豁免 Compiler 规则。
@@ -204,7 +208,11 @@ export default function JobMatchModal({ job, onClose }: Props) {
     try {
       const created = await createAiTask({
         kind: "job_match",
-        payload: { job_id: jobId, force: data != null && data.id > 0 },
+        payload: {
+          job_id: jobId,
+          force: data != null && data.id > 0,
+          ...(resumeId ? { resume_id: resumeId } : {}),
+        },
         label,
       });
       setTaskId(created.id);
@@ -281,6 +289,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
       open={!!job}
       onCancel={onClose}
       footer={null}
+      mask={{ closable: false }}
       width={760}
       // 匹配分析逐条输出，条数不固定：限高让超长内容只滚弹窗内部。
       styles={{
@@ -288,6 +297,15 @@ export default function JobMatchModal({ job, onClose }: Props) {
       }}
       destroyOnHidden
     >
+      {job && (
+        <JobMatchResumeSelect
+          jobId={job.id}
+          value={resumeId}
+          onChange={setResumeId}
+          disabled={analyzing || undefined}
+        />
+      )}
+      {hasResult && result && <JobMatchSourceNotice result={result} stale={data.stale} />}
       {error && (
         <Alert
           type="error"

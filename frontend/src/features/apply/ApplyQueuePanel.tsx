@@ -46,11 +46,23 @@ interface Props {
   /** 有任务正在运行时为真：禁止重复开始。 */
   disabled: boolean;
   onStarted: (task: ApplyTask) => void;
+  task?: ApplyTask | null;
+  controlBusy?: boolean;
+  onPause?: () => void;
+  onResume?: () => void;
   /** 队列内容变化（增删改）时通知页面刷新概览。 */
   onChanged?: () => void;
 }
 
-export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Props) {
+export default function ApplyQueuePanel({
+  disabled,
+  onStarted,
+  task,
+  controlBusy = false,
+  onPause,
+  onResume,
+  onChanged,
+}: Props) {
   const { message } = App.useApp();
   // 本面板用模块级 t()：必须订阅语言变化。
   useLocale();
@@ -385,9 +397,12 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
       <ApplyQueueStartBar
         selectedCount={selectedIds.length}
         eligibleCount={selectableIds.length}
-        busy={busy}
+        busy={busy || controlBusy}
         startDisabled={disabled || pendingItems.length === 0}
         onStart={() => void start()}
+        task={task}
+        onPause={onPause}
+        onResume={onResume}
       />
 
       <ApplyQueueDetailDrawer

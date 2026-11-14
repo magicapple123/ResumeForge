@@ -18,7 +18,14 @@ import type { StylePropKey } from "../../../utils/resumeStyleParams";
  * Q15 删掉了 emphasis（「重点文字」）：planner 从不产出该角色、模板也没有对应
  * `data-role`，PDF/Word 从不查询它——留着只会让用户在面板里调一个永不生效的项。
  */
-export const RESUME_ROLES = ["name", "section_title", "entry_title", "body", "meta"] as const;
+export const RESUME_ROLES = [
+  "name",
+  "section_title",
+  "entry_title",
+  "body",
+  "meta",
+  "field_label",
+] as const;
 
 export type ResumeRoleKey = (typeof RESUME_ROLES)[number];
 
@@ -63,6 +70,7 @@ export const ROLE_STYLE_PROPS: Record<ResumeRoleKey, readonly StylePropKey[]> = 
     "letter_spacing",
   ],
   meta: ["font_scale", "color", "bold", "meta_align"],
+  field_label: ["font_scale", "color", "bold", "letter_spacing"],
 };
 
 /**
@@ -92,4 +100,21 @@ export const ROLE_LABELS: Record<ResumeRoleKey, MessageKey> = {
   entry_title: "typography.role.entry_title",
   body: "typography.role.body",
   meta: "typography.role.meta",
+  field_label: "typography.role.field_label",
+};
+
+/**
+ * 角色 → 「控制纸面哪里」的一句说明（F25）。
+ *
+ * 只写名字时用户分不清「字段名」调的是值前面的「技术栈：」还是值本身；这六句是
+ * 折叠头第二行的常驻小字，**必须能在收起状态看到**，所以放在这里而不是展开后的正文。
+ * 每条 ≤14 字：一行放得下，窄栏也不会折成三行。
+ */
+export const ROLE_HINTS: Record<ResumeRoleKey, MessageKey> = {
+  name: "typography.role.hint.name",
+  section_title: "typography.role.hint.section_title",
+  entry_title: "typography.role.hint.entry_title",
+  body: "typography.role.hint.body",
+  meta: "typography.role.hint.meta",
+  field_label: "typography.role.hint.field_label",
 };

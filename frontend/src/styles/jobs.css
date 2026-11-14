@@ -3,23 +3,79 @@
   width: 100%;
 }
 
+/* 筛选栏控件统一 40px 高：antd 的 size="small" 只给到 30px，整条工具栏比表格行还瘦。
+   只提高度、不动 size——换成 middle 会把按钮左右内边距从 7px 抬到 15px，1440 下必折行。
+   antd 的行内样式与 css-in-js 会顶掉普通规则，所以每条都带 !important。 */
+.jobs-filter-bar .ant-btn {
+  height: 40px !important;
+  padding-inline: 10px !important;
+}
+
+.jobs-filter-bar .ant-input-affix-wrapper {
+  height: 40px !important;
+  padding-inline: 10px !important;
+}
+
+.jobs-filter-bar .ant-select {
+  height: 40px !important;
+}
+
+/* antd 6 的单选下拉内部是 .ant-select-content（v5 叫 .ant-select-selector），
+   它自己带 min-height，撑满外层高度并把文字垂直居中。 */
+.jobs-filter-bar .ant-select .ant-select-content {
+  height: 100% !important;
+  align-items: center;
+}
+
 /* 备选岗位卡片网格：antd Card 自身不带下间距，裸堆会一张贴一张；用 grid gap 拉开。 */
 .candidate-job-card-grid {
   display: grid;
   gap: 16px;
 }
 
-/* 搜索框可伸缩：260 是舒适宽，160 是"还能看清关键词"的下限。
+/* 搜索框可伸缩：240 是舒适宽，160 是"还能看清关键词"的下限。
    真正参与收缩的是它外面的 .ant-space-item——.jobs-search-input 自己不是 flex 项，
-   只写 flex 会静默失效（这是 768–991 把筛选行挤成两行的直接原因）。 */
-.jobs-filter-bar > .ant-space-item:has(> .jobs-search-input) {
+   只写 flex 会静默失效（这是 768–991 把筛选行挤成两行的直接原因）。
+   F04 起搜索框多包了一层筛簇（`.jobs-filter-group-filters`），所以选择器跟着下沉一层；
+   不写这一条的话搜索框会退回 antd 的默认宽，整簇重新挤在一起。 */
+.jobs-filter-group-filters > .ant-space-item:has(> .jobs-search-input) {
   flex: 1 1 200px;
   min-width: 160px;
-  max-width: 260px;
+  max-width: 240px !important;
+}
+
+/* 1366 及以下：控件加高到 40px 后一行更挤，搜索框先让出 80px，别整行折行。 */
+@media (max-width: 1366px) {
+  .jobs-filter-group-filters > .ant-space-item:has(> .jobs-search-input) {
+    max-width: 160px !important;
+  }
 }
 
 .jobs-search-input {
   width: 100%;
+}
+
+/* ===== F04：四簇分组（筛选｜AI｜导入｜新增）=====
+ * 间距原先由单一 `Space size={2}` 统一给定：10 个控件几乎相接，谁也看不出哪几个是一组。
+ * 现在簇内 6px、簇间 8px + 一条竖线。簇本身不参与 flex 分配（按内容宽度排），
+ * 只有筛选簇里的搜索框按上面那条规则伸缩——否则外层会把「新增」也拉成一整段空白。 */
+.jobs-filter-bar .jobs-filter-divider {
+  /* antd 的 vertical divider 是 `height: 0.9em` 且带 -0.06em 上移：夹在 40px 控件之间
+     会显得又短又飘。固定 20px（约半控件高）并归零位移；左右 2px 叠上 8px 间距 = 18px，
+     仍是簇内 6px 的三倍。 */
+  height: 20px;
+  margin-inline: 2px;
+  top: 0;
+}
+
+/* 「导入 + 新增」合并成一个 flex 项（见 JSX 注释）：外层因此只有三个 flex 项，
+   宽屏一行四簇，1440/1080 折成两行各两簇——而不是把「手动添加」单独甩到第二行。
+   内层间距与外层一致（8px），折行后两簇仍按同一节奏排。 */
+.jobs-filter-bar .jobs-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .table-text-link {
@@ -145,4 +201,59 @@
   padding-top: 8px;
   border-top: 1px solid var(--rf-border-subtle);
   width: 100%;
+}
+
+/* ===== 从链接导入弹窗的表单区（F27）=====
+ * 原先五个块塞在一个 `Flex wrap` 里：420+180+220+120+110 ≈ 1098px > 弹窗内容区，
+ * 必然折行；`align="flex-end"` 又会把没有说明文字的「抓取方式」压低 18px。
+ * 现在按内容分成两行：第一行只放输入与主按钮，第二行走栅格。 */
+.jobs-import-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jobs-import-url-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+/* `min-width: 0` 让输入框在窄弹窗里真的能缩，而不是撑出横向滚动。 */
+.jobs-import-url {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.jobs-import-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 三列参数：每列「标签 → 控件 → 说明」纵向堆叠，说明跟着自己的控件。 */
+.jobs-import-params {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: start;
+  margin-top: 4px;
+}
+
+.jobs-import-hint {
+  font-size: 12px;
+}
+
+/* 空态改成居中的整块，高度与只有表头时的预览区接近，避免"抓取前后页面跳一下"。 */
+.jobs-import-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px dashed var(--rf-border);
+  border-radius: 8px;
+  text-align: center;
 }

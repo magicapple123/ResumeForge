@@ -18,6 +18,7 @@ interface TouTouProviderProps {
 export function TouTouProvider({ children }: TouTouProviderProps) {
   const [enabled, setEnabled] = useState(true);
   const [tipsEnabled, setTipsEnabled] = useState(true);
+  const [selectionEnabled, setSelectionEnabled] = useState(true);
   const [edge, setEdge] = useState<TouTouEdge>("right");
   const [status, setStatus] = useState<TouTouStatus>("idle");
 
@@ -29,6 +30,9 @@ export function TouTouProvider({ children }: TouTouProviderProps) {
         setEnabled(setting.enabled);
         // 后端 schema 是整对象：缺字段时保持默认开，不做半截更新。
         if (typeof setting.tips_enabled === "boolean") setTipsEnabled(setting.tips_enabled);
+        if (typeof setting.selection_enabled === "boolean") {
+          setSelectionEnabled(setting.selection_enabled);
+        }
       })
       .catch(() => {
         // 读取失败时保持默认开启，不能因为设置接口短暂不可用而丢失助手入口。
@@ -42,16 +46,19 @@ export function TouTouProvider({ children }: TouTouProviderProps) {
     const handleSettingChange = (event: Event) => {
       const detail = (event as CustomEvent<TouTouSettingEventDetail>).detail;
       if (typeof detail?.enabled === "boolean") setEnabled(detail.enabled);
-      // tips_enabled 可选：旧的事件生产方不带它，缺省时保持现值不动。
+      // tips_enabled / selection_enabled 可选：旧的事件生产方不带它们，缺省时保持现值不动。
       if (typeof detail?.tips_enabled === "boolean") setTipsEnabled(detail.tips_enabled);
+      if (typeof detail?.selection_enabled === "boolean") {
+        setSelectionEnabled(detail.selection_enabled);
+      }
     };
     window.addEventListener(TOU_TOU_SETTING_EVENT, handleSettingChange);
     return () => window.removeEventListener(TOU_TOU_SETTING_EVENT, handleSettingChange);
   }, []);
 
   const value = useMemo(
-    () => ({ enabled, tipsEnabled, edge, status, setEdge, setStatus }),
-    [enabled, tipsEnabled, edge, status],
+    () => ({ enabled, tipsEnabled, selectionEnabled, edge, status, setEdge, setStatus }),
+    [enabled, tipsEnabled, selectionEnabled, edge, status],
   );
   return <TouTouContext.Provider value={value}>{children}</TouTouContext.Provider>;
 }

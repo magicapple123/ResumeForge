@@ -19,14 +19,19 @@ from __future__ import annotations
 
 from ...schemas.resume_document_plan import BlockPlan, DocumentPlan, Inline
 from .document_html import coerce_document, join_cell_texts, paper_document
+from .resume_inline_style import strip_style_markers
 from .resume_labels import DEFAULT_RESUME_LANGUAGE, normalize_language
 
 
 def _inline_text(segments: list[Inline], *, strong_marks: bool = True) -> str:
-    """行内段拼成纯文本；strong 段用 Markdown 加粗（与 HTML 的 strong 对等）。"""
+    """行内段拼成纯文本；strong 段用 Markdown 加粗（与 HTML 的 strong 对等）。
+
+    F22：字号/颜色标记（`{@size=…}`）在 Markdown 里没有对应语法，先剥掉再拼——
+    `**` 留给 Markdown 本身，所以用 `strip_style_markers` 而不是 `strip_markers`。
+    """
     parts: list[str] = []
     for seg in segments:
-        text = str(seg.text or "")
+        text = strip_style_markers(str(seg.text or ""))
         if not text:
             continue
         if strong_marks and seg.strong and not text.startswith("**"):

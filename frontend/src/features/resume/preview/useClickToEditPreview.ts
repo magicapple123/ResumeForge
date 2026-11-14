@@ -35,7 +35,13 @@ import {
   writeStoredClickToEdit,
 } from "./clickToEdit";
 import { forwardWheelToParent } from "./useFrameInteractions";
-import { paintRichField, toggleBold, type RichTextEditAdapter } from "./richText";
+import {
+  paintRichField,
+  STYLE_OPENERS,
+  toggleBold,
+  toggleStyle,
+  type RichTextEditAdapter,
+} from "./richText";
 import { menuPoint, resolveRichSelection, restoreRichSelection } from "./richSelection";
 
 export type { RichTextEditAdapter } from "./richText";
@@ -240,6 +246,25 @@ export function useClickToEditPreview({
     rich.toggle(current.path, next, current.raw);
   }, [target]);
 
+  /** R-11：行内字号 / 强调色。与加粗同一套"先就地改、再交给宿主"的顺序。 */
+  const applyStyle = useCallback(
+    (opener: string) => {
+      const current = target;
+      const rich = richRef.current;
+      if (!current || !rich) return;
+      setTarget(null);
+      const { next, range } = toggleStyle(current.raw, current.start, current.end, opener);
+      if (next === current.raw) return;
+      paintRichField(current.element, next);
+      restoreRichSelection(current.element, range[0], range[1]);
+      rich.toggle(current.path, next, current.raw);
+    },
+    [target],
+  );
+
+  const applySmall = useCallback(() => applyStyle(STYLE_OPENERS.small), [applyStyle]);
+  const applyEmphasis = useCallback(() => applyStyle(STYLE_OPENERS.emphasis), [applyStyle]);
+
   const pickFromMenu = useCallback(() => {
     const current = target;
     if (!current) return;
@@ -255,10 +280,12 @@ export function useClickToEditPreview({
       y: target.y,
       isBold: target.isBold,
       onToggle: applyBold,
+      onToggleSmall: applySmall,
+      onToggleEmphasis: applyEmphasis,
       onPick: pickFromMenu,
       onClose: closeBoldMenu,
     };
-  }, [applyBold, closeBoldMenu, pickFromMenu, target]);
+  }, [applyBold, applySmall, applyEmphasis, closeBoldMenu, pickFromMenu, target]);
 
   return { checked, setChecked, available, active, bindDocument, boldMenu };
 }

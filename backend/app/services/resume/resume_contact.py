@@ -39,6 +39,17 @@ from ...schemas.resume import ResumeContent
 #: `format_config` 里的键名（与前端 `CONTACT_BREAKS_KEY` 逐字一致）。
 CONTACT_BREAKS_KEY = "contact_breaks"
 
+#: 联系方式**字段之间**用什么分隔（与 `contact_breaks` 正交：那个管换行，这个管同行间隔）。
+#:
+#: `space` = 历史行为（HTML 靠 CSS 间距、PDF 四空格、Word 两空格），不写这个键时逐字节
+#: 等于改动前；`bar` / `dot` 让用户在"联系方式之间有明显分隔符"的版式里选。
+CONTACT_SEPARATOR_KEY = "contact_separator"
+CONTACT_SEPARATOR_STYLES: tuple[str, ...] = ("space", "bar", "dot")
+
+#: 分档 → 同一行里字段之间的**可见文本**。空串 = 沿用各渲染器的历史分隔符。
+#: 用 `\u00b7` 转义而不是直接写「·」：代码文件默认 ASCII（AGENTS.md）。
+_SEPARATOR_TEXT: dict[str, str] = {"bar": " | ", "dot": " \u00b7 "}
+
 #: 页眉联系方式的字段顺序。HTML / PDF / Word 三处都读这一份；新增字段只改这里。
 CONTACT_FIELDS: tuple[str, ...] = (
     "phone",
@@ -84,6 +95,21 @@ def validate_contact_breaks(raw: object) -> list[str]:
     wanted = {str(item).strip() for item in candidates}
     # 按字段顺序输出，而不是用户输入顺序：字段顺序是固定的，用户只决定"在哪一行开始"。
     return [key for key in CONTACT_FIELDS if key in wanted]
+
+
+def validate_contact_separator(raw: object) -> str:
+    """把用户输入白名单化成 `space | bar | dot`；任何其它形状一律回落到 `space`。
+
+    `format_config` 是用户可以随手改的 JSON：未知值不该让渲染 500，也不该猜成某种
+    不存在的分隔符。回落值与"从未设置"同义，因此旧数据产物逐字节不变。
+    """
+    text = str(raw or "").strip().lower()
+    return text if text in CONTACT_SEPARATOR_STYLES else "space"
+
+
+def contact_separator_text(style: object) -> str:
+    """分档 → 同行字段之间的可见文本（空串 = 沿用各渲染器的历史分隔符）。"""
+    return _SEPARATOR_TEXT.get(validate_contact_separator(style), "")
 
 
 def contact_entries(resume: ResumeContent, labels: dict[str, str]) -> list[tuple[str, str]]:
@@ -204,14 +230,18 @@ def pack_contact_lines(
 
 __all__ = [
     "CONTACT_BREAKS_KEY",
+    "CONTACT_SEPARATOR_KEY",
+    "CONTACT_SEPARATOR_STYLES",
     "CONTACT_FIELDS",
     "LABELLED_FIELDS",
     "PDF_SEPARATOR",
     "WORD_SEPARATOR",
     "contact_entries",
+    "contact_separator_text",
     "contact_groups",
     "contact_items",
     "contact_lines",
     "pack_contact_lines",
     "validate_contact_breaks",
+    "validate_contact_separator",
 ]

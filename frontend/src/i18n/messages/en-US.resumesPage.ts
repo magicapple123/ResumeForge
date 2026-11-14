@@ -138,6 +138,13 @@ const resumesPage = {
     "{matched} of {target} target keywords covered ({ratio}%)",
   "resumesPage.external.checkKeywordsMissing": "Missing: {words}",
   "resumesPage.external.lineWithText": "Line {line}: {text}",
+  "resumesPage.external.searchPlaceholder": "Search name, job or company",
+  "resumesPage.external.total": "{count} resumes",
+  "resumesPage.external.filteredTotal": "{count} matching resumes",
+  "resumesPage.external.noMatches": "No matching external resumes",
+  "resumesPage.external.clearFilters": "Clear filters",
+  "resumesPage.external.limited": "Showing the latest {count}; search to find other resumes",
+  "resumesPage.external.uploadFiltersCleared": "Filters cleared to show the uploaded resume",
 } as const;
 
 export default resumesPage;

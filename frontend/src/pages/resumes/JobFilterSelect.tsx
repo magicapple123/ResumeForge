@@ -26,9 +26,10 @@ interface Props {
   onChange: (jobId: number | undefined) => void;
   /** 当前选中项的名称（父组件用来渲染 Tag）；查不到时收到 `#id`。 */
   onLabelChange?: (label: string) => void;
+  width?: number;
 }
 
-export default function JobFilterSelect({ value, onChange, onLabelChange }: Props) {
+export default function JobFilterSelect({ value, onChange, onLabelChange, width = 240 }: Props) {
   useLocale();
   // 取数函数用 useCallback 定住：hook 内部以引用做依赖，每次渲染换新函数会反复回查。
   const fetchOptions = useCallback(
@@ -93,7 +94,7 @@ export default function JobFilterSelect({ value, onChange, onLabelChange }: Prop
       allowClear
       placeholder={t("resumesPage.jobFilter.label")}
       aria-label={t("resumesPage.jobFilter.label")}
-      style={{ width: 240 }}
+      style={{ width }}
       options={mergedOptions}
       value={value}
       onChange={(next) => onChange(next ?? undefined)}

@@ -22,6 +22,15 @@ const interviewPage = {
   "interviewPage.avatarAlt": "面试官 Jane",
   /** 对话气泡里的面试官作者名：两种语言都写作 "Jane"（人名不翻译）。 */
   "interviewPage.interviewerName": "Jane",
+
+  // ===== 页头副标题：四个 tab 各一句（旧 key interview.page.subtitle 留给「模拟面试」） =====
+  "interview.page.subtitle.session":
+    "让 AI 面试官按你设定的类型与难度提问，结束后给出评分报告与改进建议。",
+  "interview.page.subtitle.bank": "按岗位与简历生成三类面试题，逐题练答题思路与参考答案。",
+  "interview.page.subtitle.experiences":
+    "记录真实面试里被问到的问题，按公司与岗位沉淀下来，下次面试前翻一翻。",
+  "interview.page.subtitle.review":
+    "把真实被问的问题录进来，分析答题思路，再把暴露的短板反向变成简历改写建议。",
   /** 对话气泡里的面试官作者名（界面文案，走语言包）。 */
 
   // ===== 历史面试卡 =====
@@ -58,12 +67,22 @@ const interviewPage = {
   "interviewPage.ready.resume": "继续面试",
   "interviewPage.ready.hint": "计时从你点下按钮开始，结束时报告里会带上这场面试的用时。",
 
+  // ===== 面试中暂停（Q2） =====
+  "interviewPage.paused.action": "暂停面试",
+  "interviewPage.paused.badge": "已暂停",
+  "interviewPage.paused.title": "面试已暂停",
+  "interviewPage.paused.body":
+    "计时已停、麦克风与播报已关闭。暂停时间不计入面试用时，点下面按钮接着进行。",
+  "interviewPage.paused.resume": "继续面试",
+
   // ===== 面试官设定卡 =====
   "interviewPage.setup.title": "面试官设定",
   "interviewPage.setup.greeting": "你好，我是 Jane，今天由我来面试你。",
   "interviewPage.setup.jobLabel": "岗位材料",
   "interviewPage.setup.jobPlaceholder": "选中后按该岗位的 JD 提问（输入关键词搜索）",
   "interviewPage.setup.jobRequired": "请选择关联岗位",
+  /** 岗位侧只剩「从记录选」：没有合适岗位时的唯一出口（跳岗位广场按链接导入）。 */
+  "interviewPage.setup.jobFromLink": "没有合适的岗位？去岗位广场从链接导入 →",
   "interviewPage.setup.resumeLabel": "简历材料",
   "interviewPage.setup.resumePlaceholder": "该岗位关联的简历与通用简历（输入关键词搜索）",
   "interviewPage.setup.resumePlaceholderNoJob": "先选关联岗位，再来挑简历",
@@ -178,6 +197,7 @@ const interviewPage = {
 
   // 外部简历（第 21 条）"用于面试"的预填提示：从简历中心跳过来时把材料带进设定卡。
   "interviewPage.setup.external.prefilled": "已带入外部简历「{name}」",
+  "interviewPage.setup.jobFileResumeHint": "简历可以另外选",
   "interviewPage.setup.external.loadFailed": "没能读取这份外部简历，请手动选择或上传",
   "interviewPage.setup.external.noText": "这份外部简历没有提取到文字，请在简历材料里上传原件",
 } as const;

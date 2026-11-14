@@ -81,9 +81,9 @@ function InputForField({
         value={value ?? ""}
         onChange={(event) => onChange?.(event.target.value)}
         onBlur={onBlur}
-        disabled={disabled}
+        disabled={disabled || undefined}
         maxLength={multiLineMax}
-        autoSize={{ minRows: 2, maxRows: 8 }}
+        autoSize={{ minRows: 2, maxRows: 12 }}
         placeholder={t("profileLibrary.field.placeholder")}
       />
     );
@@ -107,7 +107,7 @@ function InputForField({
         value={value}
         onChange={(next: string) => onChange?.(next)}
         onBlur={onBlur}
-        disabled={disabled}
+        disabled={disabled || undefined}
         maxLength={singleLineMax}
         options={field.enum_suggestions.map((item) => ({ value: item }))}
         placeholder={fieldPlaceholder(field)}
@@ -120,7 +120,7 @@ function InputForField({
       value={value ?? ""}
       onChange={(event) => onChange?.(event.target.value)}
       onBlur={onBlur}
-      disabled={disabled}
+      disabled={disabled || undefined}
       maxLength={singleLineMax}
       placeholder={fieldPlaceholder(field)}
     />

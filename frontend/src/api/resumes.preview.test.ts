@@ -12,7 +12,7 @@
  * 关弹窗时还要能掐掉在飞的渲染）。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchResumeHtml, previewResumeTemplate } from "./resumes";
+import { fetchResumePreviewHtml, previewResumeTemplate } from "./resumes";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -94,7 +94,7 @@ describe("previewResumeTemplate", () => {
   });
 });
 
-describe("fetchResumeHtml 的草稿预览请求体（问题清单 §7）", () => {
+describe("fetchResumePreviewHtml 的草稿预览请求体（问题清单 §7）", () => {
   it("详情预览显式带 include_overflow_pages=true，默认（其它调用方）带 false", async () => {
     const bodies: Record<string, unknown>[] = [];
     vi.stubGlobal(
@@ -110,19 +110,21 @@ describe("fetchResumeHtml 的草稿预览请求体（问题清单 §7）", () =>
       }),
     );
 
-    await fetchResumeHtml(7, false, { includeOverflowPages: true });
+    await fetchResumePreviewHtml(7, { includeOverflowPages: true });
     expect(bodies[0]).toMatchObject({
       format: "html",
       preview: true,
       include_overflow_pages: true,
+      allow_incomplete: true,
     });
 
     // 打印 / 导出 HTML 等调用不传 options：请求体必须显式 false（不能被当成"要完整页"）。
-    await fetchResumeHtml(7);
+    await fetchResumePreviewHtml(7);
     expect(bodies[1]).toMatchObject({
       format: "html",
       preview: true,
       include_overflow_pages: false,
+      allow_incomplete: true,
     });
   });
 });

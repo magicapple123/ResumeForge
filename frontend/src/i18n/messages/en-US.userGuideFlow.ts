@@ -196,7 +196,7 @@ const userGuideFlow = {
     "The “⋮” on a conversation in the left list (or a right-click) renames it, pins it, copies a share link, continues it in a new conversation, archives or deletes it, and exports it as Markdown or saves it to the material library.",
   "userGuideFlow.assistant.step1.point13.lead": "Messages",
   "userGuideFlow.assistant.step1.point13.text":
-    "Right-click any message to “Quote this and keep asking”, copy or delete it; hovering a message also reveals an action bar: copy (always the full text), quote, regenerate (last assistant answer only) and delete. Long answers collapse automatically — click “Show full text” to read everything; to delete several at once, right-click any message, choose “Batch select”, tick them and click “Delete selected”.",
+    "Right-click any message to open the menu: quote (and keep asking with it), copy (always the full text), regenerate (last assistant answer only) and delete all live there — there is no action bar under the message any more. Long answers collapse automatically — click “Show full text” to read everything; to delete several at once, right-click any message, choose “Batch select”, tick them and click “Delete selected”.",
   "userGuideFlow.assistant.step1.point14.lead": "Thinking",
   "userGuideFlow.assistant.step1.point14.text":
     "Models with a thinking mode let you set “Thinking effort” on the right of the input; when it is on, a collapsed “Thinking process” appears below the reply. The current **model name (read-only)** is also shown left of the send button: hover it to see the record name and “switch at the top”; use the header dropdown to change models and this label follows.",
@@ -260,16 +260,16 @@ const userGuideFlow = {
     "Importing creates a new dataset by default and leaves the one you are using alone; you can also **create an empty dataset** and record into it from scratch. Before importing, every attachment in the package is checked (checksums and name clashes) and any problem rejects the whole import without touching a local file; once confirmed you may skip the broken attachments and import the database only.",
   "userGuideFlow.dataBackup.step1.point7.lead": "Storage and backups",
   "userGuideFlow.dataBackup.step1.point7.text":
-    "At the bottom of Settings → Data & export you can see how much disk each part of the data directory uses; database snapshots left in backups/ during a migration are listed too — unwanted ones can be moved, one by one and after confirmation, into a recycle folder inside the local data directory, where the file manager can always find them again. The system never cleans them up automatically.",
+    "At the bottom of Settings → Data & storage you can see how much disk each part of the data directory uses; database snapshots left in backups/ during a migration are listed too — unwanted ones can be moved, one by one and after confirmation, into a recycle folder inside the local data directory, where the file manager can always find them again. The system never cleans them up automatically.",
   "userGuideFlow.dataBackup.step1.point8.lead": "API keys",
   "userGuideFlow.dataBackup.step1.point8.text":
     "A backup includes model API keys by default; clear “Include model API keys in the backup” before exporting if you do not want them; after restoring, test the connection in the model settings; backups from older versions still import, and a new package with keys / fonts (formats 5 and 6) warns older versions to upgrade — export and import within the same major version when migrating.",
   "userGuideFlow.dataBackup.step1.point9.lead": "Trim the sidebar",
   "userGuideFlow.dataBackup.step1.point9.text":
-    "Settings → Appearance & interaction → “Interface and navigation” lets you turn off sidebar modules you do not use, and “Restore default display” on the card header undoes it in one click. Hiding only folds the entry away — no data is deleted, and Home, Job board, Resume center, My Profile, Apply desk and Settings always stay.",
+    "Settings → Appearance & language → “Interface and navigation” lets you turn off sidebar modules you do not use, and “Restore default display” on the card header undoes it in one click. Hiding only folds the entry away — no data is deleted, and Home, Job board, Resume center, My Profile, Apply desk and Settings always stay.",
   "userGuideFlow.dataBackup.step1.point10.lead": "Narrow screens and keyboard",
   "userGuideFlow.dataBackup.step1.point10.text":
-    "On a narrow window click **“Open navigation”** to switch pages; “My space” stays in the header. Tab reaches “Skip to main content” first, and Enter takes you straight into the body. Common actions have shortcuts: Ctrl/⌘+K search, Ctrl/⌘+S save, Ctrl/⌘+Z undo, Ctrl/⌘+J toggle the assistant; “Settings → Appearance & interaction → Shortcuts” changes the keys.",
+    "On a narrow window click **“Open navigation”** to switch pages; “My space” stays in the header. Tab reaches “Skip to main content” first, and Enter takes you straight into the body. Common actions have shortcuts: Ctrl/⌘+K search, Ctrl/⌘+S save, Ctrl/⌘+Z undo, Ctrl/⌘+J toggle the assistant; “Settings → Interaction habits → Shortcuts” changes the keys.",
   "userGuideFlow.dataBackup.step1.point11.lead": "Check for updates",
   "userGuideFlow.dataBackup.step1.point11.text":
     "The refresh icon in the header checks for updates. Settings → Updates & help supports downloading, progress and background download; if reading the status fails, click “Retry reading status” first. Windows confirms with “Restart and install”, macOS uses update.command, Linux uses update.sh; only the program is replaced — data/, .env and backups stay — and the real version and logs are the source of truth.",

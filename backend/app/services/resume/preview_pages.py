@@ -28,10 +28,9 @@
 
 ## 并发
 
-一趟渲染按页拆成任务丢进线程池（`min(页数, 4)` 路）。pypdfium2 **不是线程安全的**，
-所以每个任务各自 `PdfDocument(io.BytesIO(pdf_bytes))` 打开一份——共用同一个对象会崩在
-C 层。字节流本身只读，线程间共享是安全的；落盘按页写不同文件（`_write_atomic` 各自
-`os.replace`），不会互相覆盖。
+PDFium 在库级别不支持并发，即使每个线程各自打开一份文档也不安全。整趟渲染通过
+pdfium_guard.run_locked 共用进程锁，逐页串行渲染，打开、渲染和关闭均在锁内。扫描页
+与附件预览也使用同一把锁；同一 token 的缓存检查与写入一并串行，避免半成品互相清理。
 
 ## 缓存
 
@@ -55,7 +54,6 @@ LRU 写法与 `services/pdf_preview_cache.py` 同一套（OrderedDict + 条数�
 from __future__ import annotations
 
 import contextlib
-import functools
 import hashlib
 import io
 import json
@@ -66,12 +64,13 @@ import shutil
 import tempfile
 import threading
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
 import pypdfium2 as pdfium
+
+from app.services.pdfium_guard import run_locked
 
 logger = logging.getLogger(__name__)
 
@@ -95,10 +94,6 @@ WIDTH_BUCKET_PX = 64
 DPR_BUCKET = 0.25
 MIN_DPR = 1.0
 MAX_DPR = 3.0
-# 逐页并发的线程数上限（#23 P2）：pypdfium2 不是线程安全的，所以**每个线程各自打开
-# 一份 PDF 字节流**（见 `_open_document`）。4 是"两页稿能并行、多页稿不再无限加线程"
-# 的折中：再高只是在 C 层抢同一批内存带宽，顺带把峰值 RSS 顶上去。
-MAX_RENDER_THREADS = 4
 # 最多留几组 token：一轮"改字号 → 改行距 → 拖回来"最多用到 4 组，12 组足够且不占内存。
 MAX_TOKENS = 12
 
@@ -108,10 +103,11 @@ PDF_NAME = "document.pdf"
 PAGE_MEDIA_TYPE = "image/webp"
 #: token 的**唯一**合法形状：`sha256(...).hexdigest()[:32]`，即 32 位小写十六进制。
 _TOKEN_RE = re.compile(r"[0-9a-f]{32}")
+PDFIUM_ERROR_MESSAGE = "PDF 引擎无法解析当前产物，请重试；持续出现请重启应用"
 
 
 class PreviewPagesError(RuntimeError):
-    """PDF 无法光栅化（文件损坏 / 引擎缺字体）。调用方按 409 + 可读文案回给用户。"""
+    """PDF 无法光栅化。字体错误在生成阶段处理，调用方将此异常转成 409。"""
 
 
 @dataclass(frozen=True)
@@ -280,22 +276,16 @@ def _read_manifest(token: str) -> RenderedPreviewPages | None:
 
 
 def _open_document(pdf_bytes: bytes) -> pdfium.PdfDocument:
-    """为**当前线程**打开一份独立的 PDF 句柄。
-
-    pypdfium2 的 `PdfDocument` 不是线程安全的：多线程共用一个对象会在 C 层崩掉,
-    那不是可捕获的 Python 异常，日志里只会看到进程消失。所以"逐页并发"的前提是
-    "每个线程各自打开一份字节流"——字节流本身只读，可以安全共享。
-
-    :raises PreviewPagesError: 文件损坏 / 引擎拒绝打开。
-    """
+    """打开 PDF 句柄；调用者必须持有进程级 PDFium 锁直到关闭。"""
     try:
         return pdfium.PdfDocument(io.BytesIO(pdf_bytes))
     except Exception as exc:  # noqa: BLE001 - pdfium 的失败类型没有稳定基类
-        raise PreviewPagesError(f"无法打开导出 PDF：{exc}") from exc
+        logger.warning("PDFium could not open generated PDF", exc_info=True)
+        raise PreviewPagesError(PDFIUM_ERROR_MESSAGE) from exc
 
 
 def _page_count(pdf_bytes: bytes) -> int:
-    """页数：开一份临时句柄数完就关（不给并发线程留下共享对象）。
+    """页数：在调用者持有的 PDFium 锁内开一份临时句柄，数完即关。
 
     :raises PreviewPagesError: PDF 打不开 / 里面一页都没有。
     """
@@ -312,7 +302,7 @@ def _page_count(pdf_bytes: bytes) -> int:
 def _render_one_page(
     pdf_bytes: bytes, index: int, *, token: str, target_px: float
 ) -> PreviewPageSize:
-    """渲染**一页**并落盘。可以安全地在多个线程里同时调用（各自持有一份文档）。
+    """在调用者持有的进程级 PDFium 锁内渲染一页并落盘。
 
     :param pdf_bytes: 整份 PDF 字节（只读，线程间共享）。
     :param index: 0 起始页号；返回的 `PreviewPageSize.index` 与它一致。
@@ -346,7 +336,8 @@ def _render_one_page(
     except PreviewPagesError:
         raise
     except Exception as exc:  # noqa: BLE001 - 同上
-        raise PreviewPagesError(f"渲染第 {index + 1} 页失败：{exc}") from exc
+        logger.warning("PDFium could not render generated page index=%d", index, exc_info=True)
+        raise PreviewPagesError(PDFIUM_ERROR_MESSAGE) from exc
     finally:
         document.close()
 
@@ -354,31 +345,19 @@ def _render_one_page(
 def _render_pages(
     pdf_bytes: bytes, *, token: str, width_px: int, dpr: float
 ) -> RenderedPreviewPages:
-    """真正渲染一趟：**逐页并发** → WebP → 落盘。**不在锁里跑**（会卡住其它请求）。
-
-    并发度取 `min(页数, MAX_RENDER_THREADS)`：两页稿两路、四页以上不再加路。
-    结果按页号收回（`ThreadPoolExecutor.map` 保序），返回值结构与串行版逐字段一致。
-    """
+    """在调用者持有的 PDFium 锁内按页串行渲染、编码并落盘。"""
     target_px = bucket_width(width_px) * bucket_dpr(dpr) * RENDER_SUPERSAMPLE
     count = _page_count(pdf_bytes)
-    workers = min(count, MAX_RENDER_THREADS)
     try:
-        if workers <= 1:
-            sizes = [
-                _render_one_page(pdf_bytes, index, token=token, target_px=target_px)
-                for index in range(count)
-            ]
-        else:
-            worker = functools.partial(
-                _render_one_page, pdf_bytes, token=token, target_px=target_px
-            )
-            with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="preview-page") as pool:
-                # `map` 按提交顺序产出：页序与导出 PDF 逐页对应，前端 `<img>` 不会错位。
-                sizes = list(pool.map(worker, range(count)))
+        sizes = [
+            _render_one_page(pdf_bytes, index, token=token, target_px=target_px)
+            for index in range(count)
+        ]
     except PreviewPagesError:
         raise
     except Exception as exc:  # noqa: BLE001 - 同上
-        raise PreviewPagesError(f"渲染预览页失败：{exc}") from exc
+        logger.warning("PDFium could not render generated PDF", exc_info=True)
+        raise PreviewPagesError(PDFIUM_ERROR_MESSAGE) from exc
     manifest = {
         "width": bucket_width(width_px),
         "dpr": bucket_dpr(dpr),
@@ -394,6 +373,7 @@ def _render_pages(
     return RenderedPreviewPages(token=token, pages=tuple(sizes))
 
 
+@run_locked
 def render_preview_pages(pdf_bytes: bytes, *, width_px: int, dpr: float) -> RenderedPreviewPages:
     """把 PDF 渲染成逐页 WebP（命中缓存则 0 次光栅化）。
 

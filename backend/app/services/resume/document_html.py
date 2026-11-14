@@ -33,6 +33,7 @@ from ...schemas.resume_document import (
 from ...schemas.resume_document_plan import DocumentPlan
 from .column_geometry import resolved_column_geometry
 from .resume_contact import CONTACT_BREAKS_KEY
+from .resume_html_csp import new_csp_nonce
 from .resume_labels import field_labels, normalize_language
 from .resume_render_overrides import RenderOverrides, render_overrides_css
 from .resume_style import meta_align_css
@@ -284,13 +285,19 @@ def document_page_title(document: ResumeDocument) -> str:
 
 
 def document_text_for_font(document: ResumeDocument) -> str:
-    """字体子集要覆盖的全部字符：除页眉照片 data URL 以外的所有文本。"""
+    """字体子集要覆盖的全部字符：除页眉照片 data URL 以外的所有文本。
+
+    **字段名前缀整表并入**（F20）：planner 会按 `label_mode` 注入「电话：」「求职意向：」
+    这类前缀，它们不在用户的取值里。不并进来的话，子集字体会缺字（纸面上是空白或豆腐块）——
+    「求职意向」一直没进字符集就是同一类老缺口。
+    """
     parts: list[str] = []
     for item in document.header.items:
         if item.placement == "photo":
             continue
         parts.append(item.value)
         parts.append(item.label)
+    parts.extend(field_labels(document.language).values())
     for section in document.sections:
         parts.append(section.title)
         for entry in section.entries:
@@ -466,13 +473,6 @@ def build_resume_html(
     if css:
         html = inject_before(html, "<style>\n" + css + "\n</style>", "</head>")
     return html
-
-
-def new_csp_nonce() -> str:
-    """每次渲染一份 nonce（只授权模板里的固定 A4 探针脚本）。"""
-    import secrets
-
-    return secrets.token_hex(16)
 
 
 __all__ = [

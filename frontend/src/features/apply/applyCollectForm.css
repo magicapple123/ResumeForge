@@ -1,0 +1,250 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* ===== 自动采集表单（2026-11-13 排版优化）=====
+ * 用户反馈「自动采集界面排版还是不太好看」。原来是三块等权白底表单 + 一个 70px 的
+ * 黄色告警块 + 底部一大片空白：控件全被拉满宽度，而内容几乎都是「不限」，空白比字多；
+ * 段与段之间也没有可读的层级，只有 16px 的等距间隙。
+ * 现在：每张卡有「标题 + 一句话说明」，栅格统一 3 列，提示压成一行，底部操作条带摘要。 */
+.apply-page .apply-collect-group-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.apply-page .apply-collect-group-hint {
+  font-size: 12px;
+}
+
+/* 搜索条件：宽屏一行四字段，容器 <1020 退两行（F10）。
+ * 旧版是 3 等分栅格 + `span 2`：单批上限只填 1–3 位数字却占 400px，关键词与历史条件
+ * 各跨两列被拉到 600–700px——宽度跟"列"走而不是跟"内容"走。
+ * 现在一行里的宽度按内容分配：关键词吃剩余宽度（下限 280），上限 150 / 城市 190 / 历史 300。
+ * 两行包装在宽屏用 `display: contents` 摊平，DOM 顺序即视觉顺序。 */
+.apply-page .apply-collect-search-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+  /* 超宽屏下不再往右拉：四个字段合计不到 950px，再宽只会让关键词空出一大截。 */
+  max-width: 1240px;
+}
+
+.apply-page .apply-collect-search-row {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* 两行模式（默认，容器 <1020）：每行两个字段，关键词与历史条件把该行剩余宽度吃掉。 */
+.apply-page .apply-collect-keywords {
+  flex: 1 1 auto;
+  min-width: 280px;
+}
+
+.apply-page .apply-collect-limit {
+  flex: 0 0 150px;
+}
+
+.apply-page .apply-collect-city {
+  flex: 0 0 190px;
+}
+
+.apply-page .apply-collect-history-cell {
+  flex: 1 1 300px;
+}
+
+/* 一行模式：包装层摊平，四个字段直接参与外层的 flex 分配。 */
+@container (min-width: 1020px) {
+  .apply-page .apply-collect-search-row {
+    display: contents;
+  }
+
+  .apply-page .apply-collect-history-cell {
+    flex: 0 0 300px;
+  }
+}
+
+/* 非 Form.Item 的字段格（历史条件 / 勾选框）：标签样式与 Form.Item 对齐。 */
+.apply-page .apply-collect-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.apply-page .apply-collect-field-label {
+  font-size: 13px;
+  color: var(--rf-text-secondary);
+}
+
+.apply-page .apply-collect-history {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 节奏：两个输入 + 勾选框同一行，单位走 addonAfter。 */
+.apply-page .apply-collect-rhythm-grid {
+  display: grid;
+  /* 两个数字框不需要 340px 宽（里面只有一个「6」）：固定 180px，剩下的交给勾选框，
+     三者挨在一起，不再是一个小框挂「秒」+ 右侧一大片空白。 */
+  grid-template-columns: 180px 180px minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.apply-page .apply-collect-samples-cell {
+  display: flex;
+  /* 这一格是 column flex（继承 `.apply-collect-field`）：`align-items` 管的是**横向**，
+     写 flex-end 会把勾选框推到整列最右边（实测 x=1059，离输入框 400px）。 */
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding-bottom: 6px;
+}
+
+.apply-page .apply-collect-samples-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+/* 站点筛选头部：身份（标题 / 已选 / 来源）在左，动作在右。 */
+.apply-page .apply-collect-site-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.apply-page .apply-collect-site-title {
+  min-width: 0;
+}
+
+/* 「已选 N 项」：中性描边小胶囊（不是彩色 pill——那被明确否决过）。 */
+.apply-page .apply-collect-selected-chip {
+  padding: 0 8px;
+  border: 1px solid var(--rf-border);
+  border-radius: 999px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.apply-page .apply-collect-site-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.apply-page .apply-collect-site-intro .ant-typography {
+  font-size: 12px;
+}
+
+/* F05：第二行是说明的续行，缩进对齐正文（18px = 图标宽 + 间距）。 */
+.apply-page .apply-collect-site-intro-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-left: 18px;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+}
+
+/* 内联提示：一行，图标 + 文字；`is-warn` 是"需要你做一个动作"（第一次启动浏览器），
+ * 用浅琥珀底压成一行，替代原来那块 70px 的 Alert。 */
+.apply-page .apply-collect-inline-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+}
+
+.apply-page .apply-collect-inline-note > .anticon {
+  color: var(--rf-warning-text);
+}
+
+.apply-page .apply-collect-inline-note.is-warn {
+  padding: 6px 10px;
+  border: 1px solid var(--rf-warning-border);
+  border-radius: 6px;
+  background: var(--rf-warning-bg);
+  color: var(--rf-text-secondary);
+  margin-bottom: 10px;
+}
+
+.apply-page .apply-collect-inline-note.is-warn > span {
+  min-width: 0;
+}
+
+/* 底部操作条：左边摘要、右边按钮，用一条细边与表单分开（不是悬在空白里）。 */
+.apply-page .apply-collect-actions {
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+.apply-page .apply-collect-summary {
+  margin-right: auto;
+  font-size: 12px;
+}
+
+@media (max-width: 768px) {
+  .apply-page .apply-collect-rhythm-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 关键词的 280px 下限在 320 宽的屏幕上放不下：手机档四个字段各占一行。 */
+  .apply-page .apply-collect-keywords,
+  .apply-page .apply-collect-limit,
+  .apply-page .apply-collect-city,
+  .apply-page .apply-collect-history-cell {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .apply-page .apply-collect-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+/* 节奏/上限里的 addonAfter（「秒」「条 / 批」）：antd 6 把它渲染成 `Space.Compact`
+   （inline-flex，实测 221px），而 `style={{width:"100%"}}` 只作用于里面的输入框本体，
+   所以外面还挂着一个 40px 的小框 + 「秒」，右边空掉大半格。
+   这里把 compact 容器拉满、输入框吃掉剩余宽度。 */
+.apply-page .apply-collect-rhythm-grid .ant-space-compact,
+.apply-page .apply-collect-search-grid .ant-space-compact {
+  display: flex;
+  width: 100%;
+}
+
+.apply-page .apply-collect-rhythm-grid .ant-space-compact > .ant-input-number,
+.apply-page .apply-collect-search-grid .ant-space-compact > .ant-input-number {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 「启动浏览器」那条提示：整行铺满会又变回横幅，按内容宽度收在左侧。 */
+.apply-page .apply-collect-inline-note.is-warn {
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* 底部操作条右侧让出投投悬浮球的位置（与投递台吸底条同一条理由）：
+   球是全局浮层、层级更高，滚到页尾时会把「开始采集」压住一半。 */
+.apply-page .apply-collect-actions {
+  padding-right: 56px;
+}

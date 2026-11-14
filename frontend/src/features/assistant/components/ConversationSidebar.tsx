@@ -6,6 +6,7 @@ import {
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
+  EyeInvisibleOutlined,
   FolderOutlined,
   InboxOutlined,
   LinkOutlined,
@@ -470,6 +471,15 @@ function ConversationSidebar({
                         })}
                         {" · "}
                         {formatDateTime(conversation.updated_at)}
+                        {conversation.memory_off ? (
+                          <Tooltip title={t("assistantUi.memory.offBadge")}>
+                            <EyeInvisibleOutlined
+                              className="assistant-conversation-memory-off"
+                              role="img"
+                              aria-label={t("assistantUi.memory.offBadge")}
+                            />
+                          </Tooltip>
+                        ) : null}
                       </Typography.Text>
                     </div>
                   )}

@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { getAssistantContextUsage } from "../../../api/assistant";
 import type { ContextUsage } from "../../../types";
 import { withWindowTokens } from "../contextUsageFormat";
+import { clearConversationContext } from "../conversationContextState";
 import { getAssistantStreamState, subscribeAssistantStream } from "./assistantStreamStore";
 
 /** 带会话 id 的值：换会话后旧值自动失效，不需要显式清理。 */
@@ -42,6 +43,11 @@ export interface AssistantContextUsageState {
 export function useAssistantContextUsage(
   conversationId: number | null,
 ): AssistantContextUsageState {
+  useEffect(() => {
+    return () => {
+      if (conversationId !== null) clearConversationContext(conversationId);
+    };
+  }, [conversationId]);
   const streamState = useSyncExternalStore(subscribeAssistantStream, getAssistantStreamState);
   const [fetched, setFetched] = useState<Scoped<ContextUsage> | null>(null);
   const [windowEdited, setWindowEdited] = useState<Scoped<number> | null>(null);

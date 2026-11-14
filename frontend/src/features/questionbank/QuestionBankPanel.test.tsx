@@ -94,7 +94,9 @@ describe("QuestionBankPanel", () => {
     renderPanel({});
     fireEvent.click(screen.getByRole("button", { name: /生成题库/ }));
 
-    expect(await screen.findByText(/请至少选择一个岗位或一份简历/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(t("questionBankPanel.validate.needJobOrResume")),
+    ).toBeInTheDocument();
     expect(apiMocks.generateQuestionBank).not.toHaveBeenCalled();
   });
 
@@ -118,7 +120,12 @@ describe("QuestionBankPanel", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /开始模拟面试/ }));
-    expect(onStartSession).toHaveBeenCalledWith(["请自我介绍", "交易系统难点", "团队如何协作"]);
+    expect(onStartSession).toHaveBeenCalledWith(["请自我介绍", "交易系统难点", "团队如何协作"], {
+      jobId: 1,
+      resumeId: undefined,
+      jobMaterial: null,
+      resumeMaterial: null,
+    });
   });
 
   it("接口报错时透出中文错误", async () => {
@@ -249,9 +256,9 @@ describe("QuestionBankPanel", () => {
 
     expect(await screen.findByText("后端开发工程师")).toBeInTheDocument();
 
-    // 展开历史条目，回看分组里的题目。
-    fireEvent.click(screen.getByText("后端开发工程师"));
-    expect(await screen.findByText("请自我介绍")).toBeInTheDocument();
+    // History rows summarize the bank; questions only render after opening its detail.
+    expect(screen.queryByText("请自我介绍")).not.toBeInTheDocument();
+    expect(document.querySelector(".ant-collapse")).toBeNull();
 
     // 删除收进了「···」菜单：打开菜单 → 点删除 → 确认（无 locale 时确认键是 "OK"）。
     fireEvent.click(screen.getByRole("button", { name: "更多操作" }));

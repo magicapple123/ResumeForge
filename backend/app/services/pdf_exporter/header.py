@@ -34,6 +34,7 @@ from ..resume.resume_contact import PDF_SEPARATOR, pack_contact_lines
 # 别名导入：本模块的 RoleStyle 是"查询函数"的类型别名（见下），与同名 dataclass 不同义。
 from ..resume.resume_style import RoleStyle as _RoleStyle
 from .canvas import _ResumePDF
+from .document_fields import draw_label_segments, has_styled_labels, label_height, label_lines
 from .fonts import FONT_FAMILY
 from .layout import _PX_TO_MM, _PX_TO_PT, PAGE_WIDTH_MM
 from .media import _photo_bytes, fit_photo_size
@@ -56,7 +57,12 @@ def _contact_segment_text(segment) -> str:
     return str(getattr(segment, "text", "") or "").strip()
 
 
-def _pack_contact_lines(pdf: _ResumePDF, groups: list[list[str]], width: float) -> list[str]:
+def _pack_contact_lines(
+    pdf: _ResumePDF,
+    groups: list[list[str]],
+    width: float,
+    separator: str = PDF_SEPARATOR,
+) -> list[str]:
     """把联系方式按字段装行：字段整体换行，**绝不拆字段内部**。
 
     groups 是 planner 分好的行（每行是若干字段文本）；行内字段之间用 PDF_SEPARATOR
@@ -66,8 +72,8 @@ def _pack_contact_lines(pdf: _ResumePDF, groups: list[list[str]], width: float) 
     **2026-11 #9**：贪心循环已抽到 `resume.resume_contact.pack_contact_lines`，Word 侧
     传字体度量、这里传画布度量，两端行分布因此只差字体本身——不再各写一份装行。
     """
-    packed = pack_contact_lines(groups, width, pdf.rich_text_width, PDF_SEPARATOR)
-    return [PDF_SEPARATOR.join(line) for line in packed]
+    packed = pack_contact_lines(groups, width, pdf.rich_text_width, separator)
+    return [separator.join(line) for line in packed]
 
 
 def draw_header(
@@ -128,19 +134,33 @@ def draw_header(
 
     name_style = style("name")
     meta_style = style("meta")
-    name_scale = float(name_style.font_scale) if name_style is not None and name_style.font_scale else 1.0
-    meta_scale = float(meta_style.font_scale) if meta_style is not None and meta_style.font_scale else 1.0
+    name_scale = (
+        float(name_style.font_scale) if name_style is not None and name_style.font_scale else 1.0
+    )
+    meta_scale = (
+        float(meta_style.font_scale) if meta_style is not None and meta_style.font_scale else 1.0
+    )
     name_size = base * layout.name_ratio * name_scale
     extra_size = base * layout.name_extra_ratio
-    name_color = parse_color(name_style.color) if name_style is not None and name_style.color else None
+    name_color = (
+        parse_color(name_style.color) if name_style is not None and name_style.color else None
+    )
     name_bold = name_style.bold if name_style is not None and name_style.bold is not None else True
-    meta_color = parse_color(meta_style.color) if meta_style is not None and meta_style.color else None
+    meta_color = (
+        parse_color(meta_style.color) if meta_style is not None and meta_style.color else None
+    )
 
     contact_size = base * layout.contact_ratio * meta_scale
     contact_lines: list[str] = []
     if contact_groups:
         pdf.set_font(FONT_FAMILY, "", contact_size * _PX_TO_PT)
-        contact_lines = _pack_contact_lines(pdf, contact_groups, text_width)
+        contact_lines = _pack_contact_lines(
+            pdf,
+            contact_groups,
+            text_width,
+            # planner 给了可见分隔文本（bar/dot）就用它，否则沿用历史的四空格。
+            header.contact_separator or PDF_SEPARATOR,
+        )
 
     # 先量页头正文高度（不落笔）：modern 的底色块按它定尺寸、画在文字之下。
     if name_text:
@@ -158,9 +178,22 @@ def draw_header(
         text_height = 0.0
     if subtitle_text:
         text_height += layout.gap_mm(layout.intent_gap)
-        text_height += pdf.text_block_height(
-            subtitle_text, width=text_width, size_px=base * layout.intent_ratio * meta_scale
-        )
+        if has_styled_labels(header.subtitle, role_style):
+            text_height += label_height(
+                label_lines(
+                    pdf,
+                    header.subtitle,
+                    base=base,
+                    role_style=role_style,
+                    width=text_width,
+                    ratio=layout.intent_ratio,
+                ),
+                pdf,
+            )
+        else:
+            text_height += pdf.text_block_height(
+                subtitle_text, width=text_width, size_px=base * layout.intent_ratio * meta_scale
+            )
     if contact_lines:
         text_height += layout.gap_mm(layout.contact_gap)
         text_height += len(contact_lines) * pdf.line_advance(contact_size)
@@ -181,16 +214,51 @@ def draw_header(
 
     if photo:
         try:
+            # R-10：偏移作用在**照片框**上（与 HTML 的 `transform: translate()` 同义），
+            # 夹紧到页头范围内——偏移再大也不会把照片推出纸张或压到标题上沿。
+            box_x = content_left if photo_left else content_right - photo_w
+            box_x += layout.photo_offset_x
+            box_x = min(
+                max(box_x, layout.margin_x + hdr_pad_x),
+                layout.margin_x + pdf.content_width - hdr_pad_x - photo_w,
+            )
+            box_y = content_top + layout.photo_offset_y
+            box_y = min(max(box_y, header_top + hdr_pad_y), header_top + header_content_h)
             pdf.image(
                 BytesIO(photo),
-                x=(content_left if photo_left else content_right - photo_w)
-                + (photo_w - photo_draw_w) / 2,
-                y=content_top + (photo_h - photo_draw_h) / 2,
+                x=box_x + (photo_w - photo_draw_w) / 2,
+                y=box_y + (photo_h - photo_draw_h) / 2,
                 w=photo_draw_w,
                 h=photo_draw_h,
             )
+            # R-07：边框与圆角。默认值（1px / 模板线色 / 4px）与模板 CSS 的
+            # `.profile-photo` 一致，所以默认态三个出口终于画的是同一个框。
+            border_px = float(getattr(layout, "photo_border_width", 1) or 0)
+            if border_px > 0:
+                border_color = parse_color(layout.photo_border_color or "") or pdf.line_color
+                radius_px = float(getattr(layout, "photo_radius", 4) or 0)
+                radius_mm = radius_px * _PX_TO_MM
+                # fpdf2 的 `rect()` 不接受 `color` / `width` 关键字（会抛 TypeError），
+                # 画笔颜色与线宽必须先用 set_* 设出来，画完再还原——否则后面的分隔线
+                # 会跟着变成照片边框的颜色与粗细。
+                # `pdf.draw_color` 在 fpdf2 里可能是 DeviceGray 等对象（不可解包），
+                # 所以还原一律回到这一页一直在用的线色，而不是"读回来的旧值"。
+                saved_width = pdf.line_width
+                pdf.set_draw_color(*border_color)
+                pdf.set_line_width(border_px * _PX_TO_MM)
+                pdf.rect(
+                    box_x,
+                    box_y,
+                    photo_w,
+                    photo_h,
+                    style="D",
+                    round_corners=radius_mm > 0,
+                    corner_radius=radius_mm,
+                )
+                pdf.set_draw_color(*pdf.line_color)
+                pdf.set_line_width(saved_width)
         except Exception:  # noqa: BLE001 - 照片坏了不能阻断导出
-            logger.warning("简历照片无法写入 PDF，已跳过")
+            logger.warning("简历照片无法写入 PDF，已跳过", exc_info=True)
 
     pdf.set_y(content_top)
     pdf.set_x(text_left)
@@ -214,14 +282,24 @@ def draw_header(
         if name_plan is not None:
             pdf.ln(layout.gap_mm(layout.intent_gap))
         pdf.set_x(text_left)
-        pdf.multi_cell(
-            text_width,
-            pdf.line_advance(subtitle_size),
-            subtitle_text,
-            align=header_text_align,
-            new_x=XPos.LMARGIN,
-            new_y=YPos.NEXT,
-        )
+        if not draw_label_segments(
+            pdf,
+            header.subtitle,
+            base=base,
+            role_style=role_style,
+            width=text_width,
+            left=text_left,
+            ratio=layout.intent_ratio,
+            align="center" if header_centered else "left",
+        ):
+            pdf.multi_cell(
+                text_width,
+                pdf.line_advance(subtitle_size),
+                subtitle_text,
+                align=header_text_align,
+                new_x=XPos.LMARGIN,
+                new_y=YPos.NEXT,
+            )
     if contact_lines:
         pdf.set_font(FONT_FAMILY, "", contact_size * _PX_TO_PT)
         pdf.set_text_color(*(meta_color or pdf.muted_text))

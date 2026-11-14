@@ -3,33 +3,58 @@
    写操作 diff+撤销（13D）。单独成片是因为 assistant-content.css 已贴 500 行预算，
    与 apply-density / apply-insights 同样的理由。 */
 
-/* ===== 13A 消息操作条：hover / focus-within 显示，≤767px 触屏常显 ===== */
-.assistant-message-actions {
+/* ===== 消息操作（F37）：桌面只有右键菜单；窄档（≤767px）一颗「⋯」 =====
+   行内 hover 操作条已删除：同一批动作曾经两处渲染，菜单只覆盖三项，「重新生成」与
+   「存为知识」被锁在操作条里。现在菜单项由 useMessageMenuItems 一份生成。 */
+.assistant-message-actions-more {
+  /* 宽档不占位：桌面用户用右键（RowContextMenu 已提供键盘等价 Shift+F10）。 */
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .assistant-message-actions-more {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+}
+
+/* ===== 本轮引用（F36）：与输入区 chip 同款，岗位片可点跳转 ===== */
+.assistant-message-refs {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   margin-top: 6px;
-  opacity: 0;
-  transition: opacity 0.12s ease;
+  min-width: 0;
 }
 
-.assistant-message:hover .assistant-message-actions,
-.assistant-message:focus-within .assistant-message-actions {
-  opacity: 1;
+.assistant-message-refs-label {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
 }
 
-/* 触屏没有 hover：窄档常显，否则这些按钮永远发现不了。 */
-@media (max-width: 767px) {
-  .assistant-message-actions {
-    opacity: 1;
-  }
+.assistant-ref-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin-inline-end: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .assistant-message-actions {
-    transition: none;
-  }
+.assistant-ref-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 可点才给指针与 hover 提示；只读 chip（浮动形态 / 无跳转回调）保持普通标签观感。 */
+.assistant-ref-chip--link {
+  cursor: pointer;
+}
+
+.assistant-ref-chip--link:hover {
+  border-color: var(--rf-info);
+  color: var(--rf-info);
 }
 
 /* ===== 13B 长回答折叠 ===== */

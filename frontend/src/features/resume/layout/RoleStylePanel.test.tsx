@@ -142,4 +142,22 @@ describe("RoleStylePanel", () => {
     renderPanel({ catalog: TEMPLATE_CATALOG, defaultOpenRoles: ["name"] });
     expect(screen.getByText(t("typography.catalog.missing"))).toBeInTheDocument();
   });
+
+  it("六个角色的折叠头都带一句「控制纸面哪里」，收起态也可见", () => {
+    // 只展开姓名：其余五个仍要在**收起**状态下看得到说明——
+    // 它们写的是"这一组调纸面哪一块"，不是展开后才需要的信息。
+    renderPanel({ defaultOpenRoles: ["name"] });
+    for (const hint of [
+      "typography.role.hint.name",
+      "typography.role.hint.section_title",
+      "typography.role.hint.entry_title",
+      "typography.role.hint.body",
+      "typography.role.hint.meta",
+      "typography.role.hint.field_label",
+    ] as const) {
+      expect(screen.getByText(t(hint))).toBeInTheDocument();
+    }
+    // 角色名仍是独立元素（第二行没有把它并进同一段文本，按名字取到的仍是那个节点）。
+    expect(screen.getByText(t("typography.role.field_label"))).toBeInTheDocument();
+  });
 });

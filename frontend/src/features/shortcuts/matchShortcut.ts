@@ -255,6 +255,12 @@ export function findConflict(
   if (!target) return null;
   for (const action of SHORTCUT_ACTIONS) {
     if (action.id === exceptId) continue;
+    // These contexts are mutually exclusive and intentionally share the default key.
+    if (
+      (action.id === "selectionPanel" && exceptId === "search") ||
+      (action.id === "search" && exceptId === "selectionPanel")
+    )
+      continue;
     const list = bindings[action.id];
     if (!Array.isArray(list)) continue;
     if (list.some((binding) => normalizeBinding(binding) === target)) return action.id;
@@ -266,18 +272,27 @@ export function findConflict(
 export function findBindingActionId(
   event: KeyboardEvent,
   bindings: Record<string, string[] | null>,
-  options: ShortcutOptions = {},
+  options: ShortcutOptions & {
+    available?: (id: ShortcutActionId) => boolean;
+    fallbackActionId?: ShortcutActionId;
+  } = {},
 ): ShortcutActionId | null {
   const normalized = normalizeEvent(event, options);
   if (!normalized) return null;
+  let fallback: ShortcutActionId | null = null;
   for (const action of SHORTCUT_ACTIONS) {
+    if (options.available && !options.available(action.id)) continue;
     const list = bindings[action.id];
     if (!Array.isArray(list)) continue;
     if (list.some((binding) => normalizeBinding(binding) === normalized)) {
+      if (action.when && !action.when()) {
+        if (action.id === options.fallbackActionId) fallback = action.id;
+        continue;
+      }
       return isShortcutActionId(action.id) ? action.id : null;
     }
   }
-  return null;
+  return fallback;
 }
 
 /** 展示用文本：macOS 走 `⌘⇧Z`，其它平台走 `Ctrl+Shift+Z`。 */

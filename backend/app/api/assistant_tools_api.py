@@ -22,6 +22,7 @@ from fastapi import APIRouter
 
 from ..schemas.assistant import AssistantToolListOut, AssistantToolOut
 from ..services.assistant_tools import tool_definitions, tool_writes
+from ..services.assistant_tools._registry import tool_category
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
@@ -36,6 +37,7 @@ def list_assistant_tools() -> AssistantToolListOut:
     items = [
         AssistantToolOut(
             name=str(definition["function"]["name"]),
+            category=tool_category(str(definition["function"]["name"])),
             description=str(definition["function"].get("description") or ""),
             writes=tool_writes(str(definition["function"]["name"])),
             parameters=definition["function"].get("parameters") or {},

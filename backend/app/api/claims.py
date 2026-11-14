@@ -37,6 +37,7 @@ from ..services.claims import (
     claim_warnings,
     current_entry_ids,
     delete_claim,
+    distinct_allowed_uses,
     list_claims_page,
     summarize_query,
 )
@@ -138,6 +139,16 @@ def read_claims_page(
         items=[_claim_summary(record, locale, entry_ids) for record in records],
         **summary,
     )
+
+
+@router.get("/allowed-uses", response_model=list[str])
+def read_allowed_uses(db: Session = Depends(get_db)):
+    """台账里已有的「可用范围」取值（去重排序、排除回收站）。
+
+    表单用它做候选，仍允许自由输入新的取值。**声明在 `/{claim_id}` 之前**（同
+    `/baseline` 的理由：固定路径被路径参数吃掉时会变成一个像参数错误的 422）。
+    """
+    return distinct_allowed_uses(db)
 
 
 @router.post("/batch-delete", response_model=ClaimBatchDeleteResult)

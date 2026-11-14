@@ -19,8 +19,10 @@ import type { RefObject } from "react";
 import { regenerateAssistantMessage, sendAssistantMessage } from "../../../api/assistant";
 import { resolvePermissionAxes } from "../assistantPermission";
 import { buildAssistantClientContext } from "../clientContext";
+import { getConversationContextState, recordContextResult } from "../conversationContextState";
 import { t } from "../../../i18n";
 import type {
+  AssistantMessageReferences,
   AssistantSource,
   AssistantSourceNumber,
   AssistantStreamEvent,
@@ -39,6 +41,8 @@ export interface AssistantStreamState {
   pendingUserText: string;
   pendingSentAt: string;
   pendingUserAttachments: PendingAttachment[];
+  /** F36：发送瞬间引用的岗位/简历快照（输入区已清空，乐观气泡靠它显示「本轮引用」）。 */
+  pendingUserRefs: AssistantMessageReferences | null;
   streamingText: string;
   streamingReasoning: string;
   streamingSources: AssistantSource[];
@@ -63,6 +67,7 @@ const initialState: AssistantStreamState = {
   pendingUserText: "",
   pendingSentAt: "",
   pendingUserAttachments: [],
+  pendingUserRefs: null,
   streamingText: "",
   streamingReasoning: "",
   streamingSources: [],
@@ -104,6 +109,10 @@ export interface SendAssistantStreamOptions extends AssistantStreamInstance {
   setTouTouStatus: (status: TouTouStatus) => void;
   jobId: number | undefined;
   resumeId: number | undefined;
+  /** 本轮引用的岗位/简历快照（F36，乐观气泡用）。 */
+  contextRefs?: AssistantMessageReferences;
+  /** F36：发送成功后清空关联选择（拿到 conversationId 之后才调，失败不能清）。 */
+  clearContextRefs?: () => void;
   webSearch: boolean;
   reasoningEffort: ReasoningEffort;
   surface: AssistantSurface;
@@ -265,6 +274,7 @@ export async function sendAssistantStreamMessage(
   // T11 四档权限：请求体永远发送**解算后的两轴布尔**（跟随全局在这里解算成具体档位），
   // 不发中间态——后端只认布尔。解算所需的全局默认取不到时按「仅查看」处理（少发安全）。
   const permissionAxes = await resolvePermissionAxes(conversationId);
+  const thresholdTokens = getConversationContextState(conversationId).thresholdTokens;
   const attachmentPayload = regenerate
     ? []
     : options.attachmentsRef.current.map(({ name, mime_type, data }) => ({
@@ -277,6 +287,7 @@ export async function sendAssistantStreamMessage(
     clearContent();
     // 引用只对这一次提问有效：发出去就清掉，避免用户以为下一条也带着引用。
     options.clearQuote();
+    options.clearContextRefs?.(); // F36：只对这次提问有效，且已拿到 conversationId
   }
   const controller = new AbortController();
   abortController = controller;
@@ -286,6 +297,7 @@ export async function sendAssistantStreamMessage(
     // 正在发送的这条消息还没有服务端时间戳，用它被发出的时刻顶上。
     pendingSentAt: new Date().toISOString(),
     pendingUserAttachments: optimisticAttachments,
+    pendingUserRefs: regenerate ? null : (options.contextRefs ?? null),
     streamingText: "",
     streamingReasoning: "",
     streamingSources: [],
@@ -344,13 +356,17 @@ export async function sendAssistantStreamMessage(
       patch({ streamingTools: next });
     }
     if (event.type === "error") {
+      recordContextResult(conversationId, event.code);
       requestErrored = true;
       // 出错也先把缓冲的文本冲出去：用户看到的错误前文要与已收到的内容一致。
       finalizeStreamText();
       patch({ streamError: event.message });
       options.setTouTouStatus("error");
     }
-    if (event.type === "done") options.setTouTouStatus("done");
+    if (event.type === "done") {
+      recordContextResult(conversationId);
+      options.setTouTouStatus("done");
+    }
     if (event.type === "round_limit") {
       // 撞到轮次上限：留着轮数，流收尾后仍要给用户一个「继续」入口（下一轮发送时复位）。
       patch({ roundLimitRounds: event.rounds });
@@ -369,6 +385,7 @@ export async function sendAssistantStreamMessage(
         regenerate.messageId,
         {
           reasoning_effort: options.reasoningEffort,
+          compaction_threshold_tokens: thresholdTokens,
           relaxed_mode: permissionAxes.relaxed,
           allow_write: permissionAxes.allowWrite,
         },
@@ -383,6 +400,7 @@ export async function sendAssistantStreamMessage(
       conversationId,
       {
         content: trimmedText,
+        compaction_threshold_tokens: thresholdTokens,
         job_id: options.jobId,
         resume_id: options.resumeId,
         // 后端保留这个字段只是兼容旧客户端；助手现在始终读取本地个人资料。
@@ -408,6 +426,7 @@ export async function sendAssistantStreamMessage(
     );
   } catch (error) {
     if (!controller.signal.aborted) {
+      recordContextResult(conversationId);
       requestErrored = true;
       patch({
         streamError: error instanceof Error ? error.message : t("assistantHooks.stream.error.send"),
@@ -429,6 +448,7 @@ export async function sendAssistantStreamMessage(
       sendingConversationId: null,
       pendingUserText: "",
       pendingUserAttachments: [],
+      pendingUserRefs: null,
       streamingText: "",
       streamingReasoning: "",
       streamingSources: [],

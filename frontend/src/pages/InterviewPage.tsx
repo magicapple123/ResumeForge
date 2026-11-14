@@ -27,18 +27,13 @@ import {
 import InterviewExperiencePanel from "../features/interview/InterviewExperiencePanel";
 import InterviewReviewPanel from "../features/interview/InterviewReviewPanel";
 import QuestionBankPanel from "../features/questionbank/QuestionBankPanel";
+import { useQuestionBankInterview } from "../features/questionbank/useQuestionBankInterview";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { toInternalResumeId, toMaterialPayload } from "../features/interview/materialPayload";
 import { useInterviewTimer } from "../features/interview/useInterviewTimer";
 import { hasInterviewReport, useInterviewTurn } from "../features/interview/useInterviewTurn";
-import { Composer } from "./interview/Composer";
-import { FinishDecisionCard } from "./interview/FinishDecisionCard";
-import { FollowUpCard } from "./interview/FollowUpCard";
+import { RoomBody } from "./interview/RoomBody";
 import { HistoryCard } from "./interview/HistoryCard";
-import { InterviewMessageList } from "./interview/MessageList";
-import { ReadyGate } from "./interview/ReadyGate";
-import { ReportCard } from "./interview/ReportCard";
-import { RoomHeader } from "./interview/RoomHeader";
 import { SetupForm, SetupTab } from "./interview/SetupTab";
 import type {
   InterviewBrief,
@@ -50,6 +45,18 @@ import { AUTO_FINISH_MAX_ROUNDS, AUTO_ROUNDS_FLAG } from "../types";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import { parseLinkedJobId } from "../features/interview/parseLinkedJobId";
+import type { MessageKey } from "../i18n";
+
+/**
+ * 页头副标题按 tab 分开（Q3）：四个 tab 是四件不同的事，共用一句"让 AI 面试官提问"
+ * 会让题库 / 面经 / 复盘三个 tab 的头图都在说别处的功能。
+ */
+const SUBTITLE_KEYS: Record<string, MessageKey> = {
+  session: "interview.page.subtitle.session",
+  bank: "interview.page.subtitle.bank",
+  experiences: "interview.page.subtitle.experiences",
+  review: "interview.page.subtitle.review",
+};
 
 export default function InterviewPage() {
   useLocale();
@@ -67,9 +74,15 @@ export default function InterviewPage() {
   const [ending, setEnding] = useState(false);
   // 计时闸门：进房间/重新进房间都要用户主动点一次「准备好了 / 继续面试」。
   const [ready, setReady] = useState(false);
+  // 面试中主动暂停（Q2）：与 `ready` 分开，因为"没开始"和"暂停中"对用户是两件事
+  // （前者是闸门卡「准备好了」，后者是「面试已暂停」+ 计时灰化）。
+  const [paused, setPaused] = useState(false);
+  // 「恢复」时焦点回到头部的暂停按钮上（Q2 第 9 条）。
+  const pauseRef = useRef<HTMLButtonElement>(null);
   const [savingReport, setSavingReport] = useState(false);
   const [activeTab, setActiveTab] = useState("session");
   const [form] = Form.useForm<SetupForm>();
+  const bankInterview = useQuestionBankInterview(form, setActiveTab);
   const endRef = useRef<HTMLDivElement>(null);
   // 追问区的定位锚点：决策卡的「继续追问」要把焦点送到这里的输入框。
   const followUpRef = useRef<HTMLDivElement>(null);
@@ -135,11 +148,12 @@ export default function InterviewPage() {
     [activeId],
   );
 
-  // `running` 全由本地状态决定：必须点过「准备好了」、还没结束、且房间里有会话。
+  // `running` 全由本地状态决定：必须点过「准备好了」、**没有暂停**、还没结束、且房间里有会话。
+  // 暂停走的是同一个开关（停表 + 按绝对值上报），只是入口是一个显式按钮而不是离开房间。
   const timer = useInterviewTimer({
     sessionId: activeId,
     initialSeconds: active?.duration_seconds ?? 0,
-    running: ready && !finished && activeId !== null,
+    running: ready && !paused && !finished && activeId !== null,
     onPersist: persistDuration,
   });
 
@@ -173,7 +187,34 @@ export default function InterviewPage() {
     timer.flush();
     setActive(null);
     setReady(false);
+    setPaused(false);
     turn.reset();
+  };
+
+  /**
+   * 暂停（Q2）：生成中就先把这一轮停掉——复用既有的 `turn.stop()`（abort 当前流、服务端
+   * 标 interrupted、已生成内容保留可重答），**不新写一套中止逻辑**。
+   *
+   * 时长在这里显式 flush 一次：`running` 由 true 变 false 时计时器自己也会报一次，
+   * 绝对值语义下重复上报无害，但显式那一次让"暂停那一刻"的读数一定被记住。
+   */
+  const pause = () => {
+    if (paused || finished) return;
+    if (turn.submitting) turn.stop();
+    timer.flush();
+    setPaused(true);
+  };
+
+  /** 恢复：只撤暂停标记，**麦克风不自动重开**（安全优先），焦点回到暂停按钮。 */
+  const resume = () => {
+    setPaused(false);
+    // 等按钮从「继续」换回「暂停」的图标后再聚焦，否则焦点会落在即将被替换的节点上。
+    requestAnimationFrame(() => pauseRef.current?.focus());
+  };
+
+  const togglePause = () => {
+    if (paused) resume();
+    else pause();
   };
 
   const start = async (values: SetupForm) => {
@@ -202,6 +243,7 @@ export default function InterviewPage() {
       turn.reset();
       // 刚开的面试一律从「准备好了」开始：计时不能从点击「开始面试」就偷偷走。
       setReady(false);
+      setPaused(false);
       await loadList();
     } catch (error) {
       message.error(error instanceof Error ? error.message : t("interview.toast.startFailed"));
@@ -216,6 +258,7 @@ export default function InterviewPage() {
       turn.reset();
       // 重新进房间同样要用户点一次「继续面试」才接着计时（离开的那段不该算进时长）。
       setReady(false);
+      setPaused(false);
     } catch (error) {
       message.error(error instanceof Error ? error.message : t("interview.toast.openFailed"));
     }
@@ -278,6 +321,7 @@ export default function InterviewPage() {
       if (active?.id === session.id) {
         setActive(null);
         setReady(false);
+        setPaused(false);
         turn.reset();
       }
       message.success(t("interview.toast.deleted"));
@@ -329,14 +373,6 @@ export default function InterviewPage() {
     }
   };
 
-  // 题库「开始模拟面试」：把题目带入面试的考察重点，并切回模拟面试页。
-  const startFromBank = (questions: string[]) => {
-    const focus = questions.slice(0, 6).join(t("interview.listSeparator")).slice(0, 255);
-    form.setFieldsValue({ focus });
-    setActiveTab("session");
-    message.info(t("interview.toast.questionsImported"));
-  };
-
   return (
     <div className="interview-page">
       <div className="profile-page-header">
@@ -344,7 +380,7 @@ export default function InterviewPage() {
           <Typography.Title level={3} style={{ margin: 0 }}>
             {t("interview.page.title")}
           </Typography.Title>
-          <Typography.Text type="secondary">{t("interview.page.subtitle")}</Typography.Text>
+          <Typography.Text type="secondary">{t(SUBTITLE_KEYS[activeTab])}</Typography.Text>
         </div>
         {active && (
           <Button icon={<ArrowLeftOutlined />} onClick={leaveRoom}>
@@ -366,6 +402,7 @@ export default function InterviewPage() {
                   <SetupTab
                     form={form}
                     initialJobId={linkedJobId}
+                    initialResumeMaterial={bankInterview.materials.resumeMaterial}
                     starting={starting}
                     onStart={(values) => void start(values)}
                   />
@@ -386,7 +423,7 @@ export default function InterviewPage() {
               label: t("interview.tab.questionBank"),
               children: (
                 <QuestionBankPanel
-                  onStartSession={startFromBank}
+                  onStartSession={bankInterview.startFromBank}
                   record={bankRecord}
                   onOpenRecord={setBankRecord}
                   onCloseRecord={() => setBankRecord(null)}
@@ -413,81 +450,42 @@ export default function InterviewPage() {
           ]}
         />
       ) : (
-        <div className="interview-room">
-          <RoomHeader
-            session={active}
-            finished={finished}
-            answered={answered}
-            submitting={busy}
-            timerLabel={timer.label}
-            showTimer={ready}
-            onEndEarly={endEarly}
-            onNew={leaveRoom}
-          />
-
-          {/* 点「准备好了」之前不显示任何对话：这场面试还没开始，面试官也还没开口。
-              已经答过题（中途离开又回来）的会话始终显示历史，否则回来会看不到自己说过什么。 */}
-          {ready || answered > 0 || finished ? (
-            <InterviewMessageList
-              /* 只渲染正式问答：追问（#41）自成一段，放在报告下方的 FollowUpCard 里，
-                 两段记录分开，轮次读数才不会被追问带偏。 */
-              messages={active.messages.filter((item) => item.phase !== "followup")}
-              interviewerStyle={active.interviewer_style}
-              pendingAnswer={turn.pendingAnswer}
-              pendingInterrupted={turn.pendingInterrupted}
-              retryDisabled={busy}
-              onRetry={turn.retry}
-              /* 收尾气泡由列表按 `context.closing` 自己判断，页面只报结束状态。 */
-              finished={finished}
-              thinking={turn.submitting && !finished}
-              /* "正在生成报告"只在真的调 /finish 那段时间（ending）成立：答完最后一题后
-                 不再自动出报告（需求 4），按轮数预测或等 phase 事件都会显示假信息。 */
-              finishing={ending}
-              streamingQuestion={turn.streamingQuestion}
-              endRef={endRef}
-            />
-          ) : null}
-
-          {finished ? (
-            <>
-              {/* 正式问答已结束但报告还没生成（需求 4）：先给决策卡，不直接出空白报告。
-                  刷新恢复也走这条（finished && !hasReport），所以重开一场自动收尾的面试
-                  不会落到"报告为空"的界面。 */}
-              {awaitingReport ? (
-                <FinishDecisionCard
-                  onContinueFollowUp={goToFollowUp}
-                  onFinish={() => void finishWithReport()}
-                  finishing={ending}
-                />
-              ) : (
-                <ReportCard
-                  session={active}
-                  onSaveToMaterial={() => void saveReport()}
-                  saving={savingReport}
-                />
-              )}
-              {/* 追问区在报告生成前后都可用：这正是"先问是否追问，再出报告"的意义。 */}
-              <div ref={followUpRef}>
-                <FollowUpCard session={active} onSession={setActive} />
-              </div>
-            </>
-          ) : !ready ? (
-            // 还没点「准备好了」：**整块不渲染作答区**（不是禁用）——计时从点下按钮开始，
-            // 这之前连输入框都不该出现，否则用户会以为已经在计时了。
-            <ReadyGate
-              onReady={() => setReady(true)}
-              resuming={timer.seconds > 0 || active.duration_seconds > 0}
-            />
-          ) : (
-            <Composer
-              value={turn.answer}
-              submitting={turn.submitting}
-              onChange={turn.setAnswer}
-              onSubmit={turn.submit}
-              onStop={turn.stop}
-            />
-          )}
-        </div>
+        <RoomBody
+          session={active}
+          finished={finished}
+          answered={answered}
+          busy={busy}
+          ending={ending}
+          awaitingReport={awaitingReport}
+          // 「开过表就显示」：暂停中也要显示对话记录（刚开场 0 题暂停时第一题不能消失）。
+          hasStarted={ready || paused || answered > 0 || finished}
+          paused={paused}
+          resuming={timer.seconds > 0 || active.duration_seconds > 0}
+          ready={ready}
+          timerLabel={timer.label}
+          // 计时器常显：只要开过表（答过题 / 暂停中 / 正在走表）就有读数。
+          showTimer={ready || paused || answered > 0}
+          savingReport={savingReport}
+          turn={turn}
+          endRef={endRef}
+          followUpRef={followUpRef}
+          pauseRef={pauseRef}
+          onReady={() => setReady(true)}
+          // 暂停卡（F13）：先撤暂停再置 ready。正常暂停时 ready 已是 true，`setReady(true)`
+          // 会被 React 同值 bail out，所以**必须**调 `resume()`，否则暂停态永远停住。
+          // 极端情况（0 题就暂停）ready 还是 false，这里一并置上，避免恢复后再弹一次闸门。
+          onResume={() => {
+            setReady(true);
+            resume();
+          }}
+          onPause={togglePause}
+          onEndEarly={endEarly}
+          onNew={leaveRoom}
+          onFinishWithReport={() => void finishWithReport()}
+          onSaveToMaterial={() => void saveReport()}
+          onContinueFollowUp={goToFollowUp}
+          onSession={setActive}
+        />
       )}
     </div>
   );

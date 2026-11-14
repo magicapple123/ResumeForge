@@ -13,7 +13,13 @@ from docx.oxml.ns import qn
 from docx.shared import Mm
 
 
-def float_picture(run, *, align: str = "right", vertical_offset_mm: float = 0.0) -> bool:
+def float_picture(
+    run,
+    *,
+    align: str = "right",
+    vertical_offset_mm: float = 0.0,
+    horizontal_offset_mm: float | None = None,
+) -> bool:
     """把 ``run`` 里刚插入的图片从**嵌入型**改成「**浮于文字上方**」（不占行高）。
 
     ## 为什么必须改
@@ -45,6 +51,9 @@ def float_picture(run, *, align: str = "right", vertical_offset_mm: float = 0.0)
     :param vertical_offset_mm: 相对锚点段落顶部的下移量（mm）。照片改成"按原图比例装进
         照片框（contain）"之后，框内上下留白由调用方算好传进来，与 CSS
         `object-fit: contain` 的垂直居中同一定位；默认 0 = 贴段首（旧行为）。
+    :param horizontal_offset_mm: 照片左沿相对**版心左缘**的横向位置（mm）。``None`` 保持
+        "贴左/右缘对齐"的旧行为（旧产物逐字节不变）；给了数值就改用 `posOffset`，
+        这样 R-10 的左右偏移在 Word 里也能落到位。
     :returns: 是否真的转换成功；没有图片或结构不认识时返回 ``False``（调用方决定是否回退）。
     """
     drawing = run._element.find(qn("w:drawing"))
@@ -79,9 +88,15 @@ def float_picture(run, *, align: str = "right", vertical_offset_mm: float = 0.0)
     # 水平：以**版心**为参照对齐，照片因此贴正文右缘（左缘），不受段落缩进影响。
     position_h = OxmlElement("wp:positionH")
     position_h.set("relativeFrom", "margin")
-    align_node = OxmlElement("wp:align")
-    align_node.text = align
-    position_h.append(align_node)
+    if horizontal_offset_mm is None:
+        align_node = OxmlElement("wp:align")
+        align_node.text = align
+        position_h.append(align_node)
+    else:
+        # 给了绝对位置就用 posOffset：`align` 只能贴左/右缘，表达不了"从原位挪 3mm"。
+        x_offset = OxmlElement("wp:posOffset")
+        x_offset.text = str(int(round(Mm(horizontal_offset_mm).emu)))
+        position_h.append(x_offset)
     anchor.append(position_h)
 
     # 垂直：以**所在段落**为参照、偏移 0——锚在姓名那一段上，页头一动它跟着动，
@@ -106,4 +121,58 @@ def float_picture(run, *, align: str = "right", vertical_offset_mm: float = 0.0)
             anchor.append(node)
 
     drawing.replace(inline, anchor)
+    return True
+
+
+def outline_picture(
+    run,
+    *,
+    width_px: float,
+    color_hex: str | tuple[int, int, int],
+    radius_px: float,
+    width_mm: float,
+    height_mm: float,
+) -> bool:
+    """给已插入的图片加**边框与圆角**（R-07 的 Word 侧）。
+
+    Word 的图片边框是 `pic:spPr/a:ln`（不是段落边框），圆角靠把几何从矩形换成
+    `roundRect` 并给 `avLst` 一个 `adj` 值（单位是"短边的一半"的 1/100000）。
+    两条都是"改已有 XML"而不是重建图片，所以图片数据、alt、尺寸都不动。
+
+    :returns: 是否真的改成功；结构不认识时返回 ``False``（调用方忽略即可）。
+    """
+    drawing = run._element.find(qn("w:drawing"))
+    if drawing is None:
+        return False
+    sp_pr = drawing.find(".//" + qn("pic:spPr"))
+    if sp_pr is None:
+        return False
+    if width_px > 0:
+        if not isinstance(color_hex, str):
+            # 调用方可能传投影出来的 RGB 元组（`DocxTheme.line_text`）：统一成十六进制。
+            from .docx_decorate import rgb_hex
+
+            color_hex = rgb_hex(color_hex)
+        line = OxmlElement("a:ln")
+        line.set("w", str(int(round(width_px * 9525))))  # 1px = 9525 EMU
+        fill = OxmlElement("a:solidFill")
+        color = OxmlElement("a:srgbClr")
+        color.set("val", color_hex.lstrip("#").upper())
+        fill.append(color)
+        line.append(fill)
+        sp_pr.append(line)
+    if radius_px > 0 and width_mm > 0 and height_mm > 0:
+        geometry = sp_pr.find(qn("a:prstGeom"))
+        if geometry is not None:
+            geometry.set("prst", "roundRect")
+            for child in list(geometry):
+                geometry.remove(child)
+            adjust_list = OxmlElement("a:avLst")
+            adjust = OxmlElement("a:gd")
+            # adj 的分母是 min(w,h)；0–50% 是 CSS 圆角能表达的范围。
+            ratio = min(0.5, (radius_px * 0.264583) / min(width_mm, height_mm))
+            adjust.set("name", "adj")
+            adjust.set("fmla", f"val {int(round(ratio * 100000))}")
+            adjust_list.append(adjust)
+            geometry.append(adjust_list)
     return True

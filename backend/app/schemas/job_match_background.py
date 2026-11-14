@@ -23,6 +23,7 @@ class JobMatchBackgroundTask(BaseModel):
     status: JobMatchBackgroundTaskStatus
     job_ids: list[int] = Field(min_length=1, max_length=50)
     force: bool = False
+    resume_id: int | None = Field(default=None, gt=0)
     # 老任务（本次改动之前写入 AppSetting 的 JSON）没有这个字段，默认按逐岗匹配读。
     mode: BatchMode = "match"
     requested_count: int = Field(ge=1, le=50)

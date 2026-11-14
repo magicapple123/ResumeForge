@@ -132,6 +132,26 @@ describe("加粗标记 · 渲染成 DOM", () => {
     expect(fragment.querySelectorAll("strong")).toHaveLength(0);
   });
 
+  it("R-11：样式标记不计入可见文本，也不写在 DOM 里", () => {
+    const raw = "带 {@size=0.9}8 人{@}团队，{@color=#c0392b}红字{@}。";
+    const visible = "带 8 人团队，红字。";
+    expect(stripMarkers(raw)).toBe(visible);
+    expect(visibleLength(raw)).toBe(visible.length);
+    const fragment = renderRichFragment(document, raw);
+    expect(fragment.textContent).toBe(visible);
+    expect(fragment.textContent).not.toContain("{@");
+  });
+
+  it("R-11：嵌套样式与未闭合标记", () => {
+    const nested = "a{@size=0.9}{@color=#c00}b{@}{@}c";
+    expect(stripMarkers(nested)).toBe("abc");
+    expect(visibleLength(nested)).toBe(3);
+    // 未闭合：后端整段按字面，前端也必须把标记当可见字符（否则点选会错位）。
+    const broken = "a{@size=0.9}b";
+    expect(stripMarkers(broken)).toBe(broken);
+    expect(visibleLength(broken)).toBe(broken.length);
+  });
+
   it("paintRichField 就地替换元素内容，脱离文档的元素安全跳过", () => {
     const host = document.createElement("p");
     host.textContent = "前中后";

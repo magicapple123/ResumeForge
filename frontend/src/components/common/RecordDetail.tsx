@@ -72,11 +72,25 @@ export function DetailTrigger({ onOpen, label, className, children }: DetailTrig
   );
 }
 
+/**
+ * 值是不是"没有内容"。
+ *
+ * 只看 `undefined` / `null` / 纯空白字符串：`"-"`、`"（无）"` 这类占位不再被组件
+ * 当成空——它们会被当成真实内容占掉一行。想显示「无」的调用方显式传一句文案，
+ * 不要指望组件替它猜。
+ */
+function isBlank(value: ReactNode): boolean {
+  if (value === undefined || value === null) return true;
+  return typeof value === "string" && value.trim() === "";
+}
+
 interface RecordDetailDrawerProps {
   open: boolean;
   title: ReactNode;
   /** 标题下的一行补充信息（公司、时间等）。 */
   subtitle?: ReactNode;
+  /** 标题下一行的紧凑元信息（更新时间、附件数、是否有链接），比字段表更省纵向空间。 */
+  meta?: ReactNode;
   /** 标题区下方的状态标签。 */
   tags?: ReactNode;
   /** 字段表：一行一项，适合短字段。 */
@@ -89,11 +103,12 @@ interface RecordDetailDrawerProps {
   width?: number;
 }
 
-/** 详情抽屉：字段缺失时给出统一占位，不留空行。 */
+/** 详情抽屉：空字段与空章节整行不渲染，不留空占位。 */
 export function RecordDetailDrawer({
   open,
   title,
   subtitle,
+  meta,
   tags,
   fields = [],
   sections = [],
@@ -102,8 +117,8 @@ export function RecordDetailDrawer({
   width = 520,
 }: RecordDetailDrawerProps) {
   useLocale();
-  const visibleFields = fields.filter((field) => field.value !== undefined && field.value !== null);
-  const visibleSections = sections.filter((section) => section.content !== undefined);
+  const visibleFields = fields.filter((field) => !isBlank(field.value));
+  const visibleSections = sections.filter((section) => !isBlank(section.content));
   const isEmpty = visibleFields.length === 0 && visibleSections.length === 0;
 
   return (
@@ -117,6 +132,7 @@ export function RecordDetailDrawer({
     >
       <Space orientation="vertical" size="small" style={{ width: "100%" }}>
         {subtitle && <Typography.Text type="secondary">{subtitle}</Typography.Text>}
+        {meta && <div className="record-detail-meta">{meta}</div>}
         {tags}
       </Space>
 
@@ -136,12 +152,9 @@ export function RecordDetailDrawer({
           )}
           {visibleSections.map((section, index) => (
             <div className="record-detail-section" key={index}>
-              {(section.title || index > 0) && <Divider style={{ margin: "12px 0" }} />}
-              {section.title && (
-                <Typography.Title level={5} style={{ marginTop: 0 }}>
-                  {section.title}
-                </Typography.Title>
-              )}
+              {/* 第一条不画分隔线：它正上方就是字段区/标签，再来一条只是多一条横线。 */}
+              {index > 0 && <Divider style={{ margin: "12px 0" }} />}
+              {section.title && <div className="record-detail-section-title">{section.title}</div>}
               <div className="record-detail-section-body">{section.content}</div>
             </div>
           ))}

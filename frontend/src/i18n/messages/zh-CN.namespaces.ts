@@ -124,6 +124,7 @@ import llmRecordView from "./zh-CN.llmRecordView";
 import llmProtocol from "./zh-CN.llmProtocol";
 import profileTextModal from "./zh-CN.profileTextModal";
 import questionBankPanel from "./zh-CN.questionBankPanel";
+import assistantTools from "./zh-CN.assistantTools";
 import referralDetail from "./zh-CN.referralDetail";
 import resume from "./zh-CN.resume";
 import resumeChangeReview from "./zh-CN.resumeChangeReview";
@@ -145,6 +146,10 @@ import assistantHooks from "./zh-CN.assistantHooks";
 import assistantBreadth from "./zh-CN.assistantBreadth";
 import assistantMemory from "./zh-CN.assistantMemory";
 import assistantLimits from "./zh-CN.assistantLimits";
+import contactSeparator from "./zh-CN.contactSeparator";
+import skillColumns from "./zh-CN.skillColumns";
+import photoFrame from "./zh-CN.photoFrame";
+import trackProbe from "./zh-CN.trackProbe";
 import assistantUi from "./zh-CN.assistantUi";
 import componentsMisc from "./zh-CN.componentsMisc";
 import componentsMisc2 from "./zh-CN.componentsMisc2";
@@ -378,6 +383,7 @@ const namespaces = {
   ...llmProtocol,
   ...profileTextModal,
   ...questionBankPanel,
+  ...assistantTools,
   ...referralDetail,
   ...resume,
   ...resumeChangeReview,
@@ -399,6 +405,10 @@ const namespaces = {
   ...assistantBreadth,
   ...assistantMemory,
   ...assistantLimits,
+  ...contactSeparator,
+  ...skillColumns,
+  ...photoFrame,
+  ...trackProbe,
   ...assistantUi,
   ...componentsMisc,
   ...componentsMisc2,

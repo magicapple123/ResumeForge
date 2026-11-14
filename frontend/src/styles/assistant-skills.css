@@ -97,8 +97,11 @@
 .assistant-skill-picker-list {
   display: grid;
   gap: 2px;
-  max-height: 240px;
+  /* 240px 是桌面档的舒适上限；矮视口（F35）按视口收缩，保证面板头部与底部预算行
+     始终在视口内——滚动只发生在列表里，不是整块面板。 */
+  max-height: min(240px, calc(100dvh - 280px));
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .assistant-skill-picker-option {

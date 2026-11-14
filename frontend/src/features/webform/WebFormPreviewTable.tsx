@@ -100,6 +100,16 @@ const PreviewLabelCell = memo(function PreviewLabelCell({ item }: { item: WebFor
         <span>{item.field_label}</span>
         {item.source === "ai" ? <Tag color="blue">{t("liveModeCard.tag.ai")}</Tag> : null}
       </Space>
+      {typeof item.confidence === "number" ? (
+        <div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {t("webFormPage.preview.aiEvidence", {
+              confidence: `${Math.round(item.confidence * 100)}%`,
+              evidence: item.evidence || "—",
+            })}
+          </Typography.Text>
+        </div>
+      ) : null}
       {item.control_label && item.control_label !== item.field_label ? (
         <div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>

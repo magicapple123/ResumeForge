@@ -34,6 +34,10 @@ const apiMocks = vi.hoisted(() => ({
   parseTracks: vi.fn(),
   applyTracks: vi.fn(),
   exportTracks: vi.fn(),
+  getProbeSettings: vi.fn(),
+  probeTracks: vi.fn(),
+  probeDaily: vi.fn(),
+  saveProbeSettings: vi.fn(),
 }));
 
 vi.mock("../api/tracker", () => apiMocks);

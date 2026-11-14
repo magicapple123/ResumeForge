@@ -1,0 +1,386 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 实时语音房间：外壳 + 头部 + 左栏（形象 / 声波 / 当前问答 / 摄像头 PiP）。
+   右栏与底栏在 `liveVoiceRoomPanels.css`——两个文件都远低于 500 行预算，
+   拆开是为了让"哪一块归谁"在文件名上就能看出来。 */
+
+.interview-live-room {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  /* 整页**不许滚**：滚动只发生在右栏消息区内部（Q1-B 的核心要求）。 */
+  overflow: hidden;
+  color: var(--rf-text-body);
+  background: var(--rf-surface-alt);
+}
+
+.interview-live-room__header,
+.interview-live-room__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 22px;
+  background: var(--rf-surface);
+}
+
+.interview-live-room__header {
+  min-height: 64px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.interview-live-room__live-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--rf-danger);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--rf-danger) 15%, transparent);
+}
+
+/* 高度接力链的第一环：`flex: 1 1 auto` + `min-height: 0` 才允许子项收缩。
+   原来是 `flex: 1 0 auto`（不可收缩），于是内容一多就整页滚，右栏底部永远空一块。
+
+   F15：栅格改成「窄左轨 + 宽主栏」。原来是 `1fr / 300–420px`，可舞台主体只有一张
+   可伸缩的问答卡，宽的一侧几乎空着，而内容重心（问答与记录）挤在窄的一侧。 */
+.interview-live-room__content {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  flex: 1 1 auto;
+  gap: 20px;
+  width: min(1220px, 100%);
+  min-height: 0;
+  margin: 0 auto;
+  padding: 22px 24px;
+  overflow: hidden;
+}
+
+/* ===== 左轨：形象 + 摄像头（问答卡已搬去主栏） ===== */
+.interview-live-room__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  text-align: center;
+}
+
+/* ===== 主栏：当前问答卡 → 对话记录 =====
+   `min-height: 0` 是滚动接力的第一环：没有它，子项的 `overflow-y: auto` 永远不生效。 */
+.interview-live-room__main {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.interview-live-room__portrait {
+  position: relative;
+  display: grid;
+  width: min(22vw, 168px);
+  min-width: 120px;
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 50%;
+  background: var(--rf-surface);
+  box-shadow: 0 16px 48px color-mix(in srgb, var(--rf-text-body) 12%, transparent);
+}
+
+.interview-live-room__portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.interview-live-room__portrait.is-speaking {
+  outline: 3px solid color-mix(in srgb, var(--rf-success-strong) 54%, transparent);
+  outline-offset: 7px;
+}
+
+.interview-live-room__sound-bars {
+  position: absolute;
+  right: 0;
+  bottom: 16px;
+  left: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  height: 30px;
+}
+
+/* 播报中的呼吸条：**不读麦克风电平**，纯动画。高度与延迟都由序号错峰，
+   语义是"面试官正在说"，不是"你房间有多吵"。 */
+.interview-live-room__sound-bars i {
+  display: block;
+  width: 4px;
+  border-radius: 3px;
+  background: var(--rf-success-strong);
+  animation: interview-live-room-breathe 900ms ease-in-out infinite alternate;
+}
+
+@keyframes interview-live-room-breathe {
+  from {
+    height: 5px;
+    opacity: 0.55;
+  }
+  to {
+    height: 24px;
+    opacity: 1;
+  }
+}
+
+.interview-live-room__name.ant-typography {
+  margin: 16px 0 2px;
+  font-size: 18px;
+}
+
+.interview-live-room__speaking-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+}
+
+.interview-live-room__notice {
+  max-width: 420px;
+  margin-top: 8px;
+  text-align: center;
+}
+
+/* ===== 当前问答卡 =====
+   F15：从左栏搬进主栏顶部。`flex: 0 1 auto` + `max-height` 让它在长问题时自己滚，
+   而不是把对话记录挤到看不见；宽度不再封顶 640（主栏本来就更宽）。 */
+.interview-live-room__turn {
+  display: flex;
+  width: 100%;
+  flex: 0 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  max-height: min(40vh, 360px);
+  padding: 14px 16px;
+  overflow-y: auto;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 10px;
+  background: var(--rf-surface);
+  text-align: left;
+}
+
+.interview-live-room__turn-label {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.interview-live-room__turn-question {
+  overflow-wrap: anywhere;
+  color: var(--rf-text-body);
+}
+
+.interview-live-room__turn-answer {
+  padding-top: 8px;
+  border-top: 1px dashed var(--rf-border-subtle);
+  overflow-wrap: anywhere;
+}
+
+.interview-live-room__turn-hint {
+  display: block;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.interview-live-room__turn-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.interview-live-room__turn-edit {
+  margin-top: 6px;
+  padding-inline: 0;
+}
+
+/* 摄像头：F15 起是左轨的第二个主体，宽度跟着轨道走（上限 280px）。
+   刻意不用 `position: absolute` 贴左下角：绝对定位会盖住问答卡或形象，
+   放在流里既保住了"左下角"的观感，也不压内容。 */
+.interview-live-room__camera {
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface);
+}
+
+.interview-live-room__camera video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.interview-live-room__camera-placeholder {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  color: var(--rf-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.interview-live-room__camera-placeholder .anticon {
+  font-size: 20px;
+}
+
+.interview-live-room__privacy {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 3px 6px;
+  color: var(--rf-text-body);
+  background: color-mix(in srgb, var(--rf-surface) 88%, transparent);
+  font-size: 10px;
+  text-align: center;
+}
+
+/* F18 录制指示：放在摄像头框**外面**（框只有 180px 宽且 overflow:hidden，
+   状态行塞进去会被裁掉）。整列宽度跟着摄像头走，不挤「当前问答」卡。
+   **这条必须写在下面的媒体查询之前**：`align-self` / `max-width` 在窄屏被覆盖，
+   规则若排在 @media 后面会把覆盖整段盖掉（768 实测：预览框没居中、宽 280 撑出轨道）。 */
+.interview-live-room__camera-wrap {
+  display: flex;
+  width: 100%;
+  max-width: 280px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 6px;
+  align-self: stretch;
+  margin-top: 20px;
+}
+
+.interview-live-room__camera-wrap .interview-live-room__camera {
+  margin-top: 0;
+}
+
+@media (max-width: 1100px) {
+  .interview-live-room__content {
+    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .interview-live-room__turn {
+    max-height: 36vh;
+  }
+
+  .interview-live-room__camera-wrap {
+    max-width: 200px;
+  }
+}
+
+/* 窄屏：左轨与主栏上下排。**滚的是内容区，不是整间房**：头部（退出）与底栏（麦克风 /
+   暂停）必须一直够得着——语音房间里把麦克风滚出屏幕是不可接受的。
+   上下排之后**不能再按栅格分高度**：`grid` 的自动行会被剩余高度挤压，而左轨已经改成
+   自然高度 + `overflow: visible`，行一矮就是预览框压到问答卡上（768×900 实测）。
+   改成纵向 flex、两段都 `flex: 0 0 auto`，高度只由内容决定，多出来的部分由 content 自己滚。 */
+@media (max-width: 860px) {
+  .interview-live-room {
+    overflow: auto;
+  }
+
+  .interview-live-room__content {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  /* 上下排之后左轨按内容自然高度排，不再自己滚（它已经不是"视口里的一列"了）。 */
+  .interview-live-room__stage {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .interview-live-room__main {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .interview-live-room__portrait {
+    width: min(48vw, 180px);
+  }
+
+  .interview-live-room__turn {
+    max-height: none;
+  }
+
+  .interview-live-room__camera-wrap {
+    max-width: 220px;
+    align-self: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .interview-live-room__sound-bars i {
+    animation: none;
+    height: 14px;
+    opacity: 0.7;
+  }
+}
+
+.interview-live-room__camera.is-recording {
+  border-color: var(--rf-danger, #d4380d);
+  box-shadow: 0 0 0 1px var(--rf-danger, #d4380d);
+}
+
+.interview-live-room__camera-rec {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+}
+
+/* 红点呼吸：只做透明度动画，不动布局（避免每帧重排）。 */
+.interview-live-room__rec-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--rf-danger, #d4380d);
+  animation: rf-rec-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes rf-rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .interview-live-room__rec-dot {
+    animation: none;
+  }
+}

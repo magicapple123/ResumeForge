@@ -44,6 +44,7 @@ from ..services.job.job_match import (
     local_match_result,
 )
 from ..services.job.job_match_context import match_source_texts, profile_is_empty
+from ..services.job.job_match_sources import match_source_snapshot, source_matches
 from ..services.llm import create_provider
 from ..services.llm.client_pool import aclose_clients_for_current_loop
 from ..services.settings_service import get_llm_config
@@ -88,6 +89,10 @@ def handle_job_match(ctx: Any) -> None:
     if job_id is None:
         raise AiTaskHandlerError("缺少岗位标识")
     force = bool(handler_payload_field(ctx.payload, "force"))
+    selected = handler_payload_field(ctx.payload, "resume_id")
+    resume_id = _positive_int(selected)
+    if selected is not None and resume_id is None:
+        raise AiTaskHandlerError("简历标识无效，请重新选择简历")
 
     ctx.set_progress(5, "正在准备岗位匹配分析")
     session = ctx.session
@@ -95,16 +100,20 @@ def handle_job_match(ctx: Any) -> None:
     if job is None or trash.is_deleted(job):
         raise AiTaskHandlerError("岗位不存在或已被删除")
 
+    try:
+        profile, profile_text, resume_text = match_source_texts(session, job, resume_id=resume_id)
+        source = match_source_snapshot(session, job, resume_id, personal_text=profile_text)
+    except ValueError as exc:
+        raise AiTaskHandlerError(str(exc)) from exc
     if not force:
         # 已有结论就不重算：与 POST /jobs/{id}/match-analysis 的非 force 语义一致，
         # 避免用户重复点「分析」白烧一次模型调用。
         existing = apply_service.latest_match(session, job_id)
-        if existing is not None and isinstance(existing.result, dict) and existing.result:
+        if existing is not None and source_matches(existing.result, source):
             ctx.set_progress(100, "已存在匹配分析结果")
             ctx.set_result({"job_id": job_id})
             return
 
-    profile, profile_text, resume_text = match_source_texts(session, job)
     if profile_is_empty(profile) and not resume_text.strip():
         raise AiTaskHandlerError("个人资料为空，无法做匹配分析")
     job_data = job_payload(job)
@@ -144,6 +153,7 @@ def handle_job_match(ctx: Any) -> None:
     stored_job = session.get(Job, job_id)
     if stored_job is None or trash.is_deleted(stored_job):
         raise AiTaskHandlerError("岗位不存在或已被删除")
+    result = result.model_copy(update={"source": source})
     apply_service.persist_match(session, stored_job, result, model=model_name)
     session.commit()
     # 落点标识：前端据此生成 /jobs?job_id=<id>（不在这里拼路由）。

@@ -8,7 +8,7 @@
  */
 import { App as AntdApp } from "antd";
 import { MemoryRouter } from "react-router-dom";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../../api/settings", () => ({
@@ -33,6 +33,7 @@ import type {
 } from "../../../../types";
 import { t } from "../../../../i18n";
 import { formatExactTokens, formatPercent, formatTokenCount } from "../../contextUsageFormat";
+import { clearConversationContext, recordContextResult } from "../../conversationContextState";
 
 function bucket(key: string, tokens: number, percent: number | null): ContextUsageBucket {
   return { key, tokens, percent };
@@ -71,8 +72,19 @@ function barSegments(): Element[] {
   ];
 }
 
+/** 图例行（`partial` 与 0 值过滤后剩下的那些）。 */
+function legendRows(): Element[] {
+  return [...document.querySelectorAll(".assistant-context-usage-legend-row")];
+}
+
+/** 展开第二层「窗口与压缩设置」：折叠区默认收起，里面的控件不在 DOM 里。 */
+function expandSettings() {
+  fireEvent.click(screen.getByText(t("contextUsage.settings.title")));
+}
+
 afterEach(() => {
   cleanup();
+  clearConversationContext(7);
 });
 
 describe("口径与结构", () => {
@@ -109,7 +121,7 @@ describe("口径与结构", () => {
     expect(screen.getByText(t("contextUsage.estimate"))).toBeInTheDocument();
   });
 
-  it("token 为 0 的桶不画段（画了会留一条看不见的缝）", () => {
+  it("token 为 0 的桶不画段，也不铺成 0.0% 的行（收成一句「另有 N 类为 0」）", () => {
     renderPopover({
       ...USAGE,
       buckets: [
@@ -122,8 +134,45 @@ describe("口径与结构", () => {
     });
     // 五段里只有两段有量：其余三桶如实是 0 token。
     expect(barSegments()).toHaveLength(2);
-    // 图例仍然五行都在——"这轮没用技能"是信息，不该被藏起来。
-    expect(document.querySelectorAll(".assistant-context-usage-legend-row")).toHaveLength(5);
+    // 0 值行不再各占一行（0.0% 会被读成"一点都没用"），收成一句计数说明。
+    expect(legendRows()).toHaveLength(2);
+    expect(screen.getByText(t("contextUsage.zeroNote", { count: 3 }))).toBeInTheDocument();
+  });
+
+  it("partial 时只留 system 与 conversation，并说明其余桶未参与估算", () => {
+    renderPopover({
+      ...USAGE,
+      partial: true,
+      buckets: [
+        bucket("system", 12_000, 12),
+        bucket("tools", 0, null),
+        bucket("conversation", 4_000, 4),
+        bucket("connectors", 0, null),
+        bucket("skills", 0, null),
+      ],
+    });
+    // 两行图例 + 一行说明：其余桶是"没估算"，不是"估出来 0"。
+    expect(legendRows()).toHaveLength(2);
+    expect(barSegments()).toHaveLength(2);
+    expect(screen.getByText(t("contextUsage.partialNote"))).toBeInTheDocument();
+    expect(screen.queryByText(t("contextUsage.zeroNote", { count: 3 }))).toBeNull();
+  });
+
+  it("全部为 0 时说「本次没有可估算的内容」，而不是五行 0.0%", () => {
+    renderPopover({
+      ...USAGE,
+      total: 0,
+      buckets: USAGE.buckets.map((item) => bucket(item.key, 0, 0)),
+    });
+    expect(legendRows()).toHaveLength(0);
+    expect(barSegments()).toHaveLength(0);
+    expect(screen.getByText(t("contextUsage.emptyNote"))).toBeInTheDocument();
+    expect(screen.queryByText(t("contextUsage.zeroNote", { count: 5 }))).toBeNull();
+  });
+
+  it("图例里不再出现按旧实现想象出来的「子智能体」「MCP」", () => {
+    expect(t("contextUsage.bucket.tools")).not.toContain("子智能体");
+    expect(t("contextUsage.bucket.connectors")).not.toContain("MCP");
   });
 
   it("实测值单列一行；未报告时说「本次未报告」而不是 0", () => {
@@ -224,6 +273,35 @@ function renderWithConversation(usage: ContextUsage | null, onContextChanged = v
 }
 
 describe("压缩状态", () => {
+  it("shows the window source alone (no repeated token count)", () => {
+    renderWithConversation({ ...USAGE, window_source: "reference" });
+    expandSettings();
+    // F31：来源与「只影响使用这个模型的对话」合成一行（不再是两段各占一行）。
+    expect(
+      screen.getByText(
+        t("contextUsage.window.sourceLine", {
+          source: t("contextUsage.window.source.reference"),
+        }),
+      ),
+    ).toBeInTheDocument();
+    // 窗口数字在上面的「已使用 x / y」里已经出现过一次，来源行不再重复。
+    expect(screen.queryByText(`100.0K · ${t("contextUsage.window.source.reference")}`)).toBeNull();
+  });
+
+  it("warns and marks custom window input red only after two context-length errors", () => {
+    renderWithConversation(USAGE);
+    expandSettings();
+    act(() => recordContextResult(7, "context_length"));
+    expect(screen.queryByText(t("contextUsage.window.mismatch"))).toBeNull();
+    act(() => recordContextResult(7, "context_length"));
+    expect(screen.getByRole("alert")).toHaveTextContent(t("contextUsage.window.mismatch"));
+    expect(document.querySelector(".assistant-context-window-custom")).toHaveClass(
+      "ant-input-number-status-error",
+    );
+    act(() => recordContextResult(7));
+    expect(screen.queryByText(t("contextUsage.window.mismatch"))).toBeNull();
+  });
+
   it("没压缩过时写「尚未压缩」，且不给「还原原文」", () => {
     renderWithConversation(USAGE);
     expect(screen.getByText(t("contextUsage.compaction.none"))).toBeInTheDocument();
@@ -232,23 +310,22 @@ describe("压缩状态", () => {
     ).toBeNull();
   });
 
-  it("有状态时把遮蔽条数、摘要轮数、token 区间与省下比例都说清", () => {
+  it("有状态时第一章给一行状态，详情（区间/省下比例/原文仍在）收在第二层", () => {
     renderWithConversation(COMPACTED);
     expect(
       screen.getByText(t("contextUsage.compaction.status", { masked: 8, turns: 17 })),
     ).toBeInTheDocument();
+    expandSettings();
     expect(
       screen.getByText(
         t("contextUsage.compaction.range", {
           before: formatTokenCount(180_000),
           after: formatTokenCount(24_000),
-        }) + ` · ${formatPercent(25.5)}`,
+        }),
       ),
     ).toBeInTheDocument();
     // 「省下 87%」是实测比例，不是估算。
-    expect(
-      screen.getByText(t("contextUsage.compaction.saved", { percent: 87 })),
-    ).toBeInTheDocument();
+    expect(screen.getByText(t("contextUsage.compaction.saved", { percent: 87 }))).toBeInTheDocument();
     // 不可逆的错觉：必须写明原文仍在本地。
     expect(screen.getAllByText(t("contextUsage.compaction.keepOriginal")).length).toBeGreaterThan(
       0,
@@ -265,9 +342,7 @@ describe("压缩状态", () => {
     const onContextChanged = vi.fn();
     renderWithConversation(USAGE, onContextChanged);
 
-    fireEvent.click(
-      screen.getByRole("button", { name: t("contextUsage.compaction.action.compact") }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: t("contextUsage.compaction.action.now") }));
     // 第一跳只问预估（dry_run=true）——它不写库、不调模型。
     expect(
       await screen.findByText(
@@ -293,6 +368,7 @@ describe("压缩状态", () => {
     vi.mocked(restoreAssistantConversation).mockResolvedValue(undefined);
     const onContextChanged = vi.fn();
     renderWithConversation(COMPACTED, onContextChanged);
+    expandSettings();
 
     fireEvent.click(
       screen.getByRole("button", { name: t("contextUsage.compaction.action.restore") }),
@@ -315,8 +391,9 @@ describe("压缩状态", () => {
       </MemoryRouter>,
     );
     expect(
-      screen.getByRole("button", { name: t("contextUsage.compaction.action.compact") }),
+      screen.getByRole("button", { name: t("contextUsage.compaction.action.now") }),
     ).toBeDisabled();
+    expandSettings();
     expect(
       screen.getByRole("button", { name: t("contextUsage.compaction.action.restore") }),
     ).toBeDisabled();

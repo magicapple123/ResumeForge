@@ -24,9 +24,24 @@ const settingsMocks = vi.hoisted(() => ({ getAgentTaskEvents: vi.fn() }));
 vi.mock("../../api/settings", () => settingsMocks);
 
 const selectMocks = vi.hoisted(() => ({
-  track: { selectProps: {}, options: [], reload: vi.fn(), ensure: vi.fn() },
-  job: { selectProps: {}, options: [], reload: vi.fn(), ensure: vi.fn() },
-  resume: { selectProps: {}, options: [], reload: vi.fn(), ensure: vi.fn() },
+  track: {
+    selectProps: {},
+    options: [] as { value: number; label: string }[],
+    reload: vi.fn(),
+    ensure: vi.fn(),
+  },
+  job: {
+    selectProps: {},
+    options: [] as { value: number; label: string }[],
+    reload: vi.fn(),
+    ensure: vi.fn(),
+  },
+  resume: {
+    selectProps: {},
+    options: [] as { value: number; label: string }[],
+    reload: vi.fn(),
+    ensure: vi.fn(),
+  },
 }));
 
 vi.mock("../../hooks/remoteSearchOptions", () => ({
@@ -122,6 +137,12 @@ describe("ReminderPanel", () => {
   });
 
   it("点「详情」打开详情抽屉，看得到关联对象与备注", async () => {
+    // 详情抽屉按"空白即不存在"整行不渲染：关联对象要给真实 id 与选项才看得见。
+    apiMocks.listReminders.mockResolvedValue([
+      { ...makeItem(), track_id: 7, job_id: 8, note: "带一份简历" },
+    ]);
+    selectMocks.track.options = [{ value: 7, label: "某跟进" }];
+    selectMocks.job.options = [{ value: 8, label: "某岗位" }];
     renderPanel();
     await screen.findByText(ITEM_TITLE);
 

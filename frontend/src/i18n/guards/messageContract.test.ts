@@ -17,6 +17,9 @@ const EXEMPT_FIXTURES = {
   "research.publications.doiPlaceholder": "10.1000/xyz123",
   "research.publications.volumePagesPlaceholder": "Vol 12, 1-15",
   "typography.inline.linkPlaceholder": "https://example.com",
+  "structure.layout.gapMillimeters": "{value} mm",
+  "trackProbe.pageUrlExample": "https://acme.jobs.feishu.cn/.../applications",
+  "trackProbe.cookieExample": "session=...; other=...",
   "versions.variants.exportOption": "{name}{job}{layout}",
   "versions.variants.exportOption.job": " · {job}",
   "provenance.usage.tokens": "token",
@@ -28,6 +31,10 @@ const EXEMPT_FIXTURES = {
   "appConfig.preset.mistral": "Mistral AI",
   "userGuide.setupProfile.step1.point9.lead": "API Key",
   "interviewPage.interviewerName": "Jane",
+  // 记忆历史一行只有两个用户值 + 箭头，不是句子（登记在 equalityExemptions）。
+  "assistantMemory.history.changed": "{before} → {after}",
+  // 复盘查看态头部副信息：只有两个已翻译插值 + 分隔符（登记在 equalityExemptions）。
+  "interviewReview.header.meta": "{time} · {target}",
   // 品牌名：两种语言写法相同（登记在 equalityExemptions）。
   "searchCard.source.deepseek": "DeepSeek",
   "searchCard.source.tavily": "Tavily",

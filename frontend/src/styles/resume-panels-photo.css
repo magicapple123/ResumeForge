@@ -1,0 +1,51 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 简历面板（5/5）：照片「边框与位置」弹层（R-07 / R-10）。
+   2026-11 F21 同批切出：resume-panels.css 已顶到 500 行预算，这一块加滑杆后放不下。
+   纯搬迁 + 改两处宽度——选择器、类名与层叠顺序不变，由 resume-panels.css 顶部的
+   @import 引入，对外入口仍是 `resume.css` 里那一条，没有第二套入口。 */
+
+/* 五行「标签 + 滑杆 + 数字」，面板定宽不跳。
+   300 = 标签 84 + 滑杆 + 数字 68 + 两处间距 16 + 余量，刚好放得下「−20.0mm」。 */
+.resume-photo-frame-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 300px;
+}
+
+.resume-photo-frame-row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) 68px;
+  align-items: center;
+  column-gap: 8px;
+}
+
+/* 颜色行控件横跨后两列（标签仍在第一列，左缘与其余五行对齐）。 */
+.resume-photo-frame-color {
+  grid-column: 2 / -1;
+}
+
+/* 滑杆不吃 antd 默认的上下外边距（`margin: 14px 6px` 会把行撑到 40px 以上）。
+   `.ant-slider` 覆写理由：布局无 token；已用本面板的类限定作用域。 */
+.resume-photo-frame-row .ant-slider {
+  margin: 0;
+}
+
+/* 中列是 `minmax(0, 1fr)`：滑杆默认 `min-width: auto` 会按内容撑宽，
+   把右侧数字框挤出 300px 面板。 */
+.resume-photo-frame-slider {
+  min-width: 0;
+}
+
+.resume-photo-frame-number {
+  width: 100%;
+}
+
+.resume-photo-frame-label {
+  color: var(--rf-text-body);
+  font-size: 12px;
+}
+
+.resume-photo-frame-hint {
+  font-size: 12px;
+}

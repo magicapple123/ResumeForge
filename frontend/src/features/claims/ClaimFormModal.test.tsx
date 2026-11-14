@@ -18,6 +18,7 @@ import ClaimFormModal from "./ClaimFormModal";
 const apiMocks = vi.hoisted(() => ({
   createClaim: vi.fn(),
   updateClaim: vi.fn(),
+  listAllowedUses: vi.fn(),
 }));
 
 vi.mock("../../api/claims", async (importOriginal) => ({
@@ -93,6 +94,8 @@ async function pickEntry() {
 beforeEach(() => {
   apiMocks.createClaim.mockReset();
   apiMocks.updateClaim.mockReset();
+  apiMocks.listAllowedUses.mockReset();
+  apiMocks.listAllowedUses.mockResolvedValue([]);
   profileMocks.getWorkspace.mockReset();
   profileMocks.getWorkspace.mockResolvedValue(workspaceWithEntries());
   apiMocks.updateClaim.mockResolvedValue(makeClaim({ entry_ids: [ENTRY_A] }));
@@ -141,5 +144,103 @@ describe("ClaimFormModal 的关联资料条目", () => {
 
     expect(await screen.findByText(t("claimForm.entryIds.loadFailed"))).toBeInTheDocument();
     expect(screen.getByLabelText(t("claimForm.field.title"))).toBeEnabled();
+  });
+});
+
+describe("ClaimFormModal 的面试细节与字段回填", () => {
+  it("新建时收起并显示已填 0 项，编辑有内容时展开", async () => {
+    renderModal(null);
+    expect(await screen.findByText(t("claimForm.interview.title"))).toBeInTheDocument();
+    expect(
+      screen.getByText(t("claimForm.interview.filledCount", { count: 0 })),
+    ).toBeInTheDocument();
+    // 收起 = 五个字段都没挂载，不会给新建的弹窗铺一屏空输入框。
+    expect(screen.queryByLabelText(t("claimForm.field.decisions"))).not.toBeInTheDocument();
+
+    cleanup();
+    document.body.innerHTML = "";
+
+    renderModal(
+      makeClaim({
+        interview_details: {
+          decisions: ["先做关键词再做语义"],
+          difficulties: [],
+          verification: [],
+          result: null,
+        },
+      }),
+    );
+    expect(await screen.findByLabelText(t("claimForm.field.decisions"))).toBeInTheDocument();
+    expect(
+      screen.getByText(t("claimForm.interview.filledCount", { count: 1 })),
+    ).toBeInTheDocument();
+  });
+
+  it("新建时按刚选中的资料回填主体与分类", async () => {
+    renderModal(null);
+
+    await pickEntry();
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(t("claimForm.field.subject"))).toHaveValue("Acme backend intern"),
+    );
+    const categoryField = screen
+      .getByLabelText(t("claimForm.field.category"))
+      .closest(".ant-form-item") as HTMLElement;
+    expect(categoryField.querySelector(".ant-select-content")).toHaveTextContent(
+      t("enumsClaims.category.internship"),
+    );
+  });
+
+  it("已经填过的主体不被关联回填覆盖", async () => {
+    renderModal(null);
+    fireEvent.change(screen.getByLabelText(t("claimForm.field.subject")), {
+      target: { value: "我自己写的主体" },
+    });
+
+    await pickEntry();
+
+    expect(screen.getByLabelText(t("claimForm.field.subject"))).toHaveValue("我自己写的主体");
+  });
+
+  it("每条证据的备注能随证据一起提交", async () => {
+    renderModal(makeClaim());
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: labelPattern(t("claimForm.evidence.add")) }),
+    );
+    fireEvent.change(screen.getByPlaceholderText(t("claimForm.placeholder.evidence")), {
+      target: { value: "https://example.com/pr" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(t("claimForm.evidence.notePlaceholder")), {
+      target: { value: "合并记录在 PR 里" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: labelPattern(t("claimForm.action.save")) }));
+
+    await waitFor(() => expect(apiMocks.updateClaim).toHaveBeenCalledTimes(1));
+    const [, payload] = apiMocks.updateClaim.mock.calls[0];
+    expect(payload.sources).toEqual([
+      {
+        type: "link",
+        location: "https://example.com/pr",
+        public: false,
+        note: "合并记录在 PR 里",
+      },
+    ]);
+  });
+
+  it("承担程度收起时只显示短名，展开的选项是两行", async () => {
+    renderModal(makeClaim());
+
+    const combobox = await screen.findByLabelText(t("claimForm.field.responsibility"));
+    const field = combobox.closest(".ant-form-item") as HTMLElement;
+    expect(field.querySelector(".ant-select-content")).toHaveTextContent(/^参与$/);
+
+    fireEvent.mouseDown(combobox);
+
+    expect(await screen.findByText(t("enumsClaims.responsibilityHint.participate"))).toHaveClass(
+      "claim-option-hint",
+    );
   });
 });

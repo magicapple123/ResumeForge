@@ -91,6 +91,8 @@ beforeEach(() => {
   apiState.data = null;
   apiState.loading = false;
   apiState.error = null;
+  localStorage.removeItem("resumeforge.apply.browser_hint_seen");
+  localStorage.removeItem("resumeforge.apply.browser_hint_seen");
 });
 
 // 项目未开启 vitest globals，自动清理不会生效，必须显式注册，
@@ -104,8 +106,12 @@ describe("BrowserStatusBar", () => {
     apiState.data = STOPPED;
     renderBar();
 
-    expect(screen.getByRole("button", { name: /启动浏览器/ })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: /打开招聘网站/ })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: new RegExp(t("browserStatus.action.start")) }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: new RegExp(t("browserStatus.action.openSite")) }),
+    ).not.toBeInTheDocument();
   });
 
   it("浏览器运行中时「打开招聘网站」可用，点击会请求后端导航", async () => {
@@ -113,7 +119,9 @@ describe("BrowserStatusBar", () => {
     apiMocks.openBrowserSite.mockResolvedValue(RUNNING_WITH_ENTRY);
     renderBar();
 
-    const openButton = screen.getByRole("button", { name: /打开招聘网站/ });
+    const openButton = screen.getByRole("button", {
+      name: new RegExp(t("browserStatus.action.openSite")),
+    });
     expect(openButton).toBeEnabled();
 
     fireEvent.click(openButton);
@@ -125,7 +133,9 @@ describe("BrowserStatusBar", () => {
     apiState.data = { ...RUNNING_WITH_ENTRY, entry_url: "" };
     renderBar();
 
-    expect(screen.getByRole("button", { name: /打开招聘网站/ })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: new RegExp(t("browserStatus.action.openSite")) }),
+    ).toBeDisabled();
   });
 
   it("展示站点入口地址，让用户知道这个窗口会去哪里", async () => {
@@ -152,7 +162,9 @@ describe("BrowserStatusBar", () => {
       screen.getByRole("menuitem", { name: new RegExp(t("browserStatus.help.trigger")) }),
     );
 
-    expect(await screen.findByText(/使用浏览器/)).toHaveTextContent("Google Chrome");
+    expect(await screen.findByText(t("browserStatus.browser"), { exact: false })).toHaveTextContent(
+      "Google Chrome",
+    );
   });
 
   it("三段说明默认不在页面上（首屏让给队列表格），只留在使用说明里", () => {
@@ -238,5 +250,22 @@ describe("BrowserStatusBar", () => {
 
     expect(screen.getByText("调试端口 9333")).toBeInTheDocument();
     expect(screen.queryByText("正在刷新")).not.toBeInTheDocument();
+  });
+
+  it("首次使用展开扫码提示，收起后记录偏好", () => {
+    apiState.data = RUNNING_WITH_ENTRY;
+    renderBar();
+    expect(document.querySelector(".apply-browser-expanded")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: t("browserStatus.hint.collapse") }));
+    expect(document.querySelector(".apply-browser-compact")).toBeInTheDocument();
+    expect(localStorage.getItem("resumeforge.apply.browser_hint_seen")).toBe("1");
+  });
+
+  it("错误态保留完整状态说明", () => {
+    apiState.data = RUNNING_WITH_ENTRY;
+    apiState.error = "status polling failed";
+    renderBar();
+    expect(document.querySelector(".apply-browser-compact")).toBeNull();
+    expect(screen.getByText("首次使用请在弹出的浏览器窗口里扫码登录一次。")).toBeInTheDocument();
   });
 });

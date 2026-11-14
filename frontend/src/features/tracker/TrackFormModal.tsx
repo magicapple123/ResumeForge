@@ -62,7 +62,7 @@ const EMPTY: FormValues = {
   channel: "unknown",
 };
 
-function toValues(track: Track): FormValues {
+function toValues(track: TrackPayload): FormValues {
   return {
     company: track.company,
     title: track.title,
@@ -102,11 +102,12 @@ function toPayload(values: FormValues, track: Track | null): TrackPayload {
 interface Props {
   open: boolean;
   track: Track | null;
+  initial?: Partial<TrackPayload>;
   onClose: () => void;
   onSaved: (track: Track) => void;
 }
 
-export default function TrackFormModal({ open, track, onClose, onSaved }: Props) {
+export default function TrackFormModal({ open, track, initial, onClose, onSaved }: Props) {
   useLocale();
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
@@ -115,17 +116,17 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
   const jobSelect = useJobSearchSelect();
   const resumeSelect = useResumeSearchSelect();
   const [full, setFull] = useState<Track | null>(null);
-  const editing = track !== null;
+  const editing = (full ?? track) !== null;
   // 脏值决定"关闭时要不要问一句"；换一条记录 / 重开弹窗都从干净态开始。
   const [dirty, setDirty] = useState(false);
   const toast = useToast();
   // 草稿按"新增 / 某条记录"分作用域：编辑 12 号时不该看到 13 号的内容。
   const watched = Form.useWatch<FormValues>([], form) as FormValues | undefined;
   const draft = useFormDraft({
-    scope: `tracker.edit#${track?.id ?? "new"}`,
+    scope: `tracker.edit#${track?.id ?? (initial?.job_id ? `job-${initial.job_id}` : "new")}`,
     values: (watched ?? EMPTY) as unknown as Record<string, unknown>,
     open,
-    isEmpty: (values) => !values.company && !values.position,
+    isEmpty: (values) => !values.company && !values.title,
   });
 
   useEffect(() => {
@@ -136,13 +137,13 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
       return;
     }
     // 已选值保显示（P0-1）：编辑时绑定的岗位/简历往往不在第一页选项里，按 id 回查。
-    void jobSelect.ensure(track?.job_id);
-    void resumeSelect.ensure(track?.resume_id);
+    void jobSelect.ensure(track?.job_id ?? initial?.job_id);
+    void resumeSelect.ensure(track?.resume_id ?? initial?.resume_id);
     void jobSelect.reload();
     void resumeSelect.reload();
     // 先用列表行乐观预填（公司/岗位/日期/状态都是全的），note 与依据可能被后端
     // 截断过，等下面的详情请求回来再覆盖。
-    form.setFieldsValue(track ? toValues(track) : EMPTY);
+    form.setFieldsValue(track ? toValues(track) : toValues({ ...emptyTrack(), ...initial }));
     setDirty(false);
     if (!track) return;
     // 列表接口的 note/evidence 是**预览**（超长截断加省略号，见后端 _track_brief）：
@@ -163,7 +164,7 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
     };
     // hook 的回调引用稳定，只需跟随打开状态与编辑目标变化。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, track, form]);
+  }, [open, track, initial, form]);
 
   const submit = async () => {
     let values: FormValues;
@@ -176,8 +177,16 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
     const source = full ?? track;
     const payload = toPayload(values, source);
     try {
-      const saved = track ? await updateTrack(track.id, payload) : await createTrack(payload);
+      const saved = source ? await updateTrack(source.id, payload) : await createTrack(payload);
       draft.clear();
+      if ("created" in saved && saved.created === false) {
+        setFull(saved);
+        form.setFieldsValue(toValues(saved));
+        setDirty(false);
+        message.info(t("trackerForm.toast.existing"));
+        onSaved(saved);
+        return;
+      }
       message.success(editing ? t("trackerForm.toast.saved") : t("trackerForm.toast.added"));
       onSaved(saved);
       onClose();
@@ -194,7 +203,7 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
         if (dirty) toast.info(t("draft.kept"));
         onClose();
       }}
-      onSubmit={() => void submit()}
+      onSubmit={submit}
       okText={t("trackerForm.action.save")}
       okIcon={<SaveOutlined />}
       dirty={dirty}
@@ -204,7 +213,16 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
           ? {
               savedAt: draft.pending.savedAt,
               fieldCount: Object.keys(draft.pending.values).length,
-              onRestore: () => form.setFieldsValue(draft.adopt() as unknown as FormValues),
+              onRestore: () => {
+                const values = draft.adopt() as unknown as FormValues;
+                // sessionStorage JSON turns Dayjs values into strings; DatePicker needs Dayjs.
+                form.setFieldsValue({
+                  ...values,
+                  applied_at: values.applied_at ? dayjs(values.applied_at) : null,
+                  status_date: values.status_date ? dayjs(values.status_date) : null,
+                  next_action_date: values.next_action_date ? dayjs(values.next_action_date) : null,
+                });
+              },
               onDiscard: draft.discard,
             }
           : null

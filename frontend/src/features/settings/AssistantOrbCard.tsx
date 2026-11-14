@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 设置页里的「投投」悬浮球卡片：入口开关与提示标语开关，即改即存。 */
+/** 设置页里的「投投」悬浮球卡片：入口、提示标语与划词浮条三个开关，即改即存。 */
 
 import { App, Card, Divider, Space, Switch, Typography } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
@@ -46,7 +46,7 @@ export default function AssistantOrbCard() {
   }, [fetchSetting]);
 
   /**
-   * 保存**全量**设置：两个开关共用一份后端对象，只带被改的那个会把另一个打回默认。
+   * 保存**全量**设置：三个开关共用一份后端对象，只带被改的那个会把其它两个打回默认。
    * 乐观更新 + 失败回滚，与页面上其它即改即存的开关保持同一手感。
    */
   const save = async (next: AssistantOrbSetting, successText: string) => {
@@ -59,7 +59,11 @@ export default function AssistantOrbCard() {
       setSetting(saved);
       window.dispatchEvent(
         new CustomEvent(TOU_TOU_SETTING_EVENT, {
-          detail: { enabled: saved.enabled, tips_enabled: saved.tips_enabled },
+          detail: {
+            enabled: saved.enabled,
+            tips_enabled: saved.tips_enabled,
+            selection_enabled: saved.selection_enabled,
+          },
         }),
       );
       message.success(successText);
@@ -107,6 +111,24 @@ export default function AssistantOrbCard() {
             }
           />
           <Typography.Text type="secondary">{t("settingsUi.orb.tipsHint")}</Typography.Text>
+          <Divider style={{ margin: "12px 0 8px" }} />
+          {/* Q9：划词浮条独立开关。checked 用 `!== false`：更早的后端响应没有这个字段时按开处理。 */}
+          <Switch
+            checked={setting.selection_enabled !== false}
+            loading={saving}
+            checkedChildren={t("settingsUi.switch.on")}
+            unCheckedChildren={t("settingsUi.switch.off")}
+            aria-label={t("settingsUi.orb.selectionAria")}
+            onChange={(checked) =>
+              void save(
+                { ...setting, selection_enabled: checked },
+                checked
+                  ? t("settingsUi.orb.selectionOnToast")
+                  : t("settingsUi.orb.selectionOffToast"),
+              )
+            }
+          />
+          <Typography.Text type="secondary">{t("settingsUi.orb.selectionHint")}</Typography.Text>
         </Space>
       </LoadingBlock>
     </Card>

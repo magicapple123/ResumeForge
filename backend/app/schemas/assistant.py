@@ -112,6 +112,7 @@ class AssistantMessageCreate(BaseModel):
     # T11 数据权限的「读」轴请求级覆盖：None = 沿用全局设置（旧客户端零改动），
     # True/False = 本次请求覆盖。流式路径每轮工具循环必须认这个覆盖，否则覆盖会被静默忽略。
     relaxed_mode: bool | None = None
+    compaction_threshold_tokens: int | None = Field(default=None, ge=1, le=2_000_000)
     # 有思考模式的大模型可以在这里调整推理强度；不支持该参数的服务商会被忽略。
     # 取值可以自定义（各家档位词汇不同），格式见 `normalize_reasoning_effort`。
     reasoning_effort: str = Field(default="", max_length=MAX_REASONING_EFFORT_CHARS)
@@ -185,12 +186,21 @@ class ChatConversationUpdate(BaseModel):
     archived: bool | None = None
     # 分组名（"移动到项目"）；空串表示移出分组。
     group_name: str | None = Field(default=None, max_length=64)
+    # 临时对话（F34）：开启后这段对话不注入也不抽取记忆；关闭不删已有记忆。
+    memory_off: bool | None = None
 
     @model_validator(mode="after")
     def require_update(self):
         if all(
             value is None
-            for value in (self.title, self.pinned, self.favorite, self.archived, self.group_name)
+            for value in (
+                self.title,
+                self.pinned,
+                self.favorite,
+                self.archived,
+                self.group_name,
+                self.memory_off,
+            )
         ):
             raise ValueError("至少提供一个要修改的会话字段")
         return self
@@ -343,6 +353,8 @@ class ChatConversationBrief(BaseModel):
     favorite: bool
     archived: bool = False
     group_name: str = ""
+    # 临时对话（F34）：为真时这段对话不读写助手记忆；侧栏据此显示小图标。
+    memory_off: bool = False
     # 列表里展示条数与最后活动时间，方便区分同名会话。
     message_count: int = 0
     created_at: datetime
@@ -381,6 +393,7 @@ class AssistantToolOut(BaseModel):
     """
 
     name: str
+    category: str = "core"
     description: str = ""
     # 写工具会改动数据（新建/修改简历、台账等）；界面据此标注「会改动数据」。
     writes: bool = False
@@ -421,6 +434,9 @@ class ContextUsageOut(BaseModel):
     total: int = 0
     # 百分比分母（当前模型的 context_window_tokens）；0 = 未设置。
     window: int = 0
+    window_source: Literal["manual", "reference", "fallback"] = "manual"
+    trigger_tokens: int = 0
+    default_trigger_tokens: int = 0
     percent: float | None = None
     # true = 旧消息没有落过用量，这里只有 system / conversation 两桶是估算出来的。
     partial: bool = False

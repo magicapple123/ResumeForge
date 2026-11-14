@@ -53,6 +53,9 @@ const jobDetail = {
   "jobDetail.relatedKnowledge.aria": "Related knowledge",
   "jobDetail.relatedKnowledge.viewAll": "View all related knowledge",
   "jobDetail.alt.noteImage": "Note image {index}",
+  "jobDetail.action.addTrack": "Add to job tracker",
+  "jobDetail.action.viewTrack": "View job tracker",
+  "jobDetail.error.loadTrack": "Could not load tracking records. Try again",
 } as const;
 
 export default jobDetail;

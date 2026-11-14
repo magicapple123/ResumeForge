@@ -139,6 +139,13 @@ const resumesPage = {
   "resumesPage.external.checkKeywordsDetail": "覆盖 {matched}/{target} 个目标词（{ratio}%）",
   "resumesPage.external.checkKeywordsMissing": "未覆盖：{words}",
   "resumesPage.external.lineWithText": "第 {line} 行：{text}",
+  "resumesPage.external.searchPlaceholder": "搜索名称、岗位或公司",
+  "resumesPage.external.total": "共 {count} 份",
+  "resumesPage.external.filteredTotal": "筛选后 {count} 份",
+  "resumesPage.external.noMatches": "没有匹配的外部简历",
+  "resumesPage.external.clearFilters": "清除筛选",
+  "resumesPage.external.limited": "仅显示最近 {count} 份，可搜索其他简历",
+  "resumesPage.external.uploadFiltersCleared": "已清除筛选，显示上传的简历",
 } as const;
 
 export default resumesPage;

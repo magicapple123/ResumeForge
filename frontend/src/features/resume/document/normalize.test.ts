@@ -221,3 +221,38 @@ describe("防御性读取帮助", () => {
     expect(second.items).toHaveLength(2);
   });
 });
+
+describe("页眉字段名三态（F20）", () => {
+  it("缺省 label_mode 时按 show_label 回落：默认 auto，显式 false 才是 hide", () => {
+    const document = makeDocument();
+    // 模拟旧文档：两个页眉项都没有 label_mode，其中一个存着 show_label:false。
+    const legacy = {
+      ...document,
+      header: {
+        ...document.header,
+        items: [
+          { ...document.header.items[0], label_mode: undefined, show_label: true },
+          { ...document.header.items[1], label_mode: undefined, show_label: false },
+        ],
+      },
+    };
+
+    const normalized = normalizeDocument(legacy);
+
+    expect(normalized.header.items[0].label_mode).toBe("auto");
+    expect(normalized.header.items[1].label_mode).toBe("hide");
+  });
+
+  it("显式三态原样保留", () => {
+    const document = makeDocument();
+    const explicit = {
+      ...document,
+      header: {
+        ...document.header,
+        items: [{ ...document.header.items[0], label_mode: "show" as const }],
+      },
+    };
+
+    expect(normalizeDocument(explicit).header.items[0].label_mode).toBe("show");
+  });
+});

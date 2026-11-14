@@ -28,6 +28,7 @@ from ..job.job_service import create_job_record, find_job_by_identity, refresh_j
 from .errors import WebFetchError
 from .extractor import MAX_ROWS, extract_detail, extract_rows, extract_rules_result
 from .fetcher import FetchConfig, FetchedPages, JobFetcher
+from .page_intent import classify_page_intent
 from .row import ExtractedRow
 
 logger = logging.getLogger(__name__)
@@ -148,7 +149,7 @@ async def preview_from_url(
     *,
     engine: str = "auto",
     limit: int = 0,
-    intent: str = "job_list",
+    intent: str = "auto",
     provider: Any = None,
     pages: int = 1,
 ) -> dict[str, Any]:
@@ -160,7 +161,15 @@ async def preview_from_url(
     fetcher = JobFetcher(db, config=_engine_config(engine))
     # 详情意图天然是单页：用户给的就是一条岗位详情，不跟它的「下一页」。
     requested = 1 if intent == "job_detail" else _page_requested(pages)
-    batch = fetcher.fetch_pages(url, pages=requested)
+    batch = fetcher.fetch_pages(
+        url,
+        pages=requested,
+        stop_after_first=(
+            (lambda page: classify_page_intent(page) == "job_detail") if intent == "auto" else None
+        ),
+    )
+    if intent == "auto" and batch.first and classify_page_intent(batch.first) == "job_detail":
+        requested = 1
     resolved = provider if provider is not None else provider_for(db)
     cap = _row_cap(limit)
     rows: list[ExtractedRow] = []

@@ -6,11 +6,37 @@
  * 现在闸门在后端，界面负责"别让用户点了才被拒"。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import type { Job } from "../../types";
 import JobDetailDrawer from "./JobDetailDrawer";
+
+const trackerMocks = vi.hoisted(() => ({ listTracksPage: vi.fn() }));
+vi.mock("../../api/tracker", () => trackerMocks);
+vi.mock("../tracker/TrackFormModal", () => ({
+  default: ({
+    open,
+    initial,
+    onClose,
+    onSaved,
+  }: {
+    open: boolean;
+    initial: unknown;
+    onClose: () => void;
+    onSaved: () => void;
+  }) =>
+    open ? (
+      <div role="dialog" aria-label="track-form">
+        <output>{JSON.stringify(initial)}</output>
+        <button onClick={onClose}>back</button>
+        <button onClick={onSaved}>save</button>
+      </div>
+    ) : null,
+}));
+beforeEach(() => {
+  trackerMocks.listTracksPage.mockReset().mockResolvedValue({ items: [{ id: 7 }], total: 1 });
+});
 
 const BASE_JOB: Job = {
   id: 1,
@@ -187,11 +213,14 @@ describe("JobDetailDrawer 带 id 的跨模块动作（RF-11）", () => {
     );
   }
 
-  it("「该岗位的投递进度」携带 job_id 跳到求职进度", () => {
+  it("已有进度时携带 job_id 跳到求职进度", async () => {
     renderWithProbe({ ...BASE_JOB, id: 42 });
-
-    fireEvent.click(screen.getByRole("button", { name: /该岗位的投递进度/ }));
-    expect(screen.getByTestId("location")).toHaveTextContent("/tracker?job_id=42");
+    const view = await screen.findByRole("button", { name: /查看求职进度/ });
+    await waitFor(() => expect(view).not.toHaveClass("ant-btn-loading"));
+    fireEvent.click(view);
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent("/tracker?job_id=42"),
+    );
   });
 
   it("「模拟面试」携带 job_id 跳到模拟面试", () => {
@@ -199,6 +228,37 @@ describe("JobDetailDrawer 带 id 的跨模块动作（RF-11）", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /模拟面试/ }));
     expect(screen.getByTestId("location")).toHaveTextContent("/interview?job_id=42");
+  });
+});
+
+describe("JobDetailDrawer 就地加入求职进度", () => {
+  it("没有关联记录时打开带岗位预填的表单，关闭后回到详情", async () => {
+    trackerMocks.listTracksPage.mockResolvedValue({ items: [], total: 0 });
+    renderDrawer(BASE_JOB);
+    const add = await screen.findByRole("button", { name: /加入求职进度/ });
+    await waitFor(() => expect(add).not.toHaveClass("ant-btn-loading"));
+    fireEvent.click(add);
+    const form = await screen.findByRole("dialog", { name: "track-form" });
+    expect(form).toHaveTextContent('"company":"示例医院"');
+    expect(form).toHaveTextContent('"job_id":1');
+    expect(form).toHaveTextContent('"status":"applied"');
+    expect(form).toHaveTextContent('"channel":"unknown"');
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "岗位详情" })).not.toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "back" }));
+    expect(await screen.findByRole("dialog", { name: "岗位详情" })).toBeInTheDocument();
+    expect(trackerMocks.listTracksPage).toHaveBeenCalledWith({ jobId: 1 }, 1, 1);
+  });
+
+  it("加载失败可重试，不把未知状态当作未加入", async () => {
+    trackerMocks.listTracksPage.mockRejectedValueOnce(new Error("offline"));
+    renderDrawer(BASE_JOB);
+    const retry = await screen.findByRole("button", { name: /求职进度未加载，请重试/ });
+    await waitFor(() => expect(retry).not.toHaveClass("ant-btn-loading"));
+    fireEvent.click(retry);
+    expect(await screen.findByRole("button", { name: /查看求职进度/ })).toBeInTheDocument();
+    expect(trackerMocks.listTracksPage).toHaveBeenCalledTimes(2);
   });
 });
 

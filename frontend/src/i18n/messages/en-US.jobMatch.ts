@@ -56,6 +56,14 @@ const jobMatch = {
   "jobMatch.hardGate.met": "Hard requirements met",
   "jobMatch.hardGate.unmet": "Hard requirements not met",
   "jobMatch.hardGate.unknown": "Hard requirements unconfirmed",
+  "jobMatch.resume.label": "Resume for matching",
+  "jobMatch.resume.default": "Default resume for each job",
+  "jobMatch.resume.loadError": "Could not load resumes; retry",
+  "jobMatch.resume.retry": "Reload resumes",
+  "jobMatch.resume.source": "Analyzed resume: {title} · revision {revision}",
+  "jobMatch.resume.profileOnly": "Analysis source: My profile",
+  "jobMatch.resume.unknownSource": "Resume source unavailable for this older result",
+  "jobMatch.resume.stale": "Resume or job changed; analyze again",
 } as const;
 
 export default jobMatch;

@@ -27,7 +27,7 @@ const apiMocks = vi.hoisted(() => ({
   listResumeIds: vi.fn(),
   updateResumeFavorite: vi.fn(),
   getResume: vi.fn(),
-  fetchResumeHtml: vi.fn(),
+  fetchResumePreviewHtml: vi.fn(),
   renderResume: vi.fn(),
   createManualResume: vi.fn(),
   getProfile: vi.fn(),
@@ -42,7 +42,7 @@ vi.mock("../api/resumes", async (importOriginal) => ({
   listResumeIds: apiMocks.listResumeIds,
   updateResumeFavorite: apiMocks.updateResumeFavorite,
   getResume: apiMocks.getResume,
-  fetchResumeHtml: apiMocks.fetchResumeHtml,
+  fetchResumePreviewHtml: apiMocks.fetchResumePreviewHtml,
   renderResume: apiMocks.renderResume,
   createManualResume: apiMocks.createManualResume,
   updateResume: vi.fn(),
@@ -151,7 +151,7 @@ beforeEach(() => {
   apiMocks.deleteResume.mockReset().mockResolvedValue(undefined);
   apiMocks.batchDeleteResumes.mockReset().mockResolvedValue({ deleted: 1 });
   apiMocks.updateResumeFavorite.mockReset().mockResolvedValue({});
-  apiMocks.fetchResumeHtml.mockReset().mockResolvedValue("<p>预览</p>");
+  apiMocks.fetchResumePreviewHtml.mockReset().mockResolvedValue("<p>预览</p>");
   apiMocks.renderResume.mockReset().mockResolvedValue("<p>预览</p>");
   jobMocks.listJobs.mockReset().mockResolvedValue({ items: [], total: 0 });
   jobMocks.getJob.mockReset().mockResolvedValue({ id: 3, title: "制造工程师" });

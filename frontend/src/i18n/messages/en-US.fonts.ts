@@ -46,9 +46,9 @@ const fonts = {
     "Source Han Sans downloaded; select Use this font to apply it to previews and exports",
   "fonts.builtin.activate-failed": "Could not set the current font; try again",
   "fonts.control.undownloaded": "{name} (not downloaded)",
-  "fonts.control.download-hint": "Download in Settings > App > Resume fonts",
+  "fonts.control.download-hint": "Download in Settings > Appearance & language > Resume fonts",
   "fonts.control.empty":
-    "No fonts available yet. Download Source Han Sans in Settings > App > Resume fonts",
+    "No fonts available yet. Download Source Han Sans in Settings > Appearance & language > Resume fonts",
   "fonts.control.system": "System font (no custom font)",
   "fonts.control.system-short": "System font",
   "fonts.control.current-global": "{name} (current global font)",

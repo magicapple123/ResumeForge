@@ -13,6 +13,7 @@ import type { AuthorsItem, FieldItem, ListItem } from "../../../types/resumeDocu
 import { enumOptionsOf } from "../document/fieldCatalog";
 import { joinDateRange, splitDateRange } from "../document/format";
 import ResizableValueTextArea from "./ResizableValueTextArea";
+import { registerInlineMarkField } from "./useInlineMarkRange";
 
 interface FieldValueProps {
   item: FieldItem;
@@ -49,6 +50,7 @@ export function FieldValueEditor({
           aria-label={t("document.field.dateStart")}
           placeholder={t("document.field.dateStart")}
           value={start}
+          onFocus={registerInlineMarkField}
           onChange={(event) => onChange({ value: joinDateRange(event.target.value, end) })}
         />
         <span className="document-field-sep" aria-hidden="true">
@@ -59,6 +61,7 @@ export function FieldValueEditor({
           aria-label={t("document.field.dateEnd")}
           placeholder={t("document.field.datePresent")}
           value={end}
+          onFocus={registerInlineMarkField}
           onChange={(event) => onChange({ value: joinDateRange(start, event.target.value) })}
         />
       </div>
@@ -113,6 +116,7 @@ export function FieldValueEditor({
           placeholder={t("document.field.textPlaceholder")}
           autoSize={{ minRows: 2, maxRows: 8 }}
           value={item.value}
+          onFocus={registerInlineMarkField}
           onChange={(event) => onChange({ value: event.target.value })}
         />
       ) : (
@@ -154,6 +158,7 @@ export function ListValuesEditor({ item, disabled = false, onChange }: ListValue
             aria-label={t("document.field.valueAria", { index: index + 1 })}
             placeholder={t("document.field.listPlaceholder")}
             value={value}
+            onFocus={registerInlineMarkField}
             onChange={(event) => update(index, event.target.value)}
           />
           <Tooltip title={t("document.field.removeValue")}>
@@ -211,6 +216,7 @@ export function AuthorsValuesEditor({ item, disabled = false, onChange }: Author
             aria-label={t("document.field.authorName")}
             placeholder={t("document.field.authorNamePlaceholder")}
             value={author.name}
+            onFocus={registerInlineMarkField}
             onChange={(event) => update(index, { name: event.target.value })}
           />
           <Checkbox

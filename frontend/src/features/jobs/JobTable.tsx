@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 岗位列表表格、列渲染和分页。 */
 
-import { CheckSquareOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
+import {
+  ApartmentOutlined,
+  CheckSquareOutlined,
+  StarFilled,
+  StarOutlined,
+} from "@ant-design/icons";
 import { Button, Table, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import type { SortOrder, TableRowSelection } from "antd/es/table/interface";
 import type { HTMLAttributes } from "react";
+import { useState } from "react";
+import JobResumeGraphModal from "./graph/JobResumeGraphModal";
 import { JOB_STATUS_META, type JobList, type Page } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
@@ -83,6 +90,7 @@ export default function JobTable({
 }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后列头与菜单不重渲染。
   useLocale();
+  const [graphJob, setGraphJob] = useState<JobList | null>(null);
   const columns: TableColumnsType<JobList> = [
     {
       title: t("jobTable.column.favorite"),
@@ -266,6 +274,12 @@ export default function JobTable({
   const secondaryActions = (job: JobList): RowActionItem[] => [
     { key: "write", label: t("jobTable.action.write"), onClick: () => onWrite(job) },
     { key: "resumes", label: t("jobTable.action.resumes"), onClick: () => onViewResumes(job) },
+    {
+      key: "resume-graph",
+      label: t("jobTable.action.resumeGraph"),
+      icon: <ApartmentOutlined />,
+      onClick: () => setGraphJob(job),
+    },
     { key: "edit", label: t("jobTable.action.edit"), onClick: () => onEdit(job) },
     {
       key: "delete",
@@ -295,51 +309,64 @@ export default function JobTable({
         ];
 
   return (
-    <Table
-      className="jobs-table"
-      rowKey="id"
-      rowSelection={selectionMode ? rowSelection : undefined}
-      columns={columns}
-      dataSource={jobs?.items ?? []}
-      loading={loading}
-      // 空表（无当前页行）时不启用横向滚动：否则 `.ant-table-content` 会变成
-      // "可横滚、区域内却没有任何可聚焦元素"的容器，命中 axe 的
-      // `scrollable-region-focusable`（serious）。有数据时照旧按列宽固定横滚。
-      // 10 列宽度之和 = 64+260+130+90+130+80+90+180+150+190 = 1364；
-      // 沿用「比列宽和少 14px」的历史取值（原来 1330 / 1344），避免操作列加宽后
-      // 表格总宽突然多出一截。
-      scroll={jobs?.items?.length ? { x: 1350 } : undefined}
-      components={{
-        body: {
-          // 整行右键即可编辑/删除；批量模式下不拦截右键，避免和选择操作打架。
-          row: (props: HTMLAttributes<HTMLTableRowElement>) => {
-            const rowKey = String((props as { "data-row-key"?: string })["data-row-key"] ?? "");
-            const job = (jobs?.items ?? []).find((item) => String(item.id) === rowKey);
-            if (batchAction !== null || !job) return <tr {...props} />;
-            return (
-              <RowContextMenu items={contextActions(job)}>
-                <tr {...props} />
-              </RowContextMenu>
-            );
+    <>
+      <Table
+        className="jobs-table"
+        rowKey="id"
+        rowSelection={selectionMode ? rowSelection : undefined}
+        columns={columns}
+        dataSource={jobs?.items ?? []}
+        loading={loading}
+        // 空表（无当前页行）时不启用横向滚动：否则 `.ant-table-content` 会变成
+        // "可横滚、区域内却没有任何可聚焦元素"的容器，命中 axe 的
+        // `scrollable-region-focusable`（serious）。有数据时照旧按列宽固定横滚。
+        // 10 列宽度之和 = 64+260+130+90+130+80+90+180+150+190 = 1364；
+        // 沿用「比列宽和少 14px」的历史取值（原来 1330 / 1344），避免操作列加宽后
+        // 表格总宽突然多出一截。
+        scroll={jobs?.items?.length ? { x: 1350 } : undefined}
+        components={{
+          body: {
+            // 整行右键即可编辑/删除；批量模式下不拦截右键，避免和选择操作打架。
+            row: (props: HTMLAttributes<HTMLTableRowElement>) => {
+              const rowKey = String((props as { "data-row-key"?: string })["data-row-key"] ?? "");
+              const job = (jobs?.items ?? []).find((item) => String(item.id) === rowKey);
+              if (batchAction !== null || !job) return <tr {...props} />;
+              return (
+                <RowContextMenu items={contextActions(job)}>
+                  <tr {...props} />
+                </RowContextMenu>
+              );
+            },
           },
-        },
-      }}
-      pagination={{
-        current: page,
-        pageSize,
-        total: jobs?.total ?? 0,
-        disabled: batchAction !== null,
-        showSizeChanger: true,
-        showTotal: (total) => t("jobTable.pagination.total", { total }),
-        onChange: onPageChange,
-      }}
-      // 排序交给服务端：只把"排序动作"翻译成 API 参数，分页/筛选的动作各走各的。
-      onChange={(_pagination, _filters, sorter, extra) => {
-        if (extra.action !== "sort") return;
-        const active = Array.isArray(sorter) ? sorter[0] : sorter;
-        const columnKey = String(active?.columnKey ?? active?.field ?? "");
-        onSortChange(nextSortState(columnKey, active?.order as SortOrder | null | undefined));
-      }}
-    />
+        }}
+        pagination={{
+          current: page,
+          pageSize,
+          total: jobs?.total ?? 0,
+          disabled: batchAction !== null,
+          showSizeChanger: true,
+          showTotal: (total) => t("jobTable.pagination.total", { total }),
+          onChange: onPageChange,
+        }}
+        // 排序交给服务端：只把"排序动作"翻译成 API 参数，分页/筛选的动作各走各的。
+        onChange={(_pagination, _filters, sorter, extra) => {
+          if (extra.action !== "sort") return;
+          const active = Array.isArray(sorter) ? sorter[0] : sorter;
+          const columnKey = String(active?.columnKey ?? active?.field ?? "");
+          onSortChange(nextSortState(columnKey, active?.order as SortOrder | null | undefined));
+        }}
+      />
+      {graphJob && (
+        <JobResumeGraphModal
+          key={graphJob.id}
+          job={graphJob}
+          onClose={() => setGraphJob(null)}
+          onGenerate={() => {
+            setGraphJob(null);
+            onGenerate(graphJob);
+          }}
+        />
+      )}
+    </>
   );
 }

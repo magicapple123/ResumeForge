@@ -9,9 +9,18 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { t } from "../../i18n";
+
+// 这些是 fixture 数据（公司/岗位/简历/备注），不是界面文案：提到常量，
+// 断言里不写中文，fixture 与断言也不会各改一半。
+const COMPANY = "示例科技";
+const JOB_TITLE = "后端开发";
+const RESUME_TITLE = "后端岗位简历";
+const FULL_NOTE = "完整备注全文";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TrackFormModal from "./TrackFormModal";
-import { getTrack } from "../../api/tracker";
+import { createTrack, getTrack, updateTrack } from "../../api/tracker";
+import { readDraft, writeDraft } from "../../utils/formDraftStorage";
 import { todayIsoDate } from "../../utils/format";
 import type { Track } from "../../types";
 
@@ -92,6 +101,83 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   document.body.innerHTML = "";
+  sessionStorage.clear();
+});
+
+describe("TrackFormModal 的岗位预填", () => {
+  const INITIAL = {
+    company: "示例科技",
+    title: "后端开发",
+    job_id: 11,
+    applied_at: todayIsoDate(),
+  };
+
+  it("恢复岗位草稿时把 JSON 日期还原成日期控件支持的值", async () => {
+    writeDraft("tracker.edit#job-11", {
+      ...INITIAL,
+      applied_at: "2026-11-13T00:00:00.000Z",
+      status_date: null,
+      next_action_date: "2026-11-15",
+    });
+    render(
+      <AntdApp>
+        <TrackFormModal open track={null} initial={INITIAL} onClose={() => {}} onSaved={() => {}} />
+      </AntdApp>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: t("draft.restore.action") }));
+    expect(screen.getByLabelText(t("trackerForm.field.appliedAt"))).toHaveValue("2026-11-13");
+    expect(screen.getByLabelText(t("trackerForm.field.nextActionDate"))).toHaveValue("2026-11-15");
+  });
+
+  it("预填公司、岗位、日期与关联岗位，同时隔离通用新增草稿", async () => {
+    writeDraft("tracker.edit#new", { company: "Unrelated draft", title: "Other job" });
+    render(
+      <AntdApp>
+        <TrackFormModal open track={null} initial={INITIAL} onClose={() => {}} onSaved={() => {}} />
+      </AntdApp>,
+    );
+    expect(await screen.findByLabelText(t("trackerForm.field.company"))).toHaveValue(COMPANY);
+    expect(screen.getByLabelText(t("trackerForm.field.title"))).toHaveValue(JOB_TITLE);
+    expect(screen.getByLabelText(t("trackerForm.field.appliedAt"))).toHaveValue(todayIsoDate());
+    expect(
+      screen.queryByRole("button", { name: t("draft.restore.action") }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(t("trackerForm.field.note")), {
+      target: { value: "Job-specific note" },
+    });
+    await waitFor(() =>
+      expect(readDraft("tracker.edit#job-11")?.values.note).toBe("Job-specific note"),
+    );
+    expect(readDraft("tracker.edit#new")?.values.company).toBe("Unrelated draft");
+  });
+
+  it("重复创建返回既有记录时切换编辑，继续保存使用更新接口", async () => {
+    vi.mocked(createTrack).mockResolvedValue({ ...LISTED_ROW, created: false });
+    vi.mocked(updateTrack).mockResolvedValue(LISTED_ROW);
+    const onClose = vi.fn();
+    const onSaved = vi.fn();
+    render(
+      <AntdApp>
+        <TrackFormModal open track={null} initial={INITIAL} onClose={onClose} onSaved={onSaved} />
+      </AntdApp>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: new RegExp(t("trackerForm.action.save")) }),
+    );
+    expect(await screen.findByText(t("trackerForm.toast.existing"))).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: t("trackerForm.title.edit") })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ id: 7 }));
+    fireEvent.click(screen.getByRole("button", { name: /保存进度/ }));
+    await waitFor(() =>
+      expect(updateTrack).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ company: LISTED_ROW.company }),
+      ),
+    );
+    expect(createTrack).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
 });
 
 describe("TrackFormModal 的投递日期", () => {
@@ -99,7 +185,7 @@ describe("TrackFormModal 的投递日期", () => {
     renderModal();
 
     expect(
-      await screen.findByText(/留空表示日期不详——该记录不计入投递趋势与周内分布/),
+      await screen.findByText(t("trackerForm.hint.appliedAt"), { exact: false }),
     ).toBeInTheDocument();
   });
 
@@ -107,7 +193,7 @@ describe("TrackFormModal 的投递日期", () => {
     renderModal();
 
     // E12 起投递日期换成 DatePicker，用标签定位而不是占位文本。
-    const input = await screen.findByLabelText("投递日期");
+    const input = await screen.findByLabelText(t("trackerForm.field.appliedAt"));
     // 预填今天会把"三周后照通知补录"的记录钉在错误的月份上。
     expect(input).toHaveValue("");
   });
@@ -115,10 +201,12 @@ describe("TrackFormModal 的投递日期", () => {
   it("点「填今天」把本地当天日期填进去，用户仍可改", async () => {
     renderModal();
 
-    fireEvent.click(await screen.findByRole("button", { name: "填今天" }));
+    fireEvent.click(await screen.findByRole("button", { name: t("trackerForm.action.fillToday") }));
 
     // 用本地日期而不是 UTC：晚上录的记录不该被写成"昨天"。
-    await waitFor(() => expect(screen.getByLabelText("投递日期")).toHaveValue(todayIsoDate()));
+    await waitFor(() =>
+      expect(screen.getByLabelText(t("trackerForm.field.appliedAt"))).toHaveValue(todayIsoDate()),
+    );
   });
 
   it("编辑时从详情接口取全文回填——列表行的 note 是截断预览，不能拿它当编辑底稿", async () => {
@@ -130,7 +218,9 @@ describe("TrackFormModal 的投递日期", () => {
     );
 
     // 详情请求回来后覆盖乐观预填的截断预览；保存（PUT 整体替换）以全文为准。
-    await waitFor(() => expect(screen.getByLabelText("备注")).toHaveValue("完整备注全文"));
+    await waitFor(() =>
+      expect(screen.getByLabelText(t("trackerForm.field.note"))).toHaveValue(FULL_NOTE),
+    );
     expect(getTrack).toHaveBeenCalledWith(7);
   });
 });
@@ -139,13 +229,13 @@ describe("TrackFormModal 的投递日期", () => {
 describe("TrackFormModal 的渠道与岗位选择", () => {
   it("渠道默认「未知」，且说明它与记录来源是两回事", async () => {
     renderModal();
-    expect(await screen.findByLabelText("投递渠道")).toBeInTheDocument();
-    expect(screen.getByText(/这是「从哪投的」，不是记录怎么进系统的/)).toBeInTheDocument();
+    expect(await screen.findByLabelText(t("trackerForm.field.channel"))).toBeInTheDocument();
+    expect(screen.getByText(t("trackerForm.hint.channel"), { exact: false })).toBeInTheDocument();
   });
 
   it("岗位关联选择器存在且选填（远程搜索，不再吃页面预拉的选项）", async () => {
     renderModal();
-    expect(await screen.findByLabelText("关联岗位")).toBeInTheDocument();
+    expect(await screen.findByLabelText(t("trackerForm.field.job"))).toBeInTheDocument();
     // 打开表单即预拉第一页候选（P0-1）。
     await waitFor(() => expect(jobsMocks.listJobs).toHaveBeenCalled());
   });
@@ -160,7 +250,7 @@ describe("TrackFormModal 的渠道与岗位选择", () => {
 
     // 详情请求回来后，按 id 回查的岗位以标题显示在选择器里。
     await waitFor(() =>
-      expect(screen.getByText("后端开发 · 示例科技").closest(".ant-select")).toBeTruthy(),
+      expect(screen.getByText(`${JOB_TITLE} · ${COMPANY}`).closest(".ant-select")).toBeTruthy(),
     );
   });
 });
@@ -169,8 +259,8 @@ describe("TrackFormModal 的渠道与岗位选择", () => {
 describe("TrackFormModal 的简历选择器", () => {
   it("选择器存在且选填（留空也能保存）", async () => {
     renderModal();
-    expect(await screen.findByLabelText("使用的简历")).toBeInTheDocument();
-    expect(screen.getByText(/选填。关联后会在简历详情里留一份投递记录/)).toBeInTheDocument();
+    expect(await screen.findByLabelText(t("trackerForm.field.resume"))).toBeInTheDocument();
+    expect(screen.getByText(t("trackerForm.hint.resume"), { exact: false })).toBeInTheDocument();
   });
 
   it("编辑时按 id 回查已关联的简历版本（保显示）", async () => {
@@ -186,6 +276,6 @@ describe("TrackFormModal 的简历选择器", () => {
     );
 
     // 按 id 回查的简历以标题显示在选择器里（选中项的展示文本）。
-    await waitFor(() => expect(screen.getByText("后端岗位简历")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(RESUME_TITLE)).toBeInTheDocument());
   });
 });

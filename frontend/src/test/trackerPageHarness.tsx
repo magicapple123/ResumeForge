@@ -32,6 +32,11 @@ export interface TrackerApiMocks {
   parseTracks: Mock;
   applyTracks: Mock;
   exportTracks: Mock;
+  // 申请状态回读（R-15 C）：页面打开时会读一次设置，必须给出确定值。
+  getProbeSettings: Mock;
+  probeTracks: Mock;
+  probeDaily: Mock;
+  saveProbeSettings: Mock;
 }
 
 /** 测试文件里 `vi.hoisted` 创建的那组 ../api/jobs mock 的形状。 */
@@ -110,6 +115,14 @@ export function resetTrackerApiMocks(mocks: TrackerApiMocks, jobs: TrackerJobApi
   for (const mock of Object.values(mocks)) mock.mockReset();
   mocks.listTrackStats.mockResolvedValue(makeStats([]));
   mocks.listTracksPage.mockResolvedValue(makePage([]));
+  // 默认"没配 Cookie、也没到期"：既有页面用例不该因为多了一个回读按钮而发请求。
+  mocks.getProbeSettings.mockResolvedValue({
+    enabled: false,
+    has_cookie: false,
+    last_run: "",
+    due: false,
+    interval_hours: 20,
+  });
   jobs.listJobs.mockReset().mockRejectedValue(new Error("jobs unavailable"));
   jobs.getJob.mockReset().mockRejectedValue(new Error("job unavailable"));
 }

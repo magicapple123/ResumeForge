@@ -34,6 +34,8 @@ from .repeated_profile_catalog import REPEATED_FIELD_LABELS
 FORM_FIELDS: tuple[FormField, ...] = (
     # ===== 身份信息 =====
     FormField("name", "姓名", GROUP_IDENTITY),
+    FormField("given_name", "名", GROUP_IDENTITY, source=SOURCE_EXTRA),
+    FormField("family_name", "姓", GROUP_IDENTITY, source=SOURCE_EXTRA),
     FormField("gender", "性别", GROUP_IDENTITY, kind="select", options=("男", "女", "其他")),
     FormField(
         "birth_date", "出生日期", GROUP_IDENTITY, kind="date", sensitive=True, source=SOURCE_EXTRA
@@ -87,9 +89,23 @@ FORM_FIELDS: tuple[FormField, ...] = (
     FormField("laboratory", "实验室", GROUP_EDUCATION),
     FormField("paper", "论文", GROUP_EDUCATION),
     FormField("major", "专业", GROUP_EDUCATION),
-    FormField("degree", "学历", GROUP_EDUCATION, kind="select", options=("高中", "大专", "本科", "硕士", "博士")),
-    FormField("degree_type", "学位", GROUP_EDUCATION, kind="select", options=("学士", "硕士学位", "博士学位", "其他")),
-    FormField("study_mode", "学习形式", GROUP_EDUCATION, kind="select", options=("全日制", "非全日制")),
+    FormField(
+        "degree",
+        "学历",
+        GROUP_EDUCATION,
+        kind="select",
+        options=("高中", "大专", "本科", "硕士", "博士"),
+    ),
+    FormField(
+        "degree_type",
+        "学位",
+        GROUP_EDUCATION,
+        kind="select",
+        options=("学士", "硕士学位", "博士学位", "其他"),
+    ),
+    FormField(
+        "study_mode", "学习形式", GROUP_EDUCATION, kind="select", options=("全日制", "非全日制")
+    ),
     FormField("education_start", "入学时间", GROUP_EDUCATION, kind="date"),
     FormField("education_end", "毕业时间", GROUP_EDUCATION, kind="date"),
     FormField("gpa", "绩点或排名", GROUP_EDUCATION),
@@ -128,12 +144,16 @@ FORM_FIELDS: tuple[FormField, ...] = (
         "project_description", "项目描述（第一条）", GROUP_OTHER, kind="longtext", derived=True
     ),
     FormField("project_tech_stack", "项目技术栈（第一条）", GROUP_OTHER, derived=True),
-    FormField("project_highlights", "项目成果（第一条）", GROUP_OTHER, kind="longtext", derived=True),
+    FormField(
+        "project_highlights", "项目成果（第一条）", GROUP_OTHER, kind="longtext", derived=True
+    ),
     FormField("campus_organization", "校园组织（第一条）", GROUP_OTHER, derived=True),
     FormField("campus_role", "校园职务（第一条）", GROUP_OTHER, derived=True),
     FormField("campus_start", "校园经历开始（第一条）", GROUP_OTHER, kind="date", derived=True),
     FormField("campus_end", "校园经历结束（第一条）", GROUP_OTHER, kind="date", derived=True),
-    FormField("campus_description", "校园经历描述（第一条）", GROUP_OTHER, kind="longtext", derived=True),
+    FormField(
+        "campus_description", "校园经历描述（第一条）", GROUP_OTHER, kind="longtext", derived=True
+    ),
     FormField("award_name", "奖项名称（第一条）", GROUP_OTHER, derived=True),
     FormField("award_date", "获奖时间（第一条）", GROUP_OTHER, kind="date", derived=True),
     FormField("award_description", "奖项说明（第一条）", GROUP_OTHER, derived=True),
@@ -157,7 +177,14 @@ FORM_FIELDS: tuple[FormField, ...] = (
     # 专业排名（大厂、银行看这个，往往要"名次/总人数"两个数）；档案与报到证（国企、公务员、
     # 事业单位的派遣流程）。这些在简历上**从不出现**，所以只能单独录。
     FormField("student_id", "学号", GROUP_EXTRA_SCHOOL, source=SOURCE_EXTRA),
-    FormField("training_mode", "培养方式", GROUP_EXTRA_SCHOOL, kind="select", options=("统招", "定向", "委培", "其他"), source=SOURCE_EXTRA),
+    FormField(
+        "training_mode",
+        "培养方式",
+        GROUP_EXTRA_SCHOOL,
+        kind="select",
+        options=("统招", "定向", "委培", "其他"),
+        source=SOURCE_EXTRA,
+    ),
     FormField("school_system", "学制", GROUP_EXTRA_SCHOOL, source=SOURCE_EXTRA),
     FormField("rank_total", "专业排名总人数", GROUP_EXTRA_SCHOOL, source=SOURCE_EXTRA),
     FormField("rank_position", "专业排名名次", GROUP_EXTRA_SCHOOL, source=SOURCE_EXTRA),

@@ -47,6 +47,19 @@ interface Exemption {
 const REVIEW_DATE = "2026-12-31";
 
 const EXEMPTIONS: Record<string, Exemption> = {
+  // —— 结构锚点（F20 / F24 / F22）——
+  "document-header-label-mode": {
+    reason: "页眉「字段名三态」下拉的外层定位类，视觉由内部 antd Select 决定",
+    expires: REVIEW_DATE,
+  },
+  "resume-contact-separator-select": {
+    reason: "联系方式分隔符下拉的外层定位类，宽度由 FieldRow 栅格决定",
+    expires: REVIEW_DATE,
+  },
+  "rf-inline-mark-host": {
+    reason: "右键菜单的命中区域（onContextMenu 挂在它上面），本身不出视觉",
+    expires: REVIEW_DATE,
+  },
   // —— 双语预览 / 文档编辑 ——
   "bilingual-variant-preview": {
     reason: "预览抽屉的 section 容器，内部 Flex 与 strong 自带布局，容器本身无自有视觉",

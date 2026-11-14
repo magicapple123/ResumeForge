@@ -15,7 +15,7 @@
  */
 import { useRef, useState } from "react";
 import { App } from "antd";
-import { submitInterviewAnswerStream } from "../../api/interview";
+import { reviseInterviewAnswerStream, submitInterviewAnswerStream } from "../../api/interview";
 import type { InterviewDetail } from "../../types";
 import { t } from "../../i18n";
 import { isAbortError } from "../../hooks/useAbortableRequest";
@@ -66,10 +66,16 @@ export interface InterviewTurn {
   setAnswer: (value: string) => void;
   /** 提交输入框里的回答。 */
   submit: () => void;
+  /** 提交语音通话中的转写，不经过输入框。 */
+  submitText: (content: string) => void;
+  /** 最近一次成功回复事件；sequence 让相同内容的连续回复也可区分。 */
+  interviewerReply: { sequence: number; text: string } | null;
   /** 停止本轮：abort 当前请求，页面立刻回到可提问状态。 */
   stop: () => void;
   /** 重新回答某一轮（服务端历史里的 interrupted，或本地刚停下的那一轮）。 */
   retry: (content: string) => void;
+  /** 改文字重问：改掉已提交的那条回答并重新生成（Q1-L2）。 */
+  revise: (messageId: number, content: string) => void;
   /** 换会话 / 离开房间时清空所有回合状态。 */
   reset: () => void;
 }
@@ -96,11 +102,19 @@ export function useInterviewTurn({
   const [pendingAnswer, setPendingAnswer] = useState<string | null>(null);
   const [pendingInterrupted, setPendingInterrupted] = useState(false);
   const [awaitingReport, setAwaitingReport] = useState(false);
+  const [interviewerReply, setInterviewerReply] = useState<{
+    sequence: number;
+    text: string;
+  } | null>(null);
+  const replySequenceRef = useRef(0);
   // 正在跑的这一轮请求：abort 即断开连接 → 服务端停下并标记 interrupted。
   const abortRef = useRef<AbortController | null>(null);
 
-  /** 把一段回答交给流式提问链路；「提交」与「重新回答」共用它。 */
-  const submitContent = async (content: string) => {
+  /**
+   * 把一段回答交给流式提问链路；「提交」「重新回答」「改文字重问」共用它。
+   * `reviseOf` 给用户消息 id 时走 `/answers/revise`（改文字重问），否则走正常的提交端点。
+   */
+  const submitContent = async (content: string, reviseOf?: number) => {
     if (!session || !content.trim() || submitting) return;
     const text = content.trim();
     const sessionId = session.id;
@@ -116,17 +130,35 @@ export function useInterviewTurn({
     try {
       // 流式：面试官的问题逐字出现（后端把 question 字段明文增量推来）；
       // done 事件的 result 与旧端点同形状，收尾/报告逻辑不变。
-      const result = await submitInterviewAnswerStream(
-        sessionId,
-        text,
-        (delta) => setStreamingQuestion((current) => (current ?? "") + delta),
-        // 不再有 phase 回调：需求 4 之后收尾只收盘，服务端不再推 ``finishing``
-        // （"正在生成报告"由页面在调用 /finish 期间显示）。
-        undefined,
-        controller.signal,
-      );
+      const onDelta = (delta: string) =>
+        setStreamingQuestion((current) => (current ?? "") + delta);
+      // 不再有 phase 回调：需求 4 之后收尾只收盘，服务端不再推 ``finishing``
+      // （"正在生成报告"由页面在调用 /finish 期间显示）。
+      const result =
+        reviseOf === undefined
+          ? await submitInterviewAnswerStream(
+              sessionId,
+              text,
+              onDelta,
+              undefined,
+              controller.signal,
+            )
+          : await reviseInterviewAnswerStream(
+              sessionId,
+              reviseOf,
+              text,
+              onDelta,
+              controller.signal,
+            );
       succeeded = true;
       onSession(result.session);
+      const reply = [...result.session.messages]
+        .reverse()
+        .find((item) => item.role === "interviewer")?.content;
+      if (reply) {
+        replySequenceRef.current += 1;
+        setInterviewerReply({ sequence: replySequenceRef.current, text: reply });
+      }
       // 收尾与出报告已拆开（需求 4）：``finished`` 只表示正式问答结束。报告还没生成时
       // 切到"等用户决定"，**不能**当成"报告已就绪"（那会弹一句没发生的成功提示）。
       // 旧后端不带这个字段，于是退回看会话本身：已结束且没有报告，同样是等待态。
@@ -164,6 +196,10 @@ export function useInterviewTurn({
     void submitContent(answer);
   };
 
+  const submitText = (content: string) => {
+    void submitContent(content);
+  };
+
   /**
    * 停止本轮：abort 掉正在跑的那一轮。
    *
@@ -180,12 +216,22 @@ export function useInterviewTurn({
     void submitContent(content);
   };
 
+  /**
+   * 改文字重问（Q1-L2）：改掉自己刚提交的那条回答，服务端作废该轮回应后重新生成。
+   * 只允许最后一条（服务端会用 409 拒绝其它轮次），界面上也只有"当前问答"给这个入口。
+   */
+  const revise = (messageId: number, content: string) => {
+    if (submitting || !content.trim()) return;
+    void submitContent(content, messageId);
+  };
+
   const reset = () => {
     setAnswer("");
     setPendingAnswer(null);
     setPendingInterrupted(false);
     setStreamingQuestion(null);
     setAwaitingReport(false);
+    setInterviewerReply(null);
   };
 
   return {
@@ -198,8 +244,11 @@ export function useInterviewTurn({
     clearAwaitingReport: () => setAwaitingReport(false),
     setAnswer,
     submit,
+    submitText,
+    interviewerReply,
     stop,
     retry,
+    revise,
     reset,
   };
 }

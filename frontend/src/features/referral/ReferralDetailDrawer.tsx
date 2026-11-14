@@ -42,21 +42,29 @@ export default function ReferralDetailDrawer({ detail, onEdit, onClose }: Props)
       fields={
         detail
           ? [
-              { label: t("referralDetail.field.company"), value: detail.company || "-" },
-              { label: t("referralDetail.field.position"), value: detail.position || "-" },
+              // 空值传 undefined 而不是 "-"：组件按"空白即不存在"整行不渲染，
+              // 假占位会让一条只填了公司名的内推看起来填满了。
+              { label: t("referralDetail.field.company"), value: detail.company || undefined },
+              { label: t("referralDetail.field.position"), value: detail.position || undefined },
               {
                 label: t("referralDetail.field.referrer"),
                 value: detail.referrer_name || t("referralDetail.value.notRecorded"),
               },
-              { label: t("referralDetail.field.contact"), value: detail.referrer_contact || "-" },
-              { label: t("referralDetail.field.relation"), value: detail.relation || "-" },
-              { label: t("referralDetail.field.channel"), value: detail.channel || "-" },
-              { label: t("referralDetail.field.code"), value: detail.referral_code || "-" },
+              {
+                label: t("referralDetail.field.contact"),
+                value: detail.referrer_contact || undefined,
+              },
+              { label: t("referralDetail.field.relation"), value: detail.relation || undefined },
+              { label: t("referralDetail.field.channel"), value: detail.channel || undefined },
+              {
+                label: t("referralDetail.field.code"),
+                value: detail.referral_code || undefined,
+              },
               {
                 label: t("referralDetail.field.submittedAt"),
                 value: detail.submitted_at || t("referralDetail.value.unknown"),
               },
-              { label: t("referralDetail.field.job"), value: detail.job_title || "-" },
+              { label: t("referralDetail.field.job"), value: detail.job_title || undefined },
               {
                 label: t("referralDetail.field.createdAt"),
                 value: formatDateTime(detail.created_at),
@@ -71,38 +79,40 @@ export default function ReferralDetailDrawer({ detail, onEdit, onClose }: Props)
       sections={
         detail
           ? [
-              {
-                title: t("referralDetail.section.note"),
-                content: detail.note || t("referralDetail.value.empty"),
-              },
-              {
-                title: t("referralDetail.section.images", {
-                  count: (detail.note_images ?? []).length,
-                }),
-                content:
-                  (detail.note_images ?? []).length === 0 ? (
-                    t("referralDetail.value.empty")
-                  ) : (
-                    <Space size={8} wrap>
-                      {/* 用 antd Image 的原生预览（遮罩层里的那张大图），不用 `<a target="_blank">`：
-                          后者会把用户甩到一个新页面，和岗位备注、资料附件、我的文件里的
-                          图片预览都不一致（用户截图反馈"不要新进一个页面"）。 */}
-                      {(detail.note_images ?? []).map((path, index) => (
-                        <Image
-                          key={path}
-                          src={referralImageUrl(path)}
-                          alt={t("referralDetail.image.noteAlt")}
-                          width={96}
-                          height={96}
-                          style={{ objectFit: "cover", borderRadius: 4 }}
-                          preview={{
-                            mask: t("referralDetail.image.previewMask", { index: index + 1 }),
-                          }}
-                        />
-                      ))}
-                    </Space>
-                  ),
-              },
+              // 备注与图片备注都为空时整块不出现：标签里已经写了「图片备注（0）」，
+              // 再补一句「（无）」只是把同一件事说两遍。
+              ...(detail.note
+                ? [{ title: t("referralDetail.section.note"), content: detail.note }]
+                : []),
+              ...((detail.note_images ?? []).length > 0
+                ? [
+                    {
+                      title: t("referralDetail.section.images", {
+                        count: (detail.note_images ?? []).length,
+                      }),
+                      content: (
+                        <Space size={8} wrap>
+                          {/* 用 antd Image 的原生预览（遮罩层里的那张大图），不用 `<a target="_blank">`：
+                              后者会把用户甩到一个新页面，和岗位备注、资料附件、我的文件里的
+                              图片预览都不一致（用户截图反馈"不要新进一个页面"）。 */}
+                          {(detail.note_images ?? []).map((path, index) => (
+                            <Image
+                              key={path}
+                              src={referralImageUrl(path)}
+                              alt={t("referralDetail.image.noteAlt")}
+                              width={96}
+                              height={96}
+                              style={{ objectFit: "cover", borderRadius: 4 }}
+                              preview={{
+                                mask: t("referralDetail.image.previewMask", { index: index + 1 }),
+                              }}
+                            />
+                          ))}
+                        </Space>
+                      ),
+                    },
+                  ]
+                : []),
             ]
           : []
       }

@@ -164,7 +164,14 @@ class JobFetcher:
             return self._to_page(raw, url=validated, html=str(getattr(raw, "html", "") or raw.text))
         return self._to_page(raw_http, url=validated, html=raw_http.text)
 
-    def fetch_pages(self, url: str, *, pages: int = 1, engine: str | None = None) -> FetchedPages:
+    def fetch_pages(
+        self,
+        url: str,
+        *,
+        pages: int = 1,
+        engine: str | None = None,
+        stop_after_first: Callable[[FetchedPage], bool] | None = None,
+    ) -> FetchedPages:
         """抓 1–10 页：只跟随页面自己给出的「下一页」，每页重新做 SSRF 校验。
 
         第一页失败照常抛错（调用方按 502 处理）；第 2 页起失败则保留已抓页面并
@@ -172,6 +179,10 @@ class JobFetcher:
         """
         requested = max(1, min(int(pages or 1), self._config.max_pages))
         first = self.fetch(url, engine=engine)
+        if stop_after_first is not None and stop_after_first(first):
+            return FetchedPages(
+                pages=(first,), pages_fetched=1, truncated=False, stop_reason="no_next"
+            )
         fetched: list[FetchedPage] = [first]
         errors: list[str] = []
         next_url = find_next_page_url(first)

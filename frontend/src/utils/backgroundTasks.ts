@@ -37,6 +37,7 @@ import {
 } from "./backgroundTasks.types";
 import {
   getBackgroundTaskAdapter,
+  hasRegisteredBackgroundTaskAdapter,
   updateFromAiTask,
   updateFromResumeTask,
   type BackgroundTaskAdapter,
@@ -117,8 +118,9 @@ async function tick(): Promise<void> {
   }
   await Promise.all(
     [...tasks.values()].map(async (entry) => {
+      // 未登记的 kind 也有兜底适配器（能拉能停），所以这里不再有"拿不到适配器就跳过"
+      // 那条死路——它正是「整理助手记忆」永久停在「生成中…」的原因。
       const adapter = getBackgroundTaskAdapter(entry.kind);
-      if (!adapter) return;
       try {
         const latest = await adapter.fetch(entry.id);
         // 这一轮成功了：失败计数清零，「状态未知」也随真实进度恢复为正常显示。
@@ -198,7 +200,11 @@ function finish(key: string, task: BackgroundTask): void {
   // **先通知，再回调**：即使业务侧的回调抛错（例如取预览失败），用户也该收到"跑完了"这件事。
   const watchers = attached.has(key);
   attached.delete(key);
-  const notices = getBackgroundTaskAdapter(task.kind)?.notices() ?? fallbackNotices(task);
+  // 未登记的 kind 走 label 兜底：兜底适配器的 notices() 拿不到任务名，
+  // 只有这里的 `task.label` 能说出「整理助手记忆」已完成/已取消。
+  const notices = hasRegisteredBackgroundTaskAdapter(task.kind)
+    ? getBackgroundTaskAdapter(task.kind).notices()
+    : fallbackNotices(task);
   if (task.status === "completed") {
     notifyTaskDone({
       // 有界面在看就不要再弹一个居中弹窗打断它；用户已经走了才需要"叫住他"。
@@ -342,8 +348,9 @@ export function dismissBackgroundTask(key: string): void {
 export async function cancelBackgroundTask(key: string): Promise<void> {
   const entry = tasks.get(key);
   if (!entry) return;
+  // 兜底适配器保证这里一定有东西；万一将来有人把兜底去掉，宁可报错也不能
+  // "什么都没做却让调用方弹「已取消」"——那是 2026-11-13 用户报的"关不掉"。
   const adapter = getBackgroundTaskAdapter(entry.kind);
-  if (!adapter) return;
   let latest: BackgroundTaskUpdate;
   try {
     latest = await adapter.cancel(entry.id);

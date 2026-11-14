@@ -89,9 +89,9 @@ const appConfig = {
   "appConfig.star.action": "去点 Star",
 
   // ── 页头源码入口 ──────────────────────────────────────────
-  "appConfig.header.repoTooltip": "在 GitHub 上查看源码 / 反馈问题",
+  "appConfig.header.repoTooltip": "去 GitHub 点个 Star，支持这个项目",
   /** `{name}` 是应用名（`appConfig.brand.name`）。 */
-  "appConfig.header.repoAria": "在 GitHub 上查看 {name} 源码",
+  "appConfig.header.repoAria": "支持 {name}（去 GitHub 点 Star）",
 
   // ── 简历详情预览头部 ──────────────────────────────────────
   /** `{job}` 是已填写的岗位名，空值由调用方先用 `appConfig.detail.notFilled` 兜底。 */

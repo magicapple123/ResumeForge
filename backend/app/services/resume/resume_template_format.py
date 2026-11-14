@@ -4,7 +4,12 @@
 from __future__ import annotations
 
 from .resume_config_domains import DOMAIN_KEYS, HEX_COLOR_RE, domain_version, is_supported
-from .resume_contact import CONTACT_BREAKS_KEY, validate_contact_breaks
+from .resume_contact import (
+    CONTACT_BREAKS_KEY,
+    CONTACT_SEPARATOR_KEY,
+    validate_contact_breaks,
+    validate_contact_separator,
+)
 from .resume_layout_overrides import (
     EXTRA_FORMAT_KEYS,
     PAGE_MARGIN_KEYS,
@@ -82,6 +87,76 @@ FORMAT_FIELDS: tuple[dict, ...] = (
         "step": 0.02,
         "description": "在所选字号档位上再乘一个系数",
         "description_en": "Multiplies the selected font size",
+    },
+    {
+        "key": "photo_border_width",
+        "label": "照片边框粗细",
+        "label_en": "Photo border width",
+        "type": "number",
+        # 0–8px：模板默认 1px（`.profile-photo { border: 1px solid var(--line) }`），
+        # 0 = 明确"不要边框"。上限 8px 时边框仍不会盖住五官。
+        "min": 0,
+        "max": 8,
+        "step": 1,
+        "description": "照片边框的粗细（像素），0 为无边框",
+        "description_en": "Photo border width in px; 0 removes it",
+    },
+    {
+        "key": "photo_border_color",
+        "label": "照片边框颜色",
+        "label_en": "Photo border color",
+        "type": "color",
+        "description": "照片边框颜色，默认跟随分隔线色",
+        "description_en": "Photo border color; defaults to the divider color",
+    },
+    {
+        "key": "photo_radius",
+        "label": "照片圆角",
+        "label_en": "Photo corner radius",
+        "type": "number",
+        "min": 0,
+        "max": 24,
+        "step": 1,
+        "description": "照片框圆角（像素），模板默认 4",
+        "description_en": "Photo corner radius in px; templates default to 4",
+    },
+    {
+        "key": "photo_offset_x",
+        "label": "照片左右偏移",
+        "label_en": "Photo offset X",
+        "type": "number",
+        # ±20mm：照片框本身约 30–45mm 宽，20mm 已能把照片推到另一侧边缘；
+        # 再大就一定压到姓名，所以上限停在"还能读"的位置。
+        "min": -20,
+        "max": 20,
+        "step": 0.5,
+        "description": "照片相对模板位置的左右偏移（毫米）",
+        "description_en": "Horizontal photo offset in mm",
+    },
+    {
+        "key": "photo_offset_y",
+        "label": "照片上下偏移",
+        "label_en": "Photo offset Y",
+        "type": "number",
+        "min": -20,
+        "max": 20,
+        "step": 0.5,
+        "description": "照片相对模板位置的上下偏移（毫米）",
+        "description_en": "Vertical photo offset in mm",
+    },
+    {
+        "key": "skill_columns",
+        "label": "技能每行个数",
+        "label_en": "Skills per row",
+        "type": "number",
+        # 1–4：小于 1 没有意义（一行至少一个标签），大于 4 时标签被压到读不清；
+        # 上限与前端分段控件（1/2/3/4）逐项一致。
+        "min": 1,
+        "max": 4,
+        "step": 1,
+        "css": "--skill-columns",
+        "description": "技能标签一行最多排几个",
+        "description_en": "Maximum skill tags per row",
     },
     {
         "key": "line_height",
@@ -201,6 +276,12 @@ def validated_format_config(raw: dict | None) -> dict:
             if font_name is not None:
                 result[FONT_KEY] = font_name
             continue
+        if str(key) == CONTACT_SEPARATOR_KEY:
+            # 联系方式同行分隔符：未知值回落到 space（＝不写这个键），旧产物逐字节不变。
+            style = validate_contact_separator(value)
+            if style != "space":
+                result[CONTACT_SEPARATOR_KEY] = style
+            continue
         if str(key) == CONTACT_BREAKS_KEY:
             # #3：联系方式强制换行的字段白名单。空列表 = 空域（不写这个键），与"从未设置"
             # 逐字节等价；未知字段键丢弃而不是 422——`format_config` 是用户可以随手改的 JSON。
@@ -268,6 +349,44 @@ def format_css(config: dict | None) -> str:
             root_parts.append(f"{field['css']}: {value};")
         if field.get("css_rule"):
             extra_rules.append(field["css_rule"] % f"{value:g}")
+    # 技能标签的"每行最多 N 个"：`max-width` 让第 N+1 个标签必然换行。
+    # 用 flex/flow 的 max-width 而不是 `grid-template-columns: repeat(N,1fr)`——
+    # 后者强制等宽，长标签会被压扁到同一宽度里（2026-11 用户明确否决过 grid 方案）。
+    # 未设这个键时**一个字都不写**：存量简历的技能标签排版逐字节不变。
+    columns = values.get("skill_columns")
+    if isinstance(columns, (int, float)) and columns >= 1:
+        count = int(columns)
+        extra_rules.append(
+            f":root {{ --skill-columns: {count}; }}"
+            " .skill-list li { max-width: calc((100% - var(--fs) * (var(--skill-columns) - 1))"
+            " / var(--skill-columns)); }"
+        )
+    # 照片框（R-07/R-10）：边框粗细/颜色/圆角与 X/Y 偏移。
+    # **只有用户设过这五项之一时才写规则**——模板自身已经是「1px + var(--line) + 4px」，
+    # 默认态写一遍只会制造无意义 diff，也会让旧简历的 HTML 变成"另一份产物"。
+    photo_keys = {
+        "photo_border_width",
+        "photo_border_color",
+        "photo_radius",
+        "photo_offset_x",
+        "photo_offset_y",
+    }
+    if photo_keys & set(values):
+        width = float(values.get("photo_border_width", 1) or 0)
+        radius = float(values.get("photo_radius", 4) or 0)
+        color = values.get("photo_border_color")
+        offset_x = float(values.get("photo_offset_x", 0) or 0)
+        offset_y = float(values.get("photo_offset_y", 0) or 0)
+        declarations = [f"border-radius: {radius:g}px"]
+        if width <= 0:
+            declarations.insert(0, "border: 0")
+        elif color:
+            declarations.insert(0, f"border: {width:g}px solid {color}")
+        else:
+            declarations.insert(0, f"border: {width:g}px solid var(--line)")
+        if offset_x or offset_y:
+            declarations.append(f"transform: translate({offset_x:g}mm, {offset_y:g}mm)")
+        extra_rules.append(".profile-photo { " + "; ".join(declarations) + " }")
     # 四条边合成一条规则（四边相等 → 单值形态，与历史产物逐字一致）。
     padding = page_padding_rule(values)
     if padding is not None:

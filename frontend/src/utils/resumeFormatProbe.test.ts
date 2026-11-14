@@ -11,6 +11,7 @@ import {
   formatG,
   lineHeightProbeCss,
   pagePaddingProbeCss,
+  photoFrameProbeCss,
   scaleProbeCss,
 } from "./resumeFormatProbe";
 
@@ -71,5 +72,45 @@ describe("两个探针与后端 FORMAT_FIELDS 的 css_rule 逐字一致", () => 
     expect(scaleProbeCss("entry_gap", 1)).toBe("");
     // 非有限值退回"没设过"，不是 NaN 字符串。
     expect(scaleProbeCss("name_scale", Number.NaN)).toBe("");
+  });
+});
+
+/**
+ * 照片框探针：与后端 `format_css()` 的照片分支逐字同形
+ * （`resume_template_format.py:359-381`，后端侧由
+ * `tests/test_resume_photo_frame.py` 钉住同一批字面量）。
+ */
+describe("照片框探针与后端 format_css 逐字一致", () => {
+  const defaults = { width: 1, color: "", radius: 4, offsetX: 0, offsetY: 0 };
+
+  it("四项全默认时返回空串（后端一个键都没设过 → 不写规则）", () => {
+    expect(photoFrameProbeCss(defaults)).toBe("");
+  });
+
+  it("只改粗细：无颜色时跟随分隔线色", () => {
+    expect(photoFrameProbeCss({ ...defaults, width: 3 })).toBe(
+      ".profile-photo { border: 3px solid var(--line); border-radius: 4px }",
+    );
+  });
+
+  it("粗细为 0 时写 `border: 0`（不是 0px solid）", () => {
+    expect(photoFrameProbeCss({ ...defaults, width: 0 })).toBe(
+      ".profile-photo { border: 0; border-radius: 4px }",
+    );
+  });
+
+  it("设了颜色就写具体色值（小写落库，探针不改写）", () => {
+    expect(photoFrameProbeCss({ ...defaults, width: 2, color: "#aabbcc" })).toBe(
+      ".profile-photo { border: 2px solid #aabbcc; border-radius: 4px }",
+    );
+  });
+
+  it("偏移非零才追加 transform，且两个轴都写（与后端一致）", () => {
+    expect(photoFrameProbeCss({ ...defaults, offsetX: 2.5 })).toBe(
+      ".profile-photo { border: 1px solid var(--line); border-radius: 4px; transform: translate(2.5mm, 0mm) }",
+    );
+    expect(photoFrameProbeCss({ ...defaults, offsetY: -3 })).toBe(
+      ".profile-photo { border: 1px solid var(--line); border-radius: 4px; transform: translate(0mm, -3mm) }",
+    );
   });
 });

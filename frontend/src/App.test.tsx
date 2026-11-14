@@ -167,8 +167,12 @@ describe("application navigation", () => {
     expect(headerActions).not.toBeNull();
     const repoLink = headerActions?.querySelector(".app-repo-button");
     expect(repoLink).not.toBeNull();
-    expect(repoLink).toHaveAttribute("href", GITHUB_REPO);
-    expect(repoLink).toHaveAttribute("aria-label", `在 GitHub 上查看 ${t(APP_NAME_KEY)} 源码`);
+    // F28：入口改成按钮——点击先弹 Star 提示，真正的跳转在弹窗里；不再直接带 href。
+    expect(repoLink!.tagName).toBe("BUTTON");
+    expect(repoLink).toHaveAttribute(
+      "aria-label",
+      t("appConfig.header.repoAria", { name: t(APP_NAME_KEY) }),
+    );
     // 页头里必须和「退出」并排，且页脚不再有第二个源码入口。
     expect(headerActions?.textContent).toContain("退出");
     expect(container.querySelector(".app-sider-footer .app-repo-button")).toBeNull();

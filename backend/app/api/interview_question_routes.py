@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Question bank and answer routes, with session dependencies injected."""
+"""题库与答题相关的路由：会话依赖从外部注入，测试可以直接替换。
+
+为什么单独一个文件：``interview.py`` 已接近行数预算，而题库/答题这组路由的参数与返回结构
+自成一类。把 ``get_db`` 与当前请求作为默认依赖注入，测试能覆盖依赖，不必打桩整个模块。
+"""
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -24,6 +28,7 @@ from ..services.resume.document_view import document_text
 from ._disconnect import client_gone, run_until_disconnect
 
 MAX_JOB_CONTEXT_FOR_INTERVIEW = 6_000
+MAX_RESUME_CONTEXT_FOR_QUESTION_BANK = 50_000
 
 
 def register_question_routes(
@@ -40,18 +45,25 @@ def register_question_routes(
         job = db.get(Job, payload.job_id) if payload.job_id else None
 
         resume_record = None
-        resume_json = ""
+        resume_json = payload.resume_text
         if payload.resume_id is not None:
             resume_record = _resume_record_or_none(db, payload.resume_id)
             if resume_record is None:
                 raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
             resume_json = document_text(document_io.document_for_record(db, resume_record)[0])
 
-        job_text = (
+        job_text = payload.job_text or (
             build_job_prompt_text(job, MAX_JOB_CONTEXT_FOR_INTERVIEW)
             if job is not None
             else _job_text(db, resume_record.job_id if resume_record is not None else None)
         )
+        notes = []
+        if len(job_text) > MAX_JOB_CONTEXT_FOR_INTERVIEW:
+            job_text = job_text[:MAX_JOB_CONTEXT_FOR_INTERVIEW]
+            notes.append(f"岗位材料较长，本次仅使用前 {MAX_JOB_CONTEXT_FOR_INTERVIEW} 字")
+        if len(resume_json) > MAX_RESUME_CONTEXT_FOR_QUESTION_BANK:
+            resume_json = resume_json[:MAX_RESUME_CONTEXT_FOR_QUESTION_BANK]
+            notes.append(f"简历材料较长，本次仅使用前 {MAX_RESUME_CONTEXT_FOR_QUESTION_BANK} 字")
         claims_json = _claims_json(db)
         db.close()
         try:
@@ -71,13 +83,14 @@ def register_question_routes(
         except LLMError as exc:
             raise HTTPException(status_code=502, detail=f"生成题库失败：{exc}") from exc
         return QuestionBankOut(
-            job_id=job.id if job is not None else None,
-            job_title=job.title if job is not None else "",
-            company=job.company if job is not None else "",
+            job_id=job.id if job is not None and not payload.job_text else None,
+            job_title="临时岗位" if payload.job_text else job.title if job is not None else "",
+            company=job.company if job is not None and not payload.job_text else "",
             resume_id=payload.resume_id,
+            resume_title=resume_record.title if resume_record is not None else payload.resume_title,
             groups=result["groups"],
             llm_used=True,
-            notes=result["notes"],
+            notes=[*notes, *result["notes"]],
         )
 
     @router.post("/analyze", response_model=InterviewAnalysisOut)
@@ -101,6 +114,10 @@ def register_question_routes(
             parts.append(
                 "## 候选人简历\n" + document_text(document_io.document_for_record(db, record)[0])
             )
+        elif payload.resume_text:
+            # 外部简历 / 导入文件（Q3）：没有内部记录，正文直接随请求带上来。
+            # 拼法与题库那一侧逐字一致（同一个「## 候选人简历」标题），提示词不用分两套。
+            parts.append("## 候选人简历\n" + payload.resume_text)
         claims_json = _claims_json(db)
         if claims_json:
             parts.append(f"## 事实台账\n{claims_json}")
@@ -169,15 +186,20 @@ def register_question_routes(
     ):
         """把面试暴露的短板与高频追问反向转成简历改写建议（**只产出建议、不改正文**）。"""
         provider, _model = _require_provider(db)
-        record = _resume_record_or_none(db, payload.resume_id)
-        if record is None:
+        # 内部简历走记录；外部简历 / 导入文件（Q3）没有再 404 的理由——正文随请求上来。
+        record = (
+            _resume_record_or_none(db, payload.resume_id)
+            if payload.resume_id is not None
+            else None
+        )
+        if payload.resume_id is not None and record is None:
             raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-        resume, _conversion = document_io.document_for_record(db, record)
+        resume = document_io.document_for_record(db, record)[0] if record is not None else None
 
         job = (
             db.get(Job, payload.job_id)
             if payload.job_id
-            else (db.get(Job, record.job_id) if record.job_id else None)
+            else (db.get(Job, record.job_id) if record is not None and record.job_id else None)
         )
         job_text = (
             build_job_prompt_text(job, MAX_JOB_CONTEXT_FOR_INTERVIEW) if job is not None else ""
@@ -191,6 +213,7 @@ def register_question_routes(
                 interview_questions_service.optimize_resume(
                     provider,
                     resume=resume,
+                    resume_text=payload.resume_text,
                     job_text=job_text,
                     weaknesses=weaknesses,
                     follow_ups=follow_ups,

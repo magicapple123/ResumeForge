@@ -37,6 +37,7 @@ from .base import (
     log_llm_failure,
 )
 from .client_pool import get_shared_client
+from .context_length_error import with_context_length_flag
 from .openai_compat import validated_base_url
 from .payload import status_error
 from .responses_messages import convert_messages, convert_tools
@@ -156,8 +157,11 @@ class ResponsesProvider(BaseLLMProvider):
                                     response.status_code, response.headers.get("retry-after")
                                 )
                                 if delay is None:
-                                    raise gate.final_error(
-                                        response.status_code, self._http_error(response)
+                                    raise await with_context_length_flag(
+                                        response,
+                                        gate.final_error(
+                                            response.status_code, self._http_error(response)
+                                        ),
                                     )
                                 logger.warning(
                                     "Responses 流式请求遇到 HTTP %s，%.1fs 后自动重试（第 %s 次）",
@@ -239,8 +243,11 @@ class ResponsesProvider(BaseLLMProvider):
                                     response.status_code, response.headers.get("retry-after")
                                 )
                                 if delay is None:
-                                    raise gate.final_error(
-                                        response.status_code, self._http_error(response)
+                                    raise await with_context_length_flag(
+                                        response,
+                                        gate.final_error(
+                                            response.status_code, self._http_error(response)
+                                        ),
                                     )
                                 logger.warning(
                                     "Responses 调用遇到 HTTP %s，%.1fs 后自动重试（第 %s 次）",

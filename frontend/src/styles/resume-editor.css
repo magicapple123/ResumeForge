@@ -212,7 +212,9 @@
 
 .settings-page {
   width: 100%;
-  max-width: 1040px;
+  /* 1040 → 1120（F38）：左侧多了 180px 导航列，不补回右侧内容区的宽度，
+     卡片会比改版前窄一大截。 */
+  max-width: 1120px;
   margin: 0 auto;
 }
 

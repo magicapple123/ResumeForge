@@ -88,6 +88,14 @@ export const LiveModeCard = memo(function LiveModeCard({
           {liveEnabled && live.source === "ai" ? (
             <Tag color="blue">{t("liveModeCard.tag.ai")}</Tag>
           ) : null}
+          {liveEnabled && typeof live.confidence === "number" ? (
+            <Typography.Text type="secondary">
+              {t("webFormPage.preview.aiEvidence", {
+                confidence: `${Math.round(live.confidence * 100)}%`,
+                evidence: live.evidence || "—",
+              })}
+            </Typography.Text>
+          ) : null}
           {liveEnabled && alternatives.length ? (
             <Tooltip
               title={alternatives

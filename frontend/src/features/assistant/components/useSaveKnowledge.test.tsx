@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/** AssistantSaveKnowledgeButton (#29B): prefill, category, success link/toast, failure path. */
+/** useSaveKnowledge (#29B, F37): prefill, category, saved link/toast, failure path, empty title. */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +12,7 @@ vi.mock("../../../api/knowledge", () => ({
   createKnowledge: (...args: unknown[]) => createKnowledge(...args),
 }));
 
-import AssistantSaveKnowledgeButton from "./AssistantSaveKnowledgeButton";
+import { useSaveKnowledge } from "./useSaveKnowledge";
 
 const FIRST_LINE = "First line conclusion";
 
@@ -33,21 +33,30 @@ function message(overrides: Partial<AssistantMessage> = {}): AssistantMessage {
   };
 }
 
-function renderButton(target: AssistantMessage = message()) {
+/** The hook returns the modal + saved link; the harness only adds the menu-trigger stand-in. */
+function Harness({ target }: { target: AssistantMessage }) {
+  const { openModal, modal, savedLink } = useSaveKnowledge(target);
+  return (
+    <>
+      <button type="button" onClick={openModal}>
+        open
+      </button>
+      {savedLink}
+      {modal}
+    </>
+  );
+}
+
+function renderHarness(target: AssistantMessage = message()) {
   return render(
     <AntdApp>
-      <AssistantSaveKnowledgeButton message={target} />
+      <Harness target={target} />
     </AntdApp>,
   );
 }
 
-function name(key: Parameters<typeof t>[0]) {
-  return new RegExp(t(key));
-}
-
 async function openModal() {
-  fireEvent.click(screen.getByRole("button", { name: name("assistantUi.saveKnowledge.button") }));
-  // findByText would match both the trigger button and the modal title; wait on the dialog.
+  fireEvent.click(screen.getByRole("button", { name: "open" }));
   return screen.findByRole("dialog");
 }
 
@@ -60,9 +69,9 @@ afterEach(() => {
   cleanup();
 });
 
-describe("AssistantSaveKnowledgeButton", () => {
+describe("useSaveKnowledge", () => {
   it("prefills the title from the first line and saves the full Markdown body", async () => {
-    renderButton();
+    renderHarness();
     await openModal();
     const titleInput = screen.getByRole("textbox", {
       name: t("assistantUi.saveKnowledge.titleLabel"),
@@ -78,7 +87,7 @@ describe("AssistantSaveKnowledgeButton", () => {
       content: message().content,
       source: t("assistantUi.saveKnowledge.source"),
     });
-    // Success: toast names the object and the button becomes a saved link.
+    // Success: toast names the object and the bubble shows the saved link.
     expect(
       await screen.findByText(t("assistantUi.saveKnowledge.toast", { title: FIRST_LINE })),
     ).toBeTruthy();
@@ -89,7 +98,7 @@ describe("AssistantSaveKnowledgeButton", () => {
   });
 
   it("can save into the interview-notes category (protocol value from types)", async () => {
-    renderButton();
+    renderHarness();
     await openModal();
     fireEvent.mouseDown(
       screen.getByRole("combobox", { name: t("assistantUi.saveKnowledge.categoryLabel") }),
@@ -104,25 +113,23 @@ describe("AssistantSaveKnowledgeButton", () => {
     expect(createKnowledge.mock.calls[0][0]).toMatchObject({ category: KNOWLEDGE_CATEGORIES[0] });
   });
 
-  it("reports where to go when saving fails and keeps the button usable", async () => {
+  it("reports where to go when saving fails and keeps the dialog open for a retry", async () => {
     createKnowledge.mockRejectedValue(new Error("backend down"));
-    renderButton();
+    renderHarness();
     await openModal();
     fireEvent.click(screen.getByRole("button", { name: t("assistantUi.saveKnowledge.save") }));
     expect(
       await screen.findByText(t("assistantUi.saveKnowledge.failed", { error: "backend down" })),
     ).toBeTruthy();
-    // The modal stays open for a retry decision, and the entry button is still there after closing.
+    // The modal stays open for a retry decision, so the trigger path is still reachable.
     // Ant Design inserts a space between two CJK characters in a button label; match loosely.
     const cancelName = new RegExp(t("common.action.cancel").split("").join("\\s*"));
     fireEvent.click(screen.getByRole("button", { name: cancelName }));
-    expect(
-      screen.getByRole("button", { name: name("assistantUi.saveKnowledge.button") }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "open" })).toBeTruthy();
   });
 
   it("cannot submit an empty title", async () => {
-    renderButton();
+    renderHarness();
     await openModal();
     const titleInput = screen.getByRole("textbox", {
       name: t("assistantUi.saveKnowledge.titleLabel"),

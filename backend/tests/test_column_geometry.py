@@ -105,6 +105,15 @@ def test_schema_accepts_partial_geometry() -> None:
     assert entry.columns is None  # 列数可以继承，模型层不替它判定
 
 
+@pytest.mark.parametrize("layout_type", [SectionLayout, EntryLayout])
+def test_gap_limits_match_at_thirty(layout_type: type[SectionLayout | EntryLayout]) -> None:
+    assert layout_type(gap=30, column_gaps=[30]).gap == 30
+    assert layout_type(gap=30, column_gaps=[30]).column_gaps == [30]
+    for values in ({"gap": 30.01}, {"column_gaps": [30.01]}):
+        with pytest.raises(ValidationError):
+            layout_type(**values)
+
+
 def test_resolved_geometry_drops_mismatched_lengths() -> None:
     assert resolved_column_geometry(3, [40, 30, 30], [1.5, 0.8]) == ([40.0, 30.0, 30.0], [1.5, 0.8])
     # 三列宽度用在两列上：整体作废，不做部分应用

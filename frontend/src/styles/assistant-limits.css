@@ -1,0 +1,107 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 设置页「运行上限与上下文压缩」卡（R-32）。
+ *
+ * 单独成文件：`.settings-card` 是共享类，这张卡需要固定两列网格（标签 132px + 控件列），
+ * 把专用布局写进共享类会波及所有设置卡。
+ *
+ * 两条硬约束（可被 `getBoundingClientRect` 断言）：
+ * 1. 五个标签左缘同一竖线、五个控件左缘同一竖线 —— 所以每一行都是同一套
+ *    `132px minmax(0,1fr)` 网格，标签列宽写死而不是 `auto`；
+ * 2. 30 与 1800 的输入框等宽 —— 宽度按用途分档（108 / 96 / 260），不随内容伸缩。
+ */
+
+.assistant-limits-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.assistant-limits-section-title {
+  margin: 0 0 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rf-border);
+  color: var(--rf-text-body);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* 第一段标题上方不需要分隔线：它紧贴卡头。 */
+.assistant-limits-section:first-child .assistant-limits-section-title {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.assistant-limits-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 两个阈值是一对：间距收紧到 8px，视觉上成组但仍保持标签/控件两条竖线。 */
+.assistant-limits-rows.is-tight {
+  gap: 8px;
+}
+
+.assistant-limits-row {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: start;
+}
+
+.assistant-limits-label {
+  padding-top: 4px;
+  color: var(--rf-text-body);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.assistant-limits-field {
+  min-width: 0;
+}
+
+/* 单位走 `suffix`（绑定在输入框内），所以宽度就是输入框宽度。 */
+.assistant-limits-number.is-rounds.ant-input-number,
+.assistant-limits-number.is-budget.ant-input-number {
+  width: 108px;
+}
+
+.assistant-limits-number.is-percent.ant-input-number {
+  width: 96px;
+}
+
+.assistant-limits-text.ant-input {
+  width: 260px;
+}
+
+.assistant-limits-hint {
+  margin: 4px 0 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.assistant-limits-error {
+  margin: 4px 0 0;
+  color: var(--rf-danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 保存区在卡底右侧：dirty 提示与按钮同一条基线。 */
+.assistant-limits-footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border);
+}
+
+.assistant-limits-dirty {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}

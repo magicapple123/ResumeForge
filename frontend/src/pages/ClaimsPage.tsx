@@ -163,7 +163,7 @@ export default function ClaimsPage() {
     <div className="claims-page">
       <div className="claims-page-head">
         <Space orientation="vertical" size={0}>
-          <Typography.Title level={4} style={{ margin: 0 }}>
+          <Typography.Title level={3} style={{ margin: 0 }}>
             {t("claimsPage.title")}
           </Typography.Title>
           <Typography.Text type="secondary">{t("claimsPage.subtitle")}</Typography.Text>

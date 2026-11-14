@@ -96,6 +96,10 @@ const assistantUi = {
   "assistantUi.sidebar.empty": "暂无对话",
   "assistantUi.sidebar.aria.selectConversation": "选择对话 {title}",
   "assistantUi.sidebar.moreTooltip": "更多操作（也可以直接右键这条对话）",
+  "assistantUi.memory.off": "本次不记忆",
+  "assistantUi.memory.offTooltip":
+    "这段对话不读取也不写入助手记忆；已保存的记忆不会被删除",
+  "assistantUi.memory.offBadge": "这段对话不记忆",
   "assistantUi.sidebar.moreAria": "更多对话操作",
   "assistantUi.sidebar.saveTitleTooltip": "保存标题（回车也可以）",
   "assistantUi.sidebar.saveTitleAria": "保存对话标题",
@@ -114,6 +118,7 @@ const assistantUi = {
   "assistantUi.sidebar.action.unarchive": "取消归档",
   "assistantUi.sidebar.confirm.deleteSelectedTitle": "删除选中的对话？",
   "assistantUi.sidebar.confirm.deleteSelectedContent": "这 {count} 段对话{note}",
+  "assistantUi.sidebar.toast.alreadyNew": "已经在新的对话里了",
   "assistantUi.sidebar.toast.shareLinkCopied": "已复制会话链接，在本应用打开即可回到这段对话",
   "assistantUi.sidebar.toast.copyLinkFailed": "复制失败，可以手动复制：{link}",
   "assistantUi.sidebar.toast.idCopied": "已复制会话 ID：{id}",
@@ -166,12 +171,14 @@ const assistantUi = {
   "assistantUi.tasks.current": "当前",
   "assistantUi.tasks.source.reminder": "来源：提醒",
   "assistantUi.tasks.source.other": "来源：{source}",
-  // #13A 消息操作条 / #13B 长回答折叠 / #13C 工具参数与步骤视图 / #13D diff+撤销。
-  "assistantUi.messageActions.aria": "消息操作",
+  // #13A 消息操作（F37 起只剩右键菜单与窄档「⋯」，两处共用同一份列表）。
+  "assistantUi.messageActions.more": "更多操作",
   "assistantUi.messageActions.copy": "复制",
   "assistantUi.messageActions.quote": "引用",
   "assistantUi.messageActions.regenerate": "重新生成",
   "assistantUi.messageActions.delete": "删除",
+  // F36 用户气泡里的「本轮引用」（岗位 / 简历）。
+  "assistantUi.messageRefs.label": "本轮引用",
   // #29B 助手长回答「存为知识条目」（回流入口之一）。
   "assistantUi.saveKnowledge.button": "存为知识条目",
   "assistantUi.saveKnowledge.modalTitle": "存为知识条目",

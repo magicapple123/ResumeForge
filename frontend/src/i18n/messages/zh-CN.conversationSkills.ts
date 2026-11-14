@@ -19,8 +19,8 @@ const conversationSkills = {
   "conversationSkills.chip.skippedHint": "整块未加载，可先停用其它技能",
   "conversationSkills.row.aria": "本对话启用的技能",
   "conversationSkills.error.tooMany": "一个对话最多启用 8 个技能",
-  "conversationSkills.message.used": "本轮技能：{names}",
-  "conversationSkills.message.separator": "、",
+  // F36：技能属于整段对话（不是「本轮」），气泡里标「本对话启用」。
+  "conversationSkills.message.enabledLabel": "本对话启用",
   "conversationSkills.page.intro":
     "技能在对话里启用，不在技能库里全局开启；到求职助手输入区的技能菜单勾选即可使用。",
 } as const;

@@ -12,6 +12,12 @@
  * 实测（1366×768，10 条队列）：
  * 改前 firstRowY 618.14 / rowH 69.78 / visibleRows 2
  * 改后 firstRowY 296~300 / rowH 56 / visibleRows 7~8
+ *
+ * ⚠️ 2026-11-13 二次调整：**字号与行高已交回页面层**（`features/apply/applyInformationHierarchy.css`
+ * 里那套"与全站同一尺寸"）。原因是用户实测反馈"投递台整页比别的页面小一号"——12–13px 的表格字
+ * + 0 padding 的单元格读起来累，而全站基准是 14px（theme/appTheme.ts）。
+ * 本文件现在只保留**结构**上的收敛（状态条一行、页签贴紧、标题栏不占位），
+ * 上面那两个 rowH / visibleRows 数字是当时的记录，不再是当前值。
  */
 
 /* 块间距 16→8：页头/站点行/浏览器卡/页签/工具栏之间共省下约 32px。 */
@@ -100,27 +106,18 @@
   text-overflow: ellipsis;
 }
 
-/* 工具栏必须是**一行**：换行成两行会白吃 44px（实测）。
-   收窄手段：低频的「清空选择」进「⋯」、跨页说明改挂 Tooltip。
-   nowrap + 横向滚动兜底：窄屏宁可横向滚，也不要再把表头往下推一行。 */
+/* 队列头部：F09 起由 Grid 排布三组（筛选 / 计数与批量动作 / 工具），
+   "一行 Space + nowrap" 的形态已不存在，这里只留密度档的下边距。
+   原先的 `.apply-queue-head-scroll` 已无对应 DOM（滚动容器换成 `.apply-queue-filters`，
+   见 applyInformationHierarchy.css），留着它只会让人以为还有一层滚动壳。 */
 .apply-queue-head {
-  flex-wrap: nowrap;
   margin-bottom: 4px;
 }
 
-/* 筛选区自己滚，右侧的批量动作与「?」常驻：同处一个滚动容器时，1200×900 下内容比
-   容器宽 50px，最右的「?」被裁一截，它的说明气泡也按被裁坐标定位，document 多出
-   16px 横向滚动。`.ant-space` 默认 `flex: 0 1 auto` + `min-width: auto`，不加 min-width: 0
-   连滚动都不会发生，而是直接把父容器撑宽。 */
-.apply-queue-head-scroll {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-
-.apply-queue-head-scroll > .ant-space,
-.apply-queue-head > .ant-space {
+/* 筛选组与工具组内的 Space 不换行：换行会把表头再往下推一行，宁可让筛选组横向滚，
+   也不要让图标组折成两排（高度直接翻倍）。 */
+.apply-queue-filters > .ant-space,
+.apply-queue-tools > .ant-space {
   flex-wrap: nowrap;
   white-space: nowrap;
 }
@@ -162,7 +159,9 @@
 }
 
 /* 站点行：兜底「目前仅支持这一个…」那句原先在 1366 下换行，把整行顶到 88px。
-   现在单行 + 省略（全文在 Tooltip 里），站点行回到 ~28px。 */
+   现在单行 + 省略（全文在 Tooltip 里）。
+   2026-11-13：这一行已从标题右侧挪到**标题下面**（页面里叫「副标题」），
+   所以不再钉死 220/180px —— 放得下就整句显示，窄屏才由省略号收尾。 */
 .apply-site-bar > .ant-space {
   flex-wrap: nowrap;
   min-width: 0;
@@ -171,7 +170,7 @@
 }
 
 .apply-site-bar-hint {
-  max-width: 220px;
+  max-width: 100%;
 }
 
 /* 漏斗：Statistic 默认 title 14 / value 18，四枚并排在页头会把行高顶到 61px。

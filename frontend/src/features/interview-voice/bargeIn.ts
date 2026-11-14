@@ -80,6 +80,8 @@ export interface BargeInInput {
   speechDurationMs: number;
   /** 面试官是否还在生成/播报（没有播报就没有插话可言）。 */
   assistantActive: boolean;
+  /** 最小连续语音时长覆盖（Q1-D「插话灵敏度」；不传 = 300ms）。 */
+  minSpeechMs?: number;
 }
 
 export type BargeInAction =
@@ -129,7 +131,7 @@ export function bargeInStep(
   if (!input.speaking) {
     return { state: { ...state, speechStartedAt: null }, action: { kind: "none" } };
   }
-  if (input.speechDurationMs < BARGE_IN_MIN_SPEECH_MS) {
+  if (input.speechDurationMs < (input.minSpeechMs ?? BARGE_IN_MIN_SPEECH_MS)) {
     return { state, action: { kind: "none" } };
   }
   return {

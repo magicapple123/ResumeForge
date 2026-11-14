@@ -5,9 +5,10 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
 import AssistantDigestCard from "./AssistantDigestCard";
+import { DIGEST_EXPANDED_KEY } from "./useDigestDisclosure";
 
 const refresh = vi.fn();
 const reload = vi.fn();
@@ -65,12 +66,16 @@ const SAMPLE = {
 };
 
 function renderCard() {
-  render(
+  const rendered = render(
     <AntdApp>
       <AssistantDigestCard />
     </AntdApp>,
   );
+  fireEvent.click(screen.getByRole("button", { name: t("assistantBreadth.digest.title") }));
+  return rendered;
 }
+
+beforeEach(() => localStorage.setItem(DIGEST_EXPANDED_KEY, "false"));
 
 afterEach(() => {
   cleanup();
@@ -86,7 +91,7 @@ describe("AssistantDigestCard", () => {
     controller.digest = SAMPLE;
     renderCard();
 
-    expect(screen.getByText(t("assistantBreadth.digest.title"))).toBeTruthy();
+    expect(screen.getByRole("button", { name: t("assistantBreadth.digest.title") })).toBeTruthy();
     expect(screen.getByText(t("assistantBreadth.digest.changes", { count: 2 }))).toBeTruthy();
     expect(screen.getByTestId("digest-generated-at").textContent).toContain("08:00");
     expect(screen.getByTestId("digest-section-worth_jobs").textContent).toContain(
@@ -131,5 +136,54 @@ describe("AssistantDigestCard", () => {
     };
     renderCard();
     expect(screen.getByText(t("assistantBreadth.digest.empty"))).toBeTruthy();
+    expect(document.querySelector(".assistant-digest-change-dot")).toBeNull();
+  });
+
+  it("opens once on the first visit, persists closing and closes with Escape", () => {
+    localStorage.removeItem(DIGEST_EXPANDED_KEY);
+    controller.digest = SAMPLE;
+    const first = render(
+      <AntdApp>
+        <AssistantDigestCard />
+      </AntdApp>,
+    );
+    const trigger = screen.getByRole("button", { name: t("assistantBreadth.digest.title") });
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(localStorage.getItem(DIGEST_EXPANDED_KEY)).toBe("false");
+    first.unmount();
+    render(
+      <AntdApp>
+        <AssistantDigestCard />
+      </AntdApp>,
+    );
+    const reopened = screen.getByRole("button", { name: t("assistantBreadth.digest.title") });
+    expect(reopened).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(reopened);
+    expect(reopened).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(reopened);
+    expect(reopened).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("keeps the popover open while regenerating and does not reopen for new changes", () => {
+    controller.digest = SAMPLE;
+    const rendered = renderCard();
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("assistantBreadth.digest.refresh")) }),
+    );
+    expect(
+      screen.getByRole("button", { name: t("assistantBreadth.digest.title") }),
+    ).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByRole("button", { name: t("assistantBreadth.digest.title") }));
+    controller.digest = { ...SAMPLE, changes: { count: 8, jd_changed: 8, stale: 0 } };
+    rendered.rerender(
+      <AntdApp>
+        <AssistantDigestCard />
+      </AntdApp>,
+    );
+    expect(
+      screen.getByRole("button", { name: t("assistantBreadth.digest.title") }),
+    ).toHaveAttribute("aria-expanded", "false");
   });
 });

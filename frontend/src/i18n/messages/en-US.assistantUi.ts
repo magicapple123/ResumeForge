@@ -100,6 +100,10 @@ const assistantUi = {
   "assistantUi.sidebar.empty": "No conversations",
   "assistantUi.sidebar.aria.selectConversation": "Select conversation {title}",
   "assistantUi.sidebar.moreTooltip": "More actions (you can also right-click this conversation)",
+  "assistantUi.memory.off": "No memory this time",
+  "assistantUi.memory.offTooltip":
+    "This conversation reads and writes no assistant memory. Saved memories are kept.",
+  "assistantUi.memory.offBadge": "No memory in this conversation",
   "assistantUi.sidebar.moreAria": "More conversation actions",
   "assistantUi.sidebar.saveTitleTooltip": "Save the title (Enter also works)",
   "assistantUi.sidebar.saveTitleAria": "Save conversation title",
@@ -118,6 +122,7 @@ const assistantUi = {
   "assistantUi.sidebar.action.unarchive": "Unarchive conversation",
   "assistantUi.sidebar.confirm.deleteSelectedTitle": "Delete the selected conversations?",
   "assistantUi.sidebar.confirm.deleteSelectedContent": "Delete these {count} conversations. {note}",
+  "assistantUi.sidebar.toast.alreadyNew": "You are already in a new conversation",
   "assistantUi.sidebar.toast.shareLinkCopied":
     "Copied the conversation link — open it in this app to return to the conversation",
   "assistantUi.sidebar.toast.copyLinkFailed": "Could not copy — copy it manually: {link}",
@@ -172,12 +177,13 @@ const assistantUi = {
   "assistantUi.tasks.current": "Current",
   "assistantUi.tasks.source.reminder": "From: reminder",
   "assistantUi.tasks.source.other": "From: {source}",
-  // #13A message actions / #13B long-answer collapse / #13C tool args+steps / #13D diff+undo.
-  "assistantUi.messageActions.aria": "Message actions",
+  // #13A message actions (F37: context menu + narrow "⋯" share one list).
+  "assistantUi.messageActions.more": "More actions",
   "assistantUi.messageActions.copy": "Copy",
   "assistantUi.messageActions.quote": "Quote",
   "assistantUi.messageActions.regenerate": "Regenerate",
   "assistantUi.messageActions.delete": "Delete",
+  "assistantUi.messageRefs.label": "Referenced this turn",
   // #29B save a long assistant answer as a knowledge entry (one of the circulation entrances).
   "assistantUi.saveKnowledge.button": "Save as knowledge",
   "assistantUi.saveKnowledge.modalTitle": "Save as knowledge",
