@@ -45,6 +45,21 @@ _CONTEXT_HINTS: tuple[tuple[str, str], ...] = (
 
 _CONTEXT_FALLBACK = "引用的内容不存在或已被删除"
 
+# 工具异常 → 固定文案。工具结果会随 SSE 流回给模型与界面，异常原文不能直接外发；
+# 但"任务不存在"这类结论对用户有操作价值，所以按特征选一条常量。
+_TOOL_HINTS: tuple[tuple[str, str], ...] = (
+    ("不存在", "对象不存在或已被删除"),
+    ("已被删除", "对象不存在或已被删除"),
+    ("无权限", "没有权限执行这个操作"),
+    ("权限", "没有权限执行这个操作"),
+    ("超时", "执行超时，请稍后重试"),
+    ("timeout", "执行超时，请稍后重试"),
+    ("网络", "网络请求失败，请检查连接后重试"),
+    ("参数", "参数不合法，请检查后重试"),
+)
+
+_TOOL_FALLBACK = "工具执行失败"
+
 
 def attachment_detail(text: str) -> str:
     """附件类错误的固定文案（不拼接原始异常文本）。"""
@@ -62,4 +77,13 @@ def context_detail(text: str) -> str:
     return _CONTEXT_FALLBACK
 
 
-__all__ = ["AssistantInputError", "attachment_detail", "context_detail"]
+def tool_error_text(text: str) -> str:
+    """工具异常的固定文案（用于 `record["error"]` / 结果文本）。"""
+    haystack = text.lower()
+    for needle, detail in _TOOL_HINTS:
+        if needle in haystack:
+            return detail
+    return _TOOL_FALLBACK
+
+
+__all__ = ["AssistantInputError", "attachment_detail", "context_detail", "tool_error_text"]

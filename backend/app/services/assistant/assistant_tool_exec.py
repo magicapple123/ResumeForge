@@ -30,6 +30,7 @@ from ..assistant_tools import (
 )
 from ..assistant_tools import policy as tool_policy
 from ..assistant_tools.authorization import create_proposal
+from .assistant_error_detail import tool_error_text
 from .assistant_persistence import update_message_context
 
 logger = logging.getLogger(__name__)
@@ -217,9 +218,13 @@ async def run_tool_call(
         record["preview"] = _sanitize_preview(result.preview)
     except Exception as exc:  # noqa: BLE001 - 工具失败不能拖垮整轮回复
         record["ok"] = False
-        record["error"] = str(exc)
-        record["result_text"] = f"工具执行失败：{exc}"
-        logger.warning("助手工具 %s 执行失败：%s", name, exc)
+        # **不要把异常原文写进 record**：工具结果会随 SSE 流回给模型和界面，
+        # 这正是 CodeQL py/stack-trace-exposure 的源点（异常文本可能带内部路径）。
+        # 这里给固定文案，细节留在日志里。
+        readable = tool_error_text(str(exc))
+        record["error"] = readable
+        record["result_text"] = f"工具执行失败：{readable}"
+        logger.warning("助手工具 %s 执行失败：%s", name, exc, exc_info=True)
     return record
 
 
