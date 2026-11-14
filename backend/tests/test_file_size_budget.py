@@ -120,11 +120,12 @@ _EXEMPTIONS: dict[str, Exemption] = {
     "backend/app/services/webform/engine/core.py": Exemption(
         "单一类内聚，无拆分缝", _STRUCTURED_BACKSTOP
     ),
-    # install_live_control_script 主体是单一注入脚本字符串（canary 整脚本
-    # 断言），且 _load_face_data_uri 被 patch、_ASSET_DIR 为 __file__ 深度耦合。
-    "backend/app/services/webform/live_control.py": Exemption(
-        "patch + __file__ + 单一脚本资源", _STRUCTURED_BACKSTOP
-    ),
+    # live_control.py 的豁免（"patch + __file__ + 单一脚本资源"）已于 2026-11-14
+    # 批 2 T4 拆分批执行并删除：~400 行 JS f-string 纯搬迁到同目录
+    # live_control_script.py（render_live_control_script），install_live_control_script
+    # 收成 4 行调用；_load_face_data_uri / _ASSET_DIR 与 __file__ 层级留在原模块
+    # （patch 落点不变）。拆分后 live_control.py 110 行、新模块 429 行，均低于
+    # 500 预算，不再需要豁免。
     # 上一轮拆分后的编排核心；captures_dir/get_task_runner 被模块属性
     # patch。触发条件：>650 行或新增批次类型时迁出 StopAwareCdpClient。
     "backend/app/services/apply/task_runner.py": Exemption(
