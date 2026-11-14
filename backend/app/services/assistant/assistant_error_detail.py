@@ -12,6 +12,19 @@
 
 from __future__ import annotations
 
+from fastapi import HTTPException
+
+
+class AssistantInputError(HTTPException, ValueError):
+    """输入类错误：既是 HTTPException（FastAPI 直接转响应），也是 ValueError（服务层单测
+    一直用 `pytest.raises(ValueError)`）。`detail` 必须是**字面量**，不接受拼接文本。
+    """
+
+    def __init__(self, status_code: int, detail: str) -> None:
+        ValueError.__init__(self, detail)
+        HTTPException.__init__(self, status_code=status_code, detail=detail)
+
+
 # 顺序即优先级：更具体的特征放前面（"总大小不能超过 5 MB" 里也含 "5 MB"）。
 _ATTACHMENT_HINTS: tuple[tuple[str, str], ...] = (
     ("最多上传 4 个附件", "一次最多上传 4 个附件"),
@@ -49,4 +62,4 @@ def context_detail(text: str) -> str:
     return _CONTEXT_FALLBACK
 
 
-__all__ = ["attachment_detail", "context_detail"]
+__all__ = ["AssistantInputError", "attachment_detail", "context_detail"]

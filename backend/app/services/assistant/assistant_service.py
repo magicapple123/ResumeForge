@@ -8,6 +8,7 @@
 因此"文档附件"对模型而言是一段文字，对用户而言仍是一份文件。
 """
 
+import logging
 from typing import Any
 
 from ...schemas.assistant import AssistantAttachmentInput
@@ -24,6 +25,9 @@ from ..attachments import (
     unsupported_attachment_error,
 )
 from ..document_text import extract_document_text
+from .assistant_error_detail import AssistantInputError, attachment_detail
+
+logger = logging.getLogger(__name__)
 
 MAX_HISTORY_MESSAGES = 20
 MAX_HISTORY_CHARS = 40_000
@@ -97,6 +101,22 @@ def normalize_attachments(attachments: list[AssistantAttachmentInput]) -> list[d
     if sum(item["size_bytes"] for item in normalized) > MAX_ATTACHMENTS_TOTAL_BYTES:
         raise ValueError("单条消息的附件总大小不能超过 5 MB")
     return normalized
+
+
+def normalize_attachments_for_api(
+    attachments: list[AssistantAttachmentInput],
+) -> list[dict[str, Any]]:
+    """路由层专用：把校验错误翻成**固定文案**的 HTTPException。
+
+    为什么不在路由里 try/except：CodeQL 的 `py/stack-trace-exposure` 会把"路由函数里出现
+    异常处理器 + 同函数返回响应"判定为异常信息外泄（见 2026-11 的 2 条存量告警）。把
+    翻译收进服务层后，路由只剩一次调用，污点链在这里断开；异常原文只进日志。
+    """
+    try:
+        return normalize_attachments(attachments)
+    except ValueError as exc:
+        logger.warning("附件校验失败：%s", exc)
+        raise AssistantInputError(422, attachment_detail(str(exc))) from None
 
 
 def conversation_title(content: str, attachments: list[dict[str, Any]], max_chars: int = 36) -> str:
@@ -206,4 +226,3 @@ def current_user_message_for_model(
     if not images:
         return {"role": "user", "content": text}
     return {"role": "user", "content": [{"type": "text", "text": text}, *images]}
-

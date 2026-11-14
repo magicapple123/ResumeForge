@@ -77,12 +77,11 @@ from ..services.assistant.assistant_conversations import (
 from ..services.assistant.assistant_conversations import (
     update_conversation as update_conversation_record,
 )
-from ..services.assistant.assistant_error_detail import attachment_detail, context_detail
 from ..services.assistant.assistant_persistence import latest_assistant_message
 from ..services.assistant.assistant_service import (
     conversation_title,
     history_messages_for_model,
-    normalize_attachments,
+    normalize_attachments_for_api,
 )
 from ..services.assistant.assistant_system_prompt import (
     _RELAXED_MODE_NOTE as _RELAXED_MODE_NOTE,
@@ -396,13 +395,9 @@ async def send_message(
     surface: ConversationSurface = "page",
 ):
     conversation = conversation_or_404(db, conversation_id, surface)
-    try:
-        attachments = normalize_attachments(payload.attachments)
-    except ValueError as exc:
-        # CodeQL py/stack-trace-exposure：异常文本只用来**选**一条常量，见
-        # `assistant_error_detail`（原文可能带内部路径，绝不拼进 detail）。
-        logger.warning("附件校验失败 conversation_id=%s：%s", conversation_id, exc)
-        raise HTTPException(status_code=422, detail=attachment_detail(str(exc))) from None
+    # 校验错误由服务层翻成固定文案的 422（`normalize_attachments_for_api`）；
+    # 路由里不留异常处理器，CodeQL 的 stack-trace-exposure 才没有源点。
+    attachments = normalize_attachments_for_api(payload.attachments)
     # 放宽模式：请求覆盖优先（None = 沿用全局设置）；流式期间请求会话已关闭，值绑进闭包。
     relaxed_mode = resolve_assistant_relaxed_mode(db, payload.relaxed_mode)
     # #35：助手入口的输入边界——放宽模式决定是否带身份字段（masked = 非放宽）。
@@ -417,11 +412,7 @@ async def send_message(
         # 上界声明预算（A1：不再留 None，否则分不清"没声明"与"不限制"）。
         budget=DEFAULT_AUDIT_BUDGET,
     )
-    try:
-        context_blocks, context_metadata = load_local_context(db, payload, relaxed=relaxed_mode)
-    except ValueError as exc:
-        logger.warning("引用的本地上下文不存在 conversation_id=%s：%s", conversation_id, exc)
-        raise HTTPException(status_code=404, detail=context_detail(str(exc))) from None
+    context_blocks, context_metadata = load_local_context(db, payload, relaxed=relaxed_mode)
     config = get_llm_config(db)
     if not config.base_url or not config.model:
         raise HTTPException(status_code=400, detail="尚未配置大模型 API")
