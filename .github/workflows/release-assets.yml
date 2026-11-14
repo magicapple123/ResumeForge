@@ -9,7 +9,7 @@
 #   2. run this workflow with `tag=<tag>` and `dry_run=false`
 #   3. the run attaches ResumeForge-Setup-<ver>.exe (+.sha256),
 #      ResumeForge-<ver>-{x64,arm64}.dmg (+.sha256) and
-#      ResumeForge-<ver>-linux-{x64,arm64}.AppImage (+.sha256) to the release
+#      ResumeForge-<ver>-{x86_64,arm64}.AppImage (+.sha256) to the release
 #
 # The build source defaults to the tag itself, so the artifacts correspond
 # exactly to what was released. `source_ref` exists for rehearsal runs
@@ -511,8 +511,8 @@ jobs:
       - name: Verify the artifacts (naming shape + target architecture)
         # 两条断言，都刻意不用通配符：
         #   1) 产物名必须**恰好**是 artifactName 的形状
-        #      ResumeForge-<ver>-linux-<arch>.AppImage（版本取自 desktop/package.json）。
-        #      写通配符的话，命名漂移（linux-x86_64、linux-amd64……）会被 *.AppImage
+        #      ResumeForge-<ver>-<arch>.AppImage（版本取自 desktop/package.json）。
+        #      写通配符的话，命名漂移（x86_64、amd64……）会被 *.AppImage
         #      静默吞下，最后上传一个名字对不上的包，而官网下载按钮按名字取，直接 404。
         #   2) 文件头里的 ELF e_machine 必须等于目标架构：AppImage 是"目标架构的运行时
         #      ELF + 追加的 squashfs"，所以读偏移 18 的两个字节就能判断这个包到底是给
@@ -542,13 +542,13 @@ jobs:
           # x86_64**（arm64 仍是 arm64）——这是 electron-builder 自己的映射，不是我们的选择。
           # 所以「ELF 判据（x64/arm64）」与「文件名里的架构词（x86_64/arm64）」是两个 token：
           # 前者喂 check_elf_machine，后者拼路径。混用会让首跑直接红在一个不存在的文件名上
-          # （2026-11-10 实测：构建成功、产物叫 -linux-x86_64.AppImage，断言却在找 -linux-x64）。
+          # （2026-11-10 实测：构建成功、产物叫 -linux-x86_64.AppImage，断言却在找 -linux-x64；2026-11-14 起产物名去掉了 -linux- 段）。
           for pair in x64:x86_64 arm64:arm64; do
             want="${pair%%:*}"
             arch="${pair##*:}"
-            artifact="desktop/out/ResumeForge-${version}-linux-${arch}.AppImage"
+            artifact="desktop/out/ResumeForge-${version}-${arch}.AppImage"
             if [ ! -f "$artifact" ]; then
-              echo "::error::缺少产物 $artifact（期望 electron-builder.yml 的 artifactName 形状 ResumeForge-${version}-linux-${arch}.AppImage，x64 在 Linux 上展开为 x86_64）。"
+              echo "::error::缺少产物 $artifact（期望 electron-builder.yml 的 artifactName 形状 ResumeForge-${version}-${arch}.AppImage，x64 在 Linux 上展开为 x86_64）。"
               ls -la desktop/out >&2 || true
               exit 1
             fi
@@ -571,7 +571,7 @@ jobs:
           cd desktop/out
           # 同上面：文件名里的架构词是 x86_64 / arm64（electron-builder 的 Linux 映射）。
           for arch in x86_64 arm64; do
-            f="ResumeForge-${version}-linux-${arch}.AppImage"
+            f="ResumeForge-${version}-${arch}.AppImage"
             sha256sum "$f" >"$f.sha256"
             cat "$f.sha256"
           done
@@ -581,8 +581,8 @@ jobs:
         with:
           name: linux-appimages
           path: |
-            desktop/out/ResumeForge-*-linux-*.AppImage
-            desktop/out/ResumeForge-*-linux-*.AppImage.sha256
+            desktop/out/ResumeForge-*-*.AppImage
+            desktop/out/ResumeForge-*-*.AppImage.sha256
           retention-days: 7
           if-no-files-found: error
 
@@ -594,8 +594,8 @@ jobs:
         run: |
           set -euo pipefail
           gh release upload "$TAG" \
-            desktop/out/ResumeForge-*-linux-*.AppImage \
-            desktop/out/ResumeForge-*-linux-*.AppImage.sha256 \
+            desktop/out/ResumeForge-*-*.AppImage \
+            desktop/out/ResumeForge-*-*.AppImage.sha256 \
             --repo "$GITHUB_REPOSITORY" --clobber
 
   source-zips:

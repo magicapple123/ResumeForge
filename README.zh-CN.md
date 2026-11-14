@@ -178,7 +178,7 @@
 | `ResumeForge-Setup-<版本>.exe` | Windows 安装版：双击安装，自动建快捷方式 | 大多数 Windows 用户 |
 | `ResumeForge-<版本>-x64.dmg` / `-arm64.dmg` | macOS 安装版：把「简历通」拖进「应用程序」 | 大多数 macOS 用户 |
 | `ResumeForge-<版本>-windows.zip` / `-macos.zip` / `-linux.zip` | 便携包：解压即用，不写入系统目录 | 无需安装，便于 U 盘携带或迁移 |
-| `ResumeForge-<版本>-linux-x64.AppImage` / `-linux-arm64.AppImage` | Linux 单文件便携应用：赋予可执行位后双击运行，不装系统包 | 大多数 Linux 用户 |
+| `ResumeForge-<版本>-x86_64.AppImage` / `-arm64.AppImage` | Linux 单文件便携应用：赋予可执行位后双击运行，不装系统包 | 大多数 Linux 用户 |
 | `ResumeForge-<版本>-all.zip` | 三个平台的便携包合集 | 需在 Windows、macOS 与 Linux 各部署一份 |
 | 源码（`git clone`） | 自行运行，需要 Python 与 Node.js | 需要阅读或修改源码 |
 

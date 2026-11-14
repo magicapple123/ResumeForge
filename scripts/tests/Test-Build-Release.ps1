@@ -135,6 +135,25 @@ try {
         -Condition ($nonAsciiBytes -eq 0) `
         -Message "Build-Release.ps1 must stay pure ASCII (found $nonAsciiBytes non-ASCII bytes)."
 
+    # --- desktop AppImage artifact naming ---
+    #
+    # AppImage is a Linux-only format, so the artifact name must not repeat a
+    # "-linux-" segment: the AppImage directory expects names like
+    # "App-1.0-x86_64.AppImage" and flags the extra segment as a WARNING rather
+    # than an error, so such a regression could sit there unnoticed. The .sha256
+    # sidecar glob in build-desktop-linux.sh must match the same name -- a rename
+    # that misses it silently drops every sidecar.
+    $desktopBuilderPath = Join-Path $ProjectRoot "desktop/electron-builder.yml"
+    $desktopBuilderContent = Read-TextFileAsUtf8 -Path $desktopBuilderPath
+    $linuxArtifactNames = @(
+        [regex]::Matches($desktopBuilderContent, '(?m)^\s*artifactName:\s*(\S+)\s*$') |
+            ForEach-Object { $_.Groups[1].Value } |
+            Where-Object { $_ -match '-linux-' }
+    )
+    Assert-ReleaseTest -Condition ($linuxArtifactNames.Count -eq 0) -Message "desktop/electron-builder.yml artifactName must not carry a '-linux-' segment; the AppImage is ResumeForge-<version>-<arch>.AppImage (offending: $($linuxArtifactNames -join ', '))."
+    $linuxBuildScriptContent = Read-TextFileAsUtf8 -Path (Join-Path $ProjectRoot "scripts/build-desktop-linux.sh")
+    Assert-ReleaseTest -Condition ($linuxBuildScriptContent -match 'ResumeForge-"\$VERSION"-\*\.AppImage') -Message "scripts/build-desktop-linux.sh must glob ResumeForge-<version>-<arch>.AppImage; a stale pattern silently drops the .sha256 sidecars."
+
     # --- the packaging run itself ---
     # A thrown error inside the build script propagates and fails this test; the
     # presence of the archive below is the positive signal.

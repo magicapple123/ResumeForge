@@ -180,7 +180,7 @@ Supported: **Windows 10/11 (x64)**, **macOS 14+ (Apple Silicon native; Intel Mac
 | `ResumeForge-Setup-<version>.exe` | Windows installer: installs and adds a shortcut | Most Windows users |
 | `ResumeForge-<version>-x64.dmg` / `-arm64.dmg` | macOS installer: drag “简历通” into Applications | Most macOS users |
 | `ResumeForge-<version>-windows.zip` / `-macos.zip` / `-linux.zip` | Portable archive: unzip and run, writes nothing outside its folder | No installation; easy to carry on a USB drive |
-| `ResumeForge-<version>-linux-x64.AppImage` / `-linux-arm64.AppImage` | Linux single-file app: mark executable and run, nothing installed system-wide | Most Linux users |
+| `ResumeForge-<version>-x86_64.AppImage` / `-arm64.AppImage` | Linux single-file app: mark executable and run, nothing installed system-wide | Most Linux users |
 | `ResumeForge-<version>-all.zip` | All three portable archives in one file | One machine per platform |
 | Source (`git clone`) | Run it yourself; needs Python and Node.js | Reading or modifying the source |
 

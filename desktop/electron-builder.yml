@@ -51,6 +51,10 @@ files:
   - lib/desktop-shell-ipc.js
   # 启动失败的可操作对话框（从 main.js 下沉）：main.js 顶层 require。
   - lib/startup-failure.js
+  # 壳层文案双语（批 2 A）：应用内语言 -> 托盘/菜单/对话框/关闭卡片。
+  - lib/shell-locale.js
+  - lib/shell-dialogs.js
+  - lib/shell-locale-runtime.js
   # Quit lifecycle (before-quit / stop / installer spawn) lifted out of main.js
   # for the 500-line budget; main.js requires it at top level.
   - lib/quit-lifecycle.js
@@ -189,6 +193,8 @@ linux:
     entry:
       "Name[zh_CN]": 简历通
       "Comment[zh_CN]": 简历通 - 本地简历优化与求职管理
-  # 与 mac 同一套命名体系（ResumeForge-<version>-<arch>），中间多一段 linux：
-  # 三种形态的产物会长在同一个 out/ 目录里，少这段就会互相覆盖。
-  artifactName: ResumeForge-${version}-linux-${arch}.${ext}
+  # 与 mac 同一套命名体系（ResumeForge-<version>-<arch>）：AppImage 本身就是 Linux
+  # 专有格式，文件名里再写一段 linux 是冗余——AppImage 目录对命名的约定是
+  # App-1.0-x86_64.AppImage，多出的段会长期挂一条 WARNING。扩展名不同，与 mac 的
+  # dmg 落在同一个 out/ 目录也不会互相覆盖。
+  artifactName: ResumeForge-${version}-${arch}.${ext}

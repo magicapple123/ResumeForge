@@ -206,7 +206,7 @@ ls -lh "$DESKTOP_DIR/out" 2>/dev/null || true
 # Same "<hex>  <name>" format as the Windows and macOS sidecars (ASCII, two
 # spaces, no "*" prefix) so `sha256sum -c` / `shasum -a 256 -c` both work.
 APPIMAGE_COUNT=0
-for APPIMAGE in "$DESKTOP_DIR/out"/ResumeForge-"$VERSION"-linux-*.AppImage; do
+for APPIMAGE in "$DESKTOP_DIR/out"/ResumeForge-"$VERSION"-*.AppImage; do
   [ -f "$APPIMAGE" ] || continue
   APPIMAGE_COUNT=$((APPIMAGE_COUNT + 1))
   (
