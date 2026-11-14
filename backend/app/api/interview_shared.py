@@ -5,7 +5,10 @@
 拆出来的是**无路由的纯读写**：进/出 schema 的转换、会话与材料的取数、回答落库与中断
 标记。真正的流程控制（什么时候收尾、什么时候出报告）留在 ``api/interview.py``——那些
 函数是测试 monkeypatch 的目标（``app.api.interview.generate_report`` /
-``_ask_next_question``），搬走会让补丁打在另一个模块上而静默失效。
+``_ask_next_question``），搬走会让补丁打在另一个模块上而静默失效。T2 起开场编排
+（``create_session``）也整体下沉到 ``services/interview/session_open.py``，但模型调用的
+两个打桩点仍由路由以注入方式传入，补丁落点不变；``_resume_record_or_none`` 的实现在
+``services/interview/interview_context.py``，本模块只做兼容再导出。
 
 ## 材料优先级（#41）
 
@@ -33,20 +36,20 @@ from ..models.interview import (
     InterviewSession,
 )
 from ..models.job import Job
-from ..models.resume import ResumeRecord
 from ..schemas.interview import (
     InterviewBrief,
-    InterviewCreate,
     InterviewDetail,
     InterviewMessageOut,
     InterviewStatus,
 )
-from ..services import trash
 from ..services.interview.interview import (
     add_message,
     answered_rounds,
     mark_answer_interrupted,
     reuse_interrupted_answer,
+)
+from ..services.interview.interview_context import (
+    resume_record_or_none as _resume_record_or_none,
 )
 from ..services.llm import create_provider
 from ..services.profile.profile_relevance import build_job_prompt_text
@@ -85,13 +88,6 @@ def _as_interview_status(value: str) -> InterviewStatus:
     if value not in _INTERVIEW_STATUS_VALUES:
         raise ValueError(f"未知的面试状态：{value!r}")
     return value
-
-
-def _resume_record_or_none(db: Session, resume_id: int) -> ResumeRecord | None:
-    record = db.get(ResumeRecord, resume_id)
-    if record is None or trash.is_deleted(record):
-        return None
-    return record
 
 
 def _resume_text(db: Session, session: InterviewSession) -> str:
@@ -172,17 +168,6 @@ def _to_detail(session: InterviewSession) -> InterviewDetail:
     )
 
 
-def _default_title(payload: InterviewCreate, job: Job | None) -> str:
-    if payload.title.strip():
-        return payload.title.strip()[:128]
-    if job is not None and job.title:
-        return f"{job.title} 模拟面试"[:128]
-    material = (payload.job_material.name if payload.job_material else "").strip()
-    if material:
-        return f"{material} 模拟面试"[:128]
-    return f"{payload.interview_type}模拟面试"[:128]
-
-
 def _record_answer(session: InterviewSession, content: str) -> InterviewMessage:
     """把这一轮的候选人回答落库。
 
@@ -219,7 +204,6 @@ __all__ = [
     "INTERVIEW_STATUS_FINISHED",
     "MAX_JOB_CONTEXT_FOR_INTERVIEW",
     "_as_interview_status",
-    "_default_title",
     "_job_text",
     "_mark_interrupted",
     "_record_answer",

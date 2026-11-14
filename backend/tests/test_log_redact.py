@@ -326,17 +326,21 @@ def test_drill_contract_error_log_is_redacted_end_to_end(client, monkeypatch) ->
     经真实路由 → ``logger.exception`` → 全局 filter，日志里只有脱敏痕迹。"""
     import app.api.drill as drill_api
 
+    # T2：开场编排已下沉到 services/drill/session_open.py，三个假实现跟着到该模块命名空间；
+    # create_provider 仍由路由以参数注入（打桩点保持 app.api.drill）。
+    import app.services.drill.session_open as drill_open
+
     fake_claim = SimpleNamespace(id=1, title="主张", subject="主题")
 
     async def exploding_plan(*_args, **_kwargs):
         raise _chained_sensitive_error()
 
-    monkeypatch.setattr(drill_api, "select_claims", lambda _db, _ids, _n: [fake_claim])
-    monkeypatch.setattr(drill_api, "llm_is_configured", lambda _config: True)
+    monkeypatch.setattr(drill_open, "select_claims", lambda _db, _ids, _n: [fake_claim])
+    monkeypatch.setattr(drill_open, "llm_is_configured", lambda _config: True)
     monkeypatch.setattr(drill_api, "create_provider", lambda _config: object())
-    monkeypatch.setattr(drill_api, "generate_plan", exploding_plan)
+    monkeypatch.setattr(drill_open, "generate_plan", exploding_plan)
 
-    with _production_style_capture("app.api.drill") as capture:
+    with _production_style_capture("app.services.drill.session_open") as capture:
         response = client.post("/api/drill", json={})
 
     assert response.status_code == 502

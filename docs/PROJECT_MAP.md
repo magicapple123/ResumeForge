@@ -80,6 +80,20 @@
 
 入口文件：`main.py`（兼容入口，重新导出）→ `application.py`（真正的装配：路由/中间件/生命周期）。`database_migrations.py` 编排 Alembic 升级。
 
+T2 分层（8 个业务函数下沉后新增的服务模块；路由只做装配、错误映射与事务收尾，规则见 `docs/architecture.md`「路由层允许与禁止」）：
+
+| 服务模块 | 承载的业务 |
+| ---- | ---- |
+| `services/resume/generation_entry.py` | SSE 简历生成编排（场景/资料快照冻结、RAG 旁路、事实基线、生成事件、保存段） |
+| `services/resume/generation_task_start.py` | 后台生成任务创建（同岗位去重、任务行 + 快照追溯行） |
+| `services/assistant/proposal_approval.py` | 写入提案「批准并执行」状态机（T01 重查目标 / 终态回写） |
+| `services/assistant/message_dispatch.py` | 助手发消息的入流准备（附件、上下文分块、消息行、provider、系统提示词） |
+| `services/drill/session_open.py` | 深挖开场（挑主张、建会话、第一条评分契约） |
+| `services/interview/session_open.py` | 模拟面试开场（材料校验、建会话、开场题落库） |
+| `services/job_preference_proposals.py` | 求职偏好「只在这次对话」提案（条件 UPDATE + session_note） |
+
+复用既有模块：`services/followup_sweep.py`（跟进卡整卡决策）、`services/job_preference_service.py`（偏好状态机与唯一读取入口）。
+
 ## 前端目录速览（frontend/src/）
 
 | 目录 | 职责 |

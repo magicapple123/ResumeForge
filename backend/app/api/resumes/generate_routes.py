@@ -14,11 +14,12 @@ patch 静默断开（部分用例靠真实配置兜底仍会绿，是最危险�
   完成时与简历记录同事务回写 resume_id。
 因此排队/运行期间切组、改参与清单、删组或改名都不会改变本次生成的来源（R-24/R-33），
 组改名/删除后历史仍能从快照行读到"本次使用"的组名与参与清单。
-"""
 
-import logging
-import threading
-import time
+**T2 分层**：两条链路的业务编排已下沉到 services/resume/generation_entry.py 与
+services/resume/generation_task_start.py；本模块只做 HTTP 错误映射、事务收尾、SSE 帧
+格式化与响应装配。快照/基线函数（freeze_generation_snapshot / build_baseline）的测试
+打桩点随之改到 generation_entry，见 tests/test_dataset_scope_stream.py。
+"""
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -27,109 +28,30 @@ from sqlalchemy.orm import Session
 from app.api import resumes as _api  # patch 锚点：调用期从包命名空间读取
 
 from ...database import get_db
-from ...models.job import Job
 from ...models.resume import ResumeGenerateTask
 from ...runtime import dataset_scope
 from ...runtime.dataset_scope import DatasetScopeError
-from ...runtime.log_redact import log_exception_redacted
-from ...schemas.job import JobOut
-from ...schemas.resume import GenerateRequest, GenerateTaskOut, ResumeContent
-from ...services import trash
-from ...services.career_scenarios.resolve import CareerContextError, resolve_context
-from ...services.claims import build_baseline
-from ...services.llm.base import LLMError
-from ...services.llm.usage_tasks import set_ambient_scope
-from ...services.rag.rag_receipt import append_rag_note, get_rag_receipt
-from ...services.rag.rag_service import generate_with_scope, prepare_selection_boost
-from ...services.rag.rag_visibility import rag_state_payload
-from ...services.resume import document_io
-from ...services.resume.generate_snapshot import (
-    consumed_has_content,
-    delete_generation_snapshot,
-    freeze_generation_snapshot,
-    persist_generation_snapshot,
-    snapshot_entry_ids,
+from ...schemas.resume import GenerateRequest, GenerateTaskOut
+from ...services.career_scenarios.resolve import CareerContextError
+from ...services.rag.rag_receipt import get_rag_receipt
+from ...services.resume.generation_entry import (
+    GenerationEntryError,
+    complete_generation_entry,
+    log_frozen_context,
+    prepare_generation_entry,
+    stream_generation_events,
 )
-from ...services.resume.generation_postprocess import enforce_material_only_echo
-from ...services.resume.resume_generate_manager import (
-    QUEUE_MESSAGE,
-    ResumeGenerateQueueFullError,
+from ...services.resume.generation_task_start import (
+    GenerationTaskStartError,
+    discard_generation_task,
+    prepare_generation_task,
 )
+from ...services.resume.resume_generate_manager import ResumeGenerateQueueFullError
 from ...services.resume.resume_generate_runner import (
     ResumeGenerateRunnerError,
     get_resume_generate_runner,
 )
-from ...services.resume.resume_generation_levels import generation_token_budget
-from ...services.resume.resume_generator import ResumeGenerator
-from ...services.resume.resume_record import save_record
-from ...services.resume.resume_task_state import active_task_for_job
-from ...services.resume.scenario_context import (
-    build_scenario_prompt_block,
-    scenario_section_order,
-)
 from ._shared import _format_sse
-
-logger = logging.getLogger(__name__)
-
-# 同岗位去重 + 建任务行必须原子的短锁（清单 §9.2）：两个并发请求都先查后插时，各自都会
-# 查到"没有活动任务"，于是同一岗位建出两条 pending——旧实现靠"单例运行器只收一个"兜住，
-# 并发化之后必须在创建处自己封口（单进程应用，不需要 DB 唯一索引/迁移）。只锁建任务
-# 这一段：快照冻结与库操作本来就在请求内，模型调用在锁外。
-_START_LOCK = threading.Lock()
-
-
-def _discard_empty_task(db: Session, task: ResumeGenerateTask, snapshot_id: int) -> None:
-    """启动失败时回滚这条空任务与空快照，不留孤儿。"""
-    delete_generation_snapshot(db, snapshot_id)
-    db.delete(task)
-    db.commit()
-
-
-def _log_frozen_context(snapshot, *, transport: str, task_id: int | None = None) -> None:
-    """记录"本次生成用了哪一版上下文"——只记标识与哈希，不记场景正文/就业状态。
-
-    计划 §15.3 要求日志能回答"这条任务用的是哪版场景"，同时禁止记录完整场景正文、
-    就业状态等用户私有信息。context_sha256 是快照的规范化哈希：既能与后续问题单对上，
-    又不能反推正文。
-    """
-    if snapshot is None:
-        return
-    logger.info(
-        "简历生成上下文已冻结 transport=%s task_id=%s origin=%s scenario_id=%s "
-        "preset_key=%s revision=%s catalog_version=%s context_sha256=%s",
-        transport,
-        task_id if task_id is not None else "-",
-        snapshot.scenario_origin,
-        snapshot.scenario_id if snapshot.scenario_id is not None else "-",
-        snapshot.preset_key or "-",
-        snapshot.scenario_revision if snapshot.scenario_revision is not None else "-",
-        snapshot.catalog_version or "-",
-        (snapshot.context_sha256 or "")[:16],
-    )
-
-
-def _log_frozen_profile(frozen, *, transport: str, task_id: int | None = None) -> None:
-    """记录"本次生成用了哪个组/哪份快照"——只记标识与计数，不记任何资料内容。"""
-    consumed = frozen.consumed
-    logger.info(
-        "简历生成资料快照已冻结 transport=%s task_id=%s group_id=%s is_default=%s "
-        "sections=%s entries=%s definition_revision=%s data_revision=%s",
-        transport,
-        task_id if task_id is not None else "-",
-        consumed.group_id,
-        consumed.is_default,
-        len(consumed.participating_keys),
-        sum(len(section.entries) for section in consumed.sections.values()),
-        frozen.definition_revision,
-        frozen.data_revision,
-    )
-
-
-def _ensure_profile_not_empty(frozen) -> None:
-    """资料是否为空必须按**本次快照**判断（不读旧资料表，R-46）。"""
-    if not consumed_has_content(frozen.consumed):
-        raise HTTPException(status_code=400, detail="个人资料为空，无法生成简历")
-
 
 router = APIRouter()
 
@@ -150,15 +72,6 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
     F3：当前组消费快照在本请求内冻结（租约内），生成器与保存段都只消费这份内存快照；
     快照追溯行在本请求内写入，保存成功时同事务回写 resume_id。
     """
-    # #35/A1：生成入口的数据边界——喂的是简历 + 资料投影 + 目标岗位（脱敏视图）；
-    # 目标语言取本次文档的语言，token 预算与篇幅上限挂钩（见 generation_token_budget）。
-    # 后台任务线程会复制本请求的 contextvars，因此这里声明一次即覆盖整条生成链路。
-    set_ambient_scope(
-        input_scope="resume+profile+job",
-        masked=True,
-        language=payload.options.language,
-        budget=generation_token_budget(payload.options),
-    )
     try:
         lease = dataset_scope.acquire_lease("resume-generate-sse")
     except DatasetScopeError as exc:
@@ -173,78 +86,29 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         )
 
     try:
-        job = db.get(Job, payload.job_id) if payload.job_id is not None else None
-        if payload.job_id is not None and (job is None or trash.is_deleted(job)):
-            raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
-
-        # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 对
-        # app.api.resumes.get_llm_config 的 patch 契约。
-        config = _api.get_llm_config(db)
-        if not config.base_url or not config.model:
-            raise HTTPException(status_code=400, detail="尚未配置大模型 API")
-
-        # A5：显式选用的职业场景在**取租约之后、流开始之前**解析并冻结。缺省/null
-        # 不解析（旧请求零差异）；引用非法/归档/版本不符时明确失败，不创建流。
-        try:
-            snapshot = resolve_context(db, payload.options.career_context)
-        except CareerContextError as exc:
-            db.close()
-            lease.release()
-            return JSONResponse(
-                status_code=exc.status_code,
-                content={"detail": exc.detail, "code": exc.code},
-            )
-        _log_frozen_context(snapshot, transport="sse")
-        career_block = build_scenario_prompt_block(snapshot)
-        context_snapshot = snapshot.model_dump() if snapshot is not None else None
-        # #30：场景 preferred_sections → 板块顺序（用户显式拖过顺序时不覆盖）；
-        # 与后台 runner 同一语义（resume_generate_runner 的 save_format_config）。
-        scenario_order = None
-        if career_block and not (payload.options.format_config or {}).get("section_order"):
-            try:
-                scenario_order = scenario_section_order(snapshot)
-            except Exception:  # noqa: BLE001 - 顺序推导失败按未用场景继续
-                logger.warning("SSE 生成场景板块顺序推导失败")
-        save_format_config = (
-            {**(payload.options.format_config or {}), **scenario_order}
-            if scenario_order
-            else payload.options.format_config
+        entry = prepare_generation_entry(
+            db,
+            payload,
+            # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 等对
+            # app.api.resumes.get_llm_config / create_provider 的 patch 契约。
+            load_llm_config=_api.get_llm_config,
+            create_provider=_api.create_provider,
         )
-
-        # F3 §1：冻结当前组消费快照（租约内、db 仍打开）；随后立即写追溯行，
-        # 生成段不再读"当前组"。
-        frozen = freeze_generation_snapshot(db)
-        _ensure_profile_not_empty(frozen)
-        _log_frozen_profile(frozen, transport="sse")
-        snapshot_row = persist_generation_snapshot(db, frozen)
+        # 事务边界在本层：快照追溯行先提交，之后才允许生成流把它回写 resume_id。
         db.commit()
-        snapshot_pk = int(snapshot_row.id)
-
-        # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 对
-        # app.api.resumes.create_provider 的 patch 契约。
-        generator = ResumeGenerator(_api.create_provider(config))
-        job_out = JobOut.model_validate(job) if job is not None else None
-        # RAG（默认关闭）：在冻结快照上旁路算一次 boost / 查询扩展词。任何失败
-        # （未配置/超时/坏响应）都返回空作用域，生成链行为与改造前逐字节一致。
-        _retrieval_started = time.perf_counter()
-        retrieval_scope = await prepare_selection_boost(
-            frozen.consumed,
-            job_out,
-            config=config,
-            db=db,
-            dataset_id=lease.identity.dataset_id,
-        )
-        # #30：把"这一次用没用上语义检索"固定下来，供 SSE 回执与 done 审计共用。
-        # 只读 scope，不改生成链行为。
-        retrieval_payload = rag_state_payload(
-            retrieval_scope,
-            elapsed_ms=int((time.perf_counter() - _retrieval_started) * 1000),
-        )
-        # 事实台账里已确认的条目作为事实基线交给模型；台账为空时它就是空基线。
-        # F3 契约 §4：只带入能关联到本次快照条目的正向事实（组外/旧资料台账不自动带入）。
-        baseline = build_baseline(db, source_entry_ids=snapshot_entry_ids(frozen.consumed))
+        await complete_generation_entry(db, entry, payload, dataset_id=lease.identity.dataset_id)
         # 流式模型调用可能持续数分钟；快照完成后立即释放请求 Session，避免占满连接池。
         db.close()
+    except CareerContextError as exc:
+        db.close()
+        lease.release()
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail, "code": exc.code},
+        )
+    except GenerationEntryError as exc:
+        lease.release()
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     except Exception:
         # 快照阶段失败（404/400/内部错误）：先还租约再抛，否则切换会一直被这份
         # 泄漏的租约挡到超时。
@@ -256,102 +120,10 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
     factory = dataset_scope.frozen_session_factory(lease.identity)
 
     async def event_stream():
-        # #30：检索发生在生成之前，所以先给回执——用户不必等整篇生成完才知道"这次没检索"。
-        yield _format_sse({"type": "retrieval", **retrieval_payload})
-        raw_parts: list[str] = []
-        parsed: dict | None = None
-        document: dict | None = None
-        warnings: list[str] = []
-        done_event: dict | None = None
         try:
-            async for event in generate_with_scope(
-                generator.generate(
-                    None,
-                    job_out,
-                    payload.options,
-                    baseline=baseline,
-                    career_context_block=career_block,
-                    fact_sections=None,
-                    consumed=frozen.consumed,
-                ),
-                retrieval_scope,
-            ):
-                if event["type"] == "delta":
-                    raw_parts.append(event["text"])
-                if event["type"] == "done":
-                    parsed = event["resume"]
-                    warnings = event["warnings"]
-                    done_event = event
-                    continue
-                yield _format_sse(event)
-            if parsed is not None and done_event is not None:
-                # C6/R-43：仅素材字段被抄进纸面正文 → error 事件，不写库。
-                echo_error = enforce_material_only_echo(
-                    ResumeContent.model_validate(parsed), frozen.consumed
-                )
-                if echo_error:
-                    yield _format_sse({"type": "error", "message": echo_error})
-                    return
-                with factory() as save_db:
-                    # SSE 的 done.resume 与详情/保存接口必须同一种形状（v2）：
-                    # 在保存同一事务的快照里取自定义字段定义，转换一次供事件使用。
-                    document = document_io.ensure_document_version(
-                        parsed,
-                        language=payload.options.language,
-                        format_config=save_format_config,
-                        custom_fields=document_io.custom_field_definitions(save_db),
-                    )
-                    record = save_record(
-                        save_db,
-                        parsed,
-                        warnings,
-                        job_out,
-                        "".join(raw_parts),
-                        generator.provider.config.model,
-                        payload.options.enhance,
-                        payload.options.enhancement_level,
-                        requested_title=payload.title,
-                        template=payload.options.template,
-                        format_name=payload.options.format_name,
-                        page_limit=payload.options.page_limit,
-                        font_scale=payload.options.font_scale,
-                        language=payload.options.language,
-                        format_config=save_format_config,
-                        custom_instruction=payload.options.custom_instruction,
-                        coverage_notes=done_event.get("coverage_notes") or [],
-                        rationale=append_rag_note(
-                            done_event.get("rationale") or "", payload=retrieval_payload
-                        ),
-                        fact_annotations=done_event.get("fact_annotations") or [],
-                        document_mode=payload.options.document_mode,
-                        context_snapshot=context_snapshot,
-                        # 与 SSE done.resume 复用同一份转换结果（只转一次，id 一致）。
-                        document=document,
-                        commit=False,
-                    )
-                    # F3 §1：简历记录与快照行同事务提交（resume_id 回写）。
-                    from ...services.resume.generate_snapshot import (
-                        attach_snapshot_resume,
-                    )
-
-                    attach_snapshot_resume(save_db, snapshot_id=snapshot_pk, resume_id=record.id)
-                    save_db.commit()
-                    save_db.refresh(record)
-                # 只有持久化成功后才宣布完成；断流不会留下“成功但无历史记录”的状态。
-                yield _format_sse({"type": "saved", "record_id": record.id})
-                if document is not None:
-                    done_event = {**done_event, "resume": document}
-                # 与 retrieval 回执同一份数据：页面展示与"可审计的一行"不会互相矛盾。
-                done_event = {**done_event, "rag": retrieval_payload}
-                yield _format_sse(done_event)
-        except LLMError:
-            logger.warning("简历生成失败（模型错误，用户可见错误已固定脱敏）")
-            yield _format_sse({"type": "error", "message": "模型服务暂时无法完成生成，请稍后重试"})
-        except Exception:  # noqa: BLE001 - 流式接口必须兜底，异常转为事件而非中断连接
-            log_exception_redacted(logger, "简历生成发生内部错误")
-            yield _format_sse(
-                {"type": "error", "message": "生成过程中发生内部错误，请查看后端日志"}
-            )
+            async for item in stream_generation_events(entry, payload, save_factory=factory):
+                # SSE 帧格式属于响应装配：业务事件由服务层产出，路由只负责编码与收尾。
+                yield _format_sse(item)
         finally:
             lease.release()
 
@@ -380,76 +152,44 @@ def start_resume_generation(payload: GenerateRequest, db: Session = Depends(get_
     profile_usage_snapshot（task_id）——worker 不再读当前组；排队/运行中切组、删组
     不改变任务来源（R-24/R-33）。
     """
-    # #35/A1：后台生成入口同样在入队前声明边界（runner.start 复制本请求 contextvars）。
-    set_ambient_scope(
-        input_scope="resume+profile+job",
-        masked=True,
-        language=payload.options.language,
-        budget=generation_token_budget(payload.options),
-    )
-    job = db.get(Job, payload.job_id) if payload.job_id is not None else None
-    if payload.job_id is not None and (job is None or trash.is_deleted(job)):
-        raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
-
-    # 经包命名空间调用期读取，与 generate_resume 的 get_llm_config patch 锚点同源。
-    config = _api.get_llm_config(db)
-    if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
-
-    # A5：任务创建时解析并**冻结**场景快照（计划 §6.4）：runner 只读 task.context_snapshot，
-    # 运行中不再查询"当前场景"。失败明确返回，不创建任务。
     try:
-        snapshot = resolve_context(db, payload.options.career_context)
+        started = prepare_generation_task(
+            db,
+            payload,
+            # 经包命名空间调用期读取，与 generate_resume 的 get_llm_config patch 锚点同源。
+            load_llm_config=_api.get_llm_config,
+        )
     except CareerContextError as exc:
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail, "code": exc.code},
         )
-
-    # 同岗位去重（清单 §9.2）：同一岗位已有 pending/running 时 409（防连点/防同岗两份），
-    # 不同岗位放行；通用简历（job_id=None）不受这条守卫影响，可同时生成多份。
-    # 「查重 → 建任务 → commit」必须在同一把短锁里，否则两个并发请求都能查到"没有活动任务"。
-    with _START_LOCK:
-        if payload.job_id is not None and active_task_for_job(db, payload.job_id) is not None:
-            raise HTTPException(status_code=409, detail="这个岗位已有一份简历正在进行中")
-
-        # F3 §1：冻结当前组消费快照（入队前），并随任务一起提交。
-        frozen = freeze_generation_snapshot(db)
-        _ensure_profile_not_empty(frozen)
-        _log_frozen_profile(frozen, transport="task")
-
-        task = ResumeGenerateTask(
-            job_id=payload.job_id,
-            title=payload.title,
-            # 排队文案先落库；拿到槽位时 worker 会立刻覆盖为进度文案（清单 §9.3-A3）。
-            message=QUEUE_MESSAGE,
-            options=payload.options.model_dump(),
-            context_snapshot=snapshot.model_dump() if snapshot is not None else None,
-        )
-        db.add(task)
-        db.flush()
-        snapshot_row = persist_generation_snapshot(db, frozen, task_id=task.id)
-        db.commit()
-        db.refresh(task)
-    _log_frozen_context(snapshot, transport="task", task_id=task.id)
+    except GenerationTaskStartError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    # 事务边界在本层：任务行与快照行同一事务提交后，才允许后台 runner 接手。
+    db.commit()
+    db.refresh(started.task)
+    log_frozen_context(started.snapshot, transport="task", task_id=started.task.id)
 
     runner = get_resume_generate_runner()
     try:
         runner.start(
-            task.id,
-            generation_snapshot=frozen,
-            snapshot_id=int(snapshot_row.id),
+            started.task.id,
+            generation_snapshot=started.frozen,
+            snapshot_id=int(started.snapshot_row.id),
         )
     except ResumeGenerateQueueFullError as exc:
         # 排队已满：提交被拒（429），回滚这条空任务与空快照，不留孤儿。
-        _discard_empty_task(db, task, int(snapshot_row.id))
+        discard_generation_task(db, started)
+        db.commit()
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except ResumeGenerateRunnerError as exc:
         # 启动失败（极端竞态：另一条任务先占了最后槽位 / 数据集正在切换）：回滚空任务
         # 与空快照，不留孤儿。
-        _discard_empty_task(db, task, int(snapshot_row.id))
+        discard_generation_task(db, started)
+        db.commit()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return GenerateTaskOut.model_validate(task)
+    return GenerateTaskOut.model_validate(started.task)
 
 
 @router.get("/generate/tasks/{task_id}", response_model=GenerateTaskOut)

@@ -10,6 +10,9 @@
 - 提案绑定数据集代次：A→B→A 之后旧提案批准被拒（410/409 类语义）；
 - GET 提案状态不暴露其他作用域的提案详情；
 - 冻结工厂从租约身份派生：切换尝试期间写入仍落原库。
+
+T2 把批准状态机下沉到 ``app/services/assistant/proposal_approval.py``，两条假 handler
+用例的 ``get_tool`` 打桩点随之改为该模块（补丁落在实现所在命名空间，约束力不变）。
 """
 
 import time
@@ -280,7 +283,7 @@ def test_handler_failure_after_internal_commit_is_unknown_not_failed(client, mon
     修复前这里返回 422「写入执行失败」并 mark_failed——而数据其实已经落库，用户照着
     提示重发就会二次写入。现在如实报"结果未知"（409）并封死这条提案。
     """
-    from app.api import assistant_proposals as endpoint
+    from app.services.assistant import proposal_approval as flow
 
     class _CommittingTool:
         name = _TARGET_TOOL
@@ -296,7 +299,7 @@ def test_handler_failure_after_internal_commit_is_unknown_not_failed(client, mon
             db.commit()
             raise RuntimeError("模拟：提交之后构造返回值时失败")
 
-    monkeypatch.setattr(endpoint, "get_tool", lambda _name: _CommittingTool())
+    monkeypatch.setattr(flow, "get_tool", lambda _name: _CommittingTool())
 
     proposal = _proposal()
     response = client.post(_APPROVE.format(proposal.proposal_id))
@@ -315,7 +318,7 @@ def test_handler_failure_after_internal_commit_is_unknown_not_failed(client, mon
 
 def test_handler_failure_before_any_commit_is_still_reported_as_failed(client, monkeypatch):
     """对照组：提交之前就抛，数据没有任何变化——这时"执行失败"才是真话。"""
-    from app.api import assistant_proposals as endpoint
+    from app.services.assistant import proposal_approval as flow
 
     class _FailingTool:
         name = _TARGET_TOOL
@@ -323,7 +326,7 @@ def test_handler_failure_before_any_commit_is_still_reported_as_failed(client, m
         def handler(self, db, arguments):
             raise RuntimeError("模拟：校验阶段失败")
 
-    monkeypatch.setattr(endpoint, "get_tool", lambda _name: _FailingTool())
+    monkeypatch.setattr(flow, "get_tool", lambda _name: _FailingTool())
 
     proposal = _proposal()
     response = client.post(_APPROVE.format(proposal.proposal_id))

@@ -26,7 +26,6 @@ from ..models.drill import (
     REHEARSE_VARIANT,
     DrillSession,
 )
-from ..models.job import Job
 from ..schemas.drill import (
     DrillAnswerRequest,
     DrillAnswerResult,
@@ -41,7 +40,6 @@ from ..services.actions.catalog import all_actions
 from ..services.drill import (
     apply_verdict,
     current_question,
-    drop_empty_session,
     evaluate_answer,
     finish_session,
     generate_plan,
@@ -58,6 +56,11 @@ from ..services.drill import (
 )
 from ..services.drill import (
     session_out as _session_out,
+)
+from ..services.drill.session_open import (
+    DrillSessionOpenError,
+    open_drill_session,
+    prepare_drill_session,
 )
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
@@ -96,81 +99,30 @@ async def create_session(payload: DrillCreate, request: Request, db: Session = D
     """开一场深挖：先选出要验证的主张，再为第一条生成**评分契约**。
 
     契约在这一步就落库了——用户看到问题的时候，判定标准已经定下来。
+
+    T2：挑主张/建会话/生成契约已下沉到 `services/drill/session_open.py`；本层只做
+    事务收尾（提交会话行、失败时删掉空会话）、HTTP 错误映射与响应组装。
     """
-    # 不传 claim_ids = 旧口径（全部已确认的）；显式空列表在 schema 层就被 422 拦下了。
-    claims = select_claims(db, payload.claim_ids or [], payload.max_questions)
-    if not claims:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "没有可深挖的主张。深挖只针对台账里「已确认」的条目——"
-                "先在「事实台账」里确认几条，再回来开这一场。"
-            ),
-        )
-
-    job = db.get(Job, payload.job_id) if payload.job_id else None
-    # 标题默认带上**第一条主张**的名字：一页十几场「主张深挖」谁也认不出是哪一场，
-    # 而列表里区分它们的唯一线索就是标题。
-    first_claim = claims[0].title or claims[0].subject or f"条目 {claims[0].id}"
-    default_title = (
-        f"{job.title} · {first_claim}" if job is not None else f"{first_claim} · 主张深挖"
-    )
-    session = DrillSession(
-        title=payload.title.strip() or default_title[:128],
-        job_id=payload.job_id,
-        job_title=job.title if job is not None else "",
-        company=job.company if job is not None else "",
-        feedback_policy=payload.feedback_policy,
-        claim_ids=[item.id for item in claims],
-        max_questions=min(payload.max_questions, len(claims)),
-    )
-    db.add(session)
-    db.commit()
-    db.refresh(session)
-
-    config = get_llm_config(db)
-    if not llm_is_configured(config):
-        # 没有模型就开不了这场深挖——契约必须由模型按主张生成，编一份假的等于没有标准。
-        db.delete(session)
-        db.commit()
-        raise HTTPException(
-            status_code=400,
-            detail="尚未配置大模型：深挖的每一题都要先按你的主张生成评分标准",
-        )
-
-    provider = create_provider(config)
-    job_title, company = session.job_title, session.company
-    session_id = session.id
-    db.close()  # 模型调用期间不要占着连接池
-
-    # 第一题没生成出来时把这条空会话删掉（实现见 services/drill.drop_empty_session：
-    # 用户会看到"一场问不出题的记录"，那比报错更让人困惑；删的时候必须另开一条会话，
-    # 原请求会话在上面已经关了）。
+    draft = None
     try:
-        plan_coro = generate_plan(provider, claims[0], job_title=job_title, company=company)
-        plan = await run_or_gone(request, plan_coro, what="深挖第一题")
-    except LLMError as exc:
-        logger.warning("生成面试深挖契约失败：%s", exc)
-        drop_empty_session(session_id)
-        raise HTTPException(status_code=502, detail=f"生成第一题失败：{exc}") from exc
-    except Exception:  # noqa: BLE001 - 外部模型异常不能变成 500
-        logger.exception("生成面试深挖契约发生内部错误")
-        drop_empty_session(session_id)
-        raise HTTPException(status_code=502, detail="生成第一题失败") from None
-
-    with fresh_session() as write_db:
-        stored = write_db.get(DrillSession, session_id)
-        if stored is None:  # pragma: no cover - 只在并发删除时发生
-            raise HTTPException(status_code=404, detail="这场深挖记录不存在或已被删除")
-        claim = write_db.get(type(claims[0]), claims[0].id)
-        if claim is None:  # pragma: no cover - 与上面的 stored 同一并发删除窗口
-            raise HTTPException(status_code=404, detail="这道题的事实台账不存在或已被删除")
-        open_contract(stored, claim, plan)
-        # 立刻 flush：契约的 id 要给后续轮次做外键，None 会让"这轮属于哪道题"对不上。
-        write_db.flush()
-        write_db.commit()
-        write_db.refresh(stored)
-        return _session_out(stored)
+        draft = prepare_drill_session(db, payload)
+        # 事务边界在本层：会话行先提交，模型调用期间不占请求会话（服务内会关掉它）。
+        db.commit()
+        db.refresh(draft.session)
+        session_id = await open_drill_session(
+            db,
+            draft,
+            load_llm_config=get_llm_config,
+            create_provider=create_provider,
+            run_plan=lambda coro: run_or_gone(request, coro, what="深挖第一题"),
+        )
+    except DrillSessionOpenError as exc:
+        if exc.discard_session and draft is not None:
+            db.delete(draft.session)
+            db.commit()
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    # 服务返回时请求会话已关闭（模型调用期间不占连接池），按 id 重新读一次再序列化。
+    return _session_out(_session_or_404(db, session_id))
 
 
 add_action_route(router, all_actions()["get_drill_report"], route_path="/{session_id}")

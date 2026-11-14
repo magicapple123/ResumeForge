@@ -41,7 +41,8 @@ def test_middleware_declares_scope() -> None:
 
 
 def test_assistant_declares_scope_with_relaxed_masking() -> None:
-    source = _read("app/api/assistant.py")
+    # T2 起入流准备在 services/assistant/message_dispatch.py（入口声明跟着实现走）。
+    source = _read("app/services/assistant/message_dispatch.py")
     assert "set_ambient_scope(" in source
     # 放宽模式开 = 不脱敏，这是 #35 审计表里「脱敏」一列的口径。
     assert "masked=not relaxed_mode" in source
@@ -129,7 +130,8 @@ def test_middleware_defaults_declare_language_and_budget() -> None:
 
 
 def test_generate_entry_declares_language_and_budget() -> None:
-    source = _read("app/api/resumes/generate_routes.py")
+    # T2：生成入口的编排与边界声明在 services/resume/generation_entry.py。
+    source = _read("app/services/resume/generation_entry.py")
     assert "language=payload.options.language" in source
     assert "generation_token_budget(payload.options)" in source
 
@@ -144,7 +146,7 @@ def test_job_analysis_declares_language_and_budget() -> None:
 
 
 def test_assistant_and_settings_probe_declare_budget() -> None:
-    assistant = _read("app/api/assistant.py")
+    assistant = _read("app/services/assistant/message_dispatch.py")
     assert "budget=DEFAULT_AUDIT_BUDGET" in assistant
     settings = _read("app/api/settings.py")
     assert "SETTINGS_PROBE_TOKEN_BUDGET" in settings

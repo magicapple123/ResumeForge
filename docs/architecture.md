@@ -120,6 +120,16 @@ backend/app/
 
 ## 模块化边界与兼容入口
 
+### 路由层允许与禁止（T2 落地）
+
+T2 把 8 个业务函数从 `app/api` 下沉到 `app/services` 之后，路由层职责固化为下面几条（守卫：`backend/tests/test_api_layer_rules.py`）：
+
+- **允许**：`db.get` 做主键存在性校验；调用 service 后用 `db.commit()` 收尾事务；把 service 返回的 ORM 对象 / dataclass 组装成响应模型；`StreamingResponse` / `JSONResponse` 装配。
+- **允许但必须保持 async**：SSE / 流式端点（要 await LLM 或逐块 yield）保持 `async def`；同步 SQLAlchemy 调用只限 `db.get` / `db.commit` 这类单元工作收尾。
+- **禁止**：在路由函数体内构造查询（`select(...)`、`db.query(...)`、`db.execute(...)`）——查询构造是服务层的唯一职责，放回路由就等于同一查询语义有第二份实现。
+- **禁止**：service 结束"路由持有的请求会话"的事务——请求会话的 `commit()` 留在路由。流式 / 多会话链路（SSE 保存段、深挖契约落库、提案执行段）按原实现保留提交点，各自模块注释写明理由。
+- **服务签名**：`(db: Session, ...) -> 领域对象`（ORM 对象或 dataclass），不返回 pydantic 响应模型；HTTP 状态码映射留在路由。
+
 入口层只负责装配，不承载业务规则：`app/application.py` 提供 `create_app()`、生命周期、路由注册和统一异常响应，`app/main.py` 保留原有 `app.main:app` 启动路径及历史导出符号。早期 SQLite 兼容列集中在 `database_compat.py`，正式结构仍以 Alembic 为唯一来源。这样可以在测试中独立创建应用，同时避免路由、迁移和兼容逻辑互相耦合。
 
 前端页面按领域组件拆分：资料、设置、岗位和简历编辑器的字段编辑器位于各自 `features/<领域>/` 目录（`components/` 只保留 `common/` 通用交互原语），共享类型位于 `types/`，样式按视觉域位于 `styles/`；全局投投悬浮球作为独立的 `features/tou-tou/*` 功能模块挂在 `MainLayout`，浮窗直接复用 `AssistantPage` / `AssistantComposer` / `AssistantMessageList` 与助手流式 hook，只在界面层隐藏附件、技能、岗位 / 简历关联等复杂控件，不复制助手业务逻辑；`types/index.ts` 继续 re-export 旧路径，避免外部组件一次性迁移。助手会话通过 `chat_conversation.surface` 区分 `page` 与 `floating`，两种入口共用工具、权限和系统提示，但历史查询、读写、删除、导出和发送接口都按作用域过滤。

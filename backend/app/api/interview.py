@@ -25,7 +25,6 @@ from ..models.interview import (
     InterviewMessage,
     InterviewSession,
 )
-from ..models.job import Job
 from ..schemas.interview import (
     InterviewAnswerCreate,
     InterviewAnswerResult,
@@ -35,7 +34,6 @@ from ..schemas.interview import (
     InterviewDurationUpdate,
 )
 from ..schemas.material import MaterialCreate, MaterialOut
-from ..services import trash
 from ..services.actions import add_action_route
 from ..services.actions.catalog import all_actions
 from ..services.interview import interview_questions as interview_questions_service  # noqa: F401
@@ -46,12 +44,16 @@ from ..services.interview.interview import (
     generate_question,
     generate_report,
     mark_finished,
-    session_persona,
 )
 from ..services.interview.interview_camera import delete_recording, has_real_report
 from ..services.interview.interview_context import _claims_json
 from ..services.interview.interview_read import list_sessions as list_session_records
 from ..services.interview.interview_report_markdown import _report_markdown
+from ..services.interview.session_open import (
+    InterviewSessionOpenError,
+    prepare_interview_session,
+    record_opening_question,
+)
 from ..services.llm.base import LLMError
 from ..services.materials import create_material as create_material_record
 from ._disconnect import client_gone, run_until_disconnect
@@ -61,7 +63,6 @@ from .interview_question_routes import register_question_routes
 from .interview_revise import register_revise_routes
 from .interview_shared import (
     MAX_JOB_CONTEXT_FOR_INTERVIEW,  # noqa: F401  (re-export：interview_answer_review 从本模块取)
-    _default_title,
     _job_text,
     _mark_interrupted,
     _record_answer,
@@ -186,81 +187,42 @@ def list_sessions(limit: int = Query(default=50, ge=1, le=200), db: Session = De
 async def create_session(payload: InterviewCreate, request: Request, db: Session = Depends(get_db)):
     """开一场面试：先落库会话，再让面试官问第一个问题。
 
-    每一侧材料都是**二选一**（记录 or 导入的文件，见 ``InterviewCreate``）：面试官只会读
+    每一侧材料都是**二选一**（记录 or 导入的文件，见 `InterviewCreate`）：面试官只会读
     这两份内容，所以指向一份已删除的简历/岗位时，与其开一场看不到材料的面试，不如直接
     告诉用户。导入的文件已经是提取好的文本（上传时就校验过），这里不再解析。
+
+    T2：会话初始化（材料校验 + 建行）已下沉到 `services/interview/session_open.py`；
+    模型调用的两个打桩点（`_require_provider` / `_ask_next_question`）与事务收尾留在本层。
     """
-    provider, model = _require_provider(db)
-    job = db.get(Job, payload.job_id) if payload.job_id is not None else None
-    if payload.job_material is None and payload.job_id is None:
-        # 缺来源与"指向的已被删除"是两件事：前者是用户少选了一步，后者是数据变了，
-        # 说清是哪一种，用户才知道该去补选还是重选。
-        raise HTTPException(
-            status_code=422, detail="这场面试缺少岗位材料：既没有选记录，也没有导入文件"
-        )
-    if payload.job_material is None and (job is None or trash.is_deleted(job)):
-        raise HTTPException(status_code=404, detail="关联岗位不存在或已被删除")
-    record = (
-        _resume_record_or_none(db, payload.resume_id) if payload.resume_id is not None else None
-    )
-    if payload.resume_material is None and payload.resume_id is None:
-        raise HTTPException(
-            status_code=422, detail="这场面试缺少简历材料：既没有选记录，也没有导入文件"
-        )
-    if payload.resume_material is None and record is None:
-        raise HTTPException(status_code=404, detail="关联简历不存在或已被删除")
-    session = InterviewSession(
-        title=_default_title(payload, job),
-        job_id=job.id if job is not None else None,
-        job_title=(job.title if job is not None else ""),
-        company=(job.company if job is not None else ""),
-        resume_id=record.id if record is not None else None,
-        resume_title=(record.title[:256] if record is not None else ""),
-        # 导入的材料是快照：文件名进列表，正文进提示词（#41）。
-        job_material_name=(payload.job_material.name if payload.job_material else ""),
-        job_material_text=(payload.job_material.text if payload.job_material else ""),
-        resume_material_name=(payload.resume_material.name if payload.resume_material else ""),
-        resume_material_text=(payload.resume_material.text if payload.resume_material else ""),
-        interview_type=payload.interview_type,
-        difficulty=payload.difficulty,
-        interviewer_style=payload.interviewer_style,
-        rounds=payload.rounds,
-        rounds_min=payload.rounds_min,
-        persona=payload.persona.strip(),
-        focus=payload.focus.strip(),
-        model=model,
-    )
-    db.add(session)
+    try:
+        draft = prepare_interview_session(db, payload, require_provider=_require_provider)
+    except InterviewSessionOpenError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    # 先落库空会话再调模型：模型调用（十几秒到分钟级）期间不维持请求会话的写事务。
     db.commit()
-    db.refresh(session)
+    db.refresh(draft.session)
 
     try:
         # 开场就要现场生成第一题（十几秒的模型调用）：客户端断开就停，别白烧 token。
         turn = await run_until_disconnect(
-            request, _ask_next_question(db, session, provider), what="模拟面试开场"
+            request, _ask_next_question(db, draft.session, draft.provider), what="模拟面试开场"
         )
     except LLMError:
         # 开场失败就删掉这条空会话：留一条没有任何内容的面试只会让列表变乱。
-        db.delete(session)
+        db.delete(draft.session)
         db.commit()
         raise HTTPException(status_code=502, detail="面试助手暂时无法开始本轮") from None
     if turn is None:
         # 客户端断在开场：同样删掉这条空会话，再报"没人收这个结果"。
-        db.delete(session)
+        db.delete(draft.session)
         db.commit()
         raise client_gone("模拟面试开场")
     question, _feedback, _done = turn
-    add_message(
-        session,
-        role="interviewer",
-        content=question,
-        context={"index": 1, "rounds": session.rounds, "persona": session_persona(session)},
-    )
+    record_opening_question(draft.session, question)
     db.commit()
-    db.refresh(session)
-    logger.info("模拟面试已开始 id=%s type=%s", session.id, session.interview_type)
-    return _to_detail(session)
-
+    db.refresh(draft.session)
+    logger.info("模拟面试已开始 id=%s type=%s", draft.session.id, draft.session.interview_type)
+    return _to_detail(draft.session)
 
 add_action_route(router, all_actions()["get_interview_report"], route_path="/{session_id}")
 def read_session(session_id: int, db: Session = Depends(get_db)):

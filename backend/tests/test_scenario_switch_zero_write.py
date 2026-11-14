@@ -110,7 +110,8 @@ def test_context_logging_records_version_hash_not_scenario_body(client, monkeypa
         lambda resolved: SuccessfulProvider(resolved),
     )
 
-    with caplog.at_level(logging.INFO, logger="app.api.resumes.generate_routes"):
+    # T2：冻结日志随编排下沉到 generation_entry（日志文本不变，记录器名跟着实现走）。
+    with caplog.at_level(logging.INFO, logger="app.services.resume.generation_entry"):
         started = client.post(
             "/api/resumes/generate/tasks",
             json={

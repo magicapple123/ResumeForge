@@ -215,8 +215,9 @@ def test_sse_generate_acquires_the_lease_before_reading_snapshots(client, monkey
         return real_acquire(owner)
 
     # F3：SSE 不再读旧资料表，改为在租约内冻结当前组消费快照（freeze_generation_snapshot）。
+    # T2：生成编排已下沉到 services/resume/generation_entry.py，探针打桩点跟着实现走。
     real_freeze = __import__(
-        "app.api.resumes.generate_routes", fromlist=["freeze_generation_snapshot"]
+        "app.services.resume.generation_entry", fromlist=["freeze_generation_snapshot"]
     ).freeze_generation_snapshot
 
     def spy_freeze(db):
@@ -224,7 +225,7 @@ def test_sse_generate_acquires_the_lease_before_reading_snapshots(client, monkey
         return real_freeze(db)
 
     real_baseline = __import__(
-        "app.api.resumes.generate_routes", fromlist=["build_baseline"]
+        "app.services.resume.generation_entry", fromlist=["build_baseline"]
     ).build_baseline
 
     def spy_baseline(db, **kwargs):
@@ -233,9 +234,9 @@ def test_sse_generate_acquires_the_lease_before_reading_snapshots(client, monkey
 
     monkeypatch.setattr(dataset_scope, "acquire_lease", spy_acquire)
     monkeypatch.setattr(
-        "app.api.resumes.generate_routes.freeze_generation_snapshot", spy_freeze
+        "app.services.resume.generation_entry.freeze_generation_snapshot", spy_freeze
     )
-    monkeypatch.setattr("app.api.resumes.generate_routes.build_baseline", spy_baseline)
+    monkeypatch.setattr("app.services.resume.generation_entry.build_baseline", spy_baseline)
 
     class SuccessfulProvider(BaseLLMProvider):
         async def chat(self, _messages, *, thinking: bool = True):  # pragma: no cover
