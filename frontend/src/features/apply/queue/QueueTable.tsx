@@ -174,11 +174,13 @@ export function QueueTable({
             type="text"
             size="small"
             className="apply-queue-sort"
-            aria-label={t(
+            // 可见文字是「参考分」(+「 ↓」)，无障碍名必须以它开头：之前只写"按…排序"，
+            // 排序列切到"加入时间"后名字与可见文字对不上（axe label-content-name-mismatch）。
+            aria-label={`${t("applyQueue.column.match")}${sortKey === "score" ? " ↓" : ""} · ${t(
               sortKey === "joined"
                 ? "applyQueue.score.sortByScore"
                 : "applyQueue.score.sortByJoinedAt",
-            )}
+            )}`}
             onClick={() => setSortKey((current) => nextSortKey(current))}
           >
             {t("applyQueue.column.match")}

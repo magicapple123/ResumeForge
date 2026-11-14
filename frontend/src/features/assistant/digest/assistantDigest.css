@@ -23,7 +23,9 @@
   background: var(--rf-warning-text);
 }
 .assistant-digest-popover {
-  width: min(620px, calc(100vw - 32px));
+  /* 375 宽实测：气泡锚点 left≈44，`100vw - 32px` 再加 antd 外层的 12px 内边距
+     会把右缘推到 387（document 多 12px 横向滚动）。按"锚点 + 外层内边距 + 4px 余量"留。 */
+  width: min(620px, calc(100vw - 60px));
   max-height: 60vh;
   overflow-y: auto;
 }

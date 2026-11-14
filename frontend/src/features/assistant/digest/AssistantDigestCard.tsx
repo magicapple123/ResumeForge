@@ -178,36 +178,30 @@ export default function AssistantDigestCard({ enabled = true }: { enabled?: bool
       </Card>
     </div>
   );
+  const summaryText = hasItems
+    ? `${t("assistantBreadth.digest.changes", { count: changes })} · ${t(
+        "assistantBreadth.digest.summary.stale",
+        { count: countFor("stale_applications") },
+      )} · ${t("assistantBreadth.digest.summary.expired", { count: countFor("expired_jobs") })}`
+    : t("assistantBreadth.digest.summary.empty");
+
   return (
     <Popover
       open={open}
       onOpenChange={changeOpen}
       trigger="click"
       placement="bottomLeft"
-      styles={{ content: { padding: 0 } }}
+      styles={{ content: { padding: 0 }, root: { maxWidth: "calc(100vw - 32px)" } }}
       content={content}
     >
       <Button
         type="text"
         className="assistant-digest-summary"
         aria-expanded={open}
-        aria-label={t("assistantBreadth.digest.title")}
       >
         {changes > 0 ? <span className="assistant-digest-change-dot" aria-hidden="true" /> : null}
         <strong>{t("assistantBreadth.digest.title")}</strong>
-        <span className="assistant-digest-summary-counts">
-          {hasItems ? (
-            <>
-              {t("assistantBreadth.digest.changes", { count: changes })} ·{" "}
-              {t("assistantBreadth.digest.summary.stale", {
-                count: countFor("stale_applications"),
-              })}{" "}
-              · {t("assistantBreadth.digest.summary.expired", { count: countFor("expired_jobs") })}
-            </>
-          ) : (
-            t("assistantBreadth.digest.summary.empty")
-          )}
-        </span>
+        <span className="assistant-digest-summary-counts">{summaryText}</span>
         {digest ? <time>{shortTime(digest.generated_at)}</time> : null}
         <span>
           {t(

@@ -146,7 +146,7 @@ export function HistoryCard({
                   >
                     <ListyMeta
                       title={
-                        <Space size={6} wrap>
+                        <Space size={6} wrap className="interview-history-title">
                           <span>{item.title}</span>
                           <Tag color={item.status === "active" ? "blue" : "default"}>
                             {item.status === "active"

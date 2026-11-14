@@ -9,6 +9,7 @@
 @import "./modules-workspace.css";
 @import "./modules-interview.css";
 @import "./modules-interview-camera.css";
+@import "./modules-interview-history.css";
 /* 面试设定卡的材料行（问题 7）：两个材料字段横跨整行。单独成片是因为
    modules-interview.css 已贴到 500 行预算。 */
 @import "./modules-interview-setup.css";

@@ -36,7 +36,10 @@ function markGuideSeen(): void {
 export function ApplyQueueGuide() {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后说明停在旧文案。
   useLocale();
-  const [open, setOpen] = useState<boolean>(() => !hasSeenGuide());
+  // 首次进入自动展开一次，但**窄屏不自动开**：375 宽时触发按钮在可横滚的工具组里，
+  // 气泡贴着它定位会跑到视口外，document 因此多出 200+px 横向滚动（CI 的 ui-quality
+  // 在 /apply 判 document overflow）。窄屏仍可手动点「?」打开。
+  const [open, setOpen] = useState<boolean>(() => !hasSeenGuide() && window.innerWidth >= 768);
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);

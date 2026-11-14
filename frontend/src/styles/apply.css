@@ -4,7 +4,9 @@
 .apply-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  /* 12 而不是 16：页头 + 浏览器卡 + 页签 + 工具栏已经占了首屏 300px 里的大半，
+     再按普通页面的 16 排，空队列时队列区顶部会落到 306（smoke 首屏预算 300）。 */
+  gap: 12px;
 }
 
 .apply-page-head {

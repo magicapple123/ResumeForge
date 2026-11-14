@@ -292,7 +292,7 @@ def _probe_cookie(db: Session, url: str | None = None) -> tuple[LoginStatusValue
     target = probe_url(db, "track_cookie") if url is None else url
     if not target:
         return "unknown", "没有可用的探测地址"
-    result = track_probe._read_page(db, target, cookie)  # noqa: SLF001 - 复用 SSRF 逐跳校验
+    result = track_probe._read_page(db, target, cookie, None)  # noqa: SLF001 - 复用 SSRF 逐跳校验
     if isinstance(result, str):
         return "unknown", result
     text, _final_url = result

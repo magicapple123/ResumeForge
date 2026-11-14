@@ -1,0 +1,26 @@
+/* SPDX-License-Identifier: Apache-2.0
+   面试历史行的标题区：岗位名 + 状态/类型/难度/简历/材料等多个 Tag。
+   375 宽实测这一行被撑到 445px（父级 `min-width:auto` 拒绝收缩），main 因此多出 125px
+   横向滚动（CI ui-quality 判 clipped content）。给 Space 自己一个可收缩的 100% 宽度，
+   换行交给 `wrap`。 */
+.interview-history-title.ant-space {
+  width: 100%;
+  min-width: 0;
+}
+
+.interview-history-title.ant-space > .ant-space-item {
+  min-width: 0;
+}
+
+/* 岗位名本身没有断点机会时允许任意断行，Tag 仍按整块换行。 */
+.interview-history-title.ant-space > .ant-space-item > span {
+  overflow-wrap: anywhere;
+}
+
+/* 简历/材料名这类 Tag 默认 `white-space: nowrap`：375 宽下一条 445px 的 Tag 直接把
+   main 撑出 125px 横向滚动。允许折行，但限制在容器宽度内。 */
+.interview-history-title.ant-space .ant-tag {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
