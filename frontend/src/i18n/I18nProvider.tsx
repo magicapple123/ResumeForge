@@ -11,8 +11,9 @@
  * "界面中文、朗读按英文念"这种只在无障碍场景才暴露的错。`index.html` 里已有的
  * `<html lang="zh-CN">` 与本处的首帧值一致，因此不会闪。
  */
-import { useLayoutEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
+import { getDesktopShellBridge } from "../features/desktop/desktopShellBridge";
 import { translate } from "./index";
 import type { Locale } from "./index";
 import { I18nContext } from "./i18nContext";
@@ -31,6 +32,13 @@ export default function I18nProvider({ locale: fixedLocale, children }: Props) {
   useLayoutEffect(() => {
     // 无障碍与断行都看它：界面语言变了，文档语言必须跟着变。
     applyDocumentLocale(locale);
+  }, [locale]);
+
+  useEffect(() => {
+    // Shell copy (tray, native dialogs, close card) follows the in-app language, not the
+    // OS language. Browser and older shells have no bridge: optional chaining keeps this a
+    // no-op. The bridge pushes only "zh"/"en", which is what the main process accepts.
+    getDesktopShellBridge()?.setLocale?.(locale.startsWith("zh") ? "zh" : "en");
   }, [locale]);
 
   // 值随 locale 变：包一层 useMemo，免得每次渲染都让所有消费者重渲染一遍。

@@ -24,7 +24,7 @@ const {
   createTitleBarController,
 } = require("../lib/titlebar");
 const { EXTERNAL_URLS, clampZoom, createDesktopMenuActions } = require("../lib/desktop-menu");
-const { TRAY_LABELS, buildTrayTemplate, createTrayManager } = require("../lib/tray-menu");
+const { buildTrayTemplate, createTrayManager, trayLabelsFor } = require("../lib/tray-menu");
 const { CHANNELS } = require("../lib/desktop-shell-ipc");
 
 // ---- lib/titlebar.js --------------------------------------------------------
@@ -294,15 +294,20 @@ function makeTrayTemplateHarness(remembered = null) {
 }
 
 test("托盘菜单：打开 / 关闭窗口时询问（checkbox）/ 退出，勾选态取自记忆", () => {
+  // 模板没注入 getLocale 时按壳层缺省语言（英文）出文案；中文/切换用例见
+  // scripts/test-shell-locale.js（那里逐项断言两套语言）。
+  const labels = trayLabelsFor("en");
   const noMemory = makeTrayTemplateHarness(null);
-  const labels = noMemory.template.filter((item) => item.type !== "separator").map((item) => item.label);
-  assert.deepEqual(labels, [TRAY_LABELS.open, TRAY_LABELS.askOnClose, TRAY_LABELS.quit]);
-  const ask = noMemory.template.find((item) => item.label === TRAY_LABELS.askOnClose);
+  const itemLabels = noMemory.template
+    .filter((item) => item.type !== "separator")
+    .map((item) => item.label);
+  assert.deepEqual(itemLabels, [labels.open, labels.askOnClose, labels.quit]);
+  const ask = noMemory.template.find((item) => item.label === labels.askOnClose);
   assert.equal(ask.type, "checkbox");
   assert.equal(ask.checked, true, "没有记忆时勾上 = 每次询问");
 
   const remembered = makeTrayTemplateHarness("minimize");
-  const askRemembered = remembered.template.find((item) => item.label === TRAY_LABELS.askOnClose);
+  const askRemembered = remembered.template.find((item) => item.label === labels.askOnClose);
   assert.equal(askRemembered.checked, false, "已记住时取消勾选");
 
   // 勾上 → 清掉记忆（main.js 的 onPreferenceChanged 会重建菜单，这里不重复刷）。
@@ -315,7 +320,7 @@ test("托盘菜单：打开 / 关闭窗口时询问（checkbox）/ 退出，勾�
   assert.equal(remembered.calls.refreshed, 1);
 
   // 托盘「退出」永远是真退出，不读记忆、不弹窗（app.quit() 交给 before-quit）。
-  const exitItem = noMemory.template.find((item) => item.label === TRAY_LABELS.quit);
+  const exitItem = noMemory.template.find((item) => item.label === labels.quit);
   exitItem.click();
   assert.equal(noMemory.calls.quits, 1);
 });
@@ -328,7 +333,9 @@ test("托盘生命周期：create 装菜单与左键唤起；refresh 重建；de
       this.handlers = {};
       TrayFake.instance = this;
     }
-    setToolTip() {}
+    setToolTip(tooltip) {
+      this.toolTip = tooltip;
+    }
     setContextMenu(menu) {
       contexts.push(menu);
     }
@@ -366,7 +373,7 @@ test("托盘生命周期：create 装菜单与左键唤起；refresh 重建；de
   remembered = "quit";
   manager.refresh();
   assert.equal(contexts.length, 2);
-  const ask = contexts[1].template.find((item) => item.label === TRAY_LABELS.askOnClose);
+  const ask = contexts[1].template.find((item) => item.label === trayLabelsFor("en").askOnClose);
   assert.equal(ask.checked, false);
 
   manager.destroy();
@@ -416,6 +423,8 @@ test("preload 暴露 desktopShell 桥，通道名与主进程逐字一致", () =
   assert.equal(typeof shell.setTheme, "function");
   // #34F：焦点可编辑状态只报一个布尔，主进程侧据它回填窗口实态快照。
   assert.equal(typeof shell.setEditableFocus, "function");
+  // T5：应用内语言推送（固定通道，主进程只接受 zh / en）。
+  assert.equal(typeof shell.setLocale, "function");
 
   // 调用一下，断言发送到的通道名与 desktop-shell-ipc.js 的定义一致。
   shell.menuAction("edit.undo").then((payload) => {
@@ -425,6 +434,7 @@ test("preload 暴露 desktopShell 桥，通道名与主进程逐字一致", () =
   shell.getWindowState();
   shell.setTheme("dark");
   shell.setEditableFocus(true);
+  shell.setLocale("en");
   shell.onWindowState(() => {});
   const sentChannels = listeners.map((entry) => entry.channel);
   assert.ok(sentChannels.includes(CHANNELS.menuAction));
@@ -432,6 +442,7 @@ test("preload 暴露 desktopShell 桥，通道名与主进程逐字一致", () =
   assert.ok(sentChannels.includes(CHANNELS.setTheme));
   assert.ok(sentChannels.includes(CHANNELS.windowState));
   assert.ok(sentChannels.includes(CHANNELS.editableFocus));
+  assert.ok(sentChannels.includes(CHANNELS.setLocale));
   // 只发布尔：即使传字符串也不会把任意载荷送进主进程。
   assert.equal(
     listeners.find((entry) => entry.channel === CHANNELS.editableFocus).payload,

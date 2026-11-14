@@ -1,0 +1,266 @@
+// SPDX-License-Identifier: Apache-2.0
+"use strict";
+
+// 壳层文案（托盘 / 原生菜单 / 对话框 / 窗口标题）的双语表与语言裁决。
+//
+// 为什么要一个独立模块：壳层有 8 个文件会弹用户可见文案（托盘菜单、启动失败、数据迁移、
+// 更新安装失败、关闭卡片等），如果各自写 if-else 或各存一份中文，规则一定会漂移。
+// 这里就是唯一出处：语言裁决和文案表都只有这一份。
+//
+// 语言规则必须与 frontend/src/i18n/localeStore.ts 的 detectPreferredLocale 一致：
+// zh / zh-* -> 中文，其余（含 C locale 与空串）-> 英文。壳层不引入 i18n 框架，
+// 所以这里只做同一条规则的纯函数版本；两边的一致性由两侧用例各钉一条同值断言
+// （desktop/scripts/test-shell-locale.js 与 frontend/src/i18n/shellLocaleBridge.test.tsx）。
+//
+// 只翻用户可见的界面文案。日志、诊断输出（diagnostic-summary.js）保持原样：
+// 那些是给维护者 grep 的，翻译会破坏既有检索习惯。
+
+/** 壳层支持的语言。渲染进程推送时只接受这两个值，其它一律忽略。 */
+const SHELL_LOCALES = Object.freeze(["zh", "en"]);
+
+/** 不是中文就是英文——与 detectPreferredLocale 的"非中文一律英文"一致。 */
+const DEFAULT_SHELL_LOCALE = "en";
+
+/**
+ * 把一个语言标签裁决成壳层支持的语言。
+ *
+ * 规则与 detectPreferredLocale **逐字相同**（zh / zh-* -> 中文，其余 -> 英文），
+ * 不额外接受 POSIX 下划线写法——那是环境变量路径自己的事，在
+ * resolveShellLocaleFromEnvironment 里先归一化再进来（否则这里就变成第二套规则了）。
+ *
+ * @param {unknown} tag 系统/应用语言标签
+ * @returns {"zh" | "en"}
+ */
+function resolveShellLocale(tag) {
+  if (typeof tag !== "string") return DEFAULT_SHELL_LOCALE;
+  const normalized = tag.trim().toLowerCase();
+  if (normalized === "zh" || normalized.startsWith("zh-")) return "zh";
+  return DEFAULT_SHELL_LOCALE;
+}
+
+/**
+ * POSIX 区域设置（zh_CN.UTF-8）归一化成语言标签（zh-CN）：只给环境变量兜底用。
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizePosixLocale(value) {
+  return String(value).trim().split(".")[0].replace(/_/g, "-");
+}
+
+/**
+ * 兜底裁决：IPC 到达之前（窗口刚起、界面语言还没确认）用系统语言。
+ *
+ * Linux 上 app.getLocale() 可能返回空串，所以按顺序取第一个非空候选：
+ * app.getLocale() -> env.LC_ALL -> env.LANG -> "en"。
+ *
+ * @param {string} appLocale app.getLocale() 的返回值（可能为空）
+ * @param {Record<string, string | undefined>} [environment] process.env 的可注入替身
+ * @returns {"zh" | "en"}
+ */
+function resolveShellLocaleFromEnvironment(appLocale, environment) {
+  const env = environment || {};
+  for (const candidate of [appLocale, env.LC_ALL, env.LANG]) {
+    if (typeof candidate === "string" && candidate.trim() !== "") {
+      return resolveShellLocale(normalizePosixLocale(candidate));
+    }
+  }
+  return DEFAULT_SHELL_LOCALE;
+}
+
+/** 渲染进程经 IPC 推来的值只认 "zh" / "en"；其它（undefined、对象、"fr"）一律返回 null。 */
+function normalizeShellLocale(value) {
+  return value === "zh" || value === "en" ? value : null;
+}
+
+// 文案表：键按用途命名，zh / en 两侧的键集合必须完全一致（有守卫用例逐键比对）。
+// 占位符统一用 {name}，由 t() 做一次替换；两条语言里的同名占位符必须一致。
+const messages = Object.freeze({
+  zh: Object.freeze({
+    "app.name": "简历通",
+
+    "tray.tooltip": "简历通",
+    "tray.open": "打开简历通",
+    "tray.openDataDir": "打开数据目录",
+    "tray.openLogDir": "打开日志目录",
+    "tray.diagnostics": "复制诊断信息",
+    "tray.checkUpdate": "检查更新",
+    "tray.askOnClose": "关闭窗口时询问",
+    "tray.quit": "退出",
+
+    "menu.error.noWindow": "主窗口不可用",
+    "menu.error.noPage": "页面不可用",
+    "menu.error.noDirectory": "目录不可用",
+    "menu.error.unknownExternal": "未知外链：{key}",
+    "menu.error.noReload": "当前页面不支持重新加载",
+    "menu.error.noDevTools": "当前页面不支持开发者工具",
+    "menu.error.noAlwaysOnTop": "当前平台不支持窗口置顶",
+    "menu.error.unknownAction": "未知菜单动作：{action}",
+
+    "preflight.message": "诊断日志的位置有变化",
+    "preflight.where": "本次运行的诊断日志保存在：\n{logDir}",
+    "preflight.whereNone": "本次运行的诊断日志不会被保存。",
+    "preflight.why": "\n\n原因：{reason}。",
+    "preflight.body":
+      "程序的安装目录通常不允许写入，这是正常现象，不影响正常使用。" +
+      "如果之后需要排查问题，可以把这个目录里的日志提供给维护者。",
+    "preflight.button.ack": "知道了",
+    "preflight.button.openLogDir": "打开日志目录",
+
+    "startupFailure.message": "启动失败",
+    "startupFailure.detailWithLog":
+      "{message}\n\n诊断日志目录：\n{logDir}\n\n" +
+      "把这里的 desktop-main.log 与 desktop-backend.log 提供给维护者，可以定位这次启动失败。",
+    "startupFailure.detailNoLog":
+      "{message}\n\n本次运行没能写下诊断日志（安装目录与系统临时目录都不可写）。",
+    "startupFailure.button.openLogDir": "打开日志目录",
+    "startupFailure.button.quit": "退出",
+
+    "quit.installSpawnFailed.body": "更新安装程序未能启动，请保留下载文件后手动重试。",
+    "quit.installBlocked.body":
+      "更新未安装：后端服务未被确认停止（{reason}）。\n" +
+      "为避免覆盖仍在使用数据文件的后端进程，安装已取消。" +
+      "请手动结束残留的后端进程后重试更新。",
+    "quit.reason.stopTimeout": "停止后端超时",
+    "quit.reason.unknown": "未知原因",
+
+    "crashBudget.body":
+      "后端服务在 {minutes} 分钟内连续异常退出 {count} 次，已停止自动重启。\n" +
+      "诊断日志：{logHint}\n请重新启动应用。",
+
+    "migration.confirm.message": "检测到旧版本数据",
+    "migration.confirm.body":
+      "检测到旧版本的数据仍保存在安装目录内。是否迁移到新的用户数据目录？" +
+      "旧数据将保留备份，迁移失败时旧数据也原样保留。",
+    "migration.confirm.repeatNote":
+      "\n\n注意：上一次迁移的标记还在，但新位置已经找不到数据库文件" +
+      "（可能被移动、删除或同步工具移走）。现在重新迁移会从旧位置再复制一份。",
+    "migration.confirm.locations": "\n\n旧位置：{from}\n新位置：{to}",
+    "migration.confirm.button.migrate": "迁移",
+    "migration.confirm.button.later": "暂不迁移",
+    "migration.recovery.title": "数据目录需要确认",
+    "migration.recovery.detail":
+      "{message}\n\n「创建全新数据库」会删除上一次迁移的标记并在新位置新建一份空数据库。",
+    "migration.recovery.button.quit": "退出（先去恢复备份）",
+    "migration.recovery.button.createFresh": "创建全新数据库",
+    "migration.inconsistent.message":
+      "数据目录「{dataDir}」里没有数据库文件，但上一次迁移的标记仍在。\n\n" +
+      "应用不会自动新建一份空数据库盖在它上面。请先恢复备份（设置 → 数据 → 导入备份），" +
+      "或选择「创建全新数据库」从零开始。",
+    "migration.failed.body":
+      "数据迁移失败，本次仍按旧的数据位置启动，旧数据完好无损，可下次启动时重试。\n\n" +
+      "原因：{reason}",
+  }),
+  en: Object.freeze({
+    "app.name": "ResumeForge",
+
+    "tray.tooltip": "ResumeForge",
+    "tray.open": "Open ResumeForge",
+    "tray.openDataDir": "Open data folder",
+    "tray.openLogDir": "Open log folder",
+    "tray.diagnostics": "Copy diagnostics",
+    "tray.checkUpdate": "Check for updates",
+    "tray.askOnClose": "Ask when closing the window",
+    "tray.quit": "Quit",
+
+    "menu.error.noWindow": "Main window is unavailable",
+    "menu.error.noPage": "Page is unavailable",
+    "menu.error.noDirectory": "Folder is unavailable",
+    "menu.error.unknownExternal": "Unknown external link: {key}",
+    "menu.error.noReload": "This page cannot be reloaded",
+    "menu.error.noDevTools": "This page does not support developer tools",
+    "menu.error.noAlwaysOnTop": "This platform does not support always-on-top",
+    "menu.error.unknownAction": "Unknown menu action: {action}",
+
+    "preflight.message": "Diagnostic log location changed",
+    "preflight.where": "Diagnostic logs for this run are saved to:\n{logDir}",
+    "preflight.whereNone": "Diagnostic logs for this run cannot be saved.",
+    "preflight.why": "\n\nReason: {reason}.",
+    "preflight.body":
+      "The installation folder is usually read-only; this is expected and does not affect normal use. " +
+      "If you need to troubleshoot later, you can share the logs in that folder with the maintainers.",
+    "preflight.button.ack": "Got it",
+    "preflight.button.openLogDir": "Open log folder",
+
+    "startupFailure.message": "Startup failed",
+    "startupFailure.detailWithLog":
+      "{message}\n\nDiagnostic log folder:\n{logDir}\n\n" +
+      "Share desktop-main.log and desktop-backend.log from that folder with the maintainers " +
+      "to diagnose this startup failure.",
+    "startupFailure.detailNoLog":
+      "{message}\n\nThis run could not write diagnostic logs " +
+      "(both the installation folder and the system temp folder are read-only).",
+    "startupFailure.button.openLogDir": "Open log folder",
+    "startupFailure.button.quit": "Quit",
+
+    "quit.installSpawnFailed.body":
+      "The update installer could not start. Keep the downloaded file and try again manually.",
+    "quit.installBlocked.body":
+      "Update not installed: the backend service was not confirmed stopped ({reason}).\n" +
+      "The installation was cancelled to avoid overwriting a backend process that may still use data files. " +
+      "Stop the remaining backend process manually, then retry the update.",
+    "quit.reason.stopTimeout": "backend stop timed out",
+    "quit.reason.unknown": "unknown reason",
+
+    "crashBudget.body":
+      "The backend service exited unexpectedly {count} times within {minutes} minutes " +
+      "and automatic restarts have stopped.\n" +
+      "Diagnostic log: {logHint}\nPlease restart the application.",
+
+    "migration.confirm.message": "Older version data detected",
+    "migration.confirm.body":
+      "Data from an older version is still stored inside the installation folder. " +
+      "Migrate it to the new user data folder? " +
+      "The old data is kept as a backup, and it stays intact if the migration fails.",
+    "migration.confirm.repeatNote":
+      "\n\nNote: the marker from the previous migration is still present, but the database at the new location is gone " +
+      "(it may have been moved, deleted, or taken away by a sync tool). Migrating again copies the old data once more.",
+    "migration.confirm.locations": "\n\nOld location: {from}\nNew location: {to}",
+    "migration.confirm.button.migrate": "Migrate",
+    "migration.confirm.button.later": "Not now",
+    "migration.recovery.title": "Data folder needs confirmation",
+    "migration.recovery.detail":
+      "{message}\n\n\"Create a new database\" removes the marker from the previous migration " +
+      "and creates an empty database in the new location.",
+    "migration.recovery.button.quit": "Quit (restore a backup first)",
+    "migration.recovery.button.createFresh": "Create a new database",
+    "migration.inconsistent.message":
+      "The data folder \"{dataDir}\" has no database file, but the marker from the previous migration is still there.\n\n" +
+      "The app will not create an empty database over it. Restore a backup first " +
+      "(Settings → Data → Import backup), or choose \"Create a new database\" to start from scratch.",
+    "migration.failed.body":
+      "Data migration failed. This run keeps using the old data location; the old data is intact " +
+      "and you can retry on the next launch.\n\nReason: {reason}",
+  }),
+});
+
+/**
+ * 取一条壳层文案。
+ *
+ * 缺 key 时返回 key 本身（界面出现 tray.open 这种字样，比空白更容易被发现），
+ * 与前端 translate 的缺 key 约定一致。
+ *
+ * @param {"zh" | "en"} locale
+ * @param {string} key
+ * @param {Record<string, string | number>} [params] {name} 占位符的取值
+ * @returns {string}
+ */
+function t(locale, key, params) {
+  const table = messages[locale === "zh" ? "zh" : "en"];
+  const template = table[key];
+  if (typeof template !== "string") return key;
+  if (!params) return template;
+  return template.replace(/\{(\w+)\}/g, (match, name) =>
+    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match,
+  );
+}
+
+module.exports = {
+  DEFAULT_SHELL_LOCALE,
+  SHELL_LOCALES,
+  messages,
+  normalizeShellLocale,
+  resolveShellLocale,
+  resolveShellLocaleFromEnvironment,
+  t,
+};

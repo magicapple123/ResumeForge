@@ -22,6 +22,10 @@
 //     handed down instead of the module's globals.
 //   * `requireChildProcess` -- a lazy accessor, so the installer spawn keeps using
 //     the shell's `child_process` (stubbed in the probes) and stays lazy as before.
+//
+// 用户可见的两条错误框文案跟随应用内语言（lib/shell-locale.js）；日志行保持原样。
+
+const { t } = require("./shell-locale");
 
 // Hard cap on how long before-quit waits for the backend to stop. A normal
 // quit is a user waiting in front of the tray menu, so the cap is short: a
@@ -49,6 +53,7 @@ const INSTALL_STOP_TIMEOUT_MS = 15_000;
  * @param {function(): object} deps.requireChildProcess Lazy accessor for child_process.
  * @param {function(Function, number): any} deps.setTimeout Timer venue of the caller.
  * @param {function(any): void} deps.clearTimeout Timer venue of the caller.
+ * @param {function(): ("zh" | "en")} [deps.getLocale] Current shell locale for the two dialogs.
  * @returns {{requestInstallAndQuit: function(string): void, handleBeforeQuit: function(object): void,
  *   getPendingInstallerPath: function(): (string|null), setPendingInstallerPath: function((string|null)): void}}
  *   The lifecycle surface; `handleBeforeQuit` is what `app.on("before-quit")` registers.
@@ -66,6 +71,7 @@ function createQuitLifecycle(deps) {
     setTimeout: scheduleTimeout,
     clearTimeout: cancelTimeout,
   } = deps;
+  const getLocale = typeof deps.getLocale === "function" ? deps.getLocale : () => "en";
 
   // Set by the updater's installAndQuit dependency; the installer spawns in
   // before-quit AFTER the backend stop completes.
@@ -136,7 +142,13 @@ function createQuitLifecycle(deps) {
       child.unref();
       child.on("error", (err) => {
         logLine(`install-spawn-failed ${installerPath}: ${err}`);
-        try { dialog.showErrorBox("简历通", "更新安装程序未能启动，请保留下载文件后手动重试。"); } catch {}
+        const locale = getLocale();
+        try {
+          dialog.showErrorBox(
+            t(locale, "app.name"),
+            t(locale, "quit.installSpawnFailed.body"),
+          );
+        } catch {}
       });
       logLine(`install-spawned ${installerPath} (waits for shell pid ${process.pid})`);
     } catch (err) {
@@ -178,7 +190,14 @@ function createQuitLifecycle(deps) {
       stopPromise,
       new Promise((resolve) => {
         scheduleTimeout(
-          () => resolve({ ok: false, reason: "停止后端超时", verified: false, timedOut: true }),
+          // reason 会出现在"安装被取消"的错误框里，所以它也是用户可见文案。
+          () =>
+            resolve({
+              ok: false,
+              reason: t(getLocale(), "quit.reason.stopTimeout"),
+              verified: false,
+              timedOut: true,
+            }),
           stopTimeoutMs,
         ).unref();
       }),
@@ -188,7 +207,8 @@ function createQuitLifecycle(deps) {
       shutdownComplete = true;
       const stopOk = Boolean(outcome && outcome.ok);
       const stopVerified = !outcome || outcome.verified !== false;
-      const reason = (outcome && outcome.reason) || "未知原因";
+      const locale = getLocale();
+      const reason = (outcome && outcome.reason) || t(locale, "quit.reason.unknown");
       const backend = getBackend();
       const backendUrl = (backend && backend.url) || "（未知）";
       const probeDetail = (outcome && outcome.detail) || "（无）";
@@ -202,10 +222,8 @@ function createQuitLifecycle(deps) {
         );
         try {
           dialog.showErrorBox(
-            "简历通",
-            `更新未安装：后端服务未被确认停止（${reason}）。\n` +
-              "为避免覆盖仍在使用数据文件的后端进程，安装已取消。" +
-              "请手动结束残留的后端进程后重试更新。",
+            t(locale, "app.name"),
+            t(locale, "quit.installBlocked.body", { reason }),
           );
         } catch {
           // A failing dialog must not block the quit itself.

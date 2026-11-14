@@ -13,6 +13,7 @@
 
 const path = require("path");
 const { createFileLogger, logHint, probeWritable, resolveLogDir } = require("./shell-paths");
+const { t } = require("./shell-locale");
 
 const MAIN_LOG_NAME = "desktop-main.log";
 
@@ -46,33 +47,38 @@ function runPreflight({ runtimeDir, tmpDir } = {}) {
 
 // 降级时给用户看的说明。文案必须是给人看的：说清"日志去了哪、为什么"，
 // 不出现 EPERM / ENOENT 之类的原文（用户拿它没办法，只会以为程序坏了）。
-function preflightNoticeText(info = {}) {
+//
+// 文案跟随应用内语言（lib/shell-locale.js）；locale 缺省按英文（壳层缺省语言）。
+function preflightNoticeText(info = {}, locale = "en") {
   const logDir = info.logDir || info.runtimeDir || "";
-  const where = logDir ? `本次运行的诊断日志保存在：\n${logDir}` : "本次运行的诊断日志不会被保存。";
-  const why = info.reason ? `\n\n原因：${info.reason}。` : "";
+  const where = logDir
+    ? t(locale, "preflight.where", { logDir })
+    : t(locale, "preflight.whereNone");
+  const why = info.reason ? t(locale, "preflight.why", { reason: info.reason }) : "";
   return {
-    message: "诊断日志的位置有变化",
-    detail:
-      `${where}${why}\n\n` +
-      "程序的安装目录通常不允许写入，这是正常现象，不影响正常使用。" +
-      "如果之后需要排查问题，可以把这个目录里的日志提供给维护者。",
+    message: t(locale, "preflight.message"),
+    detail: `${where}${why}\n\n${t(locale, "preflight.body")}`,
   };
 }
 
 // 非阻断提示：只有两个按钮，第二个顺手把日志目录打开。
 // dialog / shell 由调用方注入（main.js 传 electron 的实现），这里全部做防御，
 // 因为一个弹不出来的提示绝不该影响启动。
-async function presentPreflightNotice({ dialog, shell, info } = {}) {
+async function presentPreflightNotice({ dialog, shell, info, getLocale } = {}) {
   if (!dialog || typeof dialog.showMessageBox !== "function") return null;
-  const text = preflightNoticeText(info || {});
+  const locale = typeof getLocale === "function" ? getLocale() : "en";
+  const text = preflightNoticeText(info || {}, locale);
   let result;
   try {
     result = await dialog.showMessageBox({
       type: "info",
-      title: "简历通",
+      title: t(locale, "app.name"),
       message: text.message,
       detail: text.detail,
-      buttons: ["知道了", "打开日志目录"],
+      buttons: [
+        t(locale, "preflight.button.ack"),
+        t(locale, "preflight.button.openLogDir"),
+      ],
       defaultId: 0,
       cancelId: 0,
       noLink: true,
@@ -128,9 +134,9 @@ function createShellLogging({ resolveRuntimeDir, degradedHint, fileName = MAIN_L
 
 // 窗口就绪之后再提示降级：启动流程已经跑起来了，用户这时才需要知道"日志去了
 // 哪里"。未降级直接返回，调用方可以无条件调用（main.js 因此只留一行接线）。
-function announceDegradedOnReady({ window, dialog, shell, info } = {}) {
+function announceDegradedOnReady({ window, dialog, shell, info, getLocale } = {}) {
   if (!info || !info.degraded || !window || typeof window.once !== "function") return;
-  window.once("ready-to-show", () => presentPreflightNotice({ dialog, shell, info }));
+  window.once("ready-to-show", () => presentPreflightNotice({ dialog, shell, info, getLocale }));
 }
 
 module.exports = {

@@ -16,6 +16,10 @@
 // 不 require("electron")：离线用例直接注入假 dialog / shell，断言失败路径的失败路径
 //（对话框被系统策略挡掉、Electron 没有 showMessageBoxSync、openPath 报错/拒绝）都
 // 仍然退出。
+//
+// 文案跟随应用内语言（lib/shell-locale.js），getLocale 缺省按英文兜底。
+
+const { t } = require("./shell-locale");
 
 /**
  * @param {object} deps
@@ -26,16 +30,19 @@
  * @param {function(): (string|null)} deps.getLogDir 日志目录；不可写时 null
  * @param {function(boolean): void} deps.setQuitting 写主进程的 quitting 标志
  * @param {object} deps.app Electron app（quit）
+ * @param {function(): ("zh" | "en")} [deps.getLocale] 当前壳层语言
  * @returns {function(Error|string): void}
  */
 function createStartupFailureReporter(deps) {
   const { dialog, shell, logLine, sendStage, getLogDir, setQuitting, app } = deps;
+  const getLocale = typeof deps.getLocale === "function" ? deps.getLocale : () => "en";
 
   return function reportStartupFailure(err) {
     const message = err && err.message ? err.message : String(err);
     logLine(`startup failed: ${message}`);
     // 双保险：对话框被系统策略静默掉时，启动图仍然显示错误原因。
     sendStage("error", message);
+    const locale = getLocale();
     const logDir = getLogDir();
     // 默认取「退出」：连对话框都弹不出来时必须收摊，不能留在半启动状态。
     let choice = 1;
@@ -43,17 +50,15 @@ function createStartupFailureReporter(deps) {
       try {
         choice = dialog.showMessageBoxSync({
           type: "error",
-          title: "简历通",
-          message: "启动失败",
-          detail:
-            `${message}\n\n` +
-            (logDir
-              ? "诊断日志目录：\n" +
-                `${logDir}\n\n` +
-                "把这里的 desktop-main.log 与 desktop-backend.log 提供给维护者，" +
-                "可以定位这次启动失败。"
-              : "本次运行没能写下诊断日志（安装目录与系统临时目录都不可写）。"),
-          buttons: ["打开日志目录", "退出"],
+          title: t(locale, "app.name"),
+          message: t(locale, "startupFailure.message"),
+          detail: logDir
+            ? t(locale, "startupFailure.detailWithLog", { message, logDir })
+            : t(locale, "startupFailure.detailNoLog", { message }),
+          buttons: [
+            t(locale, "startupFailure.button.openLogDir"),
+            t(locale, "startupFailure.button.quit"),
+          ],
           defaultId: 0,
           cancelId: 1,
           noLink: true,

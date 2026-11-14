@@ -34,7 +34,10 @@ function flush() {
   return new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
 }
 
-function loadMain() {
+function loadMain(options = {}) {
+  // 壳层语言兜底来自 app.getLocale()（Windows 上 ready 之后才可靠）。默认钉成中文：
+  // 既有用例断言的托盘/对话框文案就是中文，不能让用例结果随开发机系统语言变化。
+  const appLocale = options.appLocale ?? "zh-CN";
   const events = {
     quitCalls: [],
     stopCalls: [],
@@ -55,6 +58,10 @@ function loadMain() {
     closeDialogPrompts: [],
     ipcHandlers: {},
     themeCalls: [],
+    // 壳层语言（T5）：托盘 tooltip、窗口标题、关闭卡片的 loadURL（含 ?locale=）。
+    trayToolTips: [],
+    windowTitles: [],
+    loadedURLs: [],
     // 媒体权限处理器（语音输入要麦克风）：main.js 在 createWindow 里装它。
     permissionHandler: null,
   };
@@ -90,6 +97,9 @@ function loadMain() {
     },
     getVersion() {
       return "0.18.0";
+    },
+    getLocale() {
+      return appLocale;
     },
   };
 
@@ -141,7 +151,9 @@ function loadMain() {
     loadFile() {
       return Promise.resolve();
     }
-    loadURL() {
+    loadURL(url) {
+      this.loadedURL = url;
+      events.loadedURLs.push(url);
       if (this.isCloseDialog && typeof events.closeDialogResolve === "function") {
         // 模拟"用户在卡片上点了按钮"：把结果从 IPC 送回主进程（与真实链路同一条通道）。
         const payload = {
@@ -195,6 +207,10 @@ function loadMain() {
       this.overlay = options;
       events.themeCalls.push(options);
     }
+    setTitle(title) {
+      this.title = title;
+      events.windowTitles.push(title);
+    }
     close() {
       this.closeCalls += 1;
       const event = {
@@ -221,7 +237,10 @@ function loadMain() {
 
   const menuHolder = {};
   class TrayStub {
-    setToolTip() {}
+    setToolTip(tooltip) {
+      this.toolTip = tooltip;
+      events.trayToolTips.push(tooltip);
+    }
     setContextMenu(menu) {
       menuHolder.menu = menu;
       menuHolder.setCount = (menuHolder.setCount ?? 0) + 1;
@@ -309,6 +328,8 @@ function loadMain() {
     on(name, handler) {
       if (name === "app:quit-request") events.quitRequestHandler = handler;
       if (name === "desktop:set-theme") events.setThemeHandler = handler;
+      // T5：应用内语言推送（渲染层 React 挂载后 send 上来）。
+      if (name === "desktop:set-locale") events.setLocaleHandler = handler;
       // Q11：自绘关闭卡片的回执通道（渲染层点完按钮后 send 上来）。
       if (name === "close-dialog:resolve") events.closeDialogResolve = handler;
     },

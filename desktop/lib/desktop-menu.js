@@ -15,6 +15,11 @@
 //
 // 不 require("electron")：desktop 的离线用例可以注入假 app / window / shell 断言
 // 每个动作真的落在对应 API 上，以及「关闭窗口」走窗口 close handler（第 18 条）。
+//
+// 回执里的错误文案跟随应用内语言（lib/shell-locale.js）：渲染层可能把 ok:false 的
+// error 直接展示给用户，所以这些也是用户可见文案。
+
+const { t } = require("./shell-locale");
 
 /** 关于弹窗里的三个外链：固定值，只认这三个 key。 */
 const EXTERNAL_URLS = {
@@ -47,6 +52,7 @@ function clampZoom(value) {
  * @param {function(): void} deps.runUpdateCheck 手动检查更新（updater.js 的入口）
  * @param {function(): string[]} [deps.readRecentProblems] 最近的 WARN/ERROR 行（#34D）
  * @param {string} [deps.platform] process.platform 的可注入替身
+ * @param {function(): ("zh" | "en")} [deps.getLocale] 当前壳层语言（错误文案用）
  * @param {function(string): void} [deps.logLine] 诊断日志
  */
 function createDesktopMenuActions(deps) {
@@ -59,6 +65,7 @@ function createDesktopMenuActions(deps) {
     runUpdateCheck,
     readRecentProblems = () => [],
     platform = process.platform,
+    getLocale = () => "en",
     logLine = () => {},
   } = deps;
 
@@ -79,19 +86,19 @@ function createDesktopMenuActions(deps) {
 
   function requireWindow() {
     const win = liveWindow();
-    if (!win) throw new Error("主窗口不可用");
+    if (!win) throw new Error(t(getLocale(), "menu.error.noWindow"));
     return win;
   }
 
   /** 页面不可用时抛错（菜单动作回执是 ok:false，而不是静默没反应）。 */
   function requireWebContents() {
     const wc = webContents();
-    if (!wc) throw new Error("页面不可用");
+    if (!wc) throw new Error(t(getLocale(), "menu.error.noPage"));
     return wc;
   }
 
   function openPath(target) {
-    if (!target) throw new Error("目录不可用");
+    if (!target) throw new Error(t(getLocale(), "menu.error.noDirectory"));
     // openPath 用"返回错误字符串"而不是 reject 来报告失败；这里统一成异常，
     // 让渲染层拿到 ok:false（打不开目录不该静默）。
     return Promise.resolve(shell.openPath(target)).then((error) => {
@@ -101,7 +108,7 @@ function createDesktopMenuActions(deps) {
 
   function openExternal(key) {
     const url = EXTERNAL_URLS[key];
-    if (!url) throw new Error(`未知外链: ${key}`);
+    if (!url) throw new Error(t(getLocale(), "menu.error.unknownExternal", { key }));
     return Promise.resolve(shell.openExternal(url));
   }
 
@@ -126,12 +133,12 @@ function createDesktopMenuActions(deps) {
     // Chromium 原样保留；渲染层的 desktopRouteMemory 只是"启动落回首页时恢复"的兜底。
     "view.reload": () => {
       const wc = requireWebContents();
-      if (typeof wc.reload !== "function") throw new Error("当前页面不支持重新加载");
+      if (typeof wc.reload !== "function") throw new Error(t(getLocale(), "menu.error.noReload"));
       wc.reload();
     },
     "view.toggleDevTools": () => {
       const wc = requireWebContents();
-      if (typeof wc.toggleDevTools !== "function") throw new Error("当前页面不支持开发者工具");
+      if (typeof wc.toggleDevTools !== "function") throw new Error(t(getLocale(), "menu.error.noDevTools"));
       wc.toggleDevTools();
     },
     "view.zoomIn": () => zoom(ZOOM_STEP),
@@ -152,7 +159,7 @@ function createDesktopMenuActions(deps) {
     // 带回渲染层做勾选；渲染层不做乐观翻转，所以勾选态不会和窗口状态相反。
     "window.toggleAlwaysOnTop": () => {
       const win = requireWindow();
-      if (typeof win.setAlwaysOnTop !== "function") throw new Error("当前平台不支持窗口置顶");
+      if (typeof win.setAlwaysOnTop !== "function") throw new Error(t(getLocale(), "menu.error.noAlwaysOnTop"));
       const previous = typeof win.isAlwaysOnTop === "function" ? Boolean(win.isAlwaysOnTop()) : false;
       win.setAlwaysOnTop(!previous);
       const next = typeof win.isAlwaysOnTop === "function" ? Boolean(win.isAlwaysOnTop()) : !previous;
@@ -202,7 +209,7 @@ function createDesktopMenuActions(deps) {
   /** 执行一个动作：未知 id 也返回 ok:false，而不是抛到 IPC 层。 */
   async function run(action) {
     if (typeof action !== "string" || !Object.prototype.hasOwnProperty.call(handlers, action)) {
-      return { ok: false, error: `未知菜单动作: ${String(action)}` };
+      return { ok: false, error: t(getLocale(), "menu.error.unknownAction", { action: String(action) }) };
     }
     try {
       const result = await handlers[action]();

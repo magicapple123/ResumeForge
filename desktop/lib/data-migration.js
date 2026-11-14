@@ -41,6 +41,7 @@ const {
   quickCheck,
   snapshotDatabase,
 } = require("./sqlite-snapshot");
+const { t } = require("./shell-locale");
 
 // The database filename config.py derives DEFAULT_DATABASE_URL from; its
 // presence is the "this directory holds real data" criterion on both sides.
@@ -402,6 +403,8 @@ async function performMigration({
 // null means "run the backend against the legacy location this launch" --
 // the caller simply omits RF_DATA_DIR and behavior is byte-identical to the
 // pre-ADR builds.
+// getLocale 决定用户可见文案（异常态消息、失败错误框）的语言，缺省按英文；
+// 日志行（log 回调）保持原样，不跟随语言。
 async function maybeMigrateUserData({
   oldDataDir,
   newDataDir,
@@ -411,6 +414,7 @@ async function maybeMigrateUserData({
   log = () => {},
   copyFileFn,
   sqlite,
+  getLocale = () => "en",
 }) {
   const state = detectMigrationState(oldDataDir, newDataDir);
   if (state.status === "skip") {
@@ -425,10 +429,7 @@ async function maybeMigrateUserData({
     return {
       outcome: "inconsistent",
       userDataDir: null,
-      message:
-        `数据目录「${newDataDir}」里没有数据库文件，但上一次迁移的标记仍在。\n\n` +
-        "应用不会自动新建一份空数据库盖在它上面。请先恢复备份（设置 → 数据 → 导入备份），" +
-        "或选择「创建全新数据库」从零开始。",
+      message: t(getLocale(), "migration.inconsistent.message", { dataDir: newDataDir }),
     };
   }
 
@@ -468,10 +469,10 @@ async function maybeMigrateUserData({
     const message = err && err.message ? err.message : String(err);
     log(`data migration: FAILED (${message}); legacy data untouched`);
     try {
+      const locale = getLocale();
       await showError(
-        "简历通",
-        "数据迁移失败，本次仍按旧的数据位置启动，旧数据完好无损，可下次启动时重试。\n\n" +
-          `原因：${message}`,
+        t(locale, "app.name"),
+        t(locale, "migration.failed.body", { reason: message }),
       );
     } catch {}
     return { outcome: "failed", userDataDir: null };

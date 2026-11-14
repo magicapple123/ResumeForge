@@ -76,6 +76,8 @@ function makeHarness(overrides = {}) {
     runUpdateCheck: () => {},
     readRecentProblems: () => ["[desktop-main.log] WARN backend slow"],
     platform: "win32",
+    // 错误回执是用户可见文案（渲染层可能直接展示），默认钉中文，英文另有一条用例。
+    getLocale: () => "zh",
     logLine: (line) => calls.log.push(line),
     ...overrides.deps,
   };
@@ -133,6 +135,25 @@ test("34A：平台不支持 setAlwaysOnTop 时如实返回 ok:false", async () =
   const outcome = await menu.run("window.toggleAlwaysOnTop");
   assert.equal(outcome.ok, false);
   assert.match(outcome.error, /不支持/);
+});
+
+test("菜单错误回执跟随应用内语言：英文环境返回英文，且不混入中文", async () => {
+  const { menu } = makeHarness({ noWindow: true, deps: { getLocale: () => "en" } });
+  const reload = await menu.run("view.reload");
+  assert.equal(reload.ok, false);
+  assert.match(reload.error, /Page is unavailable/);
+  assert.doesNotMatch(reload.error, /[\u4e00-\u9fff]/, "英文语言下不得混入中文");
+
+  const noDir = createDesktopMenuActions({
+    app: { getVersion: () => "2.0.0" },
+    getWindow: () => makeHarness().win,
+    shell: { openPath: () => Promise.resolve(""), openExternal: () => Promise.resolve() },
+    getDataDir: () => "D:/data",
+    getLogDir: () => null,
+    runUpdateCheck: () => {},
+    getLocale: () => "en",
+  });
+  assert.match((await noDir.run("help.openLogDir")).error, /Folder is unavailable/);
 });
 
 test("34D help.getDiagnostics：版本 / 平台 / 目录 / 最近告警都带上", async () => {

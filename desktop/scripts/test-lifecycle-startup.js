@@ -20,8 +20,8 @@ const { flush, loadMain, waitForShellReady } = require("./lifecycle-harness");
 
 // 让 startBackend() 抛错：当后端永远起不来时，用户看到的不该只是启动图上的
 // 一行红字 + 一个需要手动复制的路径。
-function makeStartupFailingMain() {
-  const loaded = loadMain();
+function makeStartupFailingMain(options = {}) {
+  const loaded = loadMain(options);
   loaded.state.startBackend = () =>
     Promise.resolve().then(() => {
       throw new Error("Backend exited early (code=1). See C:/logs/desktop-backend.log");
@@ -68,6 +68,26 @@ test("startup failure opens a NATIVE dialog with 'open log dir' and 'exit'", asy
       loaded.events.stages.some((payload) => payload.stage === "error"),
       "the splash must still be told about the error",
     );
+  } finally {
+    loaded.cleanup();
+  }
+});
+
+test("startup failure dialog follows the in-app language (English system locale -> English)", async () => {
+  // 应用内语言还没到（渲染进程没挂载）时按系统语言兜底：英文系统上第一个对话框
+  // 不能是中文，否则英文用户看到的第一屏就是看不懂的错误。
+  const loaded = makeStartupFailingMain({ appLocale: "en-US" });
+  try {
+    await flush();
+    await flush();
+
+    assert.strictEqual(loaded.events.messageBoxes.length, 1);
+    const box = loaded.events.messageBoxes[0];
+    assert.strictEqual(box.title, "ResumeForge");
+    assert.strictEqual(box.message, "Startup failed");
+    assert.deepStrictEqual([...box.buttons], ["Open log folder", "Quit"]);
+    assert.match(box.detail, /Diagnostic log folder/);
+    assert.doesNotMatch(box.detail, /[\u4e00-\u9fff]/, "英文环境下不得混入中文");
   } finally {
     loaded.cleanup();
   }

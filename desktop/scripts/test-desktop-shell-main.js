@@ -16,6 +16,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
 const { flush, loadMain, waitForShellReady } = require("./lifecycle-harness");
+const { t } = require("../lib/shell-locale");
 
 const closeEvent = () => {
   const event = {
@@ -283,6 +284,87 @@ test("窗口最大化 / 全屏变化会推 desktop:window-state 给渲染层", a
       // #34F：可编辑焦点由渲染层上报，初始为 false。
       editableFocus: false,
     });
+  } finally {
+    loaded.cleanup();
+  }
+});
+
+test("应用内语言 IPC：切到英文重建托盘菜单/tooltip 并兜底窗口标题，非法值与冒充发送方被忽略", async () => {
+  const loaded = loadMain();
+  try {
+    await waitForShellReady(loaded);
+    const window = loaded.windowInstances[0];
+    // 启动时按系统语言兜底建一次菜单（harness 的 app.getLocale 默认 zh-CN）。
+    assert.equal(loaded.menuHolder.setCount, 1);
+    const zhQuit = t("zh", "tray.quit");
+    assert.ok(loaded.menuHolder.menu.template.some((item) => item.label === zhQuit));
+
+    const handler = loaded.events.setLocaleHandler;
+    assert.equal(typeof handler, "function", "main.js 必须注册 desktop:set-locale");
+    handler({ sender: window.webContents }, "en");
+
+    assert.equal(loaded.menuHolder.setCount, 2, "语言切换必须重建托盘菜单");
+    const labels = loaded.menuHolder.menu.template.map((item) => item.label);
+    assert.ok(labels.includes(t("en", "tray.quit")), "菜单文案必须换成英文");
+    assert.ok(!labels.includes(zhQuit), "不得残留旧语言菜单项");
+    assert.equal(
+      loaded.events.trayToolTips[loaded.events.trayToolTips.length - 1],
+      "ResumeForge",
+      "tooltip 必须与菜单同一次重建换掉",
+    );
+    assert.equal(loaded.events.windowTitles.pop(), "ResumeForge", "窗口标题要有兜底并换语言");
+
+    // 同语言重复推送不重建（React 首帧 + 服务端校正各推一次是预期行为）。
+    handler({ sender: window.webContents }, "en");
+    assert.equal(loaded.menuHolder.setCount, 2);
+    // 只接受 zh / en；其它值静默忽略。
+    handler({ sender: window.webContents }, "fr");
+    handler({ sender: window.webContents }, { locale: "en" });
+    assert.equal(loaded.menuHolder.setCount, 2);
+    // 非主窗口发来的一律拒绝（与 menu-action / set-theme 同一条发送方校验）。
+    handler({ sender: { rogue: true } }, "zh");
+    assert.equal(loaded.menuHolder.setCount, 2);
+    assert.ok(loaded.menuHolder.menu.template.some((item) => item.label === t("en", "tray.quit")));
+  } finally {
+    loaded.cleanup();
+  }
+});
+
+test("启动语言兜底：英文系统下托盘与 tooltip 一开始就是英文", async () => {
+  const loaded = loadMain({ appLocale: "en-US" });
+  try {
+    await waitForShellReady(loaded);
+    const labels = loaded.menuHolder.menu.template.map((item) => item.label);
+    assert.ok(labels.includes("Quit"), "英文系统下托盘应是英文");
+    assert.ok(!labels.some((label) => /[\u4e00-\u9fff]/.test(label)), "不得先闪一段中文");
+    assert.equal(loaded.events.trayToolTips[0], "ResumeForge");
+  } finally {
+    loaded.cleanup();
+  }
+});
+
+test("关闭卡片跟随应用内语言：切换后下一次打开带新的 ?locale=", async () => {
+  const loaded = loadMain();
+  try {
+    await waitForShellReady(loaded);
+    const window = loaded.windowInstances[0];
+    loaded.state.closeDialogResponse = 0;
+
+    window.handlers.close(closeEvent());
+    await flush();
+    const firstDialogs = loaded.windowInstances.filter((item) => item.isCloseDialog);
+    assert.equal(firstDialogs.length, 1);
+    assert.ok(firstDialogs[0].loadedURL.endsWith("?locale=zh"), firstDialogs[0].loadedURL);
+
+    loaded.events.setLocaleHandler({ sender: window.webContents }, "en");
+    window.handlers.close(closeEvent());
+    await flush();
+    const dialogs = loaded.windowInstances.filter((item) => item.isCloseDialog);
+    assert.equal(dialogs.length, 2);
+    assert.ok(
+      dialogs[dialogs.length - 1].loadedURL.endsWith("?locale=en"),
+      "已打开的卡片不热切换，但下一次打开必须是新语言",
+    );
   } finally {
     loaded.cleanup();
   }

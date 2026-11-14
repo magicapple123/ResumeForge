@@ -19,13 +19,15 @@ contextBridge.exposeInMainWorld("splash", {
 /**
  * 自绘标题栏桥（问题清单 §19，主进程侧见 desktop/lib/desktop-shell-ipc.js）。
  *
- * 只暴露五个**固定**入口，不接收任意通道名：
+ * 只暴露几个**固定**入口，不接收任意通道名：
  *  - menuAction：发菜单动作 id（编辑 / 视图 / 窗口 / 打开目录 / 诊断 / 关于信息），
  *    主进程的 desktop-menu.js 是唯一动作白名单；
  *  - getWindowState：窗口最大化/全屏/置顶/可编辑焦点快照（菜单文案、勾选态、置灰用）；
  *  - onWindowState：主进程状态变化时推送（最大化 / 还原 / 进出全屏）；
  *  - setTheme：把实际生效主题告诉主进程，同步系统绘制的标题栏覆盖层颜色；
- *  - setEditableFocus：把"焦点在不在可编辑区"报给主进程（#34F），菜单打开前读回同源实态。
+ *  - setEditableFocus：把"焦点在不在可编辑区"报给主进程（#34F），菜单打开前读回同源实态；
+ *  - setLocale：把**应用内语言**（不是系统语言）报给主进程，壳层文案据此重建
+ *    （托盘 / 原生对话框 / 窗口标题）；只接受 "zh" / "en"，主进程其它值一律忽略。
  * platform 只用于 macOS 红绿灯的左内边距分支，不暴露进程信息。
  */
 contextBridge.exposeInMainWorld("desktopShell", {
@@ -37,6 +39,8 @@ contextBridge.exposeInMainWorld("desktopShell", {
   setTheme: (theme) => ipcRenderer.send("desktop:set-theme", theme),
   // #34F：只发一个布尔，不接受任意载荷；主进程侧同样校验发送方必须是主窗口。
   setEditableFocus: (editable) => ipcRenderer.send("desktop:editable-focus", Boolean(editable)),
+  // 应用内语言：只发固定两个值之一，主进程侧同样校验发送方与取值。
+  setLocale: (locale) => ipcRenderer.send("desktop:set-locale", locale),
 });
 
 /**

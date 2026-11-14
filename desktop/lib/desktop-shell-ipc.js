@@ -12,6 +12,7 @@ const {
   createDesktopMenuActions,
 } = require("./desktop-menu");
 const { readRecentProblems } = require("./diagnostic-summary");
+const { normalizeShellLocale } = require("./shell-locale");
 
 /** 通道名：preload.js 与 frontend 的 desktopShell 桥必须逐字一致。 */
 const CHANNELS = {
@@ -25,6 +26,9 @@ const CHANNELS = {
   // #34F：渲染层把「焦点在不在可编辑区」报过来。这是一条**单向**通道（只写布尔），
   // 读回走 getWindowState 的快照——菜单打开前会重新读一次，两边因此同源。
   editableFocus: "desktop:editable-focus",
+  // 应用内语言（不是系统语言）：渲染进程 React 挂载后把当前 locale 推过来，
+  // 主进程据此重建托盘菜单 / tooltip 与窗口标题兜底。
+  setLocale: "desktop:set-locale",
 };
 
 /** 窗口是否置顶（#34A）：拿不到窗口 / API 缺失一律按 false，绝不让快照抛错。 */
@@ -61,6 +65,9 @@ function isMainWindowSender(event, getWindow) {
  * @param {function(): (string|null)} deps.getLogDir 诊断日志目录
  * @param {function(): void} deps.runUpdateCheck 手动检查更新
  * @param {object} deps.titleBar lib/titlebar 的控制器
+ * @param {function(): ("zh" | "en")} [deps.getShellLocale] 当前壳层语言（菜单错误文案用）
+ * @param {function("zh" | "en"): void} [deps.onShellLocaleChanged] 语言切换后的重建入口
+ *   （由 main.js 装配：托盘菜单 + tooltip + 窗口标题；本模块只管通道校验与分发）
  * @param {function(string): void} [deps.logLine]
  */
 function registerDesktopShellIpc(deps) {
@@ -73,6 +80,8 @@ function registerDesktopShellIpc(deps) {
     getLogDir,
     runUpdateCheck,
     titleBar,
+    getShellLocale = () => "en",
+    onShellLocaleChanged,
     logLine = () => {},
   } = deps;
 
@@ -88,6 +97,7 @@ function registerDesktopShellIpc(deps) {
     runUpdateCheck,
     // #34D：日志目录由 shell-paths 裁决（getLogDir 可能返回 null），这里只负责读尾部。
     readRecentProblems: () => readRecentProblems({ logDir: getLogDir() }),
+    getLocale: getShellLocale,
     logLine,
   });
 
@@ -135,6 +145,17 @@ function registerDesktopShellIpc(deps) {
 
   ipcMain.on(CHANNELS.setTheme, (event, theme) => {
     if (trusted(event)) titleBar.applyTheme(theme);
+  });
+
+  // 应用内语言：只接受 "zh" / "en"（其它值静默忽略，渲染层传错不会影响壳层状态）。
+  // 收到后交给 main.js 重建主进程侧的用户可见文案：托盘菜单 + tooltip、主窗口标题
+  // （运行时标题由渲染层 RouteAccessibility 接管，这里只是切换瞬间的兜底），
+  // 以及下一次打开关闭卡片时使用的语言。已打开的关闭卡片不热切换（见 close-dialog.js）。
+  ipcMain.on(CHANNELS.setLocale, (event, value) => {
+    if (!trusted(event)) return;
+    const locale = normalizeShellLocale(value);
+    if (!locale) return;
+    if (typeof onShellLocaleChanged === "function") onShellLocaleChanged(locale);
   });
 
   return { menu, channels: CHANNELS };

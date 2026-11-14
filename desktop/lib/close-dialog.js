@@ -27,10 +27,12 @@ const { pathToFileURL } = require("node:url");
  * @param {object} deps.ipcMain Electron ipcMain
  * @param {function(): (object|null)} deps.getWindow 当前主窗口
  * @param {string} deps.dirname 本文件所在目录（用于定位 html / preload）
+ * @param {function(): ("zh" | "en")} [deps.getShellLocale] 壳层当前语言（卡片文案用）
  * @param {function(string): void} [deps.logLine]
  */
 function createClosePrompt(deps) {
-  const { BrowserWindow, ipcMain, getWindow, dirname, logLine = () => {} } = deps;
+  const { BrowserWindow, ipcMain, getWindow, dirname } = deps;
+  const { logLine = () => {}, getShellLocale = () => "en" } = deps;
   let pendingWindow = null;
 
   // 只注册一次：处理器内部按 `pendingWindow` 找当前实例。
@@ -104,8 +106,12 @@ function createClosePrompt(deps) {
       });
 
       const file = path.join(dirname, "..", "close-dialog.html");
+      // 文案跟随应用内语言：这个窗口不加载 React，读不到前端语言包，所以壳层语言
+      // 拼进 query，由页面内联的 zh/en 两份文案表按 location.search 选（缺省英文）。
+      // 已打开的卡片不热切换：语言切换只影响下一次打开——有意取舍（简单、无闪烁）。
+      const locale = getShellLocale();
       win
-        .loadURL(pathToFileURL(file).href)
+        .loadURL(`${pathToFileURL(file).href}?locale=${encodeURIComponent(locale)}`)
         .then(() => {
           win.show();
           win.focus();

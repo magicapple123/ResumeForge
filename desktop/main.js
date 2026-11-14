@@ -38,6 +38,8 @@ const { createWindowShell } = require("./lib/window-shell");
 const { createTitleBarController, installTitleBarFallbackOnLoad } = require("./lib/titlebar");
 
 const { registerDesktopShellIpc } = require("./lib/desktop-shell-ipc");
+const { createShellDialogs } = require("./lib/shell-dialogs");
+const { createShellLocaleRuntime } = require("./lib/shell-locale-runtime");
 const { createStartupFailureReporter } = require("./lib/startup-failure");
 const { installerWaitCommand, runManualUpdateCheck, scheduleUpdateCheck, wantsManualUpdateCheck } = require("./updater");
 
@@ -110,49 +112,20 @@ const shellLogging = createShellLogging({
 });
 const logLine = shellLogging.log;
 
-// ADR-0004 legacy-data migration: asks the user before moving the payload-era
-// data into the user data dir. The module is required lazily (inside the
-// packaged-only path) so the dev-tree lifecycle probes, which load this file
-// in a VM with app.isPackaged = false, never resolve it.
-function confirmDataMigration(details) {
-  const incomplete =
-    details.reason === "marker-without-database"
-      ? "\n\n注意：上一次迁移的标记还在，但新位置已经找不到数据库文件" +
-        "（可能被移动、删除或同步工具移走）。现在重新迁移会从旧位置再复制一份。"
-      : "";
-  return dialog
-    .showMessageBox({
-      type: "question",
-      title: "简历通",
-      message: "检测到旧版本数据",
-      detail:
-        "检测到旧版本的数据仍保存在安装目录内。是否迁移到新的用户数据目录？" +
-        "旧数据将保留备份，迁移失败时旧数据也原样保留。" +
-        incomplete +
-        `\n\n旧位置：${details.from}\n新位置：${details.to}`,
-      buttons: ["迁移", "暂不迁移"],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true,
-    })
-    .then(({ response }) => response === 0);
-}
+// 壳层语言（应用内语言）：渲染进程挂载后推送，之前用系统语言兜底。切换后由 runtime
+// 重建托盘菜单 / tooltip 与窗口标题兜底（逻辑与用例都在 lib/shell-locale-runtime.js）。
+const shellLocaleRuntime = createShellLocaleRuntime({
+  getWindow: () => mainWindow,
+  getTrayManager: () => trayManager,
+  logLine,
+});
 
-// Marker present but no database anywhere: fail closed and let the user pick
-// between restoring a backup (quit) and explicitly starting from scratch.
-async function recoverMissingData(message) {
-  const { response } = await dialog.showMessageBox({
-    type: "error",
-    title: "简历通",
-    message: "数据目录需要确认",
-    detail: `${message}\n\n「创建全新数据库」会删除上一次迁移的标记并在新位置新建一份空数据库。`,
-    buttons: ["退出（先去恢复备份）", "创建全新数据库"],
-    defaultId: 0,
-    cancelId: 0,
-    noLink: true,
-  });
-  return response === 1;
-}
+// 原生对话框的文案装配（数据迁移确认 / 迁移不一致恢复 / 崩溃预算耗尽）。
+// 文案表在 lib/shell-locale.js；这里只注入 dialog 与"当前语言"。
+const shellDialogs = createShellDialogs({
+  dialog,
+  getLocale: () => shellLocaleRuntime.getLocale(),
+});
 
 // Resolves to { userDataDir, aborted }: null userDataDir keeps the legacy
 // (payload) location for this launch (declined / failed migration); aborted
@@ -162,13 +135,14 @@ async function resolveUserDataDir() {
   const result = await maybeMigrateUserData({
     oldDataDir: path.join(projectRoot(), "backend", "data"),
     newDataDir: userDataDir(),
-    showConfirm: confirmDataMigration,
+    showConfirm: shellDialogs.confirmDataMigration,
     showError: (title, message) => dialog.showErrorBox(title, message),
+    getLocale: () => shellLocaleRuntime.getLocale(),
     log: logLine,
   });
   if (result.outcome === "inconsistent") {
     logLine("data dir inconsistent: marker without database; asking the user");
-    const startFresh = await recoverMissingData(result.message);
+    const startFresh = await shellDialogs.confirmFreshStart(result.message);
     if (!startFresh) return { userDataDir: null, aborted: true };
     clearMarker(userDataDir());
     logLine("data dir inconsistent: user chose to start with a fresh database");
@@ -195,6 +169,7 @@ const promptClose = createClosePrompt({
   ipcMain,
   getWindow: () => mainWindow,
   dirname: __dirname,
+  getShellLocale: () => shellLocaleRuntime.getLocale(),
   logLine,
 });
 let desktopShellMenu = null;
@@ -205,6 +180,7 @@ const { closeBehavior, trayManager } = createWindowShell({
   setQuitting: (value) => { quitting = value; },
   store: createPreferenceStore({ app }),
   getMenu: () => desktopShellMenu,
+  getLocale: () => shellLocaleRuntime.getLocale(),
   logLine,
 });
 
@@ -234,6 +210,9 @@ function createWindow() {
     ...titleBar.windowOptions(),
     backgroundColor: "#f5f7fa",
     icon: shellIcon(),
+    // 静态兜底标题：页面加载前任务栏/Alt-Tab 显示它。运行时双语由渲染层
+    // RouteAccessibility 接管（document.title 随页面与语言变化），主进程不重复实现。
+    title: "ResumeForge",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -297,11 +276,11 @@ function handleUnexpectedExit(info) {
       `backend crash budget exhausted (${restartTimestamps.length} exits in ` +
         `${RESTART_WINDOW_MS / 60000} min), giving up`,
     );
-    dialog.showErrorBox(
-      "简历通",
-      `后端服务在 ${RESTART_WINDOW_MS / 60000} 分钟内连续异常退出 ${restartTimestamps.length} 次，已停止自动重启。\n` +
-        `诊断日志：${shellLogging.hint()}\n请重新启动应用。`,
-    );
+    shellDialogs.reportCrashBudgetExhausted({
+      count: restartTimestamps.length,
+      minutes: RESTART_WINDOW_MS / 60000,
+      logHint: shellLogging.hint(),
+    });
     return;
   }
 
@@ -380,6 +359,7 @@ const reportStartupFailure = createStartupFailureReporter({
   logLine,
   sendStage,
   getLogDir: startupLogDir,
+  getLocale: () => shellLocaleRuntime.getLocale(),
   setQuitting: (value) => {
     quitting = value;
   },
@@ -403,6 +383,7 @@ const quitLifecycle = createQuitLifecycle({
   logLine,
   getBackend: () => backend,
   getRestartTimer: () => restartTimer,
+  getLocale: () => shellLocaleRuntime.getLocale(),
   setQuitting: (value) => {
     quitting = value;
   },
@@ -435,11 +416,20 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     try {
       // 先体检再启动：安装目录只读是正常形态，降级只提示，绝不阻断启动。
+      // 应用内语言还没到：先用系统语言兜底（app.getLocale 在 Windows 上要等 ready 之后）。
+      shellLocaleRuntime.initializeFromApp(app);
+      logLine(`shell locale fallback: ${shellLocaleRuntime.getLocale()}`);
       const preflightInfo = shellLogging.preflight();
       logLine("whenReady reached");
       createWindow();
       trayManager.create();
-      announceDegradedOnReady({ window: mainWindow, dialog, shell, info: preflightInfo });
+      announceDegradedOnReady({
+        window: mainWindow,
+        dialog,
+        shell,
+        info: preflightInfo,
+        getLocale: () => shellLocaleRuntime.getLocale(),
+      });
       await startBackendAndSwap();
       scheduleUpdateCheck(mainWindow, logLine, { installAndQuit: quitLifecycle.requestInstallAndQuit });
       if (wantsManualUpdateCheck()) runManualUpdateCheck(mainWindow, logLine, { installAndQuit: quitLifecycle.requestInstallAndQuit });
@@ -487,6 +477,9 @@ desktopShellMenu = registerDesktopShellIpc({
       installAndQuit: quitLifecycle.requestInstallAndQuit,
     }),
   titleBar,
+  getShellLocale: () => shellLocaleRuntime.getLocale(),
+  // 语言切换后的重建入口：托盘菜单 + tooltip + 窗口标题兜底（见 lib/shell-locale-runtime.js）。
+  onShellLocaleChanged: (locale) => shellLocaleRuntime.apply(locale),
   logLine,
 });
 

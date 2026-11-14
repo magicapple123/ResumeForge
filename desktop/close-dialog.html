@@ -1,12 +1,14 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <!-- 自绘关闭卡片（Q11）：原生 MessageBox 的标题栏/图标/按钮全由系统画，
          参数里没有任何旋钮能改外观，所以只能自己开一个无边框窗口。
-         这里只有一个窗口、两个视图：视图 1 主问，视图 2 二次确认（只在"勾了记住 + 选退出"时出现）。 -->
+         这里只有一个窗口、两个视图：视图 1 主问，视图 2 二次确认（只在"勾了记住 + 选退出"时出现）。
+         文案跟随应用内语言：壳层语言由主进程拼进 URL（?locale=zh|en，见 lib/close-dialog.js），
+         页面内联 zh/en 两份表选定一份；缺省英文（静态 HTML 也是英文，避免非中文环境闪一下中文）。 -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
-    <title>关闭简历通</title>
+    <title>Close ResumeForge</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -79,7 +81,7 @@
   <body>
     <!-- 视图 1：主问 -->
     <section id="ask">
-      <h1 id="ask-title">关闭简历通？</h1>
+      <h1 id="ask-title">Close ResumeForge?</h1>
       <p id="ask-detail"></p>
       <div class="row">
         <button id="hide" class="primary"></button>
@@ -87,48 +89,126 @@
       </div>
       <label class="remember">
         <input id="remember" type="checkbox" />
-        <span id="remember-label">记住我的选择</span>
+        <span id="remember-label">Remember my choice</span>
       </label>
       <div class="hint" id="ask-hint"></div>
     </section>
 
     <!-- 视图 2：二次确认（勾了记住 + 选了退出） -->
     <section id="confirm" hidden>
-      <h1>以后关闭窗口将直接退出应用</h1>
-      <p>正在进行的生成或采集会被中断。随时可以在托盘菜单里重新打开「关闭窗口时询问」。</p>
+      <h1>Closing the window will quit the app from now on</h1>
+      <p>Any generation or collection in progress will be interrupted. You can turn "Ask when closing the window" back on in the tray menu at any time.</p>
       <div class="row">
-        <button id="confirm-quit" class="danger">退出并记住</button>
-        <button id="confirm-once" class="primary">只退出这次</button>
+        <button id="confirm-quit" class="danger">Quit and remember</button>
+        <button id="confirm-once" class="primary">Just this time</button>
       </div>
     </section>
 
     <script>
-      const api = window.closeDialog;
-      const ask = document.getElementById("ask");
-      const confirm = document.getElementById("confirm");
-      let action = "hide";
+      // 内联的 zh/en 两份文案表：本窗口不加载 React，拿不到前端语言包，所以由主进程
+      // 把壳层语言拼进 URL（lib/close-dialog.js: ?locale=zh|en），这里按 location.search 选。
+      // 缺省英文：静态 HTML 的默认文案也是英文，非中文环境不会先闪一段中文。
+      // 已打开的卡片不热切换（语言变更只影响下一次打开）——有意取舍：简单、无闪烁。
+      var COPY = {
+        en: {
+          lang: "en",
+          title: "Close ResumeForge",
+          askTitle: "Close ResumeForge?",
+          hideMinimize: "Minimize to tray",
+          hideClose: "Close window",
+          quit: "Quit app",
+          detailMinimize:
+            "The app keeps running in the background after minimizing; reopen it from the tray icon. " +
+            "Quitting stops the local service and interrupts any generation or collection in progress.",
+          detailClose:
+            "The app stays in the Dock and menu bar after closing the window and can be reopened. " +
+            "Quitting stops the local service and interrupts any generation or collection in progress.",
+          hintMinimize: "Press Esc to minimize to tray",
+          hintClose: "Press Esc to close the window",
+          remember: "Remember my choice",
+          confirmTitle: "Closing the window will quit the app from now on",
+          confirmBody:
+            'Any generation or collection in progress will be interrupted. ' +
+            'You can turn "Ask when closing the window" back on in the tray menu at any time.',
+          confirmQuit: "Quit and remember",
+          confirmOnce: "Just this time",
+        },
+        zh: {
+          lang: "zh-CN",
+          title: "关闭简历通",
+          askTitle: "关闭简历通？",
+          hideMinimize: "最小化到托盘",
+          hideClose: "关闭窗口",
+          quit: "退出应用",
+          detailMinimize:
+            "最小化后仍会继续在后台运行，可从托盘图标重新打开；" +
+            "退出应用会停止本地服务，正在进行的生成/采集会中断。",
+          detailClose:
+            "关闭窗口后应用仍会留在 Dock 与菜单栏，可重新打开；" +
+            "退出应用会停止本地服务，正在进行的生成/采集会中断。",
+          hintMinimize: "按 Esc 等于最小化到托盘",
+          hintClose: "按 Esc 等于关闭窗口",
+          remember: "记住我的选择",
+          confirmTitle: "以后关闭窗口将直接退出应用",
+          confirmBody:
+            "正在进行的生成或采集会被中断。" +
+            "随时可以在托盘菜单里重新打开「关闭窗口时询问」。",
+          confirmQuit: "退出并记住",
+          confirmOnce: "只退出这次",
+        },
+      };
+
+      function resolveLocale() {
+        var params = new URLSearchParams(window.location.search);
+        return params.get("locale") === "zh" ? "zh" : "en";
+      }
+
+      var copy = COPY[resolveLocale()];
+      document.documentElement.lang = copy.lang;
+      document.title = copy.title;
+      // 视图 2 是隐藏的，但文字先写好：二次确认是"误勾一次会长期失去保护"的补救，
+      // 不能等用户点出来才拼文案。
+      document.querySelector("#confirm h1").textContent = copy.confirmTitle;
+      document.querySelector("#confirm p").textContent = copy.confirmBody;
+      document.getElementById("confirm-quit").textContent = copy.confirmQuit;
+      document.getElementById("confirm-once").textContent = copy.confirmOnce;
+      document.getElementById("remember-label").textContent = copy.remember;
+
+      var api = window.closeDialog;
+      var ask = document.getElementById("ask");
+      var confirm = document.getElementById("confirm");
+      var action = "hide";
 
       // 平台口径由主进程给：macOS 没有"最小化到托盘"的惯例，退化为「关闭窗口」。
       api
         .platform()
-        .then((isMac) => {
-          document.getElementById("hide").textContent = isMac ? "关闭窗口" : "最小化到托盘";
-          document.getElementById("quit").textContent = "退出应用";
-          document.getElementById("ask-title").textContent = "关闭简历通？";
+        .then(function (isMac) {
+          document.getElementById("ask-title").textContent = copy.askTitle;
+          document.getElementById("hide").textContent = isMac ? copy.hideClose : copy.hideMinimize;
+          document.getElementById("quit").textContent = copy.quit;
           document.getElementById("ask-detail").textContent = isMac
-            ? "关闭窗口后应用仍会留在 Dock 与菜单栏，可重新打开；退出应用会停止本地服务，正在进行的生成/采集会中断。"
-            : "最小化后仍会继续在后台运行，可从托盘图标重新打开；退出应用会停止本地服务，正在进行的生成/采集会中断。";
-          document.getElementById("ask-hint").textContent = "按 Esc 等于最小化到托盘";
+            ? copy.detailClose
+            : copy.detailMinimize;
+          document.getElementById("ask-hint").textContent = isMac ? copy.hintClose : copy.hintMinimize;
         })
-        .catch(() => undefined);
+        .catch(function () {
+          // 主进程没回平台口径也不能留空白按钮：按 Windows 惯例填上（可关闭/可退出）。
+          document.getElementById("ask-title").textContent = copy.askTitle;
+          document.getElementById("hide").textContent = copy.hideMinimize;
+          document.getElementById("quit").textContent = copy.quit;
+          document.getElementById("ask-detail").textContent = copy.detailMinimize;
+          document.getElementById("ask-hint").textContent = copy.hintMinimize;
+        });
 
       function finish(payload) {
         api.resolve(payload);
       }
 
-      document.getElementById("hide").addEventListener("click", () => finish({ action: "hide", remember: false }));
-      document.getElementById("quit").addEventListener("click", () => {
-        const remember = document.getElementById("remember").checked;
+      document.getElementById("hide").addEventListener("click", function () {
+        finish({ action: "hide", remember: false });
+      });
+      document.getElementById("quit").addEventListener("click", function () {
+        var remember = document.getElementById("remember").checked;
         if (!remember) {
           finish({ action: "quit", remember: false });
           return;
@@ -139,15 +219,15 @@
         confirm.hidden = false;
         document.getElementById("confirm-once").focus();
       });
-      document.getElementById("confirm-quit").addEventListener("click", () =>
-        finish({ action, remember: true }),
-      );
-      document.getElementById("confirm-once").addEventListener("click", () =>
-        finish({ action, remember: false }),
-      );
+      document.getElementById("confirm-quit").addEventListener("click", function () {
+        finish({ action: action, remember: true });
+      });
+      document.getElementById("confirm-once").addEventListener("click", function () {
+        finish({ action: action, remember: false });
+      });
 
       // Esc = 安全默认（最小化 / 关闭窗口），绝不等于退出。
-      window.addEventListener("keydown", (event) => {
+      window.addEventListener("keydown", function (event) {
         if (event.key !== "Escape") return;
         event.preventDefault();
         finish({ action: "hide", remember: false });

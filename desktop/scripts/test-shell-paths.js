@@ -342,8 +342,15 @@ test("降级提示是给人看的：有路径、有原因、没有 EPERM/ENOENT 
   assert.doesNotMatch(`${text.message}${text.detail}`, /EPERM|ENOENT|errno/i,
     "面向用户/诊断的文案不能出现原始 errno");
 
+  // 缺省语言是英文（壳层缺省）；中文由 preflightNoticeText 的第二个参数选择。
   const nothing = preflightNoticeText({ logDir: null, runtimeDir: null, reason: "都不可写" });
-  assert.match(nothing.detail, /不会被保存/, "完全不可写时要说清楚后果");
+  assert.match(nothing.detail, /cannot be saved/, "完全不可写时要说清楚后果");
+  const nothingZh = preflightNoticeText(
+    { logDir: null, runtimeDir: null, reason: "都不可写" },
+    "zh",
+  );
+  assert.match(nothingZh.message, /诊断日志的位置有变化/, "中文环境必须给中文文案");
+  assert.match(nothingZh.detail, /不会被保存/);
 });
 
 test("presentPreflightNotice：第二条按钮才打开目录，任何缺失都安全", async () => {

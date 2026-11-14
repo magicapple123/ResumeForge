@@ -182,7 +182,9 @@ test("marker without a database fails closed instead of starting an empty app", 
 
     assert.strictEqual(result.outcome, "inconsistent");
     assert.strictEqual(result.userDataDir, null, "no data dir may be handed to the backend");
-    assert.match(result.message, /不会自动新建/);
+    // 缺省语言是英文；这条消息会被主进程放进恢复对话框，用户看到的就是它。
+    assert.match(result.message, /will not create an empty database/);
+    assert.match(result.message, new RegExp(newDataDir.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")));
     // Nothing was created and the marker is still there for the recovery dialog.
     assert.strictEqual(fs.existsSync(path.join(newDataDir, DATABASE_FILENAME)), false);
     assert.ok(fs.existsSync(path.join(newDataDir, MARKER_FILENAME)));

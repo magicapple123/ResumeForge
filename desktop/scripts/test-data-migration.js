@@ -284,7 +284,9 @@ test("verification failure: temp cleaned, no marker, legacy data intact, error s
       "a failed migration must not write the marker");
     assert.deepStrictEqual(hashAll(oldDataDir), legacyBefore, "legacy data must be untouched");
     assert.strictEqual(errorMessages.length, 1, "the user must see the failure");
-    assert.match(errorMessages[0].message, /重试/, "the message must offer a retry");
+    // 文案跟随壳层语言；用例没注入 getLocale，按壳层缺省英文输出（中文另有一条用例）。
+    assert.match(errorMessages[0].message, /retry/i, "the message must offer a retry");
+    assert.strictEqual(errorMessages[0].title, "ResumeForge");
     // The backup stays as a safety artifact (user-writable location).
     assert.ok(
       fs.existsSync(

@@ -26,11 +26,12 @@ const { createTrayManager } = require("./tray-menu");
  * @param {object} deps.store 关闭记忆读写句柄
  * @param {function(): (object|null)} [deps.getMenu] 返回 `registerDesktopShellIpc` 的 dispatcher
  *   （有 `run(id)`）。用函数而不是对象：IPC 在 main.js 更靠后才注册，构造窗口壳时它还不存在。
+ * @param {function(): ("zh" | "en")} [deps.getLocale] 壳层当前语言（托盘文案用）
  * @param {function(string): void} [deps.logLine]
  */
 function createWindowShell(deps) {
   const { app, Tray, Menu, iconPath, promptClose, getWindow, isQuitting, setQuitting } = deps;
-  const { store, getMenu, logLine = () => {} } = deps;
+  const { store, getMenu, getLocale, logLine = () => {} } = deps;
 
   /** 托盘要能触发菜单动作（打开数据目录 / 日志目录 / 复制诊断 / 检查更新）。 */
   const runMenuAction = (id) => {
@@ -66,6 +67,7 @@ function createWindowShell(deps) {
     getRemembered: () => closeBehavior.getRemembered(),
     clearRemembered: () => closeBehavior.clearRemembered(),
     runMenuAction,
+    getLocale,
     logLine,
   });
 
