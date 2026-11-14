@@ -51,9 +51,10 @@ export function VoiceSettingsPopover({
           size="small"
           value={settings.voice}
           onChange={(value) => patch({ voice: value })}
-          options={(voices.length > 0 ? voices : [{ id: settings.voice, label: settings.voice }]).map(
-            (item) => ({ value: item.id, label: item.label }),
-          )}
+          options={(voices.length > 0
+            ? voices
+            : [{ id: settings.voice, label: settings.voice }]
+          ).map((item) => ({ value: item.id, label: item.label }))}
           popupMatchSelectWidth={false}
           aria-label={t("interviewVoice.settings.voice")}
         />

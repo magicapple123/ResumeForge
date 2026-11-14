@@ -88,7 +88,11 @@ export default function CollectConfigForm({
               extra={t("applyCollect.hint.keywords")}
               className="apply-collect-keywords"
             >
-              <Select mode="tags" placeholder={t("applyCollect.placeholder.keywords")} open={false} />
+              <Select
+                mode="tags"
+                placeholder={t("applyCollect.placeholder.keywords")}
+                open={false}
+              />
             </Form.Item>
             <Form.Item
               className="apply-collect-limit"
@@ -104,7 +108,11 @@ export default function CollectConfigForm({
             </Form.Item>
           </div>
           <div className="apply-collect-search-row">
-            <Form.Item className="apply-collect-city" name="city" label={t("applyCollect.field.city")}>
+            <Form.Item
+              className="apply-collect-city"
+              name="city"
+              label={t("applyCollect.field.city")}
+            >
               <Input placeholder={t("applyCollect.placeholder.city")} />
             </Form.Item>
             {/* 历史条件从标题行挪进栅格：它是一份"可回填的输入"，和关键词、城市同级；

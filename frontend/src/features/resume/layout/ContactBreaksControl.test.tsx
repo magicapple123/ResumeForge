@@ -186,7 +186,9 @@ describe("联系方式同行分隔符（R-05）", () => {
   it("选「竖线」→ onChange 收到 contact_separator: bar", async () => {
     const onChange = renderControl({ accent: "#123456" });
 
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: t("workbench.contactSeparator.label") }));
+    fireEvent.mouseDown(
+      screen.getByRole("combobox", { name: t("workbench.contactSeparator.label") }),
+    );
     fireEvent.click(await screen.findByText(t("contactSeparator.option.bar")));
 
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
@@ -201,7 +203,9 @@ describe("F26：分隔符是独立一行", () => {
   it("两个可见行标签各自渲染，分隔下拉挂在第二行里", () => {
     render(<ContactBreaksControl formatConfig={{}} onChange={vi.fn()} />);
 
-    const breakRow = screen.getByText(t("workbench.contactBreak.label")).closest(".resume-wb-field-row");
+    const breakRow = screen
+      .getByText(t("workbench.contactBreak.label"))
+      .closest(".resume-wb-field-row");
     const separatorRow = screen
       .getByText(t("workbench.contactSeparator.label"))
       .closest(".resume-wb-field-row");
@@ -210,7 +214,11 @@ describe("F26：分隔符是独立一行", () => {
     expect(separatorRow).not.toBeNull();
     expect(breakRow).not.toBe(separatorRow);
     // 分隔下拉只在第二行；第一行只有「在哪换行」那一个多选。
-    expect(separatorRow!.querySelector('[aria-label="' + t("workbench.contactSeparator.label") + '"]')).not.toBeNull();
-    expect(breakRow!.querySelector('[aria-label="' + t("workbench.contactSeparator.label") + '"]')).toBeNull();
+    expect(
+      separatorRow!.querySelector('[aria-label="' + t("workbench.contactSeparator.label") + '"]'),
+    ).not.toBeNull();
+    expect(
+      breakRow!.querySelector('[aria-label="' + t("workbench.contactSeparator.label") + '"]'),
+    ).toBeNull();
   });
 });

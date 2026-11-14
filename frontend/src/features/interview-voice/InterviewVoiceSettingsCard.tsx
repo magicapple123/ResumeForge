@@ -8,7 +8,18 @@
  * 值存在 `localStorage`（`voiceSettings`），与数据集无关，**不需要数据库迁移**。
  * 布局沿用设置页既有写法（`Card` + 纵向 `Space` + `Divider`），不新增 CSS 类。
  */
-import { App, Button, Card, Divider, Segmented, Select, Slider, Space, Switch, Typography } from "antd";
+import {
+  App,
+  Button,
+  Card,
+  Divider,
+  Segmented,
+  Select,
+  Slider,
+  Space,
+  Switch,
+  Typography,
+} from "antd";
 import { useEffect, useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -21,7 +32,15 @@ interface VoiceOption {
 }
 
 /** 一行「标签 + 控件」：设置页既有的卡片都是这个形态，不另造样式类。 */
-function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Row({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div
       style={{
@@ -70,7 +89,10 @@ export function InterviewVoiceSettingsCard() {
     };
   }, []);
 
-  const markers = (range: [number, number]) => ({ [range[0]]: `${range[0]}`, [range[1]]: `${range[1]}` });
+  const markers = (range: [number, number]) => ({
+    [range[0]]: `${range[0]}`,
+    [range[1]]: `${range[1]}`,
+  });
 
   return (
     <Card
@@ -92,7 +114,10 @@ export function InterviewVoiceSettingsCard() {
       </Typography.Paragraph>
 
       <Space orientation="vertical" size={10} style={{ width: "100%" }}>
-        <Row label={t("interviewVoice.settings.speak")} hint={t("interviewVoice.settings.speakHint")}>
+        <Row
+          label={t("interviewVoice.settings.speak")}
+          hint={t("interviewVoice.settings.speakHint")}
+        >
           <Switch
             checked={settings.speakInterviewer}
             onChange={(checked) => patch({ speakInterviewer: checked })}
@@ -103,15 +128,19 @@ export function InterviewVoiceSettingsCard() {
           <Select
             value={settings.voice}
             onChange={(value) => patch({ voice: value })}
-            options={(
-              voices.length > 0 ? voices : [{ id: settings.voice, label: settings.voice }]
+            options={(voices.length > 0
+              ? voices
+              : [{ id: settings.voice, label: settings.voice }]
             ).map((item) => ({ value: item.id, label: item.label }))}
             popupMatchSelectWidth={false}
             style={{ minWidth: 180 }}
             aria-label={t("interviewVoice.settings.voice")}
           />
         </Row>
-        <Row label={t("interviewVoice.settings.autoSend")} hint={t("interviewVoice.settings.autoSendHint")}>
+        <Row
+          label={t("interviewVoice.settings.autoSend")}
+          hint={t("interviewVoice.settings.autoSendHint")}
+        >
           <Switch
             checked={settings.autoSend}
             onChange={(checked) => patch({ autoSend: checked })}

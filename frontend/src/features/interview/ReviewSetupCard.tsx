@@ -124,12 +124,7 @@ export default function ReviewSetupCard({
         />
         {resumeField}
         <Space wrap>
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            loading={analyzing}
-            onClick={onAnalyze}
-          >
+          <Button type="primary" icon={<SendOutlined />} loading={analyzing} onClick={onAnalyze}>
             {t("interviewReview.action.analyze")}
           </Button>
           {analyzing && <AbortButton onClick={onAbort} />}

@@ -248,7 +248,9 @@ describe("InterviewPage 计时器与「准备好了」闸门", () => {
 
     // 暂停：作答区换成暂停卡，计时冻住（推进 30s 读数不动）。
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: named(t("interviewPage.paused.action")) }));
+      fireEvent.click(
+        screen.getByRole("button", { name: named(t("interviewPage.paused.action")) }),
+      );
     });
     expect(screen.getByText(t("interviewPage.paused.title"))).toBeTruthy();
     expect(screen.queryByPlaceholderText(t("interview.placeholder"))).toBeNull();

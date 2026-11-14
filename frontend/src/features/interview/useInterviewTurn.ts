@@ -130,8 +130,7 @@ export function useInterviewTurn({
     try {
       // 流式：面试官的问题逐字出现（后端把 question 字段明文增量推来）；
       // done 事件的 result 与旧端点同形状，收尾/报告逻辑不变。
-      const onDelta = (delta: string) =>
-        setStreamingQuestion((current) => (current ?? "") + delta);
+      const onDelta = (delta: string) => setStreamingQuestion((current) => (current ?? "") + delta);
       // 不再有 phase 回调：需求 4 之后收尾只收盘，服务端不再推 ``finishing``
       // （"正在生成报告"由页面在调用 /finish 期间显示）。
       const result =

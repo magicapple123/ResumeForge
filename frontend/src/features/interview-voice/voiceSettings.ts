@@ -82,7 +82,9 @@ export function normalizeVoiceSettings(raw: unknown): InterviewVoiceSettings {
   return {
     version: 1,
     speakInterviewer:
-      typeof source.speakInterviewer === "boolean" ? source.speakInterviewer : base.speakInterviewer,
+      typeof source.speakInterviewer === "boolean"
+        ? source.speakInterviewer
+        : base.speakInterviewer,
     voice: typeof source.voice === "string" && source.voice ? source.voice : base.voice,
     rate: clamp(Number(source.rate), 0.7, 1.5, base.rate),
     volume: clamp(Number(source.volume), 0, 1, base.volume),

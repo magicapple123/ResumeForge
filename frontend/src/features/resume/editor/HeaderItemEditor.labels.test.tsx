@@ -79,7 +79,5 @@ it("联系方式与性别行也提供三态；姓名行不提供", () => {
   cleanup();
 
   renderEditor(item({ id: "ob_name000001", key: "name", placement: "name", value: "张三" }));
-  expect(
-    screen.queryByRole("combobox", { name: t("structure.layout.labelMode.aria") }),
-  ).toBeNull();
+  expect(screen.queryByRole("combobox", { name: t("structure.layout.labelMode.aria") })).toBeNull();
 });

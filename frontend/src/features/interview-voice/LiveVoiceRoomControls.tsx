@@ -72,7 +72,11 @@ export function LiveVoiceRoomControls({
           {voice.enabled ? t("interviewVoice.room.micOff") : t("interviewVoice.room.micOn")}
         </Button>
         {mode === "push-to-talk" && voice.enabled ? (
-          <Button type="primary" onPointerUp={voice.releasePushToTalk} onClick={voice.releasePushToTalk}>
+          <Button
+            type="primary"
+            onPointerUp={voice.releasePushToTalk}
+            onClick={voice.releasePushToTalk}
+          >
             {t("interviewVoice.action.hold")}
           </Button>
         ) : null}

@@ -71,7 +71,9 @@ function renderCard() {
       <AssistantDigestCard />
     </AntdApp>,
   );
-  fireEvent.click(screen.getByRole("button", { name: new RegExp(t("assistantBreadth.digest.title")) }));
+  fireEvent.click(
+    screen.getByRole("button", { name: new RegExp(t("assistantBreadth.digest.title")) }),
+  );
   return rendered;
 }
 
@@ -91,7 +93,9 @@ describe("AssistantDigestCard", () => {
     controller.digest = SAMPLE;
     renderCard();
 
-    expect(screen.getByRole("button", { name: new RegExp(t("assistantBreadth.digest.title")) })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: new RegExp(t("assistantBreadth.digest.title")) }),
+    ).toBeTruthy();
     expect(screen.getByText(t("assistantBreadth.digest.changes", { count: 2 }))).toBeTruthy();
     expect(screen.getByTestId("digest-generated-at").textContent).toContain("08:00");
     expect(screen.getByTestId("digest-section-worth_jobs").textContent).toContain(
@@ -147,7 +151,9 @@ describe("AssistantDigestCard", () => {
         <AssistantDigestCard />
       </AntdApp>,
     );
-    const trigger = screen.getByRole("button", { name: new RegExp(t("assistantBreadth.digest.title")) });
+    const trigger = screen.getByRole("button", {
+      name: new RegExp(t("assistantBreadth.digest.title")),
+    });
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     fireEvent.keyDown(document, { key: "Escape" });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -158,7 +164,9 @@ describe("AssistantDigestCard", () => {
         <AssistantDigestCard />
       </AntdApp>,
     );
-    const reopened = screen.getByRole("button", { name: new RegExp(t("assistantBreadth.digest.title")) });
+    const reopened = screen.getByRole("button", {
+      name: new RegExp(t("assistantBreadth.digest.title")),
+    });
     expect(reopened).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(reopened);
     expect(reopened).toHaveAttribute("aria-expanded", "true");

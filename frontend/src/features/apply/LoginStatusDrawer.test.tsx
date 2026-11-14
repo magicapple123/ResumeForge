@@ -142,9 +142,7 @@ describe("F07 登录状态：网申逐站点", () => {
       ).toBeTruthy();
     }
     // 超出上限的提示：共 4 个站点，只列了 2 个。
-    expect(
-      screen.getByText(t("applyUi.loginStatus.siteTruncated", { count: 2 })),
-    ).toBeTruthy();
+    expect(screen.getByText(t("applyUi.loginStatus.siteTruncated", { count: 2 }))).toBeTruthy();
   });
 
   it("没有探测地址时检测/重登置灰，并按来源给提示（F12）", async () => {

@@ -21,9 +21,7 @@ export const SKILL_COLUMNS_KEY = "skill_columns";
 export const SKILL_COLUMN_VALUES = [1, 2, 3, 4] as const;
 
 /** 读当前档位；未设置/脏数据返回 0（= 跟随模板默认）。 */
-export function readSkillColumns(
-  config: ResumeFormatConfig | null | undefined,
-): number {
+export function readSkillColumns(config: ResumeFormatConfig | null | undefined): number {
   const raw = config?.[SKILL_COLUMNS_KEY];
   return typeof raw === "number" && SKILL_COLUMN_VALUES.includes(raw as 1 | 2 | 3 | 4) ? raw : 0;
 }
@@ -45,11 +43,7 @@ interface Props {
   onChange: (next: ResumeFormatConfig) => void;
 }
 
-export default function SkillColumnsControl({
-  formatConfig,
-  disabled = false,
-  onChange,
-}: Props) {
+export default function SkillColumnsControl({ formatConfig, disabled = false, onChange }: Props) {
   useLocale();
   const value = readSkillColumns(formatConfig);
   return (

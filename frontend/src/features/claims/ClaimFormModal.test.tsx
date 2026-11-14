@@ -182,7 +182,9 @@ describe("ClaimFormModal 的面试细节与字段回填", () => {
     await pickEntry();
 
     await waitFor(() =>
-      expect(screen.getByLabelText(t("claimForm.field.subject"))).toHaveValue("Acme backend intern"),
+      expect(screen.getByLabelText(t("claimForm.field.subject"))).toHaveValue(
+        "Acme backend intern",
+      ),
     );
     const categoryField = screen
       .getByLabelText(t("claimForm.field.category"))

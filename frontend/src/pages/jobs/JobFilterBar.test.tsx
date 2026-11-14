@@ -164,14 +164,8 @@ describe("JobFilterBar · 四簇分组", () => {
     expect(container.querySelectorAll(".jobs-filter-group")).toHaveLength(4);
     expect(container.querySelectorAll(".jobs-filter-divider")).toHaveLength(3);
     // 分组不能把控件搬走：搜索框仍在筛选簇内，导入入口仍在导入簇内。
-    expect(
-      container.querySelector(
-        ".jobs-filter-group-filters .jobs-search-input",
-      ),
-    ).not.toBeNull();
-    expect(
-      screen.getByTestId("link-import").closest(".jobs-filter-group-import"),
-    ).not.toBeNull();
+    expect(container.querySelector(".jobs-filter-group-filters .jobs-search-input")).not.toBeNull();
+    expect(screen.getByTestId("link-import").closest(".jobs-filter-group-import")).not.toBeNull();
   });
 
   it("全栏只有「手动添加」是主按钮（AI 对比选岗降为普通按钮）", () => {

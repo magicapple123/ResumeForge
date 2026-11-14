@@ -228,9 +228,7 @@ describe("AssistantLimitCard 排版结构（R-32）", () => {
     expect(screen.getByText(t("assistantLimits.settings.dirty"))).toBeInTheDocument();
 
     fireEvent.click(saveButton());
-    await waitFor(() =>
-      expect(screen.queryByText(t("assistantLimits.settings.dirty"))).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByText(t("assistantLimits.settings.dirty"))).toBeNull());
   });
 
   it("阈值错误挂在对应字段内（不是堆在保存按钮上方）", async () => {

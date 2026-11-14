@@ -56,9 +56,7 @@ export default function AssistantWorkspaceHeader({
           {memoryOff !== undefined && onMemoryOffChange ? (
             <Tooltip title={t("assistantUi.memory.offTooltip")} placement="bottom">
               <span className="assistant-memory-toggle">
-                <Typography.Text type="secondary">
-                  {t("assistantUi.memory.off")}
-                </Typography.Text>
+                <Typography.Text type="secondary">{t("assistantUi.memory.off")}</Typography.Text>
                 <Switch
                   size="small"
                   checked={memoryOff}

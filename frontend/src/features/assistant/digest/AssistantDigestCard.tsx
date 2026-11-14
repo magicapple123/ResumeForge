@@ -194,11 +194,7 @@ export default function AssistantDigestCard({ enabled = true }: { enabled?: bool
       styles={{ content: { padding: 0 }, root: { maxWidth: "calc(100vw - 32px)" } }}
       content={content}
     >
-      <Button
-        type="text"
-        className="assistant-digest-summary"
-        aria-expanded={open}
-      >
+      <Button type="text" className="assistant-digest-summary" aria-expanded={open}>
         {changes > 0 ? <span className="assistant-digest-change-dot" aria-hidden="true" /> : null}
         <strong>{t("assistantBreadth.digest.title")}</strong>
         <span className="assistant-digest-summary-counts">{summaryText}</span>

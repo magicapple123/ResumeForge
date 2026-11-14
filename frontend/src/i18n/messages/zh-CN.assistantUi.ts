@@ -97,8 +97,7 @@ const assistantUi = {
   "assistantUi.sidebar.aria.selectConversation": "选择对话 {title}",
   "assistantUi.sidebar.moreTooltip": "更多操作（也可以直接右键这条对话）",
   "assistantUi.memory.off": "本次不记忆",
-  "assistantUi.memory.offTooltip":
-    "这段对话不读取也不写入助手记忆；已保存的记忆不会被删除",
+  "assistantUi.memory.offTooltip": "这段对话不读取也不写入助手记忆；已保存的记忆不会被删除",
   "assistantUi.memory.offBadge": "这段对话不记忆",
   "assistantUi.sidebar.moreAria": "更多对话操作",
   "assistantUi.sidebar.saveTitleTooltip": "保存标题（回车也可以）",

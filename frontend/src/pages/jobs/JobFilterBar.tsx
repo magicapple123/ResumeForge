@@ -96,12 +96,7 @@ export function JobFilterBar({
           互相抢注意力。现在按「筛选｜AI｜导入｜新增」分成四簇：簇内 6px、簇间 8px + 一条
           竖分隔线，读到哪一簇停在哪里由线来断句；全栏只留「手动添加」一个 primary。 */}
       <Space wrap size={8} align="center" className="jobs-filter-bar">
-        <Space
-          wrap
-          size={6}
-          align="center"
-          className="jobs-filter-group jobs-filter-group-filters"
-        >
+        <Space wrap size={6} align="center" className="jobs-filter-group jobs-filter-group-filters">
           <Input.Search
             size="small"
             className="jobs-search-input"

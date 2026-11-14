@@ -81,10 +81,7 @@ export default function LoginStatusDrawer({
     setLoading(true);
     try {
       // 两个都是只读缓存：打开面板绝不能顺手发 check（浏览器类检测会弹窗）。
-      const [statuses, webformSites] = await Promise.all([
-        listLoginStatuses(),
-        listWebformSites(),
-      ]);
+      const [statuses, webformSites] = await Promise.all([listLoginStatuses(), listWebformSites()]);
       setRows(statuses);
       setSites(webformSites);
     } catch (error) {
@@ -182,10 +179,16 @@ export default function LoginStatusDrawer({
     // 先排投递浏览器，再排各站点，最后才是 Cookie 与其它来源：一条平铺的任务队列，
     // 顺序就是用户看到的执行顺序。
     const sources = rows.filter((row) => row.id !== "webform_browser" || !hasSites);
-    const ordered: Array<{ kind: "source"; row: LoginStatusRow } | { kind: "site"; site: LoginStatusSite }> = [
-      ...sources.filter((row) => row.id === "apply_browser").map((row) => ({ kind: "source" as const, row })),
+    const ordered: Array<
+      { kind: "source"; row: LoginStatusRow } | { kind: "site"; site: LoginStatusSite }
+    > = [
+      ...sources
+        .filter((row) => row.id === "apply_browser")
+        .map((row) => ({ kind: "source" as const, row })),
       ...sites.items.map((site) => ({ kind: "site" as const, site })),
-      ...sources.filter((row) => row.id !== "apply_browser").map((row) => ({ kind: "source" as const, row })),
+      ...sources
+        .filter((row) => row.id !== "apply_browser")
+        .map((row) => ({ kind: "source" as const, row })),
     ];
     setCheckingAll(true);
     setProgress({ done: 0, total: ordered.length });
@@ -241,11 +244,7 @@ export default function LoginStatusDrawer({
         >
           {t("applyUi.loginStatus.site.check")}
         </Button>
-        <Button
-          size="small"
-          disabled={!site.probe_url}
-          onClick={() => void runSiteRelogin(site)}
-        >
+        <Button size="small" disabled={!site.probe_url} onClick={() => void runSiteRelogin(site)}>
           {t("applyUi.loginStatus.site.relogin")}
         </Button>
       </div>
@@ -272,9 +271,7 @@ export default function LoginStatusDrawer({
         </Button>
       }
     >
-      <Typography.Paragraph type="secondary">
-        {t("applyUi.loginStatus.intro")}
-      </Typography.Paragraph>
+      <Typography.Paragraph type="secondary">{t("applyUi.loginStatus.intro")}</Typography.Paragraph>
       <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
         {t("applyUi.loginStatus.probeHint")}
       </Typography.Paragraph>

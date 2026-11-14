@@ -150,8 +150,10 @@ const applyUi = {
   // ===== 登录状态面板（Q12）=====
   "applyUi.loginStatus.button": "登录状态",
   "applyUi.loginStatus.title": "登录状态",
-  "applyUi.loginStatus.intro": "投递浏览器、网申浏览器与门户 Cookie 是三处彼此独立的登录态，任何一处掉线都只影响它自己。",
-  "applyUi.loginStatus.probeHint": "检测会真的拉起对应浏览器并访问一次站点，所以只在你点的时候才跑。",
+  "applyUi.loginStatus.intro":
+    "投递浏览器、网申浏览器与门户 Cookie 是三处彼此独立的登录态，任何一处掉线都只影响它自己。",
+  "applyUi.loginStatus.probeHint":
+    "检测会真的拉起对应浏览器并访问一次站点，所以只在你点的时候才跑。",
   "applyUi.loginStatus.status.ok": "正常",
   "applyUi.loginStatus.status.expired": "已失效",
   "applyUi.loginStatus.status.unknown": "无法判断",

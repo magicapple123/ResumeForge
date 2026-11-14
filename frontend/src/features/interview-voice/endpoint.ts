@@ -184,10 +184,7 @@ export function decideEndpoint(input: EndpointInput): EndpointDecision {
     return {
       kind: "wait",
       cause: "incomplete",
-      deadlineAt: Math.max(
-        input.lastSpeechAt + timing.extendedMs,
-        input.atMs + timing.graceMs,
-      ),
+      deadlineAt: Math.max(input.lastSpeechAt + timing.extendedMs, input.atMs + timing.graceMs),
     };
   }
   const transcriptClass = classifyTranscript(text);
@@ -198,10 +195,7 @@ export function decideEndpoint(input: EndpointInput): EndpointDecision {
   }
   if (transcriptClass === "complete") return { kind: "send", cause: "complete" };
   // 没说完：延长到 1.2–1.5s；ASR 慢导致窗口已过时至少再给 EXTENDED_GRACE_MS。
-  const deadlineAt = Math.max(
-    input.lastSpeechAt + timing.extendedMs,
-    input.atMs + timing.graceMs,
-  );
+  const deadlineAt = Math.max(input.lastSpeechAt + timing.extendedMs, input.atMs + timing.graceMs);
   if (deadlineAt <= input.atMs) return { kind: "send", cause: "extended-deadline" };
   return { kind: "wait", cause: endsWithFiller(text) ? "filler" : "incomplete", deadlineAt };
 }

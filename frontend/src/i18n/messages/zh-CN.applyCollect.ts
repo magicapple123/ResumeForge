@@ -14,7 +14,8 @@ const applyCollect = {
   "applyCollect.field.history": "历史条件",
   "applyCollect.unit.perBatch": "条 / 批",
   "applyCollect.unit.seconds": "秒",
-  "applyCollect.footer.summary": "预计 {count} 条 · 间隔 {interval} ± {jitter} 秒 · 约 {minutes} 分钟",
+  "applyCollect.footer.summary":
+    "预计 {count} 条 · 间隔 {interval} ± {jitter} 秒 · 约 {minutes} 分钟",
   "applyCollect.filters.selected": "已选 {count} 项",
   "applyCollect.flow.summary": "采集结果 → 导入岗位 → 加入投递队列",
   "applyCollect.flow.instructions": "查看说明",

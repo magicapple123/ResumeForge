@@ -38,10 +38,7 @@ interface Options {
 
 /** 会话可以被单独修改的字段（置顶/收藏/归档/分组名/本次不记忆）。 */
 export type ConversationPatch = Partial<
-  Pick<
-    AssistantConversationBrief,
-    "pinned" | "favorite" | "archived" | "group_name" | "memory_off"
-  >
+  Pick<AssistantConversationBrief, "pinned" | "favorite" | "archived" | "group_name" | "memory_off">
 >;
 
 export function useAssistantConversations({ message, surface = "page" }: Options) {

@@ -325,7 +325,9 @@ describe("压缩状态", () => {
       ),
     ).toBeInTheDocument();
     // 「省下 87%」是实测比例，不是估算。
-    expect(screen.getByText(t("contextUsage.compaction.saved", { percent: 87 }))).toBeInTheDocument();
+    expect(
+      screen.getByText(t("contextUsage.compaction.saved", { percent: 87 })),
+    ).toBeInTheDocument();
     // 不可逆的错觉：必须写明原文仍在本地。
     expect(screen.getAllByText(t("contextUsage.compaction.keepOriginal")).length).toBeGreaterThan(
       0,

@@ -104,9 +104,7 @@ export default function ReviewHistoryCard({
         <Space orientation="vertical" style={{ width: "100%" }} size={4}>
           {/* 摘要而不是全文：完整的 questions / framework / suggestions 在「查看详情」里。 */}
           {question && <Typography.Text>{question}</Typography.Text>}
-          {framework && (
-            <Typography.Text type="secondary">{framework}</Typography.Text>
-          )}
+          {framework && <Typography.Text type="secondary">{framework}</Typography.Text>}
           {suggestionCount > 0 && (
             <Typography.Text type="secondary">
               {t("interviewReview.history.summary.suggestions", { count: suggestionCount })}

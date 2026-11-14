@@ -148,9 +148,7 @@ export function CameraReportSection({
             <PlayCircleOutlined aria-hidden="true" />
             <Typography.Text>{t("interviewCamera.report.playback")}</Typography.Text>
             {meta.expires_at ? (
-              <Typography.Text type="secondary">
-                {formatEpochDate(meta.expires_at)}
-              </Typography.Text>
+              <Typography.Text type="secondary">{formatEpochDate(meta.expires_at)}</Typography.Text>
             ) : null}
           </Space>
           {/* 录像默认无音轨（getUserMedia audio:false），controls 仍保留进度拖动。 */}

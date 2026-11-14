@@ -26,7 +26,8 @@ const settingsUi = {
     "When off, the orb stops showing tips and no longer suggests improving your Profile on the My Profile page; everything else keeps working.",
   "settingsUi.orb.selectionAria": "Turn on Toutou selection toolbar",
   "settingsUi.orb.selectionOnToast": "The Toutou selection toolbar will show over selected text",
-  "settingsUi.orb.selectionOffToast": "The selection toolbar will no longer show over selected text",
+  "settingsUi.orb.selectionOffToast":
+    "The selection toolbar will no longer show over selected text",
   "settingsUi.orb.selectionHint":
     "When off, selecting text on a page no longer brings up the action bar (rewrite, copy, save as material); opening the assistant from the orb and the long-press action panel keep working.",
   "settingsUi.orb.loadFailed": "Could not load the Toutou orb setting",

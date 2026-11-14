@@ -17,11 +17,7 @@ import { Button, Popover } from "antd";
 import { useState } from "react";
 import { t } from "../../../../i18n";
 import { useLocale } from "../../../../i18n/i18nContext";
-import {
-  contextArcPercent,
-  contextUsageLevel,
-  formatPercentShort,
-} from "../../contextUsageFormat";
+import { contextArcPercent, contextUsageLevel, formatPercentShort } from "../../contextUsageFormat";
 import type { ContextUsage } from "../../../../types";
 import ContextUsagePopover from "./ContextUsagePopover";
 

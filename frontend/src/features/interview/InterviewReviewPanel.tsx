@@ -104,12 +104,14 @@ export default function InterviewReviewPanel({
   const [optimizeResult, setOptimizeResult] = useState<InterviewOptimizeResult | null>(null);
   // F01：记录态独立作用域。打开/关闭历史**不得**修改工作区的 analysis / optimizeResult /
   // jobId / 简历选择——旧实现把记录内容灌进共享 state，关闭记录后它"冒充"成工作区结果。
-  const [recordOptimizeResult, setRecordOptimizeResult] =
-    useState<InterviewOptimizeResult | null>(null);
+  const [recordOptimizeResult, setRecordOptimizeResult] = useState<InterviewOptimizeResult | null>(
+    null,
+  );
   const [recordResumeMode, setRecordResumeMode] = useState<MaterialSourceMode>("record");
   const [recordResumeChoice, setRecordResumeChoice] = useState<ResumeChoice | null>(null);
-  const [recordResumeMaterial, setRecordResumeMaterial] =
-    useState<InterviewMaterialExtract | null>(null);
+  const [recordResumeMaterial, setRecordResumeMaterial] = useState<InterviewMaterialExtract | null>(
+    null,
+  );
   // F02/F03：工作态自动保存后拿到的记录 id。非空 = 已经入库，保存按钮收起、反向优化写回它。
   const [workRecordId, setWorkRecordId] = useState<number | null>(null);
   // 反向优化的两个可编辑输入（问题 12）：`null` = 用户没改过 → 回落到模型分析值。
@@ -215,9 +217,7 @@ export default function InterviewReviewPanel({
     // 历史里的简历只有 id 能还原（外部/上传的正文不进历史，零迁移的代价）：
     // 记录页因此保留简历来源控件，用户补选一次就能继续反向优化。
     setRecordResumeMode("record");
-    setRecordResumeChoice(
-      record?.resume_id ? { kind: "internal", id: record.resume_id } : null,
-    );
+    setRecordResumeChoice(record?.resume_id ? { kind: "internal", id: record.resume_id } : null);
     setRecordResumeMaterial(null);
   }
 

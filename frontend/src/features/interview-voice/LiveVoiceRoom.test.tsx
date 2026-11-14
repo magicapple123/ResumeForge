@@ -203,7 +203,9 @@ describe("LiveVoiceRoom", () => {
     expect(userBubble).toHaveClass("interview-message--me");
 
     // 昵称：气泡里写的是房间自己的称呼（面试官 / 我）。
-    expect(within(conversation).getByText(t("interviewVoice.room.interviewer"))).toBeInTheDocument();
+    expect(
+      within(conversation).getByText(t("interviewVoice.room.interviewer")),
+    ).toBeInTheDocument();
     expect(within(conversation).getByText(t("interviewVoice.room.you"))).toBeInTheDocument();
 
     // 时间与点评也在气泡里。
@@ -212,8 +214,13 @@ describe("LiveVoiceRoom", () => {
   });
 
   it("renders the pending answer as a user bubble without a timestamp", () => {
-    renderWithMessages([message({ id: 1, role: "interviewer" })], "Draft answer typed but not sent yet.");
-    const bubble = screen.getByText("Draft answer typed but not sent yet.").closest(".interview-message");
+    renderWithMessages(
+      [message({ id: 1, role: "interviewer" })],
+      "Draft answer typed but not sent yet.",
+    );
+    const bubble = screen
+      .getByText("Draft answer typed but not sent yet.")
+      .closest(".interview-message");
     expect(bubble).toHaveClass("interview-message--me");
     // 占位气泡不是服务端记录：不写时间，避免"刚刚"这种假信息。
     expect(bubble?.querySelector(".assistant-message-time")).toBeNull();
