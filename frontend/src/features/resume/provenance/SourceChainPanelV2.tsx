@@ -14,13 +14,10 @@ import { pt } from "./i18n";
 import { fieldCatalogLabelResolver } from "../document/fieldCatalog";
 import { useFieldPlacementCatalog } from "../../profile/library/fieldPlacement";
 import {
-  createFactLock,
   deleteBlockLink,
-  deleteFactLock,
   fetchProvenance,
   fetchSource,
   fetchSourceImpact,
-  listFactLocks,
   listSourceRevisions,
 } from "./api";
 import { shortFingerprint, sourceKindKey } from "./helpers";
@@ -28,8 +25,6 @@ import { selectionKey, selectionKeyForLocator, selectionOptions } from "./panelS
 import type {
   AdoptLinkOut,
   BlockLinkOut,
-  FactLockCreateRequest,
-  FactLockOut,
   ResumeProvenanceOut,
   SourceImpactEntryOut,
   SourceImpactOut,
@@ -47,6 +42,7 @@ import FactLockPanel from "./FactLockPanel";
 import ProvenanceSelectionCard from "./ProvenanceSelectionCard";
 import UnresolvedLinksCard from "./UnresolvedLinksCard";
 import type { LinkTargetInput } from "./linkInput";
+import { useFactLocks } from "./useFactLocks";
 import { isResumeDocument, textAtIdentity, textAtPath } from "./sourceChainText";
 
 interface Props {
@@ -88,10 +84,8 @@ export default function SourceChainPanelV2({
   const [initialSourceId, setInitialSourceId] = useState<number | null>(null);
   const [pendingUnresolvedId, setPendingUnresolvedId] = useState<number | null>(null);
   const [adoptEntry, setAdoptEntry] = useState<SourceImpactEntryOut | null>(null);
-  const [locks, setLocks] = useState<FactLockOut[]>([]);
-  const [locksLoading, setLocksLoading] = useState(false);
-  const [lockSaving, setLockSaving] = useState(false);
-  const [lockError, setLockError] = useState<string | null>(null);
+  const { locks, locksLoading, lockSaving, lockError, handleCreateLock, handleDeleteLock } =
+    useFactLocks({ resumeId, disabled, revision });
   const [sourceDetail, setSourceDetail] = useState<SourceOut | null>(null);
   const [sourceRevisions, setSourceRevisions] = useState<SourceRevisionItemOut[]>([]);
   const [sourceImpact, setSourceImpact] = useState<SourceImpactOut | null>(null);
@@ -140,25 +134,6 @@ export default function SourceChainPanelV2({
       alive = false;
     };
   }, [resumeId, revision, disabled, reloadKey, selectedPath]);
-
-  const loadLocks = useCallback(async () => {
-    if (!resumeId || disabled) return;
-    setLocksLoading(true);
-    try {
-      const result = await listFactLocks(resumeId);
-      setLocks(result.locks ?? []);
-      setLockError(null);
-    } catch (caught) {
-      setLockError(caught instanceof Error ? caught.message : pt("provenance.link.failed"));
-    } finally {
-      setLocksLoading(false);
-    }
-  }, [disabled, resumeId]);
-
-  useEffect(() => {
-    // 取数入口的同步 setState 放进微任务，避开级联渲染告警（仍在本帧内发起请求）。
-    queueMicrotask(() => void loadLocks());
-  }, [loadLocks, revision]);
 
   const selectedObject = useMemo(
     () =>
@@ -310,28 +285,6 @@ export default function SourceChainPanelV2({
     toast.success(pt("provenance.adopt.success"));
     closeAdopt();
     setReloadKey((value) => value + 1);
-  };
-
-  const handleCreateLock = async (payload: FactLockCreateRequest) => {
-    if (!resumeId) return;
-    setLockSaving(true);
-    try {
-      await createFactLock(resumeId, payload);
-      await loadLocks();
-    } catch (caught) {
-      setLockError(caught instanceof Error ? caught.message : pt("provenance.lock.conflict"));
-    } finally {
-      setLockSaving(false);
-    }
-  };
-
-  const handleDeleteLock = async (lock: FactLockOut) => {
-    try {
-      await deleteFactLock(resumeId, lock.id);
-      await loadLocks();
-    } catch (caught) {
-      setLockError(caught instanceof Error ? caught.message : pt("provenance.link.failed"));
-    }
   };
 
   if (!resumeId || disabled) {

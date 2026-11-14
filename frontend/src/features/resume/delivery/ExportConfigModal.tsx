@@ -30,6 +30,7 @@ import ExportConfigForm from "./ExportConfigForm";
 import ConfigPreviewPanel from "./ConfigPreviewPanel";
 import VariantPicker, { type VariantOption } from "./VariantPicker";
 import { useExportBundle } from "./useExportBundle";
+import { useExportPresetSelection } from "./useExportPresetSelection";
 import { useExportPresets } from "./useExportPresets";
 import { productPreflightRequest, useExportPreflightGate } from "./exportPreflightGate";
 import "./delivery.css";
@@ -137,10 +138,7 @@ export default function ExportConfigModal({
   useEffect(() => {
     if (open && resumeId !== null) void refreshCheckRef.current();
   }, [open, resumeId]);
-  const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null);
-  const [presetName, setPresetName] = useState("");
-  const [presetDefault, setPresetDefault] = useState(false);
-  const [savingPreset, setSavingPreset] = useState(false);
+
   // R-21：导出形式与"单独文件"的串行进度（交付包走 bundle 自己的 exporting）。
   const [progress, setProgress] = useState<SingleExportProgress | null>(null);
   const [singleRunning, setSingleRunning] = useState(false);
@@ -172,52 +170,18 @@ export default function ExportConfigModal({
   );
 
   const issues = validatePresetConfig(bundle.config);
-  const selectedPreset = presets.presets.find((preset) => preset.id === selectedPresetId) ?? null;
-
-  const choosePreset = (presetId: number | null) => {
-    setSelectedPresetId(presetId);
-    bundle.applyPreset(presets.presets.find((preset) => preset.id === presetId) ?? null);
-  };
-
-  const savePreset = async () => {
-    if (savingPreset) return;
-    if (!presetName.trim()) {
-      message.warning(t("delivery.config.presetNameRequired"));
-      return;
-    }
-    if (!issues.ok) return;
-    setSavingPreset(true);
-    try {
-      const saved = await presets.savePreset(
-        {
-          name: presetName.trim(),
-          // 导出形式是这次操作的开关，不是预设的一部分（读回时也不恢复），不写进预设。
-          config: { ...bundle.config, mode: undefined },
-          is_default: presetDefault,
-        },
-        selectedPresetId ?? undefined,
-      );
-      setSelectedPresetId(saved.id);
-      setPresetName("");
-      setPresetDefault(false);
-      message.success(t("delivery.config.presetSaved"));
-    } catch {
-      message.error(t("delivery.config.presetSaveFailed"));
-    } finally {
-      setSavingPreset(false);
-    }
-  };
-
-  const removePreset = async () => {
-    if (selectedPresetId === null) return;
-    try {
-      await presets.deletePreset(selectedPresetId);
-      setSelectedPresetId(null);
-      message.success(t("delivery.config.presetDeleted"));
-    } catch {
-      message.error(t("delivery.config.presetSaveFailed"));
-    }
-  };
+  const {
+    selectedPresetId,
+    presetName,
+    setPresetName,
+    presetDefault,
+    setPresetDefault,
+    savingPreset,
+    selectedPreset,
+    choosePreset,
+    savePreset,
+    removePreset,
+  } = useExportPresetSelection({ presets, bundle, message, issuesOk: issues.ok });
 
   const formatLabel = (format: ExportFormat) => t(`delivery.format.${format}` as MessageKey);
 

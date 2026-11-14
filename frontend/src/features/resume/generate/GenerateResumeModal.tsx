@@ -13,12 +13,9 @@ const SCROLL_BODY_STYLES = {
 import { App, Button, Modal, Space } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { attachTaskUi, resumeTaskKey, watchResumeTask } from "../../../utils/backgroundTasks";
-import { isDocumentHidden, onVisibilityChange } from "../../../utils/visibility";
+import { watchResumeTask } from "../../../utils/backgroundTasks";
 import {
-  cancelResumeGenerateTask,
   fetchResumeTemplates,
-  getResumeGenerateTask,
   renderResume,
   startResumeGeneration,
   updateResume,
@@ -50,6 +47,7 @@ import GenerationErrorStage from "./GenerationErrorStage";
 import GenerationPreviewStage from "./GenerationPreviewStage";
 import type { GenerateResult } from "./GenerationPreviewStage";
 import { useGenerationPreviewLoader } from "./useGenerationPreviewLoader";
+import { useGenerateTaskPolling } from "./useGenerateTaskPolling";
 import { buildGenerateRequest } from "./generateRequest";
 import { readTemplateCatalogDefaults } from "./templateCatalogDefaults";
 
@@ -66,7 +64,7 @@ interface Props {
 
 export default function GenerateResumeModal({ job, open, initialTitle = "", onClose }: Props) {
   useLocale();
-  const { message, notification } = App.useApp();
+  const { message } = App.useApp();
   const navigate = useNavigate();
   const [stage, setStage] = useState<Stage>("config");
   const [title, setTitle] = useState("");
@@ -253,102 +251,18 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     }
   };
 
-  // 轮询后台任务：进入终态前每 1.5s 拉一次状态（弹窗内的进度显示用它）。
-  // 与 `utils/backgroundTasks` 的分工：**这一份只管弹窗里的进度显示**，"关掉弹窗之后
-  // 仍然被追踪、并在完成时统一提醒"由登记表的轮询负责。两边各拉一次是有意的取舍——
-  // 共享同一份 React 状态会让"完成时把任务从列表里删掉"和"弹窗还要读终态"互相打架
-  // （实测会陷入无限更新）。两条轮询互不依赖，任一条断掉都不影响另一条。
-  useEffect(() => {
-    if (taskId == null) return;
-    let disposed = false;
-    const poll = async () => {
-      try {
-        const updated = await getResumeGenerateTask(taskId);
-        if (!disposed) setTask(updated);
-      } catch {
-        // 轮询失败（后端短暂不可用）不打断，等下一轮自愈。
-      }
-    };
-    void poll();
-    // 页面在后台时跳过本轮 tick；回到前台由 visibilitychange 立即补一次。
-    const timer = window.setInterval(() => {
-      if (isDocumentHidden()) return;
-      void poll();
-    }, 1500);
-    const unsubscribeVisibility = onVisibilityChange(() => {
-      if (isDocumentHidden()) return;
-      void poll();
-    });
-    return () => {
-      disposed = true;
-      window.clearInterval(timer);
-      unsubscribeVisibility();
-    };
-  }, [taskId]);
-
-  // 弹窗开着时声明"界面在看这个任务"：完成后用右上角卡片提醒，不弹居中弹窗打断用户。
-  // detach 只跟随弹窗关闭，不跟随 taskId 置空：任务进入终态时弹窗收尾会把 taskId
-  // 置空（见下面的完成分支），但弹窗仍开着展示预览——若跟着 detach，registry 稍后
-  // 的完成通知会误判"用户已经走开"，给正看着预览的用户升级成居中弹窗。React 19 的
-  // 被动副作用落点让这个竞态从偶发变成确定性发生，"在看"的生命周期必须跟随弹窗。
-  const detachTaskUiRef = useRef<(() => void) | null>(null);
-  useEffect(() => {
-    if (!open) {
-      detachTaskUiRef.current?.();
-      detachTaskUiRef.current = null;
-      return;
-    }
-    if (taskId == null || detachTaskUiRef.current) return;
-    detachTaskUiRef.current = attachTaskUi(resumeTaskKey(taskId));
-  }, [open, taskId]);
-  useEffect(() => {
-    // 组件卸载兜底释放，防止登记表泄漏。
-    return () => detachTaskUiRef.current?.();
-  }, []);
-
-  // 任务进入终态后的收尾：完成→取简历进预览并提醒；取消→回配置；失败→错误。
-  // 本质是"派生事件"（后台任务轮询到达终态后的收尾扇出）：状态收尾与 loadPreview
-  // 副作用在此汇合，改为回调直连需要重构轮询器，故按书面理由豁免 Compiler 规则。
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (!task) return;
-    if (task.status === "completed") {
-      const resumeId = task.resume_id;
-      setRagAudit(task.rag ?? null);
-      setTaskId(null);
-      setTask(null);
-      if (resumeId == null) {
-        // 完成却没回填记录 id：理论上不会发生（完成一定先落库），防御性当作失败处理，
-        // 避免卡在"完成"状态却永远拿不到预览。
-        setErrorMsg(t("generate.resultMissing"));
-        setStage("error");
-        return;
-      }
-      // 完成提醒（弹窗 + 提示音）由 `utils/backgroundTasks` 统一发：只有它知道用户
-      // 是"还在看弹窗"还是"已经走开了"，也只有它能保证关掉弹窗后仍然提醒。
-      void loadPreview(resumeId);
-    } else if (task.status === "cancelled") {
-      setTaskId(null);
-      setTask(null);
-      setStage("config");
-      message.info(t("generate.cancelled"));
-    } else if (task.status === "failed") {
-      setTaskId(null);
-      setErrorMsg(task.error || t("generate.failed"));
-      setStage("error");
-    }
-  }, [task, notification, message, navigate, loadPreview]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  const handleCancelGenerate = async () => {
-    if (taskId == null) return;
-    try {
-      const cancelled = await cancelResumeGenerateTask(taskId);
-      setTask(cancelled);
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : t("generate.cancelFailed"));
-    }
-  };
+  const { handleCancelGenerate } = useGenerateTaskPolling({
+    open,
+    taskId,
+    task,
+    setTaskId,
+    setTask,
+    setRagAudit,
+    setErrorMsg,
+    setStage,
+    message,
+    loadPreview,
+  });
 
   const handleClose = () => {
     // 生成中关弹窗 = 后台继续（不是取消）：任务继续跑，完成后提醒；其余阶段照旧复位。

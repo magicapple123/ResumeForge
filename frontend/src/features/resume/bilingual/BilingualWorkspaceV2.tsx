@@ -15,7 +15,7 @@
  * - 只读（`revision === null`）时创建项与翻译按钮都禁用，版本与对照仍可查看。
  */
 import { Alert, Button, Segmented, Tooltip, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ErrorState from "../../../components/common/ErrorState";
 import LoadingBlock from "../../../components/common/LoadingBlock";
 import { useToast } from "../../../hooks/useToast";
@@ -36,21 +36,15 @@ import {
 } from "./fieldPairs";
 import { isSameContent, variantDocumentOf } from "./real";
 import VariantOverwriteButton from "./VariantOverwriteButton";
-import {
-  adoptTranslation,
-  createLanguageVariant,
-  getVariant,
-  listVariants,
-  translateVariant,
-} from "./api";
-import type { VariantBriefOut, VariantDetailOut } from "./api";
-import type { TranslationCandidate } from "./types";
+import { adoptTranslation, createLanguageVariant, getVariant, translateVariant } from "./api";
+import type { VariantBriefOut } from "./api";
 import BilingualCompareView from "./BilingualCompareView";
 import BilingualGlossaryPanel from "./BilingualGlossaryPanel";
 import TranslationCandidatePanel from "./TranslationCandidatePanel";
 import VariantBar from "./VariantBar";
 import VariantLayoutSection from "./VariantLayoutSection";
 import VariantReadOnlyPreviewDrawer from "./VariantReadOnlyPreviewDrawer";
+import { useBilingualVariantData } from "./useBilingualVariantData";
 import {
   briefToView,
   errorText,
@@ -91,13 +85,21 @@ export default function BilingualWorkspaceV2({
     targetLanguage === "en-US" ? bt("bilingual.variant.en") : bt("bilingual.variant.zh");
 
   const [tab, setTab] = useState<WorkspaceTab>("compare");
-  const [variants, setVariants] = useState<VariantBriefOut[]>([]);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const {
+    variants,
+    selectedId,
+    setSelectedId,
+    detail,
+    setDetail,
+    loading,
+    error,
+    candidates,
+    setCandidates,
+    loadVariants,
+  } = useBilingualVariantData({ resumeId, targetLanguage });
+
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [detail, setDetail] = useState<VariantDetailOut | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [candidates, setCandidates] = useState<TranslationCandidate[] | null>(null);
+
   const [translating, setTranslating] = useState(false);
   const [adopting, setAdopting] = useState(false);
   const [creating, setCreating] = useState<LanguageCode | null>(null);
@@ -112,57 +114,6 @@ export default function BilingualWorkspaceV2({
 
   /** 标签解析：目录优先（与制作台其它面板同一份字段目录），缺省按 item 类型给通用名。 */
   const labels = useMemo<PairLabels>(() => buildPairLabels(catalog), [catalog]);
-
-  const loadVariants = useCallback(async () => {
-    if (!resumeId) {
-      setVariants([]);
-      setSelectedId(null);
-      setDetail(null);
-      return;
-    }
-    setLoading(true);
-    try {
-      const data = await listVariants(resumeId);
-      setVariants(data.items);
-      setSelectedId((current) => {
-        if (current && data.items.some((item) => item.id === current)) return current;
-        const preferred =
-          data.items.find((item) => item.language === targetLanguage) ?? data.items[0];
-        return preferred ? preferred.id : null;
-      });
-      setError(null);
-    } catch (caught) {
-      setError(errorText(caught) || bt("bilingual.workspace.loadFailed"));
-    } finally {
-      setLoading(false);
-    }
-  }, [resumeId, targetLanguage]);
-
-  useEffect(() => {
-    queueMicrotask(() => void loadVariants());
-  }, [loadVariants]);
-
-  useEffect(() => {
-    if (!resumeId || selectedId === null) {
-      // 清空详情属于外部同步：setState 放进微任务，避开 effect 体里同步 setState 的级联渲染告警。
-      queueMicrotask(() => setDetail(null));
-      return;
-    }
-    let cancelled = false;
-    void getVariant(resumeId, selectedId)
-      .then((next) => {
-        if (!cancelled) {
-          setDetail(next);
-          setCandidates(null);
-        }
-      })
-      .catch((caught: unknown) => {
-        if (!cancelled) setError(errorText(caught) || bt("bilingual.workspace.loadFailed"));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [resumeId, selectedId]);
 
   const handleTranslate = async () => {
     if (!resumeId || !detail) return;
