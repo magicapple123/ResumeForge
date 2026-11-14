@@ -234,7 +234,7 @@ class ApplyQueueItem(Base):
     company: Mapped[str] = mapped_column(String(128), default="")
     # 用户指定用哪份简历；空 = 运行时按默认规则解析。
     resume_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # 本岗位的招呼语（用户可编辑 / 按岗位生成后落此）；空 = 用默认招呼语。
     greeting: Mapped[str] = mapped_column(Text, default="")
@@ -291,7 +291,7 @@ class ApplyTaskItem(Base):
     company: Mapped[str] = mapped_column(String(128), default="")
     # 快照：记录当时用的简历，简历被删除后仍可读。
     resume_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
     resume_title: Mapped[str] = mapped_column(String(256), default="")
     # 实际发送的招呼语（脱敏按"记全文但截断到合理上限"处理）。

@@ -19,7 +19,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
@@ -79,6 +79,9 @@ class AssistantMemory(Base):
     """一条语义记忆：用户明确表达（或可从中稳定抽取）的求职事实。"""
 
     __tablename__ = "assistant_memory"
+    # 0015 建的三条索引必须与模型声明一致（kind/status 是注入时的筛选起点，两条来源列让
+    # 列表能点回原对话）。迁移在 T3 之前就建了它们，这里只补模型声明对齐，不重复建。
+    __table_args__ = (Index("ix_assistant_memory_kind_status", "kind", "status"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     # 取值见 MEMORY_KINDS；服务端拒绝白名单之外的 kind。
@@ -89,10 +92,10 @@ class AssistantMemory(Base):
     # 0–1 的置信度：手填默认 1，自动抽取按明确程度给分。
     confidence: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
     source_conversation_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_conversation.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("chat_conversation.id", ondelete="SET NULL"), nullable=True, index=True
     )
     source_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("chat_message.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # active / superseded / deleted（见模块顶部常量）。
     status: Mapped[str] = mapped_column(String(16), default=MEMORY_STATUS_ACTIVE, nullable=False)

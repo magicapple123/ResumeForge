@@ -35,7 +35,7 @@ class InterviewReviewRecord(Base):
     job_title: Mapped[str] = mapped_column(String(128), default="")
     company: Mapped[str] = mapped_column(String(128), default="")
     resume_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
     resume_title: Mapped[str] = mapped_column(String(256), default="")
     # 真实被问的问题清单：["这个项目难点怎么解决？", ...]

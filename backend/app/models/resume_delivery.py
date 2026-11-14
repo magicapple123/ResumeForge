@@ -43,7 +43,7 @@ class ResumeDeliveryRecord(Base):
         ForeignKey("job.id", ondelete="SET NULL"), nullable=True, index=True
     )
     track_id: Mapped[int | None] = mapped_column(
-        ForeignKey("application_track.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("application_track.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # apply / track / export（取值见模块顶部常量）。
     source: Mapped[str] = mapped_column(String(16), default=DELIVERY_SOURCE_APPLY, nullable=False)

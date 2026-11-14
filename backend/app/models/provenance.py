@@ -126,7 +126,7 @@ class ResumeBlockSource(Base):
     )
     # 关联建立时对应的来源修订；来源被清理时置空，但关联本身保留（历史可解释）。
     source_revision_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_source_revision.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_source_revision.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # W01 稳定身份；旧数据可能只有 path（"这是明确退化，不猜"）。
     object_id: Mapped[str | None] = mapped_column(String(32), nullable=True)

@@ -35,7 +35,7 @@ class QuestionBankRecord(Base):
     job_title: Mapped[str] = mapped_column(String(128), default="")
     company: Mapped[str] = mapped_column(String(128), default="")
     resume_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
     resume_title: Mapped[str] = mapped_column(String(256), default="")
     # 三类题分组：[{"type": "基础题", "questions": [{"question","purpose","answer_hint"}]}]

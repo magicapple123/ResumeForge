@@ -65,7 +65,7 @@ class ResumeReviewAnnotation(Base):
     )
     # W13 命名版本（可选）；NULL = 未绑定版本。
     document_version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_version.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_version.id", ondelete="SET NULL"), nullable=True, index=True
     )
     snapshot_sha256: Mapped[str] = mapped_column(String(64), default="", server_default="")
     external_id: Mapped[str] = mapped_column(String(64), default="")

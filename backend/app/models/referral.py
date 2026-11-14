@@ -59,7 +59,7 @@ class Referral(Base):
     status: Mapped[str] = mapped_column(String(16), default=REFERRAL_STATUS_ACTIVE, index=True)
     # 转化关联的求职进度：内推成功后落到哪条漏斗记录。删除进度记录不连坐。
     track_id: Mapped[int | None] = mapped_column(
-        ForeignKey("application_track.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("application_track.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # 历史占位列（迁移 0018 引入）：转化口径现由关联 ApplicationTrack 派生，
     # 写入侧不接受该字段、读取侧也不读它（见 services/referral_service._is_converted）。

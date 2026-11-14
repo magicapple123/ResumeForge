@@ -35,7 +35,7 @@ class KnowledgeEntry(Base):
     )
     # 关联岗位（可空外键，SET NULL）：岗位彻底删除后条目仍可读，知识是用户的。
     job_id: Mapped[int | None] = mapped_column(
-        ForeignKey("job.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("job.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # 蒸馏结果（#29E）：卡片直接显示摘要，RAG 命中优先返回摘要（省 token）。
     summary: Mapped[str] = mapped_column(String(300), default="", server_default="")

@@ -62,10 +62,10 @@ class ResumePhrase(Base):
     )
     language: Mapped[str] = mapped_column(String(16), default="", server_default="")
     source_claim_id: Mapped[int | None] = mapped_column(
-        ForeignKey("claim_record.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("claim_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
     source_resume_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
     source_object_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     job_tags: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")

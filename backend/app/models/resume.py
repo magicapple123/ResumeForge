@@ -127,7 +127,7 @@ class ResumeRecord(Base):
     # 版本血缘（RF-17）：这份简历由哪份简历派生而来（修订/复制当时记下）。
     # NULL 表示独立版本——旧行与手写简历都是 NULL，读取方不做任何推断。
     parent_revision_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # 本次生成的职业场景上下文快照（0061，计划 §7.1/§7.4）：server-owned 不可变 JSON，
     # 与 content / format_config / render_context **分开存**。NULL = 未记录/未使用
@@ -189,7 +189,7 @@ class ResumeGenerateTask(Base):
     status: Mapped[str] = mapped_column(String(16), default=GENERATE_STATUS_PENDING, index=True)
     # 完成后回填；取消/失败时保持 NULL（**绝不写半成品简历**）。
     resume_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # 失败/取消原因，可直接展示给用户。
     error: Mapped[str] = mapped_column(Text, default="")

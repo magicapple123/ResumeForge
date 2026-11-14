@@ -305,7 +305,7 @@ class ApplicationTrack(Base):
         ForeignKey("job.id", ondelete="SET NULL"), nullable=True, index=True
     )
     resume_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # 所用简历的标题快照（RF-17）：简历被删（resume_id 置 NULL）后仍能回答
     # "当时投的是哪一版"。旧行/未关联为空串，界面如实标注「历史关联未知」。

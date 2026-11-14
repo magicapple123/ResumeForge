@@ -209,7 +209,7 @@ class DrillSession(Base):
     title: Mapped[str] = mapped_column(String(128), default="")
     # 关联岗位（可选，快照保存）。
     job_id: Mapped[int | None] = mapped_column(
-        ForeignKey("job.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("job.id", ondelete="SET NULL"), nullable=True, index=True
     )
     job_title: Mapped[str] = mapped_column(String(128), default="")
     company: Mapped[str] = mapped_column(String(128), default="")

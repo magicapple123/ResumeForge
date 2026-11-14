@@ -51,7 +51,7 @@ class ResumeVersion(Base):
     change_summary: Mapped[str] = mapped_column(Text, default="", server_default="")
     # 目标岗位快照（岗位被删/改名后版本仍可解释清楚）。
     job_id: Mapped[int | None] = mapped_column(
-        ForeignKey("job.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("job.id", ondelete="SET NULL"), nullable=True, index=True
     )
     job_title: Mapped[str] = mapped_column(String(128), default="", server_default="")
     company: Mapped[str] = mapped_column(String(128), default="", server_default="")
@@ -63,7 +63,7 @@ class ResumeVersion(Base):
     # 快照来自第几版当前简历（只作说明，不是外键：resume_record.revision 不是实体）。
     source_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     parent_version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_version.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_version.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # 冻结 = 已投递/已定稿：不会再产生任何修改（本表也没有更新内容的 API）。
     frozen: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
@@ -87,7 +87,7 @@ class ResumeVariant(Base):
     )
     name: Mapped[str] = mapped_column(String(256), default="")
     job_id: Mapped[int | None] = mapped_column(
-        ForeignKey("job.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("job.id", ondelete="SET NULL"), nullable=True, index=True
     )
     job_title: Mapped[str] = mapped_column(String(128), default="", server_default="")
     company: Mapped[str] = mapped_column(String(128), default="", server_default="")
@@ -101,11 +101,11 @@ class ResumeVariant(Base):
     content_sha256: Mapped[str] = mapped_column(String(64), default="", server_default="")
     # 派生自哪个命名版本（可选）；null = 从创建时的当前简历派生。
     base_version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_version.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_version.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # 最近一次"选择性同步"用了哪份来源版本、什么时候（UI 能说清"上次同步基于哪版"）。
     last_synced_version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_version.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_version.id", ondelete="SET NULL"), nullable=True, index=True
     )
     synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # W16 语言变体（0058）：空串 = 未标注语言（旧变体），variant_group_id 把同一母版的

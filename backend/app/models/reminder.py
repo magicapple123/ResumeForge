@@ -57,13 +57,13 @@ class Reminder(Base):
     status: Mapped[str] = mapped_column(String(16), default=REMINDER_STATUS_PENDING, index=True)
     # 三个可选绑定对象，均为 SET NULL：被绑对象删除后提醒仍保留。
     track_id: Mapped[int | None] = mapped_column(
-        ForeignKey("application_track.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("application_track.id", ondelete="SET NULL"), nullable=True, index=True
     )
     job_id: Mapped[int | None] = mapped_column(
         ForeignKey("job.id", ondelete="SET NULL"), nullable=True, index=True
     )
     resume_id: Mapped[int | None] = mapped_column(
-        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
     note: Mapped[str] = mapped_column(Text, default="")
 

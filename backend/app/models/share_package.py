@@ -43,7 +43,7 @@ class SharePackage(Base):
         ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
     job_id: Mapped[int | None] = mapped_column(
-        ForeignKey("job.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("job.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # 文件清单：[{"name","path","format","size","sha256"}]
     files: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)

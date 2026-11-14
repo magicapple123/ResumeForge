@@ -110,7 +110,7 @@ class Education(Base):
     __tablename__ = "education"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"))
+    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"), index=True)
     school: Mapped[str] = mapped_column(String(128), default="")
     # 院系：网申表单普遍与「学校」「专业」并列单独问一项。
     department: Mapped[str] = mapped_column(String(128), default="")
@@ -138,7 +138,7 @@ class Experience(Base):
     __tablename__ = "experience"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"))
+    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"), index=True)
     company: Mapped[str] = mapped_column(String(128), default="")
     role: Mapped[str] = mapped_column(String(128), default="")
     start_date: Mapped[str] = mapped_column(String(16), default="")
@@ -152,7 +152,7 @@ class CampusExperience(Base):
     __tablename__ = "campus_experience"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"))
+    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"), index=True)
     organization: Mapped[str] = mapped_column(String(128), default="")  # 学生会/班级/社团等
     role: Mapped[str] = mapped_column(String(128), default="")  # 职务或担任角色
     start_date: Mapped[str] = mapped_column(String(16), default="")
@@ -166,7 +166,7 @@ class Project(Base):
     __tablename__ = "project"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"))
+    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(128), default="")
     role: Mapped[str] = mapped_column(String(64), default="")
     start_date: Mapped[str] = mapped_column(String(16), default="")
@@ -182,7 +182,7 @@ class Skill(Base):
     __tablename__ = "skill"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"))
+    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(64), default="")
     level: Mapped[str] = mapped_column(String(32), default="")  # 熟练/掌握/了解
 
@@ -191,7 +191,7 @@ class Award(Base):
     __tablename__ = "award"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"))
+    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(128), default="")
     date: Mapped[str] = mapped_column(String(32), default="")
     description: Mapped[str] = mapped_column(String(256), default="")
