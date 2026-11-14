@@ -21,7 +21,7 @@ import logging
 import random
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -41,6 +41,8 @@ from .collect_filters import FilterTally, evaluate_filters
 # 去重判据与「采样留痕」都在 collector_history（15A/15B）：前者原样搬走只为腾行数，
 # 后者是本批新增——重采不再"跳过即无痕"。
 from .collector_history import already_known, known_job_of, record_sighting
+from .collector_report import CollectReport
+from .collector_summary import build_task_config_summary
 
 logger = logging.getLogger(__name__)
 
@@ -48,37 +50,6 @@ logger = logging.getLogger(__name__)
 # 避免"两个模块各写一遍字符串、改一处漏一处"——那个坑已经以 500 的形式发作过一次。
 COLLECT_RECOGNITION_SOURCE = RECOGNITION_SOURCE_COLLECT
 MAX_COLLECT_PAGES = 30
-
-
-@dataclass
-class CollectReport:
-    """一次采集的统计结果。
-
-    ``collected`` 是**已暂存**的候选数（不是"已进入岗位广场"）；``skipped`` 是重复数
-    （岗位广场里已有，或暂存区里已有）。
-    """
-
-    collected: int = 0
-    skipped: int = 0
-    pages: int = 0
-    # 按用户填的学历 / 经验 / 薪资**明确筛掉**的条数（判断不了的不算，它们被保留了）。
-    filtered: int = 0
-    # 其中"跳过"里有几条是因为岗位广场的**回收站**里已经有一条（用户之前删过）。
-    skipped_trashed: int = 0
-    # 搜索采集里"暂存了、但正文（JD）为空"的条数。这是**站点漂移唯一留下的痕迹**：能翻到
-    # 列表却读不出详情时，任务本身仍然是"成功"的，不计这个数就完全看不见——历史上"8 条岗位
-    # JD 全空"的事故就是这么发生的。补详情模式有自己的账目（backfilled / backfill_skipped），
-    # 两者刻意不混用，否则会把"用户点名去补"的语义算进"正常采集"的漂移里。
-    detail_missing: int = 0
-    # 「补齐详情」模式：成功补到的条数，以及因为"已经有描述 / 在回收站里 / 没有链接"跳过的条数。
-    backfilled: int = 0
-    backfill_skipped: int = 0
-    blocked: int = 0  # 命中屏蔽清单被丢弃的条数：用户要知道"为什么这次采到的比往年少"
-    # 翻页饱和提前停止的位置：站点从某一页起开始返回与前面**完全相同**的结果
-    # （筛选组合下岗位总量就这么多，或站点对深层翻页重复推送），再翻只会原样重复到
-    # 页数上限。0 表示没有触发（正常翻完或被上限/去重之外的路径终止）。
-    pagination_stopped_at: int = 0
-    unmapped_conditions: list[str] = field(default_factory=list)
 
 
 class Collector:
@@ -289,54 +260,14 @@ class Collector:
                 )
 
         report.unmapped_conditions = sorted(unmapped)
-        # 筛选的账目写进 ``task.config``（不新增数据库列，与 ``unmapped_conditions`` 同一套做法）：
-        # 「筛掉几条、按哪条筛的、有几条因为岗位没给字段而没能判断」都要给用户看到——
-        # 只留一个"已暂存 N 个"会让人以为筛选生效了，而不知道实际筛掉了多少、漏了多少。
-        summary: dict[str, Any] = {}
-        if report.unmapped_conditions:
-            summary["unmapped_conditions"] = report.unmapped_conditions
-        if report.skipped_trashed:
-            summary["skipped_trashed"] = report.skipped_trashed
-        if report.backfilled or report.backfill_skipped:
-            # 补详情的账目：补到几条、跳过几条（跳过包括"已经有描述"和"仍然抓不到"）。
-            # 不给这两个数，用户看到"任务完成"却不知道到底补上没有。
-            summary["backfilled"] = report.backfilled
-            summary["backfill_skipped"] = report.backfill_skipped
-        if not backfill_job_ids:
-            # 只有**搜索采集**才写"详情缺失"这条账目：它是站点漂移的早期信号，站点健康度靠它
-            # 识别"能采到列表却抓不到 JD"。补详情模式不写这个键（它走 backfilled/backfill_skipped），
-            # 两套口径不混一起——否则用户一次"点名补详情"会把漂移计数搅乱。
-            summary["detail_missing"] = report.detail_missing
-        configured_filters = {
-            "薪资": query.salary_min is not None,
-            "经验": bool(query.experience),
-            "学历": bool(query.education),
-            "岗位类型": bool(query.job_type),
-        }
-        # 「采集后筛选」已下线（无适配器声明 post_filter_conditions），此账目分支当前不可达；
-        # 与 collect_filters 一并保留供未来站点复用。
-        applied_filters = [
-            condition
-            for condition in adapter.post_filter_conditions
-            if configured_filters.get(condition, False)
-        ]
-        if applied_filters:
-            # 保留适配器声明的顺序（与界面上的字段顺序一致），不排序——排序会把
-            # "薪资 / 经验 / 学历"变成按码位排的"学历 / 经验 / 薪资"，读起来别扭。
-            summary["filter_applied"] = applied_filters
-            summary["filtered_out"] = report.filtered
-            summary["filter_reasons"] = sorted(tally.reasons)
-            summary["filter_undecided"] = sorted(tally.undecided)
-            summary["filter_undecided_count"] = tally.undecided_count
-            summary["filter_unapplied"] = sorted(tally.unapplied)
-        if site_filters.applied or site_filters.unapplied:
-            # 站点侧筛选的账目：**生效了哪几条**（站点在接口侧就筛掉了，用户能少翻很多页）、
-            # **哪几条没能生效**。后者必须说出来——用户选了「公司规模：1000人以上」却拿到
-            # 各种规模的岗位，唯一能解释这件事的就是这句话。
-            summary["site_filter_applied"] = list(site_filters.applied)
-            summary["site_filter_unapplied"] = list(site_filters.unapplied)
-        if report.pagination_stopped_at:
-            summary["pagination_stopped_at"] = report.pagination_stopped_at
+        summary = build_task_config_summary(
+            report,
+            query=query,
+            adapter=adapter,
+            tally=tally,
+            site_filters=site_filters,
+            backfill_job_ids=backfill_job_ids,
+        )
         if summary:
             task.config = {**(task.config or {}), **summary}
         # 进度口径只能有一处实现（搜索算 collected、补详情算 backfilled）。此前收尾又按搜索口径

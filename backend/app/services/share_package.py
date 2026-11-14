@@ -25,8 +25,6 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from ..config import DATA_DIR
-from ..dataset_registry import configured_database_file
 from ..models.profile import utcnow
 from ..models.resume import ResumeRecord
 from ..models.share_package import (
@@ -36,12 +34,7 @@ from ..models.share_package import (
 )
 from ..runtime.log_fields import safe_log_text
 from ..schemas.resume_document import document_to_json
-from ..schemas.share_package import (
-    ShareCommentsOut,
-    ShareFileOut,
-    SharePackageBrief,
-    SharePackageOut,
-)
+from ..schemas.share_package import ShareCommentsOut
 from . import trash
 from .export_pipeline import ExportRequest, RenderContext, build_export
 from .pdf_exporter import ResumePDFError
@@ -53,12 +46,15 @@ from .resume.resume_labels import DEFAULT_RESUME_LANGUAGE
 from .resume.resume_record import record_format_config
 from .resume.resume_template_store import resolve_style_config, resolve_style_template
 from .resume.resume_templates import DEFAULT_FONT_SCALE, DEFAULT_PAGE_LIMIT
+from .share_package_paths import (
+    SHARE_PACKAGES_DIR,
+    package_directory,
+    share_root,
+)
+from .share_package_views import share_package_brief, share_package_out
 
 logger = logging.getLogger(__name__)
 
-# 分享包落在数据目录下（与 captures 同级），天然不进仓库、不进备份。文件型 SQLite
-# 时进一步落到数据库同目录：测试库（临时目录）自动隔离，不会写进仓库的 backend/data。
-SHARE_PACKAGES_DIR = DATA_DIR / "share_packages"
 
 MAX_SHARE_PACKAGE_LIST = 500
 
@@ -75,42 +71,6 @@ class SharePackageError(Exception):
     def __init__(self, message: str, status_code: int = 400) -> None:
         super().__init__(message)
         self.status_code = status_code
-
-
-def _is_main_database(path: Path) -> bool:
-    """这个文件是不是 ``DATABASE_URL`` 指向的主数据。
-
-    判不出来时按"是"处理：那只会退回旧的路径规则，不会凭空改掉既有分享包的位置。
-    """
-    try:
-        return path == configured_database_file()
-    except Exception:  # noqa: BLE001 - 拿不到配置时保持既有行为
-        return True
-
-
-def share_root(bind) -> Path:
-    """分享包根目录：文件型 SQLite 落在数据库同目录，其余回退到数据目录。
-
-    **非主数据额外带一层库文件名。** 多个数据集共用 ``data/datasets/`` 这一个目录，而分享包
-    的 id 是每个库各自自增的——一律用 ``<库目录>/share_packages/<id>`` 的话，数据集 A 的第 1 份
-    与数据集 B 的第 1 份会落到同一个目录里，后建的那份把先建的**覆盖掉**（同一个坑在导出
-    备份那边也踩过一次：多份数据集共用一个文件系统命名空间）。
-
-    主数据保持原路径不变：它下面可能已经有用户的分享包，平白迁走等于让那些文件消失。
-    路径改变对非主数据是安全的——文件缺了会按库里的快照重新生成（见 ``ensure_package_files``）。
-    """
-    url = getattr(bind, "url", None)
-    database = getattr(url, "database", None)
-    if database and database != ":memory:" and Path(database).is_absolute():
-        resolved = Path(database).resolve()
-        root = resolved.parent / "share_packages"
-        return root if _is_main_database(resolved) else root / resolved.stem
-    return SHARE_PACKAGES_DIR
-
-
-def package_directory(bind, share_id: int) -> Path:
-    """某个分享包的本地目录：``<share_root>/<id>``（见 ``share_root`` 的数据集隔离规则）。"""
-    return share_root(bind) / str(share_id)
 
 
 def _write_atomically(path: Path, content: bytes) -> None:
@@ -375,53 +335,6 @@ def list_share_packages(db: Session, *, keyword: str = "", limit: int = 200) -> 
 def share_package_or_none(db: Session, share_id: int) -> SharePackage | None:
     """取一条分享包；已在回收站里的当作不存在。"""
     return trash.get_live(db, SharePackage, share_id)
-
-
-def _download_url(package: SharePackage, name: str) -> str:
-    return f"/api/share-packages/{package.id}/files/{name}"
-
-
-def share_package_brief(package: SharePackage) -> SharePackageBrief:
-    """分享包的列表摘要视图。"""
-    return SharePackageBrief(
-        id=package.id,
-        title=package.title,
-        resume_id=package.resume_id,
-        job_id=package.job_id,
-        permission=package.permission,
-        file_count=len(package.files or []),
-        created_at=package.created_at,
-        updated_at=package.updated_at,
-    )
-
-
-def share_package_out(package: SharePackage) -> SharePackageOut:
-    """分享包详情视图：文件清单（含下载地址）与脱敏快照、权限、token。"""
-    files = [
-        ShareFileOut(
-            name=str(item.get("name", "")),
-            path=str(item.get("path", "")),
-            format=str(item.get("format", "")),
-            size=int(item.get("size", 0)),
-            sha256=str(item.get("sha256", "")),
-            download_url=_download_url(package, str(item.get("name", ""))),
-        )
-        for item in (package.files or [])
-    ]
-    return SharePackageOut(
-        id=package.id,
-        title=package.title,
-        resume_id=package.resume_id,
-        job_id=package.job_id,
-        permission=package.permission,
-        files=files,
-        snapshot=package.snapshot or {},
-        comments_file=package.comments_file or "",
-        share_token=package.share_token or "",
-        redaction_config=package.redaction_config or {},
-        created_at=package.created_at,
-        updated_at=package.updated_at,
-    )
 
 
 def read_comments(package: SharePackage) -> ShareCommentsOut:
