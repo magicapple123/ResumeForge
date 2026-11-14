@@ -12,7 +12,7 @@
  *   「继续面试」；累计时长上报给服务端，最终报告里会带上它。
  */
 import { ArrowLeftOutlined } from "@ant-design/icons";
-import { App, Button, Form, Tabs, Typography } from "antd";
+import { App, Button, Form, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -24,17 +24,14 @@ import {
   listInterviews,
   updateInterviewDuration,
 } from "../api/interview";
-import InterviewExperiencePanel from "../features/interview/InterviewExperiencePanel";
-import InterviewReviewPanel from "../features/interview/InterviewReviewPanel";
-import QuestionBankPanel from "../features/questionbank/QuestionBankPanel";
 import { useQuestionBankInterview } from "../features/questionbank/useQuestionBankInterview";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { toInternalResumeId, toMaterialPayload } from "../features/interview/materialPayload";
 import { useInterviewTimer } from "../features/interview/useInterviewTimer";
 import { hasInterviewReport, useInterviewTurn } from "../features/interview/useInterviewTurn";
 import { RoomBody } from "./interview/RoomBody";
-import { HistoryCard } from "./interview/HistoryCard";
-import { SetupForm, SetupTab } from "./interview/SetupTab";
+import InterviewSetupTabs from "./interview/InterviewSetupTabs";
+import type { SetupForm } from "./interview/SetupTab";
 import type {
   InterviewBrief,
   InterviewDetail,
@@ -390,64 +387,28 @@ export default function InterviewPage() {
       </div>
 
       {!active ? (
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          items={[
-            {
-              key: "session",
-              label: t("interview.tab.interview"),
-              children: (
-                <div className="interview-setup">
-                  <SetupTab
-                    form={form}
-                    initialJobId={linkedJobId}
-                    initialResumeMaterial={bankInterview.materials.resumeMaterial}
-                    starting={starting}
-                    onStart={(values) => void start(values)}
-                  />
-
-                  <HistoryCard
-                    sessions={sessions}
-                    batch={batch}
-                    loadingList={loadingList}
-                    onOpen={openSession}
-                    onRemove={remove}
-                    onRemoveSelected={removeSelected}
-                  />
-                </div>
-              ),
-            },
-            {
-              key: "bank",
-              label: t("interview.tab.questionBank"),
-              children: (
-                <QuestionBankPanel
-                  onStartSession={bankInterview.startFromBank}
-                  record={bankRecord}
-                  onOpenRecord={setBankRecord}
-                  onCloseRecord={() => setBankRecord(null)}
-                />
-              ),
-            },
-            {
-              key: "experiences",
-              label: t("interview.tab.experiences"),
-              children: <InterviewExperiencePanel />,
-            },
-            {
-              key: "review",
-              label: t("interview.tab.review"),
-              children: (
-                <InterviewReviewPanel
-                  onGoToResume={() => navigate("/resumes")}
-                  record={reviewRecord}
-                  onOpenRecord={setReviewRecord}
-                  onCloseRecord={() => setReviewRecord(null)}
-                />
-              ),
-            },
-          ]}
+        <InterviewSetupTabs
+          activeTab={activeTab}
+          onActiveTabChange={setActiveTab}
+          form={form}
+          linkedJobId={linkedJobId}
+          initialResumeMaterial={bankInterview.materials.resumeMaterial}
+          starting={starting}
+          onStart={(values) => void start(values)}
+          sessions={sessions}
+          batch={batch}
+          loadingList={loadingList}
+          onOpen={openSession}
+          onRemove={remove}
+          onRemoveSelected={removeSelected}
+          onStartFromBank={bankInterview.startFromBank}
+          bankRecord={bankRecord}
+          onOpenBankRecord={setBankRecord}
+          onCloseBankRecord={() => setBankRecord(null)}
+          reviewRecord={reviewRecord}
+          onOpenReviewRecord={setReviewRecord}
+          onCloseReviewRecord={() => setReviewRecord(null)}
+          onGoToResume={() => navigate("/resumes")}
         />
       ) : (
         <RoomBody

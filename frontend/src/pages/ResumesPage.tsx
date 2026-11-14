@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历中心：生成历史列表、收藏、预览与导出。 */
-import { UndoOutlined } from "@ant-design/icons";
-import { App, Button, Select, Space, Tag, Tooltip } from "antd";
+import { App } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -18,8 +17,6 @@ import ErrorState from "../components/common/ErrorState";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import ManualResumeModal from "../features/resume/list/ManualResumeModal";
 import ResumeDetailModal from "../features/resume/list/ResumeDetailModal";
-import ResumeCenterAiEntry from "../features/career-scenarios/ResumeCenterAiEntry";
-import ResumeScenarioSuggestion from "../features/career-scenarios/ResumeScenarioSuggestion";
 import { registerNewResumeHandler } from "../features/shortcuts/runtimeTargets";
 import { computeFieldDiff } from "../utils/resumeFieldDiff";
 import { useResumeListVersion } from "../features/resume/resumeListEvents";
@@ -30,9 +27,7 @@ import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import {
   DEFAULT_RESUME_SORT_STATE,
-  isDefaultResumeSort,
   parseResumeSort,
-  resumeSortResetHint,
   toResumeSort,
   type ResumeSortState,
 } from "../utils/resumeSort";
@@ -41,13 +36,11 @@ import DeliveryArchiveModal from "../features/resume/delivery/DeliveryArchiveMod
 import ResumeRenameModal from "./resumes/ResumeRenameModal";
 import ResumeNoteModal from "./resumes/ResumeNoteModal";
 import ResumeDiffModal from "./resumes/ResumeDiffModal";
-import JobFilterSelect from "./resumes/JobFilterSelect";
-import ResumeSearchInput from "./resumes/ResumeSearchInput";
 import { useSelectAllResumes } from "./resumes/useSelectAllResumes";
 import { useResumeBatchActions } from "./resumes/useResumeBatchActions";
 import { buildResumeBatchRowActions } from "./resumes/resumeBatchActions";
 import BatchConfigModal from "../features/batch/BatchConfigModal";
-import ExternalResumeEntry from "./resumes/ExternalResumeEntry";
+import ResumeFilterBar from "./resumes/ResumeFilterBar";
 
 export default function ResumesPage() {
   useLocale();
@@ -330,62 +323,23 @@ export default function ResumesPage() {
           setPreviewId(resumeId);
         }}
       />
-      {/* 筛选栏整体收进一个 Space（gap 12px，wrap 换行时同样吃 gap）：
-          之前「交付存档」按钮、搜索框、两个筛选 Select 各写各的 marginBottom，
-          行内元素水平方向零间距——按钮和搜索框几乎贴死，视觉节奏也不一致。 */}
-      <Space wrap size={16} align="center" className="rf-filter-bar">
-        <Button type="primary" onClick={() => setManualOpen(true)}>
-          {t("resumesPage.page.newResume")}
-        </Button>
-        <ResumeCenterAiEntry />
-        <Button onClick={() => setArchiveOpen(true)}>
-          {t("resumesPage.page.deliveryArchive")}
-        </Button>
-        {/* 第 1 条：外部简历不再常驻本页，改为独立页入口（带数量）。 */}
-        <ExternalResumeEntry />
-        {jobId && (
-          <Space size={4} align="center">
-            <Tag color="blue">
-              {t("resumesPage.page.jobFilterTag", { job: jobLabel || `#${jobId}` })}
-            </Tag>
-            <Button type="link" size="small" onClick={() => applyJobFilter(undefined)}>
-              {t("resumesPage.page.clearFilter")}
-            </Button>
-          </Space>
-        )}
-        <JobFilterSelect value={jobId} onChange={applyJobFilter} onLabelChange={setJobLabel} />
-        <ResumeSearchInput keyword={keyword} onCommit={applyKeyword} />
-        <Select
-          allowClear
-          placeholder={t("resumesPage.filter.jobRelation")}
-          aria-label={t("resumesPage.filter.jobRelationAria")}
-          style={{ width: 140 }}
-          value={hasJobFilter}
-          onChange={(value) => {
-            setHasJobFilter(value);
-            setPage(1);
-          }}
-          options={[
-            { value: true, label: t("resumesPage.filter.hasJob") },
-            { value: false, label: t("resumesPage.filter.general") },
-          ]}
-        />
-        {/* T2：排序改到列头（三态），这里只留「恢复默认排序」——默认态禁用，
-            文案说清"点了会发生什么"，与岗位广场同一套交互。 */}
-        <Tooltip title={resumeSortResetHint(sortState)}>
-          <Button
-            icon={<UndoOutlined />}
-            aria-label={t("resumesPage.sort.reset")}
-            disabled={isDefaultResumeSort(sortState)}
-            onClick={() => applySort(DEFAULT_RESUME_SORT_STATE)}
-          >
-            {t("resumesPage.sort.reset")}
-          </Button>
-        </Tooltip>
-        {/* A2 场景建议入口：悬停/点击才浮出说明，只提供入口，不调用模型、不按场景
-            过滤任何已有简历。放在筛选栏末尾，不再单独占一行。 */}
-        <ResumeScenarioSuggestion />
-      </Space>
+      <ResumeFilterBar
+        keyword={keyword}
+        jobId={jobId}
+        jobLabel={jobLabel}
+        hasJobFilter={hasJobFilter}
+        sortState={sortState}
+        onNewResume={() => setManualOpen(true)}
+        onOpenArchive={() => setArchiveOpen(true)}
+        onJobFilterChange={applyJobFilter}
+        onJobLabelChange={setJobLabel}
+        onKeywordCommit={applyKeyword}
+        onHasJobFilterChange={(value) => {
+          setHasJobFilter(value);
+          setPage(1);
+        }}
+        onSortReset={() => applySort(DEFAULT_RESUME_SORT_STATE)}
+      />
       {batch.selecting && (
         <ResumeBatchToolbar
           count={batch.selectedCount}

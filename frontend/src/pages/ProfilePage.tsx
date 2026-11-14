@@ -1,24 +1,17 @@
 /** 我的资料：13 个大字段（定义驱动）+ 当前组 + 网申资料分页，整体保存。 */
-import { Alert, App, Button, Form } from "antd";
+import { App, Form } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import ErrorState from "../components/common/ErrorState";
 import PageSkeleton from "../components/common/PageSkeleton";
 import ProfilePageHeader from "../features/profile/fields/ProfilePageHeader";
-import ProfileEditActionBar from "../features/profile/fields/ProfileEditActionBar";
-import ProfileLeaveConfirmModal from "../features/profile/fields/ProfileLeaveConfirmModal";
-import ProfilePageModals from "../features/profile/fields/ProfilePageModals";
 import ProfileSectionStack from "../features/profile/fields/ProfileSectionStack";
 import ProfileWorkspaceTabs, {
   type ProfileWorkspaceKey,
 } from "../features/profile/fields/ProfileWorkspaceTabs";
 import ProfileGroupControl from "../features/profile/groups/ProfileGroupControl";
-import ProfileGroupManagerModal from "../features/profile/groups/ProfileGroupManagerModal";
 import { useCurrentProfileGroup } from "../features/profile/groups/useCurrentProfileGroup";
-import ProfilePlacementGuide from "../features/profile/library/ProfilePlacementGuide";
-import ProfileUpgradeNotice from "../features/profile/library/ProfileUpgradeNotice";
-import ProfileDeepLinkNotice from "../features/profile/ProfileDeepLinkNotice";
 import { useProfileDeepLink } from "../features/profile/useProfileDeepLink";
 import {
   buildProfileBaseline,
@@ -36,6 +29,8 @@ import {
 import { profileSectionLabel } from "../features/profile/library/profileLabels";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import ProfilePageNotices from "./ProfilePageNotices";
+import ProfilePageOverlays from "./ProfilePageOverlays";
 
 export default function ProfilePage() {
   const locale = useLocale();
@@ -412,84 +407,51 @@ export default function ProfilePage() {
         }}
       />
 
-      {workspace?.pending_notice ? (
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 16 }}
-          title={workspace.pending_notice.message ?? t("profileGroups.notice.fallback")}
-          action={
-            <Button
-              size="small"
-              onClick={() => void groupApi.acknowledge(workspace.pending_notice?.notice_id ?? "")}
-            >
-              {t("profileGroups.notice.ack")}
-            </Button>
-          }
-        />
-      ) : null}
-      {deepLink.missingSectionKey ? (
-        <ProfileDeepLinkNotice
-          sectionName={sectionNames[deepLink.missingSectionKey] ?? deepLink.missingSectionKey}
-          onShow={() => void handleSetSectionVisible(deepLink.missingSectionKey, true)}
-        />
-      ) : null}
-      {workspace ? (
-        <ProfileUpgradeNotice
-          hasLegacyData={workspace.upgrade.has_legacy_data}
-          newProfileHasEntries={workspace.upgrade.new_profile_has_entries}
-          onOpenBackup={() => navigate("/settings")}
-          onStartFill={handleStartEditing}
-        />
-      ) : null}
+      <ProfilePageNotices
+        workspace={workspace}
+        onAcknowledgeNotice={(noticeId) => void groupApi.acknowledge(noticeId)}
+        missingSectionKey={deepLink.missingSectionKey}
+        missingSectionName={sectionNames[deepLink.missingSectionKey] ?? deepLink.missingSectionKey}
+        onShowMissingSection={() => void handleSetSectionVisible(deepLink.missingSectionKey, true)}
+        onOpenBackup={() => navigate("/settings")}
+        onStartFill={handleStartEditing}
+      />
 
       {workspaceTabs}
 
-      {/* 编辑且有未保存改动时，操作条常驻内容区底部（需求 6）：页头的保存/取消只在页顶，
-          资料页又长，改到下面几条就够不着了。动作**复用** submitAll / handleCancelEditing，
-          所以校验、冲突提示、离开守卫都还是同一条路径。
-          未保存确认卡片弹出时收起：同一屏不要再摆第二组"保存/取消"——这与上面三处
-          `leaveGuard.confirmOpen` 让位是同一条理由。 */}
-      {leaveGuard.confirmOpen ? null : (
-        <ProfileEditActionBar
-          editing={profile.editing}
-          dirty={dirty}
-          saving={profile.saving || webform.extraSaving}
-          blocked={profile.photoReading}
-          onSave={() => void submitAll()}
-          onCancel={handleCancelEditing}
-        />
-      )}
-
-      {/* 未保存修改的确认卡片：与三个 Modal 并列挂在页面上，打开时遮罩 + 居中，
-          不再挤在页面最顶部（触发它的按钮可能在页头甚至页外，用户根本看不到）。 */}
-      <ProfileLeaveConfirmModal
-        open={leaveGuard.confirmOpen}
-        kind={leaveGuard.pendingKind}
-        onDiscard={leaveGuard.confirmDiscard}
-        onKeep={leaveGuard.cancelDiscard}
+      <ProfilePageOverlays
+        editing={profile.editing}
+        dirty={dirty}
+        saving={profile.saving || webform.extraSaving}
+        blocked={profile.photoReading}
+        onSave={() => void submitAll()}
+        onCancel={handleCancelEditing}
+        leaveConfirm={{
+          open: leaveGuard.confirmOpen,
+          kind: leaveGuard.pendingKind,
+          onDiscard: leaveGuard.confirmDiscard,
+          onKeep: leaveGuard.cancelDiscard,
+        }}
+        profileTextModal={profile.recognition.modal}
+        webformTextModal={webform.webformTextModal}
+        manager={
+          managerOpen
+            ? {
+                open: true,
+                onClose: () => {
+                  setManagerOpen(false);
+                  setManagerSectionKey("");
+                },
+                workspace,
+                onChanged: profile.reloadWorkspace,
+                initialView: managerView,
+                initialSectionKey: managerSectionKey,
+                editing: profile.editing,
+              }
+            : null
+        }
+        placementGuide={{ open: guideOpen, onClose: () => setGuideOpen(false) }}
       />
-
-      <ProfilePageModals
-        profileText={profile.recognition.modal}
-        webformText={webform.webformTextModal}
-      />
-
-      {managerOpen ? (
-        <ProfileGroupManagerModal
-          open
-          onClose={() => {
-            setManagerOpen(false);
-            setManagerSectionKey("");
-          }}
-          workspace={workspace}
-          onChanged={profile.reloadWorkspace}
-          initialView={managerView}
-          initialSectionKey={managerSectionKey}
-          editing={profile.editing}
-        />
-      ) : null}
-      <ProfilePlacementGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   );
 }

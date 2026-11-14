@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 我的资料页：通用页面行为（分页/未保存防护/折叠/悬浮球卡/输入性能）。 */
+/**
+ * 我的资料页：通用页面行为（分页 / 未保存防护 / 折叠 / 输入性能）。
+ *
+ * 投投悬浮球「去改资料」提示卡的用例已拆到 `ProfilePage.editPrompt.test.tsx`（行数预算）。
+ */
 
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getProfileEditControl } from "../features/tou-tou/profileSaveBridge";
 import {
   makeAllSections,
   makeEntry,
@@ -380,66 +383,6 @@ describe("ProfilePage 分区折叠", () => {
     fireEvent.click(expandAll);
     expect(screen.getByRole("button", { name: "收起基本信息" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /全部收起/ })).toBeInTheDocument();
-  });
-});
-
-describe("ProfilePage 悬浮球「去改资料」提示卡", () => {
-  it("挂载后注册编辑入口，点它等同于点页头的「编辑资料」", async () => {
-    renderProfilePage();
-    await waitFor(() => expect(getProfileEditControl()).not.toBeNull());
-
-    act(() => getProfileEditControl()?.onEdit());
-
-    // 进入编辑态：页头换成取消 / 保存全部资料。
-    expect(await screen.findByRole("button", { name: /保存全部资料/ })).toBeInTheDocument();
-  });
-
-  it("资料还没加载完时不注册（那时点了也没反应）", async () => {
-    workspaceMocks.getWorkspace.mockReturnValue(new Promise(() => {}));
-    renderProfilePage();
-
-    // 加载态只有骨架屏；桥上也就不该有东西。
-    expect(document.querySelector(".ant-skeleton")).not.toBeNull();
-    expect(getProfileEditControl()).toBeNull();
-  });
-
-  it("进入编辑态后注销，取消编辑也不再弹回来（点过就算提醒过了）", async () => {
-    renderProfilePage();
-    await waitFor(() => expect(getProfileEditControl()).not.toBeNull());
-
-    act(() => getProfileEditControl()?.onEdit());
-    await waitFor(() => expect(getProfileEditControl()).toBeNull());
-
-    fireEvent.click(screen.getByRole("button", { name: /取消/ }));
-    await findHeaderEditButton();
-    // 卡片起初就是为了让人知道去哪改资料；取消一次编辑后再催一遍属于打扰。
-    expect(getProfileEditControl()).toBeNull();
-  });
-
-  it("关掉之后本次进入不再注册", async () => {
-    renderProfilePage();
-    await waitFor(() => expect(getProfileEditControl()).not.toBeNull());
-
-    act(() => getProfileEditControl()?.onDismiss());
-    await waitFor(() => expect(getProfileEditControl()).toBeNull());
-
-    // 之后页面再重渲（例如切分页）也不该把它加回来。
-    fireEvent.click(await screen.findByRole("tab", { name: "网申资料" }));
-    await waitFor(() =>
-      expect(
-        screen.getAllByText(t("profileLibrary.webform.sectionAlertTitle")).length,
-      ).toBeGreaterThan(0),
-    );
-    expect(getProfileEditControl()).toBeNull();
-  });
-
-  it("离开这一页（卸载）时注销，回来才会重新提醒", async () => {
-    const view = renderProfilePage();
-    await waitFor(() => expect(getProfileEditControl()).not.toBeNull());
-
-    view.unmount();
-
-    expect(getProfileEditControl()).toBeNull();
   });
 });
 

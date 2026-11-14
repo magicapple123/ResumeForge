@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistantConversationDetail, AssistantStreamEvent } from "../types";
-import { MessageToolCalls } from "../features/assistant/components/AssistantMessageContent";
 import {
   getAssistantStreamState,
   resetAssistantStreamForTests,
@@ -327,103 +326,6 @@ describe("AssistantPage", () => {
     expect(screen.queryByText("resume.exe")).not.toBeInTheDocument();
     expect(apiMocks.sendAssistantMessage).not.toHaveBeenCalled();
   });
-  it("shows what the assistant did with tools while the reply is streaming", async () => {
-    const stream = deferred<void>();
-    apiMocks.sendAssistantMessage.mockImplementation(
-      async (_id: number, _payload: unknown, onEvent: (event: AssistantStreamEvent) => void) => {
-        onEvent({
-          type: "start",
-          user_message_id: 1,
-          assistant_message_id: 2,
-          conversation_title: "新对话",
-        });
-        onEvent({
-          type: "tool",
-          name: "create_job",
-          arguments: { title: "字节跳动后端实习" },
-          summary: "新增岗位「字节跳动后端实习」",
-          link: "/jobs",
-          ok: true,
-          error: "",
-          changed: true,
-        });
-        await stream.promise;
-      },
-    );
-
-    renderPage();
-    fireEvent.change(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题"), {
-      target: { value: "帮我把这个岗位存进去" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
-
-    // 助手改动了数据这件事必须一眼可见：现在记录默认折叠了，但改动项被提到折叠标题里，
-    // 所以不展开也能看到"改动了 1 项"——原来的"必须一眼可见"由标题摘要保住，而不是丢掉。
-    expect(await screen.findByText(/助手做了什么（1）/)).toBeInTheDocument();
-    expect(screen.getByText(/改动了 1 项/)).toBeInTheDocument();
-    // 逐条明细仍在折叠面板内，展开后可见，且「前往查看」跳转不变。
-    expect(screen.queryByText("新建岗位")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /助手做了什么（1）/ }));
-    expect(await screen.findByText("新建岗位")).toBeInTheDocument();
-    expect(screen.getByText("新增岗位「字节跳动后端实习」")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "前往查看" })).toHaveAttribute("href", "/jobs");
-  });
-
-  it("flags a tool that failed", async () => {
-    const stream = deferred<void>();
-    apiMocks.sendAssistantMessage.mockImplementation(
-      async (_id: number, _payload: unknown, onEvent: (event: AssistantStreamEvent) => void) => {
-        onEvent({
-          type: "tool",
-          name: "get_job",
-          arguments: { job_id: 999 },
-          summary: "",
-          link: "",
-          ok: false,
-          error: "岗位 999 不存在",
-          changed: false,
-        });
-        await stream.promise;
-      },
-    );
-
-    renderPage();
-    fireEvent.change(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题"), {
-      target: { value: "看看 999 号岗位" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
-
-    // 失败不能被折叠藏起来：失败计数写在折叠标题里，不展开也能看到出了问题。
-    expect(await screen.findByText(/1 项失败/)).toBeInTheDocument();
-    // 展开后能看到具体是哪一条、为什么失败。
-    fireEvent.click(screen.getByRole("button", { name: /助手做了什么（1）/ }));
-    expect(await screen.findByText(/失败：岗位 999 不存在/)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "前往查看" })).not.toBeInTheDocument();
-  });
-
-  it("never claims data changed when a historical tool call has no changed flag", () => {
-    // changed 是随功能一起加的可选字段，更早存下的历史消息里没有。缺失必须按"没改动"处理，
-    // 否则折叠标题会凭空报出「改动了 1 项」——那是在替后端编造它没说过的改动。
-    render(
-      <MessageToolCalls
-        calls={[
-          {
-            name: "create_job",
-            arguments: { title: "历史岗位" },
-            summary: "新增岗位「历史岗位」",
-            link: "/jobs",
-            ok: true,
-            error: "",
-          },
-        ]}
-      />,
-    );
-
-    expect(screen.getByText(/助手做了什么（1）/)).toBeInTheDocument();
-    expect(screen.queryByText(/改动了/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/项失败/)).not.toBeInTheDocument();
-  });
-
   it("50 个 delta 只触发有限次订阅者通知（T02 缓冲 + rAF/setTimeout 合并 flush）", async () => {
     let emit: ((event: AssistantStreamEvent) => void) | undefined;
     let finish: () => void = () => undefined;

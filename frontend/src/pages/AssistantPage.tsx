@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** AI 求职助手：流式对话、历史记录、按对话启用的技能、附件与项目上下文联动。 */
 import { ArrowDownOutlined } from "@ant-design/icons";
-import { App, Drawer } from "antd";
+import { App } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AssistantBreadthPanel from "../features/assistant/AssistantBreadthPanel";
@@ -10,7 +10,6 @@ import AssistantContinueBar from "../features/assistant/components/AssistantCont
 import AssistantGroupModal from "../features/assistant/components/AssistantGroupModal";
 import AssistantMessageList from "../features/assistant/components/AssistantMessageList";
 import AssistantWorkspaceHeader from "../features/assistant/components/AssistantWorkspaceHeader";
-import ConversationSidebar from "../features/assistant/components/ConversationSidebar";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import { readStoredReasoningEffort } from "../features/assistant/readStoredReasoningEffort";
@@ -29,14 +28,12 @@ import { useAssistantMessageSelection } from "../features/assistant/hooks/useAss
 import { useAssistantSidebarActions } from "../features/assistant/hooks/useAssistantSidebarActions";
 import { useConversationSkills } from "../features/assistant/hooks/useConversationSkills";
 import { useAssistantStream } from "../features/assistant/hooks/useAssistantStream";
-import {
-  useAssistantContextSelection,
-  useContextResetOnSwitch,
-} from "../features/assistant/hooks/useAssistantContextSelection";
+import { useAssistantContextSelection } from "../features/assistant/hooks/useAssistantContextSelection";
 import { useAssistantHistoryDrawer } from "../features/assistant/hooks/useAssistantHistoryDrawer";
 import { useAssistantUrlBootstrap } from "../features/assistant/hooks/useAssistantUrlBootstrap";
 import { useRestoreStreamingConversation } from "../features/assistant/hooks/useRestoreStreamingConversation";
 import { useAssistantDisplayStream } from "../features/assistant/hooks/useThrottledStreamingText";
+import AssistantSidebarSlot from "./AssistantSidebarSlot";
 import type { AssistantPageProps } from "./assistantPageTypes";
 import type { AssistantConversationBrief, AssistantSurface, ReasoningEffort } from "../types";
 
@@ -85,8 +82,6 @@ export default function AssistantPage({
     conversations,
     conversationsLoading,
     conversationsError,
-    conversationSearch,
-    handleConversationSearch,
     reloadConversations,
     loadDetail,
     loadEarlier,
@@ -252,21 +247,7 @@ export default function AssistantPage({
     if (prompt.enableWebSearch) setWebSearch(true);
   };
 
-  const {
-    handleToggleSkill,
-    handleSidebarCreate,
-    handleSidebarSelect,
-    handleSidebarDelete,
-    handleSidebarRestored,
-    handleSidebarBatchDelete,
-    handleSidebarRename,
-    handleSidebarToggleFlag,
-    handleSidebarArchive,
-    handleSidebarFork,
-    handleMemoryOffChange,
-    openGroupModal,
-    confirmGroup,
-  } = useAssistantSidebarActions({
+  const sidebarActions = useAssistantSidebarActions({
     conversations: conversationsState,
     groupTarget,
     groupValue,
@@ -277,11 +258,7 @@ export default function AssistantPage({
     setHistoryOpen,
     toggleSkill,
   });
-
-  // F36：新建 / 切换会话都要丢掉上一段对话的岗位/简历关联，否则对话 A 的岗位会跟着
-  // 对话 B 的下一条消息发出去。
-  const { handleCreate: handleSidebarCreateWithClear, handleSelect: handleSidebarSelectWithClear } =
-    useContextResetOnSwitch(clearContextRefs, handleSidebarCreate, handleSidebarSelect);
+  const { confirmGroup, handleMemoryOffChange, handleToggleSkill } = sidebarActions;
 
   // ===== 滚动域（问题 A）：吸底跟随、定位到底部与「加载更早」跳过 =====
   // 整域下沉到 useAssistantAutoScroll；页面只消费回调与「回到底部」显隐。
@@ -316,55 +293,20 @@ export default function AssistantPage({
     setDrawerOpen: setHistoryDrawerOpen,
   } = useAssistantHistoryDrawer(compact, historyOpen, setHistoryOpen);
 
-  /**
-   * 历史列表**只有一份 JSX**：宽档内联、平板档进抽屉、浮窗进浮层，三处共用同一个节点。
-   * 写三遍的话（曾经有过两遍）"会话搜索""批量删除"这类能力会在某一处悄悄缺失。
-   */
-  const sidebarNode = (
-    <ConversationSidebar
-      surface={surface}
-      conversations={conversations}
-      loading={conversationsLoading}
-      activeId={activeId}
-      onCreate={handleSidebarCreateWithClear}
-      onSelect={handleSidebarSelectWithClear}
-      onDelete={handleSidebarDelete}
-      onRestored={handleSidebarRestored}
-      onBatchDelete={handleSidebarBatchDelete}
-      onRename={handleSidebarRename}
-      onToggleFlag={handleSidebarToggleFlag}
-      onArchive={handleSidebarArchive}
-      onFork={handleSidebarFork}
-      onMoveToGroup={openGroupModal}
-      // 会话搜索（P0-2）：输入防抖后走服务端 keyword 过滤。
-      search={conversationSearch}
-      onSearchChange={handleConversationSearch}
-      className={compact ? "assistant-sidebar--floating" : undefined}
-    />
-  );
   return (
     <div className={`assistant-page${compact ? " assistant-page--floating" : ""}`}>
-      {compact && historyOpen && (
-        <button
-          type="button"
-          className="assistant-sidebar-backdrop"
-          aria-label={t("responsive.assistant.aria.closeHistory")}
-          onClick={() => setHistoryOpen(false)}
-        />
-      )}
-      {(!compact && !historyDrawer) || (compact && historyOpen) ? sidebarNode : null}
-      {historyDrawer ? (
-        <Drawer
-          className="assistant-history-drawer"
-          open={historyDrawerOpen}
-          onClose={() => setHistoryDrawerOpen(false)}
-          title={t("responsive.assistant.history.title")}
-          size="default"
-          destroyOnHidden
-        >
-          {sidebarNode}
-        </Drawer>
-      ) : null}
+      <AssistantSidebarSlot
+        compact={compact}
+        surface={surface}
+        historyOpen={historyOpen}
+        onHistoryOpenChange={setHistoryOpen}
+        drawerVisible={historyDrawer}
+        drawerOpen={historyDrawerOpen}
+        onDrawerOpenChange={setHistoryDrawerOpen}
+        conversationsState={conversationsState}
+        sidebarActions={sidebarActions}
+        clearContextRefs={clearContextRefs}
+      />
       <section className={`assistant-workspace${selecting ? " is-selecting" : ""}`}>
         <AssistantWorkspaceHeader
           compact={compact}
