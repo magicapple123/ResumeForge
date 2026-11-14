@@ -20,19 +20,13 @@
 import { App, Space } from "antd";
 import { useEffect, useState } from "react";
 import EmptyState from "../../components/common/EmptyState";
-import {
-  analyzeInterviewQuestion,
-  deleteReview,
-  listReviews,
-  optimizeResumeFromInterview,
-  saveReview,
-  updateReview,
-} from "../../api/interview";
+import { analyzeInterviewQuestion, listReviews, saveReview } from "../../api/interview";
 import ReviewAnalysisCard from "./ReviewAnalysisCard";
 import ReviewHistoryCard from "./ReviewHistoryCard";
 import ReviewRecordHeader from "./ReviewRecordHeader";
 import ReviewSetupCard, { ReviewResumeField } from "./ReviewSetupCard";
 import ReviewOutcomeCards from "./ReviewOutcomeCards";
+import { useInterviewReviewOptimize } from "./useInterviewReviewOptimize";
 import {
   normalizeOptimizeItems,
   normalizeReviewAnalysis,
@@ -97,9 +91,7 @@ export default function InterviewReviewPanel({
   const [resumeMaterial, setResumeMaterial] = useState<InterviewMaterialExtract | null>(null);
   // 分析思路与反向优化都是一次「点一下等十几秒」的生成：各自可停，互不影响。
   const analyzeRequest = useAbortableRequest();
-  const optimizeRequest = useAbortableRequest();
   const analyzing = analyzeRequest.loading;
-  const optimizing = optimizeRequest.loading;
   const [analysis, setAnalysis] = useState<InterviewAnalysis | null>(null);
   const [optimizeResult, setOptimizeResult] = useState<InterviewOptimizeResult | null>(null);
   // F01：记录态独立作用域。打开/关闭历史**不得**修改工作区的 analysis / optimizeResult /
@@ -326,91 +318,22 @@ export default function InterviewReviewPanel({
     await persistReview(analysis, optimizeResult?.suggestions ?? []);
   };
 
-  const optimize = async () => {
-    if (!hasResume) {
-      message.error(t("interviewReview.error.needResume"));
-      return;
-    }
-    if (!viewAnalysis) {
-      message.error(t("interviewReview.error.needAnalysis"));
-      return;
-    }
-    // 兜底：按钮已禁用，但键盘/程序化触发仍可能走到这里；发请求必然 422。
-    if (!canOptimize) {
-      message.error(t("interviewReview.optimize.needInput"));
-      return;
-    }
-    const outcome = await optimizeRequest.run((signal) =>
-      optimizeResumeFromInterview(
-        {
-          resume_id: internalResumeId,
-          job_id: activeJobId ?? null,
-          weaknesses: effectiveWeaknesses,
-          follow_ups: effectiveFollowUps,
-          ...materialPayload,
-        },
-        signal,
-      ),
-    );
-    if (outcome.status === "error") {
-      message.error(errorText(outcome.error, t("interviewReview.error.optimizeFailed")));
-      return;
-    }
-    if (outcome.status === "aborted") return;
-    // 记录态：结果只落记录作用域，并 PATCH 这一条。
-    if (record) {
-      setRecordOptimizeResult(outcome.data);
-      try {
-        await updateReview(record.id, {
-          analysis: {
-            ...viewAnalysis,
-            pitfalls: effectiveWeaknesses,
-            follow_up: effectiveFollowUps,
-          },
-          suggestions: outcome.data.suggestions,
-        });
-      } catch (error) {
-        message.warning(
-          error instanceof Error ? error.message : t("interviewReview.error.writeBackFailed"),
-        );
-      }
-      return;
-    }
-    setOptimizeResult(outcome.data);
-    // F03：工作态也必须落库，否则刷新后建议数为 0。目标 id 来自自动保存；为空说明那次
-    // 保存失败了——明确提示，不静默丢弃（用户还能点「保存复盘」重试）。
-    if (workRecordId === null) {
-      message.warning(t("interviewReview.error.notPersisted"));
-      return;
-    }
-    try {
-      await updateReview(workRecordId, {
-        analysis: {
-          ...viewAnalysis,
-          pitfalls: effectiveWeaknesses,
-          follow_up: effectiveFollowUps,
-        },
-        suggestions: outcome.data.suggestions,
-      });
-      await reviews.reload();
-    } catch (error) {
-      message.warning(
-        error instanceof Error ? error.message : t("interviewReview.error.writeBackFailed"),
-      );
-    }
-  };
-
-  const removeReview = async (id: number) => {
-    try {
-      await deleteReview(id);
-      message.success(t("interviewReview.deleted"));
-      await reviews.reload();
-    } catch (error) {
-      message.error(
-        error instanceof Error ? error.message : t("interviewReview.error.deleteFailed"),
-      );
-    }
-  };
+  const { optimizing, optimize, cancelOptimize, removeReview } = useInterviewReviewOptimize({
+    record,
+    viewAnalysis,
+    effectiveWeaknesses,
+    effectiveFollowUps,
+    canOptimize,
+    hasResume,
+    internalResumeId,
+    activeJobId,
+    materialPayload,
+    workRecordId,
+    message,
+    reloadReviews: () => reviews.reload(),
+    setOptimizeResult,
+    setRecordOptimizeResult,
+  });
 
   // 简历来源控件：新建时在设定卡里，历史查看态在「答题思路」卡里（反向优化要用它）。
   const resumeField = (
@@ -459,7 +382,7 @@ export default function InterviewReviewPanel({
           canOptimize={canOptimize}
           optimizing={optimizing}
           onOptimize={() => void optimize()}
-          onAbort={() => optimizeRequest.cancel()}
+          onAbort={cancelOptimize}
           // 历史查看态：简历来源要能补选（外部/上传的正文不进历史）。
           resumeField={record ? resumeField : undefined}
           // F02：自动保存已入库时收起按钮（再点只会重复入库）；保存失败时按钮留着当重试。

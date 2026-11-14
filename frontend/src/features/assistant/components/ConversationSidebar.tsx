@@ -6,31 +6,17 @@ import {
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
-  EyeInvisibleOutlined,
   FolderOutlined,
   InboxOutlined,
   LinkOutlined,
-  MoreOutlined,
   PlusOutlined,
   PushpinFilled,
   PushpinOutlined,
-  SaveOutlined,
   StarFilled,
   StarOutlined,
   SplitCellsOutlined,
 } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Checkbox,
-  Input,
-  Listy,
-  Popconfirm,
-  Popover,
-  Segmented,
-  Tooltip,
-  Typography,
-} from "antd";
+import { App, Button, Input, Listy, Segmented } from "antd";
 import EmptyState from "../../../components/common/EmptyState";
 import { memo, useState } from "react";
 import type { AssistantConversationBrief, ConversationFilter } from "../../../types";
@@ -38,16 +24,14 @@ import type { Props } from "./ConversationSidebar.types";
 import { conversationToMaterial, exportConversation } from "../../../api/assistant";
 import { copyText } from "../../../utils/clipboard";
 import { downloadBlob } from "../../../utils/download";
-import { formatDateTime } from "../../../utils/format";
 import BatchActionBar from "../../../components/common/BatchActionBar";
 import LoadingBlock from "../../../components/common/LoadingBlock";
 import { RowContextMenu, type RowActionItem } from "../../../components/common/RowActions";
 import { useBatchSelection } from "../../../hooks/useBatchSelection";
 import { useDeleteUndo } from "../../trash/useDeleteUndo";
-import { ListyItem } from "../../../components/common/ListyItem";
-import { ConversationTitle } from "./AssistantMessageContent";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
+import ConversationSidebarRow from "./ConversationSidebarRow";
 
 function ConversationSidebar({
   className,
@@ -357,133 +341,23 @@ function ConversationSidebar({
                       : actionsFor(conversation)
                 }
               >
-                <ListyItem
-                  className={conversation.id === activeId ? "is-active" : ""}
-                  actions={
-                    batch.selecting
-                      ? [
-                          // 多选模式：行动作区换成勾选框，点行（标题）也切换勾选。
-                          <Checkbox
-                            key="pick"
-                            aria-label={t("assistantUi.sidebar.aria.selectConversation", {
-                              title: conversation.title,
-                            })}
-                            checked={batch.isSelected(conversation.id)}
-                            onChange={() => batch.toggle(conversation.id)}
-                          />,
-                        ]
-                      : [
-                          <Popover
-                            key="more"
-                            trigger="click"
-                            placement="bottomRight"
-                            open={actionMenuId === conversation.id}
-                            onOpenChange={(open) => setActionMenuId(open ? conversation.id : null)}
-                            content={
-                              <div className="assistant-conversation-actions-menu">
-                                {actionsFor(conversation).map((item) =>
-                                  item.confirm ? (
-                                    <Popconfirm
-                                      key={item.key}
-                                      title={item.confirm}
-                                      // 这个「···」菜单是手写的 Popover（不走 useRowActionMenu），
-                                      // 所以正文要在这里显式传，否则右键菜单有后果段、这里没有。
-                                      description={item.confirmBody}
-                                      onConfirm={() => {
-                                        setActionMenuId(null);
-                                        item.onClick?.();
-                                      }}
-                                    >
-                                      <Button
-                                        type="text"
-                                        size="small"
-                                        danger={item.danger}
-                                        icon={item.icon}
-                                      >
-                                        {item.label}
-                                      </Button>
-                                    </Popconfirm>
-                                  ) : (
-                                    <Button
-                                      key={item.key}
-                                      type="text"
-                                      size="small"
-                                      danger={item.danger}
-                                      icon={item.icon}
-                                      onClick={item.onClick}
-                                    >
-                                      {item.label}
-                                    </Button>
-                                  ),
-                                )}
-                              </div>
-                            }
-                          >
-                            <Tooltip title={t("assistantUi.sidebar.moreTooltip")}>
-                              <Button
-                                type="text"
-                                size="small"
-                                aria-label={t("assistantUi.sidebar.moreAria")}
-                                className="assistant-conversation-more-button"
-                                icon={<MoreOutlined />}
-                              />
-                            </Tooltip>
-                          </Popover>,
-                        ]
+                <ConversationSidebarRow
+                  conversation={conversation}
+                  activeId={activeId}
+                  selecting={batch.selecting}
+                  selected={batch.isSelected(conversation.id)}
+                  onToggleSelected={() => batch.toggle(conversation.id)}
+                  actions={actionsFor(conversation)}
+                  menuOpen={actionMenuId === conversation.id}
+                  onMenuOpenChange={(open) => setActionMenuId(open ? conversation.id : null)}
+                  editing={editingId === conversation.id}
+                  editingTitle={editingTitle}
+                  onEditingTitleChange={setEditingTitle}
+                  onFinishEditing={() => saveTitle(conversation.id)}
+                  onSelect={() =>
+                    batch.selecting ? batch.toggle(conversation.id) : onSelect(conversation.id)
                   }
-                >
-                  {editingId === conversation.id ? (
-                    <Input
-                      size="small"
-                      value={editingTitle}
-                      autoFocus
-                      maxLength={128}
-                      suffix={
-                        <Tooltip title={t("assistantUi.sidebar.saveTitleTooltip")}>
-                          <Button
-                            type="text"
-                            size="small"
-                            aria-label={t("assistantUi.sidebar.saveTitleAria")}
-                            icon={<SaveOutlined />}
-                            onClick={() => saveTitle(conversation.id)}
-                          />
-                        </Tooltip>
-                      }
-                      onChange={(event) => setEditingTitle(event.target.value)}
-                      onPressEnter={() => saveTitle(conversation.id)}
-                    />
-                  ) : (
-                    <div className="assistant-conversation-item">
-                      <ConversationTitle
-                        title={conversation.title}
-                        pinned={conversation.pinned}
-                        favorite={conversation.favorite}
-                        onSelect={() =>
-                          batch.selecting
-                            ? batch.toggle(conversation.id)
-                            : onSelect(conversation.id)
-                        }
-                      />
-                      <Typography.Text type="secondary" className="assistant-conversation-meta">
-                        {conversation.group_name ? `${conversation.group_name} · ` : ""}
-                        {t("assistantUi.sidebar.messageCount", {
-                          count: conversation.message_count,
-                        })}
-                        {" · "}
-                        {formatDateTime(conversation.updated_at)}
-                        {conversation.memory_off ? (
-                          <Tooltip title={t("assistantUi.memory.offBadge")}>
-                            <EyeInvisibleOutlined
-                              className="assistant-conversation-memory-off"
-                              role="img"
-                              aria-label={t("assistantUi.memory.offBadge")}
-                            />
-                          </Tooltip>
-                        ) : null}
-                      </Typography.Text>
-                    </div>
-                  )}
-                </ListyItem>
+                />
               </RowContextMenu>
             )}
           />

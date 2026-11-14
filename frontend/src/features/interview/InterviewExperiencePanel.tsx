@@ -1,27 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 面经知识库（R-15）：真实面经的增删改查，可绑定岗位、沉淀真实问题清单。 */
-import {
-  CheckSquareOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  MoreOutlined,
-  PlusOutlined,
-} from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Card,
-  Checkbox,
-  Dropdown,
-  Empty,
-  Form,
-  Input,
-  Listy,
-  Select,
-  Space,
-  Tag,
-  Typography,
-} from "antd";
+import { EditOutlined, PlusOutlined } from "@ant-design/icons";
+import { App, Button, Card, Empty, Form, Input, Listy, Select, Space, Tag } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -35,8 +15,8 @@ import { useJobSearchSelect } from "../../hooks/remoteSearchOptions";
 import BatchActionBar from "../../components/common/BatchActionBar";
 import BatchDeleteButton from "../../components/common/BatchDeleteButton";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
-import { RowContextMenu } from "../../components/common/RowActions";
 import InterviewExperienceFormModal from "./InterviewExperienceFormModal";
+import InterviewExperienceListItem from "./InterviewExperienceListItem";
 import { EXPERIENCE_SOURCES } from "../../types";
 import type {
   ExperienceSource,
@@ -50,9 +30,6 @@ import {
 } from "../../i18n/enum/interview";
 import { formatDateTime } from "../../utils/format";
 import { RecordDetailDrawer } from "../../components/common/RecordDetail";
-import { isFromInnerControl } from "../../components/common/recordDetailCore";
-import { ListyItem, ListyMeta } from "../../components/common/ListyItem";
-import { useRowActionMenu } from "../../components/common/rowActionMenu";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
@@ -74,7 +51,6 @@ export default function InterviewExperiencePanel() {
   const [detail, setDetail] = useState<InterviewExperience | null>(null);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm<InterviewExperiencePayload>();
-  const buildMenu = useRowActionMenu();
   // 详情抽屉的标签和列表同一套显示名：来源/轮次是协议值（原样入库），
   // 白名单外的历史值原样显示，不丢信息。
   const detailSourceKey = detail ? experienceSourceLabelKey(detail.source) : undefined;
@@ -271,128 +247,18 @@ export default function InterviewExperiencePanel() {
           className="rf-card-list"
           items={items}
           rowKey={(item) => item.id}
-          itemRender={(item) => {
-            // 来源/轮次是协议值：显示名走语言包；白名单外的历史值原样显示。
-            const sourceKey = experienceSourceLabelKey(item.source);
-            const roundKey = experienceRoundTypeLabelKey(item.round_type);
-            return (
-              <ListyItem
-                className="detail-trigger"
-                // 整条点开详情；行内的「详情 / 更多」按钮不会被这一层抢走。
-                onClick={(event) => {
-                  if (isFromInnerControl(event)) return;
-                  setDetail(item);
-                }}
-                actions={[
-                  batch.selecting ? (
-                    <Checkbox
-                      key="select"
-                      aria-label={t("interviewExperience.aria.select", {
-                        name: item.title || item.company,
-                      })}
-                      checked={batch.isSelected(item.id)}
-                      onChange={() => batch.toggle(item.id)}
-                    />
-                  ) : (
-                    <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
-                      {t("interviewExperience.action.detail")}
-                    </Button>
-                  ),
-                  ...(batch.selecting
-                    ? []
-                    : [
-                        <Dropdown
-                          key="more"
-                          trigger={["click"]}
-                          menu={{
-                            items: buildMenu([
-                              {
-                                key: "edit",
-                                label: t("interviewExperience.action.edit"),
-                                icon: <EditOutlined />,
-                                onClick: () => openEdit(item),
-                              },
-                              {
-                                key: "delete",
-                                label: t("common.action.delete"),
-                                danger: true,
-                                icon: <DeleteOutlined />,
-                                confirm: t("interviewExperience.confirm.delete"),
-                                confirmBody: t("common.note.trashRecovery"),
-                                onClick: () => void doRemove(item),
-                              },
-                            ]),
-                          }}
-                        >
-                          <Button
-                            type="text"
-                            size="small"
-                            icon={<MoreOutlined />}
-                            aria-label={t("interviewExperience.aria.more", {
-                              name: item.title || item.company,
-                            })}
-                          />
-                        </Dropdown>,
-                      ]),
-                ]}
-              >
-                {/* 右键菜单挂在条目主体上：多选模式收起（入口只在正常模式的菜单里）。 */}
-                <RowContextMenu
-                  items={
-                    batch.selecting
-                      ? []
-                      : [
-                          {
-                            key: "batch_select",
-                            label: t("common.action.batchSelect"),
-                            icon: <CheckSquareOutlined />,
-                            onClick: batch.enterSelecting,
-                          },
-                        ]
-                  }
-                >
-                  <div>
-                    <ListyMeta
-                      title={
-                        <Space size={6} wrap>
-                          <span>{item.title || t("interviewExperience.untitled")}</span>
-                          <Tag color="geekblue">{sourceKey ? t(sourceKey) : item.source}</Tag>
-                          {item.round_type && <Tag>{roundKey ? t(roundKey) : item.round_type}</Tag>}
-                          {item.interview_date && <Tag>{item.interview_date}</Tag>}
-                        </Space>
-                      }
-                      description={
-                        <Space orientation="vertical" size={2} style={{ width: "100%" }}>
-                          <Typography.Text type="secondary">
-                            {item.company}
-                            {item.position ? ` · ${item.position}` : ""}
-                            {item.difficulty ? ` · ${item.difficulty}` : ""}
-                          </Typography.Text>
-                          {item.questions.length > 0 && (
-                            <Typography.Text type="secondary">
-                              {t("interviewExperience.questions.preview", {
-                                count: item.questions.length,
-                              })}
-                              {item.questions
-                                .slice(0, 3)
-                                .join(t("interviewExperience.separator.question"))}
-                            </Typography.Text>
-                          )}
-                          {item.tags.length > 0 && (
-                            <Space size={4} wrap>
-                              {item.tags.map((tag) => (
-                                <Tag key={tag}>{tag}</Tag>
-                              ))}
-                            </Space>
-                          )}
-                        </Space>
-                      }
-                    />
-                  </div>
-                </RowContextMenu>
-              </ListyItem>
-            );
-          }}
+          itemRender={(item) => (
+            <InterviewExperienceListItem
+              item={item}
+              selecting={batch.selecting}
+              selected={batch.isSelected(item.id)}
+              onToggleSelect={() => batch.toggle(item.id)}
+              onEnterSelecting={batch.enterSelecting}
+              onOpenDetail={() => setDetail(item)}
+              onEdit={() => openEdit(item)}
+              onRemove={() => void doRemove(item)}
+            />
+          )}
         />
       )}
 

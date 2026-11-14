@@ -38,86 +38,18 @@ import {
   cancelBackgroundTask,
   watchAiTask,
 } from "../../utils/backgroundTasks";
-import {
-  ADMISSION_META,
-  MATCH_STATUS_META,
-  type HardGateResult,
-  type Job,
-  type JobMatchOut,
-  type MatchCondition,
-  type MatchScoreDimension,
-} from "../../types";
-import { t, type MessageKey } from "../../i18n";
-import {
-  ADMISSION_LABEL_KEYS,
-  MATCH_STATUS_LABEL_KEYS,
-  matchScoreDimensionKey,
-} from "../../i18n/enum/apply";
+import { ADMISSION_META, type Job, type JobMatchOut } from "../../types";
+import { t } from "../../i18n";
+import { ADMISSION_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 import JobMatchResumeSelect from "./JobMatchResumeSelect";
 import JobMatchSourceNotice from "./JobMatchSourceNotice";
+import JobMatchConditionList from "./JobMatchConditionList";
+import { GROUPS, HARD_GATE_LABELS, dimensionLabel } from "./jobMatchLabels";
 
 interface Props {
   job: Job | null;
   onClose: () => void;
-}
-
-const HARD_GATE_LABELS: Record<HardGateResult, { labelKey: MessageKey; color: string }> = {
-  met: { labelKey: "jobMatch.hardGate.met", color: "green" },
-  unmet: { labelKey: "jobMatch.hardGate.unmet", color: "red" },
-  unknown: { labelKey: "jobMatch.hardGate.unknown", color: "gold" },
-};
-
-const GROUPS: {
-  key: keyof Pick<JobMatchOut["result"], "hard_conditions" | "core_abilities" | "bonus_items">;
-  titleKey: MessageKey;
-}[] = [
-  { key: "hard_conditions", titleKey: "jobMatch.group.hardConditions" },
-  { key: "core_abilities", titleKey: "jobMatch.group.coreAbilities" },
-  { key: "bonus_items", titleKey: "jobMatch.group.bonusItems" },
-];
-
-/**
- * 参考分分项的展示名：按后端稳定的 `key` 查语言包。
- *
- * `label` 是后端下发的中文展示名（`MATCH_SCORE_DIMENSIONS`），英文界面下会露中文；
- * 后端新增分项时表里查不到，回退它下发的原文——不显示 key，也不留空。
- */
-function dimensionLabel(dimension: MatchScoreDimension): string {
-  const labelKey = matchScoreDimensionKey(dimension.key);
-  return labelKey ? t(labelKey) : dimension.label;
-}
-
-function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
-  useLocale();
-  if (conditions.length === 0) {
-    return <EmptyState inline description={t("jobMatch.empty.none")} />;
-  }
-  return (
-    <ul className="job-match-conditions">
-      {conditions.map((condition, index) => {
-        const meta = MATCH_STATUS_META[condition.status];
-        return (
-          <li key={`${condition.label}-${index}`} className="job-match-condition">
-            <Space wrap size={8}>
-              <Tag color={meta.color}>{t(MATCH_STATUS_LABEL_KEYS[condition.status])}</Tag>
-              <Typography.Text strong>{condition.label}</Typography.Text>
-            </Space>
-            {condition.jd_quote && (
-              <Typography.Paragraph type="secondary" className="job-match-quote">
-                {t("jobMatch.condition.jdQuote", { quote: condition.jd_quote })}
-              </Typography.Paragraph>
-            )}
-            <Typography.Paragraph className="job-match-evidence">
-              {t("jobMatch.condition.evidence", {
-                evidence: condition.evidence || t("jobMatch.condition.evidenceMissing"),
-              })}
-            </Typography.Paragraph>
-          </li>
-        );
-      })}
-    </ul>
-  );
 }
 
 export default function JobMatchModal({ job, onClose }: Props) {
@@ -403,7 +335,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
             {GROUPS.map((group) => (
               <section key={group.key} className="job-match-group">
                 <Typography.Title level={5}>{t(group.titleKey)}</Typography.Title>
-                <ConditionList conditions={result[group.key]} />
+                <JobMatchConditionList conditions={result[group.key]} />
               </section>
             ))}
 
