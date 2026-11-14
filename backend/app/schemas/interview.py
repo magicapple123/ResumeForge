@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from ..models.interview import (
+from ..vocabulary.interview import (
     INTERVIEW_DIFFICULTIES,
     INTERVIEW_STATUS_ACTIVE,
     INTERVIEW_STATUS_FINISHED,

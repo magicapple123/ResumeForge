@@ -21,20 +21,19 @@ from datetime import datetime
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.vocabulary.referral import (
+    REFERRAL_STATUS_ACTIVE,
+    REFERRAL_STATUS_CLOSED,
+    REFERRAL_STATUS_INVALID,
+    REFERRAL_STATUS_SUBMITTED,
+    REFERRAL_STATUSES,
+)
+
 from ..database import Base
 from .profile import utcnow
 
-# ===== 内推状态（前后端共用一份取值）=====
-REFERRAL_STATUS_ACTIVE = "active"
-REFERRAL_STATUS_SUBMITTED = "submitted"
-REFERRAL_STATUS_CLOSED = "closed"
-REFERRAL_STATUS_INVALID = "invalid"
-REFERRAL_STATUSES = (
-    REFERRAL_STATUS_ACTIVE,
-    REFERRAL_STATUS_SUBMITTED,
-    REFERRAL_STATUS_CLOSED,
-    REFERRAL_STATUS_INVALID,
-)
+# 内推状态词表已下沉到 ``app/vocabulary/referral.py``（D8：契约层不再经由 models 取词表）。
+# 这里逐个显式 re-export，既有 ``from app.models.referral import ...`` 不变。
 
 
 class Referral(Base):

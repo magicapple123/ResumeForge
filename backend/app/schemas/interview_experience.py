@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from ..models.interview_experience import (
+from ..vocabulary.interview_experience import (
     EXPERIENCE_SOURCE_SELF,
     EXPERIENCE_SOURCES,
 )

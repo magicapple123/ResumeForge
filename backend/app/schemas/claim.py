@@ -19,7 +19,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from ..models.claim import (
+from ..vocabulary.claim import (
     CLAIM_CATEGORIES,
     CLAIM_CATEGORY_OTHER,
     RESPONSIBILITY_LEVELS,

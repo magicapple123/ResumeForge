@@ -19,18 +19,19 @@ from datetime import datetime
 from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.vocabulary.interview_experience import (
+    EXPERIENCE_SOURCE_PEER,
+    EXPERIENCE_SOURCE_PUBLIC,
+    EXPERIENCE_SOURCE_SELF,
+    EXPERIENCE_SOURCES,
+)
+
 from ..database import Base
 from .profile import utcnow
 
-# ===== 面经来源（前后端共用一份取值）=====
-EXPERIENCE_SOURCE_SELF = "self"
-EXPERIENCE_SOURCE_PEER = "peer"
-EXPERIENCE_SOURCE_PUBLIC = "public"
-EXPERIENCE_SOURCES = (
-    EXPERIENCE_SOURCE_SELF,
-    EXPERIENCE_SOURCE_PEER,
-    EXPERIENCE_SOURCE_PUBLIC,
-)
+# 面经来源词表已下沉到 ``app/vocabulary/interview_experience.py``（D8：契约层不再经由
+# models 取词表）。这里逐个显式 re-export，既有 ``from app.models.interview_experience
+# import EXPERIENCE_SOURCES`` 不变。
 
 # ===== 常见面试轮次（供前端下拉的白名单参考，存储仍是自由字符串）=====
 EXPERIENCE_ROUND_TYPES = ("一面", "二面", "三面", "HR面", "笔试", "其他")

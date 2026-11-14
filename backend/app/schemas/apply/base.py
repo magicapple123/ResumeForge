@@ -7,7 +7,7 @@
 from typing import Literal
 
 from ...config import DEFAULT_BROWSER_PORT as DEFAULT_BROWSER_PORT
-from ...models.apply import FAILURE_CATEGORIES
+from ...vocabulary.apply import FAILURE_CATEGORIES
 
 # ===== 配置默认值（出厂默认，键与 app_setting 一致）=====
 DEFAULT_INTERVAL_SECONDS = 25

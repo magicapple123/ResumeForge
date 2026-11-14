@@ -12,40 +12,25 @@ from typing import Any
 from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.vocabulary.interview import INTERVIEW_DIFFICULTIES as INTERVIEW_DIFFICULTIES
+from app.vocabulary.interview import INTERVIEW_STATUS_ACTIVE, MESSAGE_PHASE_INTERVIEW
+from app.vocabulary.interview import INTERVIEW_STATUS_FINISHED as INTERVIEW_STATUS_FINISHED
+from app.vocabulary.interview import INTERVIEW_TYPES as INTERVIEW_TYPES
+from app.vocabulary.interview import INTERVIEWER_STYLES as INTERVIEWER_STYLES
+
 from ..database import Base
 from .profile import utcnow
 
-# 面试类型：覆盖校招/社招常见形式，前端按这个清单给选项。
-INTERVIEW_TYPES = (
-    "技术面",
-    "项目深挖",
-    "行为面（STAR）",
-    "HR 面",
-    "综合面",
-    "案例分析",
-    "英语面试",
-    "压力面",
-)
-
-INTERVIEW_DIFFICULTIES = ("初级", "中级", "高级")
-
-# 面试官风格：影响提问语气与追问强度。
-INTERVIEWER_STYLES = (
-    "严谨专业",
-    "温和引导",
-    "持续追问",
-    "压力质询",
-)
-
-INTERVIEW_STATUS_ACTIVE = "active"
-INTERVIEW_STATUS_FINISHED = "finished"
-
+# 面试类型 / 难度 / 面试官风格 / 会话状态 / 正式问答阶段已下沉到
+# ``app/vocabulary/interview.py``（D8：契约层不再经由 models 取词表）。本模块无
+# ``__all__``，其中 4 个未被本模块引用的词表符号用 ``X as X`` 显式 re-export；
+# 既有 ``from app.models.interview import INTERVIEW_TYPES`` 等导入路径不变。
+#
 # 消息所属的阶段（0071 / #41）：
 #   · ``interview`` —— 正式面试的问答，**只有它计入轮次**（进度条与报告都按它算）；
 #   · ``followup``  —— 面试结束后的「追问」，面试已经收尾，再问多少轮都不影响
 #                      ``answered_rounds``，也不会让一场已结束的面试"重新开始"。
 # 默认是 ``interview``：历史行升级后行为逐字节不变（迁移里给了同样的 server_default）。
-MESSAGE_PHASE_INTERVIEW = "interview"
 MESSAGE_PHASE_FOLLOWUP = "followup"
 MESSAGE_PHASES = (MESSAGE_PHASE_INTERVIEW, MESSAGE_PHASE_FOLLOWUP)
 

@@ -12,7 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ..models.referral import REFERRAL_STATUS_ACTIVE, REFERRAL_STATUSES
+from ..vocabulary.referral import REFERRAL_STATUS_ACTIVE, REFERRAL_STATUSES
 
 MAX_REFERRAL_TEXT_CHARS = 128
 MAX_RELATION_CHARS = 64

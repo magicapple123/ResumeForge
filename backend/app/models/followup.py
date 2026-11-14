@@ -23,17 +23,18 @@ from datetime import datetime
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from ..database import Base
-from .profile import utcnow
-
-FOLLOWUP_DECISION_CONTACTED = "contacted"
-FOLLOWUP_DECISION_REPLIED = "replied"
-FOLLOWUP_DECISION_STOPPED = "stopped"
-FOLLOWUP_DECISIONS: tuple[str, ...] = (
+from app.vocabulary.followup import (
     FOLLOWUP_DECISION_CONTACTED,
     FOLLOWUP_DECISION_REPLIED,
     FOLLOWUP_DECISION_STOPPED,
+    FOLLOWUP_DECISIONS,
 )
+
+from ..database import Base
+from .profile import utcnow
+
+# 跟进决策词表已下沉到 ``app/vocabulary/followup.py``（D8：契约层不再经由 models 取词表）。
+# 这里逐个显式 re-export，既有 ``from app.models.followup import FOLLOWUP_DECISIONS`` 不变。
 
 
 class ApplicationFollowUp(Base):

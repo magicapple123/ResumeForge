@@ -14,7 +14,7 @@ from pydantic import (
     model_validator,
 )
 
-from ..models.job import JOB_STATUSES
+from ..vocabulary.job import JOB_STATUSES
 from .extraction import (
     MAX_EXTRACTION_DOCUMENT_COUNT,
     MAX_EXTRACTION_IMAGE_COUNT,

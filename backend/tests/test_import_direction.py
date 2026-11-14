@@ -187,6 +187,11 @@ ALLOW_MODELS_SCHEMAS: dict[tuple[str, str], str] = {
     ): "偏好词表唯一实现在 services/job_preference_catalog；模块级导入，待评估是否搬进 schemas",
 }
 
+# 规则 schemas-no-models：契约层（``app/schemas``）不得 import 实现层（``app/models``）。
+# 领域词表已下沉到 ``app/vocabulary``（D8），schema 校验只取词表、不取 ORM 实体与数据库层。
+# **现状为空表**：空表就是"schemas 目前零反向依赖 models"的存证，再出现只能新增登记。
+ALLOW_SCHEMAS_MODELS: dict[tuple[str, str], str] = {}
+
 # 显式公共层：被多个路由复用属于合规形态，不按"跨模块耦合"计。逐个列名而不是按
 # ``_shared.py`` 通配——新增一个公共层应当是一次有意识的改动，而不是改名就自动豁免。
 SHARED_API_MODULES: frozenset[str] = frozenset(
@@ -328,6 +333,35 @@ def test_models_schemas_no_services_api() -> None:
         ALLOW_MODELS_SCHEMAS,
         lambda rel, rec, target: rel.split("/")[0] in ("models", "schemas")
         and target.split(".")[1] in ("services", "api"),
+    )
+
+
+def test_schemas_no_models() -> None:
+    """``app/schemas/**`` 不得 import ``app.models``。
+
+    契约层只需要领域词表，不需要 ORM 实体与数据库层——词表已下沉到
+    ``app/vocabulary/``（D8：真问题是"领域词表住在 models 层，契约层被迫依赖实现层"）。
+    例外见 ALLOW_SCHEMAS_MODELS（空表）。
+    """
+    _assert_no_violations(
+        "schemas-no-models",
+        ALLOW_SCHEMAS_MODELS,
+        lambda rel, rec, target: rel.startswith("schemas/") and target.split(".")[1] == "models",
+    )
+
+
+def test_vocabulary_imports_stdlib_only() -> None:
+    """``app/vocabulary/**`` 只允许标准库 import，不得 import 任何 ``app.*``。
+
+    词表是依赖图的最底层：``models`` 与 ``schemas`` 都反向依赖它。一旦它回头
+    import ``app.*``，契约层就会经由 vocabulary 再次绕回实现层，D8 的断开等于没做。
+    """
+    vocabulary_files = [path for path in _scan() if _rel(path).startswith("vocabulary/")]
+    assert vocabulary_files, "app/vocabulary/ 下没有可扫描的模块，守卫会静默空转"
+    _assert_no_violations(
+        "vocabulary-stdlib-only",
+        {},
+        lambda rel, rec, target: rel.startswith("vocabulary/"),
     )
 
 

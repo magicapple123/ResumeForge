@@ -17,7 +17,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ..models.share_package import SHARE_PERMISSIONS
+from ..vocabulary.share_package import SHARE_PERMISSIONS
 from .export import RedactionOptions
 
 SharePermission = Literal["read_only", "comment"]

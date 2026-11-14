@@ -22,6 +22,8 @@ from typing import Any
 from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.vocabulary.drill import FEEDBACK_DEFERRED, FEEDBACK_IMMEDIATE, FEEDBACK_POLICIES
+
 from ..database import Base
 from .profile import utcnow
 
@@ -56,11 +58,8 @@ DRILL_STATUS_ACTIVE = "active"
 DRILL_STATUS_FINISHED = "finished"
 
 # ===== ③ 反馈策略：真实模拟与训练模式的分野 =====
-# 真实模拟默认**不在每题后**把判定念给用户（那会让人按判分标准答题，而不是像真面试）；
-# 训练模式则每题后立刻给一段简短反馈。
-FEEDBACK_DEFERRED = "deferred"
-FEEDBACK_IMMEDIATE = "immediate"
-FEEDBACK_POLICIES = (FEEDBACK_DEFERRED, FEEDBACK_IMMEDIATE)
+# 词表已下沉到 ``app/vocabulary/drill.py``（D8：契约层不再经由 models 取词表）；
+# 这里逐个显式 re-export，既有 ``from app.models.drill import FEEDBACK_POLICIES`` 不变。
 
 # 追问问题的类型：按需选择，不机械遍历。
 FOLLOWUP_KINDS = (

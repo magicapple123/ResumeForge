@@ -5,7 +5,7 @@
 且都要保持 ``extra="forbid"`` 与"稳定码原样下发、展示名走前端语言包"的口径。
 契约定稿见 ``D:/rf_verify/contracts/CONTRACTS.md`` 的 A/B 两节。
 
-跟进决策的取值来自 ``models.followup.FOLLOWUP_DECISIONS``（封闭决策集，不是漏斗
+跟进决策的取值来自 ``app.vocabulary.followup.FOLLOWUP_DECISIONS``（封闭决策集，不是漏斗
 状态）；这里只做接口层校验，**不做状态映射**——"对方已回"绝不写
 ``application_track.status``，理由见 models/followup.py 的模块注释。
 """
@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ..models.followup import FOLLOWUP_DECISIONS
+from ..vocabulary.followup import FOLLOWUP_DECISIONS
 
 #: 一张卡最多几个决策：与巡检单卡上限（``followup_sweep.MAX_TRACKS_PER_BUCKET``）一致。
 MAX_DECISIONS_PER_CARD = 5

@@ -21,27 +21,34 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from ..database import Base
-from .profile import utcnow
-
-# ===== ① 状态：秋招漏斗的六个阶段 =====
-STATUS_UNKNOWN = "unknown"
-STATUS_APPLIED = "applied"
-STATUS_SCREENING = "screening"
-STATUS_ASSESSMENT = "assessment"
-STATUS_INTERVIEW = "interview"
-STATUS_OFFER = "offer"
-STATUS_REJECTED = "rejected"
-
-STATUSES = (
+from app.vocabulary.tracker import (
+    CHANNEL_HEADHUNTER,
+    CHANNEL_OTHER,
+    CHANNEL_PLATFORM,
+    CHANNEL_REFERRAL,
+    CHANNEL_UNKNOWN,
+    CHANNEL_WEBSITE,
+    CHANNELS,
+    SOURCE_APPLY,
+    SOURCE_MANUAL,
+    SOURCE_RECOGNIZED,
+    SOURCES,
     STATUS_APPLIED,
-    STATUS_SCREENING,
     STATUS_ASSESSMENT,
     STATUS_INTERVIEW,
     STATUS_OFFER,
     STATUS_REJECTED,
+    STATUS_SCREENING,
     STATUS_UNKNOWN,
+    STATUSES,
 )
+
+from ..database import Base
+from .profile import utcnow
+
+# ===== ① 状态：秋招漏斗的六个阶段 =====
+# 词表（``STATUSES`` 与 7 个稳定码）已下沉到 ``app/vocabulary/tracker.py``（D8：契约层
+# 不再经由 models 取词表）；这里逐个显式 re-export，既有导入路径不变。
 
 STATUS_LABELS = {
     STATUS_APPLIED: "已投递",
@@ -70,10 +77,7 @@ ACTIVE_STATUSES = frozenset(
 )
 
 # ===== ② 记录来源 =====
-SOURCE_APPLY = "apply"
-SOURCE_MANUAL = "manual"
-SOURCE_RECOGNIZED = "recognized"
-SOURCES = (SOURCE_APPLY, SOURCE_MANUAL, SOURCE_RECOGNIZED)
+# 词表已下沉到 ``app/vocabulary/tracker.py``（D8）；这里逐个显式 re-export。
 
 SOURCE_LABELS = {
     SOURCE_APPLY: "投递台自动记录",
@@ -84,20 +88,7 @@ SOURCE_LABELS = {
 # ===== ②′ 投递渠道（RF-18）：用户自己选的"这份工作从哪来的" =====
 # 与 ``source``（记录来源：这一行**怎么进系统的**）是两个维度，不许混用。
 # 未知是合法取值且是默认值：不知道就是不知道，宁可留空也不替用户编一个渠道。
-CHANNEL_UNKNOWN = "unknown"
-CHANNEL_REFERRAL = "referral"
-CHANNEL_WEBSITE = "official_website"
-CHANNEL_PLATFORM = "job_platform"
-CHANNEL_HEADHUNTER = "headhunter"
-CHANNEL_OTHER = "other"
-CHANNELS = (
-    CHANNEL_UNKNOWN,
-    CHANNEL_REFERRAL,
-    CHANNEL_WEBSITE,
-    CHANNEL_PLATFORM,
-    CHANNEL_HEADHUNTER,
-    CHANNEL_OTHER,
-)
+# 词表已下沉到 ``app/vocabulary/tracker.py``（D8）；这里逐个显式 re-export。
 
 CHANNEL_LABELS = {
     CHANNEL_UNKNOWN: "未知",

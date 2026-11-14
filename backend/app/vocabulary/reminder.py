@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+"""日历提醒的词表：提醒种类（为什么提醒归哪类）与状态（待办 / 已完成 / 已忽略）。"""
+
+# ===== 提醒种类（前后端共用一份取值）=====
+REMINDER_KIND_INTERVIEW = "interview"
+REMINDER_KIND_ASSESSMENT_DEADLINE = "assessment_deadline"
+REMINDER_KIND_HR_REPLY = "hr_reply"
+REMINDER_KIND_OTHER = "other"
+REMINDER_KINDS = (
+    REMINDER_KIND_INTERVIEW,
+    REMINDER_KIND_ASSESSMENT_DEADLINE,
+    REMINDER_KIND_HR_REPLY,
+    REMINDER_KIND_OTHER,
+)
+
+# ===== 提醒状态 =====
+REMINDER_STATUS_PENDING = "pending"
+REMINDER_STATUS_DONE = "done"
+REMINDER_STATUS_DISMISSED = "dismissed"
+REMINDER_STATUSES = (
+    REMINDER_STATUS_PENDING,
+    REMINDER_STATUS_DONE,
+    REMINDER_STATUS_DISMISSED,
+)

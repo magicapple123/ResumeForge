@@ -139,7 +139,7 @@ class DrillCreate(BaseModel):
     @field_validator("feedback_policy")
     @classmethod
     def policy_must_be_known(cls, value: str) -> str:
-        from ..models.drill import FEEDBACK_POLICIES
+        from ..vocabulary.drill import FEEDBACK_POLICIES
 
         cleaned = (value or "").strip() or "deferred"
         if cleaned not in FEEDBACK_POLICIES:

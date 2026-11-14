@@ -110,7 +110,7 @@ class TrackRecordIn(BaseModel):
     @field_validator("status")
     @classmethod
     def status_must_be_known(cls, value: str) -> str:
-        from ..models.tracker import STATUSES
+        from ..vocabulary.tracker import STATUSES
 
         cleaned = (value or "").strip()
         if cleaned not in STATUSES:
@@ -151,7 +151,7 @@ class TrackCreate(TrackRecordIn):
     @field_validator("channel")
     @classmethod
     def channel_must_be_known(cls, value: str) -> str:
-        from ..models.tracker import CHANNELS
+        from ..vocabulary.tracker import CHANNELS
 
         cleaned = (value or "").strip() or "unknown"
         if cleaned not in CHANNELS:
@@ -260,7 +260,7 @@ class TrackApplyRequest(BaseModel):
     @field_validator("source")
     @classmethod
     def source_must_be_known(cls, value: str) -> str:
-        from ..models.tracker import SOURCES
+        from ..vocabulary.tracker import SOURCES
 
         cleaned = (value or "").strip() or "recognized"
         if cleaned not in SOURCES:

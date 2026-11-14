@@ -19,16 +19,17 @@ from typing import Any
 from sqlalchemy import JSON, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.vocabulary.share_package import (
+    SHARE_PERMISSION_COMMENT,
+    SHARE_PERMISSION_READ_ONLY,
+    SHARE_PERMISSIONS,
+)
+
 from ..database import Base
 from .profile import utcnow
 
-# ===== 分享权限（前后端共用一份取值）=====
-SHARE_PERMISSION_READ_ONLY = "read_only"
-SHARE_PERMISSION_COMMENT = "comment"
-SHARE_PERMISSIONS = (
-    SHARE_PERMISSION_READ_ONLY,
-    SHARE_PERMISSION_COMMENT,
-)
+# 分享权限词表已下沉到 ``app/vocabulary/share_package.py``（D8：契约层不再经由 models
+# 取词表）。这里逐个显式 re-export，既有 ``from app.models.share_package import ...`` 不变。
 
 
 class SharePackage(Base):

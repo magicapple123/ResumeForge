@@ -12,7 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ..models.reminder import (
+from ..vocabulary.reminder import (
     REMINDER_KIND_OTHER,
     REMINDER_KINDS,
     REMINDER_STATUS_PENDING,

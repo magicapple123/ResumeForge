@@ -21,35 +21,40 @@ from typing import Any
 from sqlalchemy import JSON, Boolean, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.vocabulary.claim import (
+    CLAIM_CATEGORIES,
+    CLAIM_CATEGORY_AWARD,
+    CLAIM_CATEGORY_CAMPUS,
+    CLAIM_CATEGORY_EDUCATION,
+    CLAIM_CATEGORY_EXPERIENCE,
+    CLAIM_CATEGORY_OTHER,
+    CLAIM_CATEGORY_PROJECT,
+    CLAIM_CATEGORY_SKILL,
+    PLACEHOLDER_MARKERS,
+    PLACEHOLDER_PREFIX,
+    RESPONSIBILITY_LED,
+    RESPONSIBILITY_LEVELS,
+    RESPONSIBILITY_MODULE,
+    RESPONSIBILITY_OWNER,
+    RESPONSIBILITY_PARTICIPATED,
+    VERIFICATION_CONFIRMED,
+    VERIFICATION_EXPIRED,
+    VERIFICATION_PENDING,
+    VERIFICATION_REJECTED,
+    VERIFICATION_STATUSES,
+    has_placeholder,
+    placeholder_hit,
+)
+
 from ..database import Base
 from .profile import utcnow
 
-# ===== ① 承担程度：个人在其中的位置，用于防止把团队成果写成本人主导 =====
-RESPONSIBILITY_PARTICIPATED = "参与"
-RESPONSIBILITY_MODULE = "负责模块"
-RESPONSIBILITY_LED = "主导方案或交付"
-RESPONSIBILITY_OWNER = "项目负责人"
-RESPONSIBILITY_LEVELS = (
-    RESPONSIBILITY_PARTICIPATED,
-    RESPONSIBILITY_MODULE,
-    RESPONSIBILITY_LED,
-    RESPONSIBILITY_OWNER,
-)
+# 台账词表（承担程度 / 核实状态 / 分类 / 未完成标记与两个闸门函数）已下沉到
+# ``app/vocabulary/claim.py``（D8：契约层不再经由 models 取词表）。这里逐个显式 re-export，
+# 既有 ``from app.models.claim import ...`` 导入路径不变。
 
 # 强主张的判定：出现这些承担程度时，必须能回答追问，因此要求填面试细节。
 STRONG_RESPONSIBILITY_LEVELS = frozenset({RESPONSIBILITY_LED, RESPONSIBILITY_OWNER})
-
-# ===== ② 核实状态：决定这条主张能出现在哪一版材料里 =====
-VERIFICATION_CONFIRMED = "已确认"
-VERIFICATION_PENDING = "待确认"
-VERIFICATION_EXPIRED = "已过期"
-VERIFICATION_REJECTED = "不采用"
-VERIFICATION_STATUSES = (
-    VERIFICATION_CONFIRMED,
-    VERIFICATION_PENDING,
-    VERIFICATION_EXPIRED,
-    VERIFICATION_REJECTED,
-)
 
 # 状态说明直接展示给用户，所以要写清"能用在哪、不能用在哪"。
 VERIFICATION_STATUS_LABELS = {
@@ -65,44 +70,6 @@ _VERIFICATION_ICONS = {
     VERIFICATION_EXPIRED: "⏳",
     VERIFICATION_REJECTED: "✕",
 }
-
-# ===== ③ 分类：与个人资料库的区块对齐，便于把资料一键转成台账草稿 =====
-CLAIM_CATEGORY_EDUCATION = "教育经历"
-CLAIM_CATEGORY_EXPERIENCE = "实习/工作"
-CLAIM_CATEGORY_PROJECT = "项目经历"
-CLAIM_CATEGORY_CAMPUS = "校园经历"
-CLAIM_CATEGORY_SKILL = "专业技能"
-CLAIM_CATEGORY_AWARD = "荣誉奖项"
-CLAIM_CATEGORY_OTHER = "其他"
-CLAIM_CATEGORIES = (
-    CLAIM_CATEGORY_EDUCATION,
-    CLAIM_CATEGORY_EXPERIENCE,
-    CLAIM_CATEGORY_PROJECT,
-    CLAIM_CATEGORY_CAMPUS,
-    CLAIM_CATEGORY_SKILL,
-    CLAIM_CATEGORY_AWARD,
-    CLAIM_CATEGORY_OTHER,
-)
-
-# ===== ④ 未完成标记：全仓库统一的可检索标记，且被禁止进入最终导出 =====
-# 用中括号【】而不是 Markdown 语法，一是中文语境下更醒目，二是能安全地出现在
-# HTML/Markdown/JSON 三种导出格式里而不破坏结构。
-PLACEHOLDER_PREFIX = "【待补"
-PLACEHOLDER_MARKERS = (PLACEHOLDER_PREFIX, "【待确认", "【待补充", "【待核实")
-
-
-def has_placeholder(text: str) -> bool:
-    """文本里是否含未完成标记（决定它能不能进最终导出）。"""
-    return any(marker in (text or "") for marker in PLACEHOLDER_MARKERS)
-
-
-def placeholder_hit(text: str) -> str:
-    """返回文本里命中的第一个未完成标记，便于在错误信息里指出具体位置。"""
-    for marker in PLACEHOLDER_MARKERS:
-        if marker in (text or ""):
-            return marker
-    return ""
-
 
 def can_enter_final(status: str) -> bool:
     """该核实状态的主张能否进入最终导出。

@@ -7,14 +7,17 @@ from typing import Any
 from sqlalchemy import JSON, Boolean, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.vocabulary.job import JOB_STATUS_APPLIED as JOB_STATUS_APPLIED
+from app.vocabulary.job import JOB_STATUS_CLOSED as JOB_STATUS_CLOSED
+from app.vocabulary.job import JOB_STATUS_OPEN as JOB_STATUS_OPEN
+from app.vocabulary.job import JOB_STATUSES as JOB_STATUSES
+
 from ..database import Base
 from .profile import utcnow
 
-# 岗位状态的可选值
-JOB_STATUS_OPEN = "开放中"
-JOB_STATUS_CLOSED = "已截止"
-JOB_STATUS_APPLIED = "已投递"
-JOB_STATUSES = (JOB_STATUS_OPEN, JOB_STATUS_CLOSED, JOB_STATUS_APPLIED)
+# 岗位状态词表已下沉到 ``app/vocabulary/job.py``（D8：契约层不再经由 models 取词表）。
+# 本模块无 ``__all__``，逐个用 ``X as X`` 显式 re-export（既是再导出、又不被当成未使用
+# 导入），既有 ``from app.models.job import JOB_STATUSES`` 导入路径不变。
 
 
 class Job(Base):
