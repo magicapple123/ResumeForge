@@ -12,9 +12,19 @@
 # on error). Run scripts/Create-DesktopShortcut.ps1 anytime; re-running just
 # refreshes the existing shortcut.
 #
-# Optional: -Remove deletes the shortcut instead (uninstall.cmd calls this).
-# Optional: -IfMissing exits silently when the shortcut already exists, so
-# start.cmd can offer it on first launch without touching an existing one.
+# The file name follows the Windows UI language: a Chinese system gets
+# 简历通.lnk, every other language gets ResumeForge.lnk. This matches the
+# installer, whose shortcut name also follows the system language, so the
+# portable zip and the installed build look alike. Only the file name is
+# localised; the shortcut metadata stays English like the application title.
+#
+# Optional: -Remove deletes the shortcut instead (manual cleanup; the uninstaller
+# removes the shortcut itself). It tries BOTH names, because the user may have
+# created the shortcut while Windows was in another display language and then
+# switched.
+# Optional: -IfMissing exits silently when the shortcut already exists under
+# either name, so start.cmd can offer it on first launch without touching an
+# existing one.
 param(
     [switch]$Remove,
     [switch]$IfMissing
@@ -22,28 +32,95 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# The desktop shortcut file name for a given system UI language. Pure so the
+# tests can pin both branches from any machine, and defined once: the "other"
+# language name is derived from it below.
+#
+# Culture names look like "zh-CN", "zh-Hans-CN" or "en-US"; the invariant culture
+# has an empty name and must fall through to the English name.
+function Resolve-ShortcutFileName {
+    param(
+        [string]$UICultureName
+    )
+
+    if (-not [string]::IsNullOrEmpty($UICultureName) -and
+        $UICultureName.StartsWith("zh", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return "简历通.lnk"
+    }
+    return "ResumeForge.lnk"
+}
+
+# Every shortcut name this launcher has ever used. -Remove and -IfMissing must
+# consider all of them: the Windows display language can change between creating
+# and removing the shortcut.
+function Get-DesktopShortcutFileNames {
+    return @(
+        (Resolve-ShortcutFileName -UICultureName "zh"),
+        (Resolve-ShortcutFileName -UICultureName "en")
+    )
+}
+
+function Get-DesktopShortcutPaths {
+    param(
+        [string]$DesktopDirectory
+    )
+
+    $paths = @()
+    foreach ($fileName in (Get-DesktopShortcutFileNames)) {
+        $paths += (Join-Path $DesktopDirectory $fileName)
+    }
+    return $paths
+}
+
+function Test-DesktopShortcutExists {
+    param(
+        [string]$DesktopDirectory
+    )
+
+    foreach ($path in (Get-DesktopShortcutPaths -DesktopDirectory $DesktopDirectory)) {
+        if (Test-Path -LiteralPath $path) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Remove-DesktopShortcut {
+    param(
+        [string]$DesktopDirectory
+    )
+
+    $removed = $false
+    foreach ($path in (Get-DesktopShortcutPaths -DesktopDirectory $DesktopDirectory)) {
+        if (Test-Path -LiteralPath $path) {
+            Remove-Item -LiteralPath $path -Force
+            Write-Host "Removed: $path"
+            $removed = $true
+        }
+    }
+    if (-not $removed) {
+        Write-Host "No desktop shortcut found (nothing to remove)."
+    }
+}
+
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$shortcutPath = Join-Path (
-    [Environment]::GetFolderPath("Desktop")
-) "简历通.lnk"
+$desktopDirectory = [Environment]::GetFolderPath("Desktop")
+$shortcutFileName = Resolve-ShortcutFileName -UICultureName ([System.Globalization.CultureInfo]::CurrentUICulture.Name)
+$shortcutPath = Join-Path $desktopDirectory $shortcutFileName
 $startCmd = Join-Path $projectRoot "start.cmd"
 $iconPath = Join-Path $projectRoot "branding\resumeforge.ico"
 
 $shell = New-Object -ComObject WScript.Shell
 
-if ($IfMissing -and (Test-Path $shortcutPath)) {
-    # First-launch path: the shortcut is already there, nothing to do and
-    # nothing to print -- start.cmd calls us with output suppressed.
+if ($IfMissing -and (Test-DesktopShortcutExists -DesktopDirectory $desktopDirectory)) {
+    # First-launch path: a shortcut already exists (under either language name),
+    # nothing to do and nothing to print -- start.cmd calls us with output
+    # suppressed.
     exit 0
 }
 
 if ($Remove) {
-    if (Test-Path $shortcutPath) {
-        Remove-Item -LiteralPath $shortcutPath -Force
-        Write-Host "Removed: $shortcutPath"
-    } else {
-        Write-Host "No desktop shortcut found (nothing to remove)."
-    }
+    Remove-DesktopShortcut -DesktopDirectory $desktopDirectory
     exit 0
 }
 
