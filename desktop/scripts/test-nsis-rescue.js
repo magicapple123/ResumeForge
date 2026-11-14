@@ -52,7 +52,12 @@ test("the rescue script starts with a UTF-8 BOM", () => {
   );
 });
 
-test("the rescue script compiles into the installer only", () => {
+// 注意用例名只说"抢救体"：文件顶部故意有**不属于**这个守卫的内容——`LogicLib` 的
+// include 与 `customHeader` 里的 26 条 `LangString RF_SHORTCUT`。它们是"两趟都要编"的
+// 例外：卸载器也会调用 setLinkVars 算快捷方式路径（见下面 customHeader 那条用例），
+// 所以必须同时出现在安装器与卸载器两个构建里。守卫本身仍要求"恰好一处 !ifndef、
+// 且一直开到文件末尾"——把 LangString 塞进守卫里会让卸载器那一趟解析不出快捷方式名。
+test("the rescue body compiles into the installer only", () => {
   const source = readRescue();
   const guards = source.match(/!ifndef\s+BUILD_UNINSTALLER/g) || [];
   assert.strictEqual(guards.length, 1, "exactly one BUILD_UNINSTALLER guard");
@@ -111,6 +116,78 @@ test("the rescue fails closed on a running app and on copy failure", () => {
   );
   // Byte-for-byte verification while copying is what makes the abort meaningful.
   assert.match(source, /StrCmp\s+\$R6\s+\$R7/, "copy verification compares source and destination sizes");
+});
+
+// 26 种语言 = electron-builder 26.17.0 默认打包集（app-builder-lib/out/util/langs.js
+// 的 bundledLanguages，未配置 installerLanguages 时全打包）。少一条就会让该语言下
+// $(RF_SHORTCUT) 解析成空串 —— 实测 $LANGUAGE=1031 时快捷方式变成 ".lnk"。
+const BUNDLED_LCIDS = [
+  1033, 1031, 1036, 3082, 2052, 1028, 1041, 1042, 1040, 1043, 1030, 1053, 1044, 1035, 1049, 2070,
+  1046, 1045, 1058, 1029, 1051, 1038, 1025, 1055, 1054, 1066,
+];
+const CHINESE_LCIDS = new Set([2052, 1028]);
+
+test("the shortcut name is a LangString that every bundled language defines", () => {
+  const yaml = fs.readFileSync(YAML, "utf8");
+  const shortcut = /^\s*shortcutName:\s*"(\$\(RF_SHORTCUT\))"\s*$/m.exec(yaml);
+  assert.ok(
+    shortcut,
+    'nsis.shortcutName must be "$(RF_SHORTCUT)" so the name follows the system language',
+  );
+  assert.strictEqual(shortcut[1], "$(RF_SHORTCUT)");
+
+  const source = readRescue();
+  const defined = new Map();
+  for (const match of source.matchAll(/^\s*LangString RF_SHORTCUT (\d+) "([^"]*)"/gm)) {
+    defined.set(Number(match[1]), match[2]);
+  }
+  assert.strictEqual(
+    defined.size,
+    BUNDLED_LCIDS.length,
+    "exactly one LangString RF_SHORTCUT per bundled language",
+  );
+  for (const lcid of BUNDLED_LCIDS) {
+    assert.ok(defined.has(lcid), `LangString RF_SHORTCUT ${lcid} is missing`);
+    const expected = CHINESE_LCIDS.has(lcid) ? "简历通" : "ResumeForge";
+    assert.strictEqual(defined.get(lcid), expected, `RF_SHORTCUT ${lcid} must read ${expected}`);
+  }
+  assert.deepStrictEqual(
+    [...defined.keys()].filter((lcid) => !BUNDLED_LCIDS.includes(lcid)),
+    [],
+    "no LangString for a language electron-builder does not pack",
+  );
+});
+
+test("customHeader is defined outside the installer-only guard", () => {
+  const source = readRescue();
+  const headerIndex = source.indexOf("!macro customHeader");
+  const guardIndex = source.indexOf("!ifndef BUILD_UNINSTALLER");
+  assert.ok(
+    headerIndex >= 0,
+    "customHeader must exist: it is the only hook expanded after addLangs loads the languages",
+  );
+  // The uninstaller build calls setLinkVars too (templates/nsis/uninstaller.nsh), so
+  // $(RF_SHORTCUT) must stay resolvable there even though the rescue body must not compile in.
+  assert.ok(
+    headerIndex < guardIndex,
+    "customHeader must sit before the BUILD_UNINSTALLER guard",
+  );
+});
+
+test("every user-facing message box is bilingual", () => {
+  const source = readRescue();
+  const branches = (source.match(/\$\{If\} \$LANGUAGE/g) || []).length;
+  const elses = (source.match(/\$\{Else\}/g) || []).length;
+  const endifs = (source.match(/\$\{EndIf\}/g) || []).length;
+  const boxes = (source.match(/^\s*MessageBox\b/gm) || []).length;
+  assert.ok(branches > 0, "the installer messages must branch on $LANGUAGE");
+  assert.strictEqual(elses, branches, "each language branch needs an ${Else} English fallback");
+  assert.strictEqual(endifs, branches, "each language branch must be closed");
+  assert.strictEqual(
+    boxes,
+    branches * 2,
+    "each message box needs one Chinese and one English variant",
+  );
 });
 
 test("the recursive copy detects directories without IfFileExists", () => {

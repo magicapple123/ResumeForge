@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { detectPreferredLocale } from "./localeStore";
 import enUS from "./messages/en-US";
+
+/** 换掉系统语言：`detectPreferredLocale` 只影响"谁都没选过"那条首启兜底分支。 */
+function stubSystemLanguages(languages: string[]): void {
+  vi.stubGlobal("navigator", { languages, language: languages[0] ?? "" });
+}
 
 beforeEach(() => {
   vi.resetModules();
@@ -8,10 +14,46 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   localStorage.removeItem("rf.locale");
 });
 
+describe("detectPreferredLocale", () => {
+  const cases: Array<[readonly string[] | undefined, "zh-CN" | "en-US"]> = [
+    [["zh-CN"], "zh-CN"],
+    [["zh-TW"], "zh-CN"],
+    [["zh"], "zh-CN"],
+    [["en-GB"], "en-US"],
+    [["en"], "en-US"],
+    // 不在支持列表里的语言一律回落英文：AppImage 目录的收录测试在 C locale 下截图，
+    // 中文界面会被判 "text mostly not in English"（PR appimage.github.io#11983）。
+    [["ja-JP"], "en-US"],
+    [["de-DE", "fr-FR"], "en-US"],
+    // 按顺序取第一个受支持的标签，而不是看第一个标签。
+    [["ja", "zh-CN"], "zh-CN"],
+    [["fr-FR", "en-US"], "en-US"],
+    [[], "en-US"],
+    [undefined, "en-US"],
+  ];
+  it.each(cases)("maps system languages %j to %s", (languages, expected) => {
+    expect(detectPreferredLocale(languages)).toBe(expected);
+  });
+});
+
 describe("locale external store", () => {
+  it("probes the system language on first launch when nothing was ever chosen", async () => {
+    stubSystemLanguages(["ja-JP"]);
+    const store = await import("./localeStore");
+    expect(store.getSnapshot().locale).toBe("en-US");
+  });
+
+  it("prefers a stored choice over the system probe", async () => {
+    stubSystemLanguages(["en-GB"]);
+    localStorage.setItem("rf.locale", "zh-CN");
+    const store = await import("./localeStore");
+    expect(store.getSnapshot().locale).toBe("zh-CN");
+  });
+
   it("reads storage synchronously and returns a stable first snapshot", async () => {
     localStorage.setItem("rf.locale", "en-US");
     const store = await import("./localeStore");
@@ -21,12 +63,17 @@ describe("locale external store", () => {
   });
 
   it.each([null, "invalid", "", "EN-US"])("normalizes the stored value %s", async (value) => {
+    // 非法/空值不再等于"用 DEFAULT_LOCALE"，而是走首启探测；这里钉住"系统是中文"这一支。
+    stubSystemLanguages(["zh-CN"]);
     if (value !== null) localStorage.setItem("rf.locale", value);
     const { getSnapshot } = await import("./localeStore");
     expect(getSnapshot().locale).toBe("zh-CN");
   });
 
   it("advances registration and switch revisions but notifies only on a switch", async () => {
+    // 初始语言必须与"切过去"的语言不同，否则 selectLocale 是空操作、不通知；
+    // 首启探测会按 jsdom 的 en-US 起手，这里钉住中文起手以保持用例本意。
+    stubSystemLanguages(["zh-CN"]);
     const store = await import("./localeStore");
     const registry = await import("./messageRegistry");
     const listener = vi.fn();
@@ -46,6 +93,8 @@ describe("locale external store", () => {
   });
 
   it("keeps the in-memory choice if storage access or writes fail", async () => {
+    // 存储抛错时首启兜底继续走系统语言探测（不能因为存储被禁就起不来）。
+    stubSystemLanguages(["zh-CN"]);
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");
     });

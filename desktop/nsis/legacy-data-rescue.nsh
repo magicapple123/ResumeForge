@@ -25,6 +25,57 @@
 # 共享头部里），整文件用 BUILD_UNINSTALLER 包住，只编进安装器。
 # ============================================================================
 
+!include "LogicLib.nsh"
+
+# ----------------------------------------------------------------------------
+# 快捷方式名（electron-builder.yml 的 nsis.shortcutName: "$(RF_SHORTCUT)"）
+#
+# 为什么定义在这里：LangString 必须在 `!insertmacro addLangs` 之后定义，否则 NSIS
+# 报 "language not loaded"；而本文件被 electron-builder 放在生成脚本最顶部（早于
+# MUI2 与 addLangs），只有 customHeader 宏会被展开在 addLangs 之后
+# （installer.nsi: `!insertmacro addLangs` → `!ifmacrodef customHeader`）。
+# 反过来也不能在这里自己 LoadLanguageFile：那会与后面的 MUI_LANGUAGE 撞车，实测报
+# `Error: can't load same language file twice`。
+#
+# 为什么 26 种语言全量列出：electron-builder 26.17.0 在未配置 installerLanguages 时
+# 默认打包全部 26 种（app-builder-lib/out/util/langs.js 的 bundledLanguages），而未
+# 定义的语言在运行期会解析成**空字符串**——实测把 $LANGUAGE 置成 1031 时
+# $(RF_SHORTCUT) 为空，快捷方式会变成 ".lnk"。非中文一律 ResumeForge，所以这些
+# 条目看起来"重复"，但一条都不能省。⚠️ 将来收窄 installerLanguages 时要同步收窄
+# 这份列表。
+#
+# 为什么放在"只编进安装器"那个守卫外面：卸载器也会调用 setLinkVars 计算快捷方式
+# 路径（templates/nsis/uninstaller.nsh），那一趟同样要能解析 $(RF_SHORTCUT)。
+# ----------------------------------------------------------------------------
+!macro customHeader
+  LangString RF_SHORTCUT 1033 "ResumeForge"  ; en_US
+  LangString RF_SHORTCUT 1031 "ResumeForge"  ; de_DE
+  LangString RF_SHORTCUT 1036 "ResumeForge"  ; fr_FR
+  LangString RF_SHORTCUT 3082 "ResumeForge"  ; es_ES
+  LangString RF_SHORTCUT 2052 "简历通"       ; zh_CN
+  LangString RF_SHORTCUT 1028 "简历通"       ; zh_TW
+  LangString RF_SHORTCUT 1041 "ResumeForge"  ; ja_JP
+  LangString RF_SHORTCUT 1042 "ResumeForge"  ; ko_KR
+  LangString RF_SHORTCUT 1040 "ResumeForge"  ; it_IT
+  LangString RF_SHORTCUT 1043 "ResumeForge"  ; nl_NL
+  LangString RF_SHORTCUT 1030 "ResumeForge"  ; da_DK
+  LangString RF_SHORTCUT 1053 "ResumeForge"  ; sv_SE
+  LangString RF_SHORTCUT 1044 "ResumeForge"  ; nb_NO
+  LangString RF_SHORTCUT 1035 "ResumeForge"  ; fi_FI
+  LangString RF_SHORTCUT 1049 "ResumeForge"  ; ru_RU
+  LangString RF_SHORTCUT 2070 "ResumeForge"  ; pt_PT
+  LangString RF_SHORTCUT 1046 "ResumeForge"  ; pt_BR
+  LangString RF_SHORTCUT 1045 "ResumeForge"  ; pl_PL
+  LangString RF_SHORTCUT 1058 "ResumeForge"  ; uk_UA
+  LangString RF_SHORTCUT 1029 "ResumeForge"  ; cs_CZ
+  LangString RF_SHORTCUT 1051 "ResumeForge"  ; sk_SK
+  LangString RF_SHORTCUT 1038 "ResumeForge"  ; hu_HU
+  LangString RF_SHORTCUT 1025 "ResumeForge"  ; ar_SA
+  LangString RF_SHORTCUT 1055 "ResumeForge"  ; tr_TR
+  LangString RF_SHORTCUT 1054 "ResumeForge"  ; th_TH
+  LangString RF_SHORTCUT 1066 "ResumeForge"  ; vi_VN
+!macroend
+
 !ifndef BUILD_UNINSTALLER
 
 # 模板里的 allowOnlyOneInstallerInstance.nsh 也 include 同一个文件（带同样的守卫），
@@ -171,7 +222,12 @@ FunctionEnd
     Sleep 1000
     Goto rf_wait_loop
   rf_wait_timeout:
-    MessageBox MB_ICONSTOP|MB_OK "检测到「简历通」正在运行。$\r$\n$\r$\n请先从托盘菜单退出应用，再重新运行安装程序。旧版本的数据会原样保留。"
+    ${If} $LANGUAGE == 2052
+    ${OrIf} $LANGUAGE == 1028
+      MessageBox MB_ICONSTOP|MB_OK "检测到「简历通」正在运行。$\r$\n$\r$\n请先从托盘菜单退出应用，再重新运行安装程序。旧版本的数据会原样保留。"
+    ${Else}
+      MessageBox MB_ICONSTOP|MB_OK "ResumeForge is still running.$\r$\n$\r$\nQuit it from the tray menu first, then run the installer again. Your old data stays untouched."
+    ${EndIf}
     Abort
   rf_wait_done:
 !macroend
@@ -212,7 +268,12 @@ FunctionEnd
   Pop $R9
 
   StrCmp $RFRescueState "failed" 0 rf_init_ok
-    MessageBox MB_ICONSTOP|MB_OK "旧版本的数据保存在安装目录内，但复制到临时目录时校验失败（常见原因：磁盘空间不足或权限受限）。$\r$\n$\r$\n为避免数据丢失，安装已中止；旧版本数据保持原样，未做任何改动。"
+    ${If} $LANGUAGE == 2052
+    ${OrIf} $LANGUAGE == 1028
+      MessageBox MB_ICONSTOP|MB_OK "旧版本的数据保存在安装目录内，但复制到临时目录时校验失败（常见原因：磁盘空间不足或权限受限）。$\r$\n$\r$\n为避免数据丢失，安装已中止；旧版本数据保持原样，未做任何改动。"
+    ${Else}
+      MessageBox MB_ICONSTOP|MB_OK "The old data is still in the install directory, but copying it to a temporary folder failed verification (usually a full disk or restricted permissions).$\r$\n$\r$\nTo avoid data loss the installation was cancelled; the old data stays exactly as it was."
+    ${EndIf}
     Abort
 
   rf_init_ok:
@@ -254,7 +315,12 @@ FunctionEnd
     Push ""
     Call RF_CopyTree
     Pop $R9
-    MessageBox MB_ICONEXCLAMATION|MB_OK "旧版本的数据未能放回应用数据位置，已完整保留在：$\r$\n$R1$\r$\n$\r$\n应用首次启动后，请把该目录里的内容复制到应用提示的位置，或联系维护者协助处理。"
+    ${If} $LANGUAGE == 2052
+    ${OrIf} $LANGUAGE == 1028
+      MessageBox MB_ICONEXCLAMATION|MB_OK "旧版本的数据未能放回应用数据位置，已完整保留在：$\r$\n$R1$\r$\n$\r$\n应用首次启动后，请把该目录里的内容复制到应用提示的位置，或联系维护者协助处理。"
+    ${Else}
+      MessageBox MB_ICONEXCLAMATION|MB_OK "The old data could not be put back where the app expects it. It is fully preserved at:$\r$\n$R1$\r$\n$\r$\nAfter the app has started once, copy that folder's contents to the location it asks for, or contact the maintainer for help."
+    ${EndIf}
 
   rf_restore_done:
   rf_install_done:

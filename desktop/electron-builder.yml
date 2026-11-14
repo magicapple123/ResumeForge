@@ -127,7 +127,15 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   # DeepSeek-style guard: refuse to install while a copy is still running.
-  shortcutName: 简历通
+  #
+  # 快捷方式名按**系统语言**解析：`$(RF_SHORTCUT)` 是 NSIS 的 LangString 引用（运行期
+  # 按 `$LANGUAGE` 取值），条目定义在 `nsis/legacy-data-rescue.nsh` 的 `customHeader`
+  # 宏里——那之外没有可用的编译期钩子（`include` 指定的脚本被放在生成脚本最顶端，
+  # 早于 MUI2 的语言加载，直接写 LangString 会报 "language not loaded"）。
+  # ⚠️ 那 26 条 LangString 与 electron-builder 默认打包的 26 种语言一一对应；**将来
+  # 收窄 `installerLanguages` 时必须同步收窄那份列表**——实测未定义的语言会把
+  # `$(RF_SHORTCUT)` 解析成空串（快捷方式变成 ".lnk"）。
+  shortcutName: "$(RF_SHORTCUT)"
   artifactName: ResumeForge-Setup-${version}.${ext}
   # 旧版（payload-era）数据抢救：在调用旧卸载器之前把安装目录里的用户数据复制出来，
   # 装完再交回应用的 ADR-0004 迁移流程。守卫测试见 scripts/test-nsis-rescue.js。
@@ -166,10 +174,21 @@ linux:
   # freedesktop 菜单分类。不写会落到 Utility，在多数桌面环境里被收进
   # "附属应用"，用户装完找不到启动项。
   category: Office
-  synopsis: 简历通 - 本地简历优化与求职管理
+  # `synopsis` 供 deb/rpm 的 Summary；`.desktop` 的默认 `Comment` 来自下面这个
+  # `description`（LinuxTargetHelper.getDescription）。两者都写英文：非中文环境必须
+  # 以英文出现，中文菜单文案由 `desktop.entry` 里的 `[zh_CN]` 键覆盖。
+  synopsis: ResumeForge - local resume editor and job-search workbench
   description: >-
-    简历通（ResumeForge）：本地运行的简历优化与求职管理工作台。
-    简历诊断、JD 对齐、面试演练与投递跟踪全部在你自己的电脑上完成。
+    ResumeForge: a local workbench for resume tuning and job-search management.
+    Resume diagnosis, JD alignment, interview practice and application tracking
+    all run on your own computer.
+  # 菜单条目双语：默认 `Name` = productName（ResumeForge）、默认 `Comment` = 上面的
+  # description，所以只补中文键。（electron-builder 合并 `entry` 之后才写 `Comment`，
+  # 所以这里的 `Comment[zh_CN]` 与默认 `Comment` 是两个键，互不覆盖。）
+  desktop:
+    entry:
+      "Name[zh_CN]": 简历通
+      "Comment[zh_CN]": 简历通 - 本地简历优化与求职管理
   # 与 mac 同一套命名体系（ResumeForge-<version>-<arch>），中间多一段 linux：
   # 三种形态的产物会长在同一个 out/ 目录里，少这段就会互相覆盖。
   artifactName: ResumeForge-${version}-linux-${arch}.${ext}

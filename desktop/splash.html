@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>简历通</title>
+    <title>ResumeForge</title>
     <style>
       :root {
         --bg: #f5f7fa;
@@ -82,16 +82,78 @@
   </head>
   <body>
     <div class="card">
-      <img id="logo" class="logo" alt="简历通" />
-      <h1>简历通</h1>
-      <div class="subtitle">AI 定制化简历生成 · 本地工作台</div>
+      <img id="logo" class="logo" alt="ResumeForge" />
+      <h1 id="app-name">ResumeForge</h1>
+      <div id="subtitle" class="subtitle">AI-tailored resumes · local workbench</div>
       <div class="track"><div id="bar" class="bar indeterminate"></div></div>
-      <div id="stage" class="stage">正在启动…</div>
+      <div id="stage" class="stage">Starting…</div>
       <div id="error" class="error"></div>
     </div>
     <script>
       (function () {
+        // 这个页面在主应用加载前就显示，CI 截到的也正是它，所以文案必须自己双语：
+        // React 侧的语言包在这里还读不到。判定规则与 frontend/src/i18n/localeStore.ts
+        // 的 detectPreferredLocale 一致——`zh`/`zh-*` → 中文，其余（含 C locale）→ 英文，
+        // 这样非中文环境下不会先闪一段中文再被 React 接管。
+        var COPY = {
+          en: {
+            lang: "en",
+            title: "ResumeForge",
+            appName: "ResumeForge",
+            subtitle: "AI-tailored resumes · local workbench",
+            alt: "ResumeForge",
+            starting: "Starting…",
+            failed: "Startup failed",
+            stages: {
+              "preparing-runtime": "Preparing runtime (first launch)…",
+              "backend-starting": "Starting the backend service…",
+              "health-check": "Waiting for the service…",
+              "ready": "Loading the interface…",
+              "backend-restarting": "Service interrupted, recovering…",
+            },
+          },
+          zh: {
+            lang: "zh-CN",
+            title: "简历通",
+            appName: "简历通",
+            subtitle: "AI 定制化简历生成 · 本地工作台",
+            alt: "简历通",
+            starting: "正在启动…",
+            failed: "启动失败",
+            stages: {
+              "preparing-runtime": "正在准备运行环境（首次启动）…",
+              "backend-starting": "正在启动后端服务…",
+              "health-check": "正在等待服务就绪…",
+              "ready": "正在加载界面…",
+              "backend-restarting": "服务中断，正在自动恢复…",
+            },
+          },
+        };
+
+        function prefersChinese() {
+          if (typeof navigator === "undefined") return false;
+          var languages = (navigator.languages && navigator.languages.length ? navigator.languages : null) || [navigator.language];
+          for (var i = 0; i < languages.length; i += 1) {
+            var tag = String(languages[i] || "").toLowerCase();
+            if (tag === "zh" || tag.indexOf("zh-") === 0) return true;
+            if (tag === "en" || tag.indexOf("en-") === 0) return false;
+          }
+          return false;
+        }
+
+        var copy = prefersChinese() ? COPY.zh : COPY.en;
+        var labels = copy.stages;
+
+        // 静态 HTML 是英文（非中文环境的兜底），中文环境在这里就地换掉。
+        if (document.documentElement) document.documentElement.lang = copy.lang;
+        document.title = copy.title;
+        var nameNode = document.getElementById("app-name");
+        if (nameNode) nameNode.textContent = copy.appName;
+        var subtitleNode = document.getElementById("subtitle");
+        if (subtitleNode) subtitleNode.textContent = copy.subtitle;
+
         var logo = document.getElementById("logo");
+        if (logo) logo.alt = copy.alt;
         // Build resources may be excluded from app.asar even when listed in
         // files. Packaged shells carry a controlled extraResources copy beside
         // app.asar; source trees use the local copy. Never read a URL from query.
@@ -102,6 +164,7 @@
         logo.src = "icon.png";
         var bar = document.getElementById("bar");
         var stage = document.getElementById("stage");
+        if (stage) stage.textContent = copy.starting;
         var errorBox = document.getElementById("error");
         var progress = {
           "preparing-runtime": 18,
@@ -110,20 +173,13 @@
           "ready": 95,
           "backend-restarting": 50,
         };
-        var labels = {
-          "preparing-runtime": "正在准备运行环境（首次启动）…",
-          "backend-starting": "正在启动后端服务…",
-          "health-check": "正在等待服务就绪…",
-          "ready": "正在加载界面…",
-          "backend-restarting": "服务中断，正在自动恢复…",
-        };
         window.splash.onStage(function (payload) {
           if (!payload) return;
           if (payload.stage === "error") {
             bar.classList.remove("indeterminate");
             bar.style.width = "100%";
             bar.style.background = "var(--error)";
-            stage.textContent = "启动失败";
+            stage.textContent = copy.failed;
             errorBox.textContent = payload.detail || "";
             errorBox.classList.add("show");
             return;

@@ -20,6 +20,7 @@
 
 ### Changed
 
+- **首启语言跟随系统语言，桌面发行物同步双语化。** 系统是中文 → 界面、安装器、桌面快捷方式全用中文（「简历通」）；系统非中文（含 C locale、日语、德语）→ 界面**默认语言**为英文（`ResumeForge`），已翻译的词条全部走英文语言包，语言包尚未覆盖的少量存量文案仍是中文（`i18nBaseline.json` 的 `src.total = 192`，棘轮只降不升）；用户手动切换过语言就以用户选择为准（服务端存过值时首启探测不再生效）。具体三处：`desktop/splash.html` 按 `navigator.language` 二选一（它在主应用加载前就显示，是截图能拍到的第一屏）；Windows 快捷方式名改成运行期解析的 `$(RF_SHORTCUT)` LangString（26 种打包语言逐条定义——实测未定义的语言会解析成空串，快捷方式变成 `.lnk`）；Linux 菜单条目补 `Name[zh_CN]` / `Comment[zh_CN]`，默认值与 `synopsis` / `description` 改英文。起因是 AppImage 官方目录的收录检查在非中文环境截图，判 `ERROR: The screenshot shows text mostly not in English but in Chinese script`（AppImage/appimage.github.io#11983）。
 - **技术债治理 T1：助手流式回复拆步骤。** `services/assistant/assistant_stream_turns.py` 的 404 行 async generator 拆成按阶段命名的步骤函数，4 个 `except` 分支重复的收尾动作（关闭 trace / 记预算 / 结束消息）收敛到一处；对外 SSE 事件序列与取消语义不变。
 - **技术债治理 T2：路由层业务函数下沉服务层。** `app/api/**` 里 8 个业务编排函数（简历生成编排、提案审批状态机、面试会话初始化、批量决策等，合计约 840 行）搬进 services 层，路由只保留 HTTP 职责；新增守卫禁止路由层再构造查询。
 - **技术债治理 T3：外键索引补齐 + 模型/迁移一致性守卫。** 迁移 0020 给 29 个没有前导索引的外键补索引（upgrade/downgrade 对称），并新增模型索引与迁移链的一致性守卫；`explain query plan` 命中新增索引。

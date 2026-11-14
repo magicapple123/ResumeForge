@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
+// 系统语言钉桩**必须作为第一条 import**：setup.ts 自己导入 `@testing-library/react` 时，
+// 它的 `vi.mock` 工厂会先一步加载 I18nProvider → `src/i18n` → localeStore，写在文件后面的
+// 钉桩已经太晚（store 已按 jsdom 的 en-US 建好实例）。原因与用法见该文件。
+import "./systemLocale";
 import "@testing-library/jest-dom/vitest";
 import { createElement } from "react";
 import type { ComponentType, ReactNode } from "react";
@@ -6,6 +10,11 @@ import { afterEach, beforeEach, vi } from "vitest";
 
 // Existing component tests stay on a fixed zh-CN provider. Locale-specific tests
 // may pass their own wrapper, which is nested inside this baseline provider.
+//
+// 系统语言也必须显式声明（见第一行 import 的 `./systemLocale`）：首启语言探测把
+// "环境的系统语言"变成了被测行为的一部分，而 jsdom 默认报 en-US。它得在**模块加载期**
+// 生效——只写在 beforeEach 里不够，测试文件的 `describe` 体（含模块级的 `t(...)`）在
+// 任何 hook 之前就求值了，那一侧会拿到英文，与用例体内的中文断言对不上。
 vi.mock("@testing-library/react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@testing-library/react")>();
   const { default: I18nProvider } = await import("../i18n/I18nProvider");
