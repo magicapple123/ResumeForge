@@ -29,6 +29,20 @@ from typing import cast
 import httpx
 
 from ..config import DATA_DIR
+from .resume_font_builtin_types import (
+    _TIMEOUT,
+    BASE_URL,
+    BUILTIN_FILES,
+    DIR_NAME,
+    DISK_HEADROOM,
+    FONT_ID,
+    FONT_LABEL,
+    FontBusy,
+    FontDeleteError,
+    FontDiskFull,
+    FontDownloadError,
+    FontNotDownloaded,
+)
 from .resume_font_download import (
     CANCEL_JOIN_TIMEOUT,
     TMP_SUFFIX,
@@ -46,52 +60,6 @@ from .resume_font_download import stop as _stop
 from .resume_font_download import written as _run_written
 
 logger = logging.getLogger(__name__)
-
-FONT_ID = "source-han-sans-sc"
-FONT_LABEL = "思源黑体"
-BASE_URL = "https://mirrors.tuna.tsinghua.edu.cn/adobe-fonts/source-han-sans/OTF/SimplifiedChinese/"
-
-# ``role`` 只用于日志与"谁是常规字重"的判断；文件顺序有意义——第一个是 Regular，
-# 下载完成后它会被设为当前字体（用户点一次"下载"就该能直接用）。
-BUILTIN_FILES: tuple[dict[str, object], ...] = (
-    {
-        "role": "regular",
-        "name": "SourceHanSansSC-Regular.otf",
-        "bytes": 16529832,
-        "sha256": "f1d8611151880c6c336aabeac4640ef434fa13cbfbf1ffe82d0a71b2a5637256",
-    },
-    {
-        "role": "bold",
-        "name": "SourceHanSansSC-Bold.otf",
-        "bytes": 16963428,
-        "sha256": "df2b90f5bcc6d01dfc964cec5f6d535d6b6aebd26ed7fd79a9c1b3f2112fcb6b",
-    },
-)
-
-DIR_NAME = "fonts"
-# 磁盘预检倍数：下载要写临时文件再 rename，峰值占用略高于最终体积。
-DISK_HEADROOM = 1.2
-_TIMEOUT = httpx.Timeout(connect=10, read=60, write=10, pool=10)
-
-
-class FontBusy(RuntimeError):
-    """已有一个下载任务在跑（API 映射 409）。"""
-
-
-class FontDiskFull(RuntimeError):
-    """磁盘剩余空间不够（API 映射 507）。"""
-
-
-class FontDownloadError(RuntimeError):
-    """下载或校验失败；消息可直接展示给用户。"""
-
-
-class FontNotDownloaded(RuntimeError):
-    """本机没有下载过内置字体（API 映射 404）。"""
-
-
-class FontDeleteError(RuntimeError):
-    """删除字体文件失败（被占用 / 无权限）：文件保留原样，API 映射 500，不假装成功。"""
 
 
 # 进程内单例：状态与进度都在这里，接口只读它。取消信号（``_stop``）、在飞连接、本轮

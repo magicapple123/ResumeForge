@@ -9,14 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import threading
-from collections.abc import Callable
 from typing import Any
 
-from sqlalchemy.orm import sessionmaker
-
 from ...config import get_settings
-from ...database import SessionLocal
 from ...models.profile import utcnow
 from ...models.resume import (
     GENERATE_STATUS_CANCELLED,
@@ -24,9 +19,7 @@ from ...models.resume import (
     GENERATE_STATUS_RUNNING,
     ResumeGenerateTask,
 )
-from ...runtime import dataset_scope
-from ...runtime.dataset_scope import DatasetLease, DatasetScopeError
-from ...runtime.log_context import run_with_bound_context
+from ...runtime.dataset_scope import DatasetScopeError
 from ...runtime.operation_budget import OperationBudget, OperationCancelled
 from ...schemas.resume import GenerateOptions
 from ...services.claims import build_baseline
@@ -35,10 +28,7 @@ from ...services.llm.base import LLMError
 from ...services.llm.client_pool import aclose_clients_for_current_loop
 from ...services.rag.rag_receipt import append_rag_note, record_retrieval
 from ...services.rag.rag_service import generate_with_scope, prepare_selection_boost
-from ...services.resume.generate_snapshot import (
-    GenerationSnapshot,
-    attach_snapshot_resume,
-)
+from ...services.resume.generate_snapshot import attach_snapshot_resume
 from ...services.resume.resume_generate_inputs import prepare_generate_inputs
 from ...services.resume.resume_generator import ResumeGenerator
 from ...services.resume.resume_task_state import (
@@ -50,134 +40,24 @@ from ...services.resume.scenario_context import (
     build_scenario_prompt_block,
     merge_scenario_order,
 )
+from .resume_generate_runner_lifecycle import (  # noqa: F401  (ResumeGenerateRunnerError 的旧 import 路径不断)
+    ResumeGenerateRunnerError,
+    _RunnerLifecycle,
+)
 from .resume_generate_support import (
     log_generation_usage,
     material_only_echo_error,
 )
-from .resume_runner_loop import RunnerEventLoopHandle
 
 logger = logging.getLogger(__name__)
 
 # 已接收字数写库的粒度：4 个并发 worker 争同一个 SQLite 单写者，粒度 400 字以减少提交
-# 次数（并发冲突用"少写"缓解，不靠降并发）；前端 1.5s 轮询仍能跟上进度。
+# 次数（并发冲突用「少写」缓解，不靠降并发）；前端 1.5s 轮询仍能跟上进度。
 _CHAR_COMMIT_STEP = 400
 
 
-class ResumeGenerateRunnerError(Exception):
-    """运行器控制类错误（任务未在运行等），message 为中文提示。"""
-
-
-class ResumeGenerateRunner:
+class ResumeGenerateRunner(_RunnerLifecycle):
     """单任务 worker：一个实例只跑一条生成任务；并发/排队由 resume_generate_manager 管。"""
-
-    def __init__(self, *, session_factory: Callable[[], Any] | None = None) -> None:
-        # session_factory 默认 None：启动时按值冻结 engine（RF-03，rebind 仍写旧库）；显式传入（测试注入）优先。
-        self._session_factory = session_factory
-        self._stop = threading.Event()
-        self._lock = threading.Lock()
-        self._thread: threading.Thread | None = None
-        self._current_task_id: int | None = None
-        self._lease: DatasetLease | None = None
-        self._frozen_factory: Callable[[], Any] | None = None
-        # 事件循环与主 task 句柄委托给句柄对象（机制见 resume_runner_loop docstring）：
-        # cancel()/shutdown() 借它跨线程中止挂起的模型调用。
-        self._loop_handle = RunnerEventLoopHandle(self._stop)
-        self._generation_snapshot: GenerationSnapshot | None = None
-        self._snapshot_id: int | None = None
-        self._on_finished: Callable[[int], None] | None = None  # 收尾回调，只消费一次
-
-    def is_running(self) -> bool:
-        return self._thread is not None and self._thread.is_alive()
-
-    def current_task_id(self) -> int | None:
-        return self._current_task_id
-
-    def start(
-        self,
-        task_id: int,
-        *,
-        generation_snapshot: GenerationSnapshot | None = None,
-        snapshot_id: int | None = None,
-        on_finished: Callable[[int], None] | None = None,
-    ) -> None:
-        """启动后台生成任务；generation_snapshot=创建时冻结的快照；on_finished 在租约归还后回调。"""
-        with self._lock:
-            if self._thread is not None and self._thread.is_alive():
-                raise ResumeGenerateRunnerError("已有简历生成任务正在进行中")
-            # 先取租约再起线程（RF-03 TOCTOU）：切换持锁期间直接失败并回滚空任务。
-            try:
-                lease = dataset_scope.acquire_lease("resume-generate")
-            except DatasetScopeError as exc:
-                raise ResumeGenerateRunnerError(str(exc)) from exc
-            self._lease = lease
-            self._frozen_factory = (
-                self._session_factory
-                if self._session_factory is not None
-                else sessionmaker(
-                    bind=lease.identity.engine, autoflush=False, expire_on_commit=False
-                )
-            )
-            self._stop.clear()
-            self._current_task_id = task_id
-            self._generation_snapshot = generation_snapshot
-            self._snapshot_id = snapshot_id
-            self._on_finished = on_finished
-            self._thread = threading.Thread(
-                # RF-20：复制启动方 contextvars 并绑定 task_id/dataset_id（同 apply 运行器）。
-                target=run_with_bound_context(
-                    self._run_releasing_lease,
-                    task_id,
-                    lease,
-                    task_id=task_id,
-                    dataset_id=lease.identity.dataset_id,
-                ),
-                name=f"rf-generate-{task_id}",
-                daemon=True,
-            )
-            self._thread.start()
-
-    def _run_releasing_lease(self, task_id: int, lease: DatasetLease) -> None:
-        """线程入口：保证租约归还；收尾回调在归还后触发（排队任务才能立刻拿到租约）。"""
-        try:
-            self._run(task_id)
-        finally:
-            lease.release()
-            callback, self._on_finished = self._on_finished, None
-            if callback is not None:
-                try:
-                    callback(task_id)
-                except Exception:  # noqa: BLE001 - 调度回调失败不得掩盖任务真实结果
-                    logger.exception("生成任务完成回调失败 task_id=%s", task_id)
-
-    def cancel(self, task_id: int) -> None:
-        # 先落"取消"信号：若线程已跑完并提交终态，终态守卫会拒绝改写（apply 同款纪律）。
-        self._require_current(task_id)
-        self._stop.set()
-        # 主动中止挂起的模型调用；终态晚于租约归还，避免紧随的切换在排空窗撞 409。
-        self._loop_handle.cancel_main_task()
-        thread = self._thread
-        if thread is not None:
-            thread.join(timeout=2.0)
-        self._set_cancelled(task_id)
-
-    def shutdown(self) -> None:
-        self._stop.set()
-        # 与 cancel 同一机制：进程收拢时也主动中止挂起的模型调用（别白等 read timeout）。
-        self._loop_handle.cancel_main_task()
-        thread = self._thread
-        if thread is not None:
-            thread.join(timeout=5)
-
-    def _require_current(self, task_id: int) -> None:
-        if self._current_task_id != task_id or not self.is_running():
-            raise ResumeGenerateRunnerError("该任务当前未在运行，无法执行该操作")
-
-    # ===== 工作线程 =====
-
-    def _open_session(self) -> Any:
-        """开一个任务会话：优先用启动时冻结的工厂（RF-03），退回测试注入，再退回全局。"""
-        factory = self._frozen_factory or self._session_factory or SessionLocal
-        return factory()
 
     def _run(self, task_id: int) -> None:
         session = self._open_session()
