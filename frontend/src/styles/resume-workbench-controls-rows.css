@@ -1,0 +1,21 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 参数行（间距 / 外观两组）的基础布局：三组参数控件共用的行容器与控件组。
+   从 `resume-workbench-controls.css` 拆出（单文件 500 行预算）：纯搬迁，
+   选择器 / 声明 / 层叠顺序逐字不变；聚合清单按原顺序 @import 本片。 */
+
+/* ===== 参数行（间距 / 外观两组） ===== */
+.resume-wb-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resume-wb-row {
+  width: 100%;
+}
+
+/* 控件组吃掉标签剩下的宽度：`±` 固定、滑杆伸缩，读数与胶囊才落在同一条竖线上。 */
+.resume-wb-row-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+}

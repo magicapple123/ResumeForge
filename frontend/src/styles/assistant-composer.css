@@ -1,50 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-.assistant-composer-attachments {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.assistant-composer-image-item {
-  display: grid;
-  justify-items: start;
-  gap: 2px;
-}
-
-.assistant-composer-image-item .assistant-message-image {
-  width: 96px;
-  height: 72px;
-}
-
-.assistant-message-attachments .ant-image {
-  display: block;
-  flex: 0 0 120px;
-  width: 120px !important;
-  height: 90px;
-  max-width: 120px;
-  overflow: hidden;
-}
-
-/* Ant Design applies width: 100% to the nested img, so constrain both layers. */
-.assistant-message-attachments .ant-image-img,
-.assistant-message-attachments .assistant-message-image {
-  display: block;
-  width: 120px !important;
-  height: 90px !important;
-  object-fit: contain;
-}
-
-.assistant-conversation-actions-menu {
-  display: grid;
-  min-width: 132px;
-  gap: 2px;
-}
-
-.assistant-conversation-actions-menu .ant-btn {
-  justify-content: flex-start;
-  text-align: left;
-}
+/* 助手输入区：上下文 chip、工具栏、模型 chip、权限卡、窄栏分档与短视口紧凑输入区。
+   本文件是聚合清单：规则按下列 @import 顺序生效（@import 必须位于任何规则之前）。
+   2026-11-14 拆分：原文件贴 500 行预算，把「附件 / 图片消息 / 会话操作菜单」整段原样搬到
+   下列分片——选择器 / 声明 / 媒体查询 / 层叠顺序逐字不变。 */
+@import "./assistant-composer-attachments.css";
 
 .assistant-composer {
   display: grid;

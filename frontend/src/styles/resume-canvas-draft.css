@@ -1,0 +1,163 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 简历预览的草稿版式：栏改写面板、预览工具栏、缩放条、页间裁切间隙、画布视口与纸面。
+   从 `resume-canvas.css` 拆出（单文件 500 行预算）：纯搬迁，
+   选择器 / 声明 / 媒体查询 / 层叠顺序逐字不变；聚合清单按原顺序 @import 本片。 */
+
+/* 「让 AI 按我的要求改这一栏」面板：从预览点某一栏进来时出现在编辑器最上方。
+   淡蓝底 + 左侧色条，与普通表单项区分开——它是一次性动作，不是又一个字段。 */
+.resume-field-rewrite {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--rf-info);
+  border-radius: 0 10px 10px 0;
+  background: var(--rf-surface-alt);
+}
+
+/* 「当前内容」预览。
+ *
+ * 这里以前是 `max-height: 72px; overflow-y: auto`——内容一长右边就竖着一根滚动条，
+ * 在一个以"改写一段文字"为主的小面板里显得很扎眼（用户反馈"不太好看"）。改成
+ * **收起 + 底部渐隐 + 「展开全文」**：默认只显示前几行，要看全的点一下展开，
+ * 既不出现滚动条，也不丢内容。 */
+.resume-field-rewrite-original {
+  display: block;
+  position: relative;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* 收起时按"视觉行数"截断：个人总结是一条长文本，靠条数折叠挡不住它。
+   `pre-line` 让多条要点各占一行，`-webkit-line-clamp` 再把整块压到 N 行。 */
+.resume-field-rewrite-original.is-collapsed .resume-field-rewrite-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.resume-field-rewrite-text {
+  margin: 4px 0 0 !important;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+.resume-field-rewrite-more {
+  height: auto !important;
+  padding: 0 !important;
+  font-size: 12px;
+}
+
+/* 一段内容的每条要点各自成行：整段改写的结果必须一行一条，糊成一段就看不出条数了。 */
+.resume-field-rewrite-line {
+  display: block;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.resume-field-rewrite-result {
+  padding: 10px 12px;
+  border: 1px dashed var(--rf-focus-ring);
+  border-radius: 8px;
+  background: var(--rf-surface);
+}
+/* 页与页之间的“裁切间隙”：把连续纸面在分页处切开，观感等同两张并排的独立 A4 纸。
+   间隙里露出预览视口的底色（#f5f7fa），两侧的柔和阴影扮演每张纸的纸边。
+   宽度由组件按 PAGE_GAP_PX × scale 内联给出；压住的是简历自身的页边距区域，不遮正文。 */
+/* 预览工具栏（P2b 起是两行：上=结构类、下=度量类）与下方警告条、画布之间的呼吸间距：
+   之前工具栏没有下缘间距，与黄色警告条、画布三层全部贴死（用户截图反馈）。 */
+.resume-preview-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* 每一行都是可换行的 flex：窄屏时行内的簇各自换行，而不是把整行挤成横向滚动。 */
+.resume-preview-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 第一行：左侧交互模式、右侧结构类控件（`margin-left:auto` 顶到最右）。 */
+.resume-preview-toolbar-row-primary {
+  justify-content: space-between;
+}
+
+.resume-preview-toolbar-cluster {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 度量那一行：cluster 是行的子项，不给 grow 就只占内容宽度（544px），
+   右边留一大块空白——与生成弹窗里铺满的两列不一致。 */
+.resume-preview-toolbar-row > .resume-preview-toolbar-cluster {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.resume-preview-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* 精确模式下、度量控件**下面**单独一行的一句说明（2026-10-21 用户要求从第二行右端
+   移到字号调整条下方）。独占一行，所以左对齐——原先靠 `margin-left: auto` 顶到最右，
+   现在会把它推到右边，与"贴着控件说一句"的意图相反。 */
+.resume-preview-exact-hint {
+  font-size: 12px;
+}
+
+/* 版式下拉的触发框（2026-10-24 收窄）。
+   上一版是 `calc(4em + 36px)`（≈ 100px，按 antd 的 16px 字号算），比「标准」这类
+   两字预设宽出一大截，同一行的「版式 / 板块 / 顺序」看着疏密不匀（用户截图）。
+   现在钉成 **88px**：刚好容下四字预设（「跟随模板」）+ 箭头与内边距，更长的自制版式名
+   在触发框里走省略号，展开后的列表仍按内容撑开（`popupMatchSelectWidth={false}`），
+   完整名字由选项自带的 `title` 提供。写 px 而不是 em：em 跟着 antd 的字号 token 漂，
+   同一个框在不同主题下会悄悄变宽/变窄。 */
+.resume-format-select {
+  /* 2026-10-28 用户要求：触发框与下拉弹层**同宽**，整体收到"四个字"就够
+     （「跟随模板」）。弹层的宽度在 resume-workbench-controls.css 的
+     `.resume-params-dropdown.resume-format-dropdown` 里跟着改成同一个值。 */
+  width: 104px;
+  min-width: 104px;
+}
+
+/* 缩放条：在纸面**下方**居中（P2b / D6）。缩放是"看"的动作，手应该落在图旁边。 */
+.resume-preview-zoom-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 精确模式的状态块也住这一行（见下一条）：整行允许换行，窄屏不会撑出横向滚动条。 */
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin-top: 12px;
+}
+
+/* 精确模式的状态（「实际 N 页（上限 M 页）」+「在新标签打开」）与缩放控件**同一行**
+   （2026-10-29 用户要求）。它原来是纸面下方单独一条，两条各自居中、中间还夹一档间距，
+   读起来像两块无关的东西。 */
+.resume-preview-zoom-status {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+}
+
+/* 状态块自己在家时有一档上边距与内缩，搬进这一行之后要归零，否则整行会比按钮高出一截。 */
+.resume-preview-zoom-status .exact-preview-status {
+  margin-top: 0;
+  padding: 0;
+}
+
+/* 溢出警告条与画布之间同样留一档（2026-10-29 从 12px 收到 8px：制作台右栏的头部要矮，
+   这一档省下来的高度直接变成纸面）。 */
+.resume-preview-overflow {
+  margin-bottom: 8px;
+}
