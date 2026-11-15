@@ -167,7 +167,16 @@ def test_profile_limit(client):
     assert overflow.status_code == 400
 
 
-def test_activate_switches_only_active_and_uses_own_key(client, probe):
+def test_activate_switches_only_active_and_uses_own_key(client, probe, monkeypatch):
+    # 列表按 ``updated_at`` **降序**（最近更新在前），而激活会刷新该条配置的 ``updated_at``：
+    # 所以"激活后顺序不变"从来就不成立，它以前能过只是因为 ``_now()`` 只到秒、两次激活
+    # 落在同一秒时时间戳打平、稳定排序恰好保留了创建顺序。2026-11-15 CI windows-3.12 上
+    # 这一秒边界被跨过，断言就翻转了。这里把时钟注入成严格递增，让"谁在最前"可判定。
+    from app.services.llm import embedding_profiles as profiles_module
+
+    ticks = iter(f"2026-01-01T00:00:{second:02d}+00:00" for second in range(60))
+    monkeypatch.setattr(profiles_module, "_now", lambda: next(ticks))
+
     first = _create(client, "A", key=SECRET_A, base_url="https://a.example.com/v1")
     second = _create(client, "B", key=SECRET_B, base_url="https://b.example.com/v1")
     _confirm(client, "https://a.example.com/v1")
@@ -185,7 +194,11 @@ def test_activate_switches_only_active_and_uses_own_key(client, probe):
     body = _status(client)
     assert body["active_profile_id"] == second["id"]
     assert probe.calls[-1].api_key == SECRET_B
-    assert [item["id"] for item in body["profiles"]] == before_ids
+    # 数量与集合不变（激活不新增/丢失配置）；顺序按 updated_at 降序 = 刚激活的那条在最前。
+    ids_after = [item["id"] for item in body["profiles"]]
+    assert len(ids_after) == len(before_ids)
+    assert set(ids_after) == set(before_ids)
+    assert ids_after[0] == second["id"]
     assert len(body["profiles"]) == 2
     keys = {item["id"]: item["key_configured"] for item in body["profiles"]}
     assert keys[first["id"]] is True and keys[second["id"]] is True
