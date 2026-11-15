@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""生成链预算接入（RF-14 §2.1.a）：假 Provider 离线；预算/延迟比例两侧各留
-4 倍以上余量，使"过期落在哪个检查点"与调度抖动无关（AGENTS 两档等待预算纪律）。
+"""生成链预算接入（RF-14 §2.1.a）：假 Provider 离线；预算过期由假 provider 在
+chat 内显式触发，不依赖墙钟比例，与机器快慢/覆盖率插桩无关（AGENTS 两档等待
+预算纪律）。
 
 钉住的性质：
 - budget=None 时行为与改动前一致：provider 的 request_deadline_seconds 全程不被触碰；
@@ -13,6 +14,7 @@
 
 import asyncio
 import json
+import time
 
 import pytest
 from app.runtime.operation_budget import OperationBudget, OperationCancelled
@@ -28,17 +30,27 @@ from tests.test_resume_generator import (
 
 
 class _DeadlineAwareProvider(FakeProvider):
-    """记录 chat 期间看到的请求级 deadline，并可模拟"慢请求后超时"。"""
+    """记录 chat 期间看到的请求级 deadline，并可模拟"chat 期间预算耗尽"。"""
 
-    def __init__(self, stream_text: str, chat_replies: list, chat_delay: float = 0.0):
+    def __init__(
+        self, stream_text: str, chat_replies: list, *, expire_budget: OperationBudget | None = None
+    ):
         super().__init__(stream_text=stream_text, chat_replies=chat_replies)
-        self.chat_delay = chat_delay
+        # 本次 chat 要"就地耗尽"的预算（父预算）。子段由调用方的
+        # begin_budget_segment 注入到 request_budget，见 chat 里一起推到过去。
+        self.expire_budget = expire_budget
         self.deadlines_seen: list[float | None] = []
 
     async def chat(self, messages, *, thinking: bool = True):
         self.deadlines_seen.append(self.request_deadline_seconds)
-        if self.chat_delay:
-            await asyncio.sleep(self.chat_delay)
+        if self.expire_budget is not None:
+            # 把"预算在本段内耗尽"确定地落在这次 chat 里：父预算与当前 child 段
+            # 一起推到过去。不睡墙钟、不依赖首段耗时，所以与机器快慢、覆盖率
+            # 插桩、调度抖动全都无关。
+            now = time.monotonic()
+            self.expire_budget.deadline = now - 1.0
+            if self.request_budget is not None:
+                self.request_budget.deadline = now - 1.0
         if not self.chat_replies:
             raise AssertionError("没有可用的 chat 回复")
         reply = self.chat_replies.pop(0)
@@ -86,15 +98,15 @@ async def test_fix_segment_gets_child_deadline_and_resets_it():
 
 async def test_fix_segment_budget_expiry_is_not_disguised_as_timeout():
     """预算耗尽 → 文案是「生成超出时间预算，已终止」，不冒充网络超时。"""
+    budget = OperationBudget.start(30)
     provider = _DeadlineAwareProvider(
         stream_text="这不是 JSON",
         chat_replies=[LLMError("模型响应超时，请稍后重试或调大超时时间")],
-        chat_delay=1.0,
+        expire_budget=budget,
     )
-    # 比例两侧各留 4 倍以上余量：流段瞬时完成远耗不到 0.25s（不会在 chat 前
-    # 就被 raise_if_stopped 拦下走另一条错误路径），chat 1.0s 必然触发预算
-    # 分支——过期确定落在"chat 之后的 is_expired 检查"，与调度抖动无关。
-    budget = OperationBudget.start(0.25)
+    # 过期点由假 provider 在修复段的 chat 内显式制造（见 _DeadlineAwareProvider）：
+    # 流段快慢不参与判定，chat 返回的 LLMError 必然落在"预算已过期"的
+    # except LLMError 分支，拿到的就是预算文案，而不是超时文案。
     events = await collect_events(
         ResumeGenerator(provider).generate(
             make_profile(), make_job(), GenerateOptions(), budget=budget
@@ -114,14 +126,15 @@ async def test_quality_retry_segment_gets_child_and_keeps_first_result_on_expiry
         sparse_reference_response,
     )
 
+    budget = OperationBudget.start(30)
     provider = _DeadlineAwareProvider(
         stream_text=json.dumps(sparse_reference_response(), ensure_ascii=False),
         chat_replies=[LLMError("模型响应超时，请稍后重试或调大超时时间")],
-        chat_delay=1.0,
+        expire_budget=budget,
     )
-    # 同上：比例拉开（首段流瞬时 << 0.25s，重试 chat 1.0s 必然到期），过期
-    # 确定落在重试 chat 期间，"沿用首轮结果"路径与调度抖动无关。
-    budget = OperationBudget.start(0.25)
+    # 同上：过期由假 provider 在重试 chat 内显式制造。重试段入口的
+    # raise_if_stopped 因此还是"预算尚在"，不会抢在前面把整次生成终止——
+    # 于是确定走到"重试失败 → 沿用首轮结果"，与首段耗时无关。
     events = await collect_events(
         ResumeGenerator(provider).generate(
             make_profile_with_reference(),
