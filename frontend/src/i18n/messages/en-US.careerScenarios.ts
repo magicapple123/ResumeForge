@@ -162,7 +162,6 @@ const careerScenarios = {
   "careerScenarios.variant.loadFailed": "Could not load scenario variant data",
   "careerScenarios.variant.refresh": "Refresh",
   "careerScenarios.center.aiGenerate": "Generate with AI",
-  "careerScenarios.center.aiGenerateAria": "Generate a Resume with AI",
   "careerScenarios.center.suggestionTitle": "Choose a career scenario, then generate a Resume",
   "careerScenarios.center.suggestionBody":
     "Scenarios provide wording suggestions only; you can also write a Resume manually without any scenario restrictions.",

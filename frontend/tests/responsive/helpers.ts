@@ -4,7 +4,7 @@
  *
  * 两个来源必须一致：视口矩阵来自方案 §7.1，路由清单来自 `src/App.tsx` 的 `<Route>`。
  * 路由写死在这里是刻意的——从 App.tsx 里反射解析路由要跑一遍 TS，代价远大于维护一张
- * 18 行的表；`App.test.tsx` 已经守着"每个路由都能渲染"，这里只负责"渲染后不溢出"。
+ * 19 行的表；`App.test.tsx` 已经守着"每个路由都能渲染"，这里只负责"渲染后不溢出"。
  */
 
 /** 8 个主档（V1–V8）；960/768 只进截图 harness，不进 CI（E 档的结构性缺陷另记）。 */
@@ -20,7 +20,7 @@ export const VIEWPORTS = [
 ] as const;
 
 /**
- * 18 条路由（与 `App.tsx` 的 `<Route path=` 一一对应，`*` 除外）。
+ * 19 条路由（与 `App.tsx` 的 `<Route path=` 一一对应，`*` 除外）。
  *
  * `fitsViewport`：这条路由**声明自己必须装进一屏**（`.app-content` 不出现纵向滚动）。
  * 只有 `/assistant` 是这种三条式工作区（标题/消息/输入，消息区内部滚动）；其余页面是
@@ -40,6 +40,7 @@ export const ROUTES = [
   { name: "materials", path: "/materials" },
   { name: "knowledge", path: "/knowledge" },
   { name: "skills", path: "/skills" },
+  { name: "research", path: "/research" },
   { name: "interview", path: "/interview" },
   { name: "profile", path: "/profile" },
   { name: "claims", path: "/claims" },
@@ -193,9 +194,10 @@ export async function collectVertical(
       if (node === document.scrollingElement) continue;
       if (node.scrollHeight <= node.clientHeight + 1) {
         const id = node.id ? `#${node.id}` : "";
-        const cls = node.className && typeof node.className === "string"
-          ? `.${node.className.trim().split(/\s+/).slice(0, 2).join(".")}`
-          : "";
+        const cls =
+          node.className && typeof node.className === "string"
+            ? `.${node.className.trim().split(/\s+/).slice(0, 2).join(".")}`
+            : "";
         emptyScrollbars.push(`${node.tagName.toLowerCase()}${id}${cls}`);
       }
     }

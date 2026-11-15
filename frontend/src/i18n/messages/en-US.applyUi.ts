@@ -145,7 +145,6 @@ const applyUi = {
   "applyUi.funnel.failed": "Failed",
   "applyUi.funnel.interviewing": "Interviewing",
   "applyUi.funnel.hint": "Last {days} days",
-  "applyUi.funnel.drillAria": "{dimension}: {value} in the last {days} days, click to view",
 
   // T07 "I submitted it": recording action, reminder date and one-time hint.
   "applyUi.recordDetail.submitted.section": "Record the submission",

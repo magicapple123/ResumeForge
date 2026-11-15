@@ -133,7 +133,6 @@ const applyUi = {
   "applyUi.funnel.failed": "失败",
   "applyUi.funnel.interviewing": "面试中",
   "applyUi.funnel.hint": "近 {days} 天",
-  "applyUi.funnel.drillAria": "近 {days} 天{dimension} {value}，点击查看",
 
   // T07「我已提交」：成功记录详情抽屉里的记录动作、提醒日期与一次性引导。
   "applyUi.recordDetail.submitted.section": "记录投递结果",

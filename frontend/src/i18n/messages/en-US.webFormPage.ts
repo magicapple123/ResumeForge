@@ -122,7 +122,9 @@ const webFormPage = {
   "webFormPage.browserCard.stopTooltip":
     "Close this controlled browser window. Logins inside it are kept, so the next start does not need them again",
   "webFormPage.browserCard.stop": "Close browser",
-  "webFormPage.browserCard.startAria": "Start the dedicated browser",
+  // 必须与下一行可见文字逐字一致：axe 的 `label-content-name-mismatch`（serious）
+  // 要求可访问名包含可见文字，多一个 "the" 就会红（只有英文暴露，中文「开启专用浏览器」两处相同）。
+  "webFormPage.browserCard.startAria": "Start dedicated browser",
   "webFormPage.browserCard.start": "Start dedicated browser",
   "webFormPage.browserCard.settings": "Browser settings",
   "webFormPage.browserCard.refreshTooltip": "Refresh now",

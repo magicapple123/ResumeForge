@@ -160,9 +160,7 @@ describe("ResumesPage 通用 AI 入口（A2）", () => {
     await screen.findByText(RESUME.title);
     const listCallsBefore = apiMocks.listResumes.mock.calls.length;
 
-    fireEvent.click(
-      screen.getByRole("button", { name: t("careerScenarios.center.aiGenerateAria") }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: t("careerScenarios.center.aiGenerate") }));
 
     const dialog = await screen.findByRole("dialog");
     // 弹窗标题由组件写死（生成通用简历）；用 DOM 读而不是 ByText，避免给 CJK 断言加存量。

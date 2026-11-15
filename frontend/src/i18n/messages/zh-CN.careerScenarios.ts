@@ -164,7 +164,6 @@ const careerScenarios = {
 
   // ── 简历中心的入口与建议卡 ────────────────────────────────────
   "careerScenarios.center.aiGenerate": "AI 生成",
-  "careerScenarios.center.aiGenerateAria": "AI 生成简历",
   "careerScenarios.center.suggestionTitle": "先选职业场景，再生成简历",
   "careerScenarios.center.suggestionBody": "场景只提供表达建议；也可以直接手写，不受任何场景限制。",
   "careerScenarios.center.suggestionGenerate": "AI 生成通用简历",

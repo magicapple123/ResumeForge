@@ -8,7 +8,16 @@
  * 「面试中」来自求职进度（track），没有对应的投递记录筛选，所以它下钻到 `/tracker`；
  * 其余三个切到「投递记录」并带上结果筛选。接口读不到时**整条不渲染**（不占位、不报错弹窗）：
  * 它是增强信息，不该让页面顶部凭空多一行错误。
+ *
+ * **四枚指标刻意不写 `aria-label`**：可访问名直接取可见文字（`Applied 0`），
+ * 「最近 7 天」这层上下文用 `aria-describedby` 交给读屏器（描述 ≠ 名字）。
+ * 原因是 axe 4.x 的 `label-content-name-mismatch`（serious）判的是**token 连续子序列**：
+ * `Statistic` 的标题与数值是两个块级 div，axe 取可见文字时中间不插分隔符 → `Applied0`，
+ * 而 `Intl.Segmenter` 把 `applied0` 切成**一个词**，于是任何自然句式（含"精确等于可见文字"）
+ * 都凑不出连续子序列、英文界面必红；换句话说这条规则在这里只能靠"不写 aria-label"绕开。
+ * 中文一直没暴露是因为 `已投递0` 会被切成两段（CJK 与数字分段），属侥幸，不能作为不修的借口。
  */
+import { useId } from "react";
 import { Button, Space, Statistic, Typography } from "antd";
 import { useApi } from "../../hooks/useApi";
 import { getApplySummary } from "../../api/applyExtras";
@@ -57,6 +66,10 @@ export const FUNNEL_DAYS = 7;
 export default function ApplyFunnelBar({ onDrill }: { onDrill: (drill: FunnelDrill) => void }) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后指标名停在旧文案。
   useLocale();
+  // useId() 必须在顶层无条件调用（早退分支之后就不合法了），且只调一次：
+  // 四个按钮共用同一句 hint（"近 7 天" / "Last 7 days"），所以只用一个 id 就够，
+  // 也避免手拼 `...-${dimension}` 这类可能含空格/中文的字符串当 id。
+  const hintId = useId();
   const { data, error } = useApi<ApplyFunnelSummary>(
     () => getApplySummary(FUNNEL_DAYS),
     [FUNNEL_DAYS],
@@ -70,12 +83,8 @@ export default function ApplyFunnelBar({ onDrill }: { onDrill: (drill: FunnelDri
           key={item.key}
           type="text"
           className="apply-funnel-item"
-          // 卡片数字本身不念得清"点了会发生什么"，aria-label 把维度 + 数值 + 动作都说出来。
-          aria-label={t("applyUi.funnel.drillAria", {
-            days: FUNNEL_DAYS,
-            dimension: t(item.labelKey),
-            value: data[item.key],
-          })}
+          // 名字＝可见文字（"Applied 0"），上下文走描述：见文件头关于 axe 分词口径的说明。
+          aria-describedby={hintId}
           onClick={() => onDrill(item.drill)}
         >
           <Statistic
@@ -87,7 +96,7 @@ export default function ApplyFunnelBar({ onDrill }: { onDrill: (drill: FunnelDri
           />
         </Button>
       ))}
-      <Typography.Text type="secondary">
+      <Typography.Text type="secondary" id={hintId}>
         {t("applyUi.funnel.hint", { days: FUNNEL_DAYS })}
       </Typography.Text>
     </Space>
