@@ -29,6 +29,7 @@ DeepSeek 的转写**不是** whisper 那套：
 from __future__ import annotations
 
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -94,6 +95,25 @@ def asr_endpoint(base_url: str) -> str:
     if base.endswith(ASR_PATH):
         return base
     return f"{base}{ASR_PATH}"
+
+
+def validated_endpoint(base_url: str) -> str:
+    """把用户填的 ``base_url`` 收成一个**只可能是 http(s) 主机**的请求地址。
+
+    这道校验不是"防别人的服务器"——本项目是本地单用户工具，地址由使用者在设置里填，
+    指向 ``127.0.0.1`` 上的自建网关是正常用法（所以**不**做内网/回环黑名单，那会把
+    本地部署直接打死）。它拦的是**协议与形态**：``file:`` / ``gopher:`` / ``ftp:`` 这类
+    非 HTTP 方案、空主机、带 userinfo 的地址（``https://user:pass@host`` 会让凭据
+    进日志与错误信息）一律拒绝，并且拒绝时只回一句可读原因，不把原地址拼进消息。
+    """
+    endpoint = asr_endpoint(base_url)
+    parts = urlsplit(endpoint)
+    scheme = parts.scheme.lower()
+    if scheme not in {"http", "https"} or not parts.hostname:
+        raise AsrError("bad_request", "语音服务地址必须是 http(s) 开头的完整地址")
+    if parts.username or parts.password:
+        raise AsrError("bad_request", "语音服务地址里不要带用户名或密码，请用 Key 字段填写凭据")
+    return endpoint
 
 
 def accepts_content(content_type: str) -> bool:
@@ -166,7 +186,7 @@ async def post_asr(
     files = {"file": ("voice.wav" if "wav" in mime else "voice.ogg", content, mime)}
     headers = {"Authorization": f"Bearer {api_key}"}
     async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(asr_endpoint(base_url), headers=headers, files=files)
+        response = await client.post(validated_endpoint(base_url), headers=headers, files=files)
     raise_for_status(response)
     try:
         payload = response.json()
@@ -198,4 +218,5 @@ __all__ = [
     "post_asr",
     "requires_model",
     "unsupported_format_message",
+    "validated_endpoint",
 ]

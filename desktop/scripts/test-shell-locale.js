@@ -375,7 +375,10 @@ test("关闭卡片：loadURL 带当前壳层语言（?locale=zh|en，缺省英�
 /** 在 vm 里跑 close-dialog.html 的内联脚本（假 DOM），返回观测面。 */
 function runCloseDialogPage(search, isMac = false) {
   const source = fs.readFileSync(path.join(DESKTOP_DIR, "close-dialog.html"), "utf8");
-  const match = source.match(/<script>([\s\S]*?)<\/script>/);
+  // 兼容 `<script>` / `<script type="...">` 与 `</script >`：只匹配无 src 的内联脚本块本身。
+  // 写成宽匹配是为了避开 CodeQL 的 js/bad-tag-filter（旧正则固定标签名，遇到属性或
+  // 大小写变化会漏匹配）。
+  const match = source.match(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script\s*>/i);
   assert.ok(match, "close-dialog.html 必须保留内联文案脚本");
   const elements = new Map();
   const element = (id) => {

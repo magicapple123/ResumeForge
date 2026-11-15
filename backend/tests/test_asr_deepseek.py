@@ -26,6 +26,7 @@ import pytest
 from app.schemas.asr import AsrSettings
 from app.services import asr_client
 from app.services import asr_deepseek as deepseek
+from app.services.asr_errors import AsrError
 from app.services.asr_settings import binding_changed, is_asr_configured
 
 FIXED_TEXT = "这是一段由假 DeepSeek 服务返回的中文转写。"
@@ -175,6 +176,30 @@ def test_endpoint_does_not_double_the_path() -> None:
     assert deepseek.asr_endpoint("https://api.deepseek.com/v1/tools/asr/") == (
         "https://api.deepseek.com/v1/tools/asr"
     )
+
+
+def test_validated_endpoint_keeps_local_gateways_but_rejects_other_schemes() -> None:
+    """只收 http(s) 主机：本地自建网关合法，``file:`` / 空主机 / 带凭据的地址一律拒。
+
+    这条守的是 CodeQL 的 ``py/full-ssrf``：请求地址来自用户在设置里填的 base_url，
+    必须先把"协议与形态"钉死再发请求。**刻意不拦回环与内网**——本地部署的网关就是
+    ``http://127.0.0.1:11434`` 这类地址，拦掉等于把正常用法打死。
+    """
+    assert deepseek.validated_endpoint("http://127.0.0.1:11434/v1") == (
+        "http://127.0.0.1:11434/v1/tools/asr"
+    )
+    assert deepseek.validated_endpoint("https://api.deepseek.com/v1/tools/asr") == (
+        "https://api.deepseek.com/v1/tools/asr"
+    )
+    for bad in ("file:///etc/passwd", "gopher://x/1", "ftp://example.com", "/v1", "https://"):
+        with pytest.raises(AsrError) as excinfo:
+            deepseek.validated_endpoint(bad)
+        assert excinfo.value.kind == "bad_request"
+    with pytest.raises(AsrError) as excinfo:
+        deepseek.validated_endpoint("https://user:secret@api.deepseek.com/v1")
+    assert "用户名或密码" in str(excinfo.value)
+    # 拒绝时不许把原地址（可能含凭据）拼进消息。
+    assert "secret" not in str(excinfo.value)
 
 
 def test_status_reports_provider_limits_for_deepseek(client, fake_deepseek) -> None:

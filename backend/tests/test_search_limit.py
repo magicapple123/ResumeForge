@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from app.schemas.setting import SearchConfig
 from app.services.assistant_tools._registry import tool_definitions
@@ -215,7 +217,10 @@ def test_tool_description_teaches_search_operators():
         text = web_search_description(fetch_pages)
         for token in ("site:", "after:", "before:", "lang:", '"'):
             assert token in text, f"{token} 必须出现在联网搜索的工具描述里"
-        assert "zhipin.com" in text  # 招聘站限定场景要给出具体例子
+        # 用带词边界的正则而不是子串判断：这里验的是"描述里给了招聘站限定的例子"，
+        # 不是 URL 白名单（`"zhipin.com" in text` 会被 CodeQL 判成
+        # py/incomplete-url-substring-sanitization，那是误读——text 是提示词文本）。
+        assert re.search(r"\bsite:zhipin\.com\b", text), "招聘站限定场景要给出具体例子"
         assert "原样提交" in text  # 与 has_search_operators 的透传语义一致
     # 两版描述仍然只差"能不能拿到正文"，操作符指引两版都有。
     assert _WEB_SEARCH_DESC_SUMMARIES != _WEB_SEARCH_DESC_WITH_PAGES

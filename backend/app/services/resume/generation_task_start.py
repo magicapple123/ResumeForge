@@ -114,6 +114,12 @@ def prepare_generation_task(
         db.add(task)
         db.flush()
         snapshot_row = persist_generation_snapshot(db, frozen, task_id=task.id)
+        # 必须在锁内提交：只 flush 不 commit 时，另一条并发请求的 SELECT 看不到这条
+        # 未提交的行（SQLite 的读隔离），照样查到"没有活动任务"，于是同岗位建出两条
+        # pending。2026-11-15 CI（ubuntu 3.11）实测这条竞态：两个请求都拿到 201。
+        # 提交在锁内也保证了"任务行 + 快照行"仍是一个事务；后续启动失败时由路由用
+        # `discard_generation_task` 删除这两行并提交，不留孤儿。
+        db.commit()
     return GenerationTaskStart(
         task=task, frozen=frozen, snapshot_row=snapshot_row, snapshot=snapshot
     )
