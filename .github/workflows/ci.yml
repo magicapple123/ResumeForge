@@ -19,8 +19,13 @@ jobs:
     # 测试走 pytest-xdist 并行（-n auto）。实测（2026-11-09，suite 8226 个用例）：
     # ubuntu 3.11 / 3.13 约 24–25 分钟（含装依赖与 coverage 收尾），Windows 更慢。
     # 30 分钟在 3.11 上只剩 5 分钟余量，一次 runner 抖动就会表现为超时取消——那不是
-    # 代码坏了。上限给到 45 分钟，同时保留"真挂住时止损"。
-    timeout-minutes: 45
+    # 代码坏了。
+    # 2026-11-15：suite 涨到 9860 个用例，45 分钟在 ubuntu 3.11 与 Windows 3.12 上
+    # 已不够（同批 3.13 跑完 27:56，另两格被 cancel 在 `Run tests with coverage`）。
+    # 上限抬到 60 分钟；同一批还把一条 458 秒的病态用例（50 MB PDF 抽 20 万行正文）
+    # 改成"体积靠注释填充、正文只留少量文本"，压到 2 秒内——抬上限是为了留余量，
+    # 不是为了让慢用例留下。
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:

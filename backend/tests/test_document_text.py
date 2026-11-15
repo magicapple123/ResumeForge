@@ -61,12 +61,21 @@ def build_docx(*paragraphs: str, table_cell: str = "") -> bytes:
     return buffer.getvalue()
 
 
-def build_pdf(text: str = "", *, blank: bool = False) -> bytes:
+def build_pdf(text: str = "", *, blank: bool = False, pad_bytes: int = 0) -> bytes:
     """手写一份最小 PDF，带正确的 xref 表。
 
     ``blank=True`` 用来模拟扫描件：页面存在，但没有可作为文字提取的内容。
+
+    ``pad_bytes`` 在**内容流末尾**追加一段 PDF 注释（``%`` 到行尾），把文件撑到指定体积
+    而不增加一个可抽取的字符：``%`` 之后的字节被内容流解析器整段跳过。于是"多大"和
+    "有多少正文"可以分开造——需要一个 >10 MB 的文件时，不必再靠几十万次文本操作把
+    pypdf 拖慢（那种造法单条用例要 400 多秒）。默认 0 = 与从前逐字节一致。
     """
     content = b"q Q" if blank else b"BT /F1 12 Tf 72 720 Td (" + text.encode("ascii") + b") Tj ET"
+    if pad_bytes > 0:
+        # 填充必须落在内容流内部：流结束后再追加字节会让 /Length 与 xref 对不上，
+        # pypdf 直接判成损坏文件（这正是早先"在尾部粘字节"行不通的原因）。
+        content += b"%" + b"x" * pad_bytes + b"\n"
     objects = [
         (1, b"<< /Type /Catalog /Pages 2 0 R >>"),
         (2, b"<< /Type /Pages /Kids [4 0 R] /Count 1 >>"),

@@ -187,9 +187,11 @@ def test_attachment_between_ten_and_fifty_mb_is_actually_parsed(client):
     10 MB 的硬闸门，于是 12 MB 的扫描件传完了却回一句"文件超过 10 MB，无法导入"。
     只断言常量大小（上面那条用例）抓不到这种"两道闸门各按各的"，必须真的走一遍上传。
     """
-    # 造一份 >10 MB 的文本 PDF：正文直接写成 13 MB 的重复句，比"在 PDF 尾部粘字节"
-    # 更可靠（后者 xref 之后的内容会被判成损坏文件，pypdf 直接拒绝）。
-    raw = build_pdf((TEXT_MARKER + " ") * 200000)
+    # 造一份 >10 MB 的 PDF，但**不把正文写成 10 MB**：正文只留几行 TEXT_MARKER，
+    # 体积靠 build_pdf(pad_bytes=…) 在内容流末尾追加的 PDF 注释填充。早先这里写的是
+    # 13 MB 重复正文，pypdf 要抽 20 万次文本操作，单条用例 458 秒——把 CI 的两个作业
+    # 顶过了 45 分钟上限。文件真的 >10 MB、正文真的抽得出，两个意图都还在。
+    raw = build_pdf(" ".join([TEXT_MARKER] * 3), pad_bytes=11 * 1024 * 1024)
     assert len(raw) > document_text.MAX_MATERIAL_FILE_BYTES
 
     response = _upload(client, "big-scan.pdf", raw, "application/pdf")
