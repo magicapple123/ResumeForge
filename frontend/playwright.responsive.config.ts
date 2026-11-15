@@ -21,6 +21,9 @@ export default defineConfig({
   use: {
     ...devices["Desktop Chrome"],
     baseURL: process.env.SMOKE_FRONTEND_URL ?? "http://127.0.0.1:8123",
+    // 语言与冒烟同一口径钉中文：首启语言跟随系统，而英文文案普遍更长——不钉的话
+    // 同一份阈值在英文 runner 上量的是另一套文本，8 个视口的溢出结论无法跨机比较。
+    locale: "zh-CN",
     // 指标口径统一 DPR 1：DPR 只影响位图密度，不影响布局；混着用会让像素数对不上。
     deviceScaleFactor: 1,
     trace: "off",

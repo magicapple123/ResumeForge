@@ -18,6 +18,11 @@ export default defineConfig({
   retries: 0,
   use: {
     baseURL: process.env.SMOKE_FRONTEND_URL ?? "http://127.0.0.1:8123",
+    // 语言钉在中文：首启语言跟随系统（`readInitialLocale` 的兜底分支读 `navigator.languages`），
+    // 而 CI 运行器是英文环境——不钉的话断言的中文文案（菜单 / 首屏 / 首次引导标题）在
+    // Linux、macOS、Windows 三个 runner 上同时失配，看起来像"页面没渲染"。
+    // 这些用例的断言本来就是按中文写死的，钉住 locale 是让环境确定，不是放宽断言。
+    locale: "zh-CN",
     headless: true,
     trace: "retain-on-failure",
   },
