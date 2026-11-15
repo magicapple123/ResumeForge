@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""生成成本与耗时（清单 §17.3-C7，2026-11-10 第 17 条）。
+"""生成成本与耗时（清单 §17.3-C7，2026-11-10 第 17 条）+ 外部服务用量（T16）。
 
 数据源是 llm_usage_record（本地用量账本）。**只报 token 与耗时，不报金额**：本库没有
 价格表，凭记忆写一个单价就是编的；账本里真实存在的是 token 数与 duration_ms。
@@ -11,14 +11,20 @@
 - total_calls / total_tokens 是全账本口径，用来说明"生成在全部 AI 消耗里占多大"；
 - by_model 只按 resume_generate 分组：换了模型之后"平均一份简历多少 token/多少秒"
   应该分模型看，混在一起会被旧账拉偏。
+
+`external_usage` 是 T16 补的一类**非 token** 用量（OCR 页数 / TTS 字符数 / ASR 秒数 /
+搜索次数）：口径与实现都在 `services/usage_counters.py`，这里只做转出，**同样不含金额**。
 """
 
 from __future__ import annotations
+
+from datetime import date, datetime
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..models.llm_usage import LLMUsageRecord
+from . import usage_counters
 from .llm.usage_tasks import TASK_RESUME_GENERATE
 
 
@@ -72,4 +78,19 @@ def generation_cost(db: Session) -> dict:
     }
 
 
-__all__ = ["generation_cost"]
+def external_usage(
+    db: Session,
+    *,
+    days: int | None = usage_counters.DEFAULT_WINDOW_DAYS,
+    since: date | datetime | None = None,
+    until: date | datetime | None = None,
+) -> dict:
+    """外部服务用量一块（OCR 页 / TTS 字符 / ASR 秒 / 搜索次数）+ 时间窗。
+
+    四项都是数量，**没有任何金额字段**（决策 #5）。没记过数是 0 而不是 None。
+    `days=None` 回落到默认窗口（30 天）；要"全部留存期"就传 `usage_counters.MAX_WINDOW_DAYS`。
+    """
+    return usage_counters.summary(db, days=days, since=since, until=until)
+
+
+__all__ = ["external_usage", "generation_cost"]

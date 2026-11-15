@@ -23,6 +23,7 @@ const navigation = {
   "navigation.item.knowledge": "知识库",
   "navigation.item.skills": "工作台",
   "navigation.item.analytics": "求职统计",
+  "navigation.item.research": "公司调研",
   "navigation.item.claims": "事实台账",
   "navigation.item.trash": "回收站",
 

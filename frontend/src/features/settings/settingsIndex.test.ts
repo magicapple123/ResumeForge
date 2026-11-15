@@ -20,12 +20,13 @@ import type { SettingsSectionKey } from "./settingsSections";
 
 declare const process: { cwd(): string };
 
-/** Panel 名 → 分组键。九组各一个 Panel。 */
+/** Panel 名 → 分组键。十组各一个 Panel。 */
 const PANEL_SECTIONS: Record<string, SettingsSectionKey> = {
   ModelPanel: "model",
   AssistantBehaviorPanel: "assistant-behavior",
   MemorySkillsPanel: "memory-skills",
   VoicePanel: "voice",
+  ConnectionsPanel: "connections",
   AppearancePanel: "appearance",
   InteractionPanel: "interaction",
   DataPanel: "data",
@@ -51,6 +52,9 @@ const CARD_IDS: Record<string, string> = {
   AsrSettingsCard: "asr",
   InterviewVoiceSettingsCard: "interview-voice",
   InterviewCameraSettingsCard: "interview-camera",
+  OcrEngineCard: "ocr-engine",
+  ConnectionsCard: "connections",
+  SystemSourcesCard: "system-sources",
   LocaleSettingsCard: "locale",
   ResumeFontCard: "font",
   NavigationSettingsCard: "navigation",
@@ -93,7 +97,7 @@ function cardsOfPanel(source: string, panel: string): string[] {
 }
 
 describe("设置项索引", () => {
-  it("has a unique id per entry and covers all nine sections", () => {
+  it("has a unique id per entry and covers all ten sections", () => {
     const ids = SETTINGS_INDEX.map((entry) => entry.id);
     expect(new Set(ids).size).toBe(ids.length);
 
@@ -101,7 +105,7 @@ describe("设置项索引", () => {
       const entries = SETTINGS_INDEX.filter((entry) => entry.section === section.key);
       expect(entries.length, `分组 ${section.key} 没有索引项`).toBeGreaterThan(0);
     }
-    expect(SETTINGS_SECTIONS).toHaveLength(9);
+    expect(SETTINGS_SECTIONS).toHaveLength(10);
     expect(SETTINGS_INDEX).toHaveLength(Object.keys(CARD_IDS).length);
   });
 

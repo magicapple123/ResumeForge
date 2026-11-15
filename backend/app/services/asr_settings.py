@@ -39,6 +39,7 @@ from ..schemas.asr import (
     AsrSettingsOut,
 )
 from .api_key_crypto import ApiKeyEncryptionError, decrypt_key
+from .asr_deepseek import is_endpoint_configured
 from .asr_profiles import (
     CLEAR_API_KEY,
     DEFAULT_PROFILE_NAME,
@@ -62,6 +63,8 @@ _PRESET_BY_ENDPOINT = {
     ("api.groq.com", "openai"): "groq",
     ("api.siliconflow.cn", "openai"): "siliconflow",
     ("dashscope.aliyuncs.com", "dashscope"): "dashscope",
+    # DeepSeek 的转写是独立协议（/tools/asr，无 model），所以协议一并作为键的一部分。
+    ("api.deepseek.com", "deepseek"): "deepseek",
 }
 
 
@@ -138,15 +141,29 @@ def get_asr_runtime_settings(db: Session) -> AsrSettings:
 
 
 def is_asr_configured(settings: AsrSettings) -> bool:
-    """三要素齐全才算可用：只有 Key 没有地址/模型，发不出一次合法请求。"""
-    return bool(settings.base_url and settings.model and settings.api_key)
+    """这一档的**最小要素**是否齐全（不是一律三要素）。
+
+    - ``openai`` / ``dashscope``：地址 + 模型 + Key，缺一发不出一次合法请求；
+    - ``deepseek``：**没有 model 参数**（请求体只有 ``file``），所以只要地址 + Key。
+      按三要素判会让"已经能用"的配置永远显示"未配置"——这类判据分散在设置页、
+      ``/transcribe/status`` 与每个写入口，错一处就是"搜索通了、语音说没 key"那种不一致。
+
+    判据只写这一处，三个调用方共用（见文件头）。
+    """
+    return is_endpoint_configured(
+        base_url=settings.base_url,
+        model=settings.model,
+        api_key=settings.api_key,
+        protocol=settings.protocol,
+    )
 
 
 def binding_changed(stored: AsrSettings, base_url: str, protocol: AsrProtocol) -> bool:
     """地址或协议变了 = 已保存的 Key 不再适用。
 
-    协议也要比：同一台主机上换协议意味着换了一条调用路径，旧 Key 就算能通过鉴权，
-    也说明用户想连的是另一个服务。判据只写一处，保存/测试连接/拉模型三处共用。
+    协议也要比：同一台主机上换协议意味着换了一条调用路径（``deepseek`` 就是第三种），
+    旧 Key 就算能通过鉴权，也说明用户想连的是另一个服务。判据只写一处，
+    保存/测试连接/拉模型三处共用。
     """
     return base_url != stored.base_url or protocol != stored.protocol
 

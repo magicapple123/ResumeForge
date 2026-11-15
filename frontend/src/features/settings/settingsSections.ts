@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 设置页的**分组表**：九个分组、三档导航标题、以及旧深链键的别名。
+ * 设置页的**分组表**：十个分组、三档导航标题、以及旧深链键的别名。
  *
  * 这张表是导航、深链解析、搜索索引三处共用的唯一来源——三份各自维护一张清单，
  * 迟早会出现"导航里有、深链进不去"或"搜得到、切不过去"。
  *
  * 分组按「你改的是什么」划分，不是按组件目录：
- * - AI 与助手：模型 → 助手行为 → 记忆与技能 → 语音与面试
+ * - AI 与助手：模型 → 助手行为 → 记忆与技能 → 语音与面试 → 外部连接
  * - 界面与操作：外观与语言 → 操作习惯
  * - 数据与应用：数据与存储 → 备份与隐私 → 更新与帮助
  */
@@ -17,6 +17,7 @@ export type SettingsSectionKey =
   | "assistant-behavior"
   | "memory-skills"
   | "voice"
+  | "connections"
   | "appearance"
   | "interaction"
   | "data"
@@ -70,6 +71,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     navGroup: "ai",
     titleKey: "settings.tab.voice",
     introKey: "settings.voice.intro",
+  },
+  {
+    // 「外部连接」（T11/T12）排在 AI 那几组的最后：它列的是**所有**对外依赖
+    // （模型 / 语音 / 语义检索 / 搜索 / 下载源 / 端口），放在前面会让"配模型"多绕一步。
+    key: "connections",
+    navGroup: "ai",
+    titleKey: "connections.tab",
+    introKey: "connections.intro",
   },
   {
     key: "appearance",

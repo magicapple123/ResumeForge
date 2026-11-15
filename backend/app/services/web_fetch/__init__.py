@@ -3,7 +3,8 @@
 
 对外入口：
 
-- JobFetcher：双引擎（http / browser）+ 自动升级 + 限速 + 页数上限；
+- JobFetcher：双引擎（http / browser）+ 自动升级 + 限速 + 页数上限，auto 档在三档
+  都拿不到正文时用 DeepSeek Fetch 兜底（结果里的 `engine` 如实写 `deepseek`）；
 - extract_job_rows：规则优先、模型兜底的 JobImportRow 抽取；
 - import_jobs_from_page / commit_import_rows：转 JobImportRow 并落库（去重、仅补空字段）。
 

@@ -1,20 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 """语音转写（ASR）的配置与接口模型。
 
-ASR 走一条**独立**的转写服务（计划 §0.1）：DeepSeek 官方没有转写能力，两个 Key 通常
-也不是同一个服务商，所以不复用大模型配置记录。
+ASR 走一条**独立**的转写服务（计划 §0.1）。注意"独立"指的是配置独立，**不是**"DeepSeek
+没有转写能力"：DeepSeek 自 2026-11 起提供 ``POST /v1/tools/asr``（``{request_id, text,
+duration_ms}``，只收 16bit PCM WAV / Ogg Opus，≤8 MiB、≤120 秒、不支持流式）。
+三个 Key 通常也不是同一个服务商，所以不复用大模型配置记录。
 
 为什么单独一个文件、不放进 ``schemas/setting.py``：那个文件归模型协议线（T09/T10）
 的写入者，语音线只新增自己的文件，避免两个写入者改同一个 500 行预算文件。
 
 ## 为什么需要 ``protocol``
 
-语音服务有两套互不兼容的调用口径，**不能靠猜**：
+语音服务有三套互不兼容的调用口径，**不能靠猜**：
 
 - ``openai``：``POST {base}/audio/transcriptions``，``multipart/form-data``
   （``file`` + ``model`` + ``language``）。OpenAI / Groq / 硅基流动都是这一套。
 - ``dashscope``：阿里云百炼 Qwen-ASR 走 ``POST {base}/chat/completions``，
   ``messages[0].content = [{type: "input_audio", input_audio: {data: "data:<mime>;base64,..."}}]``。
+- ``deepseek``：``POST {base}/tools/asr``，``multipart/form-data`` 里**只有 ``file``**
+  （没有 ``model`` / ``language``），返回 ``{request_id, text, duration_ms}``。
 
 同样的 Base URL 前缀（``/compatible-mode/v1``）让"按地址猜协议"必然出错，所以把协议
 显式建模成配置字段。旧数据没有这个字段时取默认 ``openai``，**不需要 Alembic 迁移**
@@ -27,12 +31,25 @@ from pydantic import BaseModel, Field, field_validator
 
 # 单段上限：10 MB / 180 秒（计划 §6）。时长由前端传 ``duration_ms``，服务端只做上限
 # 校验，不解析音频——解析 3 分钟音频要额外依赖，而前端本来就知道真实录音时长。
+# **这两个常量是 openai / dashscope 的上限**；``deepseek`` 是 120 秒 / 8 MiB，按协议取值
+# 走 ``services/asr_deepseek.audio_limits_for``（三套数字收敛在那一个函数里）。
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
 MAX_AUDIO_SECONDS = 180
 
-# 调用协议：openai = whisper 式 multipart；dashscope = Qwen-ASR 的 chat + input_audio。
-AsrProtocol = Literal["openai", "dashscope"]
+# 调用协议：openai = whisper 式 multipart；dashscope = Qwen-ASR 的 chat + input_audio；
+# deepseek = /tools/asr 的单字段 multipart（无 model，只收 WAV / Ogg Opus）。
+AsrProtocol = Literal["openai", "dashscope", "deepseek"]
 DEFAULT_ASR_PROTOCOL: AsrProtocol = "openai"
+
+#: 全部合法协议。**加协议时四处判据（写入口 / 落盘归一化 / 配置判定 / 模型目录）
+#: 都读这一份**，否则不认识的协议会被静默降级成 ``openai``——那是最难查的一类缺陷：
+#: 界面上协议看着是对的，请求却发到了另一条路径。
+ASR_PROTOCOLS: tuple[AsrProtocol, ...] = ("openai", "dashscope", "deepseek")
+
+
+def normalize_protocol(value: object) -> AsrProtocol:
+    """落盘值可能被旧版本写坏：不认识的协议按默认值读，不让整页 500。"""
+    return value if value in ASR_PROTOCOLS else DEFAULT_ASR_PROTOCOL
 
 
 def normalize_base_url(value: str) -> str:

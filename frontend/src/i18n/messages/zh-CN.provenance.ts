@@ -343,6 +343,17 @@ const provenance = {
   "provenance.usage.cacheMiss": "输入·未命中",
   "provenance.usage.output": "输出",
   "provenance.usage.cacheUnknown": "有 {count} 条旧记录没有缓存明细，统计只含已记录的调用。",
+  "provenance.usage.external.title": "外部用量（只记数量）",
+  "provenance.usage.external.hint":
+    "OCR 页数 / 语音合成字符 / 语音转写秒数 / 联网搜索次数，只统计数量，**不折算金额**。",
+  "provenance.usage.external.ocr": "OCR 识别",
+  "provenance.usage.external.tts": "语音合成",
+  "provenance.usage.external.asr": "语音转写",
+  "provenance.usage.external.search": "联网搜索",
+  "provenance.usage.external.pages": "{count} 页",
+  "provenance.usage.external.chars": "{count} 字符",
+  "provenance.usage.external.seconds": "{count} 秒",
+  "provenance.usage.external.calls": "{count} 次",
 } as const;
 
 export default provenance;

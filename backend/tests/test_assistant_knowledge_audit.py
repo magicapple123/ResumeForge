@@ -131,6 +131,7 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "面试深挖": ("drill",),
     "面经知识库": ("interview_experience",),
     "知识库": ("knowledge",),
+    "公司调研": ("company_research",),
     "AI 求职助手": ("assistant_chat",),
     "助手放宽模式": ("assistant_relaxed_mode",),
     "技能": ("skills",),

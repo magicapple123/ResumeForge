@@ -2,7 +2,8 @@
 """资料箱附件的本地文本提取（第 23 条）。
 
 为什么单独成模块：document_text 已贴着 500 行预算，而"资料箱附件"这一档比面试
-材料链路多收 json / csv、并且**扫描件 PDF 不做视觉识别**——差异都收在这里，
+材料链路多收 json / csv、并且**扫描件 PDF 不走视觉模型**（OCR 是另一回事：它按页
+换回文字，正是资料箱需要的）——差异都收在这里，
 document_text.extract_material_text 保持面试链路原有语义不变。
 
 底层解析（pypdf / docx / 纯文本解码 / 截断）复用 document_text 的同一份实现；
@@ -19,11 +20,13 @@ from .document_text import (
     MATERIAL_TRUNCATED_WARNING,
     MATERIAL_UNSUPPORTED,
     MAX_DOCUMENT_TEXT_CHARS,
-    MAX_MATERIAL_FILE_BYTES,
+    MAX_LOOSE_MATERIAL_BYTES,
     MaterialText,
     extract_material_text,
     material_suffix,
+    material_too_large_message,
 )
+from .ocr.policy import OcrContext
 
 # 资料箱附件接受的文本类扩展名：比面试材料那条链路多收 json / csv。
 MATERIAL_ATTACHMENT_TEXT_SUFFIXES = frozenset(
@@ -38,7 +41,9 @@ def _truncate_attachment(text: str) -> tuple[str, list[str]]:
     return text[:MAX_DOCUMENT_TEXT_CHARS], [MATERIAL_TRUNCATED_WARNING]
 
 
-def extract_attachment_text(name: str, raw: bytes) -> MaterialText:
+def extract_attachment_text(
+    name: str, raw: bytes, ocr: OcrContext | None = None
+) -> MaterialText:
     """把资料箱上传的文件提取成纯文本。
 
     与 document_text.extract_material_text 的三点不同：
@@ -49,6 +54,10 @@ def extract_attachment_text(name: str, raw: bytes) -> MaterialText:
     3. 只做提取，不判断"要不要给模型看"——调用方拿 text 与 warnings 组装附件
        元信息，原件由调用方另存。
 
+    ``ocr`` 非空且允许时，扫描件 PDF 仍会走 OCR（**第 2 点只约束视觉模型**）：
+    OCR 不是把整页位图塞进对话，而是按页换回文字，资料箱正需要这份文字。
+    ``engine=ocr`` 且没有 Key 时抛 ``OcrError``，由路由层转成可操作的 422。
+
     .doc 与其它格式抛面向用户的 ValueError（前端在选文件时也拦一道）。
     """
     suffix = material_suffix(name)
@@ -58,8 +67,8 @@ def extract_attachment_text(name: str, raw: bytes) -> MaterialText:
         # 复用 document_text 里的同一句用户文案，不在这里复制一份中文。
         if not raw:
             raise ValueError(document_text._MATERIAL_EMPTY_FILE)
-        if len(raw) > MAX_MATERIAL_FILE_BYTES:
-            raise ValueError(document_text._MATERIAL_TOO_LARGE)
+        if len(raw) > MAX_LOOSE_MATERIAL_BYTES:
+            raise ValueError(material_too_large_message(MAX_LOOSE_MATERIAL_BYTES))
         # json / csv 就是纯文本：不解码成结构化数据（用户要的是可复制的文本）。
         text = document_text._decode_plain_text(raw).strip()
         if not text:
@@ -68,7 +77,9 @@ def extract_attachment_text(name: str, raw: bytes) -> MaterialText:
         return MaterialText(truncated, warnings)
     if suffix.lstrip(".") not in MATERIAL_ATTACHMENT_TEXT_SUFFIXES:
         raise ValueError(MATERIAL_UNSUPPORTED)
-    return extract_material_text(name, raw, render_scan_pages=False)
+    return extract_material_text(
+        name, raw, render_scan_pages=False, ocr=ocr, max_bytes=MAX_LOOSE_MATERIAL_BYTES
+    )
 
 
 __all__ = [

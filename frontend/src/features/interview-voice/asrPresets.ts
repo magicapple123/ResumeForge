@@ -7,14 +7,22 @@
  *
  * ## 为什么每条都带 protocol
  *
- * 语音服务存在两套互不兼容的请求体：
+ * 语音服务存在三套互不兼容的请求体：
  *
  * - `openai`：`POST {base}/audio/transcriptions`，`multipart/form-data`（OpenAI / Groq / 硅基流动）；
  * - `dashscope`：`POST {base}/chat/completions`，`messages[0].content=[{type:"input_audio",...}]`
- *   （阿里云百炼 Qwen-ASR）。
+ *   （阿里云百炼 Qwen-ASR）；
+ * - `deepseek`：`POST {base}/tools/asr`，multipart 里**只有 `file`**（没有 model），
+ *   只收 16bit PCM WAV / Ogg Opus，单段 ≤120 秒。
  *
  * 百炼的 OpenAI **兼容地址**并不实现 `/audio/transcriptions`，所以"地址一样 → 协议一样"这个
  * 假设是错的。协议必须跟着预设走，由用户在下拉里显式选（自定义时）。
+ *
+ * ## DeepSeek 这一条为什么 `models` 只有一项
+ *
+ * 它**没有 model 参数**（请求体只有 `file`），也没有 `/models` 目录。预设里那一个
+ * `deepseek-asr` 是"界面上的口径名"，由后端 `fixed_models()` 给出；保存时不要求用户
+ * 填模型，拉模型列表也不会为它发请求。
  *
  * ## 模型名与日期
  *
@@ -39,6 +47,8 @@ export interface AsrPreset {
   baseUrl: string;
   protocol: AsrProtocol;
   models: readonly AsrModelPreset[];
+  /** 这一档是否需要用户在界面上填模型名（DeepSeek 没有 model 参数）。 */
+  requiresModel: boolean;
 }
 
 /** 预设之外的一条路：地址、协议、模型全手填。 */
@@ -54,6 +64,7 @@ export const ASR_PRESETS: readonly AsrPreset[] = [
     noteKey: "voiceInput.settings.provider.note.openai",
     baseUrl: "https://api.openai.com/v1",
     protocol: "openai",
+    requiresModel: true,
     models: [
       // 官方推荐，也是本预设的默认模型。
       { id: "gpt-transcribe" },
@@ -68,6 +79,7 @@ export const ASR_PRESETS: readonly AsrPreset[] = [
     noteKey: "voiceInput.settings.provider.note.groq",
     baseUrl: "https://api.groq.com/openai/v1",
     protocol: "openai",
+    requiresModel: true,
     models: [{ id: "whisper-large-v3-turbo" }, { id: "whisper-large-v3" }],
   },
   {
@@ -76,6 +88,7 @@ export const ASR_PRESETS: readonly AsrPreset[] = [
     noteKey: "voiceInput.settings.provider.note.siliconflow",
     baseUrl: "https://api.siliconflow.cn/v1",
     protocol: "openai",
+    requiresModel: true,
     models: [{ id: "FunAudioLLM/SenseVoiceSmall" }, { id: "TeleAI/TeleSpeechASR" }],
   },
   {
@@ -85,7 +98,18 @@ export const ASR_PRESETS: readonly AsrPreset[] = [
     // 百炼的 OpenAI 兼容入口：Qwen-ASR 在这条路径上走 chat，不是 whisper。
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     protocol: "dashscope",
+    requiresModel: true,
     models: [{ id: "qwen3-asr-flash" }],
+  },
+  {
+    id: "deepseek",
+    labelKey: "voiceInput.settings.provider.deepseek",
+    noteKey: "voiceInput.settings.provider.note.deepseek",
+    baseUrl: "https://api.deepseek.com/v1",
+    protocol: "deepseek",
+    // 没有 model 参数：界面上那一格只显示口径名，不要求用户填。
+    requiresModel: false,
+    models: [{ id: "deepseek-asr" }],
   },
 ];
 

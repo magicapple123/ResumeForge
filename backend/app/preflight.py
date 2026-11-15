@@ -31,6 +31,7 @@ _REQUIRED_FILES: Final[tuple[tuple[str, str], ...]] = (
     ("app/prompts/application_status.md", "求职进度识别的提示词"),
     ("app/prompts/assistant_welcome.md", "求职助手的默认引导对话"),
     ("app/prompts/claim_draft.md", "从资料草拟事实台账条目的提示词"),
+    ("app/prompts/company_research_brief.md", "公司与岗位背景调研的联网简报提示词"),
     ("app/prompts/drill_common.md", "面试深挖的共用约束（事实边界与输出纪律）"),
     ("app/prompts/drill_contract.md", "面试深挖的评分契约生成提示词"),
     ("app/prompts/drill_evaluate.md", "面试深挖的逐轮判定提示词"),

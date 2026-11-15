@@ -194,7 +194,7 @@ function activeCardTitles(): string[] {
 }
 
 describe("SettingsPage 分组导航", () => {
-  it("renders the nine sections under three nav groups", async () => {
+  it("renders the ten sections under three nav groups", async () => {
     renderPage();
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
 
@@ -203,6 +203,8 @@ describe("SettingsPage 分组导航", () => {
       t("settings.tab.assistant"),
       t("settings.tab.memorySkills"),
       t("settings.tab.voice"),
+      // 外部连接（T11/T12）排在 AI 那几组之后、界面与操作之前。
+      t("connections.tab"),
       t("settings.tab.appearance"),
       t("settings.tab.interaction"),
       t("settings.tab.data"),
@@ -232,6 +234,19 @@ describe("SettingsPage 分组导航", () => {
     // 内容区顶部是这一组的标题，第一张卡是模型配置卡（不依赖"人去点一下才有内容"）。
     expect(await screen.findByText(t("llmConfigCard.card.title"))).toBeInTheDocument();
     expect(activeCardTitles()[0]).toBe(t("llmConfigCard.card.title"));
+  });
+
+  it("gives every section at least one card", async () => {
+    renderPage();
+    await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
+
+    // 反证过的坑（2026-11-15）：`panelFor` 的 switch 少写一个 case 时，React 会静默渲染
+    // `undefined`——导航有、内容区全空，页面不报错、测试也不红。这条守的就是"漏一个 case"。
+    // navLabels() 与 SETTINGS_SECTIONS 同源，所以这里遍历导航按钮即可，不再抄一份键清单。
+    for (const label of navLabels()) {
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      await waitFor(() => expect(activeCardTitles().length).toBeGreaterThan(0));
+    }
   });
 
   it("keeps language, font and navigation cards side by side in the appearance section", async () => {

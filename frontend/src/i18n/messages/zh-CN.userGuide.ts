@@ -47,7 +47,7 @@ const userGuide = {
     "13 个板块、当前方案与字段设置都在这里；再把能对外说的话在事实台账里逐条核实。",
   "userGuide.setupProfile.step2.point1.lead": "怎么录",
   "userGuide.setupProfile.step2.point1.text":
-    "可手动填写，也可粘贴整段个人资料；还能按 Ctrl+V 贴截图，或上传 **pdf/docx 简历文档**（文字在本机提取）识别成草稿。",
+    "可手动填写、粘贴整段资料，也能贴截图或上传 **pdf/docx 简历文档**（文字在本机提取）识别成草稿；扫描件没有文字层，按「识别引擎」设置走 OCR 或多模态模型——两条路都会把原件交给第三方。",
   "userGuide.setupProfile.step2.point2.lead": "13 个板块",
   "userGuide.setupProfile.step2.point2.text":
     "资料页按 13 个板块组织：基本信息、教育、实习/工作、项目、技能、校园、荣誉、总结、学术成果、科研项目、知识产权、证书资质、语言能力；每个板块下有默认字段。字段改成响应式多列排列，单行文本宽屏最多 3 列、多行文本与日期整行。",

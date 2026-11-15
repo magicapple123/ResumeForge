@@ -46,6 +46,7 @@ from ..models.setting import AppSetting
 from ..schemas.setting import SearchConfig
 from . import global_settings
 from .api_key_crypto import decrypt_key, encrypt_key
+from .credentials.semantics import apply_stored_key
 from .llm_key_refs import API_KEY_MASK
 
 logger = logging.getLogger(__name__)
@@ -188,13 +189,14 @@ def save_search_config(db: Session, config: SearchConfig) -> SearchConfig:
     encrypted: dict[str, str] = {}
     for field in _SECRET_FIELDS:
         existing = str((block or {}).get(field) or "")
-        incoming = (getattr(config, field) or "").strip()
-        if incoming.startswith(API_KEY_MASK):
-            encrypted[field] = existing
-        elif incoming:
-            encrypted[field] = encrypt_key(incoming)
-        else:
-            encrypted[field] = ""
+        # 三分支（掩码=保持 / 空串=清除 / 其它=新值加密）的唯一实现在
+        # credentials.semantics；本处只声明"这个来源的空串意味着清除"。
+        # 与语音/语义检索的"空串=沿用本条旧 Key"是**既有差异**，不能在这里统一掉。
+        encrypted[field] = apply_stored_key(
+            (getattr(config, field) or "").strip(),
+            existing_stored=existing,
+            empty_clears=True,
+        )
     persisted = _stored_block(config.model_copy(update=dict.fromkeys(_SECRET_FIELDS, "")))
     persisted.update(encrypted)
 

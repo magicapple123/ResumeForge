@@ -16,6 +16,7 @@ import bilingual from "./zh-CN.bilingual";
 import careerScenarios from "./zh-CN.careerScenarios";
 import conflict from "./zh-CN.conflict";
 import common from "./zh-CN.common";
+import companyResearch from "./zh-CN.companyResearch";
 import credentials from "./zh-CN.credentials";
 import documentPack from "./zh-CN.document";
 import delivery from "./zh-CN.delivery";
@@ -33,6 +34,9 @@ import preview from "./zh-CN.preview";
 import provenance from "./zh-CN.provenance";
 import proview from "./zh-CN.proview";
 import research from "./zh-CN.research";
+import external from "./zh-CN.external";
+import ocrScan from "./zh-CN.ocrScan";
+import voiceMemo from "./zh-CN.voiceMemo";
 import responsive from "./zh-CN.responsive";
 import review from "./zh-CN.review";
 import rich from "./zh-CN.rich";
@@ -222,10 +226,15 @@ const namespaces = {
   /** W02 保存冲突三选一。 */
   ...conflict,
   ...common,
+  ...companyResearch,
   /** W15/D04/D05/D09/D10/D13/D14 专业视图。 */
   ...proview,
   /** W14 科研栏目与长 CV 模式。 */
   ...research,
+  /** 外部连接页 / 扫描件 OCR / 语音记一条（DeepSeek 全家桶批次）。 */
+  ...external,
+  ...ocrScan,
+  ...voiceMemo,
   /** W07 局部排版。 */
   ...typography,
   /** W17 私有表达资产。 */

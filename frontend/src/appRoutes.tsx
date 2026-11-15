@@ -15,6 +15,7 @@ import { Navigate, Route } from "react-router-dom";
 import AppShell from "./features/shell/AppShell";
 import {
   AnalyticsPage,
+  CompanyResearchPage,
   ApplyPage,
   AssistantPage,
   ClaimsPage,
@@ -52,6 +53,8 @@ export const APP_ROOT_ROUTE: ReactElement = (
     <Route path="/webform" element={<WebFormPage />} />
     <Route path="/tracker" element={<TrackerPage />} />
     <Route path="/analytics" element={<AnalyticsPage />} />
+    {/* T07：公司/岗位背景调研（卡片 + 带编号引用的简报）。 */}
+    <Route path="/research" element={<CompanyResearchPage />} />
     <Route path="/favorites" element={<FavoritesPage />} />
     <Route path="/assistant" element={<AssistantPage />} />
     <Route path="/materials" element={<MaterialsPage />} />

@@ -2,6 +2,7 @@
 import {
   AuditOutlined,
   BarChartOutlined,
+  CompassOutlined,
   BookOutlined,
   DeleteOutlined,
   FileTextOutlined,
@@ -127,6 +128,13 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
     key: "/skills",
     icon: createElement(ToolOutlined),
     labelKey: "navigation.item.skills",
+    group: "space",
+    required: false,
+  },
+  {
+    key: "/research",
+    icon: createElement(CompassOutlined),
+    labelKey: "navigation.item.research",
     group: "space",
     required: false,
   },

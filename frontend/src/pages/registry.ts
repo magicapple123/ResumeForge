@@ -86,5 +86,7 @@ export const KnowledgePage = lazyPage(() => import("./KnowledgePage"));
 export const SkillsPage = lazyPage(() => import("./SkillsPage"));
 export const InterviewPage = lazyPage(() => import("./InterviewPage"));
 export const AnalyticsPage = lazyPage(() => import("./AnalyticsPage"));
+// 公司/岗位背景调研（T07）：投递前看一眼这家公司/这个岗位。
+export const CompanyResearchPage = lazyPage(() => import("./CompanyResearchPage"));
 export const SettingsPage = lazyPage(() => import("./SettingsPage"));
 export const TrashPage = lazyPage(() => import("./TrashPage"));

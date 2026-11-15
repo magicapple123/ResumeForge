@@ -5,12 +5,12 @@
 
 * **PDF / TXT / Markdown / Word** —— 本地提取（``document_text.extract_material_text``）。
   这类文件有文字层，交给模型读只会更慢更贵，而且原文可以直接锚定。
-* **图片（png / jpg / jpeg / webp）** —— **必须**交给视觉模型。浏览器截下来的是像素，
-  本地没有任何 OCR 能力；走"图片入参 + 要求逐字抄录"的多模态通路（同一套安全前提：
-  图片内容是不可信资料，只当待抄录的文字）。
-* **扫描件 PDF** —— 文字层几乎空白时把前 8 页渲染成位图，与图片走同一条视觉通路，
-  识别结果与文字层拼接。**有文字层的 PDF 永远不会走到这里**，所以"放宽类型"没有把
-  纯文本路径拖下水：未配置模型时 pdf / txt / md / docx 全部照常可用。
+* **图片（png / jpg / jpeg / webp）** —— 配了 DeepSeek Key 时先走 **OCR**（按张计费），
+  未配置或 OCR 失败才交给视觉模型。浏览器截下来的是像素，没有 OCR 时只能走"图片入参 +
+  要求逐字抄录"的多模态通路（同一套安全前提：图片内容是不可信资料，只当待抄录的文字）。
+* **扫描件 PDF** —— 文字层几乎空白时把扫描页交给 OCR；OCR 未启用或失败才渲染成位图
+  走视觉通路，识别结果与文字层拼接。**有文字层的 PDF 永远不会走到这里**，所以"放宽
+  类型"没有把纯文本路径拖下水：未配置模型时 pdf / txt / md / docx 全部照常可用。
 
 识别不出文字时**不静默通过**：一张 20 px 的缩略图、全黑的截图、或一份纯扫描页的 PDF
 会被模型礼貌地回一句"图片中没有文字"，那种结果拿去开面试等于让面试官对着空气提问。
@@ -23,6 +23,8 @@ import base64
 from pathlib import Path
 from typing import NamedTuple
 
+from starlette.concurrency import run_in_threadpool
+
 from ...schemas.interview_material import MAX_MATERIAL_TEXT_CHARS
 from ..attachments import normalize_image_attachment
 from ..document_text import (
@@ -31,6 +33,9 @@ from ..document_text import (
     extract_material_text,
 )
 from ..llm.base import BaseLLMProvider
+from ..ocr.client import OcrError
+from ..ocr.policy import OcrContext
+from ..ocr.scan import recognize_single_image, user_message_for
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
 
@@ -49,6 +54,8 @@ _IMAGE_MIME_BY_SUFFIX = {
 # 识别失败时的用户文案。**不写"请"**（与后端 detail 规范一致：动作由前端补）。
 IMAGE_NOT_RECOGNIZED = "这张图没能识别出文字，可换更清晰的截图"
 SCAN_PAGES_NOT_RECOGNIZED = "这份 PDF 的扫描页没能识别出文字"
+# OCR 没接住、而调用方按"OCR 可用"没有解析视觉模型时的文案（原先会抛 AttributeError）。
+VISION_PROVIDER_REQUIRED = "OCR 没认出这张图的文字，识别未完成；可换更清晰的截图重试"
 
 
 class ExtractedMaterial(NamedTuple):
@@ -63,6 +70,8 @@ class ExtractedMaterial(NamedTuple):
     warnings: list[str]
     scan_images: tuple[str, ...] = ()
     scan_warnings: tuple[str, ...] = ()
+    # text = 本机文字层、ocr = DeepSeek OCR、vision = 视觉模型。界面据此说明"发给了谁"。
+    parser: str = "text"
 
 
 def _base_name(name: str) -> str:
@@ -86,21 +95,28 @@ def _clip(text: str) -> tuple[str, bool]:
     return body[:MAX_MATERIAL_TEXT_CHARS], True
 
 
-def extract_text_material(name: str, raw: bytes) -> ExtractedMaterial:
+def extract_text_material(
+    name: str, raw: bytes, ocr: OcrContext | None = None
+) -> ExtractedMaterial:
     """文本类材料（PDF / TXT / Markdown / Word）：本地提取，**不需要模型**。
 
-    扫描件 PDF 会带出 ``scan_images``：调用方拿到之后才需要向模型要能力
-    （见 :func:`recognize_material_scans`）。校验失败抛 ``ValueError``
-    （面向用户的原因文案），由接口层转成 422。
+    扫描件 PDF 先走 OCR（``ocr`` 非空且允许时）：识别成功就直接拿到正文，
+    ``scan_images`` 为空，调用方不再需要视觉模型。OCR 未启用或失败时才带出
+    ``scan_images``，由 :func:`recognize_material_scans` 兜底。校验失败抛
+    ``ValueError``（面向用户的原因文案），由接口层转成 422。
     """
     safe_name = _base_name(name)
-    extracted = extract_material_text(safe_name, raw)
+    try:
+        extracted = extract_material_text(safe_name, raw, ocr=ocr)
+    except OcrError as exc:
+        raise ValueError(user_message_for(exc)) from exc
     return ExtractedMaterial(
         name=safe_name,
         text=extracted.text,
         warnings=list(extracted.warnings),
         scan_images=extracted.images,
         scan_warnings=tuple(extracted.scan_warnings),
+        parser=extracted.parser,
     )
 
 
@@ -125,12 +141,20 @@ def _image_messages(data_urls: list[str]) -> list[dict[str, object]]:
 
 
 async def extract_image_material(
-    provider: BaseLLMProvider, name: str, raw: bytes
+    provider: BaseLLMProvider | None, name: str, raw: bytes, ocr: OcrContext | None = None
 ) -> ExtractedMaterial:
-    """图片材料（png / jpg / jpeg / webp）→ 视觉模型逐字识别 → 文本。
+    """图片材料（png / jpg / jpeg / webp）→ OCR 或视觉模型 → 文本。
 
     ``normalize_image_attachment`` 负责格式白名单、文件头校验与体积上限（它同时会做
     bmp/tiff 转码）；这里只额外限定这几种扩展名。
+
+    OCR 优先：配了 DeepSeek Key（或用户选了只用 OCR）时，图片直接换回文字，不再
+    送给视觉模型——一次识别按一张计费，比整张图进对话便宜，也不占模型上下文。
+    OCR 未启用或失败（``auto`` 档）时才走原来的视觉识别。
+
+    ``provider`` 允许 ``None``：调用方在"OCR 可用"时可以不为视觉模型解析配置
+    （用户可能只配了 OCR 的 Key）。真走到视觉这一档却没有 provider 时，这里抛
+    ``ValueError`` 说明缺什么——而不是让 ``None.chat`` 抛 ``AttributeError``。
     """
     safe_name = _base_name(name)
     suffix = _suffix(safe_name)
@@ -144,14 +168,45 @@ async def extract_image_material(
     canonical = _IMAGE_MIME_BY_SUFFIX[suffix]
     attachment = normalize_image_attachment(safe_name, "", f"data:{canonical};base64,{encoded}")
     data_url = str(attachment["data_url"])
+
+    try:
+        # OCR 是同步长连接：放进线程池，别把事件循环卡住（一次识别可能几秒）。
+        outcome = await run_in_threadpool(
+            recognize_single_image, raw, safe_name, canonical, ocr
+        )
+    except OcrError as exc:
+        raise ValueError(user_message_for(exc)) from exc
+    if outcome.used:
+        cleaned = _strip_noise(outcome.text)
+        if not _has_real_text(cleaned):
+            raise ValueError(IMAGE_NOT_RECOGNIZED)
+        body, truncated = _clip(cleaned)
+        warnings = list(outcome.warnings)
+        if truncated:
+            warnings.append(MATERIAL_TRUNCATED_WARNING)
+        return ExtractedMaterial(
+            name=safe_name, text=body, warnings=warnings, parser="ocr"
+        )
+
+    if provider is None:
+        # 走到这里说明 OCR 没接住（没启用 / 引擎回退 / 没认出文字），而调用方按"OCR 可用"
+        # 的假设没有解析视觉模型：如实告诉用户这一轮没成，而不是让 None.chat 冒 500。
+        raise ValueError(VISION_PROVIDER_REQUIRED)
     text = (await provider.chat(_image_messages([data_url]), thinking=False)).strip()
     cleaned = _strip_noise(text)
     if not _has_real_text(cleaned):
         # 模型礼貌地说"没有文字"时 content 可能非空，所以还要看长度：一两个标点不算识别成功。
         raise ValueError(IMAGE_NOT_RECOGNIZED)
     body, truncated = _clip(cleaned)
-    warnings = [MATERIAL_TRUNCATED_WARNING] if truncated else []
-    return ExtractedMaterial(name=safe_name, text=body, warnings=warnings)
+    warnings = list(outcome.warnings)
+    if truncated:
+        warnings.append(MATERIAL_TRUNCATED_WARNING)
+    return ExtractedMaterial(
+        name=safe_name,
+        text=body,
+        warnings=list(dict.fromkeys(warnings)),
+        parser="vision",
+    )
 
 
 async def recognize_material_scans(
@@ -224,6 +279,7 @@ __all__ = [
     "IMAGE_NOT_RECOGNIZED",
     "SCAN_PAGES_NOT_RECOGNIZED",
     "TEXT_MATERIAL_SUFFIXES",
+    "VISION_PROVIDER_REQUIRED",
     "ExtractedMaterial",
     "extract_image_material",
     "extract_text_material",

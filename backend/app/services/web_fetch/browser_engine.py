@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -132,10 +133,15 @@ def fetch_with_browser(
     ready_timeout: float = PAGE_READY_TIMEOUT_SECONDS,
     settle_seconds: float = PAGE_SETTLE_SECONDS,
     use_new_tab: bool = True,
+    resolver: Callable[[str, int], list[str]] | None = None,
 ) -> BrowserPage:
     """用投递专用浏览器打开 url，返回正文与页面发出的 JSON 响应。
 
     浏览器没启动时按需启动（与投递台共用同一个浏览器实例，复用登录态）。
+
+    ``resolver`` 与 http 引擎的注入点一致（见 :func:`url_policy.resolve_and_check`）：
+    编排层（``JobFetcher``）把同一个解析器传进来，两档才用同一套 SSRF 判据；
+    默认 ``None`` = 用真实 DNS 解析，与不传时的行为一致。
 
     ``use_new_tab`` 默认 **True：每次抓取新开一个标签页，抓完关掉**。两个理由：
 
@@ -147,7 +153,7 @@ def fetch_with_browser(
     from ..browser.cdp_client.base import CdpError
     from ..browser.page_ready import ReadyWait, wait_for_page_state
 
-    target = resolve_and_check(url)
+    target = resolve_and_check(url, resolver=resolver)
     factory = manager_factory
     if factory is None:
         from ..apply import get_browser_manager
@@ -182,7 +188,7 @@ def fetch_with_browser(
         final_url = str(client.evaluate(_FINAL_URL_JS, timeout=CDP_TIMEOUT_SECONDS) or target)
         # 浏览器内部的重定向不经过本进程：落地后必须重新校验一次。
         try:
-            resolve_and_check(final_url)
+            resolve_and_check(final_url, resolver=resolver)
         except ValueError as exc:
             raise WebFetchError("这个页面跳转到了不允许访问的地址，已停止读取") from exc
         text = str(client.evaluate(_INNER_TEXT_JS, timeout=CDP_TIMEOUT_SECONDS) or "")

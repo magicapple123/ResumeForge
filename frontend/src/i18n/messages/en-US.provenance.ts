@@ -342,6 +342,17 @@ const provenance = {
   "provenance.usage.output": "Out",
   "provenance.usage.cacheUnknown":
     "{count} older calls have no cache breakdown; totals cover recorded calls only.",
+  "provenance.usage.external.title": "External usage (counts only)",
+  "provenance.usage.external.hint":
+    "OCR pages / speech-synthesis characters / transcription seconds / web searches. Counts only — **no money is computed**.",
+  "provenance.usage.external.ocr": "OCR",
+  "provenance.usage.external.tts": "Speech synthesis",
+  "provenance.usage.external.asr": "Transcription",
+  "provenance.usage.external.search": "Web search",
+  "provenance.usage.external.pages": "{count} pages",
+  "provenance.usage.external.chars": "{count} chars",
+  "provenance.usage.external.seconds": "{count} s",
+  "provenance.usage.external.calls": "{count} calls",
 } as const;
 
 export default provenance;

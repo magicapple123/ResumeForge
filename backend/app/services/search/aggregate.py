@@ -65,6 +65,11 @@ logger = logging.getLogger(__name__)
 
 # 每个来源最多取多少条候选（最终还会按 max_results 截断）。
 _PER_SOURCE_LIMIT = 10
+# 「深入」档每个来源的候选条数（T14）：deep 档要打开前 5 条抓正文、还要按查询词项
+# 做二次筛选，只召回 10 条时融合后的候选池太浅——两个来源一交错就只剩五六条可选，
+# 上限设成 30 也吃不满。24 ≈ 目标上限（8）× 3 倍冗余，仍远低于接口的 50 上限。
+# 只对 deep 生效：standard / snippet 的召回量与改造前完全一致（多召回 = 多花钱）。
+_DEEP_PER_SOURCE_LIMIT = 24
 # 402 欠费要直接告诉用户：这是"配置问题"，不是"这次没搜到"。
 _BALANCE_MESSAGE = "DeepSeek 搜索账户余额不足（402），本次没有可用的其它搜索来源。"
 _BALANCE_FAILURES = frozenset({"insufficient_balance"})
@@ -389,9 +394,13 @@ async def aggregate_search(
     """
     sources = config.configured_sources()
     cap = max(1, min(limit if limit is not None else config.max_results, config.max_results))
-    # 每个来源多取一些候选：合并去重与相关性过滤会消耗条数，只按 cap 取会拿不满。
-    per_source_limit = max(_PER_SOURCE_LIMIT, cap)
     effective_depth = depth if depth in DEPTH_PROFILE else config.depth
+    # 每个来源多取一些候选：合并去重与相关性过滤会消耗条数，只按 cap 取会拿不满。
+    # deep 档再多取一截（T14）：多召回才够做二次筛选。**返回条数不受影响**——合并后
+    # 仍然按 cap 截断（`limited = merged[:cap]`），放大只作用于候选池。
+    per_source_limit = max(_PER_SOURCE_LIMIT, cap)
+    if effective_depth == "deep":
+        per_source_limit = max(per_source_limit, _DEEP_PER_SOURCE_LIMIT)
     pages, max_passages, total_chars = DEPTH_PROFILE[effective_depth]
 
     key = build_cache_key(query, sources, effective_depth, cap)

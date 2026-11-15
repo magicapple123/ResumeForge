@@ -72,7 +72,7 @@
 ## ✨ 功能特性
 
 <details>
-<summary><b>全部功能一览（82 项，点击展开）</b></summary>
+<summary><b>全部功能一览（83 项，点击展开）</b></summary>
 
 <p>下表每条功能名都可点击，跳到官方文档里对应的小节；文档没有讲到的功能，也已经在这次一并补齐。</p>
 
@@ -141,6 +141,7 @@
 | [🗓 日历提醒](https://magicapple123.github.io/ResumeForge-official/docs.html#reminder) | 投递、面试、内推等日程可设提醒，按**紧急度分色**（已逾期 / 24 小时内 / 3 天内 / 更远），支持列表与月历 |
 | [🔔 跟进巡检](https://magicapple123.github.io/ResumeForge-official/docs.html#tracker) | 在 **设置 → 助手与 AI 行为 → 「任务卡」** 打开总开关（默认关闭）后，后台会检查「进行中且超过 7 天没有任何更新」的投递：超过 7 天、不超过 21 天生成一张**跟进清单卡**，超过 21 天生成一张**确认状态卡**（两桶互斥）；每张卡最多 5 家、同一类型同一周只生成一张；卡面只陈述「投出 N 天，期间没有记录到任何状态变化」，不替你判断对方是否回复；可逐家点「已联系 / 对方已回 / 不跟了」，**只记录决策、不改进度状态** |
 | [🤝 内推管理](https://magicapple123.github.io/ResumeForge-official/docs.html#referral) | 记录内推人、内推码与备注图片，按状态跟进并统计**内推转化率** |
+| [🧭 公司调研](https://magicapple123.github.io/ResumeForge-official/docs.html#research) | 填公司名（岗位名、招聘描述可选）后一次调研出两块结果：上半屏是搜索来的**资料卡片**（官网 / 近期新闻 / 公司介绍，标注站点与权威度），下半屏是**带引用编号的联网简报**，逐条可展开对照原文；两路分开发请求，**简报失败不吞掉卡片**（只写原因）；「深度调研」默认关闭（多轮深度搜索，按查询词条数计费），页面如实显示本次搜索次数与耗时 |
 | [📈 求职数据看板](https://magicapple123.github.io/ResumeForge-official/docs.html#analytics) | 四个主题：转化与卡点、时间与节奏、渠道与去向、简历与健康度；**每张图各自成块、各有标题与口径**；趋势可选近 1 / 3 / 6 月 |
 | [⭐ 收藏夹](https://magicapple123.github.io/ResumeForge-official/docs.html#jobs-favorites) | 分页集中查看收藏的岗位与简历，可跳详情或取消收藏 |
 | [🎤 模拟面试](https://magicapple123.github.io/ResumeForge-official/docs.html#interview) | 设定岗位、难度与面试官风格后逐轮作答，会点评追问；结束给维度评分与改进建议；**报告下方可继续追问或停止追问**（追问不占正式轮次）；材料可从记录选或导入文件（岗位侧吃 PDF / TXT，简历侧吃截图，解析失败给明确原因）；另有独立实时语音通话界面，支持语音作答、面试官语音朗读与可选本地摄像头预览 |

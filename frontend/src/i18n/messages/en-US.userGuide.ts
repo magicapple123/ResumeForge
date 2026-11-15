@@ -48,7 +48,7 @@ const userGuide = {
     "The 13 sections, the Current Plan and the field settings all live here; then verify, entry by entry, what you may say in public in the Fact ledger.",
   "userGuide.setupProfile.step2.point1.lead": "How to enter it",
   "userGuide.setupProfile.step2.point1.text":
-    "Fill it in by hand, or paste a whole Profile at once; you can also press Ctrl+V to paste a screenshot, or upload a **pdf/docx Resume** (text is extracted on this machine) and have it recognized as a draft.",
+    "Fill it in, paste a Profile, or upload a **pdf/docx Resume** for a draft; scans follow “Recognition engine” and **both send the original to a third party**.",
   "userGuide.setupProfile.step2.point2.lead": "13 sections",
   "userGuide.setupProfile.step2.point2.text":
     "The Profile page is organized into 13 sections: Basic information, Education, Internship/Work, Projects, Skills, Campus, Honors, Summary, Academic output, Research projects, Intellectual property, Certificates, Languages; each one has its default fields. Fields use a responsive multi-column layout — single-line text up to 3 columns on wide screens, multi-line text and dates on a full row.",

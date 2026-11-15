@@ -28,6 +28,8 @@ export interface AsrProfileFormValues {
 const PROTOCOL_OPTIONS: { value: AsrProtocol; labelKey: MessageKey }[] = [
   { value: "openai", labelKey: "voiceInput.settings.protocol.openai" },
   { value: "dashscope", labelKey: "voiceInput.settings.protocol.dashscope" },
+  // DeepSeek 那一档没有 model 参数（请求体只有 file），选中后模型字段会隐藏。
+  { value: "deepseek", labelKey: "voiceInput.settings.protocol.deepseek" },
 ];
 
 interface Props {
@@ -128,46 +130,50 @@ export default function AsrProfileFields({ value, preset, keyHint, disabled, onC
         />
       </SettingsField>
 
-      <SettingsField
-        label={t("voiceInput.settings.model.label")}
-        hint={
-          retireDate
-            ? t("voiceInput.settings.model.retiredHint", { date: retireDate })
-            : t("voiceInput.settings.model.hint")
-        }
-        action={
-          <Flex gap={8} align="center">
-            {fetchedModels.length > 0 ? (
-              <Checkbox
-                checked={showAllModels}
-                onChange={(event) => setShowAllModels(event.target.checked)}
-                disabled={disabled || undefined}
+      {/* DeepSeek 的 /tools/asr 请求体里**没有 model**（只有 file）。留着一个填了也不起作用的
+          输入框，用户会以为自己填错才没生效——这一档直接不显示模型字段。 */}
+      {value.protocol === "deepseek" ? null : (
+        <SettingsField
+          label={t("voiceInput.settings.model.label")}
+          hint={
+            retireDate
+              ? t("voiceInput.settings.model.retiredHint", { date: retireDate })
+              : t("voiceInput.settings.model.hint")
+          }
+          action={
+            <Flex gap={8} align="center">
+              {fetchedModels.length > 0 ? (
+                <Checkbox
+                  checked={showAllModels}
+                  onChange={(event) => setShowAllModels(event.target.checked)}
+                  disabled={disabled || undefined}
+                >
+                  {t("voiceInput.settings.model.showAll")}
+                </Checkbox>
+              ) : null}
+              <Button
+                size="small"
+                loading={fetching}
+                disabled={disabled || !value.base_url.trim() || undefined}
+                onClick={() => void fetchModels()}
               >
-                {t("voiceInput.settings.model.showAll")}
-              </Checkbox>
-            ) : null}
-            <Button
-              size="small"
-              loading={fetching}
-              disabled={disabled || !value.base_url.trim() || undefined}
-              onClick={() => void fetchModels()}
-            >
-              {t("voiceInput.settings.model.fetch")}
-            </Button>
-          </Flex>
-        }
-      >
-        <AutoComplete
-          aria-label={t("voiceInput.settings.model.aria")}
-          style={{ width: "100%" }}
-          value={value.model}
-          options={modelOptions}
-          onChange={(next: string) => patch({ model: next })}
-          placeholder={t("voiceInput.settings.model.placeholder")}
-          allowClear
-          disabled={disabled || undefined}
-        />
-      </SettingsField>
+                {t("voiceInput.settings.model.fetch")}
+              </Button>
+            </Flex>
+          }
+        >
+          <AutoComplete
+            aria-label={t("voiceInput.settings.model.aria")}
+            style={{ width: "100%" }}
+            value={value.model}
+            options={modelOptions}
+            onChange={(next: string) => patch({ model: next })}
+            placeholder={t("voiceInput.settings.model.placeholder")}
+            allowClear
+            disabled={disabled || undefined}
+          />
+        </SettingsField>
+      )}
 
       <SettingsField label={t("voiceInput.settings.key.label")} hint={keyHint}>
         <Input.Password

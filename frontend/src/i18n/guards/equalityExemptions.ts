@@ -33,6 +33,8 @@ export const EQUALITY_EXEMPT_KEYS = {
   "appConfig.preset.openai": "Provider brand name, identical in both languages",
   "appConfig.preset.xai": "Provider brand name spelled identically",
   "appConfig.preset.mistral": "Provider brand name spelled identically",
+  // The speech protocol is named after the provider, so the label is the brand in both languages.
+  "voiceInput.settings.protocol.deepseek": "Provider brand name, identical in both languages",
   // The API key label is the same technical term in Chinese UI (original copy used "API Key").
   "userGuide.setupProfile.step1.point9.lead":
     "Technical term used verbatim in the original Chinese copy",
@@ -46,10 +48,12 @@ export const EQUALITY_EXEMPT_KEYS = {
   "searchCard.source.deepseek": "Provider brand name, identical in both languages",
   "searchCard.source.tavily": "Provider brand name, identical in both languages",
   "searchCard.source.jina": "Provider brand name, identical in both languages",
-  // The version badge is a token ("v1", "v2", …), not prose: the letter is part of the
-  // notation and must not become "第 1 版" on the Chinese side either, otherwise the
-  // version bar no longer matches how the same feature is described in docs and tests.
+  // 版本徽章是记号（v1 / v2…）而不是散文：字母是记号的一部分，中文侧也不能写成"第 1 版"，
+  // 否则版本条与文档、测试里对同一个功能的叫法就对不上。
   "writing.version.label": "Version token v1/v2, identical in both languages",
+  // TTS / ASR 服务商品牌名：中文界面里同样写作"DeepSeek"，不属于可翻译散文。
+  "ttsProvider.deepseek": "Provider brand name, identical in both languages",
+  "voiceInput.settings.provider.deepseek": "Provider brand name, identical in both languages",
 } as const satisfies Readonly<Record<string, string>>;
 
 export function isEqualityExempt(key: string): boolean {

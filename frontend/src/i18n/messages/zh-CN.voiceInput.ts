@@ -42,7 +42,7 @@ const voiceInput = {
   "voiceInput.settings.intro":
     "语音只用于听写：说完点结束，识别出的文字先填进输入框，由你确认后再提交。音频会发给下面配置的服务商；本应用不保存音频。",
   "voiceInput.settings.providerNote":
-    "DeepSeek 没有语音转写能力，这里要单独配置一家 OpenAI 兼容服务（OpenAI、Groq、硅基流动等）。",
+    "DeepSeek 有语音转写（走它自己的接口，单段最长 120 秒、不支持流式）；其它服务商按 OpenAI 兼容接口配置。",
   "voiceInput.settings.baseUrl.label": "服务地址",
   "voiceInput.settings.baseUrl.aria": "语音服务地址",
   "voiceInput.settings.baseUrl.placeholder": "https://api.openai.com/v1",
@@ -73,6 +73,9 @@ const voiceInput = {
   "voiceInput.settings.badge.configured": "已配置",
   "voiceInput.settings.badge.notConfigured": "未配置",
   "voiceInput.settings.limitHint": "单段上限 3 分钟 / 10 MB；面试作答 3 分钟、复盘追问 1 分钟。",
+  // DeepSeek 那一档的上限是上游硬限制（120 秒 / 8 MiB），不写清楚用户会以为设置坏了。
+  "voiceInput.settings.limitHintDeepseek":
+    "单段上限 120 秒 / 8 MB：这个服务不支持流式，单次请求只收 120 秒，比其它两档更紧。",
   "voiceInput.settings.privacyNote": "保存后，录音会发送到 {host}；本应用不保存音频。",
 
   /**
@@ -120,11 +123,12 @@ const voiceInput = {
   "voiceInput.settings.provider.note.dashscope": "Qwen-ASR 走 chat 接口，不是 whisper",
   "voiceInput.settings.provider.note.custom": "地址、协议与模型全部手填",
 
-  /** 调用协议：两套请求体互不兼容，必须显式选（见后端 asr_client）。 */
+  /** 调用协议：三套请求体互不兼容，必须显式选（见后端 asr_client）。 */
   "voiceInput.settings.protocol.label": "调用协议",
   "voiceInput.settings.protocol.aria": "语音服务的调用协议",
   "voiceInput.settings.protocol.openai": "OpenAI 兼容",
   "voiceInput.settings.protocol.dashscope": "阿里云百炼",
+  "voiceInput.settings.protocol.deepseek": "DeepSeek",
   "voiceInput.settings.protocol.hint": "百炼的兼容地址不支持 whisper 式上传，选错会一直返回 400",
 
   /** 模型字段：可输入 + 可拉取候选。 */

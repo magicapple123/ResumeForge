@@ -76,6 +76,7 @@ export const DEMO_ROUTES = [
   "/materials",
   "/knowledge",
   "/skills",
+  "/research",
   "/claims",
   "/trash",
   "/settings",

@@ -324,6 +324,20 @@ export interface UsageCostOut {
   reason: string;
 }
 
+/**
+ * 四类**非 token** 用量（T16）：OCR 页数 / 语音合成字符 / 语音转写秒数 / 搜索次数。
+ *
+ * 刻意**没有**金额字段：这批能力按页、按字符、按秒、按次计费，与"每百万 token"的单价
+ * 模型不同构，折算出来的数字无法核对（决策 #5：用量不折算金额）。
+ */
+export interface UsageExternalOut {
+  ocr_pages: number;
+  tts_chars: number;
+  asr_seconds: number;
+  search_calls: number;
+  window: { days: number; since: string | null; until: string | null };
+}
+
 export interface UsageSummaryOut {
   dataset_id: string | null;
   records: number;
@@ -333,6 +347,12 @@ export interface UsageSummaryOut {
   totals: UsageBucketOut;
   unknown_token_records: number;
   cost: UsageCostOut;
+  /**
+   * 外部用量。**可选**：老后端、老备份、以及缓存里的旧响应都没有这个字段，
+   * 声明成必填会让「升级前存下来的用量快照」在界面上直接抛 TypeError。
+   * 消费方一律用 `?.` + `?? 0` 兜底。
+   */
+  external?: UsageExternalOut;
 }
 
 /**

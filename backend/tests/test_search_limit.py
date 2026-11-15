@@ -204,6 +204,23 @@ def test_tool_description_mentions_the_configured_maximum():
     assert "最多返回 12 条" in search["function"]["description"]
 
 
+def test_tool_description_teaches_search_operators():
+    """T15 / Q08：描述要教模型用 site: / after: / before: / lang: 与成对引号精确短语。
+
+    只列语法不够——必须点名场景（招聘站限定用 site:），否则模型仍然只会堆关键词。
+    这里的断言同时钉住"操作符不会被改写"这句承诺（``aggregate._run_sources`` 里
+    ``has_search_operators`` 的透传保护）。
+    """
+    for fetch_pages in (0, 2):
+        text = web_search_description(fetch_pages)
+        for token in ("site:", "after:", "before:", "lang:", '"'):
+            assert token in text, f"{token} 必须出现在联网搜索的工具描述里"
+        assert "zhipin.com" in text  # 招聘站限定场景要给出具体例子
+        assert "原样提交" in text  # 与 has_search_operators 的透传语义一致
+    # 两版描述仍然只差"能不能拿到正文"，操作符指引两版都有。
+    assert _WEB_SEARCH_DESC_SUMMARIES != _WEB_SEARCH_DESC_WITH_PAGES
+
+
 @pytest.mark.asyncio
 async def test_tool_handler_passes_limit_and_ignores_invalid_values(db_session, monkeypatch):
     from app.services.assistant_tools.search_tools import _tool_web_search

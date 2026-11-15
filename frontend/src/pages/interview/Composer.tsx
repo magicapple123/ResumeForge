@@ -32,6 +32,12 @@ import {
   BARGE_IN_MIN_SPEECH_MS,
   useVoiceSettings,
 } from "../../features/interview-voice/voiceSettings";
+import {
+  providerVoicesOf,
+  resolveTtsVoice,
+  type TtsProvider,
+  type TtsStatusPayload,
+} from "../../features/interview-voice/ttsVoices";
 import type { VoiceOption } from "../../features/interview-voice/VoiceSettingsPopover";
 import type { InterviewMessage } from "../../types";
 import { t } from "../../i18n";
@@ -39,8 +45,11 @@ import { useLocale } from "../../i18n/i18nContext";
 import { useVoiceInput } from "../../hooks/useVoiceInput";
 import "../../styles/interview-voice.css";
 
-/** 后端音色清单：拿不到就只显示当前值，不阻塞通话。 */
-interface TtsStatus {
+/**
+ * 后端合成状态：顶层四项是旧口径（= 默认档），`providers` 是新口径（两档各自的音色）。
+ * 拿不到就只显示当前值，不阻塞通话。
+ */
+interface TtsStatus extends TtsStatusPayload {
   available: boolean;
   default_voice: string;
   voices: VoiceOption[];
@@ -109,10 +118,17 @@ export function Composer({
       }),
     [],
   );
+  /**
+   * 实际要用的音色与档位：**存的音色属于另一档时不静默变声**——`resolveTtsVoice` 回落到
+   * 该档默认音色，回落事实由设置页负责提示（这里只管用对的那一个，否则上游会 400）。
+   */
+  const resolvedVoice = resolveTtsVoice(tts, settings.ttsProvider, settings.voice);
+  const provider: TtsProvider = settings.ttsProvider;
   const speechOutput = useMemo(
     () =>
       new RemoteSpeechOutput({
-        voice: settings.voice,
+        voice: resolvedVoice.voice,
+        provider,
         rate: settings.rate,
         volume: settings.volume,
         onSpeakingChange: setAssistantSpeaking,
@@ -123,16 +139,17 @@ export function Composer({
         },
         fallback: browserOutput,
       }),
-    [browserOutput, settings.voice, settings.rate, settings.volume],
+    // resolvedVoice.voice 而不是 settings.voice：档位一换，实际音色往往跟着换。
+    [browserOutput, resolvedVoice.voice, provider, settings.rate, settings.volume],
   );
   useEffect(() => {
     speechOutput.configure({
-      voice: settings.voice,
+      voice: resolvedVoice.voice,
       rate: settings.rate,
       volume: settings.volume,
     });
     browserOutput.configure({ rate: settings.rate, volume: settings.volume });
-  }, [browserOutput, speechOutput, settings.voice, settings.rate, settings.volume]);
+  }, [browserOutput, speechOutput, resolvedVoice.voice, settings.rate, settings.volume]);
   useEffect(() => {
     browserOutput.setLocale(locale);
   }, [locale, browserOutput]);
@@ -146,11 +163,7 @@ export function Composer({
       try {
         const response = await fetch("/api/interview/voice/tts/status", { method: "GET" });
         if (!response.ok) return;
-        const payload = (await response.json()) as {
-          available: boolean;
-          default_voice: string;
-          voices: { id: string; label: string }[];
-        };
+        const payload = (await response.json()) as TtsStatus;
         if (!cancelled) setTts(payload);
       } catch {
         // 拿不到清单不影响通话：下拉只显示当前音色，合成失败时还有浏览器兜底。
@@ -272,7 +285,9 @@ export function Composer({
           streamingQuestion={streamingQuestion}
           speaking={assistantSpeaking}
           speechNotice={notice}
-          voices={tts?.voices ?? []}
+          // 房间里的 ⚙ 音色下拉只列**当前档**的音色（档位在设置页切）：两档并列时，
+          // 把 6 个音色混在一个下拉里，用户会选中另一档的音色然后听到 503。
+          voices={providerVoicesOf(tts, provider).voices}
           revising={submitting}
           sessionId={sessionId ?? null}
           onClose={closeLiveRoom}

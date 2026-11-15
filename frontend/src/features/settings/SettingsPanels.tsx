@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 设置页九组的**卡片编排**：只决定"哪张卡放在哪一组、按什么顺序、组内要不要一句说明"，
+ * 设置页十组的**卡片编排**：只决定"哪张卡放在哪一组、按什么顺序、组内要不要一句说明"，
  * 不取数、不管弹窗状态。
  *
- * 为什么拆成九个小组件而不是一个巨型 `AssistantPanel`：分组从 6 页扩到 9 组后，
+ * 为什么拆成十个小组件而不是一个巨型 `AssistantPanel`：分组从 6 页扩到 10 组后，
  * 「助手与 AI 行为」原来一页 12 张卡（现拆成助手行为 / 记忆与技能 / 语音与面试三组），要改面试音色得先翻过前面六张——所以按
  * 「模型 / 助手行为 / 记忆与技能 / 语音与面试」拆开，每组只放同一件事的卡。
  *
@@ -50,6 +50,9 @@ import UpdateCard from "./UpdateCard";
 import AnnouncementSettingsCard from "./AnnouncementSettingsCard";
 import HelpDiagnosticsCard from "./HelpDiagnosticsCard";
 import ReminderPopupCard from "./ReminderPopupCard";
+import ConnectionsCard from "./ConnectionsCard";
+import SystemSourcesCard from "./SystemSourcesCard";
+import OcrEngineCard from "./OcrEngineCard";
 
 /** 组内的子块标题：一组里确实还有两层时才用（不是每个分组都要）。 */
 function SettingsGroupTitle({ text, hint }: { text: string; hint?: string }) {
@@ -136,6 +139,26 @@ export function VoicePanel() {
       <InterviewVoiceSettingsCard />
       {/* 面试镜头（F18）：默认关；录像不进备份，设置卡里写明。 */}
       <InterviewCameraSettingsCard />
+    </>
+  );
+}
+
+/**
+ * 外部连接（T11/T12 + T01 的识别引擎）：一屏看全所有对外依赖。
+ *
+ * 顺序按"被改的概率"排：识别引擎最常被调（扫描件识别效果不对时第一反应是看这里），
+ * 然后是 AI 服务与搜索来源的 Key，最后是很少动的下载源与端口。
+ */
+export function ConnectionsPanel() {
+  useLocale();
+  return (
+    <>
+      {/* 识别引擎（T01）：三档说明由后端给，Key 复用联网搜索那一把。 */}
+      <OcrEngineCard />
+      {/* A/B 组：三态 + 存储方式 + 就地改 / 清除。 */}
+      <ConnectionsCard />
+      {/* C 组：更新源 / 字体源 / RAG 资产源 / 浏览器端口，可编辑、可恢复默认。 */}
+      <SystemSourcesCard />
     </>
   );
 }

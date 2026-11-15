@@ -39,3 +39,5 @@ export * from "./export";
 export * from "./sharePackage";
 export * from "./templateMarket";
 export * from "./webform";
+/** 「外部连接」页（T11 / T12）与识别引擎设置（T01）。 */
+export * from "./connections";

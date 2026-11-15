@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 页面感知（#27B）：注册表合并规则、**18 条路由逐页都有动作**（从 APP_ROOT_ROUTE 反推，
+ * 页面感知（#27B）：注册表合并规则、**20 条路由逐页都有动作**（从 APP_ROOT_ROUTE 反推，
  * 新增路由漏登记会点名）、以及信号合成（溢出 / 队列 / 资料 / 未保存）。
  */
 import type { ReactElement } from "react";
@@ -27,11 +27,12 @@ function routePathsFromAppRoutes(): string[] {
     .filter((path) => path !== "" && path !== "*");
 }
 
-describe("18 条路由都有本页动作", () => {
+describe("20 条路由都有本页动作", () => {
   const paths = routePathsFromAppRoutes();
 
-  it("路由表里确实有 19 条业务路由（交接书的 18 = 根路由之外的 18 个子页）", () => {
-    expect(paths.length).toBe(19);
+  it("路由表里确实有 20 条业务路由（交接书的 18 条 + 之后新增的外部简历 /resumes/external 与 T07 公司调研 /research）", () => {
+    // 数字只认 `appRoutes.tsx`：这里多一条、少一条都要连着改，别让它变成"顺手改大的阈值"。
+    expect(paths.length).toBe(20);
   });
 
   it("每条路由都登记了动作（3–5 个，面板只展示前 5 个）", () => {

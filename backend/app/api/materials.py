@@ -32,13 +32,18 @@ from ..services.attachments import (
     normalize_image_attachment,
     safe_attachment_name,
 )
-from ..services.document_text import MATERIAL_LEGACY_DOC, MAX_MATERIAL_FILE_BYTES, material_suffix
+from ..services.document_text import (
+    MATERIAL_LEGACY_DOC,
+    MAX_LOOSE_MATERIAL_BYTES,
+    material_suffix,
+)
 from ..services.material_attachment_text import extract_attachment_text
 from ..services.materials import (
     delete_material,
     list_materials_page,
     material_categories,
 )
+from ..services.ocr.policy import OcrContext, load_ocr_context
 from ..services.user_files import save_from_bytes
 
 logger = logging.getLogger(__name__)
@@ -48,15 +53,23 @@ router = APIRouter(prefix="/api/materials", tags=["materials"])
 
 
 
-# 单份附件上限：与 document_text.MAX_MATERIAL_FILE_BYTES（面试材料）同一个数。
-# multipart 已经收进内存/临时文件，在解析前就拦住比解析完再说好。
-MAX_MATERIAL_ATTACHMENT_BYTES = MAX_MATERIAL_FILE_BYTES
+# 单份附件上限。**这里比面试材料的 10 MB 放宽**（T02）：资料箱是"存证书、成绩单扫描件"
+# 的地方，而扫描件的体积主要来自位图——一页 300dpi 彩色扫描就有 300–800 KB，10 MB 只装得
+# 下十几页，与 OCR 侧 100 MiB 的能力差一个数量级（Q04）。取 50 MB：够一份 60–80 页的扫描件，
+# 又不至于让 `await file.read()` 在桌面进程里一次吃掉上百 MB 内存。
+#
+# 上限值本身住在 `services/document_text.py`：解析层是同一条链路的最后一道闸门，
+# 常量只放一处，端点与解析层才不会各按各的（曾经出现过"端点放行 50 MB、解析层仍按
+# 10 MB 拒绝"，用户看到"文件超过 10 MB"却已经传完了 12 MB）。
+MAX_MATERIAL_ATTACHMENT_BYTES = MAX_LOOSE_MATERIAL_BYTES
 
 # 附件上传的完整路径。请求体中间件按这个键单独放宽上限（config.max_attachment_upload_mb，
-# 默认 12MB）：端点自身校验 10MB，但全局默认只有 8MB，不放宽的话 8–10MB 的文件会先被
-# 中间件以「请求体过大，最大允许 8 MB」拦下，用户看到的提示与真实原因不符。
+# 默认 56MB）：端点自身校验 50MB，但全局默认只有 8MB，不放宽的话大文件会先被中间件以
+# 「请求体过大，最大允许 8 MB」拦下，用户看到的提示与真实原因不符。
 ATTACHMENT_UPLOAD_PATH = f"{router.prefix}/attachments"
-_ATTACHMENT_TOO_LARGE = "文件超过 10 MB，无法上传"
+_ATTACHMENT_TOO_LARGE = (
+    f"文件超过 {MAX_MATERIAL_ATTACHMENT_BYTES // (1024 * 1024)} MB，无法上传"
+)
 _ATTACHMENT_EMPTY = "文件是空的"
 _ATTACHMENT_SAVE_FAILED = "原件保存失败，请重试"
 _ATTACHMENT_UNSUPPORTED = (
@@ -88,11 +101,19 @@ class _ParsedAttachment(NamedTuple):
     warnings: list[str]
 
 
-def _parse_attachment(name: str, declared_mime: str, raw: bytes) -> _ParsedAttachment:
+def _parse_attachment(
+    name: str, declared_mime: str, raw: bytes, ocr: OcrContext | None = None
+) -> _ParsedAttachment:
     """按扩展名分派：图片走受限缩略图，文档走本机文本提取（纯 CPU/IO，在线程池里跑）。
 
     失败一律抛面向用户的 ValueError（由端点转成 422）。.doc 单独给"另存为 .docx"
-    的提示；扫描件 PDF 不做视觉识别，返回空文本 + 警告（仍可另存为原件）。
+    的提示；扫描件 PDF **不再只是"不支持识别"**（T02）：``ocr`` 允许时按页换成文字，
+    只有未启用 OCR 时才保持"返回空文本 + 警告、原件仍可另存"的老口径。
+
+    ``ocr`` 直接标注为 ``OcrContext``：本模块本来就 import 了
+    ``services.ocr.policy.load_ocr_context``，类型也从同一处取，不额外制造循环导入
+    （历史上前者写成 ``object`` 是为了躲一个已不存在的依赖方向，代价是这一层的类型
+    检查全部失效）。
     """
     safe_name = safe_attachment_name(name)
     suffix = material_suffix(safe_name)
@@ -108,19 +129,23 @@ def _parse_attachment(name: str, declared_mime: str, raw: bytes) -> _ParsedAttac
         normalized = normalize_image_attachment(
             safe_name, canonical_mime, f"data:{canonical_mime};base64,{encoded}"
         )
+        notes = [str(item) for item in (normalized.get("notes") or [])]
+        # 证书 / 成绩单经常是手机拍的图片：有 OCR 就顺手换回文字，缩略图照旧保留
+        # （用户仍能点开看原件）。OCR 失败不夺走原件——image 的 ValueError 由端点转 422。
+        text, ocr_notes = _image_ocr_text(raw, safe_name, canonical_mime, ocr)
         return _ParsedAttachment(
             name=str(normalized["name"]),
             mime_type=str(normalized["mime_type"]),
             size_bytes=int(normalized["size_bytes"]),
-            text="",
+            text=text,
             data_url=str(normalized["data_url"]),
-            warnings=[str(item) for item in (normalized.get("notes") or [])],
+            warnings=[*notes, *ocr_notes],
         )
     mime_type = _ATTACHMENT_MIME_BY_SUFFIX.get(suffix)
     if mime_type is None:
         # 先判类型再解析：不认识的扩展名不该进 pypdf/docx 解析器。
         raise ValueError(_ATTACHMENT_UNSUPPORTED)
-    extracted = extract_attachment_text(safe_name, raw)
+    extracted = extract_attachment_text(safe_name, raw, ocr=ocr)
     return _ParsedAttachment(
         name=safe_name,
         mime_type=mime_type,
@@ -129,6 +154,21 @@ def _parse_attachment(name: str, declared_mime: str, raw: bytes) -> _ParsedAttac
         data_url="",
         warnings=list(extracted.warnings),
     )
+
+
+def _image_ocr_text(
+    raw: bytes, name: str, mime: str, ocr: OcrContext | None
+) -> tuple[str, list[str]]:
+    """图片附件的 OCR 文字与警告；未启用 OCR 时原样返回空文本（保持改造前行为）。"""
+    from ..services.ocr.client import OcrError
+    from ..services.ocr.scan import recognize_single_image, user_message_for
+
+    try:
+        outcome = recognize_single_image(raw, name, mime, ocr)
+    except OcrError as exc:
+        # engine=ocr：用户明确只要 OCR，失败必须如实报错，不能静默退回"没有文字"。
+        raise ValueError(user_message_for(exc)) from exc
+    return outcome.text, list(outcome.warnings)
 
 
 @router.post("/attachments", response_model=MaterialAttachmentOut)
@@ -150,8 +190,9 @@ async def upload_material_attachment(
         raise HTTPException(status_code=413, detail=_ATTACHMENT_TOO_LARGE)
     try:
         # PDF/docx 解析是同步 CPU/IO 重活（pypdf / zipfile），下沉线程池别占住事件循环。
+        # OCR 同样是同步长连接，一并留在线程池里；识别引擎档位按全局设置取一次。
         parsed = await run_in_threadpool(
-            _parse_attachment, name, file.content_type or "", raw
+            _parse_attachment, name, file.content_type or "", raw, load_ocr_context(db)
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

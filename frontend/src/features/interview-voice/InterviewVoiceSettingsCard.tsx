@@ -7,6 +7,13 @@
  *
  * 值存在 `localStorage`（`voiceSettings`），与数据集无关，**不需要数据库迁移**。
  * 布局沿用设置页既有写法（`Card` + 纵向 `Space` + `Divider`），不新增 CSS 类。
+ *
+ * 两处与"换厂商"有关的判断都在这里，因为它们都是**用户必须看见**的事实：
+ * - **合成服务档位**：两档并列，音色清单跟着档位走；存的音色属于另一档时显式提示
+ *   "已改用 X"（静默变声等同于"设置坏了"）。
+ * - **单段录音上限**：上限定到哪里由 `/transcribe/status` 说了算（DeepSeek 因不支持
+ *   流式只有 120 秒）。滑块的上界跟着它走，并且**用一句话说明原因**——静默把用户
+ *   拉到 300 的值砍掉，用户只会以为录音坏了。
  */
 import {
   App,
@@ -23,13 +30,19 @@ import {
 import { useEffect, useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { getTranscribeStatus, type TranscribeStatus } from "./asrApi";
+import {
+  TTS_PROVIDER_LABEL_KEYS,
+  TTS_PROVIDER_ORDER,
+  fallbackNotice,
+  providerAvailable,
+  providerVoicesOf,
+  resolveTtsVoice,
+  type TtsProvider,
+  type TtsStatusPayload,
+} from "./ttsVoices";
 import type { BargeInSensitivity } from "./voiceSettings";
-import { resetVoiceSettings, useVoiceSettings } from "./voiceSettings";
-
-interface VoiceOption {
-  id: string;
-  label: string;
-}
+import { resetVoiceSettings, useVoiceSettings, VOICE_SETTING_RANGES } from "./voiceSettings";
 
 /** 一行「标签 + 控件」：设置页既有的卡片都是这个形态，不另造样式类。 */
 function Row({
@@ -69,25 +82,57 @@ export function InterviewVoiceSettingsCard() {
   useLocale();
   const { message } = App.useApp();
   const [settings, patch] = useVoiceSettings();
-  const [voices, setVoices] = useState<VoiceOption[]>([]);
+  const [tts, setTts] = useState<TtsStatusPayload | null>(null);
+  const [asr, setAsr] = useState<TranscribeStatus | null>(null);
 
-  // 音色清单来自后端（`/voice/tts/status`）；拿不到时下拉只显示当前值，不影响其它参数。
+  // 合成档位与音色清单来自后端（`/voice/tts/status`）；拿不到时用内建回退表，音色不空。
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const response = await fetch("/api/interview/voice/tts/status", { method: "GET" });
         if (!response.ok) return;
-        const payload = (await response.json()) as { voices?: VoiceOption[] };
-        if (!cancelled) setVoices(payload.voices ?? []);
+        const payload = (await response.json()) as TtsStatusPayload;
+        if (!cancelled) setTts(payload);
       } catch {
-        // 离线/后端未就绪：保留当前音色即可。
+        // 离线/后端未就绪：内建回退表足够渲染下拉。
       }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // 录音上限的唯一口径：优先信服务端（它会按协议给 120 秒或 180 秒）。
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const snapshot = await getTranscribeStatus();
+        if (!cancelled) setAsr(snapshot);
+      } catch {
+        // 探测失败：滑块保持本地区间，不拦着用户调。
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const provider = settings.ttsProvider;
+  const voiceOptions = providerVoicesOf(tts, provider).voices;
+  const resolved = resolveTtsVoice(tts, provider, settings.voice);
+  const providerMissingKey = !providerAvailable(tts, provider);
+  /** 服务端给的单段上限；拿不到时用本地区间上界。 */
+  const recordCap = Math.min(VOICE_SETTING_RANGES.maxRecordSeconds[1], asr?.max_seconds ?? 300);
+  const recordValue = Math.min(settings.maxRecordSeconds, recordCap);
+
+  const changeProvider = (next: TtsProvider) => {
+    const target = resolveTtsVoice(tts, next, settings.voice);
+    // 一次性把档位与音色一起落盘：分两次 patch 会出现"档位换了、音色还是旧的"的中间态。
+    patch({ ttsProvider: next, voice: target.voice });
+    if (target.fellBack) message.info(fallbackNotice(target));
+  };
 
   const markers = (range: [number, number]) => ({
     [range[0]]: `${range[0]}`,
@@ -124,19 +169,43 @@ export function InterviewVoiceSettingsCard() {
             aria-label={t("interviewVoice.settings.speak")}
           />
         </Row>
+        <Row
+          label={t("ttsProvider.label")}
+          hint={providerMissingKey ? t("ttsProvider.missingKey") : t("ttsProvider.hint")}
+        >
+          <Segmented<TtsProvider>
+            size="small"
+            value={provider}
+            onChange={(value) => changeProvider(value)}
+            options={TTS_PROVIDER_ORDER.map((item) => ({
+              value: item,
+              label: t(TTS_PROVIDER_LABEL_KEYS[item]),
+            }))}
+            aria-label={t("ttsProvider.label")}
+          />
+        </Row>
         <Row label={t("interviewVoice.settings.voice")}>
           <Select
-            value={settings.voice}
+            value={resolved.voice}
             onChange={(value) => patch({ voice: value })}
-            options={(voices.length > 0
-              ? voices
-              : [{ id: settings.voice, label: settings.voice }]
+            options={(voiceOptions.length > 0
+              ? voiceOptions
+              : [{ id: resolved.voice, label: resolved.voice }]
             ).map((item) => ({ value: item.id, label: item.label }))}
             popupMatchSelectWidth={false}
             style={{ minWidth: 180 }}
             aria-label={t("interviewVoice.settings.voice")}
           />
         </Row>
+        {/*
+          旧音色落在新档：显式说一句"已改用 X"。这不是错误（合成照样能用），
+          所以用次要色而不是 danger——但它必须出现，否则用户会以为音色设置丢了。
+        */}
+        {resolved.fellBack ? (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {fallbackNotice(resolved)}
+          </Typography.Text>
+        ) : null}
         <Row
           label={t("interviewVoice.settings.autoSend")}
           hint={t("interviewVoice.settings.autoSendHint")}
@@ -222,16 +291,26 @@ export function InterviewVoiceSettingsCard() {
         <div>
           <Typography.Text>
             {t("interviewVoice.settings.maxRecord")} ·{" "}
-            {t("interviewVoice.settings.seconds", { value: settings.maxRecordSeconds })}
+            {t("interviewVoice.settings.seconds", { value: recordValue })}
           </Typography.Text>
           <Slider
-            min={60}
-            max={300}
+            min={VOICE_SETTING_RANGES.maxRecordSeconds[0]}
+            // 上界跟着服务端走：选 DeepSeek 时是 120（不支持流式），其余是 300。
+            max={recordCap}
             step={30}
-            value={settings.maxRecordSeconds}
+            value={recordValue}
             onChange={(value) => patch({ maxRecordSeconds: value })}
             aria-label={t("interviewVoice.settings.maxRecord")}
           />
+          {asr && asr.max_seconds < VOICE_SETTING_RANGES.maxRecordSeconds[1] ? (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {/* 原因分两种：只有 DeepSeek 是"不支持流式"（上游硬限制 120 秒），
+                  其它服务商只是服务端上限比滑块小。同一句话套在百炼会说假话。 */}
+              {asr.protocol === "deepseek"
+                ? t("voiceMemo.hint.streamLimited", { seconds: asr.max_seconds })
+                : t("voiceMemo.hint.serverCap", { seconds: asr.max_seconds })}
+            </Typography.Text>
+          ) : null}
         </div>
       </Space>
     </Card>

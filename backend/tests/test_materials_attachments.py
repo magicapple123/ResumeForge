@@ -141,30 +141,63 @@ def test_nine_mb_attachment_passes_the_body_gate(client):
 
 
 def test_oversize_attachment_is_rejected_by_the_endpoint_not_the_middleware(client):
-    """10.5 MB 仍被拒，但拒绝者必须是端点自己的 10 MB 检查。
+    """超过端点上限时，拒绝者必须是端点自己（不是中间件）。
 
     区分两者很重要：中间件拒会回「请求体过大，最大允许 N MB」，那说明放宽没生效；
-    端点拒回「文件超过 10 MB，无法上传」，这才是设计里的行为。
-    """
-    response = _upload(client, "big.txt", b"x" * (10 * 1024 * 1024 + 200_000), "text/plain")
-    assert response.status_code == 413
-    detail = response.json()["detail"]
-    assert "文件超过 10 MB" in detail
-    assert "请求体过大" not in detail
+    端点拒回「文件超过 50 MB，无法上传」，这才是设计里的行为。
 
-
-def test_endpoint_size_guard_uses_the_ten_mb_limit(client, monkeypatch):
-    """端点自带的上限与 document_text.MAX_MATERIAL_FILE_BYTES 同数（10 MB）。
-
-    这里把端点阈值调小，验的是「超限返回 413 且文案说明上限」这条分支本身；
-    真实 10.5 MB 请求由上一用例覆盖（它现在能穿过 12 MB 的请求体闸门到达端点）。
+    这里用 monkeypatch 把阈值调到 1 MB 再传 10.5 MB：**不**为了验证一条分支真的去
+    构造 50 MB 请求体（那会让这条用例吃掉几百 MB 内存），但"谁拒的"这个判据完全等价。
     """
     from app.api import materials as materials_api
 
-    monkeypatch.setattr(materials_api, "MAX_MATERIAL_ATTACHMENT_BYTES", 8)
-    response = _upload(client, "tiny.txt", b"0123456789", "text/plain")
+    monkeypatch_target = 1024 * 1024
+    original = materials_api.MAX_MATERIAL_ATTACHMENT_BYTES
+    materials_api.MAX_MATERIAL_ATTACHMENT_BYTES = monkeypatch_target
+    try:
+        response = _upload(
+            client, "big.txt", b"x" * (10 * 1024 * 1024 + 200_000), "text/plain"
+        )
+    finally:
+        materials_api.MAX_MATERIAL_ATTACHMENT_BYTES = original
     assert response.status_code == 413
-    assert "10 MB" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert "文件超过 50 MB" in detail
+    assert "请求体过大" not in detail
+
+
+def test_endpoint_size_guard_uses_the_fifty_mb_limit(client):
+    """资料箱附件上限已放宽到 50 MB（T02），且**不再**等于面试材料的 10 MB。
+
+    两者刻意分开：面试材料链路仍然只收 10 MB（那条链路把整份文本塞进提示词），资料箱
+    收的是扫描件原件，体积随页数线性增长。
+    """
+    from app.api import materials as materials_api
+    from app.services.document_text import MAX_MATERIAL_FILE_BYTES
+
+    assert materials_api.MAX_MATERIAL_ATTACHMENT_BYTES == 50 * 1024 * 1024
+    assert materials_api.MAX_MATERIAL_ATTACHMENT_BYTES > MAX_MATERIAL_FILE_BYTES
+    assert materials_api._ATTACHMENT_TOO_LARGE == "文件超过 50 MB，无法上传"
+
+
+def test_attachment_between_ten_and_fifty_mb_is_actually_parsed(client):
+    """10–50 MB 之间的一份材料必须真的能解析（T02 返工 1）。
+
+    反证过的坑：端点已经放行 50 MB，但解析层 ``extract_material_text`` 里还留着
+    10 MB 的硬闸门，于是 12 MB 的扫描件传完了却回一句"文件超过 10 MB，无法导入"。
+    只断言常量大小（上面那条用例）抓不到这种"两道闸门各按各的"，必须真的走一遍上传。
+    """
+    # 造一份 >10 MB 的文本 PDF：正文直接写成 13 MB 的重复句，比"在 PDF 尾部粘字节"
+    # 更可靠（后者 xref 之后的内容会被判成损坏文件，pypdf 直接拒绝）。
+    raw = build_pdf((TEXT_MARKER + " ") * 200000)
+    assert len(raw) > document_text.MAX_MATERIAL_FILE_BYTES
+
+    response = _upload(client, "big-scan.pdf", raw, "application/pdf")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["size_bytes"] == len(raw)
+    assert "Backend engineer hiring note" in payload["text"]
 
 
 def test_broken_pdf_returns_a_readable_reason(client):

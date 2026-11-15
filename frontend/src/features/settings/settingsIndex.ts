@@ -2,7 +2,7 @@
 /**
  * 设置项的**搜索索引**：卡片标题 + 分组名 + 少量口头词别名。
  *
- * 为什么单独一张表：31 张卡分布在九组里，用户找"音色"时不会先记住它在「语音与面试」；
+ * 为什么单独一张表：35 张卡分布在十组里，用户找"音色"时不会先记住它在「语音与面试」；
  * 索引是唯一能搜到它的地方。表是纯数据，匹配逻辑是纯函数，两者都不碰 DOM。
  *
  * 别名的口径：**只给标题里没有用户口头词的卡**（目前 10 张）。标题已经含"搜索""记忆"
@@ -75,6 +75,12 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
     titleKey: "interviewCamera.settings.title",
     aliasKey: "settings.search.alias.interview-camera",
   },
+  // 外部连接（T11/T12 + 识别引擎）
+  // 别名额度只有 8–10 条且已被占满（守卫 `settingsIndex.test.ts`）：这两张卡的标题
+  // 本身就有"识别""端口"这类口头词，不再登记同义词。
+  { id: "ocr-engine", section: "connections", titleKey: "ocrEngine.title" },
+  { id: "connections", section: "connections", titleKey: "connections.tab" },
+  { id: "system-sources", section: "connections", titleKey: "connections.group.system" },
   // 外观与语言
   { id: "locale", section: "appearance", titleKey: "settings.locale.title" },
   { id: "font", section: "appearance", titleKey: "fonts.card.title" },
@@ -131,7 +137,7 @@ export function indexEntryHaystack(entry: SettingsIndexEntry): string {
 
 /**
  * 按关键词过滤索引。空格分词、全部词都命中才算（"语音 音色" 收窄到一张卡），
- * 空串返回空数组——空输入不该把九组全部摊开。
+ * 空串返回空数组——空输入不该把十组全部摊开。
  */
 export function searchSettingsEntries(query: string): SettingsIndexEntry[] {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);

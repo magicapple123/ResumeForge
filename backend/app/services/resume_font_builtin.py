@@ -312,6 +312,17 @@ def _open_client() -> httpx.Client:
     return httpx.Client(timeout=_TIMEOUT, follow_redirects=True)
 
 
+def _font_base_url() -> str:
+    """下载根地址：设置页「外部连接 → 字体下载源」优先，否则用本模块的 ``BASE_URL``。
+
+    ``BASE_URL`` 仍然作为兜底值传进去（不是复制一份常量）：测试 monkeypatch 的是
+    ``resume_font_builtin.BASE_URL`` 这个模块属性，走兜底时它照样生效。
+    """
+    from . import system_sources
+
+    return system_sources.font_base_url(BASE_URL)
+
+
 def _download_one(entry: dict, written: list[Path]) -> None:
     """下载一个文件到 ``<name>.tmp``，校验通过后 rename 成正式文件。"""
     raise_if_cancelled()
@@ -319,7 +330,7 @@ def _download_one(entry: dict, written: list[Path]) -> None:
     temp = target.with_name(target.name + TMP_SUFFIX)
     try:
         fetch(
-            f"{BASE_URL}{entry['name']}",
+            f"{_font_base_url()}{entry['name']}",
             temp,
             expected_bytes=int(entry["bytes"]),
             expected_sha256=str(entry["sha256"]),

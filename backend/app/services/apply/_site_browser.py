@@ -184,9 +184,17 @@ _browser_manager_key: tuple[Any, ...] | None = None
 
 
 def _browser_cache_key(config: ApplyConfigIn) -> tuple[Any, ...]:
-    """浏览器单例的缓存键：端口、浏览器选择、自定义路径任一变化都要重建。"""
+    """浏览器单例的缓存键：端口、浏览器选择、自定义路径任一变化都要重建。
+
+    端口优先级是**设置页「外部连接 → 浏览器调试端口」> 网申配置里的 browser_port >
+    config.DEFAULT_BROWSER_PORT**：前者是这台机器的"端口冲突"逃生口，后者是单个数据集
+    的偏好。反过来（数据集优先）会让"端口被占用"这个最常见的场景在切换数据集后复发，
+    所以系统级覆盖放在最前面，界面文案里也如实写明它优先。
+    """
+    from .. import system_sources
+
     return (
-        config.browser_port or DEFAULT_BROWSER_PORT,
+        system_sources.browser_port(config.browser_port or DEFAULT_BROWSER_PORT),
         config.browser_choice,
         config.browser_path.strip(),
     )

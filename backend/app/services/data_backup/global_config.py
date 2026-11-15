@@ -9,6 +9,14 @@
 密钥策略与数据库一致：`include_api_keys=false` 时写空串，绝不新造明文；
 `true` 时按本机存储形态原样带走（Windows 上是 DPAPI 密文，换机器解不开时
 `decrypt_key` 会按空串处理，配置本身仍然恢复）。
+
+## 载荷版本 2：加上 `system_sources`
+
+「外部连接」C 组的四项（更新源 / 字体源 / RAG 资产源 / 浏览器端口）不是密钥，
+`include_api_keys` 的开关**不影响**它们，但它们同样是"数据集之外的一台机器的配置"，
+换机器时应当跟着回来——验收口径要求"对应值进备份路径"。所以放在同一成员里加一个
+`system_sources` 字段，并**只**升成员自己的载荷版本（1 → 2）；外层归档格式号不动：
+加的是既有成员里的字段，不是新成员，旧版本读到它只会忽略那个键，不会少恢复任何东西。
 """
 
 from __future__ import annotations
@@ -21,17 +29,20 @@ from typing import Any
 
 from ...config import get_settings
 from ...schemas.setting import LLMConfig
+from .. import system_sources
 from ..global_settings import active_profile_of, load_state, profiles_of
 
 GLOBAL_LLM_MEMBER = "global_llm.json"
-GLOBAL_LLM_PAYLOAD_VERSION = 1
+# 2 = 成员里多了 `system_sources`（见模块头）。导入侧对 1/2 都接受：字段缺失即跳过。
+GLOBAL_LLM_PAYLOAD_VERSION = 2
 
 
 def build_global_llm_payload(*, include_api_keys: bool) -> dict[str, Any] | None:
-    """把全部已保存记录打包成可写入 zip 的字典；没有任何记录时返回 None。"""
+    """把全部已保存记录打包成可写入 zip 的字典；两份内容都空时返回 None。"""
     state = load_state()
     profiles = profiles_of(state or {})
-    if not profiles:
+    sources = system_sources.export_overrides()
+    if not profiles and not sources:
         return None
     active = active_profile_of(state or {})
     active_id = str((active or {}).get("id") or "")
@@ -56,7 +67,7 @@ def build_global_llm_payload(*, include_api_keys: bool) -> dict[str, Any] | None
                 "updated_at": str(profile.get("updated_at") or ""),
             }
         )
-    if not exported:
+    if not exported and not sources:
         return None
     settings = get_settings()
     return {
@@ -66,6 +77,8 @@ def build_global_llm_payload(*, include_api_keys: bool) -> dict[str, Any] | None
         "exported_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "active_profile_id": active_id,
         "profiles": exported,
+        # 「外部连接」C 组：只写用户改过的项（默认值由代码自带，不必进包）。
+        "system_sources": sources,
     }
 
 
@@ -92,7 +105,23 @@ def payload_summary(payload: dict[str, Any] | None) -> dict[str, Any] | None:
     if not payload:
         return None
     profiles = payload.get("profiles")
-    return {"profiles": len(profiles) if isinstance(profiles, list) else 0}
+    summary: dict[str, Any] = {"profiles": len(profiles) if isinstance(profiles, list) else 0}
+    sources = payload.get("system_sources")
+    if isinstance(sources, dict):
+        # 「外部连接」C 组：只报条数，值本身是下载源与端口，不需要进界面摘要。
+        summary["system_sources"] = len(sources)
+    return summary
+
+
+def restore_global_system_sources(payload: dict[str, Any] | None) -> int:
+    """从载荷里恢复「外部连接」C 组四项，返回真正恢复的条数。
+
+    旧包（载荷版本 1）没有这个字段 → 返回 0，不报错。单条非法值只跳过那一条，
+    不让一份过期备份把整次导入判成失败（与字体/模型配置同样的"边上信息"口径）。
+    """
+    if not payload:
+        return 0
+    return system_sources.restore_overrides(payload.get("system_sources"))
 
 
 def write_global_llm_member(archive: zipfile.ZipFile, payload: dict[str, Any] | None) -> int:
@@ -110,5 +139,6 @@ __all__ = [
     "build_global_llm_payload",
     "payload_summary",
     "read_global_llm_payload",
+    "restore_global_system_sources",
     "write_global_llm_member",
 ]

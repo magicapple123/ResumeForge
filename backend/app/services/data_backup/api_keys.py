@@ -13,6 +13,7 @@ from pathlib import Path
 
 from sqlalchemy import Engine
 
+from ..credentials.backup_whitelist import secret_app_setting_where
 from ..settings_service import _LLM_CONFIG_KEY, API_KEY_MASK
 from .paths import BackupError, database_path
 
@@ -22,22 +23,28 @@ def _plaintext_api_keys(bind: Engine) -> list[str]:
     return _plaintext_api_keys_in(database_path(bind))
 
 
-# 除模型配置外，数据集自己的 AppSetting 里还有两种"裸密钥行"：
-# 语音转写的 asr_api_key（每条语音配置共用同一行）与联网搜索的
-# search_deepseek_api_key。encrypt_key() 在 macOS/Linux 上按设计返回明文
-# （只有 Windows 走 DPAPI），所以"不含密钥"的导出必须把它们一起收集、一起剥离，
-# 否则备份包里会留下可直接使用的明文 Key。前缀匹配是为了将来的多条语音配置
-# （asr_api_key:xxx）也落在同一道闸门里。
+# 数据集自己的 AppSetting 里有一类"裸密钥行"：语音转写的 asr_api_key（每条语音配置共用
+# 同一行）与联网搜索的三个 search_*_api_key（升级前的旧形态）。encrypt_key() 在
+# macOS/Linux 上按设计返回明文（只有 Windows 走 DPAPI），所以"不含密钥"的导出必须把它们
+# 一起收集、一起剥离，否则备份包里会留下可直接使用的明文 Key。前缀匹配是为了将来的多条
+# 语音配置（asr_api_key:xxx）也落在同一道闸门里。
 #
 # 2.1.0 修过的洞（"勾了不含 API Key 仍带出 key"）就出在这张名单上：新增来源的 Key
-# 忘了登记，它就会以明文留在包里。P4-09/P4-10 接 Tavily 与 Jina 时**必须**同步登记，
-# 否则"不含密钥"的勾选对这两个来源无效。
-_SECRET_APP_SETTING_WHERE = (
-    "key LIKE 'asr_api_key%'"
-    " OR key LIKE 'search_deepseek_api_key%'"
-    " OR key LIKE 'search_tavily_api_key%'"
-    " OR key LIKE 'search_jina_api_key%'"
-)
+# 忘了登记，它就会以明文留在包里。**现在不再手写**：名单从
+# ``services/credentials`` 的 registry 派生（每个来源声明自己的 AppSetting 键前缀），
+# 新增来源只改 registry 一个文件即可，这里不需要再记得改一次（Q17）。
+# 派生结果与手写版逐条等价，由 ``tests/test_credentials_registry.py`` 正反两向守住。
+_SECRET_APP_SETTING_WHERE = secret_app_setting_where()
+
+
+def _secret_where() -> str:
+    """每次调用都从 registry 重新派生。
+
+    不做成模块级常量的一次性快照，是为了让"新增来源会自动进白名单"这件事**可验证**：
+    测试可以往 registry 里塞一个假来源，然后真的跑一遍剥离，看那一行有没有被删掉。
+    派生只是拼几个字符串，代价可以忽略（一次导出调用两次）。
+    """
+    return secret_app_setting_where()
 
 
 def _plaintext_api_keys_in(database: Path) -> list[str]:
@@ -69,7 +76,7 @@ def _plaintext_api_keys_in(database: Path) -> list[str]:
             found.extend(
                 str(value)
                 for (value,) in connection.execute(
-                    f"SELECT value FROM app_setting WHERE {_SECRET_APP_SETTING_WHERE}"
+                    f"SELECT value FROM app_setting WHERE {_secret_where()}"
                 )
                 if value and not str(value).startswith(API_KEY_MASK)
             )
@@ -101,9 +108,7 @@ def _strip_api_keys(database: Path) -> None:
             connection.execute("UPDATE llm_config_record SET api_key = ''")
         if "app_setting" in tables:
             # 裸密钥行直接删（备份是副本；"剥离的是副本"由专门用例守住）。
-            connection.execute(
-                f"DELETE FROM app_setting WHERE {_SECRET_APP_SETTING_WHERE}"
-            )
+            connection.execute(f"DELETE FROM app_setting WHERE {_secret_where()}")
             row = connection.execute(
                 "SELECT value FROM app_setting WHERE key = ?", (_LLM_CONFIG_KEY,)
             ).fetchone()

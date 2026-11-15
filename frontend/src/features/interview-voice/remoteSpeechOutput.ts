@@ -21,6 +21,8 @@ import { speechTextFromMarkdown } from "./browserSpeechOutput";
 
 export interface RemoteSpeechOutputOptions {
   voice: string;
+  /** 合成服务档位（`dashscope` / `deepseek`）。缺省 = 后端默认档，未升级的调用方照旧工作。 */
+  provider?: string;
   rate: number;
   volume: number;
   /** 播报开始/结束（界面据此决定头像动效）。 */
@@ -108,27 +110,35 @@ export function splitSentences(text: string): string[] {
   return merged;
 }
 
-async function defaultFetchAudio(text: string, voice: string, signal: AbortSignal): Promise<Blob> {
-  const response = await fetch("/api/interview/voice/tts", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, voice }),
-    signal,
-  });
-  if (!response.ok) {
-    // 原因分两步取：先试 JSON 的 detail（后端 503 会写清原因），拿不到就退回状态码本身。
-    // **刻意不拼 "HTTP xxx" 前缀**：i18n 的 product-copy 扫描按 AST 判、不看语言，
-    // 任何模板串都会被当成一句界面文案要求登记；状态码本身就够定位了。
-    let reason = String(response.status);
-    try {
-      const payload = (await response.json()) as { detail?: string };
-      if (payload?.detail) reason = payload.detail;
-    } catch {
-      // 非 JSON 错误体：保留状态码。
+/**
+ * 默认取音频实现。`provider` 由闭包带进来（`fetchAudio` 的签名保持三段，测试替身不用改）：
+ * 档位是"这一轮用哪家合成"的选择，与音色一起提交，后端才能选对上游。
+ */
+function defaultFetchAudio(
+  provider: string | undefined,
+): (text: string, voice: string, signal: AbortSignal) => Promise<Blob> {
+  return async (text, voice, signal) => {
+    const response = await fetch("/api/interview/voice/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(provider ? { text, voice, provider } : { text, voice }),
+      signal,
+    });
+    if (!response.ok) {
+      // 原因分两步取：先试 JSON 的 detail（后端 503 会写清原因），拿不到就退回状态码本身。
+      // **刻意不拼 "HTTP xxx" 前缀**：i18n 的 product-copy 扫描按 AST 判、不看语言，
+      // 任何模板串都会被当成一句界面文案要求登记；状态码本身就够定位了。
+      let reason = String(response.status);
+      try {
+        const payload = (await response.json()) as { detail?: string };
+        if (payload?.detail) reason = payload.detail;
+      } catch {
+        // 非 JSON 错误体：保留状态码。
+      }
+      throw new Error(reason);
     }
-    throw new Error(reason);
-  }
-  return response.blob();
+    return response.blob();
+  };
 }
 
 export class RemoteSpeechOutput implements InterviewVoiceOutput {
@@ -150,7 +160,7 @@ export class RemoteSpeechOutput implements InterviewVoiceOutput {
   private stopped = true;
 
   constructor(private options: RemoteSpeechOutputOptions) {
-    this.fetchAudio = options.fetchAudio ?? defaultFetchAudio;
+    this.fetchAudio = options.fetchAudio ?? defaultFetchAudio(options.provider);
     this.createAudio =
       options.createAudio ??
       (() => {

@@ -69,7 +69,17 @@ _cache: dict[str, tuple[float, UpdateCheckResult]] = {}
 
 
 def repository() -> str:
-    return os.environ.get(REPOSITORY_ENV_VAR, "").strip() or DEFAULT_REPOSITORY
+    """检查更新时查询的 ``owner/repo``。
+
+    优先级：环境变量（开发/自建部署的显式覆盖）→ 设置页「外部连接 → 更新源」→
+    内置默认。设置页那一档让用户不必改环境变量就能换自托管发行源。
+    """
+    explicit = os.environ.get(REPOSITORY_ENV_VAR, "").strip()
+    if explicit:
+        return explicit
+    from .system_sources import update_repository
+
+    return update_repository()
 
 
 def _version_tuple(value: str) -> tuple[int, ...]:

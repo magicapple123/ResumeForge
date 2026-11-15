@@ -35,15 +35,16 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ..schemas.asr import (
-    DEFAULT_ASR_PROTOCOL,
     AsrProfileIn,
     AsrProfileOut,
     AsrProfilesOut,
     AsrProfileTestRequest,
     AsrProtocol,
     AsrSettings,
+    normalize_protocol,
 )
 from .api_key_crypto import decrypt_key, encrypt_key
+from .asr_deepseek import incomplete_message, is_endpoint_configured
 from .global_settings import load_state, mutate_state
 from .llm_key_refs import API_KEY_MASK
 
@@ -94,8 +95,13 @@ def new_profile_id() -> str:
 
 
 def _normalize_protocol(raw: Any) -> AsrProtocol:
-    """落盘值可能被旧版本写坏：不认识的协议按默认值读，不让整页 500。"""
-    return raw if raw in ("openai", "dashscope") else DEFAULT_ASR_PROTOCOL
+    """落盘值可能被旧版本写坏：不认识的协议按默认值读，不让整页 500。
+
+    白名单来自 ``schemas.asr.ASR_PROTOCOLS``（单一真相）：这里曾自己写死 ``("openai",
+    "dashscope")``，于是 ``deepseek`` 存进 JSON 再读出来就变成 ``openai`` —— 界面显示对、
+    请求发错路径，是本轮最隐蔽的一处。
+    """
+    return normalize_protocol(raw)
 
 
 def _block_of(state: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -131,11 +137,17 @@ def _decrypted_key(profile: dict[str, Any] | None) -> str:
 
 
 def _is_configured(profile: dict[str, Any] | None) -> bool:
-    """三要素齐全才算可用：只有 Key 没有地址/模型，发不出一次合法请求。"""
-    return bool(
-        str((profile or {}).get("base_url") or "")
-        and str((profile or {}).get("model") or "")
-        and _decrypted_key(profile)
+    """这一条能不能用：**按协议取最小要素**（``deepseek`` 没有 model 参数）。
+
+    判据实现只有一份（``asr_deepseek.is_endpoint_configured``）：这里与
+    ``asr_settings.is_asr_configured``、API 层的测试连接校验共用，否则会出现
+    "卡片说未配置、其实能转写"这种自相矛盾。
+    """
+    return is_endpoint_configured(
+        base_url=str((profile or {}).get("base_url") or ""),
+        model=str((profile or {}).get("model") or ""),
+        api_key=_decrypted_key(profile),
+        protocol=_normalize_protocol((profile or {}).get("protocol")),
     )
 
 
@@ -162,7 +174,7 @@ def _profile_out(profile: dict[str, Any]) -> AsrProfileOut:
         model=model,
         protocol=_normalize_protocol(profile.get("protocol")),
         has_key=bool(key),
-        configured=bool(base_url and model and key),
+        configured=_is_configured(profile),
         updated_at=str(profile.get("updated_at") or ""),
     )
 
@@ -342,7 +354,9 @@ def activate_asr_profile(profile_id: str) -> AsrProfilesOut:
         if profile is None:
             raise AsrProfileNotFound(profile_id)
         if not _is_configured(profile):
-            raise AsrProfileIncomplete("这条配置缺少服务地址、模型或 Key，补齐后才能设为使用中")
+            raise AsrProfileIncomplete(
+                incomplete_message(_normalize_protocol(profile.get("protocol")))
+            )
         block["active_profile_id"] = profile_id
         logger.info("已切换语音配置 id=%s", profile_id)
 

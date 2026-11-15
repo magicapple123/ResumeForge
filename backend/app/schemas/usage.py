@@ -3,11 +3,44 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MAX_PRICE_PER_1K = 1_000_000.0
+
+
+class UsageExternalWindowOut(BaseModel):
+    """外部用量的时间窗（含首尾）；`days` = 窗口覆盖的自然日数。"""
+
+    days: int = 0
+    since: date | None = None
+    until: date | None = None
+
+
+class UsageExternalOut(BaseModel):
+    """四类**非 token** 用量（T16）：只有数量与单位，**没有任何金额字段**。
+
+    - OCR = 页数；TTS = 计费字符数（汉字算 2，由生产方折算）；ASR = 音频秒数；
+      搜索 = 成功请求次数。
+    - 没记过任何数时四项都是 0（不是 null）：界面上一行"0 页"是可用的事实，
+      空白会被读成功能坏了。
+    - 决策 #5 是"用量不折算金额"，所以这里不出现 cost / price / amount / currency，
+      也不提供按单价换算的入口。
+    """
+
+    ocr_pages: int = 0
+    tts_chars: int = 0
+    asr_seconds: float = 0.0
+    search_calls: int = 0
+    window: UsageExternalWindowOut = Field(default_factory=UsageExternalWindowOut)
+
+
+class UsageExternalPayloadOut(BaseModel):
+    """`GET /api/analytics/usage` 的响应：`external` 段 + 当前数据集。"""
+
+    dataset_id: str | None = None
+    external: UsageExternalOut = Field(default_factory=UsageExternalOut)
 
 
 class UsageBucketOut(BaseModel):
@@ -50,6 +83,8 @@ class UsageSummaryOut(BaseModel):
     totals: UsageBucketOut = Field(default_factory=lambda: UsageBucketOut(key=""))
     unknown_token_records: int = 0
     cost: UsageCostOut = Field(default_factory=UsageCostOut)
+    # 非 token 用量（T16）：与 token 汇总同一份响应、同一个时间窗，但**没有任何金额**。
+    external: UsageExternalOut = Field(default_factory=UsageExternalOut)
 
 
 class UsageRecordOut(BaseModel):

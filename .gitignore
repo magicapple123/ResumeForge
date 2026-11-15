@@ -49,6 +49,8 @@ backend/*.sqlite-*
 backend/*.sqlite3
 backend/*.sqlite3-*
 backend/backups/
+# 测试/启动前的自动备份目录（按 PID 或测试名建子目录，内容是 .db，属运行期产物）
+backend/auto-backups/
 backend/test_resume_forge.db
 /runtime/
 # 后端运行期产物：本机调查脚本会在 backend/runtime/ 下写导出件。

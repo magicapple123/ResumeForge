@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: Apache-2.0
+/** English copy for the company / role research page (T07). */
+const companyResearch = {
+  "companyResearch.title": "Company and role research",
+  "companyResearch.intro":
+    "Before you apply: source cards come from search, and the brief carries numbered citations.",
+  "companyResearch.field.company": "Company",
+  "companyResearch.field.companyPlaceholder": "e.g. Tencent",
+  "companyResearch.field.role": "Role",
+  "companyResearch.field.roleOptional": "Role (optional)",
+  "companyResearch.field.rolePlaceholder": "e.g. Backend engineer",
+  "companyResearch.field.jd": "Job description",
+  "companyResearch.field.jdOptional": "Job description (optional)",
+  "companyResearch.field.jdPlaceholder": "Paste the JD so the brief can read the role",
+  "companyResearch.action.submit": "Start research",
+  "companyResearch.action.rerun": "Run again",
+  "companyResearch.error.companyRequired": "Enter a company name first",
+  "companyResearch.error.request": "This research run did not finish",
+  "companyResearch.cards.title": "Source cards",
+  "companyResearch.cards.empty":
+    "No public material came back this time; try the full legal company name",
+  "companyResearch.card.official": "Official site",
+  "companyResearch.card.news": "Recent news",
+  "companyResearch.card.overview": "Overview",
+  "companyResearch.card.authorityBadge": "Highly authoritative",
+  "companyResearch.card.openAria": "Open this source in a new window: {title}",
+  "companyResearch.brief.title": "Web brief",
+  "companyResearch.brief.failed": "No brief was generated this time",
+  "companyResearch.brief.empty": "Enter a company name to start; the brief appears here",
+  "companyResearch.brief.sources": "Citations",
+  "companyResearch.brief.noSources": "This brief has no citations to show",
+  "companyResearch.brief.citationAria": "Open citation {number}",
+  "companyResearch.deep.label": "Deep research",
+  "companyResearch.deep.hint":
+    "Runs several search rounds with up to about 20 tool calls. Searches are billed per query term, so it costs much more than the default mode.",
+  "companyResearch.deep.defaultOff": "Deep research is off by default and uses a single search",
+  "companyResearch.usage.summary": "{count} searches this run, {seconds}s elapsed",
+  "companyResearch.usage.billing": "Searches are billed per query term; deep research adds many",
+  "companyResearch.notes.title": "Notes for this run",
+  "companyResearch.notes.separator": "; ",
+};
+
+export default companyResearch;

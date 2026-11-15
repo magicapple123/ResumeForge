@@ -12,6 +12,7 @@ from __future__ import annotations
 import struct
 
 import pytest
+from app.services import usage_units
 from app.services.interview import interview_tts
 
 
@@ -93,3 +94,34 @@ def test_synthesize_rejects_empty_audio(monkeypatch: pytest.MonkeyPatch) -> None
 def test_available_false_without_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(interview_tts, "active_profile_settings", lambda: None)
     assert interview_tts.available() is False
+
+
+def test_synthesize_records_tts_chars(monkeypatch) -> None:
+    """T16：真的发了一次上游合成才入账；缓存命中不重复计。
+
+    用**唯一文本**避开进程内缓存（缓存键含文本），否则第二次调用命中缓存、账目为 0，
+    断言会变成"看执行顺序"的伪测试。
+    """
+    from app.services import usage_counters
+
+    monkeypatch.setattr(interview_tts, "_request_for", lambda *_args: _wav())
+
+    async def _never(*_args, **_kwargs):  # pragma: no cover - 不应被调用
+        raise AssertionError("不应走真实上游")
+
+    text = "计费字符口径验证：汉字算两个"
+    monkeypatch.setattr(interview_tts, "_request_audio", _never)
+
+    # 计量写的是全局设置文件，读也用同一个会话：测试库按 PID 隔离，不影响其它用例。
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        before = usage_counters.summary(db)["tts_chars"]
+        interview_tts.synthesize(text, "Cherry", "dashscope")
+        db.expire_all()
+        after = usage_counters.summary(db)["tts_chars"]
+    finally:
+        db.close()
+
+    assert after - before == usage_units.tts_billable_chars(text)

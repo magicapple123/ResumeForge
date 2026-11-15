@@ -10,6 +10,7 @@
  * 新字段"能被补齐（而不是整份作废、把用户调过的音色丢掉）。
  */
 import { useEffect, useState } from "react";
+import { DEFAULT_TTS_PROVIDER, normalizeTtsProvider, type TtsProvider } from "./ttsVoices";
 
 export type BargeInSensitivity = "slow" | "normal" | "fast";
 
@@ -17,8 +18,14 @@ export interface InterviewVoiceSettings {
   version: 1;
   /** 面试官是否朗读（关掉后只出文字）。 */
   speakInterviewer: boolean;
-  /** 播报音色 id（必须是后端 `VOICES` 里的一个；未知值回落默认）。 */
+  /**
+   * 音色 id。**属于哪一档由 `ttsProvider` 决定**：百炼档是 Cherry / Serena / Ethan /
+   * Chelsie，DeepSeek 档是 stella / tide。存的是字符串而不是"档内序号"——切换档位时旧值
+   * 原样保留，选回去就还能用（不静默失效）。
+   */
   voice: string;
+  /** 合成服务档位：`dashscope`（默认，百炼）/ `deepseek`。两档并列，不互斥替换。 */
+  ttsProvider: TtsProvider;
   /** 播报语速 0.7–1.5。 */
   rate: number;
   /** 播报音量 0–1。 */
@@ -41,6 +48,7 @@ export const DEFAULT_VOICE_SETTINGS: InterviewVoiceSettings = {
   version: 1,
   speakInterviewer: true,
   voice: "Cherry",
+  ttsProvider: DEFAULT_TTS_PROVIDER,
   rate: 1,
   volume: 1,
   endpointSilenceMs: 700,
@@ -86,6 +94,9 @@ export function normalizeVoiceSettings(raw: unknown): InterviewVoiceSettings {
         ? source.speakInterviewer
         : base.speakInterviewer,
     voice: typeof source.voice === "string" && source.voice ? source.voice : base.voice,
+    // 档位写坏了回落默认档，但**音色字符串原样保留**：值属于哪一档由 resolveTtsVoice 判，
+    // 在这一层清空等于"换个版本就把用户选的音色丢了"。
+    ttsProvider: normalizeTtsProvider(source.ttsProvider),
     rate: clamp(Number(source.rate), 0.7, 1.5, base.rate),
     volume: clamp(Number(source.volume), 0, 1, base.volume),
     endpointSilenceMs: clamp(Number(source.endpointSilenceMs), 400, 1500, base.endpointSilenceMs),

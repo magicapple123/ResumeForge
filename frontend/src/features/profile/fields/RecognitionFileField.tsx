@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 识别前的文件暂存区：图片显示缩略图（可点开预览），文档显示名称与体积。 */
 
-import { DeleteOutlined, PictureOutlined } from "@ant-design/icons";
+import { useState } from "react";
+import { DeleteOutlined, FileSearchOutlined, PictureOutlined } from "@ant-design/icons";
 import { App, Button, Image, Tooltip, Typography, Upload } from "antd";
 import type { StagedFile } from "../../../hooks/useRecognitionFiles";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import { MAX_ATTACHMENT_COUNT, RECOGNITION_ACCEPT } from "../../../utils/attachments";
 import FileDropZone from "../../../components/common/FileDropZone";
+import ScanOcrModal from "../../resume/import/ScanOcrModal";
 import RecognitionFilePreview from "./RecognitionFilePreview";
 
 interface Props {
@@ -27,6 +29,8 @@ export default function RecognitionFileField({
 }: Props) {
   useLocale();
   const { message } = App.useApp();
+  // 扫描件走独立面板（T03）：它不在"暂存待识别"这条链路上，而是上传→后台任务→进度。
+  const [scanOpen, setScanOpen] = useState(false);
   const full = files.length >= MAX_ATTACHMENT_COUNT;
   const busy = reading || disabled;
 
@@ -59,6 +63,11 @@ export default function RecognitionFileField({
               {t("componentsMisc.recognitionField.add")}
             </Button>
           </Upload>
+          {/* 扫描件（无文字层）的独立入口：与"添加文件"并列，避免用户把扫描 PDF 当普通
+              文档传进去后被一句"没有文字"顶回来。 */}
+          <Button icon={<FileSearchOutlined />} disabled={busy} onClick={() => setScanOpen(true)}>
+            {t("ocrScan.entry")}
+          </Button>
           <Typography.Text type="secondary">
             {t("componentsMisc.recognitionField.pasteHint", { count: MAX_ATTACHMENT_COUNT })}
           </Typography.Text>
@@ -98,6 +107,7 @@ export default function RecognitionFileField({
           </Image.PreviewGroup>
         )}
       </div>
+      <ScanOcrModal open={scanOpen} onClose={() => setScanOpen(false)} />
     </FileDropZone>
   );
 }

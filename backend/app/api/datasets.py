@@ -40,7 +40,10 @@ from ..services.data_backup.global_assets import (
     read_global_assets_payload,
     restore_global_assets,
 )
-from ..services.data_backup.global_config import read_global_llm_payload
+from ..services.data_backup.global_config import (
+    read_global_llm_payload,
+    restore_global_system_sources,
+)
 from ..services.data_backup.naming import default_backup_stem, safe_backup_filename
 from ..services.datasets import (
     activate_dataset,
@@ -178,6 +181,11 @@ async def import_archive(request: Request) -> dict:
             global_payload = read_global_llm_payload(staging)
             if global_payload is not None:
                 created["global_llm"] = merge_exported_profiles(global_payload)
+                # 「外部连接」C 组（更新源 / 字体源 / RAG 资产源 / 浏览器端口）跟着同一个
+                # 成员回来；旧包没有这一段时它是 0，不报错也不影响数据集本身。
+                restored_sources = restore_global_system_sources(global_payload)
+                if restored_sources:
+                    created["restored_system_sources"] = restored_sources
         except Exception as exc:  # noqa: BLE001 - 边上信息，不能扩大失败面
             logger.warning("备份包里的全局模型配置未能导入：%s", exc)
             created["global_llm"] = {"error": "全局模型配置未能导入，详情见服务端日志"}

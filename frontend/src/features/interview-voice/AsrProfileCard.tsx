@@ -29,6 +29,7 @@ import { ASR_PRESETS } from "./asrPresets";
 const PROTOCOL_LABEL_KEYS: Record<string, MessageKey> = {
   openai: "voiceInput.settings.protocol.openai",
   dashscope: "voiceInput.settings.protocol.dashscope",
+  deepseek: "voiceInput.settings.protocol.deepseek",
 };
 
 interface Props {

@@ -76,6 +76,12 @@ const ROUTE_ACTIONS: readonly RouteActions[] = [
     actions: ["open-assistant", "side-ask", "go-resumes", "go-knowledge", "open-clipboard"],
   },
   {
+    // T07 公司/岗位背景调研：本页的动作是"看完调研接着去做的那几件事"——找同方向的岗位、
+    // 加入投递台、把结论问给助手；页面自己的输入与简报按钮在页面上，不需要球代劳。
+    path: "/research",
+    actions: ["open-assistant", "side-ask", "go-jobs", "go-apply", "open-clipboard"],
+  },
+  {
     path: "/interview",
     actions: ["open-assistant", "side-ask", "go-claims", "go-tracker", "open-clipboard"],
   },

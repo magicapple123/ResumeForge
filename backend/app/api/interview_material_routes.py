@@ -17,6 +17,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Literal
+
 from fastapi import Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
@@ -40,13 +43,19 @@ from ..services.interview.interview_material import (
     extract_text_material,
     recognize_material_scans,
 )
-from ..services.llm.base import LLMError
+from ..services.llm.base import BaseLLMProvider, LLMError
+from ..services.ocr.policy import load_ocr_context
 from .interview_shared import (
     _resume_text,
     _session_job_text,
     _session_or_404,
     _to_detail,
 )
+
+#: 材料识别链的「模型解析器」契约：给一个会话，拿到（provider, 模型名）或抛 400。
+#: 显式标注是因为这里的 ``provider`` 可能为 ``None``（OCR 可用时不需要视觉模型），
+#: 不标注时 pyright 只能推出 ``Unknown``，调用点就没有真检查。
+RequireProvider = Callable[[Session], tuple[BaseLLMProvider, str]]
 
 # 单份材料文件的硬上限：与 ``document_text.MAX_MATERIAL_FILE_BYTES`` 同一个数，
 # 在这里再拦一道是因为 multipart 已经收进内存/临时文件，早点说"太大"比解析完再说好。
@@ -60,8 +69,25 @@ _FOLLOWUP_NOT_FINISHED_DETAIL = "这场面试还没结束，追问只在面试�
 _FOLLOWUP_CLOSED_DETAIL = "追问已停止，先点「继续追问」再发问"
 _FOLLOWUP_FAILED_DETAIL = "面试助手暂时无法回答这次追问"
 
+#: 响应契约允许的 ``parser`` 取值（未知值一律按 ``text``，与改造前口径一致）。
+_PARSER_VALUES: dict[str, Literal["text", "ocr", "vision"]] = {
+    "text": "text",
+    "ocr": "ocr",
+    "vision": "vision",
+}
 
-def register_material_routes(router, require_provider) -> None:
+
+def _parser_of(extracted) -> Literal["text", "ocr", "vision"]:
+    """正文来源：响应契约只认 ``text`` / ``ocr`` / ``vision``，其它值一律按本机提取。
+
+    走"查表"而不是 ``in`` 判断：``getattr`` 拿到的是 ``Any``，值域收窄要在**返回值**上
+    成立（``Literal`` 才行），否则调用点等于没被检查。
+    """
+    parser = str(getattr(extracted, "parser", "text"))
+    return _PARSER_VALUES.get(parser, "text")
+
+
+def register_material_routes(router, require_provider: RequireProvider) -> None:
     @router.post("/materials", response_model=InterviewMaterialExtract)
     async def extract_material(
         kind: MaterialKind = Form(...),
@@ -76,12 +102,17 @@ def register_material_routes(router, require_provider) -> None:
         if len(raw) > MAX_MATERIAL_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail=_TOO_LARGE_DETAIL)
         suffix = material_suffix(name)
+        # 识别引擎与 Key 是全局设置：这里一次性解析，两条识别链共用同一份决策。
+        ocr_ctx = load_ocr_context(db)
 
         if suffix in IMAGE_MATERIAL_SUFFIXES:
-            # 图片必须走视觉模型：没配置模型时给的是"去设置里配"这个前因，而不是一个坏文件。
-            provider, _model = require_provider(db)
+            # OCR 可用时不需要视觉模型：用户可能只配了 DeepSeek Key、没配多模态模型，
+            # 那种情况下强行 require_provider 会把一条本来能走通的路径挡死。
+            provider: BaseLLMProvider | None = None
+            if not (ocr_ctx.uses_ocr() and ocr_ctx.configured):
+                provider, _model = require_provider(db)
             try:
-                extracted = await extract_image_material(provider, name, raw)
+                extracted = await extract_image_material(provider, name, raw, ocr_ctx)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             except LLMError as exc:
@@ -90,34 +121,33 @@ def register_material_routes(router, require_provider) -> None:
                 name=extracted.name,
                 text=extracted.text,
                 warnings=list(extracted.warnings),
-                parser="vision",
+                parser=_parser_of(extracted),
             )
 
         try:
-            # PDF 解析是同步 CPU/IO 重活（pypdf），下沉线程池，别占住事件循环。
-            extracted = await run_in_threadpool(extract_text_material, name, raw)
+            # PDF 解析是同步 CPU/IO 重活（pypdf + 可能的 OCR 长连接），下沉线程池。
+            extracted = await run_in_threadpool(extract_text_material, name, raw, ocr_ctx)
         except ValueError as exc:
             # detail 只写原因：动作（换文件 / 重试）由前端按场景补。
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-        parser = "text"
         if extracted.scan_images:
             # 扫描件兜底：**只有真的拿到渲染页**才向模型要能力。有文字层的 PDF
             # 永远走不到这里，所以未配置模型不会挡住 pdf / txt / md / docx。
             provider, _model = require_provider(db)
-            parser = "vision"
             try:
                 extracted = await recognize_material_scans(provider, extracted)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             except LLMError as exc:
                 raise HTTPException(status_code=502, detail=_SCAN_FAILED_DETAIL) from exc
+            extracted = extracted._replace(parser="vision")
 
         return InterviewMaterialExtract(
             name=extracted.name,
             text=extracted.text,
             warnings=list(extracted.warnings),
-            parser=parser,
+            parser=_parser_of(extracted),
         )
 
 

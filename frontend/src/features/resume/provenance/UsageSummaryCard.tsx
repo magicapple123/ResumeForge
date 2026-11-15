@@ -10,7 +10,7 @@ import type { TableColumnsType } from "antd";
 import EmptyState from "../../../components/common/EmptyState";
 import ErrorState from "../../../components/common/ErrorState";
 import LoadingBlock from "../../../components/common/LoadingBlock";
-import { pt } from "./i18n";
+import { pt, type ProvenanceMessageKey } from "./i18n";
 import { usageTaskLabel } from "./usageTaskLabels";
 import { costAmount, durationText, hasUnknownTokens, tokenText } from "./helpers";
 import type { UsageBucketOut, UsageSummaryOut } from "./types";
@@ -21,6 +21,23 @@ interface Props {
   loading?: boolean;
   error?: string | null;
   onRetry?: () => void;
+}
+
+/** 四类外部用量的展示顺序与单位（单位文案在同一个命名空间里，便于一起翻译）。 */
+function externalStats(
+  external: NonNullable<UsageSummaryOut["external"]>,
+): [ProvenanceMessageKey, ProvenanceMessageKey, number][] {
+  return [
+    ["provenance.usage.external.ocr", "provenance.usage.external.pages", external.ocr_pages],
+    ["provenance.usage.external.tts", "provenance.usage.external.chars", external.tts_chars],
+    // 秒数按整数展示：小数的秒对用户没有意义（0.4 秒写成 0 秒会像"没记"）。
+    [
+      "provenance.usage.external.asr",
+      "provenance.usage.external.seconds",
+      Math.round(external.asr_seconds),
+    ],
+    ["provenance.usage.external.search", "provenance.usage.external.calls", external.search_calls],
+  ];
 }
 
 const UNKNOWN = "provenance.usage.unknown" as const;
@@ -76,7 +93,20 @@ export default function UsageSummaryCard({
   useLocale();
   if (error) return <ErrorState description={error} onRetry={onRetry} />;
   if (loading) return <LoadingBlock tip={pt("provenance.usage.title")} />;
-  if (!summary || summary.records === 0) {
+  // 老响应没有 external：整套按 0 兜底，而不是让整张卡抛错（升级瞬间的旧数据）。
+  // 必须声明在下面的空态判据之前——空态判据要用它，写到后面就是 TDZ 报错。
+  const external: UsageSummaryOut["external"] = summary?.external ?? {
+    ocr_pages: 0,
+    tts_chars: 0,
+    asr_seconds: 0,
+    search_calls: 0,
+    window: { days: 0, since: null, until: null },
+  };
+  // records 只数 token 调用；OCR / 语音 / 搜索不会产生 token 记录，所以"没有 token 记录"
+  // 不等于"什么用量都没有"（只做过 OCR 的用户会看到空态，那是在说谎）。
+  const externalTotal =
+    external.ocr_pages + external.tts_chars + external.asr_seconds + external.search_calls;
+  if (!summary || (summary.records === 0 && externalTotal === 0)) {
     return <EmptyState inline description={pt("provenance.usage.empty")} />;
   }
 
@@ -137,6 +167,22 @@ export default function UsageSummaryCard({
               {pt("provenance.usage.costEstimated")}
             </Typography.Text>
           ) : null}
+        </div>
+      </div>
+      <div data-usage-external="1" style={{ marginTop: 10 }}>
+        <Typography.Text strong>{pt("provenance.usage.external.title")}</Typography.Text>
+        <div style={{ fontSize: 12, color: "var(--rf-text-secondary)", marginBottom: 6 }}>
+          {pt("provenance.usage.external.hint")}
+        </div>
+        <div className="usage-stat-grid">
+          {externalStats(external).map(([labelKey, unitKey, value]) => (
+            <div className="usage-stat" key={labelKey}>
+              <span className="usage-stat-label">{pt(labelKey)}</span>
+              <Typography.Text strong className="usage-stat-value">
+                {pt(unitKey, { count: value })}
+              </Typography.Text>
+            </div>
+          ))}
         </div>
       </div>
       <div data-usage-cache="1">

@@ -1,0 +1,103 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 「语音记一条」的样式（T09）。
+ *
+ * 只有三块：入口那一行（按钮 + 提示）、录音态那颗红胶囊、校对弹窗里的条目卡片。
+ * 颜色一律走 `--rf-*` 变量（深色主题自动跟随），不写死色值。
+ * 录音态刻意不是 antd Button：同一行里往往已经有别的按钮，再来一颗红按钮会让人分不清
+ * 哪个是"停止录音"——这与面试页 `voice-recording-button` 的取舍一致。
+ */
+
+.voice-memo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.voice-memo-hint {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.voice-memo-recording {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 12px;
+  border: 1px solid var(--rf-danger, #d4380d);
+  background: transparent;
+  color: var(--rf-danger, #d4380d);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.voice-memo-recording:hover {
+  background: var(--rf-danger-weak, rgba(212, 56, 13, 0.08));
+}
+
+.voice-memo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: voice-memo-pulse 1.2s ease-in-out infinite;
+}
+
+.voice-memo-time {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes voice-memo-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* 校对弹窗：一条提案一张卡，字段名在上、可编辑值在下（窄屏也不会挤成一列按钮）。 */
+.voice-memo-entry {
+  border: 1px solid var(--rf-border, #f0f0f0);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.voice-memo-entry:last-child {
+  margin-bottom: 0;
+}
+
+.voice-memo-entry-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.voice-memo-field {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.voice-memo-field:last-child {
+  margin-bottom: 0;
+}
+
+.voice-memo-field-label {
+  display: block;
+  font-size: 12px;
+  color: var(--rf-text-secondary, rgba(0, 0, 0, 0.45));
+  margin-bottom: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-memo-dot {
+    animation: none;
+  }
+}

@@ -7,6 +7,7 @@ import bilingual from "./en-US.bilingual";
 import careerScenarios from "./en-US.careerScenarios";
 import conflict from "./en-US.conflict";
 import common from "./en-US.common";
+import companyResearch from "./en-US.companyResearch";
 import core from "./en-US.core";
 import credentials from "./en-US.credentials";
 import documentPack from "./en-US.document";
@@ -25,6 +26,9 @@ import profileLibrary from "./en-US.profileLibrary";
 import provenance from "./en-US.provenance";
 import proview from "./en-US.proview";
 import research from "./en-US.research";
+import external from "./en-US.external";
+import ocrScan from "./en-US.ocrScan";
+import voiceMemo from "./en-US.voiceMemo";
 import responsive from "./en-US.responsive";
 import review from "./en-US.review";
 import rich from "./en-US.rich";
@@ -202,6 +206,7 @@ const enUS = {
   ...careerScenarios,
   ...conflict,
   ...common,
+  ...companyResearch,
   ...credentials,
   ...delivery,
   ...fontDownload,
@@ -218,6 +223,9 @@ const enUS = {
   ...provenance,
   ...proview,
   ...research,
+  ...external,
+  ...ocrScan,
+  ...voiceMemo,
   ...responsive,
   ...review,
   ...rich,

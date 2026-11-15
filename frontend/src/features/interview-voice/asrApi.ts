@@ -4,10 +4,11 @@
 import { request } from "../../api/client";
 
 /**
- * 调用协议。两套请求体互不兼容（见 `asrPresets.ts` 与后端 `services/asr_client.py`）：
- * `openai` = whisper 式 multipart；`dashscope` = Qwen-ASR 的 chat + input_audio。
+ * 调用协议。三套请求体互不兼容（见 `asrPresets.ts` 与后端 `services/asr_client.py`）：
+ * `openai` = whisper 式 multipart；`dashscope` = Qwen-ASR 的 chat + input_audio；
+ * `deepseek` = `/tools/asr` 的单字段 multipart（无 model，只收 WAV / Ogg Opus，120 秒上限）。
  */
-export type AsrProtocol = "openai" | "dashscope";
+export type AsrProtocol = "openai" | "dashscope" | "deepseek";
 
 /** 语音服务配置；api_key 只可能是掩码（********）或空串，绝不是原文。 */
 export interface AsrSettings {

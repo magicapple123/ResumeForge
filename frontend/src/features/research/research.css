@@ -1,0 +1,105 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 公司与岗位调研页（T07）的布局。
+ *
+ * 只写布局与间距：颜色一律走 antd token / --rf-* 变量，不在这里写死。
+ * 卡片用两列网格（窄屏一列），一屏能看到"官网 / 新闻 / 介绍"三类是怎么分布的。 */
+
+.rf-research-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-gap-lg, 16px);
+}
+
+.rf-research-form .rf-research-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rf-research-deep {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rf-research-hint {
+  font-size: 12px;
+}
+
+.rf-research-cards {
+  display: grid;
+  /* min(280px, 100%)：窄视口（容器 < 280px）下 auto-fill 的固定下限会把整行撑出容器、
+     横向溢出；用 min() 让下限跟着容器收，视觉在正常宽度下不变。 */
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 网格项本体：卡片撑满列高，两列卡片底部对齐。 */
+.rf-research-card {
+  height: 100%;
+}
+
+/* 简报容器：标题 / 段落 / 列表 / 来源纵向排，间距由内部段落自带。 */
+.rf-research-brief {
+  display: flex;
+  flex-direction: column;
+}
+
+.rf-research-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.rf-research-card-icon {
+  border-radius: 2px;
+}
+
+.rf-research-card-site {
+  font-size: 12px;
+}
+
+.rf-research-card-snippet {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+/* 引用编号：小一号、不换行，点开原始来源。 */
+.rf-research-citation {
+  white-space: nowrap;
+  font-size: 0.9em;
+}
+
+.rf-research-brief-heading {
+  margin: 12px 0 4px;
+}
+
+.rf-research-brief-paragraph {
+  margin-bottom: 8px;
+}
+
+.rf-research-brief-list {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.rf-research-brief-sources {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+}
+
+.rf-research-brief-sources li {
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.rf-research-usage {
+  margin: 12px 0 0;
+  font-size: 12px;
+}

@@ -50,7 +50,7 @@ const searchCard = {
   "searchCard.deepseek.keyAria": "DeepSeek search API key",
   "searchCard.deepseek.keyPlaceholder": "Paste your DeepSeek API key",
   "searchCard.deepseek.cost":
-    "Search and Fetch cost about ¥0.005 per successful request each, billed by DeepSeek; this app does not track that usage. A saved key is echoed as ********; clear the field to remove it.",
+    "Search and Fetch cost about ¥0.005 per successful request each, billed by DeepSeek; the app only counts calls and never converts them into money. A saved key is echoed as ********; clear the field to remove it.",
   "searchCard.deepseek.privacy":
     "With this source selected, page URLs are sent to DeepSeek so it can fetch the body; local reading is used only when that fails. Turn the source off if you do not want URLs sent.",
 

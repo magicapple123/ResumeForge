@@ -115,6 +115,58 @@ def test_tool_schema_exposes_the_three_depths():
 
 
 @pytest.mark.asyncio
+async def test_deep_depth_asks_each_source_for_more_candidates(monkeypatch):
+    """T14：deep 档单源 count 提到 20–30；standard / snippet 保持原样（多召回 = 多花钱）。"""
+    asked: dict[str, list[int]] = {}
+
+    async def fake_ddg(_query: str, limit: int = 10):
+        asked.setdefault("ddg", []).append(limit)
+        return [_result(index) for index in range(1, limit + 1)]
+
+    async def fake_fetch(_url: str, max_chars: int = 0, **_kwargs):
+        return "后端招聘岗位职责：负责服务端开发。"
+
+    monkeypatch.setattr(aggregate_module, "search_duckduckgo", fake_ddg)
+    monkeypatch.setattr(aggregate_module, "fetch_page_text", fake_fetch)
+
+    await aggregate_search(
+        "后端 招聘 深度召回", SearchConfig(sources=["duckduckgo"], depth="deep")
+    )
+    await aggregate_search(
+        "后端 招聘 标准召回", SearchConfig(sources=["duckduckgo"], depth="standard")
+    )
+    await aggregate_search(
+        "后端 招聘 摘要召回", SearchConfig(sources=["duckduckgo"], depth="snippet")
+    )
+
+    deep_limit, standard_limit, snippet_limit = asked["ddg"]
+    assert 20 <= deep_limit <= 30
+    assert deep_limit == aggregate_module._DEEP_PER_SOURCE_LIMIT
+    # 标准 / 摘要档与改造前一致（``max(_PER_SOURCE_LIMIT, cap)``，默认 cap=8 → 10）。
+    assert standard_limit == snippet_limit == aggregate_module._PER_SOURCE_LIMIT
+
+
+@pytest.mark.asyncio
+async def test_deep_depth_still_returns_at_most_max_results(monkeypatch):
+    """放大的是候选池，不是返回条数：合并后仍按 max_results 截断。"""
+
+    async def fake_ddg(_query: str, limit: int = 10):
+        return [_result(index) for index in range(1, limit + 1)]
+
+    async def fake_fetch(_url: str, max_chars: int = 0, **_kwargs):
+        return "后端招聘岗位职责：负责服务端开发。"
+
+    monkeypatch.setattr(aggregate_module, "search_duckduckgo", fake_ddg)
+    monkeypatch.setattr(aggregate_module, "fetch_page_text", fake_fetch)
+
+    results = await aggregate_search(
+        "后端 招聘 深度截断",
+        SearchConfig(sources=["duckduckgo"], depth="deep", max_results=8),
+    )
+    assert len(results) <= 8
+
+
+@pytest.mark.asyncio
 async def test_zero_rss_items_says_the_bing_endpoint_may_have_changed(monkeypatch):
     """RSS 解析到 0 条 ≠ 这次没搜到：必须提示端点可能已变更（不是让用户换关键词）。"""
 

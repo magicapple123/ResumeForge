@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...models.llm_usage import LLMUsageRecord
+from .. import usage_counters
 from .usage import FINISH_STOP, LLMUsage, summarize_usages
 from .usage_pricing import (
     COST_NO_TOKEN,
@@ -287,6 +288,22 @@ def _cost_summary(rows: list[LLMUsageRecord], pricing: UsagePricing | None) -> d
     }
 
 
+def _external_usage_block(db: Session, *, since: datetime | None) -> dict[str, Any]:
+    """非 token 用量（T16）：OCR 页 / TTS 字符 / ASR 秒 / 搜索次数，**没有金额字段**。
+
+    与 token 汇总挂在同一份响应上，是为了让用户在一个地方看全"用了多少"；口径与存储
+    在 `services/usage_counters.py`（同库的 `app_setting` external 分区），这里只转出。
+    `since` 传进来就按同一个时间窗过滤，保证两块数字的时间口径一致。
+    """
+    try:
+        if since is not None:
+            return usage_counters.summary(db, since=since)
+        return usage_counters.summary(db)
+    except Exception:  # noqa: BLE001 - 计量是旁路，坏掉也不能让用量汇总 500
+        logger.warning("外部用量汇总失败，按全零降级", exc_info=True)
+        return usage_counters.empty_summary()
+
+
 def summarize_usage(
     db: Session,
     *,
@@ -316,6 +333,8 @@ def summarize_usage(
         "totals": totals,
         "unknown_token_records": sum(1 for row in rows if row.total_tokens is None),
         "cost": _cost_summary(rows, pricing),
+        # #T16：非 token 用量与 token 汇总同屏可见；这一块**不含任何金额**。
+        "external": _external_usage_block(db, since=since),
     }
 
 

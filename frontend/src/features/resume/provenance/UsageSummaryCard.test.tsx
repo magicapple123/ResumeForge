@@ -27,6 +27,14 @@ function summary(overrides: Partial<UsageSummaryOut> = {}): UsageSummaryOut {
     totals: bucket,
     unknown_token_records: 0,
     cost: { estimated: false, currency: "USD", amount: null, reason: "not_configured" },
+    // 外部用量（T16）：夹具默认全 0，个别用例再覆盖。
+    external: {
+      ocr_pages: 0,
+      tts_chars: 0,
+      asr_seconds: 0,
+      search_calls: 0,
+      window: { days: 30, since: null, until: null },
+    },
     ...overrides,
   };
 }

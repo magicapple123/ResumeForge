@@ -146,12 +146,18 @@ class _TurnCancelResult(BaseModel):
 
 
 class _TtsPayload(BaseModel):
-    """一句待合成的文本。**按句调用**：整段一次合成要等十秒以上（见 interview_tts 文件头）。"""
+    """一句待合成的文本。**按句调用**：整段一次合成要等十秒以上（见 interview_tts 文件头）。
+
+    ``provider`` 是并列的两档（``dashscope`` 默认 / ``deepseek``）。缺省 = 默认档，
+    所以未升级的前端照旧工作；前端持久化的音色字符串**不因为档位存在而失效**
+    （选回百炼档时 4 个旧音色原样可用）。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     text: str = Field(min_length=1, max_length=interview_tts.MAX_TEXT_LENGTH)
     voice: str = Field(default=interview_tts.DEFAULT_VOICE, max_length=32)
+    provider: str = Field(default=interview_tts.DEFAULT_PROVIDER, max_length=32)
 
 
 class _TtsVoiceOption(BaseModel):
@@ -159,13 +165,33 @@ class _TtsVoiceOption(BaseModel):
     label: str
 
 
+class _TtsProviderStatus(BaseModel):
+    """一档的合成能力（`GET /voice/tts/status` 的 ``providers[]``）。
+
+    ``available`` 是**逐档**判断的：百炼有 Key 不等于 DeepSeek 有 Key，界面要分开显示，
+    否则用户会在"看着可用"的档上点了没声音。
+    """
+
+    id: str
+    model: str
+    default_voice: str
+    available: bool
+    voices: list[_TtsVoiceOption]
+
+
 class _TtsStatus(BaseModel):
-    """房间进来先问一次：能不能合成、有哪些音色。同时顺手预热一次。"""
+    """房间进来先问一次：能不能合成、有哪些音色。同时顺手预热一次。
+
+    顶层四个字段是**旧口径**（= 默认档，向后兼容未升级前端）；``providers`` 是新口径，
+    前端按它渲染档位下拉。两者内容有重叠是刻意的：改顶层字段名会让旧前端读不到音色。
+    """
 
     available: bool
     model: str
     default_voice: str
     voices: list[_TtsVoiceOption]
+    default_provider: str = interview_tts.DEFAULT_PROVIDER
+    providers: list[_TtsProviderStatus] = []
 
 
 def register_voice_routes(router: APIRouter) -> None:
@@ -205,17 +231,28 @@ def register_voice_routes(router: APIRouter) -> None:
     def tts_status() -> _TtsStatus:
         """合成能力与音色清单（**只读配置，不发合成请求**）。
 
-        顺手预热一次：首次冷启动实测 6.4s，而进房间到面试官开口之间通常有几秒，
+        顺手预热一次默认档：首次冷启动实测 6.4s，而进房间到面试官开口之间通常有几秒，
         正好用来把模型焐热。预热是后台线程、失败静默（见 ``interview_tts.prewarm``）。
+        新档**不预热**：它可能是用户没配 Key 的那一档，预热的失败日志只会变成噪音。
         """
-        available = interview_tts.available()
+        default_provider = interview_tts.DEFAULT_PROVIDER
+        available = interview_tts.available(default_provider)
         if available:
-            interview_tts.prewarm()
+            interview_tts.prewarm(interview_tts.default_voice_of(default_provider), default_provider)
+        providers = [
+            _TtsProviderStatus.model_validate(interview_tts.provider_status(provider))
+            for provider in interview_tts.PROVIDER_IDS
+        ]
         return _TtsStatus(
             available=available,
-            model=interview_tts.MODEL,
-            default_voice=interview_tts.DEFAULT_VOICE,
-            voices=[_TtsVoiceOption(id=key, label=label) for key, label in interview_tts.VOICES],
+            model=interview_tts.model_of(default_provider),
+            default_voice=interview_tts.default_voice_of(default_provider),
+            voices=[
+                _TtsVoiceOption(id=key, label=label)
+                for key, label in interview_tts.voices_of(default_provider)
+            ],
+            default_provider=default_provider,
+            providers=providers,
         )
 
     @router.post("/voice/tts")
@@ -224,9 +261,12 @@ def register_voice_routes(router: APIRouter) -> None:
 
         失败一律 503 + 原因：前端据此回落到浏览器音色，并把原因显示在界面上——
         "合成失败"不许表现成"没声音"（那样无从排查）。
+
+        音色不属于所选档时**不报错**：``interview_tts.synthesize`` 按该档默认音色合成
+        （宁可换声也不静默无声），界面上的显式提示由前端用同一份 ``resolve_voice`` 给出。
         """
         try:
-            audio = interview_tts.synthesize(payload.text, payload.voice)
+            audio = interview_tts.synthesize(payload.text, payload.voice, payload.provider)
         except interview_tts.TtsUnavailable as error:
             raise HTTPException(status_code=503, detail=str(error)) from error
         return Response(

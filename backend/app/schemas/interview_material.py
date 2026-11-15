@@ -50,5 +50,6 @@ class InterviewMaterialExtract(BaseModel):
     name: str
     text: str
     warnings: list[str] = Field(default_factory=list)
-    # text = 本机提取，vision = 视觉识别（图片 / 扫描件 PDF）；两侧格式统一后只能按实际路径说。
-    parser: Literal["text", "vision"] = "text"
+    # text = 本机提取，ocr = DeepSeek OCR 识别，vision = 视觉识别（图片 / 扫描件 PDF）。
+    # 接入 OCR 后不能再把"扫描件"笼统算作 text：界面要按实际路径说明原件发给了谁。
+    parser: Literal["text", "ocr", "vision"] = "text"

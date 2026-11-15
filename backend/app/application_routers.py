@@ -33,6 +33,7 @@ from .api import (
     candidate_jobs,
     career_scenarios,
     claims,
+    connections,
     datasets,
     drill,
     external_resumes,
@@ -51,12 +52,14 @@ from .api import (
     login_status,
     manual_backups,
     materials,
+    ocr,
     profile,
     profile_definitions,
     profile_groups,
     profile_workspace,
     referrals,
     reminders,
+    research,
     resume_risk,
     resume_writing,
     resumes,
@@ -148,6 +151,9 @@ ROUTERS = (
     resume_templates_api.router,
     profile.router,
     materials.router,
+    # 扫描件 OCR：独立前缀 /api/ocr（识别引擎设置 + 后台识别任务）。放在 materials 之后
+    # 只是保持"资料域相邻"的阅读顺序，路径上两者没有交集。
+    ocr.router,
     knowledge.router,
     candidate_jobs.router,
     claims.router,
@@ -166,6 +172,8 @@ ROUTERS = (
     webform.router,
     tracker.router,
     settings_api.router,
+    # 「外部连接」页（T11）：独立前缀 /api/connections，只做读侧聚合。
+    connections.router,
     # RAG v3：语义检索 provider 配置（/api/settings/embedding/*，独立前缀）。
     settings_embedding.router,
     # 同前缀的命名配置写端点（/api/settings/embedding/profiles*）。原先由
@@ -216,6 +224,8 @@ ROUTERS = (
     assistant_breadth.router,
     # 期二 求职偏好档（/api/job-preferences，独立前缀；与 /api/assistant 不抢路径）。
     job_preferences.router,
+    # 公司/岗位背景调研（T07）：独立前缀 /api/research，与 /api/jobs、/api/assistant 零交集。
+    research.router,
     trash.router,
     # 附件预览（PDF 首页渲染）：独立前缀 /api/attachments，与识别链路无耦合。
     attachments.router,

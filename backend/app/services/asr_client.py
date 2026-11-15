@@ -1,18 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
-"""语音转写客户端：按 ``protocol`` 分派到两套互不兼容的上游口径。
+"""语音转写客户端：按 ``protocol`` 分派到三套互不兼容的上游口径。
 
 | protocol    | 端点                          | 请求体                                        |
 | ----------- | ----------------------------- | --------------------------------------------- |
 | ``openai``  | ``POST {base}/audio/transcriptions`` | ``multipart/form-data``：``file`` + ``model`` + ``language`` |
 | ``dashscope`` | ``POST {base}/chat/completions``   | JSON：``messages[0].content=[{type:"input_audio",...}]`` |
+| ``deepseek`` | ``POST {base}/tools/asr``     | ``multipart/form-data``：**只有 ``file``**（无 model），只收 WAV / Ogg Opus |
 
 为什么必须显式建模协议：阿里云百炼的 OpenAI 兼容地址（``/compatible-mode/v1``）**不实现**
 ``/audio/transcriptions``，Qwen-ASR 只走 chat + ``input_audio``（只接受公网 URL 或
-Base64 Data URI，不接受本地路径，所以音频必须由后端转 base64）。靠地址猜协议必然出错，
-协议是配置字段（见 ``schemas/asr.py``）。
+Base64 Data URI，不接受本地路径，所以音频必须由后端转 base64）；DeepSeek 则是第三种形状
+（``/tools/asr``、无 model、只收 WAV/Ogg、120 秒上限）。靠地址猜协议必然出错，
+协议是配置字段（见 ``schemas/asr.py``）。DeepSeek 那一段在 ``asr_deepseek.py``。
 
 错误分类是这个模块存在的主要理由：上层要把 400 上游原因 / 401 / 404 / 413 / 超时 / 空结果
-分别翻成**各不相同、且能给下一步**的中文提示（"失败"两个字对用户没有用）。
+分别翻成**各不相同、且能给下一步**的中文提示（"失败"两个字对用户没有用）。分类实现
+下沉到 ``asr_errors.py``（三套协议共用一份），这里 re-export 保持既有 import 路径不变。
 
 安全边界：日志与异常消息不携带 Key、不携带音频内容；Key 只出现在发给上游的
 ``Authorization`` 头里；上游返回的错误消息只截断脱敏后使用。
@@ -21,13 +24,28 @@ Base64 Data URI，不接受本地路径，所以音频必须由后端转 base64�
 from __future__ import annotations
 
 import base64
-import re
 import struct
 import time
 
 import httpx
 
 from ..schemas.asr import AsrProtocol
+from .asr_deepseek import fixed_models as deepseek_fixed_models
+from .asr_deepseek import post_asr as post_deepseek_asr
+from .asr_errors import AsrError, raise_for_status, sanitize_upstream_text, upstream_detail
+
+__all__ = [
+    "AsrError",
+    "DEFAULT_TIMEOUT_SECONDS",
+    "MAX_MODEL_COUNT",
+    "chat_endpoint",
+    "fetch_asr_models",
+    "models_endpoint",
+    "probe_asr_connection",
+    "silent_wav_bytes",
+    "transcribe_audio",
+    "transcribe_endpoint",
+]
 
 # 单次转写的上游超时：60 秒（计划 §6）。3 分钟音频在这段时间内足够转完；
 # 拨高只会让"服务不可用"时用户多等。
@@ -40,11 +58,6 @@ MODELS_PATH = "/models"
 MAX_MODEL_COUNT = 100
 # 拉模型列表的超时比转写短：它只是一次 GET，用户盯着按钮等。
 MODELS_TIMEOUT_SECONDS = 15.0
-
-# 上游错误消息的截断长度与脱敏规则：把 400 的原文给用户看是排查的唯一入口，
-# 但整段 HTML / 超长 JSON 会撑爆前端 Alert，且可能带出 Key 片段。
-_UPSTREAM_DETAIL_MAX = 300
-_SECRET_LIKE = re.compile(r"(sk-[A-Za-z0-9_\-]{6,}|Bearer\s+[A-Za-z0-9._\-]{6,})")
 
 # 音频 Content-Type → 传给上游的固定文件名。不直接用 ``UploadFile.filename``：
 # 那是用户可控输入，拼进 multipart 头要处理引号/换行，而扩展名对识别毫无帮助。
@@ -60,19 +73,6 @@ _FILE_NAME_BY_CONTENT_TYPE = {
 }
 
 
-class AsrError(RuntimeError):
-    """上游转写失败；``kind`` 决定 API 层翻成哪个 HTTP 状态与哪句中文。
-
-    kind 取值：auth（401/403）、not_found（404）、too_large（413）、timeout、
-    empty（200 但没有文本）、network（连不上）、bad_request（400，带上游原文）、
-    upstream（其它非 2xx / 响应不是 JSON）。
-    """
-
-    def __init__(self, kind: str, message: str) -> None:
-        super().__init__(message)
-        self.kind = kind
-
-
 def transcribe_endpoint(base_url: str) -> str:
     """把用户填的 Base URL 拼成 whisper 式转写端点。"""
     return f"{(base_url or '').strip().rstrip('/')}{TRANSCRIBE_PATH}"
@@ -84,7 +84,7 @@ def chat_endpoint(base_url: str) -> str:
 
 
 def models_endpoint(base_url: str) -> str:
-    """模型目录端点（两家都是 ``GET {base}/models``）。"""
+    """模型目录端点（openai / dashscope 都是 ``GET {base}/models``）。"""
     return f"{(base_url or '').strip().rstrip('/')}{MODELS_PATH}"
 
 
@@ -102,33 +102,13 @@ def _audio_data_url(content: bytes, content_type: str) -> str:
 
 
 def _sanitize_upstream_text(text: str) -> str:
-    """压平空白 + 抹掉像密钥的片段 + 截断：只保留可读的排查信息。"""
-    flattened = " ".join((text or "").split())
-    return _SECRET_LIKE.sub("***", flattened)[:_UPSTREAM_DETAIL_MAX]
+    """兼容旧名：实现已下沉到 ``asr_errors``（三套协议共用一份脱敏规则）。"""
+    return sanitize_upstream_text(text)
 
 
 def _upstream_detail(response: httpx.Response) -> str:
-    """取上游 ``error.message``（也兼容 ``message`` / ``detail`` 与错误体是纯文本）。
-
-    400 是唯一一类"用户必须看到上游原话"的失败：地址对了、模型名打错、音频被判无效，
-    都只能从上游那句里看出来。取不到就退回空串，调用方用自己的兜底文案。
-    """
-    try:
-        payload = response.json()
-    except ValueError:
-        return _sanitize_upstream_text(response.text or "")
-    if not isinstance(payload, dict):
-        return ""
-    error = payload.get("error")
-    if isinstance(error, dict):
-        message = str(error.get("message") or "")
-    elif isinstance(error, str):
-        message = error
-    else:
-        message = ""
-    if not message:
-        message = str(payload.get("message") or payload.get("detail") or "")
-    return _sanitize_upstream_text(message)
+    """兼容旧名：实现已下沉到 ``asr_errors``。"""
+    return upstream_detail(response)
 
 
 def _message_of(payload: dict) -> str:
@@ -164,24 +144,8 @@ def _message_of(payload: dict) -> str:
 
 
 def _raise_for_status(response: httpx.Response) -> None:
-    """把非 2xx 翻成带 ``kind`` 的 :class:`AsrError`（两家协议共用）。"""
-    status = response.status_code
-    if status in (401, 403):
-        raise AsrError("auth", "语音服务鉴权失败（401），请检查设置 → 语音转写里的 Key 是否正确")
-    if status == 404:
-        raise AsrError(
-            "not_found", "语音服务地址不存在（404），请检查地址是否包含服务商要求的路径前缀"
-        )
-    if status == 413:
-        raise AsrError("too_large", "语音服务拒绝了这个音频（413），单段录音请控制在 3 分钟内")
-    if status == 400:
-        detail = _upstream_detail(response)
-        suffix = f"：{detail}" if detail else ""
-        raise AsrError("bad_request", f"语音服务拒绝了这次请求（HTTP 400）{suffix}")
-    if status >= 400:
-        detail = _upstream_detail(response)
-        suffix = f"（{detail}）" if detail else ""
-        raise AsrError("upstream", f"语音服务返回异常（HTTP {status}）{suffix}，请稍后重试")
+    """兼容旧名：状态码分类已下沉到 ``asr_errors.raise_for_status``（三套协议共用）。"""
+    raise_for_status(response)
 
 
 async def _post_openai_compatible(
@@ -263,8 +227,26 @@ async def transcribe_audio(
 
     ``timeout`` 显式传入是为了让测试能在毫秒级验证超时分支（真机走 60 秒默认值）。
     ``protocol`` 决定走哪套请求体（见模块头的表），默认 ``openai``。
+
+    ``deepseek`` 那一支在 ``asr_deepseek.post_asr``：它没有 ``model`` / ``language``
+    参数（上游会 400），并且只接受 WAV / Ogg Opus——这两条都在那边判，本函数只做分派。
     """
     effective_timeout = DEFAULT_TIMEOUT_SECONDS if timeout is None else timeout
+    if protocol == "deepseek":
+        try:
+            return await post_deepseek_asr(
+                base_url=base_url,
+                api_key=api_key,
+                content=content,
+                content_type=content_type,
+                timeout=effective_timeout,
+            )
+        except httpx.TimeoutException as exc:
+            raise AsrError(
+                "timeout", f"语音服务响应超时（{effective_timeout:g} 秒），请稍后重试"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise AsrError("network", "连不上语音服务，请检查网络与语音服务地址") from exc
     callback = _post_dashscope if protocol == "dashscope" else _post_openai_compatible
     try:
         return await callback(
@@ -386,11 +368,14 @@ async def fetch_asr_models(
     与语义检索的 ``rag_remote_setup.fetch_models`` 同一模式：**任何失败都返回空列表**，
     界面退回手填。拉不到列表不该让"填地址 + 手打模型名"这条路消失。
 
-    ``protocol`` 目前不影响端点（两家都用 ``/models``），但保留在签名里：协议决定解析
-    口径时（未来出现只返回 ``models[]`` 的服务）调用方不需要改。**不做关键词过滤**——
-    目录里混着 LLM 与图像模型，按词裁剪会误杀自定义服务的模型名，分组交给前端。
+    ``openai`` / ``dashscope`` 用 ``/models``；**``deepseek`` 没有模型目录**——选到它时
+    不发任何请求、也不报错，直接返回固定口径（``deepseek`` 没有 model 参数，界面那一格
+    只是显示值）。在这里发一次 ``GET /models`` 只会换回 404，让用户以为地址填错了。
+    **不做关键词过滤**——目录里混着 LLM 与图像模型，按词裁剪会误杀自定义服务的模型名，
+    分组交给前端。
     """
-    del protocol  # 两家端点一致，见 docstring
+    if protocol == "deepseek":
+        return deepseek_fixed_models()
     effective_timeout = MODELS_TIMEOUT_SECONDS if timeout is None else timeout
     headers = {"Authorization": f"Bearer {api_key}"}
     try:

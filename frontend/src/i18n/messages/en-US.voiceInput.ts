@@ -49,7 +49,7 @@ const voiceInput = {
   "voiceInput.settings.intro":
     "Voice is used for dictation only: stop the recording and the text is placed in the input box for you to review and submit. Audio is sent to the provider configured below; this app does not store audio.",
   "voiceInput.settings.providerNote":
-    "DeepSeek cannot transcribe audio. Configure an OpenAI-compatible service here (OpenAI, Groq, SiliconFlow, etc.).",
+    "DeepSeek can transcribe through its own endpoint (120 seconds per clip, no streaming); other providers use the OpenAI-compatible interface.",
   "voiceInput.settings.baseUrl.label": "Service address",
   "voiceInput.settings.baseUrl.aria": "Voice service address",
   "voiceInput.settings.baseUrl.placeholder": "https://api.openai.com/v1 (example)",
@@ -81,6 +81,8 @@ const voiceInput = {
   "voiceInput.settings.badge.notConfigured": "Not configured",
   "voiceInput.settings.limitHint":
     "Up to 3 minutes / 10 MB per clip; 3 minutes for interview answers and 1 minute for follow-up questions.",
+  "voiceInput.settings.limitHintDeepseek":
+    "Up to 120 seconds / 8 MB per clip: this service has no streaming, and one request accepts 120 seconds at most.",
   "voiceInput.settings.privacyNote":
     "After saving, recordings go to {host}; this app does not store audio.",
 
@@ -129,6 +131,7 @@ const voiceInput = {
   "voiceInput.settings.protocol.aria": "Speech service call protocol",
   "voiceInput.settings.protocol.openai": "OpenAI-compatible",
   "voiceInput.settings.protocol.dashscope": "Alibaba Cloud Bailian",
+  "voiceInput.settings.protocol.deepseek": "DeepSeek",
   "voiceInput.settings.protocol.hint":
     "Bailian's compatible endpoint rejects whisper-style uploads and keeps returning 400",
 

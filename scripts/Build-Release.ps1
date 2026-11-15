@@ -99,6 +99,7 @@ $RequiredFiles = @(
     "backend/app/prompts/assistant_system.md",
     "backend/app/prompts/assistant_welcome.md",
     "backend/app/prompts/claim_draft.md",
+    "backend/app/prompts/company_research_brief.md",
     "backend/app/prompts/drill_common.md",
     "backend/app/prompts/drill_contract.md",
     "backend/app/prompts/drill_evaluate.md",

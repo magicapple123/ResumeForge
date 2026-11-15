@@ -11,6 +11,7 @@ import asyncio
 import httpx
 import pytest
 from app.services.web_fetch import import_service
+from app.services.web_fetch.errors import WebFetchError
 from app.services.web_fetch.fetcher import (
     FetchConfig,
     FetchedPage,
@@ -77,10 +78,25 @@ def _transport(routes: dict[str, object], calls: list[str]) -> httpx.MockTranspo
     return httpx.MockTransport(handler)
 
 
-def _fetcher(routes: dict[str, object], calls: list[str]) -> JobFetcher:
+def _browser_unavailable(*_args, **_kwargs):
+    """浏览器档桩：立刻失败，绝不启动真实浏览器、也不做真实 DNS 解析。
+
+    auto 引擎在 http 失败后仍会尝试浏览器档，这条桩让它当场失败，于是失败原因按
+    「http → browser → deepseek（未配置）」的顺序如实汇总进 warnings。
+    """
+    raise WebFetchError("浏览器抓取失败，请确认投递浏览器仍在运行")
+
+
+def _fetcher(
+    routes: dict[str, object],
+    calls: list[str],
+    *,
+    browser_fetcher=_browser_unavailable,
+) -> JobFetcher:
     return JobFetcher(
         None,
         http_transport=_transport(routes, calls),
+        browser_fetcher=browser_fetcher,
         resolver=_resolver,
         config=FetchConfig(min_interval=0),
     )

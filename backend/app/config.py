@@ -86,10 +86,16 @@ class Settings(BaseSettings):
     max_backup_upload_mb: int = Field(default=512, ge=1, le=4096)
     max_backup_uncompressed_mb: int = Field(default=4096, ge=1, le=65536)
 
-    # 资料箱附件上传单独放宽：端点按 10MB 校验单个文件，全局默认 8MB 会让 8–10MB
-    # 的 PDF/Word 在进入端点前就被中间件拦下。这里给到 12MB（10MB 内容 + multipart
-    # 边界与表单头的余量），其余接口仍受 max_request_body_mb 约束。
-    max_attachment_upload_mb: int = Field(default=12, ge=1, le=64)
+    # 资料箱附件上传单独放宽：端点按 50MB 校验单个文件（T02：扫描件按页算体积，10MB 只
+    # 装得下十几页），全局默认 8MB 会让几十 MB 的 PDF 在进入端点前就被中间件拦下。
+    # 这里给到 56MB（50MB 内容 + multipart 边界与表单头的余量），其余接口仍受
+    # max_request_body_mb 约束。
+    max_attachment_upload_mb: int = Field(default=56, ge=1, le=256)
+
+    # OCR 识别任务单独放宽：DeepSeek 侧上限是 100 MiB（T03 的任务端点直传原件），
+    # 这里给到 110MB 留出 multipart 余量。它**只**对 /api/ocr/tasks 生效——其他接口
+    # 维持 8MB，避免把"能传 100MB"变成全局默认行为。
+    max_ocr_upload_mb: int = Field(default=110, ge=1, le=1024)
 
     # 文件日志：在数据目录 logs/ 下追加一份 5MB×5 的滚动日志，防止长期挂机时
     # 启动器重定向的 stdout/stderr（runtime/*.log）无限膨胀。不想落盘的场景

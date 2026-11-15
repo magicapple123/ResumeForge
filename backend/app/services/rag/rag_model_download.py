@@ -20,6 +20,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ...config import DATA_DIR, get_settings
+from .. import system_sources
 from . import rag_asset_archive as archive
 from .rag_asset_manifest import AssetUnavailable, select_assets
 from .rag_runtime_loader import model_dir, runtime_dir, safe_extract_zip, unload_runtime
@@ -64,7 +65,9 @@ def _plan() -> list[dict[str, Any]]:
         assets = select_assets()
     except AssetUnavailable as exc:
         raise DownloadError(str(exc)) from exc
-    base = str(getattr(get_settings(), "rag_asset_base_url", "") or "").rstrip("/")
+    base = system_sources.rag_asset_base_url(
+        getattr(get_settings(), "rag_asset_base_url", "")
+    )
     hf = str(getattr(get_settings(), "rag_asset_hf_base_url", "") or "").rstrip("/")
 
     def zip_source(asset: dict[str, Any]) -> dict[str, Any]:

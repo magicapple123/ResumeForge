@@ -27,7 +27,9 @@ export const BUDGETS_MS: Record<RequestBudgetKind, number> = {
   task: 30_000,
   // AI 识别（岗位/资料解析）：非流式等完整 JSON，大文本 30s 不够——90s 兜底，
   // 正常在几秒到十几秒返回，超时才报错（此前 default 15s 会让大文本直接超时）。
-  recognition: 90_000,
+  // 提到 200s（Q20）：扫描件 PDF 会走 DeepSeek OCR，服务端上限 180 秒；仍按 90s 卡
+  // 就会在前端先断开，用户看到"失败"而账已经记上。多页扫描件的长尾在这条链路上。
+  recognition: 200_000,
   // 岗位解读（T1）：整段生成 10–60s 是常态，长 JD 更久；15s 必然误超时。
   analysis: 180_000,
   // 翻译候选：几十个可译段按块翻译后仍是 1–3 次模型调用（每次十几到几十秒），

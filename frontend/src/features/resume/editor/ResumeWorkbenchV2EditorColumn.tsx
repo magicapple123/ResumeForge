@@ -26,6 +26,7 @@ import { newObjectId } from "../document/identity";
 import AddSectionModal from "./AddSectionModal";
 import DocumentEditor from "./DocumentEditor";
 import { EMPTY_FACT_ANNOTATIONS, FactSourceContext } from "./factSourceContext";
+import { VoiceMemoButton } from "../../interview-voice/VoiceMemoButton";
 import type { FactAnnotation } from "../../../types";
 import "./workbench-v2.css";
 
@@ -163,7 +164,11 @@ export default function ResumeWorkbenchV2EditorColumn({
           }
         />
       ) : null}
-      {fillMenu ? <div className="resume-wb-v2-fill-menu">{fillMenu}</div> : null}
+      <div className="resume-wb-v2-fill-menu">
+        {fillMenu}
+        {/* 口述入口：整份文档级的全局入口（不属于某个字段），与「从资料填入」同一行。 */}
+        <VoiceMemoButton document={document} onChange={onChange} catalog={fieldCatalog} />
+      </div>
       {/* #24 24E：标注走 context，而不是给 DocumentEditor 加 prop——那个文件正好 500 行，
           而 chip 在它下面三层，透传要改四处签名。空表用模块级常量（引用稳定，不会让
           上百个 chip 因"新的空数组"重渲染）。 */}

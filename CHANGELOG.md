@@ -6,6 +6,20 @@
 
 ### Added
 
+- **公司与岗位背景调研（`/research`，T07）。** 投递前先看清这家公司和这个岗位：填公司名（岗位名、招聘描述可选）后一次调研出两块结果，两条路**并发、分开发请求**——上半屏是聚合搜索来的**资料卡片**（官网 / 近期新闻 / 公司介绍，带站点图标、发布日期与权威度），下半屏是联网生成的**带编号引用简报**，每条引用可展开对照原文。失败语义是刻意的：**简报失败不吞掉卡片**（卡片是已经花过钱搜来的），只把原因写进简报面板；只有「公司名为空」才报 400。「深度调研」默认关闭，开启后做多轮深度搜索（最多约 20 次工具调用），搜索按查询词条数计费，页面如实显示本次搜索次数与耗时。后端 `services/job/company_research*.py` + 提示词 `prompts/company_research_brief.md`（已进 `preflight._REQUIRED_FILES` 与打包 `$RequiredFiles`），接口 `POST /api/research/company`。
+- **「外部连接」页：这台机器对外依赖的服务与下载源集中在一处（T11 / T12）。** 设置新增「外部连接」页签，把 **7 个凭据**（模型 / 语音转写 / 语义检索 / 联网搜索 / 网页抓取 / OCR 复用的搜索 Key 等）与 **4 个系统来源**（下载源、浏览器端口等）逐行列出：各自有没有配、存在哪、怎么改，密钥只显示掩码，就地改成空值即清除、改完立刻生效（系统来源随备份带走）。凭据目录由后端 `services/credentials/` 统一登记（registry 给 `label` 与来源说明，前端再包一层 i18n），不再靠各页各写一份读 Key 的代码。
+- **语音记一条：口述 → 简历条目（T09）。** 简历编辑器新增全局「语音记一条」：点一下录音、再点一下结束，走既有 `POST /api/transcribe` 转写、既有 `POST /api/profile/parse-text` 抽取，弹窗里**逐字段校对**后再插入为可编辑条目（与「添加一条」完全同形）。两个刻意的边界：**页眉字段（`basic_info`）与纯文本板块不插**（口述日期容易被模型误填成出生年月、一句简介会覆盖整段正文）；录音上限以 `/api/transcribe/status` 的 `max_seconds` 为唯一口径，选到不支持流式的服务商时界面**用一句话解释为什么只有 120 秒**，而不是静默砍掉滑块。
+- **语音转写第三套协议 `deepseek`。** DeepSeek 的转写不是 whisper 那套：端点是 `POST {base}/tools/asr`，multipart **只有 `file`、没有 `model`**，只收 16bit PCM WAV / Ogg Opus，**单段硬上限 120 秒 / 8 MiB 且不支持流式**。所以「三要素齐全才算配好」对它是错的——`is_asr_configured` 按协议给出最小要素，界面档位里明确写「无 model 参数」。上游错误按可读原因归类（`services/asr_errors.py`），不再把 4xx 一律报成「转写失败」。
+- **网页抓取加第四档兜底：DeepSeek Fetch。** `auto` 引擎此前只做 http → 浏览器两档；现在按 **http → browser → DeepSeek Fetch** 依次尝试，「都拿不到正文」才进下一档：http 失败（反爬 403 / 超时 / 非网页）也会升级到浏览器（招聘站要登录时带登录态的浏览器是唯一能打开的那一档），最后一档是**服务端**抓取（反爬 / 纯 JS 站点常常能拿到正文，仅配置了 DeepSeek Key 时启用）。某一档在本次任务内明确不可用就整段停用（浏览器起不来不再每页重试 20 秒、账号级 401/402/429 不再反复计费）；三档都失败时 `WebFetchError` **按顺序列出每一档的原因**，翻页仍是 `stop_reason=http_error` + 第一页保留，`FetchedPage.engine` 如实写这一页是谁抓的。
+
+- **扫描件 / 图片简历 OCR（DeepSeek）。** 此前扫描件（没有文字层）只有一条路：整页渲染成位图交给用户自己配的多模态模型，受"单张 2 MB / 最多 4 张 / 合计 5 MB / 最多 8 页"四重预算限制，6 页扫描简历就可能超预算；资料箱则明确"扫描件不做视觉识别"，证书与成绩单永远只有一句警告。现在新增 **DeepSeek OCR** 通路（`services/ocr/**` + `POST /api/ocr/{settings,tasks}`）：
+  - **识别引擎三档显式设置**（设置 →「识别引擎」）：`自动`（配了 Key 走 OCR）/ `只用 OCR`（没 Key 直接报错，不静默降级）/ `只用视觉模型`（**绝不**发出 OCR 请求）。两条路的原件收件方与计费方式不同，所以由用户决定而不是隐式切换；Key 复用联网搜索那一个，不新增第二处填写。
+  - **OCR 不受位图预算限制**：上限是 OCR 自己的 100 MB / 1000 页 / 180 秒；纯文字 PDF 仍走本机 `pypdf`（免费、离线、锚定更硬）。
+  - **后台任务化 + 真实页码进度**：`POST /api/ocr/tasks` 立即返回任务号，轮询显示"已识别 N / M 页"。**没有取消端点**——服务端断开不中止识别、照常计费，界面只提供「停止等待」并写明原因。
+  - **资料箱**：扫描件 PDF 与证书照片返回文字（不再只给"不支持识别"），单文件上限 10 MB → **50 MB**（请求体同步放宽到 56 MB）；面试材料的 10 MB 上限不变。
+  - **前端请求预算 `recognition` 90s → 200s**：OCR 服务端上限 180 秒，仍按 90 秒卡就会在前端先断开，用户看到"失败"而账已经记上。
+  - 隐私口径重写：应用内指南、`docs/user-guide.md`、README 都明确"扫描件按引擎设置发给 DeepSeek 或你配置的模型服务商"，不再沿用"发给**你自己配的**模型服务商"这句已失真的一半事实。
+
 - **桌面壳层文案跟随「设置 → 界面语言」（批 2 A）。** 此前壳层固定中文：英文用户在 Linux 上会看到中文托盘菜单、关闭卡片、启动失败 / 数据迁移 / 更新安装对话框。现在渲染进程把应用内语言经 `desktop:set-locale` 推给主进程（`desktop/lib/shell-locale.js` 是唯一消息表，规则与前端 `detectPreferredLocale` 同源），托盘菜单、tooltip、应用菜单、窗口标题兜底与关闭卡片（`?locale=` 参数）即时重建；中文环境仍是「简历通」，其它环境用英文。首帧静态标题改为中性的 `ResumeForge`，运行时标题仍由 `RouteAccessibility` 按页面名 + 本地化应用名接管。
 - **`generate` 输出加跨平台规范化 JSON 哈希金标。** 新增 `backend/tests/test_resume_generate_golden.py`：用 FakeProvider 真实跑「定向岗位 / 通用简历」两条生成链，把响应里时间戳、自动 id、绝对路径等易变字段剔除后取 sha256，存 `tests/fixtures/generate_golden/manifest.json`（缺失即生成、存在即比对，规则版本变化会明确报错）。不对 PDF 字节做金标（跨平台字体差异会假红）。
 - **依赖锁定文件 `backend/requirements.lock.txt` 改为 uv 通用锁（带哈希）。** 由 `uv pip compile --universal --python-version 3.11 --generate-hashes` 生成：一份锁同时覆盖 Linux 的 `uvloop` / `httptools` 与 Windows 的 `colorama` 等平台专属依赖（用 PEP 508 marker 表达），CI 的 ubuntu 3.11 / ubuntu 3.13 / windows 3.12 三格都执行 `pip install --require-hashes -r requirements.lock.txt` 真装校验。`requirements.txt` 一个字节未改。

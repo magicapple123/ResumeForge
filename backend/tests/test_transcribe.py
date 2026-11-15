@@ -406,3 +406,21 @@ def test_silent_wav_is_a_valid_wav_container():
     assert data[12:16] == b"fmt "
     assert data[36:40] == b"data"
     assert len(data) > 44
+
+
+def test_transcribe_records_asr_seconds(client, db_session, fake_asr):
+    """T16：转写成功后按**音频秒数**入账，且只记数量、不出现金额。
+
+    反证过的坑：计量曾经只有 OCR 与搜索两个生产方，用量页上"语音转写 0 秒"是恒假值——
+    界面上看着有这一行，实际上永远不会有数。
+    """
+    from app.services import usage_counters
+
+    _configure(client, fake_asr)
+    before = usage_counters.summary(db_session)["asr_seconds"]
+
+    assert _post_audio(client, duration_ms="5000").status_code == 200
+
+    db_session.expire_all()
+    after = usage_counters.summary(db_session)["asr_seconds"]
+    assert after - before == pytest.approx(5.0, abs=0.001)

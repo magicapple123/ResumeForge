@@ -32,6 +32,7 @@ import {
   AppearancePanel,
   AssistantBehaviorPanel,
   BackupPanel,
+  ConnectionsPanel,
   DataPanel,
   InteractionPanel,
   MemorySkillsPanel,
@@ -289,6 +290,9 @@ export default function SettingsPage() {
         return <MemorySkillsPanel skillsCard={skillsCard} />;
       case "voice":
         return <VoicePanel />;
+      case "connections":
+        // 外部连接（T11/T12）：识别引擎 + A/B 组凭据 + C 组下载源，三张卡同属一组。
+        return <ConnectionsPanel />;
       case "appearance":
         return <AppearancePanel />;
       case "interaction":

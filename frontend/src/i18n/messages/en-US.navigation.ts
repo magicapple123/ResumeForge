@@ -21,6 +21,7 @@ const navigation = {
   "navigation.item.knowledge": "Knowledge base",
   "navigation.item.skills": "Workbench",
   "navigation.item.analytics": "Analytics",
+  "navigation.item.research": "Company research",
   "navigation.item.claims": "Fact ledger",
   "navigation.item.trash": "Trash",
 

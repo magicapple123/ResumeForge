@@ -76,7 +76,7 @@ const searchCard = {
   /** 占位符不能写成纯 ASCII（`sk-...` 会被判成"源文是英文"），所以给一句中文。 */
   "searchCard.deepseek.keyPlaceholder": "粘贴 DeepSeek API Key",
   "searchCard.deepseek.cost":
-    "Search 与 Fetch 各约 ¥0.005 次成功请求，由 DeepSeek 计费；本应用不统计这部分用量。已保存的 Key 回显为 ********，清空输入框即移除。",
+    "Search 与 Fetch 各约 ¥0.005 次成功请求，由 DeepSeek 计费；应用内只统计调用次数，不折算金额。已保存的 Key 回显为 ********，清空输入框即移除。",
   "searchCard.deepseek.privacy":
     "勾选这个来源后，抓取正文时网页地址会发送给 DeepSeek 由它读取；只有它失败时才回落到本机读取。不想发送地址就关掉这个来源。",
 
