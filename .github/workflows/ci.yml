@@ -245,7 +245,7 @@ jobs:
       # runners preinstall Node, so no setup-node is needed here -- but pnpm is
       # NOT preinstalled, and without it every step below dies on "command not found".
       - name: Set up pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           version: 12.21.0
       - name: Build the production frontend assets
@@ -458,7 +458,7 @@ jobs:
       - name: Set up pnpm
         # MUST run before setup-node: setup-node resolves the pnpm store by running
         # `pnpm store path`, and skips the cache silently when pnpm is absent.
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           version: 12.21.0
       - name: Set up Node.js
@@ -756,7 +756,7 @@ jobs:
       - name: Set up pnpm
         # MUST run before setup-node: setup-node resolves the pnpm store by running
         # `pnpm store path`, and skips the cache silently when pnpm is absent.
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           version: 12.21.0
       - name: Set up Node.js
@@ -1065,7 +1065,7 @@ jobs:
       - name: Set up pnpm
         # MUST run before setup-node: setup-node resolves the pnpm store by running
         # `pnpm store path`, and skips the cache silently when pnpm is absent.
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           version: 12.21.0
 
@@ -1160,7 +1160,7 @@ jobs:
       - name: Set up pnpm
         # MUST run before setup-node: setup-node resolves the pnpm store by running
         # `pnpm store path`, and skips the cache silently when pnpm is absent.
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           version: 12.21.0
 
@@ -1187,7 +1187,7 @@ jobs:
       - name: Set up pnpm
         # MUST run before setup-node: setup-node resolves the pnpm store by running
         # `pnpm store path`, and skips the cache silently when pnpm is absent.
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           version: 12.21.0
 
