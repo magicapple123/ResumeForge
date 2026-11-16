@@ -75,13 +75,18 @@ def test_resolve_layout_applies_user_overrides():
     assert layout.section_gap == 0.7
 
 
-def test_resolve_layout_ignores_values_out_of_range():
-    """越界的覆盖会被 `validated_format_config` 丢掉，于是退回模板默认值。"""
+def test_resolve_layout_clamps_values_out_of_range():
+    """越界的覆盖被 `validated_format_config` 夹到上界（I-32），不再退回模板默认值。
+
+    退回默认值会让"用户拖到头"与"用户没设过"在纸面上完全一样；夹紧至少保住了
+    "确实想更大"这个意图，也与前端滑杆停的位置一致。
+    """
     defaults = TEMPLATE_LAYOUT_DEFAULTS["classic"]
 
     layout = resolve_layout(template="classic", base_px=14.0, format_config={"line_height": 9.9})
 
-    assert layout.line_height == defaults["line_height"]
+    assert layout.line_height != defaults["line_height"]
+    assert layout.line_height == 3.0
 
 
 @pytest.mark.parametrize("name", sorted(RESUME_TEMPLATES))
@@ -290,12 +295,8 @@ def test_template_page_padding_default_is_used_when_not_overridden():
         )
     )
 
-    compact_left = resolve_layout(
-        template="compact", base_px=14.0, format_config=None
-    ).margin_left
-    minimal_left = resolve_layout(
-        template="minimal", base_px=14.0, format_config=None
-    ).margin_left
+    compact_left = resolve_layout(template="compact", base_px=14.0, format_config=None).margin_left
+    minimal_left = resolve_layout(template="minimal", base_px=14.0, format_config=None).margin_left
 
     assert minimal_left > compact_left  # minimal 18mm > compact 14mm
     assert (minimal_x - compact_x) == pytest.approx(

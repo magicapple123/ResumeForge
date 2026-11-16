@@ -17,9 +17,10 @@ from app.services.resume.resume_template_format import format_css, validated_for
 
 def test_format_config_keeps_skill_columns_in_range():
     assert validated_format_config({"skill_columns": 3})["skill_columns"] == 3
-    # 越界丢弃（与其它 FORMAT_FIELDS 同一条契约），不是夹紧。
-    assert "skill_columns" not in validated_format_config({"skill_columns": 0})
-    assert "skill_columns" not in validated_format_config({"skill_columns": 5})
+    # 越界夹到边界（I-32，与其它 FORMAT_FIELDS 同一条契约）：0 列画不出来，5 列挤成一团，
+    # 两端都不该被当成"用户没设过"而静默退回默认。
+    assert validated_format_config({"skill_columns": 0})["skill_columns"] == 1.0
+    assert validated_format_config({"skill_columns": 5})["skill_columns"] == 4.0
 
 
 def test_format_css_emits_max_width_not_grid():

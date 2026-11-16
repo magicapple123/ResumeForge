@@ -16,7 +16,6 @@ from app.schemas.setting import LLMConfig
 from app.services.llm.base import BaseLLMProvider
 from app.services.resume.resume_template_import import (
     MAX_SOURCE_CHARS,
-    TemplateImportError,
     TemplateImportSource,
     build_design_import_messages,
     build_import_messages,
@@ -71,12 +70,15 @@ async def test_valid_config_is_kept_and_normalized():
 
 
 @pytest.mark.asyncio
-async def test_out_of_range_values_do_not_become_an_empty_template():
-    """全部取值都越界时必须报错，而不是存一个空模板。"""
+async def test_out_of_range_values_are_clamped_not_discarded():
+    """模型给的越界数值夹到边界后保留（I-32），不能落成一个"什么都没设"的空模板。"""
     provider = ImportProvider('{"config": {"line_height": 9.9, "accent": "深蓝色"}}')
 
-    with pytest.raises(TemplateImportError):
-        await derive_format_template(provider, TemplateImportSource(filename="x.png"))
+    result = await derive_format_template(provider, TemplateImportSource(filename="x.png"))
+
+    assert result["config"]["line_height"] == 3.0
+    # 颜色不是"接近了就能用"的数值：认不出来的色名仍然丢弃。
+    assert "accent" not in result["config"]
 
 
 @pytest.mark.asyncio

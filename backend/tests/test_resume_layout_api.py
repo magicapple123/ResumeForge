@@ -5,6 +5,7 @@
 用户会在下载 PDF 之后才发现字号没变——而那时他已经按预览的样子投出去了。
 所以这里显式钉住"导出走的是同一条解析路径"。
 """
+
 import pytest
 from app.models.resume import ResumeRecord
 from app.services.resume.resume_record import record_format_config
@@ -187,7 +188,13 @@ def test_analyze_accepts_both_long_cv_page_limit_bounds(client, page_limit):
     resume_id = _make_resume(client)
     response = client.post(
         f"/api/resumes/{resume_id}/layout/analyze",
-        json={"measure": {"used_height": PAGE * 0.9, "page_content_height": PAGE, "page_limit": page_limit}},
+        json={
+            "measure": {
+                "used_height": PAGE * 0.9,
+                "page_content_height": PAGE,
+                "page_limit": page_limit,
+            }
+        },
     )
     assert response.status_code == 200, response.text
     assert response.json()["diagnosis"]["page_limit"] == page_limit
@@ -198,7 +205,9 @@ def test_analyze_rejects_page_limit_above_long_cv_max(client):
     resume_id = _make_resume(client)
     response = client.post(
         f"/api/resumes/{resume_id}/layout/analyze",
-        json={"measure": {"used_height": PAGE * 0.9, "page_content_height": PAGE, "page_limit": 11}},
+        json={
+            "measure": {"used_height": PAGE * 0.9, "page_content_height": PAGE, "page_limit": 11}
+        },
     )
     assert response.status_code == 422
 
@@ -259,14 +268,14 @@ def test_layout_patch_validates_the_override(client):
         f"/api/resumes/{resume_id}/layout",
         json={
             "format_config": {
-                "line_height": 99,  # 超出范围，应被丢掉
-                "accent": "javascript:alert(1)",  # 不是十六进制颜色，应被丢掉
+                "line_height": 99,  # 超出范围：夹到上界（I-32），不丢弃
+                "accent": "javascript:alert(1)",  # 不是十六进制颜色：丢弃（类型不可能"接近"）
                 "page_padding": 12,  # 合法
             }
         },
     )
     assert response.status_code == 200
-    assert response.json()["format_config"] == {"page_padding": 12}
+    assert response.json()["format_config"] == {"page_padding": 12, "line_height": 3.0}
 
 
 # ===== 语言（批 3）：拖字号滑杆不许把英文简历改回中文 =====
@@ -296,7 +305,7 @@ def test_patching_layout_without_language_keeps_it(client):
 
 
 def test_patching_layout_with_language_switches_it(client):
-    """"不传 = 不涉及"不能退化成"永远改不了"：显式传值时必须真的改。"""
+    """ "不传 = 不涉及"不能退化成"永远改不了"：显式传值时必须真的改。"""
     resume_id = _make_resume(client)
     client.patch(f"/api/resumes/{resume_id}/layout", json={"language": "en-US"})
     body = client.patch(f"/api/resumes/{resume_id}/layout", json={"language": "zh-CN"}).json()
@@ -363,6 +372,7 @@ def test_render_uses_the_requested_language(client):
 
 
 # ===== 预览与导出必须一致 =====
+
 
 def test_exported_html_uses_the_per_resume_override(client):
     """自动一页改了预览却没改导出，是这类功能最坏的失败方式。"""

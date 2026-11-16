@@ -5,7 +5,9 @@
 模板名可能指向一个已被删除的自制模板，那时必须安静地退回默认内置模板，而不是让
 预览和导出一起报错。
 """
+
 import pytest
+from app.services.resume.resume_template_format import validated_format_config
 from app.services.resume.resume_template_store import (
     TemplateError,
     custom_format_options,
@@ -54,7 +56,9 @@ def test_style_template_is_offline_for_writes(client, db_session):
     )
     assert created.status_code == 400
     detail = created.json()["detail"]
-    assert (detail["message"] if isinstance(detail, dict) else detail) == "自制模板已下线，只能创建版式"
+    assert (
+        detail["message"] if isinstance(detail, dict) else detail
+    ) == "自制模板已下线，只能创建版式"
 
     # 读不到也不该抛异常：记录里可能还存着这个名字。
     assert resolve_style_template(db_session, "自定义A") == ("classic", "")
@@ -84,7 +88,10 @@ def test_existing_style_rows_are_not_read_anymore(client, db_session):
     assert resolve_style_template(db_session, "存量样式") == ("classic", "")
     assert custom_template_options(db_session) == []
     # 行还在（用户能在列表里看到并删除），只是不再参与渲染。
-    assert client.get("/api/resume-templates", params={"kind": "style"}).json()[0]["name"] == "存量样式"
+    assert (
+        client.get("/api/resume-templates", params={"kind": "style"}).json()[0]["name"]
+        == "存量样式"
+    )
     # 编辑同样被拒：能改只会让人以为"改了有用"。
     edited = client.put(f"/api/resume-templates/{row.id}", json={"name": "改名试试"})
     assert edited.status_code == 400
@@ -95,16 +102,31 @@ def test_format_template_requires_a_real_setting(client, db_session):
     empty = client.post("/api/resume-templates", json={"name": "空版式", "kind": "format"})
     assert empty.status_code == 400
 
-    # 越界值会被丢弃，丢掉后没有剩余项时同样按"空配置"拒绝。
+    # 越界数值不再是"空配置"（夹紧发生在读取侧，落库仍是用户给的原样），所以建得出来。
+    # 真正生效的值由 `validated_format_config` 在渲染前夹到边界（见下一条断言）。
     out_of_range = client.post(
         "/api/resume-templates",
         json={"name": "越界版式", "kind": "format", "config": {"line_height": 99}},
     )
-    assert out_of_range.status_code == 400
+    assert out_of_range.status_code == 201
+    stored = next(item for item in custom_format_options(db_session) if item["name"] == "越界版式")
+    assert stored["config"]["line_height"] == 99
+    assert validated_format_config(stored["config"])["line_height"] == 3.0
+
+    # 类型不对（不是数值）仍然丢弃；丢掉后没有剩余项时照旧按"空配置"拒绝。
+    empty_after_drop = client.post(
+        "/api/resume-templates",
+        json={"name": "脏版式", "kind": "format", "config": {"line_height": "abc"}},
+    )
+    assert empty_after_drop.status_code == 400
 
     created = client.post(
         "/api/resume-templates",
-        json={"name": "紧凑A", "kind": "format", "config": {"line_height": 1.5, "accent": "#123456"}},
+        json={
+            "name": "紧凑A",
+            "kind": "format",
+            "config": {"line_height": 1.5, "accent": "#123456"},
+        },
     )
     assert created.status_code == 201
     assert custom_format_options(db_session)[0]["config"] == {

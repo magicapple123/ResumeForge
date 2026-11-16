@@ -109,19 +109,30 @@ def test_valid_role_scoped_props_are_kept_and_narrowed_by_role():
     }
 
 
-def test_malformed_keys_out_of_range_values_and_unknown_roles_are_dropped():
+def test_malformed_keys_unknown_roles_are_dropped_and_numbers_clamp():
+    """结构错误丢弃，数值越界夹紧（I-32）——两条不同的规则。
+
+    键不合法（对象 id 太短 / 多一个冒号）、角色未知、值不是对象：这些没有"最近的合法
+    形态"可言，整条丢弃。数值越界则夹到该属性的边界并保留：用户把字号拖到头松手之后
+    读数必须与渲染一致，而不是悄悄回到默认。
+    """
     domain = validate_object_roles_domain(
         {
             "version": 1,
             "short:body": {"bold": True},  # 对象 id 太短
             f"{ENTRY_ID}:nope": {"bold": True},  # 未知角色
             f"{ENTRY_ID}:body:extra": {"bold": True},  # 多一个冒号，对象 id 不合法
-            f"{ENTRY_ID}:body": {"font_scale": 9.0, "color": "red", "bogus": 1},  # 全非法
-            f"{OTHER_ID}:name": {"letter_spacing": 9.0},  # 越界
+            # font_scale 越界夹到 3.0；color 不是合法颜色、bogus 不是已知属性，两者丢弃。
+            f"{ENTRY_ID}:body": {"font_scale": 9.0, "color": "red", "bogus": 1},
+            f"{OTHER_ID}:name": {"letter_spacing": 9.0},  # 越界夹到 0.6
             f"{OTHER_ID}:body": "not-a-dict",
         }
     )
-    assert domain is None
+    assert domain == {
+        "version": 1,
+        f"{ENTRY_ID}:body": {"font_scale": 3.0},
+        f"{OTHER_ID}:name": {"letter_spacing": 0.6},
+    }
 
 
 def test_empty_or_non_mapping_domain_returns_none():

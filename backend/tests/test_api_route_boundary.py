@@ -211,7 +211,13 @@ def test_research_company_three_phases(monkeypatch: pytest.MonkeyPatch, db_sessi
         return real_load(db, api_key=api_key)
 
     async def fake_research(
-        runtime: Any, *, company: str, role: str = "", jd: str = "", deep: bool = False
+        runtime: Any,
+        *,
+        company: str,
+        role: str = "",
+        jd: str = "",
+        deep: bool = False,
+        parts: tuple[str, ...] = ("cards", "brief"),
     ) -> dict[str, Any]:  # noqa: ANN401
         threads["research"] = _tid()
         assert closed, "网络/模型调用开始前请求连接必须已经归还"

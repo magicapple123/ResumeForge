@@ -65,14 +65,13 @@ def test_generation_persists_validated_format_config(client, monkeypatch):
     keys = [section["key"] for section in record["content"]["sections"]]
     assert keys, "生成文档不应为空"
     assert config["font_scale_adjust"] == 0.455
-    # 未知键与越界值在落库前就被丢掉：存下来的必须是"渲染时真的生效"的那一份。
-    assert "page_padding" not in config
+    # 未知键在落库前被丢掉；越界数值夹到边界后**保留**（I-32），存的仍是"渲染时真的
+    # 生效"的那一份——只不过生效值现在是边界值，而不是浏览器默认。
+    assert config["page_padding"] == 26.0
     assert "evil_key" not in config
 
 
-def test_generation_without_format_config_uses_profile_order_for_sections_only(
-    client, monkeypatch
-):
+def test_generation_without_format_config_uses_profile_order_for_sections_only(client, monkeypatch):
     """不传 `format_config` 时，资料顺序只用于决定 v2 文档的分区落位，不再写进记录。
 
     T7 之前这里断言 `format_config.section_order` 被"物化"；v2 之后分区顺序的唯一真相是

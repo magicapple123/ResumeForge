@@ -50,7 +50,13 @@ _RATIO_SELECTORS: dict[str, str] = {
 #
 # 这四处必须**先**放宽再改模板：顺序反了会让 8 个模板 × 2 条断言一起红，
 # 而报错信息（"字号既不是 calc(var(--fs)*N) 也不是 var(--fs)"）会指向完全无关的地方。
-_SCALE_TAIL = r"(?:\s*\*\s*var\(--(?:photo-scale|name-scale|section-title-scale|entry-gap),\s*1\))?"
+# 页眉线粗细要用"运行期增量"叠加在基准内边距上（`+ var(--header-rule-gap, 0mm)`，照片行
+# 改造后从 `.header` 挪到 `.header-main` 并接了这一项）。基准值仍是前面那个乘数，所以只把
+# 加法尾巴加进白名单，不改变"取到的是模板基准"这条性质。
+_SCALE_TAIL = (
+    r"(?:\s*\*\s*var\(--(?:photo-scale|name-scale|section-title-scale|entry-gap),\s*1\))?"
+    r"(?:\s*\+\s*var\(--header-rule-gap,\s*0mm\))?"
+)
 
 
 def _selector_font_size_ratio(css: str, selector: str) -> float:
@@ -198,13 +204,20 @@ def test_template_vertical_gaps_and_title_style_match_the_template_files():
             _fs_scale(_selector_block(css, ".header .contact"), "margin-top")
             == defaults["contact_gap"]
         ), name
-        # 页头装饰：底边线（宽度/颜色）、padding-bottom，以及 modern 的浅底色块。
-        header_border = re.search(r"border-bottom:\s*([\d.]+)px\s+solid\s+var\(--accent\)", header)
+        # 页头装饰：底边线（宽度/颜色）+ padding-bottom 现在挂在 `.header-main` 上——
+        # 照片改成绝对定位后，边框和它下面的留白都只属于文字那一块，整行（含照片）不再有
+        # 一条横穿到底的线。`.header` 只剩行内布局、margin 与 modern/split 的浅底色块。
+        header_main = _selector_block(css, ".header-main")
+        header_border = re.search(
+            r"border-bottom:\s*([\d.]+)px\s+solid\s+var\(--accent\)", header_main
+        )
         assert (float(header_border.group(1)) if header_border else 0.0) == defaults[
             "header_border_width"
         ], name
         assert ("accent" if header_border else "none") == defaults["header_border_color"], name
-        assert (_fs_scale(header, "padding-bottom") or 0.0) == defaults["header_pad_bottom"], name
+        assert (_fs_scale(header_main, "padding-bottom") or 0.0) == defaults["header_pad_bottom"], (
+            name
+        )
         assert (
             "soft_accent" if "background: var(--accent-soft)" in header else "none"
         ) == defaults["header_bg"], name

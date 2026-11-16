@@ -256,18 +256,21 @@ def test_photo_scale_step_divides_the_interval():
     assert abs(margin_span / PAGE_MARGIN_STEP - round(margin_span / PAGE_MARGIN_STEP)) < 1e-9
 
 
-# ===== 白名单：越界**丢弃**（不夹紧）=====
+# ===== 白名单：数值越界**夹到边界**，类型不对仍然丢弃 =====
 
 
-def test_validated_format_config_drops_out_of_range_extras():
-    """与 ``page_padding`` 及 ``test_format_config_is_whitelisted`` 同一条契约：
-    非法输入不进入 CSS/渲染。**不对称是故意的**——夹紧会让那条测试的哲学崩掉，
-    可用性由前端滑杆的 clamp 兜住。
+def test_validated_format_config_clamps_out_of_range_extras():
+    """数值越界夹紧（I-32），类型不对仍丢弃——两件事分开。
+
+    以前越界一律丢弃，于是用户把字号/边距拖到端点松手后"跳回去了"，看起来像控件坏了；
+    现在夹到边界并保留，读取侧同样夹紧，所以旧文档里的越界值在界面上显示的就是渲染
+    实际用的值。**类型**错误没有"最近的合法值"可言（"abc" 不是任何数字），仍然丢弃，
+    这也是 CSS 注入那条契约（``test_format_config_is_whitelisted``）仍成立的原因。
     """
-    assert validated_format_config({"page_padding_top": 30}) == {}
-    assert validated_format_config({"page_padding_left": -0.1}) == {}
-    assert validated_format_config({PHOTO_SCALE_KEY: 2.0}) == {}
-    assert validated_format_config({PHOTO_SCALE_KEY: 0.2}) == {}
+    assert validated_format_config({"page_padding_top": 30}) == {"page_padding_top": 26.0}
+    assert validated_format_config({"page_padding_left": -0.1}) == {"page_padding_left": 0.0}
+    assert validated_format_config({PHOTO_SCALE_KEY: 2.0}) == {PHOTO_SCALE_KEY: 1.6}
+    assert validated_format_config({PHOTO_SCALE_KEY: 0.2}) == {PHOTO_SCALE_KEY: 0.6}
     assert validated_format_config({"page_padding_right": "abc"}) == {}
     assert validated_format_config({"page_padding_bottom": None}) == {}
 

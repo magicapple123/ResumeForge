@@ -129,10 +129,14 @@ def test_html_emits_explicit_columns_and_per_cell_padding() -> None:
     grid = _sub_grid(html)
     assert "grid-template-columns: 40.0% 30.0% 30.0%" in grid
     assert "column-gap: 0" in grid
-    # 前两列各自吃自己的间隔，最后一列不加右边距（padding 在格子上，不在容器上）
+    # 前两列各自吃自己的间隔，最后一列不加右边距（padding 在格子上，不在容器上）。
+    # 只数**子格**身上的 padding-right，不数整份 HTML：页眉照片行、行内标记等别处
+    # 也会写 padding-right，按全文计数等于把无关样式算进这条断言（已因此假红一次）。
+    cells = re.findall(r'<span class="sub-cell"[^>]*>', html)
+    assert len(cells) == 3
+    assert sum("padding-right:" in cell for cell in cells) == 2
     assert html.count("padding-right: calc(var(--fs) * 1.5)") == 1
     assert html.count("padding-right: calc(var(--fs) * 0.8)") == 1
-    assert html.count("padding-right:") == 2
 
 
 def test_html_without_geometry_is_unchanged() -> None:
