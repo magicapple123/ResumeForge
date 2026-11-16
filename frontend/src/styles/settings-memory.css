@@ -144,7 +144,9 @@
 .rf-memory-edit.ant-btn {
   height: 22px;
   padding: 0 4px;
-  color: var(--rf-link);
+  /* 与卡片其它行内链接同一个信息蓝（`--rf-link` 这个 token 从来没有定义过，
+     `design-tokens-coverage` 守卫会因此报"无 fallback 的 var() 没有定义"）。 */
+  color: var(--rf-info);
   font-size: 12px;
 }
 
