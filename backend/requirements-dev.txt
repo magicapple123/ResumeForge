@@ -2,7 +2,7 @@
 
 # Repository quality checks used locally and in CI.
 pytest==9.2.0
-pytest-asyncio==1.4.0
+pytest-asyncio==1.5.0
 pytest-cov==7.1.0
 # Parallel test execution. The suite is >1000 tests and the only reason a change
 # takes minutes to verify; conftest keys its temp database and dataset directory
