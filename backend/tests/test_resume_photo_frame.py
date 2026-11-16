@@ -32,6 +32,25 @@ def _content() -> ResumeContent:
     )
 
 
+def test_html_photo_is_absolute_and_text_column_makes_room():
+    """I-31：草稿侧照片脱流。
+
+    判据三条：①有照片时页眉带 `has-photo` 类；②`.profile-photo` 绝对定位（不再参与
+    页眉高度）；③`.header.has-photo .header-main` 给照片让位，否则姓名会跑到照片下面。
+    没有照片时不加类、也不留空位。
+    """
+    from app.services.exporter import render_html
+
+    html = render_html(_content(), template="classic")
+    # 类加在页眉元素上（样式表里那条 `.header.has-photo` 规则是常量，不能当判据）。
+    assert '<div class="header has-photo">' in html
+    assert ".header.has-photo .header-main" in html
+    assert "position: absolute" in html
+
+    without_photo = _content().model_copy(update={"photo": ""})
+    assert '<div class="header has-photo">' not in render_html(without_photo, template="classic")
+
+
 def test_format_css_writes_nothing_when_untouched():
     """没调过就不写规则：旧简历的 HTML 一个字节都不变。"""
     assert format_css({}) == ""

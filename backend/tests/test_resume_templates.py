@@ -132,14 +132,20 @@ def test_format_config_is_validated():
     config = validated_format_config(
         {
             "accent": "#0F766E",
-            "line_height": 9.9,  # 超出范围 → 丢弃
+            "line_height": 9.9,  # I-32：越界**夹到边界**（不再丢键）
             "page_padding": 20,
             "font_scale_adjust": 1.05,
             "evil": "x",  # 不在清单里 → 丢弃
             "text_color": "javascript:alert(1)",  # 不是十六进制 → 丢弃
         }
     )
-    assert config == {"accent": "#0f766e", "page_padding": 20.0, "font_scale_adjust": 1.05}
+    assert config == {
+        "accent": "#0f766e",
+        # line_height 夹到区间上限 3.0（I-32 起不再丢弃越界值）。
+        "line_height": 3.0,
+        "page_padding": 20.0,
+        "font_scale_adjust": 1.05,
+    }
 
 
 def test_format_css_contains_root_and_rules():
@@ -399,15 +405,15 @@ def test_font_scale_adjust_lower_bound_matches_the_five_pixel_slider():
     field = _format_field("font_scale_adjust")
     assert field is not None
     assert field["min"] == 0.35
-    # 上限与步长不动：滑块只放宽了"更小"这一个方向。
-    assert field["max"] == 1.16
+    # I-32：上限也放宽到 2.40（"字再大一号"是常见诉求），步长不变。
+    assert field["max"] == 2.40
     assert field["step"] == 0.02
 
     # 5px / 最小档 11px ≈ 0.455 必须能落库，且渲染时真的参与计算。
     assert validated_format_config({"font_scale_adjust": 0.455}) == {"font_scale_adjust": 0.455}
     assert validated_format_config({"font_scale_adjust": 0.35}) == {"font_scale_adjust": 0.35}
-    # 再小就越界：字段范围不是"无下限"。
-    assert validated_format_config({"font_scale_adjust": 0.34}) == {}
+    # 再小就越界 → I-32 起夹到下限 0.35，而不是丢键（字段范围仍不是"无下限"）。
+    assert validated_format_config({"font_scale_adjust": 0.34}) == {"font_scale_adjust": 0.35}
 
     # 目录下发的选项也要是同一个数：前端读的是这一份。
     option = next(item for item in format_field_options() if item["key"] == "font_scale_adjust")

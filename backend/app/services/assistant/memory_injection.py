@@ -17,6 +17,13 @@ from ...models.assistant_memory import (
 
 #: 注入上限（#31B）：按当前用户消息相关性取 top 5，不全塞。
 INJECTION_TOP_N = 5
+#: 相关性命中阈值：只命中一个双字滑窗不足以说明相关（「岗位」这类双字可能只是
+#: 记忆值里任意相邻两个字）。两个独立命中、或一个 ≥4 字的命中才算相关。
+MIN_HITS = 2
+MIN_HIT_TOKEN_CHARS = 4
+#: 完整命中记忆值也算强信号：城市名多为两字（「上海」），靠双字滑窗永远凑不到
+#: 两个命中，但消息里完整出现「上海」和碰巧共享两个字是两回事。
+MIN_VERBATIM_VALUE_CHARS = 2
 
 
 def active_memories(db: Session, *, kinds: list[str] | None = None) -> list[AssistantMemory]:
@@ -42,19 +49,35 @@ def relevant_memories(
 ) -> list[AssistantMemory]:
     """#31B：按当前用户消息挑 top N 条记忆；一条都不相关时返回空（不全塞）。
 
-    相关 = 消息词元命中记忆的 kind 展示名 / key / value。排序：命中数降序，
-    同分时最近的在前。空消息或没有生效记忆都返回空列表。
+    相关 = 消息词元命中记忆的 **key / value**。**kind 展示名不参与计分**：标签
+    「目标岗位」里的「岗位」两个字会让「这个岗位怎么样」给所有 target_role 各记
+    一分，结果是"记了什么都往里塞"——这与"少而准"的取舍相反。
+    排序：命中数降序，同分时最近的在前。空消息或没有生效记忆都返回空列表。
+
+    已知限制：不做近义/语义召回（「江浙」召回不了「只看杭州和上海」）。那是 RAG
+    的活，规则层只认字面命中。
     """
     tokens = _tokens(message)
     if not tokens:
         return []
+    folded_message = (message or "").strip().casefold()
     scored: list[tuple[int, AssistantMemory]] = []
     for memory in active_memories(db):
-        label = MEMORY_KIND_LABELS.get(memory.kind, memory.kind)
-        haystack = f"{label} {memory.key} {memory.value}".casefold()
-        score = sum(1 for token in tokens if token in haystack)
-        if score > 0:
-            scored.append((score, memory))
+        haystack = f"{memory.key} {memory.value}".strip().casefold()
+        if not haystack:
+            continue
+        hits = [token for token in tokens if token in haystack]
+        if not hits:
+            continue
+        value = (memory.value or "").strip().casefold()
+        verbatim = len(value) >= MIN_VERBATIM_VALUE_CHARS and value in folded_message
+        if (
+            len(hits) < MIN_HITS
+            and not verbatim
+            and max(len(token) for token in hits) < MIN_HIT_TOKEN_CHARS
+        ):
+            continue
+        scored.append((len(hits), memory))
     scored.sort(key=lambda row: (-row[0], -row[1].updated_at.timestamp(), -row[1].id))
     return [memory for _score, memory in scored[: max(1, top)]]
 

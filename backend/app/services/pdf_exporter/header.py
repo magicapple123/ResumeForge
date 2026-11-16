@@ -43,6 +43,34 @@ from .style_blocks import parse_color
 
 logger = logging.getLogger(__name__)
 
+#: I-29：页眉线让开照片时的端点内缩。圆角照片的角是空的，紧贴会像线插进照片里。
+_PHOTO_LINE_GAP_MM = 0.5
+#: 让开之后短于这个长度的线段直接丢弃：画出来只是一个小点，反而像脏。
+_MIN_LINE_SEGMENT_MM = 2.0
+
+
+def _line_segments_around_photo(
+    x_start: float,
+    x_end: float,
+    line_y: float,
+    photo_rect: tuple[float, float, float, float] | None,
+) -> list[tuple[float, float]]:
+    """把一条横线按"让开照片"拆成若干段（纯函数，几何可直接测）。
+
+    ``photo_rect`` 是 ``(x, y, w, h)``：只有照片真的画出来了才有值。线不在照片的
+    纵向区间内时原样返回整条；在区间内就左右各让 0.5mm，过短的段丢掉。
+    """
+    if photo_rect is None:
+        return [(x_start, x_end)]
+    box_x, box_y, photo_w, photo_h = photo_rect
+    if not (box_y <= line_y <= box_y + photo_h):
+        return [(x_start, x_end)]
+    candidates = (
+        (x_start, min(box_x - _PHOTO_LINE_GAP_MM, x_end)),
+        (max(box_x + photo_w + _PHOTO_LINE_GAP_MM, x_start), x_end),
+    )
+    return [(start, end) for start, end in candidates if end - start >= _MIN_LINE_SEGMENT_MM]
+
 #: 角色/对象覆盖的查询函数：role_style(role, object_id=None)，无覆盖返回 None。
 RoleStyle = Callable[..., _RoleStyle | None]
 
@@ -197,8 +225,12 @@ def draw_header(
     if contact_lines:
         text_height += layout.gap_mm(layout.contact_gap)
         text_height += len(contact_lines) * pdf.line_advance(contact_size)
-    photo_span = photo_h if photo else 0.0
-    header_content_h = max(text_height, photo_span)
+    # I-31：照片**脱流**（绝对定位）——页眉高度只跟文字，照片可以压住下方正文。
+    # 这与草稿侧一致（模板里照片 `position: absolute`），也符合"背景块底边跟文字"。
+    header_content_h = text_height
+    # I-29：照片矩形只有在 `pdf.image()` 成功之后才赋值。放函数级而不是 if 块内，
+    # 是因为后面的分隔线要按它决定"在哪让开"；画失败时保持 None，线照旧整条画。
+    photo_rect: tuple[float, float, float, float] | None = None
 
     if header_has_bg:
         pdf.set_fill_color(*pdf.accent_soft)
@@ -222,8 +254,8 @@ def draw_header(
                 max(box_x, layout.margin_x + hdr_pad_x),
                 layout.margin_x + pdf.content_width - hdr_pad_x - photo_w,
             )
-            box_y = content_top + layout.photo_offset_y
-            box_y = min(max(box_y, header_top + hdr_pad_y), header_top + header_content_h)
+            # 脱流后只夹上沿：下沿**允许越出页眉**（会压到正文，编辑器负责提示）。
+            box_y = max(content_top + layout.photo_offset_y, header_top + hdr_pad_y)
             pdf.image(
                 BytesIO(photo),
                 x=box_x + (photo_w - photo_draw_w) / 2,
@@ -231,6 +263,7 @@ def draw_header(
                 w=photo_draw_w,
                 h=photo_draw_h,
             )
+            photo_rect = (box_x, box_y, photo_w, photo_h)
             # R-07：边框与圆角。默认值（1px / 模板线色 / 4px）与模板 CSS 的
             # `.profile-photo` 一致，所以默认态三个出口终于画的是同一个框。
             border_px = float(getattr(layout, "photo_border_width", 1) or 0)
@@ -321,15 +354,24 @@ def draw_header(
             )
     pdf.set_text_color(*pdf.body_text)
 
-    header_bottom = max(pdf.get_y(), content_top + photo_span)
+    header_bottom = pdf.get_y()
     if header_has_bg:
         header_bottom += hdr_pad_y
     if hdr_border_w > 0:
         header_bottom += hdr_pad_bottom
-        line_y = header_bottom
+        # I-31：线跟**文字底部 + 微调**（0–12mm），不跟照片。Word 侧是段落底边框，
+        # 草稿侧 border 挂在 .header-main 上，三个出口同一口径。
+        line_y = pdf.get_y() + hdr_pad_bottom + layout.header_rule_gap
         pdf.set_draw_color(*pdf.accent)
         pdf.set_line_width(hdr_border_w)
-        pdf.line(layout.margin_left, line_y, PAGE_WIDTH_MM - layout.margin_right, line_y)
+        # I-29：照片允许越界（偏移作用在照片框上），线压在照片上会像"穿透"。
+        # 线按照片的横向区间拆成两段让开，端点各内缩 0.5mm；任一段短于 2mm 直接丢掉。
+        # **不动 header_bottom**：它决定页眉高度与分页，改了会连锁影响 fit.py 的
+        # 18 组「1 页 + 填充率」校验。
+        for start, end in _line_segments_around_photo(
+            layout.margin_left, PAGE_WIDTH_MM - layout.margin_right, line_y, photo_rect
+        ):
+            pdf.line(start, line_y, end, line_y)
     pdf.set_y(header_bottom)
 
 

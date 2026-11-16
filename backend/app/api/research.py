@@ -26,10 +26,26 @@ from ..services.job.company_research import (
     record_research_usage,
     run_company_research_with,
 )
+from ..services.job.company_research_store import (
+    latest_company_entry,
+    research_entry_summary,
+    save_research_entry,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/research", tags=["research"])
+
+
+@router.get("/company/latest")
+async def latest_research(company: str, db: Session = Depends(get_db)) -> dict:
+    """这家公司最近一次调研（无则 ``entry: null``）。
+
+    只返回摘要（不含正文）：调研页只需要显示「最近一次调研：3 天前 · 查看」，
+    正文在知识库里读，避免一进页面就传几万字。
+    """
+    entry = await run_sync(latest_company_entry, db, company)
+    return {"entry": research_entry_summary(entry)}
 
 
 @router.post("/company")
@@ -41,7 +57,7 @@ async def research_company(payload: ResearchCompanyRequest, db: Session = Depend
     ``detail`` 里**只写原因**，引导语由前端 ``errorGuidance`` 补。
 
     三段式：准备（读搜索配置与 Key，worker 里做完就归还请求连接）→ 两条网络路
-    （协程回到事件循环）→ 收尾（记搜索用量，worker）。
+    （协程回到事件循环）→ 收尾（记搜索用量 + 把简报写成知识库条目，worker）。
     """
     try:
         runtime = await run_sync(load_research_runtime, db, api_key=None)
@@ -51,8 +67,17 @@ async def research_company(payload: ResearchCompanyRequest, db: Session = Depend
             role=payload.role,
             jd=payload.jd,
             deep=payload.deep,
+            parts=tuple(payload.parts),
         )
         await run_sync(record_research_usage, db, result["brief"])
+        # I-21：结果落库（同公司同来源原地更新）。落库失败不影响本次结果：
+        # 用户已经付过搜索费，不能因为写知识库出错就把整屏调研丢掉。
+        try:
+            entry = await run_sync(save_research_entry, db, result, job_id=payload.job_id)
+        except Exception:  # noqa: BLE001 - 落库是增强项
+            logger.warning("调研结果落库失败 company=%r", payload.company, exc_info=True)
+            entry = None
+        result["knowledge_entry"] = research_entry_summary(entry)
         return result
     except ValueError as exc:
         # 输入不可用（公司名为空、文本超长）：这是调用方的问题，400 比 500 有用。

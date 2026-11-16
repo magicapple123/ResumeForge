@@ -96,6 +96,8 @@ _READ_ONLY_TOOLS = (
     "queue_list",
     # 联网搜索（只读网络查询，不落库、不向外部系统提交任何东西）
     "web_search",
+    # I-23 公司调研（只读；会消耗搜索额度，结果落知识库）
+    "research_company",
     # 简历文档只读（版面读数 / 版本 / 变体 / 单条读取）
     "get_resume_status",
     "list_versions",
@@ -182,7 +184,7 @@ EXPECTED_PERMISSIONS: dict[str, ToolPermission] = {
     **{name: EXTERNAL_SIDE_EFFECT for name in _EXTERNAL_SIDE_EFFECT_TOOLS},
 }
 
-EXPECTED_TOOL_COUNT = 91
+EXPECTED_TOOL_COUNT = 92
 
 
 def _tool_constructions() -> list[tuple[Path, ast.Call]]:
@@ -280,12 +282,12 @@ def test_every_tool_declares_one_of_the_four_levels():
 
 
 def test_permission_distribution_is_the_expected_one():
-    """分布快照：55 只读 / 34 可撤销 / 1 不可逆 / 1 外部副作用（T17 + T29 + T31 + T12 + #15F + #16/#18A/#29A）。"""
+    """分布快照：56 只读 / 34 可撤销 / 1 不可逆 / 1 外部副作用（T17 + T29 + T31 + T12 + #15F + #16/#18A/#29A + I-23）。"""
     counts = {
         level: sum(1 for tool in _TOOLS if tool.permission is level) for level in PERMISSION_LEVELS
     }
     assert counts == {
-        READ_ONLY: 55,
+        READ_ONLY: 56,
         REVERSIBLE_WRITE: 34,
         IRREVERSIBLE_WRITE: 1,
         EXTERNAL_SIDE_EFFECT: 1,

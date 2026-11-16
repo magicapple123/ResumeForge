@@ -31,15 +31,16 @@
     padding: 12mm 13mm;
   }
   /* 页头不画横线：参考版式里姓名/联系方式与首段信息区之间只靠留白分开。 */
-  .header { display: flex; align-items: flex-start; gap: calc(var(--fs) * 1.1); margin-bottom: calc(var(--fs) * 0.6); }
+  .header { position: relative; display: flex; align-items: flex-start; gap: calc(var(--fs) * 1.1); margin-bottom: calc(var(--fs) * 0.6); }
   .header-main { flex: 1; min-width: 0; }
+  .header.has-photo .header-main { padding-right: calc(var(--fs) * 1.1 + var(--fs) * 5.0 * var(--photo-scale, 1)); }
   .header .name { font-size: calc(var(--fs) * 2 * var(--name-scale, 1)); font-weight: 700; letter-spacing: 2px; line-height: 1.2; }
   .name-extra { font-size: calc(var(--fs) * 0.9); font-weight: 400; color: var(--muted); letter-spacing: 0; }
   .header .intent { font-size: calc(var(--fs) * 0.95); color: var(--muted); margin-top: calc(var(--fs) * 0.3); }
   .header .contact { font-size: calc(var(--fs) * 0.88); color: var(--muted); margin-top: calc(var(--fs) * 0.15); }
   .header .contact span { margin-right: calc(var(--fs) * 0.9); white-space: nowrap; }
   /* 有照片时是右上角的方形块；没有照片时宏不渲染这个元素，所以不会留空洞。 */
-  .profile-photo { width: calc(var(--fs) * 5 * var(--photo-scale, 1)); height: calc(var(--fs) * 5 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: contain; }
+  .profile-photo { position: absolute; top: 0; right: 0; width: calc(var(--fs) * 5 * var(--photo-scale, 1)); height: calc(var(--fs) * 5 * var(--photo-scale, 1)); object-fit: contain; }
   .section { margin-bottom: calc(var(--fs) * 0.75); }
   .section-title { font-size: calc(var(--fs) * 1.06 * var(--section-title-scale, 1)); font-weight: 700; letter-spacing: 1px; border-bottom: 1px solid var(--line); padding-bottom: calc(var(--fs) * 0.14); margin-bottom: calc(var(--fs) * 0.35); }
   .entry { margin-bottom: calc(var(--fs) * 0.42 * var(--entry-gap, 1)); }

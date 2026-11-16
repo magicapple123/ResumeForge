@@ -76,7 +76,26 @@ class CompanyResearchError(RuntimeError):
 
     消息里**只写原因**（"请""你可以"这类引导由前端 ``errorGuidance`` 补），
     这样同一个原因在 API、界面提示和日志里是同一句话。
+
+    ``code``（I-22）是给前端的机器可读分类：``unauthorized`` / ``insufficient_balance``
+    / ``rate_limited`` / ``upstream``。界面据此给"去设置配置""查看余额""稍后重试"
+    这类可行动按钮；只有文字没有按钮，用户看完仍然不知道该做什么。
     """
+
+    def __init__(self, message: str, *, code: str = "upstream") -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _failure_code(status: int) -> str:
+    """上游状态码 → 可行动分类（与 ``_failure_reason`` 一一对应）。"""
+    if status in (401, 403):
+        return "unauthorized"
+    if status == 402:
+        return "insufficient_balance"
+    if status == 429:
+        return "rate_limited"
+    return "upstream"
 
 
 def _load_prompt(max_tool_calls: int) -> str:
@@ -338,6 +357,7 @@ def parse_brief(body: Any, *, deep: bool) -> dict[str, Any]:
     return {
         "status": "ok",
         "reason": "",
+        "reason_code": "",
         "markdown": markdown,
         "sources": sources,
         "deep": deep,
@@ -350,11 +370,30 @@ def parse_brief(body: Any, *, deep: bool) -> dict[str, Any]:
     }
 
 
-def failed_brief(reason: str, *, deep: bool) -> dict[str, Any]:
+def skipped_brief(*, deep: bool) -> dict[str, Any]:
+    """这一路没有被请求（``parts`` 白名单）：与"失败"区分开，界面不该报错。"""
+    return {
+        "status": "skipped",
+        "reason": "",
+        "reason_code": "",
+        "markdown": "",
+        "sources": [],
+        "deep": deep,
+        "tool_calls": 0,
+        "query_terms": 0,
+        "billed_searches": 0,
+        "fetched_pages": 0,
+        "tool_call_budget": max_tool_calls_for(deep),
+        "tool_budget_exceeded": False,
+    }
+
+
+def failed_brief(reason: str, *, deep: bool, code: str = "upstream") -> dict[str, Any]:
     """简报失败时的同一形状（前端不用为失败态再写一套字段判断）。"""
     return {
         "status": "failed",
         "reason": reason,
+        "reason_code": code,
         "markdown": "",
         "sources": [],
         "deep": deep,
@@ -399,7 +438,8 @@ async def build_company_brief(
         CompanyResearchError: 无 Key、上游拒绝、超时、空回答。
     """
     if not api_key:
-        raise CompanyResearchError("未配置 DeepSeek Key，无法生成联网简报")
+        # 与 401 归同一类：两者的可行动作都是"去设置配置 Key"，界面不该给两个入口。
+        raise CompanyResearchError("未配置 DeepSeek Key，无法生成联网简报", code="unauthorized")
 
     started = time.perf_counter()
     payload = build_payload(company, role, jd, deep=deep)
@@ -407,7 +447,9 @@ async def build_company_brief(
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     if response.status_code != 200:
         logger.warning("调研简报失败 status=%s elapsed_ms=%s", response.status_code, elapsed_ms)
-        raise CompanyResearchError(_failure_reason(response.status_code))
+        raise CompanyResearchError(
+            _failure_reason(response.status_code), code=_failure_code(response.status_code)
+        )
     try:
         body = response.json()
     except ValueError as exc:

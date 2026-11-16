@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""联网搜索工具声明（``_TOOLS`` 最后 1 条）。"""
+"""联网搜索与公司调研工具声明（``_TOOLS`` 末尾两条）。"""
 from __future__ import annotations
 
 from ._types import _WEB_SEARCH_DESC_SUMMARIES, Tool, ToolPermission
+from .research_tools import _tool_research_company
 from .search_tools import _tool_web_search
 
 SEARCH_TOOLS: tuple[Tool, ...] = (
@@ -41,6 +42,34 @@ SEARCH_TOOLS: tuple[Tool, ...] = (
         },
         handler=_tool_web_search,
         service_entry="search.aggregate_search",
+        permission=ToolPermission.READ_ONLY,
+        requires_web_search=True,
+    ),
+    # I-23：把"调研这家公司"变成助手能做的一件事。只读（不改库、不外发），但会消耗
+    # 搜索额度——描述里写清楚，模型才会在真的需要公司背景时才调用。
+    Tool(
+        name="research_company",
+        description=(
+            "调研一家公司的背景（主营、近期动态、口碑），返回带来源链接的摘要。"
+            "会消耗搜索额度（深度档最多约 20 次工具调用，费用明显更高），"
+            "只在用户问「这家公司怎么样 / 值不值得投」这类需要外部信息的问题时使用；"
+            "用户只是让你改简历或查本地数据时不要调用。"
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "company": {"type": "string", "description": "公司名，尽量用全名"},
+                "role": {"type": "string", "description": "可选：目标岗位名，让结论更贴岗位"},
+                "jd": {"type": "string", "description": "可选：招聘描述原文，用于解读岗位"},
+                "deep": {
+                    "type": "boolean",
+                    "description": "可选：深度调研（多轮搜索，费用更高）。默认 false。",
+                },
+            },
+            "required": ["company"],
+        },
+        handler=_tool_research_company,
+        service_entry="job.company_research",
         permission=ToolPermission.READ_ONLY,
         requires_web_search=True,
     ),

@@ -216,25 +216,26 @@ def test_scale_css_vars_keep_a_fixed_order():
 
 
 @pytest.mark.parametrize(
-    ("key", "value", "accepted"),
+    ("key", "value", "expected"),
     [
-        ("name_scale", 0.8, True),
-        ("name_scale", 1.3, True),
-        ("name_scale", 0.79, False),
-        ("name_scale", 1.31, False),
-        ("section_title_scale", 0.85, True),
-        ("section_title_scale", 1.25, True),
-        ("section_title_scale", 0.84, False),
-        ("section_title_scale", 1.26, False),
-        ("entry_gap", 0.6, True),
-        ("entry_gap", 1.8, True),
-        ("entry_gap", 0.59, False),
-        ("entry_gap", 1.81, False),
+        ("name_scale", 0.8, 0.8),
+        ("name_scale", 1.3, 1.3),
+        # I-32：越界不再丢键，而是夹到边界——用户拖到上限松手不会跳回去。
+        ("name_scale", 0.79, 0.8),
+        ("name_scale", 1.31, 1.3),
+        ("section_title_scale", 0.85, 0.85),
+        ("section_title_scale", 1.25, 1.25),
+        ("section_title_scale", 0.84, 0.85),
+        ("section_title_scale", 1.26, 1.25),
+        ("entry_gap", 0.6, 0.6),
+        ("entry_gap", 1.8, 1.8),
+        ("entry_gap", 0.59, 0.6),
+        ("entry_gap", 1.81, 1.8),
     ],
 )
-def test_scale_bounds_clamp_at_the_edge_and_drop_outside(key: str, value: float, accepted: bool):
-    """边界值收、越界丢弃（与 `page_padding` 同一条白名单契约）。"""
-    assert (key in validated_format_config({key: value})) is accepted
+def test_scale_bounds_clamp_at_the_edge(key: str, value: float, expected: float):
+    """边界值收、越界夹到边界（I-32 起的统一口径）。"""
+    assert validated_format_config({key: value})[key] == expected
 
 
 def test_scale_bounds_match_the_frontend_contract():

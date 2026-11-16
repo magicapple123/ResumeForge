@@ -71,6 +71,45 @@ class MemoryValidationError(ValueError):
     """记忆内容不合法（kind 不在白名单 / 空值 / 疑似敏感信息）。"""
 
 
+#: 一次性动作的引导词。用户说「帮我看看这份作品集」时，抽取器容易把动作本身
+#: 记成 value（如「目标岗位：投递后端开发岗位」），之后每一轮都可能被注入。
+ACTION_LEAD_WORDS = ("投递", "申请", "应聘", "帮我", "看看", "这份", "那份", "改一下")
+#: 稳定描述的标志词：出现任一个就说明这是可复用的偏好，不按动作丢弃。
+#: 判据必须两条同时满足才丢——「投递后端开发（长期方向）」是合法边界样例。
+STABLE_MARKERS = (
+    "长期",
+    "一直",
+    "目前",
+    "现在",
+    "目标",
+    "稳定",
+    "优先",
+    "倾向",
+    "不考虑",
+    "只看",
+    "只想",
+    "一律",
+    "每次",
+    "通常",
+    "希望",
+    "打算",
+)
+
+
+def is_one_off_action(value: str) -> bool:
+    """value 是不是"一次性动作"而不是稳定偏好。
+
+    保守判据：以动作词开头 **且** 不含任何稳定描述标志。整条丢弃，不裁剪成半句
+    ——把「投递后端开发岗位」裁成「后端开发岗位」等于替用户改事实，宁可这次不记。
+    """
+    text = " ".join(str(value or "").split())
+    if not text:
+        return False
+    if not text.startswith(ACTION_LEAD_WORDS):
+        return False
+    return not any(marker in text for marker in STABLE_MARKERS)
+
+
 def _clean(value: Any, *, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
 
@@ -310,8 +349,11 @@ def apply_operations(
 
     任何一条不合法（kind 不在白名单 / 敏感内容）都只跳过这一条并计数，
     不影响同一批其他条——一次抽取里混进一条脏数据不该让整次学习失败。
+
+    一次性动作（「帮我看看这份作品集」）在这里整条丢弃：提示词已经要求模型只写
+    名词性偏好，但模型偶尔仍会把动作记成 value，落库前再拦一道更可靠。
     """
-    counts = {"add": 0, "update": 0, "supersede": 0, "noop": 0, "invalid": 0}
+    counts = {"add": 0, "update": 0, "supersede": 0, "noop": 0, "invalid": 0, "dropped": 0}
     now = utcnow()
     for operation in operations:
         if not isinstance(operation, dict):
@@ -327,6 +369,9 @@ def apply_operations(
             )
         except MemoryValidationError:
             counts["invalid"] += 1
+            continue
+        if is_one_off_action(value):
+            counts["dropped"] += 1
             continue
         if op == "NOOP":
             counts["noop"] += 1

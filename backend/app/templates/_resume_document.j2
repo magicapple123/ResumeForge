@@ -190,7 +190,7 @@
 {%- endif -%}
 {%- endmacro %}
 
-<div class="header">
+<div class="header{% if document_plan.header.photo %} has-photo{% endif %}">
   <div class="header-main">
     <div class="name" data-role="name">{{ path_spans(document_plan.header.name) }}{% if document_plan.header.name_meta %} <span class="name-extra" data-role="meta">{{ path_spans(document_plan.header.name_meta) }}</span>{% endif %}</div>
     {%- if document_plan.header.subtitle %}

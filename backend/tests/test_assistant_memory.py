@@ -23,6 +23,7 @@ from app.models.profile import utcnow
 from app.services.ai_task_registry import registered_ai_task_kinds
 from app.services.assistant import memory
 from app.services.assistant.memory_extract import (
+    backfill_pending_extractions,
     mark_extracted,
     parse_extraction_response,
     run_extraction,
@@ -151,6 +152,25 @@ def test_relevant_memories_returns_top_five_and_empty_when_unrelated(db_session)
 
     unrelated = memory.relevant_memories(db_session, "今天天气怎么样")
     assert unrelated == []
+
+
+def test_injection_ignores_kind_label_and_applies_threshold(db_session):
+    """I-06：kind 标签不参与计分 + 命中阈值 + 两字城市名的完整命中。
+
+    四个固定样例（来自问题清单实测）：
+    ①「这个岗位怎么样」不再给所有 target_role 各记一分（标签「岗位」不计分）；
+    ②「上海的机会」能召回 city=上海（完整命中记忆值）；
+    ③「我想去江浙一带」召回不了「只看杭州和上海」——已知限制，规则层不做近义召回；
+    ④ 空消息返回空列表。
+    """
+    memory.create_memory(db_session, kind="target_role", value="算法工程师", key="算法")
+    memory.create_memory(db_session, kind="city", value="上海", key="上海")
+    memory.create_memory(db_session, kind="city", value="杭州", key="杭州")
+
+    assert memory.relevant_memories(db_session, "这个岗位怎么样") == []
+    assert [item.value for item in memory.relevant_memories(db_session, "上海的机会")] == ["上海"]
+    assert memory.relevant_memories(db_session, "我想去江浙一带") == []
+    assert memory.relevant_memories(db_session, "") == []
 
 
 def test_render_memory_block_uses_latest_user_message(db_session):
@@ -308,6 +328,105 @@ def test_should_schedule_blocks_when_a_task_is_already_running(db_session):
 def test_memory_extract_handler_is_registered():
     """#31A 接 ai_task 执行器：kind 必须已登记（否则 API 层会 400）。"""
     assert AI_TASK_KIND_ASSISTANT_MEMORY in registered_ai_task_kinds()
+
+
+class _RecordingRunner:
+    """记录 start 调用的替身执行器：补扫的验收只看"登记了几条"。"""
+
+    def __init__(self) -> None:
+        self.started: list[int] = []
+
+    def start(self, task_id: int) -> None:
+        self.started.append(task_id)
+
+    def mark_failed(self, task_id: int, reason: str) -> None:  # pragma: no cover - 不应发生
+        raise AssertionError(f"补扫不应该走到失败收尾：{task_id} {reason}")
+
+
+def _patch_runner(monkeypatch: pytest.MonkeyPatch) -> _RecordingRunner:
+    import app.services.ai_task_runner as runner_module
+
+    runner = _RecordingRunner()
+    monkeypatch.setattr(runner_module, "get_ai_task_runner", lambda: runner)
+    return runner
+
+
+def test_backfill_schedules_the_idle_conversation(db_session, monkeypatch):
+    """I-04：上一段对话已空闲且 cursor 落后 → 启动补扫恰好登记 1 条抽取任务。"""
+    runner = _patch_runner(monkeypatch)
+    conversation = _conversation(db_session)
+    _message(db_session, conversation, "user", "我只看杭州", minutes_ago=11)
+    _message(db_session, conversation, "assistant", "好的", minutes_ago=10)
+    memory.set_auto_extract(db_session, True)
+
+    assert backfill_pending_extractions(db_session) == 1
+    tasks = (
+        db_session.query(AiTask)
+        .filter(AiTask.kind == AI_TASK_KIND_ASSISTANT_MEMORY)
+        .all()
+    )
+    assert len(tasks) == 1
+    assert (tasks[0].payload or {}).get("conversation_id") == conversation.id
+    assert runner.started == [tasks[0].id]
+
+
+def test_backfill_skips_when_switch_is_off(db_session, monkeypatch):
+    """I-04 判据一：自动抽取关闭时一条都不登记。"""
+    runner = _patch_runner(monkeypatch)
+    conversation = _conversation(db_session)
+    _message(db_session, conversation, "assistant", "好的", minutes_ago=10)
+
+    assert backfill_pending_extractions(db_session) == 0
+    assert (
+        db_session.query(AiTask)
+        .filter(AiTask.kind == AI_TASK_KIND_ASSISTANT_MEMORY)
+        .count()
+        == 0
+    )
+    assert runner.started == []
+
+
+def test_backfill_skips_when_cursor_is_up_to_date(db_session, monkeypatch):
+    """I-04 判据二：这段对话已经抽过（cursor 覆盖最新消息）→ 不再登记。"""
+    _patch_runner(monkeypatch)
+    conversation = _conversation(db_session)
+    _message(db_session, conversation, "user", "我只看杭州", minutes_ago=11)
+    last = _message(db_session, conversation, "assistant", "好的", minutes_ago=10)
+    memory.set_auto_extract(db_session, True)
+    mark_extracted(db_session, conversation.id, last.id)
+
+    assert backfill_pending_extractions(db_session) == 0
+
+
+def test_backfill_skips_conversation_with_a_running_task(db_session, monkeypatch):
+    """I-04 判据三：同会话已有在跑的任务 → 不重复登记（幂等由在跑任务保证）。"""
+    _patch_runner(monkeypatch)
+    conversation = _conversation(db_session)
+    _message(db_session, conversation, "user", "我只看杭州", minutes_ago=11)
+    _message(db_session, conversation, "assistant", "好的", minutes_ago=10)
+    memory.set_auto_extract(db_session, True)
+    db_session.add(
+        AiTask(
+            kind=AI_TASK_KIND_ASSISTANT_MEMORY,
+            payload={"conversation_id": conversation.id},
+            label="整理助手记忆",
+        )
+    )
+    db_session.commit()
+
+    assert backfill_pending_extractions(db_session) == 0
+
+
+def test_backfill_skips_empty_and_too_recent_conversations(db_session, monkeypatch):
+    """I-04 判据四：没有消息的会话、刚聊完还没到空闲阈值的会话都不登记。"""
+    _patch_runner(monkeypatch)
+    memory.set_auto_extract(db_session, True)
+    empty = _conversation(db_session, title="空会话")
+    fresh = _conversation(db_session, title="刚聊完")
+    _message(db_session, fresh, "assistant", "在的", minutes_ago=1)
+    assert empty.id and fresh.id
+
+    assert backfill_pending_extractions(db_session) == 0
 
 
 def test_suppressed_is_not_reinjected_and_blocks_reextraction(db_session):

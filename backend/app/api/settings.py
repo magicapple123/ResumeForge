@@ -93,6 +93,7 @@ from ..services.settings_service import (
 )
 from .assistant_compaction_api import register_compaction_setting_routes
 from .model_window_api import register_model_window_routes
+from .settings_reset_api import register_settings_reset_routes
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,8 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 register_compaction_setting_routes(router)
 # 「模型窗口参考」只读列表（R-18 的旁路展示）：同样只留注册一行。
 register_model_window_routes(router)
+# 设置「恢复默认」与快照（I-10）：本文件已贴 500 行硬预算，同样只留注册一行。
+register_settings_reset_routes(router)
 
 
 def _is_loopback_request(request: Request) -> bool:

@@ -242,6 +242,19 @@ async def lifespan(_app: FastAPI):
             recover_running_tasks(session)
         except Exception:  # noqa: BLE001 - 恢复失败不应阻断启动
             startup_logger.warning("恢复中断的 Agent 任务失败", exc_info=True)
+    # I-04：助手记忆的启动补扫。抽取没有常驻定时器——用户关掉应用之后到点也没有进程
+    # 在跑，所以"下次打开应用"就是能抽的最佳时机。放在迁移、SQLite 维护与孤儿任务收尾
+    # 之后：孤儿 pending 行刚被标 failed，不会把补扫挡在"同会话在跑"上。
+    startup_logger.info("启动自检：补登记待抽取的助手记忆")
+    try:
+        from .services.assistant.memory_extract import backfill_pending_extractions
+
+        with database.SessionLocal() as session:
+            backfilled = backfill_pending_extractions(session)
+        if backfilled:
+            startup_logger.info("补登记助手记忆抽取 %d 个会话", backfilled)
+    except Exception:  # noqa: BLE001 - 补扫失败不能阻断启动
+        startup_logger.warning("补登记助手记忆抽取失败（不阻断启动）", exc_info=True)
     # T01：写操作提案跨重启语义——内存 token 已随进程丢失，pending/approved 必须
     # 一律置 expired（否则会出现"界面上还能确认、后端却执行不了"的假象）；同时按
     # 隐私最小化清理过期提案的参数与预览。失败不阻断启动（最坏是多留几条旧状态）。

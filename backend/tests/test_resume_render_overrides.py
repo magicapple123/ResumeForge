@@ -92,7 +92,8 @@ def test_unsupported_domain_version_is_dropped_whole():
     assert "roles" not in config
 
 
-def test_role_domain_drops_unknown_roles_props_and_out_of_range_values():
+def test_role_domain_drops_unknown_roles_props_and_clamps_out_of_range_values():
+    """I-32：越界值夹到边界并保留（不再静默丢键），未知角色/属性仍然丢弃。"""
     domain = validate_roles_domain(
         {
             "version": 1,
@@ -101,7 +102,10 @@ def test_role_domain_drops_unknown_roles_props_and_out_of_range_values():
             "name": {"line_height": 1.8},  # name 不允许 line_height
         }
     )
-    assert domain == {"version": 1, "body": {"line_height": 1.55, "indent": 1.2}}
+    assert domain == {
+        "version": 1,
+        "body": {"line_height": 1.55, "indent": 1.2, "font_scale": 3.0},
+    }
 
 
 def test_objects_domain_requires_stable_ids_and_bounds_entries():
@@ -122,11 +126,12 @@ def test_style_props_and_bounds_are_the_frozen_contract():
     keys = tuple(prop["key"] for prop in STYLE_PROPS)
     # #5d：italic 移除后是 11 项；数字边界仍逐项冻结。
     assert len(keys) == 11 and len(set(keys)) == 11 and "italic" not in keys
-    assert PROP_BOUNDS["font_scale"] == (0.70, 2.40)
-    assert PROP_BOUNDS["space_before"] == (0.0, 3.0)
-    assert PROP_BOUNDS["line_height"] == (1.0, 2.6)
-    assert PROP_BOUNDS["indent"] == (0.0, 4.0)
-    assert PROP_BOUNDS["letter_spacing"] == (-0.10, 0.30)
+    # I-32：A 类全量放宽（数值型 6 项逐项冻结；改这里必须同批改前端镜像）。
+    assert PROP_BOUNDS["font_scale"] == (0.50, 3.00)
+    assert PROP_BOUNDS["space_before"] == (0.0, 6.0)
+    assert PROP_BOUNDS["line_height"] == (0.90, 3.00)
+    assert PROP_BOUNDS["indent"] == (0.0, 8.0)
+    assert PROP_BOUNDS["letter_spacing"] == (-0.20, 0.60)
     assert set(ROLE_PROPS["body"]) >= {"indent", "bullet", "align", "line_height"}
     assert "meta_align" in ROLE_PROPS["meta"]
 

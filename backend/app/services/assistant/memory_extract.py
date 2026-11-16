@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """#31A 会话空闲后的语义记忆抽取：提示词、响应校验、异步落库与触发判定。
 
-写入时机是**会话空闲 5 分钟后在后台跑一次**（不是每轮）：输入最近 N 轮对话 + 现有
-生效记忆（用于判重），模型输出 ADD/UPDATE/SUPERSEDE/NOOP 四类操作，落库交给
+写入时机：**下次使用助手时**（含应用启动补扫）整理上一段已空闲的对话，不是每轮。
+之所以不是"空闲 5 分钟后由定时器跑"：本地应用常年只在用的时候开着，定时器在用户
+关掉应用后不会醒，覆盖不到主场景。输入最近 N 轮对话 + 现有生效记忆（用于判重），
+模型输出 ADD/UPDATE/SUPERSEDE/NOOP 四类操作，落库交给
 assistant.memory.apply_operations。接 ai_task 执行器（kind=assistant_memory_extract），
 不占生成请求关键路径。
 
@@ -20,6 +22,7 @@ import logging
 from datetime import timedelta
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ...models.ai_task import (
@@ -38,6 +41,10 @@ logger = logging.getLogger(__name__)
 RECENT_MESSAGES = 24
 #: 每条消息截断长度（只给模型看"说了什么"，不喂长文）。
 MAX_TURN_CHARS = 600
+#: 启动补扫：一次最多补登记多少个会话（会话很多时不拖慢启动）。
+BACKFILL_LIMIT = 20
+#: 启动补扫：候选扫描上限（按最新消息倒序；精确条件仍由 should_schedule 判）。
+BACKFILL_SCAN_LIMIT = 100
 
 _SYSTEM_PROMPT = (
     "你是用户求职偏好的记忆整理器。从给定对话里抽取**用户明确表达过的稳定事实**，"
@@ -50,7 +57,12 @@ _SYSTEM_PROMPT = (
     "\n规则：① 只记用户**自己说的**事实，不要从助手的推测里提炼；"
     "② 用户没说清或只随口提一次的，不要记；③ 与现有记忆同类不同值用 SUPERSEDE，"
     "同类同义补充细节用 UPDATE，完全重复用 NOOP；④ value 是一句不超过 60 字的陈述；"
-    "⑤ 不记手机号、身份证号、密钥等敏感信息；⑥ 没有可记的就输出 []。"
+    "⑤ 不记手机号、身份证号、密钥等敏感信息；⑥ 没有可记的就输出 []；"
+    "⑦ value 必须是**名词性偏好**（岗位方向 / 城市 / 薪资底线 / 技术栈 / 约束），"
+    "不要写成动作——用户说「投递后端开发岗位」时记「后端开发」，"
+    "target_role 只写岗位方向，不带「投递 / 申请 / 目标」这类前缀；"
+    "⑧ 一次性的任务（看这份简历、改一下这段话、帮我看看）不入库，"
+    "它们是本轮请求，不是稳定偏好。"
 )
 
 
@@ -247,6 +259,42 @@ def schedule_extraction(db: Session, conversation_id: int) -> AiTask | None:
     return task
 
 
+def backfill_pending_extractions(db: Session, *, limit: int = BACKFILL_LIMIT) -> int:
+    """启动补扫：把"上一段对话已结束、但还没抽"的会话补登记一次。
+
+    没有常驻定时器（用户关掉应用之后，到点也没有进程在跑），所以能抽的时机只有
+    "下次打开应用"。这里刻意不在同一进程里另起协程轮询：多一个常驻任务 + SQLite
+    并发写 + 关闭时要 cancel，换来的只是把"下次打开时抽"提前几分钟。
+
+    判定条件全部复用 `should_schedule`（开关 / 空闲 5 分钟 / cursor / 同会话在跑），
+    本函数只负责找出候选会话并逐个登记，避免第二份规则实现。返回实际登记数。
+    """
+    if not memory.auto_extract_enabled(db):
+        return 0
+    rows = (
+        db.query(ChatMessage.conversation_id, func.max(ChatMessage.id))
+        .filter(ChatMessage.status == "complete")
+        .group_by(ChatMessage.conversation_id)
+        .order_by(func.max(ChatMessage.id).desc())
+        .limit(BACKFILL_SCAN_LIMIT)
+        .all()
+    )
+    scheduled = 0
+    for conversation_id, latest_id in rows:
+        if scheduled >= limit:
+            break
+        if not conversation_id:
+            continue
+        # cursor 已覆盖最新消息 = 这段已经抽过，连 should_schedule 都不用进。
+        if int(latest_id or 0) <= read_cursor(db, int(conversation_id)):
+            continue
+        if schedule_extraction(db, int(conversation_id)) is not None:
+            scheduled += 1
+    if scheduled:
+        logger.info("启动补扫登记助手记忆抽取 %d 个会话", scheduled)
+    return scheduled
+
+
 async def run_extraction(db: Session, *, conversation_id: int, provider: Any) -> dict[str, Any]:
     """跑一次抽取：读轮次 → 调模型 → 解析 → 落库。返回计数（写进任务 result_ref）。
 
@@ -287,8 +335,11 @@ async def run_extraction(db: Session, *, conversation_id: int, provider: Any) ->
 
 
 __all__ = [
+    "BACKFILL_LIMIT",
+    "BACKFILL_SCAN_LIMIT",
     "MAX_TURN_CHARS",
     "RECENT_MESSAGES",
+    "backfill_pending_extractions",
     "build_extraction_messages",
     "mark_extracted",
     "parse_extraction_response",

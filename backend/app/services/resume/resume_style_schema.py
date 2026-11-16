@@ -38,7 +38,7 @@ ROLES: tuple[str, ...] = (
 
 # 属性表：key → 类型 + 区间/枚举 + 可用角色。前端同名表必须逐键相等（测试钉住）。
 STYLE_PROPS: tuple[dict[str, Any], ...] = (
-    {"key": "font_scale", "type": "number", "min": 0.70, "max": 2.40, "step": 0.02, "roles": ROLES},
+    {"key": "font_scale", "type": "number", "min": 0.50, "max": 3.00, "step": 0.02, "roles": ROLES},
     {"key": "color", "type": "color", "roles": ROLES},
     {"key": "bold", "type": "bool", "roles": ROLES},
     # #5d：italic 已整体移除（PDF 无斜体字形、Word/HTML 行为不一，详见 CHANGELOG）；
@@ -47,7 +47,7 @@ STYLE_PROPS: tuple[dict[str, Any], ...] = (
         "key": "space_before",
         "type": "number",
         "min": 0.0,
-        "max": 3.0,
+        "max": 6.0,
         "step": 0.05,
         "roles": ("section_title", "entry_title", "body"),
     },
@@ -55,19 +55,19 @@ STYLE_PROPS: tuple[dict[str, Any], ...] = (
         "key": "space_after",
         "type": "number",
         "min": 0.0,
-        "max": 3.0,
+        "max": 6.0,
         "step": 0.05,
         "roles": ("section_title", "entry_title", "body"),
     },
     {
         "key": "line_height",
         "type": "number",
-        "min": 1.0,
-        "max": 2.6,
+        "min": 0.90,
+        "max": 3.00,
         "step": 0.01,
         "roles": ("body", "entry_title"),
     },
-    {"key": "indent", "type": "number", "min": 0.0, "max": 4.0, "step": 0.05, "roles": ("body",)},
+    {"key": "indent", "type": "number", "min": 0.0, "max": 8.0, "step": 0.05, "roles": ("body",)},
     {
         "key": "bullet",
         "type": "enum",
@@ -89,8 +89,8 @@ STYLE_PROPS: tuple[dict[str, Any], ...] = (
     {
         "key": "letter_spacing",
         "type": "number",
-        "min": -0.10,
-        "max": 0.30,
+        "min": -0.20,
+        "max": 0.60,
         "step": 0.01,
         # Q11：字距放开到正文 / 条目头——四出口都能表达（HTML letter-spacing / Word
         # w:spacing / PDF set_char_spacing）；此前只允许姓名与板块标题，用户调不到。
@@ -117,7 +117,7 @@ PROP_STEPS: dict[str, float] = {
     prop["key"]: float(prop["step"]) for prop in STYLE_PROPS if prop["type"] == "number"
 }
 
-# 单角色/单对象最多 12 个属性（契约 §1.3）；STYLE_PROPS 一共 12 个，正好封顶。
+# 单角色/单对象最多 12 个属性（契约 §1.3）；STYLE_PROPS 一共 11 个，上限仍有余量。
 MAX_ROLE_PROPS = 12
 MAX_OBJECTS = 400
 # ``object_roles`` 域的条目上限（键是"对象 id:角色"，比 objects 更细，仍按同一数量级
@@ -132,7 +132,12 @@ def _as_float(value: object) -> float | None:
 
 
 def _valid_value(prop: dict[str, Any], value: object) -> object | None:
-    """按属性类型校验；不合法返回 None（调用方丢弃该属性，不夹紧）。"""
+    """按属性类型校验；**类型不合法**返回 None（调用方丢弃该属性）。
+
+    数值越界**夹到边界并保留**（I-32）：旧行为是越界返回 None、调用方静默丢键，
+    用户把字号拖到 2.4 松手后"跳回去"，看起来像控件坏了。读取侧同样夹紧，所以
+    旧文档里存着的越界值在界面上显示的就是渲染实际用的值。
+    """
     kind = prop["type"]
     if kind == "bool":
         return value if isinstance(value, bool) else None
@@ -146,7 +151,7 @@ def _valid_value(prop: dict[str, Any], value: object) -> object | None:
     if number is None:
         return None
     low, high = float(prop["min"]), float(prop["max"])
-    return round(number, 3) if low <= number <= high else None
+    return round(min(max(number, low), high), 3)
 
 
 def _validate_style_payload(

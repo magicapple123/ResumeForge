@@ -42,6 +42,9 @@ from .resume.resume_style import RoleStyle
 
 logger = logging.getLogger(__name__)
 
+#: 毫米 → 磅（1pt = 25.4/72 mm）。Word 的段落边框 `space` 只认磅。
+_MM_TO_PT = 72.0 / 25.4
+
 #: 角色/对象覆盖查询函数（与 PDF / HTML 同一形态）；None = 模板默认。
 RoleStyleQuery = Callable[..., RoleStyle | None]
 
@@ -337,7 +340,9 @@ def draw_header(
             edges=("bottom",),
             border_color=_hex_to_rgb(str(getattr(layout, "header_border_color", ""))) or accent,
             border_sz=border_sz_from_px(border_width_px),
-            space_pt=base * float(getattr(layout, "header_pad_bottom", 0.0) or 0.0) * _PX_TO_PT,
+            # I-31：段落底边框的 space 加上用户微调（mm → pt），与草稿/PDF 同口径。
+            space_pt=base * float(getattr(layout, "header_pad_bottom", 0.0) or 0.0) * _PX_TO_PT
+            + float(getattr(layout, "header_rule_gap", 0.0) or 0.0) * _MM_TO_PT,
         )
 
 

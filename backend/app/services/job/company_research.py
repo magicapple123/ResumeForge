@@ -40,6 +40,7 @@ from .company_research_brief import (
     build_company_brief,
     failed_brief,
     max_tool_calls_for,
+    skipped_brief,
 )
 from .company_research_cards import CardSection, build_company_cards
 
@@ -80,7 +81,9 @@ async def _brief_or_reason(
         return await build_company_brief(company, role, jd, deep=deep, api_key=api_key)
     except CompanyResearchError as exc:
         logger.info("调研简报降级 deep=%s reason=%s", deep, exc)
-        return failed_brief(str(exc) or "联网调研暂时不可用", deep=deep)
+        return failed_brief(
+            str(exc) or "联网调研暂时不可用", deep=deep, code=getattr(exc, "code", "upstream")
+        )
 
 
 def _record_search_usage(db: Session | None, brief: dict[str, Any]) -> None:
@@ -158,6 +161,7 @@ async def run_company_research_with(
     role: str = "",
     jd: str = "",
     deep: bool = False,
+    parts: tuple[str, ...] = ("cards", "brief"),
 ) -> dict[str, Any]:
     """跑一次调研（**不碰数据库**）：并发取卡片与简报并合并成前端要的一屏结果。
 
@@ -177,11 +181,28 @@ async def run_company_research_with(
     started = time.perf_counter()
     name, role_text, jd_text = normalize_inputs(company, role, jd)
 
-    card_task = asyncio.ensure_future(build_company_cards(name, role_text, runtime.config))
-    brief_task = asyncio.ensure_future(
-        _brief_or_reason(name, role_text, jd_text, deep=deep, api_key=runtime.api_key)
+    want_cards = "cards" in parts
+    want_brief = "brief" in parts
+    card_task = (
+        asyncio.ensure_future(build_company_cards(name, role_text, runtime.config))
+        if want_cards
+        else None
     )
-    cards_result, brief = await asyncio.gather(card_task, brief_task)
+    brief_task = (
+        asyncio.ensure_future(
+            _brief_or_reason(name, role_text, jd_text, deep=deep, api_key=runtime.api_key)
+        )
+        if want_brief
+        else None
+    )
+    if card_task is not None and brief_task is not None:
+        cards_result, brief = await asyncio.gather(card_task, brief_task)
+    elif card_task is not None:
+        cards_result, brief = await card_task, skipped_brief(deep=deep)
+    elif brief_task is not None:
+        cards_result, brief = CardSection(), await brief_task
+    else:  # pragma: no cover - schema 的 min_length=1 已经挡住空 parts
+        cards_result, brief = CardSection(), skipped_brief(deep=deep)
     cards = cards_result if isinstance(cards_result, CardSection) else CardSection()
 
     elapsed_ms = int((time.perf_counter() - started) * 1000)

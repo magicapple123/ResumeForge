@@ -111,6 +111,10 @@ def read_resume_templates(db: Session = Depends(get_db)):
                 "line_height": defaults["line_height"],
                 "padding_mm": defaults["padding_mm"],
                 "section_gap": defaults["section_gap"],
+                # 页眉线粗细（0 = 该模板没有页眉线）：「版式编辑器」用它判断
+                # `header_rule_gap` 这一项能不能用（I-31 的 `requires: "header_border"`）。
+                # 与 PDF / Word / HTML 三个出口读的是同一张表里的同一个键。
+                "header_border_width": float(defaults.get("header_border_width", 0.0) or 0.0),
             }
             for name, defaults in TEMPLATE_LAYOUT_DEFAULTS.items()
         },

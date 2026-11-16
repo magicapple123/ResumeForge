@@ -95,6 +95,8 @@ class ResumeLayout:
     header_border_width: float
     header_border_color: str
     header_pad_bottom: float
+    # I-31：线相对**文字底边**的微调（毫米，0–12）。页眉高度不再跟照片，见 header.py。
+    header_rule_gap: float
     header_bg: str
     header_pad_x: float
     header_pad_y: float
@@ -311,6 +313,7 @@ def resolve_layout(
         header_border_width=template_float(defaults["header_border_width"]),
         header_border_color=str(defaults["header_border_color"]),
         header_pad_bottom=template_float(defaults["header_pad_bottom"]),
+        header_rule_gap=template_float(overrides.get("header_rule_gap", 0)),
         header_bg=str(defaults["header_bg"]),
         header_pad_x=template_float(defaults["header_pad_x"]),
         header_pad_y=template_float(defaults["header_pad_y"]),
