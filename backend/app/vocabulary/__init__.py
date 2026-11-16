@@ -6,8 +6,11 @@
 
 约束：
 
-- 本包**只允许标准库 import**，不得 import 任何 ``app.*``（守卫见
-  ``tests/test_import_direction.py`` 的 ``vocabulary-stdlib-only`` 规则）；
+- 本包**只允许标准库 import，以及包内兄弟模块之间的 import**，不得 import
+  ``app.models`` / ``app.schemas`` / ``app.services`` / ``app.api``（守卫见
+  ``tests/test_import_direction.py`` 的 ``vocabulary-stdlib-only`` 规则）。兄弟互引
+  只用于按 500 行预算拆分同一份词表（如 ``job_preference_kinds`` 取
+  ``job_preference_terms`` 的枚举映射），不引入任何向上依赖；
 - 词表同时被 ``app/models/*`` 与 ``app/schemas/*`` 取用：``models`` 侧保留逐个显式
   re-export，既有的 ``from app.models.x import STATUSES`` 导入路径不变；
 - 只放词表（常量、元组、纯函数），不放 ORM 实体，也不放服务实现。

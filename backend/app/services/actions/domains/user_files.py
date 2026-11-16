@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """user_files 域的 action 契约（T28）：list_user_files。
 
-本域是「旧实现委托」范式的最小样板：
-- run 直接调用既有路由 handler（app.api.user_files.list_user_files），data 即原响应体；
+本域是「动作直接调服务层」的最小样板：
+- run 直接调用 services.user_files.list_file_copies（路由 handler 是同一函数的薄壳），
+  data 即原响应体；
 - run_tool 直接调用既有工具 handler（data_tools._tool_list_user_files），text/summary 不变；
 - tool_fields 只把旧工具声明过的参数暴露给模型（page/page_size 是路由分页参数，不暴露）；
 - tool_defaults 保住旧工具默认 limit=20。
@@ -14,12 +15,12 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..legacy import route_runner, tool_runner
-from ..registry import define_action
-from ..spec import ActionSpec, HttpRoute, permission_enum
+from ...user_files import list_file_copies
+from ..legacy import tool_runner
+from ..spec import ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Session  # noqa: F401
+    from sqlalchemy.orm import Session
 
 _DEFAULT_TOOL_LIMIT = 20
 
@@ -40,41 +41,49 @@ class ListUserFilesInput(BaseModel):
     limit: int | None = Field(default=None, ge=1, description="工具侧最多返回多少条，默认 20")
 
 
+def _run_list_user_files(db: Session, payload: ListUserFilesInput) -> ActionOutcome:
+    """文件副本分页列表：与 ``GET /api/user-files`` 同一个服务函数。
+
+    路由侧参数是 page/page_size（旧工具侧的 limit 只走 run_tool），与迁移前
+    ``route_runner`` 调 handler 的口径一致：``limit`` 不参与路由。
+    """
+    return ActionOutcome(
+        data=list_file_copies(
+            db,
+            page=payload.page,
+            page_size=payload.page_size,
+            source_type=payload.source_type,
+            keyword=payload.keyword,
+        )
+    )
+
+
 _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def user_file_actions() -> dict[str, ActionSpec]:
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
-    list_user_files = define_action(
-        ActionSpec(
-            name="list_user_files",
-            description=(
-                "列出文件副本库（资料箱「文件副本」页签）里的文件副本：所有存入简历通的文件都会"
-                "自动留一份副本（资料箱附件、简历照片、岗位备注图、备选岗位截图、助手消息附件），"
-                "同一份内容按指纹去重。用户问「我存过哪些文件」「那张照片/截图还在吗」时用它。"
-                "**只返回元数据（文件名、类型、大小、来源）**，你读不了文件内容。"
-            ),
-            input_model=ListUserFilesInput,
-            permission=Permission.READ_ONLY,
-            run=route_runner("app.api.user_files", "list_user_files"),
-            run_tool=tool_runner(
-                "app.services.assistant_tools.data_tools", "_tool_list_user_files"
-            ),
-            service_entry=None,
-            service_reason="内联 ORM 查询/组装，无 services 收口（T27 收口候选）",
-            tool_fields=("keyword", "source_type", "limit"),
-            tool_defaults=(("limit", _DEFAULT_TOOL_LIMIT),),
-            ignore_unknown_arguments=True,
-            http=HttpRoute("GET", "/api/user-files", dict, tags=("user-files",)),
-        )
+    list_user_files = ActionSpec(
+        name="list_user_files",
+        description=(
+            "列出文件副本库（资料箱「文件副本」页签）里的文件副本：所有存入简历通的文件都会"
+            "自动留一份副本（资料箱附件、简历照片、岗位备注图、备选岗位截图、助手消息附件），"
+            "同一份内容按指纹去重。用户问「我存过哪些文件」「那张照片/截图还在吗」时用它。"
+            "**只返回元数据（文件名、类型、大小、来源）**，你读不了文件内容。"
+        ),
+        input_model=ListUserFilesInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_user_files,
+        run_tool=tool_runner("app.services.assistant_tools.data_tools", "_tool_list_user_files"),
+        # RF-03b：run 真的调的就是这个服务函数（路由 handler 是它的薄壳），如实登记。
+        service_entry="user_files.list_file_copies",
+        tool_fields=("keyword", "source_type", "limit"),
+        tool_defaults=(("limit", _DEFAULT_TOOL_LIMIT),),
+        ignore_unknown_arguments=True,
+        http=HttpRoute("GET", "/api/user-files", dict, tags=("user-files",)),
     )
     _ACTIONS = {list_user_files.name: list_user_files}
     return _ACTIONS

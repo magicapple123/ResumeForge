@@ -10,7 +10,7 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from ..runtime import dataset_scope
+from ..runtime import dataset_scope, usage_context
 from ..runtime.dataset_scope import DatasetScopeError
 
 logger = logging.getLogger(__name__)
@@ -60,19 +60,20 @@ class DatasetRequestMiddleware:
         # R04：AI 任务名随请求上下文下发（provider 每次调用自动落用量账）。
         # 必须在 app 调用之前写入：sync 端点在线程池里跑（复制 context）、
         # SSE/后台线程由各自的上下文复制机制继承。
-        from ..services.llm import usage_ledger
-
-        usage_ledger.set_ambient_task(usage_ledger.task_for_path(path))
+        # 只依赖 runtime 的上下文原语（``runtime/usage_context.py``）：中间件不该为了打一个
+        # 任务标签反向依赖 ``services/llm/usage_ledger``（那会把账本连同 SQLAlchemy 模型、
+        # 单价与汇总一起拉进每个请求的导入链）。落库仍在 services，读写的是同一个 ContextVar。
+        usage_context.set_ambient_task(usage_context.task_for_path(path))
         # #35/A1：HTTP 入口的默认输入边界（按路径前缀；更细的入口在调用点覆盖）。
         # masked 默认 True 是安全侧：未声明脱敏策略的入口一律按"已脱敏"审计标注。
         # language/budget 必须给**有值**的兜底：审计要能区分"没声明"与"不限制"，
         # 空串/null 会让四个入口的记录看起来一样（A1 的缺口就出在这里）。
         # 声明了目标语言或预算的入口（生成 / 助手 / 岗位解读 / 设置自检）在调用点覆盖。
-        usage_ledger.set_ambient_scope(
-            input_scope=usage_ledger.scope_for_path(path),
+        usage_context.set_ambient_scope(
+            input_scope=usage_context.scope_for_path(path),
             masked=True,
-            language=usage_ledger.DEFAULT_AUDIT_LANGUAGE,
-            budget=usage_ledger.DEFAULT_AUDIT_BUDGET,
+            language=usage_context.DEFAULT_AUDIT_LANGUAGE,
+            budget=usage_context.DEFAULT_AUDIT_BUDGET,
         )
         headers = Headers(scope=scope)
         expected = headers.get("X-Dataset-Scope")

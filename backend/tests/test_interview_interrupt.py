@@ -23,6 +23,7 @@ from app.services.interview.interview import (
     mark_answer_interrupted,
 )
 from app.services.llm.base import LLMError
+from tests.interview_target_support import answer_prep
 from tests.interview_target_support import start_interview as _start
 
 
@@ -94,7 +95,9 @@ async def test_disconnect_marks_the_round_interrupted_and_keeps_the_answer(
     session_id, session, answer = _session_with_answer(client, db_session)
 
     with pytest.raises(asyncio.CancelledError):
-        async for _chunk in _answer_stream_events(db_session, session, provider, 1, answer):
+        async for _chunk in _answer_stream_events(
+            db_session, answer_prep(db_session, session, provider, 1, answer.id)
+        ):
             pass
 
     messages = _messages(client, session_id)
@@ -115,7 +118,9 @@ async def test_model_failure_also_leaves_the_round_re_answerable(client, db_sess
 
     event_types = [
         json.loads(chunk.removeprefix("data: ").strip())["type"]
-        async for chunk in _answer_stream_events(db_session, session, provider, 1, answer)
+        async for chunk in _answer_stream_events(
+            db_session, answer_prep(db_session, session, provider, 1, answer.id)
+        )
     ]
     assert event_types == ["error"]
 

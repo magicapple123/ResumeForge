@@ -31,6 +31,7 @@ from ...schemas.apply import (
     TaskItemStatus,
     TaskStatus,
 )
+from ...schemas.common import Page
 from .. import trash
 from .lifecycle import jd_changed_map
 
@@ -294,7 +295,9 @@ def list_record_batches(
         .group_by(ApplyTaskItem.task_id, ApplyTaskItem.failure_category)
         .all()
     )
-    failure_by_task: dict[int, list[ApplyFailureCountOut]] = {task_id: [] for task_id in batch_id_list}
+    failure_by_task: dict[int, list[ApplyFailureCountOut]] = {
+        task_id: [] for task_id in batch_id_list
+    }
     for task_id, category, count in failure_rows:
         failure_by_task.setdefault(task_id, []).append(
             ApplyFailureCountOut(
@@ -352,6 +355,33 @@ def list_record_batches(
     return batches, total
 
 
+def record_batch_page(
+    db: Session,
+    *,
+    keyword: str = "",
+    result: str = "",
+    failure_category: str = "",
+    page: int = 1,
+    page_size: int = 5,
+    include_items: bool = True,
+) -> Page[ApplyRecordBatchOut]:
+    """投递记录列表的响应体：一页批次 + 全量批次数。
+
+    ``GET /api/apply/records/grouped`` 与助手动作 ``list_apply_records`` 都调这里——
+    分页/筛选口径在 :func:`list_record_batches`，"怎么包成 Page"只此一处。
+    """
+    batches, total = list_record_batches(
+        db,
+        keyword=keyword,
+        result=result,
+        failure_category=failure_category,
+        page=page,
+        page_size=page_size,
+        include_items=include_items,
+    )
+    return Page(items=batches, total=total)
+
+
 def list_batch_items(
     db: Session,
     task_id: int,
@@ -404,9 +434,7 @@ def select_retryable_items(
     这里选出来的条数必然一致。成功/跳过的记录不在这里——它们没有需要重投的失败。
     """
     return (
-        _matched_items_query(
-            db, keyword=keyword, result=result, failure_category=failure_category
-        )
+        _matched_items_query(db, keyword=keyword, result=result, failure_category=failure_category)
         .filter(ApplyTaskItem.task_id == task_id, ApplyTaskItem.status == ITEM_STATUS_FAILED)
         .order_by(ApplyTaskItem.sort_order, ApplyTaskItem.id)
         .all()

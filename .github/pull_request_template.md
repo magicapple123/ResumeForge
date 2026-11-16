@@ -14,7 +14,7 @@
 
 - [ ] 后端测试通过：`python -m pytest`
 - [ ] 后端静态检查通过：`python -m ruff check .`
-- [ ] 前端测试通过：`npm test`
+- [ ] 前端测试通过：`pnpm run test`
 - [ ] 前端格式、Lint 和构建通过
 - [ ] 已手动验证受影响的核心流程
 

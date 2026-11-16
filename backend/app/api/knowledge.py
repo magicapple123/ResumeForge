@@ -5,7 +5,9 @@ import io
 import logging
 import re
 import zipfile
+from collections.abc import Mapping, Sequence
 from datetime import datetime
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.knowledge_entry import KnowledgeEntry
+from ..runtime.blocking import run_sync
 from ..schemas.common import Page
 from ..schemas.knowledge import (
     KNOWLEDGE_CATEGORIES,
@@ -31,7 +34,13 @@ from ..schemas.knowledge import (
 from ..services import trash
 from ..services.actions import add_action_route
 from ..services.actions.domains.knowledge import knowledge_actions
-from ..services.knowledge_rag import chunk_embedding_text, entry_chunks, hybrid_search
+from ..services.knowledge_rag import (
+    KnowledgeChunk,
+    KnowledgeHit,
+    chunk_embedding_text,
+    entry_chunks,
+    hybrid_search,
+)
 from ..services.knowledge_service import (
     delete_knowledge,
     export_entries,
@@ -55,6 +64,48 @@ router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 # T28 Batch B：GET /api/knowledge 由契约层生成（ActionSpec 是参数/权限唯一真源）。
 # 注册位置仍由本文件里的调用点显式决定（原来的装饰器位置，保持注册顺序）。
 add_action_route(router, knowledge_actions()["list_knowledge"])
+
+
+def _prepare_retrieval(
+    db: Session,
+) -> tuple[Any, list[KnowledgeChunk]]:
+    """混合检索的**准备段**：建嵌入 provider、取全库切块，然后归还请求连接。
+
+    返回的 provider 与 ``KnowledgeChunk``（冻结 dataclass）都不引用会话，所以能安全
+    穿过随后两段 ``await`` 编码；请求连接在这里就还掉，编码期间不占 SQLite 连接。
+    """
+    from ..services.llm.embeddings import create_embedding_provider, resolve_embedding_spec
+
+    try:
+        provider = create_embedding_provider(resolve_embedding_spec())
+        if provider is None:
+            return None, []
+        return provider, [chunk for group in entry_chunks(db).values() for chunk in group]
+    finally:
+        db.close()
+
+
+def _run_hybrid_search(
+    db: Session,
+    query: str,
+    *,
+    limit: int,
+    company: str,
+    query_vector: Sequence[float] | None,
+    chunk_vectors: Mapping[str, Sequence[float]] | None,
+) -> tuple[list[KnowledgeHit], dict]:
+    """混合检索的**回读段**：只在 worker 里用会话，用完归还。"""
+    try:
+        return hybrid_search(
+            db,
+            query,
+            limit=limit,
+            company=company,
+            query_vector=query_vector,
+            chunk_vectors=chunk_vectors,
+        )
+    finally:
+        db.close()
 
 
 @router.get("/page", response_model=Page[KnowledgeEntrySummary])
@@ -106,28 +157,28 @@ async def search_knowledge(
     （未配置 / 本地运行时缺失 / 超时）都退回关键词路并记 fallback_reason，
     与 rag_service 的失败语义一致：检索失败不能让接口 500。
     """
-    from ..services.llm.embeddings import create_embedding_provider, resolve_embedding_spec
-
     query_vector = None
     chunk_vectors = None
     try:
-        provider = create_embedding_provider(resolve_embedding_spec())
+        # 准备段（建 embedder + 取全库切块）碰请求会话与本地运行时，交给 worker；
+        # 两段编码是真正的模型调用，回到事件循环 await。
+        provider, chunks = await run_sync(_prepare_retrieval, db)
         if provider is not None:
             query_vector = await provider.embed_query(q)
-            flat = [chunk for group in entry_chunks(db).values() for chunk in group]
-            if flat:
+            if chunks:
                 batch = await provider.embed_documents(
-                    [chunk_embedding_text(chunk) for chunk in flat]
+                    [chunk_embedding_text(chunk) for chunk in chunks]
                 )
                 chunk_vectors = {
                     chunk.chunk_id: vector
-                    for chunk, vector in zip(flat, batch.vectors, strict=True)
+                    for chunk, vector in zip(chunks, batch.vectors, strict=True)
                 }
     except Exception:  # noqa: BLE001 - 任何模型侧异常都回退关键词路，绝不 500
         logger.info("知识库检索 embedding 不可用，回退关键词路", exc_info=True)
         query_vector = None
         chunk_vectors = None
-    hits, diagnostics = hybrid_search(
+    hits, diagnostics = await run_sync(
+        _run_hybrid_search,
         db,
         q,
         limit=limit,
@@ -193,18 +244,30 @@ def read_review_prompt(
 async def create_knowledge_from_source(
     payload: KnowledgeFromSourceRequest, db: Session = Depends(get_db)
 ):
-    from ..services.knowledge_capture import CaptureSourceError, create_from_source
+    """从业务数据沉淀一条知识（服务端取源，前端只给 source + source_id）。
+
+    三段式：准备（读源数据，worker）→ 本地规则扫描（简历诊断才需要，协程）→
+    落库 + 查重（worker）。会话在准备段读完就归还，扫描期间不占连接。
+    """
+    from ..services.knowledge_capture import (
+        CaptureSourceError,
+        capture_payload,
+        persist_capture,
+        prepare_capture,
+    )
 
     try:
-        entry, created = await create_from_source(db, payload.source, payload.source_id)
+        plan = await run_sync(prepare_capture, db, payload.source, payload.source_id)
+        content = await capture_payload(plan)
+        outcome = await run_sync(persist_capture, db, content)
     except CaptureSourceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return KnowledgeFromSourceOut(
-        id=int(entry.id),
-        title=entry.title,
-        category=entry.category,
-        source=entry.source,
-        created=created,
+        id=outcome.knowledge_id,
+        title=outcome.title,
+        category=outcome.category,
+        source=outcome.source,
+        created=outcome.created,
     )
 
 

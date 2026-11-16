@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from ...models.resume import ResumeRecord
 from ...models.versions import ResumeVariant, ResumeVersion
+from ...schemas.versions import VariantListOut, VariantOut
 from .document_paths import read_document_value, write_document_value
 from .document_variants_view import (
     MAX_LAYOUT_BYTES,
@@ -142,6 +143,17 @@ def list_variants(db: Session, resume_id: int) -> list[ResumeVariant]:
 
 def get_variant(db: Session, resume_id: int, variant_id: int) -> ResumeVariant:
     return _get_variant(db, resume_id, variant_id)
+
+
+def variant_list_for_resume(db: Session, resume_id: int) -> VariantListOut:
+    """``GET /{resume_id}/variants`` 的列表视图（路由与助手动作共用的唯一编排）。"""
+    record = _load_resume(db, resume_id)
+    return VariantListOut(
+        items=[
+            VariantOut.model_validate(variant_brief(variant))
+            for variant in list_variants(db, record.id)
+        ]
+    )
 
 
 def _write_path(payload: Any, path: str, value: Any) -> bool:
@@ -344,5 +356,6 @@ __all__ = [
     "sync_variants",
     "variant_brief",
     "variant_detail",
+    "variant_list_for_resume",
     "write_document_path",
 ]

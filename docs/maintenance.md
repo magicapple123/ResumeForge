@@ -19,6 +19,10 @@ ResumeForge/
 │   ├── app/templates/          Jinja 简历模板
 │   ├── migrations/versions/    Alembic 迁移链（2.0 只有单基线 0001_baseline_v2，
 │   │                           新增迁移接在它之后；改迁移前先 grep 旧 head 的字面量，见 §4.1）
+│   ├── requirements.txt        顶层钉版来源（唯一手改处；生产链不直接装它）
+│   ├── requirements.runtime.lock.txt  ★ 生产安装唯一来源：逐包 SHA-256（§4.5）
+│   ├── requirements.lock.txt   开发锁：运行闭包 + 工具链（§4.5）
+│   ├── requirements-dev.txt    开发依赖清单（顶层，同样不直接装）
 │   ├── tests/                  测试（文件数 / 用例数以 pytest 汇总行为准）
 │   └── data/                   ★ 运行时数据：数据集、备份、浏览器登录态、legacy-archive（.gitignore）
 ├── frontend/                 React 19.3 + antd 6 + Vite 8（Rolldown）
@@ -88,7 +92,7 @@ ResumeForge/
   ```
 
   判定以汇总行 + 覆盖率报告为准；`vite build` 被拦时指定仓库外输出目录：
-  `npx vite build --outDir D:\rf_build_tmp --emptyOutDir`。
+  `pnpm exec vite build --outDir D:\rf_build_tmp --emptyOutDir`。
 
 ### ④ 文档同步
 
@@ -137,7 +141,10 @@ cd backend
 # 创建虚拟环境并安装运行依赖
 py -3 -m venv .venv
 $env:PYTHONUTF8 = "1"
-.venv\Scripts\python.exe -m pip install -r requirements.txt
+# 装的是**生产锁**（逐包 SHA-256），与首次安装、发布包、CI 同一套闭包；别装 requirements.txt
+.venv\Scripts\python.exe -m pip install --require-hashes -r requirements.runtime.lock.txt
+# 还要跑 pytest / ruff / pyright：补开发锁（已含上面的运行闭包，不用再装一遍）
+.venv\Scripts\python.exe -m pip install --require-hashes -r requirements.lock.txt
 
 # 启动服务（默认 http://127.0.0.1:8000，接口文档见 /docs）
 .venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
@@ -147,8 +154,8 @@ macOS / Linux 用 `.venv/bin/python` 替换上面的 Windows 路径；Git Bash �
 
 ```powershell
 cd frontend
-npm ci
-npm run dev        # http://localhost:5173，已配置 /api 代理到 8000 端口
+pnpm install --frozen-lockfile
+pnpm run dev        # http://localhost:5173，已配置 /api 代理到 8000 端口
 ```
 
 运行测试：
@@ -165,14 +172,14 @@ cd backend
 .venv\Scripts\python.exe -m coverage report --rcfile=..\pyproject.toml --fail-under=80
 
 cd ../frontend
-npm test && npm run lint && npm run typecheck && npm run build
+pnpm run test && pnpm run lint && pnpm run typecheck && pnpm run build
 ```
 
 浏览器冒烟（Playwright，`frontend/tests/smoke/`）需要应用先跑起来，用例不对抗启动链——两种形态任选其一：
 
 ```powershell
 # 形态一：发布形态（后端同源，默认 smoke 口 8123）
-npm run build
+pnpm run build
 cd ..
 powershell -File scripts\Start-ResumeForge.ps1 -NoBrowser -BackendPort 8123
 cd frontend
@@ -181,16 +188,16 @@ cd frontend
 cd backend
 .venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
 cd ../frontend
-npm run dev
+pnpm run dev
 ```
 
 然后跑冒烟（发布形态零配置；开发形态把两个地址分别指给前端页面与 API）：
 
 ```powershell
 cd frontend
-npm run smoke                                   # 发布形态（默认 http://127.0.0.1:8123）
+pnpm run smoke                                   # 发布形态（默认 http://127.0.0.1:8123）
 $env:SMOKE_FRONTEND_URL = "http://127.0.0.1:5173"; $env:SMOKE_BACKEND_URL = "http://127.0.0.1:8000"
-npm run smoke                                   # 开发形态
+pnpm run smoke                                   # 开发形态
 ```
 
 当前规模：后端与前端合计 **11,000+ 个测试用例**（后端约 7,100 个、前端约 4,700 个；后端覆盖率门槛 80%；确切数字以每次 CI 的汇总行为准）。GitHub Actions 在 Linux、Windows 与 macOS 上重复执行关键检查——macOS 那几个作业是刻意加的：它们会真下载便携运行时、从干净检出走完整启动链，并做浏览器冒烟，是 macOS 链路的持续把关；macOS 桌面安装包（dmg）自 v1.0.1 起同样由 CI 构建产出。
@@ -280,6 +287,66 @@ npm run smoke                                   # 开发形态
   剥离 `sqlite_stat*` 统计表（保证旧版本导入兼容），导入白名单按 `sqlite_` 前缀放行
   引擎内部表。
 
+### 4.5 依赖锁（生产运行时闭包）
+
+四份文件、四种角色，别混：
+
+| 文件 | 角色 | 谁装它 |
+| --- | --- | --- |
+| `backend/requirements.txt` | 唯一的**手改**钉版来源（只写直接依赖） | 没人直接装 |
+| `backend/requirements.runtime.lock.txt` | 生产闭包，逐包 `--hash=sha256`（当前闭包见文件本身） | **所有**首次安装与更新（Windows/macOS/Linux）、发布运行时、CI |
+| `backend/requirements.lock.txt` | 开发锁（运行闭包 + 工具链，当前集合见文件本身） | 本地测试环境、CI 静态检查作业 |
+| `backend/requirements-dev.txt` | 开发依赖清单（顶层） | 没人直接装 |
+
+**为什么只有锁能装**：`requirements.txt` 没有哈希，pip 会自己再解析一次传递依赖，于是同一份
+代码在不同时间、不同镜像上装出不同的包集合（"某台机器上能跑"）。锁带逐包 SHA-256，
+`pip install --require-hashes` 会校验每个下载物；锁还钉住整条闭包，用户机器上装出来的就是
+发布包与 CI 审过的那一套。锁缺失或损坏时安装**明确失败**，绝不退回顶层清单重新解析。
+
+**改依赖的流程**（唯一支持的方式；手改锁文件必被守卫打红）：
+
+```powershell
+# 1) 只改 requirements.txt / requirements-dev.txt 里的钉版
+cd backend
+# 2) 重新生成两份锁（需要 uv + 网络；本地没有 uv 就让 CI 生成后贴回）
+uv pip compile --universal --python-version 3.11 --generate-hashes -o requirements.runtime.lock.txt requirements.txt
+uv pip compile --universal --python-version 3.11 --generate-hashes -o requirements.lock.txt requirements-dev.txt
+# 3) 守卫（纯函数，不需要网络/uv）：集合与版本必须零漂移
+pwsh -NoProfile -File scripts/tests/Test-PythonRuntimeGuard.ps1
+```
+
+`--universal` 与 `--python-version 3.11` 不是可选项：一份锁要覆盖 3.11–3.13 与三个平台，
+PEP 508 标记（例如 uvloop 的 `sys_platform != 'win32'`）必须原样保留；删掉标记等于把通用锁
+变成平台专用锁，Linux 首次安装会直接失败。
+
+**三条不变量，各有守卫**（全在 `scripts/tests/Test-PythonRuntimeGuard.ps1`，不靠人眼看）：
+
+1. **锁可装**：每个 pin 都有 `--hash=sha256`；没有 `-r` 委托行（委托等于把选版本交回给
+   解析器）；没有开发工具（`pytest*` / `ruff` / `pyright` / `playwright` …）。
+2. **锁不漂移**：从开发锁的 `# via` 图 + `requirements.txt` 的根做可达闭包，包集合与同名版本
+   必须与生产锁完全一致。反证方式：把锁里的某个版本改一位、或删掉一个包 →
+   该测试立刻红并报出具体包名（`only in lock: [...] / only in projection: [...]`）→
+   `git checkout -- backend/requirements.runtime.lock.txt` 恢复 → 复绿。
+3. **首次安装只有一条路**：Part 4 逐个扫 `Build-PythonRuntime.ps1`、`ResumeForge.Process.ps1`、
+   `Update-ResumeForge.ps1`、`scripts/{macos,linux}/{start,update}.sh`，要求 `--require-hashes`
+   在场、顶层 `-r …requirements.txt` 不在场、且确实引用了生产锁。shell 侧另有
+   `scripts/tests/test-{macos,linux}-launcher.sh` 断言锁的可用性判定与路径拼接。
+
+**缓存键是锁的内容哈希**：`python-runtime.zip` 里盖的 manifest（schema 2）存的是
+`requirements.runtime.lock.txt` 的 SHA-256——不是文件名，也不是时间戳。因此"锁重新解析、
+`requirements.txt` 一个字没动"也会判 Stale 并重建；schema 1 的缺陷正在这里（它哈希
+`requirements.txt`，于是换掉整套包仍然算"最新"）。manifest 缺 `runtimeLockSha256` 字段
+（手工改过、旧写入器漏写、空串）一律按过期重建，绝不当成"当前运行时"复用。
+
+**发布包与更新器**：`Build-Release.ps1` 的 `$RequiredFiles` 列了它，`scripts/linux/update.sh`
+的 `rf_is_program_path` 白名单与更新前备份清单也列了它——缺了它的发布包在解压验证那一步
+就红，而不是等用户首次安装时报"找不到锁"。
+
+**路径拼接**：`Get-RuntimeLockPath -BackendDirectory <backend>`（PowerShell）与
+`rf_runtime_lock_path <backend>`（bash）都只做"backend 目录 + 文件名"，锁文件名常量本身不含
+目录前缀。两侧都有断言守着：这条错过一次（按"项目根"拼接，拼成 `backend/backend/...`），
+表现是首次安装直接死在"找不到锁"。
+
 ## 5. 本机环境已知坑（速查）
 
 | 现象 | 原因 | 处理 |
@@ -298,7 +365,7 @@ npm run smoke                                   # 开发形态
 - **退出码不能单独作为判据**。本机沙箱的 `sitecustomize.py` 包装了 `shutil.rmtree`，pytest 清理临时目录时触发"批量删除守卫"并 `SystemExit(1)`：worker 猝死、xdist 控制器抛 `INTERNALERROR ... KeyError: <WorkerController>`，而**汇总行仍是 `N passed, 0 failed`**，覆盖率那一步却没跑到。串行也不安全——`pytest-cov` 收尾的 `cov.combine()` 删 `.coverage.*` 时同样会命中守卫，退出码 3、覆盖率报告整段跳过。**判据是"汇总行 + 覆盖率报告都正常打印"**，不是退出码。
 - **coverage 只从 cwd 找配置**（`.coveragerc` / `pyproject.toml`），不会向上层目录搜索。在 `backend/` 下裸跑会把 `tests/` 一起统计：2026-10-10 实测假 41% vs 真 86%。必须显式 `--rcfile=..\pyproject.toml`，并走"run → combine → report"三段式。
 - **覆盖率与并行不能写进同一条命令**（2026-10-27 实测）：worker 是子进程，plain `coverage run` 追不到，`combine` 出来 28%（真值 88%），`--fail-under=80` 直接红。要覆盖率就串行，要速度就并行但别开 coverage。
-- **`vite build` 在本机沙箱下 exit 1 不是构建错误**：模块已全部 transform 成功，死在清理 `frontend/dist/assets` 时被批量删除守卫拦下（日志形如 `SAFE_DELETE_BULK_CONFIRM_REQUIRED count=170 threshold=100`）。指定仓库外输出目录即可：`npx vite build --outDir D:\rf_build_tmp --emptyOutDir`。
+- **`vite build` 在本机沙箱下 exit 1 不是构建错误**：模块已全部 transform 成功，死在清理 `frontend/dist/assets` 时被批量删除守卫拦下（日志形如 `SAFE_DELETE_BULK_CONFIRM_REQUIRED count=170 threshold=100`）。指定仓库外输出目录即可：`pnpm exec vite build --outDir D:\rf_build_tmp --emptyOutDir`。
 - **webform canary 只在有可控 CDP 浏览器时有意义**：并行跑与 CI 下按契约恒 skip，它不是 CI 门禁；也别指向日常浏览器窗口（会互相抢标签页）。一次性跑法：`python runtime/investigation/phase5/canary-local.py`（默认 9344，`--port` 可改；脚本是本地证据工具，不进源码）。
 - **测试的等待预算分两档**：期望**超时**的用例预算越小越快；期望**成功**的用例就绪即返回，预算只是安全网。2026-09-23 修过一处——两类共用 `timeout=0.02`，于是"成功"用例的成败取决于真实墙钟，单跑必过、`-n auto` 下偶发失败。判断标准：**用例的成败是否取决于"等了多久"**，是就不该用个位数毫秒。
 

@@ -21,13 +21,13 @@ node_modules/.tmp/
 # vite build 的临时输出目录。docs/AGENTS 里的构建绕行方案**要求输出到仓库外面**
 # （`--outDir D:\rf_build_tmp`），但真有人写进仓库时（一度出现过
 # `frontend/rf_build_tmp/`），构建产物不该被误提交——加一条兜住。
-# 构建产物本身可随时用 `npm run build` 重建，留着只会污染 `git status`。
+# 构建产物本身可随时用 `pnpm run build` 重建，留着只会污染 `git status`。
 rf_build_*/
 frontend/rf_build_*/
 # 审计验收时的一次性构建输出（2026-10-19 快照），同样不该被提交。
 frontend/rf_audit_build/
 # 手动导出的前端产物包（如 `frontend/dist-1.0.2-20261026.zip`）：`dist/` 只忽略目录，
-# 这类打好的 zip 会以未跟踪文件一直挂在 `git status` 里。产物可由 `npm run build` 重建，
+# 这类打好的 zip 会以未跟踪文件一直挂在 `git status` 里。产物可由 `pnpm run build` 重建，
 # 要分发请走 Release 资产，不进仓库。
 frontend/dist-*.zip
 

@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..runtime.blocking import run_sync
 from ..schemas.assistant import (
     AssistantMessageCreate,
     ChatConversationBrief,
@@ -29,7 +30,7 @@ from ..schemas.material import (
     MaterialOut,
 )
 from ..services.actions import add_action_route
-from ..services.actions.catalog import all_actions
+from ..services.actions.catalog import registered_action
 from ..services.assistant.assistant_compaction_settings import get_compaction_settings
 from ..services.assistant.assistant_compaction_store import (
     compaction_state_out,
@@ -100,6 +101,7 @@ from ..services.conversation_export import (
     conversation_to_markdown,
 )
 from ..services.llm import create_provider
+from ..services.llm.usage_tasks import set_ambient_scope
 from ..services.materials import create_material as create_material_record
 from ..services.model_context_windows import configured_model_window
 from ..services.settings_service import (
@@ -131,7 +133,7 @@ def create_conversation(payload: ChatConversationCreate, db: Session = Depends(g
     return create_conversation_record(payload, db)
 
 
-add_action_route(router, all_actions()["list_chat_conversations"], route_path="/conversations")
+add_action_route(router, registered_action("list_chat_conversations"), route_path="/conversations")
 
 
 def list_conversations(
@@ -140,12 +142,19 @@ def list_conversations(
     surface: ConversationSurface = Query(default="page"),
     db: Session = Depends(get_db),
 ):
+    """会话列表（置顶 + 更新时间倒序，可按标题/首条消息搜）。
+
+    薄壳：查询与投影都在 ``services.assistant.assistant_conversations.list_conversations``
+    （助手动作 ``list_chat_conversations`` 调同一个函数）。
+    """
     # P0-2：上限解封到 500 并新增 keyword（标题/首条消息），旧会话靠搜索可达。
     return list_conversation_records(limit, db, surface, keyword=keyword)
 
 
 add_action_route(
-    router, all_actions()["get_chat_conversation"], route_path="/conversations/{conversation_id}"
+    router,
+    registered_action("get_chat_conversation"),
+    route_path="/conversations/{conversation_id}",
 )
 
 
@@ -157,6 +166,11 @@ def read_conversation(
     ),
     db: Session = Depends(get_db),
 ):
+    """会话详情；``message_limit > 0`` 时只取最新 N 条。
+
+    薄壳：查询与投影都在 ``services.assistant.assistant_conversations.read_conversation``
+    （助手动作 ``get_chat_conversation`` 调同一个函数）。
+    """
     return read_conversation_record(conversation_id, db, surface, message_limit=message_limit)
 
 
@@ -349,6 +363,33 @@ def delete_message(
         raise HTTPException(status_code=404, detail="消息不存在或已被删除")
 
 
+def _prepare_stream(
+    db: Session,
+    conversation_id: int,
+    payload: AssistantMessageCreate,
+    surface: ConversationSurface,
+):
+    """入流准备 + 事务收尾 + 释放连接：**整段同步工作单元**（只在 worker 里跑）。
+
+    顺序与拆分前逐字一致：准备 → 提交消息行 → 附件副本（best-effort，在提交之后）。
+    ``prepare_message_dispatch`` 仍是模块级名字，测试按 ``app.api.assistant`` 打桩时照旧生效。
+    """
+    dispatch = prepare_message_dispatch(
+        db,
+        conversation_id,
+        payload,
+        surface,
+        load_llm_config=get_llm_config,
+        create_provider=create_provider,
+    )
+    # 事务边界在本层：消息行先提交，附件磁盘副本是提交后的 best-effort 动作。
+    db.commit()
+    save_attachment_copies(db, dispatch)
+    # 流式期间请求会话已关闭（值已绑进 dispatch），别占着连接池。
+    db.close()
+    return dispatch
+
+
 @router.post("/conversations/{conversation_id}/messages")
 async def send_message(
     conversation_id: int,
@@ -361,23 +402,16 @@ async def send_message(
     T2：入流准备（会话/附件/上下文/消息行/provider/系统提示词）已下沉到
     `services/assistant/message_dispatch.py`；本层只做 HTTP 错误映射、事务收尾
     （提交消息行 + best-effort 附件副本）、关闭请求会话与 StreamingResponse 装配。
+
+    RF-02：准备阶段读会话/附件/配置 + 提交消息行都是同步数据库工作，整段交给
+    worker（``run_sync``）。**审计上下文仍在事件循环上写**——ContextVar 在 worker
+    线程里 set 不会回到事件循环，SSE 期间记录的用量会退回中间件默认值。
     """
     try:
-        dispatch = prepare_message_dispatch(
-            db,
-            conversation_id,
-            payload,
-            surface,
-            load_llm_config=get_llm_config,
-            create_provider=create_provider,
-        )
+        dispatch = await run_sync(_prepare_stream, db, conversation_id, payload, surface)
     except MessageDispatchError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    # 事务边界在本层：消息行先提交，附件磁盘副本是提交后的 best-effort 动作。
-    db.commit()
-    save_attachment_copies(db, dispatch)
-    # 流式期间请求会话已关闭（值已绑进 dispatch），别占着连接池。
-    db.close()
+    set_ambient_scope(**dispatch.audit_scope)
     return StreamingResponse(
         dispatch.event_stream(),
         media_type="text/event-stream",

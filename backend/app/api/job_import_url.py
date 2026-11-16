@@ -24,14 +24,18 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..runtime.blocking import run_sync
 from ..services.web_fetch.errors import WebExtractError, WebFetchError
 from ..services.web_fetch.import_service import (
     DETAIL_BATCH_LIMIT,
     MAX_LIST_PAGES,
     MAX_PREVIEW_ROWS,
+    collect_detail_rows,
+    collect_preview_rows,
     commit_rows,
-    fetch_details,
-    preview_from_url,
+    finalize_preview,
+    prepare_details,
+    prepare_preview,
 )
 from ..services.web_fetch.url_policy import UrlRejected
 
@@ -87,15 +91,33 @@ def _map_error(exc: Exception) -> HTTPException:
 async def preview_from_url_route(
     payload: FromUrlPreviewRequest, db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    """抓取一页并返回预览行：可编辑、可取消勾选，不落库。"""
+    """抓取一页并返回预览行：可编辑、可取消勾选，不落库。
+
+    三段式：抓取（网络 + 同域限速，worker，完成即归还请求连接）→ 抽取（可能调模型，
+    协程）→ 标「已在库」+ 拼响应（worker）。
+    """
     try:
-        return await preview_from_url(
+        plan = await run_sync(
+            prepare_preview,
             db,
             payload.url,
             engine=payload.engine,
             limit=payload.limit,
             intent=payload.intent,
             pages=payload.pages,
+        )
+        rows, method, warnings = await collect_preview_rows(
+            plan, intent=payload.intent, limit=payload.limit
+        )
+        return await run_sync(
+            finalize_preview,
+            db,
+            plan,
+            rows,
+            method=method,
+            warnings=warnings,
+            engine=payload.engine,
+            limit=payload.limit,
         )
     except (UrlRejected, WebFetchError, WebExtractError, ValueError) as exc:
         raise _map_error(exc) from exc
@@ -107,12 +129,14 @@ async def fetch_details_route(
 ) -> dict[str, Any]:
     """逐条补详情：单条失败标 fetch_failed；已完成的行原样返回（不整体回滚）。"""
     try:
-        return await fetch_details(
+        plan = await run_sync(
+            prepare_details,
             db,
             payload.rows,
             engine=payload.engine,
             page_url=payload.page_url,
         )
+        return await collect_detail_rows(plan)
     except (UrlRejected, WebFetchError, WebExtractError, ValueError) as exc:
         raise _map_error(exc) from exc
 

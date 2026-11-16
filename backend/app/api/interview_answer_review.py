@@ -7,17 +7,23 @@
 
 路由用 ``/questions/review`` 字面量段，注册顺序排在 ``interview.router`` 之前（与
 ``interview_history`` 同理）：否则会被 ``/{session_id}`` 这类参数段抢走。
+
+RF-02：整条准备链（provider + 岗位 JD + 简历正文）读的都是同步 IO，且要读简历文件，
+所以整体搬进一个 ``run_sync`` 工作单元；模型调用期间事件循环不持有任何 Session 副作用。
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.job import Job
+from ..runtime.blocking import run_sync
 from ..schemas.interview import InterviewAnswerReviewOut, InterviewAnswerReviewRequest
 from ..services.interview import interview_questions as interview_questions_service
 from ..services.llm.base import LLMError
@@ -34,11 +40,21 @@ router = APIRouter(prefix="/api/interview", tags=["interview"])
 logger = logging.getLogger(__name__)
 
 
-@router.post("/questions/review", response_model=InterviewAnswerReviewOut)
-async def review_question_answer(
-    payload: InterviewAnswerReviewRequest, db: Session = Depends(get_db)
-):
-    """批改候选人对某道题的自答：打分 + 解析 + 修改建议 + 改写示范（即时计算、不落库）。"""
+@dataclass(frozen=True)
+class _ReviewInputs:
+    """批改要用的三份只读输入（跨 ``await`` 的冻结快照，都是纯字符串 / 无状态对象）。"""
+
+    provider: Any
+    job_payload: str = ""
+    resume_text: str = ""
+
+
+def _review_inputs(db: Session, payload: InterviewAnswerReviewRequest) -> _ReviewInputs:
+    """读齐批改要用的输入，并把读事务收口（工作单元）。
+
+    末尾 ``db.close()`` 是刻意的：模型调用（几秒到十几秒）期间不占着连接池，也让"读事务
+    在 worker 里结束"这件事有唯一落点。``close()`` 之后这个 Session 不再被本请求使用。
+    """
     provider, _model = interview_api._require_provider(db)
 
     job_payload = ""
@@ -55,13 +71,22 @@ async def review_question_answer(
         resume_text = document_text(document_io.document_for_record(db, record)[0])
 
     db.close()
+    return _ReviewInputs(provider=provider, job_payload=job_payload, resume_text=resume_text)
+
+
+@router.post("/questions/review", response_model=InterviewAnswerReviewOut)
+async def review_question_answer(
+    payload: InterviewAnswerReviewRequest, db: Session = Depends(get_db)
+):
+    """批改候选人对某道题的自答：打分 + 解析 + 修改建议 + 改写示范（即时计算、不落库）。"""
+    inputs = await run_sync(_review_inputs, db, payload)
     try:
         return await interview_questions_service.review_answer(
-            provider,
+            inputs.provider,
             question=payload.question,
             my_answer=payload.my_answer,
-            job_payload=job_payload,
-            resume_text=resume_text,
+            job_payload=inputs.job_payload,
+            resume_text=inputs.resume_text,
             reference_answer=payload.reference_answer,
         )
     except LLMError as exc:

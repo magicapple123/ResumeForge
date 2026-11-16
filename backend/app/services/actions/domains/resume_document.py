@@ -21,9 +21,15 @@
 - set_entry_layout：没有条目级布局路由——PATCH /{resume_id}/layout 是**简历级**版式参数
   （模板/页数/字号/format_config），不是条目级 head/columns/align/layout。
 
-行为保持（硬要求）：run 委托既有路由 handler（route_runner），run_tool 委托既有工具
-handler（tool_runner），不改任何业务逻辑。唯一差异是**错误形状**：旧 handler 抛
-HTTPException，迁移后按 T28 统一口径映射成 ActionError（路由 detail 变 {code,message}）。
+行为保持（硬要求）：run 直接调 ``services/resume/**``（路由 handler 是同一函数的薄壳），
+run_tool 委托既有工具 handler（tool_runner），不改任何业务逻辑。唯一差异是**错误形状**：
+旧 handler 抛 HTTPException，迁移后按 T28 统一口径映射成 ActionError（路由 detail 变
+{code, message}）。
+
+**RF-03b**：三条 run 从"委托路由 handler"改成"直接调服务层"——handler 里除了"调服务 +
+包一层响应"没有别的活，委托只会让同一段编排同时长在 api 层。服务层的领域异常
+（``VersionNotFound`` / ``ResumeNotFound``）在这里翻回原来的 ``HTTPException``，
+经 ``_contract_errors`` 仍收敛成同一张错误表里的 ``ActionError``。
 """
 
 from __future__ import annotations
@@ -35,8 +41,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ....schemas.export import PreviewPdfRequest
 from ....schemas.versions import VariantListOut, VersionListOut
-from ..legacy import route_runner, tool_runner
-from ..registry import define_action
+from ...resume import document_variants as variants
+from ...resume import document_versions as versions
+from ...resume.pagination_report_service import resume_pagination_report
+from ...resume.resume_read_service import ResumeNotFound
+from ..legacy import tool_runner
 from ..spec import (
     ActionError,
     ActionOutcome,
@@ -127,98 +136,117 @@ class GetResumeStatusInput(PreviewPdfRequest):
 _ACTIONS: dict[str, ActionSpec] | None = None
 
 
+def _version_not_found(exc: versions.VersionNotFound) -> HTTPException:
+    """版本/变体两支的 404 形状：与 ``api/resumes/versions_routes._version_not_found`` 同文。"""
+    return HTTPException(status_code=404, detail=str(exc) or "版本不存在")
+
+
+def _run_list_versions(db: Session, payload: ListVersionsInput) -> ActionOutcome:
+    """命名版本列表：与 ``GET /{resume_id}/versions`` 同一个服务函数。"""
+    try:
+        return ActionOutcome(data=versions.version_list_for_resume(db, payload.resume_id))
+    except versions.VersionNotFound as exc:
+        raise _version_not_found(exc) from exc
+
+
+def _run_list_variants(db: Session, payload: ListVariantsInput) -> ActionOutcome:
+    """岗位变体列表：与 ``GET /{resume_id}/variants`` 同一个服务函数。"""
+    try:
+        return ActionOutcome(data=variants.variant_list_for_resume(db, payload.resume_id))
+    except versions.VersionNotFound as exc:
+        raise _version_not_found(exc) from exc
+
+
+def _run_get_resume_status(db: Session, payload: GetResumeStatusInput) -> ActionOutcome:
+    """分页报告：与 ``POST /{resume_id}/pagination/report`` 同一个服务函数。
+
+    ``payload`` 本身就是路由的精确预览请求体（``PreviewPdfRequest`` 子类），而服务层
+    只认 ``PreviewPdfRequest`` 的那几个字段——多出来的 ``resume_id`` 由服务层的
+    ``resume_id`` 形参取，不参与渲染。
+    """
+    try:
+        return ActionOutcome(data=resume_pagination_report(db, payload.resume_id, payload))
+    except ResumeNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 def resume_document_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）简历文档域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）简历文档域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
 
     Permission = permission_enum()
-    list_versions = define_action(
-        ActionSpec(
-            name="list_versions",
-            description=(
-                "列出某份简历保存过的命名版本（名称、改动摘要、是否冻结、来自第几版、创建时间）。"
-                "用户问「有哪些历史版本」「上次保存的那版叫什么」时用它。"
-                "恢复版本要由用户在制作台「版本」里操作，这里只读。"
-            ),
-            input_model=ListVersionsInput,
-            permission=Permission.READ_ONLY,
-            run=_contract_errors(route_runner("app.api.resumes.versions_routes", "list_versions")),
-            run_tool=tool_runner(
-                "app.services.assistant_tools.document_tools", "_tool_list_versions"
-            ),
-            tool_fields=("resume_id", "limit"),
-            # 旧 GET 路由只认识 resume_id，未知 query 被忽略（不是 422）。
-            ignore_unknown_arguments=True,
-            service_entry="resume.document_versions.list_versions",
-            http=HttpRoute(
-                "GET",
-                "/api/resumes/{resume_id}/versions",
-                VersionListOut,
-                tags=("resumes",),
-            ),
-        )
+    list_versions = ActionSpec(
+        name="list_versions",
+        description=(
+            "列出某份简历保存过的命名版本（名称、改动摘要、是否冻结、来自第几版、创建时间）。"
+            "用户问「有哪些历史版本」「上次保存的那版叫什么」时用它。"
+            "恢复版本要由用户在制作台「版本」里操作，这里只读。"
+        ),
+        input_model=ListVersionsInput,
+        permission=Permission.READ_ONLY,
+        run=_contract_errors(_run_list_versions),
+        run_tool=tool_runner("app.services.assistant_tools.document_tools", "_tool_list_versions"),
+        tool_fields=("resume_id", "limit"),
+        # 旧 GET 路由只认识 resume_id，未知 query 被忽略（不是 422）。
+        ignore_unknown_arguments=True,
+        # RF-03b：service_entry 指向 run 的**第一跳**（本批新增的编排函数），不是它内部
+        # 再调一层的取值函数——元数据是给人/模型指路的，指到第二跳就是错误指路。
+        service_entry="resume.document_versions.version_list_for_resume",
+        http=HttpRoute(
+            "GET",
+            "/api/resumes/{resume_id}/versions",
+            VersionListOut,
+            tags=("resumes",),
+        ),
     )
-    list_variants = define_action(
-        ActionSpec(
-            name="list_variants",
-            description=(
-                "列出某份简历派生过的岗位变体（名称、目标岗位/公司、语言、基于哪版派生、最近同步时间）。"
-                "用户问「有没有为这个岗位单独做过变体」「变体有哪些」时用它。变体的派生与同步只在"
-                "制作台「版本」里操作。"
-            ),
-            input_model=ListVariantsInput,
-            permission=Permission.READ_ONLY,
-            run=_contract_errors(route_runner("app.api.resumes.versions_routes", "list_variants")),
-            run_tool=tool_runner(
-                "app.services.assistant_tools.document_tools", "_tool_list_variants"
-            ),
-            tool_fields=("resume_id", "limit"),
-            ignore_unknown_arguments=True,
-            service_entry="resume.document_variants.list_variants",
-            http=HttpRoute(
-                "GET",
-                "/api/resumes/{resume_id}/variants",
-                VariantListOut,
-                tags=("resumes",),
-            ),
-        )
+    list_variants = ActionSpec(
+        name="list_variants",
+        description=(
+            "列出某份简历派生过的岗位变体（名称、目标岗位/公司、语言、基于哪版派生、最近同步时间）。"
+            "用户问「有没有为这个岗位单独做过变体」「变体有哪些」时用它。变体的派生与同步只在"
+            "制作台「版本」里操作。"
+        ),
+        input_model=ListVariantsInput,
+        permission=Permission.READ_ONLY,
+        run=_contract_errors(_run_list_variants),
+        run_tool=tool_runner("app.services.assistant_tools.document_tools", "_tool_list_variants"),
+        tool_fields=("resume_id", "limit"),
+        ignore_unknown_arguments=True,
+        service_entry="resume.document_variants.variant_list_for_resume",
+        http=HttpRoute(
+            "GET",
+            "/api/resumes/{resume_id}/variants",
+            VariantListOut,
+            tags=("resumes",),
+        ),
     )
-    get_resume_status = define_action(
-        ActionSpec(
-            name="get_resume_status",
-            description=(
-                "读取一份简历的**版面状态**：按当前正文与版式真实排一遍 PDF，返回实际页数、"
-                "是否需要更多页（pages_needed）、是否溢出（overflow）、页数上限、末页占用、"
-                "被截断的位置（哪一段/哪一条）与手动断页，并附带内容+排版预检的告警计数。"
-                "用户问「这版几页」「有没有溢出/超页」「分页里断页在哪」「版面有没有问题」时用它。"
-                "返回值里的 pagination_panel 是界面上看断页的面板与按钮，回答时指过去。"
-            ),
-            input_model=GetResumeStatusInput,
-            permission=Permission.READ_ONLY,
-            run=_contract_errors(
-                route_runner("app.api.resumes.layout_render_routes", "pagination_report")
-            ),
-            run_tool=tool_runner(
-                "app.services.assistant_tools.document_tools", "_tool_get_resume_status"
-            ),
-            # 工具历史上只吃 resume_id：其余字段（content/watermark/variant_id…）是路由
-            # 的精确预览参数，模型侧看不到也传不进；路由侧仍按旧 body 全量接收。
-            tool_fields=("resume_id",),
-            service_entry="resume.document_pagination.build_pagination_report",
-            http=HttpRoute(
-                "POST",
-                "/api/resumes/{resume_id}/pagination/report",
-                dict,
-                tags=("resumes",),
-            ),
-        )
+    get_resume_status = ActionSpec(
+        name="get_resume_status",
+        description=(
+            "读取一份简历的**版面状态**：按当前正文与版式真实排一遍 PDF，返回实际页数、"
+            "是否需要更多页（pages_needed）、是否溢出（overflow）、页数上限、末页占用、"
+            "被截断的位置（哪一段/哪一条）与手动断页，并附带内容+排版预检的告警计数。"
+            "用户问「这版几页」「有没有溢出/超页」「分页里断页在哪」「版面有没有问题」时用它。"
+            "返回值里的 pagination_panel 是界面上看断页的面板与按钮，回答时指过去。"
+        ),
+        input_model=GetResumeStatusInput,
+        permission=Permission.READ_ONLY,
+        run=_contract_errors(_run_get_resume_status),
+        run_tool=tool_runner(
+            "app.services.assistant_tools.document_tools", "_tool_get_resume_status"
+        ),
+        # 工具历史上只吃 resume_id：其余字段（content/watermark/variant_id…）是路由
+        # 的精确预览参数，模型侧看不到也传不进；路由侧仍按旧 body 全量接收。
+        tool_fields=("resume_id",),
+        service_entry="resume.pagination_report_service.resume_pagination_report",
+        http=HttpRoute(
+            "POST",
+            "/api/resumes/{resume_id}/pagination/report",
+            dict,
+            tags=("resumes",),
+        ),
     )
     _ACTIONS = {spec.name: spec for spec in (list_versions, list_variants, get_resume_status)}
     return _ACTIONS

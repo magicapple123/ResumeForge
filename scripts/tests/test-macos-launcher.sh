@@ -785,6 +785,85 @@ else
 fi
 
 printf '\n'
+# ---------------------------------------------------------------------------
+# 生产依赖锁（backend/requirements.runtime.lock.txt）
+#
+# 首次安装与更新只装这一份（逐包 SHA-256 + --require-hashes）。这里断言的是它的
+# **可用性判定**：缺文件、没哈希、混进开发工具都必须被明确拒绝，而不是退回
+# requirements.txt 重新解析（那会让每台机器装出不同的传递依赖）。
+# ---------------------------------------------------------------------------
+printf '== 生产依赖锁的可用性判定 ==\n'
+rf_lock_dir="$rf_test_tmp/lock"
+mkdir -p "$rf_lock_dir"
+# 64 个 0，写成字面量：macOS 上没有 GNU coreutils 的 seq。
+rf_zero_hash='0000000000000000000000000000000000000000000000000000000000000000'
+
+rf_lock_good="$rf_lock_dir/good.lock.txt"
+{
+    printf 'fastapi==0.162.0 \\\n'
+    printf '    --hash=sha256:%s\n' "$rf_zero_hash"
+    printf '    # via -r requirements.txt\n'
+} >"$rf_lock_good"
+rf_lock_missing="$rf_lock_dir/absent.lock.txt"
+rf_lock_unhashed="$rf_lock_dir/unhashed.lock.txt"
+printf 'fastapi==0.162.0\n' >"$rf_lock_unhashed"
+rf_lock_devtool="$rf_lock_dir/devtool.lock.txt"
+{
+    printf 'pytest==8.4.2 \\\n'
+    printf '    --hash=sha256:%s\n' "$rf_zero_hash"
+} >"$rf_lock_devtool"
+
+if rf_runtime_lock_problem "$rf_lock_good" >/dev/null; then
+    rf_check 0 "完整的生产锁判定为可用"
+else
+    rf_check 1 "完整的生产锁被判为不可用（误报）"
+fi
+if rf_runtime_lock_problem "$rf_lock_missing" >/dev/null; then
+    rf_check 1 "缺失的生产锁被判为可用（绝不能退回 requirements.txt）"
+else
+    rf_check 0 "缺失的生产锁被明确拒绝"
+fi
+if rf_runtime_lock_problem "$rf_lock_unhashed" >/dev/null; then
+    rf_check 1 "没有逐包哈希的锁被判为可用（--require-hashes 会直接失败）"
+else
+    rf_check 0 "没有逐包哈希的锁被明确拒绝"
+fi
+if rf_runtime_lock_problem "$rf_lock_devtool" >/dev/null; then
+    rf_check 1 "混进 pytest 的锁被判为可用（生产包不能装开发工具）"
+else
+    rf_check 0 "混进开发工具的锁被明确拒绝"
+fi
+
+case "$(rf_runtime_lock_path '/proj/backend/')" in
+    */proj/backend/requirements.runtime.lock.txt) rf_check 0 "rf_runtime_lock_path 会去掉末尾斜杠" ;;
+    *) rf_check 1 "rf_runtime_lock_path 没有正确处理末尾斜杠" ;;
+esac
+
+# 路径拼接与常量必须对得上：判定函数本身是"给定一个真实存在的文件"来测的，
+# 它无论如何都会通过，所以上面那几行**测不到拼接错**。曾经的真实缺陷就在这里：
+# 函数按"项目根"拼接，而 start.sh/update.sh 全都传 backend 目录，最后得到
+# backend/backend/requirements.runtime.lock.txt，首次安装直接死在"找不到锁"。
+if rf_runtime_lock_problem "$(rf_runtime_lock_path "$RF_TEST_ROOT/backend")" >/dev/null; then
+    rf_check 0 "rf_runtime_lock_path 拼出的路径就是仓库里那份锁"
+else
+    rf_check 1 "rf_runtime_lock_path 拼出的不是仓库里那份锁（拼接或常量不一致）"
+fi
+
+# 仓库里真正分发的那一份必须能通过判定本身：判定与真实文件漂移的话，
+# "可用" 就只是测试里的故事。
+if rf_runtime_lock_problem "$RF_TEST_ROOT/backend/requirements.runtime.lock.txt" >/dev/null; then
+    rf_check 0 "仓库里的 backend/requirements.runtime.lock.txt 通过可用性判定"
+else
+    rf_check 1 "仓库里的 backend/requirements.runtime.lock.txt 没通过可用性判定"
+fi
+
+# 从项目根算起的相对路径是发布包白名单、备份清单、更新器比对的形状，必须自洽。
+case "$RF_RUNTIME_LOCK_RELATIVE" in
+    "backend/$RF_RUNTIME_LOCK_NAME") rf_check 0 "RF_RUNTIME_LOCK_RELATIVE 与锁文件名一致" ;;
+    *) rf_check 1 "RF_RUNTIME_LOCK_RELATIVE 与锁文件名不一致（得到 '$RF_RUNTIME_LOCK_RELATIVE'）" ;;
+esac
+
+printf '\n'
 if [ "$rf_test_failures" -eq 0 ]; then
     printf 'macOS 启动链测试全部通过。\n'
     exit 0

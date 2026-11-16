@@ -269,3 +269,35 @@ def delete_llm_config_record(db: Session, record_id: int) -> None:
     if row is not None:
         db.delete(row)
         db.commit()
+
+
+def resolve_probe_config(db: Session, config: _ConfigT) -> _ConfigT:
+    """设置页三个探测入口的**准备段**：把掩码/引用解析成真实 Key，然后归还请求连接。
+
+    解析要读库（当前配置、命名记录、全局 profile），而随后的探测是一次真发请求的远端
+    调用；两者之间不该继续占着 SQLite 连接。解析失败抛 ``ValueError``（由路由转成
+    可读 message），行为与改造前的就地调用一致。
+    """
+    try:
+        return resolve_llm_config_api_key(db, config)
+    finally:
+        db.close()
+
+
+def resolve_probe_config_with_locale(db: Session, config: _ConfigT) -> tuple[_ConfigT, str]:
+    """同 :func:`resolve_probe_config`，并把审计用的界面语言一起读出来。
+
+    语言存 ``app_settings``，必须读库才能拿到；但 ``set_ambient_scope`` 写的是
+    ContextVar，只能在事件循环线程上写（worker 拿到的是上下文副本）。所以这里只把值
+    带回来，由调用方在协程里 ``set_ambient_scope(language=...)``。
+    """
+    from .llm.usage_tasks import DEFAULT_AUDIT_LANGUAGE
+    from .ui_locale import get_ui_locale
+
+    try:
+        return (
+            resolve_llm_config_api_key(db, config),
+            get_ui_locale(db) or DEFAULT_AUDIT_LANGUAGE,
+        )
+    finally:
+        db.close()

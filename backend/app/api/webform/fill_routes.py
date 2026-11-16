@@ -23,7 +23,7 @@ from ...schemas.webform import (
 from ...services import diagnostics
 from ...services import webform as webform_service
 from ...services.actions import add_action_route
-from ...services.actions.catalog import all_actions
+from ...services.actions.catalog import registered_action
 from ...services.settings_service import get_webform_relaxed_mode
 from ...services.webform.review_highlights import highlight_review
 from ._shared import _raise, logger
@@ -54,6 +54,25 @@ def take_snapshot(db: Session = Depends(get_db)):
         "snapshot_id": snapshot.id,
         "page": page,
     }
+
+
+def _prepare_ai_and_review(db: Session, *, want_ai: bool) -> tuple[Any, Any]:
+    """取 AI 调用器与评审用浏览器客户端，然后归还请求连接。
+
+    这三件事都碰请求会话（读模型配置、取浏览器单例、``close``），所以整段同步工作单元
+    一起下沉线程池：只要有一个 ``Session`` 方法留在事件循环线程上，模型调用期间的其它
+    请求就要排在这条 SQLite 连接后面等。
+    """
+    provider = webform_service.ai.build_provider(db) if want_ai else None
+    review_client = None
+    try:
+        manager = webform_service.browser.get_browser_manager(db)
+        if manager.is_active():
+            review_client = manager.client()
+    except Exception as error:  # noqa: BLE001 - computed preview remains usable
+        diagnostics.record_event("webform.review_browser_unavailable", error=type(error).__name__)
+    db.close()
+    return provider, review_client
 
 
 @router.post("/preview", response_model=WebFormPreviewOut)
@@ -89,16 +108,11 @@ async def preview(payload: WebFormPreviewIn, db: Session = Depends(get_db)):
         )
     except webform_service.WebFormError as exc:
         _raise(exc)
-    # provider 要拿 db 配置，模型调用要等网络——**先取配置、关连接，再 await**。
-    provider = webform_service.ai.build_provider(db) if payload.ai else None
-    review_client = None
-    try:
-        manager = webform_service.browser.get_browser_manager(db)
-        if manager.is_active():
-            review_client = manager.client()
-    except Exception as error:  # noqa: BLE001 - computed preview remains usable
-        diagnostics.record_event("webform.review_browser_unavailable", error=type(error).__name__)
-    db.close()
+    # provider 要拿 db 配置、浏览器单例也要 db，模型调用要等网络——**先在 worker 里取
+    # 完配置并关连接，再 await**；事件循环不碰会话。
+    provider, review_client = await run_in_threadpool(
+        _prepare_ai_and_review, db, want_ai=payload.ai
+    )
     try:
         if provider is not None:
             # relaxed 与 build_preview 用同一个开关值：开启时放宽候选（点选类、规则没认出
@@ -261,7 +275,7 @@ def _record_fill(
 # 回看用：每次「填充到页面」落一条。删除走回收站（软删），彻底删除在回收站里另做。
 
 
-add_action_route(router, all_actions()["list_web_form_fills"], route_path="/records")
+add_action_route(router, registered_action("list_web_form_fills"), route_path="/records")
 
 
 def list_records(
@@ -272,17 +286,26 @@ def list_records(
     ),
     db: Session = Depends(get_db),
 ):
-    """填充记录列表（只含未删除的，最近的在最前）。"""
+    """填充记录列表（只含未删除的，最近的在最前）。
+
+    薄壳：查询在 ``services.webform.history.list_records``（助手动作
+    ``list_web_form_fills`` 调同一个函数）。
+    """
     return webform_service.history.list_records(db, limit=limit)
 
 
-add_action_route(router, all_actions()["get_web_form_fill"], route_path="/records/{record_id}")
+add_action_route(router, registered_action("get_web_form_fill"), route_path="/records/{record_id}")
 
 
 def read_record(record_id: int, db: Session = Depends(get_db)):
+    """读一次填充的完整明细；已软删的按不存在处理。
+
+    薄壳：取数在 ``services.webform.history.record_or_none``（与助手动作
+    ``get_web_form_fill`` 同一处），404 文案只在服务层定义一份。
+    """
     record = webform_service.history.record_or_none(db, record_id)
     if record is None:
-        raise HTTPException(status_code=404, detail="填充记录不存在或已被删除")
+        raise HTTPException(status_code=404, detail=webform_service.history.RECORD_NOT_FOUND_DETAIL)
     return record
 
 
@@ -290,4 +313,4 @@ def read_record(record_id: int, db: Session = Depends(get_db)):
 def remove_record(record_id: int, db: Session = Depends(get_db)):
     """移入回收站（软删，可恢复）。彻底删除在回收站里另做。"""
     if not webform_service.history.delete_record(db, record_id):
-        raise HTTPException(status_code=404, detail="填充记录不存在或已被删除")
+        raise HTTPException(status_code=404, detail=webform_service.history.RECORD_NOT_FOUND_DETAIL)

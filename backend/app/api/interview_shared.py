@@ -24,10 +24,10 @@
 from __future__ import annotations
 
 import logging
-from typing import get_args
+from dataclasses import dataclass
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from ..models.interview import (
     INTERVIEW_STATUS_ACTIVE,
@@ -39,17 +39,26 @@ from ..models.job import Job
 from ..schemas.interview import (
     InterviewBrief,
     InterviewDetail,
-    InterviewMessageOut,
-    InterviewStatus,
 )
 from ..services.interview.interview import (
     add_message,
-    answered_rounds,
     mark_answer_interrupted,
     reuse_interrupted_answer,
 )
 from ..services.interview.interview_context import (
     resume_record_or_none as _resume_record_or_none,
+)
+from ..services.interview.interview_read import (
+    SESSION_NOT_FOUND_DETAIL,
+)
+from ..services.interview.interview_read import (
+    as_interview_status as _as_interview_status,
+)
+from ..services.interview.interview_read import (
+    session_brief as _session_brief,
+)
+from ..services.interview.interview_read import (
+    session_detail as _session_detail,
 )
 from ..services.llm import create_provider
 from ..services.profile.profile_relevance import build_job_prompt_text
@@ -61,13 +70,11 @@ logger = logging.getLogger(__name__)
 
 MAX_JOB_CONTEXT_FOR_INTERVIEW = 6_000
 
-_INTERVIEW_STATUS_VALUES: tuple[InterviewStatus, ...] = get_args(InterviewStatus)
-
 
 def _session_or_404(db: Session, session_id: int) -> InterviewSession:
     session = db.get(InterviewSession, session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="面试不存在或已被删除")
+        raise HTTPException(status_code=404, detail=SESSION_NOT_FOUND_DETAIL)
     return session
 
 
@@ -77,17 +84,6 @@ def _require_provider(db: Session):
     if not config.base_url.strip() or not config.model.strip():
         raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     return create_provider(config), config.model
-
-
-def _as_interview_status(value: str) -> InterviewStatus:
-    """模型层 ``status`` 是 ``str``，出口处收窄为 schema 的 ``Literal``。
-
-    取值由开场 / 结束链路用常量写入，正常不会走到兜底；万一库里出现未知值，在这里
-    大声失败（与 pydantic Literal 字段的校验行为一致），不悄悄把非法状态发给前端。
-    """
-    if value not in _INTERVIEW_STATUS_VALUES:
-        raise ValueError(f"未知的面试状态：{value!r}")
-    return value
 
 
 def _resume_text(db: Session, session: InterviewSession) -> str:
@@ -133,39 +129,13 @@ def _session_job_text(db: Session, session: InterviewSession) -> str:
 
 
 def _to_out(session: InterviewSession) -> InterviewBrief:
-    return InterviewBrief(
-        id=session.id,
-        title=session.title,
-        job_id=session.job_id,
-        job_title=session.job_title,
-        company=session.company,
-        resume_id=session.resume_id,
-        resume_title=session.resume_title,
-        job_material_name=session.job_material_name or "",
-        resume_material_name=session.resume_material_name or "",
-        duration_seconds=session.duration_seconds,
-        interview_type=session.interview_type,
-        difficulty=session.difficulty,
-        interviewer_style=session.interviewer_style,
-        rounds=session.rounds,
-        rounds_min=session.rounds_min,
-        status=_as_interview_status(session.status),
-        created_at=session.created_at,
-        updated_at=session.updated_at,
-        follow_up_closed_at=session.follow_up_closed_at,
-        answered_rounds=answered_rounds(session),
-    )
+    """兼容再导出：出口视图的唯一实现在 ``services/interview/interview_read.session_brief``。"""
+    return _session_brief(session)
 
 
 def _to_detail(session: InterviewSession) -> InterviewDetail:
-    return InterviewDetail(
-        **_to_out(session).model_dump(),
-        persona=session.persona,
-        focus=session.focus,
-        model=session.model,
-        report=session.report or {},
-        messages=[InterviewMessageOut.model_validate(item) for item in session.messages],
-    )
+    """兼容再导出：出口视图的唯一实现在 ``services/interview/interview_read.session_detail``。"""
+    return _session_detail(session)
 
 
 def _record_answer(session: InterviewSession, content: str) -> InterviewMessage:
@@ -199,19 +169,78 @@ def _mark_interrupted(db: Session, answer: InterviewMessage) -> None:
         db.rollback()
 
 
+def _mark_interrupted_by_id(db: Session, answer_id: int) -> None:
+    """按 id 收口"这一轮没答完"（跨 ``await`` 只传 id，不传那条 ORM 消息）。"""
+    answer = db.get(InterviewMessage, answer_id)
+    if answer is not None:
+        _mark_interrupted(db, answer)
+
+
+# ===== 同步工作单元（RF-02：这些函数**只能**经 ``run_sync`` 在 worker 里调用）=====
+#
+# 本批的切分口径：路由里"碰 Session 的那一段"整体是一个工作单元，worker 结束时把状态
+# 收口到"事件循环只读已加载标量"的程度——``commit`` / ``refresh`` / 关系读热都留在里面。
+# 这样 ``await`` 之后按属性读的都是内存值，不会在事件循环上触发 SELECT。
+
+
+@dataclass(frozen=True)
+class SessionMaterial:
+    """面试官要读的两份材料文本（跨 ``await`` 的**冻结快照**）。
+
+    材料是文件 IO + 简历反序列化，必须在 worker 里读；读成这个不可变对象之后，事件循环
+    只持有字符串，不再持有任何需要懒加载的 ORM 关系。
+    """
+
+    resume_text: str = ""
+    job_text: str = ""
+
+
+def _warm_messages(session: InterviewSession) -> None:
+    """把 ``messages`` 关系读热（**只能在 worker 里调**）。
+
+    ``commit()`` / ``refresh()`` 之后关系是过期的，事件循环上第一次访问
+    ``session.messages`` 会触发一次同步 SELECT——正是本批要挪走的那种阻塞。所以每个写
+    工作单元的末尾都顺手读一遍。会话已 detached（测试里手工构造的对象）时直接跳过。
+    """
+    if object_session(session) is None:
+        return
+    _ = [item.id for item in session.messages]
+
+
+def _commit_and_refresh(db: Session, session: InterviewSession) -> None:
+    """提交 + 刷新 + 读热关系：一个完整的「写事务收尾」工作单元。"""
+    db.commit()
+    db.refresh(session)
+    _warm_messages(session)
+
+
+def _session_material(db: Session, session: InterviewSession) -> SessionMaterial:
+    """读出候选人 / 岗位两份材料文本（含文件 IO），顺手读热消息关系。"""
+    _warm_messages(session)
+    return SessionMaterial(
+        resume_text=_resume_text(db, session),
+        job_text=_session_job_text(db, session),
+    )
+
+
 __all__ = [
     "INTERVIEW_STATUS_ACTIVE",
     "INTERVIEW_STATUS_FINISHED",
     "MAX_JOB_CONTEXT_FOR_INTERVIEW",
+    "SessionMaterial",
     "_as_interview_status",
+    "_commit_and_refresh",
     "_job_text",
     "_mark_interrupted",
+    "_mark_interrupted_by_id",
     "_record_answer",
     "_require_provider",
     "_resume_record_or_none",
     "_resume_text",
     "_session_job_text",
+    "_session_material",
     "_session_or_404",
     "_to_detail",
     "_to_out",
+    "_warm_messages",
 ]

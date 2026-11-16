@@ -85,26 +85,33 @@ jobs:
         with:
           ref: ${{ needs.target.outputs.ref }}
 
+      - name: Set up pnpm
+        # MUST run before setup-node: setup-node resolves the pnpm store by running
+        # `pnpm store path`, and skips the cache silently when pnpm is absent.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.21.0
+
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
+          cache: pnpm
           cache-dependency-path: |
-            frontend/package-lock.json
-            desktop/package-lock.json
+            frontend/pnpm-lock.yaml
+            desktop/pnpm-lock.yaml
 
       - name: Build frontend production assets
         working-directory: frontend
         run: |
-          npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
-          npm run build
+          pnpm install --frozen-lockfile --registry=https://registry.npmjs.org
+          pnpm run build
 
       - name: Install desktop shell dependencies
         working-directory: desktop
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
-        run: npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+        run: pnpm install --frozen-lockfile --registry=https://registry.npmjs.org
 
       - name: Package desktop app (dir + NSIS)
         env:
@@ -371,14 +378,21 @@ jobs:
         with:
           ref: ${{ needs.target.outputs.ref }}
 
+      - name: Set up pnpm
+        # MUST run before setup-node: setup-node resolves the pnpm store by running
+        # `pnpm store path`, and skips the cache silently when pnpm is absent.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.21.0
+
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
+          cache: pnpm
           cache-dependency-path: |
-            frontend/package-lock.json
-            desktop/package-lock.json
+            frontend/pnpm-lock.yaml
+            desktop/pnpm-lock.yaml
 
       - name: Check the mac build script exists at this ref
         # Tags older than the script (v1.0.1 and earlier) cannot build dmgs
@@ -393,14 +407,14 @@ jobs:
       - name: Build frontend production assets
         working-directory: frontend
         run: |
-          npm ci --no-audit --no-fund
-          npm run build
+          pnpm install --frozen-lockfile
+          pnpm run build
 
       - name: Install desktop shell dependencies
         working-directory: desktop
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
-        run: npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+        run: pnpm install --frozen-lockfile --registry=https://registry.npmjs.org
 
       - name: Build dmgs (x64 + arm64)
         env:
@@ -466,14 +480,21 @@ jobs:
         with:
           ref: ${{ needs.target.outputs.ref }}
 
+      - name: Set up pnpm
+        # MUST run before setup-node: setup-node resolves the pnpm store by running
+        # `pnpm store path`, and skips the cache silently when pnpm is absent.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.21.0
+
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
+          cache: pnpm
           cache-dependency-path: |
-            frontend/package-lock.json
-            desktop/package-lock.json
+            frontend/pnpm-lock.yaml
+            desktop/pnpm-lock.yaml
 
       - name: Check the Linux build script exists at this ref
         # 老 tag 上没有这个脚本，从工作流里直接调只会得到一句 127。这里提前给出
@@ -488,14 +509,14 @@ jobs:
       - name: Build frontend production assets
         working-directory: frontend
         run: |
-          npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
-          npm run build
+          pnpm install --frozen-lockfile --registry=https://registry.npmjs.org
+          pnpm run build
 
       - name: Install desktop shell dependencies
         working-directory: desktop
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
-        run: npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+        run: pnpm install --frozen-lockfile --registry=https://registry.npmjs.org
 
       - name: Build the AppImages (x64 + arm64)
         env:
@@ -609,12 +630,19 @@ jobs:
         with:
           ref: ${{ needs.target.outputs.ref }}
 
+      - name: Set up pnpm
+        # MUST run before setup-node: setup-node resolves the pnpm store by running
+        # `pnpm store path`, and skips the cache silently when pnpm is absent.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.21.0
+
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       # 纯源码发行包（git archive + 内置前端产物 + 逐平台启动器裁剪与校验）。
       # v1.0.2 起回归此处：流程迁移到 CI 安装包时这一环曾被漏掉，Release 只挂

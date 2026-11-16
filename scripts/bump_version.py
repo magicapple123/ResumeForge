@@ -42,11 +42,9 @@ for _stream in (sys.stdout, sys.stderr):
 REPO_ROOT = Path(os.environ.get("RF_BUMP_REPO_ROOT") or Path(__file__).resolve().parents[1])
 CONFIG_PY = REPO_ROOT / "backend" / "app" / "config.py"
 PACKAGE_JSON = REPO_ROOT / "frontend" / "package.json"
-PACKAGE_LOCK = REPO_ROOT / "frontend" / "package-lock.json"
 # 桌面壳的版本（desktop/package.json）就是打包后 app.getVersion() 的来源，也是
 # 更新器比较版本号的基准——发版时必须与前端同步前进（audit PR-05）。
 DESKTOP_PACKAGE_JSON = REPO_ROOT / "desktop" / "package.json"
-DESKTOP_PACKAGE_LOCK = REPO_ROOT / "desktop" / "package-lock.json"
 README = REPO_ROOT / "README.md"
 # GitHub 默认展示英文版（README.md），中文版是 README.zh-CN.md；两处版本号必须同步前进，
 # 否则"英文页写着旧版本、中文页写着新版本"。
@@ -231,19 +229,9 @@ def apply_version(new_version: str, released_on: str) -> list[str]:
     PACKAGE_JSON.write_text(updated, encoding="utf-8", newline="\n")
     touched.append(str(PACKAGE_JSON.relative_to(REPO_ROOT)))
 
-    # lockfile 里还有大量依赖自身的 "version" 字段，所以按结构改而不是按行改：
-    # 只动根包与 packages[""] 两处。frontend 与 desktop 两个 lock 同一策略。
-    for lock_path in (PACKAGE_LOCK, DESKTOP_PACKAGE_LOCK):
-        lock = json.loads(lock_path.read_text("utf-8"))
-        lock["version"] = new_version
-        lock["packages"][""]["version"] = new_version
-        lock_path.write_text(
-            json.dumps(lock, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-            newline="\n",
-        )
-        touched.append(str(lock_path.relative_to(REPO_ROOT)))
-
+    # 锁文件不再参与版本写入：迁移到 pnpm 后 `pnpm-lock.yaml` 的 importers 段
+    # 不记录根包版本（npm 的 `lock["version"]` / `lock["packages"][""]["version"]`
+    # 两个同步点已经不存在），所以发版只需改 package.json。
     desktop_package_text = DESKTOP_PACKAGE_JSON.read_text("utf-8")
     updated = replace_exact(
         desktop_package_text,
@@ -328,9 +316,7 @@ def main(argv: list[str] | None = None) -> int:
             for path in (
                 CONFIG_PY,
                 PACKAGE_JSON,
-                PACKAGE_LOCK,
                 DESKTOP_PACKAGE_JSON,
-                DESKTOP_PACKAGE_LOCK,
                 README,
                 CHANGELOG,
             ):

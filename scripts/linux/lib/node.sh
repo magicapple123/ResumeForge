@@ -219,7 +219,9 @@ rf_install_portable_node() {
     return 0
 }
 
-# 确保有一个可用的 Node/npm。成功后 RF_NODE_PATH、RF_NPM_PATH、RF_NODE_VERSION 可用。
+# 确保有一个可用的 Node 运行时。同目录必须带 npm，但那只是"官方发行包完整"的标志，
+# 启动器不用它跑任何命令（包管理器是 pnpm，见 rf_resolve_pnpm_command）。
+# 成功后 RF_NODE_PATH、RF_NPM_PATH、RF_NODE_VERSION 可用。
 rf_ensure_node_runtime() {
     local arch
     if rf_find_system_node_runtime; then
@@ -230,4 +232,36 @@ rf_ensure_node_runtime() {
     log_info "没有找到可用的 Node.js/npm（需要 ${RF_NODE_MIN_VERSION} 或更新版本），正在自动准备一份便携版..."
     rf_install_portable_node "$arch"
     return 0
+}
+
+# 解析"怎么调用 pnpm"，结果放进 RF_PNPM_COMMAND（bash 数组，可直接 @ 展开）。
+#
+# pnpm 不是 Node 的随附组件，没法像 npm 那样按固定路径找。首选 Node 自带的
+# corepack（>=16.9 一起分发）：它按 package.json 的 `packageManager` 字段取来
+# 12.21.0 并缓存，行为与用户全局装了什么无关——这正是启动器要的。找不到
+# corepack 才退回 PATH 上的 pnpm。调用方统一写 "${RF_PNPM_COMMAND[@]}"，
+# 因此有没有 corepack 前缀都不影响调用点。
+rf_resolve_pnpm_command() {
+    local node_dir
+    local pnpm_path
+
+    RF_PNPM_COMMAND=()
+    if [ -n "$RF_NODE_PATH" ]; then
+        node_dir=$(dirname "$RF_NODE_PATH")
+        if [ -x "$node_dir/corepack" ]; then
+            RF_PNPM_COMMAND=("$node_dir/corepack" pnpm)
+            return 0
+        fi
+    fi
+
+    pnpm_path=$(command -v pnpm 2>/dev/null || true)
+    if [ -n "$pnpm_path" ]; then
+        RF_PNPM_COMMAND=("$pnpm_path")
+        return 0
+    fi
+
+    die "找不到 pnpm：当前 Node 不带 corepack，PATH 上也没有 pnpm。" \
+        "怎么办（二选一）：" \
+        "  1) 装 Node.js ${RF_NODE_MIN_VERSION} 或更新版本的官方包（自带 corepack）；" \
+        "  2) 执行 npm install -g pnpm@12.21.0 后重试。"
 }

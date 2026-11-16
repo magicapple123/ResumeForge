@@ -496,3 +496,4 @@ def test_job_preference_restore_conflicts_with_an_active_kind(db_session):
     assert trash.is_deleted(db_session.get(JobPreference, doomed.id))
     # 不同 kind 不是冲突：唯一性轴是 (dataset_key, kind) 两列。
     assert trash.restore(db_session, "job_preference", other.id)
+

@@ -44,7 +44,6 @@ from ...schemas.skill import (
     AssistantSkillFileInput,
     AssistantSkillUpdate,
 )
-from .registry import define_action
 from .spec import ActionError, ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -286,98 +285,86 @@ def _run_get_job(db: Session, payload: GetJobInput) -> ActionOutcome:
     )
 
 
-# ----------------------------- 惰性构建与注册 -----------------------------
+# ----------------------------- 惰性构建（不注册） -----------------------------
 
 _PILOT_ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def pilot_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）三个试点动作，返回 name -> ActionSpec。
+    """构建（**不注册**）试点动作，返回 name -> ActionSpec。
+
+    注册是 ``catalog.ensure_registered()`` 的唯一职责：本函数只构造 ActionSpec，
+    因此可以重复调用、也可以在 ``reset_registry()`` 之后安全地再取一次。
 
     第一次调用可能发生在 assistant_tools 包初始化期间（工具声明模块 import 本模块后
     立刻构建 Tool）。若第一次调用来自 api 模块（先 import 了本模块），Permission 的
     延迟导入会触发 assistant_tools 完整初始化，其中工具声明模块会**重入**本函数：
-    内层先把动作建好并放进缓存，外层拿到缓存直接返回，因此 define_action 每个名字
-    只执行一次。这就是用惰性构建换掉"模块级常量"的原因（模块级常量在 import 环里
+    内层先把动作建好并放进缓存，外层拿到缓存直接返回，因此每个名字只构造一次（对象
+    标识稳定）。这就是用惰性构建换掉"模块级常量"的原因（模块级常量在 import 环里
     会以半成品状态被工具声明模块读到）。
     """
     global _PILOT_ACTIONS
     if _PILOT_ACTIONS is not None:
-        # 注册表可能被测试 reset_registry() 清空；缓存还在时按需自愈，避免
-        # "工具已注册、action 注册表却空了"的半状态（守卫测试会踩到）。
-        from .registry import get_action
-
-        for spec in _PILOT_ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _PILOT_ACTIONS
     Permission = permission_enum()
     if _PILOT_ACTIONS is not None:  # 内层重入已完成构建
         return _PILOT_ACTIONS
 
-    list_claims = define_action(
-        ActionSpec(
-            name="list_claims",
-            description=(
-                "列出事实台账里的条目（用户逐条核对过的、可以写进简历的事实，含核实状态与"
-                "承担程度）。用户提到「台账」「那条经历有没有核对过」「哪些还没确认」时用它。"
-            ),
-            input_model=ListClaimsInput,
-            permission=Permission.READ_ONLY,
-            run=_run_list_claims,
-            service_entry="claims.list_claims",
-            http=HttpRoute("GET", "/api/claims", ClaimListOut, tags=("claims",)),
-        )
+    list_claims = ActionSpec(
+        name="list_claims",
+        description=(
+            "列出事实台账里的条目（用户逐条核对过的、可以写进简历的事实，含核实状态与"
+            "承担程度）。用户提到「台账」「那条经历有没有核对过」「哪些还没确认」时用它。"
+        ),
+        input_model=ListClaimsInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_claims,
+        service_entry="claims.list_claims",
+        http=HttpRoute("GET", "/api/claims", ClaimListOut, tags=("claims",)),
     )
-    create_reminder = define_action(
-        ActionSpec(
-            name="create_reminder",
-            description=(
-                "新增一条日历提醒（面试、测评截止、催 HR 回复等）。"
-                "只在用户明确要求「帮我记个提醒」时调用；remind_at 必填，ISO 格式。"
-            ),
-            input_model=CreateReminderInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_create_reminder,
-            preview=_preview_create_reminder,
-            service_entry="reminder_service.create_reminder",
-            http=HttpRoute(
-                "POST", "/api/reminders", ReminderOut, status_code=201, tags=("reminders",)
-            ),
-        )
+    create_reminder = ActionSpec(
+        name="create_reminder",
+        description=(
+            "新增一条日历提醒（面试、测评截止、催 HR 回复等）。"
+            "只在用户明确要求「帮我记个提醒」时调用；remind_at 必填，ISO 格式。"
+        ),
+        input_model=CreateReminderInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_create_reminder,
+        preview=_preview_create_reminder,
+        service_entry="reminder_service.create_reminder",
+        http=HttpRoute(
+            "POST", "/api/reminders", ReminderOut, status_code=201, tags=("reminders",)
+        ),
     )
-    update_skill = define_action(
-        ActionSpec(
-            name="update_skill",
-            description=(
-                "修改一个技能的提示词、名称、适用场景或知识文件（只传要改的字段）。"
-                "传 files 会**整体替换**该技能现有的知识文件（不是追加）；不传 files 则不动已有文件。"
-                "限制：提示词不超过 4000 字符；知识文件最多 10 个文件、单文件不超过 20000 字符、"
-                "合计不超过 60000 字符。"
-            ),
-            input_model=UpdateSkillInput,
-            permission=Permission.IRREVERSIBLE_WRITE,
-            run=_run_update_skill,
-            preview=_preview_update_skill,
-            service_entry="assistant.assistant_skills.update_skill",
-            http=HttpRoute(
-                "PUT",
-                "/api/assistant/skills/{skill_id}",
-                AssistantSkillDetail,
-                tags=("assistant",),
-            ),
-        )
+    update_skill = ActionSpec(
+        name="update_skill",
+        description=(
+            "修改一个技能的提示词、名称、适用场景或知识文件（只传要改的字段）。"
+            "传 files 会**整体替换**该技能现有的知识文件（不是追加）；不传 files 则不动已有文件。"
+            "限制：提示词不超过 4000 字符；知识文件最多 10 个文件、单文件不超过 20000 字符、"
+            "合计不超过 60000 字符。"
+        ),
+        input_model=UpdateSkillInput,
+        permission=Permission.IRREVERSIBLE_WRITE,
+        run=_run_update_skill,
+        preview=_preview_update_skill,
+        service_entry="assistant.assistant_skills.update_skill",
+        http=HttpRoute(
+            "PUT",
+            "/api/assistant/skills/{skill_id}",
+            AssistantSkillDetail,
+            tags=("assistant",),
+        ),
     )
-    get_job = define_action(
-        ActionSpec(
-            name="get_job",
-            description="按 id 读取某个岗位的完整内容（含岗位职责与任职要求）。",
-            input_model=GetJobInput,
-            permission=Permission.READ_ONLY,
-            run=_run_get_job,
-            service_entry="profile.profile_relevance.build_job_prompt_text",
-            http=HttpRoute("GET", "/api/jobs/{job_id}", JobOut, tags=("jobs",)),
-        )
+    get_job = ActionSpec(
+        name="get_job",
+        description="按 id 读取某个岗位的完整内容（含岗位职责与任职要求）。",
+        input_model=GetJobInput,
+        permission=Permission.READ_ONLY,
+        run=_run_get_job,
+        service_entry="job.job_views.job_out",
+        http=HttpRoute("GET", "/api/jobs/{job_id}", JobOut, tags=("jobs",)),
     )
     _PILOT_ACTIONS = {
         list_claims.name: list_claims,

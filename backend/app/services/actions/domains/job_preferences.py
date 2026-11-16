@@ -29,7 +29,6 @@ from ....schemas.job_preference import (
     JobPreferenceOut,
     UpdateJobPreferenceInput,
 )
-from ..registry import define_action
 from ..spec import ActionError, ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -267,82 +266,71 @@ _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def job_preference_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）求职偏好域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）求职偏好域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
-    get_job_preferences = define_action(
-        ActionSpec(
-            name="get_job_preferences",
-            description=(
-                "查看用户的求职偏好设定（期望岗位方向、城市、薪资底线、工作方式、排除项、"
-                "写作红线、到岗时间等），返回每条的 pref_id 与取值。"
-                "回答「我设过哪些偏好」「你记住了我什么」或准备更新偏好前先调用它。"
-                "偏好是用户设定、不是经历：只能当行为约束，不得引用为事实。"
-            ),
-            input_model=ListJobPreferencesInput,
-            permission=Permission.READ_ONLY,
-            run=_run_get_job_preferences,
-            service_entry="job_preference_service.list_preferences",
-            tool_fields=(),
-            http=HttpRoute(
-                "GET", "/api/job-preferences", JobPreferenceListOut, tags=("job-preferences",)
-            ),
-        )
+    get_job_preferences = ActionSpec(
+        name="get_job_preferences",
+        description=(
+            "查看用户的求职偏好设定（期望岗位方向、城市、薪资底线、工作方式、排除项、"
+            "写作红线、到岗时间等），返回每条的 pref_id 与取值。"
+            "回答「我设过哪些偏好」「你记住了我什么」或准备更新偏好前先调用它。"
+            "偏好是用户设定、不是经历：只能当行为约束，不得引用为事实。"
+        ),
+        input_model=ListJobPreferencesInput,
+        permission=Permission.READ_ONLY,
+        run=_run_get_job_preferences,
+        service_entry="job_preference_service.list_preferences",
+        tool_fields=(),
+        http=HttpRoute(
+            "GET", "/api/job-preferences", JobPreferenceListOut, tags=("job-preferences",)
+        ),
     )
-    create_job_preference = define_action(
-        ActionSpec(
-            name="create_job_preference",
-            description=(
-                "新增一条求职偏好（长期生效，需用户在确认卡上点「以后都这样」）。"
-                "kind 来自闭集目录；value 按类别传数组或对象（薪资可写「月薪 15k」）。"
-                "用户说「这次 / 暂时 / 先 / 本次」这类临时意愿时也调用本工具：kind 用 session_note，"
-                "此时 value 必须是**一段纯文本**（例：「这次不想去上海，暂时不投上海的岗位」），"
-                "不要传数组或对象；长期还是仅本会话由用户在确认卡上最终点选，不要追问。"
-                "偏好不是经历：绝不能把用户没说过的事实当成偏好或反过来。"
-            ),
-            input_model=CreateJobPreferenceInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_create_job_preference,
-            run_tool=_run_tool_create_job_preference,
-            preview=_preview_create_job_preference,
-            service_entry="job_preference_service.upsert_preference",
-            http=HttpRoute(
-                "POST",
-                "/api/job-preferences",
-                JobPreferenceOut,
-                status_code=201,
-                tags=("job-preferences",),
-            ),
-        )
+    create_job_preference = ActionSpec(
+        name="create_job_preference",
+        description=(
+            "新增一条求职偏好（长期生效，需用户在确认卡上点「以后都这样」）。"
+            "kind 来自闭集目录；value 按类别传数组或对象（薪资可写「月薪 15k」）。"
+            "用户说「这次 / 暂时 / 先 / 本次」这类临时意愿时也调用本工具：kind 用 session_note，"
+            "此时 value 必须是**一段纯文本**（例：「这次不想去上海，暂时不投上海的岗位」），"
+            "不要传数组或对象；长期还是仅本会话由用户在确认卡上最终点选，不要追问。"
+            "偏好不是经历：绝不能把用户没说过的事实当成偏好或反过来。"
+        ),
+        input_model=CreateJobPreferenceInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_create_job_preference,
+        run_tool=_run_tool_create_job_preference,
+        preview=_preview_create_job_preference,
+        service_entry="job_preference_service.upsert_preference",
+        http=HttpRoute(
+            "POST",
+            "/api/job-preferences",
+            JobPreferenceOut,
+            status_code=201,
+            tags=("job-preferences",),
+        ),
     )
-    update_job_preference = define_action(
-        ActionSpec(
-            name="update_job_preference",
-            description=(
-                "修改一条已存在的求职偏好（长期生效，需用户确认）。先用 get_job_preferences "
-                "拿到 pref_id；类别沿用该条偏好，不能在更新时改类别。"
-                "用户说「之前记的城市改成北京」时用它。"
-            ),
-            input_model=UpdateJobPreferenceInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_update_job_preference,
-            run_tool=_run_tool_update_job_preference,
-            preview=_preview_update_job_preference,
-            service_entry="job_preference_service.upsert_preference",
-            http=HttpRoute(
-                "PATCH",
-                "/api/job-preferences/{pref_id}",
-                JobPreferenceOut,
-                tags=("job-preferences",),
-            ),
-        )
+    update_job_preference = ActionSpec(
+        name="update_job_preference",
+        description=(
+            "修改一条已存在的求职偏好（长期生效，需用户确认）。先用 get_job_preferences "
+            "拿到 pref_id；类别沿用该条偏好，不能在更新时改类别。"
+            "用户说「之前记的城市改成北京」时用它。"
+        ),
+        input_model=UpdateJobPreferenceInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_update_job_preference,
+        run_tool=_run_tool_update_job_preference,
+        preview=_preview_update_job_preference,
+        service_entry="job_preference_service.upsert_preference",
+        http=HttpRoute(
+            "PATCH",
+            "/api/job-preferences/{pref_id}",
+            JobPreferenceOut,
+            tags=("job-preferences",),
+        ),
     )
     _ACTIONS = {
         spec.name: spec

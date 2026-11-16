@@ -13,6 +13,9 @@ import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any
 
+import anyio
+
+from ...runtime.blocking import run_sync
 from ...schemas.assistant import AssistantMessageCreate
 from .. import settings_service
 from ..assistant_limits import (
@@ -263,8 +266,11 @@ async def _run_rounds(run: StreamRun) -> AsyncGenerator[str, None]:
             run.assistant_context["reasoning"] = stored
             if truncated:
                 run.assistant_context["reasoning_truncated"] = True
-            update_message_context(
-                run.assistant_message_id, dict(run.assistant_context), factory=run.factory
+            await run_sync(
+                update_message_context,
+                run.assistant_message_id,
+                dict(run.assistant_context),
+                factory=run.factory,
             )
         if not calls:
             break
@@ -345,7 +351,9 @@ async def _run_rounds(run: StreamRun) -> AsyncGenerator[str, None]:
                 collected_sources.extend(new_sources)
                 run.metadata["sources"] = collected_sources
                 # 来源属于用户那条消息：它说明"这次回答参考了哪些公开来源"。
-                update_message_context(run.user_message_id, run.metadata, factory=run.factory)
+                await run_sync(
+                    update_message_context, run.user_message_id, run.metadata, factory=run.factory
+                )
                 yield format_sse(
                     {
                         "type": "sources",
@@ -358,8 +366,11 @@ async def _run_rounds(run: StreamRun) -> AsyncGenerator[str, None]:
         # 助手回复下最自然（来源则属于用户那条消息，见上面的来源分支）。
         run.assistant_context["tool_calls"] = run.tool_records
         run.assistant_context["run_trace"] = run_trace_payload(run.trace)
-        update_message_context(
-            run.assistant_message_id, dict(run.assistant_context), factory=run.factory
+        await run_sync(
+            update_message_context,
+            run.assistant_message_id,
+            dict(run.assistant_context),
+            factory=run.factory,
         )
     if hit_round_limit:
         # 到达轮次上限：停止继续调用工具，让用户看到已经做了什么，并由前端给一个
@@ -377,8 +388,11 @@ async def _finish_success(run: StreamRun) -> AsyncGenerator[str, None]:
     # 而不是拿"去重后的参考来源"下标去对——那会跳错来源。即使这轮没有工具调用/
     # 思考，只要工具搜到过来源，也要在结束前写回。
     run.assistant_context["source_map"] = run.numberer.mapping()
-    update_message_context(
-        run.assistant_message_id, dict(run.assistant_context), factory=run.factory
+    await run_sync(
+        update_message_context,
+        run.assistant_message_id,
+        dict(run.assistant_context),
+        factory=run.factory,
     )
 
     content = "".join(run.parts)
@@ -393,10 +407,16 @@ async def _finish_success(run: StreamRun) -> AsyncGenerator[str, None]:
     # 用量总口径（§2.2-5）：token 缺失是 null（「未知」）不是 0；estimated_* 只在
     # 估算开启时存在。
     usage_payload = run.budget.usage_summary(provider=run.provider)
-    close_run_trace(
-        run.trace, run.assistant_context, run.assistant_message_id, run.factory, status="ok"
+    await run_sync(
+        close_run_trace,
+        run.trace,
+        run.assistant_context,
+        run.assistant_message_id,
+        run.factory,
+        status="ok",
     )
-    saved = finish_assistant_message(
+    saved = await run_sync(
+        finish_assistant_message,
         run.assistant_message_id,
         content=content,
         status="complete",
@@ -425,25 +445,35 @@ async def _finalize_run(
     路径没有 SSE 事件可发（用户取消）。
     """
     trace_status = "cancelled" if status == "cancelled" else "failed"
-    close_run_trace(
-        run.trace, run.assistant_context, run.assistant_message_id, run.factory, trace_status
-    )
-    # 失败路径也收集最后一轮 usage（PR-07-6）：轮循环的 record_round 因异常被跳过，
-    # provider 的 last_usage 在上面的 aclose finally 里已写好。能拿到多少算多少。
-    run.budget.record_round(run.provider)
-    usage_payload = run.budget.usage_summary(
-        provider=run.provider, finish_reason=usage_finish_reason
-    )
-    # 用户取消没有 SSE 事件可发（旧实现只落库）；固定文案与旧实现逐字一致。
-    error_text = (error_event or {}).get("message") or "回复已中断"
-    finish_assistant_message(
-        run.assistant_message_id,
-        content="".join(run.parts),
-        status=status,
-        error=error_text,
-        factory=run.factory,
-        usage=usage_payload,
-    )
+    # 终态落库必须**扛住取消**：这段原本是同步执行（天然不可打断），搬进 worker 之后
+    # 就多了一个 await 点，客户端断开时可能还没写就抛 CancelledError，留下永远 pending
+    # 的消息。shield 让这几步跑完；取消在退出作用域后照常抛出。
+    with anyio.CancelScope(shield=True):
+        await run_sync(
+            close_run_trace,
+            run.trace,
+            run.assistant_context,
+            run.assistant_message_id,
+            run.factory,
+            trace_status,
+        )
+        # 失败路径也收集最后一轮 usage（PR-07-6）：轮循环的 record_round 因异常被跳过，
+        # provider 的 last_usage 在上面的 aclose finally 里已写好。能拿到多少算多少。
+        run.budget.record_round(run.provider)
+        usage_payload = run.budget.usage_summary(
+            provider=run.provider, finish_reason=usage_finish_reason
+        )
+        # 用户取消没有 SSE 事件可发（旧实现只落库）；固定文案与旧实现逐字一致。
+        error_text = (error_event or {}).get("message") or "回复已中断"
+        await run_sync(
+            finish_assistant_message,
+            run.assistant_message_id,
+            content="".join(run.parts),
+            status=status,
+            error=error_text,
+            factory=run.factory,
+            usage=usage_payload,
+        )
     if error_event is not None:
         yield format_sse(error_event)
     if rereraise:

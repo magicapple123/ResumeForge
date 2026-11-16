@@ -24,7 +24,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from ....schemas.common import Page
 from ....schemas.job import JobCreate, JobListOut, JobOut, JobUpdate
 from ...job.job_sorting import JobSort, JobSortOrder
-from ..registry import define_action
 from ..spec import ActionError, ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -205,58 +204,47 @@ _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def job_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）jobs 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）jobs 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
-    list_jobs = define_action(
-        ActionSpec(
-            name="list_jobs",
-            description="列出岗位。可按关键词（标题/公司/描述）、状态或是否收藏筛选。",
-            input_model=ListJobsInput,
-            permission=Permission.READ_ONLY,
-            run=_run_list_jobs,
-            service_entry=None,
-            service_reason="分页/筛选/排序是路由形状（service_entry 无对应服务函数），筛选器在 services/job/job_queries",
-            tool_defaults=(("limit", _DEFAULT_LIST_LIMIT),),
-            ignore_unknown_arguments=True,
-            http=HttpRoute("GET", "/api/jobs", Page[JobListOut], tags=("jobs",)),
-        )
+    list_jobs = ActionSpec(
+        name="list_jobs",
+        description="列出岗位。可按关键词（标题/公司/描述）、状态或是否收藏筛选。",
+        input_model=ListJobsInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_jobs,
+        service_entry=None,
+        service_reason="分页/筛选/排序是路由形状（service_entry 无对应服务函数），筛选器在 services/job/job_queries",
+        tool_defaults=(("limit", _DEFAULT_LIST_LIMIT),),
+        ignore_unknown_arguments=True,
+        http=HttpRoute("GET", "/api/jobs", Page[JobListOut], tags=("jobs",)),
     )
-    create_job = define_action(
-        ActionSpec(
-            name="create_job",
-            description="新增一个岗位。只在用户明确要求录入招聘信息时调用；至少要有 title。",
-            input_model=CreateJobInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_create_job,
-            preview=_preview_create_job,
-            service_entry="job.job_service.create_job_record",
-            tool_defaults=(("recognition_source", _TOOL_CREATE_RECOGNITION_SOURCE),),
-            # 历史行为：POST /api/jobs 会原样接收 parse-text 草稿里的额外字段（skill_tags 等），
-            # 前端"解析→确认→创建"链路依赖这一点；契约层用开关保持旧客户端行为不变。
-            ignore_unknown_arguments=True,
-            http=HttpRoute("POST", "/api/jobs", JobOut, status_code=201, tags=("jobs",)),
-        )
+    create_job = ActionSpec(
+        name="create_job",
+        description="新增一个岗位。只在用户明确要求录入招聘信息时调用；至少要有 title。",
+        input_model=CreateJobInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_create_job,
+        preview=_preview_create_job,
+        service_entry="job.job_service.create_job_record",
+        tool_defaults=(("recognition_source", _TOOL_CREATE_RECOGNITION_SOURCE),),
+        # 历史行为：POST /api/jobs 会原样接收 parse-text 草稿里的额外字段（skill_tags 等），
+        # 前端"解析→确认→创建"链路依赖这一点；契约层用开关保持旧客户端行为不变。
+        ignore_unknown_arguments=True,
+        http=HttpRoute("POST", "/api/jobs", JobOut, status_code=201, tags=("jobs",)),
     )
-    update_job = define_action(
-        ActionSpec(
-            name="update_job",
-            description="修改已有岗位的字段（只传要改的那些）。收藏/取消收藏用 favorite。",
-            input_model=UpdateJobInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_update_job,
-            preview=_preview_update_job,
-            service_entry="job.job_service.update_job_record",
-            ignore_unknown_arguments=True,
-            http=HttpRoute("PUT", "/api/jobs/{job_id}", JobOut, tags=("jobs",)),
-        )
+    update_job = ActionSpec(
+        name="update_job",
+        description="修改已有岗位的字段（只传要改的那些）。收藏/取消收藏用 favorite。",
+        input_model=UpdateJobInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_update_job,
+        preview=_preview_update_job,
+        service_entry="job.job_service.update_job_record",
+        ignore_unknown_arguments=True,
+        http=HttpRoute("PUT", "/api/jobs/{job_id}", JobOut, tags=("jobs",)),
     )
     _ACTIONS = {spec.name: spec for spec in (list_jobs, create_job, update_job)}
     return _ACTIONS

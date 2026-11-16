@@ -6,9 +6,14 @@
 - deleted_at 不出现（删除后本就查不到）；
 - source：这条从哪来（user_stated / user_edited / imported）——**不含 assistant**。
 
-值校验在 pydantic 层调用 services/job_preference_catalog 的逐 kind 校验器：非法 kind、
-非法值形状（城市里带数字/履历名词、薪资解析不了等）在**参数校验阶段**就 422，
-不会进到服务层。
+值校验在 pydantic 层调用词表包（``app/vocabulary/job_preference_kinds``）的逐 kind
+校验器：非法 kind、非法值形状（城市里带数字/履历名词、薪资解析不了等）在**参数校验
+阶段**就 422，不会进到服务层。
+
+为什么取词表而不是 ``services/job_preference_catalog``：契约层不依赖实现层
+（``tests/test_import_direction.py`` 的 ``models-schemas-no-services-api``）。闭集与
+归一化规则本来就不需要数据库/IO，放在词表包里方向才对；服务层那份 catalog 只是
+把同一份规格渲染成接口与注入块文案。
 """
 
 from __future__ import annotations
@@ -18,7 +23,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..services import job_preference_catalog as catalog
+from ..vocabulary import job_preference_kinds as kinds
 
 MAX_NOTE_CHARS = 200
 
@@ -45,7 +50,7 @@ class JobPreferenceOut(BaseModel):
 
     @classmethod
     def from_record(cls, record: Any, *, has_previous: bool = False) -> JobPreferenceOut:
-        spec = catalog.spec_for_kind(record.kind)
+        spec = kinds.spec_for_kind(record.kind)
         return cls(
             pref_id=record.pref_id,
             kind=record.kind,
@@ -90,9 +95,9 @@ class CreateJobPreferenceInput(BaseModel):
 
     @model_validator(mode="after")
     def normalize_value(self) -> CreateJobPreferenceInput:
-        spec = catalog.spec_for_kind(self.kind)
+        spec = kinds.spec_for_kind(self.kind)
         self.kind = spec.kind
-        self.value = catalog.normalize_value(spec.kind, self.value)
+        self.value = kinds.normalize_value(spec.kind, self.value)
         return self
 
 

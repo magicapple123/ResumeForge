@@ -33,7 +33,7 @@ EXPECTED_TOOL_DECLARATIONS = {
     "get_profile": (
         "读取个人资料（已脱敏：不含姓名、电话、邮箱和照片）。想确认某个字段是否已填写时用它。",
         ToolPermission.READ_ONLY,
-        "settings_service.get_assistant_relaxed_mode",
+        "profile.profile_service.project_legacy_profile",
     ),
     "list_application_tracks": (
         "列出求职进度记录，可按状态或公司/岗位/备注关键词筛选。用户问投递到哪一步、"
@@ -44,7 +44,7 @@ EXPECTED_TOOL_DECLARATIONS = {
     "get_application_track": (
         "按 id 读取一条求职进度的完整内容。",
         ToolPermission.READ_ONLY,
-        None,
+        "tracker.track_or_none",
     ),
     "create_application_track": (
         "新增一条求职进度。只在用户明确要求记录投递/筛选/面试/Offer 等进展时调用；"
@@ -148,10 +148,10 @@ def test_migrated_tool_declarations_keep_legacy_name_description_permission():
         assert spec.description == description
         assert spec.permission is permission
         assert spec.service_entry == service_entry
-    # service_entry=None 必须带理由（T23-b 口径），迁移时原样保留。
-    get_track = _all_actions()["get_application_track"]
-    assert get_track.service_reason.strip()
-    assert get_tool("get_application_track").service_reason == get_track.service_reason
+    # 两条原为 service_entry=None 的动作已接到服务层（2026-11 CD-5）：
+    # get_application_track → tracker.track_or_none；get_skill → assistant.skill_views.skill_detail。
+    # 它们的 service_reason 必须随之清空（None 才允许带理由），由上面的逐项断言保证。
+    assert not _all_actions()["get_application_track"].service_reason
 
 
 def test_update_pairs_use_run_tool_for_the_divergent_write_semantics():

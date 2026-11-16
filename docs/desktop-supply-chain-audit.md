@@ -2,17 +2,18 @@
 
 ## 2026-10-14 清偿记录：当前已无已知漏洞与有效豁免
 
-- 保留 Electron 44.7.0 与 electron-builder 26.17.0，不执行 `npm audit fix --force`。仅对
+- 保留 Electron 44.7.0 与 electron-builder 26.17.0，不执行任何自动修复——迁移前这句话写作「不执行 `npm audit fix --force`」，pnpm 侧没有 `audit fix` 的等价物，禁令照旧成立。仅对
   `@electron/get@3.1.0` 的 `global-agent` 使用精确 override `4.1.3`：该版本保留 CommonJS
   `bootstrap()` 接口，移除了 `roarr` / `sprintf-js`，因此无需等待 sprintf-js 自身发布补丁。
 - 官方 registry 的锁文件审计从 **8 moderate 降至 0**；隔离的新目录实际执行
-  `npm ci --ignore-scripts` 后，再使用 builder 所依赖的真实下载器验证代理下载、SHA-256
+  `npm ci --ignore-scripts`（迁移前的写法；pnpm 下等价命令是 `pnpm install --ignore-scripts`）后，再使用 builder 所依赖的真实下载器验证代理下载、SHA-256
   校验与 `NO_PROXY` 绕过。测试只传输虚构字节，没有下载或执行安装器。
 - `audit-baseline.json` 当前为 `packages: []`，移除已清偿的豁免，不删除历史审计记录。
   CI 门禁现在检查 **low / moderate / high / critical 全部等级**；新告警必须修复，或登记
   经审查、有明确到期日的豁免。原有到期、等级升级与新公告负向测试保持有效。
 - Windows 审计命令改为通过已知 Node 可执行文件运行 `npm-cli.js`，始终 `shell: false`。
   `--registry` 只作为单个参数传递；不再让 `.cmd` shell 解释调用者输入的元字符。
+  **（2026-11 迁移到 pnpm 后这一实现已整段移除）**：pnpm 12 是原生 `pnpm.exe`，没有 `pnpm-cli.js` 可供 Node 直接运行；Windows 上 `spawn(shell:false)` 也跑不了 `pnpm.cmd`，`bin/pnpm.mjs` 是  `stdio:'inherit'` 父进程读不到 stdout。门禁改成消费调用方存下来的报告文件（见下方「门禁（CI 强制）」），  于是既没有 spawn，也没有命令行参数可注入了。
 - 本轮不覆盖现有 `desktop/node_modules` 或 Electron 二进制。重新安装/CI/发布构建必须使用
   更新后的锁文件；本地旧依赖缓存不等于新的可部署依赖树。
 
@@ -21,13 +22,13 @@
 
 ## 2026-10-13 升级记录（PR-06 豁免清偿）
 
-2026-10-13 执行 `electron ^33.0.0 → ^44.7.0` 与 `electron-builder ^25.1.8 → ^26.17.0` 升级（仅锁文件变更，由 CI desktop-shell 打包门禁 + desktop-shell-smoke 真启动作业全链路验证）。升级后 `npm audit` 从 **19 条（4 moderate / 14 high / 1 critical）降到 8 条（全 moderate）**：全部 critical/high（含 critical 的 tar、electron 自身的 38 条 GHSA）随升级清零。剩余 8 条全部源自单一根公告 **GHSA-hp3w-g68c-fv3c**（sprintf-js 无界精度说明符 DoS），当时按 moderate 登记豁免至 2027-01-31。此前“必须等待 sprintf-js 补丁”的判断并不完整：次日发现并验证可替换代理依赖链，现已清偿，见上方记录。
+2026-10-13 执行 `electron ^33.0.0 → ^44.7.0` 与 `electron-builder ^25.1.8 → ^26.17.0` 升级（仅锁文件变更，由 CI desktop-shell 打包门禁 + desktop-shell-smoke 真启动作业全链路验证）。升级后 `npm audit`（当时的口径；迁移到 pnpm 后同一测量用 `pnpm audit`）从 **19 条（4 moderate / 14 high / 1 critical）降到 8 条（全 moderate）**：全部 critical/high（含 critical 的 tar、electron 自身的 38 条 GHSA）随升级清零。剩余 8 条全部源自单一根公告 **GHSA-hp3w-g68c-fv3c**（sprintf-js 无界精度说明符 DoS），当时按 moderate 登记豁免至 2027-01-31。此前“必须等待 sprintf-js 补丁”的判断并不完整：次日发现并验证可替换代理依赖链，现已清偿，见上方记录。
 
-> 下表保留升级前的逐条审计记录供追溯，**它描述的是升级前状态，不是当前口径**；**当前权威豁免清单是 `desktop/scripts/audit-baseline.json`**（当前为空，CI 门禁 `desktop/scripts/check-npm-audit.js` 消费它）。electron-builder 26 的配置 schema/产物布局变化由 CI 打包校验与 asar require 门禁兜底。
+> 下表保留升级前的逐条审计记录供追溯，**它描述的是升级前状态，不是当前口径**；**当前权威豁免清单是 `desktop/scripts/audit-baseline.json`**（2026-11 起登记了 `minimatch` 一条 moderate 豁免——GHSA-g3hv-75wg-m249 在 electron-builder 26 的构建链里没有 semver 兼容修复，豁免至 2027-01-30；CI 门禁 `desktop/scripts/check-pnpm-audit.js` 消费它）。electron-builder 26 的配置 schema/产物布局变化由 CI 打包校验与 asar require 门禁兜底。
 
 ## 范围与结论（**历史快照：升级前**，2026-10-13 上午）
 
-对 `desktop/` 运行 `npm audit`（registry.npmjs.org，2026-10-13）：**19 个受影响包条目**
+对 `desktop/` 运行 `npm audit`（registry.npmjs.org，2026-10-13；迁移后同一命令是 `pnpm audit`）：**19 个受影响包条目**
 （4 moderate / 14 high / 1 critical，critical 为 `tar`）。
 
 **当时的结论：本轮不升级任何依赖版本，全部 19 条登记为带到期日的豁免（waiver）。**（同日下午已按上面「2026-10-13 升级记录」执行了 Electron 44 / electron-builder 26 升级，19 条降为 8 条 moderate；本节以下内容仅作历史对照。）依据：
@@ -40,14 +41,19 @@
   `desktop-shell` + `desktop-shell-smoke` 全链路后再切。
 - `tar`（critical，12 条公告）安装为 6.2.1，被 `node-gyp@9` 的 `^6.1.2` 钉死；修复线在 7.5.21+，
   不可达。tar 只在**构建期**（依赖安装时解包）被使用，**不进 app.asar、不进 payload**，运行时无暴露面。
-- `npm audit fix` / `audit fix --force` 被审计规则禁止（会重写 node_modules / 强升主版本）。
+- 自动修复被审计规则禁止：`npm audit fix` / `audit fix --force` 会重写 node_modules / 强升主版本；pnpm 侧没有 `audit fix` 的等价物，**同样禁止**（要做只能按下面的豁免流程逐条复核）。
 
 ## 门禁（CI 强制）
 
-- 脚本：`desktop/scripts/check-npm-audit.js`（只读运行 `npm audit --json`，不改锁文件）。
+- 脚本：`desktop/scripts/check-pnpm-audit.js`（消费 `pnpm audit --json` **的报告文件**，`--file` 必填；只读，不改锁文件）。
+- 报告形状：pnpm 写的是 npm v6 的 `{ advisories, metadata }`，**没有 `vulnerabilities` 键**。门禁为此有三道守卫：
+  - **形状守卫**：认不出 `advisories` / `vulnerabilities` 形状（含 `null`、`{"advisories":[]}` 这类空数组）就**直接失败**，绝不回落成空对象——旧逻辑遇到 pnpm 报告会退化成 `checked=0` 还打印 OK，等于门禁空转。
+  - **一致性守卫**：`advisories` 为空但 `metadata.vulnerabilities` 各等级之和 >0，视为报告被 `--audit-level` 裁剪过，同样失败。
+  - **聚合守卫**：同一包的多个公告按最高 severity 聚合、但**每个公告 id 都保留**，第二个未登记公告不会被聚合吞掉。
+- 正因为 `--audit-level` 会裁剪 advisories 并据此决定退出码，**`desktop-shell` 这个作业不得给它加 `--audit-level`**（前端 `dependency-audit` 作业才用 `pnpm audit --prod --audit-level=high`）。
 - 基线：`desktop/scripts/audit-baseline.json`——逐包登记 severity、类别（runtime / build）、
-  公告 id 清单、豁免决定与**到期日（`until`）**；当前无有效豁免。
-- CI 的 `desktop-shell` 作业运行该门禁。以下情形**失败**：
+  公告 id 清单、豁免决定与**到期日（`until`）**。当前登记 15 条：1 条带公告 id（`minimatch` 的 GHSA-g3hv-75wg-m249，moderate，dev 构建链），其余 14 条是它的依赖边；到期日统一 2027-01-30，到期即失败、强制复审。注意 desktop 的 `minimatch` 仍是漏洞版本（靠这条豁免），只有 frontend 用 overrides 升到了 11.0.8——这个不对称是既有决策，不是遗漏。
+- CI 的 `desktop-shell` 作业运行该门禁（`pnpm audit --json > audit.json` 之后传 `--file`；退出码 1 表示有 findings、交由基线判定，>1 才算审计本身执行失败）。以下情形**失败**：
   1. 出现基线之外的**任意等级新受影响包**；
   2. 已登记包出现**新公告 id**（新的 GHSA）；
   3. 已登记包的 severity **升级**（如 moderate → high）；

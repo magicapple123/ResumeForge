@@ -26,10 +26,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from ...runtime.blocking import run_sync
 from ...schemas.setting import SearchConfig
 from ..usage_counters import KIND_SEARCH, record_external_usage
 from ..web_search_settings import get_search_config_with_secrets, resolve_search_deepseek_key
@@ -112,25 +114,59 @@ def _notes_of(cards: CardSection) -> list[str]:
     return list(dict.fromkeys(cards.failures))
 
 
-async def run_company_research(
+@dataclass(frozen=True)
+class ResearchRuntime:
+    """调研的准备段产物：搜索配置 + Key。
+
+    两者都只能从请求会话（或全局配置文件）解出来，解完就可以把连接还回去——
+    随后的卡片/简报两条路都是网络调用，一秒钟都不该再占着 SQLite 连接。
+    """
+
+    config: SearchConfig
+    api_key: str
+
+
+def load_research_runtime(db: Session | None, *, api_key: str | None = None) -> ResearchRuntime:
+    """同步准备段：读搜索配置与 DeepSeek Key（``db`` 为 ``None`` 时用出厂默认）。
+
+    读完就归还请求连接：后面两条路都是网络调用，一次调研可能几十秒。
+    """
+    try:
+        config: SearchConfig = (
+            get_search_config_with_secrets(db) if db is not None else SearchConfig()
+        )
+        key = (
+            api_key
+            if api_key is not None
+            else (resolve_search_deepseek_key(db) if db is not None else "")
+        )
+        return ResearchRuntime(config=config, api_key=key)
+    finally:
+        if db is not None:
+            db.close()
+
+
+def record_research_usage(db: Session | None, brief: dict[str, Any]) -> None:
+    """同步收尾段：把本轮实际发生的搜索次数记进账本（旁路，失败不打断用户）。"""
+    _record_search_usage(db, brief)
+
+
+async def run_company_research_with(
+    runtime: ResearchRuntime,
     *,
     company: str,
     role: str = "",
     jd: str = "",
     deep: bool = False,
-    db: Session | None = None,
-    api_key: str | None = None,
 ) -> dict[str, Any]:
-    """一次调研：并发取卡片与简报，合并成前端要的一屏结果。
+    """跑一次调研（**不碰数据库**）：并发取卡片与简报并合并成前端要的一屏结果。
 
     Args:
+        runtime: :func:`load_research_runtime` 在 worker 里解出的配置快照。
         company: 公司名（必填）。
         role: 目标岗位名，可选。
         jd: 用户粘贴的招聘描述，可选；只作为**不可信数据**交给模型。
-        deep: 深度调研开关（默认关）。开会切到 ``thinking: enabled`` 并把工具调用
-            上限提到 20 次，费用按查询词条数计。
-        db: 数据库会话；用于读搜索配置与记用量。为 ``None`` 时用默认 ``SearchConfig``。
-        api_key: **仅供离线测试与本地实机验证**覆盖 Key；正常路径保持 ``None``。
+        deep: 深度调研开关（默认关）。
 
     Returns:
         ``{company, role, deep, cards, brief, sources, notes, usage}``。
@@ -141,23 +177,15 @@ async def run_company_research(
     started = time.perf_counter()
     name, role_text, jd_text = normalize_inputs(company, role, jd)
 
-    config: SearchConfig = get_search_config_with_secrets(db) if db is not None else SearchConfig()
-    key = (
-        api_key
-        if api_key is not None
-        else (resolve_search_deepseek_key(db) if db is not None else "")
-    )
-
-    card_task = asyncio.ensure_future(build_company_cards(name, role_text, config))
+    card_task = asyncio.ensure_future(build_company_cards(name, role_text, runtime.config))
     brief_task = asyncio.ensure_future(
-        _brief_or_reason(name, role_text, jd_text, deep=deep, api_key=key)
+        _brief_or_reason(name, role_text, jd_text, deep=deep, api_key=runtime.api_key)
     )
     cards_result, brief = await asyncio.gather(card_task, brief_task)
     cards = cards_result if isinstance(cards_result, CardSection) else CardSection()
 
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     brief["elapsed_ms"] = int(brief.get("elapsed_ms") or elapsed_ms)
-    _record_search_usage(db, brief)
 
     usage = {
         "deep": deep,
@@ -190,10 +218,49 @@ async def run_company_research(
     }
 
 
+async def run_company_research(
+    *,
+    company: str,
+    role: str = "",
+    jd: str = "",
+    deep: bool = False,
+    db: Session | None = None,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """带请求会话的完整编排（工具层与离线测试的入口）。
+
+    HTTP 路由**不走这里**：它拿到的是请求会话，若把它当实参传进一个 ``async def``，
+    判据就看不出同步段有没有被搬出去。路由改为显式拆成
+    ``run_sync(load_research_runtime)`` → :func:`run_company_research_with` →
+    ``run_sync(record_research_usage)``，与本函数的三段完全同源。
+
+    Args:
+        company: 公司名（必填）。
+        role: 目标岗位名，可选。
+        jd: 用户粘贴的招聘描述，可选；只作为**不可信数据**交给模型。
+        deep: 深度调研开关（默认关）。
+        db: 数据库会话；用于读搜索配置与记用量。为 ``None`` 时用默认 ``SearchConfig``。
+        api_key: **仅供离线测试与本地实机验证**覆盖 Key；正常路径保持 ``None``。
+
+    Raises:
+        ValueError: 公司名为空或输入超长。
+    """
+    runtime = await run_sync(load_research_runtime, db, api_key=api_key)
+    result = await run_company_research_with(
+        runtime, company=company, role=role, jd=jd, deep=deep
+    )
+    await run_sync(record_research_usage, db, result["brief"])
+    return result
+
+
 __all__ = [
     "MAX_COMPANY_CHARS",
     "MAX_JD_CHARS",
     "MAX_ROLE_CHARS",
+    "ResearchRuntime",
+    "load_research_runtime",
     "normalize_inputs",
+    "record_research_usage",
     "run_company_research",
+    "run_company_research_with",
 ]

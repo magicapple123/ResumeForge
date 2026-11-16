@@ -5,6 +5,7 @@
 ``api/drill.py`` 搬进来的——那两处的共同点是"请求会话已经关掉（模型调用期间不能占着
 连接池），回来时得再开一条"，属于服务层的会话策略，不该由路由直接摸 ``SessionLocal``。
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -14,6 +15,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ...models.drill import (
+    DRILL_STATUS_ACTIVE,
     DRILL_STATUS_FINISHED,
     EVIDENCE_PARTIAL,
     EVIDENCE_STATUSES,
@@ -22,7 +24,12 @@ from ...models.drill import (
     DrillContract,
     DrillSession,
 )
-from ...schemas.drill import DrillContractOut, DrillSessionOut, DrillTurnOut
+from ...schemas.drill import (
+    DrillContractOut,
+    DrillSessionBrief,
+    DrillSessionOut,
+    DrillTurnOut,
+)
 
 
 def finish_session(session: DrillSession, review: dict[str, Any]) -> None:
@@ -67,6 +74,7 @@ def session_summary(session: DrillSession) -> dict[str, Any]:
         "contradictory_count": counts.get("contradictory", 0),
         "status_counts": counts,
     }
+
 
 def session_out(record: DrillSession) -> DrillSessionOut:
     """深挖记录的响应视图（含契约、轮次、复盘、汇总与"当前这一问"）。
@@ -115,6 +123,58 @@ def list_sessions(db: Session, *, status: str = "") -> list[DrillSession]:
     if status:
         query = query.filter(DrillSession.status == status)
     return query.order_by(DrillSession.created_at.desc()).all()
+
+
+#: 读不到会话时的对外文案，**当前两个使用者**：``api/drill_units.py`` 的 ``session_or_404``
+#: 与助手动作 ``get_drill_report``（走 ``session_detail_or_none`` + 本常量）。
+#: （``api/drill.py::read_session`` 这个未挂路由的薄壳已在 RF-03a 收尾时删除——它零引用，
+#: 留着会让人误以为 ``GET /api/drill/{id}`` 走的是它，实际走的是动作 ``get_drill_report``。）
+#: **仍未收口的地方**（字面值相同、行为零差异，统一属于清理，不在 RF-03a 范围）：
+#: ``api/drill.py`` 的 ``delete_session``、``api/drill_units.py`` 里 4 处「并发删除」兜底
+#: （带 ``# pragma: no cover``）；``services/drill/session_open.py`` 另有自己的
+#: ``DrillSessionOpenError(404, ...)``，那套错误类型是设计选择，不并入本常量。
+SESSION_NOT_FOUND_DETAIL = "这场深挖记录不存在或已被删除"
+
+
+class DrillSessionReadError(Exception):
+    """只读入口的领域错误：``status_code``/``detail`` 由 HTTP 边界各自映射。
+
+    服务层不 import FastAPI。目前只有两类：状态取值不在白名单（422）与读不到会话（404）。
+    路由与助手动作都翻成同一个 ``HTTPException(status_code, detail)``，detail 逐字一致。
+    """
+
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+def _require_known_status(status: str) -> None:
+    """状态白名单：只接受 active / finished（空串表示不限）。"""
+    if status and status not in (DRILL_STATUS_ACTIVE, DRILL_STATUS_FINISHED):
+        raise DrillSessionReadError(422, "未知的会话状态")
+
+
+def list_session_briefs(db: Session, *, status: str = "") -> list[DrillSessionBrief]:
+    """深挖列表的响应视图（``GET /api/drill`` 与动作 ``list_drill_sessions`` 共用）。
+
+    状态白名单校验与"行 -> ``DrillSessionBrief``"的投影都只此一份：动作若自己再校验一遍，
+    "未知状态给 422"这句话迟早有一侧忘记跟上。
+    """
+    _require_known_status(status)
+    return [DrillSessionBrief.model_validate(item) for item in list_sessions(db, status=status)]
+
+
+def session_detail_or_none(db: Session, session_id: int) -> DrillSessionOut | None:
+    """按 id 取深挖详情；不存在（或已并发删除）时返回 ``None``。
+
+    不存在是"取不到"而不是服务层错误：HTTP 侧要 404、助手侧要同一句 404 文案，
+    判空与抛错的位置由两个边界各自决定（文案见 ``SESSION_NOT_FOUND_DETAIL``）。
+    """
+    record = db.get(DrillSession, session_id)
+    if record is None:
+        return None
+    return session_out(record)
 
 
 def drop_empty_session(session_id: int) -> None:

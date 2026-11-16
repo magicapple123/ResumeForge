@@ -15,13 +15,32 @@
 （``fetch` + ``consumeSSE``），同一条连接上没法再发控制帧。本地单用户应用里 cancel 用
 一条独立请求最省事；生成器只在 delta 边界检查一次——LLM 流式通常 50–200ms 一个 delta，
 所以打断延迟就落在这个量级，这也正是 26H 要观测的那个数。
+
+## RF-02：生成器里的同步数据库段全部搬进 worker
+
+异步生成器**跑在事件循环上**，所以它内部每一次 ``db.get`` / ``commit`` / 关系懒加载都是
+一次事件循环阻塞（SQLite ``busy_timeout`` 是 5 秒，一次锁等待就够把同进程的 SSE 与其他
+请求一起卡住）。本模块因此把"碰 Session 的那一段"整体抽成下面的同步工作单元，改由
+``run_sync`` 在 worker 里跑：
+
+- ``_turn_state``：幂等键 + 是否早就答完（回放结果在 worker 里就组装成 pydantic DTO）；
+- ``_build_turn_messages``：读材料（简历文件 / 记录反序列化）+ 转录拼提示词；
+- ``_persist_barge_in``：插话回滚落库；
+- ``_persist_turn``：面试官那句回应落库（**在 yield ``done`` 之前**）；
+- ``_mark_by_id``：这一轮没走完时标 ``interrupted``。
+
+跨 ``await`` 只传 ``answer_id`` 与会话行；不再把"刚写进去的那条消息"当参数传来传去。
+生成器因此只吃一个 ``AnswerPrep``（准备段在 ``interview_units`` 里产出），收盘钩子同理；
+``db`` 仍是显式形参，但它只允许作为 ``run_sync(...)`` 的第一实参出现。
 """
 
+import asyncio
 import json
 import logging
 import re
 import time
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
@@ -30,6 +49,7 @@ from ..models.interview import (
     InterviewMessage,
     InterviewSession,
 )
+from ..runtime.blocking import run_sync
 from ..schemas.interview import (
     InterviewAnswerResult,
 )
@@ -46,6 +66,7 @@ from ..services.interview.voice_turns import (
     turn_completed,
 )
 from ..services.llm.base import LLMError
+from .interview_units import AnswerPrep
 from .interview_voice import TurnControl, register_turn, unregister_turn
 
 logger = logging.getLogger(__name__)
@@ -144,6 +165,107 @@ def _replay_result(
     )
 
 
+@dataclass(frozen=True)
+class _TurnState:
+    """这一轮的开始状态：幂等键 + （如果早就答完）现成的回放结果。"""
+
+    client_turn_id: str | None = None
+    replay: InterviewAnswerResult | None = None
+
+
+def _turn_state(db: Session, session: InterviewSession, answer_id: int, to_detail) -> _TurnState:
+    """读齐这一轮开始需要的状态（工作单元）。
+
+    回答行按 **id** 重新取：调用方跨 ``await`` 传的是 id，不是那条随时可能过期的实例。
+    """
+    answer = db.get(InterviewMessage, answer_id)
+    if answer is None:
+        # 并发删除（极少见）：没有幂等键可判，当作全新一轮，后面按 id 继续。
+        return _TurnState()
+    client_turn_id = _client_turn_id_of(answer)
+    if client_turn_id is not None and turn_completed(session, answer):
+        return _TurnState(
+            client_turn_id=client_turn_id,
+            replay=_replay_result(session, answer, to_detail),
+        )
+    return _TurnState(client_turn_id=client_turn_id)
+
+
+def _build_turn_messages(
+    db: Session,
+    session: InterviewSession,
+    index: int,
+    resume_text_of,
+    job_text_of,
+) -> list[dict[str, str]]:
+    """拼本轮提示词（工作单元）。
+
+    材料要走简历文件读与记录反序列化，转录要读 ``session.messages``（可能懒加载）——
+    两者都是同步 IO，必须离开事件循环。拼好的消息是纯 dict 列表，跨 ``await`` 没有风险。
+    """
+    messages = build_interview_messages(
+        session,
+        index=index,
+        resume_text=resume_text_of(db, session),
+        job_text=job_text_of(db, session),
+    )
+    # 26E：上一轮被打断时，本轮补一句"只说到 X"；没有中断时原样返回。
+    return append_interruption_notice(messages, session)
+
+
+def _persist_barge_in(
+    db: Session,
+    session: InterviewSession,
+    answer_id: int,
+    *,
+    index: int,
+    played_text: str,
+    played_chars: int,
+    generated_chars: int,
+) -> None:
+    """插话收口落库（工作单元）：回滚到"已播出"并写回那条面试官回应。"""
+    answer = db.get(InterviewMessage, answer_id)
+    if answer is None:  # pragma: no cover - 并发删除
+        return
+    record_barge_in(
+        db,
+        session,
+        answer,
+        index=index,
+        played_text=played_text,
+        played_chars=played_chars,
+        generated_chars=generated_chars,
+    )
+
+
+def _persist_turn(
+    db: Session,
+    session: InterviewSession,
+    content: str,
+    context: dict,
+) -> None:
+    """面试官那句回应落库 + 提交刷新（工作单元）。
+
+    **在 ``yield done`` 之前调用**：客户端在这一刻之后断开，"这一轮已经答完"这个事实
+    已经在盘上了，重连/重试走幂等回放，不会重写一遍。
+    """
+    add_message(session, role="interviewer", content=content, context=context)
+    db.commit()
+    db.refresh(session)
+
+
+def _refresh_turn(db: Session, session: InterviewSession) -> None:
+    """只刷新（没有任何待提交改动时用），让 ``_to_detail`` 读到的都是内存值。"""
+    db.refresh(session)
+
+
+def _mark_by_id(db: Session, answer_id: int, mark_interrupted) -> None:
+    """把"这一轮没走完"写回去（工作单元）：按 id 取那条回答再交给钩子。"""
+    answer = db.get(InterviewMessage, answer_id)
+    if answer is not None:
+        mark_interrupted(db, answer)
+
+
 def _log_turn(
     control: TurnControl,
     *,
@@ -181,44 +303,48 @@ def make_answer_stream(
 ):
     """收尾钩子由调用方注入（``api/interview.py`` 传的是"只收盘"的 ``_auto_close``）。
 
-    钩子签名固定 ``(db, session, provider)``：需求 4 之后它不再生成报告，但仍然收
-    provider，这样以后要改回"收盘即出报告"时调用点不用动。
+    钩子签名固定 ``(prep)``：``prep`` 是准备段（``interview_units.AnswerPrep``）产出的
+    冻结结果，里面带着会话行、provider、轮次序号与回答 id。需求 4 之后钩子不再生成报告，
+    但仍然需要 provider，这样以后要改回"收盘即出报告"时调用点不用动。
     """
 
     async def _answer_stream_events(
         db: Session,
-        session: InterviewSession,
-        provider,
-        index: int,
-        answer: InterviewMessage,
+        prep: AnswerPrep,
     ) -> AsyncIterator[str]:
         """流式生成一轮回答的 SSE 事件流。
 
-        ``answer`` 是这一轮刚写库的候选人回答。只有"面试官那句回应真的落库了"、或者
-        "轮数用尽/模型收尾这类**正常答完**"才算这一轮走完（``completed``）；中途被取消
+        ``prep.answer_id`` 是这一轮刚写库的候选人回答。只有"面试官那句回应真的落库了"、
+        或者"轮数用尽/模型收尾这类**正常答完**"才算这一轮走完（``completed``）；中途被取消
         （客户端断开、用户点「停止本轮」、用户插话）或模型这一轮失败时，``finally`` 把这条
         回答标成 ``interrupted``——**不删它**，用户可以重答。
+
+        ``db`` 仍然留在形参上：它是本生成器里**唯一**允许出现的会话引用，且只作为
+        ``run_sync(...)`` 的第一实参使用（守卫 ``test_async_route_thread_boundary`` 的口径）。
+        其余状态一律读 ``prep`` 的属性。
         """
-        client_turn_id = _client_turn_id_of(answer)
+        session = prep.session
+        index = prep.index
+        answer_id = prep.answer_id
+        state = await run_sync(_turn_state, db, session, answer_id, _to_detail)
         # ① 幂等回放：同一轮重复提交（这一轮早就答完）→ 不重新生成，直接回放 done。
-        if client_turn_id is not None and turn_completed(session, answer):
-            replayed = _replay_result(session, answer, _to_detail)
+        if state.replay is not None:
             logger.info(
                 "interview_voice replay session=%d index=%d client_turn=%s",
                 session.id,
                 index,
-                client_turn_id,
+                state.client_turn_id,
             )
             yield _sse(
                 {
                     "type": "done",
                     "replayed": True,
-                    "result": json.loads(replayed.model_dump_json()),
+                    "result": json.loads(state.replay.model_dump_json()),
                 }
             )
             return
 
-        control = register_turn(session.id, client_turn_id)
+        control = register_turn(session.id, state.client_turn_id)
         if control is None:
             # ② 同一轮已经有一条生成流在跑：不重复计轮、不重复生成，也不动库。
             yield _sse({"type": "error", "detail": "这一轮正在生成中，请稍候"})
@@ -240,9 +366,12 @@ def make_answer_stream(
                 # 否则 ``finally`` 会把这条答完的回答标成 interrupted，界面上出现一个点了
                 # 必然 409（面试已结束）的「重新回答」。
                 completed = True
-                await _close_session(db, session, provider)
+                await _close_session(prep)
                 result = InterviewAnswerResult(
-                    session=_to_detail(session), feedback="", finished=True, needs_report=True
+                    session=await run_sync(_to_detail, session),
+                    feedback="",
+                    finished=True,
+                    needs_report=True,
                 )
                 yield _sse({"type": "done", "result": json.loads(result.model_dump_json())})
                 return
@@ -250,15 +379,15 @@ def make_answer_stream(
             extractor = _QuestionDeltaExtractor()
             parts: list[str] = []
             try:
-                messages = build_interview_messages(
+                messages = await run_sync(
+                    _build_turn_messages,
+                    db,
                     session,
-                    index=index,
-                    resume_text=_resume_text(db, session),
-                    job_text=_session_job_text(db, session),
+                    index,
+                    _resume_text,
+                    _session_job_text,
                 )
-                # 26E：上一轮被打断时，本轮补一句"只说到 X"；没有中断时原样返回。
-                messages = append_interruption_notice(messages, session)
-                async for delta in provider.stream_chat_events(messages):
+                async for delta in prep.provider.stream_chat_events(messages):
                     if control.cancelled:
                         break
                     if delta.text:
@@ -279,14 +408,13 @@ def make_answer_stream(
                     interrupted = True
                     generated = control.sent_text
                     generated_chars = len(generated)
-                    played_text, rolled_back_chars = rollback_text(
-                        generated, control.played_chars
-                    )
+                    played_text, rolled_back_chars = rollback_text(generated, control.played_chars)
                     played_chars = len(played_text)
-                    record_barge_in(
+                    await run_sync(
+                        _persist_barge_in,
                         db,
                         session,
-                        answer,
+                        answer_id,
                         index=index,
                         played_text=played_text,
                         played_chars=played_chars,
@@ -313,41 +441,47 @@ def make_answer_stream(
 
             # ``done`` 时这句 question 按提示词约定就是收尾语：标记出来，``_close_session``
             # 之后的 ``_auto_close`` 才不会以为还没收尾、再补一段告别。
-            add_message(
+            await run_sync(
+                _persist_turn,
+                db,
                 session,
-                role="interviewer",
-                content=question,
-                context={
+                question,
+                {
                     "index": index,
                     "rounds": session.rounds,
                     "feedback": feedback,
                     **({"closing": True} if done else {}),
                 },
             )
-            db.commit()
             # 面试官这句回应落库了 → 这一轮就结束了。之后再被取消（比如正赶上出报告）只是
             # "报告没来得及生成"，属于另一件事：面试官已经接上话，不该再让用户重答这一轮。
             completed = True
             if done:
                 # 模型提前收尾：question 按提示词约定是收尾语。同样只收盘、不出报告
                 # （需求 4）：报告要等用户在决策卡上点「结束并生成报告」。
-                await _close_session(db, session, provider)
+                await _close_session(prep)
                 result = InterviewAnswerResult(
-                    session=_to_detail(session),
+                    session=await run_sync(_to_detail, session),
                     feedback=feedback,
                     finished=True,
                     needs_report=True,
                 )
             else:
-                db.refresh(session)
+                await run_sync(_refresh_turn, db, session)
                 result = InterviewAnswerResult(
-                    session=_to_detail(session), feedback=feedback, finished=False
+                    session=await run_sync(_to_detail, session),
+                    feedback=feedback,
+                    finished=False,
                 )
             yield _sse({"type": "done", "result": json.loads(result.model_dump_json())})
         finally:
             unregister_turn(control)
             if not completed:
-                _mark_interrupted(db, answer)
+                # 落库在 worker 里跑，并 ``shield`` 起来：客户端断开时外层已被取消，而"这一轮
+                # 没答完"这个标记必须落地（否则用户看不到「重新回答」）；``mark_answer_interrupted``
+                # 对已经 complete 的消息返回 False 直接跳过，所以"done 之后再断开"不会改坏
+                # 已经答完的一轮，也不会重复写。
+                await asyncio.shield(run_sync(_mark_by_id, db, answer_id, _mark_interrupted))
             _log_turn(
                 control,
                 index=index,

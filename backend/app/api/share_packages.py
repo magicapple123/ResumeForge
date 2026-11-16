@@ -24,7 +24,7 @@ from ..schemas.share_package import (
 )
 from ..services import trash
 from ..services.actions import add_action_route
-from ..services.actions.catalog import all_actions
+from ..services.actions.catalog import registered_action
 from ..services.data_backup.asset_safety import safe_asset_path
 from ..services.data_backup.paths import BackupError
 from ..services.privacy import RedactionOptions as PrivacyRedactionOptions
@@ -33,18 +33,15 @@ from ..services.share_package import (
     create_share_package,
     ensure_package_files,
     import_comments,
-    list_share_packages,
+    list_share_package_briefs,
     package_directory,
     read_comments,
-    share_package_brief,
     share_package_or_none,
     share_package_out,
     share_root,
 )
 
 logger = logging.getLogger(__name__)
-
-
 
 
 router = APIRouter(prefix="/api/share-packages", tags=["share-packages"])
@@ -88,15 +85,20 @@ def create_share_package_entry(payload: SharePackageCreate, db: Session = Depend
     return share_package_out(package)
 
 
-add_action_route(router, all_actions()["list_share_packages"], route_path="")
+add_action_route(router, registered_action("list_share_packages"), route_path="")
+
+
 def read_share_packages(
     keyword: str = Query(default=""),
     limit: int = Query(default=200, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
-    return [
-        share_package_brief(item) for item in list_share_packages(db, keyword=keyword, limit=limit)
-    ]
+    """分享包列表（最近的在前，可按标题关键词过滤）。
+
+    薄壳：查询与简报投影都在 ``services.share_package.list_share_package_briefs``
+    （助手动作 ``list_share_packages`` 调同一个函数）。
+    """
+    return list_share_package_briefs(db, keyword=keyword, limit=limit)
 
 
 @router.get("/{share_id}", response_model=SharePackageOut)

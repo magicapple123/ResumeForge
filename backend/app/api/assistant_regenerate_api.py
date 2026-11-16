@@ -16,6 +16,8 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -25,6 +27,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.assistant import ChatMessage
 from ..models.profile import utcnow
+from ..runtime.blocking import run_sync
 from ..schemas.assistant import AssistantMessageCreate, ConversationSurface
 from ..services.assistant.assistant_conversations import (
     SUPERSEDED_STATUS,
@@ -98,6 +101,99 @@ def _replay_payload(
     )
 
 
+@dataclass(frozen=True)
+class _RegeneratePrep:
+    """重新生成的准备结果（worker 产出）：事件循环只拿普通结构建 SSE，不再碰 Session。"""
+
+    replay: AssistantMessageCreate
+    attachments: list[dict[str, Any]]
+    provider: Any
+    history: list[dict[str, Any]]
+    context_blocks: list[str]
+    context_metadata: dict[str, Any]
+    user_message_id: int
+    new_message_id: int
+    generated_title: str
+    system_prompt: str
+    quoted: dict[str, Any] | None
+    audit_scope: dict[str, Any]
+
+
+def _prepare_regeneration(
+    db: Session,
+    conversation_id: int,
+    message_id: int,
+    payload: AssistantRegenerateRequest,
+    surface: ConversationSurface,
+) -> _RegeneratePrep:
+    """读齐重跑所需的一切，并写入"旧回答 superseded + 新消息 pending"。
+
+    **顺序与拆分前逐字一致**：先把所有可能失败的准备做完（provider、系统提示词），再动
+    数据库——否则"旧回答已标 superseded、新消息没建出来"会留下一段点不开的历史。
+    审计上下文的值在这里算好带走，由路由在事件循环上调用 ``set_ambient_scope``。
+    """
+    conversation = conversation_or_404(db, conversation_id, surface)
+    target, user_message = _regenerable_pair(db, conversation_id, message_id)
+    replay = _replay_payload(user_message, payload)
+    relaxed_mode = resolve_assistant_relaxed_mode(db, payload.relaxed_mode)
+    # 目标语言优先取用户保存的界面语言；没保存过就用默认审计语言（与消息入口同口径）。
+    language = get_ui_locale(db) or DEFAULT_AUDIT_LANGUAGE
+    # 引用的岗位/简历不存在时，`load_local_context` 自己抛固定文案的 404。
+    context_blocks, context_metadata = load_local_context(db, replay, relaxed=relaxed_mode)
+    config = get_llm_config(db)
+    if not config.base_url or not config.model:
+        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
+    # 历史只取原问题**之前**的消息：问题本身要作为"本轮输入"，不能再进历史一遍。
+    history = history_snapshot(db, conversation_id, before_id=user_message.id)
+    attachments = list(user_message.attachments or [])
+    quoted_snapshot = (
+        user_message.context.get("quoted") if isinstance(user_message.context, dict) else None
+    )
+    generated_title = conversation.title
+    provider = create_provider(config.without_thinking())
+    provider.request_overrides = {"reasoning_effort": payload.reasoning_effort}
+    system_prompt = _system_prompt(
+        db, relaxed=relaxed_mode, conversation_id=conversation_id, client_context=None
+    )
+    superseded_context = dict(target.context or {})
+    new_message = ChatMessage(
+        conversation_id=conversation_id,
+        role="assistant",
+        status="pending",
+        model=config.model,
+    )
+    db.add(new_message)
+    db.flush()
+    superseded_context["superseded_by"] = new_message.id
+    target.context = superseded_context
+    target.status = SUPERSEDED_STATUS
+    conversation.updated_at = utcnow()
+    db.commit()
+    db.refresh(new_message)
+    new_message_id = int(new_message.id)
+    user_message_id = int(user_message.id)
+    db.close()
+    return _RegeneratePrep(
+        replay=replay,
+        attachments=attachments,
+        provider=provider,
+        history=history,
+        context_blocks=context_blocks,
+        context_metadata=context_metadata,
+        user_message_id=user_message_id,
+        new_message_id=new_message_id,
+        generated_title=generated_title,
+        system_prompt=system_prompt,
+        quoted=quoted_snapshot,
+        audit_scope={
+            "input_scope": "assistant_context",
+            "masked": not relaxed_mode,
+            "language": language,
+            "budget": DEFAULT_AUDIT_BUDGET,
+        },
+    )
+
+
 def register_regenerate_routes(router: APIRouter) -> None:
     """把重新生成路由挂到已存在的 /api/assistant router 上。"""
 
@@ -110,71 +206,33 @@ def register_regenerate_routes(router: APIRouter) -> None:
         surface: ConversationSurface = Query(default="page"),
         db: Session = Depends(get_db),
     ):
-        conversation = conversation_or_404(db, conversation_id, surface)
-        target, user_message = _regenerable_pair(db, conversation_id, message_id)
-        replay = _replay_payload(user_message, payload)
-        relaxed_mode = resolve_assistant_relaxed_mode(db, payload.relaxed_mode)
-        set_ambient_scope(
-            input_scope="assistant_context",
-            masked=not relaxed_mode,
-            language=get_ui_locale(db) or DEFAULT_AUDIT_LANGUAGE,
-            budget=DEFAULT_AUDIT_BUDGET,
+        # RF-02：准备段（读会话/原消息/放宽模式/引用上下文/配置/历史 + 写新消息行并提交）
+        # 是**一整段同步数据库工作**，交给 worker；事件循环只 await 模型流。
+        prep = await run_sync(
+            _prepare_regeneration, db, conversation_id, message_id, payload, surface
         )
-        # 引用的岗位/简历不存在时，`load_local_context` 自己抛固定文案的 404。
-        context_blocks, context_metadata = load_local_context(db, replay, relaxed=relaxed_mode)
-        config = get_llm_config(db)
-        if not config.base_url or not config.model:
-            raise HTTPException(status_code=400, detail="尚未配置大模型 API")
-        # 历史只取原问题**之前**的消息：问题本身要作为"本轮输入"，不能再进历史一遍。
-        history = history_snapshot(db, conversation_id, before_id=user_message.id)
-        attachments = list(user_message.attachments or [])
-        quoted_snapshot = (
-            user_message.context.get("quoted") if isinstance(user_message.context, dict) else None
-        )
-        generated_title = conversation.title
-        # 先把所有可能失败的准备做完（provider 创建、系统提示词），再动数据库：
-        # 否则"旧回答已标 superseded、新消息没建出来"会留下一段点不开的历史。
-        provider = create_provider(config.without_thinking())
-        provider.request_overrides = {"reasoning_effort": payload.reasoning_effort}
-        system_prompt = _system_prompt(
-            db, relaxed=relaxed_mode, conversation_id=conversation_id, client_context=None
-        )
-        superseded_context = dict(target.context or {})
-        new_message = ChatMessage(
-            conversation_id=conversation_id,
-            role="assistant",
-            status="pending",
-            model=config.model,
-        )
-        db.add(new_message)
-        db.flush()
-        superseded_context["superseded_by"] = new_message.id
-        target.context = superseded_context
-        target.status = SUPERSEDED_STATUS
-        conversation.updated_at = utcnow()
-        db.commit()
-        db.refresh(new_message)
-        new_message_id = new_message.id
-        db.close()
+        # 审计 ContextVar 只能在事件循环上写：worker 线程拿的是 context 副本，
+        # 在里面 set 不会传播到 SSE 生成器（用量会退回中间件默认值）。
+        set_ambient_scope(**prep.audit_scope)
         logger.info(
             "助手重新生成 conversation_id=%s old_message_id=%s new_message_id=%s",
             conversation_id,
             message_id,
-            new_message_id,
+            prep.new_message_id,
         )
         return StreamingResponse(
             stream_message_events(
-                payload=replay,
-                attachments=attachments,
-                provider=provider,
-                history=history,
-                context_blocks=context_blocks,
-                context_metadata=context_metadata,
-                user_message_id=user_message.id,
-                assistant_message_id=new_message_id,
-                generated_title=generated_title,
-                system_prompt=system_prompt,
-                quoted=quoted_snapshot,
+                payload=prep.replay,
+                attachments=prep.attachments,
+                provider=prep.provider,
+                history=prep.history,
+                context_blocks=prep.context_blocks,
+                context_metadata=prep.context_metadata,
+                user_message_id=prep.user_message_id,
+                assistant_message_id=prep.new_message_id,
+                generated_title=prep.generated_title,
+                system_prompt=prep.system_prompt,
+                quoted=prep.quoted,
                 conversation_id=conversation_id,
             ),
             media_type="text/event-stream",

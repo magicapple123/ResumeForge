@@ -13,7 +13,9 @@
 from pathlib import Path
 
 import pytest
+from app.services.assistant.message_dispatch import assistant_audit_scope
 from app.services.llm.usage_tasks import (
+    DEFAULT_AUDIT_BUDGET,
     ambient_scope,
     scope_for_path,
     set_ambient_scope,
@@ -45,7 +47,16 @@ def test_assistant_declares_scope_with_relaxed_masking() -> None:
     source = _read("app/services/assistant/message_dispatch.py")
     assert "set_ambient_scope(" in source
     # 放宽模式开 = 不脱敏，这是 #35 审计表里「脱敏」一列的口径。
-    assert "masked=not relaxed_mode" in source
+    # RF-02 起这份 scope 以 dict 形式随 MessageDispatch 带到事件循环（worker 里的
+    # ContextVar 写入不会传播回 SSE），所以断言**行为**而不是拼源码字符串——
+    # 后者会被"值从哪来"的实现细节绑死，而且改一次写法就得改守卫。
+    relaxed = assistant_audit_scope(relaxed_mode=True, language="zh-CN")
+    strict = assistant_audit_scope(relaxed_mode=False, language="zh-CN")
+    assert relaxed["masked"] is False, "放宽模式必须不脱敏"
+    assert strict["masked"] is True
+    assert strict["input_scope"] == "assistant_context"
+    assert strict["budget"] == DEFAULT_AUDIT_BUDGET
+    assert strict["language"] == "zh-CN"
 
 
 def test_settings_probe_declares_minimal_scope() -> None:
@@ -146,8 +157,11 @@ def test_job_analysis_declares_language_and_budget() -> None:
 
 
 def test_assistant_and_settings_probe_declare_budget() -> None:
-    assistant = _read("app/services/assistant/message_dispatch.py")
-    assert "budget=DEFAULT_AUDIT_BUDGET" in assistant
+    # 助手：预算必须是**有值**的应用默认上界（A1：None 分不清"没声明"与"不限制"）。
+    # RF-02 起 scope 以 dict 下发，断行为而不是拼源码。
+    assert assistant_audit_scope(relaxed_mode=False, language="zh-CN")["budget"] == (
+        DEFAULT_AUDIT_BUDGET
+    )
     settings = _read("app/api/settings.py")
     assert "SETTINGS_PROBE_TOKEN_BUDGET" in settings
     assert settings.count("set_ambient_scope(") >= 2

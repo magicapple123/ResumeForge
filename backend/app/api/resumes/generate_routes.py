@@ -21,6 +21,8 @@ services/resume/generation_task_start.py；本模块只做 HTTP 错误映射、�
 打桩点随之改到 generation_entry，见 tests/test_dataset_scope_stream.py。
 """
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -30,6 +32,7 @@ from app.api import resumes as _api  # patch 锚点：调用期从包命名空�
 from ...database import get_db
 from ...models.resume import ResumeGenerateTask
 from ...runtime import dataset_scope
+from ...runtime.blocking import run_sync
 from ...runtime.dataset_scope import DatasetScopeError
 from ...schemas.resume import GenerateRequest, GenerateTaskOut
 from ...services.career_scenarios.resolve import CareerContextError
@@ -37,6 +40,7 @@ from ...services.rag.rag_receipt import get_rag_receipt
 from ...services.resume.generation_entry import (
     GenerationEntryError,
     complete_generation_entry,
+    declare_generation_scope,
     log_frozen_context,
     prepare_generation_entry,
     stream_generation_events,
@@ -54,6 +58,26 @@ from ...services.resume.resume_generate_runner import (
 from ._shared import _format_sse
 
 router = APIRouter()
+
+
+def _prepare_entry_and_commit(db: Session, payload: GenerateRequest):
+    """冻结入口 + 提交快照行，作为**一个**同步工作单元在线程池里跑。
+
+    两件事必须在同一个 worker 里连着做：``prepare_generation_entry`` 读岗位、冻结资料
+    快照、写快照追溯行（都是同步 DB），紧接着的提交是这条事务的收尾；中间若回到事件
+    循环，快照行就一直挂在未提交事务里，同进程的其它请求会等这把 SQLite 写锁。
+    """
+    entry = prepare_generation_entry(
+        db,
+        payload,
+        # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 等对
+        # app.api.resumes.get_llm_config / create_provider 的 patch 契约。
+        load_llm_config=_api.get_llm_config,
+        create_provider=_api.create_provider,
+    )
+    # 事务边界在本层：快照追溯行先提交，之后才允许生成流把它回写 resume_id。
+    db.commit()
+    return entry
 
 
 @router.post("/generate")
@@ -86,21 +110,25 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         )
 
     try:
-        entry = prepare_generation_entry(
-            db,
+        # 数据边界是 ContextVar：只能在事件循环上声明，worker 里写回不来（见
+        # generation_entry.declare_generation_scope）。
+        declare_generation_scope(payload)
+        # 冻结 + 提交是这条事务的终态写：用 ``asyncio.shield`` 包住，客户端在这一刻断开
+        # 也不能把事务撕成两半（快照行与租约必须成对，否则后面的切换会一直被挡住）。
+        entry = await asyncio.shield(run_sync(_prepare_entry_and_commit, db, payload))
+        # 冻结工厂从**租约身份**派生（PR-03）：旁路检索、事实基线与保存段都只读这一份
+        # 身份，不重读当前库——即便释放租约与保存之间有并发切换也不串写。
+        factory = dataset_scope.frozen_session_factory(lease.identity)
+        await complete_generation_entry(
+            entry,
             payload,
-            # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 等对
-            # app.api.resumes.get_llm_config / create_provider 的 patch 契约。
-            load_llm_config=_api.get_llm_config,
-            create_provider=_api.create_provider,
+            dataset_id=lease.identity.dataset_id,
+            session_factory=factory,
         )
-        # 事务边界在本层：快照追溯行先提交，之后才允许生成流把它回写 resume_id。
-        db.commit()
-        await complete_generation_entry(db, entry, payload, dataset_id=lease.identity.dataset_id)
         # 流式模型调用可能持续数分钟；快照完成后立即释放请求 Session，避免占满连接池。
-        db.close()
+        await run_sync(db.close)
     except CareerContextError as exc:
-        db.close()
+        await run_sync(db.close)
         lease.release()
         return JSONResponse(
             status_code=exc.status_code,
@@ -114,10 +142,6 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         # 泄漏的租约挡到超时。
         lease.release()
         raise
-
-    # 冻结工厂从**租约身份**派生（PR-03）：不重读当前库，保存段绝不漂到
-    # 切换后的新库——即便租约释放与保存之间有并发切换也不串写。
-    factory = dataset_scope.frozen_session_factory(lease.identity)
 
     async def event_stream():
         try:

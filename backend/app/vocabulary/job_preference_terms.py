@@ -1,0 +1,139 @@
+# SPDX-License-Identifier: Apache-2.0
+"""求职偏好的枚举词表与目录选项（纯数据，无归一化逻辑）。
+
+为什么在 ``app/vocabulary``：契约层（``app/schemas/job_preference.py``）在 Pydantic
+校验阶段就要按 kind 规范化取值、并且要用 kind 的中文标签回显，而
+``app/services/job_preference_catalog.py`` 是**实现层**——schema 反向 import services
+是一条真实的架构回边（``tests/test_import_direction.py`` 原先为它登记了例外）。
+词表属于最底层，把"取值闭集 + 中文展示 + 归一化规则"放到这里，方向就正过来了：
+vocabulary ← models / schemas / services，vocabulary 自己谁都不依赖。
+
+本模块只放**数据**：别名映射（``*_MAP``）与展示顺序（``*_OPTIONS``）。
+两类数据成对维护：``*_MAP`` 是归一化输入别名（协议值 + 常见中文写法），
+``*_OPTIONS`` 是目录与前端共用的展示顺序——**顺序本身是行为契约**，不要重排。
+
+归一化函数与 kind 目录表在 :mod:`app.vocabulary.job_preference_kinds`；两者同属
+词表包，内部可以互相 import（``tests/test_import_direction.py`` 的
+``vocabulary-stdlib-only`` 只禁止 vocabulary 依赖 vocabulary 之外的 ``app.*``）。
+"""
+
+from __future__ import annotations
+
+CHINESE_NUMBERS: dict[str, int] = {
+    "一": 1,
+    "二": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+    "十": 10,
+}
+
+WORK_MODE_MAP: dict[str, str] = {
+    "onsite": "onsite",
+    "现场": "onsite",
+    "坐班": "onsite",
+    "线下": "onsite",
+    "hybrid": "hybrid",
+    "混合": "hybrid",
+    "混合办公": "hybrid",
+    "半远程": "hybrid",
+    "remote": "remote",
+    "远程": "remote",
+    "线上": "remote",
+    "居家": "remote",
+}
+OVERTIME_MAP: dict[str, str] = {
+    "accept": "accept",
+    "接受": "accept",
+    "可以": "accept",
+    "没问题": "accept",
+    "不限": "accept",
+    "limited": "limited",
+    "少量": "limited",
+    "偶尔": "limited",
+    "有限": "limited",
+    "尽量少": "limited",
+    "reject": "reject",
+    "不接受": "reject",
+    "拒绝": "reject",
+    "不加班": "reject",
+    "不能加班": "reject",
+}
+TONE_MAP: dict[str, str] = {
+    "professional": "professional",
+    "专业": "professional",
+    "正式": "professional",
+    "稳重": "professional",
+    "plain": "plain",
+    "平实": "plain",
+    "朴实": "plain",
+    "简洁": "plain",
+    "warm": "warm",
+    "温和": "warm",
+    "亲切": "warm",
+    "有温度": "warm",
+}
+# 用工形式：外包既不是行业也不是工作方式（现场/远程），必须单列一类，否则「不投外包」
+# 只能被就近塞进「排除行业」，模型自己都会向用户承认"分类是就近选择"。
+EMPLOYMENT_TYPE_MAP: dict[str, str] = {
+    "full_time": "full_time",
+    "fulltime": "full_time",
+    "正式": "full_time",
+    "全职": "full_time",
+    "正职": "full_time",
+    "internship": "internship",
+    "intern": "internship",
+    "实习": "internship",
+    "outsourcing": "outsourcing",
+    "outsourced": "outsourcing",
+    "外包": "outsourcing",
+    "驻场": "outsourcing",
+    "part_time": "part_time",
+    "parttime": "part_time",
+    "兼职": "part_time",
+    "dispatch": "dispatch",
+    "labor_dispatch": "dispatch",
+    "劳务派遣": "dispatch",
+    "派遣": "dispatch",
+}
+
+# ===== 枚举选项（目录与前端共用） =====
+
+WORK_MODE_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("onsite", "现场"),
+    ("hybrid", "混合"),
+    ("remote", "远程"),
+)
+OVERTIME_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("accept", "接受"),
+    ("limited", "尽量少"),
+    ("reject", "不接受"),
+)
+REDLINE_TONE_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("professional", "专业"),
+    ("plain", "平实"),
+    ("warm", "温和"),
+)
+EMPLOYMENT_TYPE_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("full_time", "正职"),
+    ("internship", "实习"),
+    ("outsourcing", "外包"),
+    ("part_time", "兼职"),
+    ("dispatch", "劳务派遣"),
+)
+
+__all__ = [
+    "CHINESE_NUMBERS",
+    "EMPLOYMENT_TYPE_MAP",
+    "EMPLOYMENT_TYPE_OPTIONS",
+    "OVERTIME_MAP",
+    "OVERTIME_OPTIONS",
+    "REDLINE_TONE_OPTIONS",
+    "TONE_MAP",
+    "WORK_MODE_MAP",
+    "WORK_MODE_OPTIONS",
+]

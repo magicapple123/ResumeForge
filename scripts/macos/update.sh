@@ -188,11 +188,17 @@ rf_sync_dependencies() {
         return 0
     fi
 
-    requirements="$RF_PROJECT_ROOT/backend/requirements.txt"
+    runtime_lock=$(rf_runtime_lock_path "$RF_PROJECT_ROOT/backend")
     venv_python="${RF_VENV_DIR}/bin/python3"
-    if [ -f "$requirements" ] && [ -x "$venv_python" ]; then
+    if [ -f "$runtime_lock" ] && [ -x "$venv_python" ]; then
         log_info "==> 正在同步后端依赖"
-        if ! "$venv_python" -m pip install --disable-pip-version-check -r "$requirements"; then
+        # 与首次安装、发布构建、CI 同一份锁与同一组参数（--require-hashes）。
+        # 更新器换了程序文件却没换掉闭包，就是"新版本启动即崩"的经典形态。
+        # 锁坏了不在这里 die：程序文件已经换好了，硬中断会把一次成功更新报成失败。
+        # 但也绝不退回 requirements.txt——只是跳过，下次启动会明确报错并给出处理办法。
+        if ! problem=$(rf_runtime_lock_problem "$runtime_lock"); then
+            log_warn "生产依赖锁不可用（${problem}），已跳过依赖同步。下次启动会明确报错。"
+        elif ! "$venv_python" -m pip install --disable-pip-version-check --require-hashes -r "$runtime_lock"; then
             log_warn "后端依赖同步失败，但程序文件已经更新。下次启动会再试一次。"
         fi
     else
@@ -202,8 +208,10 @@ rf_sync_dependencies() {
     if [ -f "$RF_PROJECT_ROOT/frontend/package.json" ] &&
         [ -d "$RF_PROJECT_ROOT/frontend/node_modules" ] &&
         rf_find_system_node_runtime; then
-        log_info "==> 正在同步前端依赖（npm ci）"
-        if ! (cd "$RF_PROJECT_ROOT/frontend" && "$RF_NPM_PATH" ci --no-audit --no-fund); then
+        rf_resolve_pnpm_command
+        log_info "==> 正在同步前端依赖（pnpm install --frozen-lockfile）"
+        if ! (cd "$RF_PROJECT_ROOT/frontend" &&
+            "${RF_PNPM_COMMAND[@]}" install --frozen-lockfile); then
             log_warn "前端依赖同步失败，但程序文件已经更新。下次启动会再试一次。"
         fi
     else

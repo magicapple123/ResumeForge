@@ -44,7 +44,7 @@ def _configure(monkeypatch, *, answers: list[str] | None = None) -> dict[str, in
                 return follow_ups.pop(0) if follow_ups else "已答完"
             return json.dumps(queue.pop(0) if queue else {"question": "收尾", "done": True})
 
-    async def ask(_db, _session_, _provider):
+    async def ask(_turn):
         payload = queue.pop(0) if queue else {"question": "收尾", "feedback": "", "done": True}
         return payload["question"], payload.get("feedback", ""), payload.get("done", False)
 

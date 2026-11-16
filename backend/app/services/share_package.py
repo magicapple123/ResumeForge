@@ -34,7 +34,7 @@ from ..models.share_package import (
 )
 from ..runtime.log_fields import safe_log_text
 from ..schemas.resume_document import document_to_json
-from ..schemas.share_package import ShareCommentsOut
+from ..schemas.share_package import ShareCommentsOut, SharePackageBrief
 from . import trash
 from .export_pipeline import ExportRequest, RenderContext, build_export
 from .pdf_exporter import ResumePDFError
@@ -332,6 +332,19 @@ def list_share_packages(db: Session, *, keyword: str = "", limit: int = 200) -> 
     )
 
 
+def list_share_package_briefs(
+    db: Session, *, keyword: str = "", limit: int = 200
+) -> list[SharePackageBrief]:
+    """分享包列表的响应视图（列表页与助手动作 ``list_share_packages`` 共用）。
+
+    查询口径在 :func:`list_share_packages`，这里只补"行 -> ``SharePackageBrief``"的投影：
+    两处各写一遍列表推导时，改一个字段（例如标题回落到文件名）就会只改到其中一处。
+    """
+    return [
+        share_package_brief(item) for item in list_share_packages(db, keyword=keyword, limit=limit)
+    ]
+
+
 def share_package_or_none(db: Session, share_id: int) -> SharePackage | None:
     """取一条分享包；已在回收站里的当作不存在。"""
     return trash.get_live(db, SharePackage, share_id)
@@ -389,6 +402,7 @@ __all__ = [
     "create_share_token",
     "ensure_package_files",
     "import_comments",
+    "list_share_package_briefs",
     "list_share_packages",
     "package_directory",
     "read_comments",

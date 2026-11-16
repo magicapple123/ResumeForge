@@ -24,22 +24,26 @@ from ..schemas.interview_history import (
     QuestionBankRecordUpdate,
 )
 from ..services.actions import add_action_route
-from ..services.actions.catalog import all_actions
+from ..services.actions.catalog import registered_action
 from ..services.interview import interview_history
 
 logger = logging.getLogger(__name__)
 
 
-
-
 router = APIRouter(prefix="/api/interview", tags=["interview-history"])
 
 
-add_action_route(router, all_actions()["list_question_banks"], route_path="/question-banks")
+add_action_route(router, registered_action("list_question_banks"), route_path="/question-banks")
+
+
 def read_question_banks(
     limit: int = Query(default=100, ge=1, le=200), db: Session = Depends(get_db)
 ):
-    """题库历史列表（只含未删除的，最近更新的在前）。"""
+    """题库历史列表（只含未删除的，最近更新的在前）。
+
+    薄壳：查询在 ``services.interview.interview_history.list_question_banks``
+    （助手动作 ``list_question_banks`` 调同一个函数）。
+    """
     return interview_history.list_question_banks(db, limit=limit)
 
 
@@ -74,9 +78,15 @@ def update_question_bank_entry(
     return record
 
 
-add_action_route(router, all_actions()["list_reviews"], route_path="/reviews")
+add_action_route(router, registered_action("list_reviews"), route_path="/reviews")
+
+
 def read_reviews(limit: int = Query(default=100, ge=1, le=200), db: Session = Depends(get_db)):
-    """复盘历史列表（只含未删除的，最近更新的在前）。"""
+    """复盘历史列表（只含未删除的，最近更新的在前）。
+
+    薄壳：查询在 ``services.interview.interview_history.list_reviews``
+    （助手动作 ``list_reviews`` 调同一个函数）。
+    """
     return interview_history.list_reviews(db, limit=limit)
 
 

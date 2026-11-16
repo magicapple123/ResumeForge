@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from app.api.interview_units import AnswerPrep
 from app.models.job import Job
 from app.models.resume import ResumeRecord
 
@@ -38,3 +39,18 @@ def targets(db_session) -> dict[str, int]:
 def start_interview(client, db_session, **overrides):
     """POST /api/interview 的简写：自动带上必填的关联岗位与关联简历。"""
     return client.post("/api/interview", json={**targets(db_session), **overrides})
+
+
+def answer_prep(db_session, session, provider, index: int, answer_id: int) -> AnswerPrep:
+    """构造流式生成器要的那份**准备结果**（与 ``prepare_stream_answer`` 返回的同形状）。
+
+    RF-02 之后生成器只吃一个 ``AnswerPrep``：跨 ``await`` 传的是会话行 + provider +
+    轮次序号 + 回答 id，生成器自己按 id 读那条回答。用例直接调生成器时要手工拼这一份。
+    """
+    return AnswerPrep(
+        db=db_session,
+        session=session,
+        provider=provider,
+        index=index,
+        answer_id=int(answer_id),
+    )

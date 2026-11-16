@@ -57,10 +57,10 @@ try {
     # npx looks in `D:\npm-cache\_npx\...` for a cached global package and
     # picks up a mismatched vite/tsc (measured: "This is not the tsc command
     # you are looking for", then vite build cannot find index.html). Going
-    # through npm scripts has the same problem.
+    # through a package-manager script (npm or pnpm) has the same problem.
     $vite = Join-Path $frontend "node_modules\.bin\vite.cmd"
     $tsc = Join-Path $frontend "node_modules\.bin\tsc.cmd"
-    if (-not (Test-Path $vite)) { throw "Cannot find $vite. Run npm ci in frontend first." }
+    if (-not (Test-Path $vite)) { throw "Cannot find $vite. Run pnpm install in frontend first." }
 
     # Type-check first: `vite build` does not do it, and tsc is what catches
     # type errors.

@@ -40,7 +40,6 @@ from ....schemas.knowledge import (
     KnowledgeUpdate,
 )
 from ..legacy import tool_runner
-from ..registry import define_action
 from ..spec import ActionError, ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -259,93 +258,72 @@ _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def knowledge_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）knowledge 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）knowledge 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
-    list_knowledge = define_action(
-        ActionSpec(
-            name="list_knowledge",
-            description=(
-                "列出知识库条目（面经总结/简历技巧/求职策略等成文内容），可按关键词或分类筛选。"
-                "用户问「知识库里有什么」「有没有关于 XX 的笔记」时用它。"
-            ),
-            input_model=ListKnowledgeInput,
-            permission=Permission.READ_ONLY,
-            run=_run_list_knowledge,
-            service_entry="knowledge_service.list_knowledge",
-            tool_defaults=(("limit", _DEFAULT_TOOL_LIST_LIMIT),),
-            http=HttpRoute(
-                "GET", "/api/knowledge", list[KnowledgeEntrySummary], tags=("knowledge",)
-            ),
-        )
+    list_knowledge = ActionSpec(
+        name="list_knowledge",
+        description=(
+            "列出知识库条目（面经总结/简历技巧/求职策略等成文内容），可按关键词或分类筛选。"
+            "用户问「知识库里有什么」「有没有关于 XX 的笔记」时用它。"
+        ),
+        input_model=ListKnowledgeInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_knowledge,
+        service_entry="knowledge_service.list_knowledge",
+        tool_defaults=(("limit", _DEFAULT_TOOL_LIST_LIMIT),),
+        http=HttpRoute("GET", "/api/knowledge", list[KnowledgeEntrySummary], tags=("knowledge",)),
     )
-    get_knowledge = define_action(
-        ActionSpec(
-            name="get_knowledge",
-            description="按 id 读取知识库里某一条的完整正文（支持 Markdown）。",
-            input_model=GetKnowledgeInput,
-            permission=Permission.READ_ONLY,
-            run=_run_get_knowledge,
-            service_entry="knowledge_service.knowledge_or_none",
-            http=HttpRoute(
-                "GET", "/api/knowledge/{knowledge_id}", KnowledgeOut, tags=("knowledge",)
-            ),
-        )
+    get_knowledge = ActionSpec(
+        name="get_knowledge",
+        description="按 id 读取知识库里某一条的完整正文（支持 Markdown）。",
+        input_model=GetKnowledgeInput,
+        permission=Permission.READ_ONLY,
+        run=_run_get_knowledge,
+        service_entry="knowledge_service.knowledge_or_none",
+        http=HttpRoute("GET", "/api/knowledge/{knowledge_id}", KnowledgeOut, tags=("knowledge",)),
     )
-    create_knowledge = define_action(
-        ActionSpec(
-            name="create_knowledge",
-            description=(
-                "把一段成文内容新增进知识库（标题必填，正文支持 Markdown）。"
-                "只在用户明确要求保存/记录时调用。"
-            ),
-            input_model=CreateKnowledgeInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_create_knowledge,
-            preview=_preview_create_knowledge,
-            service_entry="knowledge_service.create_knowledge",
-            tool_defaults=(("source", _TOOL_CREATE_SOURCE),),
-            http=HttpRoute(
-                "POST", "/api/knowledge", KnowledgeOut, status_code=201, tags=("knowledge",)
-            ),
-        )
+    create_knowledge = ActionSpec(
+        name="create_knowledge",
+        description=(
+            "把一段成文内容新增进知识库（标题必填，正文支持 Markdown）。"
+            "只在用户明确要求保存/记录时调用。"
+        ),
+        input_model=CreateKnowledgeInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_create_knowledge,
+        preview=_preview_create_knowledge,
+        service_entry="knowledge_service.create_knowledge",
+        tool_defaults=(("source", _TOOL_CREATE_SOURCE),),
+        http=HttpRoute(
+            "POST", "/api/knowledge", KnowledgeOut, status_code=201, tags=("knowledge",)
+        ),
     )
-    update_knowledge = define_action(
-        ActionSpec(
-            name="update_knowledge",
-            description="修改知识库里已有的一条（只传要改的字段，其余保持不变）。",
-            input_model=UpdateKnowledgeInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_update_knowledge,
-            run_tool=tool_runner(
-                "app.services.assistant_tools.report_tools", "_tool_update_knowledge"
-            ),
-            preview=_preview_update_knowledge,
-            service_entry="knowledge_service.update_knowledge",
-            tool_fields=(
-                "knowledge_id",
-                "title",
-                "category",
-                "tags",
-                "content",
-                "source",
-                "reason",
-                "company",
-                "job_id",
-                "summary",
-                "key_points",
-            ),
-            http=HttpRoute(
-                "PUT", "/api/knowledge/{knowledge_id}", KnowledgeOut, tags=("knowledge",)
-            ),
-        )
+    update_knowledge = ActionSpec(
+        name="update_knowledge",
+        description="修改知识库里已有的一条（只传要改的字段，其余保持不变）。",
+        input_model=UpdateKnowledgeInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_update_knowledge,
+        run_tool=tool_runner("app.services.assistant_tools.report_tools", "_tool_update_knowledge"),
+        preview=_preview_update_knowledge,
+        service_entry="knowledge_service.update_knowledge",
+        tool_fields=(
+            "knowledge_id",
+            "title",
+            "category",
+            "tags",
+            "content",
+            "source",
+            "reason",
+            "company",
+            "job_id",
+            "summary",
+            "key_points",
+        ),
+        http=HttpRoute("PUT", "/api/knowledge/{knowledge_id}", KnowledgeOut, tags=("knowledge",)),
     )
     _ACTIONS = {
         spec.name: spec

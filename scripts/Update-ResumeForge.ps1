@@ -10,7 +10,7 @@ Two modes:
   * plain folder  -> download the repository zip and copy program files over
 
 同步依赖前会先停掉仍在运行的简历通（按 `runtime\*.json` 的记录校验 PID、启动时间与
-命令行），否则 `npm ci` 删不掉被前端占着的 `node_modules`，会以 EPERM 失败。
+命令行），否则 pnpm 删不掉被前端占着的 `node_modules`，会以 EPERM 失败。
 
 Run it from the project root with:  update.cmd
 #>
@@ -292,7 +292,7 @@ function Stop-FrontendPid {
     $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
     if ($null -eq $process) { return }
     $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue).CommandLine
-    if ($commandLine -notmatch "npm\.cmd.*\brun\s+dev") {
+    if ($commandLine -notmatch "(?:pnpm|npm)(?:\.cmd)?.*\brun\s+dev") {
         Write-Warning "Skipped stopping PID $ProcessId because it is not the recorded ResumeForge frontend."
         return
     }
@@ -303,10 +303,10 @@ function Stop-FrontendPid {
 }
 
 <#
-依赖同步要**删掉** `frontend\node_modules` 再重装（npm ci）、还要覆盖
-`backend\.venv` 里的文件，而正在运行的简历通正把这些文件锁在手里：`npm ci` 删不掉
+依赖同步要**删掉** `frontend\node_modules` 再重装（pnpm install --frozen-lockfile）、还要覆盖
+`backend\.venv` 里的文件，而正在运行的简历通正把这些文件锁在手里：pnpm 删不掉
 `node_modules\@esbuild\win32-x64\esbuild.exe` 就会以 EPERM 中断（2026-09-28 有用户
-双击 update.cmd 时就是这么失败的），用户看到的是一页 npm 日志，看不出"关掉应用就能好"。
+双击 update.cmd 时就是这么失败的），用户看到的是一页 pnpm 日志，看不出"关掉应用就能好"。
 
 应用内「检查更新」走的是 -ArchivePath 分支，那里已经先等应用退出、再按传进来的 PID
 停前端。手动双击 update.cmd 没有任何这类机制，所以在这里补上；**只补手动那条路径**——
@@ -655,7 +655,7 @@ if ($SkipDependencies) {
     Write-Step "Dependency sync skipped (-SkipDependencies)"
 } else {
     # git 分支在这里再停一次：上面只 pull 了代码，还没碰过文件，所以停在这一步之前
-    # 都来得及；而 npm ci 删 node_modules、pip 覆盖 .venv 时必须有文件锁的进程先退出。
+    # 都来得及；而 pnpm 删 node_modules、pip 覆盖 .venv 时必须有文件锁的进程先退出。
     # 另外两条分支**不能**在这里再调一次：手动 zip 分支在覆盖之前已经停过了，而
     # `-ArchivePath` 分支更不能停——更新器是那个后端的子进程，`taskkill /T` 会连
     # 更新器自己一起杀掉。
@@ -665,14 +665,18 @@ if ($SkipDependencies) {
         Backup-UserData
     }
 
-    $requirements = Join-Path $ProjectRoot "backend\requirements.txt"
+    # 依赖同步装的是**生产锁**，与首次安装、发布运行时构建、CI 走同一份文件与
+    # 同一组参数（--require-hashes）。更新器换了程序文件却没换掉闭包，是新版本
+    # 启动即崩的经典形态；用锁才能保证"这一步装出来的就是这一版审过的那一套"。
+    . (Join-Path $PSScriptRoot "Project-RuntimeLock.ps1")
+    $runtimeLockPath = Get-RuntimeLockPath -BackendDirectory (Join-Path $ProjectRoot "backend")
     $packageJson = Join-Path $ProjectRoot "frontend\package.json"
     $nodeModules = Join-Path $ProjectRoot "frontend\node_modules"
     try {
-        # 只有"没有 requirements.txt"才算没有后端依赖可装——那不是依赖问题（多半是
-        # 目录根本不是我们的包）。解释器找不到**不能**算跳过：那正是桌面用户升级后
-        # 缺 pypdfium2、后端起不来的原因，必须在这里失败并让用户看到提示。
-        if (Test-Path $requirements) {
+        # 只有"没有锁文件"才算没有后端依赖可装——那不是依赖问题（多半是目录根本
+        # 不是我们的包）。解释器找不到**不能**算跳过：那正是桌面用户升级后缺
+        # pypdfium2、后端起不来的原因，必须在这里失败并让用户看到提示。
+        if (Test-Path $runtimeLockPath) {
             $backendPython = $null
             if ($DryRun) {
                 # 演练不装任何东西，所以找不到解释器也不该让它失败：用户只是想看流程，
@@ -686,18 +690,22 @@ if ($SkipDependencies) {
                 $backendPython = Resolve-BackendPython -ProjectRoot $ProjectRoot
             }
             if ($backendPython) {
+                Assert-RuntimeLockUsable -LockPath $runtimeLockPath | Out-Null
                 Write-Step "Syncing backend dependencies"
                 Invoke-External -FilePath $backendPython -Arguments @(
-                    "-m", "pip", "install", "--disable-pip-version-check", "-r", $requirements
+                    "-m", "pip", "install", "--disable-pip-version-check", "--require-hashes", "-r", $runtimeLockPath
                 ) -WorkingDirectory (Join-Path $ProjectRoot "backend")
             }
         } else {
-            Write-Host "    backend\requirements.txt not found; skipping the backend dependency sync."
+            Write-Host "    backend\requirements.runtime.lock.txt not found; skipping the backend dependency sync." -ForegroundColor Yellow
         }
 
-        if ((Test-Path $packageJson) -and (Test-Path $nodeModules) -and (Get-Command npm -ErrorAction SilentlyContinue)) {
-            Write-Step "Syncing frontend dependencies (npm ci)"
-            Invoke-External -FilePath "npm" -Arguments @("ci", "--no-audit", "--no-fund") -WorkingDirectory (Join-Path $ProjectRoot "frontend")
+        if ((Test-Path $packageJson) -and (Test-Path $nodeModules)) {
+            $pnpmLauncher = Resolve-PnpmLauncher
+            Write-Step "Syncing frontend dependencies (pnpm install --frozen-lockfile)"
+            Invoke-External -FilePath $pnpmLauncher.FilePath `
+                -Arguments (@($pnpmLauncher.PrefixArguments) + @("install", "--frozen-lockfile")) `
+                -WorkingDirectory (Join-Path $ProjectRoot "frontend")
         } else {
             Write-Host "    Frontend dependencies not installed; they will be installed on the next start."
         }

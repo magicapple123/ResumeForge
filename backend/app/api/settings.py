@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..database import get_db, session_engine
+from ..runtime.blocking import run_sync
 from ..schemas.backup_status import BackupStatusOut
 from ..schemas.batch_operation import (
     BatchExportConfig,
@@ -63,7 +64,6 @@ from ..services.llm.model_catalog import list_available_models
 from ..services.llm.responses import ResponsesProvider, responses_unsupported_hint
 from ..services.llm.thinking import probe_thinking, thinking_support
 from ..services.llm.usage_tasks import (
-    DEFAULT_AUDIT_LANGUAGE,
     SETTINGS_PROBE_TOKEN_BUDGET,
     TASK_SETTINGS_PROBE,
     set_ambient_scope,
@@ -79,7 +79,8 @@ from ..services.settings_service import (
     get_reminder_popup_on_start,
     get_search_config,
     get_webform_relaxed_mode,
-    resolve_llm_config_api_key,
+    resolve_probe_config,
+    resolve_probe_config_with_locale,
     save_agent_task_events_enabled,
     save_assistant_orb_setting,
     save_assistant_relaxed_mode,
@@ -90,7 +91,6 @@ from ..services.settings_service import (
     save_search_config,
     save_webform_relaxed_mode,
 )
-from ..services.ui_locale import get_ui_locale
 from .assistant_compaction_api import register_compaction_setting_routes
 from .model_window_api import register_model_window_routes
 
@@ -302,7 +302,8 @@ async def list_llm_models(payload: LLMModelsRequest, db: Session = Depends(get_d
     if not payload.base_url.strip():
         return LLMModelsResult(message="请先填写 Base URL")
     try:
-        resolved = resolve_llm_config_api_key(db, payload)
+        # 准备段（解析真实 Key）读库并归还连接，随后的目录请求是一次远端调用。
+        resolved = await run_sync(resolve_probe_config, db, payload)
     except ValueError as exc:
         return LLMModelsResult(message=str(exc))
     try:
@@ -325,7 +326,8 @@ async def check_llm_thinking(payload: LLMThinkingRequest, db: Session = Depends(
     if not payload.base_url.strip() or not payload.model.strip():
         return LLMThinkingResult(message="请先填写 Base URL 与模型名称")
     try:
-        resolved = resolve_llm_config_api_key(db, payload)
+        # 界面语言要读库，但 ContextVar 只能在事件循环上写：worker 只把值带回来。
+        resolved, ui_language = await run_sync(resolve_probe_config_with_locale, db, payload)
     except ValueError as exc:
         return LLMThinkingResult(message=str(exc))
     support = thinking_support(resolved)
@@ -345,7 +347,7 @@ async def check_llm_thinking(payload: LLMThinkingRequest, db: Session = Depends(
     set_ambient_scope(
         input_scope="none",
         masked=True,
-        language=get_ui_locale(db) or DEFAULT_AUDIT_LANGUAGE,
+        language=ui_language,
         budget=SETTINGS_PROBE_TOKEN_BUDGET,
     )
     probed = await probe_thinking(resolved)
@@ -365,7 +367,10 @@ async def test_llm(payload: LLMTestRequest, db: Session = Depends(get_db)):
     if not payload.base_url or not payload.model:
         return LLMTestResult(ok=False, message="请先填写 Base URL 与模型名称")
     try:
-        resolved_payload = resolve_llm_config_api_key(db, payload)
+        # 准备段：解析真实 Key + 读出界面语言（要读库），然后归还请求连接。
+        resolved_payload, ui_language = await run_sync(
+            resolve_probe_config_with_locale, db, payload
+        )
     except ValueError as exc:
         return LLMTestResult(ok=False, message=str(exc))
     # 不继承用户的思考参数；默认思考的已知模型由能力表显式关闭，未知服务商不加参数。
@@ -378,7 +383,7 @@ async def test_llm(payload: LLMTestRequest, db: Session = Depends(get_db)):
     set_ambient_scope(
         input_scope="none",
         masked=True,
-        language=get_ui_locale(db) or DEFAULT_AUDIT_LANGUAGE,
+        language=ui_language,
         budget=SETTINGS_PROBE_TOKEN_BUDGET,
     )
     # Responses 的已知不支持名单（Claude / Gemini / 硅基流动）先拦一道：

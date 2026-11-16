@@ -93,11 +93,11 @@ def _configure(monkeypatch, *, recognize: str | None = None) -> dict[str, object
                 raise LLMError("模型不可用")
             return recognize
 
-    async def ask_capture(db, session, _provider):
-        from app.api.interview_shared import _resume_text, _session_job_text
-
-        captured["job_text"] = _session_job_text(db, session)
-        captured["resume_text"] = _resume_text(db, session)
+    async def ask_capture(turn):
+        # 两份材料的文本由准备段在 worker 里读好（``_session_material``），随
+        # ``QuestionTurn`` 一起传进来——它就是随后交给模型的那两段，直接断言它即可。
+        captured["job_text"] = turn.material.job_text
+        captured["resume_text"] = turn.material.resume_text
         return "第一个问题", "", False
 
     async def build_report(_provider, _session_):

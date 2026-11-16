@@ -601,3 +601,71 @@ format_service_start_failure() {
         printf '%s\n最后几行：\n%s\n' "$message" "$tail_output"
     fi
 }
+
+# 生产依赖锁
+# ----------
+# 首次安装、更新、发布运行时构建与 CI 都只装这一份（backend/requirements.runtime.lock.txt），
+# 安装参数统一带 --require-hashes。它**不是**"另一份顶层清单"：它是 requirements.txt
+# 用 uv 投影出来的、带逐包 SHA-256 的完整闭包，随仓库与发布包一起分发。
+#
+# 为什么不许退回 requirements.txt：那份文件没有哈希，pip 会自己再解析一次，于是同一份
+# 代码在不同时间、不同镜像上会装出不同的传递依赖——"某台机器上能跑"。锁缺失或损坏时
+# 必须明确失败，让问题在安装那一刻暴露。
+#
+# 两个常量分工明确，别混用：RF_RUNTIME_LOCK_NAME 是**相对 backend 目录**的文件名，
+# RF_RUNTIME_LOCK_RELATIVE 是从项目根算起的相对路径（发布包白名单、备份清单、
+# 更新器比对的都是后者那种形状）。
+RF_RUNTIME_LOCK_NAME='requirements.runtime.lock.txt'
+RF_RUNTIME_LOCK_RELATIVE="backend/$RF_RUNTIME_LOCK_NAME"
+
+# 开发工具的前缀白名单：生产运行时里出现任何一个都算锁坏了。
+# 与 Windows 侧 scripts/Project-RuntimeLock.ps1 的 Test-DevToolPackageName 同一套口径。
+RF_DEV_TOOL_PATTERN='^(pytest[a-z0-9._-]*|ruff|pyright|coverage|execnet|iniconfig|pluggy|nodeenv|pip|pip-api|pip-audit|pip-licenses|pip-requirements-parser|playwright|pyee)=='
+
+# rf_runtime_lock_path BACKEND_DIR -> 锁的绝对路径（不校验存在性）。
+# 参数是**backend 目录**（start.sh/update.sh 传的都是 RF_BACKEND_DIR 那种值）。
+# 这里踩过一次坑：函数一度按"项目根"拼接，而 4 处调用全都传 backend 目录，于是每次
+# 都拼出 backend/backend/requirements.runtime.lock.txt——文件永远不存在，首次安装
+# 直接死在"找不到锁"。文件名常量因此只带文件名、不带 backend/ 前缀。
+rf_runtime_lock_path() {
+    printf '%s/%s\n' "${1%/}" "$RF_RUNTIME_LOCK_NAME"
+}
+
+# rf_runtime_lock_problem LOCK_PATH
+# 可用 -> 无输出、返回 0；不可用 -> 把原因打到 stdout、返回 1。
+# 调用方自己决定是 die（首次安装）还是 log_warn（更新器，程序文件已经换好了）。
+# 这里刻意没有"退回 requirements.txt"的分支。
+rf_runtime_lock_problem() {
+    lock_path=$1
+    if [ ! -f "$lock_path" ]; then
+        printf '找不到文件 %s\n' "$lock_path"
+        return 1
+    fi
+    if ! grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]*==' "$lock_path" 2>/dev/null; then
+        printf '%s 里没有任何已钉版的包\n' "$lock_path"
+        return 1
+    fi
+    if ! grep -q -e '--hash=sha256:' "$lock_path" 2>/dev/null; then
+        printf '%s 里的包没有逐包 --hash=sha256，pip --require-hashes 无法校验下载物\n' "$lock_path"
+        return 1
+    fi
+    if grep -qiE "$RF_DEV_TOOL_PATTERN" "$lock_path" 2>/dev/null; then
+        printf '%s 里混进了开发工具（pytest / ruff / pyright 之类），生产运行时不能装它们\n' "$lock_path"
+        return 1
+    fi
+    return 0
+}
+
+# rf_require_runtime_lock LOCK_PATH
+# 不可用即 die：首次安装没有"装个大概"的选项。
+rf_require_runtime_lock() {
+    lock_path=$1
+    if ! problem=$(rf_runtime_lock_problem "$lock_path"); then
+        die "生产依赖锁不可用：$problem" \
+            "首次安装只从这份锁装包（逐包 SHA-256 校验），不会退回顶层 requirements.txt 重新解析。" \
+            "怎么办：" \
+            "  1) 重新解压一次发布包（或 git checkout -- backend/requirements.runtime.lock.txt）；" \
+            "  2) 仍失败：把上面的信息连同锁文件前几行发到 GitHub Issues。"
+    fi
+    return 0
+}

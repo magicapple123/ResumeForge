@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.user_file import UserFile
 from ..services.actions import add_action_route
-from ..services.actions.catalog import all_actions
+from ..services.actions.catalog import registered_action
 from ..services.document_text import preview_text_of_file
 from ..services.system_reveal import reveal_path
 from ..services.user_files import (
@@ -39,7 +39,9 @@ _MAX_PAGE_SIZE = 100
 _MAX_TEXT_PREVIEW_BYTES = 50 * 1024 * 1024
 
 
-add_action_route(router, all_actions()["list_user_files"], route_path="")
+add_action_route(router, registered_action("list_user_files"), route_path="")
+
+
 def list_user_files(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=_MAX_PAGE_SIZE),
@@ -47,7 +49,11 @@ def list_user_files(
     keyword: str = Query(default=""),
     db: Session = Depends(get_db),
 ) -> dict:
-    """分页列出副本；``keyword`` 模糊匹配原名，``source_type`` 精确过滤来源。"""
+    """分页列出副本；``keyword`` 模糊匹配原名，``source_type`` 精确过滤来源。
+
+    薄壳：分页 / 过滤 / 视图组装都在 ``services.user_files.list_file_copies``
+    （助手动作 ``list_user_files`` 调同一个函数）。
+    """
     return list_file_copies(
         db,
         page=page,
@@ -121,13 +127,13 @@ def read_text(file_id: int, db: Session = Depends(get_db)) -> dict:
             detail=f"文件超过 {_MAX_TEXT_PREVIEW_BYTES // (1024 * 1024)} MB，暂不支持在线预览",
         )
     try:
-        text, warnings = preview_text_of_file(row.original_name or path.name, row.mime, path.read_bytes())
+        text, warnings = preview_text_of_file(
+            row.original_name or path.name, row.mime, path.read_bytes()
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - 解析失败只给一句中文原因
-        logger.warning(
-            "提取副本文字失败 id=%s error_type=%s", int(file_id), type(exc).__name__
-        )
+        logger.warning("提取副本文字失败 id=%s error_type=%s", int(file_id), type(exc).__name__)
         raise HTTPException(status_code=400, detail="读取这个文件失败（可能已损坏）") from exc
     return {"text": text, "warnings": warnings}
 

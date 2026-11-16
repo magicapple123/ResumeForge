@@ -151,10 +151,14 @@ def test_three_pairs_are_registered_with_http_route_and_tool():
 
 def test_legacy_metadata_is_preserved():
     actions = resume_document_actions()
+    # RF-03b：这三条的 run 已经从"委托路由 handler"改成"直接调服务层"，服务的**入口**
+    # 就是各自的第一跳编排函数（版本的列表/变体的列表/分页报告编排），而不再是它们内部
+    # 再调一层的 list_versions / list_variants / build_pagination_report。
+    # 表改的是"真实入口名单"，不是阈值——指到第二跳等于给读元数据的人指错路。
     expected_service_entry = {
-        "list_versions": "resume.document_versions.list_versions",
-        "list_variants": "resume.document_variants.list_variants",
-        "get_resume_status": "resume.document_pagination.build_pagination_report",
+        "list_versions": "resume.document_versions.version_list_for_resume",
+        "list_variants": "resume.document_variants.variant_list_for_resume",
+        "get_resume_status": "resume.pagination_report_service.resume_pagination_report",
     }
     for name, service_entry in expected_service_entry.items():
         spec = actions[name]

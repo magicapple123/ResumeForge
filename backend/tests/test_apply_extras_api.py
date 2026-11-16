@@ -312,6 +312,37 @@ def test_greeting_template_rendering_fills_known_vars_and_keeps_the_rest():
     assert rendered == "您好张三，看到贵司A公司在招后端开发，{未知}保持原样。"
     # 缺值回落空串（安全字典语义），但**绝不**因为不认识的花括号而抛异常。
     assert render_greeting_template("您好{name}") == "您好"
+
+
+def test_greeting_preview_falls_back_when_provider_cannot_be_created(
+    client, db_session, monkeypatch
+):
+    """构造不出 provider（配置让厂商适配器抛错）→ 200 + 默认招呼语，不是 500。
+
+    准备段在 worker 里建 provider，异常会原样穿回事件循环。这条端点的语义是"能生成
+    就生成、生成不了给默认话术"（模型调用失败那条路径已经是这么降级的），所以构造
+    失败也必须走同一条兜底——以前它会冒到全局兜底 handler 变成 500。
+    """
+    from types import SimpleNamespace
+
+    from app.api import apply as apply_api
+
+    job = _job(db_session)
+    monkeypatch.setattr(
+        apply_api,
+        "get_llm_config",
+        lambda _db: SimpleNamespace(base_url="http://127.0.0.1:1/v1", model="m", api_key="k"),
+    )
+
+    def _boom(_config):
+        raise RuntimeError("厂商适配器不认这个 api_style")
+
+    monkeypatch.setattr(apply_api, "create_provider", _boom)
+
+    response = client.post("/api/apply/greeting/preview", json={"job_id": job.id})
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "default"
     assert render_greeting_template("{ 不是占位符 }") == "{ 不是占位符 }"
 
 

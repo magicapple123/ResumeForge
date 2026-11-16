@@ -23,7 +23,6 @@ from ....schemas.interview_experience import (
     InterviewExperienceCreate,
     InterviewExperienceOut,
 )
-from ..registry import define_action
 from ..spec import ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -124,58 +123,49 @@ _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def interview_experience_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）interview_experiences 域 action（幂等、可重入）。"""
+    """构建（不注册）interview_experiences 域 action（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
-    list_experiences = define_action(
-        ActionSpec(
-            name="list_interview_experiences",
-            description=(
-                "列出真实面经（公司/岗位/来源/难度/被问问题数），可按关键词、公司或来源筛选。"
-                "用户问「有没有 XX 公司的面经」「我记过哪些面经」时用它。"
-            ),
-            input_model=ListInterviewExperiencesInput,
-            permission=Permission.READ_ONLY,
-            run=_run_list_interview_experiences,
-            service_entry="interview.interview_experience_service.list_experiences",
-            tool_defaults=(("limit", _DEFAULT_TOOL_LIST_LIMIT),),
-            http=HttpRoute(
-                "GET",
-                "/api/interview-experiences",
-                list[InterviewExperienceOut],
-                tags=("interview-experiences",),
-            ),
-        )
+    list_experiences = ActionSpec(
+        name="list_interview_experiences",
+        description=(
+            "列出真实面经（公司/岗位/来源/难度/被问问题数），可按关键词、公司或来源筛选。"
+            "用户问「有没有 XX 公司的面经」「我记过哪些面经」时用它。"
+        ),
+        input_model=ListInterviewExperiencesInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_interview_experiences,
+        service_entry="interview.interview_experience_service.list_experiences",
+        tool_defaults=(("limit", _DEFAULT_TOOL_LIST_LIMIT),),
+        http=HttpRoute(
+            "GET",
+            "/api/interview-experiences",
+            list[InterviewExperienceOut],
+            tags=("interview-experiences",),
+        ),
     )
-    create_experience = define_action(
-        ActionSpec(
-            name="create_interview_experience",
-            description=(
-                "把一条真实面经记进面经知识库（公司/岗位/来源/被问到的真实问题/难度/轮次/日期）。"
-                "用户说「记个面经」「把这次面试经历存下来」时调用；"
-                "至少要有标题、公司、正文或问题清单之一，否则记不成。"
-            ),
-            input_model=InterviewExperienceCreate,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_create_interview_experience,
-            run_tool=_run_tool_create_interview_experience,
-            preview=_preview_create_interview_experience,
-            service_entry="interview.interview_experience_service.create_experience",
-            http=HttpRoute(
-                "POST",
-                "/api/interview-experiences",
-                InterviewExperienceOut,
-                status_code=201,
-                tags=("interview-experiences",),
-            ),
-        )
+    create_experience = ActionSpec(
+        name="create_interview_experience",
+        description=(
+            "把一条真实面经记进面经知识库（公司/岗位/来源/被问到的真实问题/难度/轮次/日期）。"
+            "用户说「记个面经」「把这次面试经历存下来」时调用；"
+            "至少要有标题、公司、正文或问题清单之一，否则记不成。"
+        ),
+        input_model=InterviewExperienceCreate,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_create_interview_experience,
+        run_tool=_run_tool_create_interview_experience,
+        preview=_preview_create_interview_experience,
+        service_entry="interview.interview_experience_service.create_experience",
+        http=HttpRoute(
+            "POST",
+            "/api/interview-experiences",
+            InterviewExperienceOut,
+            status_code=201,
+            tags=("interview-experiences",),
+        ),
     )
     _ACTIONS = {
         list_experiences.name: list_experiences,

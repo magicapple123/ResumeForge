@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.claim import CLAIM_CATEGORIES, VERIFICATION_STATUSES, ClaimRecord
+from ..runtime.blocking import run_sync
 from ..schemas.claim import (
     MAX_CLAIM_LIST_EXCERPT_CHARS,
     ClaimBatchDeleteResult,
@@ -30,7 +31,7 @@ from ..services import trash
 from ..services.actions import add_action_route
 from ..services.actions.domains.claims import claim_actions
 from ..services.actions.pilots import pilot_actions
-from ..services.claim_draft import draft_from_text
+from ..services.claim_draft import draft_from_text, prepare_draft_provider
 from ..services.claims import (
     build_baseline,
     claim_linked,
@@ -75,9 +76,14 @@ def read_baseline(
 
 @router.post("/draft", response_model=ClaimDraftOut)
 async def draft_claims(payload: ClaimDraftRequest, db: Session = Depends(get_db)):
-    """按一段资料草拟台账条目；只返回草稿，不落库，等用户确认后再保存。"""
+    """按一段资料草拟台账条目；只返回草稿，不落库，等用户确认后再保存。
+
+    准备段（读模型配置 + 建 provider + 归还请求连接）交给 worker；模型调用本身
+    回到事件循环。``provider is None`` = 没配置模型，服务层走本地分段降级。
+    """
+    provider = await run_sync(prepare_draft_provider, db)
     try:
-        return await draft_from_text(db, payload)
+        return await draft_from_text(payload, provider)
     except LLMError as exc:
         logger.warning("草拟台账条目失败：%s", exc)
         raise HTTPException(status_code=502, detail=f"提取台账草稿失败：{exc}") from exc

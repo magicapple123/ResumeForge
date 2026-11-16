@@ -55,6 +55,8 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
             backend/requirements-dev.txt
+            backend/requirements.lock.txt
+            backend/requirements.runtime.lock.txt
 
       - name: Install dependencies
         run: |
@@ -67,6 +69,23 @@ jobs:
         # 的专属依赖分支，任何一格装不上就说明"通用锁"没真正通用。锁只做一致性
         # 校验，不替换上面的安装链路；锁文件不嵌入 index 地址，这里走 runner 默认 PyPI。
         run: python -m pip install --require-hashes -r requirements.lock.txt
+
+      - name: Verify requirements.runtime.lock.txt installs with hashes (production path)
+        # 上一条验证的是**开发**锁（含 pytest/ruff/pyright）。生产安装点装的却是这一份：
+        # Windows/macOS/Linux 首次安装、更新器、桌面运行时构建、发布构建都只装
+        # requirements.runtime.lock.txt 且带 --require-hashes。所以这里在一个**干净**的
+        # venv 里真装一次，等价于"用户机器上的首次安装"：哈希与闭包任何一处不对就变红。
+        # 用 bash 是为了让三个 runner 走同一段代码（Windows runner 也有 git bash）。
+        shell: bash
+        run: |
+          python -m venv .runtime-lock-check
+          if [ -x .runtime-lock-check/bin/python ]; then
+            PY=.runtime-lock-check/bin/python
+          else
+            PY=.runtime-lock-check/Scripts/python.exe
+          fi
+          "$PY" -m pip install --quiet --require-hashes -r requirements.runtime.lock.txt
+          "$PY" -c "import fastapi, uvicorn, sqlalchemy, alembic, pydantic, pydantic_settings, PIL, pypdf, fpdf, websocket, docx, multipart"
 
       - name: Install a CJK font for PDF export tests
         if: runner.os == 'Linux'
@@ -223,14 +242,20 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # runners preinstall Node, so no setup-node is needed here -- but pnpm is
+      # NOT preinstalled, and without it every step below dies on "command not found".
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.21.0
       - name: Build the production frontend assets
         # RF-09 方案 A：frontend/dist 存在时启动链走"后端同源静态"模式（不起
         # Vite）。这个作业要验证的正是发布形态：先构建出 dist，再走完整启动链，
         # 最后从后端端口真取一次 index.html 引用的入口模块。
         working-directory: frontend
         run: |
-          npm ci --no-audit --no-fund
-          npm run build
+          pnpm install --frozen-lockfile
+          pnpm run build
       - name: Start the app the way a Mac user does
         # 维护者没有 Mac，这个作业就是"那台 Mac"：从干净检出开始，
         # 走 start.sh 的完整链路（准备运行时 → 建 venv → 装依赖 → 启动
@@ -264,8 +289,8 @@ jobs:
           SMOKE_FRONTEND_URL: "http://127.0.0.1:8123"
           SMOKE_BACKEND_URL: "http://127.0.0.1:8123"
         run: |
-          npx playwright install chromium
-          npx playwright test
+          pnpm exec playwright install chromium
+          pnpm exec playwright test
 
       - name: Responsive layout gate (8 viewports x 18 routes)
         # 多分辨率适配的硬指标（R1/R2/R3）：8 个视口 × 18 条路由 = 144 条断言，
@@ -274,7 +299,7 @@ jobs:
         working-directory: frontend
         env:
           SMOKE_FRONTEND_URL: "http://127.0.0.1:8123"
-        run: npx playwright test -c playwright.responsive.config.ts
+        run: pnpm exec playwright test -c playwright.responsive.config.ts
 
       - name: Read-only install root (runtime state must leave the payload)
         # 报告 §1.8 第 4 条的可执行替代，加在本作业里而不新建作业：新建会重复
@@ -430,6 +455,12 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
+      - name: Set up pnpm
+        # MUST run before setup-node: setup-node resolves the pnpm store by running
+        # `pnpm store path`, and skips the cache silently when pnpm is absent.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.21.0
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -440,10 +471,10 @@ jobs:
         working-directory: frontend
         shell: pwsh
         run: |
-          npm ci --no-audit --no-fund
-          if ($LASTEXITCODE -ne 0) { throw "npm ci failed with $LASTEXITCODE" }
-          npm run build
-          if ($LASTEXITCODE -ne 0) { throw "npm run build failed with $LASTEXITCODE" }
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "pnpm install failed with $LASTEXITCODE" }
+          pnpm run build
+          if ($LASTEXITCODE -ne 0) { throw "pnpm run build failed with $LASTEXITCODE" }
       - name: Start the app and verify it serves (one step, like a user's session)
         # 这份作业就是"一台干净的新电脑"：从空检出开始，走和 start.cmd 完全相同的链路。
         # 它捕的是"新下载的包在这台机器上起不来"这一类问题——2026-09-29 有用户在一台
@@ -489,8 +520,8 @@ jobs:
           SMOKE_FRONTEND_URL: "http://127.0.0.1:8123"
           SMOKE_BACKEND_URL: "http://127.0.0.1:8123"
         run: |
-          npx playwright install chromium
-          npx playwright test
+          pnpm exec playwright install chromium
+          pnpm exec playwright test
 
       - name: Stop the app
         if: always()
@@ -722,12 +753,18 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up pnpm
+        # MUST run before setup-node: setup-node resolves the pnpm store by running
+        # `pnpm store path`, and skips the cache silently when pnpm is absent.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.21.0
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install a CJK font for the PDF/Word export checks
         # 与 backend 作业同一条理由：fonts-wqy-zenhei 是 TrueType 轮廓，fonts-noto-cjk
         # 是 CFF 轮廓，fpdf2 对 CFF 的子集化会把提取文本弄丢（2026-10-11 实测）。
@@ -741,8 +778,8 @@ jobs:
         # 端口真取一次 index.html 引用的入口模块。
         working-directory: frontend
         run: |
-          npm ci --no-audit --no-fund
-          npm run build
+          pnpm install --frozen-lockfile
+          pnpm run build
       - name: Start the app the way a Linux user does
         # 与 macOS/Windows 两个端到端作业同一条纪律：**启动与探活必须在同一个 run 里**。
         # 分成两个步骤会在间歇性失败上骗人——服务被外部收掉时，事后那一步只能看到
@@ -817,8 +854,8 @@ jobs:
           SMOKE_FRONTEND_URL: "http://127.0.0.1:8005"
           SMOKE_BACKEND_URL: "http://127.0.0.1:8005"
         run: |
-          npx playwright install --with-deps chromium
-          npx playwright test
+          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright test
       - name: Responsive layout gate (8 viewports x 18 routes)
         # 多分辨率适配的硬指标（R1/R2/R3）：8 个视口 × 18 条路由 = 144 条断言。
         # 不复用默认配置——那套的 testDir 是 tests/smoke，断言按 1200px 校准过，
@@ -826,7 +863,7 @@ jobs:
         working-directory: frontend
         env:
           SMOKE_FRONTEND_URL: "http://127.0.0.1:8005"
-        run: npx playwright test -c playwright.responsive.config.ts
+        run: pnpm exec playwright test -c playwright.responsive.config.ts
       - name: Read-only install root (runtime state must leave the payload)
         # macOS 那份作业的等价用例，Linux 上更硬：用户从 AppImage 拿到的运行时是
         # 只读挂载里的 squashfs 内容，安装目录同样不该被写。
@@ -1025,22 +1062,29 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Set up pnpm
+        # MUST run before setup-node: setup-node resolves the pnpm store by running
+        # `pnpm store path`, and skips the cache silently when pnpm is absent.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.21.0
+
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # 22 起才满足 vitest 5 / jsdom 30 的 engines（>=20.19 只是运行时下限，
           # 测试工具链需要 22.12+）。与本地开发版本保持一致，避免双环境漂移。
           node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       - name: Run tests with coverage
         # 前端覆盖率门禁（v8 provider，thresholds 见 vitest.config.ts）：
         # 阈值策略是"基线 −3pt、只升不降"，与后端 fail_under=80 对称。
-        run: npm run test:coverage -- --maxWorkers=2
+        run: pnpm run test:coverage -- --maxWorkers=2
 
       - name: Upload coverage report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -1051,13 +1095,13 @@ jobs:
           if-no-files-found: error
 
       - name: Check formatting
-        run: npm run format:check
+        run: pnpm run format:check
 
       - name: Run lint
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Build production bundle
-        run: npm run build
+        run: pnpm run build
 
   dependency-audit:
     name: Dependency audit
@@ -1073,11 +1117,16 @@ jobs:
           python-version: "3.13"
 
       - name: Audit production Python dependencies (blocking)
-        # 门禁策略（分级）：生产依赖（requirements.txt）发现任何已知漏洞即失败；
-        # 开发工具链继续走 advisory（continue-on-error），噪音不阻断 PR 但留痕。
+        # 门禁策略（分级）：生产依赖发现任何已知漏洞即失败；开发工具链继续走
+        # advisory（continue-on-error），噪音不阻断 PR 但留痕。
+        #
+        # 审的是**解析闭包**而不是顶层清单：backend/requirements.txt 只有 18 个直
+        # 接依赖，用户机器上真正装进去的是 requirements.runtime.lock.txt 的 40 个包。
+        # 只审顶层会漏掉任何"顶层没变、传递依赖带进来"的漏洞（starlette / anyio /
+        # httpcore 这类都在闭包里）。锁就是安装点用的那一份，所以审它等于审用户的机器。
         run: |
           python -m pip install pip-audit==2.10.1
-          python -m pip_audit --requirement backend/requirements.txt --index-url https://pypi.org/simple
+          python -m pip_audit --requirement backend/requirements.runtime.lock.txt --index-url https://pypi.org/simple
 
       - name: Audit development Python dependencies (advisory)
         continue-on-error: true
@@ -1090,7 +1139,11 @@ jobs:
         # 作为 artifact 供发布时随包带走/复核。独立脚本，不进 Build-Release.ps1。
         shell: pwsh
         run: |
-          python -m pip install -r backend/requirements.txt pip-licenses==5.5.5
+          # 装的是生产锁（用户机器上真正存在的那套闭包），再补上许可证工具本身：
+          # pip-licenses 不在锁里，所以它单独一条命令装，不参与 --require-hashes
+          # （锁只描述运行时的包，不能为了工具链把它污染掉）。
+          python -m pip install --require-hashes -r backend/requirements.runtime.lock.txt
+          python -m pip install pip-licenses==5.5.5
           .\scripts\Generate-Sbom.ps1 -OutputDir runtime/sbom
           if ($LASTEXITCODE -ne 0) { throw "Generate-Sbom.ps1 failed with $LASTEXITCODE" }
 
@@ -1104,16 +1157,24 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      - name: Set up pnpm
+        # MUST run before setup-node: setup-node resolves the pnpm store by running
+        # `pnpm store path`, and skips the cache silently when pnpm is absent.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.21.0
+
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Audit frontend production dependencies (blocking, high+)
+        # --prod 是 pnpm 对应 npm --omit=dev 的写法：只管用户机器上真正会装的包。
         working-directory: frontend
-        run: npm audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org
+        run: pnpm audit --prod --audit-level=high --registry=https://registry.npmjs.org
 
   desktop-shell:
     name: Desktop shell (windows packaging)
@@ -1123,24 +1184,32 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Set up pnpm
+        # MUST run before setup-node: setup-node resolves the pnpm store by running
+        # `pnpm store path`, and skips the cache silently when pnpm is absent.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.21.0
+
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
+          cache: pnpm
+          # This job installs BOTH trees, so both lockfiles key the cache.
           cache-dependency-path: |
-            frontend/package-lock.json
-            desktop/package-lock.json
+            frontend/pnpm-lock.yaml
+            desktop/pnpm-lock.yaml
 
       - name: Build frontend production assets
         working-directory: frontend
         run: |
-          npm ci --registry=https://registry.npmjs.org
-          npm run build
+          pnpm install --frozen-lockfile --registry=https://registry.npmjs.org
+          pnpm run build
 
       - name: Install desktop shell dependencies
         working-directory: desktop
-        run: npm ci --registry=https://registry.npmjs.org
+        run: pnpm install --frozen-lockfile --registry=https://registry.npmjs.org
 
       - name: Run desktop shell unit tests (node:test, audit PR-05/06)
         working-directory: desktop
@@ -1159,16 +1228,30 @@ jobs:
         # 真实 Electron 运行时冒烟（不打包、不联网）：真实 ipcMain 通道 + 隐藏 BrowserWindow
         # + Chromium printToPDF 产出 PDF；同时验证非主窗口 sender 拒绝、非法/超大 payload
         # 拒绝、超预算快速失败。--disable-gpu：runner 无 GPU 时避免 Chromium 初始化抖动。
-        run: npx electron scripts/smoke-print-bridge-electron.js
+        run: pnpm exec electron scripts/smoke-print-bridge-electron.js
 
       - name: Desktop supply-chain audit gate (audit PR-06)
         working-directory: desktop
-        # Read-only `npm audit --json` + baseline comparison: fails on any
+        # Read-only `pnpm audit --json` + baseline comparison: fails on any
         # severity finding that is not registered (with an unexpired
         # waiver) in desktop/scripts/audit-baseline.json. Unlike the
-        # frontend job there is no --omit=dev here: electron is the desktop
+        # frontend job there is no --prod here: electron is the desktop
         # runtime kernel even though it lives in devDependencies.
-        run: node scripts/check-npm-audit.js --baseline scripts/audit-baseline.json
+        #
+        # The report is written to a file because the gate cannot spawn pnpm
+        # itself (native pnpm.exe, and on Windows spawn(shell:false) cannot run
+        # pnpm.cmd; bin/pnpm.mjs inherits stdio so its stdout is unreadable).
+        #
+        # NEVER add --audit-level to this step: pnpm's --audit-level filters the
+        # advisories AND decides the exit code, so the gate would compare a
+        # trimmed report against the baseline and go blind.
+        shell: pwsh
+        run: |
+          pnpm audit --json > "$env:RUNNER_TEMP\desktop-audit.json"
+          # 1 = findings exist (normal; the baseline decides). > 1 = the audit
+          # run itself failed, which must not be mistaken for "clean".
+          if ($LASTEXITCODE -gt 1) { throw "pnpm audit failed with $LASTEXITCODE" }
+          node scripts/check-pnpm-audit.js --baseline scripts/audit-baseline.json --file "$env:RUNNER_TEMP\desktop-audit.json"
 
       - name: Check require graph against builder manifest (source, audit PR-04)
         working-directory: desktop
@@ -1363,6 +1446,35 @@ jobs:
             desktop/out/smoke-port.txt
           retention-days: 7
           if-no-files-found: ignore
+
+  repo-hygiene:
+    name: Repo hygiene
+    # 行尾是唯一"对提交内容零差异、但本地工具会假红"的规范：2026-11-16 实测本机工作区
+    # 有 457 个文本文件是 CRLF（索引一直是 LF，所以 CI 从来是绿的），而
+    # `pnpm run format:check` 报 65 个文件"格式不对"——diff 是"整个文件每行都变了、
+    # 肉眼看不出区别"。这类假红很容易被当成格式跑偏去批量重排，所以要在提交层面守住。
+    # 几百毫秒，独立作业是为了在 PR 列表里一眼可见。
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Reject CRLF line endings in tracked text files
+        run: |
+          set -eu
+          # i/crlf = 仓库里的对象就是 CRLF；w/crlf = 检出后的工作区是 CRLF。
+          # 两者都不允许：.gitattributes 声明 `* text=auto eol=lf`（.bat/.cmd 例外，
+          # 它们声明 eol=crlf，在 Linux 检出时仍是 w/lf，不会进这份清单）。
+          offenders=$(git ls-files --eol | grep -E 'i/crlf|w/crlf' || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::以下文件行尾不是 LF（.gitattributes: * text=auto eol=lf）"
+            printf '%s\n' "$offenders"
+            echo "修复：git add --renormalize <file>（内容零差异）；长期：core.autocrlf=false。"
+            echo "诊断口诀：一整个文件「每行都改了」但肉眼看不出区别 = 行尾，不是格式。"
+            exit 1
+          fi
+          echo "OK：全部文本文件均为 LF。"
 
   docs-guards:
     name: Docs guards

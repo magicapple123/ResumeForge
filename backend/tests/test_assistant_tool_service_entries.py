@@ -48,24 +48,19 @@ _ADAPTER_MODULE_SUFFIX = ".actions.tool_adapter"
 # - 经 assistant_tools.document_support 读写 v2 文档：内部唯一收口，无 services 符号。
 # 新增工具如果确实没有 services 收口，必须同时：service_entry=None +
 # service_reason="..." + 把名字加进这里。三者缺一，守卫变红。
+#
+# RF-03b：``list_resumes`` / ``get_resume`` / ``list_user_files`` / ``list_web_form_fills`` /
+# ``get_web_form_fill`` / ``list_chat_conversations`` / ``get_chat_conversation`` /
+# ``list_drill_sessions`` / ``list_match_analyses`` 这 9 条已从白名单**删除**——它们的 run
+# 上一批（或本批）已经直接调服务层，"无 services 收口" 是假话，service_entry 已改成真实
+# 入口。白名单是治理进度表：条目被消除就该被删掉，而不是留在这里当赦免。
 _SERVICE_FREE_TOOLS = frozenset(
     {
         "get_overview",
         "list_jobs",
-        "list_resumes",
-        "get_resume",
-        "get_application_track",
         "create_candidate_job",
         "update_candidate_job",
-        "get_skill",
-        "list_user_files",
-        "list_web_form_fills",
-        "get_web_form_fill",
-        "list_chat_conversations",
-        "get_chat_conversation",
-        "list_drill_sessions",
         "update_resume",
-        "list_match_analyses",
         "get_entry",
         "add_resume_entry",
         "reorder_sections",

@@ -38,7 +38,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ....schemas.apply import ApplyQueueItemOut, ApplyTaskCreate
 from ..legacy import preview_runner
-from ..registry import define_action
 from ..spec import ActionError, ActionOutcome, ActionSpec, permission_enum
 
 if TYPE_CHECKING:
@@ -277,67 +276,56 @@ _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def apply_queue_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）投递队列域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）投递队列域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
     if _ACTIONS is not None:  # permission_enum 可能触发工具声明模块重入本构建器
         return _ACTIONS
-    queue_list = define_action(
-        ActionSpec(
-            name="queue_list",
-            description=(
-                "查看投递队列（投递台里排队等着投的岗位）：队列条目 id、岗位、公司、状态、"
-                "用哪份简历、能不能自动投递、准入结论与参考分。可按状态或关键词筛选。"
-                "用户问「队列里还有什么」「有哪些待投的」时用它。**只读，不投递**。"
-            ),
-            input_model=QueueListInput,
-            permission=Permission.READ_ONLY,
-            run=_run_queue_list,
-            service_entry="apply._queue.list_queue",
-        )
+    queue_list = ActionSpec(
+        name="queue_list",
+        description=(
+            "查看投递队列（投递台里排队等着投的岗位）：队列条目 id、岗位、公司、状态、"
+            "用哪份简历、能不能自动投递、准入结论与参考分。可按状态或关键词筛选。"
+            "用户问「队列里还有什么」「有哪些待投的」时用它。**只读，不投递**。"
+        ),
+        input_model=QueueListInput,
+        permission=Permission.READ_ONLY,
+        run=_run_queue_list,
+        service_entry="apply._queue.list_queue",
     )
-    queue_update_priority = define_action(
-        ActionSpec(
-            name="queue_update_priority",
-            description=(
-                "按给定顺序重排投递队列（order 是队列条目 id，从最优先到最后）。"
-                "只改顺序，**不投递**；写前会生成确认预览，用户确认后才生效。"
-                "用户说「把这几条排前面」时用它，id 先用 queue_list 查。"
-            ),
-            input_model=QueueUpdatePriorityInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_queue_update_priority,
-            preview=preview_runner(
-                "app.services.assistant_tools.previews_apply", "preview_queue_update_priority"
-            ),
-            service_entry="apply._queue.reorder_queue",
-        )
+    queue_update_priority = ActionSpec(
+        name="queue_update_priority",
+        description=(
+            "按给定顺序重排投递队列（order 是队列条目 id，从最优先到最后）。"
+            "只改顺序，**不投递**；写前会生成确认预览，用户确认后才生效。"
+            "用户说「把这几条排前面」时用它，id 先用 queue_list 查。"
+        ),
+        input_model=QueueUpdatePriorityInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_queue_update_priority,
+        preview=preview_runner(
+            "app.services.assistant_tools.previews_apply", "preview_queue_update_priority"
+        ),
+        service_entry="apply._queue.reorder_queue",
     )
-    apply_start = define_action(
-        ActionSpec(
-            name="apply_start",
-            description=(
-                "按队列条目 id 开始自动投递。**会真实提交投递，不可撤销**"
-                "（招聘平台侧没有撤回接口）；失败不自动重试。"
-                "**仅在用户明确确认后调用**：必须先由提案卡让用户看清「哪几条、用哪份简历」，"
-                "用户确认后才会执行。**不要替用户批量海投**——一次最多 50 条，"
-                "且只接受待投递（pending）的队列条目。"
-            ),
-            input_model=ApplyStartInput,
-            permission=Permission.EXTERNAL_SIDE_EFFECT,
-            run=_run_apply_start,
-            preview=preview_runner(
-                "app.services.assistant_tools.previews_apply", "preview_apply_start"
-            ),
-            service_entry="apply._tasks.create_apply_task",
-        )
+    apply_start = ActionSpec(
+        name="apply_start",
+        description=(
+            "按队列条目 id 开始自动投递。**会真实提交投递，不可撤销**"
+            "（招聘平台侧没有撤回接口）；失败不自动重试。"
+            "**仅在用户明确确认后调用**：必须先由提案卡让用户看清「哪几条、用哪份简历」，"
+            "用户确认后才会执行。**不要替用户批量海投**——一次最多 50 条，"
+            "且只接受待投递（pending）的队列条目。"
+        ),
+        input_model=ApplyStartInput,
+        permission=Permission.EXTERNAL_SIDE_EFFECT,
+        run=_run_apply_start,
+        preview=preview_runner(
+            "app.services.assistant_tools.previews_apply", "preview_apply_start"
+        ),
+        service_entry="apply._tasks.create_apply_task",
     )
     _ACTIONS = {spec.name: spec for spec in (queue_list, queue_update_priority, apply_start)}
     return _ACTIONS

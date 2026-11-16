@@ -11,8 +11,8 @@
 #   powershell -File scripts\Build-Desktop.ps1 -Target dir  # dir only
 #   powershell -File scripts\Build-Desktop.ps1 -Target mac  # mac: dmg + dir (run on macOS)
 #
-# Prereqs: frontend/dist exists (run `npm run build` in frontend/ first);
-# desktop/node_modules exists (npm install in desktop/).
+# Prereqs: frontend/dist exists (run `pnpm run build` in frontend/ first);
+# desktop/node_modules exists (pnpm install in desktop/).
 
 param(
     [ValidateSet("win", "mac", "dir")]
@@ -30,10 +30,10 @@ $desktopDir = Join-Path $projectRoot "desktop"
 $payloadDir = Join-Path $desktopDir "payload"
 
 if (-not (Test-Path (Join-Path $projectRoot "frontend\dist\index.html"))) {
-    throw "frontend/dist/index.html missing - build the frontend first (npm run build)."
+    throw "frontend/dist/index.html missing - build the frontend first (pnpm run build)."
 }
 if (-not (Test-Path (Join-Path $desktopDir "node_modules\electron"))) {
-    throw "desktop/node_modules missing - run npm install in desktop/ first."
+    throw "desktop/node_modules missing - run pnpm install in desktop/ first."
 }
 
 Write-Host "Assembling desktop payload..."
@@ -90,26 +90,28 @@ $updateCmdLines = @(
 # mac shell falls back to the shipped launcher, which provisions on demand).
 #
 # Reuse is guarded by a manifest embedded in the zip (see
-# PythonRuntimeManifest.ps1). It records the SHA-256 of backend\requirements.txt
-# and the bundled Python version at build time; here we compare both against the
-# current checkout and rebuild on any mismatch -- including a zip that carries no
-# manifest, i.e. a cache from before this guard existed. The 1.0.1 incident was
-# precisely a cache that predated a requirements change, so a bare existence
-# check (the old behaviour) is exactly the trap this closes.
+# PythonRuntimeManifest.ps1). It records the SHA-256 of the production lock
+# (backend\requirements.runtime.lock.txt -- the package set the runtime actually
+# contains) plus the bundled Python version at build time; here we compare both
+# against the current checkout and rebuild on any mismatch -- including a zip that
+# carries no manifest, or one stamped by the older schema-1 guard, i.e. a cache
+# from before this rule existed. The 1.0.1 incident was precisely a cache that
+# predated a dependency change, so a bare existence check (the old behaviour) is
+# exactly the trap this closes.
 . (Join-Path $PSScriptRoot "PythonRuntimeManifest.ps1")
 $runtimeZip = Join-Path $desktopDir "python-runtime.zip"
 if ($Target -ne "mac") {
-    $requirementsPath = Join-Path $projectRoot "backend\requirements.txt"
+    $runtimeLockPath = Get-RuntimeLockPath -BackendDirectory (Join-Path $projectRoot "backend")
     # Bind the rebuild inputs to locals before the scriptblock so it does not
     # depend on scope resolution while the helper invokes it.
     $buildRuntimeScript = Join-Path $PSScriptRoot "Build-PythonRuntime.ps1"
     $bundledPythonVersion = $PythonVersion
-    $runtimeDecision = Invoke-PythonRuntimeEnsure -ZipPath $runtimeZip -PythonVersion $PythonVersion -RequirementsPath $requirementsPath -Rebuild {
+    $runtimeDecision = Invoke-PythonRuntimeEnsure -ZipPath $runtimeZip -PythonVersion $PythonVersion -RuntimeLockPath $runtimeLockPath -Rebuild {
         & powershell -NoProfile -ExecutionPolicy Bypass -File $buildRuntimeScript -PythonVersion $bundledPythonVersion
         if ($LASTEXITCODE -ne 0) { throw "Build-PythonRuntime failed with $LASTEXITCODE" }
     }
     if ($runtimeDecision.Rebuilt) {
-        Write-Host "python-runtime.zip rebuilt from the current requirements."
+        Write-Host "python-runtime.zip rebuilt from the current production dependency lock."
     }
     Copy-Item -Force $runtimeZip (Join-Path $payloadDir "python-runtime.zip")
 

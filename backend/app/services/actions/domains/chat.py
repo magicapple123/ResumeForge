@@ -4,9 +4,10 @@
 迁移对（行为零漂移：run / run_tool 都直接委托既有实现）：
 
 - list_chat_conversations ↔ GET /api/assistant/conversations
-  （handler app.api.assistant.list_conversations）
+  （run 调 services.assistant.assistant_conversations.list_conversations）
 - get_chat_conversation  ↔ GET /api/assistant/conversations/{conversation_id}
-  （handler app.api.assistant.read_conversation）
+  （run 调 services.assistant.assistant_conversations.read_conversation）
+两条路由的 handler 都是同一函数的薄壳，不再由动作反向调用。
 
 两侧都是 **requires_relaxed=True**：对话是用户与模型的私密记录，只有用户显式开启
 「助手放宽模式」后才下发给模型（门控在 tool_definitions，声明必须原样保留）。
@@ -26,9 +27,14 @@ from ....schemas.assistant import (
     ChatConversationDetail,
     ConversationSurface,
 )
-from ..legacy import route_runner, tool_runner
-from ..registry import define_action
-from ..spec import ActionSpec, HttpRoute, permission_enum
+from ...assistant.assistant_conversations import (
+    list_conversations as list_conversation_records,
+)
+from ...assistant.assistant_conversations import (
+    read_conversation as read_conversation_record,
+)
+from ..legacy import tool_runner
+from ..spec import ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 # 旧工具 handler 的默认条数（assistant_tools/_shared.DEFAULT_LIST_LIMIT=20）。
 _DEFAULT_TOOL_LIMIT = 20
@@ -68,78 +74,85 @@ class GetChatConversationInput(BaseModel):
     )
 
 
+def _run_list_chat_conversations(db, payload: ListChatConversationsInput) -> ActionOutcome:
+    """会话列表：与 ``GET /api/assistant/conversations`` 同一个服务函数。"""
+    return ActionOutcome(
+        data=list_conversation_records(payload.limit, db, payload.surface, keyword=payload.keyword)
+    )
+
+
+def _run_get_chat_conversation(db, payload: GetChatConversationInput) -> ActionOutcome:
+    """会话详情：与 ``GET /api/assistant/conversations/{id}`` 同一个服务函数。"""
+    return ActionOutcome(
+        data=read_conversation_record(
+            payload.conversation_id, db, payload.surface, message_limit=payload.message_limit
+        )
+    )
+
+
 _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def chat_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）chat 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）chat 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
     if _ACTIONS is not None:  # 内层重入已完成构建（工具声明模块在 assistant_tools 初始化期调用）
         return _ACTIONS
-    list_chat_conversations = define_action(
-        ActionSpec(
-            name="list_chat_conversations",
-            description=(
-                "列出助手的历史对话（标题、入口、更新时间），可按关键词搜标题。"
-                "**放宽模式工具**：对话是用户与模型的私密记录，仅当用户开启助手放宽模式后"
-                "你才有这个工具，用于回看「我们之前聊过什么」。"
-            ),
-            input_model=ListChatConversationsInput,
-            permission=Permission.READ_ONLY,
-            run=route_runner("app.api.assistant", "list_conversations"),
-            run_tool=tool_runner(
-                "app.services.assistant_tools.data_tools.chat_history",
-                "_tool_list_chat_conversations",
-            ),
-            requires_relaxed=True,
-            service_entry=None,
-            service_reason="内联 ORM 查询/组装，无 services 收口（T27 收口候选）",
-            tool_fields=("keyword", "limit"),
-            tool_defaults=(("limit", _DEFAULT_TOOL_LIMIT),),
-            ignore_unknown_arguments=True,
-            http=HttpRoute(
-                "GET",
-                "/api/assistant/conversations",
-                list[ChatConversationBrief],
-                tags=("assistant",),
-            ),
-        )
+    list_chat_conversations = ActionSpec(
+        name="list_chat_conversations",
+        description=(
+            "列出助手的历史对话（标题、入口、更新时间），可按关键词搜标题。"
+            "**放宽模式工具**：对话是用户与模型的私密记录，仅当用户开启助手放宽模式后"
+            "你才有这个工具，用于回看「我们之前聊过什么」。"
+        ),
+        input_model=ListChatConversationsInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_chat_conversations,
+        run_tool=tool_runner(
+            "app.services.assistant_tools.data_tools.chat_history",
+            "_tool_list_chat_conversations",
+        ),
+        requires_relaxed=True,
+        # RF-03b：run 真的调的就是这个服务函数（路由 handler 是它的薄壳），如实登记。
+        service_entry="assistant.assistant_conversations.list_conversations",
+        tool_fields=("keyword", "limit"),
+        tool_defaults=(("limit", _DEFAULT_TOOL_LIMIT),),
+        ignore_unknown_arguments=True,
+        http=HttpRoute(
+            "GET",
+            "/api/assistant/conversations",
+            list[ChatConversationBrief],
+            tags=("assistant",),
+        ),
     )
-    get_chat_conversation = define_action(
-        ActionSpec(
-            name="get_chat_conversation",
-            description=(
-                "读取一场历史对话的完整消息（按时间正序）。**放宽模式工具**：仅当用户开启"
-                "助手放宽模式后才可用；用户问「我们之前聊到的 XX」时用它现场查证，"
-                "不要凭记忆复述旧对话。"
-            ),
-            input_model=GetChatConversationInput,
-            permission=Permission.READ_ONLY,
-            run=route_runner("app.api.assistant", "read_conversation"),
-            run_tool=tool_runner(
-                "app.services.assistant_tools.data_tools.chat_history",
-                "_tool_get_chat_conversation",
-            ),
-            requires_relaxed=True,
-            service_entry=None,
-            service_reason="内联 ORM 查询/组装，无 services 收口（T27 收口候选）",
-            tool_fields=("conversation_id",),
-            ignore_unknown_arguments=True,
-            http=HttpRoute(
-                "GET",
-                "/api/assistant/conversations/{conversation_id}",
-                ChatConversationDetail,
-                tags=("assistant",),
-            ),
-        )
+    get_chat_conversation = ActionSpec(
+        name="get_chat_conversation",
+        description=(
+            "读取一场历史对话的完整消息（按时间正序）。**放宽模式工具**：仅当用户开启"
+            "助手放宽模式后才可用；用户问「我们之前聊到的 XX」时用它现场查证，"
+            "不要凭记忆复述旧对话。"
+        ),
+        input_model=GetChatConversationInput,
+        permission=Permission.READ_ONLY,
+        run=_run_get_chat_conversation,
+        run_tool=tool_runner(
+            "app.services.assistant_tools.data_tools.chat_history",
+            "_tool_get_chat_conversation",
+        ),
+        requires_relaxed=True,
+        # RF-03b：run 真的调的就是这个服务函数（路由 handler 是它的薄壳），如实登记。
+        service_entry="assistant.assistant_conversations.read_conversation",
+        tool_fields=("conversation_id",),
+        ignore_unknown_arguments=True,
+        http=HttpRoute(
+            "GET",
+            "/api/assistant/conversations/{conversation_id}",
+            ChatConversationDetail,
+            tags=("assistant",),
+        ),
     )
     _ACTIONS = {
         list_chat_conversations.name: list_chat_conversations,

@@ -19,6 +19,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..runtime.blocking import run_sync
 from ..schemas.assistant import ConversationSurface
 from ..schemas.assistant_compaction import (
     AssistantCompactionSetting,
@@ -30,8 +31,10 @@ from ..services.assistant.assistant_compaction_store import (
     CompactionUnavailable,
     clear_compaction,
     get_compaction_settings,
-    run_manual_compaction,
+    persist_manual_compaction,
+    plan_manual_compaction,
     save_compaction_settings,
+    summarize_region,
 )
 from ..services.assistant.assistant_conversations import conversation_or_404
 
@@ -51,13 +54,27 @@ def register_compaction_routes(router: APIRouter) -> None:
         surface: ConversationSurface = Query(default="page"),
         db: Session = Depends(get_db),
     ) -> ConversationCompactOut:
-        conversation_or_404(db, conversation_id, surface)
+        # 存在性校验是一次主键读：交给 worker，事件循环不碰 Session。
+        await run_sync(conversation_or_404, db, conversation_id, surface)
+        # 三段式：worker 读历史算区间（并归还请求连接）→ 循环上调一次摘要模型 →
+        # worker 落库。摘要动辄几十秒，读事务留在这中间会钉住一条池连接与快照。
+        #
+        # 准备段也包在 ``except CompactionUnavailable`` 里：它同样会在"建不出 provider"
+        # 时抛这个异常（例如配置里的 api_style 让构造器失败）。这类"模型这会儿不可用"
+        # 与摘要失败是同一件事，都必须落 503 而不是被兜底成 500。
         try:
-            result = await run_manual_compaction(conversation_id, db, dry_run=payload.dry_run)
+            plan = await run_sync(
+                plan_manual_compaction, db, conversation_id, dry_run=payload.dry_run
+            )
+            if plan.result is not None:
+                # dry_run 预估 / 没有可摘要内容：不调模型、不写库。
+                return ConversationCompactOut.model_validate(plan.result)
+            parsed = await summarize_region(plan.provider, plan.region)
         except CompactionUnavailable as exc:
             # 503 而不是 500：这是"模型这会儿不可用"，用户稍后重试有意义，
             # 原文与既有摘要都没被动过（失败不写库）。
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+        result = await run_sync(persist_manual_compaction, plan, parsed)
         return ConversationCompactOut.model_validate(result)
 
     @router.delete("/conversations/{conversation_id}/compact", status_code=204)

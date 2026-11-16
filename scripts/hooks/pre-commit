@@ -12,6 +12,34 @@ STAGED_TS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|ts
 
 FAIL=0
 
+# 0) 行尾：暂存的文本文件必须是 LF（.gitattributes 的 `* text=auto eol=lf`）
+#
+# 2026-11-16 实测：457 个已跟踪文本文件在工作区是 CRLF（索引与提交内容一直是 LF，
+# 所以 CI 全绿），本机 `npm run format:check` 却报 65 个文件"格式不对"——实际 diff 是
+# "整个文件每行都变了、肉眼看不出区别"。根因是本机 core.autocrlf=true 且文件在
+# .gitattributes 生效前就 checkout 过。这种"假红"很容易被当成格式跑偏去批量重排，
+# 所以把它变成提交时的硬检查：几百毫秒，比事后诊断便宜得多。
+STAGED_TEXT=$(git diff --cached --name-only --diff-filter=ACMR \
+  | grep -viE '\.(bat|cmd|png|jpe?g|gif|ico|icns|webp|pdf|zip|woff2?|ttf|otf|eot|mp4|webm|wav|mp3|db|sqlite3?|pyc|bin|so|dll|dylib|exe|jar|7z|gz|tar)$' \
+  || true)
+if [ -n "$STAGED_TEXT" ]; then
+  # 用 `git ls-files --eol` 而不是 `grep '\r'`：Windows 的 Git Bash 里 grep 处于文本模式，
+  # 会把行尾的 CR 吃掉（实测 `grep -c "$(printf '\r')"` 对 CRLF 文件返回 0），这条检查会
+  # 变成永远通过的空转守卫。git 自己算的 eol 没有这个问题。
+  CRLF_FILES=$(git ls-files --eol -- $STAGED_TEXT 2>/dev/null \
+    | grep -E 'i/crlf|w/crlf' \
+    | awk -F'\t' '{print $NF}')
+  if [ -n "$CRLF_FILES" ]; then
+    echo "[pre-commit] 行尾必须是 LF（.gitattributes: * text=auto eol=lf）。以下暂存文件含 CRLF:"
+    printf '%s\n' "$CRLF_FILES" | sed 's/^/  - /'
+    echo "  诊断：一整个文件「每行都改了」但肉眼看不出区别 = 行尾，不是格式。"
+    echo "  处理：git add --renormalize <file>（内容零差异，只是刷新索引与工作区）；"
+    echo "        长期：git config core.autocrlf false（本仓库的 .gitattributes 已经声明 eol=lf）。"
+    echo "  禁止用 prettier --write / ruff format 去「修」它：内容不会变，只会掩盖问题。"
+    FAIL=1
+  fi
+fi
+
 # 1) Ruff on staged Python files
 if [ -n "$STAGED_P" ]; then
   RUFF=""

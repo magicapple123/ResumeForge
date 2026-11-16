@@ -2,8 +2,10 @@
 """action 注册表（T27）：内存表 + 唯一性校验；**导入本模块不注册任何动作**。
 
 **为什么显式注册而不是扫描目录**：注册顺序与 ``application_routers.ROUTERS`` 的路由顺序
-一样是行为契约（见该文件行内注释），必须可整体审阅。动作在各自定义模块里显式
-``define_action(...)``，本模块只保证"同名 / 同 method+path 不允许注册两次"（契约不双写）。
+一样是行为契约（见该文件行内注释），必须可整体审阅。动作在各域定义模块里**只构建**，
+注册统一由 ``catalog.ensure_registered()`` 这一处完成（RF-10：构建与注册分离，构建器
+不再 import 本模块，``tests/test_action_registry.py`` 用 AST 守着）。本模块只保证
+"同名 / 同 method+path 不允许注册两次"（契约不双写）。
 """
 
 from __future__ import annotations

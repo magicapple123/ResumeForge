@@ -21,12 +21,60 @@ from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.routing import APIRoute
+from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
+from starlette.responses import Response
 
 from .spec import ActionError, ActionOutcome, ActionSpec, HttpRoute, validate_input
 from .tool_adapter import to_tool_schema
 
 _QUERY_METHODS = frozenset({"GET", "DELETE"})
+
+
+def _materialize(response_model: Any, data: Any) -> Any:
+    """在 worker 线程里把 ``data`` 需要读的属性**全部读掉**，然后把原对象原样返回。
+
+    为什么必须在这里读：``spec.run`` 拿到的 Session 属于请求，而 SQLAlchemy 的
+    relationship / 列属性可能是**懒加载**的——真正触发 SQL 的时刻是"第一次读属性"。
+    如果只把 ``run`` 搬进线程池就返回 ORM 对象，FastAPI 在事件循环上做
+    ``response_model`` 校验时仍会逐属性读取（= 在事件循环里发 SQL），问题只是从
+    "动作体阻塞"变成"响应序列化阻塞"。
+
+    **为什么返回原对象而不是 dumped dict**：``Model.dump_python()`` 会按字段配置丢弃
+    被 ``exclude=True`` 的字段（如 ``JobListOut.description``），而 ``has_description``
+    这类 ``computed_field`` 是从被丢弃的字段算出来的——返回 dict 后 FastAPI 会拿它重新
+    校验成模型，``description`` 回落到默认空串，``has_description`` 就从 true 变成 false
+    （这是本改动第一版的真实回归，被 ``test_api_jobs`` 的列表用例抓到）。
+
+    所以这里用 ``TypeAdapter(response_model).validate_python(..., from_attributes=True)``
+    做一次**只为触发读取**的校验：结果丢弃，副作用是所有属性都已进 ``__dict__``；随后
+    FastAPI 的校验与序列化（含 computed_field、别名、exclude）语义与改动前逐字一致。
+    """
+    if data is None:
+        # 204/空响应：没有可物化的内容，交给 FastAPI 原样处理。
+        return None
+    if isinstance(data, Response):
+        # 已经构造好的响应（409/404 的 JSONResponse、流式响应等）必须原样透传：
+        # 动作里"提前返回一个带状态码的响应"是既有契约（如保存冲突 409），
+        # 拿 response_model 去校验它只会变成 500。
+        return data
+    TypeAdapter(response_model).validate_python(data, from_attributes=True)
+    return data
+
+
+def _execute(spec: ActionSpec, response_model: Any, db: Session, raw: dict[str, Any]) -> Any:
+    """**整个同步动作阶段**：校验 → 执行 → 物化。只在 worker 线程里调用。
+
+    会话所有权不变：``db`` 仍由 ``Depends(get_db)`` 创建/关闭，本函数只在一个 worker
+    线程里串行使用它；``endpoint`` 在 ``await`` 期间不会碰同一个 Session。动作自己
+    提交/回滚的事务边界照旧（动作体内的 ``db.commit()`` 仍在这个线程里完成）。
+    """
+    payload = validate_input(spec, raw)
+    outcome = spec.run(db, payload)
+    if not isinstance(outcome, ActionOutcome):
+        raise ActionError("internal", f"action {spec.name} 的 run 未返回 ActionOutcome")
+    return _materialize(response_model, outcome.data)
 
 
 def _http_error(exc: ActionError) -> HTTPException:
@@ -163,15 +211,17 @@ def as_route(spec: ActionSpec) -> APIRouter:
             if route.method in _QUERY_METHODS:
                 # 路由侧宽容、工具侧仍 forbid（见 _drop_undeclared）。
                 raw = _drop_undeclared(raw, spec)
-            payload = validate_input(spec, raw)
-            outcome = spec.run(db, payload)
         except ActionError as exc:
             raise _http_error(exc) from exc
-        if not isinstance(outcome, ActionOutcome):
-            raise _http_error(
-                ActionError("internal", f"action {spec.name} 的 run 未返回 ActionOutcome")
-            )
-        return outcome.data
+        # 动作体是同步的（``RunFunc`` 只收同步函数），它的 SQL / 懒加载 / 事务提交
+        # 一律在 worker 线程里完成：``async def`` 里直接调用会占住事件循环，
+        # 同一进程内的 SSE、轮询和健康检查都会跟着卡住（busy_timeout 最长 5s 的等待
+        # 同样发生在这个线程上）。校验与响应物化也放进同一个 worker，避免把"读属性"
+        # 留到事件循环上的 response_model 校验里。
+        try:
+            return await run_in_threadpool(_execute, spec, route.response_model, db, raw)
+        except ActionError as exc:
+            raise _http_error(exc) from exc
 
     router = APIRouter()
     router.add_api_route(

@@ -152,9 +152,22 @@ $RequiredFiles = @(
     "backend/app/templates/_resume_sections.j2",
     "backend/app/templates/_resume_fit_script.j2",
     "backend/requirements.txt",
+    # The production dependency lock. Not a preflight requirement (preflight only
+    # checks app assets), but the RELEASE must carry it: the first-run installers
+    # on all three platforms install from this file and refuse to fall back to
+    # requirements.txt, so a missing lock turns every fresh install into an
+    # explicit failure. `git archive` ships tracked files, so this is a self-check
+    # that the lock is actually tracked and present in the archive.
+    "backend/requirements.runtime.lock.txt",
     "backend/alembic.ini",
     "frontend/package.json",
-    "frontend/package-lock.json",
+    # Both pnpm files are load-bearing, not bookkeeping: the launchers run
+    # `pnpm install --frozen-lockfile`, which fails when the lockfile is missing OR
+    # when it no longer matches the dependency configuration. After the npm->pnpm
+    # migration the overrides and allowBuilds live in pnpm-workspace.yaml, so an
+    # archive without it would hand every fresh install a lockfile it cannot satisfy.
+    "frontend/pnpm-lock.yaml",
+    "frontend/pnpm-workspace.yaml",
     "frontend/index.html",
     # RF-09 plan A: the launcher serves the built frontend from the backend, so
     # the release zip must carry the production assets. They are not tracked in
@@ -342,7 +355,13 @@ $ForbiddenPatterns = @(
     "^\.git/",
     "(^|/)\.env(\.|$)",
     "(^|/)__pycache__/",
-    "(^|/)\.pytest_cache/"
+    "(^|/)\.pytest_cache/",
+    # One dependency tree, one lockfile. This repository moved npm -> pnpm on
+    # 2026-11-16; a stray `npm install` regenerates package-lock.json, and a
+    # package carrying both hands the installer two conflicting resolutions.
+    # pnpm-lock.yaml wins, so the stale file looks harmless right up until
+    # something reads it -- the same double-lockfile state the migration removed.
+    "(^|/)package-lock\.json$"
 )
 
 # Tracked paths that only look forbidden: the example configuration is meant to
@@ -545,26 +564,45 @@ if ((Test-Path -LiteralPath $distIndexFile -PathType Leaf) -and ($distVersion -e
     Write-Host "frontend\dist already matches version $version; reusing it (delete frontend\dist to force a rebuild)."
 }
 else {
-    # Windows ships npm.cmd; Linux/macOS (the CI source-zips job runs this
-    # script under pwsh) only have npm. Prefer the first one found and invoke
-    # it through the resolved command object afterwards.
-    $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
-    if ($null -eq $npmCommand) {
-        $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+    # pnpm is not shipped with Node, so it cannot be located by a fixed path the way
+    # npm.cmd could. Prefer Node's own corepack: it fetches the version pinned by
+    # package.json's `packageManager` field, so the version used here is the same
+    # one the launchers and CI use. Only then fall back to a pnpm already on PATH.
+    $pnpmCommand = $null
+    $pnpmPrefix = @()
+    $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+    if ($null -eq $nodeCommand) {
+        $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
     }
-    if ($null -eq $npmCommand) {
-        throw "npm was not found on PATH. Building frontend\dist needs Node.js 20.19+; install it (or delete frontend\dist if a stale build is blocking the version check)."
+    if ($null -ne $nodeCommand) {
+        foreach ($corepackName in @("corepack.cmd", "corepack")) {
+            $corepackPath = Join-Path (Split-Path -Parent $nodeCommand.Source) $corepackName
+            if (Test-Path -LiteralPath $corepackPath -PathType Leaf) {
+                $pnpmCommand = $corepackPath
+                $pnpmPrefix = @("pnpm")
+                break
+            }
+        }
     }
-    Write-Host "Building the frontend (npm ci, then npm run build)..."
+    if ($null -eq $pnpmCommand) {
+        $pnpmOnPath = Get-Command pnpm -ErrorAction SilentlyContinue
+        if ($null -ne $pnpmOnPath) {
+            $pnpmCommand = $pnpmOnPath.Source
+        }
+    }
+    if ($null -eq $pnpmCommand) {
+        throw "pnpm was not found (no corepack next to node, nothing on PATH). Building frontend\dist needs Node.js 20.19+ with its bundled corepack, or a global pnpm@12.21.0 (or delete frontend\dist if a stale build is blocking the version check)."
+    }
+    Write-Host "Building the frontend (pnpm install --frozen-lockfile, then pnpm run build)..."
     Push-Location -LiteralPath $frontendDirectory
     try {
-        & $npmCommand.Source ci --no-audit --no-fund --fetch-timeout=1800000 --fetch-retries=5
+        & $pnpmCommand @pnpmPrefix install --frozen-lockfile --fetch-timeout=1800000 --config.fetch-retries=5
         if ($LASTEXITCODE -ne 0) {
-            throw "npm ci failed (exit $LASTEXITCODE). Release aborted: the archive must carry a working frontend\dist."
+            throw "pnpm install --frozen-lockfile failed (exit $LASTEXITCODE). Release aborted: the archive must carry a working frontend\dist and the lockfile must match package.json."
         }
-        & $npmCommand.Source run build
+        & $pnpmCommand @pnpmPrefix run build
         if ($LASTEXITCODE -ne 0) {
-            throw "npm run build failed (exit $LASTEXITCODE). Release aborted: shipping without frontend\dist would hand out a launcher that cannot show a page."
+            throw "pnpm run build failed (exit $LASTEXITCODE). Release aborted: shipping without frontend\dist would hand out a launcher that cannot show a page."
         }
     }
     finally {
@@ -633,7 +671,7 @@ if ($IncludeDesktop) {
     if ([string]::IsNullOrWhiteSpace($DesktopSetupPath)) {
         $desktopNodeModules = Join-Path $ProjectRoot "desktop\node_modules\electron"
         if (-not (Test-Path -LiteralPath $desktopNodeModules)) {
-            throw "desktop\node_modules is missing - run npm install in desktop\ first (the desktop build needs electron-builder)."
+            throw "desktop\node_modules is missing - run pnpm install in desktop\ first (the desktop build needs electron-builder)."
         }
         Write-Host "Building the desktop shell (Build-Desktop.ps1 -Target win)..."
         & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ProjectRoot "scripts\Build-Desktop.ps1") -Target win

@@ -10,7 +10,7 @@ import { t } from "../../i18n";
 import TouTouOrb from "./TouTouOrb";
 import { defaultTouTouContext, TouTouContext } from "./touTouContext";
 import { registerTouTouContext, type TouTouSignal } from "./touTouPageContext";
-import { INTERVENTION_STORAGE_KEY } from "./touTouIntervention";
+import { INTERVENTION_STORAGE_KEY, interventionWeekKey } from "./touTouIntervention";
 import { renderOrb } from "./touTouTestUtils";
 import { askTouTouSideQuestion } from "./touTouSideAsk";
 
@@ -157,7 +157,9 @@ describe("中断预算（#27D）", () => {
         mutedKinds: {},
         weekly: {
           "layout-overflow": {
-            week: "2026-W46",
+            // 必须是"当前 ISO 周"：周计数换周即清零，写死某一周会在那周过去后
+            // 自动失效（本用例曾硬编码 2026-W46，2026-11-16 进入 W47 当天变红）。
+            week: interventionWeekKey(new Date()),
             count: 2,
           },
         },

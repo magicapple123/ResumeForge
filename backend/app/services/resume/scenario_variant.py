@@ -87,16 +87,23 @@ def create_scenario_variant(
 async def preview_scenario_candidate(
     provider: Any,
     *,
-    record: ResumeRecord,
-    variant: ResumeVariant,
+    variant_content: dict,
+    variant_language: str | None,
+    render_language: str | None,
+    format_config: dict,
     job: JobOut | None,
     snapshot: GenerationContextSnapshot,
     instructions: str,
 ) -> dict:
-    """按场景表达指南生成候选内容；**内存返回 v2 文档，不写库**。"""
-    del record  # 只用于权限/归属校验（路由层已做），预览不需要母版内容
-    resume = document_io.ensure_document_version(variant.content,
-        language=variant.language or None, format_config=(variant.render_context or {}).get("format_config") or {})
+    """按场景表达指南生成候选内容；**内存返回 v2 文档，不写库**。
+
+    入参是路由在 worker 里物化好的纯数据（变体正文/语言/排版 + 岗位 + 场景快照），
+    不是 ORM 行：生成要跑几十秒，期间请求会话早已归还，拿 ORM 对象就会撞上
+    ``DetachedInstanceError``。
+    """
+    resume = document_io.ensure_document_version(
+        variant_content, language=variant_language, format_config=format_config
+    )
     revised = await revise_resume(
         provider,
         resume,
@@ -106,8 +113,8 @@ async def preview_scenario_candidate(
     )
     return document_io.ensure_document_version(
         revised if isinstance(revised, dict) else revised.model_dump(),
-        language=(variant.render_context or {}).get("language") or variant.language or None,
-        format_config=(variant.render_context or {}).get("format_config") or {},
+        language=render_language or variant_language,
+        format_config=format_config,
     )
 
 

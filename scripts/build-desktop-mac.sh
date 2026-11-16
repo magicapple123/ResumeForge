@@ -18,9 +18,9 @@
 #
 # Prerequisites:
 #   - macOS with Xcode Command Line Tools:  xcode-select --install
-#   - Node.js 20.19+ and npm
-#   - frontend deps installed once:  (cd frontend && npm ci)
-#   - desktop deps installed once:   (cd desktop && ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm install)
+#   - Node.js 20.19+ (its bundled corepack provides pnpm)
+#   - frontend deps installed once:  (cd frontend && pnpm install --frozen-lockfile)
+#   - desktop deps installed once:   (cd desktop && ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ pnpm install)
 #
 # Notes:
 #   - The macOS payload intentionally carries NO python-runtime.zip. The shell
@@ -73,12 +73,13 @@ done
 [ "$(uname -s)" = "Darwin" ] || fail "This script must run on macOS (dmg creation needs hdiutil)."
 command -v git >/dev/null 2>&1 || fail "git not found (install the Xcode Command Line Tools: xcode-select --install)."
 command -v node >/dev/null 2>&1 || fail "Node.js 20.19+ not found."
-command -v npm >/dev/null 2>&1 || fail "npm not found."
+command -v corepack >/dev/null 2>&1 || command -v pnpm >/dev/null 2>&1 ||
+  fail "pnpm not found - Node.js 20.19+ ships corepack; reinstall Node.js from https://nodejs.org/ (or npm install -g pnpm@12.21.0)."
 
 [ -f "$FRONTEND_DIR/dist/index.html" ] ||
-  fail "frontend/dist/index.html is missing - build it first: (cd frontend && npm ci && npm run build)"
+  fail "frontend/dist/index.html is missing - build it first: (cd frontend && pnpm install --frozen-lockfile && pnpm run build)"
 [ -d "$DESKTOP_DIR/node_modules/electron" ] ||
-  fail "desktop/node_modules is missing - install it first: (cd desktop && ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm install)"
+  fail "desktop/node_modules is missing - install it first: (cd desktop && ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ pnpm install)"
 
 # electron-builder downloads its own helper binaries on first use; the mirror
 # keeps that from stalling on slow international links. Override by exporting
@@ -168,7 +169,7 @@ echo "Payload assembled: $PAYLOAD_FILES files"
 
 # --- package -----------------------------------------------------------
 BUILDER="$DESKTOP_DIR/node_modules/.bin/electron-builder"
-[ -x "$BUILDER" ] || fail "electron-builder not found at $BUILDER - run npm install in desktop/ first."
+[ -x "$BUILDER" ] || fail "electron-builder not found at $BUILDER - run pnpm install in desktop/ first."
 
 # Architecture selection. Default (empty) keeps electron-builder's host-arch
 # behaviour; CI uses "both" so one run ships native dmgs for Intel and Apple

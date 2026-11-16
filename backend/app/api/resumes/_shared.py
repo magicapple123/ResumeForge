@@ -3,56 +3,33 @@
 
 从原 ``api/resumes.py`` 原样搬运（Wave5 拆分）：常量与 helper 的实现逻辑零改动，
 仅随文件移动改变导入路径。
+
+**RF-03b**：``document_or_422`` / ``conversion_error_detail`` 与详情序列化
+（``_to_resume_out``）的实现搬到了 ``services/resume/**``——分页报告、版式保存与
+``get_resume`` 动作下沉到服务层之后，这两处若不搬就会被复制成第二份实现。
+本文件保留同名 re-export（含历史名字 ``_to_resume_out``），调用点无需改动。
 """
 
 import json
-from typing import Any, Literal, get_args
+from typing import Any
 
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ...middleware.loopback_origin import is_non_cross_site_request
 from ...models.resume import ResumeRecord
-from ...schemas.resume import (
-    FactAnnotation,
-    ResumeFontScale,
-    ResumeOut,
-)
 from ...schemas.resume_document import DocumentValidationError
 from ...services import trash
 from ...services.resume import document_io
 from ...services.resume.document_conversion_types import ConversionError
-from ...services.resume.resume_labels import DEFAULT_RESUME_LANGUAGE, normalize_language
-from ...services.resume.resume_templates import DEFAULT_FONT_SCALE, DEFAULT_TEMPLATE
+from ...services.resume.document_io import conversion_error_detail, document_or_422
+from ...services.resume.resume_labels import DEFAULT_RESUME_LANGUAGE
+from ...services.resume.resume_out import build_resume_out
 from .. import settings as settings_api
 
-# 与 ResumeBrief 对应字段上的 Literal 保持一致（schema 里未起别名，这里就近镜像）。
-ResumeSource = Literal["ai", "manual"]
-ResumeEnhancementLevel = Literal["light", "balanced", "strong"]
-
-# 模型层三列都是 ``str``，出口处收窄为 schema 的 ``Literal``（未知值大声失败，
-# 与 pydantic Literal 字段的校验语义一致——以前响应模型校验也会在同一位置拦下）。
-_SOURCE_VALUES: tuple[ResumeSource, ...] = get_args(ResumeSource)
-_ENHANCEMENT_LEVEL_VALUES: tuple[ResumeEnhancementLevel, ...] = get_args(ResumeEnhancementLevel)
-_FONT_SCALE_VALUES: tuple[ResumeFontScale, ...] = get_args(ResumeFontScale)
-
-
-def _as_resume_source(value: str) -> ResumeSource:
-    if value not in _SOURCE_VALUES:
-        raise ValueError(f"未知的简历来源：{value!r}")
-    return value
-
-
-def _as_enhancement_level(value: str) -> ResumeEnhancementLevel:
-    if value not in _ENHANCEMENT_LEVEL_VALUES:
-        raise ValueError(f"未知的美化档位：{value!r}")
-    return value
-
-
-def _as_font_scale(value: str) -> ResumeFontScale:
-    if value not in _FONT_SCALE_VALUES:
-        raise ValueError(f"未知的字号系数：{value!r}")
-    return value
+# 历史名字（Wave5 之前叫 ``_to_resume_out``）：ai_edits / crud / layout_render /
+# versions / resume_phrases 这些调用点与既有 monkeypatch 位置都还用这个名字。
+_to_resume_out = build_resume_out
 
 
 # 服务端 PDF 的实际页数与用户选定的上限。前端靠它们提示"下载下来的页数和你选的不一样"，
@@ -120,40 +97,6 @@ def _format_sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-# v1 内容的 pydantic 校验错误（尤其照片 data URL）对用户没有可读性：这里统一翻成人话。
-_UNSUPPORTED_PHOTO_DETAIL = "简历照片格式不受支持：照片必须是 JPEG、PNG 或 WebP 格式的 base64 data URL，请重新上传后再预览或导出"
-
-
-def conversion_error_detail(exc: Exception) -> str:
-    """把 ConversionError / pydantic 校验错误翻成可读的 422 detail（照片单独给指引）。"""
-    text = str(exc).strip()
-    lowered = text.lower()
-    if "photo" in lowered or "data url" in lowered or "data_url" in lowered:
-        return _UNSUPPORTED_PHOTO_DETAIL
-    if text:
-        return f"简历内容无法解析：{text[:300]}"
-    return "简历内容无法解析：请检查内容结构后重试"
-
-
-def document_or_422(
-    payload: Any,
-    db: Session | None = None,
-    *,
-    language: str | None = None,
-    format_config: dict | None = None,
-) -> dict:
-    """读/渲染入口的版本收口：v1/v2 -> v2 dict；结构不合法统一 422（不 500）。"""
-    try:
-        return document_io.ensure_document_version(
-            payload,
-            language=language,
-            format_config=format_config,
-            custom_fields=document_io.custom_field_definitions(db),
-        )
-    except (ConversionError, DocumentValidationError) as exc:
-        raise HTTPException(status_code=422, detail=conversion_error_detail(exc)) from exc
-
-
 def _validated_content(
     payload: Any,
     db: Session | None = None,
@@ -175,73 +118,6 @@ def _validated_content(
         )
     except (ConversionError, DocumentValidationError) as exc:
         raise HTTPException(status_code=422, detail=conversion_error_detail(exc)) from exc
-
-
-def _to_resume_out(
-    record: ResumeRecord,
-    db: Session | None = None,
-    *,
-    document_conversion: dict | None = None,
-) -> ResumeOut:
-    """记录 -> 详情响应。读路径统一收口：v1 记录一次性转 v2（不写库）。
-
-    document_conversion 由**写路径**传入（创建时请求体是 v1，响应要告诉用户已升级）；
-    读路径下它是 None = 库内本来就是 v2，或转换发生在本次读取（document_for_record 返回摘要）。
-    """
-    content, conversion = document_io.document_for_record(db, record)
-    if document_conversion is not None:
-        conversion_summary = document_conversion
-    else:
-        conversion_summary = document_io.conversion_summary(conversion)
-    return ResumeOut(
-        id=record.id,
-        title=record.title,
-        job_id=record.job_id,
-        job_title=record.job_title,
-        company=record.company,
-        source=_as_resume_source(record.source or "ai"),
-        favorite=record.favorite,
-        favorited_at=record.favorited_at,
-        favorited_at_estimated=bool(record.favorited_at_estimated),
-        model=record.model,
-        enhancement_enabled=record.enhancement_enabled,
-        enhancement_level=_as_enhancement_level(record.enhancement_level),
-        note=record.note or "",
-        # W14/0054：旧行 server_default 读作 resume。
-        document_mode=getattr(record, "document_mode", "resume") or "resume",
-        template=record.template or DEFAULT_TEMPLATE,
-        format_name=record.format_name or "",
-        # 这个字段漏了不会报错，只会让保存成功却读不回来——界面上表现为"按了没反应"。
-        format_config=record.format_config or {},
-        # 语义值原样回传：``0`` = 「不限篇幅」（前端按 ``=== 0`` 判定）。写成
-        # ``or 1`` 会让 API 把「不限」答成"1 页"，编辑器立刻显示最严的篇幅——用户
-        # 明明选了不限，界面却告诉他只能写一页。只有 NULL 列（老数据）才回落 1。
-        page_limit=record.page_limit if record.page_limit is not None else 1,
-        font_scale=_as_font_scale(record.font_scale or DEFAULT_FONT_SCALE),
-        # 读取侧收口而不是直接透传：库里的值被外部工具改成 "fr" 或空串时按 zh-CN 读，
-        # 否则 schema 的 Literal 校验会让整份简历列表 500（见 resume_labels 的说明）。
-        language=normalize_language(record.language),
-        created_at=record.created_at,
-        parent_revision_id=record.parent_revision_id,
-        content=content,
-        document_conversion=conversion_summary,
-        warnings=record.warnings or [],
-        parse_error=record.parse_error,
-        rationale=record.rationale or "",
-        coverage_notes=record.coverage_notes or [],
-        # JSON 列里存的是 dict，逐条显式校验成 FactAnnotation（与 pydantic 构造时的
-        # 隐式校验同语义，这里写明让类型检查器也看得到）。
-        fact_annotations=[
-            FactAnnotation.model_validate(item) for item in (record.fact_annotations or [])
-        ],
-        # 制作台靠它决定要不要把「保存」常驻（见 schema 里的说明）。
-        draft=bool(record.draft),
-        # 保存次数（0052）：前端把它记成 ``expectedRevision``，下次条件写原样发回。
-        # ``or 0`` 兜住 0052 之前写入的旧行与"列刚加、还没 refresh"的实例。
-        revision=int(record.revision or 0),
-        # A5：这份简历生成时冻结的职业场景快照（旧行/手写简历为 None，不按当前场景回填）。
-        context_snapshot=getattr(record, "context_snapshot", None),
-    )
 
 
 def _get_live_resume(db: Session, resume_id: int) -> ResumeRecord:

@@ -62,6 +62,8 @@ from .llm_settings import get_llm_config as get_llm_config
 from .llm_settings import list_llm_config_records as list_llm_config_records
 from .llm_settings import mask_llm_config as mask_llm_config
 from .llm_settings import resolve_llm_config_api_key as resolve_llm_config_api_key
+from .llm_settings import resolve_probe_config as resolve_probe_config
+from .llm_settings import resolve_probe_config_with_locale as resolve_probe_config_with_locale
 from .llm_settings import save_llm_config as save_llm_config
 from .llm_settings import save_llm_config_record as save_llm_config_record
 

@@ -283,7 +283,7 @@ def session_id(client, db_session, monkeypatch):
     # 开场需要"已配置模型"：与其它面试用例同一条打桩点（app.api.interview._require_provider）。
     monkeypatch.setattr("app.api.interview._require_provider", lambda _db: (_VisionProvider(), "m"))
 
-    async def ask(_db, _session, _provider):
+    async def ask(_turn):
         return "讲讲你最近做的一个项目", "", False
 
     # 开场会立刻生成第一题：这里只测镜头，不该被题目生成牵连。

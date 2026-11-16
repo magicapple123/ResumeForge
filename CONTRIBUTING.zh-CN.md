@@ -11,7 +11,7 @@
 ## 开始之前
 
 - Python 3.11–3.13（CI 覆盖 3.11 / 3.12 / 3.13；`pyproject.toml` 的 `target-version = "py311"`）。
-- Node.js `>= 20.19.0`，并使用随 Node 提供的 npm。
+- Node.js `>= 20.19.0`，以及 **pnpm 12.21.0**（`corepack enable`，或 `npm install -g pnpm@12.21.0`）。pnpm **不随 Node 一起分发**：首次 `corepack pnpm …` 会下载 12.21.0 二进制，所以第一次调用需要联网。
 - Windows 中文环境运行 Python 命令前建议设置 `PYTHONUTF8=1`。
 - 不要提交 `.env`、数据库、真实简历、API Key、构建产物、虚拟环境或其他个人数据。
 
@@ -31,9 +31,11 @@ python -m venv .venv
 
 ```powershell
 cd frontend
-npm ci
-npm run dev
+pnpm install --frozen-lockfile
+pnpm run dev
 ```
+
+依赖真相是 `pnpm-lock.yaml`，不再有 `package-lock.json`（也不允许再生成一份）。`--frozen-lockfile` 在锁文件不一致时直接报错，不会悄悄重解析。两个 npm 参数在 pnpm 上是**非法**的、会直接 Usage 报错：`--no-audit`、`--no-fund`。超时/重试类参数走 config 形式，例如 `--config.fetch-retries=5`（`--fetch-timeout` 本身仍可用）。
 
 开发环境由 Vite 将 `/api` 转发到 `http://127.0.0.1:8000`。
 
@@ -69,10 +71,10 @@ npm run dev
 
 1. `ruff check backend/app backend/tests`，再对这两个目录下**本次改动涉及的** `.py` 文件跑 `ruff format --check`（对 HEAD 的改动 + 未跟踪文件）。
 2. 后端全量测试 `pytest tests -q -n 2`，**不带 `--cov`**；需要 9333 端口上有活应用的 canary 测试被跳过。
-3. `npm run typecheck`。
-4. `npm run lint`。
-5. `npm run test`，再跑 `npm audit --registry=https://registry.npmjs.org`（high 及以上）。
-6. `npm run build`。
+3. `pnpm run typecheck`。
+4. `pnpm run lint`。
+5. `pnpm run test`，再跑 `pnpm audit --registry=https://registry.npmjs.org`（high 及以上）。
+6. `pnpm run build`。
 
 ```powershell
 .\scripts\Check-All.ps1
@@ -112,12 +114,12 @@ $env:PYTHONUTF8 = "1"
 
 ```powershell
 cd frontend
-npm test
-npm run format:check
-npm run lint
-npm run typecheck
-npm run build
-npm audit --registry=https://registry.npmjs.org
+pnpm run test
+pnpm run format:check
+pnpm run lint
+pnpm run typecheck
+pnpm run build
+pnpm audit --registry=https://registry.npmjs.org
 ```
 
 涉及界面交互时，还应手动验证对应流程及常见空状态、错误状态和窄屏布局。涉及用户可见行为、依赖、配置或数据库兼容性的改动，请同步更新 `README.md`、相关 `docs/` 文档及 `CHANGELOG.md`。

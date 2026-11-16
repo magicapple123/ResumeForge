@@ -33,6 +33,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..runtime.blocking import run_sync
 from ..schemas.asr import (
     MAX_AUDIO_BYTES,
     MAX_AUDIO_SECONDS,
@@ -189,6 +190,80 @@ def _resolve_key(
     return raw_key
 
 
+def _prepare_settings_probe(
+    db: Session, payload: AsrSettings
+) -> AsrSettings | AsrSettingsTestResult:
+    """「测试连接」的**准备段**：跑一次旧数据迁移、合并已存配置、解析出真实 Key。
+
+    整段都碰请求会话，所以在同一个 worker 里做完并归还连接；随后那次探测是一次真发
+    音频的远端调用，不该继续占着 SQLite 连接。要素不全时直接把最终结果返回，路由据此
+    提前返回（与改造前同一份文案）。
+    """
+    try:
+        _ensure_asr_migrated(db)
+        stored = get_asr_runtime_settings(db)
+        base_url = payload.base_url or stored.base_url
+        model = payload.model or stored.model
+        protocol = _resolve_protocol(payload, stored)
+        api_key = _resolve_key(db, payload, protocol)
+        candidate = AsrSettings(base_url=base_url, model=model, api_key=api_key, protocol=protocol)
+        if not is_asr_configured(candidate):
+            # deepseek 没有 model 参数：向它要模型名会让用户永远填不完这一格。
+            message = (
+                "请先填写语音服务地址与 Key"
+                if protocol == DEEPSEEK_PROTOCOL
+                else "请先填写语音服务地址、模型与 Key"
+            )
+            return AsrSettingsTestResult(ok=False, message=message)
+        return candidate
+    finally:
+        db.close()
+
+
+def _prepare_models_probe(db: Session, payload: AsrModelsRequest) -> AsrSettings | None:
+    """「拉模型列表」的**准备段**：解析地址/协议/Key；缺一即返回 ``None``（空列表）。"""
+    try:
+        stored = get_asr_runtime_settings(db)
+        base_url = payload.base_url or stored.base_url
+        protocol = _resolve_protocol(payload, stored)
+        api_key = _resolve_key(db, payload, protocol)
+        if not (base_url and api_key):
+            return None
+        return AsrSettings(base_url=base_url, api_key=api_key, protocol=protocol)
+    finally:
+        db.close()
+
+
+def _prepare_profile_probe(
+    db: Session, profile_id: str, payload: AsrProfileTestRequest
+) -> AsrSettings | None:
+    """命名配置「测试连接」的**准备段**：迁移 + 解析「已存 Key + 草稿覆盖」。"""
+    try:
+        _ensure_asr_migrated(db)
+        with _profile_errors():
+            return resolve_probe_target(profile_id, payload)
+    finally:
+        db.close()
+
+
+def _load_asr_runtime(db: Session) -> AsrSettings:
+    """转写入口的**准备段**：读出这一档真正生效的运行时配置，然后归还连接。"""
+    try:
+        return get_asr_runtime_settings(db)
+    finally:
+        db.close()
+
+
+def _record_asr_usage(db: Session, seconds: float, *, source: str, host: str) -> None:
+    """转写入口的**收尾段**：记一条非 token 用量账（旁路，失败只记日志）。"""
+    from ..services.usage_counters import KIND_ASR, record_external_usage
+
+    try:
+        record_external_usage(KIND_ASR, seconds, source=source, db=db)
+    except Exception:  # noqa: BLE001 - 计量是旁路，不能让已成功的转写变成失败
+        logger.warning("ASR 用量记录失败 host=%s", host, exc_info=True)
+
+
 @router.get("/settings/asr", response_model=AsrSettingsOut)
 def read_asr_settings(db: Session = Depends(get_db)) -> AsrSettingsOut:
     """读取语音服务配置：``api_key`` 只可能是掩码或空串。"""
@@ -210,25 +285,14 @@ async def test_asr_settings(
     payload: AsrSettings, db: Session = Depends(get_db)
 ) -> AsrSettingsTestResult:
     """用表单当前值探测一次上游（发一段静音），不要求先保存。"""
-    _ensure_asr_migrated(db)
-    stored = get_asr_runtime_settings(db)
-    base_url = payload.base_url or stored.base_url
-    model = payload.model or stored.model
-    protocol = _resolve_protocol(payload, stored)
-    api_key = _resolve_key(db, payload, protocol)
-    candidate = AsrSettings(
-        base_url=base_url, model=model, api_key=api_key, protocol=protocol
-    )
-    if not is_asr_configured(candidate):
-        # deepseek 没有 model 参数：向它要模型名会让用户永远填不完这一格。
-        message = (
-            "请先填写语音服务地址与 Key"
-            if protocol == DEEPSEEK_PROTOCOL
-            else "请先填写语音服务地址、模型与 Key"
-        )
-        return AsrSettingsTestResult(ok=False, message=message)
+    prepared = await run_sync(_prepare_settings_probe, db, payload)
+    if isinstance(prepared, AsrSettingsTestResult):
+        return prepared
     ok, message, latency_ms = await probe_asr_connection(
-        base_url=base_url, api_key=api_key, model=model, protocol=protocol
+        base_url=prepared.base_url,
+        api_key=prepared.api_key,
+        model=prepared.model,
+        protocol=prepared.protocol,
     )
     return AsrSettingsTestResult(ok=ok, latency_ms=latency_ms, message=message)
 
@@ -241,13 +305,12 @@ async def list_asr_models(
 
     与「测试连接」共用 :func:`_resolve_key`：两处对"沿用旧 Key"的判据必须一致。
     """
-    stored = get_asr_runtime_settings(db)
-    base_url = payload.base_url or stored.base_url
-    protocol = _resolve_protocol(payload, stored)
-    api_key = _resolve_key(db, payload, protocol)
-    if not (base_url and api_key):
+    target = await run_sync(_prepare_models_probe, db, payload)
+    if target is None:
         return AsrModelsResult(models=[])
-    models = await fetch_asr_models(base_url=base_url, api_key=api_key, protocol=protocol)
+    models = await fetch_asr_models(
+        base_url=target.base_url, api_key=target.api_key, protocol=target.protocol
+    )
     return AsrModelsResult(models=models)
 
 
@@ -303,9 +366,7 @@ async def test_asr_profile(
     ``profile_id`` 允许传 ``new``（新建弹窗里还没有 id）：此时不读取任何已存 Key，
     避免"新建时留空却测通了上一条配置的 Key"这种误判。
     """
-    _ensure_asr_migrated(db)
-    with _profile_errors():
-        target = resolve_probe_target(profile_id, payload)
+    target = await run_sync(_prepare_profile_probe, db, profile_id, payload)
     if target is None:
         return AsrSettingsTestResult(ok=False, message="请先填写语音服务地址、模型与 Key")
     ok, message, latency_ms = await probe_asr_connection(
@@ -315,6 +376,7 @@ async def test_asr_profile(
         protocol=target.protocol,
     )
     return AsrSettingsTestResult(ok=ok, latency_ms=latency_ms, message=message)
+
 
 @router.get("/transcribe/status", response_model=AsrStatus)
 def read_transcribe_status(db: Session = Depends(get_db)) -> AsrStatus:
@@ -351,7 +413,7 @@ async def transcribe(
     DeepSeek 的 ``/tools/asr``）。上限也按协议取：``deepseek`` 是 120 秒 / 8 MiB。
     """
     started = time.perf_counter()
-    runtime = get_asr_runtime_settings(db)
+    runtime = await run_sync(_load_asr_runtime, db)
     host = provider_host(runtime.base_url)
     if not is_asr_configured(runtime):
         raise HTTPException(status_code=409, detail=_NOT_CONFIGURED_DETAIL)
@@ -405,15 +467,15 @@ async def transcribe(
     # 计量（T16）：只记**音频秒数**，不折算金额。用前端报的 duration_ms 除以 1000
     # （那是真实录音时长，也是上限校验的同一个数）；没报就不记——用字节数反推时长
     # 会随编码格式漂移（1.5 KB 的 opus 只有 0.25 秒），宁可少一条也不写错账。
+    # 落账同样是一次写库，交给 worker：转写刚回来，事件循环要先能接下一个请求。
     if duration_ms:
-        from ..services.usage_counters import KIND_ASR, record_external_usage
-
-        try:
-            record_external_usage(
-                KIND_ASR, duration_ms / 1000, source=f"transcribe:{host}", db=db
-            )
-        except Exception:  # noqa: BLE001 - 计量是旁路，不能让已成功的转写变成失败
-            logger.warning("ASR 用量记录失败 host=%s", host, exc_info=True)
+        await run_sync(
+            _record_asr_usage,
+            db,
+            duration_ms / 1000,
+            source=f"transcribe:{host}",
+            host=host,
+        )
     # duration_ms 是"录音被掐断"的唯一直接证据（需求 #8：之前只能拿 bytes 反推时长，
     # 1.5 KB 的 opus 折算 0.25 秒才定位到"用户连点两下"）。缺省记 -1，与"0 毫秒"区分开。
     logged_duration = duration_ms if duration_ms is not None else -1

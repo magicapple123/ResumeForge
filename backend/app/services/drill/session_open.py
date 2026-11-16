@@ -8,8 +8,9 @@
 请求会话的连接池，而"第一题没生成出来就把空会话删掉"要用另一条会话（drop_empty_session
 内部自开）。两段之间的事务收尾（commit + refresh）留在路由：那是路由的事务边界。
 
-**打桩点**：`load_llm_config` / `create_provider` 由路由以参数注入；测试打桩的是
-`app.api.drill` 命名空间上的这两个名字，路由调用期读取后传入，补丁落点不变。
+**打桩点**：`create_provider` 由路由以参数注入；测试打桩的是 `app.api.drill` 命名空间上的
+这个名字，路由调用期读取后传入，补丁落点不变。模型配置也由路由在 worker 里读好再传进来
+（`config`），本函数因此**不需要请求会话**——RF-02 之后它是"纯编排 + 一次模型调用"。
 """
 
 from __future__ import annotations
@@ -87,19 +88,19 @@ def prepare_drill_session(db: Session, payload: DrillCreate) -> DrillSessionDraf
 
 
 async def open_drill_session(
-    db: Session,
     draft: DrillSessionDraft,
     *,
-    load_llm_config: Callable[[Session], Any],
+    config: Any,
     create_provider: Callable[[Any], Any],
     run_plan: Callable[[Awaitable[Any]], Awaitable[Any]],
 ) -> int:
     """生成第一条评分契约并落库，返回会话 id（路由提交过会话行之后调用）。
 
-    `run_plan` 由路由注入：它负责"模型调用 + 客户端断开就取消"（run_or_gone）。
+    `config` / `create_provider` 由路由注入：路由在 worker 里读好模型配置、提交会话行、
+    并关掉请求会话（模型调用期间不占连接池），所以本函数不再碰请求会话。`run_plan` 也由
+    路由注入，负责"模型调用 + 客户端断开就取消"（``run_or_gone``）。
     返回后会话已关闭，路由按 id 重新读一次再组装响应（关系是延迟加载的）。
     """
-    config = load_llm_config(db)
     if not llm_is_configured(config):
         # 没有模型就开不了这场深挖——契约必须由模型按主张生成，编一份假的等于没有标准。
         raise DrillSessionOpenError(
@@ -110,9 +111,8 @@ async def open_drill_session(
 
     provider = create_provider(config)
     claim = draft.claims[0]
-    session_id = draft.session.id
+    session_id = int(draft.session.id)
     job_title, company = draft.session.job_title, draft.session.company
-    db.close()  # 模型调用期间不要占着连接池
 
     # 第一题没生成出来时把这条空会话删掉（实现见 services/drill/session.py：
     # 用户会看到"一场问不出题的记录"，那比报错更让人困惑；删的时候必须另开一条会话，

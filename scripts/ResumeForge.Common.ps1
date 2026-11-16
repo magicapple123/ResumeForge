@@ -64,7 +64,45 @@ function Get-ResumeForgeProcessPattern {
     if ($Service -eq "backend") {
         return "uvicorn\s+app\.main:app"
     }
-    return "npm\.cmd.*\brun\s+dev"
+    # The frontend is started through pnpm (corepack.cmd pnpm run dev ... or
+    # pnpm.cmd ... run dev). "npm.cmd" is kept so a process recorded by an older
+    # build is still recognised and can be stopped instead of being orphaned.
+    return "(?:pnpm|npm)(?:\.cmd)?.*\brun\s+dev"
+}
+
+function Resolve-PnpmLauncher {
+    param($NodeRuntime)
+
+    # pnpm is not shipped with Node, so it cannot be located by a fixed path the
+    # way npm.cmd is. Prefer Node's own corepack (bundled since 16.9): it fetches
+    # the version pinned by package.json's `packageManager` field and caches it,
+    # so behaviour does not depend on what the user happens to have installed
+    # globally. Only then fall back to a pnpm already on PATH.
+    $nodePath = if ($null -ne $NodeRuntime -and $NodeRuntime.NodePath) {
+        $NodeRuntime.NodePath
+    }
+    else {
+        $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+        if ($null -ne $nodeCommand) { $nodeCommand.Source }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($nodePath)) {
+        $nodeDirectory = Split-Path -Parent $nodePath
+        foreach ($corepackName in @("corepack.cmd", "corepack")) {
+            $corepackPath = Join-Path $nodeDirectory $corepackName
+            if (Test-Path -LiteralPath $corepackPath -PathType Leaf) {
+                return [pscustomobject]@{ FilePath = $corepackPath; PrefixArguments = @("pnpm") }
+            }
+        }
+    }
+    foreach ($pnpmName in @("pnpm.cmd", "pnpm")) {
+        $pnpmCommand = Get-Command $pnpmName -ErrorAction SilentlyContinue
+        if ($null -ne $pnpmCommand) {
+            return [pscustomobject]@{ FilePath = $pnpmCommand.Source; PrefixArguments = @() }
+        }
+    }
+    throw ("pnpm was not found: the Node.js install at '$nodePath' has no corepack and there is " +
+        "no pnpm on PATH. Install the official Node.js 20.19+ package (it bundles corepack), " +
+        "or run npm install -g pnpm@12.21.0.")
 }
 
 function Wait-ForCondition {
@@ -283,9 +321,10 @@ function Get-ResumeForgeFallbackCommandPattern {
     if ($Service -eq "backend") {
         return "uvicorn\s+app\.main:app"
     }
-    # Windows 启动器用 npm.cmd 拉起 Vite 并显式传 --strictPort；监听端口的是 Vite 自己的
-    # node 进程（命令行里不一定还有 npm），所以两个特征都认。
-    return "([\\/]vite(\.js)?\s.*--strictPort|npm(\.cmd)?\s.*\brun\s+dev\b)"
+    # Windows 启动器用 pnpm 拉起 Vite 并显式传 --strictPort；监听端口的是 Vite 自己的
+    # node 进程（命令行里不一定还有 pnpm），所以两个特征都认。npm 一并保留：旧版本
+    # 记录下来的进程仍在跑时也要能被认出来并停掉。
+    return "([\\/]vite(\.js)?\s.*--strictPort|(?:pnpm|npm)(?:\.cmd)?\s.*\brun\s+dev\b)"
 }
 
 function Test-ResumeForgeHealthPayload {

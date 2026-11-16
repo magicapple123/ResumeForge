@@ -68,10 +68,18 @@ ResumeForge/
 ## 4. 常见问题排查路径
 
 - **启动失败 / 端口占用**：看 `runtime/backend.stderr.log`（后端）或 `runtime/frontend.stderr.log`（前端）的最后几行。端口被占用时，用 `start.cmd -BackendPort <端口>`（或 `-FrontendPort`）换端口；启动器只结束自己记录并校验过的进程，不会误杀其他程序。
-- **依赖缺失 / venv**：后端依赖在 `backend/requirements.txt`（开发依赖 `requirements-dev.txt`），前端在 `frontend/package.json`（`npm ci` 安装）。虚拟环境在 `backend/.venv`。缺包先确认 venv 已激活 / 已用对 Python（3.11–3.13）。
+- **依赖缺失 / venv**：后端依赖在 `backend/requirements.txt`（开发依赖 `requirements-dev.txt`），前端在 `frontend/package.json`（`pnpm install --frozen-lockfile` 安装）。虚拟环境在 `backend/.venv`。缺包先确认 venv 已激活 / 已用对 Python（3.11–3.13）。
 - **数据库结构与启动闸门**：2.0 的迁移链只有一条基线 `0001_baseline_v2`，闸门看单行表 `app_schema_epoch`（`epoch=2`）。启动时先读 epoch：**缺 epoch 表且库里有业务表 → 判为 pre-2.0 库**，整包归档到 `backend/data/legacy-archive/<时间戳>/` 后建空库（1.x 的数据**不会**搬进新库）；`epoch > 2` 拒绝启动；`epoch == 2` 才用 revision 判断是否在链上，有用户数据且有待应用 revision 时先在 `backend/data/backups/` 建一致性备份。不要在外部手工改库结构。
 - **导出失败**：2.0 支持 7 种导出格式 —— PDF / Word / HTML / Markdown / 纯文本 / JSON / PNG。PDF 直出依赖系统中文字体（`RESUMEFORGE_PDF_FONT` 可覆盖），找不到字体会明确报错并保留浏览器打印作为替代；Word / HTML / Markdown / 纯文本 / JSON 为本地生成；**PNG 是前端做的补充格式**——把精确 PDF 的同一份字节逐页光栅化（`frontend/src/utils/pdfToPng.ts` + `pngExport.ts`，pdfjs + jszip 动态加载），单页出 `.png`、多页打成 zip，所以它继承 PDF 的篇幅截断（PDF 被裁到几页，图片就是几页）。篇幅上限对**除 JSON 外**的 6 种格式生效（JSON 是数据交付物，始终完整）。脱敏与分享包始终基于脱敏内容。
-- **前端白屏 / 构建**：`cd frontend && npm ci && npm run build`；生产部署需要 SPA history fallback 并把 `/api` 反代到后端，不能只复制 `dist` 后直接双击打开。
+- **前端白屏 / 构建**：`cd frontend && pnpm install --frozen-lockfile && pnpm run build`；生产部署需要 SPA history fallback 并把 `/api` 反代到后端，不能只复制 `dist` 后直接双击打开。
+- **pnpm 报 `ERR_PNPM_IGNORED_BUILDS`**：某个依赖带构建脚本（install / postinstall），pnpm 12 默认不执行、并且**直接让 install 失败**，报错里会点名那个包。修法：把包名加进**对应那棵树**的 `pnpm-workspace.yaml` 的 `allowBuilds`——注意它是**映射**（`包名: true`），写成数组会解析失败：
+  ```yaml
+  allowBuilds:
+    electron-winstaller: true
+  ```
+  加完必须重装才会补跑：`ERR_PNPM_IGNORED_BUILDS` 出现过一次之后会被记进 `ignoredBuilds`，**后续 install 会静默跳过**（不再报错，等于那个包的脚本永远没跑）。所以改完 `pnpm-workspace.yaml` 要删掉 `node_modules` 再 `pnpm install --frozen-lockfile`，别只看日志变绿就以为修好了。
+- **锁文件里出现 `---` 或 `packageManagerDependencies`（静默分支，最危险的一种）**：说明 `pnpm-workspace.yaml` 顶层的 `pmOnFail: ignore` **整行被删掉**（或从未加），或者**缩进错**——写进别的键下面就变成那个键的子项，pnpm 不认也不报错，等于这行不存在。于是 pnpm 又开始把自己写进锁文件的第一个 YAML 文档。后果不是本地报错，而是 **GitHub 的依赖图只读第一个文档 → Dependabot 的 JS 安全告警与 `dependency-review` 全部失明**，`pnpm install` 依旧全绿，所以只能靠 `grep -c '^---$' pnpm-lock.yaml`（应为 0）发现。修法：补回两个 `pnpm-workspace.yaml` 顶层的 `pmOnFail: ignore`，再 `pnpm install --lockfile-only` 重生成（该命令不碰 `node_modules`），然后用 `backend/tests/test_version_consistency.py::test_lockfiles_are_single_yaml_document` 复核。
+- **`pnpm install` 当场报 `pmOnFail` 的配置错（不静默，别和上面那条混为一谈）**：值写错**不会**无声降级——`pmOnFail` 只认 `download` / `error` / `warn` / `ignore`，写成 `off` / `false` / `yes` 之类会直接 `ERR_PNPM_INVALID_SETTING`（`unknown variant 'off', expected one of download, error, warn, ignore`）；键名拼错成别的顶层键则是 `ERR_PNPM_UNRECOGNIZED_WORKSPACE_SETTINGS`。这类错误在解析配置阶段就中止，锁文件不会被它改动；改回顶层 `pmOnFail: ignore`（不缩进）即可。
 - **更新升级**：Windows 用 `update.cmd`（只替换程序文件，不动 `data/`、`.env`）；完整升级、备份与回滚步骤见 `docs/upgrading.md`。**别对 1.x → 2.0 说"升级不会丢数据"**：2.0 不搬数据，首次启动会把旧库**整包归档**到 `legacy-archive/<时间戳>/` 后建空库，新库里从空白开始（归档保留全部旧数据，可用 1.0.2 打开）。**只有同 major 内的更新**才是"下次启动自动迁移、数据保留"。
 
 ## 5. 硬性约束（AI 回答时必须遵守）

@@ -10,6 +10,7 @@
 - 记录里的 ``items`` / ``page_snapshot`` 含用户填进页面的真实值，**只存本机**，
   不进分享包、不进简历导出（见 ``models/web_form_record.py`` 的隐私说明）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -135,6 +136,10 @@ def list_records_page(
         .all()
     )
     return rows, total
+
+
+#: 读不到（或已进回收站）填充记录时的对外文案：路由与助手动作共用同一句。
+RECORD_NOT_FOUND_DETAIL = "填充记录不存在或已被删除"
 
 
 def record_or_none(db: Session, record_id: int) -> WebFormFillRecord | None:

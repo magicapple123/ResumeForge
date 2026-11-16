@@ -29,8 +29,8 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, ConfigDict, Field
 
 from ....schemas.profile import MAX_PROFILE_DETAIL_CHARS, ProfileOut, ProfileUpdate
-from ..legacy import preview_runner, route_runner, tool_runner
-from ..registry import define_action
+from ...profile.profile_save import save_profile_with_photo
+from ..legacy import preview_runner, tool_runner
 from ..spec import ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -98,57 +98,54 @@ class UpdateProfileInput(ProfileUpdate):
     summary: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS, description="个人总结")
 
 
+def _run_update_profile(db: Session, payload: UpdateProfileInput) -> ActionOutcome:
+    """旧协议 PUT：与 ``PUT /api/profile`` 同一个服务函数（整份替换 + 照片副本）。
+
+    工具侧不走这里：``run_tool`` 是 read-modify-write，两侧写语义本就不同（见模块 docstring）。
+    """
+    return ActionOutcome(data=save_profile_with_photo(db, payload))
+
+
 _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def profile_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）profile 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）profile 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
     if _ACTIONS is not None:  # 内层重入已完成构建（工具声明模块在 assistant_tools 初始化期调用）
         return _ACTIONS
-    get_profile = define_action(
-        ActionSpec(
-            name="get_profile",
-            description="读取个人资料（已脱敏：不含姓名、电话、邮箱和照片）。想确认某个字段是否已填写时用它。",
-            input_model=GetProfileInput,
-            permission=Permission.READ_ONLY,
-            run=_run_get_profile,
-            service_entry="settings_service.get_assistant_relaxed_mode",
-            # 旧路由忽略未知 query 参数、旧工具忽略未声明的参数：用开关保持同样的宽容。
-            ignore_unknown_arguments=True,
-            http=HttpRoute("GET", "/api/profile", ProfileOut, tags=("profile",)),
-        )
+    get_profile = ActionSpec(
+        name="get_profile",
+        description="读取个人资料（已脱敏：不含姓名、电话、邮箱和照片）。想确认某个字段是否已填写时用它。",
+        input_model=GetProfileInput,
+        permission=Permission.READ_ONLY,
+        run=_run_get_profile,
+        service_entry="profile.profile_service.project_legacy_profile",
+        # 旧路由忽略未知 query 参数、旧工具忽略未声明的参数：用开关保持同样的宽容。
+        ignore_unknown_arguments=True,
+        http=HttpRoute("GET", "/api/profile", ProfileOut, tags=("profile",)),
     )
-    update_profile = define_action(
-        ActionSpec(
-            name="update_profile",
-            description=(
-                "更新个人资料里的基础字段（只传要改的那些，其余字段会被保留）。"
-                "教育经历、工作经历、项目、技能、奖项等结构化条目暂不支持，"
-                "请让用户在「我的资料」页面编辑。"
-            ),
-            input_model=UpdateProfileInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=route_runner("app.api.profile", "save_profile"),
-            run_tool=tool_runner("app.services.assistant_tools.job_tools", "_tool_update_profile"),
-            preview=preview_runner(
-                "app.services.assistant_tools.previews", "preview_update_profile"
-            ),
-            service_entry="profile.profile_service.update_profile",
-            tool_fields=_TOOL_PROFILE_FIELDS,
-            # 旧 PUT 路由的 Pydantic 模型是 extra=ignore：前端可能回传资料草稿的额外字段，
-            # 保持"未知 body 字段被忽略"的历史行为（工具侧仍有 tool_fields 严格投影）。
-            ignore_unknown_arguments=True,
-            http=HttpRoute("PUT", "/api/profile", ProfileOut, tags=("profile",)),
-        )
+    update_profile = ActionSpec(
+        name="update_profile",
+        description=(
+            "更新个人资料里的基础字段（只传要改的那些，其余字段会被保留）。"
+            "教育经历、工作经历、项目、技能、奖项等结构化条目暂不支持，"
+            "请让用户在「我的资料」页面编辑。"
+        ),
+        input_model=UpdateProfileInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_update_profile,
+        run_tool=tool_runner("app.services.assistant_tools.job_tools", "_tool_update_profile"),
+        preview=preview_runner("app.services.assistant_tools.previews", "preview_update_profile"),
+        service_entry="profile.profile_save.save_profile_with_photo",
+        tool_fields=_TOOL_PROFILE_FIELDS,
+        # 旧 PUT 路由的 Pydantic 模型是 extra=ignore：前端可能回传资料草稿的额外字段，
+        # 保持"未知 body 字段被忽略"的历史行为（工具侧仍有 tool_fields 严格投影）。
+        ignore_unknown_arguments=True,
+        http=HttpRoute("PUT", "/api/profile", ProfileOut, tags=("profile",)),
     )
     _ACTIONS = {spec.name: spec for spec in (get_profile, update_profile)}
     return _ACTIONS

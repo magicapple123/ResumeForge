@@ -22,7 +22,7 @@ from ..schemas.material import (
     CandidateJobOut,
 )
 from ..services.actions import add_action_route
-from ..services.actions.catalog import all_actions
+from ..services.actions.catalog import registered_action
 from ..services.candidate_csv import (
     candidates_to_csv_text,
     decode_csv_bytes,
@@ -57,7 +57,7 @@ def _parse_collect_task_ids(raw: str) -> list[int]:
     return list(dict.fromkeys(parsed))
 
 
-add_action_route(router, all_actions()["list_candidate_jobs"], route_path="")
+add_action_route(router, registered_action("list_candidate_jobs"), route_path="")
 
 
 @router.get("/page", response_model=Page[CandidateJobOut])
@@ -91,7 +91,7 @@ def read_candidate_jobs_page(
     return Page(items=items, total=total)
 
 
-add_action_route(router, all_actions()["create_candidate_job"], route_path="")
+add_action_route(router, registered_action("create_candidate_job"), route_path="")
 
 
 @router.post("/import", response_model=CandidateJobBulkImportOut)
@@ -192,13 +192,13 @@ def _get_candidates_or_404(db: Session, candidate_ids: list[int]) -> list:
     return candidates
 
 
-add_action_route(router, all_actions()["get_candidate_job"], route_path="/{candidate_id}")
+add_action_route(router, registered_action("get_candidate_job"), route_path="/{candidate_id}")
 
 
-add_action_route(router, all_actions()["update_candidate_job"], route_path="/{candidate_id}")
+add_action_route(router, registered_action("update_candidate_job"), route_path="/{candidate_id}")
 
 
-add_action_route(router, all_actions()["import_candidate_job"], route_path="/{candidate_id}/imported")
+add_action_route(router, registered_action("import_candidate_job"), route_path="/{candidate_id}/imported")
 
 
 @router.delete("/{candidate_id}", status_code=204)

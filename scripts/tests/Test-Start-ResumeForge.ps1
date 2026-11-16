@@ -331,20 +331,20 @@ try {
         -Condition ($script:probedSelectors[0] -eq "-3.12" -and $script:probedSelectors.Count -eq 1) `
         -Message "Probing must start at 3.12 and stop at the first supported runtime."
 
-    # --- launching npm.cmd from a path that contains spaces ---
+    # --- launching the package-manager shim from a path that contains spaces ---
 
     # The frontend used to go through a hand-written "cmd /s /c ""<path>" args"
     # line. Start-Process joins -ArgumentList with spaces and adds no quoting
     # while cmd /s /c strips the outer quotes, so a Node install under
     # "C:\Program Files\nodejs" (the official MSI default) never started. The
-    # launcher now hands npm.cmd to Start-Process directly and lets PowerShell
-    # build the cmd.exe wrapper, so this runs the same shape against a stub in a
-    # directory with a space in its name.
+    # launcher now hands the pnpm shim (node's corepack.cmd) to Start-Process
+    # directly and lets PowerShell build the cmd.exe wrapper, so this runs the
+    # same shape against a stub in a directory with a space in its name.
     $spacedDirectory = Join-Path $RuntimeDirectory "program files node"
     New-Item -ItemType Directory -Path $spacedDirectory -Force | Out-Null
-    $stubNpmPath = Join-Path $spacedDirectory "npm.cmd"
+    $stubPnpmShimPath = Join-Path $spacedDirectory "corepack.cmd"
     $stubMarkerPath = Join-Path $RuntimeDirectory "stub-arguments.txt"
-    Set-Content -LiteralPath $stubNpmPath -Encoding ascii -Value @(
+    Set-Content -LiteralPath $stubPnpmShimPath -Encoding ascii -Value @(
         "@echo off",
         "echo %* > `"$stubMarkerPath`"",
         "exit /b 0"
@@ -352,26 +352,26 @@ try {
 
     $stubOutputPath = Join-Path $RuntimeDirectory "stub.stdout.log"
     $stubErrorPath = Join-Path $RuntimeDirectory "stub.stderr.log"
-    $spacedProcess = Start-Process -FilePath $stubNpmPath `
-        -ArgumentList @("run", "dev", "--", "--host", "127.0.0.1", "--port", "5173", "--strictPort") `
+    $spacedProcess = Start-Process -FilePath $stubPnpmShimPath `
+        -ArgumentList @("pnpm", "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173", "--strictPort") `
         -WorkingDirectory $RuntimeDirectory -WindowStyle Hidden -Wait -PassThru `
         -RedirectStandardOutput $stubOutputPath -RedirectStandardError $stubErrorPath
     Assert-LauncherTest `
         -Condition ($spacedProcess.ExitCode -eq 0) `
-        -Message "npm.cmd could not be started from a path containing a space (exit $($spacedProcess.ExitCode))."
+        -Message "the pnpm shim could not be started from a path containing a space (exit $($spacedProcess.ExitCode))."
     Assert-LauncherTest `
         -Condition (Test-Path -LiteralPath $stubMarkerPath) `
-        -Message "The npm.cmd stub never ran, so the command line was misparsed."
+        -Message "The pnpm shim stub never ran, so the command line was misparsed."
     Assert-LauncherTest `
-        -Condition ((Get-Content -LiteralPath $stubMarkerPath -Raw) -match "run dev -- --host 127\.0\.0\.1 --port 5173 --strictPort") `
-        -Message "Arguments were mangled on the way to npm.cmd."
+        -Condition ((Get-Content -LiteralPath $stubMarkerPath -Raw) -match "pnpm run dev -- --host 127\.0\.0\.1 --port 5173 --strictPort") `
+        -Message "Arguments were mangled on the way to the pnpm shim."
 
     # stop.cmd finds the frontend by matching the recorded command line, so the
-    # wrapper PowerShell builds must still contain the npm.cmd invocation. Use
-    # the same spaced npm.cmd stub, kept alive long enough to be inspected, and
-    # stop it before asserting so a failure cannot strand the process tree.
-    Set-Content -LiteralPath $stubNpmPath -Encoding ascii -Value @("@echo off", "ping -n 60 127.0.0.1 > nul")
-    $longStubProcess = Start-Process -FilePath $stubNpmPath -ArgumentList @("run", "dev") `
+    # wrapper PowerShell builds must still contain the pnpm invocation. Use the
+    # same spaced shim stub, kept alive long enough to be inspected, and stop it
+    # before asserting so a failure cannot strand the process tree.
+    Set-Content -LiteralPath $stubPnpmShimPath -Encoding ascii -Value @("@echo off", "ping -n 60 127.0.0.1 > nul")
+    $longStubProcess = Start-Process -FilePath $stubPnpmShimPath -ArgumentList @("pnpm", "run", "dev") `
         -WorkingDirectory $RuntimeDirectory -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput (Join-Path $RuntimeDirectory "tree.stdout.log") `
         -RedirectStandardError (Join-Path $RuntimeDirectory "tree.stderr.log")
@@ -386,7 +386,7 @@ try {
         -Condition ($stubProcessName -eq "cmd.exe") `
         -Message "The recorded frontend process must stay cmd.exe, or stop.cmd will not recognise it."
     Assert-LauncherTest `
-        -Condition ($stubCommandLine -match "npm\.cmd.*\brun\s+dev") `
+        -Condition ($stubCommandLine -match (Get-ResumeForgeProcessPattern -Service "frontend")) `
         -Message "stop.cmd identifies the frontend by matching its command line; that match broke."
 
     # --- Node download candidates ---
@@ -450,8 +450,11 @@ try {
         -Condition ("uvicorn app.main:app --host 127.0.0.1 --port 8005" -match (Get-ResumeForgeProcessPattern -Service "backend")) `
         -Message "The backend pattern must match the command line the launcher starts."
     Assert-LauncherTest `
+        -Condition ("cmd.exe /d /s /c `"C:\Program Files\nodejs\corepack.cmd`" pnpm run dev -- --host 127.0.0.1" -match (Get-ResumeForgeProcessPattern -Service "frontend")) `
+        -Message "The frontend pattern must match the cmd.exe wrapper PowerShell builds around the pnpm shim (corepack.cmd pnpm run dev)."
+    Assert-LauncherTest `
         -Condition ("cmd.exe /d /s /c `"C:\Program Files\nodejs\npm.cmd`" run dev -- --host 127.0.0.1" -match (Get-ResumeForgeProcessPattern -Service "frontend")) `
-        -Message "The frontend pattern must match the cmd.exe wrapper PowerShell builds around npm.cmd."
+        -Message "The frontend pattern must still match a process recorded by a pre-pnpm build, otherwise an in-flight upgrade strands it."
 
     # --- stop.cmd 兜底：没有启动记录时也要能停掉"确实是简历通"的实例（2026-10-26） ---
     #
@@ -692,7 +695,7 @@ while ($true) {
     New-Item -ItemType Directory -Path $coldFrontend -Force | Out-Null
     Assert-LauncherTest `
         -Condition (-not (Test-WarmStart -BackendDirectory $warmBackend -FrontendDirectory $coldFrontend)) `
-        -Message "缺 node_modules 时必须判定为冷启动：这次还要跑一遍 npm ci。"
+        -Message "缺 node_modules 时必须判定为冷启动：这次还要跑一遍 pnpm install --frozen-lockfile。"
 
     # --- frontend-mode（RF-09 方案 A）---
 
@@ -724,7 +727,7 @@ while ($true) {
         $productionError = $_.Exception.Message
     }
     Assert-LauncherTest `
-        -Condition ($null -ne $productionError -and $productionError -match "npm run build") `
+        -Condition ($null -ne $productionError -and $productionError -match "pnpm run build") `
         -Message "production 模式缺 dist 必须明确报错（不降级到 dev），报错里要有可照做的步骤。"
 
     # backend\.env 的可选覆盖：参数优先由 Start-ResumeForge.ps1 的

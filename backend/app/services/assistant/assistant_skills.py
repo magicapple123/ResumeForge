@@ -16,6 +16,7 @@ import logging
 import re
 from typing import Any
 
+from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
 from ...models.assistant import AssistantConversationSkill, AssistantSkill, AssistantSkillFile
@@ -235,16 +236,15 @@ def validate_conversation_skill_ids(db: Session, skill_ids: list[int]) -> list[i
     if len(unique) > MAX_SKILLS_PER_CONVERSATION:
         raise ValueError(f"一个对话最多启用 {MAX_SKILLS_PER_CONVERSATION} 个技能")
     if unique:
-        existing = {
-            int(row[0])
-            for row in db.query(AssistantSkill.id).filter(AssistantSkill.id.in_(unique)).all()
-        }
+        # 一次取行就够：存在性看 id，待验证看 generated/validation_status。原先分两条
+        # 查询（先只取 id、再取整行）纯属重复扫描，行数固定为 ≤8 也没有优化空间。
+        skills = db.query(AssistantSkill).filter(AssistantSkill.id.in_(unique)).all()
+        existing = {int(skill.id) for skill in skills}
         missing = [skill_id for skill_id in unique if skill_id not in existing]
         if missing:
             names = "、".join(str(skill_id) for skill_id in missing)
             raise ValueError(f"技能不存在或已被删除：{names}")
         # #31D/#31F：待验证的自动生成技能不允许挂到对话上（手写/导入技能不受影响）。
-        skills = db.query(AssistantSkill).filter(AssistantSkill.id.in_(unique)).all()
         _raise_for_pending_skills(skills)
     return unique
 
@@ -257,8 +257,16 @@ def replace_conversation_skills(
     db.query(AssistantConversationSkill).filter(
         AssistantConversationSkill.conversation_id == conversation_id
     ).delete(synchronize_session=False)
-    for skill_id in validated:
-        db.add(AssistantConversationSkill(conversation_id=conversation_id, skill_id=skill_id))
+    if validated:
+        # 一条 executemany：最多 8 行也走单次往返，且不必为每行构造 ORM 对象。
+        db.execute(
+            insert(AssistantConversationSkill).values(
+                [
+                    {"conversation_id": conversation_id, "skill_id": skill_id}
+                    for skill_id in validated
+                ]
+            )
+        )
     db.flush()
     return validated
 

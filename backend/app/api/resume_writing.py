@@ -14,6 +14,8 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -21,6 +23,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.claim import ClaimRecord
 from ..models.resume import ResumeRecord
+from ..runtime.blocking import run_sync
 from ..schemas.resume_writing import (
     PhrasesOut,
     PhrasesRequest,
@@ -80,6 +83,69 @@ def _require_provider(db: Session):
     return create_provider(config)
 
 
+def _provider_for_resume(db: Session, resume_id: int):
+    """校验简历存在且未删除，取模型调用器，然后**归还请求连接**（完整同步工作单元）。
+
+    这一组端点随后的模型调用只跑 1–3 秒，但它照样是 await：会话留在事件循环线程上时，
+    同进程的其它请求要排在这条 SQLite 连接后面（``busy_timeout`` 最长 5 秒）。
+    """
+    try:
+        _load_record(db, resume_id)
+        return _require_provider(db)
+    finally:
+        db.close()
+
+
+def _prepare_star(db: Session, resume_id: int, claim_id: int | None) -> tuple[Any, Any]:
+    """STAR 改写的准备段：校验简历、取可选的事实台账条目、取调用器，然后归还连接。
+
+    返回的 claim 在 ``db.close()`` 之后只用于读三个**已加载的列**（``candidate_wording``
+    / ``source_fact`` / ``boundary``），不带任何懒加载关系——与改造前"先 close 再改写"
+    的读法完全一致，只是把这段同步工作挪出了事件循环。
+    """
+    try:
+        _load_record(db, resume_id)
+        claim = None
+        if claim_id is not None:
+            candidate = db.get(ClaimRecord, claim_id)
+            if candidate is not None and not trash.is_deleted(candidate):
+                claim = candidate
+        return claim, _require_provider(db)
+    finally:
+        db.close()
+
+
+def _provider_only(db: Session):
+    """全局润色入口的准备段：这里不读任何简历，只取调用器，然后归还请求连接。"""
+    try:
+        return _require_provider(db)
+    finally:
+        db.close()
+
+
+@dataclass(frozen=True)
+class _FieldRewritePrep:
+    """字段改写的冻结输入：目标字段是纯数据，调用器已建好。"""
+
+    target: Any
+    provider: Any
+
+
+def _prepare_field_rewrite(db: Session, resume_id: int, path: str) -> _FieldRewritePrep:
+    """字段改写的准备段：读文档、定位目标字段、取调用器，然后归还连接。
+
+    顺序与改造前一致：先定位字段（路径非法 → 400），再检查模型配置——用户写错了路径时
+    应该看到"路径不存在"，而不是被一句"尚未配置大模型 API"挡住。
+    """
+    try:
+        record = _load_record(db, resume_id)
+        content, _conversion = document_io.document_for_record(db, record)
+        target = resolve_field_target(content, path)
+        return _FieldRewritePrep(target=target, provider=_require_provider(db))
+    finally:
+        db.close()
+
+
 @router.post("/{resume_id}/writing/star", response_model=StarRewriteOut)
 async def star_rewrite(
     request: Request,
@@ -87,14 +153,7 @@ async def star_rewrite(
     payload: StarRewriteRequest,
     db: Session = Depends(get_db),
 ):
-    _load_record(db, resume_id)
-    claim = None
-    if payload.claim_id is not None:
-        candidate = db.get(ClaimRecord, payload.claim_id)
-        if candidate is not None and not trash.is_deleted(candidate):
-            claim = candidate
-    provider = _require_provider(db)
-    db.close()
+    claim, provider = await run_sync(_prepare_star, db, resume_id, payload.claim_id)
     try:
         result = await run_until_disconnect(
             request, rewrite_star(provider, payload.text, claim), what="STAR 改写"
@@ -116,9 +175,7 @@ async def phrases(
     payload: PhrasesRequest,
     db: Session = Depends(get_db),
 ):
-    _load_record(db, resume_id)
-    provider = _require_provider(db)
-    db.close()
+    provider = await run_sync(_provider_for_resume, db, resume_id)
     try:
         result = await run_until_disconnect(
             request, generate_phrases(provider, payload.text, list(payload.modes)), what="话术生成"
@@ -140,9 +197,7 @@ async def polish_resume(
     payload: PolishRequest,
     db: Session = Depends(get_db),
 ):
-    _load_record(db, resume_id)
-    provider = _require_provider(db)
-    db.close()
+    provider = await run_sync(_provider_for_resume, db, resume_id)
     try:
         result = await run_until_disconnect(
             request, polish(provider, payload.text, payload.style), what="润色"
@@ -172,14 +227,12 @@ async def rewrite_resume_field(
     不落库是刻意的：AI 不能静默改用户已经导出过的内容。前端把结果填进表单，
     用户看过、点保存，才算数。
     """
-    record = _load_record(db, resume_id)
-    content, _conversion = document_io.document_for_record(db, record)
     try:
-        target = resolve_field_target(content, payload.path)
+        prepared = await run_sync(_prepare_field_rewrite, db, resume_id, payload.path)
     except FieldPathError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    provider = _require_provider(db)
-    db.close()
+    target = prepared.target
+    provider = prepared.provider
     try:
         result = await run_until_disconnect(
             request, rewrite_field(provider, target, payload.instruction), what="改写"
@@ -213,9 +266,7 @@ async def translate_resume(
     payload: TranslateRequest,
     db: Session = Depends(get_db),
 ):
-    _load_record(db, resume_id)
-    provider = _require_provider(db)
-    db.close()
+    provider = await run_sync(_provider_for_resume, db, resume_id)
     try:
         result = await run_until_disconnect(
             request, translate(provider, payload.text, payload.direction), what="翻译"
@@ -239,8 +290,7 @@ async def polish_selection_endpoint(
     **只处理请求体里的 ``text``**：这里既不读简历、也不知道这段文字属于哪一栏，
     所以不可能把整份简历送出去。结果只返回给前端，是否替换由用户点「替换选中」决定。
     """
-    provider = _require_provider(db)
-    db.close()
+    provider = await run_sync(_provider_only, db)
     try:
         result = await run_until_disconnect(
             request, polish_selection(provider, payload.text, payload.instruction), what="润色"

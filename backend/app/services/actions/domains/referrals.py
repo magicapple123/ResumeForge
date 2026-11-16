@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ....schemas.referral import ReferralCreate, ReferralOut
-from ..registry import define_action
 from ..spec import ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -119,49 +118,38 @@ _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def referral_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）referrals 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）referrals 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
-    list_referrals = define_action(
-        ActionSpec(
-            name="list_referrals",
-            description=(
-                "列出内推记录（公司/岗位/内推人/关系/状态/是否已转化）。"
-                "用户问「我有几个内推」「内推进展怎么样」时用它。"
-            ),
-            input_model=ListReferralsInput,
-            permission=Permission.READ_ONLY,
-            run=_run_list_referrals,
-            service_entry="referral_service.list_referrals",
-            tool_defaults=(("limit", _DEFAULT_TOOL_LIST_LIMIT),),
-            http=HttpRoute("GET", "/api/referrals", list[ReferralOut], tags=("referrals",)),
-        )
+    list_referrals = ActionSpec(
+        name="list_referrals",
+        description=(
+            "列出内推记录（公司/岗位/内推人/关系/状态/是否已转化）。"
+            "用户问「我有几个内推」「内推进展怎么样」时用它。"
+        ),
+        input_model=ListReferralsInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_referrals,
+        service_entry="referral_service.list_referrals",
+        tool_defaults=(("limit", _DEFAULT_TOOL_LIST_LIMIT),),
+        http=HttpRoute("GET", "/api/referrals", list[ReferralOut], tags=("referrals",)),
     )
-    create_referral = define_action(
-        ActionSpec(
-            name="create_referral",
-            description=(
-                "新增一条内推记录（公司/岗位/内推人/关系/渠道/状态）。"
-                "用户说「记一条内推」「XX 帮我内推了」时调用，至少要给公司或内推人之一；"
-                "状态默认进行中。内推码与备注图片等完整编辑请在「投递台」页做。"
-            ),
-            input_model=ReferralCreate,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_create_referral,
-            run_tool=_run_tool_create_referral,
-            preview=_preview_create_referral,
-            service_entry="referral_service.create_referral",
-            http=HttpRoute(
-                "POST", "/api/referrals", ReferralOut, status_code=201, tags=("referrals",)
-            ),
-        )
+    create_referral = ActionSpec(
+        name="create_referral",
+        description=(
+            "新增一条内推记录（公司/岗位/内推人/关系/渠道/状态）。"
+            "用户说「记一条内推」「XX 帮我内推了」时调用，至少要给公司或内推人之一；"
+            "状态默认进行中。内推码与备注图片等完整编辑请在「投递台」页做。"
+        ),
+        input_model=ReferralCreate,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_create_referral,
+        run_tool=_run_tool_create_referral,
+        preview=_preview_create_referral,
+        service_entry="referral_service.create_referral",
+        http=HttpRoute("POST", "/api/referrals", ReferralOut, status_code=201, tags=("referrals",)),
     )
     _ACTIONS = {
         list_referrals.name: list_referrals,

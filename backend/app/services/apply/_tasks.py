@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 
+from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session
 
 from ...models.apply import (
@@ -86,22 +87,96 @@ def get_task_detail(db: Session, task_id: int) -> ApplyTask:
     return task
 
 
-def _resolve_targets(db: Session, payload: ApplyTaskCreate) -> list[tuple[Job, ApplyQueueItem | None]]:
+def list_task_items(db: Session, task_id: int) -> list[ApplyTaskItem]:
+    """列出某个批次的全部条目（轮询详情页与采集详情页共用，:func:`get_task_detail` 的配对查询）。
+
+    **只此一份实现**：``GET /api/apply/tasks/{id}`` 与 ``GET /api/collect/tasks/{id}`` 是同
+    一个详情出口，条目查询原先写在路由的未装饰 helper（``api/apply.py::_task_detail``）里——
+    既让"api 层不构造查询"的守卫扫不到（守卫只扫被路由装饰器装饰的函数），也让同一语义
+    在路由与服务层各有一份写法。查询下沉到这里之后，两个入口共用同一个排序口径。
+
+    排序 ``(sort_order, id)``：``sort_order`` 是批次执行顺序，同序号按写入顺序兜底——详情页
+    的进度条按数组下标推进，顺序变了进度就会跳。
+
+    **刻意不过软删过滤**：批次详情展示的是"这一次执行发生了什么"，用户从投递记录列表里
+    删掉一条只是让它不再出现在那个列表里，批次自身的执行轨迹不该因此少一行。要按软删过滤
+    口径取记录请用 ``_records.list_batch_items``（那是另一个语义：可筛选、可分页的记录列表）。
+    """
+    return (
+        db.query(ApplyTaskItem)
+        .filter(ApplyTaskItem.task_id == task_id)
+        .order_by(ApplyTaskItem.sort_order, ApplyTaskItem.id)
+        .all()
+    )
+
+
+def _jobs_by_id(db: Session, job_ids: Sequence[int | None]) -> dict[int, Job]:
+    """按 id **批量**取岗位（一次查询）；缺失（已删除）的不在返回里。
+
+    字典只负责"id → 行"，**不承载"先报哪个错"**：:func:`_resolve_targets` 仍按
+    ``payload.job_ids`` 的输入顺序逐个查表，所以"第一个缺失的 id"永远与输入顺序一致。
+    """
+    ids = sorted({int(job_id) for job_id in job_ids if job_id})
+    if not ids:
+        return {}
+    return {job.id: job for job in db.query(Job).filter(Job.id.in_(ids)).all()}
+
+
+def _queue_items_by_job_id(
+    db: Session, job_ids: Sequence[int | None]
+) -> tuple[dict[int, ApplyQueueItem], set[int]]:
+    """按 job **批量**取队列条目（一次查询），替代逐项 ``one_or_none()``。
+
+    返回 ``(job_id → 条目, 出现多行的 job_id 集合)``。**重复不在这里抛**：抛在这里会让一个
+    靠后的 id 的脏数据抢在它前面那个 id 的错误之前报出来，改变"先报哪个错"的顺序；由
+    :func:`_resolve_targets` 按输入顺序、轮到那个 id 时再抛同样的异常。
+
+    ``apply_queue_item.job_id`` 上有唯一约束（``uq_apply_queue_item_job_id``），所以这条
+    分支在正常库里不可达。保留它是因为原实现用 ``one_or_none()``——那是"读不出唯一一行就
+    大声失败"，而不是"随手挑一条"。批量版若改成后者覆盖前者，脏库里的行为会从"报错"悄悄
+    变成"投递时用错那条记录的简历/招呼语"。
+    """
+    ids = sorted({int(job_id) for job_id in job_ids if job_id})
+    if not ids:
+        return {}, set()
+    by_job: dict[int, ApplyQueueItem] = {}
+    duplicated: set[int] = set()
+    for row in db.query(ApplyQueueItem).filter(ApplyQueueItem.job_id.in_(ids)).all():
+        if row.job_id is None:  # NOT NULL 约束下不可达；显式跳过让运行期行为与类型一致
+            continue
+        if row.job_id in by_job:
+            duplicated.add(int(row.job_id))
+            continue
+        by_job[int(row.job_id)] = row
+    return by_job, duplicated
+
+
+def _resolve_targets(
+    db: Session, payload: ApplyTaskCreate
+) -> list[tuple[Job, ApplyQueueItem | None]]:
     targets: list[tuple[Job, ApplyQueueItem | None]] = []
     if payload.job_ids:
+        # 岗位与队列条目各**一次批量取**（原先逐项：每条一次 db.get + 一次队列查询）。
+        # 但报错顺序仍然完全按 ``payload.job_ids`` 的输入顺序走——"先报哪个错"是用户看得见
+        # 的契约，不能因为集合化就变成"按 id 排序后的第一个"。
+        jobs = _jobs_by_id(db, payload.job_ids)
+        queue_by_job, duplicated_queue_jobs = _queue_items_by_job_id(db, payload.job_ids)
         for job_id in payload.job_ids:
-            job = db.get(Job, job_id)
+            job = jobs.get(int(job_id))
             if job is None:
                 raise ApplyNotFound(f"岗位不存在或已被删除：{job_id}")
-            queue_item = (
-                db.query(ApplyQueueItem)
-                .filter(ApplyQueueItem.job_id == job_id)
-                .one_or_none()
-            )
+            # 与逐项 ``one_or_none()`` 同序：先判岗位存在，再判"这个岗位的队列条目是否唯一"。
+            if int(job_id) in duplicated_queue_jobs:
+                raise MultipleResultsFound(
+                    f"Multiple rows were found for apply_queue_item.job_id={job_id}"
+                )
+            queue_item = queue_by_job.get(int(job_id))
             if queue_item is None:
                 # 直接指定（未走队列）的岗位仍须过准入：真实缺口必须先确认。
                 # 读不出结论（admission is None）在这里与 needs_confirm 同级——两者都不在此阻断，
                 # 真正的"未知不得默认放行"闸门在入队侧（add_to_queue / _match_requires_confirm）。
+                # ``latest_match`` 保留逐项：它是单行取数（``one_or_none()``），没有可复用的
+                # 批量实现；按 N 次单行查询读"最近一次结论"比猜一份窗口查询更安全。
                 match = latest_match(db, job_id)
                 if match is not None and _admission_of_match(match) == ADMISSION_BLOCK:
                     raise ApplyConflict(
@@ -119,8 +194,10 @@ def _resolve_targets(db: Session, payload: ApplyTaskCreate) -> list[tuple[Job, A
             .order_by(ApplyQueueItem.sort_order, ApplyQueueItem.id)
             .all()
         )
+        # 岗位同样一次批量取回（原先每条队列条目一次 db.get）。
+        jobs = _jobs_by_id(db, [item.job_id for item in items])
         for queue_item in items:
-            job = db.get(Job, queue_item.job_id) if queue_item.job_id else None
+            job = jobs.get(queue_item.job_id) if queue_item.job_id else None
             if job is None:
                 continue  # 岗位已删除的队列条目直接跳过（快照仍在队列里可读）
             targets.append((job, queue_item))

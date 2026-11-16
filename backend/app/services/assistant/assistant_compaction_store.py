@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -24,6 +25,7 @@ from ...models.assistant import ChatConversation, ChatMessage
 from ..llm import create_provider
 from ..llm.base import BaseLLMProvider
 from ..model_context_windows import configured_model_window
+from ..session_scope import fresh_session
 from ..settings_service import get_llm_config
 from . import assistant_compaction as core
 from . import assistant_compaction_summary as summary_ops
@@ -300,16 +302,37 @@ def _latest_usage(db: Session, conversation_id: int) -> dict[str, Any]:
     return usage if isinstance(usage, dict) else {}
 
 
-async def run_manual_compaction(
-    conversation_id: int,
-    db: Session,
-    *,
-    dry_run: bool,
-) -> dict[str, Any]:
-    """用户主动压缩：先 dry-run 出预估，确认后才真跑（真跑会消耗一次模型调用）。
+@dataclass(frozen=True)
+class ManualCompactionPlan:
+    """手动压缩的**准备段**产物。
 
-    ``dry_run=True`` 时**不写库、不调模型**：返回的 ``percent_after`` 是按状态卡
-    中位大小估的，界面必须标「预计」，不能当成实测。
+    ``result`` 非空表示"不用调模型"：``dry_run`` 预估或没有可摘要的内容，直接就是响应体；
+    否则由调用方 ``await summarize_region(provider, region)``，再交回
+    :func:`persist_manual_compaction` 落库。
+
+    这里只带纯数据（payload/region/previous/last_mask/provider）——摘要是长调用，
+    期间请求会话已经归还，带 ORM 行过来只会在 worker 之外撞 ``DetachedInstanceError``。
+    """
+
+    conversation_id: int
+    result: dict[str, Any] | None = None
+    provider: BaseLLMProvider | None = None
+    region: Any = None
+    payload: dict[str, Any] | None = None
+    previous_summary: dict[str, Any] | None = None
+    last_mask: dict[str, Any] | None = None
+    window_tokens: int = 0
+    tokens_before: int = 0
+    settings_model: str = ""
+
+
+def plan_manual_compaction(
+    db: Session, conversation_id: int, *, dry_run: bool
+) -> ManualCompactionPlan:
+    """同步准备段：读设置/历史/用量，算出预估；``dry_run`` 时就直接给出响应体。
+
+    ``dry_run=True`` 路径**不调模型、不写库**（与改造前同一语义）；真跑路径在这里只
+    准备好 provider 与待摘要区间，然后归还请求连接。
     """
     settings = get_compaction_settings(db)
     state = load_compaction(db, conversation_id)
@@ -327,7 +350,7 @@ async def run_manual_compaction(
     covered = state.get("covered_until_message_id")
     region = core.summary_region(history, covered_until_message_id=covered)
     percent_before = _percent(tokens_before, window_tokens)
-    payload: dict[str, Any] = {
+    base_payload: dict[str, Any] = {
         "dry_run": dry_run,
         "percent_before": percent_before,
         "percent_after": percent_before,
@@ -340,39 +363,67 @@ async def run_manual_compaction(
         "compaction": compaction_state_out(state) or None,
         "reason": "",
     }
-    if not region.message_ids:
-        payload["reason"] = "nothing_to_summarize"
-        return payload
-    estimated_after = max(0, tokens_before - region.tokens + PREVIEW_SUMMARY_TOKENS)
-    payload["percent_after"] = _percent(estimated_after, window_tokens)
-    if dry_run:
-        return payload
     try:
-        base_provider = create_provider(get_llm_config(db))
-    except Exception as exc:  # noqa: BLE001 - 没有可用配置时按"摘要不可用"处理
-        raise CompactionUnavailable("尚未配置大模型 API") from exc
-    provider = resolve_summary_provider(db, base_provider, settings)
-    parsed = await summarize_region(provider, region)
-    previous = state.get("summary") if isinstance(state.get("summary"), dict) else None
+        if not region.message_ids:
+            base_payload["reason"] = "nothing_to_summarize"
+            return ManualCompactionPlan(conversation_id=conversation_id, result=base_payload)
+        estimated_after = max(0, tokens_before - region.tokens + PREVIEW_SUMMARY_TOKENS)
+        base_payload["percent_after"] = _percent(estimated_after, window_tokens)
+        if dry_run:
+            return ManualCompactionPlan(conversation_id=conversation_id, result=base_payload)
+        try:
+            base_provider = create_provider(get_llm_config(db))
+        except Exception as exc:  # noqa: BLE001 - 没有可用配置时按"摘要不可用"处理
+            raise CompactionUnavailable("尚未配置大模型 API") from exc
+        provider = resolve_summary_provider(db, base_provider, settings)
+        return ManualCompactionPlan(
+            conversation_id=conversation_id,
+            provider=provider,
+            region=region,
+            payload=base_payload,
+            previous_summary=(
+                state.get("summary") if isinstance(state.get("summary"), dict) else None
+            ),
+            last_mask=state.get("last_mask") if isinstance(state.get("last_mask"), dict) else None,
+            window_tokens=window_tokens,
+            tokens_before=tokens_before,
+            settings_model=settings.model,
+        )
+    finally:
+        db.close()
+
+
+def persist_manual_compaction(plan: ManualCompactionPlan, parsed: Any) -> dict[str, Any]:
+    """同步落库段：合并摘要、算真实 token、写 ``compaction`` 列，拼出响应体。
+
+    **自己开会话**：准备段 ``plan_manual_compaction`` 已经把请求会话还回去了，模型
+    调用又在那之后，所以这里不能再要一个"调用方给的会话"（它多半已经关了或过期）。
+    """
+    region = plan.region
+    payload = dict(plan.payload or {})
     merged = summary_ops.merge_summary(
-        previous, parsed, message_ids=region.message_ids, turns=region.turns
+        plan.previous_summary,
+        parsed,
+        message_ids=region.message_ids,
+        turns=region.turns,
     )
     summary_tokens = summary_ops.summary_block_tokens(merged)
-    tokens_after = max(0, tokens_before - region.tokens + summary_tokens)
+    tokens_after = max(0, plan.tokens_before - region.tokens + summary_tokens)
     stored = {
         "summary": merged,
         "covered_until_message_id": region.until_message_id,
-        "tokens_before": tokens_before,
+        "tokens_before": plan.tokens_before,
         "tokens_after": tokens_after,
-        "model": _provider_model(provider, settings.model),
+        "model": _provider_model(plan.provider, plan.settings_model),
         "created_at": _now_iso(),
     }
-    if isinstance(state.get("last_mask"), dict):
-        stored["last_mask"] = state["last_mask"]
-    save_compaction(db, conversation_id, stored)
+    if plan.last_mask is not None:
+        stored["last_mask"] = plan.last_mask
+    with fresh_session() as db:
+        save_compaction(db, plan.conversation_id, stored)
     payload.update(
         {
-            "percent_after": _percent(tokens_after, window_tokens),
+            "percent_after": _percent(tokens_after, plan.window_tokens),
             "model": stored["model"],
             "created_at": stored["created_at"],
             "covered_until_message_id": region.until_message_id,
@@ -402,6 +453,7 @@ __all__ = [
     "CompactionSettings",
     "CompactionUnavailable",
     "MASK_PERCENT_KEY",
+    "ManualCompactionPlan",
     "SUMMARY_PERCENT_KEY",
     "SUMMARY_TIMEOUT_SECONDS",
     "clear_compaction",
@@ -409,8 +461,9 @@ __all__ = [
     "compaction_state_out",
     "get_compaction_settings",
     "load_compaction",
+    "persist_manual_compaction",
+    "plan_manual_compaction",
     "resolve_summary_provider",
-    "run_manual_compaction",
     "save_compaction",
     "save_compaction_settings",
     "summarize_region",

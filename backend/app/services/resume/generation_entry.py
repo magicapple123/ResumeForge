@@ -23,6 +23,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ...models.job import Job
+from ...runtime.blocking import run_sync
 from ...runtime.log_redact import log_exception_redacted
 from ...schemas.job import JobOut
 from ...schemas.resume import GenerateRequest, ResumeContent
@@ -128,6 +129,25 @@ def ensure_profile_not_empty(frozen) -> None:
         raise GenerationEntryError(400, "个人资料为空，无法生成简历")
 
 
+def declare_generation_scope(payload: GenerateRequest) -> None:
+    """声明本次生成的数据边界（只读 payload，不碰数据库，也不碰任何 IO）。
+
+    **必须由调用方在事件循环线程上调用**：``set_ambient_scope`` 写的是 ContextVar，
+    而线程池里的 worker 拿到的是上下文的**副本**——在 worker 里写只能影响那一个线程，
+    回到请求协程就丢了，随后 provider 落账会记成"未声明"。
+
+    声明一次即覆盖整条链路：后台任务线程会复制本请求的 contextvars。
+    """
+    # #35/A1：生成入口的数据边界——喂的是简历 + 资料投影 + 目标岗位（脱敏视图）；
+    # 目标语言取本次文档的语言，token 预算与篇幅上限挂钩（见 generation_token_budget）。
+    set_ambient_scope(
+        input_scope="resume+profile+job",
+        masked=True,
+        language=payload.options.language,
+        budget=generation_token_budget(payload.options),
+    )
+
+
 def prepare_generation_entry(
     db: Session,
     payload: GenerateRequest,
@@ -135,16 +155,14 @@ def prepare_generation_entry(
     load_llm_config: Callable[[Session], Any],
     create_provider: Callable[[Any], Any],
 ) -> GenerationEntry:
-    """入口校验 + 场景/资料快照冻结 + 生成器构造（不提交：路由收尾快照行事务）。"""
-    # #35/A1：生成入口的数据边界——喂的是简历 + 资料投影 + 目标岗位（脱敏视图）；
-    # 目标语言取本次文档的语言，token 预算与篇幅上限挂钩（见 generation_token_budget）。
-    # 后台任务线程会复制本请求的 contextvars，因此这里声明一次即覆盖整条生成链路。
-    set_ambient_scope(
-        input_scope="resume+profile+job",
-        masked=True,
-        language=payload.options.language,
-        budget=generation_token_budget(payload.options),
-    )
+    """入口校验 + 场景/资料快照冻结 + 生成器构造（不提交：路由收尾快照行事务）。
+
+    整段都是同步 DB 工作，**必须**由调用方放进线程池（``run_sync``）：它要读岗位、
+    读资料快照、写快照追溯行，之后紧跟的是一次可能持续数分钟的模型流。
+
+    数据边界声明不在这里——见 :func:`declare_generation_scope`：ContextVar 的写入
+    在 worker 线程里回传不到请求协程。
+    """
     job = db.get(Job, payload.job_id) if payload.job_id is not None else None
     if payload.job_id is not None and (job is None or trash.is_deleted(job)):
         raise GenerationEntryError(404, "岗位不存在或已被删除")
@@ -193,18 +211,45 @@ def prepare_generation_entry(
     )
 
 
+def _load_baseline(session_factory: Callable[[], Session], consumed: Any) -> Any:
+    """读事实基线（同步 DB 读）：用**短会话**读出来，读完立刻归还。
+
+    单独成函数是因为它要在线程池里跑；``build_baseline`` 仍然从本模块全局取，
+    保住 ``tests/test_dataset_scope_stream.py`` 对该符号的打桩点。
+    """
+    session = session_factory()
+    try:
+        return build_baseline(session, source_entry_ids=snapshot_entry_ids(consumed))
+    finally:
+        session.close()
+
+
 async def complete_generation_entry(
-    db: Session, entry: GenerationEntry, payload: GenerateRequest, *, dataset_id: str
+    entry: GenerationEntry,
+    payload: GenerateRequest,
+    *,
+    dataset_id: str,
+    session_factory: Callable[[], Session],
 ) -> None:
-    """快照行提交后补齐旁路输入：RAG 作用域 + 事实基线（只读，不写库）。"""
+    """快照行提交后补齐旁路输入：RAG 作用域 + 事实基线（只读，不写库）。
+
+    ``session_factory`` 是**冻结数据集身份**的会话工厂（路由用租约身份派生）：这里既不
+    接收也不长期持有请求 Session——RAG 的 best-effort 写入与事实基线读取各自开一个短
+    会话，用完立刻归还，于是"提交快照 → 检索 → 生成流"这条长链路上不再有任何一条
+    请求连接被 await 挂在连接池里。
+    """
     retrieval_started = time.perf_counter()
-    entry.retrieval_scope = await prepare_selection_boost(
-        entry.frozen.consumed,
-        entry.job_out,
-        config=entry.config,
-        db=db,
-        dataset_id=dataset_id,
-    )
+    rag_session = session_factory()
+    try:
+        entry.retrieval_scope = await prepare_selection_boost(
+            entry.frozen.consumed,
+            entry.job_out,
+            config=entry.config,
+            db=rag_session,
+            dataset_id=dataset_id,
+        )
+    finally:
+        rag_session.close()
     # #30：把"这一次用没用上语义检索"固定下来，供 SSE 回执与 done 审计共用。
     # 只读 scope，不改生成链行为。
     entry.retrieval_payload = rag_state_payload(
@@ -213,7 +258,7 @@ async def complete_generation_entry(
     )
     # 事实台账里已确认的条目作为事实基线交给模型；台账为空时它就是空基线。
     # F3 契约 §4：只带入能关联到本次快照条目的正向事实（组外/旧资料台账不自动带入）。
-    entry.baseline = build_baseline(db, source_entry_ids=snapshot_entry_ids(entry.frozen.consumed))
+    entry.baseline = await run_sync(_load_baseline, session_factory, entry.frozen.consumed)
 
 
 async def stream_generation_events(
@@ -322,6 +367,7 @@ __all__ = [
     "GenerationEntry",
     "GenerationEntryError",
     "complete_generation_entry",
+    "declare_generation_scope",
     "ensure_profile_not_empty",
     "log_frozen_context",
     "log_frozen_profile",

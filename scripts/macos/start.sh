@@ -113,7 +113,7 @@ rf_resolve_frontend_mode() {
                 die "--frontend-mode production 需要前端静态资产，但没有找到：${dist_index}" \
                     "怎么办：" \
                     "  1) 发布包（zip）自带 frontend/dist，重新下载完整安装包；" \
-                    "  2) 源码检出要先构建一次：在 frontend 目录执行 npm run build；" \
+                    "  2) 源码检出要先构建一次：在 frontend 目录执行 pnpm run build；" \
                     "  3) 只想本地开发：用默认的 auto，或显式 --frontend-mode dev。"
             fi
             return 0
@@ -295,16 +295,24 @@ rf_ensure_backend_dependencies() {
     fi
 
     log_info "首次运行：正在安装后端依赖（约 40 个包，第一次要几分钟）..."
-    if ! "$RF_VENV_PYTHON" -m pip install --timeout 300 --retries 10 \
-        -r "$RF_BACKEND_DIR/requirements.txt"; then
+    # 装的是**生产锁**：只有它带逐包 SHA-256，也钉住了整条闭包，所以这台机器上
+    # 装出来的包集合与发布包、CI 审过的那一套一致。锁不可用时明确失败，绝不退回
+    # requirements.txt 重新解析——那正是"同一份代码在不同机器装上不同版本"的来源。
+    runtime_lock=$(rf_runtime_lock_path "$RF_BACKEND_DIR")
+    rf_require_runtime_lock "$runtime_lock"
+    if ! "$RF_VENV_PYTHON" -m pip install --require-hashes --timeout 300 --retries 10 \
+        -r "$runtime_lock"; then
         die "后端依赖安装失败。" \
+            "安装用的是随包分发的生产锁 backend/requirements.runtime.lock.txt（逐包 SHA-256 校验），不是顶层 requirements.txt。" \
             "最常见的原因是网络：默认走官方 PyPI，国内经常很慢或直接超时。" \
             "怎么办（按顺序试）：" \
             "  1) 换国内镜像重装（最有效）：" \
-            "     \"${RF_VENV_PYTHON}\" -m pip install -i https://mirrors.aliyun.com/pypi/simple -r backend/requirements.txt" \
+            "     \"${RF_VENV_PYTHON}\" -m pip install --require-hashes -i https://mirrors.aliyun.com/pypi/simple -r backend/requirements.runtime.lock.txt" \
             "  2) 需要代理时，先在终端里 export HTTPS_PROXY=http://127.0.0.1:端口 再重试；" \
             "  3) 确认能打开 https://mirrors.aliyun.com/pypi/simple/（打不开就是网络被拦了）；" \
-            "  4) 仍失败：把上面 pip 的报错原文发到 GitHub Issues。"
+            "  4) 若报错是哈希不匹配（hash mismatch），说明下载到的文件与锁记录的不一致，" \
+            "     不要绕过校验：把 pip 输出原文发到 GitHub Issues，等锁更新；" \
+            "  5) 仍失败：把上面 pip 的报错原文发到 GitHub Issues。"
     fi
 }
 
@@ -370,36 +378,30 @@ rf_start_backend() {
 # ---------------------------------------------------------------------------
 
 rf_ensure_frontend_dependencies() {
-    vite_command="$RF_FRONTEND_DIR/node_modules/.bin/vite"
+    local vite_command="$RF_FRONTEND_DIR/node_modules/.bin/vite"
     if [ -x "$vite_command" ]; then
         return 0
     fi
 
     log_info "首次运行：正在安装前端依赖（几百个包，第一次要几分钟）..."
-    # npm ci 按当前目录解析 package-lock.json，所以必须先进到 frontend/。
-    # 没有 lockfile 的旧源码包用 npm install 现场生成一份，而不是直接报 EUSAGE。
-    if [ -f "$RF_FRONTEND_DIR/package-lock.json" ]; then
-        install_command=ci
-    else
-        log_warn "没有找到 frontend/package-lock.json，改用 npm install 现场生成一份（这样装出来的版本可能与发布时不同）。"
-        install_command=install
-    fi
-
+    # 依赖真相只有 pnpm-lock.yaml：--frozen-lockfile 在锁文件缺失或与 package.json
+    # 不一致时直接报错，不会悄悄重解析出另一套版本。刻意没有"锁文件不存在就退回
+    # 不带 --frozen-lockfile 的 install"分支——那个分支会生成 package-lock.json，
+    # 让两套锁文件互相矛盾。pnpm 按当前目录定位锁文件，所以必须先进 frontend/。
     if ! (
         cd "$RF_FRONTEND_DIR"
-        "$RF_NPM_PATH" "$install_command" \
-            --no-audit --no-fund \
-            --fetch-timeout=1800000 --fetch-retries=5 \
-            --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
+        "${RF_PNPM_COMMAND[@]}" install --frozen-lockfile \
+            --fetch-timeout=1800000 --config.fetch-retries=5 \
+            --config.fetch-retry-mintimeout=20000 --config.fetch-retry-maxtimeout=120000
     ); then
         die "前端依赖安装失败。" \
             "可能原因：网络不通、npm 镜像不可达、或磁盘空间不足。" \
             "怎么办：" \
             "  1) 手动重试看完整报错：在 frontend 目录执行" \
-            "     $RF_NPM_PATH install --registry=https://registry.npmmirror.com" \
+            "     pnpm install --frozen-lockfile --registry=https://registry.npmmirror.com" \
             "  2) 空间不足时先清理磁盘（node_modules 需要约 400 MB）；" \
             "  3) 需要代理时先在终端里 export HTTPS_PROXY=http://127.0.0.1:端口；" \
-            "  4) 仍失败：把上面 npm 的报错原文发到 GitHub Issues。"
+            "  4) 仍失败：把上面 pnpm 的报错原文发到 GitHub Issues。"
     fi
 }
 
@@ -423,6 +425,7 @@ rf_start_frontend() {
     fi
 
     rf_ensure_node_runtime
+    rf_resolve_pnpm_command
     rf_ensure_frontend_dependencies
 
     # 这个环境变量只作用于本次进程，让 Vite 代理指向上面启动的后端，
@@ -430,7 +433,7 @@ rf_start_frontend() {
     (
         cd "$RF_FRONTEND_DIR"
         export VITE_BACKEND_URL="$(rf_backend_url)"
-        exec "$RF_NPM_PATH" run dev -- \
+        exec "${RF_PNPM_COMMAND[@]}" run dev -- \
             --host 127.0.0.1 --port "$RF_FRONTEND_PORT" --strictPort
     ) >>"$RF_FRONTEND_STDOUT" 2>>"$RF_FRONTEND_STDERR" &
     rf_started_frontend_pid=$!

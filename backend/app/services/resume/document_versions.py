@@ -31,6 +31,8 @@ from ...models.versions import (
     ResumeVersion,
 )
 from ...schemas.resume_generation import UNLIMITED_PAGE_LIMIT, mode_page_limit
+from ...schemas.versions import VersionCompareOut, VersionListOut, VersionOut
+from .. import trash
 from . import document_io
 from .document_save import _conditional_update
 from .document_versions_diff import build_field_changes
@@ -241,6 +243,37 @@ def get_version(db: Session, resume_id: int, version_id: int) -> ResumeVersion:
     return _get_version(db, resume_id, version_id)
 
 
+def live_resume_for_versions(db: Session, resume_id: int) -> ResumeRecord:
+    """按 id 取**存活**简历，缺失/已软删抛 :class:`VersionNotFound`。
+
+    版本与变体两支都用同一个 404 文案（``简历记录不存在或已被删除``）：路由 handler 与
+    ActionSpec.run 各自把它翻成同一条 ``HTTPException``，文案只在这里出现一次。
+    """
+    record = db.get(ResumeRecord, resume_id)
+    if record is None or trash.is_deleted(record):
+        raise VersionNotFound("简历记录不存在或已被删除")
+    return record
+
+
+def version_list_for_resume(db: Session, resume_id: int) -> VersionListOut:
+    """``GET /{resume_id}/versions`` 的列表视图（路由与助手动作共用的唯一编排）。"""
+    record = live_resume_for_versions(db, resume_id)
+    return VersionListOut(
+        items=[
+            VersionOut.model_validate(version_brief(version))
+            for version in list_versions(db, record.id)
+        ]
+    )
+
+
+def compare_for_resume(
+    db: Session, resume_id: int, base_id: int, against: str
+) -> VersionCompareOut:
+    """``GET /{resume_id}/versions/{base_id}/compare/{against}`` 的对比视图。"""
+    record = live_resume_for_versions(db, resume_id)
+    return VersionCompareOut.model_validate(compare_versions(db, record, base_id, against))
+
+
 def freeze_version(db: Session, resume_id: int, version_id: int, *, frozen: bool) -> ResumeVersion:
     version = _get_version(db, resume_id, version_id)
     version.frozen = bool(frozen)
@@ -395,6 +428,7 @@ def restore_version(
 
 __all__ = [
     "VersionNotFound",
+    "compare_for_resume",
     "compare_versions",
     "create_version",
     "document_content",
@@ -406,4 +440,6 @@ __all__ = [
     "restore_version",
     "version_brief",
     "version_detail",
+    "version_list_for_resume",
+    "live_resume_for_versions",
 ]

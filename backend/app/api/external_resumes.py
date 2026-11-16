@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.external_resume import ExternalResume
 from ..models.user_file import UserFile
+from ..runtime.blocking import run_sync
 from ..schemas.external_resume import (
     MAX_EXTERNAL_RESUME_BYTES,
     ExternalResumeAnalysisOut,
@@ -62,6 +63,40 @@ def _detail_of(db: Session, row: ExternalResume) -> ExternalResumeDetail:
     return service.detail_of(row, job_title=_job_title(db, row), mime=mime)
 
 
+def _persist_upload(
+    db: Session,
+    raw: bytes,
+    *,
+    original_name: str,
+    mime: str,
+    name: str,
+    job_id: int | None,
+    extracted: object,
+) -> ExternalResumeDetail:
+    """上传的落库段：登记文件、建行、拼详情回显——三段都碰请求会话。
+
+    一次放进同一个 worker 做完：``row`` 是 ORM 实例，若把它跨线程/跨 ``await``
+    带回事件循环，会话一关它就成了 detached，``_detail_of`` 里任何一个没加载过的
+    列都会抛 ``DetachedInstanceError``。这里就在会话还活着的时候把 DTO 物化好。
+    """
+    try:
+        row, warnings = service.create_external_resume(
+            db,
+            content=raw,
+            original_name=original_name,
+            mime=mime,
+            name=name,
+            job_id=job_id,
+            extracted=extracted,  # type: ignore[arg-type]
+        )
+    except ValueError as exc:
+        # detail 只写原因（文件坏了 / 没有文字层之外的问题）；动作由前端补。
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    out = _detail_of(db, row)
+    out.warnings = warnings
+    return out
+
+
 @router.post("", response_model=ExternalResumeDetail, status_code=201)
 async def upload_external_resume(
     file: UploadFile = File(...),
@@ -80,21 +115,21 @@ async def upload_external_resume(
     try:
         # 解析 PDF/docx 是同步 CPU/IO 活：下沉线程池，别占住事件循环。
         extracted = await run_in_threadpool(service.prepare_upload, original_name, raw)
-        row, warnings = service.create_external_resume(
-            db,
-            content=raw,
-            original_name=original_name,
-            mime=file.content_type or "",
-            name=name,
-            job_id=job_id,
-            extracted=extracted,
-        )
     except ValueError as exc:
         # detail 只写原因（文件坏了 / 没有文字层之外的问题）；动作由前端补。
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    out = _detail_of(db, row)
-    out.warnings = warnings
-    return out
+    # 落库段（登记文件 + 建行 + 详情回显）是在一次读事务之外的另一段同步工作，
+    # 同样交给 worker：解析已经做完，这里不必再持有事件循环线程。
+    return await run_sync(
+        _persist_upload,
+        db,
+        raw,
+        original_name=original_name,
+        mime=file.content_type or "",
+        name=name,
+        job_id=job_id,
+        extracted=extracted,
+    )
 
 
 @router.get("", response_model=ExternalResumeListOut)

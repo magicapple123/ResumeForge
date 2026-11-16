@@ -1,0 +1,19 @@
+# pnpm 12 起 package.json 的 "pnpm" 字段整段失效，.npmrc 只认 auth/registry/TLS/proxy，
+# 所以 overrides 与 allowBuilds 只能放这里（即使这棵树不是 monorepo）。
+
+# 不把 pnpm 自身写进锁文件的环境文档（packageManagerDependencies + @pnpm/exe.*）。
+# 一旦写成两个 YAML 文档，GitHub 的依赖图只读第一个，Dependabot 的 security alerts
+# 与 dependency-review 会对 JS 依赖失效。版本钉死由 engines.pnpm 的精确串硬校验负责。
+# 删掉这行会让锁文件变回双文档，backend/tests/test_version_consistency.py 有守卫。
+pmOnFail: ignore
+
+overrides:
+  minimatch: ^11.0.1
+
+allowBuilds:
+  # 传递依赖（code-inspector-plugin → node-pty）。自带 win32-x64 prebuild，
+  # install = "node scripts/prebuild.js || node-gyp rebuild"；本机无 VS C++ 工具链，走 prebuild。
+  node-pty: true
+  # darwin-only optional，macOS runner 上会真的执行 node-gyp rebuild。
+  # Windows 上跳过，本机测不出，但 mac 作业会 ERR_PNPM_IGNORED_BUILDS。
+  fsevents: true

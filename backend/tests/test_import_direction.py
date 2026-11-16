@@ -53,7 +53,9 @@ def _scan_app_imports() -> dict[Path, list[ImportRecord]]:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    records.append(ImportRecord(node.lineno, alias.name, (alias.asname or alias.name,)))
+                    records.append(
+                        ImportRecord(node.lineno, alias.name, (alias.asname or alias.name,))
+                    )
             elif isinstance(node, ast.ImportFrom):
                 if node.level:
                     # from .x import y：level=1 的基准是当前包（文件所在目录）。
@@ -103,7 +105,9 @@ def _violations(
                 continue
             if matches(_rel(path), record, target):
                 names = ", ".join(record.names)
-                hits.append(f"app/{_rel(path)}:{record.lineno} -> {target} (导入: {names})  [规则: {rule}]")
+                hits.append(
+                    f"app/{_rel(path)}:{record.lineno} -> {target} (导入: {names})  [规则: {rule}]"
+                )
     return hits
 
 
@@ -125,7 +129,7 @@ def _allowlisted(description: str, allowlist: dict[tuple[str, str], str]) -> boo
 
     行号不参与匹配（行号随代码漂移），只按 (文件, 目标模块) 判定。
     """
-    for (file_rel, module) in allowlist:
+    for file_rel, module in allowlist:
         if f"app/{file_rel}:" in description and f"-> {module} " in description:
             return True
     return False
@@ -178,13 +182,11 @@ ALLOW_MODELS_SCHEMAS: dict[tuple[str, str], str] = {
         "schemas/job.py",
         "app.services.sites.registry",
     ): "can_apply 属性延迟导入注册表；判据唯一，docstring 已说明",
-    # 偏好词表（PREFERENCE_*_VALUES / 上限常量）唯一实现在 services.job_preference_catalog。
-    # 这是**模块级**导入（不是上面两条那样的延迟导入）：catalog 只依赖 models，
-    # 不构成环，但 schemas 导入即拉进 services，属已知的方向例外，登记待评估。
-    (
-        "schemas/job_preference.py",
-        "app.services",
-    ): "偏好词表唯一实现在 services/job_preference_catalog；模块级导入，待评估是否搬进 schemas",
+    # 偏好词表那条（``schemas/job_preference.py`` → ``app.services``）已在 RF-07a 消除：
+    # 13 类闭集、中文标签、枚举选项与逐 kind 归一化规则下沉到
+    # ``app/vocabulary/job_preference_kinds.py`` + ``job_preference_terms.py``，服务层的
+    # ``job_preference_catalog`` 只保留接口/文案渲染并对词表做再导出。
+    # **不要再登记回来**：schema 只需要词表，不需要实现层。
 }
 
 # 规则 schemas-no-models：契约层（``app/schemas``）不得 import 实现层（``app/models``）。
@@ -199,7 +201,11 @@ SHARED_API_MODULES: frozenset[str] = frozenset(
         "app.api._disconnect",  # SSE 断连轮询（client_gone / run_until_disconnect）
         "app.api.resumes._shared",  # resumes 子包共享层
         "app.api.webform._shared",  # webform 子包共享层
+        # 面试准备/收尾工作单元 + 轮次控制面，四支 interview 路由共用，按 500 行预算拆出
+        "app.api.interview_units",
         "app.api.interview_shared",  # interview 子域共享层（会话读写 + 详情序列化）
+        # drill 的同步工作单元（读→关会话→落库），路由只在循环上调 provider.chat
+        "app.api.drill_units",
     }
 )
 
@@ -212,41 +218,98 @@ ALLOW_API_CROSS: dict[tuple[str, str], str] = {
     # services/assistant/assistant_conversations，为它们登记的 5 条豁免同批删掉了。
     ("api/assistant.py", "app.api.assistant_context"): "assistant 子域兄弟模块复用（公开符号）",
     ("api/assistant.py", "app.api.assistant_stream"): "assistant 子域兄弟模块复用（公开符号）",
-    ("api/assistant_regenerate_api.py", "app.api.assistant_context"): "load_local_context 经兼容壳取用（实现已在 services/assistant）",
-    ("api/assistant_regenerate_api.py", "app.api.assistant_stream"): "stream_message_events 为 SSE 唯一实现，重放与首答必须同一份",
+    (
+        "api/assistant_regenerate_api.py",
+        "app.api.assistant_context",
+    ): "load_local_context 经兼容壳取用（实现已在 services/assistant）",
+    (
+        "api/assistant_regenerate_api.py",
+        "app.api.assistant_stream",
+    ): "stream_message_events 为 SSE 唯一实现，重放与首答必须同一份",
     # --- resumes 子包：各 *_routes 模块从子包共享层 resumes/_shared 复用
     # 序列化/探活/SSE 帮助函数——_shared 就是该子包的"公共层"（已列入 SHARED_API_MODULES），
     # 以下是仍从 export_routes 直接取私有助手的几处，属于真·待治理。
-    ("api/resumes/ai_edits_routes.py", "app.api.resumes._shared"): "经子包共享层 _shared 复用（合规形态）",
-    ("api/resumes/crud_routes.py", "app.api.resumes._shared"): "经子包共享层 _shared 复用（合规形态）",
-    ("api/resumes/export_routes.py", "app.api.resumes._shared"): "经子包共享层 _shared 复用（合规形态）",
-    ("api/resumes/generate_routes.py", "app.api.resumes._shared"): "经子包共享层 _shared 复用（合规形态）",
-    ("api/resumes/layout_render_routes.py", "app.api.resumes._shared"): "经子包共享层 _shared 复用（合规形态）",
-    ("api/resumes/review_routes.py", "app.api.resumes._shared"): "经子包共享层 _shared 复用（合规形态）",
-    ("api/resumes/batch_export_routes.py", "app.api.resumes.export_routes"): "导出准入与落盘助手仍在 export_routes，待提取进 _shared",
-    ("api/resumes/export_bundle_routes.py", "app.api.resumes.export_routes"): "_require_local_export_request 唯一实现在 export_routes，待提取进 _shared",
-    ("api/resumes/export_share_routes.py", "app.api.resumes.export_routes"): "导出准入/文档构造仍在 export_routes，待提取进 _shared",
-    ("api/resumes/preview_pages_routes.py", "app.api.resumes.export_routes"): "预览与导出的准入校验必须同源，待提取进 _shared",
+    (
+        "api/resumes/ai_edits_routes.py",
+        "app.api.resumes._shared",
+    ): "经子包共享层 _shared 复用（合规形态）",
+    (
+        "api/resumes/crud_routes.py",
+        "app.api.resumes._shared",
+    ): "经子包共享层 _shared 复用（合规形态）",
+    (
+        "api/resumes/export_routes.py",
+        "app.api.resumes._shared",
+    ): "经子包共享层 _shared 复用（合规形态）",
+    (
+        "api/resumes/generate_routes.py",
+        "app.api.resumes._shared",
+    ): "经子包共享层 _shared 复用（合规形态）",
+    (
+        "api/resumes/layout_render_routes.py",
+        "app.api.resumes._shared",
+    ): "经子包共享层 _shared 复用（合规形态）",
+    (
+        "api/resumes/review_routes.py",
+        "app.api.resumes._shared",
+    ): "经子包共享层 _shared 复用（合规形态）",
+    (
+        "api/resumes/batch_export_routes.py",
+        "app.api.resumes.export_routes",
+    ): "导出准入与落盘助手仍在 export_routes，待提取进 _shared",
+    (
+        "api/resumes/export_bundle_routes.py",
+        "app.api.resumes.export_routes",
+    ): "_require_local_export_request 唯一实现在 export_routes，待提取进 _shared",
+    (
+        "api/resumes/export_share_routes.py",
+        "app.api.resumes.export_routes",
+    ): "导出准入/文档构造仍在 export_routes，待提取进 _shared",
+    (
+        "api/resumes/preview_pages_routes.py",
+        "app.api.resumes.export_routes",
+    ): "预览与导出的准入校验必须同源，待提取进 _shared",
     # --- webform 子包：同样经 _shared 复用（合规形态）。
-    ("api/webform/browser_routes.py", "app.api.webform._shared"): "经子包共享层 _shared 复用（合规形态）",
-    ("api/webform/fill_routes.py", "app.api.webform._shared"): "经子包共享层 _shared 复用（合规形态）",
-    ("api/webform/live_routes.py", "app.api.webform._shared"): "经子包共享层 _shared 复用（合规形态）",
+    (
+        "api/webform/browser_routes.py",
+        "app.api.webform._shared",
+    ): "经子包共享层 _shared 复用（合规形态）",
+    (
+        "api/webform/fill_routes.py",
+        "app.api.webform._shared",
+    ): "经子包共享层 _shared 复用（合规形态）",
+    (
+        "api/webform/live_routes.py",
+        "app.api.webform._shared",
+    ): "经子包共享层 _shared 复用（合规形态）",
     # --- interview 子域：跨流式模块的回合控制与增量抽取。
     ("api/interview.py", "app.api.interview_stream"): "答案流与增量抽取器同一实现，路由负责编排",
-    ("api/interview.py", "app.api.interview_voice"): "语音录制与路由注册同源（record_stream_answer + register_voice_routes）",
-    ("api/interview_stream.py", "app.api.interview_voice"): "回合控制 TurnControl 是流式与语音共享的互斥闸门",
+    (
+        "api/interview.py",
+        "app.api.interview_voice",
+    ): "语音录制与路由注册同源（record_stream_answer + register_voice_routes）",
+    (
+        "api/interview_stream.py",
+        "app.api.interview_voice",
+    ): "回合控制 TurnControl 是流式与语音共享的互斥闸门",
     # --- 本机回环判定：唯一实现在 api/settings.py，被字体与两个设置子路由复用。
     # 抽到 api/_loopback.py 会更干净，但 5 个用例 monkeypatch 的是
     # ``app.api.settings._is_loopback_request``——搬走会让打桩静默失效，故留待
     # 连同用例一起迁的独立批次。
-    ("api/fonts.py", "app.api.settings"): "_is_loopback_request 唯一实现在 settings（打桩点在此，搬迁需同批改用例）",
+    (
+        "api/fonts.py",
+        "app.api.settings",
+    ): "_is_loopback_request 唯一实现在 settings（打桩点在此，搬迁需同批改用例）",
     ("api/settings_embedding.py", "app.api.settings"): "同上：回环判定唯一实现",
     ("api/settings_llm_global.py", "app.api.settings"): "同上：回环判定唯一实现",
     # --- 字体：内置字体的列表项与缓存失效都长在 fonts.py。
     ("api/font_builtin.py", "app.api.fonts"): "内置字体复用 fonts 的渲染缓存失效与回环守卫",
     # --- 资料工作台：定义/分组/条目的序列化助手仍在各自路由模块。
     ("api/profile_workspace.py", "app.api.profile_definitions"): "section_out 为板块序列化唯一实现",
-    ("api/profile_workspace.py", "app.api.profile_groups"): "group_brief_out / state_out 为分组序列化唯一实现",
+    (
+        "api/profile_workspace.py",
+        "app.api.profile_groups",
+    ): "group_brief_out / state_out 为分组序列化唯一实现",
     # --- 真·待治理项：browser_routes 两次跨子模块导入 live_routes 的私有函数
     # _start_live_session（下划线符号）。正确修法是把"启动 live 会话"提取进
     # webform/_shared 或 services 层；牵动 live 会话生命周期，留独立批次。
@@ -271,8 +334,9 @@ def test_runtime_is_bottom() -> None:
     _assert_no_violations(
         "runtime-is-bottom",
         ALLOW_RUNTIME,
-        lambda rel, rec, target: rel.startswith("runtime/")
-        and target.split(".")[1] in ("services", "api"),
+        lambda rel, rec, target: (
+            rel.startswith("runtime/") and target.split(".")[1] in ("services", "api")
+        ),
     )
 
 
@@ -286,9 +350,9 @@ def test_api_never_opens_own_session() -> None:
     _assert_no_violations(
         "api-no-session-factory",
         ALLOW_API_SESSION_FACTORY,
-        lambda rel, rec, target: rel.startswith("api/")
-        and target == "app.database"
-        and "SessionLocal" in rec.names,
+        lambda rel, rec, target: (
+            rel.startswith("api/") and target == "app.database" and "SessionLocal" in rec.names
+        ),
     )
 
 
@@ -301,8 +365,9 @@ def test_assistant_tools_no_api() -> None:
     _assert_no_violations(
         "assistant-tools-no-api",
         ALLOW_ASSISTANT_TOOLS_API,
-        lambda rel, rec, target: rel.startswith("services/assistant_tools/")
-        and target.split(".")[1] == "api",
+        lambda rel, rec, target: (
+            rel.startswith("services/assistant_tools/") and target.split(".")[1] == "api"
+        ),
     )
 
 
@@ -317,8 +382,7 @@ def test_services_no_api() -> None:
     _assert_no_violations(
         "services-no-api",
         ALLOW_SERVICES_API,
-        lambda rel, rec, target: rel.startswith("services/")
-        and target.split(".")[1] == "api",
+        lambda rel, rec, target: rel.startswith("services/") and target.split(".")[1] == "api",
     )
 
 
@@ -331,8 +395,10 @@ def test_models_schemas_no_services_api() -> None:
     _assert_no_violations(
         "models-schemas-no-services-api",
         ALLOW_MODELS_SCHEMAS,
-        lambda rel, rec, target: rel.split("/")[0] in ("models", "schemas")
-        and target.split(".")[1] in ("services", "api"),
+        lambda rel, rec, target: (
+            rel.split("/")[0] in ("models", "schemas")
+            and target.split(".")[1] in ("services", "api")
+        ),
     )
 
 
@@ -351,17 +417,25 @@ def test_schemas_no_models() -> None:
 
 
 def test_vocabulary_imports_stdlib_only() -> None:
-    """``app/vocabulary/**`` 只允许标准库 import，不得 import 任何 ``app.*``。
+    """``app/vocabulary/**`` 只允许标准库（与包内兄弟模块）import。
 
     词表是依赖图的最底层：``models`` 与 ``schemas`` 都反向依赖它。一旦它回头
-    import ``app.*``，契约层就会经由 vocabulary 再次绕回实现层，D8 的断开等于没做。
+    import ``app.models`` / ``app.schemas`` / ``app.services`` / ``app.api``，契约层就会
+    经由 vocabulary 再次绕回实现层，D8 的断开等于没做。
+
+    包内兄弟互引是允许的（``vocabulary/job_preference_kinds.py`` 取
+    ``job_preference_terms.py`` 的枚举映射）：那是**同一层内部**的拆分，只受
+    ``test_file_size_budget.py`` 的 500 行预算驱动，不会引入任何向上依赖。
+    判定写成"目标不是 ``app.vocabulary.*``"，而不是给第二个模块开白名单。
     """
     vocabulary_files = [path for path in _scan() if _rel(path).startswith("vocabulary/")]
     assert vocabulary_files, "app/vocabulary/ 下没有可扫描的模块，守卫会静默空转"
     _assert_no_violations(
         "vocabulary-stdlib-only",
         {},
-        lambda rel, rec, target: rel.startswith("vocabulary/"),
+        lambda rel, rec, target: (
+            rel.startswith("vocabulary/") and not target.startswith("app.vocabulary")
+        ),
     )
 
 
@@ -395,16 +469,12 @@ def test_api_cross_module_imports() -> None:
     _assert_no_violations("api-cross-module-imports", ALLOW_API_CROSS, matches)
 
 
-# api 层里"就是公共层"的模块见 ALLOWLIST 上方的 SHARED_API_MODULES。
-
-
 def _is_route_assembly(names: tuple[str, ...]) -> bool:
     """``from app.api.x import router`` / ``register_*_routes`` 属于装配，不是业务复用。"""
     return bool(names) and all(
         name == "router" or (name.startswith("register_") and name.endswith("_routes"))
         for name in names
     )
-
 
 
 def _module_to_init_rel(module: str) -> str:

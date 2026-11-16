@@ -7,9 +7,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable
-from typing import TypeVar
+from dataclasses import dataclass
+from typing import Any, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -18,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.job import Job
+from ..runtime.blocking import run_sync
 from ..runtime.log_redact import log_exception_redacted
 from ..schemas.job import JobOut
 from ..schemas.job_analysis import JobAnalysisResponse, JobAnalysisResult
@@ -62,6 +65,62 @@ def _disconnected_response() -> JSONResponse:
     return JSONResponse(status_code=499, content={"detail": "客户端已断开，本次解读未生成"})
 
 
+@dataclass(frozen=True)
+class _AnalysisPrep:
+    """岗位解读的冻结输入：一次 worker 里读完，await 期间不再持有请求会话。
+
+    ``cached`` 非空表示命中缓存、路由直接返回它；``engine`` 只是"这次请求所在库"的
+    定位信息（写入段据此开一个**短会话**），不是连接，也不含 ORM 对象。
+    """
+
+    job_out: JobOut
+    config: Any
+    language: str
+    cached: JobAnalysisResponse | None
+    engine: Any
+
+
+def _prepare_analysis(db: Session, job_id: int, force: bool) -> _AnalysisPrep:
+    """解读入口的同步准备段：读岗位、读缓存、取模型配置，然后归还请求连接。
+
+    缓存命中也在 worker 里装配（``JobAnalysisResponse`` 是纯 DTO）：判断"这条缓存能不能
+    直接用"要读 ``job.analysis_cache`` 并做一次 schema 校验，留在事件循环线程上等于把一次
+    读与一次 Pydantic 校验塞进所有其它请求的前面。
+
+    语言取界面语言（未保存过用应用默认值）——``get_ui_locale`` 需要会话，所以在这里读出
+    具体值带回；``set_ambient_scope`` 是 ContextVar 写入，**必须**由调用方在事件循环上调用
+    （线程池里写不回主上下文）。
+    """
+    job = db.get(Job, job_id)
+    if job is None or trash.is_deleted(job):
+        raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
+    cached: JobAnalysisResponse | None = None
+    if not force:
+        stored = read_cached_analysis(job)
+        # stale 表示岗位内容改过：旧解读仍可读，但它不是"当前这份岗位"的结论，
+        # 这时按缓存缺失处理，走一次真实生成；界面上也有「重新生成」的显式入口。
+        if stored is not None and not stored["stale"]:
+            try:
+                cached = JobAnalysisResponse(cached=True, **stored["result"])
+            except ValidationError:
+                # 缓存是过去某次调用的结果，字段可能已随模型演进而不再合法。
+                # 与其回 500，不如当作没有缓存重新生成一次。
+                logger.warning("岗位解读缓存结构已失效，转为重新生成 job=%s", job_id)
+    config = get_llm_config(db)
+    if not config.base_url or not config.model:
+        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
+    try:
+        return _AnalysisPrep(
+            job_out=JobOut.model_validate(job),
+            config=config,
+            language=get_ui_locale(db) or DEFAULT_AUDIT_LANGUAGE,
+            cached=cached,
+            engine=db.get_bind(),
+        )
+    finally:
+        db.close()
+
+
 @router.get("/{job_id}/analysis")
 def read_job_analysis(job_id: int, db: Session = Depends(get_db)) -> dict:
     """读取缓存的岗位解读（R2）：不发模型请求，秒开。
@@ -98,38 +157,21 @@ async def analyze_job(
     生成期间持续盯客户端是否还连着（T1）：用户点了「取消」就真的取消本次生成（返回 499、
     不写缓存），而不是让服务端把整段跑完继续烧 token。
     """
-    job = db.get(Job, job_id)
-    if job is None or trash.is_deleted(job):
-        raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
-    if not force:
-        cached = read_cached_analysis(job)
-        # stale 表示岗位内容改过：旧解读仍可读，但它不是"当前这份岗位"的结论，
-        # 这时按缓存缺失处理，走一次真实生成；界面上也有「重新生成」的显式入口。
-        if cached is not None and not cached["stale"]:
-            try:
-                return JobAnalysisResponse(cached=True, **cached["result"])
-            except ValidationError:
-                # 缓存是过去某次调用的结果，字段可能已随模型演进而不再合法。
-                # 与其回 500，不如当作没有缓存重新生成一次。
-                logger.warning("岗位解读缓存结构已失效，转为重新生成 job=%s", job_id)
-    config = get_llm_config(db)
-    if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
+    prep = await run_sync(_prepare_analysis, db, job_id, force)
+    if prep.cached is not None:
+        return prep.cached
     # #35/A1：岗位解读入口的数据边界——只喂这一条岗位；语言取界面语言（未保存过用
-    # 应用默认值）；token 预算按"总结 + 要求 + 建议"三段的输出形态声明。
+    # 应用默认值，已在 worker 里读成具体值）；token 预算按"总结 + 要求 + 建议"三段的
+    # 输出形态声明。ContextVar 必须在事件循环上写，线程池里写不回主上下文。
     set_ambient_scope(
         input_scope="job",
         masked=True,
-        language=get_ui_locale(db) or DEFAULT_AUDIT_LANGUAGE,
+        language=prep.language,
         budget=JOB_ANALYSIS_TOKEN_BUDGET,
     )
-    provider = create_provider(config)
-    job_out = JobOut.model_validate(job)
-    # 长调用期间不持有会话：先关掉，拿到结果再开一个写缓存。
-    engine = db.get_bind()
-    db.close()
+    provider = create_provider(prep.config)
     try:
-        result = await _run_until_disconnect(generate_job_analysis(provider, job_out), request)
+        result = await _run_until_disconnect(generate_job_analysis(provider, prep.job_out), request)
     except LLMError as exc:
         logger.warning("岗位需求解读失败：%s", exc)
         raise HTTPException(status_code=502, detail=f"生成岗位解读失败：{exc}") from exc
@@ -144,7 +186,9 @@ async def analyze_job(
     if await request.is_disconnected():
         logger.info("岗位解读已生成但客户端已断开，本次不写缓存 job=%s", job_id)
         return fresh
-    _cache_job_analysis(engine, job_id, result)
+    # 写缓存是同步 IO（开会话 + 读岗位 + 写 JSON 列），同样要挪出事件循环；用 shield
+    # 包住：客户端在这一刻断开时不要把已经付过 token 的解读结果丢掉。
+    await asyncio.shield(run_sync(_cache_job_analysis, prep.engine, job_id, result))
     return fresh
 
 

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.referral import REFERRAL_STATUSES, Referral
+from ..runtime.blocking import run_sync
 from ..schemas.common import Page
 from ..schemas.referral import (
     ReferralBatchDeleteResult,
@@ -91,10 +92,16 @@ def read_referrals_page(
 
 @router.post("/upload-image", response_model=ReferralImageUploadOut)
 async def upload_referral_image(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """上传一张内推备注图片：校验类型/大小，存本地目录，返回相对路径。"""
+    """上传一张内推备注图片：校验类型/大小，存本地目录，返回相对路径。
+
+    校验（读文件头）+ 落盘都是同步 IO，且目录要靠请求会话的引擎定位，所以整段放进
+    worker：事件循环只负责 ``await file.read()`` 与等待结果。
+    """
     data = await file.read()
     try:
-        path = save_referral_image(db, file.filename or "", file.content_type or "", data)
+        path = await run_sync(
+            save_referral_image, db, file.filename or "", file.content_type or "", data
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return ReferralImageUploadOut(path=path)

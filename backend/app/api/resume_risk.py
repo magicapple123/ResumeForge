@@ -17,10 +17,12 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.resume import ResumeRecord
+from ..runtime.blocking import run_sync
 from ..schemas.resume_risk import RiskScanOut, RiskScanRequest
 from ..services import trash
 from ..services.claims import live_claim_records
 from ..services.llm import create_provider
+from ..services.llm.base import BaseLLMProvider
 from ..services.resume import document_io
 from ..services.resume.resume_risk import scan_resume_risks
 from ..services.settings_service import get_llm_config
@@ -37,8 +39,34 @@ def _load_record(db: Session, resume_id: int) -> ResumeRecord:
 
 def _to_content(record: ResumeRecord) -> dict:
     """把落库的 JSON 转回结构体；排除 photo 避免照片校验干扰旧数据的体检。"""
-    return document_io.ensure_document_version(record.content or {}, language=record.language,
-                                               format_config=record.format_config)
+    return document_io.ensure_document_version(
+        record.content or {}, language=record.language, format_config=record.format_config
+    )
+
+
+def _prepare_scan(
+    db: Session, resume_id: int, enhance: bool
+) -> tuple[dict, list, BaseLLMProvider | None, bool]:
+    """体检入口的同步准备段：读简历、读整本台账、取模型配置，然后归还请求连接。
+
+    整段都碰请求会话（``_load_record`` / ``live_claim_records`` / ``get_llm_config`` /
+    ``close``），所以在同一个 worker 里一次做完并返回**纯数据**（dict + 台账行 +
+    调用器 + 是否配置了模型）：随后的远端增强是一次可能持续十几秒的模型调用，会话留在
+    事件循环线程上会让同进程的其它请求排在这条 SQLite 连接后面。
+
+    ``provider`` 由 ``enhance`` 决定——显式 ``enhance=false`` 时连 provider 都不建，
+    从源头保证"不发出去"不依赖下游是否记得跳过。
+    """
+    record = _load_record(db, resume_id)
+    content = _to_content(record)
+    claims = live_claim_records(db)
+    config = get_llm_config(db)
+    try:
+        configured = bool(config.base_url.strip() and config.model.strip())
+        provider = create_provider(config) if configured and enhance else None
+        return content, claims, provider, configured
+    finally:
+        db.close()
 
 
 @router.post("/{resume_id}/risk-scan", response_model=RiskScanOut)
@@ -47,16 +75,9 @@ async def risk_scan(
     payload: RiskScanRequest | None = None,
     db: Session = Depends(get_db),
 ):
-    record = _load_record(db, resume_id)
-    content = _to_content(record)
-    claims = live_claim_records(db)
-    config = get_llm_config(db)
-    configured = bool(config.base_url.strip() and config.model.strip())
-    # 没有请求体 = 老调用方（保持原行为）；显式 enhance=false 时连 provider 都不建，
-    # 从源头保证"不发出去"不依赖下游是否记得跳过。
+    # 没有请求体 = 老调用方（保持原行为）；显式 enhance=false 时只跑本地规则。
     enhance = payload.enhance if payload is not None else True
-    provider = create_provider(config) if configured and enhance else None
-    db.close()
+    content, claims, provider, configured = await run_sync(_prepare_scan, db, resume_id, enhance)
     return await scan_resume_risks(
         content,
         claims,

@@ -7,6 +7,7 @@
 ASR 秒 / 搜索次数）。它刻意不在看板的大 payload 里——看板每改趋势区间就整份重取，而用量是
 另一条时间窗；放在这里让前端按需单独拉、单独显示三态。**响应里没有任何金额字段**。
 """
+
 import logging
 from datetime import date
 
@@ -18,8 +19,8 @@ from ..dataset_registry import read_active_dataset_id
 from ..schemas.analytics import DashboardOut, WeeklyGoalIn, WeeklyGoalOut
 from ..schemas.usage import UsageExternalPayloadOut
 from ..services.actions import add_action_route
-from ..services.actions.catalog import all_actions
-from ..services.analytics import build_dashboard
+from ..services.actions.catalog import registered_action
+from ..services.analytics import build_dashboard_out
 from ..services.analytics_goal import save_weekly_goal, weekly_goal_block
 from ..services.analytics_usage import external_usage
 from ..services.usage_counters import DEFAULT_WINDOW_DAYS, MAX_WINDOW_DAYS
@@ -27,18 +28,22 @@ from ..services.usage_counters import DEFAULT_WINDOW_DAYS, MAX_WINDOW_DAYS
 logger = logging.getLogger(__name__)
 
 
-
-
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 
-add_action_route(router, all_actions()["get_analytics_overview"], route_path="/dashboard")
+add_action_route(router, registered_action("get_analytics_overview"), route_path="/dashboard")
+
+
 def read_dashboard(
     trend_months: int = Query(default=6, ge=1, le=24, description="趋势统计的自然月数（1..24）"),
     db: Session = Depends(get_db),
-):
-    """投递总量 / 面试率 / 笔试通过率 / Offer 数 / 六阶段漏斗 / 月度趋势。"""
-    return DashboardOut(**build_dashboard(db, trend_months=trend_months))
+) -> DashboardOut:
+    """投递总量 / 面试率 / 笔试通过率 / Offer 数 / 六阶段漏斗 / 月度趋势。
+
+    薄壳：业务在 ``services.analytics.build_dashboard_out``（助手动作
+    ``get_analytics_overview`` 调同一个函数）。路由入口由上面的 ``add_action_route`` 生成。
+    """
+    return build_dashboard_out(db, trend_months=trend_months)
 
 
 @router.put("/weekly-goal", response_model=WeeklyGoalOut)

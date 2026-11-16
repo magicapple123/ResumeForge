@@ -43,7 +43,6 @@ from ....schemas.claim import (
     ClaimUpdate,
 )
 from ..legacy import tool_runner
-from ..registry import define_action
 from ..spec import ActionError, ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -263,90 +262,79 @@ _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def claim_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）本模块负责的 claims action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）本模块负责的 claims action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
     if _ACTIONS is not None:  # 内层重入已完成构建（工具声明模块在 assistant_tools 初始化期调用）
         return _ACTIONS
-    get_claim = define_action(
-        ActionSpec(
-            name="get_claim",
-            description=(
-                "按 id 读取一条台账条目的完整内容：原始事实、简历表述、个人边界、证据来源、"
-                "面试细节（决策/难点/验证/结果）与待改进项。准备面试追问或核对表述时用它。"
-            ),
-            input_model=GetClaimInput,
-            permission=Permission.READ_ONLY,
-            run=_run_get_claim,
-            service_entry="claims.claim_detail_text",
-            tool_fields=("claim_id",),
-            ignore_unknown_arguments=True,
-            http=HttpRoute("GET", "/api/claims/{claim_id}", ClaimOut, tags=("claims",)),
-        )
+    get_claim = ActionSpec(
+        name="get_claim",
+        description=(
+            "按 id 读取一条台账条目的完整内容：原始事实、简历表述、个人边界、证据来源、"
+            "面试细节（决策/难点/验证/结果）与待改进项。准备面试追问或核对表述时用它。"
+        ),
+        input_model=GetClaimInput,
+        permission=Permission.READ_ONLY,
+        run=_run_get_claim,
+        service_entry="claims.claim_detail_text",
+        tool_fields=("claim_id",),
+        ignore_unknown_arguments=True,
+        http=HttpRoute("GET", "/api/claims/{claim_id}", ClaimOut, tags=("claims",)),
     )
-    create_claim = define_action(
-        ActionSpec(
-            name="create_claim",
-            description=(
-                "把一条经历整理成台账条目记下来。只在用户明确要求记录时调用。"
-                "新条目一律是「待确认」——是否确认由用户自己判断，你不能替他确认。"
-                "原始事实要照实写、不加包装；信息不全时写【待补：缺什么】而不是猜测。"
-            ),
-            input_model=CreateClaimInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_create_claim,
-            run_tool=tool_runner(
-                "app.services.assistant_tools.data_tools.claims", "_tool_create_claim"
-            ),
-            preview=_preview_create_claim,
-            service_entry="claims.create_claim",
-            tool_fields=(
-                "title",
-                "category",
-                "subject",
-                "source_fact",
-                "candidate_wording",
-                "responsibility_level",
-                "boundary",
-                "risk_notes",
-            ),
-            http=HttpRoute("POST", "/api/claims", ClaimOut, status_code=201, tags=("claims",)),
-        )
+    create_claim = ActionSpec(
+        name="create_claim",
+        description=(
+            "把一条经历整理成台账条目记下来。只在用户明确要求记录时调用。"
+            "新条目一律是「待确认」——是否确认由用户自己判断，你不能替他确认。"
+            "原始事实要照实写、不加包装；信息不全时写【待补：缺什么】而不是猜测。"
+        ),
+        input_model=CreateClaimInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_create_claim,
+        run_tool=tool_runner(
+            "app.services.assistant_tools.data_tools.claims", "_tool_create_claim"
+        ),
+        preview=_preview_create_claim,
+        service_entry="claims.create_claim",
+        tool_fields=(
+            "title",
+            "category",
+            "subject",
+            "source_fact",
+            "candidate_wording",
+            "responsibility_level",
+            "boundary",
+            "risk_notes",
+        ),
+        http=HttpRoute("POST", "/api/claims", ClaimOut, status_code=201, tags=("claims",)),
     )
-    update_claim = define_action(
-        ActionSpec(
-            name="update_claim",
-            description=(
-                "修改一条已有的台账条目（只传要改的字段）。**核实状态改不了**——"
-                "已确认、待确认这类判断必须由用户自己下。"
-            ),
-            input_model=UpdateClaimInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_update_claim,
-            run_tool=tool_runner(
-                "app.services.assistant_tools.data_tools.claims", "_tool_update_claim"
-            ),
-            preview=_preview_update_claim,
-            service_entry="claims.update_claim",
-            tool_fields=(
-                "claim_id",
-                "title",
-                "subject",
-                "source_fact",
-                "candidate_wording",
-                "responsibility_level",
-                "boundary",
-                "risk_notes",
-            ),
-            http=HttpRoute("PUT", "/api/claims/{claim_id}", ClaimOut, tags=("claims",)),
-        )
+    update_claim = ActionSpec(
+        name="update_claim",
+        description=(
+            "修改一条已有的台账条目（只传要改的字段）。**核实状态改不了**——"
+            "已确认、待确认这类判断必须由用户自己下。"
+        ),
+        input_model=UpdateClaimInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_update_claim,
+        run_tool=tool_runner(
+            "app.services.assistant_tools.data_tools.claims", "_tool_update_claim"
+        ),
+        preview=_preview_update_claim,
+        service_entry="claims.update_claim",
+        tool_fields=(
+            "claim_id",
+            "title",
+            "subject",
+            "source_fact",
+            "candidate_wording",
+            "responsibility_level",
+            "boundary",
+            "risk_notes",
+        ),
+        http=HttpRoute("PUT", "/api/claims/{claim_id}", ClaimOut, tags=("claims",)),
     )
     _ACTIONS = {spec.name: spec for spec in (get_claim, create_claim, update_claim)}
     return _ACTIONS

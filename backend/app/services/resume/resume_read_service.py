@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-"""简历的只读查询：列表分页 / 全选 id / 按 id 批量取存活记录。
+"""简历的只读查询：列表分页 / 全选 id / 按 id 批量取存活记录 / 详情视图。
 
 从 api/resumes/crud_routes.py 与 api/resumes/batch_export_routes.py 搬来（读路径
 第三批）：筛选条件、排序键与"缺一个就整体拒绝"的取数口径是简历域的主读路径，
 路由只该做参数校验、错误映射与响应模型声明——查询构造与视图组装收在这里。
+
+**RF-03b**：``resume_detail`` 是 ``GET /api/resumes/{id}`` 与助手动作 ``get_resume``
+共用的详情读路径。动作层按守卫不许 import ``app.api``，所以"存在性判定 + 详情序列化 +
+本次使用追溯"这一组编排必须住在服务层，否则只能被复制一份。
 """
 
 from __future__ import annotations
@@ -15,8 +19,23 @@ from sqlalchemy.orm import Query, Session
 
 from ...models.resume import ResumeRecord, saved_only
 from ...schemas.common import Page
-from ...schemas.resume import ResumeBrief
+from ...schemas.resume import ResumeBrief, ResumeOut
 from .. import trash
+from .profile_usage import profile_usage_for_resume
+from .resume_out import build_resume_out
+
+#: 详情端点与分页报告的 404 文案（两个端点是同一句话，改一处必须改另一处）。
+RESUME_NOT_FOUND_DETAIL = "简历记录不存在或已被删除"
+
+
+class ResumeNotFound(LookupError):
+    """简历不存在或已在回收站里。
+
+    服务层只表达"没有这一行"，``404`` 是接口层契约：路由 handler 与
+    ActionSpec.run 各自把同一个异常翻成同一句 ``HTTPException``（翻译点各一处，
+    不属于重复实现）。
+    """
+
 
 #: 列表排序的取值 → ORDER BY（从 crud_routes 原样搬入）。
 #
@@ -206,11 +225,38 @@ def live_resumes_by_ids(db: Session, resume_ids: list[int]) -> tuple[list[Resume
     return ordered, missing
 
 
+def live_resume_or_raise(db: Session, resume_id: int) -> ResumeRecord:
+    """按 id 取**存活**简历；不存在或已在回收站里抛 :class:`ResumeNotFound`。
+
+    ``db.get`` 绕过软删过滤，所以必须显式再判一次 ``is_deleted``——否则回收站里的
+    记录会从详情/分页报告这两条只读入口漏出去。
+    """
+    record = db.get(ResumeRecord, resume_id)
+    if record is None or trash.is_deleted(record):
+        raise ResumeNotFound(RESUME_NOT_FOUND_DETAIL)
+    return record
+
+
+def resume_detail(db: Session, resume_id: int) -> ResumeOut:
+    """``GET /api/resumes/{id}`` 的完整详情（R-33 追溯元数据也在这里补）。
+
+    ``profile_usage`` 只在详情端点补：列表不需要它，独立的 ``GET /profile-usage``
+    还额外带过时判定，两者口径不同，不能混。
+    """
+    record = live_resume_or_raise(db, resume_id)
+    detail = build_resume_out(record, db)
+    detail.profile_usage = profile_usage_for_resume(db, record.id)
+    return detail
+
+
 __all__ = [
+    "RESUME_NOT_FOUND_DETAIL",
     "RESUME_SORT_ORDERS",
+    "ResumeNotFound",
     "SortKey",
     "filtered_query",
     "list_resume_ids",
     "list_resumes_page",
     "live_resumes_by_ids",
+    "resume_detail",
 ]

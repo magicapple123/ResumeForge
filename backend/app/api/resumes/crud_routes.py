@@ -37,8 +37,11 @@ from ...services.resume.manual_creation import (
     create_manual_resume_record,
     profile_snapshot_stale_response,
 )
-from ...services.resume.profile_usage import profile_usage_for_resume
 from ...services.resume.resume_labels import normalize_language
+from ...services.resume.resume_read_service import (
+    ResumeNotFound,
+    resume_detail,
+)
 from ...services.resume.resume_read_service import (
     list_resume_ids as list_resume_ids_query,
 )
@@ -95,6 +98,8 @@ def batch_delete_resumes(payload: ResumeBatchRequest, db: Session = Depends(get_
 
 
 add_action_route(router, all_actions()["list_resumes"], route_path="")
+
+
 def list_resumes(
     db: Session = Depends(get_db),
     keyword: str = Query(default=""),
@@ -171,14 +176,20 @@ def list_resume_ids(
 
 
 add_action_route(router, all_actions()["get_resume"], route_path="/{resume_id}")
+
+
 def get_resume(resume_id: int, db: Session = Depends(get_db)):
-    record = db.get(ResumeRecord, resume_id)
-    if record is None or trash.is_deleted(record):
-        raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-    detail = _to_resume_out(record, db)
-    # R-33 追溯元数据：只在详情端点补（列表不需要；独立 GET /profile-usage 还带过时判定）。
-    detail.profile_usage = profile_usage_for_resume(db, record.id)
-    return detail
+    """按 id 读取某份简历的完整内容。
+
+    编排（存在性判定 + 详情序列化 + R-33 本次使用追溯）在
+    ``services/resume/resume_read_service.resume_detail``：助手动作 ``get_resume`` 的
+    ``run`` 走同一个函数，本端点只负责把 ``ResumeNotFound`` 翻成 404 并交给
+    ``response_model`` 做出口校验。
+    """
+    try:
+        return resume_detail(db, resume_id)
+    except ResumeNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.put("/{resume_id}", response_model=ResumeOut)

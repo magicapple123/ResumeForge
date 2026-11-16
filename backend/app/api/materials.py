@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.material import MATERIAL_CATEGORIES, Material
+from ..runtime.blocking import run_sync
 from ..schemas.common import Page
 from ..schemas.material import (
     MaterialAttachmentOut,
@@ -189,15 +190,20 @@ async def upload_material_attachment(
     if len(raw) > MAX_MATERIAL_ATTACHMENT_BYTES:
         raise HTTPException(status_code=413, detail=_ATTACHMENT_TOO_LARGE)
     try:
-        # PDF/docx 解析是同步 CPU/IO 重活（pypdf / zipfile），下沉线程池别占住事件循环。
-        # OCR 同样是同步长连接，一并留在线程池里；识别引擎档位按全局设置取一次。
+        # 解析 PDF/docx 是同步 CPU/IO 重活（pypdf / zipfile），下沉线程池别占住事件循环。
+        # 识别引擎档位要读库：先在它自己的 worker 里读出来——别在事件循环线程上顺手
+        # 求值一次 `load_ocr_context(db)`（那等于把刚搬走的同步读又补回来了）。
+        ocr_context = await run_sync(load_ocr_context, db)
         parsed = await run_in_threadpool(
-            _parse_attachment, name, file.content_type or "", raw, load_ocr_context(db)
+            _parse_attachment, name, file.content_type or "", raw, ocr_context
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
-        file_id = save_from_bytes(
+        # 落盘 + 登记用户文件是一次同步写事务（磁盘写 + 主键回读），交给 worker：
+        # 事件循环在附件多选批量上传时还要接下一个请求。
+        file_id = await run_sync(
+            save_from_bytes,
             db,
             raw,
             original_name=parsed.name,

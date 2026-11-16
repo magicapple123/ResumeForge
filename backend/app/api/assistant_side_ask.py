@@ -26,17 +26,34 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..runtime.blocking import run_sync
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.settings_service import get_llm_config
 from ..services.text_extraction import llm_is_configured
 from ._disconnect import run_or_gone
+
+
+def _prepare(db: Session) -> tuple[Any, Any]:
+    """同步准备：读模型配置、建 provider、交还请求连接（**必须在 worker 里跑**）。
+
+    读配置是数据库 IO；``create_provider`` 只是把配置包成客户端对象，不建连接。两者
+    一起搬进 worker，回到事件循环的只有普通对象——长模型调用期间不占请求连接池。
+    """
+    config = get_llm_config(db)
+    if not llm_is_configured(config):
+        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
+    provider = create_provider(config.without_thinking())
+    # 模型调用不占着请求连接池（与 drill 等短任务端点同一纪律）；之后不再写库。
+    db.close()
+    return config, provider
 
 logger = logging.getLogger(__name__)
 
@@ -100,12 +117,8 @@ async def side_ask(
     db: Session = Depends(get_db),
 ) -> AssistantSideAskResponse:
     """一次性侧问：问完即弃，不落库。"""
-    config = get_llm_config(db)
-    if not llm_is_configured(config):
-        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
-    provider = create_provider(config.without_thinking())
-    # 模型调用不占着请求连接池（与 drill 等短任务端点同一纪律）；之后不再写库。
-    db.close()
+    # 读配置 + 建 provider + 释放请求连接：整段同步工作单元交给 worker，事件循环只 await。
+    config, provider = await run_sync(_prepare, db)
     try:
         raw = await run_or_gone(
             request,

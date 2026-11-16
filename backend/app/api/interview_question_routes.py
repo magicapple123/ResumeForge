@@ -3,13 +3,22 @@
 
 为什么单独一个文件：``interview.py`` 已接近行数预算，而题库/答题这组路由的参数与返回结构
 自成一类。把 ``get_db`` 与当前请求作为默认依赖注入，测试能覆盖依赖，不必打桩整个模块。
+
+RF-02：这四条端点都是「读材料 → 调模型 → 组装响应」，其中"读材料"整段是同步 IO
+（``db.get`` / 简历反序列化 / 读文件）。它被收成每个端点一份的**准备单元**，用
+``run_sync`` 丢进 worker；事件循环上只剩 ``await`` 那次模型调用，以及拿冻结快照拼响应。
+准备单元末尾照旧 ``db.close()``：模型调用要十几秒，不该占着 SQLite 连接。
 """
+
+from dataclasses import dataclass
+from typing import Any
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.job import Job
+from ..runtime.blocking import run_sync
 from ..schemas.interview import (
     InterviewAnalysisOut,
     InterviewAnalysisRequest,
@@ -31,16 +40,65 @@ MAX_JOB_CONTEXT_FOR_INTERVIEW = 6_000
 MAX_RESUME_CONTEXT_FOR_QUESTION_BANK = 50_000
 
 
+@dataclass(frozen=True)
+class _QuestionBankPrep:
+    """题库生成要用的全部输入（材料已截断、岗位/简历标题已取成字符串）。
+
+    响应字段也一并带上：``job`` / ``resume_record`` 在准备单元结束时就连同会话一起
+    失效了（``db.close()``），再回事件循环按属性读它们会把已 detached 的实例当活对象用。
+    """
+
+    provider: Any
+    job_id: int | None
+    job_title: str
+    company: str
+    resume_title: str
+    job_text: str
+    resume_json: str
+    claims_json: str
+    notes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _AnalysisPrep:
+    """答题思路分析的输入：provider + 已拼好的上下文（岗位/简历/台账/补充）。"""
+
+    provider: Any
+    context: str
+
+
+@dataclass(frozen=True)
+class _QuestionAnswerPrep:
+    """单道题参考答案的输入：provider + 岗位与简历正文。"""
+
+    provider: Any
+    job_payload: str
+    resume_text: str
+
+
+@dataclass(frozen=True)
+class _OptimizePrep:
+    """面试反向优化的输入：provider + 简历文档（纯 dict）+ 岗位文本 + 短板/追问。"""
+
+    provider: Any
+    resume: dict | None
+    job_text: str
+    weaknesses: list[str]
+    follow_ups: list[str]
+
+
 def register_question_routes(
     router, _require_provider, _resume_record_or_none, _job_text, _claims_json
 ):
-    @router.post("/questions", response_model=QuestionBankOut)
-    async def generate_question_bank(
-        payload: InterviewQuestionGenerateRequest,
-        request: Request,
-        db: Session = Depends(get_db),
-    ):
-        """生成个性化题库（三类：基础/项目深挖/反问 HR），**即时计算、不落库**。"""
+    """把题库/思路/参考答案/反向优化四条路由挂到既有 router 上。
+
+    四个读取原语由 ``interview.py`` 以参数注入（补丁落在它的模块全局上，见
+    ``interview_units`` 的 patch 点纪律）。准备单元是闭包：它们只被对应的那条路由调用，
+    把注入项当成外层变量读，签名里就只剩 ``(db, payload)``。
+    """
+
+    def _prepare_question_bank(db: Session, payload: InterviewQuestionGenerateRequest):
+        """（工作单元）读齐题库生成的材料，截断超长上下文，并在模型调用前放掉连接。"""
         provider, _model = _require_provider(db)
         job = db.get(Job, payload.job_id) if payload.job_id else None
 
@@ -57,7 +115,7 @@ def register_question_routes(
             if job is not None
             else _job_text(db, resume_record.job_id if resume_record is not None else None)
         )
-        notes = []
+        notes: list[str] = []
         if len(job_text) > MAX_JOB_CONTEXT_FOR_INTERVIEW:
             job_text = job_text[:MAX_JOB_CONTEXT_FOR_INTERVIEW]
             notes.append(f"岗位材料较长，本次仅使用前 {MAX_JOB_CONTEXT_FOR_INTERVIEW} 字")
@@ -65,39 +123,25 @@ def register_question_routes(
             resume_json = resume_json[:MAX_RESUME_CONTEXT_FOR_QUESTION_BANK]
             notes.append(f"简历材料较长，本次仅使用前 {MAX_RESUME_CONTEXT_FOR_QUESTION_BANK} 字")
         claims_json = _claims_json(db)
-        db.close()
-        try:
-            # 客户端断开就真的停：题库是一次十几秒的生成，人走了没人收这份结果。
-            result = await run_until_disconnect(
-                request,
-                interview_questions_service.generate_question_bank(
-                    provider,
-                    job_text=job_text,
-                    resume_json=resume_json,
-                    claims_json=claims_json,
-                ),
-                what="面试题库生成",
-            )
-            if result is None:
-                raise client_gone("面试题库生成")
-        except LLMError as exc:
-            raise HTTPException(status_code=502, detail=f"生成题库失败：{exc}") from exc
-        return QuestionBankOut(
+        prep = _QuestionBankPrep(
+            provider=provider,
+            # 用户自带岗位正文时，"这场对话属于哪个岗位"就不该再指回记录。
             job_id=job.id if job is not None and not payload.job_text else None,
-            job_title="临时岗位" if payload.job_text else job.title if job is not None else "",
+            job_title="临时岗位" if payload.job_text else (job.title if job is not None else ""),
             company=job.company if job is not None and not payload.job_text else "",
-            resume_id=payload.resume_id,
-            resume_title=resume_record.title if resume_record is not None else payload.resume_title,
-            groups=result["groups"],
-            llm_used=True,
-            notes=[*notes, *result["notes"]],
+            resume_title=(
+                resume_record.title if resume_record is not None else payload.resume_title
+            ),
+            job_text=job_text,
+            resume_json=resume_json,
+            claims_json=claims_json,
+            notes=tuple(notes),
         )
+        db.close()  # 模型调用期间不占连接池
+        return prep
 
-    @router.post("/analyze", response_model=InterviewAnalysisOut)
-    async def analyze_question(
-        payload: InterviewAnalysisRequest, request: Request, db: Session = Depends(get_db)
-    ):
-        """输入一道真实问题，分析答题思路（框架/要点/追问/误区）。"""
+    def _prepare_analysis(db: Session, payload: InterviewAnalysisRequest) -> _AnalysisPrep:
+        """（工作单元）拼答题思路分析的上下文（含岗位 JD、简历正文、事实台账）。"""
         provider, _model = _require_provider(db)
 
         parts: list[str] = []
@@ -126,27 +170,12 @@ def register_question_routes(
 
         context = "\n\n".join(parts)
         db.close()
-        try:
-            analysis = await run_until_disconnect(
-                request,
-                interview_questions_service.analyze_question(
-                    provider, question=payload.question, context=context
-                ),
-                what="答题思路分析",
-            )
-        except LLMError as exc:
-            raise HTTPException(status_code=502, detail=f"分析答题思路失败：{exc}") from exc
-        if analysis is None:
-            raise client_gone("答题思路分析")
-        return analysis
+        return _AnalysisPrep(provider=provider, context=context)
 
-    @router.post("/questions/answer", response_model=InterviewQuestionAnswerOut)
-    async def generate_question_answer_entry(
-        payload: InterviewQuestionAnswerRequest,
-        request: Request,
-        db: Session = Depends(get_db),
-    ):
-        """为单道题生成详细参考答案（正文 + 要点 + 话术），**即时计算、不落库**。"""
+    def _prepare_question_answer(
+        db: Session, payload: InterviewQuestionAnswerRequest
+    ) -> _QuestionAnswerPrep:
+        """（工作单元）读单道题参考答案要用的岗位与简历正文。"""
         provider, _model = _require_provider(db)
 
         job_payload = ""
@@ -163,34 +192,16 @@ def register_question_routes(
             resume_text = document_text(document_io.document_for_record(db, record)[0])
 
         db.close()
-        try:
-            answer = await run_until_disconnect(
-                request,
-                interview_questions_service.generate_question_answer(
-                    provider,
-                    question=payload.question,
-                    job_payload=job_payload,
-                    resume_text=resume_text,
-                ),
-                what="参考答案生成",
-            )
-        except LLMError as exc:
-            raise HTTPException(status_code=502, detail=f"生成参考答案失败：{exc}") from exc
-        if answer is None:
-            raise client_gone("参考答案生成")
-        return answer
+        return _QuestionAnswerPrep(
+            provider=provider, job_payload=job_payload, resume_text=resume_text
+        )
 
-    @router.post("/optimize-resume", response_model=InterviewOptimizeOut)
-    async def optimize_resume(
-        payload: InterviewOptimizeRequest, request: Request, db: Session = Depends(get_db)
-    ):
-        """把面试暴露的短板与高频追问反向转成简历改写建议（**只产出建议、不改正文**）。"""
+    def _prepare_optimize(db: Session, payload: InterviewOptimizeRequest) -> _OptimizePrep:
+        """（工作单元）读反向优化要用的简历文档与岗位文本。"""
         provider, _model = _require_provider(db)
         # 内部简历走记录；外部简历 / 导入文件（Q3）没有再 404 的理由——正文随请求上来。
         record = (
-            _resume_record_or_none(db, payload.resume_id)
-            if payload.resume_id is not None
-            else None
+            _resume_record_or_none(db, payload.resume_id) if payload.resume_id is not None else None
         )
         if payload.resume_id is not None and record is None:
             raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
@@ -207,16 +218,110 @@ def register_question_routes(
         weaknesses = [str(item).strip() for item in payload.weaknesses if str(item).strip()]
         follow_ups = [str(item).strip() for item in payload.follow_ups if str(item).strip()]
         db.close()
+        return _OptimizePrep(
+            provider=provider,
+            resume=resume,
+            job_text=job_text,
+            weaknesses=weaknesses,
+            follow_ups=follow_ups,
+        )
+
+    @router.post("/questions", response_model=QuestionBankOut)
+    async def generate_question_bank(
+        payload: InterviewQuestionGenerateRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        """生成个性化题库（三类：基础/项目深挖/反问 HR），**即时计算、不落库**。"""
+        prep = await run_sync(_prepare_question_bank, db, payload)
+        try:
+            # 客户端断开就真的停：题库是一次十几秒的生成，人走了没人收这份结果。
+            result = await run_until_disconnect(
+                request,
+                interview_questions_service.generate_question_bank(
+                    prep.provider,
+                    job_text=prep.job_text,
+                    resume_json=prep.resume_json,
+                    claims_json=prep.claims_json,
+                ),
+                what="面试题库生成",
+            )
+            if result is None:
+                raise client_gone("面试题库生成")
+        except LLMError as exc:
+            raise HTTPException(status_code=502, detail=f"生成题库失败：{exc}") from exc
+        return QuestionBankOut(
+            job_id=prep.job_id,
+            job_title=prep.job_title,
+            company=prep.company,
+            resume_id=payload.resume_id,
+            resume_title=prep.resume_title,
+            groups=result["groups"],
+            llm_used=True,
+            notes=[*prep.notes, *result["notes"]],
+        )
+
+    @router.post("/analyze", response_model=InterviewAnalysisOut)
+    async def analyze_question(
+        payload: InterviewAnalysisRequest, request: Request, db: Session = Depends(get_db)
+    ):
+        """输入一道真实问题，分析答题思路（框架/要点/追问/误区）。"""
+        prep = await run_sync(_prepare_analysis, db, payload)
+        try:
+            analysis = await run_until_disconnect(
+                request,
+                interview_questions_service.analyze_question(
+                    prep.provider, question=payload.question, context=prep.context
+                ),
+                what="答题思路分析",
+            )
+        except LLMError as exc:
+            raise HTTPException(status_code=502, detail=f"分析答题思路失败：{exc}") from exc
+        if analysis is None:
+            raise client_gone("答题思路分析")
+        return analysis
+
+    @router.post("/questions/answer", response_model=InterviewQuestionAnswerOut)
+    async def generate_question_answer_entry(
+        payload: InterviewQuestionAnswerRequest,
+        request: Request,
+        db: Session = Depends(get_db),
+    ):
+        """为单道题生成详细参考答案（正文 + 要点 + 话术），**即时计算、不落库**。"""
+        prep = await run_sync(_prepare_question_answer, db, payload)
+        try:
+            answer = await run_until_disconnect(
+                request,
+                interview_questions_service.generate_question_answer(
+                    prep.provider,
+                    question=payload.question,
+                    job_payload=prep.job_payload,
+                    resume_text=prep.resume_text,
+                ),
+                what="参考答案生成",
+            )
+        except LLMError as exc:
+            raise HTTPException(status_code=502, detail=f"生成参考答案失败：{exc}") from exc
+        if answer is None:
+            raise client_gone("参考答案生成")
+        return answer
+
+    @router.post("/optimize-resume", response_model=InterviewOptimizeOut)
+    async def optimize_resume(
+        payload: InterviewOptimizeRequest, request: Request, db: Session = Depends(get_db)
+    ):
+        """把面试暴露的短板与高频追问反向转成简历改写建议（**只产出建议、不改正文**）。"""
+        prep = await run_sync(_prepare_optimize, db, payload)
         try:
             suggestions = await run_until_disconnect(
                 request,
                 interview_questions_service.optimize_resume(
-                    provider,
-                    resume=resume,
+                    prep.provider,
+                    resume=prep.resume,
                     resume_text=payload.resume_text,
-                    job_text=job_text,
-                    weaknesses=weaknesses,
-                    follow_ups=follow_ups,
+                    job_text=prep.job_text,
+                    weaknesses=prep.weaknesses,
+                    follow_ups=prep.follow_ups,
                 ),
                 what="面试反向优化",
             )

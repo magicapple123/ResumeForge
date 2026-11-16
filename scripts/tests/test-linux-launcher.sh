@@ -862,6 +862,65 @@ else
 fi
 
 printf '\n'
+printf '== 生产依赖锁（backend/requirements.runtime.lock.txt）==\n'
+# 首次安装与更新只装这一份（逐包 SHA-256 + --require-hashes）。这里断言两件事：
+# 判定函数真的能拒绝坏锁；以及**拼出来的路径真的指向仓库里那份文件**——后者是
+# 踩过的坑：函数按"项目根"拼接、而 start.sh/update.sh 传的都是 backend 目录，于是
+# 每次得到 backend/backend/requirements.runtime.lock.txt，首次安装直接死在"找不到锁"。
+rf_lock_dir="$rf_test_tmp/lock"
+mkdir -p "$rf_lock_dir"
+# 64 个 0，写成字面量：最小化容器里不一定有 GNU coreutils 的 seq。
+rf_zero_hash='0000000000000000000000000000000000000000000000000000000000000000'
+
+rf_lock_good="$rf_lock_dir/good.lock.txt"
+{
+    printf 'fastapi==0.162.0 \\\n'
+    printf '    --hash=sha256:%s\n' "$rf_zero_hash"
+    printf '    # via -r requirements.txt\n'
+} >"$rf_lock_good"
+rf_lock_missing="$rf_lock_dir/absent.lock.txt"
+rf_lock_unhashed="$rf_lock_dir/unhashed.lock.txt"
+printf 'fastapi==0.162.0\n' >"$rf_lock_unhashed"
+rf_lock_devtool="$rf_lock_dir/devtool.lock.txt"
+{
+    printf 'pytest==8.4.2 \\\n'
+    printf '    --hash=sha256:%s\n' "$rf_zero_hash"
+} >"$rf_lock_devtool"
+
+if rf_runtime_lock_problem "$rf_lock_good" >/dev/null; then
+    rf_check 0 "完整的生产锁判定为可用"
+else
+    rf_check 1 "完整的生产锁被判为不可用（误报）"
+fi
+if rf_runtime_lock_problem "$rf_lock_missing" >/dev/null; then
+    rf_check 1 "缺失的生产锁被判为可用（绝不能退回 requirements.txt）"
+else
+    rf_check 0 "缺失的生产锁被明确拒绝"
+fi
+if rf_runtime_lock_problem "$rf_lock_unhashed" >/dev/null; then
+    rf_check 1 "没有逐包哈希的锁被判为可用（--require-hashes 会直接失败）"
+else
+    rf_check 0 "没有逐包哈希的锁被明确拒绝"
+fi
+if rf_runtime_lock_problem "$rf_lock_devtool" >/dev/null; then
+    rf_check 1 "混进 pytest 的锁被判为可用（生产包不能装开发工具）"
+else
+    rf_check 0 "混进开发工具的锁被明确拒绝"
+fi
+
+# 路径拼接必须落到真实文件上。判定函数本身是"喂一个真实存在的文件"来测的，
+# 上面四条**测不到拼接错**，所以这里单独钉一次真实仓库路径。
+if rf_runtime_lock_problem "$(rf_runtime_lock_path "$RF_TEST_ROOT/backend")" >/dev/null; then
+    rf_check 0 "rf_runtime_lock_path 拼出的路径就是仓库里那份锁"
+else
+    rf_check 1 "rf_runtime_lock_path 拼出的不是仓库里那份锁（拼接或常量不一致）"
+fi
+case "$RF_RUNTIME_LOCK_RELATIVE" in
+    "backend/$RF_RUNTIME_LOCK_NAME") rf_check 0 "RF_RUNTIME_LOCK_RELATIVE 与锁文件名一致" ;;
+    *) rf_check 1 "RF_RUNTIME_LOCK_RELATIVE 与锁文件名不一致（得到 '$RF_RUNTIME_LOCK_RELATIVE'）" ;;
+esac
+
+printf '\n'
 if [ "$rf_test_failures" -eq 0 ]; then
     printf 'Linux 启动链测试全部通过（%d 项）。\n' "$rf_test_passes"
     exit 0

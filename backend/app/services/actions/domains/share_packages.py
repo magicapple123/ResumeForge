@@ -12,12 +12,12 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, ConfigDict, Field
 
 from ....schemas.share_package import SharePackageBrief
-from ..legacy import route_runner, tool_runner
-from ..registry import define_action
-from ..spec import ActionSpec, HttpRoute, permission_enum
+from ...share_package import list_share_package_briefs
+from ..legacy import tool_runner
+from ..spec import ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Session  # noqa: F401
+    from sqlalchemy.orm import Session
 
 _DEFAULT_TOOL_LIMIT = 20
 
@@ -29,42 +29,42 @@ class ListSharePackagesInput(BaseModel):
     limit: int = Field(default=200, ge=1, le=500, description="可选，默认 20")
 
 
+def _run_list_share_packages(db: Session, payload: ListSharePackagesInput) -> ActionOutcome:
+    """分享包列表：与 ``GET /api/share-packages`` 同一个服务函数。"""
+    return ActionOutcome(
+        data=list_share_package_briefs(db, keyword=payload.keyword, limit=payload.limit)
+    )
+
+
 _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def share_package_actions() -> dict[str, ActionSpec]:
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
     if _ACTIONS is not None:  # permission_enum 可能触发工具声明模块重入本构建器（首次 import 顺序）
         return _ACTIONS
-    list_share_packages = define_action(
-        ActionSpec(
-            name="list_share_packages",
-            description=(
-                "列出已生成的离线分享包（脱敏后的简历快照，含标题/权限/文件数/生成时间）。"
-                "用户问「我发过哪些分享包」时用它。"
-            ),
-            input_model=ListSharePackagesInput,
-            permission=Permission.READ_ONLY,
-            run=route_runner("app.api.share_packages", "read_share_packages"),
-            run_tool=tool_runner(
-                "app.services.assistant_tools.report_tools", "_tool_list_share_packages"
-            ),
-            service_entry="share_package.list_share_packages",
-            tool_fields=("keyword", "limit"),
-            tool_defaults=(("limit", _DEFAULT_TOOL_LIMIT),),
-            ignore_unknown_arguments=True,
-            http=HttpRoute(
-                "GET", "/api/share-packages", list[SharePackageBrief], tags=("share-packages",)
-            ),
-        )
+    list_share_packages = ActionSpec(
+        name="list_share_packages",
+        description=(
+            "列出已生成的离线分享包（脱敏后的简历快照，含标题/权限/文件数/生成时间）。"
+            "用户问「我发过哪些分享包」时用它。"
+        ),
+        input_model=ListSharePackagesInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_share_packages,
+        run_tool=tool_runner(
+            "app.services.assistant_tools.report_tools", "_tool_list_share_packages"
+        ),
+        service_entry="share_package.list_share_package_briefs",
+        tool_fields=("keyword", "limit"),
+        tool_defaults=(("limit", _DEFAULT_TOOL_LIMIT),),
+        ignore_unknown_arguments=True,
+        http=HttpRoute(
+            "GET", "/api/share-packages", list[SharePackageBrief], tags=("share-packages",)
+        ),
     )
     _ACTIONS = {list_share_packages.name: list_share_packages}
     return _ACTIONS

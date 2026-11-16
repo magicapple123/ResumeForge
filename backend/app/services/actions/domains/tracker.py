@@ -46,7 +46,6 @@ from ....schemas.tracker import (
     TrackUpdate,
 )
 from ..legacy import preview_runner, tool_runner
-from ..registry import define_action
 from ..spec import ActionError, ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -301,88 +300,72 @@ _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def tracker_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）tracker 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）tracker 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
     if _ACTIONS is not None:  # 内层重入已完成构建（工具声明模块在 assistant_tools 初始化期调用）
         return _ACTIONS
-    list_tracks_action = define_action(
-        ActionSpec(
-            name="list_application_tracks",
-            description=(
-                "列出求职进度记录，可按状态或公司/岗位/备注关键词筛选。用户问投递到哪一步、"
-                "哪些岗位还在推进或哪些记录没有下一步时先调用。"
-            ),
-            input_model=ListApplicationTracksInput,
-            permission=Permission.READ_ONLY,
-            run=_run_list_application_tracks,
-            service_entry="tracker.list_tracks",
-            tool_defaults=(("limit", _DEFAULT_LIST_LIMIT),),
-            # 旧路由忽略未知 query（例如岗位深链的 job_id 在旧列表端点就是不认识的），
-            # 旧工具同样只读它认识的键：用开关保持这段历史行为。
-            ignore_unknown_arguments=True,
-            http=HttpRoute("GET", "/api/tracker", TrackListOut, tags=("tracker",)),
-        )
+    list_tracks_action = ActionSpec(
+        name="list_application_tracks",
+        description=(
+            "列出求职进度记录，可按状态或公司/岗位/备注关键词筛选。用户问投递到哪一步、"
+            "哪些岗位还在推进或哪些记录没有下一步时先调用。"
+        ),
+        input_model=ListApplicationTracksInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_application_tracks,
+        service_entry="tracker.list_tracks",
+        tool_defaults=(("limit", _DEFAULT_LIST_LIMIT),),
+        # 旧路由忽略未知 query（例如岗位深链的 job_id 在旧列表端点就是不认识的），
+        # 旧工具同样只读它认识的键：用开关保持这段历史行为。
+        ignore_unknown_arguments=True,
+        http=HttpRoute("GET", "/api/tracker", TrackListOut, tags=("tracker",)),
     )
-    get_track_action = define_action(
-        ActionSpec(
-            name="get_application_track",
-            description="按 id 读取一条求职进度的完整内容。",
-            input_model=GetApplicationTrackInput,
-            permission=Permission.READ_ONLY,
-            run=_run_get_application_track,
-            service_entry=None,
-            service_reason="内联 ORM 查询/组装，无 services 收口（T27 收口候选）",
-            ignore_unknown_arguments=True,
-            http=HttpRoute("GET", "/api/tracker/{track_id}", TrackOut, tags=("tracker",)),
-        )
+    get_track_action = ActionSpec(
+        name="get_application_track",
+        description="按 id 读取一条求职进度的完整内容。",
+        input_model=GetApplicationTrackInput,
+        permission=Permission.READ_ONLY,
+        run=_run_get_application_track,
+        service_entry="tracker.track_or_none",
+        ignore_unknown_arguments=True,
+        http=HttpRoute("GET", "/api/tracker/{track_id}", TrackOut, tags=("tracker",)),
     )
-    create_track_action = define_action(
-        ActionSpec(
-            name="create_application_track",
-            description=(
-                "新增一条求职进度。只在用户明确要求记录投递/筛选/面试/Offer 等进展时调用；"
-                "公司、岗位和状态必填。"
-            ),
-            input_model=CreateApplicationTrackInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_create_application_track,
-            preview=_preview_create_application_track,
-            service_entry="tracker.create_track",
-            http=HttpRoute(
-                "POST", "/api/tracker", TrackCreateOut, status_code=201, tags=("tracker",)
-            ),
-        )
+    create_track_action = ActionSpec(
+        name="create_application_track",
+        description=(
+            "新增一条求职进度。只在用户明确要求记录投递/筛选/面试/Offer 等进展时调用；"
+            "公司、岗位和状态必填。"
+        ),
+        input_model=CreateApplicationTrackInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_create_application_track,
+        preview=_preview_create_application_track,
+        service_entry="tracker.create_track",
+        http=HttpRoute("POST", "/api/tracker", TrackCreateOut, status_code=201, tags=("tracker",)),
     )
-    update_track_action = define_action(
-        ActionSpec(
-            name="update_application_track",
-            description=(
-                "修改已有求职进度（先用 get_application_track 或 list_application_tracks 确认 id）。"
-                "删除不通过工具执行，用户要删除时请引导去求职进度页或回收站。"
-            ),
-            input_model=UpdateApplicationTrackInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            # 路由侧委托既有 save_track；input_model 为配合工具侧宽松了跨字段校验，
-            # 所以这里用薄包装把 TrackUpdate 重建失败映射成 invalid_input（见该函数）。
-            run=_run_update_application_track,
-            run_tool=tool_runner(
-                "app.services.assistant_tools.tracker_tools", "_tool_update_application_track"
-            ),
-            preview=preview_runner(
-                "app.services.assistant_tools.previews", "preview_update_application_track"
-            ),
-            service_entry="tracker.update_track",
-            tool_fields=_TOOL_TRACK_FIELDS,
-            http=HttpRoute("PUT", "/api/tracker/{track_id}", TrackOut, tags=("tracker",)),
-        )
+    update_track_action = ActionSpec(
+        name="update_application_track",
+        description=(
+            "修改已有求职进度（先用 get_application_track 或 list_application_tracks 确认 id）。"
+            "删除不通过工具执行，用户要删除时请引导去求职进度页或回收站。"
+        ),
+        input_model=UpdateApplicationTrackInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        # 路由侧委托既有 save_track；input_model 为配合工具侧宽松了跨字段校验，
+        # 所以这里用薄包装把 TrackUpdate 重建失败映射成 invalid_input（见该函数）。
+        run=_run_update_application_track,
+        run_tool=tool_runner(
+            "app.services.assistant_tools.tracker_tools", "_tool_update_application_track"
+        ),
+        preview=preview_runner(
+            "app.services.assistant_tools.previews", "preview_update_application_track"
+        ),
+        service_entry="tracker.save_track_record",
+        tool_fields=_TOOL_TRACK_FIELDS,
+        http=HttpRoute("PUT", "/api/tracker/{track_id}", TrackOut, tags=("tracker",)),
     )
     _ACTIONS = {
         spec.name: spec

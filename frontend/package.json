@@ -13,8 +13,10 @@
   },
   "homepage": "https://github.com/magicapple123/ResumeForge#readme",
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=20.19.0",
+    "pnpm": "12.21.0"
   },
+  "packageManager": "pnpm@12.21.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -62,8 +64,5 @@
     "typescript-eslint": "^8.71.0",
     "vite": "^8.3.5",
     "vitest": "^5.0.3"
-  },
-  "overrides": {
-    "minimatch": "^11.0.1"
   }
 }

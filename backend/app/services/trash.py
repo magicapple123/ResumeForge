@@ -37,6 +37,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.orm import Session
 
 from ..models.profile import utcnow
@@ -130,11 +131,24 @@ def _brief(spec: TrashSpec, item: Any) -> dict[str, Any]:
 
 
 def counts(db: Session) -> dict[str, int]:
-    """各类内容的回收站条数（界面用它显示"回收站 (3)"这样的角标）。"""
-    return {
-        spec.key: db.query(spec.model).filter(trash_only(spec.model)).count()
+    """各类内容的回收站条数（界面用它显示"回收站 (3)"这样的角标）。
+
+    **一条 UNION ALL 取全部类型**：角标是所有页面都会拉的轻请求，按类型各发一条
+    ``COUNT(*)`` 会随回收站支持的类型数线性增长（现在 10 类 = 10 条）。每个子查询都
+    带 ``WHERE deleted_at IS NOT NULL`` 且无 ``GROUP BY``，所以每个分支恰好一行，
+    合并后与逐条查询结果逐项相同。
+    """
+    parts = [
+        select(literal(spec.key).label("type_key"), func.count().label("total"))
+        .select_from(spec.model)
+        .where(trash_only(spec.model))
         for spec in TRASH_SPECS
-    }
+    ]
+    totals = {spec.key: 0 for spec in TRASH_SPECS}
+    if parts:
+        for type_key, total in db.execute(union_all(*parts)).all():
+            totals[str(type_key)] = int(total)
+    return totals
 
 
 def list_trashed(

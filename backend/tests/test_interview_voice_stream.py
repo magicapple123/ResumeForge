@@ -31,6 +31,7 @@ from app.services.interview.interview import (
 )
 from app.services.interview.voice_turns import INTERRUPTED_MARKER
 from app.services.llm.base import LLMError
+from tests.interview_target_support import answer_prep
 from tests.interview_target_support import start_interview as _start
 
 STREAM_URL = "/api/interview/{session_id}/answers/stream"
@@ -209,7 +210,9 @@ async def test_cancel_mid_stream_rolls_back_to_played_text(client, db_session, m
     provider = _configure(monkeypatch, _Provider(chunks=QUESTION_CHUNKS))
     session_id, session, answer = _answer(client, db_session)
 
-    generator = _answer_stream_events(db_session, session, provider, 1, answer)
+    generator = _answer_stream_events(
+        db_session, answer_prep(db_session, session, provider, 1, answer.id)
+    )
     first = await generator.__anext__()
     first_event = json.loads(first.removeprefix("data: ").strip())
     assert first_event["type"] == "question_delta"
@@ -255,7 +258,9 @@ async def test_next_round_prompt_only_quotes_played_text(client, db_session, mon
     """下一轮提示词里有「上一轮被打断」，且只引用播出过的文本。"""
     provider = _configure(monkeypatch, _Provider(chunks=QUESTION_CHUNKS))
     session_id, session, answer = _answer(client, db_session)
-    generator = _answer_stream_events(db_session, session, provider, 1, answer)
+    generator = _answer_stream_events(
+        db_session, answer_prep(db_session, session, provider, 1, answer.id)
+    )
     await generator.__anext__()
     client.post(CANCEL_URL, json={"session_id": session_id, "played_chars": 5})
     async for _chunk in generator:
@@ -294,7 +299,9 @@ async def test_interrupted_context_is_visible_in_session_detail(client, db_sessi
     """被打断的部分回应会落库成一条带 context 的面试官消息（刷新后 UI/报告都看得到）。"""
     provider = _configure(monkeypatch, _Provider(chunks=QUESTION_CHUNKS))
     session_id, session, answer = _answer(client, db_session)
-    generator = _answer_stream_events(db_session, session, provider, 1, answer)
+    generator = _answer_stream_events(
+        db_session, answer_prep(db_session, session, provider, 1, answer.id)
+    )
     await generator.__anext__()
     client.post(CANCEL_URL, json={"session_id": session_id, "played_chars": 2})
     async for _chunk in generator:

@@ -19,6 +19,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -29,8 +30,8 @@ from ...models.versions import ResumeVariant
 from ..llm.base import BaseLLMProvider, LLMError
 from ..llm.structured_output import parse_json_object
 from . import document_io, fact_locks, resume_glossary
-from .content_locks import entry_content_payload, validate_content_locks_for
-from .document_identity import ENTRY_FIELDS, is_object_id
+from .bilingual_variants_locks import _fact_lock_blocked, _restore_locked_entries
+from .content_locks import validate_content_locks_for
 from .document_paths import read_document_value
 from .document_variants import read_document_path, write_document_path
 from .document_view import header_items, iter_entries
@@ -253,143 +254,132 @@ def _glossary_locked_translation(
     return translated
 
 
-async def build_translation_candidate(
-    db: Session,
-    provider: BaseLLMProvider,
-    variant: ResumeVariant,
-    *,
-    target_language: str,
-) -> dict[str, Any]:
-    """生成翻译候选（不写库）：批量翻译 + 术语锁定 + 事实锁校验。"""
-    if target_language not in _TARGET_LANGUAGES:
-        raise BilingualError("目标语言不受支持")
-    source = source_language_of(variant, target_language)
-    if source == target_language:
-        raise BilingualError("目标语言与当前变体语言相同")
-    direction = _direction(source, target_language)
-    original = document_io.ensure_document_version(
-        variant.content,
-        language=source,
-        format_config=(variant.render_context or {}).get("format_config") or {},
-    )
-    candidate = copy.deepcopy(original)
-    glossary_terms = resume_glossary.list_locked_terms(
-        db, language_from=source, language_to=target_language
-    )
-    glossary_hits: list[dict[str, str]] = []
-    blocked: list[str] = []
-    # 先按 translatable_paths 的顺序收集全部可译段，再一次性按块翻译：顺序语义与逐段
-    # 路径完全一致（同一个列表、同一个索引），只是把 N 次模型调用压成 1–3 次。
-    segments: list[tuple[str, str]] = []
-    for path in translatable_paths(original):
-        text = _read_path(original, path)
-        if isinstance(text, str) and text.strip():
-            segments.append((path, text))
-    translations = await _translate_segments(provider, [text for _, text in segments], direction)
-    for (path, text), translated in zip(segments, translations, strict=True):
-        locked = _glossary_locked_translation(
-            path, text, translated, glossary_terms, blocked=blocked, glossary_hits=glossary_hits
-        )
-        if locked is not None:
-            _write_path(candidate, path, locked)
-    blocked.extend(_fact_lock_blocked(db, variant, candidate))
-    blocked.extend(_restore_locked_entries(variant, candidate))
-    for path in blocked:
-        original_value = _read_path(original, path)
-        if isinstance(original_value, str):
-            _write_path(candidate, path, original_value)
-    diff = build_resume_diff(
-        variant.id,
-        variant.name,
-        original,
-        0,
-        "翻译候选",
-        candidate,
-    )
-    # 候选出厂必须是 v2：前端拿到后既可直接预览，也会被采纳路径按 v2 路径写回。
-    candidate_document = document_io.ensure_document_version(
-        candidate,
-        language=target_language,
-        format_config=(variant.render_context or {}).get("format_config") or {},
-    )
-    return {
-        "variant_id": variant.id,
-        "source_language": source,
-        "target_language": target_language,
-        "candidate": candidate_document,
-        "diff": diff,
-        "glossary_hits": glossary_hits,
-        "blocked_fields": sorted(set(blocked)),
-    }
+@dataclass(frozen=True)
+class TranslationPlan:
+    """翻译候选的准备段产物：全部物化成纯数据（请求会话随后即归还）。
 
-
-def _fact_lock_blocked(db: Session, variant: ResumeVariant, candidate: dict[str, Any]) -> list[str]:
-    record = db.get(ResumeRecord, variant.resume_id) if variant.resume_id else None
-    if record is None:
-        return []
-    violations = fact_locks.validate_fact_locks(db, record, candidate)
-    return [item.path for item in violations]
-
-
-def _restore_locked_entries(variant: ResumeVariant, candidate: dict[str, Any]) -> list[str]:
-    """正文锁在候选里也不展示改动：锁定条目整条回填原文，并记入 blocked_fields。
-
-    基准是**变体自己的旧内容**（候选与采纳都写变体），不能用当前简历的 lock 标记：
-    变体是独立表达对象，母版的锁/未锁状态与它无关。
+    逐字段翻译要跑好几十秒，期间只该持有方向、原文快照、待译段与术语表；把这些留成
+    ORM 行的话，任何一个没加载过的列都会在 worker 之外抛 ``DetachedInstanceError``。
     """
-    if candidate.get("version") == 2:
-        old_document = document_io.ensure_document_version(variant.content)
-        blocked: list[str] = []
-        for key, old_entry in iter_entries(old_document):
-            if not old_entry.get("lock_content"):
-                continue
-            target = next(
-                (
-                    entry
-                    for section, entry in iter_entries(candidate)
-                    if section == key and entry.get("id") == old_entry.get("id")
-                ),
-                None,
+
+    variant_id: int
+    variant_name: str
+    resume_id: int | None
+    source: str
+    target: str
+    direction: str
+    original: dict
+    segments: tuple[tuple[str, str], ...]
+    glossary_terms: tuple[ResumeGlossaryTerm, ...]
+    variant_content: dict
+    format_config: dict
+
+
+def prepare_translation(
+    db: Session, variant: ResumeVariant, *, target_language: str
+) -> TranslationPlan:
+    """同步准备段：校验目标语言、物化变体正文、读术语表，然后归还请求连接。"""
+    try:
+        if target_language not in _TARGET_LANGUAGES:
+            raise BilingualError("目标语言不受支持")
+        source = source_language_of(variant, target_language)
+        if source == target_language:
+            raise BilingualError("目标语言与当前变体语言相同")
+        direction = _direction(source, target_language)
+        format_config = (variant.render_context or {}).get("format_config") or {}
+        original = document_io.ensure_document_version(
+            variant.content, language=source, format_config=format_config
+        )
+        glossary_terms = tuple(
+            resume_glossary.list_locked_terms(
+                db, language_from=source, language_to=target_language
             )
-            if target is None:
-                blocked.append(f"{key}.{old_entry['id']}")
-                continue
-            if entry_content_payload(old_entry) != entry_content_payload(target):
-                blocked.append(f"{key}.{old_entry['id']}")
-            target.clear()
-            target.update(copy.deepcopy(old_entry))
-        return blocked
-    old_content = variant.content or {}
-    blocked: list[str] = []
-    for field in ENTRY_FIELDS:
-        old_entries = old_content.get(field) or []
-        new_entries = candidate.get(field)
-        if not isinstance(old_entries, list) or not isinstance(new_entries, list):
-            continue
-        for index, old_entry in enumerate(old_entries):
-            if not isinstance(old_entry, dict) or not old_entry.get("lock_content"):
-                continue
-            target_index: int | None = None
-            object_id = old_entry.get("id")
-            if is_object_id(object_id):
-                for candidate_index, entry in enumerate(new_entries):
-                    if isinstance(entry, dict) and entry.get("id") == object_id:
-                        target_index = candidate_index
-                        break
-            if target_index is None and index < len(new_entries):
-                candidate_entry = new_entries[index]
-                other_id = candidate_entry.get("id") if isinstance(candidate_entry, dict) else None
-                same_object = not (
-                    is_object_id(object_id) and is_object_id(other_id) and other_id != object_id
-                )
-                if same_object:
-                    target_index = index
-            if target_index is None:
-                continue
-            if entry_content_payload(old_entry) != entry_content_payload(new_entries[target_index]):
-                blocked.append(f"{field}.{target_index}")
-            new_entries[target_index] = copy.deepcopy(old_entry)
-    return blocked
+        )
+        # 先按 translatable_paths 的顺序收集全部可译段，再一次性按块翻译：顺序语义与逐段
+        # 路径完全一致（同一个列表、同一个索引），只是把 N 次模型调用压成 1–3 次。
+        segments: list[tuple[str, str]] = []
+        for path in translatable_paths(original):
+            text = _read_path(original, path)
+            if isinstance(text, str) and text.strip():
+                segments.append((path, text))
+        return TranslationPlan(
+            variant_id=int(variant.id),
+            variant_name=variant.name,
+            resume_id=variant.resume_id,
+            source=source,
+            target=target_language,
+            direction=direction,
+            original=original,
+            segments=tuple(segments),
+            glossary_terms=glossary_terms,
+            variant_content=copy.deepcopy(variant.content or {}),
+            format_config=format_config,
+        )
+    finally:
+        db.close()
+
+
+async def translate_plan_segments(
+    provider: BaseLLMProvider, plan: TranslationPlan
+) -> list[str]:
+    """中间段：按块翻译计划里的全部可译段（**不碰数据库**）。"""
+    return await _translate_segments(
+        provider, [text for _, text in plan.segments], plan.direction
+    )
+
+
+def finalize_translation(
+    db: Session, plan: TranslationPlan, translations: list[str]
+) -> dict[str, Any]:
+    """同步收尾段：术语锁定 + 事实锁校验（要读库）+ 差异，拼出候选响应。"""
+    try:
+        candidate = copy.deepcopy(plan.original)
+        glossary_hits: list[dict[str, str]] = []
+        blocked: list[str] = []
+        for (path, text), translated in zip(plan.segments, translations, strict=True):
+            locked = _glossary_locked_translation(
+                path,
+                text,
+                translated,
+                list(plan.glossary_terms),
+                blocked=blocked,
+                glossary_hits=glossary_hits,
+            )
+            if locked is not None:
+                _write_path(candidate, path, locked)
+        blocked.extend(_fact_lock_blocked(db, plan.resume_id, candidate))
+        blocked.extend(_restore_locked_entries(plan.variant_content, candidate))
+        for path in blocked:
+            original_value = _read_path(plan.original, path)
+            if isinstance(original_value, str):
+                _write_path(candidate, path, original_value)
+        diff = build_resume_diff(
+            plan.variant_id,
+            plan.variant_name,
+            plan.original,
+            0,
+            "翻译候选",
+            candidate,
+        )
+        # 候选出厂必须是 v2：前端拿到后既可直接预览，也会被采纳路径按 v2 路径写回。
+        candidate_document = document_io.ensure_document_version(
+            candidate,
+            language=plan.target,
+            format_config=plan.format_config,
+        )
+        return {
+            "variant_id": plan.variant_id,
+            "source_language": plan.source,
+            "target_language": plan.target,
+            "candidate": candidate_document,
+            "diff": diff,
+            "glossary_hits": glossary_hits,
+            "blocked_fields": sorted(set(blocked)),
+        }
+    finally:
+        db.close()
+
+
 
 
 def adopt_translation(
@@ -459,9 +449,12 @@ def patch_variant(
 
 __all__ = [
     "BilingualError",
+    "TranslationPlan",
     "adopt_translation",
-    "build_translation_candidate",
+    "finalize_translation",
     "patch_variant",
+    "prepare_translation",
     "source_language_of",
     "translatable_paths",
+    "translate_plan_segments",
 ]

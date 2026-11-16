@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ....schemas.reminder import ReminderListItemOut, ReminderOut, ReminderUpdate
-from ..registry import define_action
 from ..spec import ActionError, ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -124,50 +123,37 @@ _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def reminder_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）reminders 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）reminders 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
-    list_reminders = define_action(
-        ActionSpec(
-            name="list_reminders",
-            description=(
-                "列出日历提醒（面试、测评截止、催 HR 回复、其他），可按类型或状态筛选。"
-                "用户问「我接下来要做什么」「我有几个提醒」时用它。"
-            ),
-            input_model=ListRemindersInput,
-            permission=Permission.READ_ONLY,
-            run=_run_list_reminders,
-            service_entry="reminder_service.list_reminders",
-            tool_defaults=(("limit", _DEFAULT_TOOL_LIST_LIMIT),),
-            http=HttpRoute(
-                "GET", "/api/reminders", list[ReminderListItemOut], tags=("reminders",)
-            ),
-        )
+    list_reminders = ActionSpec(
+        name="list_reminders",
+        description=(
+            "列出日历提醒（面试、测评截止、催 HR 回复、其他），可按类型或状态筛选。"
+            "用户问「我接下来要做什么」「我有几个提醒」时用它。"
+        ),
+        input_model=ListRemindersInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_reminders,
+        service_entry="reminder_service.reminder_list_items_out",
+        tool_defaults=(("limit", _DEFAULT_TOOL_LIST_LIMIT),),
+        http=HttpRoute("GET", "/api/reminders", list[ReminderListItemOut], tags=("reminders",)),
     )
-    update_reminder = define_action(
-        ActionSpec(
-            name="update_reminder",
-            description=(
-                "把一条日历提醒标记为 done（已完成）或 dismissed（已忽略），也可改回 pending。"
-                "用户说「那个提醒我弄完了」「这条不用管了」时先用 list_reminders 找到 id 再调用。"
-                "提醒时间、绑定与备注的修改请在「求职进度 → 提醒」页做。"
-            ),
-            input_model=UpdateReminderInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_update_reminder,
-            preview=_preview_update_reminder,
-            service_entry="reminder_service.update_reminder",
-            http=HttpRoute(
-                "PATCH", "/api/reminders/{reminder_id}", ReminderOut, tags=("reminders",)
-            ),
-        )
+    update_reminder = ActionSpec(
+        name="update_reminder",
+        description=(
+            "把一条日历提醒标记为 done（已完成）或 dismissed（已忽略），也可改回 pending。"
+            "用户说「那个提醒我弄完了」「这条不用管了」时先用 list_reminders 找到 id 再调用。"
+            "提醒时间、绑定与备注的修改请在「求职进度 → 提醒」页做。"
+        ),
+        input_model=UpdateReminderInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_update_reminder,
+        preview=_preview_update_reminder,
+        service_entry="reminder_service.update_reminder",
+        http=HttpRoute("PATCH", "/api/reminders/{reminder_id}", ReminderOut, tags=("reminders",)),
     )
     _ACTIONS = {spec.name: spec for spec in (list_reminders, update_reminder)}
     return _ACTIONS

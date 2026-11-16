@@ -70,10 +70,26 @@ Remove-Item -LiteralPath $pipWheel
 & $pythonExe -m pip --version
 if ($LASTEXITCODE -ne 0) { throw "pip bootstrap failed with $LASTEXITCODE" }
 
-# 4. Backend requirements.
-Write-Host "Installing backend requirements..."
-& $pythonExe -m pip install -r (Join-Path $projectRoot "backend\requirements.txt") -q --no-warn-script-location
-if ($LASTEXITCODE -ne 0) { throw "pip install failed with $LASTEXITCODE" }
+# 4. Backend runtime dependencies.
+# Install from the production lock, never from requirements.txt: only the lock
+# carries a SHA-256 per artifact, so --require-hashes makes pip verify every
+# wheel/sdist it downloads instead of trusting whatever the index serves. The
+# lock is also the single source of the package *set* -- requirements.txt pins the
+# top level, the lock pins the whole closure, so a fresh resolution here cannot
+# quietly pick a different transitive version than the console installers get.
+# --no-deps is implied by --require-hashes (pip refuses a resolver round when
+# every requirement is pinned and hashed).
+Write-Host "Installing backend runtime dependencies from the production lock..."
+. (Join-Path $PSScriptRoot "Project-RuntimeLock.ps1")
+$runtimeLockPath = Get-RuntimeLockPath -BackendDirectory (Join-Path $projectRoot "backend")
+Write-Host "  lock: $runtimeLockPath"
+Assert-RuntimeLockUsable -LockPath $runtimeLockPath | Out-Null
+& $pythonExe -m pip install --require-hashes -r $runtimeLockPath -q --no-warn-script-location
+if ($LASTEXITCODE -ne 0) {
+    # Hard failure on purpose: falling back to requirements.txt here would produce
+    # a runtime whose contents nobody can reproduce or audit.
+    throw "pip install --require-hashes -r $(Get-RuntimeLockFileName) failed with $LASTEXITCODE"
+}
 
 # 5. Sanity check: the exact import set the console launcher verifies.
 & $pythonExe -c "import fastapi, uvicorn, sqlalchemy, alembic, pydantic, pydantic_settings, PIL, pypdf, fpdf, websocket, docx, multipart"
@@ -94,14 +110,20 @@ if (Test-Path $sevenZip) {
 Remove-Item -Recurse -Force $staging
 
 # 7. Stamp the dependency manifest INTO the zip. Build-Desktop.ps1 reads this
-# entry to decide whether a cached zip may be reused: a runtime that predates a
-# backend\requirements.txt change must not be handed to the packager (the 1.0.1
-# incident shipped exactly that and the app crashed on 'import pypdfium2').
+# entry to decide whether a cached zip may be reused: a runtime built from a
+# different package set must not be handed to the packager (the 1.0.1 incident
+# shipped exactly that and the app crashed on 'import pypdfium2').
+# The fingerprint is the production lock's SHA-256 plus the bundled Python
+# version, so re-resolving the lock alone invalidates the cache.
 # Embedding it in the archive keeps the marker self-contained -- the zip carries
 # its own fingerprint through copies and re-distribution.
 . (Join-Path $PSScriptRoot "PythonRuntimeManifest.ps1")
-$manifest = Add-PythonRuntimeManifest -ZipPath $zipPath -PythonVersion $PythonVersion -RequirementsPath (Join-Path $projectRoot "backend\requirements.txt")
-Write-Host "Stamped runtime manifest: python $($manifest.pythonVersion), requirements $($manifest.requirementsSha256.Substring(0, 12))..."
+$manifest = Add-PythonRuntimeManifest `
+    -ZipPath $zipPath `
+    -PythonVersion $PythonVersion `
+    -RuntimeLockPath $runtimeLockPath `
+    -RequirementsPath (Join-Path $projectRoot "backend\requirements.txt")
+Write-Host "Stamped runtime manifest: python $($manifest.pythonVersion), $(Get-RuntimeLockFileName) $($manifest.runtimeLockSha256.Substring(0, 12))..."
 
 $size = "{0:N1} MB" -f ((Get-Item $zipPath).Length / 1MB)
 Write-Host "Done: $zipPath ($size)"

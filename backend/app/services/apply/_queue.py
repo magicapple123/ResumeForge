@@ -14,11 +14,12 @@ from ...models.apply import (
     HARD_GATES,
     QUEUE_STATUS_PENDING,
     ApplyQueueItem,
+    JobMatchAnalysis,
 )
 from ...models.job import Job
 from ...models.profile import utcnow
 from ...models.resume import ResumeRecord, saved_only
-from ...schemas.apply import ApplyConfigIn, ApplyQueueItemOut, QueueStatus
+from ...schemas.apply import ApplyConfigIn, ApplyQueueItemOut, ApplyQueueListOut, QueueStatus
 from .. import trash
 from ..profile.profile_service import project_legacy_profile
 from ..sites.base import SiteAdapter
@@ -54,6 +55,36 @@ def _resume_title(db: Session, resume_id: int | None) -> str:
     return resume.title if resume is not None else ""
 
 
+def _resume_titles(db: Session, resume_ids: Sequence[int | None]) -> dict[int, str]:
+    """按 id **批量**取简历标题（一次查询覆盖整页），缺失（已删）的不在返回里。
+
+    与 :func:`_resume_title` 同一口径，只是把"每行一次 ``db.get``"换成一次 ``in_``：
+    队列列表整页 500 条时，逐行取标题就是 500 次主键查询。
+
+    **刻意不过软删过滤**：``_resume_title`` 用的是 ``db.get``，它本来就不看软删，批量版
+    必须逐字保持这个口径——否则"删除简历后队列标题从空变成旧标题"这种差异会悄悄出现。
+    """
+    ids = sorted({int(resume_id) for resume_id in resume_ids if resume_id})
+    if not ids:
+        return {}
+    rows = db.query(ResumeRecord).filter(ResumeRecord.id.in_(ids)).all()
+    return {row.id: row.title for row in rows}
+
+
+def _matches_by_job_id(db: Session, job_ids: Sequence[int | None]) -> dict[int, JobMatchAnalysis]:
+    """按岗位批量取最近一次匹配结论（一次查询覆盖整页），等价于逐条 :func:`latest_match`。
+
+    ``job_match_analysis.job_id`` 有唯一约束（一个岗位只保留最近一次分析），所以
+    "按 job_id 批量取"与"逐条 ``one_or_none()``"读到的是同一行，不存在窗口/排序语义问题。
+    ``job_id`` 为空的行（岗位已删除、结论仍留快照）不参与——``latest_match(None)`` 也是 None。
+    """
+    ids = sorted({int(job_id) for job_id in job_ids if job_id})
+    if not ids:
+        return {}
+    rows = db.query(JobMatchAnalysis).filter(JobMatchAnalysis.job_id.in_(ids)).all()
+    return {int(row.job_id): row for row in rows if row.job_id is not None}
+
+
 def job_apply_site(job: Job | None) -> SiteAdapter | None:
     """这个岗位能不能自动投递：能则返回对应站点适配器，不能则返回 ``None``。
 
@@ -82,16 +113,29 @@ def _queue_out(
     job: Job | None,
     *,
     cache: dict[str, Any] | None = None,
+    resume_titles: dict[int, str] | None = None,
+    matches: dict[int, JobMatchAnalysis] | None = None,
 ) -> ApplyQueueItemOut:
     """队列条目的出口结构：准入摘要 + 能否投递 + 参考分/收藏（14B）+ 生命周期（15A/15B）。
 
     ``cache`` 只用于列表批量出口时复用"资料文本"（见 ``signals.reference_score``）与
     "采样序列"（见 ``lifecycle.job_history``）；单条出口（入队、改招呼语）不传，
     省一次字典分配也不影响正确性。
+
+    ``resume_titles`` / ``matches`` 是**批量出口专用**的预取字典（见 :func:`_resume_titles`
+    与 :func:`_matches_by_job_id`）：传了就只查字典，不传就按单条口径各查一次。
+    两者都**不改变结果**——批量版与单条版读的是同一份数据、同一个唯一约束。
     """
-    match = latest_match(db, item.job_id)
+    if matches is not None:
+        match = matches.get(item.job_id) if item.job_id is not None else None
+    else:
+        match = latest_match(db, item.job_id)
     admission = _admission_of_match(match) if match is not None else None
     hard_gate = match.hard_gate if match is not None and match.hard_gate in HARD_GATES else None
+    if resume_titles is not None:
+        resume_title = resume_titles.get(item.resume_id, "") if item.resume_id is not None else ""
+    else:
+        resume_title = _resume_title(db, item.resume_id)
     # 15A/15B：僵尸分与 JD 变更都来自同一份采集历史，一次读库（见 lifecycle.job_history）。
     history = job_history(db, job, cache=cache)
     return ApplyQueueItemOut(
@@ -100,7 +144,7 @@ def _queue_out(
         job_title=item.job_title,
         company=item.company,
         resume_id=item.resume_id,
-        resume_title=_resume_title(db, item.resume_id),
+        resume_title=resume_title,
         greeting=item.greeting,
         sort_order=item.sort_order,
         status=_as_queue_status(item.status),
@@ -138,6 +182,10 @@ def list_queue(db: Session, limit: int = MAX_QUEUE_LIST) -> list[ApplyQueueItemO
     )
     # 岗位一次性取回，避免每行一次查询（队列条数不多，但这属于该顺手做对的事）。
     jobs = _jobs_by_id(db, [item.job_id for item in items])
+    # 简历标题与匹配结论同样整页一次取回（原先每行各一次 db.get / latest_match）：
+    # 500 条队列 = 1000 次多余的主键/单行查询，而这两份数据在出口处只用于填充字段。
+    resume_titles = _resume_titles(db, [item.resume_id for item in items])
+    matches = _matches_by_job_id(db, [item.job_id for item in items])
     # 参考分要现算：资料文本整页只读一次，简历文本逐岗位不同（见 signals.reference_score）。
     cache: dict[str, Any] = {}
     # job_id 在模型层可空（岗位删除后置空）；_jobs_by_id 只收非空 id，这里对 None 直接给 None。
@@ -147,6 +195,8 @@ def list_queue(db: Session, limit: int = MAX_QUEUE_LIST) -> list[ApplyQueueItemO
             item,
             jobs.get(item.job_id) if item.job_id is not None else None,
             cache=cache,
+            resume_titles=resume_titles,
+            matches=matches,
         )
         for item in items
     ]
@@ -155,6 +205,18 @@ def list_queue(db: Session, limit: int = MAX_QUEUE_LIST) -> list[ApplyQueueItemO
 def count_queue(db: Session) -> int:
     """队列总条数：与 ``list_queue`` 的上限无关的全量口径。"""
     return int(db.query(func.count(ApplyQueueItem.id)).scalar() or 0)
+
+
+def queue_overview(db: Session) -> ApplyQueueListOut:
+    """队列列表的响应体：一页条目 + 全量总数 + 是否被上限截断。
+
+    ``GET /api/apply/queue`` 与助手动作 ``list_apply_queue`` 都调这里：截断判据
+    （``len(items) < total``）只有一处实现，不会出现"一侧如实标记、另一侧静默全量"的
+    两种口径。
+    """
+    items = list_queue(db)
+    total = count_queue(db)
+    return ApplyQueueListOut(items=items, total=total, truncated=len(items) < total)
 
 
 def _jobs_by_id(db: Session, job_ids: Sequence[int | None]) -> dict[int, Job]:
@@ -296,10 +358,24 @@ def reorder_queue(db: Session, order: list[int]) -> list[ApplyQueueItemOut]:
     ``order`` 是**界面显示顺序**（从上到下）。与 ``list_queue`` 的倒序口径配对：
     显示在越前面的 ``sort_order`` 越大，这样后导入（``sort_order`` 取最大）的条目
     才会自然排到最上面。
+
+    **条目一次批量取回**（原先逐条 ``db.get``：拖 50 行就是 50 条 SELECT，而这只为了在
+    内存里写一个整数）。语义逐条保持：
+
+    - 缺失的 id 跳过，但 ``total`` 仍是 ``len(order)``（含缺失项）——序号按界面给的槽位算；
+    - 重复 id 由**靠后的那次**覆盖（与逐条 ``db.get`` 拿到同一对象、后写覆盖前写一致）；
+    - ``updated_at`` 逐行刷新、单次 commit、出口仍是 :func:`list_queue`。
     """
     total = len(order)
+    # ``order`` 为空时不发查询：``in_([])`` 会退化成恒假条件，白跑一次还多一条 SQL。
+    by_id: dict[int, ApplyQueueItem] = {}
+    if order:
+        ids = sorted({int(item_id) for item_id in order})
+        by_id = {
+            row.id: row for row in db.query(ApplyQueueItem).filter(ApplyQueueItem.id.in_(ids)).all()
+        }
     for index, item_id in enumerate(order):
-        item = db.get(ApplyQueueItem, item_id)
+        item = by_id.get(item_id)
         if item is None:
             continue
         item.sort_order = total - index

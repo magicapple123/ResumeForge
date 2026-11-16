@@ -26,7 +26,7 @@ from ..models.claim import (
 )
 from ..schemas.claim import ClaimCreate, ClaimDraftOut, ClaimDraftRequest
 from .llm import create_provider
-from .llm.base import LLMError
+from .llm.base import BaseLLMProvider, LLMError
 from .settings_service import get_llm_config
 
 logger = logging.getLogger(__name__)
@@ -170,16 +170,32 @@ def local_drafts(payload: ClaimDraftRequest) -> ClaimDraftOut:
     return ClaimDraftOut(drafts=drafts, notes=notes)
 
 
-async def draft_from_text(db: Session, payload: ClaimDraftRequest) -> ClaimDraftOut:
-    """调用一次模型草拟台账条目；不落库，也不修改任何现有数据。"""
-    config = get_llm_config(db)
-    configured = bool(config.base_url.strip() and config.model.strip())
-    # 释放数据库连接（await 期间不要占着连接池）。
-    db.close()
-    if not configured:
+def prepare_draft_provider(db: Session) -> BaseLLMProvider | None:
+    """草稿入口的准备段：读模型配置、建 provider，然后归还请求连接。
+
+    未配置模型时返回 ``None``（路由据此走本地分段降级，行为与改造前一致）。
+    ``db.close()`` 放在 ``finally``：接下来可能是一次几十秒的模型调用，请求连接
+    不该被它钉住。
+    """
+    try:
+        config = get_llm_config(db)
+        configured = bool(config.base_url.strip() and config.model.strip())
+        return create_provider(config) if configured else None
+    finally:
+        db.close()
+
+
+async def draft_from_text(
+    payload: ClaimDraftRequest, provider: BaseLLMProvider | None
+) -> ClaimDraftOut:
+    """调用一次模型草拟台账条目；不落库，也不修改任何现有数据。
+
+    ``provider`` 由 :func:`prepare_draft_provider` 在 worker 里准备好后传进来：
+    本函数不碰数据库，``await`` 期间也就不持有任何请求连接。
+    """
+    if provider is None:
         return local_drafts(payload)
 
-    provider = create_provider(config)
     messages = build_draft_messages(payload)
     raw = await provider.chat(messages)
     drafts, notes = parse_drafts(raw)
@@ -198,4 +214,5 @@ __all__ = [
     "draft_from_text",
     "local_drafts",
     "parse_drafts",
+    "prepare_draft_provider",
 ]

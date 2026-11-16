@@ -136,7 +136,7 @@ T2 把 8 个业务函数从 `app/api` 下沉到 `app/services` 之后，路由�
 
 - `app/vocabulary/` 是**叶子层**：只允许 import 标准库，不得 import 任何 `app.*`（守卫 `backend/tests/test_import_direction.py` 的 `vocabulary-stdlib-only`）。
 - 领域状态常量 / 白名单 / 纯函数（如 `JOB_STATUSES`、`REMINDER_KINDS`、`CLAIM_CATEGORIES`、`has_placeholder`）唯一实现放在这里；`app/models/*.py` 逐个显式 re-export 并保留 `__all__`（历史 import 路径不断），`app/schemas/**` 直接从 vocabulary 取。
-- `schemas → models` 已清零并加守卫（`schemas-no-models`，`ALLOW_SCHEMAS_MODELS` 为空表存证）；schemas 仍允许对 `services` 的 3 处登记例外（见 `ALLOW_MODELS_SCHEMAS`，均为判据唯一实现的延迟导入或偏好词表，待评估搬迁）。
+- `schemas → models` 已清零并加守卫（`schemas-no-models`，`ALLOW_SCHEMAS_MODELS` 为空表存证）；schemas 仍允许对 `services` 的 2 处登记例外（见 `ALLOW_MODELS_SCHEMAS`，均为「站点可投递判据」的唯一实现，函数内延迟导入；偏好词表那一处已在 RF-07a 下沉到 `app/vocabulary/` 并删除）。
 
 入口层只负责装配，不承载业务规则：`app/application.py` 提供 `create_app()`、生命周期、路由注册和统一异常响应，`app/main.py` 保留原有 `app.main:app` 启动路径及历史导出符号。早期 SQLite 兼容列集中在 `database_compat.py`，正式结构仍以 Alembic 为唯一来源。这样可以在测试中独立创建应用，同时避免路由、迁移和兼容逻辑互相耦合。
 

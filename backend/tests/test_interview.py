@@ -83,7 +83,7 @@ def _configure(monkeypatch, turns: list[dict], report: dict | None = None) -> No
     """把面试官与报告都换成按顺序返回预设内容的假实现（不联网、不解析模型输出）。"""
     queue = list(turns)
 
-    async def ask(_db, _session_, _provider):
+    async def ask(_turn):
         payload = queue.pop(0) if queue else {"question": "", "feedback": "", "done": True}
         question = str(payload.get("question") or "")
         if not question:
@@ -279,9 +279,7 @@ def test_delete_and_missing_session(client):
     assert client.post("/api/interview/999/answers", json={"content": "x"}).status_code == 404
 
 
-def test_the_last_answer_does_not_produce_a_dangling_question(
-    client, db_session, monkeypatch
-):
+def test_the_last_answer_does_not_produce_a_dangling_question(client, db_session, monkeypatch):
     """答满轮数后不该再问一道没人会回答的题。
 
     此前是"先生成下一题、再判断是否满轮"，于是 6 轮的面试会存下 7 道面试官消息，
@@ -308,9 +306,7 @@ def test_the_last_answer_does_not_produce_a_dangling_question(
     assert detail["status"] == "finished"
 
 
-def test_the_maximum_round_count_can_actually_be_finished(
-    client, db_session, monkeypatch
-):
+def test_the_maximum_round_count_can_actually_be_finished(client, db_session, monkeypatch):
     """轮数取到上限时最后一答不能报错。
 
     之前 generate_question 的 index 会算成 13 > MAX_INTERVIEW_ROUNDS，最后一答直接 502，

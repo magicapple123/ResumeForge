@@ -62,13 +62,13 @@ git log --oneline -1            # 记录 commit，写入汇报
 
 # 2. 前端：安装依赖 + 构建生产资产（产出 frontend/dist；version.json 必须与 desktop/package.json 一致）
 cd frontend
-npm ci --no-audit --no-fund
-npm run build
+pnpm install --frozen-lockfile
+pnpm run build
 cd ..
 
 # 3. 桌面壳依赖（含 Electron 二进制；镜像避免国内下载卡住）
 cd desktop
-ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm install --no-audit --no-fund
+ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ pnpm install
 cd ..
 
 # 4. 一键构建（脚本会：组装 payload → electron-builder --mac → 写 sha256）
@@ -118,7 +118,7 @@ open /Applications/ResumeForge.app
 | # | 现象 | 处理 |
 |---|---|---|
 | 1 | `xcode-select: error` / 缺头文件 | `xcode-select --install` 装 CLT（不装完整 Xcode） |
-| 2 | `npm install` 卡在 electron 下载 | 必须带 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` |
+| 2 | `pnpm install` 卡在 electron 下载 | 必须带 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` |
 | 3 | 构建报错 `/bin/bash: ... Build-Desktop.ps1: ...` | **不要用 PowerShell 脚本**（`scripts/Build-Desktop.ps1` 是 Windows 专用）；mac 用 `scripts/build-desktop-mac.sh` |
 | 4 | 首次启动白屏/闪退 | 先看 `desktop-main.log`；VM 可试 `--disable-gpu`；再查首启装配是否还在进行 |
 | 5 | App 双击无反应/提示"无法验证开发者" | 未签名所致：右键→打开；或 `xattr -dr com.apple.quarantine /Applications/ResumeForge.app` |

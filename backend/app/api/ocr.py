@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..runtime.blocking import run_sync
 from ..schemas.ocr import (
     OcrConfig,
     OcrEngineOption,
@@ -87,7 +88,7 @@ async def create_ocr_task(file: UploadFile = File(...), db: Session = Depends(ge
     if len(raw) > MAX_OCR_FILE_BYTES:
         raise HTTPException(status_code=413, detail=_TOO_LARGE_DETAIL)
 
-    ctx = load_ocr_context(db)
+    ctx = await run_sync(load_ocr_context, db)
     if not ctx.configured:
         raise HTTPException(status_code=422, detail=_NO_KEY_DETAIL)
 

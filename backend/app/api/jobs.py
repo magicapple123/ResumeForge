@@ -10,6 +10,7 @@ from starlette.responses import Response
 
 from ..database import get_db
 from ..models.job import JOB_STATUSES, Job
+from ..runtime.blocking import run_sync
 from ..schemas.job import (
     JobBatchDeleteResult,
     JobBatchRequest,
@@ -114,6 +115,18 @@ def list_job_ids(
 add_action_route(router, job_actions()["create_job"])
 
 
+def _prepare_parse_llm(db: Session):
+    """读模型配置、构造调用器，然后归还请求连接（整段同步工作单元）。
+
+    识别可能持续几十秒：会话留在事件循环线程上（哪怕只是 ``close``）会让同进程的其它
+    请求排在这条 SQLite 连接后面。未配置模型时返回 ``None``，调用方走本地兜底。
+    """
+    config = get_llm_config(db)
+    provider = create_provider(config) if llm_is_configured(config) else None
+    db.close()
+    return provider
+
+
 @router.post("/parse-text", response_model=JobTextParseResult)
 async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depends(get_db)):
     """把用户粘贴的招聘信息（或截图、文档）解析为草稿；确认后仍由新增岗位接口入库。"""
@@ -137,15 +150,13 @@ async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depen
     # 字段锚定也仍然对着原文，比图片那条"让模型自己抄录再核对"的路子强。
     source_text = "\n\n".join(part for part in (payload.text, documents.text) if part.strip())
     local_draft = parse_job_text(source_text)
-    config = get_llm_config(db)
-    if not llm_is_configured(config):
+    provider = await run_sync(_prepare_parse_llm, db)
+    if provider is None:
         return finalize_recognition_result(
             mark_local_fallback(local_draft, no_model_warning(has_images, has_documents)),
             has_images=has_images,
             document_warnings=documents.warnings,
         )
-    provider = create_provider(config)
-    db.close()
     try:
         result = await extract_job_text(provider, source_text, local_draft, image_urls)
     except LLMError as exc:
@@ -202,8 +213,8 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
             drafts = [parse_job_text("")]
         return [mark_local_fallback(draft, reason) for draft in drafts]
 
-    config = get_llm_config(db)
-    if not llm_is_configured(config):
+    provider = await run_sync(_prepare_parse_llm, db)
+    if provider is None:
         items = _local_items(no_model_warning(has_images, has_documents))
         return JobMultiTextParseResult(
             items=[
@@ -215,8 +226,6 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
             parse_engine="local",
         )
 
-    provider = create_provider(config)
-    db.close()
     try:
         results = await extract_multiple_jobs(provider, source_text, image_urls)
         engine = "ai"

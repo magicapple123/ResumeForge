@@ -16,17 +16,37 @@
 # Build-PythonRuntime.ps1 stamps a small JSON manifest into the zip it writes
 # (entry name at the zip root, next to python\, so the fingerprint travels with
 # the file through copies, archives and re-distribution). Build-Desktop.ps1
-# compares the stamped requirements fingerprint and bundled Python version
-# against the current checkout before reusing the zip; any mismatch -- including
-# a zip that carries no manifest at all -- means rebuild.
+# compares the stamped fingerprint and bundled Python version against the current
+# checkout before reusing the zip; any mismatch -- including a zip that carries no
+# manifest at all -- means rebuild.
 #
-# The fingerprint is the SHA-256 of backend\requirements.txt's bytes. Content,
-# not mtime: a git checkout rewrites timestamps for identical content, so an
-# mtime check would rebuild for nothing and, worse, could miss a change.
+# What the fingerprint covers (schema 2)
+# --------------------------------------
+# The identity of a runtime is the set of packages installed into it, and that
+# set is defined by exactly one file: backend\requirements.runtime.lock.txt, the
+# universal hash lock the whole production chain installs from. So the fingerprint
+# is the SHA-256 of THAT file's bytes, plus the bundled Python version.
+#
+# Schema 1 hashed backend\requirements.txt instead. That was one level too high:
+# a lock change (regenerated against the same top-level pins, e.g. a refreshed
+# transitive version or hash) moved no byte in requirements.txt, so an old zip
+# stayed "fresh" while describing a different package set. Schema 2 keys on the
+# lock, so re-resolving it alone is enough to force a rebuild. Manifests written
+# with schema 1 are therefore stale by definition and must rebuild -- the check
+# below rejects any schema it does not know, which is also how a hand-edited
+# manifest that lacks runtimeLockSha256 gets caught.
+#
+# Content, not mtime: a git checkout rewrites timestamps for identical content, so
+# an mtime check would rebuild for nothing and, worse, could miss a change.
 #
 # Dot-source this file (`. scripts\PythonRuntimeManifest.ps1`); it defines
-# functions only and emits no output. Every accessor below is a plain function
-# on purpose, so behaviour does not depend on which scope dot-sourced the file.
+# functions only and emits no output. Every accessor below is a plain function on
+# purpose, so behaviour does not depend on which scope dot-sourced the file.
+
+# The lock helpers (file names, validation) live in their own file and this one
+# refuses to work without them, so it pulls them in rather than relying on every
+# caller to remember the order. Dot-sourcing the same file twice is harmless.
+. (Join-Path $PSScriptRoot "Project-RuntimeLock.ps1")
 
 function Get-PythonRuntimeManifestEntryName {
     # The manifest is a sibling of python\ inside the archive. Storing it in the
@@ -38,12 +58,25 @@ function Get-PythonRuntimeManifestEntryName {
 function Get-PythonRuntimeManifestSchema {
     # Bumped when the manifest shape changes, so an older stamp is treated as
     # stale instead of being misread against a newer field set.
-    return 1
+    #   1 = SHA-256 of backend\requirements.txt (pre-RF-09)
+    #   2 = SHA-256 of backend\requirements.runtime.lock.txt + Python version
+    return 2
+}
+
+function Get-RuntimeLockPath {
+    # Single place that decides which lock file the runtime is built from. Every
+    # script that needs the lock goes through this, so "which file is the lock"
+    # cannot drift between the builder, the packager and the tests.
+    param(
+        [Parameter(Mandatory = $true)][string]$BackendDirectory
+    )
+
+    return (Join-Path $BackendDirectory (Get-RuntimeLockFileName))
 }
 
 function Get-RequirementsFingerprint {
-    # SHA-256 over the raw bytes of the requirements file. Content-addressed, so
-    # a git checkout (which changes mtime, not content) never looks "changed".
+    # SHA-256 over the raw bytes of a requirements file. Content-addressed, so a
+    # git checkout (which changes mtime, not content) never looks "changed".
     param(
         [Parameter(Mandatory = $true)][string]$RequirementsPath
     )
@@ -52,6 +85,24 @@ function Get-RequirementsFingerprint {
         throw "requirements file not found at '$RequirementsPath'."
     }
     return (Get-FileHash -LiteralPath $RequirementsPath -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-RuntimeLockFingerprint {
+    # SHA-256 of the production lock, after proving the lock is installable.
+    #
+    # Validation happens here, not in the builder, so no caller can hash a lock it
+    # would then fail to install: a missing, truncated, hash-less or dev-tainted
+    # lock throws with the offending lines named. There is deliberately no path
+    # that falls back to requirements.txt -- re-resolving top-level pins is the
+    # failure mode this whole guard exists to prevent.
+    param(
+        [Parameter(Mandatory = $true)][string]$RuntimeLockPath
+    )
+
+    if (-not (Get-Command Assert-RuntimeLockUsable -ErrorAction SilentlyContinue)) {
+        throw "Get-RuntimeLockFingerprint needs scripts\Project-RuntimeLock.ps1 dot-sourced first."
+    }    Assert-RuntimeLockUsable -LockPath $RuntimeLockPath | Out-Null
+    return (Get-FileHash -LiteralPath $RuntimeLockPath -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
 function Get-ManifestField {
@@ -69,18 +120,26 @@ function Get-ManifestField {
 
 function New-PythonRuntimeManifest {
     # Builds the manifest object that gets stamped into the zip.
+    #
+    # RequirementsSha256 is recorded for diagnosis only ("top-level pins unchanged,
+    # lock changed" is now a real and interesting case). The reuse decision below
+    # never reads it.
     param(
         [Parameter(Mandatory = $true)][string]$PythonVersion,
-        [Parameter(Mandatory = $true)][string]$RequirementsPath
+        [Parameter(Mandatory = $true)][string]$RuntimeLockPath,
+        [string]$RequirementsPath = ""
     )
 
-    $fingerprint = Get-RequirementsFingerprint -RequirementsPath $RequirementsPath
-    return [pscustomobject]@{
-        schema             = Get-PythonRuntimeManifestSchema
+    $manifest = [ordered]@{
+        schema             = (Get-PythonRuntimeManifestSchema)
         pythonVersion      = $PythonVersion
-        requirementsSha256 = $fingerprint
+        runtimeLockSha256  = (Get-RuntimeLockFingerprint -RuntimeLockPath $RuntimeLockPath)
         createdUtc         = (Get-Date).ToUniversalTime().ToString("o")
     }
+    if (-not [string]::IsNullOrWhiteSpace($RequirementsPath)) {
+        $manifest["requirementsSha256"] = (Get-RequirementsFingerprint -RequirementsPath $RequirementsPath)
+    }
+    return [pscustomobject]$manifest
 }
 
 function Add-PythonRuntimeManifest {
@@ -89,14 +148,18 @@ function Add-PythonRuntimeManifest {
     param(
         [Parameter(Mandatory = $true)][string]$ZipPath,
         [Parameter(Mandatory = $true)][string]$PythonVersion,
-        [Parameter(Mandatory = $true)][string]$RequirementsPath
+        [Parameter(Mandatory = $true)][string]$RuntimeLockPath,
+        [string]$RequirementsPath = ""
     )
 
     if (-not (Test-Path -LiteralPath $ZipPath -PathType Leaf)) {
         throw "cannot stamp a runtime manifest: zip not found at '$ZipPath'."
     }
 
-    $manifest = New-PythonRuntimeManifest -PythonVersion $PythonVersion -RequirementsPath $RequirementsPath
+    $manifest = New-PythonRuntimeManifest `
+        -PythonVersion $PythonVersion `
+        -RuntimeLockPath $RuntimeLockPath `
+        -RequirementsPath $RequirementsPath
     $json = $manifest | ConvertTo-Json -Compress
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
     $entryName = Get-PythonRuntimeManifestEntryName
@@ -174,23 +237,28 @@ function Get-PythonRuntimeStatus {
     # without downloading or installing anything. States:
     #   Missing  - no zip at all (first-ever build)
     #   Stale    - zip exists but must not be reused
-    #   UpToDate - zip matches the current requirements + Python version
+    #   UpToDate - zip matches the current production lock + Python version
+    #
+    # Throws when the lock itself is unusable. That is the point: "we could not
+    # tell what the runtime should contain" must not be reported as either
+    # UpToDate (stale reuse) or Stale (a rebuild that would also fail).
     param(
         [Parameter(Mandatory = $true)][string]$ZipPath,
         [Parameter(Mandatory = $true)][string]$PythonVersion,
-        [Parameter(Mandatory = $true)][string]$RequirementsPath
+        [Parameter(Mandatory = $true)][string]$RuntimeLockPath
     )
+
+    $expected = Get-RuntimeLockFingerprint -RuntimeLockPath $RuntimeLockPath
 
     if (-not (Test-Path -LiteralPath $ZipPath -PathType Leaf)) {
         return [pscustomobject]@{
             State    = "Missing"
             Reason   = "the cached zip does not exist yet"
-            Expected = $null
+            Expected = $expected
             Actual   = $null
         }
     }
 
-    $expected = Get-RequirementsFingerprint -RequirementsPath $RequirementsPath
     $manifest = Get-PythonRuntimeManifest -ZipPath $ZipPath
     if ($null -eq $manifest) {
         return [pscustomobject]@{
@@ -205,7 +273,7 @@ function Get-PythonRuntimeStatus {
     if ("$manifestSchema" -ne "$(Get-PythonRuntimeManifestSchema)") {
         return [pscustomobject]@{
             State    = "Stale"
-            Reason   = "the runtime manifest schema is outdated (found '$manifestSchema')"
+            Reason   = "the runtime manifest schema is outdated (found '$manifestSchema', need '$(Get-PythonRuntimeManifestSchema)')"
             Expected = $expected
             Actual   = $null
         }
@@ -221,19 +289,30 @@ function Get-PythonRuntimeStatus {
         }
     }
 
-    $manifestHash = Get-ManifestField -Manifest $manifest -Name "requirementsSha256"
-    if ("$manifestHash" -ne $expected) {
+    # Absent field, empty string and "null" all mean the same thing: this stamp
+    # cannot prove which lock produced the runtime.
+    $manifestLock = Get-ManifestField -Manifest $manifest -Name "runtimeLockSha256"
+    if ([string]::IsNullOrWhiteSpace("$manifestLock") -or "$manifestLock" -eq "null") {
         return [pscustomobject]@{
             State    = "Stale"
-            Reason   = "backend\requirements.txt changed since the runtime was built"
+            Reason   = "the runtime manifest carries no $(Get-RuntimeLockFileName) fingerprint, so the bundled package set is unknown"
             Expected = $expected
-            Actual   = $manifestHash
+            Actual   = $null
+        }
+    }
+
+    if ("$manifestLock" -ne $expected) {
+        return [pscustomobject]@{
+            State    = "Stale"
+            Reason   = "$(Get-RuntimeLockFileName) changed since the runtime was built"
+            Expected = $expected
+            Actual   = "$manifestLock"
         }
     }
 
     return [pscustomobject]@{
         State    = "UpToDate"
-        Reason   = "matches backend\requirements.txt and Python $PythonVersion"
+        Reason   = "matches $(Get-RuntimeLockFileName) and Python $PythonVersion"
         Expected = $expected
         Actual   = $expected
     }
@@ -248,11 +327,11 @@ function Invoke-PythonRuntimeEnsure {
     param(
         [Parameter(Mandatory = $true)][string]$ZipPath,
         [Parameter(Mandatory = $true)][string]$PythonVersion,
-        [Parameter(Mandatory = $true)][string]$RequirementsPath,
+        [Parameter(Mandatory = $true)][string]$RuntimeLockPath,
         [Parameter(Mandatory = $true)][scriptblock]$Rebuild
     )
 
-    $status = Get-PythonRuntimeStatus -ZipPath $ZipPath -PythonVersion $PythonVersion -RequirementsPath $RequirementsPath
+    $status = Get-PythonRuntimeStatus -ZipPath $ZipPath -PythonVersion $PythonVersion -RuntimeLockPath $RuntimeLockPath
     if ($status.State -eq "UpToDate") {
         Write-Host "python-runtime.zip is up to date ($($status.Reason)); reusing it."
         return [pscustomobject]@{ Rebuilt = $false; State = $status.State; Reason = $status.Reason }

@@ -1,0 +1,24 @@
+# hoisted：desktop/scripts 里有 3 处 require 传递依赖
+#   check-asar-deps.js → @electron/asar
+#   test-proxy-override.js → app-builder-lib / @electron/get
+# isolated 下顶层不可见会 MODULE_NOT_FOUND；electron-builder 也依赖扁平树。
+nodeLinker: hoisted
+
+# 不把 pnpm 自身写进锁文件的环境文档（packageManagerDependencies + @pnpm/exe.*）。
+# 一旦写成两个 YAML 文档，GitHub 的依赖图只读第一个，Dependabot 的 security alerts
+# 与 dependency-review 会对 JS 依赖失效。版本钉死由 engines.pnpm 的精确串硬校验负责。
+# 删掉这行会让锁文件变回双文档，backend/tests/test_version_consistency.py 有守卫。
+pmOnFail: ignore
+
+overrides:
+  # npm 的嵌套写法 "@electron/get@3.1.0": {"global-agent": "4.1.3"}
+  # 在 pnpm 里必须写成 "parent>child"。
+  '@electron/get@3.1.0>global-agent': 4.1.3
+  fast-uri@3: 3.1.9
+  undici@6: 6.29.1
+  undici@7: 7.30.1
+
+allowBuilds:
+  # electron-builder-squirrel-windows → electron-winstaller 的 install 脚本
+  # (node ./script/select-7z-arch.js)。pnpm 12 遇到被忽略的 build script 是硬失败。
+  electron-winstaller: true

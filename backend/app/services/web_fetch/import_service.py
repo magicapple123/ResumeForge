@@ -16,18 +16,28 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlsplit
 
 from sqlalchemy.orm import Session
 
 from ...models.job import Job
-from ...schemas.job import RECOGNITION_SOURCE_OFFICIAL, JobCreate
-from ..job.job_csv import row_to_payload
+from ...runtime.blocking import run_sync
+from ...schemas.job import JobCreate
 from ..job.job_service import create_job_record, find_job_by_identity, refresh_job_keywords
 from .errors import WebFetchError
 from .extractor import MAX_ROWS, extract_detail, extract_rows, extract_rules_result
-from .fetcher import FetchConfig, FetchedPages, JobFetcher
+from .fetcher import FetchedPage, FetchedPages, JobFetcher
+from .import_rows import (
+    _annotate_existing,
+    _clean_for_import,
+    _dedupe_rows,
+    _engine_config,
+    _page_requested,
+    _row_cap,
+    _row_for_detail,
+    preview_out,
+)
 from .page_intent import classify_page_intent
 from .row import ExtractedRow
 
@@ -55,6 +65,8 @@ FILLABLE_FIELDS = (
 )
 
 
+
+
 def provider_for(db: Session) -> Any:
     """当前配置可用时返回 LLM provider，否则 None（模型层只是兜底，不是前提）。"""
     if db is None:  # 离线测试（不碰 DB 的抓取/抽取）不读配置。
@@ -71,76 +83,133 @@ def provider_for(db: Session) -> Any:
     return create_provider(config) if llm_is_configured(config) else None
 
 
-def _engine_config(engine: str) -> FetchConfig:
-    return FetchConfig(engine=engine or "auto")
 
 
-def _annotate_existing(db: Session, rows: list[ExtractedRow]) -> None:
-    for row in rows:
-        existing = find_job_by_identity(
-            db,
-            title=row.title,
-            company=row.data.get("company", ""),
-            source_url=row.data.get("source_url") or row.detail_url,
-        )
-        row.existing_job_id = int(existing.id) if existing is not None else None
 
 
-def _dedupe_rows(rows: list[ExtractedRow]) -> list[ExtractedRow]:
-    """跨页去重：同一详情链接，或同公司同标题，只留第一次出现的那条。
 
-    去重放在抽取之后、预览之前：跨页重复的岗位不会在表里出现两次，total 与限制
-    条数也都基于去重后的集合；落库阶段仍由 find_job_by_identity 再兜一层。
+
+
+
+
+
+
+
+@dataclass(frozen=True)
+class PreviewPlan:
+    """预览的准备段产物：已抓到的页面 + 解析好的模型 provider（都不引用会话）。
+
+    抓取（网络 + 同域限速等待）与"读模型配置"都是同步阻塞，一起在 worker 里做完；
+    随后的抽取是模型调用，回到事件循环。
     """
-    seen: set[str] = set()
-    unique: list[ExtractedRow] = []
-    for row in rows:
-        key = (
-            row.detail_url or row.data.get("source_url") or ""
-        ).strip() or f"{row.title}|{row.data.get('company', '')}".strip().lower()
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        unique.append(row)
-    return unique
+
+    batch: FetchedPages
+    provider: Any
+    requested: int
+    url: str
 
 
-def preview_out(
+@dataclass(frozen=True)
+class DetailsPlan:
+    """补详情的准备段产物：每行对应的已抓到的详情页（``None`` = 抓取失败/无链接）。"""
+
+    prepared: tuple[tuple[ExtractedRow, FetchedPage | None], ...]
+    provider: Any
+
+
+def prepare_preview(
+    db: Session | None,
+    url: str,
+    *,
+    engine: str = "auto",
+    limit: int = 0,
+    intent: str = "auto",
+    provider: Any = None,
+    pages: int = 1,
+) -> PreviewPlan:
+    """同步准备段：抓 1–10 页并取好 provider，然后归还请求连接。"""
+    try:
+        fetcher = JobFetcher(db, config=_engine_config(engine))
+        # 详情意图天然是单页：用户给的就是一条岗位详情，不跟它的「下一页」。
+        requested = 1 if intent == "job_detail" else _page_requested(pages)
+        batch = fetcher.fetch_pages(
+            url,
+            pages=requested,
+            stop_after_first=(
+                (lambda page: classify_page_intent(page) == "job_detail")
+                if intent == "auto"
+                else None
+            ),
+        )
+        if intent == "auto" and batch.first and classify_page_intent(batch.first) == "job_detail":
+            requested = 1
+        # db 可为 None（不落库的预览路径）：没有会话就不取「已存在岗位」，与改动前「没有 db 就没有标注」的行为一致。
+        resolved = provider if provider is not None else (provider_for(db) if db is not None else None)
+        return PreviewPlan(batch=batch, provider=resolved, requested=requested, url=url)
+    finally:
+        if db is not None:
+            db.close()
+
+
+async def collect_preview_rows(
+    plan: PreviewPlan, *, intent: str = "auto", limit: int = 0
+) -> tuple[list[ExtractedRow], str, list[str]]:
+    """中间段：逐页走抽取层（可能调模型），**不碰数据库**。
+
+    Returns:
+        ``(rows, method, warnings)``——``method`` 是 model / rules / none 的聚合口径。
+    """
+    cap = _row_cap(limit)
+    rows: list[ExtractedRow] = []
+    method = "none"
+    warnings = list(plan.batch.errors)
+    for page in plan.batch.pages:
+        result = await extract_rows(page, provider=plan.provider, intent=intent, limit=cap)
+        rows.extend(result.rows)
+        warnings.extend(result.warnings)
+        if result.method == "model":
+            method = "model"
+        elif result.method == "rules" and method == "none":
+            method = "rules"
+    return rows, method, warnings
+
+
+def finalize_preview(
+    db: Session | None,
+    plan: PreviewPlan,
     rows: list[ExtractedRow],
     *,
-    url: str,
-    engine: str,
     method: str,
-    fetched_on: str,
     warnings: list[str],
-    pages_requested: int = 1,
-    pages_fetched: int = 1,
-    truncated: bool = False,
-    stop_reason: str = "no_next",
+    engine: str = "auto",
+    limit: int = 0,
 ) -> dict[str, Any]:
-    """预览响应（含分页诊断）：前端据此如实显示抓了几页 / 为什么停 / 是否还有。"""
-    return {
-        "url": url,
-        "engine": engine,
-        "method": method,
-        "fetched_on": fetched_on,
-        "total": len(rows),
-        "rows": [row.to_dict() for row in rows],
-        "warnings": warnings,
-        # #16 分页（收尾任务 2）：每页都走同一套 SSRF/限速/预算；停止原因四值见 fetcher。
-        "pages_requested": pages_requested,
-        "pages_fetched": pages_fetched,
-        "truncated": truncated,
-        "stop_reason": stop_reason,
-    }
-
-
-def _row_cap(limit: int) -> int:
-    return MAX_PREVIEW_ROWS if not limit else max(1, min(int(limit), MAX_PREVIEW_ROWS))
-
-
-def _page_requested(pages: int) -> int:
-    return max(1, min(int(pages or 1), MAX_LIST_PAGES))
+    """同步收尾段：去重/截断/标「已在库」（要读库），拼出预览响应。"""
+    try:
+        cap = _row_cap(limit)
+        rows = _dedupe_rows(rows)
+        capped = len(rows) > cap
+        if capped:
+            warnings.append(f"多页共 {len(rows)} 条，本次最多取 {cap} 条")
+            rows = rows[:cap]
+        if db is not None:
+            _annotate_existing(db, rows)
+        first = plan.batch.first
+        return preview_out(
+            rows,
+            url=first.url if first is not None else plan.url,
+            engine=first.engine if first is not None else engine,
+            method=method,
+            fetched_on=first.fetched_on if first is not None else "",
+            warnings=warnings,
+            pages_requested=plan.requested,
+            pages_fetched=plan.batch.pages_fetched,
+            truncated=plan.batch.truncated or capped,
+            stop_reason=plan.batch.stop_reason,
+        )
+    finally:
+        if db is not None:
+            db.close()
 
 
 async def preview_from_url(
@@ -157,50 +226,30 @@ async def preview_from_url(
 
     第 2 页起抓取失败不会回滚：已抓到的页照常抽取并返回，失败信息进 warnings，
     由 pages_fetched / truncated / stop_reason 如实说明停在哪一步。
+
+    三段式（准备 → 模型抽取 → 收尾），与 HTTP 路由同一套切法：本函数只是把三段
+    串起来的兼容入口（工具层与离线测试按它调用）。
     """
-    fetcher = JobFetcher(db, config=_engine_config(engine))
-    # 详情意图天然是单页：用户给的就是一条岗位详情，不跟它的「下一页」。
-    requested = 1 if intent == "job_detail" else _page_requested(pages)
-    batch = fetcher.fetch_pages(
+    plan = await run_sync(
+        prepare_preview,
+        db,
         url,
-        pages=requested,
-        stop_after_first=(
-            (lambda page: classify_page_intent(page) == "job_detail") if intent == "auto" else None
-        ),
+        engine=engine,
+        limit=limit,
+        intent=intent,
+        pages=pages,
+        provider=provider,
     )
-    if intent == "auto" and batch.first and classify_page_intent(batch.first) == "job_detail":
-        requested = 1
-    resolved = provider if provider is not None else provider_for(db)
-    cap = _row_cap(limit)
-    rows: list[ExtractedRow] = []
-    method = "none"
-    warnings = list(batch.errors)
-    for page in batch.pages:
-        result = await extract_rows(page, provider=resolved, intent=intent, limit=cap)
-        rows.extend(result.rows)
-        warnings.extend(result.warnings)
-        if result.method == "model":
-            method = "model"
-        elif result.method == "rules" and method == "none":
-            method = "rules"
-    rows = _dedupe_rows(rows)
-    capped = len(rows) > cap
-    if capped:
-        warnings.append(f"多页共 {len(rows)} 条，本次最多取 {cap} 条")
-        rows = rows[:cap]
-    _annotate_existing(db, rows)
-    first = batch.first
-    return preview_out(
+    rows, method, warnings = await collect_preview_rows(plan, intent=intent, limit=limit)
+    return await run_sync(
+        finalize_preview,
+        db,
+        plan,
         rows,
-        url=first.url if first is not None else url,
-        engine=first.engine if first is not None else engine,
         method=method,
-        fetched_on=first.fetched_on if first is not None else "",
         warnings=warnings,
-        pages_requested=requested,
-        pages_fetched=batch.pages_fetched,
-        truncated=batch.truncated or capped,
-        stop_reason=batch.stop_reason,
+        engine=engine,
+        limit=limit,
     )
 
 
@@ -233,61 +282,58 @@ def preview_rules_from_url(
     return rows, batch, warnings
 
 
-def _row_for_detail(raw: dict[str, Any], *, page_url: str) -> ExtractedRow:
-    """把前端回传的行还原成 ExtractedRow（只保留已抓到的值，四态重新推导）。"""
-    data = {
-        key: str(value or "")
-        for key, value in (raw.get("data") or {}).items()
-        if isinstance(value, str)
-    }
-    detail_url = str(raw.get("detail_url") or "").strip()
-    raw_states = raw.get("field_states")
-    states: dict[str, Any] = raw_states if isinstance(raw_states, dict) else {}
-    row = ExtractedRow(
-        data=data,
-        detail_url=detail_url,
-        evidence={str(k): str(v)[:160] for k, v in (raw.get("evidence") or {}).items()},
-        summary=str(raw.get("summary") or ""),
-        field_states={str(k): str(v) for k, v in states.items()},
-        detail_error=str(raw.get("detail_error") or ""),
-        posted_at_raw=str(raw.get("posted_at_raw") or ""),
-        posted_at_inferred=bool(raw.get("posted_at_inferred")),
-        job_type_inferred=bool(raw.get("job_type_inferred")),
-        jd_split=bool(raw.get("jd_split")),
-        existing_job_id=raw.get("existing_job_id"),
-    )
-    if not row.field_states:
-        row._refresh_states(pending_detail=bool(detail_url))
-    return row
 
 
-async def fetch_details(
-    db: Session,
+def prepare_details(
+    db: Session | None,
     rows: list[dict[str, Any]],
     *,
     engine: str = "auto",
     provider: Any = None,
     page_url: str = "",
-) -> dict[str, Any]:
-    """对勾选的行逐条补详情；单条失败标 fetch_failed，已完成的保留。"""
-    if len(rows) > DETAIL_BATCH_LIMIT:
-        raise ValueError(f"一次最多补 {DETAIL_BATCH_LIMIT} 条详情，请分批补齐")
-    fetcher = JobFetcher(db, config=_engine_config(engine))
-    resolved = provider if provider is not None else provider_for(db)
+) -> DetailsPlan:
+    """同步准备段：还原行、逐条抓详情页（网络 + 限速）、取好 provider，然后归还连接。"""
+    try:
+        if len(rows) > DETAIL_BATCH_LIMIT:
+            raise ValueError(f"一次最多补 {DETAIL_BATCH_LIMIT} 条详情，请分批补齐")
+        fetcher = JobFetcher(db, config=_engine_config(engine))
+        # db 可为 None（不落库的预览路径）：没有会话就不取「已存在岗位」，与改动前「没有 db 就没有标注」的行为一致。
+        resolved = provider if provider is not None else (provider_for(db) if db is not None else None)
+        prepared: list[tuple[ExtractedRow, FetchedPage | None]] = []
+        for raw in rows:
+            row = _row_for_detail(raw, page_url=page_url)
+            # 只跟「列表页明确给出的详情链接」走：source_url 可能就是列表页自身，
+            # 把它当详情页抓一遍既浪费请求，也会把列表页正文当成 JD 写进去。
+            target = row.detail_url
+            if not target:
+                row.mark_fetch_failed("列表页没有给出详情链接，无法补详情")
+                prepared.append((row, None))
+                continue
+            page: FetchedPage | None = None
+            try:
+                page = fetcher.fetch(target)
+            except WebFetchError as exc:
+                row.mark_fetch_failed(str(exc))
+            except Exception:  # noqa: BLE001 - 单条失败不拖垮整批
+                logger.warning("链接导入补详情失败：%s", target, exc_info=True)
+                row.mark_fetch_failed("这条详情抓取失败")
+            prepared.append((row, page))
+        return DetailsPlan(prepared=tuple(prepared), provider=resolved)
+    finally:
+        if db is not None:
+            db.close()
+
+
+async def collect_detail_rows(plan: DetailsPlan) -> dict[str, Any]:
+    """中间段：对已抓到的详情页逐条抽取（可能调模型），**不碰数据库**。"""
     updated: list[dict[str, Any]] = []
     warnings: list[str] = []
-    for raw in rows:
-        row = _row_for_detail(raw, page_url=page_url)
-        # 只跟「列表页明确给出的详情链接」走：source_url 可能就是列表页自身，
-        # 把它当详情页抓一遍既浪费请求，也会把列表页正文当成 JD 写进去。
-        target = row.detail_url
-        if not target:
-            row.mark_fetch_failed("列表页没有给出详情链接，无法补详情")
+    for row, page in plan.prepared:
+        if page is None:
             updated.append(row.to_dict())
             continue
         try:
-            page = fetcher.fetch(target)
-            detail = await extract_detail(page, provider=resolved)
+            detail = await extract_detail(page, provider=plan.provider)
             row.apply_detail(
                 detail.fields,
                 page_url=page.url,
@@ -300,32 +346,38 @@ async def fetch_details(
         except WebFetchError as exc:
             row.mark_fetch_failed(str(exc))
         except Exception:  # noqa: BLE001 - 单条失败不拖垮整批
-            logger.warning("链接导入补详情失败：%s", target, exc_info=True)
+            logger.warning("链接导入补详情失败：%s", row.detail_url, exc_info=True)
             row.mark_fetch_failed("这条详情抓取失败")
         updated.append(row.to_dict())
     return {"rows": updated, "warnings": warnings}
 
 
-def _origin_for(source_url: str) -> str:
-    try:
-        host = urlsplit(source_url).hostname or ""
-    except ValueError:
-        host = ""
-    return host[:64]
+async def fetch_details(
+    db: Session,
+    rows: list[dict[str, Any]],
+    *,
+    engine: str = "auto",
+    provider: Any = None,
+    page_url: str = "",
+) -> dict[str, Any]:
+    """对勾选的行逐条补详情；单条失败标 fetch_failed，已完成的保留。
+
+    三段式（抓取在 worker → 抽取在事件循环 → 结果合并），与 HTTP 路由同一套切法；
+    本函数只是把三段串起来的兼容入口。
+    """
+    plan = await run_sync(
+        prepare_details,
+        db,
+        rows,
+        engine=engine,
+        provider=provider,
+        page_url=page_url,
+    )
+    return await collect_detail_rows(plan)
 
 
-def _clean_for_import(row: dict[str, Any]) -> dict[str, Any]:
-    """把一行预览数据清洗成 JobCreate 可接受的值；非法行抛 ValueError（逐行容错）。"""
-    data = {
-        key: str(value or "")
-        for key, value in (row.get("data") or {}).items()
-        if isinstance(value, str)
-    }
-    payload = row_to_payload({key: data.get(key, "") for key in data})
-    payload.setdefault("recognition_source", RECOGNITION_SOURCE_OFFICIAL)
-    if not payload.get("origin_source"):
-        payload["origin_source"] = _origin_for(str(payload.get("source_url") or ""))
-    return payload
+
+
 
 
 def fill_empty_fields(job: Job, payload: dict[str, Any]) -> list[str]:
@@ -402,9 +454,16 @@ __all__ = [
     "FILLABLE_FIELDS",
     "MAX_LIST_PAGES",
     "MAX_PREVIEW_ROWS",
+    "DetailsPlan",
+    "PreviewPlan",
+    "collect_detail_rows",
+    "collect_preview_rows",
     "commit_rows",
     "fetch_details",
     "fill_empty_fields",
+    "finalize_preview",
+    "prepare_details",
+    "prepare_preview",
     "preview_from_url",
     "preview_out",
     "preview_rules_from_url",

@@ -8,6 +8,8 @@
 """
 
 import logging
+from dataclasses import dataclass
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -16,6 +18,7 @@ from ..database import get_db
 from ..models.job import Job
 from ..models.job_match_batch import JobMatchBatch
 from ..models.profile import utcnow
+from ..runtime.blocking import run_sync
 from ..runtime.log_redact import log_exception_redacted
 from ..schemas.job_comparison import JobComparisonResult
 from ..schemas.job_match import JobMatchOut, JobMatchResult
@@ -25,7 +28,7 @@ from ..schemas.job_match_batch import (
     JobMatchBatchRequest,
 )
 from ..services.actions import add_action_route
-from ..services.actions.catalog import all_actions
+from ..services.actions.catalog import registered_action
 from ..services.apply import apply_service
 from ..services.job.job_comparison import MAX_COMPARISON_JOBS
 from ..services.job.job_comparison_store import load_comparison
@@ -83,6 +86,104 @@ def _batch_out(row: JobMatchBatch, comparison: JobComparisonResult | None) -> Jo
     )
 
 
+@dataclass(frozen=True)
+class _BatchPrep:
+    """批量匹配的冻结输入：输入项与模型配置都是纯数据，跨 await 不带任何 ORM 对象。"""
+
+    inputs: list[Any]
+    config: Any
+
+
+def _prepare_match_batch(
+    db: Session, job_ids: list[int], *, force: bool, resume_id: int | None
+) -> _BatchPrep:
+    """批量匹配的同步准备段：查岗位、准备资料投影与岗位输入、取模型配置，然后归还连接。
+
+    整段都在请求会话上（``jobs_by_ids`` / ``build_batch_inputs`` / ``get_llm_config`` /
+    ``close``），所以放进同一个 worker 一次做完：随后是逐个岗位的模型调用，可能持续
+    几分钟，会话留在事件循环线程上会让同进程的其它请求排在这条 SQLite 连接后面。
+    """
+    jobs, missing = jobs_by_ids(db, job_ids)
+    if missing:
+        raise HTTPException(
+            status_code=404, detail=f"以下岗位不存在或已被删除：{'、'.join(map(str, missing))}"
+        )
+    try:
+        inputs = build_batch_inputs(db, jobs, force=force, resume_id=resume_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        return _BatchPrep(inputs=inputs, config=get_llm_config(db))
+    finally:
+        # 模型调用期间不占用请求数据库连接。
+        db.close()
+
+
+@dataclass(frozen=True)
+class _MatchPrep:
+    """单岗匹配的冻结输入。
+
+    ``cached`` 非空表示"已有一份对当前来源仍然成立的结论"，这次不必再调模型，此时
+    其余字段不参与（``job_input`` 为 ``None``）。
+    """
+
+    cached: JobMatchResult | None
+    job_input: dict[str, Any] | None
+    profile_text: str
+    resume_text: str
+    source: Any
+    config: Any
+    configured: bool
+
+
+def _prepare_match_analysis(
+    db: Session, job_id: int, *, force: bool, resume_id: int | None
+) -> _MatchPrep:
+    """单岗匹配的同步准备段：读岗位与资料投影、算来源指纹、取模型配置，然后归还连接。
+
+    资料投影（``match_source_texts`` / ``match_source_snapshot``）与"最近一次结论是否
+    仍然成立"的判断都要读库；这些必须在模型调用**之前**读完并把结果物化成纯数据，
+    否则 await 期间既占着连接，也会让来源指纹与实际喂给模型的文本来自两个时刻。
+    """
+    job = db.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
+
+    try:
+        try:
+            profile, profile_text, resume_text = match_source_texts(db, job, resume_id=resume_id)
+            source = match_source_snapshot(db, job, resume_id, personal_text=profile_text)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not force:
+            existing = apply_service.latest_match(db, job_id)
+            if existing is not None and source_matches(existing.result, source):
+                # 结论与当前来源一致，直接复用：不必再烧一次 token。
+                return _MatchPrep(
+                    cached=JobMatchResult.model_validate(existing.result),
+                    job_input=None,
+                    profile_text=profile_text,
+                    resume_text=resume_text,
+                    source=source,
+                    config=None,
+                    configured=False,
+                )
+        if profile_is_empty(profile) and not resume_text.strip():
+            raise HTTPException(status_code=400, detail="个人资料为空，无法做匹配分析")
+        config = get_llm_config(db)
+        return _MatchPrep(
+            cached=None,
+            job_input=job_payload(job),
+            profile_text=profile_text,
+            resume_text=resume_text,
+            source=source,
+            config=config,
+            configured=bool(config.base_url.strip() and config.model.strip()),
+        )
+    finally:
+        db.close()
+
+
 @router.post("/match-batches", response_model=JobMatchBatchOut)
 async def create_match_batch(
     payload: JobMatchBatchRequest,
@@ -91,21 +192,18 @@ async def create_match_batch(
     """对用户选中的岗位批量分析，并按参考分保存一份可回看的快照。"""
     job_ids = list(dict.fromkeys(payload.job_ids))
     _validate_mode(job_ids, payload.mode)
-    jobs, missing = jobs_by_ids(db, job_ids)
-    if missing:
-        raise HTTPException(
-            status_code=404, detail=f"以下岗位不存在或已被删除：{'、'.join(map(str, missing))}"
-        )
-    try:
-        inputs = build_batch_inputs(db, jobs, force=payload.force, resume_id=payload.resume_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    config = get_llm_config(db)
-    # 模型调用期间不占用请求数据库连接。
-    db.close()
-    run = await run_batch_match(inputs, config)
+    prep = await run_sync(
+        _prepare_match_batch,
+        db,
+        job_ids,
+        force=payload.force,
+        resume_id=payload.resume_id,
+    )
+    run = await run_batch_match(prep.inputs, prep.config)
     comparison = (
-        await run_batch_comparison(inputs, run, config) if payload.mode == "compare" else None
+        await run_batch_comparison(prep.inputs, run, prep.config)
+        if payload.mode == "compare"
+        else None
     )
     try:
         row = persist_batch_in_new_session(run, comparison=comparison)
@@ -173,13 +271,18 @@ def cancel_match_batch_task(task_id: str, db: Session = Depends(get_db)):
     return refreshed or task
 
 
-add_action_route(router, all_actions()["list_match_analyses"], route_path="/match-batches")
+add_action_route(router, registered_action("list_match_analyses"), route_path="/match-batches")
 
 
 def get_match_batch_history(
     limit: int = Query(default=30, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
+    """历史批量匹配记录摘要（最近的在前）。
+
+    薄壳：查询与摘要投影都在 ``services.job.job_match_batch.list_batch_summaries``
+    （助手动作 ``list_match_analyses`` 调同一个函数）。
+    """
     return list_batch_summaries(db, limit=limit)
 
 
@@ -198,47 +301,39 @@ async def create_match_analysis(
     resume_id: int | None = Query(default=None, gt=0),
     db: Session = Depends(get_db),
 ):
-    job = db.get(Job, job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
+    prep = await run_sync(
+        _prepare_match_analysis,
+        db,
+        job_id,
+        force=force,
+        resume_id=resume_id,
+    )
+    if prep.cached is not None:
+        return prep.cached
 
-    try:
-        profile, profile_text, resume_text = match_source_texts(db, job, resume_id=resume_id)
-        source = match_source_snapshot(db, job, resume_id, personal_text=profile_text)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if not force:
-        existing = apply_service.latest_match(db, job_id)
-        if existing is not None and source_matches(existing.result, source):
-            return JobMatchResult.model_validate(existing.result)
-
-    if profile_is_empty(profile) and not resume_text.strip():
-        raise HTTPException(status_code=400, detail="个人资料为空，无法做匹配分析")
-
-    payload = job_payload(job)
-    config = get_llm_config(db)
-    configured = bool(config.base_url.strip() and config.model.strip())
-    # 释放数据库连接（await 期间不要占着连接池）。
-    db.close()
-
-    if not configured:
-        result = local_match_result(payload)
+    # ``job_input`` 只在 cached 分支是 None（那一条上面已经 return），这里用 cast 把
+    # "已收窄"表达给类型检查器；不改成 ``or {}``，否则真出问题时会静默匹配空岗位。
+    job_input = cast(dict[str, Any], prep.job_input)
+    if not prep.configured:
+        result = local_match_result(job_input)
         model_name = ""
     else:
-        provider = create_provider(config)
+        provider = create_provider(prep.config)
         try:
             # 与批量匹配共用"可重试失败再试一次"的收口：模型这一次证据跑偏时
             # 服务端自动重试一次，别让用户看到"请重试"后还得自己再点一遍。
-            result = await analyze_match_with_retry(provider, payload, profile_text, resume_text)
+            result = await analyze_match_with_retry(
+                provider, job_input, prep.profile_text, prep.resume_text
+            )
         except LLMError as exc:
             logger.warning("岗位匹配分析失败：%s", exc)
             raise HTTPException(status_code=502, detail=f"生成匹配分析失败：{exc}") from exc
         except Exception as exc:  # noqa: BLE001 - 外部模型异常统一转为可理解的错误
             log_exception_redacted(logger, "岗位匹配分析发生内部错误")
             raise HTTPException(status_code=502, detail="生成匹配分析失败") from exc
-        model_name = config.model
+        model_name = prep.config.model
 
-    result = result.model_copy(update={"source": source})
+    result = result.model_copy(update={"source": prep.source})
     apply_service.persist_match_in_new_session(job_id, result, model=model_name)
     return result
 

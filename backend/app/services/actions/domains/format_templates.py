@@ -36,7 +36,6 @@ from ....schemas.resume_template import (
 )
 from ....services.resume.resume_template_format import FORMAT_FIELD_KEYS, FORMAT_FIELDS
 from ..legacy import preview_runner, tool_runner
-from ..registry import define_action
 from ..spec import ActionError, ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -162,66 +161,57 @@ _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def format_template_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）版式域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）版式域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
-    list_format_templates = define_action(
-        ActionSpec(
-            name="list_format_templates",
-            description=(
-                "列出用户自制的版式（id、名称、说明、排版参数如强调色/行高/页边距）。"
-                "用户问「我有哪些版式」「之前那个版式设了哪些参数」时用它，"
-                "也用于在 update_format_template 之前确认要改哪一个。"
-                "内置版式与模板（完整 HTML）不在此列，它们只能在「工作台」页查看。"
-            ),
-            input_model=ListFormatTemplatesInput,
-            permission=Permission.READ_ONLY,
-            run=_run_list_format_templates,
-            run_tool=tool_runner(_TOOL_HANDLERS, "_tool_list_format_templates"),
-            service_entry="resume.resume_template_store.list_user_templates",
-            tool_fields=(),
-            # 旧 GET 路由的未知 query 参数一律忽略（FastAPI 默认行为）。
-            ignore_unknown_arguments=True,
-            http=HttpRoute(
-                "GET", "/api/resume-templates", list[ResumeTemplateOut], tags=("resume-templates",)
-            ),
-        )
+    list_format_templates = ActionSpec(
+        name="list_format_templates",
+        description=(
+            "列出用户自制的版式（id、名称、说明、排版参数如强调色/行高/页边距）。"
+            "用户问「我有哪些版式」「之前那个版式设了哪些参数」时用它，"
+            "也用于在 update_format_template 之前确认要改哪一个。"
+            "内置版式与模板（完整 HTML）不在此列，它们只能在「工作台」页查看。"
+        ),
+        input_model=ListFormatTemplatesInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_format_templates,
+        run_tool=tool_runner(_TOOL_HANDLERS, "_tool_list_format_templates"),
+        service_entry="resume.resume_template_store.list_user_templates",
+        tool_fields=(),
+        # 旧 GET 路由的未知 query 参数一律忽略（FastAPI 默认行为）。
+        ignore_unknown_arguments=True,
+        http=HttpRoute(
+            "GET", "/api/resume-templates", list[ResumeTemplateOut], tags=("resume-templates",)
+        ),
     )
-    create_format_template = define_action(
-        ActionSpec(
-            name="create_format_template",
-            description=(
-                "新建一个「版式」——只调排版参数（强调色/行高/页边距/区块间距/字号系数），不写 HTML。"
-                "用户说「版式太挤」「帮我压进一页」「换个强调色」「做一个版式」时用它。"
-                "至少设置一项参数。名称限 1-40 个字符、只能含中文/字母/数字/空格/下划线/连字符，"
-                "且不能与内置或已有的模板、版式重名；自制模板与版式的总数上限 40 个。"
-                "注意：**模板（外观骨架、完整 HTML）这一层不能用工具创建**，那需要用户到「工作台」页操作；"
-                "版式这一层可以，本工具就是做这个的。"
-            ),
-            input_model=CreateFormatTemplateInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_create_format_template,
-            run_tool=tool_runner(_TOOL_HANDLERS, "_tool_create_format_template"),
-            preview=preview_runner(
-                "app.services.assistant_tools.previews", "preview_create_format_template"
-            ),
-            service_entry="resume.resume_template_store.create_user_template",
-            tool_fields=("name", "description", *FORMAT_FIELD_KEYS),
-            http=HttpRoute(
-                "POST",
-                "/api/resume-templates",
-                ResumeTemplateDetail,
-                status_code=201,
-                tags=("resume-templates",),
-            ),
-        )
+    create_format_template = ActionSpec(
+        name="create_format_template",
+        description=(
+            "新建一个「版式」——只调排版参数（强调色/行高/页边距/区块间距/字号系数），不写 HTML。"
+            "用户说「版式太挤」「帮我压进一页」「换个强调色」「做一个版式」时用它。"
+            "至少设置一项参数。名称限 1-40 个字符、只能含中文/字母/数字/空格/下划线/连字符，"
+            "且不能与内置或已有的模板、版式重名；自制模板与版式的总数上限 40 个。"
+            "注意：**模板（外观骨架、完整 HTML）这一层不能用工具创建**，那需要用户到「工作台」页操作；"
+            "版式这一层可以，本工具就是做这个的。"
+        ),
+        input_model=CreateFormatTemplateInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_create_format_template,
+        run_tool=tool_runner(_TOOL_HANDLERS, "_tool_create_format_template"),
+        preview=preview_runner(
+            "app.services.assistant_tools.previews", "preview_create_format_template"
+        ),
+        service_entry="resume.resume_template_store.create_user_template",
+        tool_fields=("name", "description", *FORMAT_FIELD_KEYS),
+        http=HttpRoute(
+            "POST",
+            "/api/resume-templates",
+            ResumeTemplateDetail,
+            status_code=201,
+            tags=("resume-templates",),
+        ),
     )
     _ACTIONS = {spec.name: spec for spec in (list_format_templates, create_format_template)}
     return _ACTIONS

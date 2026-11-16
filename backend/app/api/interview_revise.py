@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..schemas.interview import InterviewAnswerRevise
 from ..services.interview.voice_turns import AnswerNotReviseable, revise_answer_for_turn
+from .interview_units import AnswerPrep
 
 
 def register_revise_routes(
@@ -36,12 +37,16 @@ def register_revise_routes(
     """把 ``POST /{session_id}/answers/revise`` 挂到既有采访 router 上（不新开 prefix）。"""
 
     @router.post("/{session_id}/answers/revise")
-    async def revise_answer_stream(
+    def revise_answer_stream(
         session_id: int, payload: InterviewAnswerRevise, db: Session = Depends(get_db)
     ):
         """改掉自己刚提交的那条回答，作废该轮回应并重新生成。
 
         只能改**最后一条**回答：改中间某一轮会让后续轮次的上下文与"第 N 轮"编号一起错位。
+
+        RF-02：整条准备链（校验 + provider + 作废旧回应 + 轮次计算）都是同步 IO，函数自身
+        没有任何 ``await``，所以声明成 ``def``——Starlette 会把整个 handler 丢进线程池，
+        事件循环在这段里一次都不被占用。
         """
         session = session_or_404(db, session_id)
         if session.status != status_active:
@@ -57,10 +62,23 @@ def register_revise_routes(
         for item in stale:
             db.delete(item)
         db.commit()
+        db.refresh(session)
         index = answered_rounds(session)
 
+        # 跨 await 只传准备结果：生成器按 ``answer_id`` 自己读那条回答（见
+        # ``interview_stream``）。这里与 ``/answers/stream`` 走同一个生成器，所以也交给它
+        # 同一份 ``AnswerPrep``。
         return StreamingResponse(
-            stream_events(db, session, provider, index, answer),
+            stream_events(
+                db,
+                AnswerPrep(
+                    db=db,
+                    session=session,
+                    provider=provider,
+                    index=index,
+                    answer_id=int(answer.id),
+                ),
+            ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )

@@ -103,7 +103,7 @@
 | 项 | 内容 |
 |---|---|
 | 审计原文 | `services/actions/domains/*.py` 中相同的 6 行 lazy import + 循环，改注册协议要动 28 个文件 |
-| 当前实测 | 29 个域文件（不含 `__init__.py`）全部改为声明式：`define_action(ActionSpec(name=..., input_model=..., run=..., http=HttpRoute(...)))`，模块末尾 `actions()` 直接返回 dict，**无重复 import 循环** |
+| 当前实测 | 29 个域文件（不含 `__init__.py`）全部是**纯构建器**：模块末尾 `actions()` 返回 `dict[str, ActionSpec]`，**不引用注册表**（RF-10 起 `define_action` / `get_action` 一律不出现在 domains 里，由 `tests/test_action_registry.py` 的 AST 判据守住）；注册统一走 `catalog.ensure_registered()`（幂等、顺序稳定） |
 
 **处置**：不排任务。
 

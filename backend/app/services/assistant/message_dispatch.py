@@ -70,6 +70,10 @@ class MessageDispatch:
     system_prompt: str
     quoted: dict[str, Any] | None
     conversation_id: int
+    # RF-02：入流准备搬到 worker 之后，ContextVar 不能在 worker 里写（anyio 的线程拿的是
+    # context 副本，值不会回到事件循环）。准备阶段把该写的值算好带走，由路由在**事件循环**
+    # 上调用 ``set_ambient_scope(**audit_scope)``，SSE 期间 provider 才能按同一份口径记账。
+    audit_scope: dict[str, Any]
 
     def event_stream(self) -> AsyncIterator[str]:
         """把入流参数原样交给 SSE 唯一实现（序列化与帧格式在那里）。"""
@@ -114,6 +118,23 @@ def save_attachment_copies(db: Session, dispatch: MessageDispatch) -> None:
             )
 
 
+def assistant_audit_scope(*, relaxed_mode: bool, language: str) -> dict[str, Any]:
+    """助手入口的审计输入边界（#35）：放宽模式开 = 不脱敏。
+
+    返回值既用于**准备阶段就地写入**（同步调用方），也随 :class:`MessageDispatch`
+    交给路由在**事件循环**上再写一次——RF-02 把准备段搬进 worker 后，worker 线程里的
+    ContextVar 写入不会传播回 SSE，所以值必须随数据一起带出来。
+    """
+    return {
+        "input_scope": "assistant_context",
+        "masked": not relaxed_mode,
+        "language": language,
+        # 助手是多轮工具循环，单轮输出仍受 provider 默认约束；审计按应用默认输出
+        # 上界声明预算（A1：不再留 None，否则分不清"没声明"与"不限制"）。
+        "budget": DEFAULT_AUDIT_BUDGET,
+    }
+
+
 def prepare_message_dispatch(
     db: Session,
     conversation_id: int,
@@ -134,14 +155,13 @@ def prepare_message_dispatch(
     # 目标语言优先取用户显式保存的界面语言（/api/settings/locale，数据集内持久化，
     # 是唯一权威值）；用户还没保存过时退回本次请求可选携带的 locale；两者都没有就留空
     # （＝本次不涉及语言选择），而不是记成缺失。
-    set_ambient_scope(
-        input_scope="assistant_context",
-        masked=not relaxed_mode,
+    audit_scope = assistant_audit_scope(
+        relaxed_mode=relaxed_mode,
         language=get_ui_locale(db) or payload.locale or DEFAULT_AUDIT_LANGUAGE,
-        # 助手是多轮工具循环，单轮输出仍受 provider 默认约束；审计按应用默认输出
-        # 上界声明预算（A1：不再留 None，否则分不清"没声明"与"不限制"）。
-        budget=DEFAULT_AUDIT_BUDGET,
     )
+    # 仍在准备阶段写一次（本函数也可能被同步调用方使用）；路由会在事件循环上按同一份
+    # 值再写一次——worker 线程里的写入不会传播回去，见 MessageDispatch.audit_scope。
+    set_ambient_scope(**audit_scope)
     context_blocks, context_metadata = load_local_context(db, payload, relaxed=relaxed_mode)
     config = load_llm_config(db)
     if not config.base_url or not config.model:
@@ -207,6 +227,7 @@ def prepare_message_dispatch(
         system_prompt=system_prompt,
         quoted=quoted_snapshot,
         conversation_id=conversation_id,
+        audit_scope=audit_scope,
     )
 
 

@@ -86,14 +86,14 @@
 
 ## 6. F · 依赖、许可与供应链（GOVERN）
 
-- [ ] **F1 已知漏洞闸门**：Python `pip-audit` 阻断；前端 `npm audit --omit=dev --audit-level=high` 阻断；依赖变更 PR 走 `dependency-review`（moderate+ 失败）。
+- [ ] **F1 已知漏洞闸门**：Python `pip-audit` 阻断；前端 `pnpm audit --prod --audit-level=high` 阻断；依赖变更 PR 走 `dependency-review`（moderate+ 失败）。
   落点：`.github/workflows/ci.yml`、`.github/workflows/dependency-review.yml`。
 - [ ] **F2 许可证与 SBOM**：每次 CI 产出 `THIRD-PARTY-NOTICES.txt` + 冻结清单并存 artifact。
   落点：`scripts/Generate-Sbom.ps1`（`pip-licenses`）、CI 的 `third-party-notices` artifact（保留 30 天）。方法论文档：`docs/desktop-supply-chain-audit.md`。
-- [ ] **F3 桌面壳供应链门禁**：`npm audit` 基线 + require 图与打包清单一致。
-  落点：`desktop/scripts/check-npm-audit.js`、`desktop/scripts/audit-baseline.json`、CI `desktop-shell` 作业。
+- [ ] **F3 桌面壳供应链门禁**：`pnpm audit` 报告 + baseline 比对（含形状守卫与裁剪守卫）+ require 图与打包清单一致。
+  落点：`desktop/scripts/check-pnpm-audit.js`、`desktop/scripts/audit-baseline.json`、CI `desktop-shell` 作业。
 - [ ] **F4 新增依赖**：必须说明必要性、维护活跃度、许可证、与现有版本兼容；锁文件同步更新。
-  落点：`backend/requirements*.txt`、`frontend/package-lock.json`、`desktop/package-lock.json`；AGENTS.md「依赖管理」。
+  落点：`backend/requirements*.txt`、`frontend/pnpm-lock.yaml`、`desktop/pnpm-lock.yaml`（以及各自的 `pnpm-workspace.yaml`——overrides 与 allowBuilds 在那里，不在 `package.json`）；AGENTS.md「依赖管理」。
 - [ ] **F5 模型/数据供应商数据流**：接入新的模型或搜索来源时，写清发送什么、存哪、如何删除。
   落点：`llm_config_record`（provider/base_url）、`services/assistant/assistant_web_search.py`（DeepSeek Search/Fetch）、设置页说明、`SECURITY.md`。
 
@@ -119,7 +119,7 @@
 - `python scripts/check_docs_pii.py` → 通过（原始输出见证据目录）。
 - 工具面：74 个工具逐个对照写入 `.workbuddy/audit/tool-service-map.md`（29 个写工具、4 个放宽模式工具）。
 - 观测面：`grep -rn "opentelemetry|trace_id" backend` → 仅 `middleware/request_context.py` 的 request_id 体系，无 OTel → E4/E5/E6 的 trace 部分按「待实现」处理。
-- 依赖面：CI 已有 pip-audit / npm audit / dependency-review / SBOM 四个闸门（F1–F3 已落地）。
+- 依赖面：CI 已有 pip-audit / pnpm audit / dependency-review / SBOM 四个闸门（F1–F3 已落地）。
 
 ## 9. NIST AI RMF 职能映射
 

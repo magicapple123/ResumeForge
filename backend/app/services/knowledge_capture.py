@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from sqlalchemy.orm import Session
 
 from ..models.apply import ApplyTaskItem
@@ -28,6 +30,7 @@ from ..schemas.knowledge import (
     KnowledgeCreate,
     KnowledgeSource,
 )
+from ..schemas.resume_risk import RiskScanOut
 from . import trash
 from .interview.interview import answered_rounds
 from .interview.interview_report_markdown import _report_markdown
@@ -195,7 +198,43 @@ def _apply_failure_payload(db: Session, item_id: int) -> KnowledgeCreate:
 # ===== 简历诊断 =====
 
 
-async def _resume_diagnosis_payload(db: Session, resume_id: int) -> KnowledgeCreate:
+@dataclass(frozen=True)
+class DiagnosisMaterial:
+    """简历诊断的准备段产物：读库读出来的纯数据（会话随后即归还）。
+
+    ``claims`` 与 ``content`` 是本地规则扫描（:func:`scan_resume_risks`）的全部输入，
+    它们都是已加载的普通值/已物化的行，扫描本身不再碰会话。
+    """
+
+    resume_id: int
+    title: str
+    company: str
+    job_id: int | None
+    content: dict
+    claims: list[ClaimRecord]
+
+
+@dataclass(frozen=True)
+class CapturePlan:
+    """知识回流的准备段产物：``payload`` 已就绪，或 ``diagnosis`` 等规则扫描补完。"""
+
+    payload: KnowledgeCreate | None = None
+    diagnosis: DiagnosisMaterial | None = None
+
+
+@dataclass(frozen=True)
+class CaptureOutcome:
+    """落库段的产物：只带响应需要的字段，不回传 ORM 实例。"""
+
+    knowledge_id: int
+    title: str
+    category: str
+    source: str
+    created: bool
+
+
+def _resume_diagnosis_material(db: Session, resume_id: int) -> DiagnosisMaterial:
+    """同步读库段：简历记录 + 事实台账（扫描要用的两份输入）。"""
     record = db.get(ResumeRecord, resume_id)
     if record is None or trash.is_deleted(record) or bool(record.draft):
         raise CaptureSourceError(404, "简历不存在或尚未保存")
@@ -205,27 +244,32 @@ async def _resume_diagnosis_payload(db: Session, resume_id: int) -> KnowledgeCre
         format_config=record.format_config,
     )
     claims = db.query(ClaimRecord).filter(trash.live_only(ClaimRecord)).all()
-    # 只跑本地规则（provider=None）：沉淀不该顺带发一次模型请求，结论也是确定性的。
-    scan = await scan_resume_risks(
-        content,
-        claims,
-        provider=None,
+    return DiagnosisMaterial(
         resume_id=resume_id,
-        remote_available=False,
+        title=record.title or "未命名简历",
+        company=record.company or "",
+        job_id=record.job_id,
+        content=content,
+        claims=list(claims),
     )
-    total = len(scan.points)
-    high = sum(1 for point in scan.points if point.severity == "high")
+
+
+def _diagnosis_payload(material: DiagnosisMaterial, scan: RiskScanOut) -> KnowledgeCreate:
+    """把本地规则扫描结果拼成知识条目正文（纯函数，不读库）。"""
+    points = list(scan.points)
+    total = len(points)
+    high = sum(1 for point in points if point.severity == "high")
     # 正文刻意**不写诊断时间**：它是分钟级快照且每次点击都会变，会让"同一次诊断"的
     # 逐字查重失效（跨分钟重复点击就多出一条）。时间由条目自身的 created_at 记录。
     lines = [
-        f"# 简历诊断：{record.title or '未命名简历'}",
+        f"# 简历诊断：{material.title}",
         "",
         f"- 命中风险点：{total} 个（高优先级 {high} 个）",
         "",
     ]
     if not total:
         lines.append("本次诊断没有命中风险点。")
-    for point in scan.points:
+    for point in points:
         category = _RISK_CATEGORY_LABELS.get(point.category, point.category)
         severity = _SEVERITY_LABELS.get(point.severity, point.severity)
         lines.extend(
@@ -239,7 +283,7 @@ async def _resume_diagnosis_payload(db: Session, resume_id: int) -> KnowledgeCre
         )
     for note in scan.notes:
         lines.append(f"> {note}")
-    title = f"简历诊断：{record.title or '未命名简历'}"
+    title = f"简历诊断：{material.title}"
     reason = _clip(
         f"简历诊断结论：{total} 个风险点，其中 {high} 个高优先级",
         120,
@@ -251,35 +295,59 @@ async def _resume_diagnosis_payload(db: Session, resume_id: int) -> KnowledgeCre
         content=_markdown_lines(*lines),
         source="简历诊断",
         reason=reason,
-        company=_clip(record.company or "", 128),
-        job_id=record.job_id,
+        company=_clip(material.company, 128),
+        job_id=material.job_id,
         summary=_clip(f"命中 {total} 个风险点，高优先级 {high} 个", MAX_KNOWLEDGE_SUMMARY_CHARS),
         key_points=[
             _clip(
-                f"{_SEVERITY_LABELS.get(point.severity, point.severity)}：{point.suggestion}", 200
+                f"{_SEVERITY_LABELS.get(point.severity, point.severity)}：{point.suggestion}",
+                200,
             )
-            for point in scan.points[:8]
+            for point in points[:8]
             if point.suggestion
         ],
     )
 
 
-async def create_from_source(
-    db: Session, source: KnowledgeSource, source_id: int
-) -> tuple[KnowledgeEntry, bool]:
-    """从业务数据生成一条知识条目；返回 (entry, created)。
+def prepare_capture(db: Session, source: KnowledgeSource, source_id: int) -> CapturePlan:
+    """同步准备段：把源业务数据读成纯数据，然后归还请求连接。
 
-    重复点击（同 source + 同标题 + 同正文）返回已有条目并 created=False；
-    用户编辑过正文后再沉淀会生成新条目（正文不再相同），避免把用户的编辑吞掉。
+    面试复盘 / 投递失败两条来源在读完就拿到了完整 payload；简历诊断要再跑一遍
+    **本地规则**扫描（零模型调用、零 IO），所以只带回扫描输入。
     """
-    if source == SOURCE_INTERVIEW_REPORT:
-        payload = _interview_payload(db, source_id)
-    elif source == SOURCE_APPLY_FAILURE:
-        payload = _apply_failure_payload(db, source_id)
-    elif source == SOURCE_RESUME_DIAGNOSIS:
-        payload = await _resume_diagnosis_payload(db, source_id)
-    else:  # pragma: no cover - schema Literal 已挡住未知 source
+    try:
+        if source == SOURCE_INTERVIEW_REPORT:
+            return CapturePlan(payload=_interview_payload(db, source_id))
+        if source == SOURCE_APPLY_FAILURE:
+            return CapturePlan(payload=_apply_failure_payload(db, source_id))
+        if source == SOURCE_RESUME_DIAGNOSIS:
+            return CapturePlan(diagnosis=_resume_diagnosis_material(db, source_id))
+    finally:
+        db.close()
+    # pragma: no cover - schema Literal 已挡住未知 source
+    raise CaptureSourceError(422, "不支持的知识回流来源")
+
+
+async def capture_payload(plan: CapturePlan) -> KnowledgeCreate:
+    """中间段：把计划补成完整 payload（只有简历诊断需要一次本地规则扫描）。"""
+    if plan.payload is not None:
+        return plan.payload
+    material = plan.diagnosis
+    if material is None:  # pragma: no cover - 类型收窄兜底
         raise CaptureSourceError(422, "不支持的知识回流来源")
+    # 只跑本地规则（provider=None）：沉淀不该顺带发一次模型请求，结论也是确定性的。
+    scan = await scan_resume_risks(
+        material.content,
+        material.claims,
+        provider=None,
+        resume_id=material.resume_id,
+        remote_available=False,
+    )
+    return _diagnosis_payload(material, scan)
+
+
+def persist_capture(db: Session, payload: KnowledgeCreate) -> CaptureOutcome:
+    """同步落库段：同内容条目复用，否则新建（重复点击不产生重复条目）。"""
     existing = (
         db.query(KnowledgeEntry)
         .filter(
@@ -293,14 +361,46 @@ async def create_from_source(
     if existing is not None and _content_for_dedupe(existing.content or "") == _content_for_dedupe(
         payload.content
     ):
-        return existing, False
-    return create_knowledge(db, payload), True
+        return CaptureOutcome(
+            knowledge_id=int(existing.id),
+            title=existing.title,
+            category=existing.category,
+            source=existing.source,
+            created=False,
+        )
+    entry = create_knowledge(db, payload)
+    return CaptureOutcome(
+        knowledge_id=int(entry.id),
+        title=entry.title,
+        category=entry.category,
+        source=entry.source,
+        created=True,
+    )
+
+
+async def create_from_source(
+    db: Session, source: KnowledgeSource, source_id: int
+) -> CaptureOutcome:
+    """从业务数据生成一条知识条目（带请求会话的完整编排）。
+
+    HTTP 路由不走这里（它显式拆成三段，否则判据看不出同步段有没有搬出去）；
+    保留它是为了让"取源 → 扫描 → 落库"这条链路有一个可离线调用的完整入口。
+    """
+    plan = prepare_capture(db, source, source_id)
+    payload = await capture_payload(plan)
+    return persist_capture(db, payload)
 
 
 __all__ = [
     "SOURCE_APPLY_FAILURE",
     "SOURCE_INTERVIEW_REPORT",
     "SOURCE_RESUME_DIAGNOSIS",
+    "CaptureOutcome",
+    "CapturePlan",
     "CaptureSourceError",
+    "DiagnosisMaterial",
+    "capture_payload",
     "create_from_source",
+    "persist_capture",
+    "prepare_capture",
 ]

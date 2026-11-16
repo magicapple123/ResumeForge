@@ -19,7 +19,7 @@
   **不含 Offer**：Offer 是终态，在漏斗里单独占一格，所以「进行中」与「漏斗前五格之和」
   天然差一个 Offer，页面必须写清这一点）；
 - **找不到进展**（2026-11-10 口径修正）= 进行中、且**超过 7 天没有发生状态变化**的条数。
-  证据优先级：事件表最新 ``event_at`` > 用户填的 ``status_date`` > 
+  证据优先级：事件表最新 ``event_at`` > 用户填的 ``status_date`` >
   ``updated_at``。以前判 ``updated_at``，改一条备注也会把它刷新掉，导入的历史数据
   更是「全部停滞」——这个指标因此失去意义。阈值与判定都在 ``models/tracker.py``，
   与 `/api/stats` 同源；**没有下一步** = 进行中且 ``next_action`` 为空的条数。
@@ -101,6 +101,7 @@ from ..models.tracker import (
     is_stalled,
     last_status_change_at,
 )
+from ..schemas.analytics import DashboardOut
 from . import trash
 from .analytics_breakdowns import (
     applied_date,
@@ -236,6 +237,16 @@ def _source_counts(tracks: Sequence[TrackRow]) -> list[dict]:
         {"key": source, "label": SOURCE_LABELS.get(source, source), "count": counts[source]}
         for source in SOURCES
     ]
+
+
+def build_dashboard_out(db: Session, trend_months: int = TREND_MONTHS) -> DashboardOut:
+    """看板响应体：``build_dashboard`` 的字典按 ``DashboardOut`` 组装。
+
+    路由（``GET /api/analytics/dashboard``）与助手动作 ``get_analytics_overview``
+    共用这一处组装——两边各自 ``DashboardOut(**build_dashboard(...))`` 就会漂移成
+    两份"哪个字段包不包得进响应模型"的判断。
+    """
+    return DashboardOut(**build_dashboard(db, trend_months=trend_months))
 
 
 def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
@@ -412,4 +423,4 @@ def dashboard_brief(dashboard: dict) -> dict:
     return brief
 
 
-__all__ = ["TREND_MONTHS", "build_dashboard", "dashboard_brief"]
+__all__ = ["TREND_MONTHS", "build_dashboard", "build_dashboard_out", "dashboard_brief"]

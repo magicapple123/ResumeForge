@@ -34,7 +34,6 @@ from ....schemas.material import (
 )
 from ...candidate_jobs import MAX_CANDIDATE_LIST
 from ..legacy import preview_runner, tool_runner
-from ..registry import define_action
 from ..spec import ActionError, ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -199,124 +198,109 @@ _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def candidate_job_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）备选岗位域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）备选岗位域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
-    list_candidate_jobs = define_action(
-        ActionSpec(
-            name="list_candidate_jobs",
-            description="列出备选岗位（还没导入正式岗位的招聘信息），可按状态或关键词筛选。",
-            input_model=ListCandidateJobsInput,
-            permission=Permission.READ_ONLY,
-            run=_run_list_candidate_jobs,
-            run_tool=tool_runner(_TOOL_HANDLERS, "_tool_list_candidate_jobs"),
-            service_entry="candidate_jobs.candidate_brief",
-            tool_fields=("status", "keyword", "limit"),
-            tool_defaults=(("limit", _DEFAULT_TOOL_LIMIT),),
-            # 旧 GET 路由的未知 query 参数一律忽略（FastAPI 默认行为）。
-            ignore_unknown_arguments=True,
-            http=HttpRoute(
-                "GET", "/api/candidate-jobs", list[CandidateJobOut], tags=("candidate-jobs",)
-            ),
-        )
+    list_candidate_jobs = ActionSpec(
+        name="list_candidate_jobs",
+        description="列出备选岗位（还没导入正式岗位的招聘信息），可按状态或关键词筛选。",
+        input_model=ListCandidateJobsInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_candidate_jobs,
+        run_tool=tool_runner(_TOOL_HANDLERS, "_tool_list_candidate_jobs"),
+        service_entry="candidate_jobs.candidate_brief",
+        tool_fields=("status", "keyword", "limit"),
+        tool_defaults=(("limit", _DEFAULT_TOOL_LIMIT),),
+        # 旧 GET 路由的未知 query 参数一律忽略（FastAPI 默认行为）。
+        ignore_unknown_arguments=True,
+        http=HttpRoute(
+            "GET", "/api/candidate-jobs", list[CandidateJobOut], tags=("candidate-jobs",)
+        ),
     )
-    get_candidate_job = define_action(
-        ActionSpec(
-            name="get_candidate_job",
-            description="按 id 读取一条备选岗位的完整招聘原文。",
-            input_model=GetCandidateJobInput,
-            permission=Permission.READ_ONLY,
-            run=_run_get_candidate_job,
-            run_tool=tool_runner(_TOOL_HANDLERS, "_tool_get_candidate_job"),
-            service_entry="candidate_jobs.candidate_detail_text",
-            tool_fields=("candidate_id",),
-            ignore_unknown_arguments=True,
-            http=HttpRoute(
-                "GET",
-                "/api/candidate-jobs/{candidate_id}",
-                CandidateJobDetailOut,
-                tags=("candidate-jobs",),
-            ),
-        )
+    get_candidate_job = ActionSpec(
+        name="get_candidate_job",
+        description="按 id 读取一条备选岗位的完整招聘原文。",
+        input_model=GetCandidateJobInput,
+        permission=Permission.READ_ONLY,
+        run=_run_get_candidate_job,
+        run_tool=tool_runner(_TOOL_HANDLERS, "_tool_get_candidate_job"),
+        service_entry="candidate_jobs.candidate_detail_text",
+        tool_fields=("candidate_id",),
+        ignore_unknown_arguments=True,
+        http=HttpRoute(
+            "GET",
+            "/api/candidate-jobs/{candidate_id}",
+            CandidateJobDetailOut,
+            tags=("candidate-jobs",),
+        ),
     )
-    create_candidate_job = define_action(
-        ActionSpec(
-            name="create_candidate_job",
-            description=(
-                "把还没核对的招聘信息放进备选岗位。用户说「先记下来」「放到备选」时使用；"
-                "已在正式岗位里的招聘信息不要再放这里。"
-            ),
-            input_model=CreateCandidateJobInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_create_candidate_job,
-            run_tool=tool_runner(_TOOL_HANDLERS, "_tool_create_candidate_job"),
-            preview=preview_runner(
-                "app.services.assistant_tools.previews", "preview_create_candidate_job"
-            ),
-            service_entry=None,
-            service_reason="内联 ORM 写入，无 services 收口（T27 收口候选）",
-            tool_fields=("title", "company", "raw_text", "note"),
-            http=HttpRoute(
-                "POST",
-                "/api/candidate-jobs",
-                CandidateJobOut,
-                status_code=201,
-                tags=("candidate-jobs",),
-            ),
-        )
+    create_candidate_job = ActionSpec(
+        name="create_candidate_job",
+        description=(
+            "把还没核对的招聘信息放进备选岗位。用户说「先记下来」「放到备选」时使用；"
+            "已在正式岗位里的招聘信息不要再放这里。"
+        ),
+        input_model=CreateCandidateJobInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_create_candidate_job,
+        run_tool=tool_runner(_TOOL_HANDLERS, "_tool_create_candidate_job"),
+        preview=preview_runner(
+            "app.services.assistant_tools.previews", "preview_create_candidate_job"
+        ),
+        service_entry=None,
+        service_reason="内联 ORM 写入，无 services 收口（T27 收口候选）",
+        tool_fields=("title", "company", "raw_text", "note"),
+        http=HttpRoute(
+            "POST",
+            "/api/candidate-jobs",
+            CandidateJobOut,
+            status_code=201,
+            tags=("candidate-jobs",),
+        ),
     )
-    update_candidate_job = define_action(
-        ActionSpec(
-            name="update_candidate_job",
-            description="修改一条备选岗位的内容（只传要改的字段）。",
-            input_model=UpdateCandidateJobInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_update_candidate_job,
-            run_tool=tool_runner(_TOOL_HANDLERS, "_tool_update_candidate_job"),
-            preview=preview_runner(
-                "app.services.assistant_tools.previews", "preview_update_candidate_job"
-            ),
-            service_entry=None,
-            service_reason="内联 ORM 写入，无 services 收口（T27 收口候选）",
-            tool_fields=("candidate_id", "title", "company", "raw_text", "note"),
-            http=HttpRoute(
-                "PUT",
-                "/api/candidate-jobs/{candidate_id}",
-                CandidateJobOut,
-                tags=("candidate-jobs",),
-            ),
-        )
+    update_candidate_job = ActionSpec(
+        name="update_candidate_job",
+        description="修改一条备选岗位的内容（只传要改的字段）。",
+        input_model=UpdateCandidateJobInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_update_candidate_job,
+        run_tool=tool_runner(_TOOL_HANDLERS, "_tool_update_candidate_job"),
+        preview=preview_runner(
+            "app.services.assistant_tools.previews", "preview_update_candidate_job"
+        ),
+        service_entry=None,
+        service_reason="内联 ORM 写入，无 services 收口（T27 收口候选）",
+        tool_fields=("candidate_id", "title", "company", "raw_text", "note"),
+        http=HttpRoute(
+            "PUT",
+            "/api/candidate-jobs/{candidate_id}",
+            CandidateJobOut,
+            tags=("candidate-jobs",),
+        ),
     )
-    import_candidate_job = define_action(
-        ActionSpec(
-            name="import_candidate_job",
-            description=(
-                "把备选岗位导入成岗位广场里的正式岗位。用户明确要求导入时调用；"
-                "重复调用不会创建第二份，会返回已导入的岗位 id。"
-            ),
-            input_model=ImportCandidateJobInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_import_candidate_job,
-            run_tool=tool_runner(_TOOL_HANDLERS, "_tool_import_candidate_job"),
-            preview=preview_runner(
-                "app.services.assistant_tools.previews", "preview_import_candidate_job"
-            ),
-            service_entry="candidate_jobs.mark_candidate_imported",
-            tool_fields=("candidate_id", "title", "company"),
-            http=HttpRoute(
-                "POST",
-                "/api/candidate-jobs/{candidate_id}/imported",
-                CandidateJobOut,
-                tags=("candidate-jobs",),
-            ),
-        )
+    import_candidate_job = ActionSpec(
+        name="import_candidate_job",
+        description=(
+            "把备选岗位导入成岗位广场里的正式岗位。用户明确要求导入时调用；"
+            "重复调用不会创建第二份，会返回已导入的岗位 id。"
+        ),
+        input_model=ImportCandidateJobInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_import_candidate_job,
+        run_tool=tool_runner(_TOOL_HANDLERS, "_tool_import_candidate_job"),
+        preview=preview_runner(
+            "app.services.assistant_tools.previews", "preview_import_candidate_job"
+        ),
+        service_entry="candidate_jobs.mark_candidate_imported",
+        tool_fields=("candidate_id", "title", "company"),
+        http=HttpRoute(
+            "POST",
+            "/api/candidate-jobs/{candidate_id}/imported",
+            CandidateJobOut,
+            tags=("candidate-jobs",),
+        ),
     )
     _ACTIONS = {
         spec.name: spec

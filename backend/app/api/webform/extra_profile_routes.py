@@ -124,6 +124,18 @@ def list_memory_targets(db: Session = Depends(get_db)):
 # ===== 「网申资料」粘贴识别（项 12 / D20 / D21 / D22 / D32）=====
 
 
+def _prepare_parse_llm(db: Session):
+    """读模型配置、构造调用器，然后归还请求连接（整段同步工作单元）。
+
+    模型调用可能几十秒，事件循环线程上一旦还留着会话（哪怕只是 ``close``），同一进程
+    里其它请求的读写就会排在这条 SQLite 连接后面。未配置模型时 ``provider`` 为 ``None``。
+    """
+    config = get_llm_config(db)
+    provider = create_provider(config) if llm_is_configured(config) else None
+    db.close()
+    return provider
+
+
 @router.post("/extra-profile/parse-text", response_model=WebFormExtraProfileParseOut)
 async def parse_extra_profile_text_draft(
     payload: WebFormExtraProfileParseIn, request: Request, db: Session = Depends(get_db)
@@ -165,13 +177,9 @@ async def parse_extra_profile_text_draft(
             recognized_text=source_text,
         )
 
-    config = get_llm_config(db)
-    if not llm_is_configured(config):
+    provider = await run_in_threadpool(_prepare_parse_llm, db)
+    if provider is None:
         return local_result([no_model_warning(has_images, has_documents)])
-
-    provider = create_provider(config)
-    # 拿到配置就把连接还给池子：模型调用可能几十秒，不该一直占着一个会话。
-    db.close()
     try:
         # 客户端断开就停下：这份草稿没人收，本地兜底也不必算。
         identified = await run_until_disconnect(

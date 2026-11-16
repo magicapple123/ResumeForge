@@ -24,7 +24,11 @@ $ForbiddenInArchive = @(
     "^frontend/node_modules/",
     "^runtime/",
     "(^|/)\.env(\.|$)",
-    "(^|/)__pycache__/"
+    "(^|/)__pycache__/",
+    # One dependency tree, one lockfile (npm -> pnpm, 2026-11-16). A package
+    # carrying both lets pnpm-lock.yaml win while the stale npm resolution
+    # travels along, which is exactly the state the migration removed.
+    "(^|/)package-lock\.json$"
 )
 # .env.example ships on purpose (backend/ and frontend/ both have one).
 # frontend/.env.demo also ships on purpose: it is the demo build-mode switch
@@ -335,6 +339,32 @@ try {
             -Condition $covered `
             -Message "Build-Release.ps1 does not require '$expected', but the app refuses to start without it."
     }
+
+    # The production dependency lock cannot be covered by the loop above: it is
+    # deliberately NOT a preflight requirement (the app boots fine without it --
+    # only the installers read it), so preflight never names it. It is still
+    # load-bearing for a *fresh install*: scripts/{macos,linux}/start.sh and the
+    # Windows first run install from it with --require-hashes and fail closed when
+    # it is missing, so a package that ships without it is a package that cannot be
+    # installed. Pin it from the AST here, and pin that it appears exactly once --
+    # a duplicated entry would mean the list was edited in a hurry.
+    $runtimeLockRelative = "backend/requirements.runtime.lock.txt"
+    $lockEntries = @($buildRequiredFiles | Where-Object { $_ -eq $runtimeLockRelative })
+    Assert-ReleaseTest `
+        -Condition ($lockEntries.Count -eq 1) `
+        -Message "Build-Release.ps1 must list '$runtimeLockRelative' exactly once in `$RequiredFiles (found $($lockEntries.Count)); every first-run installer installs from that lock and fails closed without it."
+
+    # The inverse of the $RequiredFiles checks above: a path that must NEVER ship.
+    # Pinning it from the AST matters because $ForbiddenPatterns is what makes the
+    # packager *delete* a bad archive instead of publishing it -- deleting the
+    # entry would leave every other assertion green while the gate quietly stopped
+    # guarding. The runtime loop further up already exercises it on a real archive;
+    # this one keeps the entry itself from disappearing.
+    $buildForbidden = Get-ScriptArrayValues -Ast $buildAst -Name '$ForbiddenPatterns'
+    $packageLockPatterns = @($buildForbidden | Where-Object { $_ -match 'package-lock' })
+    Assert-ReleaseTest `
+        -Condition ($packageLockPatterns.Count -eq 1) `
+        -Message "Build-Release.ps1 must keep a package-lock.json entry in `$ForbiddenPatterns (found $($packageLockPatterns.Count)); npm and pnpm lockfiles must never ship together."
 
     # --- the three per-platform archives the website serves ---
     #

@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """简历质量相关只读 action（T28 收尾）：check_ats_match / compare_resume_versions。
 
-这两对都真实存在（工具 + 路由），且路由 handler 是同步纯本地计算，用旧实现委托范式：
+这两对都真实存在（工具 + 路由），且都是同步纯本地计算：
 - check_ats_match：路由 POST /api/resumes/{resume_id}/ats-check（body 是 jd_text）；
+  run 直接调 ``services.ats_panel.check_resume_ats``（路由 handler 是同一函数的薄壳）；
   工具参数是 resume_id + job_id（本地按岗位 JD 算），run_tool 保留旧 handler 语义。
 - compare_resume_versions：路由 GET /api/resumes/{resume_id}/versions/{base_id}/compare/{against}；
   工具参数是 from_version/to_version，用 tool_argument_aliases + argument_map 对齐。
@@ -14,16 +15,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from ....schemas.ats import AtsCheckOut
 from ....schemas.versions import VersionCompareOut
-from ..legacy import route_runner, tool_runner
-from ..registry import define_action
-from ..spec import ActionSpec, HttpRoute, permission_enum
+from ...ats_panel import AtsResumeNotFound, check_resume_ats
+from ...resume import document_versions as versions
+from ..legacy import tool_runner
+from ..spec import ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Session  # noqa: F401
+    from sqlalchemy.orm import Session
 
 
 class CheckAtsMatchInput(BaseModel):
@@ -62,67 +65,89 @@ def _compare_tool_arguments(payload: CompareResumeVersionsInput) -> dict[str, ob
     }
 
 
+def _run_check_ats_match(db: Session, payload: CheckAtsMatchInput) -> ActionOutcome:
+    """ATS 面板：与 ``POST /api/resumes/{resume_id}/ats-check`` 同一个服务函数。
+
+    404 的形状沿用旧路由（``HTTPException``，``detail`` 就是那句中文）：换成
+    ``ActionError`` 会把对外 ``detail`` 变成 ``{code, message}``，属于契约变更。
+    """
+    try:
+        return ActionOutcome(
+            data=check_resume_ats(db, resume_id=payload.resume_id, jd_text=payload.jd_text)
+        )
+    except AtsResumeNotFound as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+def _run_compare_resume_versions(db: Session, payload: CompareResumeVersionsInput) -> ActionOutcome:
+    """版本对比：与 ``GET /{resume_id}/versions/{base_id}/compare/{against}`` 同一个服务函数。
+
+    404 的形状沿用迁移前（``HTTPException``，``detail`` 就是那句中文）：版本对比的
+    "简历/版本不存在" 与 ATS 面板同一口径，换成 ``ActionError`` 会把对外 ``detail``
+    变成 ``{code, message}``，属于契约变更。
+    """
+    try:
+        return ActionOutcome(
+            data=versions.compare_for_resume(
+                db,
+                resume_id=payload.resume_id,
+                base_id=payload.base_id,
+                against=payload.against,
+            )
+        )
+    except versions.VersionNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc) or "版本不存在") from exc
+
+
 _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def quality_action_pairs() -> dict[str, ActionSpec]:
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
-    check_ats = define_action(
-        ActionSpec(
-            name="check_ats_match",
-            description=(
-                "用**本地规则**估算某份简历对某个岗位的 ATS 适配度（关键词覆盖 / 格式风险 / "
-                "信息位置），返回三个分项分、加权总分与前 5 条问题。结果只是本地启发式估计，"
-                "回答时必须原样转述免责声明：「本地规则估计，不代表真实 ATS 解析结果」。"
-            ),
-            input_model=CheckAtsMatchInput,
-            permission=Permission.READ_ONLY,
-            run=route_runner("app.api.ats", "ats_check"),
-            run_tool=tool_runner(
-                "app.services.assistant_tools.quality_tools", "_tool_check_ats_match"
-            ),
-            service_entry="ats_check.check_ats",
-            tool_fields=("resume_id", "job_id"),
-            ignore_unknown_arguments=True,
-            http=HttpRoute(
-                "POST", "/api/resumes/{resume_id}/ats-check", AtsCheckOut, tags=("ats",)
-            ),
-        )
+    check_ats = ActionSpec(
+        name="check_ats_match",
+        description=(
+            "用**本地规则**估算某份简历对某个岗位的 ATS 适配度（关键词覆盖 / 格式风险 / "
+            "信息位置），返回三个分项分、加权总分与前 5 条问题。结果只是本地启发式估计，"
+            "回答时必须原样转述免责声明：「本地规则估计，不代表真实 ATS 解析结果」。"
+        ),
+        input_model=CheckAtsMatchInput,
+        permission=Permission.READ_ONLY,
+        run=_run_check_ats_match,
+        run_tool=tool_runner("app.services.assistant_tools.quality_tools", "_tool_check_ats_match"),
+        service_entry="ats_panel.check_resume_ats",
+        tool_fields=("resume_id", "job_id"),
+        ignore_unknown_arguments=True,
+        http=HttpRoute("POST", "/api/resumes/{resume_id}/ats-check", AtsCheckOut, tags=("ats",)),
     )
-    compare = define_action(
-        ActionSpec(
-            name="compare_resume_versions",
-            description=(
-                "对比同一份简历的两个命名版本（from_version → to_version），返回正文行差异、"
-                "排版项增删改与字段级变更摘要，超出上限会截断。只读，不恢复也不覆盖任何版本；"
-                "版本 id 先用 list_versions 查。"
-            ),
-            input_model=CompareResumeVersionsInput,
-            permission=Permission.READ_ONLY,
-            run=route_runner("app.api.resumes.versions_routes", "compare_versions"),
-            run_tool=tool_runner(
-                "app.services.assistant_tools.quality_tools",
-                "_tool_compare_resume_versions",
-                argument_map=_compare_tool_arguments,
-            ),
-            service_entry="resume.document_versions.compare_versions",
-            tool_fields=("resume_id", "base_id", "against"),
-            tool_argument_aliases=(("from_version", "base_id"), ("to_version", "against")),
-            http=HttpRoute(
-                "GET",
-                "/api/resumes/{resume_id}/versions/{base_id}/compare/{against}",
-                VersionCompareOut,
-                tags=("resumes",),
-            ),
-        )
+    compare = ActionSpec(
+        name="compare_resume_versions",
+        description=(
+            "对比同一份简历的两个命名版本（from_version → to_version），返回正文行差异、"
+            "排版项增删改与字段级变更摘要，超出上限会截断。只读，不恢复也不覆盖任何版本；"
+            "版本 id 先用 list_versions 查。"
+        ),
+        input_model=CompareResumeVersionsInput,
+        permission=Permission.READ_ONLY,
+        run=_run_compare_resume_versions,
+        run_tool=tool_runner(
+            "app.services.assistant_tools.quality_tools",
+            "_tool_compare_resume_versions",
+            argument_map=_compare_tool_arguments,
+        ),
+        # RF-03b：指向 run 的第一跳（本批新增的对比编排），不是它内部再调的取值函数。
+        service_entry="resume.document_versions.compare_for_resume",
+        tool_fields=("resume_id", "base_id", "against"),
+        tool_argument_aliases=(("from_version", "base_id"), ("to_version", "against")),
+        http=HttpRoute(
+            "GET",
+            "/api/resumes/{resume_id}/versions/{base_id}/compare/{against}",
+            VersionCompareOut,
+            tags=("resumes",),
+        ),
     )
     _ACTIONS = {check_ats.name: check_ats, compare.name: compare}
     return _ACTIONS

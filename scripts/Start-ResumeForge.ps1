@@ -17,7 +17,8 @@ $ErrorActionPreference = "Stop"
 
 # Set UTF-8 mode before any Python child process starts. pip 24.x decodes a
 # BOM-less requirements file with the locale codec (cp936 on Chinese Windows),
-# so without this the first-run `pip install -r requirements.txt` aborts with
+# so without this the first-run install of backend\requirements.runtime.lock.txt
+# (the production lock the launcher installs from, 40 hashed pins) aborts with
 # UnicodeDecodeError. venv creation, pip and the backend all inherit it.
 $env:PYTHONUTF8 = "1"
 

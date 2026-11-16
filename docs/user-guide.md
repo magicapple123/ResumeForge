@@ -2380,7 +2380,7 @@ Markdown 是文本流：灰字段逐行「标签：值」，正文要点用「- 
   前端依赖目录一律不动；
 - **手动更新会先停掉还在运行的简历通**（按 `runtime/` 里的进程记录校验 PID、启动时间与命令行，
   对不上就不动）。同步依赖要删掉 `frontend/node_modules` 重装、还要覆盖 `backend/.venv` 里的文件，
-  运行中的实例会锁住这些文件——不停掉的话 `npm ci` 会以 `EPERM` 失败。应用内安装本来就会先等
+  运行中的实例会锁住这些文件——不停掉的话 `pnpm install --frozen-lockfile` 会以 `EPERM` 失败。应用内安装本来就会先等
   应用退出，这一步是给手动双击 `update.cmd` 补上的；
 - 想先看它准备做什么：Windows 用 `powershell -File scripts\Update-ResumeForge.ps1 -DryRun`，
   macOS 用 `bash scripts/macos/update.sh --dry-run`。
@@ -3168,7 +3168,7 @@ runtime/backend.stderr.log 的相关时间段；日志中同样不要手工补�
 backend\.venv\Scripts\python.exe -m pip install -i https://mirrors.aliyun.com/pypi/simple -r backend\requirements.txt
 ```
 
-前端同理，在 `frontend` 目录执行 `npm install --registry=https://registry.npmmirror.com`。
+前端同理，在 `frontend` 目录执行 `pnpm install --registry=https://registry.npmmirror.com`。
 
 ### 窄窗口找不到侧栏，或者列表提示加载失败
 

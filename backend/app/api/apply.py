@@ -7,6 +7,8 @@
 
 import json
 import logging
+from dataclasses import dataclass
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
@@ -20,6 +22,7 @@ from ..models.apply import (
     ApplyTaskItem,
 )
 from ..models.job import Job
+from ..runtime.blocking import run_sync
 from ..schemas.apply import (
     ApplyConfigIn,
     ApplyConfigOut,
@@ -43,7 +46,7 @@ from ..schemas.apply import (
 from ..schemas.common import Page
 from ..services import trash
 from ..services.actions import add_action_route
-from ..services.actions.catalog import all_actions
+from ..services.actions.catalog import registered_action
 from ..services.apply import apply_service, task_runner
 from ..services.job.job_match import generate_greeting, job_payload
 from ..services.llm import create_provider
@@ -59,8 +62,6 @@ from .apply_tasks_page import router as apply_tasks_page_router
 from .webform.records_page import router as webform_records_page_router
 
 logger = logging.getLogger(__name__)
-
-
 
 
 router = APIRouter(prefix="/api/apply", tags=["apply"])
@@ -146,10 +147,27 @@ router.include_router(apply_browser_router)
 # ===== 招呼语预览 =====
 
 
-@router.post("/greeting/preview", response_model=GreetingPreviewOut)
-async def greeting_preview(
-    payload: GreetingPreviewRequest, request: Request, db: Session = Depends(get_db)
-):
+@dataclass(frozen=True)
+class _GreetingPrep:
+    """招呼语预览的同步准备结果（worker 产出，事件循环只消费）。
+
+    ``early`` 非空表示无需调模型（队列里已有招呼语 / 模型未配置），直接返回它；
+    否则用 ``provider`` + 两个纯字符串去跑模型，``default_greeting`` 是失败兜底。
+    """
+
+    early: GreetingPreviewOut | None = None
+    provider: Any = None
+    payload_data: dict[str, Any] | None = None
+    resume_text: str = ""
+    default_greeting: str = ""
+
+
+def _prepare_greeting(db: Session, payload: GreetingPreviewRequest) -> _GreetingPrep:
+    """招呼语预览的全部同步数据库工作（岗位/配置/队列条目/简历/模型配置）。
+
+    整段放进 worker：这里读五张表（岗位、投递配置、队列条目、简历、模型配置），
+    原先全压在事件循环线程上；``db.close()`` 也在同一条线程里收尾，之后不再碰库。
+    """
     job = db.get(Job, payload.job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
@@ -158,11 +176,18 @@ async def greeting_preview(
     if payload.item_id is not None:
         item = db.get(ApplyQueueItem, payload.item_id)
         if item is not None and item.greeting.strip():
-            return GreetingPreviewOut(greeting=item.greeting.strip(), source="queue")
+            db.close()
+            return _GreetingPrep(
+                early=GreetingPreviewOut(greeting=item.greeting.strip(), source="queue")
+            )
 
     llm = get_llm_config(db)
     if not (llm.base_url.strip() and llm.model.strip()):
-        return GreetingPreviewOut(greeting=config.default_greeting.strip(), source="default")
+        db.close()
+        return _GreetingPrep(
+            early=GreetingPreviewOut(greeting=config.default_greeting.strip(), source="default"),
+            default_greeting=config.default_greeting.strip(),
+        )
 
     resume = apply_service.resolve_resume(db, job.id, None)
     resume_text = ""
@@ -171,13 +196,42 @@ async def greeting_preview(
             {"title": resume.title, "content": resume.content}, ensure_ascii=False
         )
     payload_data = job_payload(job)
-    provider = create_provider(llm)
+    default_greeting = config.default_greeting.strip()
+    try:
+        provider = create_provider(llm)
+    except Exception:  # noqa: BLE001 - 构造不了 provider 与"模型这会儿不可用"同类
+        # 与"没配模型"走同一条兜底：返回默认招呼语而不是 500。原来的行为是让异常冒出
+        # ``run_sync`` → 兜底 handler → 500，用户只看到报错，而这条端点的语义本就是
+        # "能生成就生成，生成不了给默认话术"（下面模型调用失败的路径也是这么降级的）。
+        logger.warning("招呼语预览构造 provider 失败，回退默认招呼语", exc_info=True)
+        db.close()
+        return _GreetingPrep(
+            early=GreetingPreviewOut(greeting=default_greeting, source="default"),
+            default_greeting=default_greeting,
+        )
     db.close()
+    return _GreetingPrep(
+        provider=provider,
+        payload_data=payload_data,
+        resume_text=resume_text,
+        default_greeting=default_greeting,
+    )
+
+
+@router.post("/greeting/preview", response_model=GreetingPreviewOut)
+async def greeting_preview(
+    payload: GreetingPreviewRequest, request: Request, db: Session = Depends(get_db)
+):
+    prep = await run_sync(_prepare_greeting, db, payload)
+    if prep.early is not None:
+        return prep.early
     # 客户端断开（用户关了预览/离开页面）：不生成、也不回退默认招呼语——没人收这份结果。
     disconnected = False
     try:
         greeting = await run_until_disconnect(
-            request, generate_greeting(provider, payload_data, resume_text), what="招呼语生成"
+            request,
+            generate_greeting(prep.provider, prep.payload_data or {}, prep.resume_text),
+            what="招呼语生成",
         )
         if greeting is not None:
             return GreetingPreviewOut(greeting=greeting, source="generated")
@@ -188,23 +242,24 @@ async def greeting_preview(
         logger.exception("招呼语生成发生内部错误，回退默认招呼语")
     if disconnected:
         raise client_gone("招呼语生成")
-    return GreetingPreviewOut(greeting=config.default_greeting.strip(), source="default")
+    return GreetingPreviewOut(greeting=prep.default_greeting, source="default")
 
 
 # ===== 执行批次（轮询模型）=====
 
 
 def _task_detail(data: Session, task_id: int) -> ApplyTaskDetailOut:
+    """批次详情（投递与采集两个入口共用）。
+
+    这是**未装饰的 helper**，两个路由都调它：``GET /api/apply/tasks/{id}`` 与
+    ``GET /api/collect/tasks/{id}``。条目查询走 ``apply_service.list_task_items``
+    （唯一实现）——api 层不构造查询（守卫见 ``tests/test_api_layer_rules.py``）。
+    """
     try:
         task = apply_service.get_task_detail(data, task_id)
     except apply_service.ApplyServiceError as exc:
         _raise(exc)
-    items = (
-        data.query(ApplyTaskItem)
-        .filter(ApplyTaskItem.task_id == task_id)
-        .order_by(ApplyTaskItem.sort_order, ApplyTaskItem.id)
-        .all()
-    )
+    items = apply_service.list_task_items(data, task_id)
     detail = ApplyTaskDetailOut.model_validate(task)
     detail.items = [ApplyTaskItemOut.model_validate(item) for item in items]
     return detail
@@ -332,7 +387,9 @@ def list_records(
     return Page(items=items, total=total)
 
 
-add_action_route(router, all_actions()["list_apply_records"], route_path="/records/grouped")
+add_action_route(router, registered_action("list_apply_records"), route_path="/records/grouped")
+
+
 def list_record_batches(
     keyword: str = Query(default=""),
     result: str = Query(default="", description="success / failed / skipped"),
@@ -351,8 +408,11 @@ def list_record_batches(
 
     ``include_items=false``（B4 按需加载）：批次只带命中数（``matched_count``），明细由
     ``GET /records/batches/{task_id}/items`` 在展开时分页拉取——默认 true，旧行为不变。
+
+    薄壳：筛选 / 分页 / 视图组装都在 ``services.apply.record_batch_page``（助手动作
+    ``list_apply_records`` 调同一个函数）。
     """
-    batches, total = apply_service.list_record_batches(
+    return apply_service.record_batch_page(
         db,
         keyword=keyword,
         result=result,
@@ -361,7 +421,6 @@ def list_record_batches(
         page_size=page_size,
         include_items=include_items,
     )
-    return Page(items=batches, total=total)
 
 
 @router.post("/records/{item_id}/retry", response_model=ApplyTaskOut)

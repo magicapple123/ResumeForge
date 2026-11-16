@@ -35,16 +35,16 @@ from ..schemas.job_preference import (
 from ..services import job_preference_proposals
 from ..services import job_preference_service as service
 from ..services.actions import add_action_route
-from ..services.actions.catalog import all_actions
+from ..services.actions.catalog import registered_action
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/job-preferences", tags=["job-preferences"])
 
 # 与工具同源的三条：GET 列表+目录 / POST 直接编辑 / PATCH 直接编辑。
-add_action_route(router, all_actions()["get_job_preferences"], route_path="")
-add_action_route(router, all_actions()["create_job_preference"], route_path="")
-add_action_route(router, all_actions()["update_job_preference"])
+add_action_route(router, registered_action("get_job_preferences"), route_path="")
+add_action_route(router, registered_action("create_job_preference"), route_path="")
+add_action_route(router, registered_action("update_job_preference"))
 
 
 def _conflict(message: str, code: str) -> JSONResponse:

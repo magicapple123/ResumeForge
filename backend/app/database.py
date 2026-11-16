@@ -16,7 +16,12 @@ from sqlalchemy.pool import StaticPool
 
 from .config import get_settings
 from .dataset_registry import DatasetError, active_database_file
-from .services.text_sort import compare_text
+
+# `rf_pinyin` collation 的实现在 runtime（纯函数、无 IO、不依赖业务概念）。
+# **不要**改成 `from .services.text_sort import compare_text`：那会让最底层的连接层
+# 反向依赖服务层，任何服务层改动都会拖动 database 的导入图
+# （见 app/services/text_sort.py 的说明）。
+from .runtime.text_sort_impl import compare_text
 
 settings = get_settings()
 

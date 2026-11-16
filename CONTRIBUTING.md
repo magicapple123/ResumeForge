@@ -11,7 +11,7 @@ By taking part — issues, pull requests, discussions — you agree to follow th
 ## Before you start
 
 - Python 3.11–3.13 (CI covers 3.11, 3.12 and 3.13; `pyproject.toml` targets `py311`).
-- Node.js `>= 20.19.0`, using the npm that ships with Node.
+- Node.js `>= 20.19.0` and **pnpm 12.21.0** (`corepack enable`, or `npm install -g pnpm@12.21.0`). pnpm is **not** bundled with Node: the first `corepack pnpm …` call downloads the 12.21.0 binary, so that first run needs network access.
 - On a Chinese-locale Windows environment, set `PYTHONUTF8=1` before running Python commands.
 - Do not commit `.env` files, databases, real resumes, API keys, build artifacts, virtual environments or any other personal data.
 
@@ -31,9 +31,11 @@ Frontend:
 
 ```powershell
 cd frontend
-npm ci
-npm run dev
+pnpm install --frozen-lockfile
+pnpm run dev
 ```
+
+The dependency truth is `pnpm-lock.yaml`; there is no `package-lock.json` (a fresh one must not appear). `--frozen-lockfile` fails loudly instead of silently re-resolving. Two npm flags are **invalid** on pnpm and abort with a usage error: `--no-audit` and `--no-fund`. Timeout/retry knobs take the config form, e.g. `--config.fetch-retries=5` (`--fetch-timeout` itself still works).
 
 In development Vite proxies `/api` to `http://127.0.0.1:8000`.
 
@@ -69,10 +71,10 @@ The one-click script `scripts/Check-All.ps1` runs six steps:
 
 1. `ruff check backend/app backend/tests`, then `ruff format --check` over the **Python files this checkout touches** (changes against `HEAD` plus untracked files) under those same two directories.
 2. The backend suite as `pytest tests -q -n 2`, without `--cov`; the canary tests that need a live app on port 9333 are skipped.
-3. `npm run typecheck`.
-4. `npm run lint`.
-5. `npm run test`, then `npm audit --registry=https://registry.npmjs.org` (high severity and above).
-6. `npm run build`.
+3. `pnpm run typecheck`.
+4. `pnpm run lint`.
+5. `pnpm run test`, then `pnpm audit --registry=https://registry.npmjs.org` (high severity and above).
+6. `pnpm run build`.
 
 ```powershell
 .\scripts\Check-All.ps1
@@ -112,12 +114,12 @@ Frontend:
 
 ```powershell
 cd frontend
-npm test
-npm run format:check
-npm run lint
-npm run typecheck
-npm run build
-npm audit --registry=https://registry.npmjs.org
+pnpm run test
+pnpm run format:check
+pnpm run lint
+pnpm run typecheck
+pnpm run build
+pnpm audit --registry=https://registry.npmjs.org
 ```
 
 When you touch UI interaction, also verify the affected flow by hand, including the usual empty states, error states and narrow-viewport layouts. Changes to user-visible behavior, dependencies, configuration or database compatibility must also update `README.md`, the related `docs/` pages and `CHANGELOG.md`.

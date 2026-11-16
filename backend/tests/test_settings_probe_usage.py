@@ -51,10 +51,13 @@ def _probe_rows(db_session) -> list[LLMUsageRecord]:
 @pytest.fixture()
 def _fake_provider(client, monkeypatch):
     provider = _UsageRecordingProvider()
+    # 准备段已挪进 worker：路由调的是 ``resolve_probe_config_with_locale``，它把
+    # "解析后的配置 + 审计语言"一起带回来（语言要读库，但 ContextVar 只能在事件循环上写）。
     monkeypatch.setattr(
-        "app.api.settings.resolve_llm_config_api_key",
-        lambda _db, payload: LLMConfig(
-            base_url="https://synthetic.invalid/v1", api_key="", model="fake-model"
+        "app.api.settings.resolve_probe_config_with_locale",
+        lambda _db, payload: (
+            LLMConfig(base_url="https://synthetic.invalid/v1", api_key="", model="fake-model"),
+            "zh",
         ),
     )
     monkeypatch.setattr("app.api.settings.create_provider", lambda _config: provider)

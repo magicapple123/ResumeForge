@@ -13,12 +13,16 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from ...database import get_db
 from ...models.job import Job
+from ...runtime.blocking import run_sync
 from ...schemas.job import JobOut
 from ...schemas.scenario_variants import (
     ScenarioVariantAdoptRequest,
@@ -59,6 +63,64 @@ def _job_out(db: Session, record) -> JobOut | None:
     return JobOut.model_validate(job)
 
 
+@dataclass(frozen=True)
+class _PreviewPlan:
+    """预览入口的准备段产物：全部物化成纯数据 / 冻结快照（不引用请求会话）。
+
+    生成候选是一次可能跑几十秒的模型调用，期间请求会话已经归还；把 ORM 行带过去，
+    任何一个没加载过的列都会在 worker 之外触发 ``DetachedInstanceError``。
+    """
+
+    variant_id: int
+    variant_name: str
+    brief: VariantOut
+    base_content_sha256: str
+    variant_document: dict
+    variant_language: str | None
+    render_language: str | None
+    format_config: dict
+    job: JobOut | None
+    snapshot: Any
+    provider: Any
+
+
+def _prepare_scenario_preview(
+    db: Session, resume_id: int, variant_id: int, career_context: Any
+) -> _PreviewPlan:
+    """同步准备段：读母版/变体、解析场景快照、取模型配置，然后归还请求连接。"""
+    try:
+        record = _get_live_resume(db, resume_id)
+        variant = _variant_or_404(db, record.id, variant_id)
+        # 场景未知/版本不符由 ``resolve_context`` 抛 ``CareerContextError``，路由层
+        # 翻成既有的 4xx 响应体（与改造前的就地调用同一份语义）。
+        snapshot = resolve_context(db, career_context)
+        if snapshot is None:  # schema 已强制必填；类型收窄兜底
+            raise HTTPException(status_code=400, detail="缺少职业场景引用")
+        config = _api.get_llm_config(db)
+        if not config.base_url or not config.model:
+            raise HTTPException(status_code=400, detail="尚未配置大模型 API")
+        provider = _api.create_provider(config)
+        render_context = variant.render_context or {}
+        format_config = render_context.get("format_config") or {}
+        return _PreviewPlan(
+            variant_id=int(variant.id),
+            variant_name=variant.name or "当前变体",
+            brief=VariantOut.model_validate(variants.variant_brief(variant)),
+            base_content_sha256=canonical_content_sha256(variant.content or {}),
+            variant_document=document_io.ensure_document_version(
+                variant.content, format_config=format_config
+            ),
+            variant_language=variant.language or None,
+            render_language=render_context.get("language") or None,
+            format_config=format_config,
+            job=_job_out(db, record),
+            snapshot=snapshot,
+            provider=provider,
+        )
+    finally:
+        db.close()
+
+
 @router.post("/{resume_id}/scenario-variants", response_model=VariantOut, status_code=201)
 def create_scenario_variant(
     resume_id: int,
@@ -95,28 +157,28 @@ async def preview_scenario_variant(
     request: Request,
     db: Session = Depends(get_db),
 ) -> ScenarioVariantPreviewOut | JSONResponse:
-    """按场景表达指南生成候选（不落库、不写源简历）。"""
-    record = _get_live_resume(db, resume_id)
-    variant = _variant_or_404(db, record.id, variant_id)
+    """按场景表达指南生成候选（不落库、不写源简历）。
+
+    三段式：准备（读母版/变体 + 场景快照 + 模型配置，worker 里做完即归还连接）→
+    生成候选（模型协程，可被客户端断开打断）→ 拼响应（纯数据，不再碰会话）。
+    """
     try:
-        snapshot = resolve_context(db, payload.career_context)
+        plan = await run_sync(
+            _prepare_scenario_preview, db, resume_id, variant_id, payload.career_context
+        )
     except CareerContextError as exc:
         return exc.to_response()
-    if snapshot is None:  # schema 已强制必填；类型收窄兜底
-        raise HTTPException(status_code=400, detail="缺少职业场景引用")
-    config = _api.get_llm_config(db)
-    if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
-    provider = _api.create_provider(config)
     try:
         candidate = await run_until_disconnect(
             request,
             service.preview_scenario_candidate(
-                provider,
-                record=record,
-                variant=variant,
-                job=_job_out(db, record),
-                snapshot=snapshot,
+                plan.provider,
+                variant_content=plan.variant_document,
+                variant_language=plan.variant_language,
+                render_language=plan.render_language,
+                format_config=plan.format_config,
+                job=plan.job,
+                snapshot=plan.snapshot,
                 instructions=payload.instructions,
             ),
             what="场景候选生成",
@@ -130,19 +192,16 @@ async def preview_scenario_variant(
     # 候选出厂即 v2（服务层已收口）；差异算法仍按 v1 分析口径，两侧折成视图再比。
     candidate_content = candidate
     return ScenarioVariantPreviewOut(
-        variant=VariantOut.model_validate(variants.variant_brief(variant)),
+        variant=plan.brief,
         candidate_content=candidate_content,
-        base_content_sha256=canonical_content_sha256(variant.content or {}),
+        base_content_sha256=plan.base_content_sha256,
         candidate_content_sha256=canonical_content_sha256(candidate_content),
-        context_snapshot=snapshot.model_dump(),
-        context_sha256=str(snapshot.context_sha256 or ""),
+        context_snapshot=plan.snapshot.model_dump(),
+        context_sha256=str(plan.snapshot.context_sha256 or ""),
         content_diff=build_resume_diff(
-            variant.id,
-            variant.name or "当前变体",
-            document_io.ensure_document_version(
-                variant.content,
-                format_config=(variant.render_context or {}).get("format_config") or {},
-            ),
+            plan.variant_id,
+            plan.variant_name,
+            plan.variant_document,
             0,
             "场景候选",
             candidate_content,

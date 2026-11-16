@@ -192,6 +192,11 @@ rf_is_program_path() {
     case "$rel" in
         backend/app/*) return 0 ;;
         backend/requirements.txt) return 0 ;;
+        # 生产依赖锁：首次安装与更新都只装它（逐包 SHA-256 + --require-hashes），
+        # 缺了它的新版程序文件会让下次启动直接报"锁不存在"。更新器不是"程序文件"
+        # 的搬运工吗？锁就是程序文件的一部分。
+        backend/requirements.runtime.lock.txt) return 0 ;;
+        backend/requirements.lock.txt) return 0 ;;
         # 后端还有三样常被漏掉的东西：迁移配置、开发依赖、运维脚本。
         # 漏了 alembic.ini 的后果是"新版本的迁移链跑不起来"，而报错只会说找不到配置。
         backend/requirements-dev.txt) return 0 ;;
@@ -377,7 +382,7 @@ rf_extract_zip() {
 # 满"不会被替换"的东西，回滚语义就模糊了），要么漏备份——比如漏了根目录三件套，
 # 回滚之后用户的 start.sh 还是被覆盖过的新版本，而其余文件已经回退，得到一个
 # 半新半旧的安装目录。
-RF_BACKUP_PATHS_BASE="backend/app backend/alembic.ini backend/requirements.txt backend/requirements-dev.txt backend/scripts frontend/dist scripts docs"
+RF_BACKUP_PATHS_BASE="backend/app backend/alembic.ini backend/requirements.txt backend/requirements.runtime.lock.txt backend/requirements.lock.txt backend/requirements-dev.txt backend/scripts frontend/dist scripts docs"
 
 # rf_collect_backup_paths EXTRACTED_DIR
 # 产出 RF_BACKUP_PATHS：**即将被替换**的顶层路径（相对项目根，空格分隔）。
@@ -561,11 +566,18 @@ rf_rollback_from_backup() {
 # 更新器的职责边界是"程序文件"，依赖只是顺手同步——失败也只提示，不把更新结果
 # 报成失败（程序文件已经更新好了，下次启动会再试一遍）。
 rf_sync_dependencies() {
-    local requirements="$RF_PROJECT_ROOT/backend/requirements.txt"
+    local runtime_lock
+    runtime_lock=$(rf_runtime_lock_path "$RF_PROJECT_ROOT/backend")
     local venv_python="${RF_VENV_DIR}/bin/python3"
-    if [ -f "$requirements" ] && [ -x "$venv_python" ]; then
+    if [ -f "$runtime_lock" ] && [ -x "$venv_python" ]; then
         log_info "==> 正在同步后端依赖"
-        if ! "$venv_python" -m pip install --disable-pip-version-check -r "$requirements"; then
+        # 与首次安装、发布构建、CI 同一份锁与同一组参数（--require-hashes）。
+        # 更新器换了程序文件却没换掉闭包，就是"新版本启动即崩"的经典形态。
+        # 锁坏了不在这里 die：程序文件已经换好了，硬中断会把一次成功更新报成失败。
+        # 但也绝不退回 requirements.txt——只是跳过，下次启动会明确报错并给出处理办法。
+        if ! problem=$(rf_runtime_lock_problem "$runtime_lock"); then
+            log_warn "生产依赖锁不可用（${problem}），已跳过依赖同步。下次启动会明确报错。"
+        elif ! "$venv_python" -m pip install --disable-pip-version-check --require-hashes -r "$runtime_lock"; then
             log_warn "后端依赖同步失败，但程序文件已经更新。下次启动会再试一次。"
         fi
     else
@@ -575,8 +587,10 @@ rf_sync_dependencies() {
     if [ -f "$RF_PROJECT_ROOT/frontend/package.json" ] &&
         [ -d "$RF_PROJECT_ROOT/frontend/node_modules" ] &&
         rf_find_system_node_runtime; then
-        log_info "==> 正在同步前端依赖（npm ci）"
-        if ! (cd "$RF_PROJECT_ROOT/frontend" && "$RF_NPM_PATH" ci --no-audit --no-fund); then
+        rf_resolve_pnpm_command
+        log_info "==> 正在同步前端依赖（pnpm install --frozen-lockfile）"
+        if ! (cd "$RF_PROJECT_ROOT/frontend" &&
+            "${RF_PNPM_COMMAND[@]}" install --frozen-lockfile); then
             log_warn "前端依赖同步失败，但程序文件已经更新。下次启动会再试一次。"
         fi
     else

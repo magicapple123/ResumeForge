@@ -20,7 +20,7 @@ from ..schemas.resume_template import (
     TemplatePreviewRequest,
 )
 from ..services.actions import add_action_route
-from ..services.actions.catalog import all_actions
+from ..services.actions.catalog import registered_action
 from ..services.document_text import (
     extract_document_text,  # noqa: F401 - legacy monkeypatch surface
 )
@@ -91,10 +91,10 @@ def read_builtin_templates():
     return template_options()
 
 
-add_action_route(router, all_actions()["list_format_templates"], route_path="")
+add_action_route(router, registered_action("list_format_templates"), route_path="")
 
 
-add_action_route(router, all_actions()["create_format_template"], route_path="")
+add_action_route(router, registered_action("create_format_template"), route_path="")
 
 
 @router.get("/{template_id}", response_model=ResumeTemplateDetail)

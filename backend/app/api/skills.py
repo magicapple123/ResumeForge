@@ -23,7 +23,7 @@ from ..schemas.skill import (
     AssistantSkillUpdate,
 )
 from ..services.actions import add_action_route
-from ..services.actions.catalog import all_actions
+from ..services.actions.catalog import registered_action
 from ..services.actions.pilots import pilot_actions
 from ..services.assistant.assistant_skills import (
     PendingSkillError,
@@ -67,7 +67,7 @@ def _source_name(request: Request) -> str | None:
     return name[:MAX_SOURCE_NAME_CHARS] or None
 
 
-add_action_route(router, all_actions()["list_skills"], route_path="")
+add_action_route(router, registered_action("list_skills"), route_path="")
 
 
 @router.post("/import", response_model=AssistantSkillOut)
@@ -82,7 +82,9 @@ async def import_skill(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=415, detail="需要 .md 提示词文件或 .zip 技能包")
 
     source_name = _source_name(request)
-    staging = restore_directory(session_engine(db))
+    # 定位落盘目录要读会话绑定的 engine，落库是同步写：两段都下沉线程池，
+    # 事件循环只负责把上传的字节写进临时文件与 await 结果。
+    staging = restore_directory(await run_in_threadpool(session_engine, db))
     staging.mkdir(parents=True, exist_ok=True)
     # 临时文件仍然用随机名，避免并发导入同名文件互相截断；真实文件名走 source_name。
     candidate = staging / f"{uuid4().hex}{suffix}"
@@ -93,7 +95,7 @@ async def import_skill(request: Request, db: Session = Depends(get_db)):
         parser = parse_zip_skill if suffix == ".zip" else parse_markdown_skill
         # zip 解析/落库是同步 IO，下沉线程池避免阻塞事件循环。
         parsed = await run_in_threadpool(parser, candidate, source_name)
-        skill = upsert_skill(db, parsed)
+        skill = await run_in_threadpool(upsert_skill, db, parsed)
     except SkillImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
@@ -103,10 +105,10 @@ async def import_skill(request: Request, db: Session = Depends(get_db)):
     return _to_out(skill)
 
 
-add_action_route(router, all_actions()["create_skill"], route_path="")
+add_action_route(router, registered_action("create_skill"), route_path="")
 
 
-add_action_route(router, all_actions()["get_skill"], route_path="/{skill_id}")
+add_action_route(router, registered_action("get_skill"), route_path="/{skill_id}")
 
 
 # T27 试点 3：PUT /api/assistant/skills/{skill_id} 由契约层生成（不可逆写，带 preview）。

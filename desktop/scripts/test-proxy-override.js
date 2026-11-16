@@ -45,14 +45,30 @@ async function proxyChild() {
 if (process.argv.includes("--proxy-child")) {
   proxyChild().catch((error) => { console.error(error); process.exitCode = 1; });
 } else {
+  // The override is declared in pnpm-workspace.yaml, but the guard must assert the
+  // RESOLVED tree, not the configuration text: "the override is written down" and
+  // "the override was applied" are different claims, and only the second one keeps
+  // the vulnerable global-agent -> roarr -> sprintf-js logging chain out of the build.
+  // The lockfile is read as text on purpose -- this repo must not grow a YAML parser
+  // (see the "No new npm dependencies" note at the top of package.json).
   test("the scoped proxy override actually removes the vulnerable logging chain", () => {
-    const pkg = JSON.parse(fs.readFileSync(path.join(DESKTOP, "package.json"), "utf8"));
-    const lock = JSON.parse(fs.readFileSync(path.join(DESKTOP, "package-lock.json"), "utf8"));
-    assert.equal(pkg.overrides["@electron/get@3.1.0"]["global-agent"], "4.1.3");
-    const agents = Object.entries(lock.packages).filter(([name]) => name.endsWith("/global-agent"));
-    assert.ok(agents.length > 0);
-    assert.ok(agents.every(([, entry]) => entry.version === "4.1.3"));
-    assert.ok(!Object.keys(lock.packages).some((name) => /\/(roarr|sprintf-js)$/.test(name)));
+    const lock = fs.readFileSync(path.join(DESKTOP, "pnpm-lock.yaml"), "utf8");
+    // Two YAML documents, each with its own `packages:` section, so an entry can
+    // legitimately appear twice. The gate cares about the resolved version SET.
+    const versionsOf = (name) => [
+      ...new Set(
+        [...lock.matchAll(
+          new RegExp(`^  '?${name.replace(/[/@.]/g, (c) => "\\" + c)}@([^:']+)'?:$`, "gm"),
+        )].map((match) => match[1]),
+      ),
+    ];
+
+    assert.deepEqual(versionsOf("global-agent"), ["4.1.3"],
+      "global-agent must resolve to 4.1.3 only (the pinned override)");
+    assert.deepEqual(versionsOf("roarr"), [],
+      "global-agent 4.x drops the roarr dependency; its presence means the override did not apply");
+    assert.deepEqual(versionsOf("sprintf-js"), [],
+      "sprintf-js is pulled in only via roarr; its presence means the override did not apply");
   });
 
   test("the builder downloader still supports HTTP proxy and NO_PROXY in an isolated child", () => {

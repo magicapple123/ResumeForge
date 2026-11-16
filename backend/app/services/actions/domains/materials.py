@@ -38,7 +38,6 @@ from ....schemas.material import (
     MaterialUpdate,
 )
 from ..legacy import tool_runner
-from ..registry import define_action
 from ..spec import ActionError, ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
 if TYPE_CHECKING:
@@ -265,83 +264,68 @@ _ACTIONS: dict[str, ActionSpec] | None = None
 
 
 def material_actions() -> dict[str, ActionSpec]:
-    """构建（并注册）materials 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
+    """构建（不注册）materials 域 action，返回 name -> ActionSpec（幂等、可重入）。"""
     global _ACTIONS
     if _ACTIONS is not None:
-        from ..registry import get_action
-
-        for spec in _ACTIONS.values():
-            if get_action(spec.name) is None:
-                define_action(spec)
         return _ACTIONS
     Permission = permission_enum()
     if _ACTIONS is not None:  # 内层重入已完成构建（工具声明模块在 assistant_tools 初始化期调用）
         return _ACTIONS
-    list_materials = define_action(
-        ActionSpec(
-            name="list_materials",
-            description=(
-                "列出资料箱里的资料（找工作与面试相关的材料：证书、作品、链接、笔记、"
-                "面试总结、实习材料等）。用户提到「我之前存过…」「资料箱里有什么」时用它。"
-            ),
-            input_model=ListMaterialsInput,
-            permission=Permission.READ_ONLY,
-            run=_run_list_materials,
-            service_entry="materials.list_materials",
-            tool_fields=("keyword", "category", "limit"),
-            tool_defaults=(("limit", _DEFAULT_LIST_LIMIT),),
-            # 旧 GET /api/materials 走 FastAPI query 参数，未知 query 一律忽略；保持兼容。
-            ignore_unknown_arguments=True,
-            http=HttpRoute("GET", "/api/materials", list[MaterialSummary], tags=("materials",)),
-        )
+    list_materials = ActionSpec(
+        name="list_materials",
+        description=(
+            "列出资料箱里的资料（找工作与面试相关的材料：证书、作品、链接、笔记、"
+            "面试总结、实习材料等）。用户提到「我之前存过…」「资料箱里有什么」时用它。"
+        ),
+        input_model=ListMaterialsInput,
+        permission=Permission.READ_ONLY,
+        run=_run_list_materials,
+        service_entry="materials.list_materials",
+        tool_fields=("keyword", "category", "limit"),
+        tool_defaults=(("limit", _DEFAULT_LIST_LIMIT),),
+        # 旧 GET /api/materials 走 FastAPI query 参数，未知 query 一律忽略；保持兼容。
+        ignore_unknown_arguments=True,
+        http=HttpRoute("GET", "/api/materials", list[MaterialSummary], tags=("materials",)),
     )
-    get_material = define_action(
-        ActionSpec(
-            name="get_material",
-            description="按 id 读取资料箱里某一条资料的完整内容（含附件里提取出的文字）。",
-            input_model=GetMaterialInput,
-            permission=Permission.READ_ONLY,
-            run=_run_get_material,
-            service_entry="materials.material_detail_text",
-            tool_fields=("material_id",),
-            ignore_unknown_arguments=True,
-            http=HttpRoute("GET", "/api/materials/{material_id}", MaterialOut, tags=("materials",)),
-        )
+    get_material = ActionSpec(
+        name="get_material",
+        description="按 id 读取资料箱里某一条资料的完整内容（含附件里提取出的文字）。",
+        input_model=GetMaterialInput,
+        permission=Permission.READ_ONLY,
+        run=_run_get_material,
+        service_entry="materials.material_detail_text",
+        tool_fields=("material_id",),
+        ignore_unknown_arguments=True,
+        http=HttpRoute("GET", "/api/materials/{material_id}", MaterialOut, tags=("materials",)),
     )
-    create_material = define_action(
-        ActionSpec(
-            name="create_material",
-            description=(
-                "把一段资料收进资料箱。只在用户明确要求保存时调用。"
-                "适合存的是与找工作/面试相关的东西：证书、作品、面经、公司信息、面试复盘等。"
-            ),
-            input_model=CreateMaterialInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_create_material,
-            run_tool=tool_runner(
-                "app.services.assistant_tools.data_tools.materials", "_tool_create_material"
-            ),
-            preview=_preview_create_material,
-            service_entry="materials.create_material",
-            tool_fields=("title", "category", "content", "url", "note"),
-            http=HttpRoute(
-                "POST", "/api/materials", MaterialOut, status_code=201, tags=("materials",)
-            ),
-        )
+    create_material = ActionSpec(
+        name="create_material",
+        description=(
+            "把一段资料收进资料箱。只在用户明确要求保存时调用。"
+            "适合存的是与找工作/面试相关的东西：证书、作品、面经、公司信息、面试复盘等。"
+        ),
+        input_model=CreateMaterialInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_create_material,
+        run_tool=tool_runner(
+            "app.services.assistant_tools.data_tools.materials", "_tool_create_material"
+        ),
+        preview=_preview_create_material,
+        service_entry="materials.create_material",
+        tool_fields=("title", "category", "content", "url", "note"),
+        http=HttpRoute("POST", "/api/materials", MaterialOut, status_code=201, tags=("materials",)),
     )
-    update_material = define_action(
-        ActionSpec(
-            name="update_material",
-            description="修改资料箱里已有的一条资料（只传要改的字段，其余保持不变）。",
-            input_model=UpdateMaterialInput,
-            permission=Permission.REVERSIBLE_WRITE,
-            run=_run_update_material,
-            run_tool=_run_tool_update_material,
-            preview=_preview_update_material,
-            service_entry="materials.update_material",
-            tool_fields=("material_id", "title", "category", "content", "url", "note"),
-            http=HttpRoute("PUT", "/api/materials/{material_id}", MaterialOut, tags=("materials",)),
-        )
+    update_material = ActionSpec(
+        name="update_material",
+        description="修改资料箱里已有的一条资料（只传要改的字段，其余保持不变）。",
+        input_model=UpdateMaterialInput,
+        permission=Permission.REVERSIBLE_WRITE,
+        run=_run_update_material,
+        run_tool=_run_tool_update_material,
+        preview=_preview_update_material,
+        service_entry="materials.update_material",
+        tool_fields=("material_id", "title", "category", "content", "url", "note"),
+        http=HttpRoute("PUT", "/api/materials/{material_id}", MaterialOut, tags=("materials",)),
     )
     _ACTIONS = {
         spec.name: spec for spec in (list_materials, get_material, create_material, update_material)

@@ -18,15 +18,21 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Literal
+from dataclasses import dataclass
+from typing import Any, Literal
 
 from fastapi import Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.interview import INTERVIEW_STATUS_FINISHED, MESSAGE_PHASE_FOLLOWUP
+from ..models.interview import (
+    INTERVIEW_STATUS_FINISHED,
+    MESSAGE_PHASE_FOLLOWUP,
+    InterviewMessage,
+)
 from ..models.profile import utcnow
+from ..runtime.blocking import run_sync
 from ..schemas.interview import (
     InterviewDetail,
     InterviewFollowUpCreate,
@@ -46,10 +52,13 @@ from ..services.interview.interview_material import (
 from ..services.llm.base import BaseLLMProvider, LLMError
 from ..services.ocr.policy import load_ocr_context
 from .interview_shared import (
+    SessionMaterial,
+    _commit_and_refresh,
     _resume_text,
     _session_job_text,
     _session_or_404,
     _to_detail,
+    _warm_messages,
 )
 
 #: 材料识别链的「模型解析器」契约：给一个会话，拿到（provider, 模型名）或抛 400。
@@ -103,14 +112,15 @@ def register_material_routes(router, require_provider: RequireProvider) -> None:
             raise HTTPException(status_code=413, detail=_TOO_LARGE_DETAIL)
         suffix = material_suffix(name)
         # 识别引擎与 Key 是全局设置：这里一次性解析，两条识别链共用同一份决策。
-        ocr_ctx = load_ocr_context(db)
+        # RF-02：读设置是同步 IO（``db.get`` + 设置行），放 worker 里。
+        ocr_ctx = await run_sync(load_ocr_context, db)
 
         if suffix in IMAGE_MATERIAL_SUFFIXES:
             # OCR 可用时不需要视觉模型：用户可能只配了 DeepSeek Key、没配多模态模型，
             # 那种情况下强行 require_provider 会把一条本来能走通的路径挡死。
             provider: BaseLLMProvider | None = None
             if not (ocr_ctx.uses_ocr() and ocr_ctx.configured):
-                provider, _model = require_provider(db)
+                provider, _model = await run_sync(require_provider, db)
             try:
                 extracted = await extract_image_material(provider, name, raw, ocr_ctx)
             except ValueError as exc:
@@ -134,7 +144,7 @@ def register_material_routes(router, require_provider: RequireProvider) -> None:
         if extracted.scan_images:
             # 扫描件兜底：**只有真的拿到渲染页**才向模型要能力。有文字层的 PDF
             # 永远走不到这里，所以未配置模型不会挡住 pdf / txt / md / docx。
-            provider, _model = require_provider(db)
+            provider, _model = await run_sync(require_provider, db)
             try:
                 extracted = await recognize_material_scans(provider, extracted)
             except ValueError as exc:
@@ -149,6 +159,73 @@ def register_material_routes(router, require_provider: RequireProvider) -> None:
             warnings=list(extracted.warnings),
             parser=_parser_of(extracted),
         )
+
+
+@dataclass(frozen=True)
+class _FollowupPrep:
+    """追问的准备结果：会话行、provider、材料快照与那条刚落库的问题消息 id。
+
+    ``question_id`` 而不是那条 ORM 消息：模型失败要把它撤掉，跨 ``await`` 只传 id，
+    由 worker 重新 ``get`` 一次。
+    """
+
+    session: Any
+    provider: Any
+    material: SessionMaterial
+    question_id: int
+
+
+def _prepare_followup(
+    db: Session, session_id: int, content: str, require_provider: RequireProvider
+) -> _FollowupPrep:
+    """校验追问前置条件 + 落库这条追问 + 读材料快照（一个完整工作单元）。"""
+    session = _session_or_404(db, session_id)
+    if session.status != INTERVIEW_STATUS_FINISHED:
+        raise HTTPException(status_code=409, detail=_FOLLOWUP_NOT_FINISHED_DETAIL)
+    # 用户自己收起了追问区：关着就别再往里写消息（否则界面上看不到、记录里却有）。
+    if session.follow_up_closed_at is not None:
+        raise HTTPException(status_code=409, detail=_FOLLOWUP_CLOSED_DETAIL)
+    provider, _model = require_provider(db)
+
+    question = add_message(
+        session,
+        role="user",
+        content=content,
+        phase=MESSAGE_PHASE_FOLLOWUP,
+    )
+    db.commit()
+    # 追问的提示词要读材料（简历文件 / 记录反序列化）与整场转录：都在 worker 里读成快照。
+    material = SessionMaterial(
+        resume_text=_resume_text(db, session),
+        job_text=_session_job_text(db, session),
+    )
+    _warm_messages(session)
+    return _FollowupPrep(
+        session=session,
+        provider=provider,
+        material=material,
+        question_id=int(question.id),
+    )
+
+
+def _discard_followup_question(db: Session, question_id: int) -> None:
+    """模型没答出来就把这条追问撤掉（工作单元）。"""
+    message = db.get(InterviewMessage, question_id)
+    if message is not None:
+        db.delete(message)
+    db.commit()
+
+
+def _record_followup_answer(db: Session, session: Any, content: str) -> InterviewDetail:
+    """落面试官那条追问回答 + 提交刷新 + 组装响应（一个完整工作单元）。"""
+    add_message(
+        session,
+        role="interviewer",
+        content=content,
+        phase=MESSAGE_PHASE_FOLLOWUP,
+    )
+    _commit_and_refresh(db, session)
+    return _to_detail(session)
 
 
 def register_followup_routes(router, require_provider) -> None:
@@ -169,45 +246,23 @@ def register_followup_routes(router, require_provider) -> None:
         改——报告有没有生成与能不能追问无关。报告的转录只取 ``phase="interview"``，
         追问不会进评分（见 ``build_report_messages``）。
         """
-        session = _session_or_404(db, session_id)
-        if session.status != INTERVIEW_STATUS_FINISHED:
-            raise HTTPException(status_code=409, detail=_FOLLOWUP_NOT_FINISHED_DETAIL)
-        # 用户自己收起了追问区：关着就别再往里写消息（否则界面上看不到、记录里却有）。
-        if session.follow_up_closed_at is not None:
-            raise HTTPException(status_code=409, detail=_FOLLOWUP_CLOSED_DETAIL)
-        provider, _model = require_provider(db)
-
-        question = add_message(
-            session,
-            role="user",
-            content=payload.content,
-            phase=MESSAGE_PHASE_FOLLOWUP,
-        )
-        db.commit()
+        prep = await run_sync(_prepare_followup, db, session_id, payload.content, require_provider)
 
         try:
             answer = await generate_followup(
-                provider,
-                session,
-                resume_text=_resume_text(db, session),
-                job_text=_session_job_text(db, session),
+                prep.provider,
+                prep.session,
+                resume_text=prep.material.resume_text,
+                job_text=prep.material.job_text,
             )
         except LLMError:
             # 没答出来就把这条追问撤掉：留一条"问了没人答"的记录，界面上会永远挂着
             # 一个空气泡，而用户重发一次就能得到完全相同的结果。
-            db.delete(question)
-            db.commit()
+            await run_sync(_discard_followup_question, db, prep.question_id)
             raise HTTPException(status_code=502, detail=_FOLLOWUP_FAILED_DETAIL) from None
 
-        add_message(
-            session,
-            role="interviewer",
-            content=answer,
-            phase=MESSAGE_PHASE_FOLLOWUP,
-        )
-        db.commit()
-        db.refresh(session)
-        return InterviewFollowUpResult(session=_to_detail(session), answer=answer)
+        detail = await run_sync(_record_followup_answer, db, prep.session, answer)
+        return InterviewFollowUpResult(session=detail, answer=answer)
 
     @router.patch("/{session_id}/followups", response_model=InterviewDetail)
     def set_followup_state(
