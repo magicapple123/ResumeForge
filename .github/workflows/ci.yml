@@ -1168,8 +1168,11 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          # 这个作业**不装依赖**（`pnpm audit` 只读锁文件），所以 pnpm store 永远
+          # 不会出现。带 cache: pnpm 时 setup-node 的收尾步骤要保存一个不存在的
+          # 路径，直接以 "Path Validation Error ... no cache is being saved" 把作业
+          # 判红——审计本身是通过的，红的是缓存那一步。
+          # 真需要缓存的是要 pnpm install 的作业（frontend / desktop-shell / e2e）。
 
       - name: Audit frontend production dependencies (blocking, high+)
         # --prod 是 pnpm 对应 npm --omit=dev 的写法：只管用户机器上真正会装的包。
@@ -1463,10 +1466,22 @@ jobs:
       - name: Reject CRLF line endings in tracked text files
         run: |
           set -eu
-          # i/crlf = 仓库里的对象就是 CRLF；w/crlf = 检出后的工作区是 CRLF。
-          # 两者都不允许：.gitattributes 声明 `* text=auto eol=lf`（.bat/.cmd 例外，
-          # 它们声明 eol=crlf，在 Linux 检出时仍是 w/lf，不会进这份清单）。
-          offenders=$(git ls-files --eol | grep -E 'i/crlf|w/crlf' || true)
+          # i/crlf = 仓库里的对象就是 CRLF（`text` 属性要求入库一律 LF，所以这一列
+          # 永远算违规）；w/crlf = 检出后的工作区是 CRLF。
+          #
+          # 工作区那一列必须**按属性判**，不能一刀切：.gitattributes 对 *.bat / *.cmd
+          # 显式声明 `eol=crlf`，它们在**任何**平台检出都是 CRLF（eol 属性与平台无关，
+          # 不是只在 Windows 生效）。早先这里假定"Linux 检出时仍是 w/lf"，于是每次
+          # 干净检出都会把 4 个 .cmd 判成违规，整个 repo-hygiene 作业恒红——守卫报的
+          # 是它自己写错的假设。
+          offenders=$(git ls-files --eol | awk '
+            {
+              line = $0
+              # attr/text eol=crlf：工作区本来就该是 CRLF，不算违规。
+              if (line ~ /i\/crlf/) { print; next }
+              if (line ~ /w\/crlf/ && line !~ /attr\/text eol=crlf/) { print }
+            }
+          ')
           if [ -n "$offenders" ]; then
             echo "::error::以下文件行尾不是 LF（.gitattributes: * text=auto eol=lf）"
             printf '%s\n' "$offenders"
@@ -1474,7 +1489,7 @@ jobs:
             echo "诊断口诀：一整个文件「每行都改了」但肉眼看不出区别 = 行尾，不是格式。"
             exit 1
           fi
-          echo "OK：全部文本文件均为 LF。"
+          echo "OK：全部文本文件均为 LF（.bat/.cmd 按 eol=crlf 声明放行）。"
 
   docs-guards:
     name: Docs guards

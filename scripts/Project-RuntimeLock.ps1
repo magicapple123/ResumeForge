@@ -57,6 +57,25 @@ function Get-RequirementsFileName {
     return $script:RfRequirementsFileName
 }
 
+function Get-RuntimeLockPath {
+    # Single place that decides which lock file the runtime is built from. Every
+    # script that needs the lock goes through this, so "which file is the lock"
+    # cannot drift between the builder, the packager and the tests.
+    #
+    # Lives here rather than in PythonRuntimeManifest.ps1: the updater, the
+    # process helper and the builder all dot-source THIS file to reach the lock
+    # names, and only some of them need the manifest. Keeping the path helper
+    # next to the names it composes is what keeps "which files must I dot-source"
+    # a one-file answer. (It used to live in the manifest, so
+    # Update-ResumeForge.ps1 / ResumeForge.Process.ps1 / Build-PythonRuntime.ps1
+    # called an undefined function and the whole launch chain died at first run.)
+    param(
+        [Parameter(Mandatory = $true)][string]$BackendDirectory
+    )
+
+    return (Join-Path $BackendDirectory (Get-RuntimeLockFileName))
+}
+
 function ConvertTo-NormalizedPackageName {
     # PEP 503 normalisation (lowercase, runs of -_. collapse to -). Comparison of
     # package names between the two locks must not depend on how uv spelled them.

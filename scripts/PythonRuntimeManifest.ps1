@@ -63,17 +63,6 @@ function Get-PythonRuntimeManifestSchema {
     return 2
 }
 
-function Get-RuntimeLockPath {
-    # Single place that decides which lock file the runtime is built from. Every
-    # script that needs the lock goes through this, so "which file is the lock"
-    # cannot drift between the builder, the packager and the tests.
-    param(
-        [Parameter(Mandatory = $true)][string]$BackendDirectory
-    )
-
-    return (Join-Path $BackendDirectory (Get-RuntimeLockFileName))
-}
-
 function Get-RequirementsFingerprint {
     # SHA-256 over the raw bytes of a requirements file. Content-addressed, so a
     # git checkout (which changes mtime, not content) never looks "changed".

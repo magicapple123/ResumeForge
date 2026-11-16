@@ -26,8 +26,13 @@ if [ -n "$STAGED_TEXT" ]; then
   # 用 `git ls-files --eol` 而不是 `grep '\r'`：Windows 的 Git Bash 里 grep 处于文本模式，
   # 会把行尾的 CR 吃掉（实测 `grep -c "$(printf '\r')"` 对 CRLF 文件返回 0），这条检查会
   # 变成永远通过的空转守卫。git 自己算的 eol 没有这个问题。
+  # `attr/text eol=crlf` 的文件（*.bat / *.cmd）本来就以 CRLF 检出，必须放行：
+  # eol 属性与平台无关，干净检出后它们永远是 w/crlf，一刀切会让每次改 .cmd 都被拦。
+  # `i/crlf` 仍然一律算违规（`text` 属性要求入库 LF）。
   CRLF_FILES=$(git ls-files --eol -- $STAGED_TEXT 2>/dev/null \
-    | grep -E 'i/crlf|w/crlf' \
+    | awk '{ line = $0
+             if (line ~ /i\/crlf/) { print; next }
+             if (line ~ /w\/crlf/ && line !~ /attr\/text eol=crlf/) { print } }' \
     | awk -F'\t' '{print $NF}')
   if [ -n "$CRLF_FILES" ]; then
     echo "[pre-commit] 行尾必须是 LF（.gitattributes: * text=auto eol=lf）。以下暂存文件含 CRLF:"
