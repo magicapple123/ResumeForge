@@ -113,7 +113,10 @@ function failureAction(
   code: ResearchBrief["reason_code"],
 ): { label: string; to: string } | { label: string; retry: true } | null {
   if (code === "unauthorized") {
-    return { label: t("companyResearch.brief.action.openSettings"), to: "/settings?tab=connections" };
+    return {
+      label: t("companyResearch.brief.action.openSettings"),
+      to: "/settings?tab=connections",
+    };
   }
   if (code === "insufficient_balance") {
     return { label: t("companyResearch.brief.action.checkBalance"), to: "/settings?tab=model" };
@@ -136,9 +139,7 @@ export default function ResearchBriefPanel({
   const citationLabel = (number: number) => t("companyResearch.brief.citationAria", { number });
 
   if (brief.status === "skipped") {
-    return (
-      <Typography.Text type="secondary">{t("companyResearch.brief.skipped")}</Typography.Text>
-    );
+    return <Typography.Text type="secondary">{t("companyResearch.brief.skipped")}</Typography.Text>;
   }
 
   if (brief.status === "failed") {

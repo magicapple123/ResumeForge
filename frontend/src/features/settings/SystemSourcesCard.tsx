@@ -56,12 +56,7 @@ export default function SystemSourcesCard() {
           <div className="connection-group__hint">{group ? connectionGroupHint(group) : ""}</div>
           <div className="connection-list">
             {(group?.items ?? []).map((item) => (
-              <ConnectionListRow
-                key={item.id}
-                item={item}
-                variant="value"
-                onApplied={onApplied}
-              />
+              <ConnectionListRow key={item.id} item={item} variant="value" onApplied={onApplied} />
             ))}
           </div>
         </section>

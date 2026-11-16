@@ -52,9 +52,7 @@ export default function SkillColumnsControl({ formatConfig, disabled = false, on
       <span className="resume-wb-field-label">{t("skillColumns.label")}</span>
       {/* I-17：49 字的解释原本是包住整个 Segmented 的 tooltip——悬停才看得见、移开就消失，
           而且会盖住"点一下换列数"这个主操作。现在它是控件右侧的 `ⓘ`。 */}
-      <span
-        style={{ justifySelf: "start", display: "inline-flex", alignItems: "center", gap: 6 }}
-      >
+      <span style={{ justifySelf: "start", display: "inline-flex", alignItems: "center", gap: 6 }}>
         <Segmented
           size="small"
           aria-label={t("skillColumns.label")}

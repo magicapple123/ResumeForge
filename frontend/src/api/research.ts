@@ -96,7 +96,9 @@ export interface ResearchEntrySummary {
 }
 
 /** 读「最近一次调研」；没有返回 `null`。 */
-export function latestCompanyResearch(company: string): Promise<{ entry: ResearchEntrySummary | null }> {
+export function latestCompanyResearch(
+  company: string,
+): Promise<{ entry: ResearchEntrySummary | null }> {
   return request(`/research/company/latest?company=${encodeURIComponent(company)}`);
 }
 

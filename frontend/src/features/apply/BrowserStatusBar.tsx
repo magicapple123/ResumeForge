@@ -243,9 +243,7 @@ export default function BrowserStatusBar() {
                 <Typography.Text className="apply-browser-state">
                   {/* 「正在读取…」与「状态未知」是两件事：前者是等待，后者是读不到。
                       混成一句会让首屏看起来像出错了。 */}
-                  {pending
-                    ? t("browserStatus.state.loading")
-                    : t(BROWSER_STATE_LABEL_KEYS[state])}
+                  {pending ? t("browserStatus.state.loading") : t(BROWSER_STATE_LABEL_KEYS[state])}
                 </Typography.Text>
               }
             />

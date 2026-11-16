@@ -139,7 +139,9 @@ async function openRecordEditByName(name: string) {
 // 配置经异步 setFieldsValue 写进表单：等 Base URL 落地再交互/保存，
 // 否则保存时 validateFields 会在空表单上直接失败、断言也会读到旧值。
 async function waitForFormLoaded(baseUrl: string) {
-  await waitFor(() => expect(screen.getByPlaceholderText("https://api.deepseek.com")).toHaveValue(baseUrl));
+  await waitFor(() =>
+    expect(screen.getByPlaceholderText("https://api.deepseek.com")).toHaveValue(baseUrl),
+  );
 }
 
 beforeEach(() => {
@@ -240,7 +242,9 @@ describe("SettingsPage model presets", () => {
     await choosePreset("纯手动配置（不套用任何预设）");
 
     // 关键区别：自定义模型保留当前内容，纯手动配置要一套空的
-    await waitFor(() => expect(screen.getByPlaceholderText("https://api.deepseek.com")).toHaveValue(""));
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("https://api.deepseek.com")).toHaveValue(""),
+    );
     expect(screen.getByLabelText("模型名称")).toHaveValue("");
     // 预设本来就不碰密钥，这里也不该替用户清掉它
     expect(screen.getByPlaceholderText("sk-…")).toHaveValue("");
@@ -297,7 +301,9 @@ describe("SettingsPage model presets", () => {
       </MemoryRouter>,
     );
     await openCreateModal();
-    await waitFor(() => expect(screen.getByPlaceholderText("https://api.deepseek.com")).toHaveValue(""));
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("https://api.deepseek.com")).toHaveValue(""),
+    );
 
     fireEvent.change(screen.getByLabelText("配置名称"), { target: { value: "DeepSeek 主力" } });
     await choosePreset("DeepSeek（深度求索）");
@@ -325,7 +331,9 @@ describe("SettingsPage model presets", () => {
       </MemoryRouter>,
     );
     await openCreateModal();
-    await waitFor(() => expect(screen.getByPlaceholderText("https://api.deepseek.com")).toHaveValue(""));
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("https://api.deepseek.com")).toHaveValue(""),
+    );
 
     fireEvent.change(screen.getByLabelText("配置名称"), { target: { value: "Claude 原生" } });
     await choosePreset("Claude（Anthropic 原生）");
@@ -387,7 +395,9 @@ describe("SettingsPage model presets", () => {
       </MemoryRouter>,
     );
     await openCreateModal();
-    await waitFor(() => expect(screen.getByPlaceholderText("https://api.deepseek.com")).toHaveValue(""));
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("https://api.deepseek.com")).toHaveValue(""),
+    );
 
     fireEvent.change(screen.getByLabelText("配置名称"), { target: { value: "本地 Ollama" } });
     await choosePreset("自定义模型（OpenAI 兼容）");

@@ -287,10 +287,7 @@ describe("BrowserStatusBar", () => {
       screen.getByRole("button", { name: new RegExp(t("browserStatus.action.start")) }),
     ).toBeDisabled();
     expect(screen.getByRole("button", { name: t("browserStatus.more.aria") })).toBeDisabled();
-    expect(view.container.querySelector(".apply-browser-bar")).toHaveAttribute(
-      "aria-busy",
-      "true",
-    );
+    expect(view.container.querySelector(".apply-browser-bar")).toHaveAttribute("aria-busy", "true");
   });
 
   it("数据到位后骨架消失，第二行换成真实端口，动作恢复可用", () => {

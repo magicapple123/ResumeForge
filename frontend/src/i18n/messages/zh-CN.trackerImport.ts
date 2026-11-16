@@ -18,7 +18,8 @@ const trackerImport = {
   "trackerImport.engine.local": "本地关键词匹配",
   // I-15：这条文案只在"识别过且 0 条"时出现，所以它必须说**下一步做什么**，
   // 而不是陈述"还没有识别结果"（那在用户眼里等于"这功能坏了"）。
-  "trackerImport.empty.noResults": "没识别出可用的进度记录：换一条信息更完整的通知，或改用截图重试。",
+  "trackerImport.empty.noResults":
+    "没识别出可用的进度记录：换一条信息更完整的通知，或改用截图重试。",
   "trackerImport.evidence.label": "依据：{evidence}",
   "trackerImport.toast.noInput": "请先粘贴通知内容，或上传截图、文档",
   "trackerImport.toast.noRecords": "没有识别出可用的进度记录",

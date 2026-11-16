@@ -101,9 +101,7 @@ function buttonByText(key: Parameters<typeof t>[0]): HTMLElement {
 /** 打开某一行的 `⋯` 菜单（行内所有次级动作都从这里进）。 */
 async function openRowMenu(id: number) {
   const row = await screen.findByTestId(`assistant-memory-${id}`);
-  fireEvent.click(
-    within(row).getByRole("button", { name: t("assistantMemory.list.menu") }),
-  );
+  fireEvent.click(within(row).getByRole("button", { name: t("assistantMemory.list.menu") }));
   return row;
 }
 

@@ -7,8 +7,7 @@
  */
 const assistantMemory = {
   "assistantMemory.title": "助手记忆",
-  "assistantMemory.intro":
-    "助手只参考你明确表达过的求职偏好。手动添加一条，或删掉不想再用的记忆。",
+  "assistantMemory.intro": "助手只参考你明确表达过的求职偏好。手动添加一条，或删掉不想再用的记忆。",
   /**
    * 列表头左侧：「生效 {count} 条」。停用/被替换的条目仍显示在列表里，但不参与注入，
    * 所以这个数字**不是**列表长度。

@@ -79,18 +79,18 @@ export default function ContactBreaksControl({
   const separatorControl = (
     <>
       <Space size={4} align="center">
-      <Select
-        size="small"
-        aria-label={t("workbench.contactSeparator.label")}
-        className="resume-contact-separator-select"
-        style={{ width: 76 }}
-        disabled={disabled || undefined}
-        value={separator}
-        options={separatorOptions}
-        onChange={(next: ContactSeparatorStyle) =>
-          onChange(withContactSeparator(formatConfig, next))
-        }
-      />
+        <Select
+          size="small"
+          aria-label={t("workbench.contactSeparator.label")}
+          className="resume-contact-separator-select"
+          style={{ width: 76 }}
+          disabled={disabled || undefined}
+          value={separator}
+          options={separatorOptions}
+          onChange={(next: ContactSeparatorStyle) =>
+            onChange(withContactSeparator(formatConfig, next))
+          }
+        />
       </Space>
       <HintDetail
         detail={t("contactSeparator.hint")}
@@ -102,23 +102,23 @@ export default function ContactBreaksControl({
   const control = (
     <>
       <Space size={4} align="center">
-      <span style={{ display: "inline-block", width: 104, maxWidth: "100%" }}>
-        <Select
-          size="small"
-          mode="multiple"
-          allowClear
-          maxTagCount="responsive"
-          aria-label={t("workbench.contactBreak.label")}
-          placeholder={t("workbench.contactBreak.placeholder")}
-          className="resume-contact-break-select"
-          style={{ width: "100%" }}
-          disabled={disabled || undefined}
-          value={value}
-          options={options}
-          onChange={(next: ContactFieldKey[]) => onChange(withContactBreaks(formatConfig, next))}
-        />
-      </span>
-          </Space>
+        <span style={{ display: "inline-block", width: 104, maxWidth: "100%" }}>
+          <Select
+            size="small"
+            mode="multiple"
+            allowClear
+            maxTagCount="responsive"
+            aria-label={t("workbench.contactBreak.label")}
+            placeholder={t("workbench.contactBreak.placeholder")}
+            className="resume-contact-break-select"
+            style={{ width: "100%" }}
+            disabled={disabled || undefined}
+            value={value}
+            options={options}
+            onChange={(next: ContactFieldKey[]) => onChange(withContactBreaks(formatConfig, next))}
+          />
+        </span>
+      </Space>
       <HintDetail
         detail={t("workbench.contactBreak.hint")}
         label={t("workbench.contactBreak.label")}

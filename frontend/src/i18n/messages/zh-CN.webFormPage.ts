@@ -16,8 +16,7 @@ const webFormPage = {
   "webFormPage.flow.reason.browserOff":
     "浏览器还没启动：先点上面的「开启专用浏览器」，再回到这里读取当前表单。",
   "webFormPage.fillMode.title": "怎么填",
-  "webFormPage.fillMode.hint":
-    "这四行决定资料怎么进页面，改完立刻生效。",
+  "webFormPage.fillMode.hint": "这四行决定资料怎么进页面，改完立刻生效。",
   /* I-27 首屏空态（三步引导）：右栏此前在没有预览时整块不渲染，只剩一行折叠记录，
      2/3 的屏幕是白的。这三步只是「怎么开始」，真实动作仍在工具条与左栏。 */
   "webFormPage.onboarding.badge": "还没开始",

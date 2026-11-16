@@ -208,9 +208,7 @@ describe("WebFormPage", () => {
     fireEvent.click(
       screen.getByRole("button", { name: webFormPageZh["webFormPage.relaxed.hintAria"] }),
     );
-    expect(
-      await screen.findByText(webFormPageZh["webFormPage.relaxed.risk"]),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(webFormPageZh["webFormPage.relaxed.risk"])).toBeInTheDocument();
   });
 
   it("says out loud that it will not submit for the user", async () => {
@@ -311,9 +309,7 @@ describe("WebFormPage", () => {
     expect(screen.getByText("智能逐项填表")).toBeInTheDocument();
     // 用法说明 120 字，收在行尾的 ⓘ 里（I-27）：点开才展开，不再常驻两行。
     fireEvent.click(screen.getByRole("button", { name: "智能逐项填表说明" }));
-    expect(
-      await screen.findByText(/点到哪个框，就在框旁边给出资料里对应的值/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/点到哪个框，就在框旁边给出资料里对应的值/)).toBeInTheDocument();
   });
 
   it("turns 智能逐项填表 on automatically after the browser is ready", async () => {

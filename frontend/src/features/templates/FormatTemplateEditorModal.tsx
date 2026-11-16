@@ -35,7 +35,11 @@ import { t } from "../../i18n";
 import type { Locale } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { ResumeFormatConfig, ResumeFormatField, ResumeTemplateDetail } from "../../types";
-import { formatFieldDescription, formatFieldGroup, formatFieldLabel } from "../../utils/resumeFormatLabels";
+import {
+  formatFieldDescription,
+  formatFieldGroup,
+  formatFieldLabel,
+} from "../../utils/resumeFormatLabels";
 
 interface Props {
   open: boolean;
@@ -141,8 +145,7 @@ export default function FormatTemplateEditorModal({
    */
   const layouts = Object.values(templateLayouts ?? {});
   const headerRuleAvailable =
-    layouts.length === 0 ||
-    layouts.some((layout) => Number(layout?.header_border_width ?? 0) > 0);
+    layouts.length === 0 || layouts.some((layout) => Number(layout?.header_border_width ?? 0) > 0);
 
   const save = async () => {
     if (!name.trim()) {
@@ -213,9 +216,7 @@ export default function FormatTemplateEditorModal({
             </Button>
           </>
         ) : (
-          <span className="rf-format-follow">
-            {t("templatesUi.formatEditor.value.unset")}
-          </span>
+          <span className="rf-format-follow">{t("templatesUi.formatEditor.value.unset")}</span>
         )}
       </span>
     );
@@ -242,10 +243,7 @@ export default function FormatTemplateEditorModal({
     const detail = formatFieldDescription(field, locale);
     const disabled = field.requires === "header_border" && !headerRuleAvailable;
     return (
-      <div
-        key={field.key}
-        className={disabled ? "rf-format-field is-disabled" : "rf-format-field"}
-      >
+      <div key={field.key} className={disabled ? "rf-format-field is-disabled" : "rf-format-field"}>
         {/* 标签与控件同一行、控件靠右：一行 28px 高。若改成"标签在上、控件在下"，
             15 个参数会多出 15 行（约 300px），弹窗立刻超出 820px 的高度预算。 */}
         <div className="rf-format-field-head">
@@ -289,7 +287,9 @@ export default function FormatTemplateEditorModal({
         <div className="rf-format-grid">
           {/* 名称与说明跨两列：它们是这份预设的身份，和参数不是同一栅格里的同类。 */}
           <div className="rf-format-span rf-format-meta">
-            <span className="rf-format-field-label">{t("templatesUi.formatEditor.field.name")}</span>
+            <span className="rf-format-field-label">
+              {t("templatesUi.formatEditor.field.name")}
+            </span>
             <Input
               value={name}
               maxLength={40}
@@ -314,7 +314,9 @@ export default function FormatTemplateEditorModal({
             // 组头文字取该组**第一个字段**的 group / group_en（同组里两者必然一致：
             // 后端由 `GROUP_LABELS` 一处产出）。空 key = 未登记分组，不输出组头。
             const head = group.key ? formatFieldGroup(group.fields[0], locale) : "";
-            const showPhotoNote = group.fields.some((field) => field.key === PHOTO_GROUP_MARKER_KEY);
+            const showPhotoNote = group.fields.some(
+              (field) => field.key === PHOTO_GROUP_MARKER_KEY,
+            );
             return (
               <Fragment key={group.key || "__ungrouped__"}>
                 {head ? (

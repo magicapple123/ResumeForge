@@ -216,10 +216,7 @@ export default function WorkbenchParamsTab({
               disabled={relayouting || undefined}
               onChange={(language) => onChange({ ...layout, language })}
             />
-            <HintDetail
-              detail={t("resume.language.hint")}
-              label={t("resume.language.hintAria")}
-            />
+            <HintDetail detail={t("resume.language.hint")} label={t("resume.language.hintAria")} />
           </span>
         </div>
         <ContactBreaksControl

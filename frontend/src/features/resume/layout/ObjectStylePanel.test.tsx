@@ -85,7 +85,9 @@ describe("ObjectStylePanel · 单字段（I-28）", () => {
 
     // 默认是字段值：正文类属性（缩进）在清单里。
     expect(screen.getByTestId("style-row-object-indent")).toBeTruthy();
-    expect(screen.getByRole("radio", { name: t("typography.fieldStyle.target.value") })).toBeTruthy();
+    expect(
+      screen.getByRole("radio", { name: t("typography.fieldStyle.target.value") }),
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("radio", { name: t("typography.fieldStyle.target.label") }));
 
@@ -96,7 +98,9 @@ describe("ObjectStylePanel · 单字段（I-28）", () => {
 
   it("非字段作用域不出现这个切换", () => {
     renderPanel({ defaultScope: "body" });
-    expect(screen.queryByRole("radio", { name: t("typography.fieldStyle.target.label") })).toBeNull();
+    expect(
+      screen.queryByRole("radio", { name: t("typography.fieldStyle.target.label") }),
+    ).toBeNull();
   });
 });
 

@@ -158,7 +158,9 @@ describe("SystemSourcesCard", () => {
     fireEvent.click(
       restored.getByRole("button", { name: t("connections.action.more", { name: PORT_LABEL }) }),
     );
-    expect(await screen.findByRole("menuitem", { name: t("connections.action.copy") })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("menuitem", { name: t("connections.action.copy") }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: t("connections.action.reset") })).toBeNull();
   });
 });

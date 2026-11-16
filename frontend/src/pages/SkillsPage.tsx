@@ -313,9 +313,7 @@ export default function SkillsPage() {
               items={[
                 {
                   key: "guide",
-                  label: (
-                    <Typography.Text strong>{t("skills.guide.whatTitle")}</Typography.Text>
-                  ),
+                  label: <Typography.Text strong>{t("skills.guide.whatTitle")}</Typography.Text>,
                   children: (
                     <>
                       <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
