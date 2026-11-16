@@ -6,6 +6,9 @@
 
 ### Added
 
+- **设置页「恢复默认」（I-10）。** 每个设置分区右上角一颗「恢复默认」，可只重置这一组（`scope`），也可勾选具体几项（`keys`）——两者二选一，都给或都不给后端直接 422，不做"猜你想要哪个"的兜底。重置前先取一次**快照**（`GET /api/settings/snapshot`），弹层里逐项列出「当前值 → 默认值」再确认，避免一键把 Key、路径、端口这类"配一次记不住"的值清成空；单批上限 128 个键。写入走既有的 KV 通道，重置后立即生效，不需要重启后端。
+- **「提示模式」`Alt+H`（I-18）。** 界面里所有 `ⓘ` 说明（表单 label、表格列头、抽屉里）平时是一个点开的浮层；按一次 `Alt+H` 变成**原地内联展开**，一屏把当前页的说明一次读完，不用逐个点、也不用逐个记。再按一次、`Esc`、窗口失焦、换页任一动作都退出——这个模式是"临时把界面翻过来看一眼"，不该有任何粘滞感。状态是模块级单例（与 `localeStore` / `touTouProposalStore` 同形），零 Provider；监听器按需挂、退出即摘，页面平时一个 listener 都不多。
+
 - **公司与岗位背景调研（`/research`，T07）。** 投递前先看清这家公司和这个岗位：填公司名（岗位名、招聘描述可选）后一次调研出两块结果，两条路**并发、分开发请求**——上半屏是聚合搜索来的**资料卡片**（官网 / 近期新闻 / 公司介绍，带站点图标、发布日期与权威度），下半屏是联网生成的**带编号引用简报**，每条引用可展开对照原文。失败语义是刻意的：**简报失败不吞掉卡片**（卡片是已经花过钱搜来的），只把原因写进简报面板；只有「公司名为空」才报 400。「深度调研」默认关闭，开启后做多轮深度搜索（最多约 20 次工具调用），搜索按查询词条数计费，页面如实显示本次搜索次数与耗时。后端 `services/job/company_research*.py` + 提示词 `prompts/company_research_brief.md`（已进 `preflight._REQUIRED_FILES` 与打包 `$RequiredFiles`），接口 `POST /api/research/company`。
 - **「外部连接」页：这台机器对外依赖的服务与下载源集中在一处（T11 / T12）。** 设置新增「外部连接」页签，把 **7 个凭据**（模型 / 语音转写 / 语义检索 / 联网搜索 / 网页抓取 / OCR 复用的搜索 Key 等）与 **4 个系统来源**（下载源、浏览器端口等）逐行列出：各自有没有配、存在哪、怎么改，密钥只显示掩码，就地改成空值即清除、改完立刻生效（系统来源随备份带走）。凭据目录由后端 `services/credentials/` 统一登记（registry 给 `label` 与来源说明，前端再包一层 i18n），不再靠各页各写一份读 Key 的代码。
 - **语音记一条：口述 → 简历条目（T09）。** 简历编辑器新增全局「语音记一条」：点一下录音、再点一下结束，走既有 `POST /api/transcribe` 转写、既有 `POST /api/profile/parse-text` 抽取，弹窗里**逐字段校对**后再插入为可编辑条目（与「添加一条」完全同形）。两个刻意的边界：**页眉字段（`basic_info`）与纯文本板块不插**（口述日期容易被模型误填成出生年月、一句简介会覆盖整段正文）；录音上限以 `/api/transcribe/status` 的 `max_seconds` 为唯一口径，选到不支持流式的服务商时界面**用一句话解释为什么只有 120 秒**，而不是静默砍掉滑块。
@@ -35,6 +38,9 @@
 - **「模型窗口参考」：各家模型的上下文窗口现在看得见。** 设置 → AI 模型 的模型配置区、以及助手输入框「上下文」弹层里各有一个入口，打开是一张只读表：14 条型号规则（OpenAI / Claude / Gemini / DeepSeek / Qwen / GLM / Kimi / MiniMax / Grok 等）、每条的真实窗口（千分位原值，不做 `1.0M` 缩写，便于逐位核对）与官方文档链接；当前生效的模型标「当前」，并显示窗口来源是**手动设置 / 参考值 / 保守值**。表里没有的型号不给假数字，只用一句「未知型号按 128,000 估算」说明。**纯只读**：没有「一键应用」，写入仍在模型配置里（同一个值会影响该模型的所有对话）。数据来自后端内置表 `services/model_context_windows.py`，接口 `GET /api/settings/model-windows`。
 
 ### Changed
+
+- **编辑器里的行内标记改成「所见即所得」（I-26）。** 此前加粗、字号、颜色在输入框里是裸语法（`**加粗**`、`{@size=1.1}`），要对着标记猜效果。做法是两层叠加：上层 `textarea` 字形透明但**照常占位**、只留可见光标，下层按解析结果画出真正的字形，标记语法全程不可见。两层共用同一套字体/行高/内边距/换行规则，光标、选区与换行才不会错位；加粗用 `-webkit-text-stroke` 描边而不是 `font-weight: 700`（后者会把字形变宽，两层越往行尾错得越多）。`{@size=…}` 是唯一会让下层横向漂移的例外，取舍写在组件注释里。
+- **网申填表页首屏重排（I-27）。** 没读取表单时右栏不再是一块白板：结果区此前整块返回 `null`，1440 宽的屏幕上三分之二只有一行折叠的「填写记录」。现在换成「三步开始填写」引导（编号 + 一句话 + 当前 / 待完成），引导里**不放第二个主按钮**——工具条上已经有一颗同名的，同屏两个相同入口只会让人犹豫点哪个。左栏的横向 `Steps` 换成「1 / 4 · 启动浏览器」+ 四段进度条：四个中文步骤名塞进 400px 必然断成「自动浏 / 览」。四行开关的 60–200 字说明收进 `HintDetail` 的 `ⓘ`（`Alt+H` 提示模式仍可一次看全），底部只留一行常驻边界「日期选择器 · 文件上传 · 密码/验证码/银行卡 · 无弹层只读选项：始终不代填」——#37 的边界仍默认可见，只是不再用两百字段落来表达。工具条的「浏览器设置」「导出诊断」收进 `⋯`，同屏只保留一个主按钮（未启动时是「开启专用浏览器」，启动后是「打开目标页」）。
 
 - **领域词表下沉 `app/vocabulary/`（D8 收口）。** `schemas` 此前从 `models` 取 13 条 import / 约 29 个状态常量与 `has_placeholder` 这类纯函数，导致契约层依赖实现层。现在这些词表按 11 个域搬到 `backend/app/vocabulary/`（只允许标准库 import），`models` 逐个显式 re-export 并保留 `__all__`，`schemas` 改从 vocabulary 取；`test_import_direction.py` 新增 `schemas-no-models`（空表存证）与 `vocabulary-stdlib-only` 两条守卫。
 - **桌面发行物语言一致性（批 2 B/C）。** 便携链桌面快捷方式按系统 UI 语言命名（中文系统「简历通.lnk」、其它系统「ResumeForge.lnk」，删除/首启判断同时识别两种历史名字）；Linux AppImage 产物名去掉冗余 `-linux-` 段，改为 `ResumeForge-<version>-x86_64.AppImage` / `-arm64.AppImage`，README、`release-assets.yml` 与打包边车 glob 同步。
@@ -95,6 +101,9 @@
 
 ### Fixed
 
+- **启动链 / 打包 / 更新器全线起不来：`Get-RuntimeLockPath` 未定义（P0）。** 该函数定义在 `PythonRuntimeManifest.ps1`，而调用它的三个脚本（`Build-PythonRuntime.ps1`、`Update-ResumeForge.ps1`、`ResumeForge.Process.ps1`；`Build-Desktop.ps1` 间接）只 dot-source 了 `Project-RuntimeLock.ps1`——Windows 上第一次运行就是 `The term 'Get-RuntimeLockPath' is not recognized`，启动器打印"启动失败"后退出，打包作业停在 `Build-PythonRuntime failed with 1`。它是"把裸锁文件名拼到 backend 目录"的纯路径助手，与锁文件名常量同属一份职责，现在搬进 `Project-RuntimeLock.ps1`（调用方本来就都加载这一份），`PythonRuntimeManifest.ps1` 仍经它转调，`Test-PythonRuntimeGuard.ps1` 的断言一条不改。
+- **版式重排：文档还没到就把草稿页数推进了。** `requestLayout` 经 `useResumeRelayout` 的 `latestRef` 转发，而 `latestRef` 在 effect 里更新；点击落在"文档刚提交、effect 还没跑"的那一帧时，闭包里的 `detail` 仍是 `null`，`render` 直接 return，hook 却按"渲染成功"回调 `onRendered`——用户看到页数读数变了、纸面还是旧版式。现在文档另存一份 `detailRef`，**在数据到达的同一个微任务里写入**（同步路径）+ effect 兜底（宿主 updater 路径），重排读 ref 而不是读闭包；`onRendered` 再挡一次"没有文档就不推进"。`ResumeDetailModal.test.tsx` 的连续改版式用例此前 1/5～1/10 偶发红（CI 上同样复现），修后连跑 15 次无一失败。
+- **CI 两条自伤的红（都不是代码问题）。** ① `repo-hygiene` 用 `grep 'i/crlf|w/crlf'` 判行尾，但 `.gitattributes` 对 `*.bat` / `*.cmd` 显式声明 `eol=crlf`，干净检出后它们**永远**是 `w/crlf`（`eol` 属性与平台无关，"Linux 检出时仍是 w/lf"这个前提是错的），于是每次检出都把 4 个 `.cmd` 判成违规、作业恒红；改成按 `attr` 列放行 `eol=crlf`，`i/crlf`（入库就是 CRLF）仍一律算违规，pre-commit 钩子同步同一套判定。② `dependency-audit` 的 `setup-node` 带了 `cache: pnpm`，但这个作业只跑 `pnpm audit`（读锁文件、不装依赖），store 目录根本不存在，收尾步骤以 `Path Validation Error … no cache is being saved` 把作业判红——审计本身是通过的。
 - **pyright 归零（T9）。** 修掉 T8 拆分引入的 18 处 mixin 类型可见性错误（`_InternalToolsMixin` / `_CanvasDrawersMixin` / `_RunnerLifecycle` 的宿主属性与执行体改用 `TYPE_CHECKING` 声明 / `cast`）；`actions/__init__.py` 的 `Permission` 补 `TYPE_CHECKING` 导入；`embeddings_local.py` 的 `onnxruntime` / `tokenizers` 两行加 `pyright: ignore[reportMissingImports]` 并注明由 rag-assets 运行时提供。
 - **回补上一批 `pragma: no cover` 中可覆盖的防御分支（T9）。** 深挖开场的「并发删除窗口」（会话行 / 主张行在模型返回前被删 → 404）与生成步骤不变式助手 `_require` 的失败路径补了确定性用例，两处不再用 `pragma: no cover`；其余 5 处 `pragma: no cover` 经复核确属不可达（取消/异常后不会再执行的伪 provider `yield`、异步生成器形态占位、轮询等待失败兜底），保留并保留原有理由注释。
 - **测试残留清理：** 删除 `frontend/src/features/jobs/JobMatchBatchPanel.test.tsx` 里 3 行 `console.log("DEBUG-3 …")` 调试输出（连同只为其服务的临时变量），断言未改。
