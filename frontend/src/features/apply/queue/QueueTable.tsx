@@ -28,6 +28,7 @@ import { t } from "../../../i18n";
 import { QUEUE_STATUS_LABEL_KEYS } from "../../../i18n/enum/apply";
 import { useLocale } from "../../../i18n/i18nContext";
 import { useContextMenu } from "../../context-menu/contextMenuContext";
+import HintDetail from "../../../components/common/HintDetail";
 import {
   useRowActionMenu,
   useRowActionRunner,
@@ -167,27 +168,27 @@ export function QueueTable({
     {
       // 「匹配」= 参考分 + 准入（2026-11-13 合并）。两个窄列（96 / 140）里各只有一行字，
       // 横向空掉一半，而岗位列与投递材料列被挤到换行；合成一列后分数在上、准入在下，
-      // 省出的 ~104px 还给内容列。列头仍是排序开关，tooltip 是后端要求原样展示的免责文案。
+      // 省出的 ~104px 还给内容列。
+      // I-17：免责文案原本藏在这一格的 tooltip 里——59 字、悬停才看得见，等于没有免责。
+      // 现在移到表格下方的脚注（常驻一句 + `ⓘ` 展开全文）。列头只剩排序开关本身。
       title: (
-        <Tooltip title={t("applyQueue.score.disclaimer")}>
-          <Button
-            type="text"
-            size="small"
-            className="apply-queue-sort"
-            // 可见文字是「参考分」(+「 ↓」)，无障碍名必须以它开头：之前只写"按…排序"，
-            // 排序列切到"加入时间"后名字与可见文字对不上（axe label-content-name-mismatch）。
-            aria-label={`${t("applyQueue.column.match")}${sortKey === "score" ? " ↓" : ""} · ${t(
-              sortKey === "joined"
-                ? "applyQueue.score.sortByScore"
-                : "applyQueue.score.sortByJoinedAt",
-            )}`}
-            onClick={() => setSortKey((current) => nextSortKey(current))}
-          >
-            {t("applyQueue.column.match")}
-            {/* 排序生效时给一个方向标记：仅靠悬浮提示说明不了"现在是按哪一列排的"。 */}
-            {sortKey === "score" ? " ↓" : ""}
-          </Button>
-        </Tooltip>
+        <Button
+          type="text"
+          size="small"
+          className="apply-queue-sort"
+          // 可见文字是「参考分」(+「 ↓」)，无障碍名必须以它开头：之前只写"按…排序"，
+          // 排序列切到"加入时间"后名字与可见文字对不上（axe label-content-name-mismatch）。
+          aria-label={`${t("applyQueue.column.match")}${sortKey === "score" ? " ↓" : ""} · ${t(
+            sortKey === "joined"
+              ? "applyQueue.score.sortByScore"
+              : "applyQueue.score.sortByJoinedAt",
+          )}`}
+          onClick={() => setSortKey((current) => nextSortKey(current))}
+        >
+          {t("applyQueue.column.match")}
+          {/* 排序生效时给一个方向标记：仅靠悬浮提示说明不了"现在是按哪一列排的"。 */}
+          {sortKey === "score" ? " ↓" : ""}
+        </Button>
       ),
       key: "match",
       width: 132,
@@ -328,6 +329,16 @@ export function QueueTable({
           },
         })}
       />
+      {/* I-17：参考分免责声明是**必须让人看见**的一句，不是悬停彩蛋。脚注常驻一句，
+          完整的 59 字措辞（含"投递准入仍以五类匹配结论为准"）在 `ⓘ` 后面；提示模式下
+          直接内联展开。 */}
+      <p className="apply-queue-score-note">
+        <HintDetail
+          summary={t("applyQueue.score.disclaimerSummary")}
+          detail={t("applyQueue.score.disclaimer")}
+          label={t("applyQueue.score.disclaimerAria")}
+        />
+      </p>
     </>
   );
 }

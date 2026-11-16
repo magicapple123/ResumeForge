@@ -6,13 +6,23 @@
  * 那个全局编辑态。开关即改即存，不设单独的保存按钮。
  */
 
-import { App, Card, Space, Switch, Typography } from "antd";
+import { App, Card, Flex, Space, Switch, Typography } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getReminderPopupSetting, saveReminderPopupSetting } from "../../api/settings";
 import { isSoundEnabled, playDoneSound, setSoundEnabled } from "../../utils/notifySound";
+import SettingsResetButton from "./SettingsResetButton";
+import { useSettingsResetListener } from "./useSettingsResetListener";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+
+/**
+ * I-10：这张卡能恢复默认的键。
+ *
+ * `ui` 作用域还包含导航可见性与悬浮球（各自在别的卡上），所以按 keys 精确复位本卡这一个
+ * 键。完成提示音存在浏览器本地（不是设置项），重置不碰它——那属于"这台机器响不响"。
+ */
+const REMINDER_RESET_KEYS = ["reminder_popup_on_start"];
 
 export default function ReminderPopupCard() {
   useLocale();
@@ -24,27 +34,30 @@ export default function ReminderPopupCard() {
   // Compiler 规范：本地偏好的初始读取用 useState 惰性初始化，替代挂载 effect。
   const [sound, setSound] = useState(() => isSoundEnabled());
 
+  // 纯取数（不含 loading 收尾）：挂载与「恢复默认」后共用，避免两处口径漂移。
+  const load = useCallback(async () => {
+    try {
+      const saved = await getReminderPopupSetting();
+      setEnabled(saved.enabled);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : t("settingsUi.reminderPopup.loadFailed"));
+    }
+  }, [message]);
+
   // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try {
-        const saved = await getReminderPopupSetting();
-        if (!cancelled) setEnabled(saved.enabled);
-      } catch (err) {
-        if (!cancelled) {
-          message.error(
-            err instanceof Error ? err.message : t("settingsUi.reminderPopup.loadFailed"),
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      await load();
+      if (!cancelled) setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [message]);
+  }, [load]);
+
+  // I-10：恢复默认后重取开关（默认开）。
+  useSettingsResetListener(() => void load());
 
   const toggle = async (checked: boolean) => {
     if (saving) return;
@@ -75,7 +88,16 @@ export default function ReminderPopupCard() {
   };
 
   return (
-    <Card title={t("settingsUi.reminderPopup.title")} className="settings-card">
+    <Card
+      title={
+        <Flex align="center" gap={8}>
+          <span>{t("settingsUi.reminderPopup.title")}</span>
+          {/* I-10：卡片级恢复默认（启动弹窗回到「开」）。 */}
+          <SettingsResetButton keys={REMINDER_RESET_KEYS} />
+        </Flex>
+      }
+      className="settings-card"
+    >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         {t("settingsUi.reminderPopup.intro")}
       </Typography.Paragraph>

@@ -5,11 +5,12 @@
  * budget; pure move, no behaviour change.
  */
 import { DownOutlined } from "@ant-design/icons";
-import { Tooltip, Typography } from "antd";
+import { Typography } from "antd";
 import { useCallback, useId, useMemo, useState } from "react";
 import type { RefObject } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
+import HintDetail from "../../../components/common/HintDetail";
 import type { ResumeDetail, ResumeLayout, ResumeTemplateCatalog } from "../../../types";
 import type { ResumeDocument } from "../../../types/resumeDocument";
 import type { PreviewMode } from "../preview/config";
@@ -205,15 +206,21 @@ export default function WorkbenchParamsTab({
                 任务 4：与上下三行同一套「标签列 + 控件列」网格，控件左缘落在同一条竖线上。 */}
         <div className="resume-wb-field-row">
           <span className="resume-wb-field-label">{t("resume.language.label")}</span>
-          <Tooltip title={t("resume.language.hint")}>
-            <span style={{ justifySelf: "start" }}>
-              <ResumeLanguageSelect
-                value={layout.language ?? "zh-CN"}
-                disabled={relayouting || undefined}
-                onChange={(language) => onChange({ ...layout, language })}
-              />
-            </span>
-          </Tooltip>
+          {/* I-17：40 字的"只改小节标题、不翻译正文"原本是包住整个下拉的 tooltip——
+              悬停才看得见，且会盖住主操作。现在它是下拉右侧的 `ⓘ`。 */}
+          <span
+            style={{ justifySelf: "start", display: "inline-flex", alignItems: "center", gap: 6 }}
+          >
+            <ResumeLanguageSelect
+              value={layout.language ?? "zh-CN"}
+              disabled={relayouting || undefined}
+              onChange={(language) => onChange({ ...layout, language })}
+            />
+            <HintDetail
+              detail={t("resume.language.hint")}
+              label={t("resume.language.hintAria")}
+            />
+          </span>
         </div>
         <ContactBreaksControl
           formatConfig={layout.format_config}

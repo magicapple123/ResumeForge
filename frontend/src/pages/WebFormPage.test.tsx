@@ -193,13 +193,24 @@ describe("WebFormPage", () => {
     expect(screen.queryByRole("button", { name: /投递/ })).not.toBeInTheDocument();
   });
 
-  it("默认态（浏览器未运行）就能看到放宽模式的四类边界说明", async () => {
+  it("默认态就能看到四类代填边界，完整风险说明在旁边的 ⓘ", async () => {
     apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "stopped" }));
     renderPage();
     await waitFor(() => expect(apiMocks.getWebFormBrowserStatus).toHaveBeenCalled());
 
-    // #37：这张卡不参与渐进展开，风险说明必须在最常见的默认入口可见。
-    expect(screen.getByText(webFormPageZh["webFormPage.relaxed.risk"])).toBeInTheDocument();
+    // #37：边界必须在最常见的默认入口看得见。I-27 把它压成一行常驻条，
+    // 四类仍逐条点名（按文案自身的 `·` 分段计数，不在测试里复述中文）。
+    const boundary = webFormPageZh["webFormPage.fillMode.boundary"];
+    expect(screen.getByText(boundary)).toBeInTheDocument();
+    expect(boundary.split("·").length).toBe(4);
+    // 200 字的风险正文不再常驻，点 ⓘ 才展开。
+    expect(screen.queryByText(webFormPageZh["webFormPage.relaxed.risk"])).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: webFormPageZh["webFormPage.relaxed.hintAria"] }),
+    );
+    expect(
+      await screen.findByText(webFormPageZh["webFormPage.relaxed.risk"]),
+    ).toBeInTheDocument();
   });
 
   it("says out loud that it will not submit for the user", async () => {
@@ -231,6 +242,20 @@ describe("WebFormPage", () => {
       expect(screen.getByRole("button", { name: "开启专用浏览器" })).toBeInTheDocument(),
     );
     expect(apiMocks.getWebFormBrowserStatus.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("没读表单时右栏是三步引导，读完后让位给结果区", async () => {
+    renderPage();
+    // 首屏：右栏不再是一块白板（I-27）。此前 `ResultPanel` 无数据时整块返回 null，
+    // 1440 宽的屏幕上右栏只剩一行折叠的「填写记录」。
+    expect(await screen.findByTestId("webform-onboarding")).toBeInTheDocument();
+    expect(screen.queryByText(webFormPageZh["webFormPage.result.tab.preview"])).toBeNull();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /读取当前表单/ })).toBeEnabled());
+    screen.getByRole("button", { name: /读取当前表单/ }).click();
+
+    await waitFor(() => expect(screen.getByLabelText("选择填入姓名")).toBeChecked());
+    expect(screen.queryByTestId("webform-onboarding")).toBeNull();
   });
 
   it("leaves a conflicting row unchecked by default", async () => {
@@ -284,7 +309,11 @@ describe("WebFormPage", () => {
 
     // 两种模式并存：批量填说的是"整页读一遍再填"，这个是"逐项核对后填写"。
     expect(screen.getByText("智能逐项填表")).toBeInTheDocument();
-    expect(screen.getByText(/点到哪个框，就在框旁边给出资料里对应的值/)).toBeInTheDocument();
+    // 用法说明 120 字，收在行尾的 ⓘ 里（I-27）：点开才展开，不再常驻两行。
+    fireEvent.click(screen.getByRole("button", { name: "智能逐项填表说明" }));
+    expect(
+      await screen.findByText(/点到哪个框，就在框旁边给出资料里对应的值/),
+    ).toBeInTheDocument();
   });
 
   it("turns 智能逐项填表 on automatically after the browser is ready", async () => {

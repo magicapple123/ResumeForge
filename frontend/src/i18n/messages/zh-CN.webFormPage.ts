@@ -13,6 +13,40 @@ const webFormPage = {
     "填充完成后请回到浏览器窗口逐项核对，确认无误后由你自己点击页面上的提交按钮。",
   "webFormPage.hint.expandLater":
     "浏览器就绪后，安全说明、AI 辅助等控制项会在这里逐步展开（放宽模式的边界说明一直可见）。",
+  "webFormPage.flow.reason.browserOff":
+    "浏览器还没启动：先点上面的「开启专用浏览器」，再回到这里读取当前表单。",
+  "webFormPage.fillMode.title": "怎么填",
+  "webFormPage.fillMode.hint":
+    "这四行决定资料怎么进页面，改完立刻生效。",
+  /* I-27 首屏空态（三步引导）：右栏此前在没有预览时整块不渲染，只剩一行折叠记录，
+     2/3 的屏幕是白的。这三步只是「怎么开始」，真实动作仍在工具条与左栏。 */
+  "webFormPage.onboarding.badge": "还没开始",
+  "webFormPage.onboarding.title": "三步开始填写",
+  "webFormPage.onboarding.lead": "先起浏览器，再打开目标页，最后回来读取。",
+  "webFormPage.onboarding.step1": "打开专用浏览器",
+  "webFormPage.onboarding.step1Hint": "独立窗口，不碰你已开着的页面",
+  "webFormPage.onboarding.step2": "在浏览器里打开目标网页",
+  "webFormPage.onboarding.step2Hint": "登录、验证码由你自己过",
+  "webFormPage.onboarding.step3": "回来读取表单",
+  "webFormPage.onboarding.step3Hint": "核对映射，确认后才一键填充",
+  "webFormPage.onboarding.next.start": "下一步：上方「开启专用浏览器」",
+  "webFormPage.onboarding.next.read": "下一步：左侧「读取当前表单」",
+  "webFormPage.onboarding.next.fill": "已读取表单，核对后再填充",
+  "webFormPage.onboarding.state.now": "当前",
+  "webFormPage.onboarding.state.done": "已完成",
+  "webFormPage.onboarding.state.todo": "待完成",
+  /* 进度条：4 个中文步骤名横排放不进 400px 左栏（会断成「自动浏/览」），
+     改成「当前第几步 + 名称」一行文字 + 4 段进度条。 */
+  "webFormPage.flow.progressTitle": "填表进度",
+  "webFormPage.flow.progressValue": "{current} / {total} · {title}",
+  /* 四类不代填的边界必须常驻可见（#37）；完整风险说明收进同面板的 ⓘ。 */
+  "webFormPage.fillMode.boundary":
+    "日期选择器 · 文件上传 · 密码/验证码/银行卡 · 无弹层只读选项：始终不代填",
+  "webFormPage.result.title": "结果与记录",
+  "webFormPage.result.tab.preview": "预览与填充",
+  "webFormPage.result.tab.pending": "待补资料 {count}",
+  "webFormPage.result.tab.result": "填充结果",
+  "webFormPage.records.hint": "记录里含真实填写的值（证件号、手机号等），看完可以逐条删掉。",
   "webFormPage.stagedAi.ready":
     "上一次后台的 AI 字段识别已完成，结果先存着；点「应用」切到那份预览，页面仍不会被自动修改。",
   "webFormPage.stagedAi.apply": "应用",
@@ -23,6 +57,7 @@ const webFormPage = {
   "webFormPage.scope.all": "全部资料",
   "webFormPage.scope.hint":
     "默认只用当前方案里的资料。切到「全部资料」后，预览、资料清单与自动填表会一起换成同一份数据。",
+  "webFormPage.scope.hintAria": "取数范围说明",
   "webFormPage.toast.targetOpened": "目标网申页面已打开；已有网页不会被覆盖",
   "webFormPage.toast.browserStarted":
     "浏览器已启动。请在这个窗口里打开目标公司的网申页面，再回来点「读取当前表单」",
@@ -100,6 +135,7 @@ const webFormPage = {
   "webFormPage.aiAssist.body.tail": "；命中的行会标上「AI 建议」并且默认不勾选。",
   "webFormPage.aiAssist.unavailable":
     "尚未配置大模型，暂时无法使用。到「设置」页填好 Base URL 与模型名之后，规则认不出的框就能交给 AI 识别。",
+  "webFormPage.aiAssist.hintAria": "未识别字段辅助说明",
   "webFormPage.aiAssist.pendingRestart": "改动会在下次「开启」时生效",
   "webFormPage.browserCard.isolatedHint":
     "使用独立的网申专用浏览器（不会覆盖投递台或已有网申页面）",
@@ -107,6 +143,7 @@ const webFormPage = {
     "停掉这个受控浏览器窗口。里面的登录态会保留，下次启动不用重新登录",
   "webFormPage.browserCard.stop": "关闭浏览器",
   "webFormPage.browserCard.startAria": "开启专用浏览器",
+  "webFormPage.browserCard.moreAria": "更多浏览器操作",
   "webFormPage.browserCard.start": "开启专用浏览器",
   "webFormPage.browserCard.settings": "浏览器设置",
   "webFormPage.browserCard.refreshTooltip": "立即刷新状态",
@@ -145,6 +182,7 @@ const webFormPage = {
   "webFormPage.relaxed.risk":
     "开启后程序会尝试代点下拉/弹层选项并代勾你逐条确认过的声明项，存在选错可能，填完请核对。 " +
     "四类始终不代填：日期选择器、文件上传、密码/验证码/银行卡、无弹层的只读点选框——这些都需要你自己操作。",
+  "webFormPage.relaxed.hintAria": "放宽模式的风险说明",
   "webFormPage.liveStatus.thinking": "正在看这个框",
   "webFormPage.liveStatus.aiThinking": "AI 正在识别",
   "webFormPage.liveStatus.matched": "已给出建议",

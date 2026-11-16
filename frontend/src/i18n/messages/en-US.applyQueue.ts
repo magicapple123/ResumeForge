@@ -2,6 +2,7 @@
 /** 投递队列页（与 zh-CN.applyQueue.ts 一一对应）。 */
 const applyQueue = {
   "applyQueue.action.viewDetail": "View details",
+  "applyQueue.action.researchCompany": "Research this company",
   "applyQueue.action.edit": "Edit",
   "applyQueue.action.remove": "Remove from queue",
   "applyQueue.action.removeShort": "Remove",
@@ -76,8 +77,13 @@ const applyQueue = {
   "applyQueue.column.actions": "Actions",
   "applyQueue.column.score": "Score",
   "applyQueue.column.match": "Match",
+  // I-17: the disclaimer used to be hidden inside a header tooltip; it now lives in a
+  // table footnote — one always-visible sentence plus the full wording behind `ⓘ`.
   "applyQueue.score.disclaimer":
     "This reference score is estimated by local rules and meant only for display and self-assessment; it is not a real ATS parsing result or a probability of success. Eligibility still follows the five match verdicts.",
+  "applyQueue.score.disclaimerSummary":
+    "Reference scores come from local rules — not a real ATS result or success rate.",
+  "applyQueue.score.disclaimerAria": "About reference scores",
   "applyQueue.score.unanalyzed": "Not analyzed",
   "applyQueue.score.sortByScore": "Sort by reference score",
   "applyQueue.score.sortByJoinedAt": "Sort by the time added",

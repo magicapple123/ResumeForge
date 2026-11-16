@@ -132,6 +132,9 @@ const typography = {
   "typography.entryStyle.scope.aria": "选择条目排版的作用范围",
   /** 四个范围名：与文字级别的同名范围刻意用不同措辞（这里是"条目排版"的入口）。 */
   "typography.entryStyle.scope.object": "整条",
+  "typography.fieldStyle.target.value": "字段值",
+  "typography.fieldStyle.target.label": "字段名",
+  "typography.fieldStyle.target.aria": "选择要调整的部分",
   "typography.entryStyle.scope.entry_title": "条目头",
   "typography.entryStyle.scope.body": "正文",
   "typography.entryStyle.scope.meta": "灰字",

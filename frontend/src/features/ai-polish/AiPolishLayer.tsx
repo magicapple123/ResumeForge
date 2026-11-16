@@ -88,6 +88,9 @@ export default function AiPolishLayer() {
       if (node instanceof Node && cardRef.current?.contains(node)) return;
       // antd 弹层里右键：放行（那里没有"润色这段"的上下文）。
       if (node instanceof Element && node.closest(ANTD_POPUP_SELECTOR)) return;
+      // I-25：行内格式字段有自己的右键菜单（InlineMarkContextMenu）。同一块输入框上
+      // 两份菜单一起弹，正是「两张菜单打架」的同类问题。选区在行内字段里时交给它。
+      if (node instanceof Element && node.closest(".rf-inline-mark-host")) return;
 
       const selection = window.getSelection();
       const target = getSelectionTarget();

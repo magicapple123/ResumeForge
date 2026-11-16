@@ -49,6 +49,16 @@ const llmRecord = {
   "llmRecord.hint.contextWindow":
     "How many tokens this model can hold at once (DeepSeek 64K, GPT 128K, Claude 200K). 0 = unknown: the assistant skips cumulative limits and the context panel hides the percentage. Stored locally, never sent to the provider.",
   "llmRecord.aria.contextWindow": "About context window",
+  "llmRecord.aria.unlimited": "About the no-limit option",
+  // I-17 second batch: accessible names for the three ⓘ that replace the long
+  // `Form.Item tooltip`s on Base URL / timeout / creativity.
+  "llmRecord.aria.baseUrl": "About the service address",
+  "llmRecord.aria.timeout": "About the timeout",
+  "llmRecord.aria.temperature": "About creativity (temperature)",
+  // I-17 third batch: the protocol explanation (188 characters, the longest in the repo)
+  // and the API-key explanation (one name covers both the create and edit wording).
+  "llmRecord.aria.protocol": "About the API protocol",
+  "llmRecord.aria.apiKey": "About the API key",
   "llmRecord.hint.unlimited":
     "When ticked, max_tokens is no longer sent and the provider decides the cap. This eases the case where a reasoning model counts its thinking against the output budget and squeezes the reply empty — but it is not truly unlimited: some providers default to a value smaller than what you set by hand.",
   "llmRecord.label.unlimited": "No limit",

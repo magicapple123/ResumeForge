@@ -46,6 +46,25 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
   useLocale();
   const { message } = App.useApp();
   const [detail, setDetail] = useState<ResumeDetail | null>(null);
+  /**
+   * 同一份文档的 ref 副本，**与 `setDetail` 同刻写入**。
+   *
+   * 版式重排的 `render` 是经 `useResumeRelayout` 的 `latestRef` 转发的，而 `latestRef`
+   * 在 effect 里才更新。点击恰好落在"文档刚到、effect 还没跑"的那一帧时（React 把被动
+   * effect 推迟到提交之后，测试里 `fireEvent` 又是同步的），闭包里的 `detail` 仍是上一帧的
+   * `null`：重排直接 return，hook 却把它当成"渲染成功"，草稿页数前进了、纸面还是旧版式。
+   * 读 ref 而不是读闭包，这条路就没有时序窗口——ref 在数据到达的同一个微任务里写好。
+   */
+  const detailRef = useRef<ResumeDetail | null>(null);
+  const commitDetail = useCallback((next: ResumeDetail | null) => {
+    detailRef.current = next;
+    setDetail(next);
+  }, []);
+  // 兜底：宿主（`resumeDocumentHost`）会用 updater 形式改写 detail，那里拿不到算好的值，
+  // 提交后补一次。同步路径（加载 / 服务端同步 / AI 修订）在上面直接写，不等这一拍。
+  useEffect(() => {
+    detailRef.current = detail;
+  }, [detail]);
   const [html, setHtml] = useState("");
   const [error, setError] = useState("");
   const [htmlError, setHtmlError] = useState("");
@@ -72,10 +91,10 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
   /** 服务端已有新版本（表达资产插入等）：刷新 detail 并重渲染预览（不写库）。 */
   const handleDocumentSynced = useCallback(
     (synced: ResumeDetail) => {
-      setDetail({ ...synced, draft: false });
+      commitDetail({ ...synced, draft: false });
       void renderResume(synced.content, layout).then((rendered) => setHtml(rendered));
     },
-    [layout],
+    [commitDetail, layout],
   );
 
   /**
@@ -108,14 +127,28 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
    */
   const { relayouting, request: requestLayout } = useResumeRelayout({
     render: async (next) => {
-      if (!detail) return;
+      // 读 ref 而不是闭包里的 `detail`：见 `detailRef` 的说明。
+      const current = detailRef.current;
+      // 还没有文档：这一版**没有渲染**（不是"渲染成功"）。见下面 `onRendered` 的同一条守卫。
+      if (!current) return;
       // 重排用的是**补过条目 id** 的那份正文（见文件头 W01 说明）：`format_config` 里的
       // `field_layout.entries.<id>` / `objects.<id>` 全靠条目 id 定位，后端读旧记录时不物化
       // id，直接送 `detail.content` 会让条目级排版在这一份 html 里退回分区默认——制作台右栏
       // 在版式提交后回落的正是这一份。已有合法 id 的条目原样保留，保存过的记录零变化。
-      setHtml(await renderResume(detail.content, next));
+      setHtml(await renderResume(current.content, next));
     },
-    onRendered: (next) => setLayout(next),
+    onRendered: (next) => {
+      // 上面那次 `render` 在没有文档时直接返回，hook 无法区分"真的渲染了"和"什么都没做"，
+      // 于是照样回调 `onRendered`。不挡这一下，草稿就会在没有任何重排的情况下前进：
+      // 用户看到的是页数读数变了、纸面还是旧版式。
+      //
+      // 这不是纯理论窗口：`requestLayout` 经 hook 的 `latestRef` 转发，而 ref 在 effect
+      // 里更新。点击恰好落在"文档刚提交、effect 还没跑"的那一帧时，闭包里的 `detail`
+      // 仍是上一帧的 null（2026-11-16 CI 上 1/10 复现）。两处守卫读的是同一个闭包变量，
+      // 所以判断必然一致。
+      if (!detailRef.current) return;
+      setLayout(next);
+    },
     onError: (err) => {
       message.error(err instanceof Error ? err.message : t("resume.detail.relayoutFailed"));
       previewRef.current?.setLiveProbe("");
@@ -191,7 +224,7 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     void getResume(recordId)
       .then((data) => {
         if (currentRequest !== requestVersion.current) return;
-        setDetail(data);
+        commitDetail(data);
         // 版式跟着记录走：上次用的是哪套，这次打开还是哪套（字段兜底只在 layoutFromDetail 一处）。
         const nextLayout = layoutFromDetail(data);
         setLayout(nextLayout);
@@ -205,7 +238,7 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     return () => {
       if (currentRequest === requestVersion.current) requestVersion.current += 1;
     };
-  }, [recordId, loadPreviewHtml]);
+  }, [commitDetail, recordId, loadPreviewHtml]);
 
   // 只有第一次打开时才去问后端的模板目录（能不能直接生成 PDF）。
   useEffect(() => {
@@ -281,7 +314,7 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     const requestAtStart = requestVersion.current;
     const rendered = await renderResume(updated.content, layout);
     if (requestAtStart !== requestVersion.current) return;
-    setDetail(updated);
+    commitDetail(updated);
     setHtml(rendered);
     setSuggestionsGenerated(false);
     setSuggestionsResetKey((value) => value + 1);

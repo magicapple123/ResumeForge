@@ -1,0 +1,243 @@
+// SPDX-License-Identifier: Apache-2.0
+/**
+ * 行内标记遮罩层（I-26）：**渲染层与文本域的接线**。
+ *
+ * 这一层测的不是"解析对不对"（那是 `inlineMarkRuns.test.ts` 与后端 fixture 的事），
+ * 而是四条只有渲染层才会错的性质：
+ *
+ * 1. 遮罩层 `aria-hidden`，且**覆盖整串**（标记也要占位，否则两层错位）；
+ * 2. 两层**共用** `.rf-inline-mark-layer` 这个字体度量类——它一旦只落在一层上，
+ *    光标就会落在两个字的缝隙里，而任何文本断言都看不出来；
+ * 3. 文本域的 value **一个字都不改**（受控值仍是含标记的源串）：行内格式的写回链路按
+ *    源串偏移工作，这里若换成可见文本，那条链路会在错误坐标系里加标记；
+ * 4. 输入法组合期给容器加 `is-composing`（预编辑串只画在文本域上，必须显形）。
+ */
+import { App as AntdApp } from "antd";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
+import { afterEach, describe, expect, it } from "vitest";
+import { fieldItem, makeDocument, textItem } from "../document/documentFixtures";
+import InlineMarkOverlay from "./InlineMarkOverlay";
+import InlineMarkTextArea from "./InlineMarkTextArea";
+import ItemEditor from "./ItemEditor";
+import ResizableValueTextArea from "./ResizableValueTextArea";
+import { FieldValueEditor } from "./itemValueEditors";
+
+afterEach(() => {
+  cleanup();
+  document.body.innerHTML = "";
+});
+
+function renderOverlay(value: string): HTMLElement {
+  const { container } = render(<InlineMarkOverlay value={value} />);
+  const overlay = container.querySelector(".rf-inline-mark-overlay");
+  if (!overlay) throw new Error("overlay not rendered");
+  return overlay as HTMLElement;
+}
+
+describe("InlineMarkOverlay", () => {
+  it("遮罩层对读屏隐藏，文本域仍是唯一可访问控件", () => {
+    const overlay = renderOverlay("a**b**c");
+    expect(overlay.getAttribute("aria-hidden")).toBe("true");
+    expect(overlay.getAttribute("role")).toBeNull();
+    // 遮罩层不接管指针事件（选区、点击、拖高手柄都留给文本域）。
+    expect(overlay.className).toContain("rf-inline-mark-overlay");
+  });
+
+  it("镜像覆盖整串：标记段也在，只是不可见", () => {
+    const overlay = renderOverlay("a**b**c");
+    // 末尾那个换行是给"结尾空行"占位的，两层滚动高度对齐靠它。
+    expect(overlay.textContent).toBe("a**b**c\n");
+    const hidden = Array.from(overlay.querySelectorAll(".rf-inline-mark-hidden")).map(
+      (node) => node.textContent,
+    );
+    expect(hidden).toEqual(["**", "**"]);
+    // 标记段没有任何样式类，避免被误当成可见文字。
+    for (const node of overlay.querySelectorAll(".rf-inline-mark-hidden")) {
+      expect(node.className).not.toContain("rf-inline-mark-bold");
+    }
+  });
+
+  it("样式区间按实际样式渲染：字号走百分比、颜色原样", () => {
+    // 区间是 `{@…}y{@}`：`y` 在区间内（带样式），`x` 在区间外。
+    const overlay = renderOverlay("x{@size=1.5,color=#2f6fd0}y{@}");
+    const styled = Array.from(overlay.querySelectorAll(".rf-inline-mark-segment")).find(
+      (node) => node.textContent === "y",
+    ) as HTMLElement | undefined;
+    expect(styled).toBeTruthy();
+    expect(styled?.style.fontSize).toBe("150%");
+    expect(styled?.style.color).toBe("rgb(47, 111, 208)");
+    const plain = Array.from(overlay.querySelectorAll(".rf-inline-mark-segment")).find(
+      (node) => node.textContent === "x",
+    ) as HTMLElement | undefined;
+    expect(plain?.style.fontSize).toBe("");
+    expect(plain?.style.color).toBe("");
+  });
+
+  it("加粗走类（描边模拟，不改字宽）；链接有下划线类", () => {
+    const overlay = renderOverlay("**bold** [label](https://example.com)");
+    expect(overlay.querySelector(".rf-inline-mark-bold")?.textContent).toBe("bold");
+    expect(overlay.querySelector(".rf-inline-mark-link")?.textContent).toBe("label");
+  });
+
+  it("滚动同步用 transform，遮罩层自身不滚", () => {
+    const { container } = render(
+      <InlineMarkOverlay value={"**a**"} scrollTop={12} scrollLeft={3} />,
+    );
+    const mirror = container.querySelector(".rf-inline-mark-mirror") as HTMLElement;
+    expect(mirror.style.transform).toBe("translate(-3px, -12px)");
+  });
+
+  it("与文本域共用字体度量类（错位的唯一防线）", () => {
+    const { container } = render(<InlineMarkOverlay value={"**a**"} />);
+    const mirror = container.querySelector(".rf-inline-mark-mirror");
+    expect(mirror?.className).toContain("rf-inline-mark-layer");
+  });
+});
+
+function Harness({ initial, onChange }: { initial: string; onChange?: (value: string) => void }) {
+  const [value, setValue] = useState(initial);
+  return (
+    <AntdApp>
+      <ResizableValueTextArea
+        ariaLabel="summary"
+        value={value}
+        onChange={(next) => {
+          onChange?.(next);
+          setValue(next);
+        }}
+      />
+    </AntdApp>
+  );
+}
+
+describe("ResizableValueTextArea · 行内标记接入", () => {
+  it("值里有标记时渲染遮罩层，但文本域的值仍是原始源串", () => {
+    const raw = "x{@size=1.2}y{@}**z**";
+    render(<Harness initial={raw} />);
+    const textarea = screen.getByRole("textbox", { name: "summary" }) as HTMLTextAreaElement;
+    expect(textarea.value).toBe(raw);
+    expect(textarea.className).toContain("rf-inline-mark-layer");
+    const overlay = document.querySelector(".rf-inline-mark-overlay");
+    expect(overlay).toBeTruthy();
+    expect(overlay?.getAttribute("aria-hidden")).toBe("true");
+    // 容器是真实布局容器（不是 `display: contents`），否则遮罩层没有定位上下文。
+    expect(
+      (document.querySelector(".rf-inline-mark-field") as HTMLElement).className,
+    ).not.toContain("is-plain");
+  });
+
+  it("没有标记时不渲染第二层，且容器不参与布局（DOM 稳、排版零变化）", () => {
+    render(<Harness initial="plain value" />);
+    expect(document.querySelector(".rf-inline-mark-overlay")).toBeNull();
+    const field = document.querySelector(".rf-inline-mark-field") as HTMLElement;
+    expect(field.className).toContain("is-plain");
+    const textarea = screen.getByRole("textbox", { name: "summary" }) as HTMLTextAreaElement;
+    expect(textarea.className).toContain("rf-inline-mark-layer");
+  });
+
+  it("onChange 契约不变：回传的是含标记的原始字符串", () => {
+    const seen: string[] = [];
+    render(<Harness initial="ab" onChange={(next) => seen.push(next)} />);
+    const textarea = screen.getByRole("textbox", { name: "summary" }) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "a**b**" } });
+    expect(seen).toEqual(["a**b**"]);
+    expect(textarea.value).toBe("a**b**");
+  });
+
+  it("输入法组合期把容器标成 is-composing（预编辑串要显形）", () => {
+    render(<Harness initial="**a**" />);
+    const textarea = screen.getByRole("textbox", { name: "summary" }) as HTMLTextAreaElement;
+    const field = document.querySelector(".rf-inline-mark-field") as HTMLElement;
+    fireEvent.compositionStart(textarea);
+    expect(field.className).toContain("is-composing");
+    fireEvent.compositionEnd(textarea);
+    expect(field.className).not.toContain("is-composing");
+  });
+
+  it("单行语义不回退：Enter 仍被拦掉", () => {
+    render(<Harness initial={"**a**"} />);
+    const textarea = screen.getByRole("textbox", { name: "summary" }) as HTMLTextAreaElement;
+    const notPrevented = fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(notPrevented).toBe(false);
+  });
+});
+
+/**
+ * 验收①（"输入框内看不到任何 `{@` 或 `**`"）依赖**三处入口都接上遮罩层**：
+ * 单行字段值、字段正文（`placement === "body"`）、条目正文。少接任何一处，
+ * 那条简历里就有一段字会露出标记语法，而测试只看单行那一处是发现不了的。
+ */
+describe("三处入口都渲染遮罩层", () => {
+  const RAW = "x{@size=1.2}y{@}**z** [l](https://example.com)";
+
+  /** 三处共用的断言：遮罩层在、对读屏隐藏、文本域的值仍是源串。 */
+  function expectDecorated(): HTMLTextAreaElement {
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(textarea.value).toBe(RAW);
+    expect(textarea.className).toContain("rf-inline-mark-layer");
+    const overlay = document.querySelector(".rf-inline-mark-overlay");
+    expect(overlay).toBeTruthy();
+    expect(overlay?.getAttribute("aria-hidden")).toBe("true");
+    // 遮罩层覆盖整串（含标记占位），所以下层的字形位置与文本域逐个对应。
+    expect(overlay?.textContent).toBe(`${RAW}\n`);
+    return textarea;
+  }
+
+  it("单行字段值（ResizableValueTextArea）", () => {
+    render(
+      <AntdApp>
+        <ResizableValueTextArea ariaLabel="value" value={RAW} onChange={() => undefined} />
+      </AntdApp>,
+    );
+    const textarea = expectDecorated();
+    // 单行语义保留：可拖高 + 拦 Enter。
+    expect(textarea.style.resize).toBe("vertical");
+  });
+
+  it("壳本身：autoSize 模式不设 resize（自动长高与可拖手柄互斥）", () => {
+    render(
+      <AntdApp>
+        <InlineMarkTextArea
+          ariaLabel="value"
+          value={RAW}
+          autoSize={{ minRows: 2, maxRows: 8 }}
+          onChange={() => undefined}
+        />
+      </AntdApp>,
+    );
+    const textarea = expectDecorated();
+    // rc-textarea 开了 autoSize 就把 resize 强制成 none（所以"自动长高"与"可拖手柄"互斥）。
+    expect(textarea.style.resize).toBe("none");
+    // 多行正文照常允许换行：Enter 不被拦。
+    expect(fireEvent.keyDown(textarea, { key: "Enter" })).toBe(true);
+  });
+
+  it("字段正文（FieldValueEditor，placement=body 的 autoSize 分支）", () => {
+    render(
+      <AntdApp>
+        <FieldValueEditor
+          item={fieldItem({ placement: "body", value: RAW })}
+          sectionKey="education"
+          onChange={() => undefined}
+        />
+      </AntdApp>,
+    );
+    expectDecorated();
+  });
+
+  it("条目正文（ItemEditor，kind=text 的 autoSize 分支）", () => {
+    render(
+      <AntdApp>
+        <ItemEditor
+          document={makeDocument()}
+          path="sections.0.entries.0.items.0"
+          item={textItem({ text: RAW })}
+          sectionKey="education"
+          onChange={() => undefined}
+        />
+      </AntdApp>,
+    );
+    expectDecorated();
+  });
+});

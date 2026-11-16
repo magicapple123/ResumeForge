@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 填充结果卡：成功/待确认/失败计数、成功率与未落定项明细。
- * （自 WebFormPage 拆出：:986-1014 整块逐字随迁，内用 FillRateTag，纯 props。）
+ * 填充结果（结果区「填充结果」标签页的内容）：成功/待确认/失败计数、成功率与未落定项明细。
+ *
+ * I-11：去掉 `Card` 外壳也去掉卡内标题——分组与标题都由外层 `ResultPanel` 的 Tab 承担，
+ * 内容直接铺开。提醒（回浏览器窗口核对后自己提交）仍然是独立一条，不被折叠。
  */
-import { Alert, Card, Space, Tag, Typography } from "antd";
+import { Alert, Space, Tag, Typography } from "antd";
 import { memo } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -16,10 +18,10 @@ export const FillResultCard = memo(function FillResultCard({
 }: {
   result: WebFormFillResult;
 }) {
-  // 本组件用模块级 t()：订阅语言变化，否则切语言后这张卡不重渲染。
+  // 本组件用模块级 t()：订阅语言变化，否则切语言后这一块不重渲染。
   useLocale();
   return (
-    <Card size="small" title={t("webFormPage.fillResult.title")}>
+    <div className="webform-fill-result">
       <Space size="middle" wrap>
         <Tag color="success">
           {t("webFormPage.fillResult.tag.filled", { count: result.filled })}
@@ -58,6 +60,6 @@ export const FillResultCard = memo(function FillResultCard({
         showIcon
         title={t("webFormPage.fillResult.verifyHint")}
       />
-    </Card>
+    </div>
   );
 });

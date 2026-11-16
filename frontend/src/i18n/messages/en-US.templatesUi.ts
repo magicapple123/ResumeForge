@@ -17,8 +17,18 @@ const templatesUi = {
   "templatesUi.formatEditor.placeholder.name": "e.g. My compact layout",
   "templatesUi.formatEditor.field.description": "Description (optional)",
   "templatesUi.formatEditor.placeholder.description": "One line on what problem it solves",
-  "templatesUi.formatEditor.value.unset": "Not set",
+  /** Shown when a parameter is unset (number placeholder and the colour row's caption). */
+  "templatesUi.formatEditor.value.unset": "Follow template",
+  /** Accessible name of the reset control next to a colour field; `name` is the field label. */
   "templatesUi.formatEditor.action.clear": "Clear",
+  /** Accessible name of the ↺ button on a colour field that already has a value. */
+  "templatesUi.formatEditor.action.followTemplate": "Reset {name} to the template default",
+  /** Accessible name of the ⓘ next to each parameter; `name` is the field label. */
+  "templatesUi.formatEditor.hint.fieldDetail": "About {name}",
+  /** Why a parameter that needs a template capability (`requires: "header_border"`) is off. */
+  "templatesUi.formatEditor.hint.noHeaderRule": "Has no effect on templates without a header rule",
+  /** Group-level note for the photo section; each parameter still has its own ⓘ. */
+  "templatesUi.formatEditor.groupNote.photo": "These five shape the photo frame together",
   "templatesUi.formatEditor.hint.blank":
     "Leave a field blank to inherit the template's settings; only filled-in items take effect.",
   "templatesUi.formatEditor.error.save": "Could not save",

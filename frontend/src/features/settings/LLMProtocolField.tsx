@@ -12,11 +12,12 @@
  * - 任何一次地址改写都给 toast（切过去与还原各用一条文案，见 i18n llmProtocol.toast.*）；
  * - 选中 Responses 时展示实验性提示条（多数已支持，Claude / Gemini / 硅基流动不支持）。
  */
-import { Alert, App, Form, Select } from "antd";
+import { Alert, App, Form, Select, Space } from "antd";
 import type { FormInstance } from "antd";
 import type { RecordFormValues } from "./useLLMRecordTools";
 import type { LLMApiStyle } from "../../types";
 import type { MessageKey } from "../../i18n";
+import HintDetail from "../../components/common/HintDetail";
 import {
   LLM_PRESETS,
   presetAnthropicBaseUrl,
@@ -80,17 +81,22 @@ export default function LLMProtocolField({ form }: Props) {
     <>
       <Form.Item
         name="api_style"
-        label={t("llmRecord.field.protocol")}
-        // 原有说明保留，下面追加两行：Responses 的支持面（多数已支持、三家不支持）
-        // 与 Anthropic 新代际的思考形态变化（T10）。
-        tooltip={
-          <span>
-            {t("llmRecord.hint.protocol")}
-            <br />
-            {t("llmProtocol.hint.protocolExtra")}
-            <br />
-            {t("llmProtocol.hint.anthropicAdaptive")}
-          </span>
+        // I-17：这一段是全仓最长的一条提示（协议说明 188 字 + Responses 支持面 + Anthropic
+        // 新代际的思考形态，共三段）。原来挂在 `Form.Item tooltip` 上——悬停才出来、
+        // 移开就没了，188 字根本读不完。三段拼成一个字符串交给 `HintDetail`（`\n` 会被
+        // `pre-line` 渲染成真实换行），点开是常驻 Popover，提示模式下原地展开。
+        label={
+          <Space size={4} wrap={false}>
+            {t("llmRecord.field.protocol")}
+            <HintDetail
+              detail={[
+                t("llmRecord.hint.protocol"),
+                t("llmProtocol.hint.protocolExtra"),
+                t("llmProtocol.hint.anthropicAdaptive"),
+              ].join("\n")}
+              label={t("llmRecord.aria.protocol")}
+            />
+          </Space>
         }
       >
         <Select

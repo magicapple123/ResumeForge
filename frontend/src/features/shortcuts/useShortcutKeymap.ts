@@ -120,8 +120,11 @@ export function useShortcutKeymap(): void {
         fallbackActionId: getShortcutHandlerCount("selectionPanel") === 0 ? "search" : undefined,
       });
       if (!id) return;
-      // 输入框里的撤回/恢复交给原生撤销栈；其余动作照常拦截。
-      if ((id === "undo" || id === "redo") && isEditableTarget(event.target)) return;
+      // 输入框里的撤回/恢复交给原生撤销栈；提示模式同理——用户正在打字时按 Alt+H
+      // 是要输入字符或按系统组合，不该把整页说明铺开（I-18 验收 ③）。其余动作照常拦截。
+      if (isEditableTarget(event.target) && (id === "undo" || id === "redo" || id === "showHints")) {
+        return;
+      }
       if (runShortcut(id, event)) event.preventDefault();
     };
     window.addEventListener("keydown", onKeyDown, true);

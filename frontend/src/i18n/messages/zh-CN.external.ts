@@ -45,12 +45,19 @@ const external = {
   "connections.protection.config_file": "明文配置文件",
 
   // ── 动作与提示 ─────────────────────────────────────────────
-  "connections.action.edit": "改",
+  // 主按钮按状态变（issue I-09）：未配置 →「设置」，已配置 →「更换」，系统来源 →「修改」。
+  // 「清除」「恢复默认」收进 `⋯` 菜单，但「清除」仍带二次确认（不可逆）。
+  "connections.action.primary.set": "设置",
+  "connections.action.primary.change": "更换",
+  "connections.action.primary.modify": "修改",
+  "connections.action.more": "{name} 的更多操作",
+  "connections.action.copy": "复制当前值",
   "connections.action.save": "保存",
   "connections.action.cancel": "取消",
   "connections.action.clear": "清除",
   "connections.action.reset": "恢复默认",
-  "connections.action.editAria": "改 {name} 的 Key",
+  // 无障碍名必须**含可见文字**（label-in-name）：可见是「设置」/「更换」，两者都在这句里。
+  "connections.action.editAria": "设置或更换 {name} 的 Key",
   "connections.action.saveAria": "保存 {name} 的新 Key",
   "connections.action.clearAria": "清除 {name} 的 Key",
   "connections.action.editValue": "修改 {name}",
@@ -59,6 +66,8 @@ const external = {
   "connections.emptyMask": "未填写",
   "connections.input.label": "{name} 的新 Key",
   "connections.input.placeholder": "粘贴新的 Key",
+  "connections.hint.aria": "查看 {name} 的说明与存储方式",
+  "connections.hint.storage": "存储方式：{label}",
   "connections.clear.title": "清除这把 Key",
   "connections.clear.body": "清除后相关能力立刻不可用，要重新填写",
   "connections.loadFailed": "读取外部连接失败",
@@ -67,7 +76,9 @@ const external = {
   "connections.toast.saved": "已保存 {name}",
   "connections.toast.cleared": "已清除 {name}",
   "connections.toast.reset": "已把 {name} 恢复默认",
-  "connections.system.defaultValue": "默认值：{value}",
+  "connections.toast.copied": "已复制 {name} 的当前值",
+  "connections.toast.copyFailed": "复制失败，请手动选中后复制",
+  "connections.system.factoryValue": "出厂值 {value}",
   "connections.system.resetHint": "改错了可以随时恢复默认",
   "connections.error.emptyValue": "新 Key 不能为空；要移除请点「清除」",
   "connections.error.unsupported": "这一项不能在这里修改",

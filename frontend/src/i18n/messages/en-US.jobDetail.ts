@@ -25,6 +25,7 @@ const jobDetail = {
   "jobDetail.section.progress": "Application progress for this Job",
   "jobDetail.action.interview": "Mock interview",
   "jobDetail.action.goApply": "Go and apply",
+  "jobDetail.action.researchCompany": "Research this company",
   "jobDetail.action.favorite": "Favorite this job",
   "jobDetail.action.unfavorite": "Remove from favorites",
   "jobDetail.unsupported.title": "This Job cannot be auto-applied from the apply desk",

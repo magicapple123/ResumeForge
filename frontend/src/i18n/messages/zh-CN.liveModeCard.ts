@@ -15,6 +15,7 @@ const liveModeCard = {
   "liveModeCard.intro.profileListHint": "会列出你填过的全部资料（按分区、可搜索），",
   "liveModeCard.intro.pickHint": "你自己挑一条填",
   "liveModeCard.intro.tail": "——所以不必依赖它认得出这个框。适合逐项核对，也能帮到批量填不了的框。",
+  "liveModeCard.intro.hintAria": "智能逐项填表说明",
   "liveModeCard.status.waiting": "等待你点某个框",
   "liveModeCard.status.off": "未开启",
   "liveModeCard.tag.off": "已关闭",

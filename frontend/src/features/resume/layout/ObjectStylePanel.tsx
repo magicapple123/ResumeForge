@@ -104,6 +104,9 @@ export default function ObjectStylePanel({
   const [manual, setManual] = useState<{ path: string | null; scope: EntryStyleScope } | null>(
     null,
   );
+  // I-28：单字段作用域下再分"字段值 / 字段名"。字段名走 `field_label` 角色，
+  // **不能**复用默认的 `fieldRole`（那是 body/meta，会把字段名样式悄悄写成正文）。
+  const [fieldTarget, setFieldTarget] = useState<"value" | "label">("value");
   const setManualScope = (next: { path: string | null; scope: EntryStyleScope }) => {
     if (lockScope) return;
     setManual(next);
@@ -113,7 +116,9 @@ export default function ObjectStylePanel({
   }
 
   const scope = manual && manual.path === pickedPath ? manual.scope : defaultScope;
-  const scopeRole = entryStyleScopeRole(scope, fieldRole);
+  const resolvedFieldRole: ResumeRoleKey =
+    scope === "field" && fieldTarget === "label" ? "field_label" : fieldRole;
+  const scopeRole = entryStyleScopeRole(scope, resolvedFieldRole);
   // 整条范围沿用"按正文继承"的既有读法（四出口的 effective(role, object_id) 同口径）。
   const role = scopeRole ?? "body";
   const config = layout.format_config;
@@ -132,7 +137,7 @@ export default function ObjectStylePanel({
   const known = entry !== null;
   const availability = entryStyleAvailability(entry);
 
-  const rows = entryStyleScopeProps(scope, fieldRole).filter((prop) => {
+  const rows = entryStyleScopeProps(scope, resolvedFieldRole).filter((prop) => {
     if (prop !== "meta_align") return true;
     // Q12：无日期/元信息字段 → 不显示「日期位置」。
     return !known || availability.hasMeta;
@@ -191,6 +196,18 @@ export default function ObjectStylePanel({
           <Typography.Text type="secondary">{t(ENTRY_STYLE_SCOPE_HINTS[scope])}</Typography.Text>
         </div>
       )}
+      {scope === "field" ? (
+        <Segmented
+          size="small"
+          value={fieldTarget}
+          onChange={(value) => setFieldTarget(value as "value" | "label")}
+          options={[
+            { value: "value", label: t("typography.fieldStyle.target.value") },
+            { value: "label", label: t("typography.fieldStyle.target.label") },
+          ]}
+          aria-label={t("typography.fieldStyle.target.aria")}
+        />
+      ) : null}
       <div className="resume-typography-rows">
         {rows.map((prop) => {
           // 正文没有要点时项目符号无效：灰显 + 下方说明，而不是让用户拖了没反应。

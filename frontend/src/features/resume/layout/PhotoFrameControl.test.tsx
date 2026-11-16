@@ -39,8 +39,8 @@ describe("照片边框读写契约", () => {
   });
 
   it("越界值由后端白名单兜底，控件只负责不下发非法数字", () => {
-    expect(PHOTO_FRAME_BOUNDS.photo_border_width).toMatchObject({ min: 0, max: 8, fallback: 1 });
-    expect(PHOTO_FRAME_BOUNDS.photo_offset_y).toMatchObject({ min: -20, max: 20, fallback: 0 });
+    expect(PHOTO_FRAME_BOUNDS.photo_border_width).toMatchObject({ min: 0, max: 16, fallback: 1 });
+    expect(PHOTO_FRAME_BOUNDS.photo_offset_y).toMatchObject({ min: -40, max: 40, fallback: 0 });
     expect(withPhotoFrame({}, "photo_offset_y", Number.NaN)).toEqual({});
   });
 });

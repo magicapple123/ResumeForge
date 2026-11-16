@@ -279,6 +279,14 @@ const resume = {
   "resume.fontScale.standard": "标准字号",
   /** 内置最大档的名字。 */
   "resume.fontScale.large": "大字号",
+
+  // ── 文档语言控件的说明入口（I-17）────────────────────────────
+  /**
+   * `resume.language.hint` 本体在主包（`zh-CN.ts`）里，不在这里重复定义；
+   * 这一条是 I-17 新增的**无障碍名**：那句 40 字的说明从 tooltip 改成了下拉右侧的
+   * `ⓘ`，读屏需要知道这个按钮点开的是什么。
+   */
+  "resume.language.hintAria": "文档语言说明",
 } as const;
 
 export default resume;

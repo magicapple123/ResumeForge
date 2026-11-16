@@ -90,10 +90,17 @@ const voiceInput = {
   "voiceInput.settings.device.aria": "Choose a microphone device",
   "voiceInput.settings.device.default": "System default",
   "voiceInput.settings.device.unnamed": "Microphone {index}",
-  "voiceInput.settings.device.empty": "No device list yet; allow access, then refresh",
+  "voiceInput.settings.device.empty":
+    "No microphone found. Connect one, then use Refresh microphone list",
   "voiceInput.settings.device.refresh": "Refresh microphone list",
-  "voiceInput.settings.device.hint": "Device names appear after you allow access",
+  "voiceInput.settings.device.hint":
+    "Access is allowed, but device names are not readable yet; use Refresh microphone list",
   "voiceInput.settings.device.lost": "That microphone is gone; using the system default",
+  "voiceInput.settings.device.grant": "Allow microphone access",
+  "voiceInput.settings.device.regrant": "Check permission again",
+  "voiceInput.settings.device.prompt": "Use Allow microphone access to see device names",
+  "voiceInput.settings.device.denied":
+    "Microphone access was denied. Open site settings from the address bar, set Microphone to Allow, then use Check permission again",
 
   "voiceInput.settings.micTest.open": "Test microphone",
   "voiceInput.micTest.title": "Test microphone",

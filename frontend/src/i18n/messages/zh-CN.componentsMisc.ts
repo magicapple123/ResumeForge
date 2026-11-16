@@ -66,6 +66,12 @@ const componentsMisc = {
   "componentsMisc.theme.light": "浅色",
   "componentsMisc.theme.dark": "深色",
   "componentsMisc.theme.system": "跟随系统",
+
+  // ── 提示模式（I-18：Alt+H 把全站 ⓘ 展开） ──────────────────
+  /** 右下角徽标的正文；后半句就是退出方式，别删（Esc 是唯一按得动的退出口）。 */
+  "helpMode.badge": "提示模式 · Esc 退出",
+  /** 徽标上那个按钮的名字（可见文字就是它的无障碍名）。 */
+  "helpMode.exit": "退出提示模式",
 } as const;
 
 export default componentsMisc;

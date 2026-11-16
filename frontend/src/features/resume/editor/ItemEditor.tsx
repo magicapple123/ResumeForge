@@ -25,6 +25,7 @@ import {
 } from "../document";
 import InlineMarkButtons from "../layout/InlineMarkButtons";
 import InlineMarkContextMenu from "../layout/InlineMarkContextMenu";
+import InlineMarkTextArea from "./InlineMarkTextArea";
 import { AuthorsValuesEditor, FieldValueEditor, ListValuesEditor } from "./itemValueEditors";
 import { applyInlineEdit, getFocusedField } from "./lastFocusedTextarea";
 import { registerInlineMarkField, useInlineMarkRange } from "./useInlineMarkRange";
@@ -200,14 +201,14 @@ export default function ItemEditor({
         {item.kind === "text" ? (
           <div className="document-field-row">
             <span className="document-field-label">{t("document.field.value")}</span>
-            <Input.TextArea
-              aria-label={t("document.field.value")}
+            {/* I-26：条目正文同样走行内标记遮罩层（三处入口共用 `InlineMarkTextArea`）。 */}
+            <InlineMarkTextArea
+              ariaLabel={t("document.field.value")}
               placeholder={t("document.field.textPlaceholder")}
               autoSize={{ minRows: 2, maxRows: 8 }}
               value={item.text}
               disabled={readOnly}
-              onFocus={registerInlineMarkField}
-              onChange={(event) => updateText({ text: event.target.value })}
+              onChange={(text) => updateText({ text })}
             />
           </div>
         ) : null}

@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+// 注：Base URL 的 label 里嵌了 ⓘ 按钮（`HintLabel`），`<label>` 内因此有两个
+// 可标注控件，`getByLabelText("Base URL")` 会报 multiple elements；改按占位符取。
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -182,7 +184,7 @@ describe("SettingsPage 记录编辑参数往返", () => {
       </MemoryRouter>,
     );
     fireEvent.click(await screen.findByRole("button", { name: /新建配置/ }));
-    fireEvent.change(screen.getByLabelText("Base URL"), {
+    fireEvent.change(screen.getByPlaceholderText("https://api.deepseek.com"), {
       target: { value: " https://models.example.com/v1 " },
     });
     fireEvent.change(screen.getByPlaceholderText("sk-…"), { target: { value: " fake-new-key " } });

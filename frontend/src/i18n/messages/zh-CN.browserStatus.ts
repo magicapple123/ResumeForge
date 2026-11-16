@@ -11,6 +11,9 @@
 const browserStatus = {
   "browserStatus.title": "投递专用浏览器",
   "browserStatus.ready": "已就绪",
+  // I-16：第一帧还没拿到状态时的文案。此前这里显示「状态未知」，读起来像"出错了"，
+  // 而实际情况只是"还在读"——两件事必须分开说。
+  "browserStatus.state.loading": "正在读取…",
   "browserStatus.hint.collapse": "收起说明",
   "browserStatus.hint.expand": "展开说明",
   "browserStatus.port": "调试端口 {port}",

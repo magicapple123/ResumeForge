@@ -193,6 +193,7 @@ export default function TemplateWorkbench({ onChanged }: Props) {
         open={formatEditor.open}
         fields={catalog?.format_fields ?? []}
         template={formatEditor.template}
+        templateLayouts={catalog?.template_layouts}
         onClose={() => setFormatEditor({ open: false, template: null })}
         onSaved={refreshAll}
       />

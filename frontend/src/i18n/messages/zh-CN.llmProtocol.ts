@@ -42,7 +42,7 @@ const llmProtocol = {
   /** 列头：Anthropic Messages 协议。 */
   "llmProtocol.matrix.anthropic": "Anthropic Messages 协议",
   /** 列头：核对日期。 */
-  "llmProtocol.matrix.verifiedAt": "核对日期",
+  "llmProtocol.matrix.verifiedAt": "核对日期 {date}",
   /** 支持。 */
   "llmProtocol.matrix.yes": "支持",
   /** 不支持。 */

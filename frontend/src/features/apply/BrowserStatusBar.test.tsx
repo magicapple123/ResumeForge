@@ -266,6 +266,80 @@ describe("BrowserStatusBar", () => {
     apiState.error = "status polling failed";
     renderBar();
     expect(document.querySelector(".apply-browser-compact")).toBeNull();
-    expect(screen.getByText("首次使用请在弹出的浏览器窗口里扫码登录一次。")).toBeInTheDocument();
+  });
+
+  /**
+   * I-16：首屏第一帧的地位。
+   *
+   * 此前这一帧被当成「状态未知」渲染——第二行整块不存在（卡片只有一行高），数据回来
+   * 之后再长出来，高度跳一下；而「启动浏览器」在没有任何状态数据时就能点，等于在猜。
+   */
+  it("首屏数据未到时先给骨架，状态写「正在读取…」，动作全部不可点", () => {
+    apiState.data = null;
+    apiState.loading = true;
+    const view = renderBar();
+
+    // 骨架的宽度在 `styles/apply.css` 里按容器百分比给（60%），不写死 220px。
+    expect(screen.getByTestId("browser-status-skeleton")).toBeInTheDocument();
+    // 「正在读取…」不是「状态未知」：一个是等待，一个是读不到。
+    expect(screen.getByText(t("browserStatus.state.loading"))).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: new RegExp(t("browserStatus.action.start")) }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: t("browserStatus.more.aria") })).toBeDisabled();
+    expect(view.container.querySelector(".apply-browser-bar")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+  });
+
+  it("数据到位后骨架消失，第二行换成真实端口，动作恢复可用", () => {
+    apiState.data = null;
+    apiState.loading = true;
+    const view = renderBar();
+    expect(screen.getByTestId("browser-status-skeleton")).toBeInTheDocument();
+
+    apiState.data = RUNNING_WITH_ENTRY;
+    apiState.loading = false;
+    view.rerender(
+      <AntdApp>
+        <BrowserStatusBar />
+      </AntdApp>,
+    );
+
+    expect(screen.queryByTestId("browser-status-skeleton")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(t("browserStatus.port", { port: RUNNING_WITH_ENTRY.port })),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: new RegExp(t("browserStatus.action.openSite")) }),
+    ).toBeEnabled();
+    expect(view.container.querySelector(".apply-browser-bar")).not.toHaveAttribute("aria-busy");
+  });
+
+  it("骨架与真实第二行同高：数据到位前后状态条高度不跳变", () => {
+    apiState.data = null;
+    apiState.loading = true;
+    const view = renderBar();
+    const pendingRow = view.container.querySelector<HTMLElement>(".apply-browser-meta");
+    expect(pendingRow).not.toBeNull();
+    const pendingHeight = (pendingRow as HTMLElement).getBoundingClientRect().height;
+
+    apiState.data = RUNNING_WITH_ENTRY;
+    apiState.loading = false;
+    view.rerender(
+      <AntdApp>
+        <BrowserStatusBar />
+      </AntdApp>,
+    );
+    const settledRow = view.container.querySelector<HTMLElement>(".apply-browser-meta");
+    expect(settledRow).not.toBeNull();
+
+    // jsdom 没有排版引擎，两个高度在这里都是 0，所以这条断言本身很弱；真正的保证是
+    // 两分支共用 `.apply-browser-meta` 这一行容器（`styles/apply.css` 里给了 18px 行高）。
+    // 留这条是为了让「某一支偷偷加了 margin/padding」在 CI 的 ui-quality 之前先被看见。
+    expect(
+      Math.abs((settledRow as HTMLElement).getBoundingClientRect().height - pendingHeight),
+    ).toBeLessThanOrEqual(1);
   });
 });

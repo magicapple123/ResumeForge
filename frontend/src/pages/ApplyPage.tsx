@@ -5,8 +5,8 @@
  * 页面只负责编排（谁在跑、把任务交给进度面板），具体交互拆在 `features/apply/` 下的子组件里。
  * 执行采用**轮询**模型：`useTaskPolling` 按 1.5s 拉取批次详情，任务进入终态后自动停止。
  */
-import { InfoCircleOutlined, SettingOutlined } from "@ant-design/icons";
-import { App, Button, Space, Tabs, Tooltip, Typography } from "antd";
+import { SettingOutlined } from "@ant-design/icons";
+import { App, Button, Space, Tabs, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -24,6 +24,7 @@ import ApplyFunnelBar, { type FunnelDrill } from "../features/apply/ApplyFunnelB
 import ApplyQueuePanel from "../features/apply/ApplyQueuePanel";
 import ApplyRecordsPanel from "../features/apply/ApplyRecordsPanel";
 import ApplySettingsModal from "../features/apply/ApplySettingsModal";
+import HintDetail from "../components/common/HintDetail";
 import BrowserStatusBar from "../features/apply/BrowserStatusBar";
 import LoginStatusDrawer from "../features/apply/LoginStatusDrawer";
 import CollectPanel from "../features/apply/CollectPanel";
@@ -153,14 +154,13 @@ export default function ApplyPage() {
             <Typography.Title level={3} style={{ margin: 0 }}>
               {t("pagesMisc.applyPage.title")}
             </Typography.Title>
-            <Tooltip title={t("pagesMisc.applyPage.subtitle")}>
-              <Button
-                type="text"
-                size="small"
-                icon={<InfoCircleOutlined />}
-                aria-label={t("pagesMisc.applyPage.subtitleAria")}
-              />
-            </Tooltip>
+            {/* I-17：这一句 61 字的流程说明原本挂在 `?` 按钮的 tooltip 上——悬停才看得见、
+                移开就消失，触屏/键盘用户读不到。改用统一的 `HintDetail`（点开是 Popover，
+                提示模式下原地展开），并复用已有的 `subtitleAria` 作无障碍名。 */}
+            <HintDetail
+              detail={t("pagesMisc.applyPage.subtitle")}
+              label={t("pagesMisc.applyPage.subtitleAria")}
+            />
           </Space>
           <CurrentSiteBar refreshKey={collectRefreshKey} />
         </div>

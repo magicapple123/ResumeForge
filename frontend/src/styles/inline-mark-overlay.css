@@ -1,0 +1,106 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * 行内标记遮罩层（I-26）：`InlineMarkOverlay` + `ResizableValueTextArea` 专用。
+ *
+ * 三件事在这里定死，改动前先看全：
+ *
+ * 1. **两层共用 `.rf-inline-mark-layer` 承担字体度量**（字号/行高/内边距/换行规则/滚动条占位）。
+ *    任何一条度量只写在其中一层上，两层立刻错位——而错位不会报错，只会让光标落在两个字的缝隙里。
+ *    文本域那条用 `.ant-input.rf-inline-mark-layer`（再加一条三类的兜底）：antd 运行期注入的
+ *    `.ant-input` / `.ant-input-sm` 与我们同特异性或更晚注入，单类选择器压不住。
+ * 2. **文本域文字透明但占位**：字形由下层画，光标与选区仍由文本域负责（`caret-color` 可见）。
+ * 3. **选区必须半透明**：文本域在下层之上，不透明的高亮会把下层文字整片盖住。
+ */
+.rf-inline-mark-layer,
+.ant-input.rf-inline-mark-layer,
+.ant-input.rf-value-textarea.rf-inline-mark-layer {
+  box-sizing: border-box;
+  padding: 4px 7px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: normal;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  tab-size: 4;
+  /* 滚动条占位：文本域出现竖向滚动条时会吃掉约 15px 内容宽度，下层没有滚动条就会少算，
+     换行位置随即不同。两层都预留同一条槽位，谁的滚动条在不在都不影响宽度。 */
+  scrollbar-gutter: stable;
+}
+
+/* 文本域：字形透明，但占位（下层靠这些位置对齐）；光标与选区由它自己画。 */
+.ant-input.rf-inline-mark-layer,
+.ant-input.rf-value-textarea.rf-inline-mark-layer {
+  position: relative;
+  z-index: 1;
+  color: transparent;
+  caret-color: var(--rf-text-body);
+  background: transparent;
+}
+
+.ant-input.rf-inline-mark-layer::selection {
+  background: color-mix(in srgb, var(--rf-info) 26%, transparent);
+  color: transparent;
+}
+
+/* 容器：遮罩层与文本域的公共定位上下文。 */
+.rf-inline-mark-field {
+  position: relative;
+}
+
+/* 没有行内标记时容器不参与布局：DOM 结构保持稳定（否则挂上第一个标记时文本域会重挂、丢焦点），
+   但排版与"没有这一层"逐像素相同。 */
+.rf-inline-mark-field.is-plain {
+  display: contents;
+}
+
+/* 遮罩层：在文本域**下面**，不接管任何指针事件（选区、点击、拖高手柄都还给文本域）。 */
+.rf-inline-mark-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  /* `overflow: hidden` 让它成为滚动容器，`scrollbar-gutter` 才会真的预留槽位——
+     它要和文本域那条 `scrollbar-gutter: stable` 成对出现，宽度才对得上。 */
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  pointer-events: none;
+  background: var(--rf-surface);
+  border-radius: var(--rf-radius-control);
+}
+
+/* 内容镜像：滚动同步靠父组件传下来的 transform，盒子本身不动。 */
+.rf-inline-mark-mirror {
+  min-height: 100%;
+  border: 1px solid transparent;
+  will-change: transform;
+}
+
+.rf-inline-mark-segment {
+  white-space: pre-wrap;
+}
+
+/* 标记语法：占位但不可见（`visibility: hidden` 保留前进宽度，`display: none` 会破坏对齐）。 */
+.rf-inline-mark-hidden {
+  visibility: hidden;
+}
+
+/* 加粗：描边加厚笔画但不改变字形宽度（`font-weight: 700` 会变宽 → 两层错位）。 */
+.rf-inline-mark-bold {
+  -webkit-text-stroke: 0.6px currentColor;
+}
+
+/* 链接：只加下划线，颜色交给用户设置的 `color`（没设置时跟随正文色，与导出的 a 标签不同色，
+   但遮罩层不该替用户决定强调色）。 */
+.rf-inline-mark-link {
+  text-decoration: underline;
+}
+
+/* 输入法组合期：预编辑串只画在文本域上，必须显形，否则拼音/候选词看不见。
+   此时遮罩层让位（标记会短暂可见——可用性优先，理由见组件注释）。 */
+.rf-inline-mark-field.is-composing .rf-inline-mark-overlay {
+  opacity: 0;
+}
+
+.rf-inline-mark-field.is-composing .ant-input.rf-inline-mark-layer {
+  color: var(--rf-text-body);
+}

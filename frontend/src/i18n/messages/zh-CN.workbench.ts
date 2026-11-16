@@ -77,6 +77,7 @@ const workbench = {
   "workbench.param.section-title-scale": "小节标题大小",
   /** `entry_gap`：同一区块内条目之间的距离（`section_gap` 管区块之间）。 */
   "workbench.param.entry-gap": "条目间距",
+  "workbench.param.header-rule-gap": "页眉线位置",
   /** `section_gap`：两个区块之间的距离。标签优先取目录 `format_fields` 的同名字段，
    *  这里只是旧后端没下发时的回落（不能是空串，否则那一行的行首会空白）。 */
   "workbench.param.section-gap": "区块间距",

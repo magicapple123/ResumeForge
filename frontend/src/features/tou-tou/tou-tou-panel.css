@@ -104,6 +104,24 @@
   color: var(--rf-info-strong);
 }
 
+/*
+ * I-17：球那四条动作（原来是一句 55 字、只能悬停看的 tooltip）常驻在面板里。
+ * 长按球就能读到，不依赖任何"一闪而过"的提示。
+ */
+.tt-panel-orb-help {
+  margin: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tt-panel-orb-help-title {
+  margin: 0 0 2px;
+  color: var(--rf-text-description);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .tt-panel-side-ask {
   display: flex;
   flex-direction: column;

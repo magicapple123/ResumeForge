@@ -76,14 +76,19 @@
   min-width: 0;
 }
 
+/* I-13：必须与 antd 竖直 Form.Item 的 14px 标签 + 22px 行高对齐，否则这一格的
+   控件起点比左边三个字段低约 5.6px（标签 13px 时实测差 5px）。 */
 .apply-page .apply-collect-field-label {
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 22px;
   color: var(--rf-text-secondary);
 }
 
 .apply-page .apply-collect-history {
   display: flex;
   align-items: center;
+  /* I-13：只改这一格。`.apply-collect-samples-cell` 靠 justify-content + padding-bottom
+     对齐节奏网格，动公共 gap 会把它顶偏。 */
   gap: 8px;
   min-width: 0;
 }

@@ -91,6 +91,9 @@ export default function TemplateCustomTable({
     <Table
       rowKey="id"
       size="small"
+      // I-20：去掉表头。列表只有「名称 / 状态 / 操作」三列、每行内容自解释，
+      // 一行表头换来的是首屏少显示半行数据，不划算。
+      showHeader={false}
       loading={loading}
       columns={columns}
       dataSource={templates}

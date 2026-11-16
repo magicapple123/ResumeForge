@@ -7,8 +7,8 @@
  * 说清楚——提前告知是这个功能成立的前提：API 密钥等凭据任何档位都不发给模型，简历照片
  * 二进制不发送，助手也没有删除类工具。
  */
-import { App, Card, Radio, Space, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { App, Card, Flex, Radio, Space, Typography } from "antd";
+import { useCallback, useEffect, useState } from "react";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { getAssistantPermission, saveAssistantPermission } from "../../api/assistantPermission";
 import type { AssistantPermissionLevel } from "../../api/assistantPermission";
@@ -19,8 +19,19 @@ import {
   bumpAssistantPermission,
   isWriteLevel,
 } from "../assistant/assistantPermission";
+import SettingsResetButton from "./SettingsResetButton";
+import { useSettingsResetListener } from "./useSettingsResetListener";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+
+/**
+ * I-10：这张卡能恢复默认的键。
+ *
+ * 权限档位是「读轴 + 写轴」同一条记录，旧键 `assistant_relaxed_mode` 与新四档同步写入，
+ * 两者必须一起回默认，否则界面显示「仅查看」而后端仍是放宽读取。同 scope 的其它键
+ * （工具轮数、记忆开关…）属于别的卡，不在这里重置。
+ */
+const PERMISSION_RESET_KEYS = ["assistant_permission", "assistant_relaxed_mode"];
 
 export default function AssistantRelaxedModeCard() {
   // 本组件用模块级 t()：必须订阅语言变化。
@@ -30,24 +41,34 @@ export default function AssistantRelaxedModeCard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // 纯取数（不含 loading 的收尾）：挂载与「恢复默认」后走同一份实现，避免两处漂移。
+  const load = useCallback(async () => {
+    try {
+      const saved = await getAssistantPermission();
+      setPermission(saved.permission);
+    } catch {
+      // 读不到按默认「仅查看」处理：这是扩权设置，保守显示比假装开着安全。
+      setPermission("read_only");
+    }
+  }, []);
+
   // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try {
-        const saved = await getAssistantPermission();
-        if (!cancelled) setPermission(saved.permission);
-      } catch {
-        // 读不到按默认「仅查看」处理：这是扩权设置，保守显示比假装开着安全。
-        if (!cancelled) setPermission("read_only");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      await load();
+      if (!cancelled) setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [load]);
+
+  // I-10：恢复默认成功后重取本卡的值，并让输入区那个「跟随全局」下来也立刻跟上。
+  useSettingsResetListener(() => {
+    bumpAssistantPermission();
+    void load();
+  });
 
   const onChange = async (next: AssistantPermissionLevel) => {
     if (saving || next === permission) return;
@@ -75,7 +96,16 @@ export default function AssistantRelaxedModeCard() {
   };
 
   return (
-    <Card title={t("assistantPermission.settings.title")} className="settings-card">
+    <Card
+      title={
+        <Flex align="center" gap={8}>
+          <span>{t("assistantPermission.settings.title")}</span>
+          {/* I-10：卡片级恢复默认（回到最低档「仅查看」）。 */}
+          <SettingsResetButton keys={PERMISSION_RESET_KEYS} />
+        </Flex>
+      }
+      className="settings-card"
+    >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         {t("assistantPermission.settings.intro")}
       </Typography.Paragraph>

@@ -22,13 +22,14 @@ import {
 
 describe("resumeStyleParams · 属性表", () => {
   it("数值区间与步长与契约逐键相等", () => {
+    // I-32：A 类全量放宽（后端 `STYLE_PROPS` 同步改）。
     expect(STYLE_PROP_BOUNDS).toEqual({
-      font_scale: { min: 0.7, max: 2.4, step: 0.02 },
-      space_before: { min: 0, max: 3, step: 0.05 },
-      space_after: { min: 0, max: 3, step: 0.05 },
-      line_height: { min: 1, max: 2.6, step: 0.01 },
-      indent: { min: 0, max: 4, step: 0.05 },
-      letter_spacing: { min: -0.1, max: 0.3, step: 0.01 },
+      font_scale: { min: 0.5, max: 3, step: 0.02 },
+      space_before: { min: 0, max: 6, step: 0.05 },
+      space_after: { min: 0, max: 6, step: 0.05 },
+      line_height: { min: 0.9, max: 3, step: 0.01 },
+      indent: { min: 0, max: 8, step: 0.05 },
+      letter_spacing: { min: -0.2, max: 0.6, step: 0.01 },
     });
   });
 
@@ -55,7 +56,8 @@ describe("resumeStyleParams · 属性表", () => {
 
 describe("resumeStyleParams · 取值归一", () => {
   it("数值越界夹紧并落到步长网格", () => {
-    expect(coerceStylePropValue("font_scale", 9)).toBe(2.4);
+    // I-32：font_scale 上限放宽到 3.0，夹紧值随区间走。
+    expect(coerceStylePropValue("font_scale", 9)).toBe(3);
     expect(coerceStylePropValue("indent", -1)).toBe(0);
     expect(coerceStylePropValue("space_before", 0.6)).toBe(0.6);
     // font_scale 是派生系数：按四位小数保留（面板显示值 = 系数 × 模板基准）。

@@ -34,6 +34,8 @@ const EXEMPT_FIXTURES = {
   "interviewPage.interviewerName": "Jane",
   // 记忆历史一行只有两个用户值 + 箭头，不是句子（登记在 equalityExemptions）。
   "assistantMemory.history.changed": "{before} → {after}",
+  // 记忆行的元信息：来源 + 更新时间，两个都已翻译，中间只有一个分隔符。
+  "assistantMemory.meta.line": "{source} · {updated}",
   // 复盘查看态头部副信息：只有两个已翻译插值 + 分隔符（登记在 equalityExemptions）。
   "interviewReview.header.meta": "{time} · {target}",
   // 品牌名：两种语言写法相同（登记在 equalityExemptions）。

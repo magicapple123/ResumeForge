@@ -1,0 +1,38 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* I-16：浏览器状态条的骨架与「同高」约束。从 `apply.css` 拆出——那个文件已贴 500 行
+   硬预算，而这组规则只服务一个组件，独立成文件更好定位。 */
+
+/*
+ * I-16 状态条第二行的"占位"与"内容"必须同高。
+ *
+ * 首屏还没读到状态时这一行渲染骨架，读到之后换成端口 / 扫码提示。此前它只在
+ * `data` 到位时才存在，于是数据回来的一瞬间整条卡片长高一行（布局跳动）。
+ * 现在两个分支共用 `.apply-browser-meta` 这一个容器，并把行高钉在 18px
+ * （与 `apply-density.css` 里扫码提示的 line-height 同档）：
+ * 骨架 18px、真实文本 18px，切换前后高度差为 0。
+ */
+.apply-page .apply-browser-meta {
+  min-height: 18px;
+}
+
+/* 端口是骨架换下来的那一块，行高必须与骨架逐像素对齐。 */
+.apply-page .apply-browser-port {
+  line-height: 18px;
+}
+
+/*
+ * 骨架宽度跟随容器（60%），**不写死像素**：窄到 768 时一个 220px 的固定宽度会把
+ * 卡片顶出横向滚动。`min-width` 只兜住极窄容器里的可见性，不参与定宽。
+ */
+.apply-page .apply-browser-skeleton {
+  display: block;
+  width: 60%;
+  max-width: 60%;
+  min-width: 40px;
+}
+
+.apply-page .apply-browser-skeleton .ant-skeleton-input {
+  width: 100%;
+  min-width: 0;
+  height: 18px;
+}

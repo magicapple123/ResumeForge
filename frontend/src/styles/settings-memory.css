@@ -1,0 +1,189 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 设置页「助手记忆」卡（I-03）的样式。
+   为什么不并进 `modules-workspace.css`：那张表已经 406 行、预算 500 行且零豁免，
+   再塞 180 行就过线；这张卡的三段分区与条目卡片化是独立的一块视觉，单独成片更清楚。 */
+
+/* ===== 设置页「助手记忆」卡（I-03）：三段分区 + 条目卡片化 =====
+   改造前是 5 个 Space 平铺：危险动作与主操作并排、1 条数据也摆搜索框、每行 5 个同权重
+   蓝字链接。这里的类名只服务这一张卡，前缀统一 `rf-memory-`。 */
+.rf-memory-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rf-memory-switch-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rf-memory-hint {
+  font-size: 12px;
+}
+
+/* 三段分区之间的线：16px 上下，比 antd 默认的 24px 紧一档。 */
+.rf-memory-divider.ant-divider {
+  margin: 16px 0;
+}
+
+/* `清空全部` 进了 Card extra：文字按钮、灰度，不跟主操作抢位置。 */
+.rf-memory-clear.ant-btn {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.rf-memory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 列表头：左「生效 N 条」，右「添加记忆」。 */
+.rf-memory-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rf-memory-count {
+  font-size: 12px;
+}
+
+/* 筛选器右对齐、与列表头右边同一条线；两个控件同宽。 */
+.rf-memory-filters {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.rf-memory-rows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 条目卡片：1px 边框 + 8px 圆角 + 10/12px 内边距（原来是无边界的裸 li）。 */
+.rf-memory-row {
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: var(--rf-surface);
+  transition: border-color 0.15s ease;
+}
+
+.rf-memory-row:hover {
+  border-color: var(--rf-border-strong);
+}
+
+/* 停用（F33）：整行降透明度，内容加删除线，但仍可读、可恢复。 */
+.rf-memory-row.is-suppressed {
+  background: var(--rf-surface-alt);
+  opacity: 0.7;
+}
+
+.rf-memory-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rf-memory-row-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rf-memory-kind.ant-tag,
+.rf-memory-status.ant-tag {
+  margin: 0;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.rf-memory-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 常驻动作只有「编辑」+「⋯」，默认不显示；行 hover 或键盘进入才显形。
+   触屏没有 hover，所以 `hover: none` 时一律常显——否则这两个动作根本无处可点。 */
+.rf-memory-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: auto;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rf-memory-row:hover .rf-memory-actions,
+.rf-memory-row:focus-within .rf-memory-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .rf-memory-actions {
+    opacity: 1;
+  }
+}
+
+.rf-memory-edit.ant-btn {
+  height: 22px;
+  padding: 0 4px;
+  color: var(--rf-link);
+  font-size: 12px;
+}
+
+.rf-memory-more.ant-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* 元信息合并成一行 11px 次级文字：来源 · 更新时间。 */
+.rf-memory-meta {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.rf-memory-excerpt {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.rf-memory-footnote {
+  font-size: 11px;
+}
+
+.rf-memory-history {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.rf-memory-history-change {
+  margin-inline-start: 8px;
+  font-size: 12px;
+}
+
+.rf-memory-history-time {
+  margin-inline-start: 8px;
+  font-size: 11px;
+}

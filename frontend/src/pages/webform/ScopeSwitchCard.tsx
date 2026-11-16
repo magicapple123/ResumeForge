@@ -6,10 +6,12 @@
  * browser panel, and it goes through the same backend range holder — the picker list, the
  * batch preview and the floating-ball autofill must never read different ranges.
  *
- * Kept as its own card so the page stays an orchestration layer; the copy lives in the
- * `webFormPage.scope.*` namespace of the message packs.
+ * Rendered as one row of `FillModePanel` (I-11): the page stays an orchestration layer and
+ * the four fill-mode controls share one panel, so there is no card shell here. The copy
+ * lives in the `webFormPage.scope.*` namespace of the message packs.
  */
-import { Card, Segmented, Space, Typography } from "antd";
+import { Segmented } from "antd";
+import HintDetail from "../../components/common/HintDetail";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { WebFormScope } from "../../types";
@@ -27,10 +29,10 @@ export function ScopeSwitchCard({
   // 订阅语言变化：本组件用模块级 `t()` 取文案，不订阅就会在切语言后停在旧文案。
   useLocale();
   return (
-    <Card size="small" title={t("webFormPage.scope.title")}>
-      <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+    <div className="webform-mode-row">
+      <span className="webform-mode-label">{t("webFormPage.scope.title")}</span>
+      <div className="webform-mode-control">
         <Segmented
-          block
           aria-label={t("webFormPage.scope.title")}
           disabled={disabled}
           value={scope}
@@ -40,10 +42,10 @@ export function ScopeSwitchCard({
           ]}
           onChange={(value) => onChange(normalizeWebFormScope(value))}
         />
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {t("webFormPage.scope.hint")}
-        </Typography.Text>
-      </Space>
-    </Card>
+        {/* 55 字的范围解释常驻会把行高从 40 拉到 76；它只在第一次切换前值得读一遍，
+            所以收进 ⓘ，标签与控件留在同一行。 */}
+        <HintDetail detail={t("webFormPage.scope.hint")} label={t("webFormPage.scope.hintAria")} />
+      </div>
+    </div>
   );
 }

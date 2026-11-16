@@ -27,7 +27,7 @@ import {
   UpOutlined,
   WarningFilled,
 } from "@ant-design/icons";
-import { App, Badge, Button, Dropdown, Modal, Space, Tooltip, Typography } from "antd";
+import { App, Badge, Button, Dropdown, Modal, Skeleton, Space, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import { getBrowserStatus, openBrowserSite, startBrowser, stopBrowser } from "../../api/apply";
 import { BROWSER_STATUS_POLL_INTERVAL_MS, useBrowserStatus } from "../../hooks/useBrowserStatus";
@@ -35,6 +35,7 @@ import { BROWSER_STATE_META } from "../../types";
 import { t } from "../../i18n";
 import { BROWSER_STATE_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
+import "../../styles/apply-browser-status.css";
 
 export const BROWSER_HINT_SEEN_KEY = "resumeforge.apply.browser_hint_seen";
 function hasSeenHint() {
@@ -97,6 +98,20 @@ export default function BrowserStatusBar() {
 
   const state = data?.state ?? "unknown";
   const meta = BROWSER_STATE_META[state];
+  /**
+   * 首屏「还没拿到状态」（I-16）。
+   *
+   * 此前这一帧被当成「状态未知」渲染：第二行整块不存在（卡片只有一行高），
+   * 数据回来后再长出来，高度从 44 跳到 70（CLS），而且「启动浏览器」在没有
+   * 任何状态数据时就是可点的——点下去等于在猜。
+   *
+   * 判据是 `loading && !data` 而不只是 `loading`：轮询期间 `loading` 会一直翻，
+   * 那时已经有数据，不该闪骨架（`useBrowserStatus` 的 loading 语义即为此设计）。
+   */
+  const pending = loading && !data;
+  const badgeStatus = pending ? "processing" : (meta.color as "default" | "success" | "warning");
+  /** 没有数据就不要猜「浏览器没启动」：动作一律不可点，等读回来再说。 */
+  const actionsLocked = !data;
   const running = state === "running";
   // 标签页被用户关掉或跳走时用它把招聘网站找回来，不必重启浏览器。
   const canOpenSite = running && Boolean(data?.entry_url);
@@ -205,6 +220,9 @@ export default function BrowserStatusBar() {
   return (
     <div
       className={`apply-browser-bar ${compact ? "apply-browser-compact" : "apply-browser-expanded"}`}
+      // 首屏读取期间整条卡片是「忙碌」的：读屏会等它安静下来再播报，
+      // 视觉上是骨架 + 转圈圆点，动作全部禁用（见下方的 actionsLocked）。
+      aria-busy={pending || undefined}
     >
       {/* 两行结构（2026-11-13 用户反馈「单独一张窄卡片不好看」）：
           第一行是身份（图标 + 标题 + 状态），第二行是细节（端口 / 扫码提示 / 沿用说明），
@@ -220,23 +238,34 @@ export default function BrowserStatusBar() {
             {/* 状态用「圆点 + 文字」：色块标签在这一行里比主按钮还抢眼，
                 而它只是"能不能点"的前提信息。 */}
             <Badge
-              status={meta.color as "default" | "processing" | "success" | "warning"}
+              status={badgeStatus}
               text={
                 <Typography.Text className="apply-browser-state">
-                  {t(BROWSER_STATE_LABEL_KEYS[state])}
+                  {/* 「正在读取…」与「状态未知」是两件事：前者是等待，后者是读不到。
+                      混成一句会让首屏看起来像出错了。 */}
+                  {pending
+                    ? t("browserStatus.state.loading")
+                    : t(BROWSER_STATE_LABEL_KEYS[state])}
                 </Typography.Text>
               }
             />
           </div>
-          {/* 第二行只在**有内容**时渲染：没有提示、没有沿用说明时，卡片就是单行。 */}
-          {data && (
+          {/* 第二行两条互斥分支：还没读到状态时给**等高的骨架**，读到之后才换成真实内容。
+              此前这一行只在 data 到位时渲染，于是首屏卡片只有一行高、数据回来时整条长高，
+              正是那次布局跳动（CLS）的来源。骨架宽度按容器百分比走（见 apply.css 的
+              `.apply-browser-skeleton`），不写死像素，窄屏不会撑出横向滚动。 */}
+          {pending ? (
+            <div className="apply-browser-meta" data-testid="browser-status-skeleton">
+              <span className="apply-browser-skeleton">
+                <Skeleton.Input active size="small" block />
+              </span>
+            </div>
+          ) : data ? (
             <div className="apply-browser-meta">
-              {data && (
-                <Typography.Text type="secondary" className="apply-browser-port">
-                  {t("browserStatus.port", { port: data.port })}
-                </Typography.Text>
-              )}
-              {!compact && data?.logged_in_hint && (
+              <Typography.Text type="secondary" className="apply-browser-port">
+                {t("browserStatus.port", { port: data.port })}
+              </Typography.Text>
+              {!compact && data.logged_in_hint && (
                 <Tooltip title={data.logged_in_hint}>
                   <span className="apply-browser-login-hint">
                     <WarningFilled />
@@ -247,7 +276,7 @@ export default function BrowserStatusBar() {
                 </Tooltip>
               )}
             </div>
-          )}
+          ) : null}
         </div>
         <Space size={8} align="center" wrap={false} className="apply-browser-actions">
           {/* 主按钮只留一个，且随状态换语义：没启动时唯一该点的是「启动浏览器」，
@@ -276,7 +305,7 @@ export default function BrowserStatusBar() {
                 type="primary"
                 icon={<PlayCircleOutlined />}
                 loading={busy}
-                disabled={running || busy || undefined}
+                disabled={actionsLocked || running || busy || undefined}
                 onClick={() => void handleStart()}
               >
                 {t("browserStatus.action.start")}
@@ -297,8 +326,19 @@ export default function BrowserStatusBar() {
               />
             </Tooltip>
           )}
-          <Dropdown menu={{ items: moreItems }} trigger={["click"]} placement="bottomRight">
-            <Button icon={<MoreOutlined />} aria-label={t("browserStatus.more.aria")} />
+          {/* 「⋯」里的动作同样依赖状态：没读到状态时连菜单都不开，
+              免得用户在「未知」上做选择（轮询会自动重试，恢复是自动的）。 */}
+          <Dropdown
+            menu={{ items: moreItems }}
+            trigger={["click"]}
+            placement="bottomRight"
+            disabled={actionsLocked}
+          >
+            <Button
+              icon={<MoreOutlined />}
+              aria-label={t("browserStatus.more.aria")}
+              disabled={actionsLocked || undefined}
+            />
           </Dropdown>
         </Space>
       </div>
@@ -309,7 +349,8 @@ export default function BrowserStatusBar() {
         </Typography.Text>
       )}
 
-      {error && (
+      {/* 错误与加载互斥：还在读的时候不该同时喊"读失败"（首批响应还没回来）。 */}
+      {error && !pending && (
         <Typography.Text type="danger" className="apply-browser-hint-line">
           {error}
         </Typography.Text>
@@ -320,7 +361,7 @@ export default function BrowserStatusBar() {
         title={t("browserStatus.help.trigger")}
         onCancel={() => setHelpOpen(false)}
         footer={null}
-        width={620}
+        width={520}
       >
         {helpContent}
       </Modal>

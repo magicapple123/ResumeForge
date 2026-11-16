@@ -10,8 +10,14 @@
  * **写出来**（`deep.defaultOff`），不能只靠开关的视觉状态。
  */
 import { Alert, Button, Card, Input, Space, Switch, Typography } from "antd";
-import { useState } from "react";
-import { researchCompany, type CompanyResearchResult } from "../../api/research";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import {
+  latestCompanyResearch,
+  researchCompany,
+  type CompanyResearchResult,
+  type ResearchEntrySummary,
+} from "../../api/research";
 import ErrorState from "../../components/common/ErrorState";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { t } from "../../i18n";
@@ -20,8 +26,20 @@ import ResearchBriefPanel from "./ResearchBrief";
 import ResearchCardList from "./ResearchCardList";
 import "./research.css";
 
+/** 「最近一次调研」的时间说法：只做到"天"，精确到分钟对这个场景没有意义。 */
+function relativeDays(iso: string | null): string {
+  if (!iso) return "";
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return "";
+  const hours = (Date.now() - then.getTime()) / 3_600_000;
+  if (hours < 1) return t("companyResearch.latest.justNow");
+  if (hours < 24) return t("companyResearch.latest.today");
+  return t("companyResearch.latest.daysAgo", { days: Math.floor(hours / 24) });
+}
+
 export default function CompanyResearchPage() {
   useLocale();
+  const [searchParams] = useSearchParams();
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
   const [jd, setJd] = useState("");
@@ -29,6 +47,44 @@ export default function CompanyResearchPage() {
   const [result, setResult] = useState<CompanyResearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [latest, setLatest] = useState<ResearchEntrySummary | null>(null);
+  // I-22：`?company=&role=&job_id=` 只用于**预填**，不自动提交——一打开页面就搜一次
+  // 等于替用户花搜索费，而用户可能只是想看看这家公司上次调研过什么。
+  const [jobId, setJobId] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    const presetCompany = searchParams.get("company")?.trim() || "";
+    const presetRole = searchParams.get("role")?.trim() || "";
+    const presetJob = Number(searchParams.get("job_id") || 0);
+    if (presetCompany) setCompany(presetCompany);
+    if (presetRole) setRole(presetRole);
+    if (presetJob > 0) setJobId(presetJob);
+    // 只在进入页面时读一次：用户改完输入不该被 URL 里的旧值拉回去。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const name = company.trim();
+    if (!name) {
+      setLatest(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      latestCompanyResearch(name)
+        .then((payload) => {
+          if (!cancelled) setLatest(payload.entry);
+        })
+        .catch(() => {
+          // 读「最近一次调研」是增强项：失败就当没有，不打扰用户。
+          if (!cancelled) setLatest(null);
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [company]);
 
   const submit = async () => {
     const name = company.trim();
@@ -39,9 +95,55 @@ export default function CompanyResearchPage() {
     setLoading(true);
     setError("");
     try {
-      setResult(await researchCompany({ company: name, role: role.trim(), jd, deep }));
+      const payload = await researchCompany({
+        company: name,
+        role: role.trim(),
+        jd,
+        deep,
+        job_id: jobId,
+      });
+      setResult(payload);
+      // 刚跑完的这次就是"最近一次"，不必再发一次读请求。
+      if (payload.knowledge_entry) setLatest(payload.knowledge_entry);
     } catch (err) {
       // 后端 `detail` 只写原因，引导由这句兜底文案负责。
+      setError(
+        err instanceof Error && err.message ? err.message : t("companyResearch.error.request"),
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** I-23：只重跑简报（429 等场景）。卡片已经搜过，再跑一遍等于白付一次搜索费。 */
+  const retryBrief = async () => {
+    const name = company.trim();
+    if (!name || loading) return;
+    setLoading(true);
+    setError("");
+    try {
+      const payload = await researchCompany({
+        company: name,
+        role: role.trim(),
+        jd,
+        deep,
+        job_id: jobId,
+        parts: ["brief"],
+      });
+      setResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              brief: payload.brief,
+              sources: payload.sources,
+              notes: payload.notes,
+              usage: payload.usage,
+              knowledge_entry: payload.knowledge_entry ?? prev.knowledge_entry,
+            }
+          : payload,
+      );
+      if (payload.knowledge_entry) setLatest(payload.knowledge_entry);
+    } catch (err) {
       setError(
         err instanceof Error && err.message ? err.message : t("companyResearch.error.request"),
       );
@@ -56,6 +158,13 @@ export default function CompanyResearchPage() {
     <div className="rf-research-page">
       <Card title={t("companyResearch.title")} className="rf-research-form">
         <Typography.Paragraph type="secondary">{t("companyResearch.intro")}</Typography.Paragraph>
+        {latest ? (
+          <Typography.Paragraph type="secondary" data-testid="research-latest">
+            {t("companyResearch.latest.label", { when: relativeDays(latest.updated_at) })}
+            {" · "}
+            <Link to="/knowledge">{t("companyResearch.latest.view")}</Link>
+          </Typography.Paragraph>
+        ) : null}
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
           <label className="rf-research-field">
             <span>{t("companyResearch.field.company")}</span>
@@ -137,7 +246,7 @@ export default function CompanyResearchPage() {
             <ResearchCardList cards={result.cards} />
           </Card>
           <Card title={t("companyResearch.brief.title")}>
-            <ResearchBriefPanel brief={result.brief} />
+            <ResearchBriefPanel brief={result.brief} onRetryBrief={() => void retryBrief()} />
             {usage ? (
               <Typography.Paragraph
                 type="secondary"

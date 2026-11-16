@@ -33,6 +33,8 @@ const fonts = {
   "fonts.builtin.download-aria": "Download Source Han Sans (about {size})",
   "fonts.builtin.source-tooltip":
     "Downloaded online without increasing the installer size. Published by Adobe under the SIL Open Font License 1.1, free for personal and commercial documents",
+  // I-17: accessible name for the ⓘ that now carries the sentence above.
+  "fonts.builtin.source-aria": "Font source and license",
   "fonts.builtin.downloading-with-total": "Downloading... {done} / {total}",
   "fonts.builtin.downloading": "Downloading... {done}",
   "fonts.builtin.failed": "Could not download Source Han Sans: {error}. Select Retry to try again.",
@@ -57,6 +59,8 @@ const fonts = {
   "skills.page.subtitle":
     "Skills control how the assistant responds; layout presets control Resume typography. Manage both here.",
   "layout.intro.title": "Using layout presets",
+  /** Accessible name for the `ⓘ` trigger (I-20). */
+  "layout.intro.label": "Layout overview",
   "layout.intro.body":
     "Layout presets control Resume density through line height, margins, Section spacing and accent color. Adjust settings without writing code. Templates control the visual structure, and you can switch built-in templates at any time.",
   "layout.intro.howto":

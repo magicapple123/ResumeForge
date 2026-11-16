@@ -66,16 +66,16 @@ export const STYLE_PROP_KINDS: Record<StylePropKey, StylePropKind> = {
 /**
  * 区间与步长的**唯一**来源（与后端 `PROP_BOUNDS` 逐键相等）。
  *
- * 越界值在后端是**丢弃该属性**（不夹紧），所以控件必须在入口夹紧——否则会出现
- * "滑杆停在 3.2、后端存的是没有这个键"的假象。
+ * I-32 起后端对越界值**夹到边界并保留**（此前是丢弃该属性），所以"拖到上限松手跳回去"
+ * 不会再有；控件仍按这里夹紧，保证界面显示值与落库值一致。
  */
 export const STYLE_PROP_BOUNDS: Record<StyleNumberPropKey, StyleNumberBounds> = {
-  font_scale: { min: 0.7, max: 2.4, step: 0.02 },
-  space_before: { min: 0, max: 3, step: 0.05 },
-  space_after: { min: 0, max: 3, step: 0.05 },
-  line_height: { min: 1, max: 2.6, step: 0.01 },
-  indent: { min: 0, max: 4, step: 0.05 },
-  letter_spacing: { min: -0.1, max: 0.3, step: 0.01 },
+  font_scale: { min: 0.5, max: 3, step: 0.02 },
+  space_before: { min: 0, max: 6, step: 0.05 },
+  space_after: { min: 0, max: 6, step: 0.05 },
+  line_height: { min: 0.9, max: 3, step: 0.01 },
+  indent: { min: 0, max: 8, step: 0.05 },
+  letter_spacing: { min: -0.2, max: 0.6, step: 0.01 },
 };
 
 /** 枚举属性的可选值 + 词条键（值就是落库字面量，顺序即界面顺序）。 */

@@ -79,6 +79,27 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("ObjectStylePanel · 单字段（I-28）", () => {
+  it("字段作用域下可切换「字段值 / 字段名」，两者行清单不同", async () => {
+    renderPanel({ defaultScope: "field", pickedPath: "exp_12345678.ob_item0002", lockScope: true });
+
+    // 默认是字段值：正文类属性（缩进）在清单里。
+    expect(screen.getByTestId("style-row-object-indent")).toBeTruthy();
+    expect(screen.getByRole("radio", { name: t("typography.fieldStyle.target.value") })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("radio", { name: t("typography.fieldStyle.target.label") }));
+
+    // 切到字段名：角色变 field_label（只有字号/颜色/加粗/字距），缩进必须消失。
+    await waitFor(() => expect(screen.queryByTestId("style-row-object-indent")).toBeNull());
+    expect(screen.getByTestId("style-row-object-font_scale")).toBeTruthy();
+  });
+
+  it("非字段作用域不出现这个切换", () => {
+    renderPanel({ defaultScope: "body" });
+    expect(screen.queryByRole("radio", { name: t("typography.fieldStyle.target.label") })).toBeNull();
+  });
+});
+
 describe("ObjectStylePanel · 作用范围（Q12）", () => {
   it("未选中对象时给出选择提示", () => {
     renderPanel({ objectId: null });

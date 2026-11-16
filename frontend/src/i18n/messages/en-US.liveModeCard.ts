@@ -20,6 +20,7 @@ const liveModeCard = {
   "liveModeCard.intro.pickHint": "pick the one you want",
   "liveModeCard.intro.tail":
     " - so it doesn't have to recognize the box. Good for checking one box at a time, and for boxes the bulk fill can't handle.",
+  "liveModeCard.intro.hintAria": "Live fill note",
   "liveModeCard.status.waiting": "Waiting for you to click a box",
   "liveModeCard.status.off": "Not started",
   "liveModeCard.tag.off": "Off",

@@ -316,9 +316,12 @@ describe("填充记录", () => {
 describe("浏览器设置", () => {
   it("提供一个改浏览器的入口（与投递台共用浏览器类型配置）", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByRole("button", { name: /浏览器设置/ })).toBeEnabled());
+    const more = await screen.findByRole("button", { name: "更多浏览器操作" });
+    await waitFor(() => expect(more).toBeEnabled());
 
-    screen.getByRole("button", { name: /浏览器设置/ }).click();
+    // 配置与诊断收进了「更多」：常驻两颗按钮会把状态行挤到换行（I-27）。
+    fireEvent.click(more);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /浏览器设置/ }));
 
     await waitFor(() =>
       expect(screen.getByText(/分别打开独立浏览器窗口与登录态/)).toBeInTheDocument(),

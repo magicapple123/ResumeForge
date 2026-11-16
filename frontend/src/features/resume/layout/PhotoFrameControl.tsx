@@ -51,11 +51,13 @@ export const PHOTO_FRAME_BOUNDS: Record<
   (typeof PHOTO_FRAME_KEYS)[number],
   { min: number; max: number; step: number; fallback: number }
 > = {
-  photo_border_width: { min: 0, max: 8, step: 1, fallback: 1 },
+  // I-32：与后端 FORMAT_FIELDS 逐项对齐（此前这里是 8 / 24 / ±20 的旧区间，
+  // 后端放宽后不同步会重现"拖不过去"——正是本条要消灭的症状）。
+  photo_border_width: { min: 0, max: 16, step: 1, fallback: 1 },
   photo_border_color: { min: 0, max: 0, step: 0, fallback: 0 },
-  photo_radius: { min: 0, max: 24, step: 1, fallback: 4 },
-  photo_offset_x: { min: -20, max: 20, step: 0.5, fallback: 0 },
-  photo_offset_y: { min: -20, max: 20, step: 0.5, fallback: 0 },
+  photo_radius: { min: 0, max: 48, step: 1, fallback: 4 },
+  photo_offset_x: { min: -40, max: 40, step: 0.5, fallback: 0 },
+  photo_offset_y: { min: -40, max: 40, step: 0.5, fallback: 0 },
 };
 
 /** 当前值（没设过就用模板默认）。 */
@@ -341,6 +343,16 @@ export default function PhotoFrameControl({
           {t("resume.photo.scale.noPhoto")}
         </Typography.Text>
       ) : null}
+      {/* I-31：照片脱流后允许压住正文，这条提示是"越界"的唯一出口——不写在这里，
+          用户只会看到文字被照片盖住却不知道能改什么。字号 11px（与其它提示同档）。 */}
+      <Typography.Text
+        type="secondary"
+        className="resume-photo-frame-hint"
+        style={{ fontSize: 11 }}
+        data-testid="photo-frame-overlap-hint"
+      >
+        {t("resume.photo.frame.overlapHint")}
+      </Typography.Text>
     </div>
   );
 

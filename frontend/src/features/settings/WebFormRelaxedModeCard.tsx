@@ -6,16 +6,21 @@
  * 文案与后端 `engine.core.relaxed_kind` 的注释同源——那里是代码事实，这里是用户可见的
  * 承诺，两者只许同时改。
  */
-import { App, Card, Space, Switch, Typography } from "antd";
+import { App, Card, Flex, Space, Switch, Typography } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { useWebFormRelaxedMode } from "./useWebFormRelaxedMode";
+import SettingsResetButton from "./SettingsResetButton";
+import { useSettingsResetListener } from "./useSettingsResetListener";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
 export default function WebFormRelaxedModeCard() {
   useLocale();
   const { message } = App.useApp();
-  const { enabled, loading, saving, toggle } = useWebFormRelaxedMode();
+  const { enabled, loading, saving, toggle, reload } = useWebFormRelaxedMode();
+
+  // I-10：`webform` 作用域只有这一个键，卡片即作用域，按 scope 整组复位。
+  useSettingsResetListener(() => void reload());
 
   const onChange = async (checked: boolean) => {
     const saved = await toggle(checked);
@@ -31,7 +36,16 @@ export default function WebFormRelaxedModeCard() {
   };
 
   return (
-    <Card title={t("settingsUi.webFormRelaxed.title")} className="settings-card">
+    <Card
+      title={
+        <Flex align="center" gap={8}>
+          <span>{t("settingsUi.webFormRelaxed.title")}</span>
+          {/* I-10：卡片级恢复默认（回到「关」）。 */}
+          <SettingsResetButton scope="webform" />
+        </Flex>
+      }
+      className="settings-card"
+    >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         {t("settingsUi.webFormRelaxed.intro")}
       </Typography.Paragraph>

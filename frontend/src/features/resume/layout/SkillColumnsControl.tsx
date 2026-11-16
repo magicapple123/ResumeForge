@@ -10,9 +10,10 @@
  * 「跟随默认」= 删键：没设过时一行排几个由模板 CSS 决定，写死一个 3 会让存量简历
  * 的标签突然重排。
  */
-import { Segmented, Tooltip } from "antd";
+import { Segmented } from "antd";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
+import HintDetail from "../../../components/common/HintDetail";
 import type { ResumeFormatConfig } from "../../../types/resumeFormat";
 
 export const SKILL_COLUMNS_KEY = "skill_columns";
@@ -49,26 +50,29 @@ export default function SkillColumnsControl({ formatConfig, disabled = false, on
   return (
     <div className="resume-wb-field-row">
       <span className="resume-wb-field-label">{t("skillColumns.label")}</span>
-      <Tooltip title={t("skillColumns.hint")}>
-        <span style={{ justifySelf: "start" }}>
-          <Segmented
-            size="small"
-            aria-label={t("skillColumns.label")}
-            value={value === 0 ? "auto" : String(value)}
-            disabled={disabled || undefined}
-            options={[
-              { value: "auto", label: t("skillColumns.auto") },
-              ...SKILL_COLUMN_VALUES.map((count) => ({
-                value: String(count),
-                label: String(count),
-              })),
-            ]}
-            onChange={(next) =>
-              onChange(withSkillColumns(formatConfig, next === "auto" ? 0 : Number(next)))
-            }
-          />
-        </span>
-      </Tooltip>
+      {/* I-17：49 字的解释原本是包住整个 Segmented 的 tooltip——悬停才看得见、移开就消失，
+          而且会盖住"点一下换列数"这个主操作。现在它是控件右侧的 `ⓘ`。 */}
+      <span
+        style={{ justifySelf: "start", display: "inline-flex", alignItems: "center", gap: 6 }}
+      >
+        <Segmented
+          size="small"
+          aria-label={t("skillColumns.label")}
+          value={value === 0 ? "auto" : String(value)}
+          disabled={disabled || undefined}
+          options={[
+            { value: "auto", label: t("skillColumns.auto") },
+            ...SKILL_COLUMN_VALUES.map((count) => ({
+              value: String(count),
+              label: String(count),
+            })),
+          ]}
+          onChange={(next) =>
+            onChange(withSkillColumns(formatConfig, next === "auto" ? 0 : Number(next)))
+          }
+        />
+        <HintDetail detail={t("skillColumns.hint")} label={t("skillColumns.hintAria")} />
+      </span>
     </div>
   );
 }

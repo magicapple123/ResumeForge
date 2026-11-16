@@ -46,6 +46,7 @@ import versions from "./zh-CN.versions";
 import workbench from "./zh-CN.workbench";
 import webformGroups from "./zh-CN.webformGroups";
 import webformFields from "./zh-CN.webformFields";
+import settingsReset from "./zh-CN.settingsReset";
 import settingsPage from "./zh-CN.settingsPage";
 import exportPanel from "./zh-CN.exportPanel";
 import resumeEditor from "./zh-CN.resumeEditor";
@@ -271,6 +272,7 @@ const namespaces = {
   ...webformGroups,
   ...webformFields,
   ...settingsPage,
+  ...settingsReset,
   ...exportPanel,
   ...resumeEditor,
   /** v2 字段级文档编辑器（2026-10-30）。 */

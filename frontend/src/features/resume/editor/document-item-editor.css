@@ -21,11 +21,15 @@
   align-items: start;
 }
 
-/* R-06 ②A：编辑器内部行 = 26px 标签列 + 内容列。`.document-value-row` 被列表值 /
-   作者行复用，所以**不改它的全局 flex 规则**，只给字段行加这个新 grid。 */
+/* R-06 ②A：编辑器内部行 = 标签列 + 内容列。`.document-value-row` 被列表值 /
+   作者行复用，所以**不改它的全局 flex 规则**，只给字段行加这个新 grid。
+
+   I-27：标签列 26px 是按 2 字标签（11px × 2 ≈ 22px）定的，「行内格式」4 字 ≈ 44px
+   会被裁成「行内」。改 `auto` 看似更聪明，但**每一行是各自独立的 grid**：auto 会让
+   各行标签列宽度不同，内容列起点随之左右错开，比裁字更难看。所以统一给 44px。 */
 .document-field-row {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr);
   gap: 6px;
   align-items: center;
   min-width: 0;
@@ -44,9 +48,9 @@
   display: block;
 }
 
-/* 日期范围：26px 标签列 + 开始 + 「至」 + 结束（「至」为空时不占宽度）。 */
+/* 日期范围：标签列与字段行同宽（44px，I-27），否则标签右边缘会与上一行不对齐。 */
 .document-field-row.is-date-range {
-  grid-template-columns: 26px minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr) auto minmax(0, 1fr);
 }
 
 .document-field-sep {

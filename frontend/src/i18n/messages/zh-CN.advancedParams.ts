@@ -32,6 +32,19 @@ const advancedParams = {
   "advancedParams.placeholder.stop": "输入后回车添加，最多 4 条",
   "advancedParams.alert.protocolNote":
     "协议换成「Anthropic 原生」后，思考预算、Top K 等参数才有意义；换成 OpenAI 兼容时它们会被忽略。思考预算与「思考模式」是同一件事的两代写法：填了预算就以预算为准，留空则由开关与强度决定。",
+
+  // ── `ⓘ` 的无障碍名（I-17）─────────────────────────────────
+  /**
+   * 上面 6 条 ≥36 字的参数解释从 `Form.Item tooltip`（悬停才看得见）改成标签后的 `ⓘ`。
+   * 每条只需要一个"这个按钮点开的是什么"的名字——正文仍用原来的 `tooltip.*` key，
+   * 一个字都不改（避免两处措辞漂移）。
+   */
+  "advancedParams.aria.topP": "Top P 说明",
+  "advancedParams.aria.topK": "Top K 说明",
+  "advancedParams.aria.repetitionPenalty": "重复惩罚说明",
+  "advancedParams.aria.thinkingBudget": "思考预算说明",
+  "advancedParams.aria.thinkingStyle": "思考参数形态说明",
+  "advancedParams.aria.stop": "停止词说明",
 } as const;
 
 export default advancedParams;

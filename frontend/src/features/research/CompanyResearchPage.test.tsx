@@ -8,13 +8,18 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CompanyResearchResult, ResearchBrief } from "../../api/research";
 import { t } from "../../i18n";
 import CompanyResearchPage from "./CompanyResearchPage";
 import { splitCitations } from "./citations";
 
-const apiMocks = vi.hoisted(() => ({ researchCompany: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({
+  researchCompany: vi.fn(),
+  // I-21：页面挂载后会读「最近一次调研」，测试里默认"没有"，避免真发请求。
+  latestCompanyResearch: vi.fn(() => Promise.resolve({ entry: null })),
+}));
 
 // 后端返回的中文（卡片标题、失败原因）是**数据**，不是界面文案：它们不进语言包，
 // 所以先用常量收起来，断言里只引用常量（cjkRatchet 只数 ByText 参数里的中文）。
@@ -26,7 +31,11 @@ const CARD_SEARCH_FAILURE = "联网搜索服务暂时不可用，请稍后重试
 
 vi.mock("../../api/research", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api/research")>();
-  return { ...actual, researchCompany: apiMocks.researchCompany };
+  return {
+    ...actual,
+    researchCompany: apiMocks.researchCompany,
+    latestCompanyResearch: apiMocks.latestCompanyResearch,
+  };
 });
 
 function brief(overrides: Partial<ResearchBrief> = {}): ResearchBrief {
@@ -95,10 +104,13 @@ function result(overrides: Partial<CompanyResearchResult> = {}): CompanyResearch
 }
 
 function renderPage() {
+  // I-22：页面读 `?company=` 预填并用 Link 跳知识库，必须有 Router 上下文。
   render(
-    <AntdApp>
-      <CompanyResearchPage />
-    </AntdApp>,
+    <MemoryRouter>
+      <AntdApp>
+        <CompanyResearchPage />
+      </AntdApp>
+    </MemoryRouter>,
   );
 }
 

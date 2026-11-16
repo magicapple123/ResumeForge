@@ -112,3 +112,14 @@
     opacity: 1;
   }
 }
+
+/*
+ * I-17：参考分免责声明从列头 tooltip 挪到这里当脚注——它必须**不悬停也能看到**。
+ * 12px、次要文字色，`ⓘ` 缩进跟着文字走（不进流、不占行高）。
+ */
+.apply-page .apply-queue-score-note {
+  display: flex;
+  gap: 4px;
+  margin: var(--rf-space-2) 0 0;
+  padding-inline: 2px;
+}

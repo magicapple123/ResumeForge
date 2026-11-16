@@ -1,0 +1,236 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * 「外部连接」页的行容器（T11 / T12，issue I-09）。
+ *
+ * 之前这页**没有任何 CSS**：11 行只有 `Flex gap={16}`，既没有分隔线也没有 hover，
+ * 读起来像一段没有结构的纯文本。本片只管三件事：
+ *
+ * 1. 行与行之间的分隔线（`.connection-row` 的 `border-bottom`）与 hover 底色；
+ * 2. 行内三段结构：名称+状态 / 值+操作 / 存储形态小字。三段高度固定，
+ *    所以**进编辑态前后行高不变**（输入框与值行同为 24px）；
+ * 3. 状态圆点的形状（`data-status`）：实心=有值、空心=没有值或没有覆盖。
+ *    形状本身能分辨，不靠颜色单独承载语义（色盲用户 + 英文界面同样可读）。
+ *
+ * `.connection-row` 这个类名**不可改**：六个用例用 `closest(".connection-row")`
+ * 定位行。改名字等于让那些断言静默退化成"页面里任何地方"。
+ */
+
+/* ── 分组（A / B / C 各一段）────────────────────────────────── */
+.connection-group {
+  display: flex;
+  flex-direction: column;
+  /* 组与组之间留白由标题的上外边距给（见下），这里不再叠一层 gap。 */
+}
+
+.connection-group__title {
+  margin: 24px 0 2px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--rf-text-body, rgba(0, 0, 0, 0.88));
+}
+
+/* 第一组贴着卡片头部，不需要 24px 的段落间距。 */
+.connection-group:first-of-type .connection-group__title {
+  margin-top: 0;
+}
+
+.connection-group__hint {
+  margin-bottom: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+}
+
+.connection-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 一行 ─────────────────────────────────────────────────── */
+.connection-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px 10px 2px;
+  border-bottom: 1px solid var(--rf-border-subtle, #e5e7eb);
+}
+
+/*
+ * 末尾那行也保留 border-style（只是透明）：验收要求 `.connection-row` 的
+ * `border-bottom` 计算值非 none，用 `border-bottom: none` 抹掉最后一行会让
+ * 那条断言变成"取决于它是第几行"。
+ */
+.connection-row:last-child {
+  border-bottom-color: transparent;
+}
+
+.connection-row:hover,
+.connection-row:focus-within {
+  background: var(--rf-fill-tertiary, rgba(0, 0, 0, 0.03));
+}
+
+/* ── 第一段：名称 + 状态 + 说明入口 ─────────────────────────── */
+.connection-row__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.connection-row__name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--rf-text-body, rgba(0, 0, 0, 0.88));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-row__status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+}
+
+.connection-row__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* 空心 = 还没有值（未配置）或没有覆盖过（系统项仍是出厂值）。 */
+.connection-row[data-status="not_configured"] .connection-row__dot,
+.connection-row[data-status="default"] .connection-row__dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+.connection-row[data-status="saved"] .connection-row__status {
+  color: var(--rf-success-text, #3f8f1f);
+}
+
+.connection-row[data-status="session_only"] .connection-row__status {
+  color: var(--rf-warning-text, #ad6800);
+}
+
+.connection-row[data-status="modified"] .connection-row__status {
+  color: var(--rf-info, #1d63d1);
+}
+
+/* 说明入口：图标按钮本身不占位，按下去才展开。 */
+.connection-row__info {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+}
+
+/* ── 第二段：值（或输入框）+ 操作列 ─────────────────────────── */
+.connection-row__main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/*
+ * 值与输入框都是 24px 高：编辑态只是把这一行"换个控件"，操作列位置不动，
+ * 整行高度也就不会跳（验收：进编辑态前后行高差 ≤ 2px）。
+ */
+.connection-row__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 24px;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 24px;
+  color: var(--rf-text-body, rgba(0, 0, 0, 0.88));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-row__editor {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 420px;
+}
+
+.connection-row__editor .ant-input,
+.connection-row__editor .ant-input-affix-wrapper,
+.connection-row__editor .ant-input-password {
+  height: 24px;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 12px;
+}
+
+.connection-row__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+}
+
+/* ── 第三段：存储形态（小字）──────────────────────────────── */
+.connection-row__meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 16px;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-row__meta > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 说明浮层（ⓘ 的内容）──────────────────────────────────── */
+.connection-row__hint {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 320px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--rf-text-secondary, rgba(0, 0, 0, 0.65));
+}
+
+.connection-row__hint-line {
+  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+}
+
+/* 窄屏：值可以折到操作列下面，操作列始终靠右。
+   断点用 767（BREAKPOINTS.phone）——640 不在本仓断点表里，breakpointGuard 会红。 */
+@media (max-width: 767px) {
+  .connection-row__main {
+    flex-wrap: wrap;
+  }
+
+  .connection-row__value,
+  .connection-row__editor {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .connection-row__actions {
+    margin-left: auto;
+  }
+}

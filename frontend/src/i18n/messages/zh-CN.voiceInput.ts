@@ -86,10 +86,20 @@ const voiceInput = {
   "voiceInput.settings.device.aria": "选择麦克风设备",
   "voiceInput.settings.device.default": "系统默认",
   "voiceInput.settings.device.unnamed": "麦克风 {index}",
-  "voiceInput.settings.device.empty": "没有读到设备列表，授权后再点刷新",
+  "voiceInput.settings.device.empty": "没有读到麦克风设备，请连接麦克风后点「刷新麦克风列表」再试",
   "voiceInput.settings.device.refresh": "刷新麦克风列表",
-  "voiceInput.settings.device.hint": "首次授权后才会显示设备名称",
+  "voiceInput.settings.device.hint": "已授权，但还没读到设备名称，点「刷新麦克风列表」再试",
   "voiceInput.settings.device.lost": "原来的麦克风不在了，已切回系统默认",
+  /**
+   * I-07：授权入口与三态提示。授权只能由用户手势触发（浏览器规定），所以必须先有按钮
+   * ——原来的界面上只有一句"首次授权后才会显示设备名称"，而**没有任何可点的入口**。
+   * 文案里不要再写"右侧/上方"这类方位词：视口一变就失效，按钮本身就在同一排。
+   */
+  "voiceInput.settings.device.grant": "授权麦克风",
+  "voiceInput.settings.device.regrant": "重新检查权限",
+  "voiceInput.settings.device.prompt": "点「授权麦克风」后就能看到设备名称",
+  "voiceInput.settings.device.denied":
+    "麦克风权限被拒绝。打开地址栏左侧的站点设置，把「麦克风」改成「允许」，再点「重新检查权限」",
 
   /** 「测试麦克风」（#8.3）：只做电平，不上传、不依赖语音服务额度。 */
   "voiceInput.settings.micTest.open": "测试麦克风",

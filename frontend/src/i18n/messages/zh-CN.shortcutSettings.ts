@@ -26,6 +26,7 @@ const shortcutSettings = {
   "shortcutSettings.action.nextPage": "下一页（列表）",
   "shortcutSettings.action.focusAssistant": "打开助手并聚焦输入",
   "shortcutSettings.action.commandPalette": "打开命令面板（制作台）",
+  "shortcutSettings.action.showHints": "显示提示（展开全站说明）",
 
   "shortcutSettings.scope.form": "表单",
   "shortcutSettings.scope.page": "页面",

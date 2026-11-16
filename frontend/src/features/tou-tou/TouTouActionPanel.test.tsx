@@ -157,4 +157,11 @@ describe("动作面板", () => {
     fireEvent.click(screen.getByRole("button", { name: t("touTou.panel.restoreMuted") }));
     expect(props.onRestoreMuted).toHaveBeenCalledTimes(1);
   });
+
+  it("常驻「球的用法」：四条动作不再只活在悬浮球的长 tooltip 里（I-17）", () => {
+    setup();
+    const note = screen.getByRole("note", { name: t("touTou.orb.helpTitle") });
+    // 划词键按用户当前配置渲染（这里是默认值），所以断言也用同一份插值。
+    expect(note).toHaveTextContent(t("touTou.orb.help", { shortcut: "Ctrl+K" }));
+  });
 });

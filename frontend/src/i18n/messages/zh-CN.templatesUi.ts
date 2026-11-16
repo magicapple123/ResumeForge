@@ -16,10 +16,18 @@ const templatesUi = {
   "templatesUi.formatEditor.placeholder.name": "如：我的紧凑版式",
   "templatesUi.formatEditor.field.description": "说明（选填）",
   "templatesUi.formatEditor.placeholder.description": "一句话说明它解决什么问题",
-  /** 参数没填时的显示值与占位符（颜色项与数值项共用同一条）。 */
-  "templatesUi.formatEditor.value.unset": "未设置",
-  /** 颜色项旁「回到跟随模板」的按钮。 */
+  /** 参数没填时的显示值（数值项的占位符与颜色项的横条文字共用同一条）。 */
+  "templatesUi.formatEditor.value.unset": "跟随模板",
+  /** 颜色项旁「回到跟随模板」的按钮无障碍名；`name` 是那一项的显示名。 */
   "templatesUi.formatEditor.action.clear": "清除",
+  /** 颜色项已设过时右侧那颗 ↺ 的无障碍名；`name` 是那一项的显示名。 */
+  "templatesUi.formatEditor.action.followTemplate": "恢复「{name}」跟随模板",
+  /** 每个参数旁的 ⓘ 的无障碍名；`name` 是那一项的显示名。 */
+  "templatesUi.formatEditor.hint.fieldDetail": "「{name}」说明",
+  /** 依赖模板能力的参数（`requires: "header_border"`）被禁用时的原因。 */
+  "templatesUi.formatEditor.hint.noHeaderRule": "模板没有页眉线时这一项不起作用",
+  /** 照片分区的组级说明（五项参数一起描述同一个相框，逐项说明在各自的 ⓘ 里）。 */
+  "templatesUi.formatEditor.groupNote.photo": "五项一起决定头像框的样子",
   /** 表单底部的说明：留空的参数不提交。 */
   "templatesUi.formatEditor.hint.blank": "留空表示沿用模板的设置；只有填过的项才会生效。",
   "templatesUi.formatEditor.error.save": "保存失败",

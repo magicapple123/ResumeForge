@@ -27,6 +27,8 @@ interface LabeledField {
   label_en?: string;
   description?: string;
   description_en?: string;
+  group?: string;
+  group_en?: string;
 }
 
 /**
@@ -76,4 +78,26 @@ export function formatFieldDescription(
     if (english) return english;
   }
   return field.description ?? "";
+}
+
+/**
+ * 取一项版式字段所属分区的**显示名**（编辑器分区用的组头文字）。
+ *
+ * `group` 是分区键（也是中文正名），`group_en` 只是它的英文附加键，所以判断规则和
+ * `formatFieldLabel` 一模一样：英文界面且 `group_en` 非空 → 用英文，其它情况回落
+ * `group`。取不到任何分组名时返回空串，调用方据此决定"这一段不带组头"。
+ *
+ * 为什么也放在这里：`resume_format_groups.py` 的模块注释把"按 group 分区、按首次
+ * 出现定顺序"的读法指向了前端渲染处；渲染处若各写一次 `locale === "en-US"`，中文界面
+ * 和英文界面的分区归属迟早会不一致（分组名和分区键是同一个值，错一处就分错组）。
+ */
+export function formatFieldGroup(field: LabeledField | undefined | null, locale: Locale): string {
+  if (!field) return "";
+  const group = (field.group ?? "").trim();
+  if (group === "") return "";
+  if (locale.startsWith("en")) {
+    const english = (field.group_en ?? "").trim();
+    if (english) return english;
+  }
+  return group;
 }

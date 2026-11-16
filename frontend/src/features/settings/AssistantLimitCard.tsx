@@ -14,8 +14,8 @@
  * 体验很差。前端用与后端**同一口径**（1–99 且摘要 > 遮蔽）直接禁用保存并给 inline 提示，
  * 同时不做静默夹取——夹取会悄悄改掉用户填的数字。
  */
-import { App, Button, Card, Input, InputNumber } from "antd";
-import { useEffect, useState } from "react";
+import { App, Button, Card, Flex, Input, InputNumber } from "antd";
+import { useCallback, useEffect, useState } from "react";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import {
   getAssistantCompactionSetting,
@@ -24,6 +24,8 @@ import {
   saveAssistantLimitSetting,
 } from "../../api/settings";
 import type { AssistantCompactionSetting, AssistantLimitSetting } from "../../types";
+import SettingsResetButton from "./SettingsResetButton";
+import { useSettingsResetListener } from "./useSettingsResetListener";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
@@ -48,6 +50,22 @@ const LIMIT_DEFAULTS: AssistantLimitSetting = {
   stream_budget_seconds: 1800,
 };
 
+/**
+ * I-10：这张卡能恢复默认的键。
+ *
+ * 卡片级入口要**精确到本卡**：`assistant` 这个后端作用域还包含权限档位、记忆开关、
+ * 任务卡开关（各自在别的卡上），按 scope 一起重置会把用户没在看的三张卡也打回默认。
+ * 压缩三项（摘要模型与两个阈值）是「模型」卡的调参，同样在这里一起复位。
+ */
+const LIMIT_RESET_KEYS = [
+  "assistant_max_tool_rounds",
+  "assistant_stream_budget_seconds",
+  "assistant_tool_result_max_chars",
+  "assistant_compaction_model",
+  "assistant_compaction_mask_percent",
+  "assistant_compaction_summary_percent",
+];
+
 export default function AssistantLimitCard() {
   // 本组件用模块级 t()：必须订阅语言变化。
   useLocale();
@@ -63,41 +81,45 @@ export default function AssistantLimitCard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // 挂载加载与「恢复默认」后重取共用这一份：两组设置**各自** try——压缩接口读失败不该把
+  // 上限一起打回默认值（反之亦然）。
+  const load = useCallback(async () => {
+    try {
+      const current = await getAssistantLimitSetting();
+      setRounds(current.max_tool_rounds);
+      setBudget(current.stream_budget_seconds);
+      setSavedLimits({
+        max_tool_rounds: current.max_tool_rounds,
+        stream_budget_seconds: current.stream_budget_seconds,
+      });
+    } catch {
+      // 读不到就保持默认展示：上限卡只是"可调项"，读失败不该让整页报错。
+    }
+    try {
+      const compaction = await getAssistantCompactionSetting();
+      setModel(compaction.model);
+      setMaskPercent(compaction.mask_percent);
+      setSummaryPercent(compaction.summary_percent);
+      setSavedCompaction(compaction);
+    } catch {
+      // 同上：压缩设置读失败只影响这一块，保持默认值让用户仍可改。
+    }
+  }, []);
+
   // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
-  // 两组设置**各自** try：压缩接口读失败不该把上限一起打回默认值（反之亦然）。
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try {
-        const current = await getAssistantLimitSetting();
-        if (!cancelled) {
-          setRounds(current.max_tool_rounds);
-          setBudget(current.stream_budget_seconds);
-          setSavedLimits({
-            max_tool_rounds: current.max_tool_rounds,
-            stream_budget_seconds: current.stream_budget_seconds,
-          });
-        }
-      } catch {
-        // 读不到就保持默认展示：上限卡只是"可调项"，读失败不该让整页报错。
-      }
-      try {
-        const compaction = await getAssistantCompactionSetting();
-        if (!cancelled) {
-          setModel(compaction.model);
-          setMaskPercent(compaction.mask_percent);
-          setSummaryPercent(compaction.summary_percent);
-          setSavedCompaction(compaction);
-        }
-      } catch {
-        // 同上：压缩设置读失败只影响这一块，保持默认值让用户仍可改。
-      }
+      await load();
       if (!cancelled) setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [load]);
+
+  // I-10：恢复默认后重取两组值——`saved*` 一起刷新，"未保存改动"提示才会消失。
+  useSettingsResetListener(() => void load());
 
   // 空白模型不是"脏"改动：保存时 trim，比较也用 trim 后的一致口径。
   const trimmedModel = model.trim();
@@ -160,7 +182,16 @@ export default function AssistantLimitCard() {
     typeof value === "number" ? value : fallback;
 
   return (
-    <Card title={t("assistantLimits.settings.title")} className="settings-card">
+    <Card
+      title={
+        <Flex align="center" gap={8}>
+          <span>{t("assistantLimits.settings.title")}</span>
+          {/* I-10：卡片级恢复默认（轮数 / 时长 / 压缩三项回到出厂值）。 */}
+          <SettingsResetButton keys={LIMIT_RESET_KEYS} />
+        </Flex>
+      }
+      className="settings-card"
+    >
       <LoadingBlock spinning={loading}>
         <div className="assistant-limits-sections">
           <section className="assistant-limits-section">

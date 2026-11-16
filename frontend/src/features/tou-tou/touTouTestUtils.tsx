@@ -9,6 +9,7 @@ import { resetTouTouProposal } from "./touTouProposalStore";
 import { resetWorkbenchLayout } from "../resume/editor/workbenchLayoutStore";
 import { setProfileEditControl, setProfileSaveControl } from "./profileSaveBridge";
 import { INTERVENTION_STORAGE_KEY } from "./touTouIntervention";
+import { ORB_HINT_SEEN_KEY } from "./TouTouOrbButton";
 
 /**
  * TouTouOrb 测试文件共享的测试基建。
@@ -25,6 +26,7 @@ afterEach(() => {
   setProfileSaveControl(null);
   setProfileEditControl(null);
   window.localStorage.removeItem(INTERVENTION_STORAGE_KEY);
+  window.localStorage.removeItem(ORB_HINT_SEEN_KEY);
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -32,8 +34,17 @@ afterEach(() => {
 /**
  * 渲染悬浮球：它现在要读路由（页面感知）与导航（动作跳转），必须有 Router。
  * `rerender` 也包一层 MemoryRouter——否则测试里换 context 会把 Router 一起换掉。
+ *
+ * `firstRunHint` 默认 **false**（按"已看过"处理）：首次说明（I-17）是一个自动展开的
+ * Popover，默认展开会给几乎所有球相关用例多挂一个浮层，断言容易被它污染。专门测
+ * "首次进入给一次完整说明"的用例传 `{ firstRunHint: true }`。
  */
-export function renderOrb(ui: ReactElement) {
+export function renderOrb(ui: ReactElement, options: { firstRunHint?: boolean } = {}) {
+  if (options.firstRunHint) {
+    window.localStorage.removeItem(ORB_HINT_SEEN_KEY);
+  } else {
+    window.localStorage.setItem(ORB_HINT_SEEN_KEY, "1");
+  }
   const wrap = (next: ReactElement) => (
     <MemoryRouter>
       <ShortcutProvider>{next}</ShortcutProvider>

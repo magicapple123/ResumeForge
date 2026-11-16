@@ -8,6 +8,7 @@
  */
 const applyQueue = {
   "applyQueue.action.viewDetail": "查看详情",
+  "applyQueue.action.researchCompany": "调研这家公司",
   "applyQueue.action.edit": "编辑",
   "applyQueue.action.remove": "移出队列",
   "applyQueue.action.removeShort": "移出",
@@ -81,8 +82,13 @@ const applyQueue = {
   "applyQueue.column.actions": "操作",
   "applyQueue.column.score": "参考分",
   "applyQueue.column.match": "匹配",
+  // I-17：免责声明原本整段塞在列头 tooltip 里——"藏起来的免责等于没有免责"。
+  // 现在它是表格脚注的常驻一句（`disclaimerSummary`），完整措辞挂在脚注的 `ⓘ` 后面。
   "applyQueue.score.disclaimer":
     "本参考分由本地规则估算，仅供展示与自我评估，不代表真实 ATS 解析结果或投递成功概率；投递准入仍以五类匹配结论为准。",
+  "applyQueue.score.disclaimerSummary":
+    "参考分由本地规则估算，不代表真实 ATS 解析结果或投递成功率。",
+  "applyQueue.score.disclaimerAria": "参考分说明",
   "applyQueue.score.unanalyzed": "未分析",
   "applyQueue.score.sortByScore": "按参考分排序",
   "applyQueue.score.sortByJoinedAt": "按入队时间排序",

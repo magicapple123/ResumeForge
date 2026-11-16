@@ -36,8 +36,18 @@ import { useCollapsedList } from "../../components/common/useCollapsedList";
 import LLMRecordModal from "./LLMRecordModal";
 import LLMRecordViewModal from "./LLMRecordViewModal";
 import LLMProtocolSupportMatrix from "./LLMProtocolSupportMatrix";
+import SettingsResetButton from "./SettingsResetButton";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+
+/**
+ * I-10：这张卡能恢复默认的键。
+ *
+ * 只有 `llm_config`（生效配置的调参：温度、超时、max_tokens、协议风格、思考与惩罚项…）——
+ * 重置只改这些字段，`api_key` / `base_url` / `model` / 配置名由后端按字段表保留，用户
+ * 不会因为点一下「恢复默认」丢掉密钥。记录本体的增删改仍走卡上的编辑弹窗。
+ */
+const MODEL_RESET_KEYS = ["llm_config"];
 
 interface Props {
   records: LLMConfigRecord[];
@@ -149,7 +159,13 @@ export default function LLMConfigCard({
   return (
     <>
       <Card
-        title={t("llmConfigCard.card.title")}
+        title={
+          <Flex align="center" gap={8}>
+            <span>{t("llmConfigCard.card.title")}</span>
+            {/* I-10：卡片级恢复默认。没有可重置项时按钮自己不渲染。 */}
+            <SettingsResetButton keys={MODEL_RESET_KEYS} />
+          </Flex>
+        }
         className="settings-card"
         extra={
           <Button

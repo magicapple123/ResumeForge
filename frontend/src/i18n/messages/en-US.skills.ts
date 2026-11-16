@@ -53,6 +53,8 @@ const skills = {
   "skills.guide.how3":
     "Skills are enabled in a conversation, not globally in the library: every new conversation starts with none, and Import skill loads a .md / .zip someone else shared.",
   "skills.guide.templates": "Templates:",
+  /** I-20: label of the merged "new from template" dropdown. */
+  "skills.guide.newFromTemplate": "New from template",
   "skills.budget.title":
     "The more skills a conversation enables, the longer the system prompt: once the total prompt size exceeds the budget, later skills are not loaded (the assistant says so in one sentence).",
   "skills.error.loadFailed": "Could not load skills: {error}",

@@ -26,6 +26,7 @@ import {
   resumeTemplateLabel,
 } from "../../../i18n/enum/resumeCatalog";
 import { layoutWithFormatPreset } from "./layoutWithFormatPreset";
+import HintDetail from "../../../components/common/HintDetail";
 import { formatPresetLabelOf } from "./resumeTemplatePresetLabel";
 import ResumeLanguageSelect from "./ResumeLanguageSelect";
 import TemplateGalleryModal from "../template-trial/TemplateGalleryModal";
@@ -208,25 +209,21 @@ export default function ResumeTemplateControls({
         onTrialAdopt={onTrialAdopt}
         onClose={() => setGalleryOpen(false)}
       />
-      {/* 简历语言：与页数/字号同属"排出来长什么样"。提示**必须**用 Tooltip——
-          原生 title 在触屏上永远不出现；「只改小节标题与字段名、不翻译正文」
-          正是最容易被误解的一句。`undefined` = 这次不涉及，界面显示中文。
+      {/* 简历语言：与页数/字号同属"排出来长什么样"。I-17：40 字的「只改小节标题与字段名、
+          不翻译正文」从包住整个下拉的 tooltip 改成右侧的 `ⓘ`——它要能主动点开读完，
+          而不是"鼠标挪开就没了"。`undefined` = 这次不涉及，界面显示中文。
           #13：制作台把它移进「版面」组（showLanguage={false}），模板组只留模板与版式。 */}
       {showLanguage && (
         <Space size={6}>
           {!compact && (
             <Typography.Text type="secondary">{t("resume.language.label")}</Typography.Text>
           )}
-          <Tooltip title={t("resume.language.hint")}>
-            {/* 包一层 span：禁用态的下拉不接收指针事件，Tooltip 只能挂在外层。 */}
-            <span>
-              <ResumeLanguageSelect
-                value={layout.language ?? "zh-CN"}
-                disabled={disabled}
-                onChange={(language) => onChange({ ...layout, language })}
-              />
-            </span>
-          </Tooltip>
+          <ResumeLanguageSelect
+            value={layout.language ?? "zh-CN"}
+            disabled={disabled}
+            onChange={(language) => onChange({ ...layout, language })}
+          />
+          <HintDetail detail={t("resume.language.hint")} label={t("resume.language.hintAria")} />
         </Space>
       )}
 

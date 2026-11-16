@@ -11,12 +11,12 @@
  * 体检抽屉是 `ApplyQueuePreflightDrawer`、详情是 `ApplyQueueDetailDrawer`、批量套话术是
  * `BatchGreetingTemplateModal`。面板自己保留的只有状态、请求与"哪些条目可投"的判定。
  */
-import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, EyeOutlined, SearchOutlined } from "@ant-design/icons";
 import { App, Alert, Button, Modal, Space, Typography } from "antd";
 import PageSkeleton from "../../components/common/PageSkeleton";
 import EmptyState from "../../components/common/EmptyState";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { listQueue } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
 import type { ApplyQueueItem, ApplyQueueList, ApplyTask, QueueStatus } from "../../types";
@@ -58,6 +58,7 @@ export default function ApplyQueuePanel({
   onChanged,
 }: Props) {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   // 本面板用模块级 t()：必须订阅语言变化。
   useLocale();
   const [reloadKey, setReloadKey] = useState(0);
@@ -178,6 +179,17 @@ export default function ApplyQueuePanel({
       label: t("applyQueue.action.edit"),
       icon: <EditOutlined />,
       onClick: () => setEditing(record),
+    },
+    {
+      // I-22：从队列直接去调研这家公司（只预填，不自动提交，避免一进来就计费）。
+      key: "research",
+      label: t("applyQueue.action.researchCompany"),
+      icon: <SearchOutlined />,
+      onClick: () =>
+        navigate(
+          `/research?company=${encodeURIComponent(record.company || "")}` +
+            `&role=${encodeURIComponent(record.job_title || "")}`,
+        ),
     },
     {
       key: "remove",

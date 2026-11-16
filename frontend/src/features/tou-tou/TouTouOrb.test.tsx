@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import TouTouOrb from "./TouTouOrb";
 import { setProfileSaveControl } from "./profileSaveBridge";
 import { activeFaceSrc, renderOrb } from "./touTouTestUtils";
+import { ORB_HINT_SEEN_KEY } from "./TouTouOrbButton";
+import { t } from "../../i18n";
 import {
   getShortcutSettings,
   saveShortcutSettings,
@@ -22,7 +24,7 @@ describe("TouTouOrb", () => {
     expect(activeFaceSrc()).toContain("ball-curious");
   });
 
-  it("shows a hover tooltip describing click and double-click actions", async () => {
+  it("shows a one-line hover tooltip (I-17: 长文案已移出 tooltip)", async () => {
     vi.useFakeTimers();
     renderOrb(<TouTouOrb onOpen={vi.fn()} />);
     const button = screen.getByRole("button", { name: "打开求职助手" });
@@ -33,13 +35,39 @@ describe("TouTouOrb", () => {
     });
 
     const tooltip = screen.getByRole("tooltip");
-    expect(tooltip).toHaveTextContent(
-      "单击：打开求职助手；双击：打开投投剪贴板；长按：打开动作面板；选中文字后按 Ctrl+K：打开划词动作",
-    );
+    // 悬停只给一行：划词键仍要出现，四条动作的完整说明不在 tooltip 里了。
+    expect(tooltip).toHaveTextContent(t("touTou.orb.tooltip", { shortcut: "Ctrl+K" }));
+    expect(tooltip.textContent?.length ?? 0).toBeLessThan(36);
+    expect(tooltip).not.toHaveTextContent(t("touTou.orb.help", { shortcut: "Ctrl+K" }));
     // overlayStyle 落在 .ant-tooltip 根节点上（role=tooltip 的是内层内容节点）；
     // 3700 高于球的 3650——球被压住的 antd 默认 Tooltip（1070）等于没有。
     const overlay = tooltip.closest(".ant-tooltip") as HTMLElement;
     expect(overlay.style.zIndex).toBe("3700");
+  });
+
+  it("shows the full four-action explanation once on first entry (I-17)", () => {
+    vi.useFakeTimers();
+    renderOrb(<TouTouOrb onOpen={vi.fn()} />, { firstRunHint: true });
+
+    // 首次进入不必悬停就能读到完整说明，并且当场记下"已看过"。
+    expect(screen.getByText(t("touTou.orb.helpTitle"))).toBeInTheDocument();
+    expect(document.body).toHaveTextContent(t("touTou.orb.help", { shortcut: "Ctrl+K" }));
+    expect(window.localStorage.getItem(ORB_HINT_SEEN_KEY)).toBe("1");
+
+    // 自动收起后不再展开（用户不必手动关掉挡在球旁边的浮层）。jsdom 不会派发
+    // transitionend，所以 rc-motion 的退场节点会停在 leave 阶段——"已进入退场"就是
+    // 这里能观测到的"已关闭"，真正移除节点发生在浏览器里。
+    act(() => {
+      vi.advanceTimersByTime(9000);
+    });
+    expect(document.querySelector(".ant-popover:not(.ant-zoom-big-leave)")).toBeNull();
+  });
+
+  it("does not repeat the first-entry explanation on the next visit", () => {
+    window.localStorage.setItem(ORB_HINT_SEEN_KEY, "1");
+    renderOrb(<TouTouOrb onOpen={vi.fn()} />);
+
+    expect(screen.queryByText(t("touTou.orb.helpTitle"))).toBeNull();
   });
 
   it("still opens the assistant while the tooltip is armed (hover does not eat clicks)", () => {

@@ -46,6 +46,7 @@ import type {
 } from "../../types";
 import { t, type MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import HintDetail from "../../components/common/HintDetail";
 
 /** 来源标签：颜色 + 文案 key。文案要说清"这份清单的可信度"，不能只说一个英文枚举值。 */
 const SOURCE_TAG: Record<
@@ -306,17 +307,21 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
           >
             {t("collectFilters.action.reload")}
           </Button>
-          <Tooltip title={t("collectFilters.test.hint")}>
-            <Button
-              size="small"
-              type="link"
-              icon={<ExperimentOutlined />}
-              loading={testing}
-              onClick={() => void runTest()}
-            >
-              {t("collectFilters.action.test")}
-            </Button>
-          </Tooltip>
+          {/* I-17：46 字的"会临时导航到筛选栏、测试完不影响采集"原本挂在这颗按钮的
+              tooltip 上——用户点之前看不到，而那正是决定"敢不敢点"的一句。改成 `ⓘ`。 */}
+          <Button
+            size="small"
+            type="link"
+            icon={<ExperimentOutlined />}
+            loading={testing}
+            onClick={() => void runTest()}
+          >
+            {t("collectFilters.action.test")}
+          </Button>
+          <HintDetail
+            detail={t("collectFilters.test.hint")}
+            label={t("collectFilters.test.hintAria")}
+          />
         </Space>
       </div>
 

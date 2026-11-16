@@ -139,6 +139,11 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  // `modal.confirm`（`⋯` 菜单里的二次确认）与 Dropdown 的浮层挂在 body 上，
+  // cleanup 之后可能还剩一层壳；清掉，免得下一条用例拿到上一条的残留菜单项。
+  document
+    .querySelectorAll(".ant-modal-root, .ant-dropdown, .ant-popover")
+    .forEach((node) => node.remove());
   vi.clearAllMocks();
 });
 
@@ -196,12 +201,14 @@ describe("ConnectionsCard", () => {
 
     const sessionLabel = t("connections.item.llm.session.label");
     await screen.findByText(sessionLabel);
+    const row = within(rowOf(sessionLabel));
+    // 「清除」不可逆，所以它不在行内平铺（每行常驻操作只剩主按钮 + `⋯`），
+    // 但收进菜单之后二次确认一步不少。
     fireEvent.click(
-      within(rowOf(sessionLabel)).getByRole("button", {
-        name: t("connections.action.clearAria", { name: sessionLabel }),
-      }),
+      row.getByRole("button", { name: t("connections.action.more", { name: sessionLabel }) }),
     );
-    // 确认按钮的文案是"清除这把 Key"（写清后果），与行内的「清除」不是同一个名字。
+    fireEvent.click(await screen.findByRole("menuitem", { name: t("connections.action.clear") }));
+    // 确认按钮的文案是"清除这把 Key"（写清后果），与菜单项「清除」不是同一个名字。
     fireEvent.click(await screen.findByRole("button", { name: t("connections.clear.title") }));
 
     await waitFor(() => expect(connMocks.clearLLMSessionKey).toHaveBeenCalledOnce());

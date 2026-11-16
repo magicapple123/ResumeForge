@@ -22,6 +22,7 @@ const jobDetail = {
   "jobDetail.section.progress": "该岗位的投递进度",
   "jobDetail.action.interview": "模拟面试",
   "jobDetail.action.goApply": "前往投递",
+  "jobDetail.action.researchCompany": "调研这家公司",
   "jobDetail.action.favorite": "收藏岗位",
   "jobDetail.action.unfavorite": "取消收藏",
   "jobDetail.unsupported.title": "这个岗位不能用投递台自动投递",

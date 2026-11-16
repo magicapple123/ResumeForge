@@ -45,9 +45,14 @@ const touTou = {
   "touTou.clipboard.save": "Save",
 
   // ── Orb button (TouTouOrbButton) ────────────────────────────
-  "touTou.orb.tooltip":
-    "Click: open the job assistant; double-click: open the Toutou clipboard; long-press: open the action panel; with text selected, {shortcut} opens the selection actions",
+  // I-17: hover shows one line only; the four actions moved to `touTou.orb.help`,
+  // surfaced in the one-time first-run bubble and in the action panel.
+  "touTou.orb.tooltip": "Click to open · long-press for more · select + {shortcut}",
   "touTou.orb.ariaLabel": "Open the Job assistant",
+  "touTou.orb.helpTitle": "How the orb works",
+  "touTou.orb.help":
+    "Click: open the job assistant; double-click: open the Toutou clipboard; long-press: open the action panel; with text selected, {shortcut} opens the selection actions",
+  "touTou.orb.helpClose": "Got it",
   "touTou.orb.signals": "{count} things Toutou can help with here",
 
   // ── Profile prompt card (TouTouProfilePromptCard) ───────────

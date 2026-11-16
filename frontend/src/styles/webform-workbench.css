@@ -1,0 +1,477 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 网申填表工作台（I-11）：吸顶工具条 + 两栏 + 结果区 Tabs + 折叠记录。
+   原来 9 张同级 Card 把「启动浏览器 → 读取 → 核对 → 填充 → 看结果」这条线性流程
+   摊成九块面板，用户得先数一遍卡片才知道下一步在哪。这里改成：
+     1) 一条吸顶工具条（网址 + 状态点 + 启停）——滚动时入口始终够得着；
+     2) 左栏「填什么 / 怎么填」，右栏「结果与记录」；
+     3) 容器宽 ≥1080 才切两栏，窄了自然回落单列（顺序仍是先控制后结果）。
+
+   ## 为什么用容器查询而不是媒体查询（方案 §3.5）
+   `.webform-workbench` 是页面内容根：左侧全局导航收起/展开时，内容区实际宽度与
+   视口宽度能差 200px 以上，用 `@media (max-width: 1092px)` 会在 1440 视口 + 展开侧栏
+   这种最常用的组合下切错列。`container-type: inline-size` 按**内容区实际宽度**判断。
+
+   ## 包含块风险（方案 §3.5 的判据）
+   `container-type` 会让本元素成为 `position: fixed` 后代的包含块。本容器内**没有**
+   `position: fixed` 后代：antd 的 Dropdown / Modal / Tooltip / message 全部 portal 到
+   body（在容器外）；网申页面上的目标浮球由后端注入到被控浏览器的网页里，不在 React 树中。
+   因此这里开容器查询是安全的——这也是本文件在 `breakpointGuard` 里登记的理由。
+
+   ## 吸顶只能用 sticky
+   `position: fixed` 会脱离文档流、盖住结果区，而且在上面这套 container 包含块语义下
+   会相对内容区而不是视口定位、滚动即漂走。 */
+
+.webform-workbench {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* ===== 吸顶工具条 ===== */
+
+.webform-workbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+}
+
+.webform-workbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.webform-workbar-status {
+  display: flex;
+  flex: 1 1 260px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 32px;
+}
+
+.webform-workbar-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--rf-text-secondary);
+}
+
+.webform-workbar-dot.is-running {
+  background: var(--rf-success-strong);
+}
+
+.webform-workbar-hint {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.webform-workbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+/* ===== 安全条：从两段式 Alert 压成一行（不收起，只压缩） ===== */
+
+.webform-safety-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin: 0;
+  padding: 6px 12px;
+  border-inline-start: 3px solid var(--rf-warning-border);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-warning-bg);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.webform-safety-strip-title {
+  color: var(--rf-warning-text);
+  font-weight: 600;
+}
+
+.webform-safety-strip-body {
+  color: var(--rf-text-secondary);
+}
+
+/* ===== 两栏栅格：默认单列，容器 ≥1080 切两栏 ===== */
+
+.webform-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+@container (min-width: 1080px) {
+  .webform-columns {
+    grid-template-columns: minmax(0, 400px) minmax(0, 1fr);
+  }
+}
+
+.webform-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* ===== 流程条：步骤 + 当前步动作 ===== */
+
+.webform-flow-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+}
+
+.webform-flow-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+/* 禁用原因与按钮同排：只把按钮灰掉、不写原因，用户只会以为功能坏了。 */
+.webform-flow-reason {
+  flex: 1 1 220px;
+  min-width: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.webform-flow-summary {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+/* ===== 左栏「怎么填」：四行开关，一行一件事 ===== */
+
+.webform-panel-title {
+  margin: 0;
+  color: var(--rf-text-body);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.webform-panel-hint {
+  margin: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.webform-fill-mode-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+}
+
+/* 一行 = 标签 + 控件（同一行，控件贴右）+ 说明（独占下一行）。
+   用 flex 而不是定宽栅格：左栏只有 400px，标签「放宽模式（代点下拉与确认勾选）」
+   这类长标题在定宽列里会被压成三行。 */
+.webform-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+.webform-mode-row:first-of-type {
+  border-top: none;
+}
+
+.webform-mode-label {
+  flex: 1 1 150px;
+  min-width: 0;
+  color: var(--rf-text-body);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.webform-mode-control {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.webform-mode-hint {
+  flex: 1 1 100%;
+  min-width: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+/* ===== 右栏结果区：Tabs 承担分组，不再叠 Card ===== */
+
+.webform-result-panel {
+  min-width: 0;
+}
+
+.webform-result-panel .ant-tabs-nav {
+  margin-bottom: 8px;
+}
+
+.webform-preview-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.webform-preview-title {
+  color: var(--rf-text-body);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.webform-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 记录区：折叠只影响视觉，面板仍挂载（forceRender），展开即见，删除入口不丢。 */
+.webform-records {
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+}
+
+.webform-records .ant-collapse-header {
+  align-items: center !important;
+}
+
+.webform-records-hint {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* ===== 流程条：一行「第几步 + 步骤名」+ 四段进度 =====
+   四个中文步骤名横排放不进 400px 左栏（会断成「自动浏 / 览」），所以文字只留当前步，
+   其余三步的进度用四段 3px 色条表达。色条是装饰：`aria-hidden`，读屏只读那行文字。 */
+
+.webform-flow-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.webform-flow-title {
+  color: var(--rf-text-body);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.webform-flow-value {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* 负外边距把色条拉近它上面那行字：进度条与标题是同一个信息的两半，
+   按栏间距（8px）排会让它们看起来像两块无关的内容。 */
+.webform-flow-track {
+  display: flex;
+  gap: 4px;
+  margin-top: -4px;
+}
+
+.webform-flow-seg {
+  flex: 1 1 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--rf-border-subtle);
+}
+
+.webform-flow-seg.is-done {
+  background: var(--rf-brand);
+}
+
+/* ===== 代填边界条：四类「始终不代填」常驻一行，完整风险说明在旁边的 ⓘ ===== */
+
+.webform-mode-boundary {
+  display: block;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.webform-mode-boundary-text {
+  margin-inline-end: 6px;
+}
+
+/* `ⓘ` 是行内元素：文字折行时它跟在最后一句末尾，不会单独占一行。 */
+.webform-mode-boundary button {
+  vertical-align: middle;
+}
+
+/* 单列回落（容器 < 1080）时左栏会撑满约 1000px：标签与开关被拉到屏幕两端，
+   中间隔着半屏空白。给控制面板一个上限，读数视线不用横跨。 */
+@container (max-width: 1079px) {
+  .webform-columns > .webform-column {
+    max-width: 720px;
+  }
+}
+
+/* ===== 右栏空态：三步开始 =====
+   没有预览也没有结果时，结果区整块不渲染会让右栏变成白板。这块引导只讲流程与
+   "下一步在哪儿"，不放主按钮——工具条上已经有一颗同名的。 */
+
+.webform-onboarding {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px 16px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+}
+
+.webform-onboarding-badge {
+  align-self: flex-start;
+  padding: 1px 8px;
+  border-radius: 9px;
+  background: var(--rf-info-bg);
+  color: var(--rf-info-strong);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.webform-onboarding-title {
+  margin: 10px 0 0;
+  color: var(--rf-text-body);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.webform-onboarding-lead {
+  margin: 4px 0 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.webform-onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.webform-onboarding-step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.webform-onboarding-num {
+  display: flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rf-border-strong);
+  border-radius: 50%;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* 当前步实心：整块引导里只有一处重色，视线自然落在这里。 */
+.webform-onboarding-step.is-current .webform-onboarding-num {
+  border-color: transparent;
+  background: var(--rf-brand);
+  color: #ffffff;
+}
+
+.webform-onboarding-step.is-done .webform-onboarding-num {
+  border-color: var(--rf-border-subtle);
+  color: var(--rf-text-tertiary);
+}
+
+.webform-onboarding-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.webform-onboarding-step-title {
+  color: var(--rf-text-body);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.webform-onboarding-step-hint {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.webform-onboarding-state {
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.webform-onboarding-step.is-current .webform-onboarding-state {
+  color: var(--rf-brand);
+  font-weight: 600;
+}
+
+.webform-onboarding-next {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border-subtle);
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}

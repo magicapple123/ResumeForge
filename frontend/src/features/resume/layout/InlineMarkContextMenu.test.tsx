@@ -71,6 +71,28 @@ describe("InlineMarkContextMenu", () => {
     expect(input.value).toBe("ab**cd**ef");
   });
 
+  it("点菜单外任意处关闭（I-25）", async () => {
+    render(<Harness initial="abcdef" />);
+    const input = screen.getByRole("textbox", { name: "字段值" }) as HTMLInputElement;
+    input.focus();
+    input.setSelectionRange(2, 4);
+    rightClick(input);
+    expect(await screen.findByRole("menu")).toBeTruthy();
+
+    // 在宿主输入框之外按下指针：菜单必须收起，输入框里的选区不受影响。
+    const outside = document.createElement("div");
+    document.body.appendChild(outside);
+    outside.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+
+    // antd 关闭受控浮层时**不卸载**，而是把弹层挪到 `left: -1000vw`（视觉上离开视口）。
+    // 所以判据是"弹层已离屏"，不是"DOM 里没有 menu"。
+    await waitFor(() => {
+      const dropdown = document.querySelector(".ant-dropdown") as HTMLElement | null;
+      const style = dropdown?.getAttribute("style") ?? "";
+      expect(!dropdown || style.includes("-1000vw")).toBe(true);
+    });
+  });
+
   it("空选区右键：放行原生菜单（不 preventDefault、不弹菜单）", async () => {
     render(<Harness initial="abcdef" />);
     const input = screen.getByRole("textbox", { name: "字段值" }) as HTMLInputElement;

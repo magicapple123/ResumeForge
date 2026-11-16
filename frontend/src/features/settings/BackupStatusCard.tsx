@@ -23,6 +23,16 @@ import { t, type MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { ListyItem } from "../../components/common/ListyItem";
+import SettingsResetButton from "./SettingsResetButton";
+import { useSettingsResetListener } from "./useSettingsResetListener";
+
+/**
+ * I-10：这张卡能恢复默认的键。
+ *
+ * 只有「自动备份间隔」——`backup` 作用域的另一项（生成内容保存位置）属于导出卡，
+ * 两处各自复位，互不牵连。恢复默认 = 回到部署配置的间隔（默认 7 天）。
+ */
+const BACKUP_RESET_KEYS = ["auto_backup_interval_days"];
 
 /** 快照目录状态：旧后端没有 `snapshot_state` 字段时按快照份数推断，缺字段不得崩。 */
 type SnapshotState = NonNullable<BackupStatus["snapshot_state"]>;
@@ -104,6 +114,9 @@ export default function BackupStatusCard() {
   const state = status ? resolveSnapshotState(status) : null;
   const disabled = status ? isAutoBackupDisabled(status) : false;
 
+  // I-10：恢复默认后重取状态（间隔就在这份响应里，不另开接口）。
+  useSettingsResetListener(() => void reload());
+
   const changeInterval = async (days: number) => {
     if (!status || days === status.interval_days || savingInterval) return;
     setSavingInterval(true);
@@ -140,13 +153,17 @@ export default function BackupStatusCard() {
       title={t("backupStatus.title")}
       className="settings-card"
       extra={
-        <Button
-          size="small"
-          type="text"
-          icon={<ReloadOutlined />}
-          onClick={() => void reload()}
-          aria-label={t("backupStatus.refresh.aria")}
-        />
+        <Space size={4}>
+          {/* I-10：卡片级恢复默认（自动备份间隔回到部署默认）。 */}
+          <SettingsResetButton keys={BACKUP_RESET_KEYS} />
+          <Button
+            size="small"
+            type="text"
+            icon={<ReloadOutlined />}
+            onClick={() => void reload()}
+            aria-label={t("backupStatus.refresh.aria")}
+          />
+        </Space>
       }
     >
       {loading ? (

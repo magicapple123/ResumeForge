@@ -9,8 +9,9 @@
  * 安全口径：正文来自模型，只当**纯文本**渲染（不注入 HTML），所以不存在 XSS 通道；
  * 链接都是后端过滤过 scheme 的 http(s) 地址。
  */
-import { Alert, Typography } from "antd";
+import { Alert, Button, Typography } from "antd";
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import type { ResearchBrief, ResearchSource } from "../../api/research";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -107,18 +108,59 @@ function renderMarkdown(
   return blocks;
 }
 
-export default function ResearchBriefPanel({ brief }: { brief: ResearchBrief }) {
+/** 失败分类 → 可行动作。没有按钮的失败（upstream）只说明原因。 */
+function failureAction(
+  code: ResearchBrief["reason_code"],
+): { label: string; to: string } | { label: string; retry: true } | null {
+  if (code === "unauthorized") {
+    return { label: t("companyResearch.brief.action.openSettings"), to: "/settings?tab=connections" };
+  }
+  if (code === "insufficient_balance") {
+    return { label: t("companyResearch.brief.action.checkBalance"), to: "/settings?tab=model" };
+  }
+  if (code === "rate_limited") {
+    // 429 时整屏重跑没必要：卡片已经搜过了，只重跑简报即可（后端 parts 白名单）。
+    return { label: t("companyResearch.brief.action.retryLater"), retry: true };
+  }
+  return null;
+}
+
+export default function ResearchBriefPanel({
+  brief,
+  onRetryBrief,
+}: {
+  brief: ResearchBrief;
+  onRetryBrief?: () => void;
+}) {
   useLocale();
   const citationLabel = (number: number) => t("companyResearch.brief.citationAria", { number });
 
+  if (brief.status === "skipped") {
+    return (
+      <Typography.Text type="secondary">{t("companyResearch.brief.skipped")}</Typography.Text>
+    );
+  }
+
   if (brief.status === "failed") {
-    // 简报失败时卡片照常展示（A 路已经搜过了），这里只说明原因。
+    // 简报失败时卡片照常展示（A 路已经搜过了），这里只说明原因 + 给一个能点的下一步。
+    const action = failureAction(brief.reason_code);
     return (
       <Alert
         type="warning"
         showIcon
         title={t("companyResearch.brief.failed")}
         description={brief.reason || t("companyResearch.error.request")}
+        action={
+          action && "to" in action ? (
+            <Link to={action.to}>
+              <Button size="small">{action.label}</Button>
+            </Link>
+          ) : action && onRetryBrief ? (
+            <Button size="small" onClick={onRetryBrief}>
+              {action.label}
+            </Button>
+          ) : undefined
+        }
       />
     );
   }

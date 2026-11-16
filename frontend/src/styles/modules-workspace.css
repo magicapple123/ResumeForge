@@ -404,3 +404,19 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/*
+ * I-20：模板下拉的菜单项是两行——第一行名字、第二行适用场景。
+ * 场景文案原来是 tooltip，收进菜单后必须常驻可读（用户就是靠它选模板），
+ * 所以第二行固定 12px 次要色，不再依赖悬停。
+ */
+.skills-template-item__name {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.skills-template-item__hint {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--rf-text-description);
+}

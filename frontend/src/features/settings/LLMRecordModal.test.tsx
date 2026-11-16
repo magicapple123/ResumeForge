@@ -142,6 +142,48 @@ describe("LLMRecordModal 草稿恢复", () => {
   });
 });
 
+/**
+ * I-17：三条参数解释（最大输出 58 字 / 不限制 87 字 / 上下文窗口 105 字）原本各挂一个
+ * antd Tooltip——悬停才看得见、移开就消失，触屏与键盘用户读不到。现在统一是 `ⓘ`
+ * （`HintDetail`）：点开是 Popover，提示模式（Alt+H）下原地展开。
+ *
+ * 断言两件事：① 三个 `ⓘ` 以各自的无障碍名可达；② 长文案**不在**默认 DOM 里
+ * （否则它又变回"一直挂着的长提示"，只是换了个容器）。
+ */
+describe("LLMRecordModal 参数长提示分层（I-17）", () => {
+  it("三条长提示都是 ⓘ，点开才给全文", async () => {
+    renderModal();
+
+    const maxTokens = screen.getByRole("button", { name: t("llmRecord.aria.maxTokens") });
+    const unlimited = screen.getByRole("button", { name: t("llmRecord.aria.unlimited") });
+    const contextWindow = screen.getByRole("button", {
+      name: t("llmRecord.aria.contextWindow"),
+    });
+
+    for (const trigger of [maxTokens, unlimited, contextWindow]) {
+      expect(trigger).toHaveAttribute("type", "button");
+    }
+    expect(document.body.textContent).not.toContain(t("llmRecord.hint.contextWindow"));
+
+    fireEvent.click(contextWindow);
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(t("llmRecord.hint.contextWindow")),
+    );
+  });
+
+  it("「不限制」勾选框仍与数字框联动，解释挪到旁边的 ⓘ 不影响勾选", async () => {
+    renderModal();
+
+    const query = () => screen.getByRole("checkbox", { name: t("llmRecord.label.unlimited") });
+    expect(query()).not.toBeChecked();
+    fireEvent.click(query());
+    // ① 勾选态由 `Form.useWatch("max_tokens")` 派生（0 = 不限制），落库到 watch 之后才变成 checked；
+    // ② antd 的 Checkbox 在受控值翻转时会重建内部节点，闭包里抓着旧元素断言会永远拿到
+    //    未勾选的那个——所以**每轮都重新查一次**（`waitFor` 会重试这个回调）。
+    await waitFor(() => expect(query()).toBeChecked());
+  });
+});
+
 /** 表单当前的 Base URL 输入框（每次重新查节点：恢复后 React 可能换掉 DOM）。 */
 function readBaseUrl(): string {
   const input = document.getElementById("base_url") as HTMLInputElement | null;

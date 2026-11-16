@@ -12,6 +12,7 @@ import type { DocumentFieldCatalog } from "../../../types/resumeDocument";
 import type { AuthorsItem, FieldItem, ListItem } from "../../../types/resumeDocument";
 import { enumOptionsOf } from "../document/fieldCatalog";
 import { joinDateRange, splitDateRange } from "../document/format";
+import InlineMarkTextArea from "./InlineMarkTextArea";
 import ResizableValueTextArea from "./ResizableValueTextArea";
 import { registerInlineMarkField } from "./useInlineMarkRange";
 
@@ -110,14 +111,15 @@ export function FieldValueEditor({
     <div className="document-field-row">
       <span className="document-field-label">{t("document.field.value")}</span>
       {multiline ? (
-        <Input.TextArea
-          disabled={disabled || undefined}
-          aria-label={t("document.field.value")}
+        // I-26：正文（`placement === "body"`）是加字号/颜色最多的字段，必须和单行值一样走
+        // 行内标记遮罩层；差别只在"自动长高"（`autoSize`）而不是"右下角可拖"。
+        <InlineMarkTextArea
+          disabled={disabled}
+          ariaLabel={t("document.field.value")}
           placeholder={t("document.field.textPlaceholder")}
           autoSize={{ minRows: 2, maxRows: 8 }}
           value={item.value}
-          onFocus={registerInlineMarkField}
-          onChange={(event) => onChange({ value: event.target.value })}
+          onChange={(value) => onChange({ value })}
         />
       ) : (
         // 问题 8：单行值也换成"一行高、可拖高"的文本域。

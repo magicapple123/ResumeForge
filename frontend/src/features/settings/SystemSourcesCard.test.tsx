@@ -99,6 +99,9 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  // `⋯` 菜单的浮层挂在 body 上：清掉，免得上一条用例的菜单项让下一条的
+  // `getByRole("menuitem")` 命中两个。
+  document.querySelectorAll(".ant-dropdown, .ant-modal-root").forEach((node) => node.remove());
   vi.clearAllMocks();
 });
 
@@ -106,8 +109,9 @@ describe("SystemSourcesCard", () => {
   it("shows the effective value next to the factory default", async () => {
     renderCard();
     expect(await screen.findByText("9400")).toBeInTheDocument();
+    // 已偏离出厂值才补这句（出厂值行不重复渲染一份与当前值相同的文本）。
     expect(
-      screen.getByText(t("connections.system.defaultValue", { value: "9333" })),
+      screen.getByText(t("connections.system.factoryValue", { value: "9333" })),
     ).toBeInTheDocument();
     // 这四项不是密钥：存储标注是"明文配置文件"，不是 DPAPI 那一套。
     expect(screen.getAllByText(t("connections.protection.config_file")).length).toBe(2);
@@ -138,22 +142,23 @@ describe("SystemSourcesCard", () => {
     const row = within(
       (await screen.findByText(PORT_LABEL)).closest(".connection-row") as HTMLElement,
     );
+    // 「恢复默认」从行内收进了 `⋯`：行里常驻操作只剩主按钮（修改）+ `⋯`。
     fireEvent.click(
-      row.getByRole("button", { name: t("connections.action.resetValue", { name: PORT_LABEL }) }),
+      row.getByRole("button", { name: t("connections.action.more", { name: PORT_LABEL }) }),
     );
+    fireEvent.click(await screen.findByRole("menuitem", { name: t("connections.action.reset") }));
 
     await waitFor(() =>
       expect(connMocks.resetSystemSource).toHaveBeenCalledWith("system.browser_port"),
     );
     expect(connMocks.saveSystemSource).not.toHaveBeenCalled();
-    // 恢复默认之后"恢复默认"按钮不该还能点（它已经是默认值了）。
-    await waitFor(() =>
-      expect(
-        within(screen.getByText(PORT_LABEL).closest(".connection-row") as HTMLElement).getByRole(
-          "button",
-          { name: t("connections.action.resetValue", { name: PORT_LABEL }) },
-        ),
-      ).toBeDisabled(),
+
+    // 恢复默认之后这一项已无"恢复默认"可点：菜单里**不存在**该动作（不是渲染成 disabled）。
+    const restored = within(screen.getByText(PORT_LABEL).closest(".connection-row") as HTMLElement);
+    fireEvent.click(
+      restored.getByRole("button", { name: t("connections.action.more", { name: PORT_LABEL }) }),
     );
+    expect(await screen.findByRole("menuitem", { name: t("connections.action.copy") })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: t("connections.action.reset") })).toBeNull();
   });
 });

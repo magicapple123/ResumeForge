@@ -22,6 +22,7 @@ import { useAsrProfiles } from "../settings/useAsrProfiles";
 import AsrProfileList from "./AsrProfileList";
 import AsrProfileModal from "./AsrProfileModal";
 import MicSettingsRow from "./MicSettingsRow";
+import SettingsResetButton from "../settings/SettingsResetButton";
 import {
   MAX_ASR_PROFILES,
   NEW_ASR_PROFILE_ID,
@@ -105,6 +106,8 @@ export default function AsrSettingsCard() {
                 ? t("voiceInput.settings.badge.configured")
                 : t("voiceInput.settings.badge.notConfigured")}
             </Tag>
+            {/* I-10：卡片级恢复默认（scope=asr）。按钮自己判断有没有可重置项。 */}
+            <SettingsResetButton scope="asr" />
           </Flex>
         }
         extra={

@@ -8,6 +8,7 @@ import {
   InfoCircleOutlined,
   PictureOutlined,
   PushpinOutlined,
+  SearchOutlined,
   StarFilled,
   StarOutlined,
 } from "@ant-design/icons";
@@ -281,6 +282,22 @@ export default function JobDetailDrawer({
                 <Typography.Title level={4} style={{ margin: 0 }}>
                   {job.title}
                 </Typography.Title>
+                {/* I-22：调研入口。带 job_id 过去，落库的简报会挂在这个岗位上，
+                岗位详情的「相关知识」立刻能看到。只预填、不自动提交（避免一进来就计费）。 */}
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<SearchOutlined />}
+                  disabled={!job.company}
+                  onClick={() =>
+                    navigate(
+                      `/research?company=${encodeURIComponent(job.company || "")}` +
+                        `&role=${encodeURIComponent(job.title || "")}&job_id=${job.id}`,
+                    )
+                  }
+                >
+                  {t("jobDetail.action.researchCompany")}
+                </Button>
                 <Tooltip
                   title={
                     job.favorite ? t("jobDetail.action.unfavorite") : t("jobDetail.action.favorite")

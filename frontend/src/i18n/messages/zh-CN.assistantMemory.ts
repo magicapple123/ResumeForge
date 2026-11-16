@@ -8,13 +8,19 @@
 const assistantMemory = {
   "assistantMemory.title": "助手记忆",
   "assistantMemory.intro":
-    "助手只参考你明确表达过的求职偏好（每轮最多注入 5 条）。这里是唯一能看到、能改的地方：手填一条画像，或删除不想再用的记忆。",
-  "assistantMemory.count": "共 {count} 条",
-  "assistantMemory.empty": "还没有记忆。补充一条目标岗位或薪资底线，下一轮对话助手就会按它理解你。",
+    "助手只参考你明确表达过的求职偏好。手动添加一条，或删掉不想再用的记忆。",
+  /**
+   * 列表头左侧：「生效 {count} 条」。停用/被替换的条目仍显示在列表里，但不参与注入，
+   * 所以这个数字**不是**列表长度。
+   */
+  "assistantMemory.list.active": "生效 {count} 条",
+  /** 每条右侧 `⋯` 菜单的无障碍名（图标按钮本身没有文字）。 */
+  "assistantMemory.list.menu": "更多操作",
+  "assistantMemory.empty": "还没有记忆。添加一条目标岗位或薪资底线，下一轮对话助手就会按它理解你。",
   "assistantMemory.loadFailed": "助手记忆读取失败，请重试",
-  "assistantMemory.autoExtract.label": "对话结束后自动抽取记忆",
+  "assistantMemory.autoExtract.label": "自动整理对话记忆",
   "assistantMemory.autoExtract.hint":
-    "开启后，对话空闲约 5 分钟由后台任务抽取；抽到的条目会出现在下面，随时可以改或删。关闭这个开关不会删除已经保存的记忆。",
+    "开启后，下次使用助手时会自动整理上一段对话；抽到的条目出现在下面，随时可以改或删。关闭这个开关不会删除已经保存的记忆。",
   "assistantMemory.autoExtract.enableToast": "已开启自动抽取记忆",
   "assistantMemory.autoExtract.disableToast": "已关闭自动抽取记忆",
   "assistantMemory.autoExtract.saveFailed": "保存自动抽取开关失败，请稍后重试",
@@ -22,10 +28,14 @@ const assistantMemory = {
   "assistantMemory.source.extracted": "自动抽取",
   "assistantMemory.status.superseded": "已被新说法替换",
   "assistantMemory.confidence": "置信度 {percent}%",
+  /** 一行的元信息：来源 · 更新时间（两件事合成一句 11px 次级文字）。 */
+  "assistantMemory.meta.line": "{source} · {updated}",
   "assistantMemory.updatedAt": "更新于 {time}",
+  /** 卡片底注：注入口径。原来长在 intro 里，和"这里是唯一能改的地方"混成一句。 */
+  "assistantMemory.footnote.injection": "每轮按相关性注入，最多 5 条。",
   "assistantMemory.openConversation": "回到原对话",
   "assistantMemory.sourceExcerpt": "「{text}」",
-  "assistantMemory.action.add": "补充画像",
+  "assistantMemory.action.add": "添加记忆",
   "assistantMemory.action.edit": "编辑",
   "assistantMemory.action.delete": "删除",
   "assistantMemory.action.neverUse": "永不使用",
@@ -69,7 +79,7 @@ const assistantMemory = {
   "assistantMemory.toast.saved": "记忆已保存",
   "assistantMemory.toast.failed": "操作失败，请稍后重试",
   "assistantMemory.error.valueRequired": "请填写记忆内容",
-  "assistantMemory.form.createTitle": "补充一条画像",
+  "assistantMemory.form.createTitle": "添加一条记忆",
   "assistantMemory.form.editTitle": "编辑记忆",
   "assistantMemory.form.kind": "类型",
   "assistantMemory.form.kindHint":

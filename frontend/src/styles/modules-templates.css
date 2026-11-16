@@ -272,3 +272,23 @@
   justify-content: center;
   background: var(--rf-surface);
 }
+
+/*
+ * I-20：工作台顶部说明从"三行卡片"收成"一行引言 + ⓘ"。
+ * 不用卡片外壳（它只是说明、不是可操作对象），只留一行文字 + 一个可 Tab 的 `ⓘ`，
+ * 让模板表在首屏第一屏就出现。行高与下面的卡片标题同档，视觉上仍是一段"抬头"。
+ */
+.template-workbench-intro {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.template-workbench-intro__summary {
+  font-weight: 600;
+  color: var(--rf-text-body);
+}

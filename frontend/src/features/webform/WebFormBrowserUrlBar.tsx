@@ -11,6 +11,8 @@ interface Props {
   value: string;
   history: WebFormUrlHistory[];
   busy: boolean;
+  /** 是否作为主按钮（同屏只亮一个 primary：浏览器没起时主按钮是工具条那颗）。 */
+  primary?: boolean;
   onChange: (value: string) => void;
   onOpen: () => void;
   onSelectHistory: (item: WebFormUrlHistory) => void;
@@ -21,6 +23,7 @@ export default function WebFormBrowserUrlBar({
   value,
   history,
   busy,
+  primary = true,
   onChange,
   onOpen,
   onSelectHistory,
@@ -78,7 +81,12 @@ export default function WebFormBrowserUrlBar({
         aria-label={t("webFormPage.urlBar.inputAria")}
       />
       <Space className="webform-url-actions" size={8} wrap>
-        <Button type="primary" loading={busy} disabled={busy} onClick={onOpen}>
+        <Button
+          type={primary ? "primary" : "default"}
+          loading={busy}
+          disabled={busy}
+          onClick={onOpen}
+        >
           {t("webFormPage.urlBar.open")}
         </Button>
         {/* 历史可能攒几十条：菜单限高滚动，不让整屏被占满。

@@ -48,27 +48,26 @@ describe("RelaxedModeCard", () => {
     mocks.enabled = () => false;
   });
 
-  it("风险文案常驻，开启状态下额外说明当前行为", () => {
+  it("行内只留一句状态说明：关闭态说默认行为，开启后说当前行为", () => {
     // 卡片已 memo（无 props）：父级重渲不再驱动它，状态由 `useWebFormRelaxedMode` 提供，
     // 所以这里用「全新渲染」来切换 mock 状态，而不是靠 rerender（后者会被 memo 正确拦下）。
+    const zh = webFormPageZh;
     const closed = renderCard();
-    expect(screen.getAllByText(/存在选错可能/).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/已开启/)).toBeNull();
+    expect(screen.getByText(zh["webFormPage.relaxed.defaultOff"])).toBeTruthy();
+    expect(screen.queryByText(zh["webFormPage.relaxed.enabledHint"])).toBeNull();
     closed.unmount();
 
     mocks.enabled = () => true;
     renderCard();
-    expect(screen.getAllByText(/存在选错可能/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/已开启/)).toBeTruthy();
+    expect(screen.getByText(zh["webFormPage.relaxed.enabledHint"])).toBeTruthy();
   });
 
-  it("默认态就渲染完整风险说明（四类始终不代填的边界含在其中）", () => {
+  it("不再内联两百字风险说明（I-27：边界条 + ⓘ 承载）", () => {
     renderCard();
-    const risk = webFormPageZh["webFormPage.relaxed.risk"];
-    expect(screen.getByText(risk)).toBeTruthy();
-    // 四类边界按「日期 / 文件 / 凭据 / 无弹层只读点选」四段写在同一条文案里；
-    // 用文案自身的分句计数，避免在测试里复述中文。
-    expect(risk.split("、").length).toBeGreaterThanOrEqual(4);
+    // 四类边界与「存在选错可能」都移到 `FillModePanel` 底部的常驻边界条与它的 ⓘ；
+    // 默认态仍看得见这条边界的守卫在 `WebFormPage.test.tsx`。这里只确认这一行
+    // 不再自己铺两屏文字——否则左栏又会回到"文字墙"。
+    expect(screen.queryByText(webFormPageZh["webFormPage.relaxed.risk"])).toBeNull();
   });
 
   it("切换开关会保存并把用户意图传给后端设置", async () => {

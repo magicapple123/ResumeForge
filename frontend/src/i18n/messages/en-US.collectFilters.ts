@@ -19,6 +19,8 @@ const collectFilters = {
   "collectFilters.section.loading": "Reading the site's filters…",
   "collectFilters.test.hint":
     "Check each selected condition on the real job site to see whether it can still be picked there (this briefly navigates to the filter bar and does not affect collection)",
+  // I-17: accessible name for the ⓘ that now carries the sentence above.
+  "collectFilters.test.hintAria": "About testing the filters",
   "collectFilters.intro":
     "These come from the job site's own filter bar: the site applies them while searching, which is more accurate than filtering after collection and means far fewer pages. The option list is read from the site itself and follows its changes.",
   "collectFilters.intro.rules":

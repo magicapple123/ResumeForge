@@ -1,14 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 设置页里的「投投」悬浮球卡片：入口、提示标语与划词浮条三个开关，即改即存。 */
 
-import { App, Card, Divider, Space, Switch, Typography } from "antd";
+import { App, Card, Divider, Flex, Space, Switch, Typography } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { useCallback, useEffect, useState } from "react";
 import { getAssistantOrbSetting, saveAssistantOrbSetting } from "../../api/settings";
 import type { AssistantOrbSetting } from "../../types/settings";
 import { TOU_TOU_SETTING_EVENT } from "../tou-tou/touTouTypes";
+import SettingsResetButton from "./SettingsResetButton";
+import { useSettingsResetListener } from "./useSettingsResetListener";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+
+/**
+ * I-10：这张卡能恢复默认的键。
+ *
+ * `ui` 作用域还包含导航可见性与提醒弹窗（各自在别的卡上），按 keys 精确复位本卡这一个
+ * 键（三个开关是同一份后端对象，`kind=value` 整体回默认）。
+ */
+const ORB_RESET_KEYS = ["assistant_orb_enabled"];
 
 export default function AssistantOrbCard() {
   useLocale();
@@ -45,6 +55,19 @@ export default function AssistantOrbCard() {
     };
   }, [fetchSetting]);
 
+  /** 把后端值同步给悬浮球本体（它订阅这个事件，不跟着设置页重渲染）。 */
+  const publishOrbSetting = useCallback((saved: AssistantOrbSetting) => {
+    window.dispatchEvent(
+      new CustomEvent(TOU_TOU_SETTING_EVENT, {
+        detail: {
+          enabled: saved.enabled,
+          tips_enabled: saved.tips_enabled,
+          selection_enabled: saved.selection_enabled,
+        },
+      }),
+    );
+  }, []);
+
   /**
    * 保存**全量**设置：三个开关共用一份后端对象，只带被改的那个会把其它两个打回默认。
    * 乐观更新 + 失败回滚，与页面上其它即改即存的开关保持同一手感。
@@ -57,15 +80,7 @@ export default function AssistantOrbCard() {
     try {
       const saved = await saveAssistantOrbSetting(next);
       setSetting(saved);
-      window.dispatchEvent(
-        new CustomEvent(TOU_TOU_SETTING_EVENT, {
-          detail: {
-            enabled: saved.enabled,
-            tips_enabled: saved.tips_enabled,
-            selection_enabled: saved.selection_enabled,
-          },
-        }),
-      );
+      publishOrbSetting(saved);
       message.success(successText);
     } catch (err) {
       setSetting(previous);
@@ -75,8 +90,27 @@ export default function AssistantOrbCard() {
     }
   };
 
+  // I-10：恢复默认后重取三个开关；悬浮球本体也要跟着变（否则它要等下一次路由才更新）。
+  useSettingsResetListener(() => {
+    void (async () => {
+      const saved = await fetchSetting();
+      if (saved === null) return;
+      setSetting(saved);
+      publishOrbSetting(saved);
+    })();
+  });
+
   return (
-    <Card title={t("settingsUi.orb.title")} className="settings-card">
+    <Card
+      title={
+        <Flex align="center" gap={8}>
+          <span>{t("settingsUi.orb.title")}</span>
+          {/* I-10：卡片级恢复默认（三个开关回到「开」）。 */}
+          <SettingsResetButton keys={ORB_RESET_KEYS} />
+        </Flex>
+      }
+      className="settings-card"
+    >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         {t("settingsUi.orb.intro")}
       </Typography.Paragraph>

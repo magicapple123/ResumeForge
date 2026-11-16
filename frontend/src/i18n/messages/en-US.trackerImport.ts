@@ -18,7 +18,10 @@ const trackerImport = {
   "trackerImport.action.confirm": "Save the {count} selected records",
   "trackerImport.engine.ai": "AI recognition",
   "trackerImport.engine.local": "Local keyword match",
-  "trackerImport.empty.noResults": "No recognition results yet",
+  // I-15: only rendered after a recognition that produced zero rows, so it has to say what
+  // to do next instead of stating "no results yet" (which reads as "this feature is broken").
+  "trackerImport.empty.noResults":
+    "No usable progress records found - try a more complete notification, or retry with a screenshot.",
   "trackerImport.evidence.label": "Evidence: {evidence}",
   "trackerImport.toast.noInput": "Paste the notification first, or upload a screenshot or document",
   "trackerImport.toast.noRecords": "No usable progress records found",

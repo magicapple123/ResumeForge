@@ -79,9 +79,15 @@ export default function SettingsNav({ active, onChange }: SettingsNavProps) {
           className="settings-nav-mobile-select"
           value={active}
           onChange={(value: SettingsSectionKey) => onChange(value)}
-          options={SETTINGS_SECTIONS.map((section) => ({
-            value: section.key,
-            label: t(section.titleKey),
+          // I-02：窄档此前是扁平列表，三档分组只喂给了宽档的 nav，窄屏看不到结构。
+          // optgroup 形态（label + options）由 antd 渲染成不可选的分组标题；value 仍是
+          // section.key，深链与 parseSettingsSection 不受影响。文案复用 settings.nav.group.*。
+          options={SETTINGS_NAV_GROUPS.map((group) => ({
+            label: t(group.titleKey),
+            options: sectionsOfGroup(group.key).map((section) => ({
+              value: section.key,
+              label: t(section.titleKey),
+            })),
           }))}
           aria-label={t("settings.nav.aria")}
         />

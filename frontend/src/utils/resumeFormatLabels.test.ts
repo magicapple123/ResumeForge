@@ -8,7 +8,12 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { formatFieldDescription, formatFieldLabel, formatFieldLabelOf } from "./resumeFormatLabels";
+import {
+  formatFieldDescription,
+  formatFieldGroup,
+  formatFieldLabel,
+  formatFieldLabelOf,
+} from "./resumeFormatLabels";
 
 describe("resumeFormatLabels · 显示名", () => {
   it("英文界面且有 label_en：用英文", () => {
@@ -56,5 +61,26 @@ describe("resumeFormatLabels · 说明文字与按 key 取值", () => {
     expect(formatFieldLabelOf(fields, "line_color", "en-US", "fallback")).toBe("Dividers");
     expect(formatFieldLabelOf(fields, "line_color", "zh-CN", "fallback")).toBe("分隔线");
     expect(formatFieldLabelOf(fields, "missing", "en-US", "fallback")).toBe("fallback");
+  });
+});
+
+describe("resumeFormatLabels · 分组名（I-19 编辑器分区）", () => {
+  it("英文界面用 group_en；中文界面用 group（它同时是分区键）", () => {
+    const field = { key: "accent", label: "强调色", group: "颜色", group_en: "Colors" };
+    expect(formatFieldGroup(field, "en-US")).toBe("Colors");
+    expect(formatFieldGroup(field, "zh-CN")).toBe("颜色");
+  });
+
+  it("group_en 为空或缺失时回落 group：英文界面组头不能变成空白", () => {
+    expect(formatFieldGroup({ label: "强调色", group: "颜色", group_en: "" }, "en-US")).toBe(
+      "颜色",
+    );
+    expect(formatFieldGroup({ label: "强调色", group: "颜色" }, "en-US")).toBe("颜色");
+  });
+
+  it("未登记分组返回空串（调用方据此不输出组头），不是兜底成「其他」", () => {
+    expect(formatFieldGroup({ label: "某项", group: "" }, "zh-CN")).toBe("");
+    expect(formatFieldGroup({ label: "某项" }, "en-US")).toBe("");
+    expect(formatFieldGroup(undefined, "zh-CN")).toBe("");
   });
 });

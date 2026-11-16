@@ -286,6 +286,29 @@ export default function ResumeSpacingControls({
     onChange({ ...current, format_config: withScale(current.format_config, key, next) });
   };
 
+  // I-31：页眉线相对文字底边的微调（0–12mm）。模板没有页眉线（modern/minimal/
+  // split/scholar）时置灰——拖它不会有任何效果，放开只会让人以为控件坏了。
+  const headerRuleGap =
+    typeof config?.["header_rule_gap"] === "number" ? Number(config["header_rule_gap"]) : 0;
+  const headerRuleWidth = Number(
+    (catalog?.template_layouts as Record<string, Record<string, unknown>> | undefined)?.[
+      layout.template
+    ]?.["header_border_width"] ?? 0,
+  );
+  const hasHeaderRule = Number.isFinite(headerRuleWidth) && headerRuleWidth > 0;
+
+  /** 写页眉线微调：`null` 或 0 = 删键（0 本来就等于"不微调"，不必留一条无效覆盖）。 */
+  const writeHeaderRuleGap = (next: number | null) => {
+    const current = layoutRef.current;
+    const rest = { ...(current.format_config ?? {}) };
+    if (next === null || next <= 0) {
+      delete rest["header_rule_gap"];
+    } else {
+      rest["header_rule_gap"] = Math.min(12, Math.max(0, roundToStep(next, 0.5)));
+    }
+    onChange({ ...current, format_config: rest });
+  };
+
   /** 系数读数：两位小数 + `×`（系数是乘子，不写 `%`，见设计 §7.1）。 */
   const formatScale = (value: number): string => `${roundToStep(value, 0.01).toFixed(2)}×`;
 
@@ -308,6 +331,20 @@ export default function ResumeSpacingControls({
 
   return (
     <div className="resume-wb-rows">
+      <SpacingRow
+        label={t("workbench.param.header-rule-gap")}
+        value={headerRuleGap}
+        bounds={{ min: 0, max: 12, step: 0.5 }}
+        customized={typeof config?.["header_rule_gap"] === "number"}
+        defaultHint={defaultHint}
+        restore={restoreFor("header_rule_gap")}
+        disabled={disabled || !hasHeaderRule}
+        format={(value) => `${Number(value.toFixed(1))}mm`}
+        probe={(value) => `.header-main { --header-rule-gap: ${value}mm !important; }`}
+        onProbe={applyProbe}
+        onCommit={(value) => writeHeaderRuleGap(value)}
+        onReset={() => writeHeaderRuleGap(null)}
+      />
       <SpacingRow
         label={gapLabel}
         value={gapValue}

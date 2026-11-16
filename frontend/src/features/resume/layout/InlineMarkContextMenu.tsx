@@ -21,7 +21,7 @@
  */
 import { Button, Dropdown, Input, Space } from "antd";
 import type { MenuProps } from "antd";
-import { useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import {
@@ -34,6 +34,7 @@ import {
   type InlineRange,
 } from "./inlineMarks";
 import type { InlineMarkCommit } from "./InlineMarkButtons";
+import "../../../styles/inline-mark-menu.css";
 
 /** 预设强调色（与工具条同一组；色板是内容数据，不是主题变量）。 */
 const COLOR_PRESETS = ["#c0392b", "#d97706", "#2f6fd0", "#2f855a", "#6b7280", "#111111"];
@@ -77,11 +78,47 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
   const [url, setUrl] = useState("");
   const [offset, setOffset] = useState<[number, number]>([0, 0]);
 
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const popupRef = useRef<HTMLDivElement | null>(null);
+
   const close = () => {
     setOpen(false);
     setLinkMode(false);
     setUrl("");
   };
+
+  /**
+   * I-25：点菜单外任意处关闭。
+   *
+   * antd 的受控 Dropdown 只在"点击"时自己上报 onOpenChange，右键菜单常见的三种
+   * 逃逸路径（在别处右键 / 点空白 / 拖选文字）都不在它的覆盖里，表现就是"点外不关"。
+   * 这里用 capture 阶段的 pointerdown 统一兜住：菜单里（含链接输入框）与宿主输入框
+   * 内部都放行——后者由 onContextMenu 自己重新定位。
+   */
+  useEffect(() => {
+    if (!open) return;
+    // 注意类型：本文件导入的 `MouseEvent` 是 React 的合成事件类型，document 上的是原生事件。
+    const onPointerDown = (event: Event) => {
+      const node = event.target;
+      if (!(node instanceof Node)) return;
+      if (popupRef.current?.contains(node)) return;
+      if (hostRef.current?.contains(node)) return;
+      close();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    // 用 mousedown 而不是 pointerdown：指针事件在部分环境（jsdom / 老 Safari）
+    // 不冒泡到 document，菜单就会"点外不关"——这正是本条要修的现象。
+    document.addEventListener("mousedown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+    // close 只做三个 setState，不依赖任何外部值。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const onContextMenu = (event: MouseEvent<HTMLDivElement>) => {
     if (disabled) return;
@@ -167,6 +204,8 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
     <Dropdown
       open={open}
       trigger={[]}
+      // I-25：宽度由样式表收口（此前长标签把菜单撑到半屏）。
+      overlayClassName="rf-inline-mark-menu"
       menu={{ items, onClick }}
       align={{
         points: ["tl", "tl"],
@@ -179,8 +218,10 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
         if (!next) close();
       }}
       popupRender={(menu) => (
-        <>
-          {menu}
+        <div ref={popupRef}>
+          {/* I-25：菜单项 mousedown 会夺走输入框焦点、选区随之消失（点完「加粗」没反应）。
+              在菜单容器上拦住默认行为；链接输入框在容器外，不受影响。 */}
+          <div onMouseDown={(event) => event.preventDefault()}>{menu}</div>
           {linkMode ? (
             <Space size={6} style={{ padding: "6px 8px" }}>
               <Input
@@ -197,10 +238,10 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
               </Button>
             </Space>
           ) : null}
-        </>
+        </div>
       )}
     >
-      <div className="rf-inline-mark-host" onContextMenu={onContextMenu}>
+      <div className="rf-inline-mark-host" ref={hostRef} onContextMenu={onContextMenu}>
         {children}
       </div>
     </Dropdown>

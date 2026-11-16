@@ -158,6 +158,8 @@ const profileLibrary = {
   "profileLibrary.fieldSettings.primaryTextField": "主文本字段",
   "profileLibrary.fieldSettings.primaryTextFieldHint":
     "这是本板块的主文本字段。隐藏后条目的内容仍会以「标签：值」逐行呈现，但不再有正文段落。",
+  // I-17：上面这句 43 字的说明从蓝色标签的 tooltip 改成标签后的 `ⓘ`，这一条是它的无障碍名。
+  "profileLibrary.fieldSettings.primaryTextFieldHintAria": "主文本字段说明",
   "profileLibrary.fieldSettings.deleteTitle": "删除字段「{label}」？",
   "profileLibrary.fieldSettings.deleteBody":
     "有 {count} 条记录填写了它；删除后不再显示，已填内容仍保留。",

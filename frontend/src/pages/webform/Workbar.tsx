@@ -1,16 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 浏览器控制卡：URL 栏 + 状态行 + 启停/配置/刷新/诊断/结束五个按钮组。
- * （自 WebFormPage 拆出：:717-808 整块逐字随迁；纯 props——handler 定义留在页面。）
+ * 网申工具条（吸顶）：目标网址 + 浏览器状态点 + 启停/配置/刷新/诊断/结束。
+ *
+ * 取代原先包在 `Card` 里的浏览器控制块：那版与页面其它八张卡平级，用户得先数一遍卡片
+ * 才知道"现在能不能开始填"。这里只留一条工具条并**吸顶**（只用 `position: sticky`；
+ * 用 `fixed` 会脱离文档流盖住结果区，在本页容器查询的包含块语义下还会相对内容区定位），
+ * 于是往下翻预览表时启停入口仍然够得着。
+ *
+ * 纯 props 组件：所有 handler 由页面侧 useCallback 稳定，`memo` 才能在打字时真正生效。
  */
 import {
   ChromeOutlined,
   DownloadOutlined,
+  MoreOutlined,
   ReloadOutlined,
   SettingOutlined,
   StopOutlined,
 } from "@ant-design/icons";
-import { Button, Card, Spin, Tag, Tooltip, Typography } from "antd";
+import { Button, Dropdown, Spin, Tag, Tooltip, Typography } from "antd";
 import { memo } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -24,7 +31,7 @@ import type { WebFormBusyState } from "./constants";
  * **memo**：所有 handler 由页面侧 useCallback 稳定（含浏览器 reload/setData 经稳定引用下发），
  * 打字时整块跳过重渲。
  */
-export const BrowserControlCard = memo(function BrowserControlCard({
+export const Workbar = memo(function Workbar({
   targetUrl,
   onChangeTargetUrl,
   urlHistory,
@@ -71,30 +78,36 @@ export const BrowserControlCard = memo(function BrowserControlCard({
   const anyBusy = busy !== null;
   const stateMeta = BROWSER_STATE_META[browserState ?? "stopped"];
   return (
-    <Card size="small" className="webform-browser-card">
+    <div className="webform-workbar">
       <WebFormBrowserUrlBar
         value={targetUrl}
         history={urlHistory}
         busy={busy === "start"}
+        primary={running}
         onChange={onChangeTargetUrl}
         onOpen={() => void onOpenUrl()}
         onSelectHistory={(item) => onChangeTargetUrl(item.url)}
         onDeleteHistory={(item) => void onDeleteHistory(item)}
       />
-      {/* 轮询状态行：对读屏器 polite 播报状态变化（Tag 文字变化时才触发，不会逐秒骚扰）。 */}
-      <div className="webform-browser-status-row">
-        <div className="webform-browser-status" aria-live="polite">
-          {/* 状态名走语言包，颜色仍来自 `BROWSER_STATE_META`（唯一来源）。 */}
+      {/* 状态行：对读屏器 polite 播报状态变化（Tag 文字变化时才触发，不会逐秒骚扰）。 */}
+      <div className="webform-workbar-row">
+        <div className="webform-workbar-status" aria-live="polite">
+          {/* 状态点只是视觉冗余：颜色来自 `BROWSER_STATE_META`（唯一来源），文字才是语义。 */}
+          <span
+            className={`webform-workbar-dot${running ? " is-running" : ""}`}
+            aria-hidden="true"
+          />
+          {/* 状态名走语言包，颜色仍来自 `BROWSER_STATE_META`。 */}
           <Tag color={stateMeta.color}>
             {t(BROWSER_STATE_LABEL_KEYS[browserState ?? "stopped"])}
           </Tag>
           {browserLoading && !browserHasData ? <Spin size="small" /> : null}
-          <Typography.Text type="secondary">
+          <Typography.Text type="secondary" className="webform-workbar-hint">
             {t("webFormPage.browserCard.isolatedHint")}
           </Typography.Text>
         </div>
-        <div className="webform-browser-actions">
-          {/* 三个按钮的职责**互不重合**，各管一件事：
+        <div className="webform-workbar-actions">
+          {/* 按钮职责**互不重合**，各管一件事：
                 起停（启动/关闭浏览器）· 配置（浏览器设置）· 重查（刷新状态）。
               设置不回显状态、刷新不改配置、起停只碰进程——所以这里也不该让它们并行。 */}
           {running ? (
@@ -120,9 +133,6 @@ export const BrowserControlCard = memo(function BrowserControlCard({
               {t("webFormPage.browserCard.start")}
             </Button>
           )}
-          <Button icon={<SettingOutlined />} disabled={anyBusy} onClick={onOpenBrowserSettings}>
-            {t("webFormPage.browserCard.settings")}
-          </Button>
           <Tooltip title={t("webFormPage.browserCard.refreshTooltip")}>
             <Button
               icon={<ReloadOutlined />}
@@ -132,14 +142,35 @@ export const BrowserControlCard = memo(function BrowserControlCard({
               aria-label={t("webFormPage.browserCard.refreshAria")}
             />
           </Tooltip>
-          <Button
-            icon={<DownloadOutlined />}
-            loading={busy === "diagnostics"}
-            disabled={anyBusy}
-            onClick={() => void onExportDiagnostics()}
+          {/* 配置与诊断是"配一次就忘"的动作，常驻两颗按钮会把状态行挤到换行。
+              收进「更多」以后这一行只剩：状态 / 刷新 / 更多 / 一个主按钮。 */}
+          <Dropdown
+            trigger={["click"]}
+            menu={{
+              items: [
+                {
+                  key: "settings",
+                  icon: <SettingOutlined />,
+                  label: t("webFormPage.browserCard.settings"),
+                  disabled: anyBusy,
+                  onClick: onOpenBrowserSettings,
+                },
+                {
+                  key: "diagnostics",
+                  icon: <DownloadOutlined />,
+                  label: t("webFormPage.browserCard.diagnostics"),
+                  disabled: anyBusy,
+                  onClick: () => void onExportDiagnostics(),
+                },
+              ],
+            }}
           >
-            {t("webFormPage.browserCard.diagnostics")}
-          </Button>
+            <Button
+              icon={<MoreOutlined />}
+              disabled={anyBusy}
+              aria-label={t("webFormPage.browserCard.moreAria")}
+            />
+          </Dropdown>
           {running && (sessionActive || liveRunning) ? (
             <Tooltip title={t("webFormPage.browserCard.endTooltip")}>
               <Button
@@ -154,6 +185,6 @@ export const BrowserControlCard = memo(function BrowserControlCard({
           ) : null}
         </div>
       </div>
-    </Card>
+    </div>
   );
 });

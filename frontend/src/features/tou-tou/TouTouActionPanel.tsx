@@ -20,6 +20,8 @@ import { Button, Input } from "antd";
 import type { InputRef } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { formatShortcut } from "../shortcuts/matchShortcut";
+import { useShortcutSettings } from "../shortcuts/useShortcutKeymap";
 import type { TouTouAction } from "./touTouPageContext";
 import { searchTouTouActions } from "./touTouActions";
 import {
@@ -82,6 +84,11 @@ export default function TouTouActionPanel({
   onClose,
 }: TouTouActionPanelProps) {
   useLocale();
+  const shortcuts = useShortcutSettings();
+  /** 划词动作的组合键：面板底部的「球的用法」要原样给出用户当前配置的键。 */
+  const selectionShortcut = (shortcuts.bindings.selectionPanel ?? [])
+    .map((key) => formatShortcut(key))
+    .join(" / ");
   const dialogRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<InputRef | null>(null);
   const [query, setQuery] = useState("");
@@ -331,6 +338,15 @@ export default function TouTouActionPanel({
             </div>
 
             <div className="tt-panel-side-ask">
+              {/* I-17：球那四条动作原来只存在于悬浮球的 55 字 tooltip 里（悬停才看得见，
+                  移开就没了）。长文案搬到面板常驻，与首次进入的一次性说明同源
+                  （`touTou.orb.help`），两处不会漂。 */}
+              <div className="tt-panel-orb-help" role="note" aria-label={t("touTou.orb.helpTitle")}>
+                <p className="tt-panel-orb-help-title">{t("touTou.orb.helpTitle")}</p>
+                <p className="tt-panel-orb-help">
+                  {t("touTou.orb.help", { shortcut: selectionShortcut })}
+                </p>
+              </div>
               <p className="tt-panel-hint">{t("touTou.panel.sideAskHint")}</p>
               <Input.TextArea
                 value={question}

@@ -35,6 +35,15 @@ const advancedParams = {
   "advancedParams.placeholder.stop": "Type and press Enter, up to 4",
   "advancedParams.alert.protocolNote":
     "The thinking budget, Top K and similar parameters only matter once the protocol is Anthropic native; OpenAI-compatible endpoints ignore them. The thinking budget and the thinking mode switch are two generations of the same setting: a budget wins when set, otherwise the switch and effort decide.",
+
+  // Accessible names for the `ⓘ` that carries the six long explanations above (I-17).
+  // The wording itself stays in the `tooltip.*` keys — one definition per sentence.
+  "advancedParams.aria.topP": "About Top P",
+  "advancedParams.aria.topK": "About Top K",
+  "advancedParams.aria.repetitionPenalty": "About the repetition penalty",
+  "advancedParams.aria.thinkingBudget": "About the thinking budget",
+  "advancedParams.aria.thinkingStyle": "About the thinking parameter style",
+  "advancedParams.aria.stop": "About stop sequences",
 } as const;
 
 export default advancedParams;

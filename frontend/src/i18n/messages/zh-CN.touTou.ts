@@ -42,9 +42,15 @@ const touTou = {
   "touTou.clipboard.save": "保存",
 
   // ── 球体按钮（TouTouOrbButton） ─────────────────────────────
-  "touTou.orb.tooltip":
-    "单击：打开求职助手；双击：打开投投剪贴板；长按：打开动作面板；选中文字后按 {shortcut}：打开划词动作",
+  // I-17：悬停只给一行（tooltip 是"这是什么"，不是说明书）；四条动作的长文案改成
+  // `touTou.orb.help`，落到首次进入的一次性气泡与动作面板的「球的用法」里。
+  // `{shortcut}` 仍被使用——划词动作是唯一"看提示才知道"的组合键。
+  "touTou.orb.tooltip": "单击打开助手 · 长按看更多 · 划词 {shortcut}",
   "touTou.orb.ariaLabel": "打开求职助手",
+  "touTou.orb.helpTitle": "球的用法",
+  "touTou.orb.help":
+    "单击：打开求职助手；双击：打开投投剪贴板；长按：打开动作面板；选中文字后按 {shortcut}：打开划词动作",
+  "touTou.orb.helpClose": "知道了",
   "touTou.orb.signals": "{count} 件事可以帮你看看",
 
   // ── 去改资料提示卡（TouTouProfilePromptCard） ───────────────

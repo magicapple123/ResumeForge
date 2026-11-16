@@ -45,7 +45,7 @@ const llmProtocol = {
   /** Column header: Anthropic Messages protocol. */
   "llmProtocol.matrix.anthropic": "Anthropic Messages",
   /** Column header: verification date. */
-  "llmProtocol.matrix.verifiedAt": "Verified on",
+  "llmProtocol.matrix.verifiedAt": "Verified on {date}",
   /** Supported. */
   "llmProtocol.matrix.yes": "Supported",
   /** Not supported. */

@@ -13,6 +13,8 @@ import {
   Card,
   Empty,
   Space,
+  Collapse,
+  Dropdown,
   Table,
   Tabs,
   Tag,
@@ -300,28 +302,59 @@ export default function SkillsPage() {
         <TemplateWorkbench />
       ) : (
         <>
+          {/* I-20：说明从"两张始终展开的卡"收成**默认收起的一条**。
+              首屏此前要滚过约 250px 的指南才看到技能表，而这段说明读一次就够；
+              收起来之后第一行数据回到首屏，需要时点标题展开。 */}
           <Card size="small" className="settings-card skills-intro-card">
-            <Typography.Title level={5} style={{ marginTop: 0 }}>
-              {t("skills.guide.whatTitle")}
-            </Typography.Title>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              {t("skills.guide.whatBody")}
-            </Typography.Paragraph>
-            <Typography.Title level={5}>{t("skills.guide.howTitle")}</Typography.Title>
-            <ol className="skills-intro-steps">
-              <li>{t("skills.guide.how1")}</li>
-              <li>{t("skills.guide.how2")}</li>
-              <li>{t("skills.guide.how3")}</li>
-            </ol>
+            <Collapse
+              ghost
+              size="small"
+              className="skills-intro-collapse"
+              items={[
+                {
+                  key: "guide",
+                  label: (
+                    <Typography.Text strong>{t("skills.guide.whatTitle")}</Typography.Text>
+                  ),
+                  children: (
+                    <>
+                      <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+                        {t("skills.guide.whatBody")}
+                      </Typography.Paragraph>
+                      <Typography.Title level={5}>{t("skills.guide.howTitle")}</Typography.Title>
+                      <ol className="skills-intro-steps">
+                        <li>{t("skills.guide.how1")}</li>
+                        <li>{t("skills.guide.how2")}</li>
+                        <li>{t("skills.guide.how3")}</li>
+                      </ol>
+                    </>
+                  ),
+                },
+              ]}
+            />
+            {/* I-20：三颗模板按钮收成一个「从模板新建」下拉。
+                原来三个 `Button` 各占 ~120px，把首屏高度吃掉一截；收进下拉后
+                占位只有一颗按钮。适用场景**不能丢**（它是用户选模板的唯一依据），
+                所以从 tooltip 挪进菜单项第二行常驻显示。 */}
             <Space wrap>
               <Typography.Text type="secondary">{t("skills.guide.templates")}</Typography.Text>
-              {SKILL_TEMPLATES.map((template) => (
-                <Tooltip key={template.labelKey} title={t(template.hintKey)}>
-                  <Button size="small" onClick={() => openCreate(template.draft)}>
-                    {t(template.labelKey)}
-                  </Button>
-                </Tooltip>
-              ))}
+              <Dropdown
+                trigger={["click"]}
+                menu={{
+                  items: SKILL_TEMPLATES.map((template) => ({
+                    key: template.labelKey,
+                    label: (
+                      <div className="skills-template-item">
+                        <div className="skills-template-item__name">{t(template.labelKey)}</div>
+                        <div className="skills-template-item__hint">{t(template.hintKey)}</div>
+                      </div>
+                    ),
+                    onClick: () => openCreate(template.draft),
+                  })),
+                }}
+              >
+                <Button size="small">{t("skills.guide.newFromTemplate")}</Button>
+              </Dropdown>
             </Space>
           </Card>
 

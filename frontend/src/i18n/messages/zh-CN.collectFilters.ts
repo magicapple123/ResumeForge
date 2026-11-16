@@ -16,6 +16,8 @@ const collectFilters = {
   "collectFilters.section.loading": "正在读取站点的筛选条件…",
   "collectFilters.test.hint":
     "在真实招聘网站页面上逐项检查你选的条件现在能不能选到（会临时导航到筛选栏，测试完不影响采集）",
+  // I-17：上面这句 46 字的说明从「测试」按钮的 tooltip 改成旁边的 `ⓘ`，这一条是它的无障碍名。
+  "collectFilters.test.hintAria": "测试筛选条件说明",
   "collectFilters.intro":
     "这些是招聘网站筛选栏里的条件，网站在搜索时就替你筛掉，比采回来再筛更准，也少翻很多页。选项清单读自站点本身，改版会自动跟着变。",
   "collectFilters.intro.rules":

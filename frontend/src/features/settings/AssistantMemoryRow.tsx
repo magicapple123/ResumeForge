@@ -1,17 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 助手记忆的一行（F33）：状态徽标、来源摘录、逐条动作与变更历史。
+ * 助手记忆的一行（F33）：类型/内容/状态、合并后的元信息、`⋯` 菜单与变更历史。
  *
- * 从 `AssistantMemoryCard` 拆出来的原因：卡片本身已经有搜索、排序、开关、清空与弹层，
- * 再塞进行内按钮与历史弹窗会顶到 500 行；一行记忆的展示规则（置灰、可恢复、可回溯）
+ * 从 `AssistantMemoryCard` 拆出来的原因：卡片本身已经有开关、列表头、筛选、清空与弹层，
+ * 再塞进行内菜单与历史弹窗会顶到 500 行；一行记忆的展示规则（置灰、可恢复、可回溯）
  * 也值得单独读。
  *
+ * ## 常驻动作只有两个（I-03）
+ *
+ * 改造前一行最多 5 个 `type="link"` 按钮（回到原对话 / 编辑 / 永不使用 / 历史 / 删除），
+ * 5 行数据就是 25 个同等权重的蓝字，主次全平。现在：
+ *
+ * - 常驻只有「编辑」（12px）+「⋯」，其余（停用或恢复 / 历史 / 回到原对话 / 删除）都进菜单；
+ * - 两个动作默认 `opacity: 0`，行 hover 或键盘进入（`:focus-within`）才显形——它们仍然
+ *   可聚焦、可被读屏读到，只是不占视觉注意力；触屏（`hover: none`）下常显，否则无路可走。
+ * - 类型标签改中性灰底（不再抢强调色），来源与时间合并成一行 11px 次级文字。
+ *
  * 三条与后端语义对齐的展示规则：
- * - `suppressed`（用户标了「永不使用」）**仍显示**，置灰 + 「已停用」+「恢复使用」；
+ * - `suppressed`（用户标了「永不使用」）**仍显示**，置灰 + 「已停用」+ 菜单里的「恢复使用」；
  * - `superseded` 显示「已被新说法替换」，只读；
  * - `deleted` 不会出现在列表里（后端过滤），这里不做分支。
  */
-import { Button, Modal, Space, Spin, Tag, Typography } from "antd";
+import { MoreOutlined } from "@ant-design/icons";
+import { Button, Dropdown, Modal, Spin, Tag, Typography } from "antd";
+import type { MenuProps } from "antd";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { t } from "../../i18n";
@@ -33,6 +45,9 @@ const HISTORY_ACTION_KEYS = {
   delete: "assistantMemory.history.action.delete",
 } as const;
 type HistoryActionKey = keyof typeof HISTORY_ACTION_KEYS;
+
+/** `⋯` 菜单项的动作名：与 handler 一起构成唯一分派点。 */
+type RowAction = "edit" | "suppress" | "restore" | "history" | "conversation" | "delete";
 
 export function AssistantMemoryRow({
   memory,
@@ -57,6 +72,7 @@ export function AssistantMemoryRow({
   const suppressed = memory.status === "suppressed";
   const superseded = memory.status === "superseded";
   const excerpt = (memory.source_excerpt || "").trim();
+  const conversationId = memory.source_conversation_id;
 
   const openHistory = async () => {
     setHistoryOpen(true);
@@ -68,66 +84,94 @@ export function AssistantMemoryRow({
     }
   };
 
+  const runAction = (action: RowAction) => {
+    if (action === "edit") onEdit(memory);
+    else if (action === "suppress") onNeverUse(memory);
+    else if (action === "restore") onRestore(memory);
+    else if (action === "delete") onDelete(memory);
+    else if (action === "conversation") navigate(`/assistant?conversation=${conversationId}`);
+    else void openHistory();
+  };
+
+  // 菜单按状态裁剪：停用的只剩「恢复使用」，被替换的只剩「历史 / 删除」。
+  const items: MenuProps["items"] = [];
+  if (!suppressed && !superseded) {
+    items.push({ key: "suppress", label: t("assistantMemory.action.neverUse") });
+  }
+  if (suppressed) {
+    items.push({ key: "restore", label: t("assistantMemory.action.restore") });
+  }
+  items.push({ key: "history", label: t("assistantMemory.action.history") });
+  if (memory.source === "extracted" && conversationId) {
+    items.push({ key: "conversation", label: t("assistantMemory.openConversation") });
+  }
+  items.push({ type: "divider" });
+  items.push({ key: "delete", label: t("assistantMemory.action.delete"), danger: true });
+
   return (
     <li
       data-testid={`assistant-memory-${memory.id}`}
-      style={{ display: "grid", gap: 4, opacity: suppressed ? 0.65 : 1 }}
+      className={suppressed ? "rf-memory-row is-suppressed" : "rf-memory-row"}
     >
-      <Space size={8} wrap>
-        <Tag color={suppressed ? "default" : "blue"}>
-          {memoryKindLabel(memory.kind, memory.kind_label)}
-        </Tag>
-        <Typography.Text delete={suppressed}>{memory.value}</Typography.Text>
-        {suppressed ? <Tag color="orange">{t("assistantMemory.status.suppressed")}</Tag> : null}
-        {superseded ? <Tag color="default">{t("assistantMemory.status.superseded")}</Tag> : null}
-        <Tag color={memory.source === "extracted" ? "purple" : "green"}>
-          {t(
-            memory.source === "extracted"
-              ? "assistantMemory.source.extracted"
-              : "assistantMemory.source.manual",
-          )}
-        </Tag>
-        <Typography.Text type="secondary">
-          {t("assistantMemory.updatedAt", { time: formatDateTime(memory.updated_at) })}
+      <div className="rf-memory-row-main">
+        <div className="rf-memory-row-line">
+          <Tag className="rf-memory-kind">{memoryKindLabel(memory.kind, memory.kind_label)}</Tag>
+          <Typography.Text delete={suppressed} className="rf-memory-value">
+            {memory.value}
+          </Typography.Text>
+          {suppressed ? (
+            <Tag className="rf-memory-status">{t("assistantMemory.status.suppressed")}</Tag>
+          ) : null}
+          {superseded ? (
+            <Tag className="rf-memory-status">{t("assistantMemory.status.superseded")}</Tag>
+          ) : null}
+          <span className="rf-memory-actions">
+            {!suppressed && !superseded ? (
+              <Button
+                type="link"
+                size="small"
+                className="rf-memory-edit"
+                onClick={() => onEdit(memory)}
+              >
+                {t("assistantMemory.action.edit")}
+              </Button>
+            ) : null}
+            <Dropdown
+              trigger={["click"]}
+              menu={{
+                items,
+                onClick: ({ key }) => runAction(key as RowAction),
+              }}
+            >
+              <Button
+                type="text"
+                size="small"
+                className="rf-memory-more"
+                aria-label={t("assistantMemory.list.menu")}
+                icon={<MoreOutlined />}
+              />
+            </Dropdown>
+          </span>
+        </div>
+        {/* 元信息合并成一行：来源 · 更新时间（原来来源是一个紫色 Tag、时间单独一段）。 */}
+        <Typography.Text type="secondary" className="rf-memory-meta">
+          {t("assistantMemory.meta.line", {
+            source: t(
+              memory.source === "extracted"
+                ? "assistantMemory.source.extracted"
+                : "assistantMemory.source.manual",
+            ),
+            updated: t("assistantMemory.updatedAt", {
+              time: formatDateTime(memory.updated_at),
+            }),
+          })}
         </Typography.Text>
-      </Space>
-      {excerpt ? (
-        <Typography.Text type="secondary" italic style={{ fontSize: 12 }}>
-          {t("assistantMemory.sourceExcerpt", { text: excerpt })}
-        </Typography.Text>
-      ) : null}
-      <Space size={4} wrap>
-        {memory.source === "extracted" && memory.source_conversation_id ? (
-          <Button
-            type="link"
-            size="small"
-            onClick={() => navigate(`/assistant?conversation=${memory.source_conversation_id}`)}
-          >
-            {t("assistantMemory.openConversation")}
-          </Button>
+        {excerpt ? (
+          <Typography.Text type="secondary" italic className="rf-memory-excerpt">
+            {t("assistantMemory.sourceExcerpt", { text: excerpt })}
+          </Typography.Text>
         ) : null}
-        {!suppressed && !superseded ? (
-          <Button type="link" size="small" onClick={() => onEdit(memory)}>
-            {t("assistantMemory.action.edit")}
-          </Button>
-        ) : null}
-        {!suppressed && !superseded ? (
-          <Button type="link" size="small" onClick={() => onNeverUse(memory)}>
-            {t("assistantMemory.action.neverUse")}
-          </Button>
-        ) : null}
-        {suppressed ? (
-          <Button type="link" size="small" onClick={() => onRestore(memory)}>
-            {t("assistantMemory.action.restore")}
-          </Button>
-        ) : null}
-        <Button type="link" size="small" onClick={() => void openHistory()}>
-          {t("assistantMemory.action.history")}
-        </Button>
-        <Button type="link" size="small" danger onClick={() => onDelete(memory)}>
-          {t("assistantMemory.action.delete")}
-        </Button>
-      </Space>
+      </div>
 
       <Modal
         open={historyOpen}
@@ -142,28 +186,26 @@ export function AssistantMemoryRow({
         ) : events.length === 0 ? (
           <Typography.Text type="secondary">{t("assistantMemory.history.empty")}</Typography.Text>
         ) : (
-          <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+          <ul className="rf-memory-history">
             {events.map((event) => (
               <li key={event.id}>
-                <Space size={8} wrap>
-                  <Typography.Text strong>
-                    {t(
-                      HISTORY_ACTION_KEYS[event.action as HistoryActionKey] ??
-                        "assistantMemory.history.action.update",
-                    )}
+                <Typography.Text strong>
+                  {t(
+                    HISTORY_ACTION_KEYS[event.action as HistoryActionKey] ??
+                      "assistantMemory.history.action.update",
+                  )}
+                </Typography.Text>
+                {event.before || event.after ? (
+                  <Typography.Text type="secondary" className="rf-memory-history-change">
+                    {t("assistantMemory.history.changed", {
+                      before: event.before || "∅",
+                      after: event.after || "∅",
+                    })}
                   </Typography.Text>
-                  {event.before || event.after ? (
-                    <Typography.Text type="secondary">
-                      {t("assistantMemory.history.changed", {
-                        before: event.before || "∅",
-                        after: event.after || "∅",
-                      })}
-                    </Typography.Text>
-                  ) : null}
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {formatDateTime(event.at)}
-                  </Typography.Text>
-                </Space>
+                ) : null}
+                <Typography.Text type="secondary" className="rf-memory-history-time">
+                  {formatDateTime(event.at)}
+                </Typography.Text>
               </li>
             ))}
           </ul>

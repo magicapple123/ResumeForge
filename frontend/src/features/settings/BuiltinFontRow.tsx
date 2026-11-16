@@ -18,7 +18,7 @@
  *   （直删、没有恢复入口，这句话必须出现在确认里）。
  */
 import { CheckOutlined, DeleteOutlined, MoreOutlined } from "@ant-design/icons";
-import { App, Button, Dropdown, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Dropdown, Tag, Typography } from "antd";
 import { useCallback, useState } from "react";
 import {
   BUILTIN_FONT_FILE,
@@ -27,6 +27,7 @@ import {
   type BuiltinFontStatus,
 } from "../../api/fonts";
 import { useBuiltinFontDownload } from "../fonts/useBuiltinFontDownload";
+import HintDetail from "../../components/common/HintDetail";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import FontSampleModal from "./FontSampleModal";
@@ -254,7 +255,13 @@ export default function BuiltinFontRow({ status, onChanged, activeName = null }:
           </Dropdown>
         ) : null}
         {!downloading && !failed && !downloaded ? (
-          <Tooltip title={t("fonts.builtin.source-tooltip")}>
+          // I-17：来源与授权（66 字）原来挂在「下载」按钮的 tooltip 上——用户点之前
+          // 根本看不到，而这正是"点之前有权知道"的那句话。现在它是按钮左边的 `ⓘ`。
+          <>
+            <HintDetail
+              detail={t("fonts.builtin.source-tooltip")}
+              label={t("fonts.builtin.source-aria")}
+            />
             <Button
               size="small"
               aria-label={t("fonts.builtin.download-aria", { size: sizeText })}
@@ -262,7 +269,7 @@ export default function BuiltinFontRow({ status, onChanged, activeName = null }:
             >
               {t("fonts.builtin.download")}
             </Button>
-          </Tooltip>
+          </>
         ) : null}
       </div>
       {failed ? (

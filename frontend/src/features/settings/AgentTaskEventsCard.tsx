@@ -11,18 +11,23 @@
  * 先弹确认（按钮文案「仍要关闭」，不用「确定」）。modal 取自 `App.useApp()`，不读静态
  * `Modal.confirm`（深色主题下会退回浅色 token）。
  */
-import { App, Card, Space, Switch, Typography } from "antd";
+import { App, Card, Flex, Space, Switch, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { listAgentTasks } from "../../api/agentTasks";
 import { getAgentTaskEvents, setAgentTaskEvents } from "../../api/settings";
 import { visibleTasks } from "../assistant/tasks/agentTaskView";
 import ErrorState from "../../components/common/ErrorState";
 import LoadingBlock from "../../components/common/LoadingBlock";
+import SettingsResetButton from "./SettingsResetButton";
+import { useSettingsResetListener } from "./useSettingsResetListener";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
 /** 关闭前要提醒的「还没结束」状态（D8）。 */
 const UNFINISHED_STATUSES: readonly string[] = ["draft", "running", "paused", "waiting_approval"];
+
+/** I-10：这张卡能恢复默认的键（总开关；默认关，不受其它 assistant 作用域设置影响）。 */
+const AGENT_TASK_RESET_KEYS = ["agent_task_events_enabled"];
 
 export default function AgentTaskEventsCard() {
   useLocale();
@@ -64,6 +69,9 @@ export default function AgentTaskEventsCard() {
       cancelled = true;
     };
   }, []);
+
+  // I-10：恢复默认后重取开关（重置直接删行，前端必须重新问一次才知道现在是关的）。
+  useSettingsResetListener(() => void load());
 
   const applyChange = useCallback(
     async (checked: boolean) => {
@@ -122,7 +130,16 @@ export default function AgentTaskEventsCard() {
   };
 
   return (
-    <Card title={t("settingsUi.agentTaskEvents.title")} className="settings-card">
+    <Card
+      title={
+        <Flex align="center" gap={8}>
+          <span>{t("settingsUi.agentTaskEvents.title")}</span>
+          {/* I-10：卡片级恢复默认（总开关回到「关」）。 */}
+          <SettingsResetButton keys={AGENT_TASK_RESET_KEYS} />
+        </Flex>
+      }
+      className="settings-card"
+    >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         {t("settingsUi.agentTaskEvents.intro")}
       </Typography.Paragraph>

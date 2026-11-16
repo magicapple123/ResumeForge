@@ -18,10 +18,11 @@
  * - 隐藏：完全不参与（不显示、不进生成与投影、也不进全局搜索）。
  * 两者都写在字段定义/偏好里的不同列上，UI 上必须能看出是两件事。
  */
-import { Button, Input, Switch, Tag, Tooltip } from "antd";
+import { Button, Input, Switch, Tag } from "antd";
 import { useState } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
+import HintDetail from "../../../components/common/HintDetail";
 import ColumnStrategySelect from "./columnStrategySelect";
 import { profileFieldLabel, profileFieldTypeLabel } from "./profileLabels";
 import { profilePlacementLabel } from "./fieldPlacement";
@@ -88,9 +89,15 @@ export default function ProfileFieldRow({
             <span className="profile-settings-row-meta">{profileFieldTypeLabel(field)}</span>
             <Tag>{profilePlacementLabel(field.effective_placement ?? field.default_placement)}</Tag>
             {primaryText ? (
-              <Tooltip title={t("profileLibrary.fieldSettings.primaryTextFieldHint")}>
+              // I-17：43 字的"这是本板块的主文本字段，隐藏后…"原本挂在这枚标签的 tooltip 上。
+              // 标签本身很窄、悬停热区小，触屏也读不到；现在标签后面跟一个 `ⓘ`。
+              <>
                 <Tag color="blue">{t("profileLibrary.fieldSettings.primaryTextField")}</Tag>
-              </Tooltip>
+                <HintDetail
+                  detail={t("profileLibrary.fieldSettings.primaryTextFieldHint")}
+                  label={t("profileLibrary.fieldSettings.primaryTextFieldHintAria")}
+                />
+              </>
             ) : null}
             {field.material_only ? (
               <Tag color="red">{t("structure.profile.materialOnlyShort")}</Tag>

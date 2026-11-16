@@ -9,6 +9,7 @@ const photoFrame = {
   "resume.photo.frame.followLine": "Follow dividers",
   "resume.photo.frame.followLineHint": "Follows the divider color",
   "resume.photo.frame.radius": "Corner radius",
+  "resume.photo.frame.overlapHint": "The photo may extend past the header and cover body text; reduce the offset or size if it does",
   "resume.photo.frame.offsetX": "Horizontal offset",
   "resume.photo.frame.offsetY": "Vertical offset",
   "resume.photo.frame.stepHint": "Slider step: 1px border/radius, 0.5mm offsets",

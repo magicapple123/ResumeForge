@@ -93,6 +93,7 @@ import referralForm from "./en-US.referralForm";
 import trackerPage from "./en-US.trackerPage";
 import drillSession from "./en-US.drillSession";
 import shortcutSettings from "./en-US.shortcutSettings";
+import settingsReset from "./en-US.settingsReset";
 import shortcutsCard from "./en-US.shortcutsCard";
 import backgroundTasks from "./en-US.backgroundTasks";
 import referenceFile from "./en-US.referenceFile";
@@ -291,6 +292,7 @@ const enUS = {
   ...trackerPage,
   ...drillSession,
   ...shortcutSettings,
+  ...settingsReset,
   ...shortcutsCard,
   ...backgroundTasks,
   ...referenceFile,

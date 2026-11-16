@@ -213,22 +213,23 @@ export default function LLMProtocolSupportMatrix() {
     {
       title: t("llmProtocol.matrix.chat"),
       align: "center",
+      // I-12：状态列定宽，auto 布局才不会转头去压「Anthropic Messages 协议」表头。
+      width: 132,
       render: (_, row) => renderSupport(row.chat, row.chatNoteKey),
     },
     {
       title: t("llmProtocol.matrix.responses"),
       align: "center",
+      // I-12：状态列定宽，auto 布局才不会转头去压「Anthropic Messages 协议」表头。
+      width: 132,
       render: (_, row) => renderSupport(row.responses, row.responsesNoteKey),
     },
     {
       title: t("llmProtocol.matrix.anthropic"),
       align: "center",
+      // I-12：状态列定宽，auto 布局才不会转头去压「Anthropic Messages 协议」表头。
+      width: 132,
       render: (_, row) => renderSupport(row.anthropic, row.anthropicNoteKey),
-    },
-    {
-      title: t("llmProtocol.matrix.verifiedAt"),
-      align: "center",
-      render: () => VERIFIED_AT,
     },
   ];
 
@@ -242,13 +243,20 @@ export default function LLMProtocolSupportMatrix() {
           label: t("llmProtocol.matrix.toggle"),
           children: (
             <>
+              {/* I-12：核对日期是**表级常量**，不再复制成 23 份行级数据；表尾 footnote 一个字不动。 */}
+              <Typography.Paragraph
+                type="secondary"
+                style={{ textAlign: "right", fontSize: 12, marginBottom: 8 }}
+              >
+                {t("llmProtocol.matrix.verifiedAt", { date: VERIFIED_AT })}
+              </Typography.Paragraph>
               <Table<MatrixRow>
                 rowKey="labelKey"
                 size="small"
                 pagination={false}
                 columns={columns}
                 dataSource={ROWS}
-                scroll={{ x: 620 }}
+                scroll={{ x: 560 }}
               />
               <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
                 {t("llmProtocol.matrix.footnote")}

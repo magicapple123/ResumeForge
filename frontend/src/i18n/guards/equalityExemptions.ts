@@ -40,6 +40,9 @@ export const EQUALITY_EXEMPT_KEYS = {
     "Technical term used verbatim in the original Chinese copy",
   // Memory history renders "before → after": two user values around an arrow, not prose.
   "assistantMemory.history.changed": "Value interpolation around an arrow separator",
+  // 记忆行的元信息 = 来源标签 + 更新时间，两个都已翻译，中间只有一个分隔符（与上面
+  // `interviewReview.header.meta` 同一情形）：这句本身不含散文。
+  "assistantMemory.meta.line": "Separator between two already-translated values",
   // The interviewer's given name is spelled "Jane" in every locale (a name, not prose).
   "interviewPage.interviewerName": "Person name, identical in both languages",
   // 复盘查看态的头部副信息：只有「时间 · 目标」两个已翻译的插值 + 一个分隔符，没有散文。

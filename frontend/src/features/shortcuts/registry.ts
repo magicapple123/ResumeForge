@@ -36,7 +36,8 @@ export type ShortcutActionId =
   | "focusAssistant"
   | "commandPalette"
   | "refreshView"
-  | "goHome";
+  | "goHome"
+  | "showHints";
 
 export interface ShortcutAction {
   id: ShortcutActionId;
@@ -172,6 +173,14 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
     id: "goHome",
     labelKey: SHELL_GESTURE_LABEL_KEYS.goHome,
     defaultKeys: ["alt+home"],
+    scope: "global",
+  },
+  {
+    // I-18：提示模式的开关（不是"打开帮助页"）。按住 alt+h 进入后所有 `ⓘ` 展开，
+    // 再按一次退出——所以它的落点是 `help-mode` 那个全局单例，不需要页面配合。
+    id: "showHints",
+    labelKey: "shortcutSettings.action.showHints",
+    defaultKeys: ["alt+h"],
     scope: "global",
   },
 ];

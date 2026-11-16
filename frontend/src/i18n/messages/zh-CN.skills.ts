@@ -52,6 +52,8 @@ const skills = {
   "skills.guide.how3":
     "技能在对话里启用，**不在技能库里全局开启**：每次新建对话都从空技能开始，也可以「导入技能」加载别人分享的 .md / .zip。",
   "skills.guide.templates": "模板：",
+  /** I-20：三颗模板按钮收成一个下拉后的按钮文案。 */
+  "skills.guide.newFromTemplate": "从模板新建",
   "skills.budget.title":
     "本对话启用的技能越多，系统提示越长：技能提示词总量超过预算时，靠后的技能不会被加载（助手会用一句话说明）。",
   "skills.error.loadFailed": "技能加载失败：{error}",

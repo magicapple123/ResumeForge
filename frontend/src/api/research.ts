@@ -30,8 +30,14 @@ export interface ResearchSource {
 
 /** 联网简报。`status === "failed"` 时 `reason` 有值、`markdown` 为空。 */
 export interface ResearchBrief {
-  status: "ok" | "failed";
+  /** `skipped` = 本次没有请求这一路（`parts` 白名单），不是失败。 */
+  status: "ok" | "failed" | "skipped";
   reason: string;
+  /**
+   * 失败分类（I-22）：`unauthorized` 去设置配置 Key、`insufficient_balance` 查余额、
+   * `rate_limited` 稍后重试、`upstream` 其他上游问题。成功时为空串 / 缺失。
+   */
+  reason_code?: "unauthorized" | "insufficient_balance" | "rate_limited" | "upstream" | "";
   markdown: string;
   sources: ResearchSource[];
   deep: boolean;
@@ -65,6 +71,8 @@ export interface CompanyResearchResult {
   /** 降级说明（某条查询失败、简报没做出来等），已去重。 */
   notes: string[];
   usage: ResearchUsage;
+  /** I-21：本次结果落库后的知识条目摘要（落库失败或无可落库内容时为 null）。 */
+  knowledge_entry?: ResearchEntrySummary | null;
 }
 
 export interface CompanyResearchInput {
@@ -72,6 +80,24 @@ export interface CompanyResearchInput {
   role?: string;
   jd?: string;
   deep?: boolean;
+  /** I-21：从岗位详情发起时带上，落库的知识条目会挂到该岗位。 */
+  job_id?: number;
+  /** I-23：只跑指定的路；不传 = 两条都跑。简报失败时用它只重跑简报，不重复搜卡片。 */
+  parts?: Array<"cards" | "brief">;
+}
+
+/** 这家公司最近一次调研的摘要（I-21）：只有元信息，正文在知识库里读。 */
+export interface ResearchEntrySummary {
+  id: number;
+  title: string;
+  company: string;
+  reason: string;
+  updated_at: string | null;
+}
+
+/** 读「最近一次调研」；没有返回 `null`。 */
+export function latestCompanyResearch(company: string): Promise<{ entry: ResearchEntrySummary | null }> {
+  return request(`/research/company/latest?company=${encodeURIComponent(company)}`);
 }
 
 /**

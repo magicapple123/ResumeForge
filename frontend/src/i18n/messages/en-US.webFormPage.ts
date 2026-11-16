@@ -16,6 +16,38 @@ const webFormPage = {
     "After filling, review each field in the browser window and click the page's own submit button yourself once everything is correct.",
   "webFormPage.hint.expandLater":
     "Once the browser is ready, the safety note, AI assist and other controls expand here step by step (the relaxed-mode boundary stays visible).",
+  "webFormPage.flow.reason.browserOff":
+    "The browser is not running yet: click “Start dedicated browser” above, then come back here to read the current form.",
+  "webFormPage.fillMode.title": "How to fill",
+  "webFormPage.fillMode.hint":
+    "These four rows decide how your data enters the page; changes apply immediately.",
+  /* I-27 first-screen empty state (three-step guide). */
+  "webFormPage.onboarding.badge": "Not started",
+  "webFormPage.onboarding.title": "Three steps to start",
+  "webFormPage.onboarding.lead":
+    "Start the browser, open the target page, then come back and read the form.",
+  "webFormPage.onboarding.step1": "Open the dedicated browser",
+  "webFormPage.onboarding.step1Hint": "A separate window; your open pages stay untouched",
+  "webFormPage.onboarding.step2": "Open the target page in that browser",
+  "webFormPage.onboarding.step2Hint": "Sign-in and captchas are yours to handle",
+  "webFormPage.onboarding.step3": "Come back and read the form",
+  "webFormPage.onboarding.step3Hint": "Review the mapping, then fill in one go",
+  "webFormPage.onboarding.next.start": "Next: “Start dedicated browser” above",
+  "webFormPage.onboarding.next.read": "Next: “Read current form” on the left",
+  "webFormPage.onboarding.next.fill": "Form read; review it, then fill",
+  "webFormPage.onboarding.state.now": "Now",
+  "webFormPage.onboarding.state.done": "Done",
+  "webFormPage.onboarding.state.todo": "Pending",
+  "webFormPage.flow.progressTitle": "Fill progress",
+  "webFormPage.flow.progressValue": "Step {current} of {total} · {title}",
+  "webFormPage.fillMode.boundary":
+    "Date pickers · File uploads · Password/OTP/bank card · Read-only toggles without a popup: never automated",
+  "webFormPage.result.title": "Results and records",
+  "webFormPage.result.tab.preview": "Preview and fill",
+  "webFormPage.result.tab.pending": "Needs your input {count}",
+  "webFormPage.result.tab.result": "Fill result",
+  "webFormPage.records.hint":
+    "Records keep the real values that were written (ID number, phone number). Delete them one by one when you are done.",
   "webFormPage.stagedAi.ready":
     "The AI field detection you started earlier is done. Its result is staged; click “Apply” to switch to that preview — the page itself is still untouched.",
   "webFormPage.stagedAi.apply": "Apply",
@@ -30,6 +62,7 @@ const webFormPage = {
     "The target web form is open; existing pages are left untouched",
   "webFormPage.toast.browserStarted":
     "The browser started. Open the company's web form in that window, then come back and click Read current form",
+  "webFormPage.scope.hintAria": "Data range note",
   "webFormPage.toast.sessionEnded": "This web form session has ended",
   "webFormPage.toast.statusRefreshed": "Browser status refreshed",
   "webFormPage.toast.diagnosticsExported":
@@ -116,6 +149,7 @@ const webFormPage = {
     "; matched rows are tagged AI suggestion and left unchecked by default.",
   "webFormPage.aiAssist.unavailable":
     "No model is configured yet, so this is unavailable for now. Fill in the Base URL and model name on the Settings page, and boxes the rules cannot recognize can go to the AI.",
+  "webFormPage.aiAssist.hintAria": "AI assist note",
   "webFormPage.aiAssist.pendingRestart": "Changes take effect the next time you turn this on",
   "webFormPage.browserCard.isolatedHint":
     "Uses a dedicated browser for web forms; it never covers the apply console or existing web form pages",
@@ -125,6 +159,7 @@ const webFormPage = {
   // 必须与下一行可见文字逐字一致：axe 的 `label-content-name-mismatch`（serious）
   // 要求可访问名包含可见文字，多一个 "the" 就会红（只有英文暴露，中文「开启专用浏览器」两处相同）。
   "webFormPage.browserCard.startAria": "Start dedicated browser",
+  "webFormPage.browserCard.moreAria": "More browser actions",
   "webFormPage.browserCard.start": "Start dedicated browser",
   "webFormPage.browserCard.settings": "Browser settings",
   "webFormPage.browserCard.refreshTooltip": "Refresh now",
@@ -166,6 +201,7 @@ const webFormPage = {
   "webFormPage.relaxed.risk":
     "When enabled, the program will click dropdown/overlay options and check declarations you confirmed one by one; mistakes are possible, please review the form. " +
     "Four categories are never automated: date pickers, file uploads, password/OTP/bank-card fields, and read-only toggles without a popup - you handle those yourself.",
+  "webFormPage.relaxed.hintAria": "Relaxed mode risk note",
   "webFormPage.liveStatus.thinking": "Looking at this box",
   "webFormPage.liveStatus.aiThinking": "AI is recognizing",
   "webFormPage.liveStatus.matched": "Suggestion ready",

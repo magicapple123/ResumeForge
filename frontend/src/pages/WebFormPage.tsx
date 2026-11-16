@@ -21,7 +21,7 @@
  * 如果只有 URL 而没有当前标签页草稿，重放的是**「读到了什么」**，勾选会回到默认；有草稿时则连
  * 勾选、手改值和填充结果一起恢复。这样既不把临时状态塞进 URL，也不会在正常切页时丢失进度。
  */
-import { Alert, App, Button, Card, Space, Typography } from "antd";
+import { Alert, App, Button, Collapse } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDiagnostics } from "../api/system";
 import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
@@ -62,15 +62,14 @@ import WebFormMemoryDialog, {
 import WebFormPendingPanel from "../features/webform/WebFormPendingPanel";
 import WebFormRecordsPanel from "../features/webform/WebFormRecordsPanel";
 import { useBrowserStatus } from "../hooks/useBrowserStatus";
-import { AiAssistCard } from "./webform/AiAssistCard";
-import { BrowserControlCard } from "./webform/BrowserControlCard";
-import { FillResultCard } from "./webform/FillResultCard";
-import { LiveModeCard } from "./webform/LiveModeCard";
-import { PreviewCard } from "./webform/PreviewCard";
-import { ReadSnapshotCard } from "./webform/ReadSnapshotCard";
-import { RelaxedModeCard } from "./webform/RelaxedModeCard";
-import { ScopeSwitchCard } from "./webform/ScopeSwitchCard";
+import { FillModePanel } from "./webform/FillModePanel";
+import { FlowBar } from "./webform/FlowBar";
+import { ResultPanel } from "./webform/ResultPanel";
+import { WebFormOnboarding } from "./webform/WebFormOnboarding";
+import { Workbar } from "./webform/Workbar";
 import { WEB_FORM_STATUS_POLL_INTERVAL_MS } from "./webform/constants";
+// 工作台版式（吸顶工具条 + 两栏 + 结果 Tabs）：按需加载，不并进全局样式表。
+import "../styles/webform-workbench.css";
 import { readWebFormScope, writeWebFormScope } from "../features/webform/webFormScopeStorage";
 import { useAiAvailable } from "./webform/useAiAvailable";
 import { useLiveSession } from "./webform/useLiveSession";
@@ -668,29 +667,29 @@ export default function WebFormPage() {
     return 0;
   }, [preview, result, running]);
 
-  // 渐进展开（RF-12）：浏览器没就绪、也没有进行中的草稿时，只保留「就绪引导」
-  // （浏览器控制卡 + 步骤条/读取卡）——纯说明性的长卡（AI 兜底、放宽模式）此时
-  // 抢的是还没开始填表的人的注意力。就绪（或恢复出未完成草稿）后全部展开。
-  // 说明内容不删，只是推迟到需要时出现；LiveModeCard 的「开启智能逐项填表」
-  // 按钮在未就绪时也要可见可禁用（WebFormPage.live.test.tsx 钉着），因此保留。
-  const controlsExpanded =
-    running || sessionActive || Boolean(snapshot) || Boolean(preview) || Boolean(result);
-
-  return (
-    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-      {/* 安全说明保留：就绪前只保留标题这一行红线；完整说明在控制项展开后一起出现。 */}
-      {controlsExpanded ? (
-        <Alert
-          type="warning"
-          showIcon
-          title={t("webFormPage.notice.title")}
-          description={t("webFormPage.notice.body")}
+  // 待补资料面板只构造一次：`preview` 不变时元素引用恒定，memo 面板才不会被打字时的
+  // 整页重渲击穿（击键路径上 preview 是不变的）。
+  const pendingPanel = useMemo(
+    () =>
+      preview ? (
+        <MemoWebFormPendingPanel
+          missingData={preview.missing_data}
+          unrecognized={preview.unrecognized}
+          blocked={preview.blocked}
         />
-      ) : (
-        <Alert type="warning" showIcon title={t("webFormPage.notice.title")} />
-      )}
+      ) : null,
+    [preview],
+  );
+  /** 待补资料条数：结果区标签直接写数字，用户不必点开才知道还差几项。 */
+  const pendingCount = preview
+    ? preview.missing_data.length + preview.unrecognized.length + preview.blocked.length
+    : 0;
 
-      <BrowserControlCard
+  // 四行开关不再参与"渐进展开"（RF-12 那套折叠已撤）：AI 兜底与放宽模式的说明必须在
+  // 默认入口就看得见——把它们藏起来，用户在还没开始填表时根本看不到边界（#37 的教训）。
+  return (
+    <div className="webform-workbench">
+      <Workbar
         targetUrl={targetUrl}
         onChangeTargetUrl={setTargetUrl}
         urlHistory={urlHistory}
@@ -710,95 +709,106 @@ export default function WebFormPage() {
         onExportDiagnostics={handleExportDiagnostics}
         onEndSession={handleEndSession}
       />
-      <ScopeSwitchCard scope={scope} disabled={busy === "read"} onChange={handleScopeChange} />
-      {/* AI 兜底：规则能确定就不调用模型，只有认不出的框才问一次。
-          渐进展开：就绪前收起（说明性长卡，与填表动作无直接关系）。 */}
-      {controlsExpanded ? (
-        <AiAssistCard
-          aiOn={aiOn}
-          aiAvailable={aiAvailable}
-          liveRunning={live?.running}
-          onAiEnabledChange={setAiEnabled}
-        />
-      ) : null}
-      {/* 放宽模式快捷入口：与设置页是同一个开关（后端持久化，默认关）。
-          预览每次都会按当前开关重新计算，改完重读表单即可生效。
-          #37：这张卡**不参与渐进展开**——它的风险说明（四类始终不代填）必须在默认态
-          就能看到，否则用户在最常见的入口（还没开浏览器）看不到边界。 */}
-      <RelaxedModeCard />
 
-      {/* 「智能逐项填表」：与上面的「读取当前表单 → 批量填」并存，不是替代。
-          它不做预先快照——点到哪个框才现场匹配，所以不存在"页面一联动序号就失效"。 */}
-      <LiveModeCard
-        live={live}
-        liveEnabled={liveEnabled}
-        running={running}
-        busy={busy}
-        rememberPending={rememberPending}
-        alternatives={alternatives}
-        onToggle={handleLiveToggle}
-        onRequestMemoryDialog={handleRequestMemoryDialog}
-      />
+      {/* 安全说明压成一行：只填不交是产品边界，必须一直挂在页面上（不随展开状态消失），
+          但也不该占掉两行高度——标题加粗、正文次要色，窄容器自动换行。 */}
+      <p className="webform-safety-strip" role="note">
+        <span className="webform-safety-strip-title">{t("webFormPage.notice.title")}</span>
+        <span className="webform-safety-strip-body">{t("webFormPage.notice.body")}</span>
+      </p>
 
-      <ReadSnapshotCard
-        step={step}
-        running={running}
-        busy={busy}
-        snapshot={snapshot}
-        onRead={handleRead}
-      />
-
-      {controlsExpanded ? null : (
-        <Typography.Text type="secondary">{t("webFormPage.hint.expandLater")}</Typography.Text>
-      )}
-
-      {/* AI 建议已就绪，但当前页面对应的不是那次快照：**由用户点一下**再切过去，
-          绝不自动覆盖他正在核对的这份预览。 */}
-      {stagedAi && snapshot?.snapshot_id !== stagedAi.snapshotId ? (
-        <Alert
-          type="info"
-          showIcon
-          title={t("webFormPage.stagedAi.ready")}
-          action={
-            <Button size="small" onClick={applyStagedAi}>
-              {t("webFormPage.stagedAi.apply")}
-            </Button>
-          }
-        />
-      ) : null}
-
-      {preview ? (
-        <PreviewCard
-          preview={preview}
-          selected={selected}
-          values={values}
-          aiSuggestions={aiSuggestions}
-          busy={busy}
-          running={running}
-          onSelectAiSuggestions={selectAiSuggestions}
-          onFill={handleFill}
-          onToggle={toggle}
-          onValueChange={changeValue}
-        />
-      ) : null}
-
-      {result ? <FillResultCard result={result} /> : null}
-
-      {preview ? (
-        <Card size="small" title={t("webFormPage.card.pending")}>
-          <MemoWebFormPendingPanel
-            missingData={preview.missing_data}
-            unrecognized={preview.unrecognized}
-            blocked={preview.blocked}
+      <div className="webform-columns">
+        {/* 左栏：填什么 / 怎么填。步骤条 + 当前步动作，再往下是四行填写方式。 */}
+        <div className="webform-column">
+          <FlowBar
+            step={step}
+            running={running}
+            busy={busy}
+            snapshot={snapshot}
+            onRead={handleRead}
           />
-        </Card>
-      ) : null}
+          <FillModePanel
+            scope={scope}
+            scopeDisabled={busy === "read"}
+            onScopeChange={handleScopeChange}
+            aiOn={aiOn}
+            aiAvailable={aiAvailable}
+            onAiEnabledChange={setAiEnabled}
+            live={live}
+            liveEnabled={liveEnabled}
+            running={running}
+            busy={busy}
+            rememberPending={rememberPending}
+            alternatives={alternatives}
+            onLiveToggle={handleLiveToggle}
+            onRequestMemoryDialog={handleRequestMemoryDialog}
+          />
 
-      {/* 填充记录：每次填充留一笔，供事后回看"我当时到底填了什么"。
-          记录里含真实值（证件号、手机号），所以删除是隐私上的必要项，不是便利。 */}
-      <Card size="small" title={t("webFormPage.card.records")}>
-        <MemoWebFormRecordsPanel refreshKey={recordRefresh} />
-      </Card>
+          {/* AI 建议已就绪，但当前页面对应的不是那次快照：**由用户点一下**再切过去，
+              绝不自动覆盖他正在核对的这份预览。 */}
+          {stagedAi && snapshot?.snapshot_id !== stagedAi.snapshotId ? (
+            <Alert
+              type="info"
+              showIcon
+              title={t("webFormPage.stagedAi.ready")}
+              action={
+                <Button size="small" onClick={applyStagedAi}>
+                  {t("webFormPage.stagedAi.apply")}
+                </Button>
+              }
+            />
+          ) : null}
+        </div>
+
+        {/* 右栏：结果与记录。三块结果合成一组 Tabs；填充记录默认收起（只折叠视觉）。
+            还没读表单时这里换成「三步开始填写」——结果区整块不渲染的话，1440 宽的屏幕上
+            右栏是一块白板，而左栏同时挤着四行开关与四段说明，一边过载一边空着。 */}
+        <div className="webform-column">
+          {preview || result ? (
+            <ResultPanel
+              preview={preview}
+              result={result}
+              pendingCount={pendingCount}
+              pendingPanel={pendingPanel}
+              selected={selected}
+              values={values}
+              aiSuggestions={aiSuggestions}
+              busy={busy}
+              running={running}
+              onSelectAiSuggestions={selectAiSuggestions}
+              onFill={handleFill}
+              onToggle={toggle}
+              onValueChange={changeValue}
+            />
+          ) : (
+            <WebFormOnboarding running={running} hasSnapshot={Boolean(snapshot)} />
+          )}
+
+          {/* 填充记录：每次填充留一笔，供事后回看"我当时到底填了什么"。
+              记录里含真实值（证件号、手机号），所以删除是隐私上的必要项，不是便利。
+              默认收起但**面板仍挂载**（forceRender）：展开即见，不必重新取数。 */}
+          <Collapse
+            className="webform-records"
+            size="small"
+            items={[
+              {
+                key: "records",
+                forceRender: true,
+                label: (
+                  <span>
+                    {t("webFormPage.card.records")}
+                    <span className="webform-records-hint">
+                      {" · "}
+                      {t("webFormPage.records.hint")}
+                    </span>
+                  </span>
+                ),
+                children: <MemoWebFormRecordsPanel refreshKey={recordRefresh} />,
+              },
+            ]}
+          />
+        </div>
+      </div>
 
       <BrowserSettingsModal
         open={browserSettingsOpen}
@@ -825,6 +835,6 @@ export default function WebFormPage() {
         onCancel={() => setMemoryDialogOpen(false)}
         onSubmit={(selection) => void handleMemorySubmit(selection)}
       />
-    </Space>
+    </div>
   );
 }

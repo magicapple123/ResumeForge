@@ -37,12 +37,21 @@ const external = {
   "connections.protection.config_file": "Plain config file",
 
   // ── Actions and feedback ───────────────────────────────────
-  "connections.action.edit": "Change",
+  // The primary button follows the state (issue I-09): not configured → Set,
+  // saved → Replace, system source → Edit. Clear/Restore default move into the
+  // `⋯` menu, but Clear keeps its confirmation because it cannot be undone.
+  "connections.action.primary.set": "Set",
+  "connections.action.primary.change": "Replace",
+  "connections.action.primary.modify": "Edit",
+  "connections.action.more": "More actions for {name}",
+  "connections.action.copy": "Copy current value",
   "connections.action.save": "Save",
   "connections.action.cancel": "Cancel",
   "connections.action.clear": "Clear",
   "connections.action.reset": "Restore default",
-  "connections.action.editAria": "Change the key for {name}",
+  // The accessible name must contain the visible text (label-in-name): the
+  // button reads "Set" or "Replace", and this sentence contains both.
+  "connections.action.editAria": "Set or change the key for {name}",
   "connections.action.saveAria": "Save the new key for {name}",
   "connections.action.clearAria": "Clear the key for {name}",
   "connections.action.editValue": "Change {name}",
@@ -51,6 +60,8 @@ const external = {
   "connections.emptyMask": "Not set",
   "connections.input.label": "New key for {name}",
   "connections.input.placeholder": "Paste the new key",
+  "connections.hint.aria": "Show details for {name}",
+  "connections.hint.storage": "Storage: {label}",
   "connections.clear.title": "Clear this key",
   "connections.clear.body": "The related feature stops working until you enter a key again",
   "connections.loadFailed": "Could not load external connections",
@@ -59,7 +70,9 @@ const external = {
   "connections.toast.saved": "Saved {name}",
   "connections.toast.cleared": "Cleared {name}",
   "connections.toast.reset": "Restored the default for {name}",
-  "connections.system.defaultValue": "Default: {value}",
+  "connections.toast.copied": "Copied the current value of {name}",
+  "connections.toast.copyFailed": "Could not copy. Select the text and copy it manually",
+  "connections.system.factoryValue": "Factory value {value}",
   "connections.system.resetHint": "You can restore the default at any time",
   "connections.error.emptyValue": "The new key cannot be empty. Use Clear to remove it.",
   "connections.error.unsupported": "This entry cannot be changed here",

@@ -23,6 +23,7 @@ const workbench = {
   "workbench.param.name-scale": "Name size",
   "workbench.param.section-title-scale": "Section heading size",
   "workbench.param.entry-gap": "Entry spacing",
+  "workbench.param.header-rule-gap": "Header rule offset",
   "workbench.param.section-gap": "Section spacing",
   "workbench.param.reset": "Double-click or press Enter to restore defaults",
   "workbench.param.resetLabel": "{label} (double-click or press Enter to restore defaults)",

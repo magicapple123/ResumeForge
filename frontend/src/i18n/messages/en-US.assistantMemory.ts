@@ -3,14 +3,17 @@
 const assistantMemory = {
   "assistantMemory.title": "Assistant memory",
   "assistantMemory.intro":
-    "The assistant only relies on job-search preferences you explicitly stated (at most five per turn). This page is the only place to inspect and edit them: add a profile fact, or delete memories you no longer want used.",
-  "assistantMemory.count": "{count} memories",
+    "The assistant only uses job-search preferences you stated yourself. Add one by hand, or delete the memories you no longer want.",
+  /** Left side of the list header. Paused and replaced rows stay listed but are not injected. */
+  "assistantMemory.list.active": "{count} in effect",
+  /** Accessible name of the row-level "..." icon button. */
+  "assistantMemory.list.menu": "More actions",
   "assistantMemory.empty":
     "No memories yet. Add a target role or salary floor, and the assistant will use it from the next turn.",
   "assistantMemory.loadFailed": "Could not load assistant memory. Please try again.",
-  "assistantMemory.autoExtract.label": "Extract memories after conversations",
+  "assistantMemory.autoExtract.label": "Organize memories automatically",
   "assistantMemory.autoExtract.hint":
-    "When on, a background task extracts memories about five minutes after a conversation goes idle. Off by default until you can see and edit them here.",
+    "When on, the next time you use the assistant it tidies up your previous conversation and lists what it found below, where you can edit or delete it. Turning this off keeps saved memories.",
   "assistantMemory.autoExtract.enableToast": "Memory extraction is on",
   "assistantMemory.autoExtract.disableToast": "Memory extraction is off",
   "assistantMemory.autoExtract.saveFailed":
@@ -19,10 +22,14 @@ const assistantMemory = {
   "assistantMemory.source.extracted": "Extracted",
   "assistantMemory.status.superseded": "Replaced by a newer value",
   "assistantMemory.confidence": "Confidence {percent}%",
+  /** One row's meta line: source · updated time. */
+  "assistantMemory.meta.line": "{source} · {updated}",
   "assistantMemory.updatedAt": "Updated {time}",
+  /** Card footnote: how memories are injected. */
+  "assistantMemory.footnote.injection": "Injected by relevance, at most five per turn.",
   "assistantMemory.sourceExcerpt": "“{text}”",
   "assistantMemory.openConversation": "Open source conversation",
-  "assistantMemory.action.add": "Add profile fact",
+  "assistantMemory.action.add": "Add memory",
   "assistantMemory.action.edit": "Edit",
   "assistantMemory.action.delete": "Delete",
   "assistantMemory.action.neverUse": "Never use",
@@ -66,7 +73,7 @@ const assistantMemory = {
   "assistantMemory.toast.saved": "Memory saved",
   "assistantMemory.toast.failed": "Something went wrong. Please try again.",
   "assistantMemory.error.valueRequired": "Please enter the memory content",
-  "assistantMemory.form.createTitle": "Add a profile fact",
+  "assistantMemory.form.createTitle": "Add a memory",
   "assistantMemory.form.editTitle": "Edit memory",
   "assistantMemory.form.kind": "Type",
   "assistantMemory.form.kindHint":

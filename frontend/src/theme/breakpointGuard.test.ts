@@ -205,6 +205,11 @@ describe("断点单一事实源", () => {
       // 上，≤900 时侧栏由吸顶改静态、导航收成顶部下拉。该容器内没有 position:fixed 后代
       // （页头在容器外，弹层 portal 到 body），按方案 §3.5 判据安全。
       "styles/settings-shell.css",
+      // webform-workbench.css —— 网申填表页两栏（I-11）：`container-type` 挂在
+      // `.webform-workbench` 上，只按内容区实际宽度决定两栏/单栏。侧栏可折叠时视口宽度
+      // 与内容宽差 200px 以上，用媒体查询会在 1440 + 展开侧栏时切错列。
+      // 该容器内没有 position:fixed 后代（浮球/弹层都 portal 到 body），按 §3.5 判据安全。
+      "styles/webform-workbench.css",
     ]);
     const offenders: string[] = [];
     for (const absolute of collectCssFiles()) {

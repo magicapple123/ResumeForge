@@ -4,9 +4,14 @@
  *
  * 预览这一步不是走过场：面板上每条都写明"会新增 / 会更新 / 没变化"和原因，用户看的是
  * **会发生什么**，而不是一堆等他自己判断的字段。取消或关闭都不会写任何数据。
+ *
+ * I-15 两条布局原则（此前都反了，弹窗一打开就是一块「还没有识别结果」的大空态）：
+ * 1. **空态不是首屏状态**：用 `recognized` 区分「还没识别」与「识别完 0 条」。前者什么
+ *    都不画（没有内容就不占位），后者才给一句**可行动**的提示。
+ * 2. **主操作与取消同一侧**：两者都在 footer。此前主操作在正文、取消在 footer，用户要在
+ *    两个对角之间找「下一步」，而弹窗里最容易点错的就是这一对。
  */
 import { App, Button, Checkbox, Input, Modal, Space, Tag, Typography } from "antd";
-import EmptyState from "../../components/common/EmptyState";
 import { useEffect, useState } from "react";
 import { applyTracks, parseTracks } from "../../api/tracker";
 import AbortButton from "../../components/common/AbortButton";
@@ -39,6 +44,13 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [notes, setNotes] = useState<string[]>([]);
   const [engine, setEngine] = useState<"ai" | "local" | "">("");
+  /**
+   * 是否**真的识别过一次**。
+   *
+   * 用它而不是 `rows.length === 0` 判空：`rows` 在弹窗刚打开时天然是空数组，拿长度当判据
+   * 就会把「还没开始」错画成「识别完 0 条」，于是每次打开都先看到一块空态。
+   */
+  const [recognized, setRecognized] = useState(false);
   // 识别（模型读通知）与写入（落库）分成两个状态：「停止」只该停识别那一半。
   const recognizeRequest = useAbortableRequest();
   const [saving, setSaving] = useState(false);
@@ -56,6 +68,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
       setRows([]);
       setNotes([]);
       setEngine("");
+      setRecognized(false);
     }
   }
 
@@ -91,6 +104,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
     setRows(outcome.data.items.map((preview, index) => ({ key: index, checked: true, preview })));
     setNotes(outcome.data.notes);
     setEngine(outcome.data.parse_engine);
+    setRecognized(true);
     if (outcome.data.items.length === 0) message.info(t("trackerImport.toast.noRecords"));
   };
 
@@ -121,6 +135,9 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
     }
   };
 
+  /** footer 上的计数与正文列表同源：勾/取消勾完立刻反映到按钮文案上。 */
+  const checkedCount = rows.filter((row) => row.checked).length;
+
   return (
     <Modal
       open={open}
@@ -132,13 +149,19 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
       }}
       onCancel={onClose}
       footer={
+        // 「取消」常驻；主按钮在「识别并预览」与「确认写入 N 条」之间互斥，
+        // 识别中换成「停止」（只中止识别，不关弹窗、不清内容）。
         <Space>
           <Button onClick={onClose}>{t("common.action.cancel")}</Button>
-          {rows.length > 0 && (
+          {recognizeRequest.loading ? (
+            <AbortButton onClick={() => recognizeRequest.cancel()} />
+          ) : rows.length > 0 ? (
             <Button type="primary" loading={saving} onClick={() => void confirm()}>
-              {t("trackerImport.action.confirm", {
-                count: rows.filter((row) => row.checked).length,
-              })}
+              {t("trackerImport.action.confirm", { count: checkedCount })}
+            </Button>
+          ) : (
+            <Button type="primary" onClick={() => void recognize()}>
+              {t("trackerImport.action.recognize")}
             </Button>
           )}
         </Space>
@@ -161,21 +184,14 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
           onAddFiles={(incoming) => void addFiles(incoming)}
           onRemove={removeFile}
         />
-        <Space>
-          <Button
-            type="primary"
-            loading={recognizeRequest.loading}
-            onClick={() => void recognize()}
-          >
-            {t("trackerImport.action.recognize")}
-          </Button>
-          {recognizeRequest.loading && <AbortButton onClick={() => recognizeRequest.cancel()} />}
-          {engine && (
+        {/* 识别引擎是「结果怎么来的」，属于预览的注解：放在备注上方，紧贴它解释的内容。 */}
+        {engine && (
+          <div>
             <Tag color={engine === "ai" ? "blue" : "default"}>
               {engine === "ai" ? t("trackerImport.engine.ai") : t("trackerImport.engine.local")}
             </Tag>
-          )}
-        </Space>
+          </div>
+        )}
 
         {notes.map((note) => (
           <Typography.Text key={note} type="secondary" className="track-import-note">
@@ -183,9 +199,8 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
           </Typography.Text>
         ))}
 
-        {rows.length === 0 ? (
-          <EmptyState inline description={t("trackerImport.empty.noResults")} />
-        ) : (
+        {/* 有结果才画列表；还没识别过时这里什么都不画（不给「还没识别」配空态插图）。 */}
+        {rows.length > 0 && (
           <div className="track-import-list">
             {rows.map((row) => (
               <div key={row.key} className="track-import-row">
@@ -221,6 +236,13 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
               </div>
             ))}
           </div>
+        )}
+
+        {/* 识别过但一条也没有：一行可行动的提示，不用大图标空态（占地，且读起来像故障）。 */}
+        {recognized && rows.length === 0 && (
+          <Typography.Text type="secondary" className="track-import-nomatch" role="status">
+            {t("trackerImport.empty.noResults")}
+          </Typography.Text>
         )}
       </Space>
     </Modal>

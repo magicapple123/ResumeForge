@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+// 注：Base URL 的 label 里嵌了 ⓘ 按钮（`HintLabel`），`<label>` 内因此有两个
+// 可标注控件，`getByLabelText("Base URL")` 会报 multiple elements；改按占位符取。
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -236,7 +238,7 @@ describe("SettingsPage 新建配置记录", () => {
     await openCreateModal();
 
     fireEvent.change(screen.getByLabelText("配置名称"), { target: { value: "Ollama 本地" } });
-    fireEvent.change(screen.getByLabelText("Base URL"), {
+    fireEvent.change(screen.getByPlaceholderText("https://api.deepseek.com"), {
       target: { value: "http://localhost:11434/v1" },
     });
     fireEvent.change(screen.getByLabelText("模型名称"), { target: { value: "qwen3:8b" } });
@@ -265,7 +267,7 @@ describe("SettingsPage 新建配置记录", () => {
     renderSettingsPage();
     await openCreateModal();
 
-    fireEvent.change(screen.getByLabelText("Base URL"), {
+    fireEvent.change(screen.getByPlaceholderText("https://api.deepseek.com"), {
       target: { value: "http://localhost:11434/v1" },
     });
     fireEvent.click(screen.getByRole("button", { name: "保存记录" }));

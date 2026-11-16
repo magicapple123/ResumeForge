@@ -1,0 +1,19 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * 行内格式右键菜单（I-25）：宽度收口 + 长标签不换行。
+ *
+ * 2026-11-16 实测：这个菜单挂在 `Dropdown` 的 portal 里，没有任何宽度约束，
+ * 一个长标签（「清除这段文字的行内格式」）就能把它撑到半屏。这里给上下限，
+ * 并让菜单项单行显示——超长就省略号，不要把整块菜单拉宽。
+ */
+.rf-inline-mark-menu .ant-dropdown-menu {
+  min-width: 168px;
+  max-width: 240px;
+}
+
+.rf-inline-mark-menu .ant-dropdown-menu-item,
+.rf-inline-mark-menu .ant-dropdown-menu-submenu-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

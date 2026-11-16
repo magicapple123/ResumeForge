@@ -3,15 +3,19 @@
  * #14B 队列「参考分」列的接线测试（列宽 / 三档配色 / 免责文案 / 列头排序 / 收藏标记）。
  *
  * 这一列的判据里最容易在两处走偏：
- * 1. 它是**派生值**——未分析必须显示「—」而不是 0 分，且列头 tooltip 必须原样保留后端
+ * 1. 它是**派生值**——未分析必须显示「—」而不是 0 分，且免责文案必须原样保留后端
  *    `reference_score.disclaimer`（不能改写成"匹配度"之类的暗示性措辞）；
  * 2. 列宽 96px 是详册写死的数字，改了会把资产列的 240px 挤掉，所以钉在测试里。
+ *
+ * I-17：免责文案换了载体——从列头 tooltip 改成表格脚注（常驻一句 + `ⓘ` 展开全文），
+ * 因为"藏起来的免责等于没有免责"。断言也随之从"悬停后能看到"改成"不悬停就能看到"。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ContextMenuHost } from "../../context-menu/ContextMenuHost";
 import type { ApplyQueueItem } from "../../../types";
+import { t } from "../../../i18n";
 import { QueueTable } from "./QueueTable";
 
 function item(id: number, job: string, score: number | null, favorite = false): ApplyQueueItem {
@@ -98,7 +102,7 @@ describe("QueueTable 参考分列（14B）", () => {
     expect(cell.textContent).toBe("—");
   });
 
-  it("列头写着「匹配」，tooltip 原样给出后端免责文案", async () => {
+  it("列头写着「匹配」，免责声明是常驻脚注而不是 tooltip（I-17）", async () => {
     renderTable([item(1, "后端开发", 80)]);
 
     const header = screen.getByRole("button", { name: /按参考分排序/ });
@@ -106,9 +110,15 @@ describe("QueueTable 参考分列（14B）", () => {
     // （aria-label 未变），列头名字跟着合并后的语义走。
     expect(header.textContent).toContain("匹配");
 
-    // tooltip 内容里必须能读到"不参与准入"的那句免责说明（后端规定原样展示）。
-    fireEvent.mouseEnter(header);
-    await waitFor(() => expect(document.body.textContent).toContain("不代表真实 ATS 解析结果"));
+    // I-17：免责文案原本藏在列头 tooltip 里（59 字、悬停才看得见 = 等于没有免责）。
+    // 现在**不悬停**就能读到核心那句，完整措辞在脚注的 `ⓘ` 后面。
+    expect(screen.getByText(t("applyQueue.score.disclaimerSummary"))).toBeInTheDocument();
+
+    const trigger = screen.getByRole("button", { name: t("applyQueue.score.disclaimerAria") });
+    fireEvent.click(trigger);
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("不代表真实 ATS 解析结果或投递成功概率"),
+    );
     expect(document.body.textContent).toContain("投递准入仍以五类匹配结论为准");
   });
 

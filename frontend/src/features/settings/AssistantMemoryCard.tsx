@@ -9,13 +9,25 @@
  * 1. **可见可改**：列表逐条展示内容/类型/来源/时间/来源摘录，可编辑、删除、停用、恢复；
  * 2. **自动抽取默认关**：开关写在后端 AppSetting，默认 false；开启前用户已经能看见并修改，
  *    才不存在"不可见不可改的记忆"；
- * 3. **敏感信息不记**：手机号/身份证/密钥由后端 422 拒绝，表单只做提示，不复制第二套校验。
+ * 3. **敏感信息不记**：手机号/身份证/密钥由后端 422 拒绝，提示文案挂在新增/编辑弹窗里
+ *    （`form.sensitiveHint`）——那句提示只在**要输入内容的那一刻**有用，放在卡片底部
+ *    隔着整屏，读到时已经填完了。
+ *
+ * ## 版面（I-03）：三段分区 + 动作收拢
+ *
+ * 改造前是 5 个 `Space size={12}` 平铺：`清空全部`（危险动作）与主操作并排、还压在列表
+ * 上方；1 条数据也照样摆出搜索框和排序；敏感提示 Alert 隔着整屏。现在：
+ *
+ * - **开关区 / 列表区 / 底注**三段，用 `Divider` 切开，`清空全部` 移出列表区、进 `Card extra`；
+ * - 列表头一行：左「生效 N 条」、右「添加记忆」；筛选器（搜索 + 排序）只在**超过 3 条**时
+ *   出现——1 条数据时的搜索框只是噪音；
+ * - 空态用 `inline` 空态（不套 192px 的 `.rf-state` 外壳），所以不会把整块撑满。
  *
  * F33 起「永不使用」= `suppressed`（置灰留在列表、可恢复），与删除（从列表消失）分开；
  * 置信度不再外露（四家官方产品都不显示），但仍留在库里参与排序。
- * 行内展示与历史弹窗在 `AssistantMemoryRow`，本文件只管取数、筛选与弹层编排。
+ * 行内展示、`⋯` 菜单与历史弹窗在 `AssistantMemoryRow`，本文件只管取数、筛选与弹层编排。
  */
-import { App, Alert, Button, Card, Input, Select, Space, Switch, Typography } from "antd";
+import { App, Button, Card, Divider, Flex, Input, Select, Switch, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErrorState from "../../components/common/ErrorState";
 import EmptyState from "../../components/common/EmptyState";
@@ -38,6 +50,8 @@ import {
 } from "./assistantMemoryApi";
 import AssistantMemoryEditModal from "./AssistantMemoryEditModal";
 import AssistantMemoryRow from "./AssistantMemoryRow";
+import SettingsResetButton from "./SettingsResetButton";
+import { useSettingsResetListener } from "./useSettingsResetListener";
 import { memoryKindLabel } from "./assistantMemoryLabels";
 
 type ModalState = { mode: "create" } | { mode: "edit"; memory: AssistantMemory } | null;
@@ -47,6 +61,22 @@ const FALLBACK_KIND_OPTIONS: MemoryKindOption[] = MEMORY_KINDS.map((kind) => ({
   kind,
   label: "",
 }));
+
+/**
+ * I-10：这张卡能恢复默认的键。
+ *
+ * 只有「自动记录记忆」这一个开关属于设置项——记忆条目本身是用户数据，恢复设置**不会**
+ * 也不该删掉它们，所以这里绝不把记忆列表放进重置范围。
+ */
+const MEMORY_RESET_KEYS = ["assistant_memory_auto_extract"];
+
+/**
+ * 出现搜索/排序的最少条数。
+ *
+ * 4 条起：3 条以内一眼看得完，摆一个 140px 的搜索框只是在告诉用户"这里可能很复杂"。
+ * 阈值写在这里而不是散在 JSX 里，是因为验收（"1 条数据时不存在搜索/排序"）读的就是它。
+ */
+const FILTER_MIN_COUNT = 3;
 
 export default function AssistantMemoryCard() {
   useLocale();
@@ -73,17 +103,22 @@ export default function AssistantMemoryCard() {
     }
   }, []);
 
+  // 只重取「设置」这一侧：恢复默认不碰记忆条目，没必要多要一次全量列表。
+  const loadSettings = useCallback(async () => {
+    try {
+      const settings = await getAssistantMemorySettings();
+      setAutoExtract(settings.auto_extract);
+    } catch {
+      // 读不到开关就保持默认关：宁可不开，也不假装已开。
+    }
+  }, []);
+
   // 挂载加载：列表失败走错误态；设置/类型清单失败分别兜底，不拖累列表。
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       await load();
-      try {
-        const settings = await getAssistantMemorySettings();
-        if (!cancelled) setAutoExtract(settings.auto_extract);
-      } catch {
-        // 读不到开关就保持默认关：宁可不开，也不假装已开。
-      }
+      await loadSettings();
       try {
         const kinds = await listMemoryKinds();
         if (!cancelled && kinds.length > 0) setKindOptions(kinds);
@@ -94,7 +129,10 @@ export default function AssistantMemoryCard() {
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [load, loadSettings]);
+
+  // I-10：恢复默认后重取自动抽取开关（重置是删行，必须重新问一次才知道现在是关的）。
+  useSettingsResetListener(() => void loadSettings());
 
   const visible = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -115,6 +153,12 @@ export default function AssistantMemoryCard() {
     }
     return rows;
   }, [memories, query, sortMode]);
+
+  /** 「生效」= `status === "active"`：停用与已被替换的条目留在列表里，但不参与注入。 */
+  const activeCount = useMemo(
+    () => memories.filter((item) => item.status === "active").length,
+    [memories],
+  );
 
   const onToggleAutoExtract = async (checked: boolean) => {
     if (savingSettings) return;
@@ -234,13 +278,28 @@ export default function AssistantMemoryCard() {
   };
 
   return (
-    <Card title={t("assistantMemory.title")} className="settings-card">
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        {t("assistantMemory.intro")}
-      </Typography.Paragraph>
+    <Card
+      title={
+        <Flex align="center" gap={8}>
+          <span>{t("assistantMemory.title")}</span>
+          {/* I-10：卡片级恢复默认（只复位「自动记录记忆」开关，不动任何记忆条目）。 */}
+          <SettingsResetButton keys={MEMORY_RESET_KEYS} />
+        </Flex>
+      }
+      className="settings-card"
+      extra={
+        // 危险动作进次级位置：0 条时这一颗根本不渲染（disabled 的「清空全部」只会让人去点）。
+        memories.length > 0 ? (
+          <Button type="text" className="rf-memory-clear" onClick={confirmClearAll}>
+            {t("assistantMemory.action.clearAll")}
+          </Button>
+        ) : null
+      }
+    >
       <LoadingBlock spinning={loading}>
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <Space size={8} wrap>
+        {/* ① 开关区：一行标题 + 开关，说明紧随其后。 */}
+        <div className="rf-memory-switch">
+          <div className="rf-memory-switch-head">
             <Typography.Text strong>{t("assistantMemory.autoExtract.label")}</Typography.Text>
             <Switch
               checked={autoExtract}
@@ -250,78 +309,88 @@ export default function AssistantMemoryCard() {
               aria-label={t("assistantMemory.autoExtract.label")}
               onChange={(checked) => void onToggleAutoExtract(checked)}
             />
-          </Space>
-          <Typography.Text type="secondary">
+          </div>
+          <Typography.Text type="secondary" className="rf-memory-hint">
             {t("assistantMemory.autoExtract.hint")}
           </Typography.Text>
+        </div>
 
-          <Space size={8} wrap>
-            <Typography.Text type="secondary">
-              {t("assistantMemory.count", { count: memories.length })}
-            </Typography.Text>
-            <Button type="primary" size="small" onClick={() => setModalState({ mode: "create" })}>
-              {t("assistantMemory.action.add")}
-            </Button>
-            <Button size="small" danger disabled={memories.length === 0} onClick={confirmClearAll}>
-              {t("assistantMemory.action.clearAll")}
-            </Button>
-          </Space>
+        <Divider className="rf-memory-divider" />
 
-          {memories.length > 0 ? (
-            <Space size={8} wrap>
-              <Input.Search
-                allowClear
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t("assistantMemory.search.placeholder")}
-                aria-label={t("assistantMemory.search.placeholder")}
-                style={{ width: 240 }}
-              />
-              <Select<SortMode>
-                value={sortMode}
-                onChange={setSortMode}
-                style={{ width: 150 }}
-                aria-label={t("assistantMemory.sort.label")}
-                options={[
-                  { value: "recent", label: t("assistantMemory.sort.recent") },
-                  { value: "kind", label: t("assistantMemory.sort.kind") },
-                ]}
-              />
-            </Space>
-          ) : null}
-
+        {/* ② 列表区 */}
+        <div className="rf-memory-list" data-testid="assistant-memory-list">
           {loadError ? (
             <ErrorState description={t("assistantMemory.loadFailed")} onRetry={() => void load()} />
           ) : memories.length === 0 ? (
+            // 空态不占满整块：inline 空态没有 192px 最小高度，一个问题 + 一个动作就走完。
             <EmptyState
               inline
               description={t("assistantMemory.empty")}
               actionLabel={t("assistantMemory.action.add")}
               onAction={() => setModalState({ mode: "create" })}
             />
-          ) : visible.length === 0 ? (
-            <EmptyState inline description={t("assistantMemory.empty")} />
           ) : (
-            <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10 }}>
-              {visible.map((memory) => (
-                <AssistantMemoryRow
-                  key={memory.id}
-                  memory={memory}
-                  onEdit={(item) => setModalState({ mode: "edit", memory: item })}
-                  onNeverUse={confirmNeverUse}
-                  onRestore={(item) => void restore(item)}
-                  onDelete={confirmDelete}
-                />
-              ))}
-            </ul>
+            <>
+              <div className="rf-memory-list-head">
+                <Typography.Text type="secondary" className="rf-memory-count">
+                  {t("assistantMemory.list.active", { count: activeCount })}
+                </Typography.Text>
+                <Button
+                  type="primary"
+                  size="small"
+                  onClick={() => setModalState({ mode: "create" })}
+                >
+                  {t("assistantMemory.action.add")}
+                </Button>
+              </div>
+              {memories.length > FILTER_MIN_COUNT ? (
+                <div className="rf-memory-filters">
+                  <Input.Search
+                    allowClear
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={t("assistantMemory.search.placeholder")}
+                    aria-label={t("assistantMemory.search.placeholder")}
+                    style={{ width: 140 }}
+                  />
+                  <Select<SortMode>
+                    value={sortMode}
+                    onChange={setSortMode}
+                    style={{ width: 140 }}
+                    aria-label={t("assistantMemory.sort.label")}
+                    options={[
+                      { value: "recent", label: t("assistantMemory.sort.recent") },
+                      { value: "kind", label: t("assistantMemory.sort.kind") },
+                    ]}
+                  />
+                </div>
+              ) : null}
+              {visible.length === 0 ? (
+                <EmptyState inline description={t("assistantMemory.empty")} />
+              ) : (
+                <ul className="rf-memory-rows">
+                  {visible.map((memory) => (
+                    <AssistantMemoryRow
+                      key={memory.id}
+                      memory={memory}
+                      onEdit={(item) => setModalState({ mode: "edit", memory: item })}
+                      onNeverUse={confirmNeverUse}
+                      onRestore={(item) => void restore(item)}
+                      onDelete={confirmDelete}
+                    />
+                  ))}
+                </ul>
+              )}
+            </>
           )}
-          <Alert
-            type="info"
-            showIcon
-            title={t("assistantMemory.form.sensitiveHint")}
-            style={{ marginTop: 4 }}
-          />
-        </Space>
+        </div>
+
+        <Divider className="rf-memory-divider" />
+
+        {/* ③ 底注：注入口径（原来长在 intro 里，和"这里是唯一能改的地方"混成一句）。 */}
+        <Typography.Text type="secondary" className="rf-memory-footnote">
+          {t("assistantMemory.footnote.injection")}
+        </Typography.Text>
       </LoadingBlock>
       {modalState ? (
         <AssistantMemoryEditModal

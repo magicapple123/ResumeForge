@@ -10,7 +10,7 @@
  * 字段名复用 editor.field.* 语言包（手机 / 邮箱 / 城市 / 出生年份 / GitHub / 个人主页）：
  * 同一份简历里"编辑字段"与"排联系方式"讲的是同一个东西，不该有两套叫法。
  */
-import { Select, Space, Tooltip } from "antd";
+import { Select, Space } from "antd";
 import { useI18n } from "../../../i18n/i18nContext";
 import type { MessageKey } from "../../../i18n";
 import type { ResumeFormatConfig } from "../../../types/resumeFormat";
@@ -20,6 +20,7 @@ import {
   withContactBreaks,
   type ContactFieldKey,
 } from "./contactBreaks";
+import HintDetail from "../../../components/common/HintDetail";
 import {
   CONTACT_SEPARATOR_STYLES,
   readContactSeparator,
@@ -76,7 +77,8 @@ export default function ContactBreaksControl({
    */
   /* 分隔符与"在哪换行"是两件事，但必须挨在一起：用户改完换行就会想调分隔符。 */
   const separatorControl = (
-    <Tooltip title={t("contactSeparator.hint")}>
+    <>
+      <Space size={4} align="center">
       <Select
         size="small"
         aria-label={t("workbench.contactSeparator.label")}
@@ -89,11 +91,17 @@ export default function ContactBreaksControl({
           onChange(withContactSeparator(formatConfig, next))
         }
       />
-    </Tooltip>
+      </Space>
+      <HintDetail
+        detail={t("contactSeparator.hint")}
+        label={t("workbench.contactSeparator.label")}
+      />
+    </>
   );
 
   const control = (
-    <Tooltip title={t("workbench.contactBreak.hint")}>
+    <>
+      <Space size={4} align="center">
       <span style={{ display: "inline-block", width: 104, maxWidth: "100%" }}>
         <Select
           size="small"
@@ -110,7 +118,12 @@ export default function ContactBreaksControl({
           onChange={(next: ContactFieldKey[]) => onChange(withContactBreaks(formatConfig, next))}
         />
       </span>
-    </Tooltip>
+          </Space>
+      <HintDetail
+        detail={t("workbench.contactBreak.hint")}
+        label={t("workbench.contactBreak.label")}
+      />
+    </>
   );
 
   // compact 分支（工具栏在用）保持原样：那里没有「版面」组的标签列，多一个标签格会留白。

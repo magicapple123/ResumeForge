@@ -152,6 +152,10 @@ const resume = {
   "resume.fontScale.small": "Small",
   "resume.fontScale.standard": "Standard",
   "resume.fontScale.large": "Large",
+
+  // I-17: accessible name for the ⓘ next to the document-language select. The sentence it
+  // opens (`resume.language.hint`) stays in the main pack — one definition per key.
+  "resume.language.hintAria": "About the document language",
 } as const;
 
 export default resume;

@@ -36,6 +36,8 @@ import AiPolishLayer from "../ai-polish/AiPolishLayer";
 import { ContextMenuHost } from "../context-menu/ContextMenuHost";
 import ShortcutProvider from "../shortcuts/ShortcutProvider";
 import { useShortcut } from "../shortcuts/useShortcutKeymap";
+import HelpModeBadge from "../help-mode/HelpModeBadge";
+import { toggleHelpMode } from "../help-mode/helpModeStore";
 import { triggerJobCreate } from "../shortcuts/runtimeTargets";
 import { useAppShortcuts } from "../shortcuts/useAppShortcuts";
 import TouTouAssistantCard from "../tou-tou/TouTouAssistantCard";
@@ -119,6 +121,8 @@ export default function AppShell() {
   // 搜索 = 跳首页 + 聚焦首页那个全站搜索框；助手 = 复用悬浮助手卡的开关；
   // 新建岗位 = 岗位页自己登记的"打开新建弹窗"（不在岗位页就什么都不做）。
   useShortcut("assistant", () => setFloatingAssistantOpen((open) => !open));
+  // I-18：提示模式开关。落点是全局单例，所以挂在外壳而不是各页面。
+  useShortcut("showHints", () => toggleHelpMode());
   useShortcut("newJob", () => location.pathname === "/jobs" && triggerJobCreate());
   useAppShortcuts(() => setFloatingAssistantOpen(true));
   // 公告条唯一的真实来源（更新可用 / 安装包已下载）；失败静默，不留痕。
@@ -291,6 +295,7 @@ export default function AppShell() {
             也不向下提供任何 context。全站只此一处，多放一份就会叠出两张菜单。 */}
         <ContextMenuHost />
 
+        <HelpModeBadge />
         {/* 快捷键：唯一的 keydown 监听挂载点；动作由各页面用 useShortcut 自己认领。 */}
         <ShortcutProvider />
         <GlobalOverlays />

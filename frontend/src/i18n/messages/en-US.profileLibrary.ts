@@ -145,6 +145,8 @@ const profileLibrary = {
   "profileLibrary.fieldSettings.primaryTextField": "Main text Field",
   "profileLibrary.fieldSettings.primaryTextFieldHint":
     "This is the Section's main text Field. Hiding it keeps every value as a Label: Value line, but the paragraph form goes away.",
+  // I-17: accessible name for the ⓘ that now carries the sentence above.
+  "profileLibrary.fieldSettings.primaryTextFieldHintAria": "About the main text Field",
   "profileLibrary.fieldSettings.deleteTitle": 'Delete Field "{label}"?',
   "profileLibrary.fieldSettings.deleteBody":
     "This Field has values in {count} Entries; after deletion it will no longer be shown, but entered content is retained.",
