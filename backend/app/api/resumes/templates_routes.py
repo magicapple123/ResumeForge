@@ -91,7 +91,6 @@ def group_resume_section_keys(db: Session) -> list[str]:
     return mapped
 
 
-@router.get("/templates")
 def _header_border_width(defaults: Mapping[str, object]) -> float:
     """页眉线粗细（0 = 该模板没有页眉线）。
 
@@ -106,6 +105,7 @@ def _header_border_width(defaults: Mapping[str, object]) -> float:
     return float(value)
 
 
+@router.get("/templates")
 def read_resume_templates(db: Session = Depends(get_db)):
     """可选的简历模板、版式与字号档位（生成、预览、工作台共用这一份清单）。
 
