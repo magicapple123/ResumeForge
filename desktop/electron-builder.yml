@@ -152,6 +152,19 @@ mac:
     - dir
   category: public.app-category.productivity
   artifactName: ResumeForge-${version}-${arch}.${ext}
+  # macOS 麦克风用途声明（I-08，**删掉它等于 mac 上没有语音输入**）。
+  #
+  # macOS 的麦克风是 TCC 级别的系统权限：第一次 getUserMedia 时系统弹窗里的那句说明
+  # 就是这里的 `NSMicrophoneUsageDescription`。缺这个键时 Electron 官方文档给的行为是
+  # "首次请求被系统拒绝"（部分版本直接让进程退出），而且**只在 mac 上暴露**——Windows
+  # 与 Linux 的测试全绿，用户装完才发现没法录音。所以 scripts/tests/Test-Build-Release.ps1
+  # 有一条断言钉着它：键必须在 mac: 段的 extendInfo 下、且值非空。
+  #
+  # 值写成**单行**中英双语：Info.plist 只有一份字符串，真正的本地化要 InfoPlist.strings
+  # （维护成本远高于收益）；单行还有一个更实际的理由——行内写 `>-` 折叠块时，那条断言
+  # 读到的"值"会变成 `>-` 本身，等于把闸门放空。
+  extendInfo:
+    NSMicrophoneUsageDescription: "语音输入与面试作答需要访问麦克风：录音只在你按下麦克风按钮时进行，音频仅发送到你配置的语音服务，本应用不保存录音。ResumeForge uses the microphone only while you use the voice button: audio goes to the voice service you configure and is never stored by this app."
 
 dmg:
   artifactName: ResumeForge-${version}-${arch}.${ext}

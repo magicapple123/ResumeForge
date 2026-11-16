@@ -19,7 +19,7 @@
 // the window or sets quitting before app.quit(). Window chrome (self-drawn
 // 32px title bar + WCO buttons) lives in lib/titlebar.js + lib/tray-menu.js.
 
-const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, screen, session, shell } = require("electron");
+const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, screen, session, shell, systemPreferences } = require("electron");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
 const { createShellLogging, announceDegradedOnReady } = require("./lib/preflight");
@@ -221,7 +221,11 @@ function createWindow() {
     },
   });
   mainWindow.setMenuBarVisibility(false);
-  require("./lib/media-permissions").installMediaPermissionHandler(session.defaultSession); // 语音输入要麦克风
+  // 媒体权限（麦克风/摄像头）：策略在 lib/media-permissions.js，这里只装配。
+  const mediaPermissions = require("./lib/media-permissions");
+  mediaPermissions.installMediaPermissionHandler(session.defaultSession); // 语音输入要麦克风
+  // macOS：首窗加载前问一次系统麦克风权限（I-08），失败只记日志，不拦启动。
+  void mediaPermissions.requestMacMicrophoneAccess({ systemPreferences, log: logLine });
   if (remembered && remembered.maximized) mainWindow.maximize();
 
   // 尺寸/位置：400ms 防抖后落盘（拖动时每一帧都写盘没有意义）。
