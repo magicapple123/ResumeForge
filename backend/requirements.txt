@@ -8,7 +8,7 @@ starlette==1.9.0
 # Multipart form parsing for the referral note-image upload endpoint.
 python-multipart==0.0.32
 uvicorn[standard]==0.54.0
-sqlalchemy==2.1.3
+sqlalchemy==2.1.8
 pydantic==2.14.1
 pydantic-settings==2.16.2
 httpx==0.28.1
