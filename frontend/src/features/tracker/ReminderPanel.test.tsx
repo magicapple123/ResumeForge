@@ -182,11 +182,15 @@ describe("ReminderPanel", () => {
       expect(node).not.toBeNull();
       return node as HTMLInputElement;
     });
-    const expected = dayjs().add(1, "hour").startOf("minute").format("YYYY-MM-DD HH:mm");
-    const expectedNext = dayjs(expected, "YYYY-MM-DD HH:mm")
-      .add(1, "minute")
-      .format("YYYY-MM-DD HH:mm");
-    expect([expected, expectedNext]).toContain(input.value);
+    // 组件在**打开弹层那一刻**算"一小时后"，断言在之后几毫秒才取 `dayjs()`。
+    // 两者之间跨过分钟边界时，组件拿到 21:47、期望值拿到 21:48——这不是功能错，
+    // 是"墙钟被测代码与墙钟在测试里各读一次"的必然窗口（2026-11-17 CI 上命中一次）。
+    // 所以允许前后各 1 分钟；再宽就失去"默认确实是一小时后"的含义了。
+    const base = dayjs().add(1, "hour").startOf("minute");
+    const accepted = [-1, 0, 1].map((offset) =>
+      base.add(offset, "minute").format("YYYY-MM-DD HH:mm"),
+    );
+    expect(accepted).toContain(input.value);
     // 时间显示到分钟：不再带秒。
     expect(input.value).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   });
