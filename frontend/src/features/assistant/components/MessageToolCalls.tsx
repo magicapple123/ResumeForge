@@ -25,6 +25,7 @@ import MessageToolCallDetails from "./MessageToolCallDetails";
  */
 const TOOL_LABELS: Record<string, MessageKey> = {
   search_product_docs: "toolLabel.search_product_docs",
+  research_company: "toolLabel.research_company",
   get_overview: "toolLabel.get_overview",
   list_jobs: "toolLabel.list_jobs",
   get_job: "toolLabel.get_job",

@@ -53,6 +53,7 @@ const toolCalls = {
   "toolLabel.update_format_template": "修改版式",
   "toolLabel.list_format_templates": "查询版式",
   "toolLabel.web_search": "联网搜索",
+  "toolLabel.research_company": "调研公司背景",
   "toolLabel.list_reminders": "查询提醒",
   "toolLabel.list_referrals": "查询内推",
   "toolLabel.list_apply_queue": "查询投递队列",

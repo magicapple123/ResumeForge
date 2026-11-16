@@ -7,6 +7,7 @@
 """
 
 import logging
+from collections.abc import Mapping
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -91,6 +92,20 @@ def group_resume_section_keys(db: Session) -> list[str]:
 
 
 @router.get("/templates")
+def _header_border_width(defaults: Mapping[str, object]) -> float:
+    """页眉线粗细（0 = 该模板没有页眉线）。
+
+    ``TEMPLATE_LAYOUT_DEFAULTS`` 的值是联合类型（数值 / 字符串 / 布尔 / 区间元组），
+    而这一项只可能是数值。非数值一律读成 0，与三个出口（HTML / Word / PDF）取不到
+    该键时的兜底一致——直接 ``float()`` 会让 pyright 报"元组不能转 float"，运行时
+    遇到元组也会抛 TypeError。
+    """
+    value = defaults.get("header_border_width", 0.0)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    return float(value)
+
+
 def read_resume_templates(db: Session = Depends(get_db)):
     """可选的简历模板、版式与字号档位（生成、预览、工作台共用这一份清单）。
 
@@ -114,7 +129,7 @@ def read_resume_templates(db: Session = Depends(get_db)):
                 # 页眉线粗细（0 = 该模板没有页眉线）：「版式编辑器」用它判断
                 # `header_rule_gap` 这一项能不能用（I-31 的 `requires: "header_border"`）。
                 # 与 PDF / Word / HTML 三个出口读的是同一张表里的同一个键。
-                "header_border_width": float(defaults.get("header_border_width", 0.0) or 0.0),
+                "header_border_width": _header_border_width(defaults),
             }
             for name, defaults in TEMPLATE_LAYOUT_DEFAULTS.items()
         },

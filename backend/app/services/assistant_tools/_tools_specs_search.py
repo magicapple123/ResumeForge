@@ -69,7 +69,7 @@ SEARCH_TOOLS: tuple[Tool, ...] = (
             "required": ["company"],
         },
         handler=_tool_research_company,
-        service_entry="job.company_research",
+        service_entry="job.company_research.run_company_research_with",
         permission=ToolPermission.READ_ONLY,
         requires_web_search=True,
     ),

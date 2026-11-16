@@ -3,6 +3,7 @@
 
 助手只能制作「版式」，不能改模板的 HTML。
 """
+
 from __future__ import annotations
 
 import json
@@ -59,17 +60,29 @@ def _format_config_from_arguments(arguments: dict) -> dict:
     允许范围是多少，模型一次就能改对——被拒的原因必须可见。
     """
     provided = {
-        key: arguments[key]
-        for key in _FORMAT_FIELD_LABELS
-        if arguments.get(key) not in (None, "")
+        key: arguments[key] for key in _FORMAT_FIELD_LABELS if arguments.get(key) not in (None, "")
     }
     config: dict = {}
     for key, value in provided.items():
+        spec = next(item for item in FORMAT_FIELDS if item["key"] == key)
+        # 数值越界要**明确报错**，不能依赖 `validated_format_config` 的"有没有留下这一项"
+        # 来判断：那个函数自 I-32 起把越界值夹到边界（用户拖滑杆不该被弹回去），于是
+        # "越界"与"合法"在返回值上都表现为"留下了"，模型只会看到一次成功、模板被夹到极点。
+        # 工具是给模型用的接口，这里保留"点名哪一项、允许范围多少"的反馈；夹紧是存储层的
+        # 归一化，两件事不冲突。
+        if (
+            spec["type"] != "color"
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and not (spec["min"] <= float(value) <= spec["max"])
+        ):
+            raise ValueError(
+                f"{spec['label']}（{key}）必须在 {spec['min']} 到 {spec['max']} 之间，收到「{value}」"
+            )
         normalized = validated_format_config({key: value})
         if key in normalized:
             config[key] = normalized[key]
             continue
-        spec = next(item for item in FORMAT_FIELDS if item["key"] == key)
         if spec["type"] == "color":
             raise ValueError(
                 f"{spec['label']}（{key}）必须是十六进制颜色（如 #2f6feb），收到「{value}」"

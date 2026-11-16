@@ -107,6 +107,11 @@
       "reason": "semantic_conflict_pending_design",
       "note": "#18A 取消任务：既有取消路由需要任务状态机语义（保留已完成步骤、终态不可恢复），工具的取消走提案卡确认；需先设计统一契约再迁移。",
       "review_after": "2027-02-28"
+    },
+    "research_company": {
+      "reason": "assistant_only_aggregate",
+      "note": "助手把『公司资料卡片』与『带引用简报』两路结果合成一条摘要返回，不是单一资源动作；路由 POST /api/research/company 是长耗时聚合（并发搜索 + 生成），直接映射成动作会把计费与失败语义切碎。",
+      "review_after": "2027-06-30"
     }
   }
 }

@@ -53,6 +53,7 @@ const toolCalls = {
   "toolLabel.update_format_template": "Update a layout template",
   "toolLabel.list_format_templates": "List layout templates",
   "toolLabel.web_search": "Web search",
+  "toolLabel.research_company": "Research a company",
   "toolLabel.list_reminders": "List reminders",
   "toolLabel.list_referrals": "List referrals",
   "toolLabel.list_apply_queue": "List the apply queue",
