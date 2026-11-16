@@ -188,13 +188,17 @@ try {
         $macBlockLines += $builderLines[$lineIndex]
     }
     $macBlock = $macBlockLines -join "`n"
-    $extendInfoIndex = $macBlock.IndexOf("extendInfo:")
-    $micUsageIndex = $macBlock.IndexOf("NSMicrophoneUsageDescription")
+    # 只认**代码行**：注释里提到这个键不算声明，否则"在 mac 段写一句注释"就能让闸门放空，
+    # 而真正的键仍然缺失。`extendInfo:` 上方那段解释性注释正好先提到键名，用整段 `IndexOf`
+    # 比先后顺序会判反（2026-11-16 实测：idxMic 265 < idxExt 639，闸门对着正确的文件报红）。
+    $macCode = @($macBlockLines | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+    $extendInfoIndex = $macCode.IndexOf("extendInfo:")
+    $micUsageIndex = $macCode.IndexOf("NSMicrophoneUsageDescription")
     Assert-ReleaseTest `
         -Condition ($extendInfoIndex -ge 0 -and $micUsageIndex -gt $extendInfoIndex) `
         -Message "desktop/electron-builder.yml must declare NSMicrophoneUsageDescription under mac.extendInfo; declared anywhere else it never reaches Info.plist and macOS denies the first microphone request."
     $micUsage = [regex]::Match(
-        $macBlock,
+        $macCode,
         '(?m)^\s+NSMicrophoneUsageDescription:\s*[''"]?(?<value>[^''"\r\n]*)'
     )
     Assert-ReleaseTest `
