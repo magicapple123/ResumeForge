@@ -158,6 +158,53 @@ try {
     $linuxBuildScriptContent = Read-TextFileAsUtf8 -Path (Join-Path $ProjectRoot "scripts/build-desktop-linux.sh")
     Assert-ReleaseTest -Condition ($linuxBuildScriptContent -match 'ResumeForge-"\$VERSION"-\*\.AppImage') -Message "scripts/build-desktop-linux.sh must glob ResumeForge-<version>-<arch>.AppImage; a stale pattern silently drops the .sha256 sidecars."
 
+    # --- macOS microphone usage declaration (I-08) ---
+    #
+    # macOS 的麦克风是 TCC 级别的系统权限：第一次 getUserMedia 时系统弹窗里那句说明就是
+    # Info.plist 的 NSMicrophoneUsageDescription，缺这个键时系统直接拒绝授权（Electron
+    # 文档，严重时进程退出）。这个缺陷**只在 mac 上可见**——Windows/Linux 全绿，用户装完
+    # 才发现录不了音。维护者没有 Mac，所以这条闸门只能钉住"声明在不在、值是不是空的、
+    # 有没有写进 mac: 段的 extendInfo"；真机行为（plutil 能读到、弹窗文案正常）未验证。
+    #
+    # 三件事分开断言，因为三处失败方式各不相同：
+    #   * 键写在 win:/linux: 下 → 永远进不了 Info.plist（mac 段才是 Info.plist 的来源）；
+    #   * 写成 `>-` 折叠块 → 断言读到的"值"会变成 `>-` 本身，等于闸门放空；
+    #   * 值留空 → 系统弹窗里没有理由，用户看到的就是"被拒绝"。
+    $builderLines = $desktopBuilderContent -split "`r?`n"
+    $macStart = -1
+    for ($lineIndex = 0; $lineIndex -lt $builderLines.Count; $lineIndex++) {
+        if ($builderLines[$lineIndex] -match '^mac:\s*$') {
+            $macStart = $lineIndex
+            break
+        }
+    }
+    Assert-ReleaseTest `
+        -Condition ($macStart -ge 0) `
+        -Message "desktop/electron-builder.yml has no top-level 'mac:' section."
+    $macBlockLines = @()
+    for ($lineIndex = $macStart + 1; $lineIndex -lt $builderLines.Count; $lineIndex++) {
+        # 顶格的下一行就是下一个顶层键（dmg: / linux: 等）。
+        if ($builderLines[$lineIndex] -match '^\S') { break }
+        $macBlockLines += $builderLines[$lineIndex]
+    }
+    $macBlock = $macBlockLines -join "`n"
+    $extendInfoIndex = $macBlock.IndexOf("extendInfo:")
+    $micUsageIndex = $macBlock.IndexOf("NSMicrophoneUsageDescription")
+    Assert-ReleaseTest `
+        -Condition ($extendInfoIndex -ge 0 -and $micUsageIndex -gt $extendInfoIndex) `
+        -Message "desktop/electron-builder.yml must declare NSMicrophoneUsageDescription under mac.extendInfo; declared anywhere else it never reaches Info.plist and macOS denies the first microphone request."
+    $micUsage = [regex]::Match(
+        $macBlock,
+        '(?m)^\s+NSMicrophoneUsageDescription:\s*[''"]?(?<value>[^''"\r\n]*)'
+    )
+    Assert-ReleaseTest `
+        -Condition ($micUsage.Success) `
+        -Message "desktop/electron-builder.yml mac.extendInfo is missing NSMicrophoneUsageDescription."
+    $micUsageValue = $micUsage.Groups["value"].Value.Trim()
+    Assert-ReleaseTest `
+        -Condition ($micUsageValue.Length -gt 0) `
+        -Message "desktop/electron-builder.yml NSMicrophoneUsageDescription must carry a non-empty reason; an empty value leaves macOS with nothing to show and the request gets denied."
+
     # --- the packaging run itself ---
     # A thrown error inside the build script propagates and fails this test; the
     # presence of the archive below is the positive signal.
