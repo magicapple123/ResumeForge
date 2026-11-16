@@ -20,6 +20,12 @@ function makeManager(root, options = {}) {
     // 任何 stop 路径都不许真的给 pid 发信号：Windows 走注入的 spawnFn，
     // POSIX 走这里的 killFn（否则在 macOS/Linux 上跑测试会杀到真实进程 4321）。
     killFn: () => {},
+    // 端口探测同理必须是注入的假值：`stop()` 收尾会问"端口还通不通"，没有这一项时
+    // 它会真的去连 `manager.url`。"本机连不上"在开发机上是一瞬间的 ECONNREFUSED，
+    // 在 CI runner 上却可能落到 5s 超时 → UNKNOWN → 判"无法确认已停止"，
+    // 于是这条用例会随 runner 的网络状态偶发变红（2026-11-17 实测一次）。
+    // 三种端口状态各自的语义由 test-stop-failclosed.js 专门覆盖，这里只关心进程树。
+    portProbeFn: () => "closed",
     ...options,
   });
 }
