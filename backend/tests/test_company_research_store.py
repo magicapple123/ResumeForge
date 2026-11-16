@@ -7,9 +7,23 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from app.models.knowledge_entry import KnowledgeEntry
 from app.services.job import company_research_store as store
+
+_URL_PATTERN = re.compile(r"https?://[^\s)\]，。]+")
+
+
+def _urls(text: str) -> list[str]:
+    """正文里出现的**完整** URL。
+
+    不用 `"https://a" in text`：那种子串判断在正文里出现 `https://evil/?https://a`
+    时同样成立（CodeQL 的 py/incomplete-url-substring-sanitization 就是这条，它把这
+    一行报成了高危）。这里要证明的是"来源链接被原样保留"，整条相等才是那个意思。
+    """
+    return _URL_PATTERN.findall(text)
 
 
 def _result(*, status: str = "ok", company: str = "字节跳动") -> dict:
@@ -59,14 +73,14 @@ def test_build_entry_keeps_sources_and_marks_provenance():
     assert payload.company == "字节跳动"
     assert payload.job_id == 7
     # 外部资料不可信：正文必须留得下来源 URL。
-    assert "https://www.bytedance.com/about" in payload.content
+    assert "https://www.bytedance.com/about" in _urls(payload.content)
     assert payload.reason.startswith("结论")
 
 
 def test_build_entry_falls_back_to_cards_when_brief_failed():
     payload = store.build_knowledge_entry(_result(status="failed"))
     assert payload is not None
-    assert "https://www.bytedance.com/" in payload.content
+    assert "https://www.bytedance.com/" in _urls(payload.content)
     assert "未配置" in payload.reason
 
 
@@ -232,7 +246,7 @@ def test_assistant_research_tool_returns_summary_and_persists(db_session, monkey
     result = asyncio.run(_tool_research_company(db_session, {"company": "字节跳动"}))
 
     assert "短视频" in result.text
-    assert "https://www.bytedance.com/about" in result.text
+    assert "https://www.bytedance.com/about" in _urls(result.text)
     assert db_session.query(KnowledgeEntry).count() == 1
 
 
