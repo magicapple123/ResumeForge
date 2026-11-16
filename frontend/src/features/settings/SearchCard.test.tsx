@@ -263,15 +263,19 @@ describe("SearchCard", () => {
     expect(selectedStyle).toContain("var(--rf-brand)");
     // 反过来钉住：不能再退回浅色专用色值。
     expect(selectedStyle).not.toMatch(/#eaf1f8|rgb\(234, 241, 248\)/i);
-    // 1.5px 必须真的生效：写进 border 简写会被归一，选中态就看不出来。
-    expect(getComputedStyle(selected).borderTopWidth).toBe("1.5px");
+    // 1.5px 必须真的生效：写进 `border` 简写会被归一，选中态就看不出来。
+    // 断言读**行内声明**而不是 `getComputedStyle`：jsdom 31 起计算值会把边框宽度归一到
+    // 整数像素（1.5px → 1px），那条路再也分不出 1.5 与 1；"有没有单独写 border-width"
+    // 这件事只在源声明里看得见。
+    expect(selectedStyle).toMatch(/border-width:\s*1\.5px/);
+    expect(getComputedStyle(selected).borderTopWidth).not.toBe("0px");
 
     const unselected = screen
       .getByRole("checkbox", { name: /SearXNG/ })
       .closest('div[style*="background-color"]') as HTMLElement;
     const unselectedStyle = unselected.getAttribute("style") ?? "";
     expect(unselectedStyle).toContain("var(--rf-border)");
-    expect(getComputedStyle(unselected).borderTopWidth).toBe("1px");
+    expect(unselectedStyle).toMatch(/border-width:\s*1px/);
   });
 
   it("shows how many sources are selected and keeps it in sync", async () => {

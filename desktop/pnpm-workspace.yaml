@@ -17,6 +17,14 @@ overrides:
   fast-uri@3: 3.1.9
   undici@6: 6.29.1
   undici@7: 7.30.1
+  # GHSA-g3hv-75wg-m249（globparts 放大导致 DoS）只对 9.x / 10.x 有影响，而 npm 上
+  # 唯一的修复版是 11.0.1+ —— 没有 9.0.10 / 10.2.7 这种"最小跳版"。两条传递依赖
+  # （@electron/universal → 9、app-builder-lib → 10）都只在**打包期**用 minimatch
+  # 匹配文件路径，9/10/11 的具名导出 API 一致，且 11 仍是 CJS+ESM 双出口（Node 20||>=22），
+  # 所以按 major 精确覆盖，不碰同样存在但不受影响的 3.x / 5.x（那两个是老 CJS 调用形态，
+  # 一起升才会真的破）。
+  minimatch@9: 11.0.8
+  minimatch@10: 11.0.8
 
 allowBuilds:
   # electron-builder-squirrel-windows → electron-winstaller 的 install 脚本
