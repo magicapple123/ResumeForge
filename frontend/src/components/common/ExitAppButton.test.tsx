@@ -45,6 +45,12 @@ describe("ExitAppButton", () => {
     // 提示里要写明两个进程都停了、以及标签页要自己关（浏览器不允许脚本关本页）。
     expect(screen.getByText(/前端与后端进程都已停止/)).toBeInTheDocument();
     expect(screen.getByText(/关闭这个标签页/)).toBeInTheDocument();
+    // 退出后 600ms 会试一次 `window.close()`。**必须等它落地**：不等的话这个定时器
+    // 会活过用例，在 jsdom 环境拆掉之后才触发——那里的 `window` 已经是 undefined，
+    // 于是整轮测试以 "ReferenceError: window is not defined" 收尾（2026-11-17 CI
+    // 就是这样红的：883 个文件全过，Errors 1 让命令退出码变 1）。顺带把"试过一次"
+    // 从注释变成断言。
+    await waitFor(() => expect(window.close).toHaveBeenCalledTimes(1), { timeout: 2_000 });
   });
 
   it("桌面壳（window.splash.isDesktop）走桌面文案并在退出后调用 quitApp", async () => {
