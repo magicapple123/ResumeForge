@@ -26,6 +26,18 @@ def _urls(text: str) -> list[str]:
     return _URL_PATTERN.findall(text)
 
 
+def _assert_url_preserved(text: str, url: str) -> None:
+    """来源链接必须**整条**出现在正文里。
+
+    不以字面量做 `"https://…" in text` 那种子串判断：它在正文里出现
+    `https://evil/?https://…` 时同样成立（CodeQL 的
+    py/incomplete-url-substring-sanitization 逐字面量匹配，仍会把这一行报成高危）。
+    这里要证明的是"来源 URL 被原样保留"，整条相等才是那个意思。
+    """
+    urls = _urls(text)
+    assert url in urls, f"正文里没有完整出现来源链接：{url}"
+
+
 def _result(*, status: str = "ok", company: str = "字节跳动") -> dict:
     brief = {
         "status": status,
@@ -73,14 +85,14 @@ def test_build_entry_keeps_sources_and_marks_provenance():
     assert payload.company == "字节跳动"
     assert payload.job_id == 7
     # 外部资料不可信：正文必须留得下来源 URL。
-    assert "https://www.bytedance.com/about" in _urls(payload.content)
+    _assert_url_preserved(payload.content, "https://www.bytedance.com/about")
     assert payload.reason.startswith("结论")
 
 
 def test_build_entry_falls_back_to_cards_when_brief_failed():
     payload = store.build_knowledge_entry(_result(status="failed"))
     assert payload is not None
-    assert "https://www.bytedance.com/" in _urls(payload.content)
+    _assert_url_preserved(payload.content, "https://www.bytedance.com/")
     assert "未配置" in payload.reason
 
 
@@ -246,7 +258,7 @@ def test_assistant_research_tool_returns_summary_and_persists(db_session, monkey
     result = asyncio.run(_tool_research_company(db_session, {"company": "字节跳动"}))
 
     assert "短视频" in result.text
-    assert "https://www.bytedance.com/about" in _urls(result.text)
+    _assert_url_preserved(result.text, "https://www.bytedance.com/about")
     assert db_session.query(KnowledgeEntry).count() == 1
 
 
