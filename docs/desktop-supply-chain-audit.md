@@ -2,13 +2,14 @@
 
 ## 2026-10-14 清偿记录：当前已无已知漏洞与有效豁免
 
-- 保留 Electron 44.7.0 与 electron-builder 26.17.0，不执行任何自动修复——迁移前这句话写作「不执行 `npm audit fix --force`」，pnpm 侧没有 `audit fix` 的等价物，禁令照旧成立。仅对
+- （2026-10-14 时点）保留 Electron 44.7.0 与 electron-builder 26.17.0，不执行任何自动修复——迁移前这句话写作「不执行 `npm audit fix --force`」，pnpm 侧没有 `audit fix` 的等价物，**禁令至今照旧成立**。仅对
   `@electron/get@3.1.0` 的 `global-agent` 使用精确 override `4.1.3`：该版本保留 CommonJS
   `bootstrap()` 接口，移除了 `roarr` / `sprintf-js`，因此无需等待 sprintf-js 自身发布补丁。
+- **现状（2026-11-17）**：`desktop/package.json` 为 electron `45.3.2` / electron-builder `^26.18.0`。上面的数字是 2026-10-14 的记录，禁令（不自动修复、豁免需登记到期日）不变；换版本时照旧先审计再逐条复核。
 - 官方 registry 的锁文件审计从 **8 moderate 降至 0**；隔离的新目录实际执行
   `npm ci --ignore-scripts`（迁移前的写法；pnpm 下等价命令是 `pnpm install --ignore-scripts`）后，再使用 builder 所依赖的真实下载器验证代理下载、SHA-256
   校验与 `NO_PROXY` 绕过。测试只传输虚构字节，没有下载或执行安装器。
-- `audit-baseline.json` 当前为 `packages: []`，移除已清偿的豁免，不删除历史审计记录。
+- `audit-baseline.json`（`desktop/scripts/`）在 **2026-10-14 清偿时为 `packages: []`**，移除已清偿的豁免，不删除历史审计记录；**2026-11 起已重新登记 15 条**（全 moderate，见下文豁免表），两处数字不冲突，是时点不同。
   CI 门禁现在检查 **low / moderate / high / critical 全部等级**；新告警必须修复，或登记
   经审查、有明确到期日的豁免。原有到期、等级升级与新公告负向测试保持有效。
 - Windows 审计命令改为通过已知 Node 可执行文件运行 `npm-cli.js`，始终 `shell: false`。

@@ -13,7 +13,7 @@
 | [OWASP Agentic AI – Threats and Mitigations](https://genai.owasp.org/) | 按**威胁名称**组织（Memory Poisoning / Tool Misuse / Privilege Compromise / Resource Overload / Cascading Failures / Human-Agent Trust Exploitation / Supply Chain 等）；不写死 T 编号，避免上游版本间编号漂移。 |
 | [OWASP Top 10 for LLM Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) | 重点覆盖 LLM01 Prompt Injection、LLM06 Sensitive Information Disclosure、LLM08 Excessive Agency、LLM05 Supply Chain。 |
 | [NIST AI RMF 1.0](https://www.nist.gov/itl/ai-risk-management-framework) + [NIST AI 600-1（生成式 AI 剖面）](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf) | 每条检查项标注它在 **GOVERN / MAP / MEASURE / MANAGE** 四个职能里的归属（见 §7 映射）。 |
-| [OpenTelemetry GenAI spans](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/) | §5 给出现有观测面与「接入 OTel 时必须满足的 span 语义」；**当前未接入**（`grep -rn "opentelemetry" backend` 0 命中）。 |
+| [OpenTelemetry GenAI spans](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/) | §5 给出现有观测面与「接入 OTel 时必须满足的 span 语义」；**当前未接入**（`grep -rn --include="*.py" "opentelemetry" backend/app backend/tests` 0 命中（必须限定目录或 `--include`，否则会命中 `backend/.venv/` 里的第三方包））。 |
 
 ## 2. A · 数据流与最小化（MAP / GOVERN）
 
@@ -28,7 +28,7 @@
 - [ ] **A5 密钥读取最小面**：设置读接口永远回脱敏引用；明文回显只给本机回环连接。
   落点：`backend/app/api/`（`/api/settings/llm/api-key/reveal`，loopback-only）、`llm_config_record` 表；Windows 下 DPAPI 落盘（`SECURITY.md`「Local security boundaries」）。
 - [ ] **A6 日志不落正文/密钥**：错误与审计日志只放结构化元信息。
-  落点：`backend/app/application.py`（`_LOG_FORMAT`、`REQUEST_ID` 等固定键）、`backend/app/middleware/request_context.py`、`safe_log_text`（`api/assistant_proposals.py`）。
+  落点：`backend/app/application.py`（`_LOG_FORMAT` 固定键）、`backend/app/middleware/request_context.py`（请求 ID）、`backend/app/runtime/log_fields.py`（`safe_log_text` 脱敏入口）。
 
 ## 3. B · 权限分级（GOVERN / MANAGE）
 
@@ -47,7 +47,7 @@
 - [ ] **B7 模型不能自我批准**：批准是用户 REST 调用，模型只能提案。
   落点：同上 + `services/assistant_tools/authorization.py`（写入预览的唯一实现）。
 - [ ] **B8 凭据/全局配置无工具入口**：任何模式下都没有读 API Key 的工具。
-  落点：`assistant_tools/_registry.py` 的工具全集（74 个，见 `.workbuddy/audit/tool-service-map.md`）；守卫：`tests/test_assistant_tool_specs.py`。
+  落点：`assistant_tools/_registry.py` 的工具全集（92 个，见 `.workbuddy/audit/tool-service-map.md`）；守卫：`tests/test_assistant_tool_specs.py`。
 
 ## 4. C · 提示注入与不可信输入（MAP / MEASURE）
 
@@ -78,7 +78,7 @@
 - [ ] **E5 默认不采集原文**：trace/span **不得**默认记录 prompt 正文、模型回复、工具入参/出参、用户生成内容；需要排障时用合成数据 + 显式 opt-in。
   落点（未来）：span 属性白名单 + 与 `A6` 同一套 `safe_log_text` 口径。T21 已给出可复用的内存版实现：`backend/app/services/assistant_run_trace.py` 的 `STEP_FIELDS` 白名单 + `redact_summary()`（26 条反例测试，含越界键检测）。
 - [ ] **E6 保留与清除**：trace 保留期、日志轮转、会话删除、数据集删除必须能真正清掉。
-  落点：`DELETE /api/assistant/conversations/{id}`、`DELETE /api/assistant/conversations/{id}/messages/{message_id}`、`POST .../messages/delete`、回收站（`services/trash*`，软删 23 类）、桌面日志轮转（`desktop/lib/backend-manager.js` 区段）；**trace 保留期尚未定义 → 🔲 待决策**（接入 OTel 时先定 N 天 + 删除入口，再写 CHANGELOG）。T21 的轨迹已接线：存在 `chat_message.context["run_trace"]`（JSON 列，随消息/会话删除自然清除，零迁移、零独立保留期）；`backend/app/services/assistant_run_trace.py` 的 recorder 本身仍是内存缓冲。若日后改为独立表，保留期/删除入口必须同步实现并回填本条。
+  落点：`DELETE /api/assistant/conversations/{id}`、`DELETE /api/assistant/conversations/{id}/messages/{message_id}`、`POST .../messages/delete`、回收站（`services/trash*`，软删 24 类）、桌面日志轮转（`desktop/lib/backend-logs.js`）；**trace 保留期尚未定义 → 🔲 待决策**（接入 OTel 时先定 N 天 + 删除入口，再写 CHANGELOG）。T21 的轨迹已接线：存在 `chat_message.context["run_trace"]`（JSON 列，随消息/会话删除自然清除，零迁移、零独立保留期）；`backend/app/services/assistant_run_trace.py` 的 recorder 本身仍是内存缓冲。若日后改为独立表，保留期/删除入口必须同步实现并回填本条。
 - [ ] **E7 观测面不外发**：健康检查/诊断接口不泄露密钥、隐私或内部堆栈。
   落点：`GET /api/system/diagnostics/*`、`backend/app/preflight.py`。
 - [ ] **E8 事件可审计**：写操作（提案执行、数据集导出/导入、数据集切换）有结构化日志与 request_id；助手每次运行的 tool/授权/状态/用量可回看。
@@ -117,8 +117,8 @@
 本次核对（2026-11-07，只读核对，不改业务代码）：
 
 - `python scripts/check_docs_pii.py` → 通过（原始输出见证据目录）。
-- 工具面：74 个工具逐个对照写入 `.workbuddy/audit/tool-service-map.md`（29 个写工具、4 个放宽模式工具）。
-- 观测面：`grep -rn "opentelemetry|trace_id" backend` → 仅 `middleware/request_context.py` 的 request_id 体系，无 OTel → E4/E5/E6 的 trace 部分按「待实现」处理。
+- 工具面：92 个工具逐个对照写入 `.workbuddy/audit/tool-service-map.md`（36 个写工具、4 个放宽模式工具）。
+- 观测面：`grep -rn --include="*.py" -E "opentelemetry|trace_id" backend/app backend/tests` → 仅 `middleware/request_context.py` 的 request_id 体系，无 OTel → E4/E5/E6 的 trace 部分按「待实现」处理（不限定 `backend/app` 会扫进 `.venv`）。
 - 依赖面：CI 已有 pip-audit / pnpm audit / dependency-review / SBOM 四个闸门（F1–F3 已落地）。
 
 ## 9. NIST AI RMF 职能映射

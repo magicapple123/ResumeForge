@@ -100,6 +100,7 @@ class ListItem(BaseModel):
     kind: Literal["list"] = "list"
     id: str; key: str; label: str = ""
     values: list[str]
+    hidden_values: list[int] = []   # 要点级隐藏：存下标，导出时跳过（v1 hidden 的 v2 等价物）
     placement: Placement = "trail"
     hidden_from: Placement | None = None
     join: Literal["comma", "semicolon", "dot", "inline"] = "semicolon"
@@ -147,6 +148,8 @@ class HeaderItem(BaseModel):
     value: str = ""
     placement: Literal["name", "name_meta", "subtitle", "contact", "photo", "hidden"] = "contact"
     format: Format = "text"
+    show_label: bool = True
+    label_mode: Literal["auto", "show", "hide"] = "auto"   # F20：auto = 按 format 推；新代码只读这个
 
 class ResumeHeader(BaseModel):
     items: list[HeaderItem]
@@ -161,10 +164,23 @@ class ResumeHeader(BaseModel):
 ### 2.5 板块、条目与布局
 
 ```python
+class RowLayout(BaseModel):              # 正文前 / 正文后各自一套（问题 4）
+    columns: Literal[1, 2, 3] | None = None
+    align: Literal["equal", "flow"] | None = None
+    justify: Literal["start", "between"] | None = None
+    gap: float | None = None            # 字号倍数（0–30）
+    column_widths: list[float] | None = None   # 百分比，合计 100（容差 0.5）
+    column_gaps: list[float] | None = None     # 逐间隔，长度 = 列数 − 1
+
 class SectionLayout(BaseModel):
     columns: Literal[1, 2, 3] = 1
     align: Literal["equal", "flow"] = "equal"
+    justify: Literal["start", "between"] = "start"
     gap: float | None = None            # 字号倍数（0–30）；None = 该 align 的兜底值
+    column_widths: list[float] | None = None   # 逐列宽度（百分比，合计 100）
+    column_gaps: list[float] | None = None     # 逐间隔（字号倍数，每项 0–30）
+    lead: RowLayout | None = None       # 正文前灰字段（与 trail 各一套）
+    trail: RowLayout | None = None      # 正文后灰字段
     hide_title: bool = False
     keep_together: bool = False
     start_on_new_page: bool = False
@@ -174,7 +190,12 @@ class EntryLayout(BaseModel):           # 条目级覆盖，None = 继承分区
     head: Literal["split", "stacked", "meta_first"] = "split"
     columns: Literal[1, 2, 3] | None = None
     align: Literal["equal", "flow"] | None = None
-    gap: float | None = None            # 字号倍数（0–10）；None = 继承分区
+    justify: Literal["start", "between"] | None = None
+    gap: float | None = None            # 字号倍数（0–30）；None = 继承分区
+    column_widths: list[float] | None = None
+    column_gaps: list[float] | None = None
+    lead: RowLayout | None = None
+    trail: RowLayout | None = None
     start_on_new_page: bool = False     # 条目级分页：这条从新页开始
     keep_together: bool = False         # 条目级分页：整条不跨页
 
@@ -506,7 +527,7 @@ class DocumentPlan(BaseModel):
   - `solo` 先冲行、再独占整行；
   - `equal`：每行 `columns` 个（条目覆盖优先，否则分区默认）；
   - `flow`：全部字段排成一行，字段间用语言的列表分隔符；
-  - `gap` 是字号倍数（分区 0–30、条目覆盖 0–10），随 plan 的 layout 交给渲染器换算实际间距。
+  - `gap` 是字号倍数（分区与条目**都是 0–30**：`MAX_COLUMN_GAP` 与 `MAX_ENTRY_GAP` 同为 30），随 plan 的 layout 交给渲染器换算实际间距。
 - **body**：`placement=body` 的字段 → `BlockPlan`（`item.body_style` 决定 bullet / paragraph，
   `show_label` 决定是否带「标签：」前缀）；`TextItem` 直接成块；`hidden=True` 的 TextItem 跳过（数据保留）。
 - **inline kind**：每个条目一行；item 的 role = `body`（正文）/ `meta`（trail 灰字）；`wrap=paren`
@@ -608,7 +629,7 @@ class DocumentPlan(BaseModel):
 | 编辑器 | `features/resume/editor` | 三区卡：HeadZone（标题 + 元信息）、DetailZone（lead / trail 灰字段行）、BodyZone（正文块）+ 字段位置下拉 + 添加字段；中栏顶部 `ProfileFillMenu`（点开才拉投影、按 source 去重、只补空字段） |
 | 工作台页签 | `features/resume/editor/WorkbenchParamsColumnV2.tsx` | 排版参数 / 本份简历结构 / 双语版本 / 表达资产库 / 来源核对 / 历史（后四个按宿主是否挂载显示；窄屏抽屉同组件） |
 | 排版参数 | 同上 | 文档模式（顶部，仅已有记录）/ 模板与版式 / 排版参数 / 间距 / 外观 / 局部排版 / **局部排版工具** / **分页** / 条目字段排版 |
-| 局部排版工具 | `typography/TypographyToolsPanelV2.tsx` | 条目排版（作用范围：整条 / 条目头 / 正文 / 灰字，分别写 `objects` 与 `object_roles`）/ 文字级别 / 多选批量；只写 `format_config` 的角色 / 对象域，不动正文 |
+| 局部排版工具 | `layout/TypographyToolsPanelV2.tsx`（`features/resume/` 下） | 条目排版（作用范围：整条 / 条目头 / 正文 / 灰字，分别写 `objects` 与 `object_roles`）/ 文字级别 / 多选批量；只写 `format_config` 的角色 / 对象域，不动正文 |
 | 分页 | `pagination/SectionPaginationPanel.tsx` | 板块级 `start_on_new_page` / `keep_together` + 已设置断页汇总 / 恢复自然分页；条目级开关在结构页签的条目字段排版内（`EntryLayoutPanel`），经 `onChange` 交宿主记历史与保存 |
 | 结构面板 | `features/resume/outline` | 树 = 页 / 栏提示 → 板块 → 条目 → 位置分组；拖拽排序、跨组移动、显示 / 隐藏、复制、锁内容 / 锁排版、搜索、与画布联动；条目勾选框 + Shift 连选，与样式页「多选批量」共用宿主的同一份选择状态 |
 | 双语版本 | `features/resume/bilingual/BilingualWorkspaceV2.tsx` | 字段对照基于 v2 **item path**；采纳只写语言变体，**不替换主稿、不推进简历 revision**；「在工作台查看这份译文」打开只读真实版式预览（关掉不影响主稿与脏值） |

@@ -27,22 +27,24 @@
 | ---- | ---- | ---- | ---- | ---- | ---- |
 | 首页 | `pages/HomePage.tsx` | `analytics.ts` `reminders.ts` | `/api/stats` `/api/analytics` `/api/reminders` | `analytics.py` `reminder_service.py` | 只读派生 |
 | 岗位广场 | `pages/JobsPage.tsx` | `jobs.ts` | `/api/jobs` | `job/job_service.py` `jd/jd_parser*.py` `job/job_analysis.py` `text_extraction.py` | `job.py` |
-| 收藏夹 | `pages/FavoritesPage.tsx` | `jobs.ts` `resumes.ts` | `/api/jobs` `/api/resumes` | 复用 `job/job_service.py` / 简历服务 | `job.py` `resume.py` |
-| 简历中心 | `pages/ResumesPage.tsx` | `resumes.ts` `resumeTemplates.ts` `resumeWriting.ts` `resumeRisk.ts` | `/api/resumes` `/api/resume-templates` | `resume/resume_generator.py` `resume/resume_content.py` `resume/resume_grounding.py` `resume/resume_layout.py` `pdf_exporter/` `docx_exporter.py` `export_pipeline.py` | `resume.py` `resume_template.py` |
+| 简历中心 | `pages/ResumesPage.tsx` | `resumes.ts` `resumeTemplates.ts` `resumeWriting.ts` `aiTasks.ts`（风险扫描走 `/ai-tasks`，kind=`resume_risk`） | `/api/resumes` `/api/resume-templates` | `resume/resume_generator.py` `resume/resume_content.py` `resume/resume_grounding.py` `resume/resume_layout.py` `pdf_exporter/` `docx_exporter.py` `export_pipeline.py` | `resume.py` `resume_template.py` |
+| 外部简历（子页） | `pages/ExternalResumesPage.tsx`（路由 `/resumes/external`） | `externalResumes.ts` | `/api/external-resumes` | `external_resumes.py` `external_resume_analysis.py` | `external_resume.py` |
 | 投递台 | `pages/ApplyPage.tsx` | `apply.ts` `candidateJob.ts` | `/api/apply` `/api/collect` `/api/candidate-jobs` | `services/apply/*` `services/sites/*` `services/browser/*` | `apply.py` `material.py`(CandidateJob) |
 | 网申填表 | `pages/WebFormPage.tsx` + `features/webform/*` | `webform.ts` | `/api/webform` | `services/webform/*`（引擎、匹配、字段目录、快照仓、填充记录、网申资料、实时会话、AI 兜底） | `profile.py`(UserProfile 的网申字段) `web_form_record.py` `web_form_profile.py` |
 | 求职进度 | `pages/TrackerPage.tsx` | `tracker.ts` | `/api/tracker` | `tracker.py` `tracker_extract.py` | `tracker.py` |
-| 求职统计 | `pages/AnalyticsPage.tsx` | `analytics.ts` | `/api/analytics` | `analytics.py` `ratios.py` `resume/resume_health.py` | 只读派生 |
 | 模拟面试 | `pages/InterviewPage.tsx` | `interview.ts` `interviewExperiences.ts` | `/api/interview` `/api/interview-experiences` | `interview/interview.py` `interview/interview_questions.py` `interview/interview_experience_service.py` | `interview.py` `interview_experience.py` `question_bank_record.py` `interview_review_record.py` |
 | 求职助手 | `pages/AssistantPage.tsx` + `features/assistant/*` | `assistant.ts` | `/api/assistant*` | `assistant/assistant_service.py` `assistant_tools/` `assistant/assistant_skills.py` `assistant/assistant_web_search.py` `feature_catalog*.py`（门面 + 三个数据段） | `assistant.py`(ChatConversation/ChatMessage/AssistantSkill) |
-| 我的资料 | `pages/ProfilePage.tsx` + `features/profile/library/*` `features/profile/groups/*`（13 板块、自建板块/字段设置、当前方案与方案管理、升级提示）；`features/profile-facts/*` 已在 2.0 随模块一并删除 | `profile.ts` `photo.ts` `features/profile/library/types.ts` `features/profile/groups/types.ts` `api/material.ts` | `/api/profile/workspace` `/api/profile/sections` `/api/profile/section-order` `/api/profile/groups` `/api/profile/current-group` `/api/profile/field-preferences` `/api/profile/current/projection` `/api/profile/upgrade-status` `/api/materials` | `profile/definition_catalog.py`（13 项与 106 个默认字段的唯一目录）`profile/definition_store.py` `profile/entry_store.py` `profile/group_store.py` `profile/field_preferences.py` `profile/group_scope.py` `profile/profile_reader.py`（消费快照）`profile/legacy_status.py`（升级检测）`profile/paper_policy.py` `profile/paper_projection.py` `profile/language_projection.py` `profile_text_parser.py` `services/profile_parser/*` | `profile_definition.py` `profile_entry.py` `profile_group.py` `profile_usage_snapshot.py` `profile.py`（旧表保留） |
+| 我的资料 | `pages/ProfilePage.tsx` + `features/profile/library/*` `features/profile/groups/*`（13 板块、自建板块/字段设置、当前方案与方案管理、升级提示）；`features/profile-facts/*` 已在 2.0 随模块一并删除 | `profile.ts` `photo.ts` `features/profile/library/types.ts` `features/profile/groups/types.ts` `api/material.ts` | `/api/profile/workspace` `/api/profile/sections` `/api/profile/section-order` `/api/profile/groups` `/api/profile/current-group` `/api/profile/field-preferences` `/api/profile/current/projection` `/api/profile/upgrade-status` `/api/materials` | `profile/definition_catalog.py`（13 项与 106 个默认字段的唯一目录）`profile/definition_store.py` `profile/entry_store.py` `profile/group_store.py` `profile/field_preferences.py` `profile/group_scope.py` `profile/profile_reader.py`（消费快照；`load_workspace_upgrade_status` 也在这里，没有单独的 legacy_status 模块）`profile/paper_policy.py` `profile/paper_projection.py` `profile/language_projection.py` `profile_text_parser.py` `services/profile_parser/*` | `profile_definition.py` `profile_entry.py` `profile_group.py` `profile_usage_snapshot.py` `profile.py`（旧表保留） |
+| 收藏夹 | `pages/FavoritesPage.tsx` | `jobs.ts` `resumes.ts` | `/api/jobs` `/api/resumes` | 复用 `job/job_service.py` / 简历服务 | `job.py` `resume.py` |
 | 资料箱 | `pages/MaterialsPage.tsx` | `material.ts` | `/api/materials` | `materials.py` `document_text.py` `text_extraction.py` | `material.py` |
 | 知识库 | `pages/KnowledgePage.tsx` | `knowledge.ts` | `/api/knowledge` | `knowledge_service.py` | `knowledge_entry.py` |
 | 工作台（技能） | `pages/SkillsPage.tsx` | `skill.ts` | `/api/assistant/skills` | `assistant/assistant_skills.py` `skill_archive.py` | `assistant.py`(AssistantSkill) |
+| 公司调研 | `pages/CompanyResearchPage.tsx` | `research.ts` | `/api/research` | `job/company_research.py` `job/company_research_store.py` | `knowledge_entry.py`（简报落知识库） |
+| 求职统计 | `pages/AnalyticsPage.tsx` | `analytics.ts` | `/api/analytics` | `analytics.py` `ratios.py` `resume/resume_health.py` | 只读派生 |
 | 事实台账 | `pages/ClaimsPage.tsx` | `claims.ts` | `/api/claims` | `claims.py` `claim_draft.py` | `claim.py` |
 | 面试深挖 | `pages/DrillPage.tsx`（路由 `/claims/drill`） | `drill.ts` | `/api/drill` | `drill.py` | `drill.py` |
-| 回收站 | `pages/TrashPage.tsx` | `trash.ts` | `/api/trash` | `trash.py`（`TRASH_SPECS` 注册表） | 多表软删 |
-| 设置 | `pages/SettingsPage.tsx` | `settings.ts` `system.ts` `update.ts` | `/api/settings` `/api/system` `/api/update` | `settings_service.py` `datasets.py` `data_backup/` `update_check.py` | `setting.py` |
+| 回收站 | `pages/TrashPage.tsx` | `trash.ts` | `/api/trash` | `trash.py`（re-export `trash_registry.TRASH_SPECS`，24 类） | 多表软删 |
+| 设置 | `pages/SettingsPage.tsx` | `settings.ts`（含 `/update/*`）`system.ts` | `/api/settings` `/api/system` `/api/update` | `settings_service.py` `datasets.py` `data_backup/` `update_check.py` | `setting.py` |
 
 页面内的功能组件（不占独立菜单，但常被问起）：
 
@@ -60,10 +62,10 @@
 
 | 目录 | 职责 | 一句话 |
 | ---- | ---- | ---- |
-| `api/` | 路由层（68 个路由模块，另有 `resumes/`、`webform/` 两个子包） | 只做参数校验与编排，不写业务 |
-| `models/` | ORM 模型（42 个文件；表数以基线迁移 `0001_baseline_v2` 为准） | 一张表一个文件；**新增表必须注册进 `models/__init__.py`** |
+| `api/` | 路由层（77 个含 `APIRouter(` 的模块，另有 `resumes/`、`webform/` 两个子包；2026-11 实测） | 只做参数校验与编排，不写业务 |
+| `models/` | ORM 模型（49 个文件；表数以基线迁移 `0001_baseline_v2` 为准） | 一张表一个文件；**新增表必须注册进 `models/__init__.py`** |
 | `schemas/` | Pydantic 契约 | 前后端共用的请求/响应结构 |
-| `vocabulary/` | 领域词表层（11 个域模块） | 状态常量 / 白名单 / 纯函数唯一真源：只依赖标准库，`models` re-export、`schemas` 直接取 |
+| `vocabulary/` | 领域词表层（13 个域模块） | 状态常量 / 白名单 / 纯函数唯一真源：只依赖标准库，`models` re-export、`schemas` 直接取 |
 | `services/` | 业务层（最大） | 核心逻辑，与框架解耦、可离线测试 |
 | `services/resume/` `services/profile/` | 简历域 / 资料域 | 生成落地、一致性、版式、模板；读写、相关性、上下文、照片 |
 | `services/job/` `services/jd/` | 岗位域 / JD 规则 | 服务、匹配、需求解读；技能学历年限规则 |
@@ -103,7 +105,7 @@ T8 纯搬迁拆分（2026-11-14）：85 个 ≥480 行文件按域拆成**同目
 | ---- | ---- |
 | `pages/` | 每个菜单项一个页面；菜单在 `features/shell/navigationConfig.ts`（`App.tsx` 仅 re-export `MENU_ITEMS`），路由表在 `appRoutes.tsx`，两者是唯一路由源 |
 | `components/` | 只保留 `components/common/`：跨模块交互原语（行操作、右键菜单、详情抽屉、空态/错误态等）；业务组件已全部按领域迁入 `features/` |
-| `features/` | 按领域组织（38 个领域目录）：业务组件、纯函数与 hooks 都在这里（`resume/` 下再按 editor/preview/document/layout 等 16 簇分层，`profile/` 下有 library/groups/fields） |
+| `features/` | 按领域组织（41 个领域目录）：业务组件、纯函数与 hooks 都在这里（`resume/` 下再按 editor/preview/document/layout 等 16 簇分层，`profile/` 下有 library/groups/fields） |
 | `api/` | 所有 HTTP 请求的封装，前端唯一发起请求的地方 |
 | `types/` | TypeScript 类型，枚举与后端常量逐字镜像 |
 | `hooks/` | 通用 hooks（`useApi.ts` 等） |
@@ -138,5 +140,5 @@ T8 纯搬迁拆分（2026-11-14）：85 个 ≥480 行文件按域拆成**同目
 
 ## 想了解得更深
 
-- 每个功能的**数据流、设计决策、为什么这么设计**：见 [architecture.md](architecture.md)（含 mermaid 时序图与 17 条扩展点）。
+- 每个功能的**数据流、设计决策、为什么这么设计**：见 [architecture.md](architecture.md)（含 mermaid 时序图与 30 条扩展点）。
 - 每个版本**改了什么、为什么**：见 [CHANGELOG.md](../CHANGELOG.md)（记录了真实用户反馈驱动的修复）。

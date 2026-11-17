@@ -1,8 +1,8 @@
 # 标签 PDF 能力研究（D12）
 
-> **历史文档（2.0 已复核）**：这是 2026-10 的技术调研记录（代码基线 `380d5bed` / `app_version 1.0.2`），结论与实测数字只对那次快照负责；2.0 未重新验证，也不代表任何无障碍达标声明。
+> **历史文档（2026-10 调研 + 2026-11-17 复测）**：这是 2026-10 的技术调研记录（代码基线 `380d5bed` / `app_version 1.0.2`）。**2026-11-17 在 2.1.0 上复测过一轮**（fpdf2 2.9.0 / pypdf 6.21.4 / 字体 Microsoft YaHei）：4 份样例的结构事实与 §1 六条结论**逐条不变**（仍无 StructTreeRoot / MarkInfo / Lang / Tabs / StructParents / 图片 Alt / XMP，字节不可复现、文本与页数可复现）。复测只证明"结论没变"，不构成任何无障碍达标声明。
 
-日期：2026-10-24 · 代码版本 `380d5bed` / `app_version 1.0.2`
+日期：2026-10-24（调研）· 2026-11-17（2.1.0 复测）· 代码版本 `380d5bed` / `app_version 1.0.2`
 性质：**有界研究交付**。结论只表示"本地证据齐全"，**不表示标签 PDF 已成为产品能力**，
 也不构成 PDF/UA、WCAG 或任何无障碍达标声明（总任务书 §12 明确延期项）。
 
@@ -30,11 +30,11 @@
 | 工具 | 结果 |
 | --- | --- |
 | Python | 3.12.2 |
-| fpdf2（PDF 引擎） | 2.8.9（**不支持 Tagged PDF 输出**） |
-| pypdf | 6.21.2（读对象树/结构事实） |
+| fpdf2（PDF 引擎） | 2.8.9 观测（**不支持 Tagged PDF 输出**）；**2026-11-17 复测用的是 2.9.0，输出仍无任何 tag 结构** |
+| pypdf | 6.21.2（调研时）；**2026-11-17 复测为 6.21.4**，读结构正常 |
 | pdftotext（xpdf 4.06） | `C:\Program Files\Git\mingw64\bin\pdftotext.exe`（不在默认 PATH，工具内做了候选探测） |
 | qpdf / pdfinfo / mutool / gs / pdftoppm | **均缺失**（本机无 PDF 结构校验器/渲染器） |
-| PDF 字体 | `backend/data/fonts/SourceHanSansSC-{Regular,Bold}.otf`，轮廓 **CFF** |
+| PDF 字体 | 调研时：`backend/data/fonts/SourceHanSansSC-{Regular,Bold}.otf`，轮廓 **CFF**；2026-11-17 复测：`C:/Windows/Fonts/msyh{,bd}.ttc`（Microsoft YaHei，轮廓 **TrueType**）——两轮都嵌入了字体、都带 `ToUnicode`，结构结论不受字体族影响 |
 | 基准 | A4 595.3 × 841.9 pt（MediaBox 实测） |
 
 没有可用的 PDF 结构校验器（veraPDF/qpdf）意味着**即使将来引入标签，也无法在本机
@@ -81,7 +81,7 @@ backend/.venv/Scripts/python.exe scripts/quality/inspect_pdf_structure.py
 
 `pdftotext` 默认提取（按内容流/启发式，节选）：
 
-`@text
+```text
 示例甲 女
 求职意向：示例岗位
 138-0000-0000 sample.a@example.com 示例市 2000 GitHub：… 个人主页：…
@@ -93,9 +93,9 @@ backend/.venv/Scripts/python.exe scripts/quality/inspect_pdf_structure.py
 示例科技有限公司 · 示例岗位
 2023.07 - 至今
 · 负责示例业务模块，把示例流程从 10 天压到 4 天。
-`@
+```
 
-这是 `pdf_exporter/render.py::_draw_resume` 的绘制顺序：页头 → 分区标题 → 条目标题
+这是 `pdf_exporter/document_render.py::draw_document` 的绘制顺序（v1 的 `render.py::_draw_resume` 已删除）：页头 → 分区标题 → 条目标题
 （左标题、右时间）→ 要点。**语义顺序天然正确**，但"哪一行是标题"只存在于视觉样式
 （字号/加粗/颜色），没有结构标签；换一个按结构读的消费者就只能当成普通段落读。
 
@@ -103,11 +103,11 @@ backend/.venv/Scripts/python.exe scripts/quality/inspect_pdf_structure.py
 
 `pdftotext -layout`（节选，保留视觉列）：
 
-`@text
+```text
   教育经历                                       实习/工作经历
 示例大学 · 示例专业 本科 · 2019.09 - 2023.06   示例科技有限公司 · 示例岗位               2023.07 - 至今
 绩点/排名：3.7/4.0                        · 负责示例业务模块，把示例流程从 10 天压到 4 天。
-`@
+```
 
 - 内容流顺序是"行级"：左格整段画完 → 右格整段画（`columns.render_sections` 的
   `_draw_row`）；所以按内容流读是"左栏一个分区 → 右栏一个分区"，**符合两栏的
@@ -200,3 +200,5 @@ HTML 的 `lang` 与 `alt` 是很好的地基，但**正文标题层级缺失**�
 | 日期 | 版本 | 变化 |
 | --- | --- | --- |
 | 2026-10-24 | v1 | 首版：工具探测 + 4 样例结构实测 + 阅读顺序/可复现性/限制 |
+| 2026-11-17 | v1.1 | 修代码围栏（原单反引号，命令块不渲染）；绘制入口改指 `document_render.py::draw_document`；fpdf2 2.9.0 未复测 |
+| 2026-11-17 | v1.2 | 2.1.0 复测：`inspect_pdf_structure.py` 4 份样例的结构事实与六条结论不变（fpdf2 2.9.0 / pypdf 6.21.4 / Microsoft YaHei）；字节仍不可复现、文本与页数可复现 |

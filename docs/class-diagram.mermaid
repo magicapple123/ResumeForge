@@ -1,6 +1,13 @@
 %% SPDX-License-Identifier: Apache-2.0
 %% ResumeForge 增量批次 · 类图（数据模型 + 服务类）
 %% 生成自 docs/system_design.md §3 / §4。三块：后端字体服务 / 后端排版注册表 / 前端实时预览与字体 UI。
+%%
+%% ⚠️ 历史快照（2026-09/10 增量批次）：与 2.0 现状**不一一对应**。
+%%   · 文中 `ResumeZoomModal` / `ResumeWorkbenchLiveCanvas` / `useResumeEditorPanel` /
+%%     `ResumeDraftStore` 是 V1 制作台的组件，已随 V2 制作台（ResumeWorkbenchV2）删除；
+%%     现行链路见 docs/architecture.md「核心数据流：简历文档模型 v2」。
+%%   · 路径以 `features/resume/...` 为准，`components/...` 下多数已迁走。
+%%   现行结构以 docs/architecture.md + docs/PROJECT_MAP.md 为准。
 
 classDiagram
 
@@ -166,8 +173,8 @@ classDiagram
     +resolved_section_order(format_config dict) list
     +normalized_section_order(raw object) list
     +profile_to_resume_order(raw object) list
-    +profile_section_keys(raw object) list
-    +default_section_order_config(db Session) dict
+    +sortable_profile_section_keys(keys list[str]) list
+    +default_section_order_config(db Session) dict or None
   }
 
   class SectionOrderUtils {
@@ -258,7 +265,6 @@ classDiagram
     <<component>>
     +layout ResumeLayout
     +catalog ResumeTemplateCatalog
-    +preferProfileOrder bool
     +onChange(next ResumeLayout) void
     -handleSectionMove(index number, direction -1|1) void
     -handleSectionOrderReset() void

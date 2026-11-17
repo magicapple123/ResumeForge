@@ -106,9 +106,15 @@ open /Applications/ResumeForge.app
    `open -a /Applications/ResumeForge.app --args --disable-gpu`（虚拟机 Metal 加速不完整时的已知规避）。
 2. **后端链路**：首次启动会经由 `start.command` **在线装配 Python 运行时**（下载 Python + pip 安装依赖，VM 网络下可能 3–10 分钟），耐心等待并观察日志；后端就绪后页面应可正常打开与操作（如首页统计、岗位列表）。
 3. 日志位置（排查用）：
-   - 壳与后端运行日志：`/Applications/ResumeForge.app/Contents/Resources/payload/runtime/logs/desktop-main.log`、`desktop-backend.log`
-   - 用户数据与后端日志：`~/Library/Application Support/ResumeForge/`（含 `data/logs/backend.log`）
-   - 启动探针：`~/Library/Application Support/ResumeForge/ResumeForge/startup-probe.log`（若存在）
+   - 壳与后端运行日志：**用户目录**下的 `runtime/logs/desktop-main.log`、`desktop-backend.log`，macOS 即
+     `~/Library/Application Support/ResumeForge/runtime/logs/`；不可写时会降级到系统临时目录（`$TMPDIR/ResumeForge/logs`），
+     极端情况两个都写不了就没有这个文件（壳不写日志也不崩）。
+     **不要看** `.app/Contents/Resources/payload/runtime/logs/`：那是 `scripts/build-desktop-mac.sh` 用 `mkdir -p` 建出来的空壳，壳层永远不往里写（payload 只读）。
+   - 用户数据与后端日志：`~/Library/Application Support/ResumeForge/data/`，后端自己那份是 `data/logs/backend.log`（5MB×5 自带滚动，与上面的壳日志不是同一个文件）
+   - 诊断包：后端起得来时，`GET /api/system/diagnostics/export` 会按原名带走 `desktop-main.log` / `desktop-backend.log`
+     （只取尾部 400 行 / 256KB，过同一道脱敏闸，不带走 `.log.1` 轮转；只有由桌面壳拉起的后端才注入 `RF_DESKTOP_LOG_DIR`）。
+     包里没有桌面日志，只说明这台机器上的后端不是由桌面壳拉起的、或该文件还没被写过、或读不到（权限/占用）——不代表诊断包坏了。
+     后端起不来时该端点本身不可达，只能走上面的手动路径。
 4. 完成后退出应用（托盘/菜单退出），并卸载 dmg：`hdiutil detach /Volumes/ResumeForge`
 
 > ⚠️ 常见误判：「打不开」先分清是 Gatekeeper 拦截（弹窗提示"无法验证开发者"→ 右键→打开 即可）还是真崩溃（进程退出/白屏 + 日志报错）。

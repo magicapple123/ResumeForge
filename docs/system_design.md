@@ -1,6 +1,6 @@
 # 增量批次系统设计（P0-1 ~ P0-8 / P1-1 ~ P1-2）
 
-> **历史文档（2.0 已复核）**：这是 2026-09 一批增量需求的系统设计记录，**不是 2.0 的现状**。文中的迁移号（`00XX_*`）、模板数量、路由落点（`App.tsx` 的 `MENU_ITEMS` / `Routes`）都是当时的快照：2.0 的迁移链只有 `0001_baseline_v2`，菜单在 `features/shell/navigationConfig.ts`、路由在 `appRoutes.tsx`。要查当前架构请看 [architecture.md](architecture.md) 与 [PROJECT_MAP.md](PROJECT_MAP.md)。
+> **历史文档（2.0 已复核）**：这是 2026-09 一批增量需求的系统设计记录，**不是 2.0 的现状**。文中的迁移号（`00XX_*`）、模板数量、路由落点（`App.tsx` 的 `MENU_ITEMS` / `Routes`）都是当时的快照：2.0 的迁移链只有 `0001_baseline_v2`，菜单在 `features/shell/navigationConfig.ts`、路由在 `appRoutes.tsx`。要查当前架构请看 [architecture.md](architecture.md) 与 [PROJECT_MAP.md](PROJECT_MAP.md)。**文中的文件路径、CSS 数值（如"下拉宽度 260px"）、行数与行数预算都是 2026-09 快照**，其中 260px 已被 2026-10-24 的 216px（版式下拉另有 104px 覆盖规则）取代。
 
 > 角色：架构（Bob）· 输入：PM 的第 N 批增量 PRD · 约束：渐进改造、不重写、不删文件、主仓库不 commit
 > 本文只给设计与任务分解，不含实现代码。所有"事实"都标了出处（`文件:行`），未经验证的推测会明确写成推测。
@@ -193,6 +193,8 @@
 
 ### 2. 文件清单
 
+> 历史排期快照：下列路径与行数预算均已变化（多个文件已迁入 `features/`），勿作为现行规范。
+
 > 「⚠️」= 本批会把它推到或接近 **500 行预算**，必须同批做一次抽取（抽取点已指定，不新增功能）。
 > 行数为现状 + 本批预估增量。
 
@@ -338,6 +340,8 @@ interface ResumeDraftStore {
 
 ### 4. 任务分解（5 个任务，硬上限内）
 
+> 历史排期：T01–T05 均已完成并多次重构，此表只作过程记录。
+
 > 说明：本批是**存量项目的增量**，不存在"项目基础设施"可搭；T01 承担等价角色——**跨任务共享的契约层**（i18n 命名空间、类型、后端只读契约、共享 hook/store）。其余 4 个任务按"可独立交付的模块"分组，都在 T01 之后**互不阻塞、可并行**。
 
 #### T01 共享契约层（必须最先做，其余全部依赖它）· P0
@@ -373,6 +377,8 @@ interface ResumeDraftStore {
 ---
 
 ### 5. 共享知识（跨文件约定，工程师必须逐条遵守）
+
+> 历史约定：下列 9 条是**当时**的约束，其中行数纪律、测试写法与 CSS 数值已不适用，勿据此改代码。
 
 1. **i18n 命名空间**：本批所有新文案进**一个新文件** `src/i18n/messages/zh-CN.fontDownload.ts`（`const fontDownload = {…} as const; export default fontDownload;`），`zh-CN.ts` 末尾 `...fontDownload` 展开。**禁止**往 `zh-CN.ts` 或既有 `zh-CN.fonts.ts` 里加行（`cjkRatchet` 逐文件比较，改已有文件新增中文行会红）。
    key 前缀分层：`fontDownload.download.*`（下拉内下载/进度/取消/重试/失败）、`fontDownload.remove.*`（删除确认与结果）、`fontDownload.sample.*`（样张四行与两类提示）、`sections.*`（P0-6 两个按钮与两条 tooltip）、`exact.serifNote`（P1-2）。

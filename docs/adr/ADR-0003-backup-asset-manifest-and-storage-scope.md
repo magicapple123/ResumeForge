@@ -3,7 +3,7 @@
 > **2.0 已复核，结论仍适用**（备份格式此后从 4 演进到 5 / 6，当前 `BACKUP_FORMAT_VERSION = 6`）；文中提到的迁移号均为 **1.x 历史号**。
 
 日期：2026-10-13（生产审计 PR-15 / PR-16）
-状态：已实施
+状态：已采纳（Accepted）
 
 ## 背景
 
@@ -34,9 +34,11 @@
 
 新增 `data_backup/asset_manifest.py`：
 
-- **引用收集**：只读连接读两处权威来源——`user_file.disk_name`（"我的文件"
-  落盘副本的登记表）与 `referral.note_images`（`referral_images/<文件名>` 相对
-  路径）。表/列不存在按"没有引用"处理。
+- **引用收集**：只读连接按 `asset_categories.ASSET_CATEGORIES` 读**三类**权威来源——
+  `user_files`（"我的文件"落盘副本的登记表）、`referral_images`（`referral.note_images`
+  的相对路径）、`export_archive`（导出归档）。目录名单唯一来源是
+  `ASSET_CATEGORIES`，`coverage.py` 只做投影，由 `test_asset_categories_and_coverage_agree`
+  钉住（不允许再手写一份）。表/列不存在按"没有引用"处理。
 - **清单格式**（`manifest.json` 的 `asset_manifest` 段；随包数据集在其条目内
   同名字段）：
 
@@ -45,6 +47,7 @@
     "manifest_version": 1,
     "user_files": [{"name": "...", "size_bytes": 123, "sha256": "..."}],
     "referral_images": [...],
+    "export_archive": [...],
     "user_files_missing": ["磁盘上已找不到的被引用文件"]
   }
   ```
@@ -64,6 +67,12 @@ DB 恢复完全正常，只是附件缺失——这与老版本本来就没有"�
 拒收，收益不成比例。作为补偿，`asset_manifest` 段自带 `manifest_version`，
 **当前版本**的导入侧对版本号不认识的包 fail-closed 拒收——将来清单结构再变时，
 不会静默按旧形状误读。
+
+**后续修订（2026-11）**：这一决策只覆盖 1.x 的「3 → 4」。2.0 新增了包成员，格式号已升到
+**6**（`services/data_backup/paths.py` 的 `BACKUP_FORMAT_VERSION = 6`），且**按内容显式计算**：
+1 单数据集无密钥 / 2 带其余数据集 / 3 含 API Key / 4 导出全部数据集（嵌套整包）/
+5 带全局模型配置 / 6 再带全局字体。导入侧对 `≥ 自身常量` 的包一律拒收并提示先升级。
+本节「靠段内 `manifest_version` 而不是格式号」的原则对 `asset_manifest` 仍然成立。
 
 ### 3. 旧格式向后兼容
 

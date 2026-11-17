@@ -6,6 +6,10 @@
 落在人工标注的期望小节上"，并且对 how-to 类额外要求 top1 是带列表的步骤小节。
 这不是调松阈值：旧断言允许 top1 落在任何一个大章节上，新断言逐题钉到具体小节、
 带面包屑消歧，还钉了 source、片段类型上限和排序优先级。
+
+改手册标题不用改测试代码：把新标题加进 ``fixtures/assistant_docs_questions.json``
+该题的 ``accepted_headings`` 即可，``test_fixture_headings_and_answer_phrases_are_still_valid``
+会在标题消失时直接点名是哪几题；切片行号也不是写死的，按文件现算。
 """
 
 from __future__ import annotations
@@ -35,7 +39,23 @@ from app.services.assistant_docs import (
 from app.services.assistant_tools import execute_tool, tool_names
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "assistant_docs_questions.json"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _HEADING_LINE = re.compile(r"^#{1,3}\s")
+
+
+def _doc_heading_line(source: str) -> int:
+    """返回 ``docs/xxx.md`` 里某个标题所在的行号（1 起）。
+
+    切片行号只用来证明"chunk 的 line 指向标题那一行"。早先这里写死 ``== 1659`` 这类
+    数字，导致每次在它上面增删一段都要手工平移——那不是被测行为，是测试自己的债。
+    从文件里现算，判据不变、维护成本归零。
+    """
+    path, heading = source.split("#", 1)
+    heading = heading.rsplit(" > ", 1)[-1]
+    lines = (_REPO_ROOT / path).read_text(encoding="utf-8").splitlines()
+    hits = [index for index, line in enumerate(lines, 1) if line.strip() == f"### {heading}"]
+    assert len(hits) == 1, f"{path} 里应恰好有一个「### {heading}」，实际 {len(hits)} 个"
+    return hits[0]
 
 
 def _load_questions() -> list[dict]:
@@ -88,11 +108,12 @@ def _user_guide_chunk(heading: str) -> ProductDocChunk:
 def _matches_expected(question: dict, chunk: ProductDocChunk) -> bool:
     heading = chunk.heading
     accepted = question["accepted_headings"]
-    if not any(heading == item or heading.endswith(item) or item in heading for item in accepted):
+    # 只允许"完全相等"或"标题带编号前缀"两种（``4.3 手动备份`` 对 ``手动备份``）。
+    # 不再用 ``item in heading``：那会让「怎么用」这类短标题匹配到任何含它的长标题，
+    # 检索结论看起来是绿的，其实命中的是别的章节。
+    if not any(heading == item or heading.endswith(item) for item in accepted):
         return False
-    return all(
-        part in chunk.heading_path for part in question.get("expected_path_contains") or []
-    )
+    return all(part in chunk.heading_path for part in question.get("expected_path_contains") or [])
 
 
 # ===== 原有入口回归 =====
@@ -143,25 +164,15 @@ def test_product_docs_search_reports_no_match_without_inventing_content():
 
 def test_chunks_split_at_third_level_with_parent_breadcrumb():
     chunk = _user_guide_chunk("导出：格式、水印与脱敏")
-    # 行号是"这一块从第几行开始"的锚点：只要在它上面增删了 user-guide 的段落就会整体平移
-    # （2026-11-09 协议一节 1532 → 1537；2026-11-10 页头手势与搜索深度两节 1537 → 1569；
-    # 2026-11-11 语音听写排查段 1569 → 1576；同日识别清洗说明 1576 → 1581；
-    # 2026-11-11 剩余条目新增「从链接导入岗位」一节 1581 → 1602；同日知识库/助手记忆两节
-    # 增补 1602 → 1612；2026-11-13 新增「上下文窗口：先看参考表再填」一节 1612 → 1624；
-    # 2026-11-15 新增「扫描件识别引擎」一节 1624 → 1658；同日界面导览表补「公司调研」一行
-    # 且新增「公司与岗位调研」一节 1658 → 1659），
-    # 跟着改数字即可，别改成范围断言。
-    assert chunk.line == 1659
+    # 行号 = "这一块从第几行开始"的锚点，按文件现算：判据仍是"指向标题那一行"，
+    # 但在这上面增删段落不再需要手工平移数字（旧写法是写死 1659、每次改文档改一遍）。
+    assert chunk.line == _doc_heading_line(chunk.source)
     assert chunk.heading_path == "使用指南 > 4. 制作、编辑和导出简历 > 导出：格式、水印与脱敏"
     assert chunk.source == f"docs/user-guide.md#{chunk.heading_path}"
     # 切块停在 ###：块内不应再出现 1-3 级标题行（出现就说明跨度超过一个小节）。
-    for user_guide_chunk in (
-        item for item in _all_chunks() if item.path == "docs/user-guide.md"
-    ):
+    for user_guide_chunk in (item for item in _all_chunks() if item.path == "docs/user-guide.md"):
         extra = [
-            line
-            for line in user_guide_chunk.text.splitlines()[1:]
-            if _HEADING_LINE.match(line)
+            line for line in user_guide_chunk.text.splitlines()[1:] if _HEADING_LINE.match(line)
         ]
         assert not extra, f"「{user_guide_chunk.heading}」块内混入了下一个章节标题：{extra[:2]}"
 
@@ -222,9 +233,7 @@ def test_title_hits_weight_leaf_heading_above_parent_breadcrumb():
     matched = ["合并", "并规", "规则"]
     leaf = _chunk("docs/x.md", "合并规则", "无关内容", "使用指南 > 合并规则")
     ancestor_only = _chunk("docs/x.md", "其他章节", "无关内容", "使用指南 > 合并规则说明")
-    assert _title_hits(matched, "合并规则", leaf) > _title_hits(
-        matched, "合并规则", ancestor_only
-    )
+    assert _title_hits(matched, "合并规则", leaf) > _title_hits(matched, "合并规则", ancestor_only)
 
 
 def test_matched_terms_are_deduplicated():
@@ -311,18 +320,57 @@ def test_default_limit_is_five_and_k_is_optional():
 # ===== 20 问标注集（top1 必须命中人工标注标题） =====
 
 
+def test_fixture_headings_and_answer_phrases_are_still_valid():
+    """标注集自身的一致性：标题必须还在索引里，答案要点必须非空。
+
+    这条不测检索、只测**标注集有没有腐坏**，作用是让"标题改名"的失败点落在这里：
+    改手册标题后如果只改文档，20 问会在检索用例里报"期望 X，实际 top1 = Y"，改的人
+    得反推是文档错了还是标注过期；有这条之后，失败信息直接说"「X」已不在任何被索引
+    文档的标题里，请把新标题加进该题的 accepted_headings"。
+
+    标题改名的正确顺序（三步，缺一步就红）：
+    1. 改文档标题；
+    2. 把新标题加进该题的 ``accepted_headings``（旧标题**只有仍存在时**才留着）；
+    3. 跑本文件——``answer_phrases`` 若提到了改名的设置页分组，同批更新。
+    """
+    headings = {chunk.heading for chunk in _all_chunks()}
+    payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    problems: list[str] = []
+    for question in payload["questions"] + payload["spaced_questions"]:
+        accepted = question["accepted_headings"]
+        if question["expected_heading"] not in accepted:
+            problems.append(f"{question['id']}：expected_heading 不在 accepted_headings 里")
+        problems.extend(
+            f"{question['id']}：「{item}」已不在任何被索引文档的标题里，请把新标题加进 accepted_headings"
+            for item in accepted
+            if item not in headings
+        )
+        if not question.get("answer_phrases"):
+            problems.append(
+                f"{question['id']}：缺 answer_phrases（至少要一条能在 top1 里找到的原话）"
+            )
+    assert not problems, "标注集需要同步：\n" + "\n".join(problems)
+
+
 @pytest.mark.parametrize("question", _annotated_questions(), ids=lambda item: item["id"])
 def test_annotated_questions_hit_expected_headings(question):
     results = search_product_docs(question["question"])
     assert results, f"{question['id']} 检索结果为空"
     top1 = results[0]
     assert _matches_expected(question, top1), (
-        f"{question['id']} 期望「{question['expected_heading']}」，"
-        f"实际 top1 = {top1.source}"
+        f"{question['id']} 期望「{question['expected_heading']}」，实际 top1 = {top1.source}"
     )
     # 返回的 source 能直接被回答引用，且 format_product_doc_results 会带出同一来源。
     assert top1.source == f"{top1.path}#{top1.heading_path}"
     assert top1.source in format_product_doc_results(question["question"], k=1)
+    # answer_phrases 以前是"只给人看的备注"，没人断言，于是设置页分组改名后仍写着
+    # 「助手与 AI 行为」「数据与导出」两个已不存在的路径。现在逐条要求出现在 top1 里：
+    # 它是"答案有没有跟着文档走"的最短判据，也不需要另建一套语料。
+    missing = [phrase for phrase in question["answer_phrases"] if phrase not in top1.text]
+    assert not missing, (
+        f"{question['id']} 的答案要点在 top1 里找不到：{missing}。"
+        f"若文档确实改了叫法（如设置页分组改名），同步更新该题的 answer_phrases"
+    )
     if question.get("expect_steps"):
         assert top1.is_steps, f"{question['id']} 的 how-to top1 不是步骤小节：{top1.source}"
 

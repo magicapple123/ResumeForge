@@ -2,7 +2,7 @@
 
 > **2.0 已复核，结论仍适用**（"用户数据永远不落 `resources/payload`"仍是不变量）；文中提到的迁移号均为 **1.x 历史号**。
 
-- 状态：Accepted（2026-10-13，2026-10-13 生产审计 PR-05）
+- 状态：已采纳（Accepted；2026-10-13 生产审计 PR-05）
 - 关联：`desktop/backend-manager.js`、`desktop/main.js`、`backend/app/config.py`（`RF_DATA_DIR`）、`docs/desktop-supply-chain-audit.md`（PR-06 供应链基线）
 
 ## 背景
@@ -24,7 +24,7 @@
 | 程序目录（app） | 安装目录（NSIS 默认 `%LOCALAPPDATA%\Programs\ResumeForge`，assisted 安装器允许用户自选） | electron-builder `perMachine: false`，每用户安装；目录随更新被整体替换，**绝不放任何用户产物** |
 | 用户数据（数据库 / 附件 / 导出 / 备份 / 提示词产物） | `%APPDATA%\ResumeForge\data\`（即 Electron `app.getPath("userData")` 下的 `data/` 子目录） | 跟随用户漫游配置、安装目录替换不影响、普通用户必然可写。实现见下文"落地方式" |
 | 运行时（解包的 Python + site-packages） | `%LOCALAPPDATA%\ResumeForge\runtime\`（现状保留） | 与安装目录解耦，安装器 / 便携版可共享；由 `.runtime-complete` 版本化 marker 管理（审计 PR-05-5 的修复，同轮落地） |
-| 日志 | `resources/payload/runtime/logs/`（现状保留，计划项见"遗留"） | 每用户安装下 payload 可写，因此现状可用；后端自身另有 5MB×5 滚动文件日志，`desktop-backend.log` 由 BackendManager 轮转（>5MB 移入 `.old`） |
+| 日志 | 用户目录下的 `runtime/logs/`：Windows `%LOCALAPPDATA%\ResumeForge\runtime\logs\`、macOS `~/Library/Application Support/ResumeForge/runtime/logs/`（**后续修订**：原计划留在 payload，实际已迁出） | 壳层绝不写安装 payload（打包后只读）：`desktop/lib/backend-logs.js` 的 `backendLogFile` 只拼 `runtimeDir/logs/desktop-backend.log`；真正打开日志的是同文件的 `openBackendLog`，它按 `<runtimeDir>/logs` → 系统临时目录 → 不写日志 逐级降级（任何一步失败都只降级、不抛异常，日志设施不能反过来打断启动）；后端自身另有 5MB×5 滚动文件日志（`data/logs/backend.log`），`desktop-backend.log` 由壳轮转（>5MB 移入 `.old`）。**注意**：`scripts/build-desktop-mac.sh` 仍会 `mkdir -p payload/runtime/logs`，所以该目录**存在但永远为空**，不能作为诊断入口 |
 | 缓存（Electron 渲染缓存等） | `%APPDATA%\ResumeForge\Cache` 等（Electron `userData` 默认行为，现状保留） | Electron 默认即落在用户目录，无需改动 |
 
 **核心不变量：用户数据永远不落 `resources/payload`。**
@@ -34,7 +34,7 @@
 1. **`backend/app/config.py`**：`DATA_DIR` 支持 `RF_DATA_DIR` 环境变量覆盖——
    设置了 `RF_DATA_DIR` 时数据目录取该值，`DEFAULT_DATABASE_URL` 随之推导；未设置时行为与从前逐字节一致
    （`backend/data`），控制台流程、开发流程、既有测试全部不受影响。
-2. **`desktop/backend-manager.js`**：新增 `buildBackendEnv(userDataDir)`——构造后端子进程环境时注入
+2. **`desktop/lib/backend-env.js`**：新增 `buildBackendEnv(userDataDir, desktopLogDir)`（`desktop/backend-manager.js` 只保留调用与 re-export）——构造后端子进程环境时注入
    `RF_DATA_DIR=<用户数据目录>`（连同父环境一起传给 bundled / launcher / venv 三个分支）。config 层的
    解析顺序（环境变量 > 默认值）不变，我们只是把值送进去。
 3. **`desktop/main.js`**：打包模式（`app.isPackaged`）下创建 BackendManager 时传
@@ -57,8 +57,7 @@
 ## 后果
 
 - 打包安装的数据库/附件/导出/备份全部落 `%APPDATA%\ResumeForge\data`，更新、重装、换安装目录都不再触碰用户数据。
-- `desktop-shell-smoke` CI 作业的日志断言路径（payload 下 `runtime/logs/desktop-backend.log`）不受影响——
-  日志本轮刻意保留原位，避免为文档性改动扩大爆炸半径；其搬迁作为遗留项登记。
+- 日志目录随后续修订迁到用户目录 `runtime/logs/`（见上表：Windows `%LOCALAPPDATA%\ResumeForge\runtime\logs\`、macOS `~/Library/Application Support/ResumeForge/runtime/logs\`；不可写时降级到系统临时目录）；`desktop-shell-smoke` 的断言路径同步改为用户目录那份（`.github/workflows/ci.yml:1354`），遗留项已清偿（来龙去脉见 CHANGELOG「装了 1.0.2 却打不开」）。
 - 后端配置层只多接受一个环境变量，既有环境变量/默认值顺序未变，向后兼容。
 - 旧数据（payload 下的库）在新版本下**不会**被自动读取或搬迁；受影响用户需等迁移版本（或手动复制）。
   这是有意的保守选择，已在上方写明后续方案的硬性要求。

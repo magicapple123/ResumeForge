@@ -12,8 +12,7 @@
 
 - 应用在**同一端口**可访问（默认 `http://127.0.0.1:8123`）：`start.cmd` 起的打包态、
   或 `cd backend && .venv/Scripts/python -m uvicorn app.main:app --port 8123` 都行。
-- `frontend/` 下已 `npm ci`——脚本用那里的 playwright，按脚本位置向上找
-  `frontend/package.json` 解析，不含任何机器绝对路径。
+- `frontend/` 下已 `pnpm install --frozen-lockfile`（仓库已迁 pnpm，`npm ci` 会因缺 `package-lock.json` 直接失败）——脚本按脚本位置向上找 `frontend/package.json`，再从那里解析 `@playwright/test` 的 `chromium`（`playwright` 不是直接依赖，pnpm 的严格 node_modules 布局下解析不到），不含任何机器绝对路径。
 
 ## ⚠️ 数据警告（先读这段）
 

@@ -32,7 +32,8 @@ const apiErrors = {
   // ── errorGuidance.ts：失败面统一的「原因 / 建议 / 编号」──
   "apiErrors.guidance.format": "原因：{reason} · 建议：{action} · 编号：{ref}",
   "apiErrors.guidance.unknownReason": "发生未知错误",
-  "apiErrors.guidance.retryDiagnostics": "重试；若反复出现，请导出诊断包反馈",
+  "apiErrors.guidance.retryDiagnostics":
+    "重试；若反复出现，请在 设置 → 更新与帮助 → 帮助与诊断 点「导出诊断包」反馈",
   "apiErrors.guidance.timeoutReason": "请求等待超时",
   "apiErrors.guidance.timeoutAction": "请重试；数据量大的导出/生成可稍后再试或调小范围",
   "apiErrors.guidance.networkReason": "无法连接后端服务",
@@ -48,7 +49,8 @@ const apiErrors = {
   "apiErrors.guidance.tooLargeReason": "请求体过大",
   "apiErrors.guidance.tooLargeAction": "请减小上传文件体积后重试",
   "apiErrors.guidance.serverReason": "服务器内部错误",
-  "apiErrors.guidance.retryWithRef": "重试；若反复出现，请导出诊断包并附上编号反馈",
+  "apiErrors.guidance.retryWithRef":
+    "重试；若反复出现，请在 设置 → 更新与帮助 → 帮助与诊断 点「导出诊断包」并附上编号反馈",
 } as const;
 
 export default apiErrors;

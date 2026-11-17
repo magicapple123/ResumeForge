@@ -75,7 +75,7 @@ const webFormPage = {
   "webFormPage.error.stopFailed": "关闭浏览器失败",
   "webFormPage.error.endFailed": "结束本次填写失败",
   "webFormPage.error.refreshFailed": "刷新浏览器状态失败",
-  "webFormPage.error.diagnosticsFailed": "导出诊断信息失败",
+  "webFormPage.error.diagnosticsFailed": "导出本页诊断失败",
   "webFormPage.error.liveToggleFailed": "切换点击填表失败",
   "webFormPage.error.readFailed": "读取表单失败",
   "webFormPage.error.fillFailed": "填充失败",
@@ -147,7 +147,7 @@ const webFormPage = {
   "webFormPage.browserCard.settings": "浏览器设置",
   "webFormPage.browserCard.refreshTooltip": "立即刷新状态",
   "webFormPage.browserCard.refreshAria": "刷新状态",
-  "webFormPage.browserCard.diagnostics": "导出诊断（不含密钥）",
+  "webFormPage.browserCard.diagnostics": "导出本页诊断（不含密钥）",
   "webFormPage.browserCard.endTooltip":
     "结束这一次网申填写：收起面板、不清理资料，下次点「读取当前表单」重来",
   "webFormPage.browserCard.end": "结束本次填写",

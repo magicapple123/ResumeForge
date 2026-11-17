@@ -1,0 +1,393 @@
+{
+  "schema_version": 1,
+  "_doc": "文档生命周期登记表：docs/ 下每一篇 .md 都必须在这里有一行。status=current 必须与当前代码一致，超过复核窗口（tier A=90 天 / B=180 天）即报错；status=historical 表示过程记录，retire_by 到期必须处置（更新、归档到 docs-archive/ 或删除）；status=record 是不可变记录（ADR、实测快照），不设到期。docs/README.md 由本表生成，不要手改。判定与流程见 docs/maintenance.md「文档生命周期」。",
+  "tier_days": {
+    "A": 90,
+    "B": 180
+  },
+  "docs": [
+    {
+      "path": "docs/user-guide.md",
+      "title": "使用指南",
+      "status": "current",
+      "note": "面向用户的主文档；改设置页分组、卡片位置、界面文案都要回来对一遍",
+      "tier": "A",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "frontend/src/features/settings/",
+        "frontend/src/features/user-guide/",
+        "frontend/src/i18n/messages/"
+      ]
+    },
+    {
+      "path": "docs/upgrading.md",
+      "title": "升级与数据安全",
+      "status": "current",
+      "note": "升级路径与数据安全；三个更新器任一改动都要回看",
+      "tier": "A",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "scripts/Update-ResumeForge.ps1",
+        "scripts/macos/update.sh",
+        "scripts/linux/update.sh"
+      ]
+    },
+    {
+      "path": "docs/maintenance.md",
+      "title": "项目维护手册",
+      "status": "current",
+      "note": "维护手册；启动/打包脚本与迁移链变动的主要落点",
+      "tier": "A",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "scripts/",
+        "backend/migrations/"
+      ]
+    },
+    {
+      "path": "docs/operations.md",
+      "title": "运营手册（Operations Runbook）",
+      "status": "current",
+      "note": "发版与事故处置",
+      "tier": "A",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        ".github/workflows/release-assets.yml",
+        "scripts/Build-Release.ps1",
+        "scripts/Generate-Sbom.ps1"
+      ]
+    },
+    {
+      "path": "docs/ai-troubleshooting.md",
+      "title": "排障规则：把问题抛给任意 AI 时",
+      "status": "current",
+      "note": "把日志落点与进程识别口径写死，最容易随启动器改动漂移",
+      "tier": "A",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "scripts/Start-ResumeForge.ps1",
+        "scripts/ResumeForge.Process.ps1"
+      ]
+    },
+    {
+      "path": "docs/troubleshooting-stale-build.md",
+      "title": "\"改了没用\"排查树",
+      "status": "current",
+      "note": "「改了没用」的判定链",
+      "tier": "A",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "scripts/Start-ResumeForge.ps1"
+      ]
+    },
+    {
+      "path": "docs/mac-build-handoff.md",
+      "title": "macOS 桌面安装包构建任务书（给 macOS 上的 agent / 维护者）",
+      "status": "current",
+      "note": "macOS 打包交接",
+      "tier": "A",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "scripts/build-desktop-mac.sh",
+        "desktop/"
+      ]
+    },
+    {
+      "path": "docs/verification-playbook.md",
+      "title": "验证手册：怎样才算\"改好了\"",
+      "status": "current",
+      "note": "判绿口径；CI 作业与测试脚本变动要同步",
+      "tier": "A",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "scripts/tests/",
+        ".github/workflows/ci.yml"
+      ]
+    },
+    {
+      "path": "docs/architecture.md",
+      "title": "架构设计",
+      "status": "current",
+      "note": "架构总览。故意不登记覆盖路径：它描述全局，任何改动都相关，靠人工判断",
+      "tier": "B",
+      "last_reviewed": "2026-11-17"
+    },
+    {
+      "path": "docs/PROJECT_MAP.md",
+      "title": "项目导航图（Code Map）",
+      "status": "current",
+      "note": "菜单顺序与路由变了就要重排功能表",
+      "tier": "B",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "frontend/src/appRoutes.tsx",
+        "frontend/src/features/shell/navigationConfig.ts"
+      ]
+    },
+    {
+      "path": "docs/resume-document-model.md",
+      "title": "简历文档模型 v2（开发者说明）",
+      "status": "current",
+      "note": "文档模型字段；schema 一加字段这里就要跟",
+      "tier": "B",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "backend/app/schemas/resume_document.py",
+        "backend/app/schemas/resume_document_layout.py",
+        "backend/app/services/resume/document_catalog.py"
+      ]
+    },
+    {
+      "path": "docs/ui-copy-guide.md",
+      "title": "界面文案口径规范（项目长期约定）",
+      "status": "current",
+      "note": "界面文案规范；语言包与文案闸门变动的主要落点",
+      "tier": "B",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "frontend/src/i18n/messages/",
+        "frontend/src/features/qa/"
+      ]
+    },
+    {
+      "path": "docs/ui-copy-guide-en.md",
+      "title": "英文界面文案口径（English UI copy guide）",
+      "status": "current",
+      "note": "英文文案口径，与中文规范同批维护",
+      "tier": "B",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "frontend/src/i18n/messages/"
+      ]
+    },
+    {
+      "path": "docs/ui-quality.md",
+      "title": "界面与交互质量规范",
+      "status": "current",
+      "note": "2026-11-17 审查未逐条核对这份文档，首次复核时要补",
+      "tier": "B",
+      "last_reviewed": "2026-11-17"
+    },
+    {
+      "path": "docs/quality/resume-quality-standard.md",
+      "title": "简历质量规范（ResumeForge 本地版）",
+      "status": "current",
+      "note": "判据部分长期有效；实测证据各有日期，改渲染链要重跑",
+      "tier": "B",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "backend/app/services/pdf_exporter/",
+        "backend/app/services/resume/"
+      ]
+    },
+    {
+      "path": "docs/defect-patterns.md",
+      "title": "缺陷模式速查",
+      "status": "current",
+      "note": "缺陷模式库，按新增事故追加",
+      "tier": "B",
+      "last_reviewed": "2026-11-17"
+    },
+    {
+      "path": "docs/ai-collaboration-sop.md",
+      "title": "与 AI 协作的作业规程",
+      "status": "current",
+      "note": "协作规程；规则权威在 AGENTS.md，本文只写理由与仓库特有约束",
+      "tier": "B",
+      "last_reviewed": "2026-11-17"
+    },
+    {
+      "path": "docs/INTERVIEW_GUIDE.md",
+      "title": "讲给面试官听：ResumeForge 项目讲解指南",
+      "status": "current",
+      "note": "讲给面试官听；版本号、测试规模这类数字最容易过期",
+      "tier": "B",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "backend/app/config.py"
+      ]
+    },
+    {
+      "path": "docs/security-agent-checklist.md",
+      "title": "Agent 安全验收清单（ResumeForge）",
+      "status": "current",
+      "note": "工具面、路径与出网边界的验收清单",
+      "tier": "B",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "backend/app/services/assistant_tools/",
+        "backend/app/api/"
+      ]
+    },
+    {
+      "path": "docs/prompt-tuning.md",
+      "title": "Prompt 调参指南",
+      "status": "current",
+      "note": "提示词调参口径",
+      "tier": "B",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "backend/app/prompts"
+      ]
+    },
+    {
+      "path": "docs/desktop-supply-chain-audit.md",
+      "title": "桌面依赖供应链审计与豁免基线（2026-10-13，生产审计 PR-06）",
+      "status": "current",
+      "note": "豁免基线与现状注；依赖升级要回看",
+      "tier": "B",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "desktop/package.json",
+        "desktop/scripts/audit-baseline.json"
+      ]
+    },
+    {
+      "path": "docs/adr/README.md",
+      "title": "架构决策记录（ADR）索引",
+      "status": "current",
+      "note": "ADR 索引与状态词约定",
+      "tier": "B",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "docs/adr/"
+      ]
+    },
+    {
+      "path": "docs/templates/delivery-report.md",
+      "title": "交付报告模板",
+      "status": "current",
+      "note": "交付报告模板",
+      "tier": "B",
+      "last_reviewed": "2026-11-17"
+    },
+    {
+      "path": "docs/templates/task-brief.md",
+      "title": "任务书模板",
+      "status": "current",
+      "note": "任务书模板",
+      "tier": "B",
+      "last_reviewed": "2026-11-17"
+    },
+    {
+      "path": "docs/verification/responsive-20261023/README.md",
+      "title": "多分辨率适配 · 验证 harness",
+      "status": "current",
+      "note": "验证 harness 的用法；同目录 PLAN.md 是历史方案",
+      "tier": "B",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "docs/verification/responsive-20261023/capture.mjs"
+      ]
+    },
+    {
+      "path": "docs/README.md",
+      "title": "文档索引",
+      "status": "current",
+      "note": "本索引由 scripts/check_docs_registry.py 生成，不要手改",
+      "tier": "B",
+      "last_reviewed": "2026-11-17",
+      "pairs": [
+        "docs/doc-registry.json"
+      ]
+    },
+    {
+      "path": "docs/system_design.md",
+      "title": "增量批次系统设计（P0-1 ~ P0-8 / P1-1 ~ P1-2）",
+      "status": "historical",
+      "note": "2026-09 增量批次的系统设计；结构已被 2.0 取代",
+      "retire_by": "2027-03-31"
+    },
+    {
+      "path": "docs/job-search-agent-plan.md",
+      "title": "求职 Agent 化三步：跟进巡检 · 投递交付单 · 求职偏好档",
+      "status": "historical",
+      "note": "三步计划已实施（65760524），留作设计与验收记录",
+      "retire_by": "2027-06-30"
+    },
+    {
+      "path": "docs/job-search-agent-exec-prompt.md",
+      "title": "执行提示词：落实《求职 Agent 化三步》计划",
+      "status": "historical",
+      "note": "一次性执行提示词，任务已合入；不要再当作业单执行",
+      "retire_by": "2027-03-31"
+    },
+    {
+      "path": "docs/resumeforge-industry-benchmark-plan.md",
+      "title": "简历通跨行业与专业工作台优化计划",
+      "status": "historical",
+      "note": "跨行业工作计划，已拆成多个批次落地",
+      "retire_by": "2027-09-30"
+    },
+    {
+      "path": "docs/tech-debt-plan-2026-11-14.md",
+      "title": "ResumeForge 技术债核实与治理计划",
+      "status": "historical",
+      "note": "技术债施工记录；数字是 2026-11-14 快照",
+      "retire_by": "2027-06-30"
+    },
+    {
+      "path": "docs/agent-native-roadmap.md",
+      "title": "ResumeForge Agent 原生化建议",
+      "status": "historical",
+      "note": "2026-11-07 的架构建议，未作为路线图采纳",
+      "retire_by": "2027-06-30"
+    },
+    {
+      "path": "docs/verification/responsive-20261023/PLAN.md",
+      "title": "ResumeForge 多分辨率 / 系统缩放适配方案（2026-10-23）",
+      "status": "historical",
+      "note": "多分辨率适配方案；已落地，留作验收记录",
+      "retire_by": "2027-06-30"
+    },
+    {
+      "path": "docs/adr/ADR-0001-dataset-scope-proposal-execution.md",
+      "title": "ADR-0001: 写入提案的数据集身份贯穿与数据集切换的 prepare/commit/compensate",
+      "status": "record",
+      "note": "决策记录"
+    },
+    {
+      "path": "docs/adr/ADR-0002-trust-delivery-ledger.md",
+      "title": "ADR-0002：可信交付账本——revision / artifact / attempt 三态关联与幂等键",
+      "status": "record",
+      "note": "决策记录"
+    },
+    {
+      "path": "docs/adr/ADR-0003-backup-asset-manifest-and-storage-scope.md",
+      "title": "ADR-0003：备份包资产清单（per-dataset asset manifest）与存储统计作用域",
+      "status": "record",
+      "note": "决策记录"
+    },
+    {
+      "path": "docs/adr/ADR-0004-desktop-data-directory-policy.md",
+      "title": "ADR-0004: 桌面端五类路径的固定策略（程序目录 / 用户数据 / 日志 / 运行时 / 缓存）",
+      "status": "record",
+      "note": "决策记录"
+    },
+    {
+      "path": "docs/adr/ADR-0005-backup-restore-verify-before-publish.md",
+      "title": "ADR-0005：备份恢复「先验后发布」与附件防覆盖",
+      "status": "record",
+      "note": "决策记录"
+    },
+    {
+      "path": "docs/quality/template-quality-archive.md",
+      "title": "模板质量档案（ResumeForge 内置模板）",
+      "status": "record",
+      "note": "逐模板质量档案；评分与截图是 1.0.2 快照，页数已按 2.1.0 复核"
+    },
+    {
+      "path": "docs/quality/tagged-pdf-research-d12.md",
+      "title": "标签 PDF 能力研究（D12）",
+      "status": "record",
+      "note": "标签 PDF 调研；2026-11-17 复测结论不变"
+    },
+    {
+      "path": "docs/quality/workbench-performance-baseline.md",
+      "title": "制作台本地性能基线（W21 / plan §11）",
+      "status": "record",
+      "note": "单机性能实测快照；重测就新增一节，不改旧数字"
+    }
+  ],
+  "archived": []
+}

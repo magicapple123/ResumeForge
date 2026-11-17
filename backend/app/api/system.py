@@ -348,9 +348,12 @@ def _system_snapshot() -> dict:
 
 
 # 导出前预览的固定口径说明（RF-20）：用户在导出前要知道包里有什么、没有什么。
+# 与 `frontend/src/i18n/messages/zh-CN.settingsUi.ts` 的 `settingsUi.help.previewNote`
+# 逐字一致——界面按语言包取文，本常量只服务非界面消费者；两处由
+# `tests/test_diagnostics_preview_note.py` 钉住，改一处必须同批改另一处。
 _DIAGNOSTICS_PREVIEW_NOTE = (
-    "诊断包只包含脱敏运行事件、系统信息与近期后端日志尾部（疑似令牌已兜底抹除）；"
-    "不包含简历全文、表单填写值、Cookie 或提示词。"
+    "诊断包只包含脱敏运行事件、系统信息与近期后端日志（桌面壳启动时含桌面壳日志；"
+    "疑似令牌已兜底抹除）；不包含简历全文、表单填写值、Cookie 或提示词。"
 )
 # 预览里最多列出的类别数：事件名是有限的集合，20 个足够覆盖现有埋点。
 _PREVIEW_MAX_CATEGORIES = 20
@@ -397,6 +400,10 @@ def preview_diagnostics():
 @router.get("/diagnostics/export")
 def export_diagnostics():
     """导出脱敏诊断包（zip）：脱敏运行事件 + 系统信息 + 近期后端日志尾部。
+
+    由桌面壳拉起时还会带上 ``desktop-main.log`` / ``desktop-backend.log`` 两个成员
+    （各取尾部 400 行 / 256KB，过同一道脱敏闸，不带轮转文件）；未注入
+    ``RF_DESKTOP_LOG_DIR`` 时这两项为空，属正常——它不代表诊断包损坏。
 
     包里**没有**简历数据、密钥或数据库文件——它是给用户直接贴进反馈的，隐私边界
     与 /diagnostics 的脱敏事件保持同一档。日志尾部会再做一道疑似令牌的兜底脱敏。

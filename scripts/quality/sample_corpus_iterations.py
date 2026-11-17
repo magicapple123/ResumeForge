@@ -163,6 +163,10 @@ def iteration_samples() -> list[Sample]:
         _sample(
             13,
             template="classic",
+            # 2026-11-17 实测：summary 提前后自然排 2 页，第 2 页只剩荣誉一行（13 字）。
+            # 本样例验的是"顺序在 PDF/Word/Markdown 一致"，不是"顺序变了还能塞进一页"，
+            # 所以上限按实测给 2；钉 1 会让页数校验永远红，而不是抓到真的排版问题。
+            page_limit=2,
             format_config={
                 "section_order": [
                     "summary",

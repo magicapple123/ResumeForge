@@ -4,7 +4,7 @@
 
 ## 总体架构
 
-前后端分离：React（Vite + TypeScript + Ant Design）+ FastAPI（Python），本地 SQLite 存储，单用户本地部署。除用户主动配置的大模型 API 外，不依赖额外的数据库或业务服务。自动投递链路与网申填表链路额外通过**浏览器桥接层**驱动一个由应用自己拉起的专用浏览器访问招聘网站——**投递台（采集 / 投递）与网申填表是项目里仅有的两条会主动访问外部站点的链路**，两者都只在用户显式触发时运行。
+前后端分离：React（Vite + TypeScript + Ant Design）+ FastAPI（Python），本地 SQLite 存储，单用户本地部署。除用户主动配置的大模型 API 外，不依赖额外的数据库或业务服务。自动投递链路与网申填表链路额外通过**浏览器桥接层**驱动一个由应用自己拉起的专用浏览器访问招聘网站——**投递台（采集 / 投递）与网申填表是最主要的两条会主动访问外部站点的链路**；此外「岗位链接导入」会抓取用户给出的岗位页，助手的**联网检索与公司调研**在用户显式启用/触发时也会请求外部站点。这些链路都只在用户显式触发时运行。
 
 ```mermaid
 flowchart LR
@@ -74,11 +74,13 @@ backend/app/
 ├── database.py        # 数据库连接、会话与 SQLite 缺列补齐
 ├── database_compat.py  # 早期未版本化 SQLite 的兼容字段定义
 ├── database_migrations.py # Alembic 编排与 SQLite 升级前备份
-├── models/            # ORM 模型（profile/profile_definition/profile_entry/profile_group/profile_usage_snapshot/job/resume/setting/assistant/apply/claim/tracker/drill/referral/reminder/interview_experience/share_package/official）
+├── models/            # ORM 模型（49 个文件，一张表一个文件；多类同文件的例外见 assistant.py / material.py。
+│                      #   精确清单见 PROJECT_MAP.md，别在这里抄枚举——一加表就过期）
 ├── schemas/           # Pydantic 数据结构（前后端契约；resume_document.py 是 v2 简历文档模型）
-├── vocabulary/        # 领域词表层（11 个域模块，只依赖标准库；models 逐个 re-export，schemas 从这里取）
+├── vocabulary/        # 领域词表层（13 个域模块，只依赖标准库；models 逐个 re-export，schemas 从这里取）
 ├── api/               # 路由层：校验参数、编排服务、组装响应
-├── middleware/        # 请求关联 ID 与请求体大小限制
+├── middleware/        # request_context（请求 ID + 请求体大小限制）/ dataset_request（数据集租约）/
+│                      #   loopback_origin（跨站来源校验）
 ├── services/          # 业务层：核心逻辑，与框架解耦
 │   ├── resume/         # 简历域：生成/落地/一致性/版式/模板/写作增强/风险/建议/分享；文档模型 v2（catalog/converter/planner）
 │   ├── profile/        # 资料域：13 板块定义/条目/方案/消费快照/纸面投影（→ v2 items）/升级检测 + 读写/相关性/上下文/预算/照片/引用/匹配
@@ -89,15 +91,21 @@ backend/app/
 │   ├── apply/          # 采集与投递编排：apply_service / collector / task_runner
 │   ├── webform/        # 网申填表：engine 表单引擎（含 relaxed_kind 判类）/ service 填充与放宽执行 / data 字段目录与资料映射
 │   ├── browser/        # 浏览器桥接层：cdp_client + browser_manager + page_ready + network_capture
-│   ├── sites/          # 站点适配器层（写路径）：base + registry + boss（单站点实现）+ boss_network
-│   │                   #   / feeds 各招聘系统适配器 / probe 站源探测 / reconcile 完整性对账 / collector 编排
-│   │                   #   / generic 通用路径：dom 元素事件流 / jsonld 结构化数据 / recipe 结构签名配方
-│   │                   #     / induce 归纳与重放校验 / llm_extract 模型兜底 / memory 站点抽取记忆
+│   ├── sites/          # 站点适配器层（写路径）：base + registry + boss（当前唯一的站点实现）
+│   │                   #   + boss_*（搜索 / 筛选 / 翻页 / 网络订阅 / 投递）
 │   ├── llm/            # 大模型抽象（base + openai_compat + structured_output）
 │   ├── assistant_tools/ # 助手工具注册表与 handler（读/写项目数据）
 │   ├── profile_parser/  # 个人资料分区、条目、技能与边界解析
 │   ├── job_parser/      # 岗位文本字段、元数据、候选值与章节解析
 │   ├── search/          # 受限联网搜索聚合
+│   ├── rag/             # RAG 语义补召回（配置/索引/编码器/provider/预热，19 个文件）
+│   ├── career_scenarios/ # 职业场景与跨行业筛选兜底
+│   ├── external_resume*.py # 外部简历：文本抽取 + 条目化检查（只读快照，不进制作台）
+│   ├── agent_task_*.py   # 助手任务的状态机 / 事件 / 恢复（5 个分片）
+│   ├── followup_*.py     # 跟进巡检与决策
+│   ├── web_fetch/        # 只走 HTTP 的受控取页（助手联网、公司调研共用）
+│   ├── actions/          # 动作注册与执行
+│   ├── knowledge_rag.py  # 知识库检索适配
 │   ├── profile_text_parser.py # 个人资料解析兼容门面
 │   ├── job_text_parser.py     # 粘贴招聘文本解析兼容门面
 │   ├── jd_parser.py           # JD 规则解析兼容门面（技能标签/学历/年限）
@@ -223,7 +231,7 @@ flowchart LR
 2026-10-25 起「我的资料」改为**板块 + 方案 + 消费快照**三层（迁移 `0064_profile_groups`，只加表）：
 
 - **定义**：13 个内置板块与 106 个默认字段是**代码目录**（`services/profile/definition_catalog.py` 汇总
-  `catalog_basic/experience/research.py`，导入期自检 key/顺序/计数）；用户自建板块与自定义字段落
+  `catalog_basic.py` / `catalog_experience.py` / `catalog_research.py` 三段，导入期自检 key/顺序/计数）；用户自建板块与自定义字段落
   `profile_custom_section` / `profile_custom_field`，软删只改可见性、不删行。
 - **值**：条目在 `profile_entry`，`values` 是 `{field_id: text}` JSON——**缺键 = 本次未提交**（合并保存），
   显式空串才是清空；单例（`basic_info` / `summary`）由 CHECK 与部分唯一索引保证至多一条。
@@ -297,8 +305,9 @@ collapsed_override），投影响应**不得出现 collapsed**。
 
 回归：`test_profile_definition_catalog.py`、`test_profile_*_store.py`、`test_profile_scope_boundaries.py`、
 `test_profile_editor_schema.py`（编辑器视图：可见字段派生 / 自建板块名 / 创建冻结 / 旧快照降级）、
-`test_profile_group_projection.py`、`test_profile_group_paper_contract.py`、`test_profile_upgrade_status.py`、
-`test_profile_legacy_compat.py`、`test_migration_0064.py`。
+`test_profile_group_projection.py`、`test_profile_group_paper_contract.py`、
+`test_profile_groups_backup.py`（升级提示随新模型写入消失）、
+`test_profile_legacy_compat.py`、`test_baseline_schema.py`（2.0 单基线，替代 1.x 的 `test_migration_0064.py`）。
 
 ## 核心数据流：简历文档模型 v2（字段级，2026-10-30 起）
 
@@ -689,7 +698,7 @@ sequenceDiagram
 - 采集与投递共用一个**任务运行器**：`services/apply/task_runner.py` 只负责线程生命周期、控制信号与公共收尾，`task_apply.py` 执行逐岗位投递，`task_collect.py` 执行采集批次与样例记录，`task_config.py` 解析任务配置快照。依赖从运行器单向流向执行模块，执行模块不反向导入 `TaskRunner`，避免循环依赖；原私有方法与 monkeypatch 路径保留兼容包装。任务支持暂停 / 继续 / 停止与连续失败熔断，进度按逐岗位状态与「已处理 N/M」展示，**不产出任何百分比**。
 - **准入判断单源**：能投 / 需确认 / 不投只由 `models/apply.py` 的 `admission_of()` 一处判定，匹配分析与投递服务都复用它；前端只读后端返回的 `admission` / `requires_confirm`，**不再判一次**。
 - **匹配分析**（`services/job/job_match.py` + `prompts/job_match.md`）读取个人资料与简历，产出硬性条件、核心能力、加分项三类逐条结论，落在「已匹配 / 表达缺口 / 证据不足 / 真实缺口 / 待确认」五类上并给出建议。它回答「你够不够」，与只读招聘原文、回答「岗位要什么」的岗位需求解读是两条独立链路；结果随岗位持久化，作为投递准入依据。
-- **浏览器桥接层**：`services/browser/cdp_client.py` 只做 CDP 传输（HTTP + WebSocket），`browser_manager.py` 负责按用户选择的浏览器（自动 / Chrome / Edge / 自定义路径，**指定了就只找那一个、找不到不静默回退**）用**独立 `user-data-dir`** 拉起 / 关闭「投递专用浏览器」。Chrome 136+ 会静默忽略默认用户目录上的 `--remote-debugging-port`，因此**不能**去连用户日常浏览器，必须由应用自己拉起一个专用实例。**"在不在跑"看调试端口，不看进程句柄**：浏览器是独立进程，应用退出时**不会**去关它（登录态就持久化在专用目录里，下次启动直接沿用），应用一重启就没有它的句柄了——按句柄判断会把正在运行的窗口误报成"未启动"而拦住采集投递，且再点"启动浏览器"也救不回来（同一 `user-data-dir` 的第二次启动会被 Chromium **转交给已在运行的实例后立刻退出**，句柄依然是死的）。"归谁"是独立于"在不在跑"的另一个事实（`BrowserStatus.owned`）：`stop()` 只终止自己持有的句柄、**绝不按 PID 猜进程**，所以非本次运行拉起的窗口关不掉——界面据此禁用「关闭浏览器」并把原因**写在页面上**（禁用按钮不派发鼠标事件，挂在悬停提示里等于没写）。`page_ready.py` 是**页面就绪等待原语**：`Page.navigate` / 打开标签页只是让浏览器**开始**加载，返回时文档往往还是空的——必须在导航之后轮询到"目标选择器匹配到内容"再动手，否则会在空白文档上抓到空结果并把"什么都没做"伪装成"完成"。等待按调用方给的 `probe` / `is_ready` / `blocker` / `on_timeout` 回调运转，与站点无关、可离线测；轮询步经过 CDP 客户端（外层 `StopAwareCdpClient` 的停止检查点），因此可被用户点的"停止"打断。**超时是唯一的失败时限**：`readyState === 'complete'` 只说明文档与静态资源加载完，SPA（如 BOSS 直聘）的岗位卡片常在它**之后**才由 XHR 异步渲染，所以**不**拿 `readyState` 当"内容该出来了、再没有就是结构变化"的证据（否则首屏稍慢就会误报失败）；就绪只由"匹配到内容（或明确无结果）"判定，出现登录失效 / 验证码仍**立刻**失败，超时则按证据给出对应文案。
+- **浏览器桥接层**：`services/browser/cdp_client/`（`base.py` 传输契约 + `websocket_client.py`）只做 CDP 传输（HTTP + WebSocket），`browser_manager.py` 负责按用户选择的浏览器（自动 / Chrome / Edge / 自定义路径，**指定了就只找那一个、找不到不静默回退**）用**独立 `user-data-dir`** 拉起 / 关闭「投递专用浏览器」。Chrome 136+ 会静默忽略默认用户目录上的 `--remote-debugging-port`，因此**不能**去连用户日常浏览器，必须由应用自己拉起一个专用实例。**"在不在跑"看调试端口，不看进程句柄**：浏览器是独立进程，应用退出时**不会**去关它（登录态就持久化在专用目录里，下次启动直接沿用），应用一重启就没有它的句柄了——按句柄判断会把正在运行的窗口误报成"未启动"而拦住采集投递，且再点"启动浏览器"也救不回来（同一 `user-data-dir` 的第二次启动会被 Chromium **转交给已在运行的实例后立刻退出**，句柄依然是死的）。"归谁"是独立于"在不在跑"的另一个事实（`BrowserStatus.owned`）：`stop()` 只终止自己持有的句柄、**绝不按 PID 猜进程**，所以非本次运行拉起的窗口关不掉——界面据此禁用「关闭浏览器」并把原因**写在页面上**（禁用按钮不派发鼠标事件，挂在悬停提示里等于没写）。`page_ready.py` 是**页面就绪等待原语**：`Page.navigate` / 打开标签页只是让浏览器**开始**加载，返回时文档往往还是空的——必须在导航之后轮询到"目标选择器匹配到内容"再动手，否则会在空白文档上抓到空结果并把"什么都没做"伪装成"完成"。等待按调用方给的 `probe` / `is_ready` / `blocker` / `on_timeout` 回调运转，与站点无关、可离线测；轮询步经过 CDP 客户端（外层 `StopAwareCdpClient` 的停止检查点），因此可被用户点的"停止"打断。**超时是唯一的失败时限**：`readyState === 'complete'` 只说明文档与静态资源加载完，SPA（如 BOSS 直聘）的岗位卡片常在它**之后**才由 XHR 异步渲染，所以**不**拿 `readyState` 当"内容该出来了、再没有就是结构变化"的证据（否则首屏稍慢就会误报失败）；就绪只由"匹配到内容（或明确无结果）"判定，出现登录失效 / 验证码仍**立刻**失败，超时则按证据给出对应文案。
   两条来自真机联调的硬约束（各自都让整条链路静默失效过，见 `test_boss_page_probe.py`）：**就绪选择器不能含会被页面自身结构命中的宽松规则**——`a[href*="/job_detail/"]` 曾命中页头「职位搜索」导航项（`href` 恰为 `/job_detail/`，无 id、不以 `.html` 结尾），它比岗位卡片先渲染，导致就绪在 0.9s 就被判真、网络订阅窗口提前关闭，而 joblist 接口还没发出；现在要求岗位链接以 `.html` 结尾。**拦截判定必须看可见性**——站点把登录弹窗模板（`.sign-form` 等 6 个）与空态容器写在标记里且默认隐藏，`querySelector` 只看存在与否会让"每个详情页都要登录""每次搜索都没结果"，所以统一用 `shown()`（`getClientRects().length`）判定。
   **"这一页是不是目标页"的判据是"目标地址里的每个查询参数都在当前地址里取到相同的值"**（`same_target_page`），而不是"地址整串相等"。整串相等会被站点的地址规范化打穿——把 `/web/geek/job` 补参数、跳成 `/web/geek/jobs` 之后，**每一次正常导航都被判成"新文档还没接管"**，等满超时后报"页面没有切换到目标地址"，而页面其实早就好了（真实用户反馈就是这句）；反过来"只看路径"又太松：`?page=1` 与 `?page=2` 路径完全相同，会把"还停在上一页"认成"已到位"，翻页于是读到上一页的内容。带参数的比较正好卡在中间，两个方向都有回归测试钉住。
   另外，页面等待**失败不再直接终止采集**：失败先被记下来，由 `collect_search` 逐级降级（见下条）。
@@ -753,6 +762,23 @@ sequenceDiagram
 - **归一化只做不会误合并的事**：去空白、统一大小写、全角转半角。加"去掉「有限公司」后缀"之类的规则看着聪明，实际会把两家不同的公司合并到一起，而用户没法撤销一次错误合并。
 - **合并键有唯一约束兜底**：`UniqueConstraint(company_key, title_key)`——"漏斗只有一个口径"由结构保证，而不是只靠服务层的自觉。
 - **识别接口只算不写**：`/parse` 全程不提交任何事务（有测试断言预览后列表仍为空）。
+
+## 核心数据流：外部简历、公司调研与助手记忆（2026-11）
+
+- **外部简历**（前端 `/resumes/external`，`pages/ExternalResumesPage.tsx`）：用户上传 pdf / docx /
+  txt / md，服务在本地抽文本（`services/external_resumes.py` + `external_resume_analysis.py`），
+  存成**只读快照**（`models/external_resume.py`）——可预览、可做条目化文本检查，但**不可编辑、
+  不进制作台、不参与导出**。它与 `resume_record` 不是同一类对象：回收站里是独立一类
+  （`trash_registry` 的 `external_resume`），彻底删除只删记录、不删物理文件；可「用于面试」带进
+  模拟面试材料。
+- **公司调研**（前端 `/research`，`pages/CompanyResearchPage.tsx`）：两条出网路径并存——应用侧
+  检索产出资料卡片（官网 / 近期新闻 / 公司介绍），联网工具产出带编号引用的简报
+  （`services/job/company_research.py` / `company_research_store.py`），两路并发、互不阻塞；
+  结果落 `knowledge_entry`。这是除助手联网搜索之外第二类**只走 HTTP、不驱动浏览器**的受控出网。
+- **助手记忆与写入提案**：记忆是独立表（`assistant_memory` + `assistant_memory_event` 事件表，
+  `services/assistant/memory*.py`），写入走**提案审批**（`assistant_write_proposal`，带 TTL，
+  `services/assistant/proposal_approval.py`）——助手不会直接改项目数据；上下文压缩入口在
+  `api/assistant_compaction_api.py`。这三块共同决定"助手能记住什么、什么时候写项目数据"。
 
 ## 核心数据流：版面诊断与「自动一页」
 
@@ -1046,7 +1072,7 @@ flowchart LR
 | 离线分享包不带敏感信息         | 分享包由脱敏 HTML/PDF + 只读快照 + 评论回传文件 + 本地 token 组成，token 仅离线校验、不做在线鉴权；删除走回收站软删除、磁盘产物不清理 |
 | ATS 检测带免责                 | `ats_check` 只做格式 / JD 关键词覆盖 / 信息位置三类静态规则检查，**不连接、不模拟真实招聘系统**，结果仅供参考、不构成通过保证 |
 | 内推转化口径派生               | `referral.converted` 是迁移 0018 的历史占位列；真实口径由关联 `ApplicationTrack` 后置位派生（进入面试及以上才算转化），写入侧不接受 `converted`、读取侧覆盖，避免表里手算第二份口径 |
-| 回收站覆盖二十三类内容         | 岗位 / 备选岗位 / 简历 / 投递 / 台账 / 资料 / 会话 + 内推 / 提醒 / 面经 / 分享包 / 题库 / 复盘 / 知识库 / 网申填充 / 表达资产 / 术语表，以及 0064 起新增的方案 / 自建板块 / 自建字段 / 资料条目、0008 起新增的求职偏好，全部由 `trash.TRASH_SPECS` 注册表描述；新增一类只加一行，注册表驱动的 `live_only` / `trash_only` 让"哪张表用哪个列名"只写一次。**2.0 + 期二起是 23 类**：补充事实（`profile_fact`）这一类随整套模块下线一并移除，基线也不再创建对应表 |
+| 回收站覆盖二十四类内容         | 岗位 / 备选岗位 / 简历记录 / 外部简历 / 求职进度 / 投递记录 / 事实台账 / 求职偏好 / 资料 / 助手会话 / 面经 / 内推 / 提醒 / 分享包 / 题库 / 复盘 / 知识库 / 网申填充 / 表达资产 / 术语表 / 方案 / 自建板块 / 自建字段 / 资料条目，全部由 `trash.TRASH_SPECS`（定义在 `services/trash_registry.py`）注册表描述；新增一类只加一行，注册表驱动的 `live_only` / `trash_only` 让"哪张表用哪个列名"只写一次。补充事实（`profile_fact`）这一类随模块下线一并移除，基线也不再创建对应表 |
 | 方案不拥有数据 / 当前方案唯一       | 方案只记「名称 + 板块清单」，共享同一份 `profile_entry`；当前方案是单行状态表 + `CHECK(id = 1)`，默认方案由 CHECK 保证不可软删。这样"每个方案一份副本"与"无当前方案"在结构上就写不进库，不靠调用方自觉（R-17/R-24/R-25） |
 | 消费 DTO 与折叠态物理隔离       | 资料页编辑 DTO 含 hidden / collapsed_override；投影、生成、网申只吃 `ConsumedProfile`（类型里没有 collapsed）。否则"收起"迟早被某条取数链当成"不参与"，而它只该影响输入框展不展示（R-66/R-67） |
 | 1.x 资料不原地迁移、整包归档 | 1.x 旧库在首次启动时整包归档到 `legacy-archive/<时间戳>/`，2.0 用空库，**不搬数据、不回填**；2.0 基线仍建旧六表（空表、新界面不读、仍进备份），但**不建 `profile_fact` / `profile_fact_field_pref`**。不原地迁移是为了不改写用户历史，并且保住"回到 1.0.2 还能打开"的路（R-46/R-47/R-49） |
@@ -1152,8 +1178,9 @@ flowchart LR
     实时链路的接缝在 `live.LiveSession._on_focus`，模型调用跑在**单槽工作线程**
     （`_AiWorker`）里——`_on_focus` 在 350ms 一轮的轮询线程上，在那里同步等一次网络调用会
     把整个轮询卡死。结果回来要**比对 `seq`**，用户已经点到别的框就丢弃。
-    改 `runtime/_rf_listener.js` 里面板的形状（候选区、来源标记、定位）后**必须重跑
-    `python runtime/_splice_engine.py`**——`engine.py` 的脚本区是生成物，手改会被下次拼接覆盖。
+    改实时面板的形状（候选区、来源标记、定位）在 `services/webform/live_scripts.py` 与
+    `live_control_script.py`——注入脚本就是这两个模块里的**手写字符串常量**（用 `/* rf:live-* */`
+    标记定位），没有"改一份 JS 再跑拼接生成"的中间步骤，改完直接跑 `tests/test_webform_live*.py`。
 
 20. **扩展网申填表的历史记录**：新表在 `models/web_form_record.py`，读写在
     `services/webform/history.py`（照 `services/interview/interview_history.py` 的形状：
@@ -1320,9 +1347,11 @@ flowchart LR
 
 ## 测试策略
 
+> **关于迁移测试的文件名**：本节的 `test_migration_00NN.py` 是 1.x 的按号拆分；2.0 把迁移链收敛成单基线 `0001_baseline_v2` 后，这些文件多数已不存在，现行守卫是 `test_baseline_schema.py`（基线往返与表集合）与 `test_epoch_gate_matrix.py`（世代闸门）。看到 `test_migration_0011/0012/0014/0064` 这类名字时，请按此理解，不要去找同名文件。
+
 - 简历文档模型 v2 按层拆测试：`test_document_model.py` 钉住 v2 schema 的 normalize / 校验 / 长度 / 私密字段 / hidden 保留 / 重复 key；`test_document_converter.py` 逐分区 fixtures 钉住「文字不丢、条目数不变、位置符合映射、幂等」与转换报告字段；`test_document_plan.py` 钉住 head 三种布局、lead / trail 列装箱（1/2/3 列、equal/flow、gap=0、solo）、inline / text 板块、页眉联系方式换行与路径唯一性；`test_document_html.py` / `test_document_pdf.py` / `test_document_docx.py` / `test_document_markdown.py` 用文本对拍钉住四出口「同字段、同顺序」，以及 PDF 右对齐 / 分页 / 溢出、Word 制表位、Markdown 展平。旧 v1 分区渲染用例随 v1 渲染路径删除或改写为 v2 等价用例，golden 基线重建。
 
-- 资料板块 / 方案 / 当前方案按层拆测试：`test_profile_definition_catalog.py` 钉住 13 项与 106 个默认字段契约；`test_profile_*_store.py` 钉住定义/条目/方案/偏好的语义与上限；`test_profile_scope_boundaries.py` 钉住消费 DTO 无折叠态、hidden 与 collapsed 的差异、三链外全量读；`test_profile_group_projection.py` / `test_profile_group_paper_contract.py` / `test_profile_group_languages.py` 钉住纸面投影、自建板块与语言映射；`test_profile_upgrade_status.py` 钉住旧表探测与升级提示分支；`test_profile_legacy_compat.py` 钉住旧 /api/profile 适配；`test_migration_0064.py` 钉住只加表、旧表集合与内容不变、downgrade 可用。
+- 资料板块 / 方案 / 当前方案按层拆测试：`test_profile_definition_catalog.py` 钉住 13 项与 106 个默认字段契约；`test_profile_*_store.py` 钉住定义/条目/方案/偏好的语义与上限；`test_profile_scope_boundaries.py` 钉住消费 DTO 无折叠态、hidden 与 collapsed 的差异、三链外全量读；`test_profile_group_projection.py` / `test_profile_group_paper_contract.py` / `test_profile_group_languages.py` 钉住纸面投影、自建板块与语言映射；`test_profile_groups_backup.py` 钉住旧表探测与升级提示分支；`test_profile_legacy_compat.py` 钉住旧 /api/profile 适配；`test_baseline_schema.py` 钉住 2.0 基线只加表、表集合不变、downgrade 可用。
 - 后端核心业务（跨行业岗位文本/JD 解析、资料参考文件、岗位相关片段筛选、分级生成、照片校验与渲染、岗位解读、助手附件/历史/搜索摘要解析、导出、防虚构校验）有单元测试；模型链路使用模拟传输或假 Provider，默认不依赖真实网络。较长测试已按主题拆分为 `test_job_text_parser_edge_cases.py`、`test_job_text_parser_metadata.py`、`test_profile_text_parser_inference.py`、`test_assistant_search.py` 和 `test_resume_quality_retry.py`，岗位元数据/英文标题/分隔符规则与核心字段测试分别维护，便于定向回归。
 - 技能链路的测试按层拆开：`test_skill_archive.py` 只管解包与解析（zip bomb、路径穿越、加密成员、非法扩展名、成员数超限都要被拒），`test_assistant_skills.py` 管持久化、系统提示拼装与知识读取（含"知识文件里的注入指令被清洗掉"），`test_skills_api.py` 管 HTTP 面（类型白名单、覆盖更新、临时文件清理、`IMPORT_PATH` 与中间件豁免绑定）。
 - 图片识别同样分单元与接口两层：`test_extraction_images.py` 钉住锚点行为（字段必须出现在抄录里、发了图却无抄录即失败、文本+图片取并集、抄录截断不产生"字段截断"警告），`test_api_extraction_images.py` 钉住接口面（图片以 `image_url` parts 下发、伪造魔数与文本附件被拒、张数与体积上限、超出请求体上限由中间件 413 而服务端的合计校验仍是 422）。
@@ -1335,7 +1364,7 @@ flowchart LR
 - 版面诊断按层拆测试：`test_resume_layout.py` 钉住规则（状态边界、建议顺序、字号下限按绝对像素、阶梯只收紧不反弹、**版式默认值与模板文件逐项一致**），`test_resume_layout_api.py` 钉住接口面（溢出才给方案、`PATCH` 的三态语义、**导出与预览用同一份版式配置**），前端 `resumeLayoutMeasure.test.ts` 钉住测量（元素筛选、减去 padding、除以页数、测量期间摘掉 transform），`ResumeLayoutDiagnosisCard.test.tsx` 钉住「够放下就停」与「保存时原样回传版式参数」。
 - 求职进度按层拆测试：`test_tracker.py` 钉住核心规则（归一只做不会误合并的事、状态只能前进、拒信覆盖、同批折叠、合并不抹掉用户填过的字段、投递台回写不把进度打回去），`test_tracker_extract.py` 钉住解析与本地降级（缺公司或岗位就丢掉、「感谢投递」不会被读成面试、公司名取更完整的那一个），`test_tracker_api.py` 钉住 HTTP 面（固定路径不被 `/{id}` 吃掉、**预览不写库**、预览与执行一致、导出与筛选），`test_migration_0012.py` 钉住迁移的建表 / 唯一约束 / 幂等 / downgrade，`test_apply_task_runner.py` 里有一条钉住"投递成功会落一条进度记录"。
 - 事实台账按层拆测试：`test_claims.py` 钉住校验规则（已确认不得含占位符、枚举、日历日、建议规则的"该报才报"），`test_claims_api.py` 钉住 HTTP 面（固定路径不被 `/{id}` 吃掉、422/502、草拟的两条路径与"模型给未知承担程度时退回最保守取值"），`test_migration_0011.py` 钉住迁移的建表 / 幂等 / downgrade / 与模型常量的默认值一致，`test_resume_completeness.py` 钉住每个区块都被扫到与"不误报"，`test_claim_integration.py` 钉住两个接合点（台账为空时提示词逐字节不变、导出闸门与它的显式出路），`test_assistant_claim_tools.py` 钉住"助手改不了核实状态"。
-- 本批新增模块同样按层拆测试：`test_resume_writing.py` 钉住写作增强（STAR 改写注入 claim 事实边界、纯空白在 schema 层 422、未配置模型降级、提示词登记）；`test_match_scoring.py` 钉住参考分（五维加权、中性分、**不改变准入结论**）；`test_resume_diff.py` 钉住版本对比三态；`test_resume_risk.py` / `test_ats.py` 钉住质量合规与 ATS 免责；`test_watermark.py` 钉住水印后处理（HTML 转义、PDF 页数不变、空文本透传、不支持格式报错）；`test_share_package.py` 钉住离线分享包（脱敏快照、文件清单、token 校验、删除→回收站→恢复→再删→彻底删除闭环）；`test_referral.py` 钉住内推转化派生口径；`test_migration_0018.py` 钉住四张新表的建表 / 幂等 / downgrade。
+- 本批新增模块同样按层拆测试：`test_resume_writing.py` 钉住写作增强（STAR 改写注入 claim 事实边界、纯空白在 schema 层 422、未配置模型降级、提示词登记）；`test_match_scoring.py` 钉住参考分（五维加权、中性分、**不改变准入结论**）；`test_resume_diff.py` 钉住版本对比三态；`test_resume_risk.py` / `test_ats_check.py` 钉住质量合规与 ATS 免责；`test_watermark.py` 钉住水印后处理（HTML 转义、PDF 页数不变、空文本透传、不支持格式报错）；`test_share_package.py` 钉住离线分享包（脱敏快照、文件清单、token 校验、删除→回收站→恢复→再删→彻底删除闭环）；`test_referral.py` 钉住内推转化派生口径；`test_migration_0018.py` 钉住四张新表的建表 / 幂等 / downgrade。
 - RAG（默认关闭；v2 检索链路 + v3 真实 provider）按层拆测试：`test_rag_chunking.py` 钉住 chunk 身份与桥接（`canonical_item_hash` 对下游 item 的键序 / JSON 空白稳定、改值必变，主字段为空被过滤后 boost 仍命中正确条目，同条目跨 chunk 去重，自建板块主文本单源）；`test_rag_policy.py` 钉住白名单与 boost 范围（`llm_allowed` / private 过滤、`filter_by_job` 规则、boost 分区名单与 `profile_relevance._CONSUMED_VALUE_SECTIONS` 逐字一致、数据集 / 资料组同域、日志 7 字段白名单与脱敏）；`test_rag_hybrid.py` 钉住融合与作用域（融合分定点化与平局回落原顺序、加权向量分量截断负相似度、跨 chunk 去重、只改可 boost 分区、`selection_scope` 只在作用域内生效、关闭时 `prepare_selection_boost` 是 no-op、同输入两次融合一致）；`test_rag_query_expansion.py` 钉住 Phase 0（扩展词只进 `terms`、坏 JSON / 超时 / 空结果静默回退、缓存指纹失效）；`test_rag_guards.py` 钉住 2026-11-08 返工的关键性质（fake provider 默认被守卫且候选与关闭态逐字节相同、显式允许时才生效；请求预算超时回退并登记后台预热、预热幂等且第二次命中缓存；作用域只在候选构造段有效、`mark_selection_done()` 作用域外 no-op；两条入口的 runner 搬移不破坏 `create_provider` monkeypatch 锚点；SSE 入口首字节与 budget 证据）；`test_llm_embeddings.py` 钉住 provider 契约（前缀 / 归一化 / 维度 / 指纹、429 / 5xx / 坏 JSON / 超时 / 取消、fake 确定性）；v3 新增：`test_rag_embedding_settings.py`（持久化配置 / 掩码 / host 确认 / 清除后的停用语义）、`test_rag_settings_api.py`（`/status` 状态机、回环写保护、启用 / 关闭 / 清除时清索引）、`test_rag_local_assets.py`（清单与平台选择、sha256、下载状态机 / 取消、解包安全、运行时注入）、`test_rag_local_provider.py`（本地 provider 编码契约）、`test_rag_remote_provider.py`（25 条切片 / 401·429·5xx / 维度校验 / 404 文案）、`test_rag_endpoint_template.py`（模板字面替换、`response_path` 极简子集、8KB 模板 / 16MB 响应上限、渲染后 header 不泄漏）、`test_rag_remote_setup.py`（探测 / 模型列表 / 私网开关 / host 确认）、`test_rag_v3_backup.py`（权重运行时 `RUNTIME_ONLY` 不进备份）。集成与备份用例（冻结快照后切组不漂移、数据集 A 不命中 B、只失效改动的那条、`filter_by_job=True` 自建板块可被 boost 召回而 `False` 顺序不变、`selected_counts` / `entry_names` / `fallback_sections` 语义不失真、无向量结构时仍可导出 / 导入 / 启动）见 T3-D 交付的 `test_rag_integration.py` / `test_rag_backup.py`。
 - 网申填表按层拆测试，**并且刻意补上旧实现缺失的那类覆盖**：`test_webform_matching.py` 穷举取值决策（占位项永不选、别名、多候选判 `ambiguous` 不猜、日期只有年份时拒绝、`至今` 不算日期），`test_webform_engine.py` 钉住控件识别、负向词挡住"紧急联系人姓名"、`file` 控件永不被映射，以及**对着真实缺陷的回归守卫**（`select` 必须用 `HTMLSelectElement` 的 setter 而不是 `HTMLInputElement` 的；`test_webform_engine_*` 另外钉住「只填不点」——下拉 / 单选 / 复选 / 日期控件一律进 `skipped`、显式填充那条路照常能写），`test_webform_data.py` 钉住"取最高学历而不是第一条"，`test_webform_service.py` 钉住冲突项默认不勾选与快照过期语义，`test_webform_api.py` 钉住 HTTP 面。另有两条**机械守卫**把产品边界变成不变量：`test_webform_no_submit.py`（源码里出现 `.submit(` / `requestSubmit` 即红；快照脚本必须跳过提交类控件）与 `test_stop_aware_client_forwarding.py`（反射 `CdpClient` 与 `WindowAwareMixin` 的每个公开方法，断言包装层都转发了——漏转发不报错，只会让该能力在生产里静默失效）。前端 `WebFormPage.test.tsx` 钉住「界面上不存在文案含『提交』的按钮」与「冲突行默认不勾选」。AI 兜底另有四层：`test_webform_ai.py` 钉住**提示词里不含任何资料值**、目录外的字段名被丢弃、`__none__` 与自相矛盾的答案怎么收敛、模型挂了要降级、语义缓存与配额、**一次抖动要重试而"都不像"不重试**；`test_webform_ai_guard.py` 钉住采纳前的共用否决（亲属 / 跨族）；`test_webform_live.py` 钉住触发条件（**只对真正认不出的问**）、**不阻塞轮询**、过期答案丢弃、`skip_reason` 优先于模型；`test_webform_js_canary.py` 在真浏览器里钉住面板**不盖住输入框、离它够近、跟得住页面重排**、拖动保留的是相对偏移、备选逐条可点，以及卸载要停掉重排定时器。另有**离线评测语料**把准确率变成数字：`tests/fixtures/webform/pages/*.json`（一 incident 一文件：真实页面的控件清单 + 人工确认的期望映射，`scripts/collect_webform_sample.py` 从真机采样并自动剥值），`test_webform_match_corpus.py` 跑分回归（**错填为零**、基线单调不可回退——只许变好），`scripts/webform_match_report.py` 出人读报告；执行侧对应 `fixtures/webform/execution/*.json` + `test_webform_execution_corpus.py` 与 `test_webform_engine_recovery.py`（按调用顺序应答的 `ScriptedCdpClient` 钉住重试阶梯：写几次、回读几次、有没有多余的点击）。新增真机 incident 的流程是**先落语料、再补单测**：没有 case 背书的规则不加。
 - 思考模式按层拆测试：`test_llm_thinking.py` 钉住形态解析、档位归一化（换模型后残留的档位不照发）、请求体片段与探测的四种判定（真的生效 / 被静默忽略 / 被上游拒绝 / 压根没跑起来）；`test_openai_compat.py` 与 `test_llm_anthropic.py` 各自钉住**默认关闭时请求体逐字节不变**与 400 降级重试；`test_api_settings.py` 钉住 `/llm/thinking/check` 的两种模式以及"测试连接不受思考设置影响"；`test_assistant.py` 钉住助手不继承设置页的开关；`test_custom_settings_actually_apply.py` 从保存配置一路断到真实请求体。

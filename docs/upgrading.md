@@ -185,7 +185,7 @@ git checkout <previous-stable-tag-or-commit>  # 例如已发布的 v0.1.0 标签
 
 将占位符替换为你要回滚到的实际稳定标签或提交；发布新版本时应为稳定版本创建 Git 标签（形如 `v0.3.0`）。版本号与 CHANGELOG 可以交给 `scripts/bump_version.py` 处理：它按自上一个 `v*` 标签以来的提交类型判定幅度，同步更新后端配置、前端 `package.json` 与 lockfile、README 与 CHANGELOG，但**不会替你提交或打标签**，改完会打印需要手动执行的命令。如果数据库已经执行了不可逆的迁移，必须先阅读对应 revision 的降级说明；不要把新版本数据库直接交给旧版本使用。
 
-改用回滚也可以走应用内：在 **设置 → 数据与导出 → 数据集** 里把之前导出的备份包导入为一份新数据集（只新增、
+改用回滚也可以走应用内：在 **设置 → 数据与存储 → 数据集** 里把之前导出的备份包导入为一份新数据集（只新增、
 不覆盖当前数据），确认内容无误后再切换过去。切换时会对该数据集补跑建表/补列/Alembic 迁移，
 所以导入一份来自旧版本的数据集也能正常使用（**仅限同一个 major 内**；1.x 的包在 2.0 会被直接拒收，
 见「从 1.x 到 2.0：整包归档 + 全新库」）。注意备份包记录着导出时的 Alembic revision，
@@ -208,10 +208,11 @@ git checkout <previous-stable-tag-or-commit>  # 例如已发布的 v0.1.0 标签
 `scripts/Build-Release.ps1` 是唯一推荐的出包方式：
 
 ```powershell
-# 发布时要出三个包（各带一份 .sha256）
+# 发布时要出四个包（all / windows / macos / linux，各带一份 .sha256）
 .\scripts\Build-Release.ps1 -Ref v0.16.0                       # 全平台 → ResumeForge-0.16.0-all.zip
 .\scripts\Build-Release.ps1 -Ref v0.16.0 -Platform windows     # 官网 Windows 按钮
 .\scripts\Build-Release.ps1 -Ref v0.16.0 -Platform macos       # 官网 macOS 按钮
+.\scripts\Build-Release.ps1 -Ref v0.16.0 -Platform linux       # 官网 Linux 按钮
 # 打包当前提交（本地试验）；输出目录默认是 <项目>\dist
 .\scripts\Build-Release.ps1 -OutputDirectory D:\tmp
 ```
@@ -226,9 +227,9 @@ macOS 桌面目标（dmg）仍未接线——electron-builder 的 mac 包需要�
 之后的独立事项。`Test-Build-Release.ps1` 通过 `-DesktopSetupPath` 钩子（仅测试用）在 CI 上
 验证整条注入 + 校验链路。
 
-三个包都要挂到 GitHub Release 上。**全平台包不是可选项**：已经装在 0.14.2 及更早版本上的
+四个包都要挂到 GitHub Release 上。**全平台包不是可选项**：已经装在 0.14.2 及更早版本上的
 用户，应用内更新跑的是他们本机那份旧代码，它按文件名排序取第一个 `.zip`——只有
-`ResumeForge-<版本>-all.zip` 排在 `-macos.zip` / `-windows.zip` 前面（`a` < `m` < `w`）。
+`ResumeForge-<版本>-all.zip` 排在 `-linux.zip` / `-macos.zip` / `-windows.zip` 前面（`a` < `l` < `m` < `w`）。
 少了它，那些用户点「重启并安装」必然下到 macOS 包、必然报「更新包缺少 start.cmd」。
 `Test-Build-Release.ps1` 把这条名字钉成了断言。
 

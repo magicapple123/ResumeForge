@@ -18,7 +18,7 @@ ResumeForge/
 │   ├── app/prompts/            提示词目录
 │   ├── app/templates/          Jinja 简历模板
 │   ├── migrations/versions/    Alembic 迁移链（2.0 只有单基线 0001_baseline_v2，
-│   │                           新增迁移接在它之后；改迁移前先 grep 旧 head 的字面量，见 §4.1）
+│   │                           其后已接 0002–0020；新增迁移接在 head 之后）
 │   ├── requirements.txt        顶层钉版来源（唯一手改处；生产链不直接装它）
 │   ├── requirements.runtime.lock.txt  ★ 生产安装唯一来源：逐包 SHA-256（§4.5）
 │   ├── requirements.lock.txt   开发锁：运行闭包 + 工具链（§4.5）
@@ -32,13 +32,15 @@ ResumeForge/
 │   ├── src/api/  src/types/    接口封装与类型
 │   ├── src/utils/  src/hooks/  纯工具与 hooks（测试与被测文件同目录）
 │   └── src/…*.test.tsx         前端测试（规模以 vitest 汇总行为准）
-├── scripts/                  启动与发布链
-│   ├── start.cmd / stop.cmd / update.cmd / uninstall.cmd     Windows 一键脚本
-│   ├── start.command / …      macOS 等价物（bash 3.2 方言）
-│   ├── scripts/macos/          macOS 启动链实现与自举常量
+├── start.cmd / stop.cmd / update.cmd / uninstall.cmd       Windows 一键入口（仓库根）
+├── start.command / …          macOS 等价物（bash 3.2 方言，仓库根）
+├── start.sh / stop.sh / update.sh                          Linux 等价物（仓库根）
+├── scripts/                  启动与发布链实现（ps1 / py，无 cmd）
+│   ├── Start-ResumeForge.ps1   Windows 启动器（被 start.cmd 调用）
+│   ├── macos/ linux/          两平台启动链实现与自举常量
 │   ├── Build-Release.ps1       发布包构建（白名单 + SHA256）
 │   ├── Build-Demo.ps1          在线体验构建
-│   └── bump_version.py         版本号统一（5 处）
+│   └── bump_version.py         版本号统一（6 处，不改锁文件）
 ├── docs/                     architecture / user-guide / PROJECT_MAP / 本文
 ├── runtime/demo/             演示数据与截图工具链
 ├── AGENTS.md                 ★ 所有协作代理的入口规则
@@ -102,6 +104,8 @@ ResumeForge/
 | 功能增删 | `README.md` 功能表（第一列逐字锁定）+ `docs/user-guide.md` |
 | 界面/流程 | `frontend/src/features/user-guide/userGuideSteps.ts` + `feature_catalog*.py`（门面 + 数据段，四方被测试钉着） |
 | 架构/模块 | `docs/architecture.md` / `docs/PROJECT_MAP.md` |
+| 新增 / 删除 / 归档一篇文档 | `docs/doc-registry.json` 加或改一行 → `--write-index`（见 §4.6） |
+| **改 `user-guide.md` 的小节标题** | `backend/tests/fixtures/assistant_docs_questions.json` 里该题的 `accepted_headings`（20 问标注集按标题命中）。切片行号不用改——由 `_doc_heading_line()` 按文件现算，不再写死数字 |
 
 ### ⑤ 提交
 
@@ -111,11 +115,11 @@ ResumeForge/
 
 ### ⑥ 发布
 
-1. `python scripts/bump_version.py`（5 处版本号一次同步；**项目已发布 1.0、现在 2.0，破坏性变更
+1. `python scripts/bump_version.py`（6 处版本号一次同步；**项目已发布 1.0、现在 2.0，破坏性变更
    显式 `--bump major`**——2.0 本身就是一次 major。`remove:` 前缀不推动版本号，
    删功能的发版别信自动判定）。
-2. `scripts/Build-Release.ps1`：**三个包**，`-Platform windows`、`-Platform macos`，以及
-   默认的 `-Platform all`（各带一份 `.sha256`，共 6 个资产）。
+2. `scripts/Build-Release.ps1`：**四个包**——`-Platform windows`、`-Platform macos`、`-Platform linux`，
+   以及默认的 `-Platform all`（各带一份 `.sha256`，共 8 个资产）。
    - Windows / macOS 两个包给官网的两个下载按钮；
    - **全平台包（`ResumeForge-<版本>-all.zip`）是必需的，别省。** 已经装在 0.14.2 及更早
      版本上的用户，应用内更新跑的是他们机器上那份旧代码——它按文件名排序取第一个 `.zip`，
@@ -139,7 +143,7 @@ ResumeForge/
 cd backend
 
 # 创建虚拟环境并安装运行依赖
-py -3 -m venv .venv
+py -3.13 -m venv .venv
 $env:PYTHONUTF8 = "1"
 # 装的是**生产锁**（逐包 SHA-256），与首次安装、发布包、CI 同一套闭包；别装 requirements.txt
 .venv\Scripts\python.exe -m pip install --require-hashes -r requirements.runtime.lock.txt
@@ -167,8 +171,10 @@ cd backend
 # 日常内循环：并行跑，快
 .venv\Scripts\python.exe -m pytest -n auto
 
-# 交付前：串行跑一次覆盖率（并行与覆盖率不能写在同一条命令里，否则统计不到子进程）
+# 交付前：串行跑一次覆盖率（与 §2 ③ 验证同一组命令；run → combine → report 三段缺一不可，
+# 少 combine 会拿到空/旧数据）。并行与覆盖率不能写在同一条命令里，否则统计不到子进程。
 .venv\Scripts\python.exe -m coverage run --rcfile=..\pyproject.toml -m pytest -q
+.venv\Scripts\python.exe -m coverage combine --keep
 .venv\Scripts\python.exe -m coverage report --rcfile=..\pyproject.toml --fail-under=80
 
 cd ../frontend
@@ -200,7 +206,7 @@ $env:SMOKE_FRONTEND_URL = "http://127.0.0.1:5173"; $env:SMOKE_BACKEND_URL = "htt
 pnpm run smoke                                   # 开发形态
 ```
 
-当前规模：后端与前端合计 **11,000+ 个测试用例**（后端约 7,100 个、前端约 4,700 个；后端覆盖率门槛 80%；确切数字以每次 CI 的汇总行为准）。GitHub Actions 在 Linux、Windows 与 macOS 上重复执行关键检查——macOS 那几个作业是刻意加的：它们会真下载便携运行时、从干净检出走完整启动链，并做浏览器冒烟，是 macOS 链路的持续把关；macOS 桌面安装包（dmg）自 v1.0.1 起同样由 CI 构建产出。
+当前规模：后端与前端合计约 **1.6 万个测试用例**（2026-11 口径：后端 828 个测试文件、pytest 全量约 1.0 万条；前端 883 个测试文件、约 6 千条；后端覆盖率门槛 80%；确切数字以每次 CI 的汇总行为准）。GitHub Actions 在 Linux、Windows 与 macOS 上重复执行关键检查——macOS 那几个作业是刻意加的：它们会真下载便携运行时、从干净检出走完整启动链，并做浏览器冒烟，是 macOS 链路的持续把关；macOS 桌面安装包（dmg）自 v1.0.1 起同样由 CI 构建产出。
 
 
 ## 3. 守卫与红线
@@ -210,15 +216,19 @@ pnpm run smoke                                   # 开发形态
 - **CI 作业**：Backend ×3（py311/313/win，含 ruff / pyright / 版本号核对 / 全量覆盖率）、
   Frontend（Node 22，测试带覆盖率门禁 + artifact）、Dependency audit（生产依赖阻断、
   开发依赖 advisory）、macOS ×3（launcher guards / portable runtimes / end-to-end，
-  e2e 末尾跑 Playwright 浏览器冒烟）、Windows end-to-end（同样以冒烟收尾）、
-  Windows portable runtimes。另有独立工作流：**CodeQL**（每周安全扫描）与
-  **Nightly**（全量回归 + flaky 标记）。
-  macOS 三件是**唯一的真机验证途径**，改了 macOS 侧要在交付说明里写明期望它们验证什么。
+  e2e 末尾跑 Playwright 浏览器冒烟）、Linux ×3（launcher guards / portable runtimes /
+  end-to-end）、Windows end-to-end（同样以冒烟收尾）、Windows portable runtimes、
+  Desktop shell ×2（`desktop-shell` 构建与打包校验 / `desktop-shell-smoke` 冒烟并断言
+  用户目录下的 `desktop-backend.log`）、`repo-hygiene`（仓库卫生）、`docs-guards`
+  （文档 PII 与链接）、`rag-runtime-matrix`（RAG 运行时矩阵）。另有独立工作流：
+  **CodeQL**（每周安全扫描）与 **Nightly**（全量回归 + flaky 标记）。
+  macOS / Linux 各三件是**真机（真 runner）验证途径**，改了任一平台的启动链要在交付说明里
+  写明期望它们验证什么。
   `windows-runtimes` 与 macOS 那个同名作业是镜像：**真的下载**启动器要用的便携版 Node
   与 Python 官方安装包并逐个校验 SHA-256，专抓"下载地址或摘要失效"——`windows-end-to-end`
   用的是 runner 自带的解释器，恰好把这条路径整个遮住，而"一台什么都没装的电脑"走的正是它。
 - **版本号单一事实来源**是 `backend/app/config.py` 的 `app_version`（发布链、更新器、
-  启动器都按同一条正则解析它）；发版用 `python scripts/bump_version.py` 同步 5 处，
+  启动器都按同一条正则解析它）；发版用 `python scripts/bump_version.py` 同步 6 处，
   `scripts/check_version_sync.py` 在 CI 核对 config.py 与 package.json 不漂移。
 - **后端静态检查双件套**：`ruff check .`（E/F/I/UP/B/SIM）与
   `python -m pyright`（basic，范围见 `backend/pyrightconfig.json`；2026-10-23 起覆盖
@@ -227,7 +237,7 @@ pnpm run smoke                                   # 开发形态
   真的取一次前端入口模块——"端口活着但页面一片空白"只有它们捕得到（2026-09-29 用户在虚拟机
   上解压新版本后只看到空白页，当时 Windows 侧没有这个作业）。改了启动链要跑它们。
 - **提交不写 AI trailer**；数据/密钥/简历不进 git。
-- 单一事实来源：`feature_catalog*.py`（功能清单：门面 + 三个数据段）、README 功能表、版本号 5 处、
+- 单一事实来源：`feature_catalog*.py`（功能清单：门面 + 三个数据段）、README 功能表、版本号 6 处、
   投递准入与状态白名单（各只有一份实现）。
 
 ## 4. 专项流程
@@ -235,16 +245,17 @@ pnpm run smoke                                   # 开发形态
 ### 4.1 数据库迁移
 
 1. 新迁移文件放 `backend/migrations/versions/`，链上 `down_revision`。**2.0 的迁移链只有一条基线
-   `0001_baseline_v2`**，新迁移一律接在它（或更新的 head）之后。
-2. **先 grep 旧版 head 的字面量**：`test_database.py`、`test_backup_apply_tables.py`、
-   `test_apply_migration_qa.py`、`test_assistant_search.py` 各钉一处，需同步更新。
+   `0001_baseline_v2`**（其后已接 0002–0020），新迁移一律接在它（或更新的 head）之后。
+2. **revision 字面量只允许出现在 `backend/tests/migration_refs.py`**（`BASELINE_REVISION` /
+   `head_revision()`）；测试一律引用它，不要自己写 `"0001_baseline_v2"`。改 head 时只需改这一处，
+   另有 `test_epoch_gate_matrix.py` / `test_manifest_revision.py` 从它派生。
 3. 约束：`upgrade`/`downgrade` 都要可用；**表/列不存在时跳过而不是报错**（迁移可能在"部分业务表"
    的库上被调用，例如导入候选库与测试夹具）；加表/加列类迁移要保证"旧备份仍可导入"（表集合前后一致）。
 4. 新增 `tests/test_migration_00XX.py` 钉住行为（2.0 基线本身的往返与 epoch 断言见
    `test_database.py`）。
 5. **减表类迁移**要额外验证"降级能把表按原样建回来"——列、索引、外键的 `ondelete` 都要与
-   建表那次逐字一致。`0025` 删官网采集遗留的三张表时就是这么做的（`sa.inspect` 比对
-   表名 / 列名 / 索引名集合）。
+   建表那次逐字一致。（历史先例：2.0 之前的 `0025` 删官网采集遗留的三张表时用 `sa.inspect`
+   比对表名 / 列名 / 索引名集合；该迁移已折进 `0001_baseline_v2`，只能当写法参考。）
 6. **单基线一旦随 2.0 发布就不得改写**：`0001_baseline_v2` 只代表"2.0 此刻的结构"，任何结构变化
    （加/删列、改类型、约束、数据回填）都只能**新增**迁移，不能编辑已发布的基线。启动闸门按
    `app_schema_epoch`（单行 `epoch=2`）判，不按 revision 判；epoch 升级必须同时新增迁移并把
@@ -261,8 +272,9 @@ pnpm run smoke                                   # 开发形态
 
 ### 4.3 界面截图与官网
 
-- 截图流水线：`scripts/seed_demo_data.py --check` → 起服务（8123/5199）→
-  `runtime/demo/tools/readme_capture.py`；视口 1728×1080。
+- 截图流水线：**仓库内没有截图脚本**（旧文档提到的 `runtime/demo/tools/readme_capture.py` 从未入库，
+  属作者本机工具）。现有图片是 `docs/images/` 下的静态资产；要更新时用示例数据集起服务
+  （`scripts/seed_demo_data.py --check` → 8123/5199），人工按 1728×1080 视口截取后覆盖同名文件。
 - 官网（`ResumeForge-official` 仓库）：三页 + `demo-app/`（iframe 内嵌）+ `download/`；
   改完必跑 `node tools/audit.js`；两个部署位置都要在 `demoBridge.ts` 的 `DEFAULT_PARENTS` 里。
 
@@ -272,14 +284,17 @@ pnpm run smoke                                   # 开发形态
   数据库做一致性快照到 `backend/data/auto-backups/`，按 `AUTO_BACKUP_KEEP`（默认 5）轮转；
   `AUTO_BACKUP_ENABLED=false` 整体关闭。标记文件按"上次尝试"节流，连续失败不会每次
   启动都重撞。
-- **更新前快照**：两条更新器在覆盖程序文件前先跑 `backend/scripts/create_user_data_snapshot.py`
-  ——复用「导出全部数据集」链路把数据库 + 按引用收集的附件 + 字体 + 全局模型配置打成一个 zip 整包
-  并用 `verify_archive` 校验（失败即中止更新，不再覆盖程序文件），随后仍把
-  `backend/data/*.db` + `datasets/*.db` 拷进 `backend/data/pre-update/` 作兜底（保留 3 份，连同
-  `-wal` / `-shm` / `-journal` 边车）。跨 major 的整包快照目录标 `pre-major-<时间戳>` 且永不被
-  轮转清理。
-  Windows 三条覆盖路径都在停应用之后（直接拷文件即一致快照）；macOS 优先用
-  `sqlite3 .backup` 在线快照。
+- **更新前快照**（三个更新器各不相同，别按同一口径描述）：
+  - **Windows**（`scripts/Update-ResumeForge.ps1`）：覆盖程序文件前先跑
+    `backend/scripts/create_user_data_snapshot.py`——复用「导出全部数据集」链路把数据库 + 按引用
+    收集的附件 + 字体 + 全局模型配置打成一个 zip 整包并用 `verify_archive` 校验（失败即中止更新，
+    不再覆盖程序文件），随后仍把 `backend/data/*.db` + `datasets/*.db` 拷进 `backend/data/pre-update/`
+    作兜底（保留 3 份，连同 `-wal` / `-shm` / `-journal` 边车）。跨 major 的整包快照目录标
+    `pre-major-<时间戳>` 且永不被轮转清理。
+  - **macOS**（`scripts/macos/update.sh`）：只做库级在线快照——优先 `sqlite3 .backup`（含各数据集
+    的 db），没有 `sqlite3` 时退回文件拷贝；不产生 zip 整包，也没有 `pre-major` 标记。
+  - **Linux**（`scripts/linux/update.sh`）：没有数据快照，只在覆盖前把**将被替换的程序文件**
+    复制到 `runtime/backup-<时间戳>/`（用户数据目录本身不覆盖）。
 - **文件日志**：`data/logs/backend.log`（5MB×5 滚动，`LOG_FILE_ENABLED` / `LOG_LEVEL`
   可调）；诊断包导出端点 `GET /api/system/diagnostics/export` 出包前对日志尾部做疑似
   令牌兜底脱敏。
@@ -346,6 +361,43 @@ PEP 508 标记（例如 uvloop 的 `sys_platform != 'win32'`）必须原样保�
 `rf_runtime_lock_path <backend>`（bash）都只做"backend 目录 + 文件名"，锁文件名常量本身不含
 目录前缀。两侧都有断言守着：这条错过一次（按"项目根"拼接，拼成 `backend/backend/...`），
 表现是首次安装直接死在"找不到锁"。
+
+### 4.6 文档生命周期
+
+文档漂移不是写作问题，是**没有生命周期**：没人知道一篇文档上次核实是什么时候、多久该再看、
+过期了归谁处置。所以 `docs/` 下每篇 `.md` 都在 [`doc-registry.json`](doc-registry.json) 登记一行，
+由 `scripts/check_docs_registry.py` 守着。索引页 [`README.md`](README.md) **由登记表生成，不要手改**。
+
+| 状态 | 含义 | 硬约束 | 到期后 |
+|---|---|---|---|
+| `current` | 必须与当前代码一致 | 有 `tier`：A=90 天 / B=180 天（按改动频率分档，用户照着操作的进 A，架构规范进 B） | 报错，逼着复核 |
+| `historical` | 过程记录，不保证与现状一致 | 开头前 15 行必须有 `> **历史…**` 横幅；有 `retire_by` | 报错，逼着处置 |
+| `record` | 不可变记录（ADR、实测快照） | 只增不改；被推翻的决策在原处留「后续修订」 | 不设到期 |
+
+**四条命令**（都只读，除了 `--review` 与 `--write-index`）：
+
+```bash
+python scripts/check_docs_registry.py                    # 全量校验：覆盖、时效、路径、索引
+python scripts/check_docs_registry.py --review docs/x.md  # 核实完登记「今天看过」
+python scripts/check_docs_registry.py --write-index       # 重新生成 docs/README.md
+python scripts/check_docs_registry.py --drift origin/main # 改了覆盖的代码但没改文档
+```
+
+**新增一篇文档**：写文件 → 登记表加一行（`status` / `tier` / `note`）→ `--write-index`。
+`note` 不是摘要，要写「这篇为什么还在、什么时候该回看」——半年后靠它判断该更新还是该归档。
+
+**归档（不是删除）**：移到 `docs-archive/`（**该目录不进 RAG 索引**，`assistant_docs` 只扫 `docs/`）→
+开头补 `> **历史…**` 横幅 → 登记表里从 `docs` 挪到 `archived`（写 `reason` 与 `replaced_by`）→
+`--write-index`。git 保留历史，读者拿到的是「这里有一条明确的路」而不是「404」。
+
+**漂移提醒怎么读**：`[DRIFT] docs/maintenance.md ← scripts/` 表示这次改动碰了该文档登记的
+`pairs`（覆盖路径），但没改文档。两条出口：① 回看并更新；② 在 PR 里写一句「为什么不用改」。
+它**只提醒、不阻断**——文档类检查一旦阻断，第一个 deadline 就会被加 `continue-on-error` 或删掉，
+那时连提醒都没有了。反过来，时效与索引是**硬失败**：它们不依赖判断，只依赖日期与一致性。
+
+判据取舍：能自动判的（存在性、一致性、日期）一律硬失败；需要人判断的（写得对不对、该不该留）
+只做提醒 + 到期强制决策。这也是为什么 `pairs` 只登记**主要落点**，不追求全覆盖——
+登记太细会让漂移提醒变成噪声，噪声一定被无视。
 
 ## 5. 本机环境已知坑（速查）
 

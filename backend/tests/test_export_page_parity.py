@@ -11,7 +11,7 @@ PDF/Word 读这个字段（``pdf_exporter/layout.py``），预览与 HTML 只认
 
 1. **一处旋钮、两条路径**：``page_padding`` 同时出现在导出的 HTML 与 PDF 里，且真的
    改变了 PDF 的正文起点（不是"参数传了但没人用"）；
-2. **``page_limit=1`` ⇒ 恰好 1 页**：8 个内置模板 × 4 档页边距，一个都不能例外——
+2. **``page_limit=1`` ⇒ 恰好 1 页**：内置模板全量（``RESUME_TEMPLATES``）× 4 档页边距，一个都不能例外——
    界面上"1 页"是对用户的承诺，服务端不许悄悄排成 2 页；
 3. **``page_limit=2`` ⇒ 不超过 2 页**；
 4. **标志不许说谎**：``X-Resume-Overflow`` 必须与 ``X-Resume-Pages-Needed`` /
@@ -45,7 +45,7 @@ from app.services.pdf_exporter import build_resume_pdf
 from app.services.resume.resume_template_catalog import RESUME_TEMPLATES
 from test_pdf_exporter import needs_font
 
-# 8 个内置模板（顺序即模板注册表顺序，新增模板会自动进入本文件的矩阵）。
+# 内置模板全量（顺序即模板注册表顺序，新增模板会自动进入本文件的矩阵；不写死条数，避免加模板时注释腐烂）。
 TEMPLATES = tuple(RESUME_TEMPLATES)
 # 11 是多数模板的默认页边距；18 是偏宽的一档；5 / 7 是极端窄档（面板下限 0）。
 PAGE_PADDINGS = (5, 7, 11, 18)

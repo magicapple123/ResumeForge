@@ -57,7 +57,7 @@
         "投投悬浮球：随时问助手"
       ],
       "answer_phrases": [
-        "设置 → 助手与 AI 行为 → 投投悬浮球"
+        "设置 → 外观与语言 → 投投悬浮球"
       ]
     },
     {
@@ -69,16 +69,16 @@
         "数据集：多份数据与备份"
       ],
       "answer_phrases": [
-        "设置 → 数据与导出 → 数据集"
+        "设置 → 数据与存储 → 数据集"
       ]
     },
     {
       "id": "Q06",
       "kind": "howto",
       "question": "网申填表怎么用？",
-      "expected_heading": "怎么用",
+      "expected_heading": "网申填表怎么用：启动 → 读取 → 核对 → 写入",
       "accepted_headings": [
-        "怎么用"
+        "网申填表怎么用：启动 → 读取 → 核对 → 写入"
       ],
       "expected_path_contains": [
         "6.5 网申填表"

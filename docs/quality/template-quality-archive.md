@@ -1,6 +1,6 @@
 # 模板质量档案（ResumeForge 内置模板）
 
-> **历史文档（2.0 已复核）**：本文是 1.0.2 时期（`380d5bed`）的模板质量归档、含已下线模板，评分与截图不作为 2.0 依据（2.0 可选 6 套，`technical` / `editorial` / `split` 已下线仍可渲染）。
+> **历史文档（评分与截图仍为 1.0.2；页数已按 2026-11-17 重测）**：本文是 1.0.2 时期（`380d5bed`）的模板质量归档、含已下线模板，**主观评分与截图**不作为 2.0 依据（2.0 可选 6 套，`technical` / `editorial` / `split` 已下线仍可渲染）。§4 的页数与"120/120 PASS"已于 2026-11-17 在 2.1.0 上重测（见 §4）。
 
 版本：v1 · 2026-10-24
 依据代码版本：`380d5bed` / `app_version 1.0.2`
@@ -23,7 +23,7 @@
 
 | 维度 | 事实 | 依据 |
 | --- | --- | --- |
-| 支持字段 | 页头 7 项（姓名/性别/出生年/电话/邮箱/城市/GitHub/个人主页/求职意向/照片）+ 七个正文分区（教育/实习工作/项目/技能/校园/荣誉/总结） | `schemas/resume.py::ResumeContent`、`templates/_resume_sections.j2` |
+| 支持字段 | 页头 **15 项**（`document_catalog.HEADER_FIELDS`：姓名/性别/求职意向/电话/邮箱/城市/出生年/GitHub/个人主页/照片/目标城市/作品集/政治面貌/驾照/到岗时间）+ **13 个板块**（`definition_catalog.BUILTIN_SECTION_KEYS`）——本表其余行的"七个分区"是 1.0.2 口径 | `schemas/resume.py::ResumeContent`、`templates/_resume_sections.j2` |
 | 页数 | 1–3 页（`MAX_RESUME_PAGES = 3`）；按真实版式排一遍，超限**截断**并标 `overflow`，**不缩字号** | `pdf_exporter/fit.py::build_resume_pdf`、`test_export_page_parity.py` |
 | 导出格式 | html / pdf / docx / md / txt / json 六种，统一从 `export_pipeline.FORMAT_RENDERERS` 出口 | `services/export_pipeline.py` |
 | PDF 字体 | 单一家族（系统/用户选择的 CJK 字体；常规 + 粗体两个字面）。模板不改变字族 | `pdf_exporter/fonts.py` |
@@ -77,10 +77,12 @@
 - 版式：上下 16mm / 左右 18mm；行高 1.76；页头**居中**、**照片在左**；
   姓名与分区标题在 HTML 里用衬线栈（Songti/SimSun/Georgia）；技能标签居中。
 - 页数：§4 实测 **2 页**（standard 档，18mm 边距 + 大行高）。
-- 字体：**跨格式差异最大的一套**——HTML 的姓名/标题是衬线，但 PDF 只有一个 CJK 字族，
-  衬线只在 HTML 成立；`serif_heading` 只用于前端提示（`resume_template_catalog.py`），
-  PDF/Word 不消费它。
-- 导出格式：六种；Word 同样无衬线，且居中/照片在左通过制表位与浮动图片模拟。
+- 字体：**跨格式差异最大的一套**——HTML 的姓名/标题是衬线；PDF 只有**一个 CJK 字族**
+  （`pdf_exporter/fonts.py` 的 `FONT_FAMILY = "resume-cjk"`，从系统字体候选里挑第一个可用的，
+  macOS 上 PingFang 先于 Songti，所以衬线不保证），衬线只在 HTML 成立；`serif_heading` 只用于
+  前端提示（`resume_template_catalog.py`）。Word 侧字族由 `services/docx_fonts.py` 的 `DOCX_FONT`
+  决定，同样不等同 HTML。
+- 导出格式：六种；Word 的居中与"照片在左"通过制表位与浮动图片模拟，字体见 `DOCX_FONT`。
 - 验证证据：`test_pdf_exporter_header_align.py`、`test_photo_float_side_follows_the_template`、
   样例 `bound-068` / `iter-04`。
 
@@ -158,17 +160,25 @@
      见 D12 研究 §5。
 - 验证证据：`test_pdf_exporter_columns.py`（11 条）、样例 `bound-073` / `iter-18`。
 
-## 4. 实测页数总表（2026-10-24 首测，2026-10-25 复核；本机 SourceHanSansSC）
+## 4. 实测页数总表（2026-10-24 首测；2026-10-25 与 **2026-11-17** 两次复核）
 
 命令：`backend/.venv/Scripts/python.exe scripts/quality/generate_resume_samples.py check
 --json-out <tmp>/check-report.json`；页数取 `template-matrix` 样例的自然页数
 （`pages_needed`）。
 
 **测量条件**（结论只在这个条件下成立）：Windows 10.0.26200 本机、Python 3.12.2、
-PDF 字体 SourceHanSansSC（CFF 轮廓）、样例库 `CORPUS_VERSION=2026-10-24.1`、
-PDF 文本提取器 `pdftotext`、页数为服务端 PDF 的自然页数（未按 `page_limit` 截断）。
-2026-10-25 复核：`write` + `check` 均 exit 0，**120/120 份样例 PASS**（120 份全部
-由 pdftotext 提取，失败 0）；下表与 §3 各模板页数在复核中逐项一致。
+PDF 字体 Microsoft YaHei（2.1.0 轮；1.0.2 轮是 SourceHanSansSC CFF）、样例库
+`CORPUS_VERSION=2026-10-24.1`、PDF 文本提取器 `pdftotext`、页数为服务端 PDF 的
+自然页数（未按 `page_limit` 截断）。
+
+**2026-11-17 复核（app_version 2.1.0）**：`write` + `check` 均 exit 0，
+**120/120 份样例 PASS**（120 份全部由 pdftotext 提取，失败 0），下表的 9 个矩阵样例
+页数逐项与 1.0.2 一致。全量分布：**自然 1 页 75 份、2 页 42 份、3 页 3 份**，
+5 份故意超页样例按声明截断并标 `overflow`。
+
+> 与 2026-10-25 那轮（76 / 42 / 2）的差不是"排版变差了"：`iter-13`（自定义分区顺序，
+> summary 提前）现在自然排到 2 页，且**第 2 页只剩荣誉一行**——这是顺序改变带来的
+> 分页结果，已把该样例的 `page_limit` 从 1 调成 2 并在样例定义里写明原因。
 
 | 模板 | 样例 | 字号档 | 自然页数 | 样例 page_limit | 是否溢出 |
 | --- | --- | --- | --- | --- | --- |
@@ -182,8 +192,8 @@ PDF 文本提取器 `pdftotext`、页数为服务端 PDF 的自然页数（未�
 | editorial | bound-072 | standard | 2 | 2 | 否 |
 | split | bound-073 | small | 1 | 1 | 否 |
 
-（2026-10-24 全量 check 的 120 份里：自然 1 页 76 份、2 页 42 份、3 页 2 份；
-5 份故意超页样例按声明截断并标 overflow。2026-10-25 复核同样是 120/120。）
+（三轮分布：2026-10-24 首测 1 页 76 / 2 页 42 / 3 页 2；2026-10-25 复核同为 120/120；
+2026-11-17 在 2.1.0 上是 1 页 75 / 2 页 42 / 3 页 3。差异来自 `iter-13` 的页数，见上。）
 
 > **minimal 两处数字的对应关系**：上表 `bound-069` 是 **small 档**、自然 1 页；
 > §3.5 所写的 standard 档 2 页对应迭代样例 `iter-05`（page_limit=2），large 档
@@ -228,3 +238,4 @@ backend/.venv/Scripts/python.exe scripts/quality/repro_scholar_bullet_glyph.py
 | --- | --- | --- |
 | 2026-10-24 | v1 | 首版：九套模板（6 可见 + 3 下线）逐套档案 + 实测页数 + 已知差异（含 scholar「•」缺陷登记） |
 | 2026-10-25 | v1.1 | 修正 minimal 页数的档位/样例错配（§3.5 与 §4）：small=1 页（bound-069）、standard=2 页（iter-05）、large=2 页（iter-20）；补测量条件与 2026-10-25 120/120 复核结果 |
+| 2026-11-17 | v1.2 | 2.1.0 全量重测：120/120 PASS（1 页 75 / 2 页 42 / 3 页 3，5 份按声明溢出），9 个矩阵样例页数不变；`iter-13` 因 summary 提前自然排 2 页（第 2 页仅荣誉一行），样例 `page_limit` 同步改 2 |

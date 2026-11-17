@@ -10,9 +10,9 @@
 
 | 步骤 | 动作 | 自动化程度 |
 | --- | --- | --- |
-| ① 版本号 | 仓库根目录跑 `python scripts/bump_version.py`（按 Conventional Commits 判定幅度；破坏性变更显式传 `--bump`）。5 处版本号（backend config / frontend package.json + lock / README / CHANGELOG）由 `backend/tests/test_version_consistency.py` 钉住 | 脚本改文件，**提交与打 tag 由维护者手动执行**（脚本不 commit） |
+| ① 版本号 | 仓库根目录跑 `python scripts/bump_version.py`（按 Conventional Commits 判定幅度；破坏性变更显式传 `--bump`）。**6 处**版本号（backend `config.py` / `frontend/package.json` / `desktop/package.json` / `README.md` / `README.zh-CN.md` / `CHANGELOG`）一次同步，**锁文件不再跟着改**；其中 config ↔ frontend package.json 与两份 README 由 `backend/tests/test_version_consistency.py` 钉住 | 脚本改文件，**提交与打 tag 由维护者手动执行**（脚本不 commit） |
 | ② 全量验证 | 后端 `pytest -n auto`（日常，不看覆盖率）+ **交付前覆盖率三步**：`coverage run --rcfile=..\pyproject.toml -m pytest -q` → `coverage combine --keep` → `coverage report --rcfile=..\pyproject.toml --fail-under=80`；`pip check` + `ruff check`；前端 `pnpm run test` / `lint` / `typecheck` / `format:check` / `vite build`；macOS 启动链 `bash scripts/tests/test-macos-launcher.sh`、Windows `scripts/tests/Test-Start-ResumeForge.ps1`。**`--cov` 不能与 `-n auto` 同时用**：并行下覆盖率统计不到子进程，报出来的数字是错的 | 全部本地命令，CI 同样跑（三个 macOS 作业 + `windows-end-to-end`） |
-| ③ 构建 | `scripts/Build-Release.ps1 -Ref <tag> -Platform <all\|windows\|macos\|linux>`：`git archive` 打包受追踪文件 → 复开归档校验"必需文件都在、敏感文件绝不在、别的平台启动器已裁掉" → 产物 `dist/ResumeForge-<version>-<平台>.zip`（四份，`-all` 是合集）。**校验失败的归档会被脚本直接删除，不进入发布**；`scripts/tests/Test-Build-Release.ps1` 会真的把三个平台包各打一遍并从里面验启动器 | ✅ 打包与内容校验自动化 |
+| ③ 构建 | `scripts/Build-Release.ps1 -Ref <tag> -Platform <all\|windows\|macos\|linux>`：`git archive` 打包受追踪文件 → 复开归档校验"必需文件都在、敏感文件绝不在、别的平台启动器已裁掉" → 产物 `dist/ResumeForge-<version>-<平台>.zip`（四份，`-all` 是合集）。**校验失败的归档会被脚本直接删除，不进入发布**；`scripts/tests/Test-Build-Release.ps1` 会真的把四个平台包各打一遍并从里面验启动器 | ✅ 打包与内容校验自动化 |
 | ④ 依赖清单（SBOM 性质） | `scripts/Generate-Sbom.ps1`：pip-licenses 产出 `THIRD-PARTY-NOTICES.txt` 与 `requirements-frozen.txt` 到 `runtime/sbom/`，随 CI 依赖审计作业上传 | ✅ 生成自动化；**只是第三方许可与锁定清单，不是 CycloneDX/SPDX 格式 SBOM**——如需标准格式需另接工具，当前未做 |
 | ⑤ 校验和 | 每个资产都由 `release-assets.yml` 生成同名 `.sha256`（Windows 的哈希对**签名后**的文件计算）并随资产上传；把参考值写进发布说明这一步仍需人工 | ✅ 生成与上传自动化；**发布说明里公布参考值仍是手动** |
 | ⑥ 签名 | **Windows 安装包签名已接入 CI。** `release-assets.yml` 的 `windows-installer` 作业把 NSIS 安装包作为本次 run 的 artifact 上传，由 SignPath 校验来源（origin verification）后签名（SHA-256 Authenticode；RFC 3161 时间戳由 SignPath 侧的签名策略一并附加（工作流不传签名参数）；`Apply signed installer` 会打印 `TimeStamperCertificate`，2026-11-06 的演练实测为 `CN=DigiCert SHA256 RSA4096 Timestamp Responder 2026 1`），`.sha256` 对**签名后**的文件计算。macOS dmg **仍未签名、也未公证**（用户需右键→打开）；源码 zip 无代码签名、无 GPG 签名，tag 亦无签名，完整性只能依赖 ⑤ 的 checksum（见 §7 威胁模型备注）。签名政策见官网 `code-signing.html`（中英各一份） | ⚠️ Windows 已接入（test-signing 已跑通，run 42077336929；生产证书待 SignPath 签发，当前线上包仍为未签名）；其余仍无签名 |
@@ -63,7 +63,7 @@
 请用户提供诊断信息时，**按需索取、明确排除**——诊断包里绝不应出现密钥与完整简历。
 
 **可以收集**：
-- `runtime/backend.log` / `backend.stderr.log` 的**出错时间窗前后各 50 行**（不要全量日志）；
+- 壳层日志 `desktop-main.log` / `desktop-backend.log`（用户目录的 `runtime/logs/`：Windows `%LOCALAPPDATA%\ResumeForge\runtime\logs\`、macOS `~/Library/Application Support/ResumeForge/runtime/logs/`；安装目录 payload 下的 `runtime/logs` 是**空壳**，别去那里找）与后端日志 `data/logs/backend.log` 的**出错时间窗前后各 50 行**（不要全量日志）；手动启动链还会写 `runtime/backend.stderr.log`；
 - 后端启动横幅（版本号、数据目录、Alembic revision）；
 - `GET /api/stats/storage` 输出（只有体积与文件数，无内容）；
 - 操作系统版本、Python/Node 版本、启动方式（start.cmd / start.command / 手动）；
@@ -78,7 +78,7 @@
 
 ## 4. 备份恢复步骤
 
-对应 PR-15 之后的备份包格式：包内 `manifest.json` 带版本链、各表行数与附件清单（逐文件 SHA-256）。日常恢复用**应用内「设置 → 数据与导出 → 导入备份」**；以下是在应用打不开时的手动恢复流程。
+对应 PR-15 之后的备份包格式：包内 `manifest.json` 带版本链、各表行数与附件清单（逐文件 SHA-256）。日常恢复用**应用内「设置 → 数据与存储 → 导入备份」**；以下是在应用打不开时的手动恢复流程。
 
 **包形态与格式号（当前 `BACKUP_FORMAT_VERSION = 6`）**：单份数据集的包是平铺结构（`resume_forge.db` + `datasets/<id>.db` + `manifest.json`）——format 1 / 2 是早期单数据集包，**format 3 表示单数据集但含密钥**（大模型 API Key）。format 4 起「导出全部数据集」改成**嵌套整包**：外层 `manifest.json`（`format: 4`、`type: "collection"`）+ `README.txt` + `datasets/<id>.zip`，每个子 zip 就是一份完整的单数据集包，并在外层清单里登记 `sha256` 与 `size_bytes`；**format 5 额外带上 `global_llm.json`**（全局模型配置），**format 6 再加上字体**（自定义字体文件）。导入时逐份校验 SHA-256：坏一份只跳过那一份并在界面点名原因，其余照常恢复；至少一份成功即返回 200，全部失败才报错。**旧版本（≤1.0.2）会明确拒收 format 4 及更高格式**（提示先升级），format 1/2/3 的旧包仍可正常导入。**反过来，2.0 不导入 1.x 的备份包**：包内库没有 `app_schema_epoch` 会被直接拒收并提示用 ResumeForge 1.0.2 打开。外层 zip 不能再套第二层嵌套。
 

@@ -2,6 +2,13 @@
 %% ResumeForge 增量批次 · 关键调用时序
 %% 本文件含 5 张 sequenceDiagram，按 `%% ===== n. 标题 =====` 分隔（多数预览器只渲染第一张，
 %% 需要看其余时把对应段落单独粘进 Mermaid Live）。与 docs/system_design.md §1 一一对应。
+%%
+%% ⚠️ 历史快照（2026-09/10 增量批次）：与 2.0 现状**不一一对应**。
+%%   · 第 1 张（中栏改内容 → 右栏实时预览）整条链路已不存在：V1 制作台的
+%%     `Form.useWatch` 宿主、`ResumeDetailModal` 的 `PATCH /resumes/{id}`、`overlays.merge`
+%%     回灌都已换成 V2 的 `useWorkbenchV2Save` / `document_save` 条件写。
+%%   · 第 2 / 3 / 5 张（字体下载 / 取消 / 删除）的端点仍与 backend/app/api/font_builtin.py 一致。
+%%   现行结构以 docs/architecture.md 为准。
 
 %% ===== 1. P0-7 中栏改内容 → 右栏实时预览（只上行、不回灌） =====
 sequenceDiagram

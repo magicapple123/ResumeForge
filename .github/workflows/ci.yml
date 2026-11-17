@@ -1500,10 +1500,29 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # 漂移提醒要 diff PR 的 base，浅克隆拿不到那个对象。
+          # 本作业只跑几个只读脚本，多取历史是秒级代价。
+          fetch-depth: 0
 
       - name: Scan docs for credentials and personal data
         # 判定口径与豁免写法见 docs/verification-playbook.md 与脚本模块注释。
         run: python3 scripts/check_docs_pii.py
+
+      - name: Check document lifecycle (coverage / review window / index)
+        # 每篇文档都必须在 docs/doc-registry.json 登记；current 超复核窗口、
+        # historical 过处置截止日、索引与登记表不一致，都会在这里红。
+        # 判据与归档流程见 docs/maintenance.md「文档生命周期」。
+        run: python3 scripts/check_docs_registry.py --check-index
+
+      - name: Report doc drift (advisory, never blocks)
+        # 「改了它覆盖的代码但没改文档」只提醒、不阻断：文档类检查一旦阻断，
+        # 第一个 deadline 就会被加 continue-on-error 或被删掉（见维护手册同一节）。
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/check_docs_registry.py --drift "$BASE_SHA"
 
   # ===== RAG runtime matrix（语义检索本地运行时，任务书 v3 §3.1 / §6）=====
   # 4 个真实平台作业：Windows x64 / Linux x64 / Linux arm64 / macOS arm64

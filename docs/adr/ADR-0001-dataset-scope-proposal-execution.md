@@ -1,8 +1,9 @@
 # ADR-0001: 写入提案的数据集身份贯穿与数据集切换的 prepare/commit/compensate
 
 日期：2026-10-13（2026-10-13 生产审计 PR-02 / PR-03）
-状态：已采纳
-关联：`docs/architecture.md` §2.1（数据集身份契约）、RF-01（写入授权）、RF-03（切换作用域）
+状态：已采纳（Accepted）
+关联：`docs/architecture.md`「关键设计决策」「部署与安全边界」（数据集身份契约）、RF-01（写入授权）、RF-03（切换作用域）
+注：`architecture.md` 的章节号已随 2.0 重构调整，本 ADR 只按标题引用，不再写 `§x.y`。
 
 ## 背景
 
@@ -55,7 +56,7 @@ finally: db.close(); lease.release()
 提案创建时从 `ToolExecutionContext` 同时绑定 `dataset_id` 与 `dataset_generation`
 （`build_context` 已有该概念，直接复用）。approve / consume / GET 全部校验二元组：
 A→B→A 之后 id 相同但代次已前进，旧提案照样 409——"同 ID 不同库"不能串写。
-GET 对作用域外提案返回 409 而不是详情（不暴露其他作用域的内容）。
+GET 对作用域外提案返回 404 而不是详情（不暴露其他作用域的内容；同一数据集内 A→B→A 的过期提案仍由作用域校验返回 409，见 `api/assistant_proposals.py`）。
 
 ### 3. 数据集切换改为 prepare / commit / compensate（PR-03）
 
@@ -86,7 +87,7 @@ recover:  启动时校验指针与可用库一致性（lifespan 调 recover_star
 - 提案状态机新增 `unknown` 终态（前端把它当"执行失败"类展示即可，语义见上）。
 - `frozen_session_factory` 新增可选 `identity` 参数（缺省行为不变）。
 - `database` 新增 `adopt_engine`；`activate_dataset` 不再调用 `rebind`。
-- 无数据库迁移（generation 只存进程内存，与 RF-03 "重启归 1 是安全的"一致）。
+- 无新增数据库迁移（generation 只存进程内存，与 RF-03 "重启归 1 是安全的"一致；2.0 起该表结构已折进基线 `0001_baseline_v2`）。
 
 ## 测试
 

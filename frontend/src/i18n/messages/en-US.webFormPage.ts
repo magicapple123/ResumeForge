@@ -85,7 +85,7 @@ const webFormPage = {
   "webFormPage.error.stopFailed": "Could not close the browser",
   "webFormPage.error.endFailed": "Could not end this session",
   "webFormPage.error.refreshFailed": "Could not refresh the browser status",
-  "webFormPage.error.diagnosticsFailed": "Could not export the diagnostics",
+  "webFormPage.error.diagnosticsFailed": "Could not export this page's diagnostics",
   "webFormPage.error.liveToggleFailed": "Could not toggle click-to-fill",
   "webFormPage.error.readFailed": "Could not read the form",
   "webFormPage.error.fillFailed": "Fill failed",
@@ -164,7 +164,7 @@ const webFormPage = {
   "webFormPage.browserCard.settings": "Browser settings",
   "webFormPage.browserCard.refreshTooltip": "Refresh now",
   "webFormPage.browserCard.refreshAria": "Refresh status",
-  "webFormPage.browserCard.diagnostics": "Export diagnostics (no secrets)",
+  "webFormPage.browserCard.diagnostics": "Export this page's diagnostics (no secrets)",
   "webFormPage.browserCard.endTooltip":
     "End this web form session: the panel is put away and nothing is cleared. Click Read current form to start again",
   "webFormPage.browserCard.end": "End this session",

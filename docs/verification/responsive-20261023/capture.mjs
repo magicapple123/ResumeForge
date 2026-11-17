@@ -58,7 +58,9 @@ const DEFAULT_OUT = join(
   "after",
 );
 
-const { chromium } = require("playwright");
+// `playwright` 不是 frontend 的直接依赖：npm 时代靠扁平 hoist 能解析，迁 pnpm 后
+// node_modules 是严格布局，必须从 @playwright/test 取 chromium。
+const { chromium } = require("@playwright/test");
 const args = process.argv.slice(2);
 const argOf = (name, fallback) => {
   const index = args.indexOf(`--${name}`);

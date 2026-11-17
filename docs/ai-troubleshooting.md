@@ -50,7 +50,7 @@ ResumeForge/
 - 后端报错 / 启动失败 → `runtime/backend.stderr.log`（一键启动器会把尾部几行打到控制台）。
 - 前端构建 / 白屏 → `runtime/frontend.stderr.log`、`frontend/dist`。
 - 数据库位置与迁移 → `backend/data/`、`backend/migrations/`。
-- 用户数据备份 → `backend/data/backups/`（迁移前自动备份）、`scripts/backup_database.py`。
+- 用户数据备份 → `backend/data/backups/`（迁移前自动备份）、`backend/scripts/backup_database.py`。
 
 ## 3. 如何「动态发现功能」（核心）
 
@@ -67,9 +67,9 @@ ResumeForge/
 
 ## 4. 常见问题排查路径
 
-- **启动失败 / 端口占用**：看 `runtime/backend.stderr.log`（后端）或 `runtime/frontend.stderr.log`（前端）的最后几行。端口被占用时，用 `start.cmd -BackendPort <端口>`（或 `-FrontendPort`）换端口；启动器只结束自己记录并校验过的进程，不会误杀其他程序。
-- **依赖缺失 / venv**：后端依赖在 `backend/requirements.txt`（开发依赖 `requirements-dev.txt`），前端在 `frontend/package.json`（`pnpm install --frozen-lockfile` 安装）。虚拟环境在 `backend/.venv`。缺包先确认 venv 已激活 / 已用对 Python（3.11–3.13）。
-- **数据库结构与启动闸门**：2.0 的迁移链只有一条基线 `0001_baseline_v2`，闸门看单行表 `app_schema_epoch`（`epoch=2`）。启动时先读 epoch：**缺 epoch 表且库里有业务表 → 判为 pre-2.0 库**，整包归档到 `backend/data/legacy-archive/<时间戳>/` 后建空库（1.x 的数据**不会**搬进新库）；`epoch > 2` 拒绝启动；`epoch == 2` 才用 revision 判断是否在链上，有用户数据且有待应用 revision 时先在 `backend/data/backups/` 建一致性备份。不要在外部手工改库结构。
+- **启动失败 / 端口占用**：看 `runtime/backend.stderr.log`（后端）或 `runtime/frontend.stderr.log`（前端）的最后几行。端口被占用时，用 `start.cmd -BackendPort <端口>`（或 `-FrontendPort`）换端口；启动器**有记录时按记录**（进程 ID + 启动时间 + 命令行三重校验），**无记录时按端口 + 命令行特征 + 健康检查自报**识别是不是自己的进程——认不出来就报错让你手动处理，不会误杀其他程序。
+- **依赖缺失 / venv**：后端依赖清单在 `backend/requirements.txt`（开发 `requirements-dev.txt`），但**实际安装只认两份锁**——生产 `requirements.runtime.lock.txt`、开发 `requirements.lock.txt`，都带 `--require-hashes`（见 `docs/maintenance.md` §4.5）。前端在 `frontend/package.json`（`pnpm install --frozen-lockfile` 安装）。虚拟环境在 `backend/.venv`。缺包先确认 venv 已激活 / 已用对 Python（3.11–3.13）。
+- **数据库结构与启动闸门**：2.0 **只有一条基线** `0001_baseline_v2`（其后已接 0002–0020，别读成"只有一条迁移"），闸门看单行表 `app_schema_epoch`（`epoch=2`）。启动时先读 epoch：**缺 epoch 表且库里有业务表 → 判为 pre-2.0 库**，整包归档到 `backend/data/legacy-archive/<时间戳>/` 后建空库（1.x 的数据**不会**搬进新库）；`epoch > 2` 拒绝启动；`epoch == 2` 才用 revision 判断是否在链上，有用户数据且有待应用 revision 时先在 `backend/data/backups/` 建一致性备份。不要在外部手工改库结构。
 - **导出失败**：2.0 支持 7 种导出格式 —— PDF / Word / HTML / Markdown / 纯文本 / JSON / PNG。PDF 直出依赖系统中文字体（`RESUMEFORGE_PDF_FONT` 可覆盖），找不到字体会明确报错并保留浏览器打印作为替代；Word / HTML / Markdown / 纯文本 / JSON 为本地生成；**PNG 是前端做的补充格式**——把精确 PDF 的同一份字节逐页光栅化（`frontend/src/utils/pdfToPng.ts` + `pngExport.ts`，pdfjs + jszip 动态加载），单页出 `.png`、多页打成 zip，所以它继承 PDF 的篇幅截断（PDF 被裁到几页，图片就是几页）。篇幅上限对**除 JSON 外**的 6 种格式生效（JSON 是数据交付物，始终完整）。脱敏与分享包始终基于脱敏内容。
 - **前端白屏 / 构建**：`cd frontend && pnpm install --frozen-lockfile && pnpm run build`；生产部署需要 SPA history fallback 并把 `/api` 反代到后端，不能只复制 `dist` 后直接双击打开。
 - **pnpm 报 `ERR_PNPM_IGNORED_BUILDS`**：某个依赖带构建脚本（install / postinstall），pnpm 12 默认不执行、并且**直接让 install 失败**，报错里会点名那个包。修法：把包名加进**对应那棵树**的 `pnpm-workspace.yaml` 的 `allowBuilds`——注意它是**映射**（`包名: true`），写成数组会解析失败：

@@ -131,7 +131,7 @@ A second problem matters more: **generative models polish wording and also fabri
 | [📦 Export shape](https://magicapple123.github.io/ResumeForge-official/en/docs.html#export-forms) | The export dialog starts by choosing a **delivery pack** or **individual files**: a delivery pack wraps the chosen formats into one zip (optionally archiving the originals and a hash manifest), while individual files let you multi-select formats and **export them one by one** with a progress indicator showing how many are done, and when one fails it tells you how many already succeeded. Both share the same typography result and export configuration |
 | [📄 Multi-format export](https://magicapple123.github.io/ResumeForge-official/en/docs.html#export-formats) | PDF **downloads directly** (rendered on the server); Word / HTML / Markdown / txt / JSON all export; HTML / PDF / Word and Markdown with typography are **rendered from one and the same layout result on the server** — same fields, same order — and JSON emits the new document structure (including each item's paper placement and typography); watermarks and **one-click redaction** are supported. The preview toolbar can switch to **“Exact”**, which shows exactly the PDF the export engine lays out, point for point identical to the file you download; after configuring a watermark or redaction you can **preview the real artifact** before exporting. Past the page limit it **never shrinks the font size**: it truncates at the limit and says so |
 | [📦 Delivery pack export](https://magicapple123.github.io/ResumeForge-official/en/docs.html#export-archive) | “Export delivery pack” on the Resume detail: formats and naming rules, watermark / redaction, **a preview of the real artifact configuration**, savable as an export configuration; exports a zip plus a manifest (hashed item by item) and can archive the **delivery originals** (hashes and the font / render versions used, which you can inspect and delete) |
-| [💾 Save location](https://magicapple123.github.io/ResumeForge-official/en/docs.html#privacy-save) | Settings → the “Data & export” tab → the “Save location” card: by default exports only go to the browser's download directory, and once you pick a folder with the native picker, exports from the local front end **also land a copy there**; remote or cross-site exports are refused |
+| [💾 Save location](https://magicapple123.github.io/ResumeForge-official/en/docs.html#privacy-save) | Settings → the “Data & storage” tab → the “Save location” card: by default exports only go to the browser's download directory, and once you pick a folder with the native picker, exports from the local front end **also land a copy there**; remote or cross-site exports are refused |
 | [📦 Offline share pack](https://magicapple123.github.io/ResumeForge-official/en/docs.html#share) | Packs a redacted HTML / PDF plus a read-only snapshot and a comment-return file, and can be “read-only” or “commentable”; a commentable pack supports **annotations on objects**: import the returned `annotations.json` and mark each annotation resolved or ignored, and annotations whose object changed must be re-linked (annotations never enter any applying artifact) |
 | [🚀 Automatic apply desk](https://magicapple123.github.io/ResumeForge-official/en/docs.html#apply) | Collect automatically by keyword and city (site filters are carried over wholesale and it runs in the background); confirmed Jobs queue up and drive your local browser to apply, and **only Jobs whose source is inside a recruiting site are accepted** |
 | [📮 Submitted & delivery receipt](https://magicapple123.github.io/ResumeForge-official/en/docs.html#apply) | On a **successful** apply record, click “I've submitted”: it adds an “applied” tracker entry (an entry already further along is never downgraded), schedules a follow-up reminder 7 days out and freezes a delivery snapshot — repeated clicks create nothing new. The “delivery receipt” in the same drawer turns that snapshot into an **inspectable record**: which Resume version went out (title + content fingerprint), to whom, export artifact and page count, which fields were filled (exact URL match against Web form fill records; a miss shows as “unknown”), how many fact-ledger doubts remain and which manual steps are still missing. Three states, **waiting on you > has doubts > ready**; “the Resume changed after delivery” is shown as information only and never changes the state |
@@ -159,12 +159,12 @@ A second problem matters more: **generative models polish wording and also fabri
 | [🗒 Conversation management](https://magicapple123.github.io/ResumeForge-official/en/docs.html#assistant-sessions) | Rename, pin, favorite, group and archive conversations, and export them as Markdown or save them to the Material library |
 | [📌 Toutou clipboard](https://magicapple123.github.io/ResumeForge-official/en/docs.html#assistant-clipboard) | **Double-click the Toutou bubble** to open it: store snippets you paste repeatedly and copy them in one click; they only live in your local browser and are never uploaded (a single click still opens the assistant) |
 | [🏠 Home](https://magicapple123.github.io/ResumeForge-official/en/docs.html#home) | Quick entries in the order you use them, across 7 destinations; the upcoming-reminders card embeds a compact month calendar |
-| [🖱 Interface details](https://magicapple123.github.io/ResumeForge-official/en/docs.html#shortcuts) | Row actions collapse into “More actions”; lists and cards **open their detail view on a single click** (Enter works too); dates are picked from a calendar; **modules you do not use can be switched off in Settings → “Appearance & interaction” → “Interface and navigation”** (only the entry is hidden, no data is deleted, and Home and Settings always remain) |
+| [🖱 Interface details](https://magicapple123.github.io/ResumeForge-official/en/docs.html#shortcuts) | Row actions collapse into “More actions”; lists and cards **open their detail view on a single click** (Enter works too); dates are picked from a calendar; **modules you do not use can be switched off in Settings → “Appearance & language” → “Interface and navigation”** (only the entry is hidden, no data is deleted, and Home and Settings always remain) |
 | [🔍 Global search](https://magicapple123.github.io/ResumeForge-official/en/docs.html#search) | One box that searches Jobs, Resumes, referrals, reminders, interview notes, the Fact ledger, the Material library and Skills at once |
 | [📤 Outbound preview and usage](https://magicapple123.github.io/ResumeForge-official/en/docs.html#privacy-outbound) | Settings page: before you send Profile material to a model or another service, see **what is about to go out** (target service, categories of material, attachments, excluded fields, whether page text is fetched and the text itself); “Model usage” lists calls and tokens per task / model — **an unknown token count is never shown as 0**, and no cost is estimated without a configured price. The preview text exists in memory only and is never written to disk; usage can be broken down per task / model / dataset with **end reasons and retries**, and cost is only estimated when a unit price is configured |
 | [✅ Batch select and delete](https://magicapple123.github.io/ResumeForge-official/en/docs.html#shortcuts-batch) | Resume Center, assistant conversation history, past interviews, deep-dive history, calendar reminders, question bank history and Web form fill records all support **batch selection**: “Batch select” → tick → “Delete selected” with one confirmation (everything goes to the trash and can be restored) |
 | [🔄 Check and update](https://magicapple123.github.io/ResumeForge-official/en/docs.html#upgrade-check) | Settings can check for a new version and create, export and import datasets; a dataset backup **includes the model API key by default** (you can untick it; on Windows it is carried DPAPI-encrypted); **on Windows double-click `start.cmd` / `stop.cmd` / `update.cmd`, on macOS double-click `start.command` / `stop.command` / `update.command`** — all zero-dependency one-click scripts — and `uninstall.cmd` cleans up the local environment |
-| [♻️ Trash](https://magicapple123.github.io/ResumeForge-official/en/docs.html#trash) | 23 kinds of content go to the trash first and can be restored or destroyed in bulk; only a second confirmation really destroys anything. Since 2026-10 the four kinds “Plans / Custom Sections / Custom Fields / Profile entries” are included, and since 2026-11 “Job preferences” |
+| [♻️ Trash](https://magicapple123.github.io/ResumeForge-official/en/docs.html#trash) | 24 kinds of content go to the trash first and can be restored or destroyed in bulk; only a second confirmation really destroys anything. Since 2026-10 the four kinds “Plans / Custom Sections / Custom Fields / Profile entries” are included, and since 2026-11 “Job preferences” |
 | [🔑 Your key, your call](https://magicapple123.github.io/ResumeForge-official/en/docs.html#model-presets) | 16 built-in service presets (DeepSeek / Claude / Doubao / OpenAI / Ollama …) with model discovery, advanced parameters and a switchable API protocol |
 
 </details>
@@ -190,7 +190,7 @@ Supported: **Windows 10/11 (x64)**, **macOS 14+ (Apple Silicon native; Intel Mac
 
 ### Let an AI assistant install it
 
-If you would rather not pick a package yourself, hand the prompt below to **Codex, Claude Code, DeepSeek or another AI assistant that can run commands**: it detects the OS, picks the matching build, verifies it and starts the app. An archive you have already downloaded works too — give the assistant its path. 展开后整段复制，粘贴给助手即可。
+If you would rather not pick a package yourself, hand the prompt below to **Codex, Claude Code, DeepSeek or another AI assistant that can run commands**: it detects the OS, picks the matching build, verifies it and starts the app. An archive you have already downloaded works too — give the assistant its path. Expand it, copy the whole prompt and paste it to the assistant.
 
 <details>
 <summary><b>Copy this prompt (click to expand)</b></summary>
@@ -209,7 +209,7 @@ Work through the steps below and report the result of each one:
    macOS → ResumeForge-<version>-x64.dmg / -arm64.dmg (installer) or -macos.zip (portable)
 2. Download it and verify it against the matching .sha256 from the same page; stop and tell me if they differ.
 3. Install it in the default location, or unpack the portable archive to a sensible directory (tell me the path).
-4. Start it: the installer from the Start menu / Applications; the portable build via start.cmd (Windows) or start.command (macOS).
+4. Start it: the installer from the Start menu / Applications; the portable build via start.cmd (Windows), start.command (macOS) or `bash start.sh` (Linux).
 5. Confirm that http://127.0.0.1:8005 loads in the browser, then report the install path, version and checksum result.
 
 Note: the packages are unsigned, so Windows may warn about an unknown publisher and macOS may say it cannot verify the developer; right-click → Open allows it. Do not disable security software or change system security settings for this.
@@ -223,7 +223,7 @@ Note: the packages are unsigned, so Windows may warn about an unknown publisher 
 | --- | --- | --- |
 | Windows installer (`.exe`) | Start menu → “ResumeForge” | Closing the window sends it to the tray; choose “Exit” from the tray menu to quit completely |
 | macOS installer (`.dmg`) | Applications → “ResumeForge” | Same: closing the window leaves it in the menu bar — quit from there |
-| Portable archive / source | Double-click `start.cmd` (Windows) / `start.command` (macOS) | Double-click `stop.cmd` / `stop.command` |
+| Portable archive / source | Double-click `start.cmd` (Windows) / `start.command` (macOS) / `bash start.sh` (Linux) | Double-click `stop.cmd` / `stop.command` / `bash stop.sh` |
 
 **The desktop installers** open a native window with the back end built in: no shell commands and no address to remember.
 
@@ -254,7 +254,7 @@ The API protocol has three options: **OpenAI-compatible (Chat Completions, defau
 
 ### Configure voice transcription (optional)
 
-In **Settings → “Assistant & AI behavior” → “Voice transcription”**, fill in an OpenAI-compatible transcription service (OpenAI, Groq, SiliconFlow and the like; DeepSeek has no transcription capability, so configure a separate provider. Endpoint such as `https://api.openai.com/v1`, model such as `whisper-1`, and that service's API key). Then the assistant input, the mock-interview answer box and the interview-review follow-up box all support **dictation**: recognised text is **placed in the input first**, and you review (and may edit) it before sending it yourself — it is **never sent automatically**, and a follow-up is only filled in, never submitted. Limits per clip: 3 minutes for the assistant and the answer box, 1 minute for review follow-ups (audio over 10 MB is rejected too). **Audio is sent to the transcription provider you configured; the app does not store audio files.**
+In **Settings → “Voice & interview” → “Voice transcription”**, fill in an OpenAI-compatible transcription service (OpenAI, Groq, SiliconFlow and the like; DeepSeek has no transcription capability, so configure a separate provider. Endpoint such as `https://api.openai.com/v1`, model such as `whisper-1`, and that service's API key). Then the assistant input, the mock-interview answer box and the interview-review follow-up box all support **dictation**: recognised text is **placed in the input first**, and you review (and may edit) it before sending it yourself — it is **never sent automatically**, and a follow-up is only filled in, never submitted. Limits per clip: 3 minutes for the assistant and the answer box, 1 minute for review follow-ups (audio over 10 MB is rejected too). **Audio is sent to the transcription provider you configured; the app does not store audio files.**
 
 Mock interviews also have a **dedicated realtime voice-call view**: complete spoken answers are submitted automatically after endpoint detection, and the interviewer replies through the browser's built-in speech synthesis (available voices depend on the browser and operating system). An optional camera preview is off by default and stays local; it is not uploaded or recorded.
 
@@ -288,7 +288,7 @@ If you believe you have found a security problem, please follow [SECURITY.md](SE
 
 Jobs, Profile, Resumes, assistant history and model configuration are stored in `backend/data/resume_forge.db`; server environment variables are stored in `backend/.env`. Both are ignored by Git, so `git pull` never overwrites them.
 
-- **Backup**: **Settings → “Data & export” → Datasets → Export current dataset**. The package holds a full database snapshot of that dataset, its attachments, fonts and the global model configuration (**the model API key is included by default and you can untick it**) but no login state; on a new computer, “Import backup as new dataset” restores it — details in [docs/upgrading.md](docs/upgrading.md).
+- **Backup**: **Settings → “Data & storage” → Datasets → Export current dataset**. The package holds a full database snapshot of that dataset, its attachments, fonts and the global model configuration (**the model API key is included by default and you can untick it**) but no login state; on a new computer, “Import backup as new dataset” restores it — details in [docs/upgrading.md](docs/upgrading.md).
 - **Migrate between versions, not across them**: format 5 and later carry the global model configuration, format 6 and later also carry fonts; older versions (≤1.0.2) refuse the package and ask you to upgrade. **The other direction is limited too: 2.0 will not import a 1.x backup package** — a database inside the package without `app_schema_epoch` is refused outright, with a pointer to open it in ResumeForge 1.0.2; packages exported by 2.0 itself import normally.
 - **Delivery archive**: after the original Resume is deleted you can still find past deliveries by title, company, Job and source; what you download is a replayed snapshot and is not guaranteed to be byte-identical to the original file.
 - **One-click update**: double-click `update.cmd` on Windows or `update.command` on macOS; only program files are replaced, and `data/`, `.env` and `runtime/` stay as they are.
@@ -336,21 +336,21 @@ One Job can link several Resumes, and a Resume shows the Job it targets; the Res
 <details>
 <summary><b>Where do I see the “Tasks” card, and what does turning it off do?</b></summary>
 
-On the **Home** page (below the upcoming-reminders card and above the to-do card): waiting-for-approval first, then in progress, at most 3 in total; “Finished” is collapsed by default. “View steps” expands in place, one task at a time, and marks the current step. Task cards created when a reminder is due (titled “Prepare: …”) also appear here with a “From: reminder” badge. When there is nothing to show, the card is not rendered at all. The master switch is **Settings → “Assistant & AI behavior” → “Task cards”**: turning it off stops creating new cards and hides the card from Home, while existing records are kept and come back when you turn it on again.
+On the **Home** page (below the upcoming-reminders card and above the to-do card): waiting-for-approval first, then in progress, at most 3 in total; “Finished” is collapsed by default. “View steps” expands in place, one task at a time, and marks the current step. Task cards created when a reminder is due (titled “Prepare: …”) also appear here with a “From: reminder” badge. When there is nothing to show, the card is not rendered at all. The master switch is **Settings → “Memory & skills” → “Task cards”**: turning it off stops creating new cards and hides the card from Home, while existing records are kept and come back when you turn it on again.
 
 </details>
 
 <details>
 <summary><b>How does voice input work? Does it send anything automatically?</b></summary>
 
-First configure an OpenAI-compatible transcription service in **Settings → “Assistant & AI behavior” → “Voice transcription”** (endpoint / model / key). Then click the microphone in the assistant input, the mock-interview answer box or the review follow-up box: the recognised text only fills the input, and **you send it yourself** — nothing is submitted automatically. Audio goes to the provider you configured and the app does not store it; per-clip limit is 3 minutes (1 minute for follow-ups).
+First configure an OpenAI-compatible transcription service in **Settings → “Voice & interview” → “Voice transcription”** (endpoint / model / key). Then click the microphone in the assistant input, the mock-interview answer box or the review follow-up box: the recognised text only fills the input, and **you send it yourself** — nothing is submitted automatically. Audio goes to the provider you configured and the app does not store it; per-clip limit is 3 minutes (1 minute for follow-ups).
 
 </details>
 
 <details>
 <summary><b>Where is the data stored, and how do I move it to another computer?</b></summary>
 
-All of it in the local data directory: the main database is `backend/data/resume_forge.db` (the desktop build uses `%APPDATA%\ResumeForge\data`), and attachments, photos, custom fonts and backups sit in the same directory, with no third party involved. To move, use “Settings → Data & export → Export current dataset”, then “Import backup as new dataset” on the new machine; details in [Updating without losing data](#-updating-without-losing-data).
+All of it in the local data directory: the main database is `backend/data/resume_forge.db` (the desktop build uses `%APPDATA%\ResumeForge\data`), and attachments, photos, custom fonts and backups sit in the same directory, with no third party involved. To move, use “Settings → Data & storage → Export current dataset”, then “Import backup as new dataset” on the new machine; details in [Updating without losing data](#-updating-without-losing-data).
 
 </details>
 
@@ -418,7 +418,8 @@ End users should begin with the [user guide on the website](https://magicapple12
 
 | Document | Contents |
 | ---- | ---- |
-| [User guide](docs/user-guide.md) | Field reference, step-by-step instructions and privacy boundaries (the most complete document) |
+| [User guide](docs/user-guide.md) |
+| [Document index](docs/README.md) | **Start here**: which docs are current, which are only history, and how often each must be re-reviewed | Field reference, step-by-step instructions and privacy boundaries (the most complete document) |
 | [Project map](docs/PROJECT_MAP.md) | Index from a feature to its implementation |
 | [Architecture](docs/architecture.md) | Layering, data model, decision records, extension points |
 | [Agent-native roadmap](docs/agent-native-roadmap.md) | Existing foundations, phased roadmap, open-source frameworks and safety boundaries |
@@ -434,6 +435,13 @@ End users should begin with the [user guide on the website](https://magicapple12
 | [Collaboration SOP](docs/ai-collaboration-sop.md) | Task-brief skeleton, file ownership, hand-off and delivery-report structure |
 | [Defect patterns](docs/defect-patterns.md) | 31 recurring defect patterns: how to spot them, why they are missed, and how to guard them |
 | [Stale-build troubleshooting](docs/troubleshooting-stale-build.md) | The “my change did nothing” decision chain: process, artefact, cache, address family |
+| [Operations handbook](docs/operations.md) | Release, signing, SBOM, backup drills, performance and stress scripts |
+| [macOS build handoff](docs/mac-build-handoff.md) | End-to-end steps and a verification checklist for building the dmg on someone else's Mac |
+| [Security self-check list](docs/security-agent-checklist.md) | Line-by-line audit of the assistant tool surface, paths, logs and network boundaries |
+| [Quality specs](docs/quality/resume-quality-standard.md) | Acceptance criteria for Resume output (layout / content / export) plus three companion documents |
+| [Architecture decision records](docs/adr/README.md) | Index, status and 「2.0 re-review」 conclusions for the five ADRs |
+
+> Three **historical** documents are kept as process records, not as current state: `docs/system_design.md`, `docs/job-search-agent-plan.md`, `docs/tech-debt-plan-2026-11-14.md`.
 | [Task brief and report templates](docs/templates/) | Copy-ready skeletons for task briefs and delivery reports |
 | [Changelog](CHANGELOG.md) | What changed in every version |
 | [Contributing](CONTRIBUTING.md) | Development environment, commit conventions, testing requirements |

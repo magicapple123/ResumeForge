@@ -98,6 +98,7 @@
 | [🖼 简历照片](https://magicapple123.github.io/ResumeForge-official/docs.html#profile-photo) | 最多存 8 张，单击缩略图切换使用哪张；**留在本机，不发送给模型** |
 | [🧾 事实台账](https://magicapple123.github.io/ResumeForge-official/docs.html#claims-status) | 每条说法记下事实、表述、承担程度与边界；**只有「已确认」的参与生成**，未确认的显式避开 |
 | [📦 资料箱](https://magicapple123.github.io/ResumeForge-official/docs.html#materials) | 证书、作品、链接与笔记集中管理，可带附件，单击卡片查看详情；助手可读取引用 |
+| [🔍 扫描件识别](https://magicapple123.github.io/ResumeForge-official/docs.html#materials) | 没有文字层的扫描 PDF 与证书照片会先识别成文字再入库，不当“死重量”存着：在 **设置 → 外部连接 → 识别引擎** 里选 *自动*（配了 DeepSeek 密钥就走 OCR）、*只走 OCR*（没有密钥就明确失败，不偷偷把文件发去别处）或 *只走视觉*（**从不**发 OCR 请求）。带文字的 PDF 仍走本机 `pypdf`，一个字节都不出机器；OCR 逐页读取，长扫描件能看到**真实页码进度**，面板只提供“停止等待”——断开连接不会停止服务端识别，也照常计费 |
 | [📎 附件多格式](https://magicapple123.github.io/ResumeForge-official/docs.html#materials) | 资料箱 → 编辑 → **一个「添加附件」入口**收图片 / PDF / Word(docx) / txt / md / json / csv（`.doc` 提示先另存为 `.docx`）；图片「复制」得到图片可直接粘贴到聊天或文档，其它格式「复制」得到提取出的文字、「另存为」下载原文件；扫描件 PDF 提取不到文字时给警告，仍可只用来另存 |
 | [📁 文件副本库](https://magicapple123.github.io/ResumeForge-official/docs.html#materials-copies) | 资料箱「文件副本」页签集中查看所有存入文件的副本（图片 / PDF 可直接预览，其它类型可一键调用系统程序打开）；副本统一存本机应用数据目录并随数据集切换 / 迁移自动重建；助手可查询副本清单 |
 | [🖼 截图与文档识别](https://magicapple123.github.io/ResumeForge-official/docs.html#recognition-input) | 岗位与资料识别支持截图与 pdf / docx（Ctrl+V 贴图，最多 4 个、单个 ≤2 MB、合计 ≤5 MB），文字在本机提取；**识别结果先列成清单供校对，确认后才填入，识别中可随时取消** |
@@ -130,38 +131,40 @@
 | [📦 导出形式](https://magicapple123.github.io/ResumeForge-official/docs.html#export-forms) | 制作台导出弹窗顶部先选**交付包**或**单独文件**：交付包把所选格式打成一个 zip（可另存归档原件与哈希清单）；单独文件可多选格式**逐个导出**，进度显示已完成数量，某一项失败会说明已完成几个。两者共用同一份排版结果与导出配置 |
 | [📄 多格式导出](https://magicapple123.github.io/ResumeForge-official/docs.html#export-formats) | PDF **可直接下载**（服务端渲染）；Word / HTML / Markdown / txt / JSON 均可导出；带版面的 HTML / PDF / Word / Markdown **由服务端同一份排版结果渲染**——同字段、同顺序，JSON 输出新版文档结构（含每条内容的纸面位置与版式）；支持水印与**一键脱敏**。预览工具栏可切**「精确」**——那显示的就是导出引擎排出的同一份 PDF，与下载到的文件逐点相同；配置水印 / 脱敏后可先**预览真实产物**再导出。超出页数上限时**不自动缩字号**，按上限截断并如实提示 |
 | [📦 导出交付包](https://magicapple123.github.io/ResumeForge-official/docs.html#export-archive) | 简历详情「导出交付包」：格式与命名规则、水印 / 脱敏、**真实产物配置预览**，可保存为导出配置；成套导出 zip + manifest（逐项哈希），可选归档**交付原件**（哈希与字体 / 渲染版本清单，可查看与删除） |
-| [💾 保存位置](https://magicapple123.github.io/ResumeForge-official/docs.html#privacy-save) | 设置 → 「数据与导出」页签「保存位置」卡片：默认只存到浏览器默认下载目录，通过本机原生选择器选定文件夹后，本机前端导出简历会**同时落盘一份**到那里；远程/跨站导出会被拒绝 |
+| [💾 保存位置](https://magicapple123.github.io/ResumeForge-official/docs.html#privacy-save) | 设置 → 「数据与存储」页签「保存位置」卡片：默认只存到浏览器默认下载目录，通过本机原生选择器选定文件夹后，本机前端导出简历会**同时落盘一份**到那里；远程/跨站导出会被拒绝 |
 | [📦 离线分享包](https://magicapple123.github.io/ResumeForge-official/docs.html#share) | 打包成脱敏 HTML / PDF + 只读快照 + 评论回传文件，可选「只读 / 可评论」；可评论的包支持**对象批注**：导入回传的 `annotations.json` 后逐条标记已解决 / 忽略，对象变了的批注需重新关联（批注不进任何投递产物） |
 | [🚀 自动投递台](https://magicapple123.github.io/ResumeForge-official/docs.html#apply) | 按关键词 / 城市自动采集（站点筛选条件整条搬进来，后台跑）；确认过的岗位排队后驱动本机浏览器投递，**只接纳来源在招聘网站内的岗位** |
 | [📮 我已提交与交付单](https://magicapple123.github.io/ResumeForge-official/docs.html#apply) | 投递记录详情里对**成功**的记录点「我已提交」：补一条「已投递」进度（已到更后阶段不会被降级）、挂一条 7 天后的跟进提醒、冻结一份投递快照，重复点不重复建行；同一抽屉的「交付单」把已有快照读成**可验收单据**——投的是哪版简历（标题 + 内容指纹）、投给谁、导出产物与页数、填了哪些字段（按 URL 精确匹配网申填充记录，匹配不上标「未知」）、事实台账疑点数、距提交还差哪些人工步骤；三态 **卡在人手上 > 有疑点 > 可验收**，「投出后简历又改过」只提示、不改三态 |
 | [📝 网申填表](https://magicapple123.github.io/ResumeForge-official/docs.html#webform) | 用**独立专用浏览器**填写官网网申表单，输入网址可直接打开新标签页并管理网址记录，不覆盖已有网页；各页面可单独开关「点哪个填哪个」。整页读取后逐条核对再填充，或点输入框时在框旁确认建议；规则认不出的框可交给 AI 识别，**只发页面文字与字段名，不发资料值**。浏览器型号与投递台共用配置，但使用独立窗口；填充记录含真实值、只存本机。**只填不交**，密码与验证码永不自动填；**只往文本类控件里写值**——下拉、单选、复选、日期控件不代选，如实列成「需要你自己点选」；可另开**放宽模式**尝试文本标签/上下文匹配并代点下拉与弹层选项（见下一行）。填充完成展示**成功率**（成功填写数 / 页面可读框总数），可导出**不含简历值的脱敏诊断信息**，方便反馈认不出的字段 |
 | [🟢 放宽模式](https://magicapple123.github.io/ResumeForge-official/docs.html#webform-relaxed) | 「网申填表」的**可选例外，默认关闭**：显式开启后，会尝试用字段标签/上下文匹配未识别的文本框（含自定义字段），并代点下拉与弹层选项（**严格选项匹配 + 回读验证**）；放宽文本匹配中只靠弱上下文的低置信度候选默认不勾、需要你确认，重复经历仅在记录数与页面顺序可配对时补齐。同意 / 声明类勾选仍需逐条确认；日期选择器与文件上传不代做。求职助手没有开关它的工具，要开请到页面或设置里开。放宽匹配可能选错，填完请核对；弹层多值须全部命中才动手 |
 | [🧠 填表时学到的](https://magicapple123.github.io/ResumeForge-official/docs.html#webform-learned) | 填表时碰到**简历通里没有**的字段，**两个入口**都能记：批量模式填完弹一条汇总提示（**默认全勾、默认「通用」**，可取消其中几条）；「点哪个填哪个」模式里**每个框旁边**都有「记住这条」，**当场就能记**——**认得出但资料里没值的框也能记**（就地补上，不用跳去别的页面）。记住后下次遇到同一字段**自动预填**。每条可选档位：**通用**（换哪家公司都成立）/ **场景**（与投递渠道有关）/ **本次**（只记下来、下次不自动填，内推码这类一次性的值用它）。来源和档位在「网申资料」里随时可改可删——**AI 认出来的值单独标「AI 认的」**，因为它比规则更可能认错字段。**清单外的自定义字段**（如「导师姓名」「实验室」）也可参与网申填表：普通模式只接受唯一精确对应，开启放宽模式后可按标签/上下文匹配并标记低置信度；有歧义或安全否决时不猜，填后请核对。**落点只有「网申资料」**：简历资料字段永不会被学走（程序里没有能改简历资料的那段代码）；密码、验证码、他人信息走拦截，学不到。只存本机，**生成简历时不读** |
+| [🔓 登录状态](https://magicapple123.github.io/ResumeForge-official/docs.html#apply-login-status) | 投递浏览器、网申浏览器与门户 Cookie 是**三个独立登录**——一个过期不影响另两个，此前只有撞到登录墙才发现。每个来源一行，带**检查**、**重新登录**（真的打开那个浏览器的登录页；Cookie 行给一个粘贴框）与**全部检查**（串行——两个浏览器同时开抢焦点）。打开面板**只读缓存**：检查才会真的开浏览器，所以从不自动跑；读不到登录信号时写**未知**而不是误报“已过期”；同一来源 60 秒内不重复探测 |
 | [🎯 求职进度](https://magicapple123.github.io/ResumeForge-official/docs.html#tracker) | 一家公司一条记录走完「已投递 → 筛选中 → 测评 → 面试 → Offer」；粘邮件 / 截图识别进展，先预览再写入 |
 | [🗓 日历提醒](https://magicapple123.github.io/ResumeForge-official/docs.html#reminder) | 投递、面试、内推等日程可设提醒，按**紧急度分色**（已逾期 / 24 小时内 / 3 天内 / 更远），支持列表与月历 |
-| [🔔 跟进巡检](https://magicapple123.github.io/ResumeForge-official/docs.html#tracker) | 在 **设置 → 助手与 AI 行为 → 「任务卡」** 打开总开关（默认关闭）后，后台会检查「进行中且超过 7 天没有任何更新」的投递：超过 7 天、不超过 21 天生成一张**跟进清单卡**，超过 21 天生成一张**确认状态卡**（两桶互斥）；每张卡最多 5 家、同一类型同一周只生成一张；卡面只陈述「投出 N 天，期间没有记录到任何状态变化」，不替你判断对方是否回复；可逐家点「已联系 / 对方已回 / 不跟了」，**只记录决策、不改进度状态** |
+| [🔔 跟进巡检](https://magicapple123.github.io/ResumeForge-official/docs.html#tracker) | 在 **设置 → 记忆与技能 → 「任务卡」** 打开总开关（默认关闭）后，后台会检查「进行中且超过 7 天没有任何更新」的投递：超过 7 天、不超过 21 天生成一张**跟进清单卡**，超过 21 天生成一张**确认状态卡**（两桶互斥）；每张卡最多 5 家、同一类型同一周只生成一张；卡面只陈述「投出 N 天，期间没有记录到任何状态变化」，不替你判断对方是否回复；可逐家点「已联系 / 对方已回 / 不跟了」，**只记录决策、不改进度状态** |
 | [🤝 内推管理](https://magicapple123.github.io/ResumeForge-official/docs.html#referral) | 记录内推人、内推码与备注图片，按状态跟进并统计**内推转化率** |
 | [🧭 公司调研](https://magicapple123.github.io/ResumeForge-official/docs.html#research) | 填公司名（岗位名、招聘描述可选）后一次调研出两块结果：上半屏是搜索来的**资料卡片**（官网 / 近期新闻 / 公司介绍，标注站点与权威度），下半屏是**带引用编号的联网简报**，逐条可展开对照原文；两路分开发请求，**简报失败不吞掉卡片**（只写原因）；「深度调研」默认关闭（多轮深度搜索，按查询词条数计费），页面如实显示本次搜索次数与耗时 |
 | [📈 求职数据看板](https://magicapple123.github.io/ResumeForge-official/docs.html#analytics) | 四个主题：转化与卡点、时间与节奏、渠道与去向、简历与健康度；**每张图各自成块、各有标题与口径**；趋势可选近 1 / 3 / 6 月 |
 | [⭐ 收藏夹](https://magicapple123.github.io/ResumeForge-official/docs.html#jobs-favorites) | 分页集中查看收藏的岗位与简历，可跳详情或取消收藏 |
 | [🎤 模拟面试](https://magicapple123.github.io/ResumeForge-official/docs.html#interview) | 设定岗位、难度与面试官风格后逐轮作答，会点评追问；结束给维度评分与改进建议；**报告下方可继续追问或停止追问**（追问不占正式轮次）；材料可从记录选或导入文件（岗位侧吃 PDF / TXT，简历侧吃截图，解析失败给明确原因）；另有独立实时语音通话界面，支持语音作答、面试官语音朗读与可选本地摄像头预览 |
+| [🎙 实时语音通话](https://magicapple123.github.io/ResumeForge-official/docs.html#interview) | 全屏通话视图：面试官头像、呼吸波形、**当前问题与你的回答**，转写自动滚动（页面本身不滚）。说出的回答被转写后发送；**面试官由云端 TTS 朗读**（百炼 `qwen3-tts-flash`，默认 Cherry），逐句合成并预取下句，合成失败时**回落到浏览器语音并显示原因**，不会静默失败。九个参数（音色 / 语速 / 音量 / 停顿阈值 / 语气词后停顿 / 自动发送 / 打断灵敏度 / 单段最长 / 朗读开关）存在本机、即时生效、可重置；关掉自动发送时每段转写都落成**可编辑气泡**，能改、能重说（只限最新一段）或丢弃，已提交的回答也能**改完重问** |
 | [🎯 个性化题库](https://magicapple123.github.io/ResumeForge-official/docs.html#bank-questions) | 按岗位生成**基础 / 项目深挖 / 反问 HR** 三类题，可单题出参考答案；真实面试题可反推改简历 |
 | [🔎 面试深挖](https://magicapple123.github.io/ResumeForge-official/docs.html#drill) | 按台账逐条压力测试，**标准在你看到问题之前就定下**；用「已验证 / 部分验证 / 未验证 / 存在矛盾」代替分数 |
 | [🧠 面经知识库](https://magicapple123.github.io/ResumeForge-official/docs.html#bank-exp) | 沉淀真实面试经验（公司 / 岗位 / 题目 / 复盘），可检索，单击卡片查看全文 |
 | [📖 知识库](https://magicapple123.github.io/ResumeForge-official/docs.html#materials) | 面经总结、简历技巧、求职策略等成文内容，带分类标签与 Markdown 预览；助手可检索增改 |
 | [💬 AI 求职助手](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant) | 流式问答，可关联岗位 / 简历 / 资料与联网搜索；能查提醒、内推、面经、统计等，**只在明确要求时写数据**；回答前会拿到本地时间与星期（深夜提醒早点休息）；工具集覆盖投递失败诊断、查询版式、面经与内推录入；任意页面都可从「投投」悬浮球打开；侧栏与浮窗聊天记录分开保存，浮窗只展示联网和思考强度控制 |
-| [🎛 求职偏好](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant) | 设置 → 「助手与 AI 行为」→「求职偏好」：把反复交代的长期约束（岗位方向 / 城市 / 薪资底线 / 工作方式 / 用工形式 / 排除公司 / 排除行业 / 加班接受度 / 禁用词 / 篇幅 / 语气 / 可到岗时间 / 仅本次对话，共 13 类）记下来，不用每个新对话重说一遍。一条 = 一次确认的完整取值；助手说「已记住」不算数，必须由你在确认卡上点「以后都这样」或「只在这次对话」；每条可编辑、删除进回收站、撤销到上一版；**只约束助手行为，不会写进简历正文或事实台账** |
-| [🔓 助手放宽模式](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant-relaxed) | 设置 → 「助手与 AI 行为」页签「助手放宽模式」卡片：默认关；开启并**提前告知**后求职助手可读取完整资料（含姓名电话等敏感字段、网申填写值、历史对话），API 密钥等凭据任何模式下都不发送 |
+| [🎛 求职偏好](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant) | 设置 → 「助手行为」→「求职偏好」：把反复交代的长期约束（岗位方向 / 城市 / 薪资底线 / 工作方式 / 用工形式 / 排除公司 / 排除行业 / 加班接受度 / 禁用词 / 篇幅 / 语气 / 可到岗时间 / 仅本次对话，共 13 类）记下来，不用每个新对话重说一遍。一条 = 一次确认的完整取值；助手说「已记住」不算数，必须由你在确认卡上点「以后都这样」或「只在这次对话」；每条可编辑、删除进回收站、撤销到上一版；**只约束助手行为，不会写进简历正文或事实台账** |
+| [🔓 助手放宽模式](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant-relaxed) | 设置 → 「助手行为」页签「助手放宽模式」卡片：默认关；开启并**提前告知**后求职助手可读取完整资料（含姓名电话等敏感字段、网申填写值、历史对话），API 密钥等凭据任何模式下都不发送 |
 | [🧩 技能](https://magicapple123.github.io/ResumeForge-official/docs.html#skills) | 新建、导入、编辑技能（提示词 + 知识文件），在对话里启用后约束该对话的作答风格 |
 | [🗒 会话管理](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant-sessions) | 会话可重命名 / 置顶 / 收藏 / 分组 / 归档，可导出 Markdown 或存进资料箱 |
 | [📌 投投剪贴板](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant-clipboard) | **双击投投悬浮球**打开：把要反复粘贴的资料存成片段，一键复制；只存本机浏览器，不上传（单击悬浮球仍是打开助手） |
 | [🏠 首页](https://magicapple123.github.io/ResumeForge-official/docs.html#home) | 快捷入口按使用顺序组织成 7 个去处；近期提醒卡片内嵌紧凑月历 |
-| [🖱 界面细节](https://magicapple123.github.io/ResumeForge-official/docs.html#shortcuts) | 行操作收进「更多操作」；列表与卡片**单击即可查看详情**（Enter 同样可开）；日期改为日历选择；**侧栏里用不到的模块可在 设置 → 「外观与交互」→「界面与导航」里关掉**（只收入口，不删数据；首页、设置等始终保留） |
+| [🖱 界面细节](https://magicapple123.github.io/ResumeForge-official/docs.html#shortcuts) | 行操作收进「更多操作」；列表与卡片**单击即可查看详情**（Enter 同样可开）；日期改为日历选择；**侧栏里用不到的模块可在 设置 → 「外观与语言」→「界面与导航」里关掉**（只收入口，不删数据；首页、设置等始终保留） |
 | [🔍 全局搜索](https://magicapple123.github.io/ResumeForge-official/docs.html#search) | 一个框同时搜岗位、简历、内推、提醒、面经、台账、资料箱与技能 |
 | [📤 外发预览与用量](https://magicapple123.github.io/ResumeForge-official/docs.html#privacy-outbound) | 设置页：把资料发给模型或其它服务前，先看「这次要发什么」（目标服务、资料类别、附件、已排除字段、是否抓取正文以及正文本身）；「模型用量」按任务 / 模型列调用数与 token——**未知 token 不显示成 0**、未配置单价不估算费用。预览正文只存在内存、不落盘；用量可按任务 / 模型 / 数据集看**结束原因与重试**，费用只在配置单价时估算 |
 | [✅ 批量选择与批量删除](https://magicapple123.github.io/ResumeForge-official/docs.html#shortcuts-batch) | 简历中心、助手历史对话、历史面试、深挖历史、日历提醒、历史题库、网申填充记录等列表支持**批量选择**：「批量选择」→ 勾选 → 「删除所选」统一确认后删除（均进回收站可恢复） |
 | [🔄 检查与更新](https://magicapple123.github.io/ResumeForge-official/docs.html#upgrade-check) | 设置页可检查新版本、新建 / 导出 / 导入数据集；数据集备份**默认包含大模型 API Key**（可取消勾选；Windows 上以 DPAPI 加密形态随包）；**Windows 双击 `start.cmd` / `stop.cmd` / `update.cmd`，macOS 双击 `start.command` / `stop.command` / `update.command`，Linux 在项目根目录执行 `bash start.sh` / `stop.sh` / `update.sh`**，都是零依赖一键启动，`uninstall.cmd` 可清理本机环境 |
-| [♻️ 回收站](https://magicapple123.github.io/ResumeForge-official/docs.html#trash) | 23 类内容删除后先进回收站，可批量恢复或彻底删除；只有二次确认才真正销毁。2026-10 起新增「方案 / 自建板块 / 自建字段 / 资料条目」四类，2026-11 起新增「求职偏好」 |
+| [♻️ 回收站](https://magicapple123.github.io/ResumeForge-official/docs.html#trash) | 24 类内容删除后先进回收站，可批量恢复或彻底删除；只有二次确认才真正销毁。2026-10 起新增「方案 / 自建板块 / 自建字段 / 资料条目」四类，2026-11 起新增「求职偏好」 |
 | [🔑 你的 Key 你做主](https://magicapple123.github.io/ResumeForge-official/docs.html#model-presets) | 内置 22 个服务预设（DeepSeek / Claude / 豆包 / OpenAI / Ollama …），可取可用模型、调高级参数，并可切换接口协议 |
 
 </details>
@@ -206,7 +209,7 @@
    macOS → ResumeForge-<版本>-x64.dmg / -arm64.dmg（安装版）或 ResumeForge-<版本>-macos.zip（便携包）
 2. 下载该文件，并用同页提供的 .sha256 校验；不一致立即停止并告诉我。
 3. 安装到系统默认位置，或把便携包解压到合适目录（解压路径告诉我）。
-4. 启动应用：安装版从开始菜单 /「应用程序」打开；便携包运行 start.cmd（Windows）或 start.command（macOS）。
+4. 启动应用：安装版从开始菜单 /「应用程序」打开；便携包运行 start.cmd（Windows）、start.command（macOS）或 `bash start.sh`（Linux）。
 5. 确认浏览器打开 http://127.0.0.1:8005 且页面正常加载，最后报告安装路径、版本号与校验结果。
 
 注意：安装包未签名，Windows 可能提示「未知发布者」、macOS 可能提示「无法验证开发者」，需右键 →「打开」放行；不要为此关闭安全软件或修改系统安全设置。
@@ -220,7 +223,7 @@
 | --- | --- | --- |
 | Windows 安装版（`.exe`） | 开始菜单 →「简历通」 | 关闭窗口会收进托盘；右键托盘图标选「退出」才彻底退出 |
 | macOS 安装版（`.dmg`） | 「应用程序」→「简历通」 | 同上：关闭窗口后从菜单栏图标退出 |
-| 便携包 / 源码包 | 双击 `start.cmd`（Windows）/ `start.command`（macOS） | 双击 `stop.cmd` / `stop.command` |
+| 便携包 / 源码包 | 双击 `start.cmd`（Windows）/ `start.command`（macOS）/ `bash start.sh`（Linux） | 双击 `stop.cmd` / `stop.command` / `bash stop.sh` |
 
 **桌面安装版**是原生窗口，内置后端，不需要命令行，也不用记地址。
 
@@ -251,7 +254,7 @@ cd ResumeForge
 
 ### 配置语音转写（可选）
 
-在**设置 →「助手与 AI 行为」→「语音转写」**里填一个 OpenAI 兼容的转写服务（OpenAI、Groq、硅基流动等；DeepSeek 没有转写能力，要单独配一家。服务地址如 `https://api.openai.com/v1`、模型如 `whisper-1`、该服务的 API Key）后，助手输入框、模拟面试答题框与面试复盘「追问」输入框都可以**语音听写**：识别出的文字**先填进输入框**，你确认（可以改）后再自己发送，**不会自动发送**；追问同样只填不发、不提交。单段上限：助手与答题框 3 分钟、复盘追问 1 分钟（音频超过 10 MB 也会被拒）。**音频会发送到你配置的这个语音服务商，本应用不保存音频文件。**
+在**设置 →「语音与面试」→「语音转写」**里填一个 OpenAI 兼容的转写服务（OpenAI、Groq、硅基流动等；DeepSeek 没有转写能力，要单独配一家。服务地址如 `https://api.openai.com/v1`、模型如 `whisper-1`、该服务的 API Key）后，助手输入框、模拟面试答题框与面试复盘「追问」输入框都可以**语音听写**：识别出的文字**先填进输入框**，你确认（可以改）后再自己发送，**不会自动发送**；追问同样只填不发、不提交。单段上限：助手与答题框 3 分钟、复盘追问 1 分钟（音频超过 10 MB 也会被拒）。**音频会发送到你配置的这个语音服务商，本应用不保存音频文件。**
 
 模拟面试另有**实时语音通话界面**：完整回答会在断句后自动发送，面试官通过浏览器内置语音合成朗读（声音取决于浏览器与操作系统）。摄像头预览默认关闭，开启后仅在本机显示，不上传或录制。
 
@@ -275,6 +278,7 @@ cd ResumeForge
 - **只有你主动配置并触发的动作才会发出请求。** 对象是你自己填地址和密钥的模型服务商，内容仅限本次生成所需的最小资料；**照片不发送给模型**。
 - **不保存招聘网站密码、Cookie、令牌或验证码。** 投递与网申走 CDP 连接你自己登录的浏览器，扫码由你完成。
 - **不硬编码密钥。** `.env`、数据库、照片与导出文件都被 `.gitignore` 忽略；Windows 上 API Key 用 DPAPI 加密后落库。
+- **面试摄像头录像只留在本机。** 摄像头默认关闭，直到你在 设置 →「语音与面试」→「面试摄像头」里开启才会请求（开启前有一次说明）。录像只有画面、没有声音，存在本机数据目录、**不进备份**，默认 7 天后过期，并随面试一起删除；抽出的画面帧会发给你配置的模型做在场判断，但从不落盘。
 - **分享时可一键脱敏**：离线分享包只含脱敏 HTML/PDF 与只读快照。
 - **默认仅监听回环地址。** 本工具为单用户本地部署、无账号体系，暴露至公网等同于公开本机数据库。
 
@@ -284,7 +288,7 @@ cd ResumeForge
 
 岗位、资料、简历、助手历史与模型配置存放于 `backend/data/resume_forge.db`，服务端环境变量存放于 `backend/.env`；两者均被 Git 忽略，`git pull` 不会覆盖。
 
-- **备份**：**设置 → 「数据与导出」→ 数据集 → 导出当前数据集**。包里是该数据集的整库快照、附件、字体与全局模型配置（**默认包含大模型 API Key，可取消勾选**），不含登录态；换电脑时「导入备份为新数据集」还原即可，细则见 [docs/upgrading.md](docs/upgrading.md)。
+- **备份**：**设置 → 「数据与存储」→ 数据集 → 导出当前数据集**。包里是该数据集的整库快照、附件、字体与全局模型配置（**默认包含大模型 API Key，可取消勾选**），不含登录态；换电脑时「导入备份为新数据集」还原即可，细则见 [docs/upgrading.md](docs/upgrading.md)。
 - **跨版本迁移请在同版本之间导**：格式 5 起带全局模型配置、格式 6 起再带字体；更早的版本（≤1.0.2）会拒收并提示升级。**反方向也有限制：2.0 不导入 1.x 的备份包**——包内库没有 `app_schema_epoch` 会被直接拒收并提示用 ResumeForge 1.0.2 打开；2.0 自己导出的包照常可导入。
 - **交付存档**：原简历删除后仍可按标题、公司、岗位与来源找回历史交付；下载的是快照重放结果，不保证与原始文件字节一致。
 - **一键更新**：Windows 双击 `update.cmd`，macOS 双击 `update.command`，Linux 执行 `bash update.sh`；只替换程序文件，`data/`、`.env`、`runtime/` 不动。
@@ -332,21 +336,21 @@ cd ResumeForge
 <details>
 <summary><b>「任务」卡在哪里看？关掉会怎样？</b></summary>
 
-在**首页**（近期提醒卡下方、待办卡上方）：待确认在前、进行中在后，合计最多 3 条，「已结束」默认收起；点「查看步骤」就地展开，同一时间只展开一条，并标出「当前这步」。提醒到期自动生成的「准备：…」卡也在这里（带「来源：提醒」徽标）。没有可显示的任务时整张卡不出现。总开关在**设置 →「助手与 AI 行为」→「任务卡」**：关闭后不再生成、首页也不再显示，已生成的记录会保留，重新打开即恢复。
+在**首页**（近期提醒卡下方、待办卡上方）：待确认在前、进行中在后，合计最多 3 条，「已结束」默认收起；点「查看步骤」就地展开，同一时间只展开一条，并标出「当前这步」。提醒到期自动生成的「准备：…」卡也在这里（带「来源：提醒」徽标）。没有可显示的任务时整张卡不出现。总开关在**设置 →「记忆与技能」→「任务卡」**：关闭后不再生成、首页也不再显示，已生成的记录会保留，重新打开即恢复。
 
 </details>
 
 <details>
 <summary><b>语音输入怎么用？会不会自动发送？</b></summary>
 
-先在**设置 →「助手与 AI 行为」→「语音转写」**配置 OpenAI 兼容的转写服务（地址 / 模型 / Key）。之后在助手输入框、模拟面试答题框或复盘「追问」框点麦克风说话，识别结果只填进输入框，**要你自己确认后发送**，不会自动提交。模拟面试的独立实时语音通话界面会自动发送完整回答，并用浏览器内置语音合成朗读面试官回复；可选摄像头仅作本地预览。音频会发送到你配置的转写服务商，本应用不保存音频；单段上限 3 分钟（追问 1 分钟）。
+先在**设置 →「语音与面试」→「语音转写」**配置 OpenAI 兼容的转写服务（地址 / 模型 / Key）。之后在助手输入框、模拟面试答题框或复盘「追问」框点麦克风说话，识别结果只填进输入框，**要你自己确认后发送**，不会自动提交。模拟面试的独立实时语音通话界面会自动发送完整回答，并用浏览器内置语音合成朗读面试官回复；可选摄像头仅作本地预览。音频会发送到你配置的转写服务商，本应用不保存音频；单段上限 3 分钟（追问 1 分钟）。
 
 </details>
 
 <details>
 <summary><b>数据存放在哪里？更换电脑如何迁移？</b></summary>
 
-全部在本机的数据目录里：主库 `backend/data/resume_forge.db`（桌面版在 `%APPDATA%\ResumeForge\data`），附件、照片、自定义字体与备份都在同一目录下，不经过任何第三方。换电脑时用「设置 → 数据与导出 → 导出当前数据集」打一份包，在新机器上「导入备份为新数据集」即可；细节见[更新而不丢失数据](#-更新而不丢失数据)。
+全部在本机的数据目录里：主库 `backend/data/resume_forge.db`（桌面版在 `%APPDATA%\ResumeForge\data`），附件、照片、自定义字体与备份都在同一目录下，不经过任何第三方。换电脑时用「设置 → 数据与存储 → 导出当前数据集」打一份包，在新机器上「导入备份为新数据集」即可；细节见[更新而不丢失数据](#-更新而不丢失数据)。
 
 </details>
 
@@ -414,7 +418,8 @@ cd ResumeForge
 
 | 文档 | 内容 |
 | ---- | ---- |
-| [使用指南](docs/user-guide.md) | 功能字段说明、操作步骤与隐私边界（最完整） |
+| [使用指南](docs/user-guide.md) |
+| [文档索引](docs/README.md) | **先看这页**：哪些文档是现役、哪些只是历史记录、每篇多久要复核一次 | 功能字段说明、操作步骤与隐私边界（最完整） |
 | [项目导航图](docs/PROJECT_MAP.md) | 由功能定位代码的索引 |
 | [架构设计](docs/architecture.md) | 分层、数据模型、决策记录、扩展点 |
 | [Agent 原生化建议](docs/agent-native-roadmap.md) | 现有基础、分阶段路线、开源框架与安全边界 |
@@ -430,6 +435,13 @@ cd ResumeForge
 | [协作规程](docs/ai-collaboration-sop.md) | 任务书骨架、文件所有权、交接续跑与交付报告结构 |
 | [缺陷模式](docs/defect-patterns.md) | 31 类高频缺陷的判据、易漏原因与守卫方式 |
 | [环境排查](docs/troubleshooting-stale-build.md) | "改了没用"的判定链：进程、产物、缓存、地址族 |
+| [运维手册](docs/operations.md) | 发版、签名、SBOM、备份演练、性能与压力脚本 |
+| [macOS 打包交接](docs/mac-build-handoff.md) | 在别人的 Mac 上打 dmg 的完整步骤与验证清单 |
+| [安全自查清单](docs/security-agent-checklist.md) | 助手工具面、路径、日志与出网边界逐条自查 |
+| [质量规范](docs/quality/resume-quality-standard.md) | 简历产物判据（版式 / 内容 / 导出）与四份质量文档 |
+| [架构决策记录](docs/adr/README.md) | 5 篇 ADR 的索引、状态与「2.0 复核」结论 |
+
+> 另有三篇**历史文档**（保留作过程记录，不是现状）：`docs/system_design.md`、`docs/job-search-agent-plan.md`、`docs/tech-debt-plan-2026-11-14.md`。
 | [任务书与报告模板](docs/templates/) | 可直接复制的任务书与交付报告骨架 |
 | [变更记录](CHANGELOG.md) | 每个版本改了什么 |
 | [贡献指南](CONTRIBUTING.zh-CN.md) | 开发环境、提交规范、测试要求 |

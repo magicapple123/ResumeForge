@@ -3,7 +3,7 @@
 > **2.0 已复核，结论仍适用**（"先验后发布"与"绝不覆盖本机附件"仍是导入侧的硬约束）；文中提到的迁移号均为 **1.x 历史号**。
 
 日期：2026-10-14（1.0 复验 RR-03）
-状态：已实施
+状态：已采纳（Accepted）
 
 ## 背景
 
@@ -39,7 +39,9 @@
 - **独立复核**：收尾用 `verify_restored_assets` 以**磁盘现状**对照清单再核一遍
   （不依赖恢复过程的内存状态）；行数复核 (`verify_database_rows`) 同样照旧。
 - **导出侧如实标记**：清单新增 `<category>_mismatched`（磁盘字节与 `user_file.sha256`
-  不符），响应头带 `X-Backup-Incomplete` / `X-Backup-Asset-Warnings`，界面把"已导出"
+  不符），响应头带六个计数（`X-Backup-Asset-Missing` / `X-Backup-Asset-Mismatched` /
+  `X-Backup-Asset-Missing-At-Import` / `X-Backup-Uncovered` / `X-Backup-Uncovered-Bytes`，
+  有告警时再加 `X-Backup-Incomplete: 1` 与 `X-Backup-Asset-Warnings`），界面把"已导出"
   改成"这份备份不完整"。不完整的包不许被当成完整备份。
 
 ## 后果

@@ -158,7 +158,6 @@ const copyBudgetBaseline: Record<string, string> = {
   "settingsUi.assistantRelaxed.neverSent": "2026-12-31",
   "settingsUi.assistantRelaxed.stateOff": "2026-12-31",
   "settingsUi.assistantRelaxed.stateOn": "2026-12-31",
-  "settingsUi.help.previewNote": "2026-12-31",
   "settingsUi.orb.intro": "2026-12-31",
   "settingsUi.orb.selectionHint": "2026-12-31",
   "settingsUi.privacy.ai": "2026-12-31",

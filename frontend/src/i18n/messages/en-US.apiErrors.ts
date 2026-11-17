@@ -37,7 +37,7 @@ const apiErrors = {
   "apiErrors.guidance.format": "Reason: {reason} · Action: {action} · Ref: {ref}",
   "apiErrors.guidance.unknownReason": "An unknown error occurred",
   "apiErrors.guidance.retryDiagnostics":
-    "Try again; if it keeps happening, export a diagnostics bundle and share it",
+    "Try again; if it keeps happening, export a diagnostics bundle from Settings → Update & help → Help & diagnostics and share it",
   "apiErrors.guidance.timeoutReason": "The request timed out",
   "apiErrors.guidance.timeoutAction":
     "Try again; for large exports or generations, retry later or reduce the scope",
@@ -57,7 +57,7 @@ const apiErrors = {
   "apiErrors.guidance.tooLargeAction": "Reduce the upload size and try again",
   "apiErrors.guidance.serverReason": "Internal server error",
   "apiErrors.guidance.retryWithRef":
-    "Try again; if it keeps happening, export a diagnostics bundle and include the ref",
+    "Try again; if it keeps happening, export a diagnostics bundle from Settings → Update & help → Help & diagnostics and include the ref",
 } as const;
 
 export default apiErrors;

@@ -351,16 +351,44 @@ def _check_legacy(sample, resume, artifacts: dict[str, bytes], report: SampleRep
 
 
 def _check_json_roundtrip(sample, artifacts: dict[str, bytes], report: SampleReport) -> None:  # noqa: ANN001
+    """JSON 是**文档交付物**（2.0 起）：校验结构、身份字段、无照片、可幂等再导出。
+
+    旧写法按 v1 的 ``ResumeContent`` 断言 ``payload["name"]``——2.0 把 JSON 导出换成
+    ``version/language/header/sections`` 之后，这条对全部 20 份迭代样例恒假，红的是
+    校验脚本而不是产品。所以现在校验的是新契约本身：形状、姓名落在页头、不含
+    data URL，以及"再导出一次字节不变"（这条才叫往返）。
+    """
     if "json" not in artifacts:
         return
-    payload = json.loads(artifacts["json"].decode("utf-8"))
-    if payload.get("name") != sample.content_dict().get("name"):
+    raw = artifacts["json"].decode("utf-8")
+    payload = json.loads(raw)
+    required = {"version", "language", "header", "sections"}
+    if not required <= set(payload):
         report.failures.append(
-            Failure(sample.sample_id, "json-roundtrip", "导出 JSON 的 name 与内容不一致")
+            Failure(
+                sample.sample_id,
+                "json-roundtrip",
+                "导出 JSON 不是 v2 文档结构（缺 "
+                + "/".join(sorted(required - set(payload)))
+                + "）",
+            )
         )
-    if "photo" in payload:
+        return
+    if "data:image" in raw:
         report.failures.append(
             Failure(sample.sample_id, "json-roundtrip", "导出 JSON 不应包含照片 data URL")
+        )
+    name = sample.content_dict().get("name")
+    header_values = [item.get("value") for item in payload["header"].get("items") or []]
+    if name and name not in header_values:
+        report.failures.append(
+            Failure(sample.sample_id, "json-roundtrip", "导出 JSON 的页头里找不到姓名")
+        )
+    from app.services.exporter import export_json
+
+    if export_json(payload).encode("utf-8") != artifacts["json"]:
+        report.failures.append(
+            Failure(sample.sample_id, "json-roundtrip", "导出 JSON 不是幂等的（再导出字节不同）")
         )
 
 
