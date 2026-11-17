@@ -51,6 +51,7 @@ from ..services.global_llm_profiles import (
 )
 from ..services.llm_key_refs import API_KEY_MASK, PROFILE_API_KEY_PREFIX
 from ..services.llm_settings import base_url_binding_identity
+from ..services.model_context_windows import configured_model_window
 from ..services.settings_service import (
     _strip_session_key,
     get_dataset_llm_config,
@@ -87,9 +88,17 @@ def _masked_global(config: LLMConfig, record_id: str, *, session_key: bool = Fal
 
 
 def _record_out(item: dict) -> LLMGlobalRecordOut:
-    """记录对外的形态：附带"名字是否仍是内置默认名"，供界面翻译默认名。"""
+    """记录对外的形态：附带"名字是否仍是内置默认名"，供界面翻译默认名。
+
+    顺带算好**解析后的上下文窗口**（手填 > 参考表 > 保守值）：卡片上的「窗口 1M（参考表）」
+    要能分清"查到的"与"估的"，而型号匹配规则只有 `model_context_windows` 一份，前端不复制。
+    `window_source` 与助手面板的 `ContextUsage.window_source` 同一套取值。
+    """
     record = LLMGlobalRecordOut.model_validate(item)
     record.name_is_default = record.name == DEFAULT_RECORD_NAME
+    resolved = configured_model_window(record)
+    record.window_tokens = resolved.tokens
+    record.window_source = resolved.source
     return record
 
 

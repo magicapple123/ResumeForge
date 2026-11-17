@@ -115,4 +115,14 @@ export interface GreetingTemplateList {
 export interface ApplyBlocklist {
   companies: string[];
   keywords: string[];
+  /**
+   * 存着但**不会生效**的关键词（太短或太宽泛）。
+   *
+   * 由后端用与匹配同一份规则判出（前端不复制停用词表）：界面据此把它们渲染成灰标签，
+   * 而不是静默丢弃——用户会以为保存失败。
+   */
+  inactive_keywords: string[];
 }
+
+/** 写回时只发用户能编辑的两列；`inactive_keywords` 是后端算出来的派生视图。 */
+export type ApplyBlocklistInput = Pick<ApplyBlocklist, "companies" | "keywords">;

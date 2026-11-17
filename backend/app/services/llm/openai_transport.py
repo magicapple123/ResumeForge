@@ -36,7 +36,8 @@ class OpenAITransport(BaseLLMProvider):
         return headers
 
     def _client(self) -> httpx.AsyncClient:
-        return get_shared_client(transport=self._transport)
+        # T02：把端点一起传下去——回环（本地模型 localhost:11434）必须强制直连。
+        return get_shared_client(transport=self._transport, url=self._net_target())
 
     def _timeout(self) -> httpx.Timeout:
         return build_request_timeout(self.config, self._deadline_remaining())

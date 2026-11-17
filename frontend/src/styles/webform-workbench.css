@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
+@import "./webform-onboarding.css";
 /* 网申填表工作台（I-11）：吸顶工具条 + 两栏 + 结果区 Tabs + 折叠记录。
    原来 9 张同级 Card 把「启动浏览器 → 读取 → 核对 → 填充 → 看结果」这条线性流程
    摊成九块面板，用户得先数一遍卡片才知道下一步在哪。这里改成：
@@ -84,31 +85,6 @@
   justify-content: flex-end;
   gap: 8px;
   margin-inline-start: auto;
-}
-
-/* ===== 安全条：从两段式 Alert 压成一行（不收起，只压缩） ===== */
-
-.webform-safety-strip {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 10px;
-  margin: 0;
-  padding: 6px 12px;
-  border-inline-start: 3px solid var(--rf-warning-border);
-  border-radius: var(--rf-radius-control);
-  background: var(--rf-warning-bg);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.webform-safety-strip-title {
-  color: var(--rf-warning-text);
-  font-weight: 600;
-}
-
-.webform-safety-strip-body {
-  color: var(--rf-text-secondary);
 }
 
 /* ===== 两栏栅格：默认单列，容器 ≥1080 切两栏 ===== */
@@ -355,123 +331,4 @@
   .webform-columns > .webform-column {
     max-width: 720px;
   }
-}
-
-/* ===== 右栏空态：三步开始 =====
-   没有预览也没有结果时，结果区整块不渲染会让右栏变成白板。这块引导只讲流程与
-   "下一步在哪儿"，不放主按钮——工具条上已经有一颗同名的。 */
-
-.webform-onboarding {
-  display: flex;
-  flex-direction: column;
-  padding: 18px 20px 16px;
-  border: 1px solid var(--rf-border-subtle);
-  border-radius: var(--rf-radius-control);
-  background: var(--rf-surface);
-}
-
-.webform-onboarding-badge {
-  align-self: flex-start;
-  padding: 1px 8px;
-  border-radius: 9px;
-  background: var(--rf-info-bg);
-  color: var(--rf-info-strong);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.webform-onboarding-title {
-  margin: 10px 0 0;
-  color: var(--rf-text-body);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 22px;
-}
-
-.webform-onboarding-lead {
-  margin: 4px 0 0;
-  color: var(--rf-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.webform-onboarding-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin: 16px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.webform-onboarding-step {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: start;
-}
-
-.webform-onboarding-num {
-  display: flex;
-  width: 22px;
-  height: 22px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--rf-border-strong);
-  border-radius: 50%;
-  color: var(--rf-text-secondary);
-  font-size: 12px;
-  line-height: 1;
-}
-
-/* 当前步实心：整块引导里只有一处重色，视线自然落在这里。 */
-.webform-onboarding-step.is-current .webform-onboarding-num {
-  border-color: transparent;
-  background: var(--rf-brand);
-  color: #ffffff;
-}
-
-.webform-onboarding-step.is-done .webform-onboarding-num {
-  border-color: var(--rf-border-subtle);
-  color: var(--rf-text-tertiary);
-}
-
-.webform-onboarding-body {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.webform-onboarding-step-title {
-  color: var(--rf-text-body);
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.webform-onboarding-step-hint {
-  color: var(--rf-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.webform-onboarding-state {
-  color: var(--rf-text-tertiary);
-  font-size: 12px;
-  line-height: 20px;
-  white-space: nowrap;
-}
-
-.webform-onboarding-step.is-current .webform-onboarding-state {
-  color: var(--rf-brand);
-  font-weight: 600;
-}
-
-.webform-onboarding-next {
-  margin: 16px 0 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--rf-border-subtle);
-  color: var(--rf-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
 }

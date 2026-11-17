@@ -149,6 +149,13 @@ PROGRESS_AND_ASSISTANT: tuple[FeatureEntry, ...] = (
         ("list_interview_sessions", "get_interview_report"),
     ),
     FeatureEntry(
+        "interview_voice",
+        "模拟面试",
+        "实时语音通话",
+        "模拟面试 → 「语音通话」：与面试官实时对话，音色/语速可调，识别结果先落成可编辑气泡",
+        (),
+    ),
+    FeatureEntry(
         "question_bank",
         "模拟面试",
         "个性化题库",
@@ -221,6 +228,13 @@ PROGRESS_AND_ASSISTANT: tuple[FeatureEntry, ...] = (
 
 TRASH_AND_SETTINGS: tuple[FeatureEntry, ...] = (
     # ===== 回收站 / 设置 =====
+    FeatureEntry(
+        "login_status",
+        "投递台",
+        "登录状态",
+        "投递台顶部 → 「登录状态」：三处登录态各一行，可单独或全部检测；判不出时显示「无法判断」",
+        (),
+    ),
     FeatureEntry(
         "trash",
         "回收站",

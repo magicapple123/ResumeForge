@@ -106,8 +106,18 @@
 }
 
 .rf-state--error {
+  /* T17：错误态图标与正文之间原本隔着 80px——antd 给 `.ant-empty-image` 的默认高度
+     是 120px 的插画位，而错误态只放一个 40px 图标，剩下的 80px 全是空白。
+     **只在 `.rf-state--error` 前缀下收紧**：其余 90 处 `EmptyState` 依赖那 120px
+     插画，全局改会把它们的排版一起推翻。 */
+  --rf-state-icon-size: 40px;
   border: 1px solid var(--rf-border-strong);
   background: var(--rf-surface-alt);
+}
+
+.rf-state--error .ant-empty-image {
+  height: var(--rf-state-icon-size);
+  margin-bottom: 12px;
 }
 
 .rf-state--error .ant-empty-description,
@@ -116,7 +126,7 @@
 }
 
 .rf-state-error-icon {
-  font-size: 40px;
+  font-size: var(--rf-state-icon-size, 40px);
 }
 
 .rf-state-actions {

@@ -47,8 +47,18 @@ _MIN_QUERY_TOKEN_CHARS = 2
 _QUERY_SPLIT_RE = re.compile(r"[\s,，。！？；：、,.!?;:()（）\[\]【】\"'“”‘’/\\|-]+")
 
 
-def list_skills(db: Session) -> list[AssistantSkill]:
-    return db.query(AssistantSkill).order_by(AssistantSkill.name).all()
+#: 内置视角技能的名字前缀（T26）。视角已改成会话列 `chat_conversation.persona_id`，
+#: 这些技能行只剩"历史数据"意义，**不进技能列表**——它们既不能按消息启用，也不占预算。
+#: 常量放在本模块而不是 `assistant_personas`：那边 import 这边，反过来会成环。
+PERSONA_SKILL_PREFIX = "视角 · "
+
+
+def list_skills(db: Session, *, include_builtin_personas: bool = False) -> list[AssistantSkill]:
+    """技能列表。默认**不含**内置视角技能（界面不该出现「视角 · X」）。"""
+    query = db.query(AssistantSkill)
+    if not include_builtin_personas:
+        query = query.filter(~AssistantSkill.name.startswith(PERSONA_SKILL_PREFIX))
+    return query.order_by(AssistantSkill.name).all()
 
 
 def find_skill(db: Session, name: str) -> AssistantSkill | None:
@@ -207,6 +217,21 @@ def list_conversation_skills(db: Session, conversation_id: int | None) -> list[A
     )
 
 
+def skills_for_ids(db: Session, skill_ids: list[int]) -> list[AssistantSkill]:
+    """按**请求里给出的顺序**取技能行（T24 消息级技能）。
+
+    ``assistant_conversation_skill`` 不再参与消息路径：本条消息用哪些技能只由请求里的
+    ``skill_ids`` 决定，所以顺序也必须按请求顺序（用户勾选的先后 = 提示词里的先后）。
+    调用方应先用 :func:`validate_conversation_skill_ids` 校验存在性与上限；这里仍按
+    缺失容忍处理（返回存在的那些），避免校验与读取之间被并发删除时抛异常。
+    """
+    if not skill_ids:
+        return []
+    rows = db.query(AssistantSkill).filter(AssistantSkill.id.in_(skill_ids)).all()
+    by_id = {int(skill.id): skill for skill in rows}
+    return [by_id[skill_id] for skill_id in skill_ids if skill_id in by_id]
+
+
 class PendingSkillError(ValueError):
     """待验证技能不能启用（#31D/#31F）：自动生成的技能必须先由用户确认。
 
@@ -271,9 +296,7 @@ def replace_conversation_skills(
     return validated
 
 
-def set_conversation_skills(
-    db: Session, conversation_id: int, skill_ids: list[int]
-) -> list[int]:
+def set_conversation_skills(db: Session, conversation_id: int, skill_ids: list[int]) -> list[int]:
     """整体替换一个对话启用的技能（PUT 接口用）；返回生效后的 id 列表。"""
     validated = replace_conversation_skills(db, conversation_id, skill_ids)
     db.commit()
@@ -290,6 +313,11 @@ def build_skill_prompt(
     db: Session, conversation_id: int | None, max_chars: int = MAX_SKILL_PROMPT_CHARS
 ) -> str:
     """把**当前对话启用的**技能拼成附加到系统提示的文字；没有启用技能时返回空串。
+
+    **T24 起生产路径不再调用它**：技能改为消息级，提示词由发送请求的 ``skill_ids`` 解析
+    （``message_dispatch.resolve_message_skills``），挂在用户消息正文之前。本函数只保留
+    给「按对话启用」时代的预算接口与测试用；它读的 ``assistant_conversation_skill``
+    不再影响任何模型请求。
 
     T14：技能不再看 ``AssistantSkill.enabled``（全局开关已废弃），只认
     ``assistant_conversation_skill` 关联行。``conversation_id`` 为空（草稿 / 无会话）

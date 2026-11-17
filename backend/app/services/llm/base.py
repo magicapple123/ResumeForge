@@ -17,9 +17,21 @@ import httpx
 
 from ...runtime.operation_budget import OperationBudget, OperationCancelled
 from ...schemas.setting import LLMConfig
+from .. import net_proxy
 from .usage import FINISH_BUDGET_EXHAUSTED, FINISH_CANCELLED, LLMUsage, build_usage
 
 logger = logging.getLogger(__name__)
+
+#: 一次传输尝试可能抛出的"网络类"异常。
+#: - ``httpx.RequestError``：连接/超时/协议类（既有口径）；
+#: - ``net_proxy.ProxyConfigurationError``：socks 缺依赖（我们主动抛，见 net_proxy）；
+#: - ``ImportError``：httpx 自己在某些路径上抛的 socks 缺依赖；**只在消息命中
+#:   ``socksio`` 时**由 `net_proxy.classify_network_error` 兜住，其余原样抛出。
+NETWORK_ERRORS: tuple[type[BaseException], ...] = (
+    httpx.RequestError,
+    net_proxy.ProxyConfigurationError,
+    ImportError,
+)
 
 
 def build_request_timeout(
@@ -49,12 +61,23 @@ class LLMError(Exception):
     "余额不足"这类硬错误重复烧两遍钱。
     """
 
-    def __init__(self, message: str, *, retryable: bool = False) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        retryable: bool = False,
+        net_path: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.retryable = retryable
         #: 由 `context_length_error.with_context_length_flag` 在确认是"上下文超长"时置 True。
         #: 默认值写在这里而不是只在检测处赋值：读方（`getattr` 之外）能直接访问该属性。
         self.context_length_error = False
+        #: 这次失败**走在哪条出网路径上**（T02）：`direct` / `proxy_refused` /
+        #: `proxy_socks_unsupported` / `tls_untrusted` / `connect` / `timeout`。
+        #: 随 SSE error 事件与 HTTP detail 一起下发，前端据此决定要不要给「用直连重试」。
+        #: 非网络类失败留空串——"没有网络语义"与"直连失败"是两件事，不能混。
+        self.net_path = net_path or ""
 
 
 def log_llm_failure(category: str, detail: str) -> None:
@@ -65,6 +88,11 @@ def log_llm_failure(category: str, detail: str) -> None:
     task_id / dataset_id 上下文由 runtime.log_context 的绑定日志自动附带。
     """
     logger.warning("LLM 传输失败类别=%s：%s", category, detail)
+
+
+def timeout_error() -> LLMError:
+    """超时的统一 LLMError（带 ``net_path='timeout'``，文案与改造前逐字一致）。"""
+    return LLMError(net_proxy.TIMEOUT_MESSAGE, net_path=net_proxy.NET_PATH_TIMEOUT)
 
 
 @dataclass
@@ -165,6 +193,36 @@ class BaseLLMProvider(ABC):
         if budget is not None and budget.is_expired():
             return OperationCancelled(budget.expiry_reason())
         return LLMError("模型响应超时，请稍后重试或调大超时时间")
+
+    def _net_target(self) -> str | None:
+        """本次请求要访问的端点；解析不出来时返回 ``None``。
+
+        **绝不让"取客户端"这一步抛新异常**：端点非法（``validated_base_url`` 抛
+        ``ValueError``）本该由构建 payload 的那一步报错，报在取客户端的位置上会把
+        "地址填错"变成一个 500。``None`` 表示"不知道访问谁"，此时不做回环判定。
+        """
+        endpoint = getattr(self, "_endpoint", None)
+        if endpoint is None:
+            return None
+        try:
+            return str(endpoint())
+        except ValueError:
+            return None
+
+    def _network_error(self, exc: BaseException) -> LLMError:
+        """把网络异常翻成带 ``net_path`` 的 :class:`LLMError`（T02）。
+
+        分类与文案同源（``net_proxy.classify_and_message``）：日志里记的类别、用户看到的
+        文案、前端拿到的 ``net_path`` 一定说的是同一件事。
+
+        非 socks 的 ``ImportError`` 会由 ``classify_network_error`` **原样抛出**，
+        所以这里不兜任何"未知错误"。
+        """
+        url = self._net_target()
+        proxy = net_proxy.resolve_proxy(target_url=url)
+        kind, message, detail = net_proxy.classify_and_message(exc, proxy=proxy, url=url)
+        log_llm_failure("timeout" if kind == net_proxy.NET_PATH_TIMEOUT else "disconnect", detail)
+        return LLMError(message, net_path=kind)
 
     def _cancelled_finish_reason(self) -> str:
         """取消类结束原因：用户取消 → cancelled；预算到期 → budget_exhausted。"""

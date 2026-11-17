@@ -49,14 +49,14 @@ const skills = {
   "skills.guide.howTitle": "How to use this workbench",
   "skills.guide.how1": "Copy a template below as a starting point, or click New skill;",
   "skills.guide.how2":
-    "Be specific with “do …” and “do not …”; after saving, enable it from the skill menu in a conversation;",
+    "Be specific with “do …” and “do not …”; after saving, tick it in the assistant composer and it applies to your next message only;",
   "skills.guide.how3":
-    "Skills are enabled in a conversation, not globally in the library: every new conversation starts with none, and Import skill loads a .md / .zip someone else shared.",
+    "Skills apply per message, not globally in the library: tick them for the next message before sending; the selection clears afterwards. Import skill loads a .md / .zip someone else shared.",
   "skills.guide.templates": "Templates:",
   /** I-20: label of the merged "new from template" dropdown. */
   "skills.guide.newFromTemplate": "New from template",
   "skills.budget.title":
-    "The more skills a conversation enables, the longer the system prompt: once the total prompt size exceeds the budget, later skills are not loaded (the assistant says so in one sentence).",
+    "The more skills you tick for one message, the longer the prompt sent with it: once the total exceeds the budget, later skills are not loaded (the assistant says so in one sentence).",
   "skills.error.loadFailed": "Could not load skills: {error}",
   "skills.empty": "No skills yet — start from a template",
 

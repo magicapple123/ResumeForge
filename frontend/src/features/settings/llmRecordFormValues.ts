@@ -7,6 +7,7 @@
 import type { LLMConfig, LLMConfigRecord } from "../../types";
 import type { LLMApiStyle } from "../../types/settings";
 import { CUSTOM_PRESET, UNLIMITED_MAX_TOKENS, configFromRecord } from "./SettingsConfig";
+import { clampContextWindow } from "./llm/contextWindowPresets";
 
 /** 新增/编辑共用弹窗的表单值。api_key 留空 = 保持原密钥（原样回传脱敏引用）。
  *
@@ -27,6 +28,13 @@ export interface RecordFormValues {
   temperature: number;
   timeout_seconds: number;
   max_tokens: number;
+  /**
+   * 上下文窗口（tokens）。`null` = 留空，**不预填**（填错比不填更糟）。
+   *
+   * 留空在保存时折成 0，语义是"跟随型号参考值"（后端 `resolve_model_window`：
+   * 手填 > 参考表 > 保守 128K），不是"不限制"。
+   */
+  context_window_tokens: number | null;
   top_p: number | null;
   frequency_penalty: number | null;
   presence_penalty: number | null;
@@ -53,6 +61,8 @@ export function createDefaults(): RecordFormValues {
     temperature: 0.1,
     timeout_seconds: 120,
     max_tokens: UNLIMITED_MAX_TOKENS,
+    // 不预填：留空 = 跟随型号参考值，用户没确认过的数字不该出现在表单里。
+    context_window_tokens: null,
     top_p: null,
     frequency_penalty: null,
     presence_penalty: null,
@@ -77,6 +87,8 @@ function createDefaultConfig(): LLMConfig {
     temperature: 0.1,
     timeout_seconds: 120,
     max_tokens: UNLIMITED_MAX_TOKENS,
+    // 0 = 未知：新建记录在用户没填之前跟随型号参考值（后端解析），不是"不限制"。
+    context_window_tokens: 0,
     api_style: "openai",
     top_p: null,
     frequency_penalty: null,
@@ -112,6 +124,10 @@ export function mergedConfigFromForm(
     temperature: values.temperature,
     timeout_seconds: values.timeout_seconds,
     max_tokens: values.max_tokens,
+    // 显式读：这一项**必须**跟着表单走。不读的后果是新建填了丢弃、编辑任何记录再保存
+    // 把窗口清成 0（`LLMConfig` 整份替换语义）。留空（null）折成 0 = 跟随型号参考值，
+    // 正数夹到 `0..2_000_000`（后端 `le` 上限，超了会被 422 拒）。
+    context_window_tokens: clampContextWindow(values.context_window_tokens),
     api_key: record && typedKey === "" ? record.api_key : typedKey,
     // 高级/思考字段按「表单里有没有真的返回」逐个覆盖：折叠态下高级区的 Form.Item
     // 不挂载，validateFields 不会返回这些键——不能拿「不发送」默认值覆盖原记录。

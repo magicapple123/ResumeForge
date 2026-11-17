@@ -32,6 +32,7 @@ import TrackFormModal from "../tracker/TrackFormModal";
 import { todayIsoDate } from "../../utils/format";
 import { getMatchAnalyzingIds, subscribeMatchAnalysis } from "../../utils/jobMatchAnalysisState";
 import RelatedKnowledgeBlock from "./RelatedKnowledgeBlock";
+import JobResearchHistory from "./JobResearchHistory";
 import SkillTags from "./SkillTags";
 import { t, type MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -383,6 +384,9 @@ export default function JobDetailDrawer({
 
               {/* #29D：按公司回溯知识库里与这个岗位相关的条目；0 条时整块不渲染。 */}
               <RelatedKnowledgeBlock company={job.company} jobId={job.id} />
+
+              {/* T07：这个岗位的调研历史（知识库只留最新一份，历史在这里回看）。 */}
+              <JobResearchHistory company={job.company} jobId={job.id} role={job.title} />
 
               <div className="job-detail-text-sections">
                 <TextSection

@@ -15,6 +15,7 @@ const collectFilters = {
     "Collection is not affected: keywords and cities still apply. Click Reload below to try again.",
   "collectFilters.action.reload": "Reload",
   "collectFilters.action.test": "Test filters",
+  "collectFilters.action.check": "Check",
   "collectFilters.section.title": "Filter by job site conditions",
   "collectFilters.section.loading": "Reading the site's filters…",
   "collectFilters.test.hint":
@@ -31,6 +32,8 @@ const collectFilters = {
     "Start the dedicated browser to read the full option list your account can see",
   "collectFilters.launch.body":
     "Some options differ per account (for example, student accounts see internships under job type), and they can only be read from a browser where you are signed in. The current list is the site-wide one: usable, but not necessarily complete.",
+  "collectFilters.intro.hintAria": "About the site filters",
+  "collectFilters.status.failed": "Read failed, retry available",
   "collectFilters.result.partial": "{count} conditions could not take effect",
   "collectFilters.result.all": "Every selected condition is really selectable on the site",
   "collectFilters.result.applied": "Applied",
@@ -40,7 +43,7 @@ const collectFilters = {
   "collectFilters.result.unlimited": "{label} — {detail}",
   "collectFilters.tag.any": "Any",
   "collectFilters.aria.group": "Site filter - {label}",
-  "collectFilters.source.session.text": "Read from your signed-in session",
+  "collectFilters.source.session.text": "Read from the real option list",
   "collectFilters.source.session.hint":
     "These are the options your account can really see on the job site, so they are the most accurate.",
   "collectFilters.source.public.text": "Site-wide option list",
@@ -49,7 +52,6 @@ const collectFilters = {
   "collectFilters.source.snapshot.text": "Built-in snapshot (offline)",
   "collectFilters.source.snapshot.hint":
     "Reading from the site over the network failed, so this is a built-in snapshot. Its codes may be out of date; reconnect to the internet and reload before collecting.",
-  "collectFilters.source.unavailable.text": "Unavailable this time",
   "collectFilters.source.unavailable.hint":
     "This condition could not be read from the site this time, so it cannot be used for filtering yet.",
 } as const;

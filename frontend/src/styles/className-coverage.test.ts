@@ -224,10 +224,6 @@ const EXEMPTIONS: Record<string, Exemption> = {
     reason: "分组小标题容器，字号由 antd Text strong 承担",
     expires: REVIEW_DATE,
   },
-  "resume-wb-v2-fill-menu": {
-    reason: "快捷填充菜单浮层，定位由父级浮层容器承担",
-    expires: REVIEW_DATE,
-  },
   "resume-writing-modal-hint": {
     reason: "Typography.Paragraph type=secondary，颜色由 antd token 承担",
     expires: REVIEW_DATE,

@@ -102,7 +102,6 @@ export const darkTheme: ThemeConfig = {
     zIndexPopupBase: layer.popupBase,
   },
   components: {
-    Button: { primaryShadow: "0 2px 4px rgb(0 0 0 / 30%)" },
     Card: { headerFontSize: 16, headerHeight: 56, borderRadiusLG: 16 },
     Table: {
       headerBg: darkPalette.tableHeaderBg,

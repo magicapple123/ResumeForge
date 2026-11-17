@@ -26,11 +26,15 @@ from ...schemas.assistant import (
     ChatConversationUpdate,
     ChatMessageOut,
     ConversationSurface,
+    LegacyConversationSkillOut,
 )
 from .. import trash
+from .assistant_compaction_store import compaction_state_out, load_compaction
 from .assistant_skills import (
+    PERSONA_SKILL_PREFIX,
     PendingSkillError,
     copy_conversation_skills,
+    list_conversation_skills,
     replace_conversation_skills,
     validate_conversation_skill_ids,
 )
@@ -240,11 +244,20 @@ def read_conversation(
     # 先验证 brief 再拼 detail：避免 model_validate 触发 conversation.messages 的
     # 全量懒加载——limit 模式下这正是要省掉的那次查询。
     brief = ChatConversationBrief.model_validate(conversation)
+    # T24：旧关联行只做只读回显（前端提示一次「技能已改为按下一条消息生效」）。
+    # 视角技能（「视角 · X」）不算旧技能：T26 已把它挪到 conversation.persona_id。
+    legacy_skills = [
+        LegacyConversationSkillOut(id=int(skill.id), name=skill.name)
+        for skill in list_conversation_skills(db, conversation_id)
+        if not skill.name.startswith(PERSONA_SKILL_PREFIX)
+    ]
     return ChatConversationDetail(
         **brief.model_dump(),
         messages=[ChatMessageOut.model_validate(row) for row in rows],
         messages_total=messages_total,
         has_earlier=has_earlier,
+        compaction=compaction_state_out(load_compaction(db, conversation_id)) or None,
+        legacy_skills=legacy_skills,
     )
 
 

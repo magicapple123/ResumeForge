@@ -39,6 +39,8 @@ export interface ResearchBrief {
    */
   reason_code?: "unauthorized" | "insufficient_balance" | "rate_limited" | "upstream" | "";
   markdown: string;
+  /** v2 的「一句话结论」：单独渲染成结论带；旧简报为空串。 */
+  lead?: string;
   sources: ResearchSource[];
   deep: boolean;
   tool_calls: number;
@@ -98,7 +100,7 @@ export interface ResearchEntrySummary {
 /** 读「最近一次调研」；没有返回 `null`。 */
 export function latestCompanyResearch(
   company: string,
-): Promise<{ entry: ResearchEntrySummary | null }> {
+): Promise<{ entry: ResearchEntrySummary | null; count: number }> {
   return request(`/research/company/latest?company=${encodeURIComponent(company)}`);
 }
 
@@ -114,4 +116,93 @@ export function researchCompany(input: CompanyResearchInput): Promise<CompanyRes
     body: JSON.stringify(input),
     budget: "analysis",
   });
+}
+
+// ---------------------------------------------------------------------------
+// 调研历史（T07）：每次调研一条快照，知识库仍只留最新一份。
+// ---------------------------------------------------------------------------
+
+/** 列表项：只有元信息 + 一行摘要（正文按需在详情里取）。 */
+export interface ResearchHistoryItem {
+  id: number;
+  /** 归一化后的公司名（历史按它聚合）。 */
+  company: string;
+  /** 用户当时输入的原样公司名。 */
+  company_raw: string;
+  role: string;
+  deep: boolean;
+  /** 简报状态；`skipped` = 那次只跑了卡片这一路，不是失败。 */
+  status: "ok" | "failed" | "skipped" | "";
+  search_count: number;
+  elapsed_ms: number;
+  job_id: number | null;
+  knowledge_entry_id: number | null;
+  created_at: string | null;
+  /** 正文首行摘要，列表里显示。 */
+  excerpt?: string;
+}
+
+/** 详情：正文、来源与卡片都在这里（历史是快照，不随知识库变化）。 */
+export interface ResearchHistoryDetail extends ResearchHistoryItem {
+  jd_excerpt: string;
+  jd_hash: string;
+  brief: ResearchBrief;
+  sources: ResearchSource[];
+  cards: ResearchCard[];
+}
+
+export interface ResearchHistoryPage {
+  items: ResearchHistoryItem[];
+  /** 下一页游标；`null` 表示没有更多。 */
+  next_cursor: string | null;
+  /** 当前筛选条件下的条数。 */
+  total: number;
+  /** 这批历史的估算体积（字节），列表底部「约 X MB」用。 */
+  bytes: number;
+}
+
+export interface ResearchHistoryQuery {
+  company?: string;
+  job_id?: number;
+  cursor?: string | null;
+  limit?: number;
+}
+
+/** 历史列表（时间倒序，游标翻页）。不带 `company` / `job_id` 就是全部公司。 */
+export function listResearchHistory(
+  query: ResearchHistoryQuery = {},
+): Promise<ResearchHistoryPage> {
+  const params = new URLSearchParams();
+  if (query.company?.trim()) params.set("company", query.company.trim());
+  if (query.job_id) params.set("job_id", String(query.job_id));
+  if (query.cursor) params.set("cursor", query.cursor);
+  if (query.limit) params.set("limit", String(query.limit));
+  const suffix = params.toString();
+  return request(`/research/history${suffix ? `?${suffix}` : ""}`);
+}
+
+/** 一条历史的完整快照。 */
+export function getResearchHistory(id: number): Promise<ResearchHistoryDetail> {
+  return request(`/research/history/${id}`);
+}
+
+/** 删掉这一条历史。**不动知识库**。 */
+export function deleteResearchHistory(id: number): Promise<void> {
+  return request(`/research/history/${id}`, { method: "DELETE" });
+}
+
+/**
+ * 清空历史。
+ *
+ * 后端要求：不带 `company` 时必须显式 `all: true`——这条路径不可恢复，
+ * 默认行为不能是"漏传参数就把所有公司的历史抹掉"。
+ */
+export function clearResearchHistory(
+  query: { company?: string; all?: boolean } = {},
+): Promise<void> {
+  const params = new URLSearchParams();
+  if (query.company?.trim()) params.set("company", query.company.trim());
+  if (query.all) params.set("all", "true");
+  const suffix = params.toString();
+  return request(`/research/history${suffix ? `?${suffix}` : ""}`, { method: "DELETE" });
 }

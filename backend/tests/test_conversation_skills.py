@@ -453,24 +453,25 @@ def test_create_skill_stays_a_proposal_even_with_full_write_permission(client, m
 
 
 def test_assistant_message_context_records_the_skill_names(client, monkeypatch, db_session):
+    """T24：技能记录挂在**用户那条消息**上（消息级），助手消息不再记。"""
     skill = _create_raw_skill(db_session, "面试模拟官")
     _configure_llm(client)
     provider = _ScriptedProvider([[LLMDelta(text="好的。")]])
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
     conversation = _create_conversation(client, title="A")
-    _enable(client, conversation["id"], [skill.id])
 
     client.post(
         f"/api/assistant/conversations/{conversation['id']}/messages",
-        json={"content": "开始面试"},
+        json={"content": "开始面试", "skill_ids": [skill.id]},
     )
 
-    assistant = client.get(f"/api/assistant/conversations/{conversation['id']}").json()["messages"][
-        1
-    ]
-    assert assistant["context"]["skills"] == ["面试模拟官"]
-    # 只记名字不记正文：提示词是模型侧的指令，不该混进历史展示字段。
-    assert "你是面试官。" not in str(assistant["context"]["skills"])
+    messages = client.get(f"/api/assistant/conversations/{conversation['id']}").json()["messages"]
+    user, assistant = messages[0], messages[1]
+    assert user["context"]["skills"] == [{"id": skill.id, "name": "面试模拟官"}]
+    # 只记 id/名字：提示词正文在 context.skill_prompt 里（模型侧），不进正文展示字段。
+    assert "你是面试官。" not in str(user["context"]["skills"])
+    assert "你是面试官。" not in user["content"]
+    assert "skills" not in assistant["context"]
 
 
 def test_no_skill_means_no_context_field(client, monkeypatch):

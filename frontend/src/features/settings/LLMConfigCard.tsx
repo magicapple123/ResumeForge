@@ -31,6 +31,10 @@ import { formatDateTime } from "../../utils/format";
 import { llmRecordDisplayName } from "../../utils/displayNames";
 import type { LLMConfigSummary } from "./SettingsConfig";
 import { CUSTOM_PRESET_LABEL_KEY, matchingPreset } from "./SettingsConfig";
+import {
+  contextWindowSourceKey,
+  formatContextWindow,
+} from "./llm/contextWindowPresets";
 import type { RecordFormValues } from "./useLLMRecordTools";
 import { useCollapsedList } from "../../components/common/useCollapsedList";
 import LLMRecordModal from "./LLMRecordModal";
@@ -246,6 +250,17 @@ export default function LLMConfigCard({
                       <Typography.Text type="secondary">
                         {record.base_url || t("llmConfigCard.fallback.baseUrl")}
                       </Typography.Text>
+                      {/* T01：窗口与**来源**一起显示（「窗口 1M（参考表）」）。来源是后端
+                          按内置参考表算好的：手填 / 查到的 / 估的必须能分辨，否则用户会以为
+                          128K 这条也是查到的。 */}
+                      {typeof record.window_tokens === "number" && record.window_tokens > 0 && (
+                        <Typography.Text type="secondary" className="llm-record-window">
+                          {t("llmConfigCard.window", {
+                            window: formatContextWindow(record.window_tokens),
+                            source: t(contextWindowSourceKey(record.window_source)),
+                          })}
+                        </Typography.Text>
+                      )}
                       {record.api_key && (
                         // 脱敏承诺：卡片只说明"配置了密钥"，密钥本体与占位符都不渲染。
                         <Tag color="green">{t("llmConfigCard.tag.keyConfigured")}</Tag>

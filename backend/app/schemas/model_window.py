@@ -7,6 +7,14 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+#: 未知型号的回落窗口：也是"用户还没填"时的默认值。
+#: 放在这一层是因为 ``schemas/setting_llm.py`` 需要它，而 schemas 不得 import services
+#: （`tests/test_import_direction.py`）；服务模块反过来从这里导入并再导出。
+DEFAULT_CONTEXT_WINDOW = 128_000
+
+#: 窗口值的来源：用户手填 / 参考表命中 / 回落默认。
+WindowSource = Literal["manual", "reference", "fallback"]
+
 
 class ModelWindowEntry(BaseModel):
     """表里的一条：型号名、窗口大小、官方文档。"""
@@ -22,7 +30,7 @@ class CurrentModelWindow(BaseModel):
     model: str = ""
     label: str | None = None
     tokens: int = Field(ge=1)
-    source: Literal["manual", "reference", "fallback"]
+    source: WindowSource
 
 
 class ModelWindowReferenceOut(BaseModel):

@@ -189,7 +189,11 @@ def test_render_memory_block_uses_latest_user_message(db_session):
 
 def test_api_create_list_edit_delete_and_never_use(client):
     """#31C：可见可改——创建、列表、编辑、删除、永不使用。"""
-    assert client.get("/api/assistant/memories/settings").json() == {"auto_extract": False}
+    # T23：设置载荷含两个开关——自动抽取默认关、注入默认开。
+    assert client.get("/api/assistant/memories/settings").json() == {
+        "auto_extract": False,
+        "inject": True,
+    }
 
     created = client.post(
         "/api/assistant/memories",
@@ -244,11 +248,13 @@ def test_api_rejects_unknown_kind_and_sensitive_value(client):
 def test_settings_switch_controls_auto_extract(client, db_session):
     """自动抽取默认关；打开后持久化（31C 的控制项）。"""
     assert client.put("/api/assistant/memories/settings", json={"auto_extract": True}).json() == {
-        "auto_extract": True
+        "auto_extract": True,
+        "inject": True,
     }
     assert memory.auto_extract_enabled(db_session) is True
     assert client.put("/api/assistant/memories/settings", json={"auto_extract": False}).json() == {
-        "auto_extract": False
+        "auto_extract": False,
+        "inject": True,
     }
 
 
@@ -360,11 +366,7 @@ def test_backfill_schedules_the_idle_conversation(db_session, monkeypatch):
     memory.set_auto_extract(db_session, True)
 
     assert backfill_pending_extractions(db_session) == 1
-    tasks = (
-        db_session.query(AiTask)
-        .filter(AiTask.kind == AI_TASK_KIND_ASSISTANT_MEMORY)
-        .all()
-    )
+    tasks = db_session.query(AiTask).filter(AiTask.kind == AI_TASK_KIND_ASSISTANT_MEMORY).all()
     assert len(tasks) == 1
     assert (tasks[0].payload or {}).get("conversation_id") == conversation.id
     assert runner.started == [tasks[0].id]
@@ -378,10 +380,7 @@ def test_backfill_skips_when_switch_is_off(db_session, monkeypatch):
 
     assert backfill_pending_extractions(db_session) == 0
     assert (
-        db_session.query(AiTask)
-        .filter(AiTask.kind == AI_TASK_KIND_ASSISTANT_MEMORY)
-        .count()
-        == 0
+        db_session.query(AiTask).filter(AiTask.kind == AI_TASK_KIND_ASSISTANT_MEMORY).count() == 0
     )
     assert runner.started == []
 

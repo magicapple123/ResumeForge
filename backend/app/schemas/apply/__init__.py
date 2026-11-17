@@ -203,6 +203,9 @@ from .extras import (
 from .extras import (
     GreetingTemplateSaveIn as GreetingTemplateSaveIn,
 )
+from .extras import (
+    GreetingTemplateUseIn as GreetingTemplateUseIn,
+)
 from .insights import (
     ApplyHistoryOut as ApplyHistoryOut,
 )
@@ -313,6 +316,7 @@ __all__ = [
     "GreetingTemplateListOut",
     "GreetingTemplateOut",
     "GreetingTemplateSaveIn",
+    "GreetingTemplateUseIn",
     "ApplyConfigIn",
     "ApplyConfigOut",
     "ApplyQueueAddItem",

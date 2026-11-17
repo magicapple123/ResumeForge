@@ -39,6 +39,13 @@ from .assistant_context import load_local_context
 from .assistant_conversations import DEFAULT_TITLE, conversation_or_404
 from .assistant_persistence import history_snapshot
 from .assistant_service import conversation_title, normalize_attachments_for_api
+from .assistant_skill_prompt import _compose_skill_prompt
+from .assistant_skills import (
+    MAX_SKILL_PROMPT_CHARS,
+    PendingSkillError,
+    skills_for_ids,
+    validate_conversation_skill_ids,
+)
 from .assistant_stream_events import stream_message_events
 from .assistant_system_prompt import _system_prompt
 
@@ -135,6 +142,36 @@ def assistant_audit_scope(*, relaxed_mode: bool, language: str) -> dict[str, Any
     }
 
 
+def resolve_message_skills(
+    db: Session, payload: AssistantMessageCreate
+) -> tuple[str, list[dict[str, Any]]]:
+    """按本条消息的 ``skill_ids`` 解析技能并拼出提示词（T24：技能是消息级）。
+
+    返回 ``(skill_prompt, skill_refs)``：提示词写进用户消息 ``context.skill_prompt``，
+    由模型侧拼在**这条消息自己的正文之前**（历史消息同样带着它，续轮不断）；
+    ``skill_refs`` 写进 ``context.skills``，只供界面渲染「使用 X」chip。
+
+    校验复用对话级时代的 ``validate_conversation_skill_ids``：去重、≤8、存在性、
+    待验证 → ``PendingSkillError``。后者转 409（前端提示"先在技能页确认"），
+    其余 ``ValueError`` 转 422，与 PUT /skills 的错误语义保持一致。
+    """
+    try:
+        skill_ids = validate_conversation_skill_ids(db, payload.skill_ids)
+    except PendingSkillError as exc:
+        raise MessageDispatchError(409, str(exc)) from None
+    except ValueError as exc:
+        raise MessageDispatchError(422, str(exc)) from None
+    if not skill_ids:
+        # 没有 skill_ids 时**不读** assistant_conversation_skill：旧关联行不算启用，
+        # 否则"技能只作用于下一条消息"会被旧会话的历史设置悄悄破坏。
+        return "", []
+    skills = skills_for_ids(db, skill_ids)
+    prompt, _truncated, _skipped, _loaded = _compose_skill_prompt(skills, MAX_SKILL_PROMPT_CHARS)
+    # chip 展示用户勾选的全部技能（预算截断是服务端行为，不在 chip 上装作没选）。
+    refs = [{"id": int(skill.id), "name": skill.name} for skill in skills]
+    return prompt, refs
+
+
 def prepare_message_dispatch(
     db: Session,
     conversation_id: int,
@@ -163,6 +200,11 @@ def prepare_message_dispatch(
     # 值再写一次——worker 线程里的写入不会传播回去，见 MessageDispatch.audit_scope。
     set_ambient_scope(**audit_scope)
     context_blocks, context_metadata = load_local_context(db, payload, relaxed=relaxed_mode)
+    # T24：技能只作用于本条消息。提示词随消息落进 context，避免"下一轮还在悄悄生效"。
+    skill_prompt, skill_refs = resolve_message_skills(db, payload)
+    if skill_prompt:
+        context_metadata["skill_prompt"] = skill_prompt
+        context_metadata["skills"] = skill_refs
     config = load_llm_config(db)
     if not config.base_url or not config.model:
         raise MessageDispatchError(400, "尚未配置大模型 API")
@@ -235,5 +277,6 @@ __all__ = [
     "MessageDispatch",
     "MessageDispatchError",
     "prepare_message_dispatch",
+    "resolve_message_skills",
     "save_attachment_copies",
 ]

@@ -51,6 +51,40 @@ const companyResearch = {
   "companyResearch.notes.title": "这次调用的说明",
   /** 多条说明之间的分隔（中文用全角分号，英文用半角）。 */
   "companyResearch.notes.separator": "；",
+
+  // 调研历史（T07）：知识库仍只留最新一份，这里是每次运行的快照。
+  "companyResearch.history.open": "调研历史",
+  "companyResearch.history.title": "调研历史",
+  "companyResearch.history.viewAll": "查看历史",
+  "companyResearch.history.empty": "这家公司还没有调研历史",
+  "companyResearch.history.emptyAll": "还没有任何调研历史",
+  "companyResearch.history.error": "调研历史没读出来，稍后再试",
+  "companyResearch.history.back": "返回列表",
+  "companyResearch.history.rerun": "重新调研",
+  "companyResearch.history.detailError": "这条调研历史没读出来",
+  "companyResearch.history.deepTag": "深度",
+  "companyResearch.history.status.ok": "简报完成",
+  "companyResearch.history.status.failed": "简报失败",
+  "companyResearch.history.status.skipped": "只跑了简报",
+  /** 超过 30 天的记录提醒它可能已经过时（岗位与公司信息会变）。 */
+  "companyResearch.history.stale": "这条记录已超过 30 天，内容可能已过时",
+  "companyResearch.history.staleDays": "这条记录距今 {days} 天，内容可能已过时",
+  "companyResearch.history.summary": "共 {count} 条 · 约 {size}",
+  "companyResearch.history.clear": "清空全部",
+  "companyResearch.history.clearBody": "清空后不能恢复，知识库最新一条不受影响",
+  "companyResearch.history.clearAction": "清空 {count} 条历史",
+  "companyResearch.history.clearCancel": "先不清空",
+  "companyResearch.history.delete": "删除这条",
+  "companyResearch.history.deleteBody": "删除后不能恢复，知识库不受影响",
+  "companyResearch.history.deleted": "已删除这条调研历史",
+  "companyResearch.history.cleared": "已清空 {count} 条调研历史",
+  "companyResearch.history.jobTitle": "这家公司的调研历史 {count} 条",
+  "companyResearch.history.jobViewAll": "查看全部",
+  "companyResearch.history.loadMore": "加载更多",
+  "companyResearch.brief.meta.deep": "深度调研",
+  "companyResearch.brief.meta.standard": "标准调研",
+  "companyResearch.brief.meta.sources": "{count} 个来源",
+  "companyResearch.brief.meta.elapsed": "耗时 {seconds} 秒",
 };
 
 export default companyResearch;

@@ -68,6 +68,7 @@ from .api import (
     settings_embedding_profiles,
     settings_llm_global,
     settings_locale,
+    settings_network,
     share_packages,
     skills,
     stats,
@@ -182,6 +183,8 @@ ROUTERS = (
     settings_embedding_profiles.router,
     settings_llm_global.router,
     settings_locale.router,
+    # T02 网络代理设置（/api/settings/network）：读/写一条出网路径，改完不重启即生效。
+    settings_network.router,
     # 必须排在 fonts_api 之前：fonts_api 有 DELETE/PATCH /fonts/{name} 的参数段，
     # 先注册的话 `GET|DELETE /fonts/builtin` 会被它当成"操作一个叫 builtin 的字体"。
     font_builtin_api.router,

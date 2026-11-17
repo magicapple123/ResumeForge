@@ -28,6 +28,7 @@ const llmConfigCard = {
     "Active configuration: Resume generation and the career assistant use it",
   "llmConfigCard.tag.active": "In use",
   "llmConfigCard.tag.keyConfigured": "API key set",
+  "llmConfigCard.window": "Window {window} ({source})",
 
   "llmConfigCard.action.apply": "Use",
   "llmConfigCard.action.test": "Test connection",

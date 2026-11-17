@@ -53,6 +53,8 @@ const assistantUi = {
   "assistantUi.messageList.thinking": "正在思考…",
   "assistantUi.messageList.streaming": "正在生成回答",
   "assistantUi.messageList.preparing": "正在准备回答",
+  /** T23：助手消息下方那一行可展开的记忆引用。 */
+  "assistantUi.messageList.memory.used": "参考了 {count} 条记忆",
   "assistantUi.selectBar.selected": "已选 {count} 条",
   "assistantUi.selectBar.confirm.title": "删除选中的消息？",
   "assistantUi.selectBar.confirm.content":

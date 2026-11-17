@@ -60,6 +60,9 @@ export default function BarChart({ points, ariaLabel }: Props) {
         const y = padding.top + chartHeight - barHeight;
         return (
           <g key={point.key ?? point.label}>
+            {/* T13：每根柱一个 `<title>`。SVG 的 `<title>` 是这一根柱子的可访问名，
+                悬停也能读到「8 月：5」——原来整张图只有一个 aria-label，读屏只知道图名。 */}
+            <title>{`${point.label}: ${point.count}`}</title>
             <rect
               x={x}
               y={y}

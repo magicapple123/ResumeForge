@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """对话技能接口（T14）：读取 / 整体替换一段对话启用的技能。
 
+**T24 起这两条路由只为兼容而保留**：技能已改为「只作用于下一条消息」，由发送请求的
+``skill_ids`` 决定，``assistant_conversation_skill`` 不再参与任何提示词组装。
+PUT 仍然写表（旧客户端不会 500），GET 仍然读表（旧客户端的选择还能看到）；
+新写入的这些行不会再影响模型，只会在会话详情里以 ``legacy_skills`` 回显一次。
+
 为什么独立成文件而不是塞进 assistant.py：那个文件正好贴着 500 行预算（硬闸门），
 两条路由加进去会顶穿；而它又必须挂在同一个 `/api/assistant` router 上（路由注册表
 application_routers.py 由别的线维护，不动它）。所以这里提供 register 函数，由
 assistant.py 在创建 router 后调用一次——path / 前缀 / 依赖与那里的其余会话路由完全一致。
-
-一份数据只在一个接口里拿全：技能清单、已启用 id、注入预算都从 GET 返回，前端菜单
-不必再拉第二次；PUT 返回同一个形状，勾选后前端可以直接用响应覆盖本地状态。
 """
 
 from __future__ import annotations
@@ -68,6 +70,8 @@ def register_conversation_skill_routes(router: APIRouter) -> None:
         surface: ConversationSurface = Query(default="page"),
         db: Session = Depends(get_db),
     ):
+        # 兼容路径：仍写表（旧客户端不会 500），但**不生效**——T24 起发送请求里的
+        # skill_ids 才是唯一输入，提示词不再读这张关联表。
         conversation_or_404(db, conversation_id, surface)
         try:
             set_conversation_skills(db, conversation_id, payload.skill_ids)

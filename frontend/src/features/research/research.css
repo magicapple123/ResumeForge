@@ -70,13 +70,53 @@
 }
 
 /* 引用编号：小一号、不换行，点开原始来源。 */
+/* T16：引用改成**上标**。原来 0.9em 的行内方括号会把行距顶开、读起来像正文的一部分；
+   上标 + 0.72em 是学术排版里"这是出处、不是句子内容"的通行写法。
+   `line-height: 0` 是必须的：上标仍会撑高行盒，正文 1.85 的行距会被它顶出缺口。 */
 .rf-research-citation {
   white-space: nowrap;
-  font-size: 0.9em;
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 0;
 }
 
+/* T16：正文栏宽 46em + 1.85 行距。宽度跟"读一段字"的经验值走（约 65–75 个西文字符），
+   宽屏下不再拉成一整行；行距 1.85 是中文长文的舒适区间。 */
+.rf-research-brief {
+  max-width: 46em;
+  line-height: 1.85;
+}
+
+.rf-research-brief-meta {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--rf-text-tertiary);
+}
+
+/* 结论带：v2 的「一句话结论」单独成块，左侧 3px 品牌短竖线 + 浅底。
+   这是整篇唯一的一处强调——其它地方不要再加底色。 */
+.rf-research-brief-lead {
+  margin: 4px 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--rf-brand);
+  border-radius: 0 8px 8px 0;
+  background: var(--rf-fill-secondary);
+  font-weight: 500;
+}
+
+/* T16：节标题带一条发丝线，把长文切成可扫的段落。 */
 .rf-research-brief-heading {
-  margin: 12px 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 4px;
+}
+
+.rf-research-brief-heading::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rf-border-subtle);
 }
 
 .rf-research-brief-paragraph {
@@ -102,4 +142,68 @@
 .rf-research-usage {
   margin: 12px 0 0;
   font-size: 12px;
+}
+
+/* ---- 调研历史抽屉（T07）：三行布局——时间 / 公司·岗位 / 标签与用量 ---- */
+
+.rf-research-history-item {
+  /* List.Item 默认上下留 12px 内边距；抽屉里一屏要放下更多条。 */
+  padding: 2px 0;
+}
+
+/* 整行是一个按钮（键盘可达），内容左对齐、允许换行。 */
+.rf-research-history-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  height: auto;
+  padding: 6px 8px;
+  text-align: left;
+  white-space: normal;
+}
+
+.rf-research-history-when {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+/* 公司 · 岗位是列表行的主信息：比时间重一档，长名字允许折行。 */
+.rf-research-history-who {
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.rf-research-history-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.rf-research-history-tag {
+  margin-inline-end: 0;
+}
+
+.rf-research-history-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rf-research-history-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--rf-border-subtle);
+  padding-top: 12px;
+}
+
+/* 清空确认是**内联**的：抽屉里再开 Modal 会叠层（同一时刻只允许一个弹层容器）。 */
+.rf-research-history-confirm {
+  max-width: 320px;
 }

@@ -99,6 +99,9 @@ class FakeFetcher:
             raise value
         return value  # type: ignore[return-value]
 
+    def close(self) -> None:
+        """T04 起导入服务会在会话收尾调用 close()（真实 JobFetcher 归还连接池）。"""
+
     def fetch_pages(
         self, url: str, *, pages: int = 1, engine: str | None = None, stop_after_first=None
     ) -> FetchedPages:

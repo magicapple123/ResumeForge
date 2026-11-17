@@ -177,6 +177,19 @@ pnpm audit --registry=https://registry.npmjs.org
 
 新增或修改交互时优先补充 Vitest 测试，并检查键盘可访问性、响应式布局、加载态、空态、错误态和异步竞态。
 
+**控制台警告分两类，不要混**（2026-11 起的约定，T12）：
+
+- **契约漂移 / 可恢复异常**（后端字段缺失、兜底路径生效、两版 HTML 不一致）：用
+  `frontend/src/utils/warnOnce.ts` 的 `warnOnce(key, ...)`，**同一个 key 整个会话只打一次**。
+  这类警告会在每次渲染/每次选择都触发，裸 `console.warn` 会把控制台刷成背景噪音，最后连真错误
+  都没人看。测试要断言"同 key 只打一次"（`src/utils/warnOnce.test.ts`）。
+- **真正的失败**：走 error 通道（用户可见提示 + 日志），**不能**用 `warnOnce` 吞掉——那会让
+  "只发生一次的错误"看起来像没发生。
+
+新增依赖类用例（需要联网/外部二进制/特定 OS）时，**自己 `pytest.skip` / `describe.skip` 并打印
+原因**，不要让它变成随机红；跳过的数量与理由要能在汇总行里被数出来（详见
+[`docs/verification-playbook.md`](docs/verification-playbook.md) §"跳过数与归因"）。
+
 ### macOS 启动链（改 `scripts/macos/**` 或根目录 `*.command` 时）
 
 ```bash

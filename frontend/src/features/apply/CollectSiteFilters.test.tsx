@@ -169,6 +169,12 @@ async function pick(groupLabel: string, optionLabel: string) {
   fireEvent.click(option);
 }
 
+/** 头部的「检查」下拉：重新读取与测试是否生效收在里面。 */
+async function openCheckMenu() {
+  fireEvent.click(await screen.findByRole("button", { name: /检查/ }));
+  return screen.findByText(t("collectFilters.action.test"));
+}
+
 /** 触发 Form 提交（antd 的 Button 在测试环境里用 role 查询不稳，直接提交 form 更可靠）。 */
 function submitForm() {
   const form = document.querySelector("form");
@@ -280,22 +286,29 @@ describe("CollectSiteFilters", () => {
     expect(submitted(onValues).salary).toBeUndefined();
   });
 
-  it("读到登录态清单时标「读取自你的登录会话」，且不提示去启动浏览器", async () => {
+  it("读到登录态清单时标「已读取真实选项」，说明收进 ⓘ 而不常驻", async () => {
     renderFilters();
     expect(await screen.findByText(t("collectFilters.source.session.text"))).toBeInTheDocument();
-    expect(bodyText()).not.toContain(t("collectFilters.launch.title"));
+    // 长说明只在点开 `ⓘ` 后出现：常驻会把七个下拉推出首屏。
+    expect(bodyText()).not.toContain(t("collectFilters.intro"));
   });
 
-  it("只有公共清单时如实标注，并说明启动浏览器能拿到账号可见的完整选项", async () => {
+  it("只有公共清单时如实标注，并在 ⓘ 里说明启动浏览器能拿到完整选项", async () => {
     apiMocks.getCollectFilterOptions.mockResolvedValue(options(false));
     renderFilters();
     expect(await screen.findByText(t("collectFilters.source.public.text"))).toBeInTheDocument();
-    expect(bodyText()).toContain(t("collectFilters.launch.title"));
+
+    fireEvent.click(screen.getByRole("button", { name: t("collectFilters.intro.hintAria") }));
+    await waitFor(() => expect(bodyText()).toContain(t("collectFilters.launch.title")));
+    expect(bodyText()).toContain(t("collectFilters.launch.body"));
   });
 
   it("能力说明写清「哪些单选、哪些多选、兼职联动」与「条件越多覆盖越杂」", async () => {
     renderFilters();
-    expect(await screen.findByText(t("collectFilters.intro.rules"))).toBeInTheDocument();
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("collectFilters.intro.hintAria") }),
+    );
+    await waitFor(() => expect(bodyText()).toContain(t("collectFilters.intro.rules")));
     expect(bodyText()).toContain(t("collectFilters.intro.breadth"));
   });
 
@@ -326,9 +339,7 @@ describe("CollectSiteFilters", () => {
     });
     renderFilters();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: new RegExp(t("collectFilters.action.test")) }),
-    );
+    fireEvent.click(await openCheckMenu());
 
     await waitFor(() =>
       expect(apiMocks.testCollectFilters).toHaveBeenCalledWith({
@@ -355,9 +366,7 @@ describe("CollectSiteFilters", () => {
     });
     renderFilters();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: new RegExp(t("collectFilters.action.test")) }),
-    );
+    fireEvent.click(await openCheckMenu());
 
     expect(
       await screen.findByText(t("collectFilters.result.partial", { count: 1 })),
@@ -371,9 +380,7 @@ describe("CollectSiteFilters", () => {
     );
     renderFilters();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: new RegExp(t("collectFilters.action.test")) }),
-    );
+    fireEvent.click(await openCheckMenu());
 
     await waitFor(() =>
       expect(bodyText()).toContain("请先在投递台启动投递专用浏览器，再测试筛选条件"),

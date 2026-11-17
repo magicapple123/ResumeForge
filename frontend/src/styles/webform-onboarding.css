@@ -1,0 +1,303 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 网申填表页：初始态版式（三步动作卡 + 两栏「怎么填 / 最近填写」）与地址条内嵌历史。
+   由 `webform-workbench.css` 顶部 `@import` 聚合（@import 必须位于任何规则之前）。
+
+   ## 为什么单独成片
+   `webform-workbench.css` 已贴着 500 行预算，而初始态是另一套版式：三步从竖排说明
+   变成横排动作卡，右栏从结果区变成「最近填写」预览。新规则写在这里，workbench 片只删。
+
+   ## 为什么用容器查询而不是媒体查询
+   `.webform-workbench` 是页面内容根（`container-type: inline-size` 在 workbench 片声明）。
+   左侧全局导航收起/展开时，内容区实际宽度与视口宽度能差 200px 以上，用视口断点会在
+   1440 + 展开侧栏这种最常用的组合下切错列。这里只写 `@container`，不重复声明容器类型，
+   也不使用任何视口 `@media` 断点。 */
+
+/* ===== 安全条：从黄色警醒块降级为一行中性小字 =====
+   它在页面顶部、任何状态下都渲染；只留锁图标 + 一句话，不再抢走两行高度。
+   语义仍是产品边界（只填不交），所以颜色取次要文字色而不是弱化到看不清。 */
+
+.webform-safety-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  margin: 0;
+  padding: 0 2px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.webform-safety-strip-icon {
+  flex: 0 0 auto;
+  color: var(--rf-text-tertiary);
+}
+
+.webform-safety-strip-title {
+  color: var(--rf-text-body);
+  font-weight: 500;
+}
+
+.webform-safety-strip-body {
+  color: var(--rf-text-secondary);
+}
+
+/* ===== 初始态：标题 + 三步横排动作卡 ===== */
+
+.webform-onboarding {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.webform-onboarding-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.webform-onboarding-title {
+  margin: 0;
+  color: var(--rf-text-body);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.webform-onboarding-lead {
+  margin: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* 三列等宽：卡片内部用 flex 纵向排，按钮 `margin-top:auto` 贴底，
+   三张卡的按钮因此永远在同一条基线上，不随说明文字长短参差。 */
+.webform-onboarding-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.webform-onboarding-step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+}
+
+/* 当前步点亮：整块引导里只有一处重色，视线自然落在这里。 */
+.webform-onboarding-step.is-current {
+  border-color: var(--rf-brand);
+  background: var(--rf-brand-wash);
+  box-shadow: inset 0 0 0 1px var(--rf-brand);
+}
+
+.webform-onboarding-step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.webform-onboarding-num {
+  display: flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rf-border-strong);
+  border-radius: 50%;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.webform-onboarding-step.is-current .webform-onboarding-num {
+  border-color: transparent;
+  background: var(--rf-brand);
+  color: #ffffff;
+}
+
+.webform-onboarding-step.is-done .webform-onboarding-num {
+  border-color: var(--rf-border-subtle);
+  color: var(--rf-text-tertiary);
+}
+
+.webform-onboarding-state {
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.webform-onboarding-step.is-current .webform-onboarding-state {
+  color: var(--rf-brand);
+  font-weight: 600;
+}
+
+.webform-onboarding-step-title {
+  color: var(--rf-text-body);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.webform-onboarding-step-hint {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.webform-onboarding-step-action {
+  align-self: flex-start;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+/* ===== 两栏「怎么填 / 最近填写」 =====
+   `align-items: stretch` + 右卡 `height: 100%`：左卡行数多时右卡跟着长高，
+   两张卡的下边缘在同一条线上；右卡内部再用 `flex: 1` 把空白交给空态垂直居中。 */
+
+.webform-onboarding-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+}
+
+.webform-onboarding-columns > * {
+  min-width: 0;
+}
+
+.webform-recent {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+}
+
+.webform-recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* 3 条固定行高：条目多少不改变卡片节奏，也不把右卡撑得比左卡高。
+   条目本身在 `overflow: hidden` 里做省略，长标题不会把标签挤出卡外。 */
+.webform-recent-rows {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  flex-direction: column;
+  list-style: none;
+}
+
+.webform-recent-row {
+  display: flex;
+  height: 44px;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--rf-border-subtle);
+  overflow: hidden;
+}
+
+.webform-recent-row:first-child {
+  border-top: none;
+}
+
+.webform-recent-time {
+  flex: 0 0 auto;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.webform-recent-page {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 13px;
+}
+
+.webform-recent-tags {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 空态：`flex: 1` 吃掉标题行之外的全部高度，内容在其中垂直居中。
+   自带标题、「会发生什么」与次要入口，不依赖外层再补说明。 */
+.webform-recent-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 0;
+  text-align: center;
+}
+
+.webform-recent-empty-title {
+  margin: 0;
+  color: var(--rf-text-body);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.webform-recent-empty-what {
+  margin: 4px 0 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.webform-recent-empty-body {
+  max-width: 300px;
+  margin: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* 窄容器塌单列：三步卡与两栏一起塌，避免 3×230px 把标题断成竖排。 */
+@container (max-width: 720px) {
+  .webform-onboarding-steps,
+  .webform-onboarding-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ===== 地址条内嵌的历史菜单（T09） =====
+   菜单自绘容器仍是**唯一**滚动层（内层 `.ant-dropdown-menu` 的 overflow 兜底在
+   `modules-webform.css`）。限高改成随视口收缩：360×420 的窄窗里 360px 会顶到窗口
+   下沿被裁，`60vh` 留出锚点那一行。 */
+.webform-history-popup {
+  max-height: min(360px, 60vh);
+  overflow-y: auto;
+}
+
+/* 一条历史 = 标题（省略号）+ 删除按钮：flex 让删除按钮始终贴右，
+   标题再长也不会把按钮挤出行外。 */
+.webform-history-item {
+  display: flex;
+  max-width: 420px;
+  align-items: center;
+  gap: 8px;
+}

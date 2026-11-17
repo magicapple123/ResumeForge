@@ -9,6 +9,7 @@ SSE 帧解析、重试接线、用量接线），协议的静态规则集中在�
 可用模型"接口（``model_catalog``）与 SearXNG 校验共用的同一套规则；
 openai_compat 按原路径再导出，既有导入方零改动。
 """
+
 from __future__ import annotations
 
 from ipaddress import ip_address
@@ -32,14 +33,24 @@ _STATUS_MESSAGES = {
 }
 
 
-def http_error_message(status: int) -> str:
-    """HTTP 状态码对应的中文提示（provider 与模型列表接口共用）。"""
+def http_error_message(status: int, location: str | None = None) -> str:
+    """HTTP 状态码对应的中文提示（provider 与模型列表接口共用）。
+
+    ``3xx`` 单独说：它几乎总是"Base URL 写错了"（少了/多了 ``/v1``、把网页地址当接口），
+    而 provider 不跟随重定向（跟随会把鉴权头带去另一个主机）。此时退回"模型调用失败"
+    等于什么也没说，用户只会去检查 Key。
+    """
+    if 300 <= status < 400:
+        target = (location or "").strip()
+        if target:
+            return f"接口地址被重定向到 {target}，请把 Base URL 改成最终地址"
+        return "接口地址被重定向了，请把 Base URL 改成最终地址（常见于少了或多了 /v1）"
     return _STATUS_MESSAGES.get(status, "模型调用失败")
 
 
-def status_error(status: int) -> LLMError:
+def status_error(status: int, location: str | None = None) -> LLMError:
     """状态码 → LLMError。与 provider 的 ``_http_error`` 文案完全一致，可在没有响应对象时构造。"""
-    return LLMError(f"{http_error_message(status)}（HTTP {status}）")
+    return LLMError(f"{http_error_message(status, location)}（HTTP {status}）")
 
 
 def looks_like_rejected_parameter(error: LLMError) -> bool:
@@ -50,6 +61,7 @@ def looks_like_rejected_parameter(error: LLMError) -> bool:
     失败的话第二次错误会照常抛出去。
     """
     return "（HTTP 400）" in str(error)
+
 
 # 请求级覆盖参数白名单：model / messages / stream 这些关键字段永远不允许被覆盖，
 # 否则一个前端参数就能改写整次调用的语义。

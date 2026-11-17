@@ -81,6 +81,16 @@
   padding-left: 18px;
 }
 
+/* 「从资料填入」+ 口述入口那一行：两段各自是 antd 按钮，窄栏里必须能换行且等距。
+   原先这一层完全没有规则（靠父级浮层容器兜着），两段紧贴成 0 间距，读起来像一颗按钮。 */
+.resume-wb-v2-fill-menu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 /* R-28：页签条吸顶。顶部那 20px 内边距从容器挪进页签条自己（`padding: 20px 20px 8px`），
    否则 `position: sticky; top: 0` 的页签条与容器内边距之间会露出一条滚动中的内容。
    只改 v2 这一个类：基类 `.resume-wb-col-params` 还挂在旧面板上。 */

@@ -16,12 +16,36 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
+// @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
+import { readFileSync } from "node:fs";
 import { fieldItem, makeDocument, textItem } from "../document/documentFixtures";
 import InlineMarkOverlay from "./InlineMarkOverlay";
 import InlineMarkTextArea from "./InlineMarkTextArea";
 import ItemEditor from "./ItemEditor";
 import ResizableValueTextArea from "./ResizableValueTextArea";
 import { FieldValueEditor } from "./itemValueEditors";
+
+declare const process: { cwd(): string };
+
+function readInlineMarkCss(): string {
+  return readFileSync([process.cwd(), "src", "styles", "inline-mark-overlay.css"].join("/"), "utf8");
+}
+
+/** 只认"字色"声明：`caret-color: transparent` 不算（它前面是连字符，不是 `;` 或行首）。 */
+const OPAQUE_TEXT_RE = /(?:^|;)\s*color:\s*transparent/;
+
+/** 把一份扁平 CSS 拆成 选择器 / 声明体；注释先剥掉，避免注释里的示例被当成规则。 */
+function cssRules(source: string): { selector: string; body: string }[] {
+  const stripped = source.replace(/\/\*[\s\S]*?\*\//g, "");
+  return stripped
+    .split("}")
+    .map((chunk) => chunk.split("{"))
+    .filter((parts) => parts.length >= 2)
+    .map(([selector, body]) => ({
+      selector: selector.trim().replace(/\s+/g, " "),
+      body: body.trim(),
+    }));
+}
 
 afterEach(() => {
   cleanup();
@@ -239,5 +263,72 @@ describe("三处入口都渲染遮罩层", () => {
       </AntdApp>,
     );
     expectDecorated();
+  });
+});
+
+/**
+ * P0 回归守卫（2026-11，`81bfd19f` 之后）：**"文字透明"必须由遮罩层是否挂载单方面决定**。
+ *
+ * 回归现象：普通值（不含 `*` / `[` / `{@`）在值输入框里一片空白——值没丢，只是上层文本域
+ * 无条件 `color: transparent`，而下层遮罩层只在含标记时挂载，于是"上层透明 + 下层不存在"。
+ *
+ * 这里钉两条只有渲染层 + 样式合起来才成立的性质：
+ * 1. DOM：`is-masked` 跟着 `decorated` 走（普通值**不得**带它）；
+ * 2. CSS：`color: transparent` 只允许出现在带 `.is-masked` 的规则里，且 `::selection`
+ *    的透明必须与它同进同出（只搬一半会让普通字段选中文字消失）。
+ *
+ * jsdom 没有布局、也不解析外部 CSS，所以第 2 条只能读原文——见
+ * `workbenchLayoutContract.test.ts` 里同样的取舍说明。
+ */
+describe("普通值的字必须可见（P0 回归守卫）", () => {
+  it("不含标记的值：文本域不带 is-masked（否则字全透明、且没有下层可画）", () => {
+    render(<Harness initial="普通的值，没有任何标记" />);
+    const textarea = screen.getByRole("textbox", { name: "summary" }) as HTMLTextAreaElement;
+    expect(textarea.className).not.toContain("is-masked");
+    // 下层确实不存在——这正是"必须靠上层自己可见"的原因。
+    expect(document.querySelector(".rf-inline-mark-overlay")).toBeNull();
+  });
+
+  it("含标记的值：文本域带 is-masked（字形交给下层，光标仍由上层画）", () => {
+    render(<Harness initial="**a**" />);
+    const textarea = screen.getByRole("textbox", { name: "summary" }) as HTMLTextAreaElement;
+    expect(textarea.className).toContain("is-masked");
+    expect(document.querySelector(".rf-inline-mark-overlay")).toBeTruthy();
+  });
+
+  it("CSS：基础规则不含 color: transparent，透明只出现在 .is-masked 下", () => {
+    const rules = cssRules(readInlineMarkCss());
+    const textTransparent = rules.filter((rule) => OPAQUE_TEXT_RE.test(rule.body));
+    expect(textTransparent.length).toBeGreaterThan(0);
+    for (const rule of textTransparent) {
+      // 每一条都必须挂在 .is-masked 上：写进基础规则 = 普通值立刻变空白。
+      expect(rule.selector, `这条规则让字形透明却没有 is-masked 开关：${rule.selector}`).toContain(
+        "is-masked",
+      );
+    }
+    // 反向：`.is-masked` 那条**必须**还在，否则含标记的值会露 `**` 与 `{@`。
+    expect(
+      rules.some(
+        (rule) =>
+          rule.selector.includes("rf-inline-mark-layer") &&
+          rule.selector.includes("is-masked") &&
+          !rule.selector.includes("::selection") &&
+          OPAQUE_TEXT_RE.test(rule.body),
+      ),
+      "没有找到 .is-masked 的 color: transparent 规则",
+    ).toBe(true);
+  });
+
+  it("CSS：::selection 的透明与字形透明同进同出（只搬一半会让选中文字消失）", () => {
+    const rules = cssRules(readInlineMarkCss());
+    const selectionRules = rules.filter(
+      (rule) => rule.selector.includes("::selection") && rule.selector.includes("rf-inline-mark-layer"),
+    );
+    expect(selectionRules.length).toBeGreaterThan(0);
+    for (const rule of selectionRules) {
+      expect(rule.selector).toContain("is-masked");
+      // 选区底色仍要半透明，否则会把下层文字整片盖住。
+      expect(rule.body).toContain("color-mix");
+    }
   });
 });

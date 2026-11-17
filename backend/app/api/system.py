@@ -335,6 +335,38 @@ def _desktop_log_entries() -> list[tuple[str, str]]:
     return entries
 
 
+def _proxy_snapshot() -> dict:
+    """诊断包的 ``proxy`` 段（T02）：设置模式 + 本次生效路径 + 系统里检测到的代理。
+
+    只给 :meth:`ProxyInfo.redacted` 的字段（来源、``host:port``、``has_auth``），
+    **账号与口令永远不出现**——诊断包是给用户直接转发给陌生支持者的。
+    """
+    from ..services import net_proxy, net_settings
+
+    return {
+        "mode": net_settings.current().mode,
+        "effective": net_proxy.resolve_proxy().redacted(),
+        "detected": net_proxy.resolve_proxy(settings=net_settings.NetworkSettings()).redacted(),
+    }
+
+
+def _tls_snapshot() -> dict:
+    """诊断包的 ``tls`` 段（T05）：最近一次证书失败的 host + 原因 + verify_message。
+
+    **不含证书路径与请求正文**：诊断包会被用户直接转发，路径里常带用户名。
+    """
+    from ..services import net_proxy
+
+    return {"last_error": net_proxy.last_tls_failure()}
+
+
+def _outbound_failures_snapshot() -> list[dict]:
+    """诊断包的 ``outbound_failures`` 段（T04）：最近 50 条失败，无路径与正文。"""
+    from ..services import net_diagnostics
+
+    return net_diagnostics.recent_failures()
+
+
 def _system_snapshot() -> dict:
     settings = get_settings()
     return {
@@ -344,6 +376,9 @@ def _system_snapshot() -> dict:
         "os": platform.system(),
         "platform": platform.platform(),
         "log_file_enabled": settings.log_file_enabled,
+        "proxy": _proxy_snapshot(),
+        "tls": _tls_snapshot(),
+        "outbound_failures": _outbound_failures_snapshot(),
     }
 
 
@@ -352,8 +387,10 @@ def _system_snapshot() -> dict:
 # 逐字一致——界面按语言包取文，本常量只服务非界面消费者；两处由
 # `tests/test_diagnostics_preview_note.py` 钉住，改一处必须同批改另一处。
 _DIAGNOSTICS_PREVIEW_NOTE = (
-    "诊断包只包含脱敏运行事件、系统信息与近期后端日志（桌面壳启动时含桌面壳日志；"
-    "疑似令牌已兜底抹除）；不包含简历全文、表单填写值、Cookie 或提示词。"
+    # 2026-11：文案压到 73 字（前端 copyBudget 的 80 字上限），"桌面壳日志"必须留着——
+    # `test_preview_note_covers_desktop_logs` 守着它，用户才知道桌面壳的日志也在包里。
+    "诊断包只含脱敏事件、系统信息与近期日志（桌面壳启动时含桌面壳日志；令牌已抹除）；"
+    "代理只记来源与端口；不包含简历全文、表单值、Cookie 与提示词。"
 )
 # 预览里最多列出的类别数：事件名是有限的集合，20 个足够覆盖现有埋点。
 _PREVIEW_MAX_CATEGORIES = 20

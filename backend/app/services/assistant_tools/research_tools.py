@@ -30,6 +30,7 @@ async def _tool_research_company(
         record_research_usage,
         run_company_research_with,
     )
+    from ..job.company_research_history import record_run
     from ..job.company_research_store import save_research_entry
 
     company = str(arguments.get("company") or "").strip()
@@ -49,8 +50,19 @@ async def _tool_research_company(
     )
     record_research_usage(db, result["brief"])
     # 落库是增强项：写失败不能挡住助手这一轮回答。
+    entry = None
     with contextlib.suppress(Exception):
-        save_research_entry(db, result)
+        entry = save_research_entry(db, result)
+    # T07：助手发起的调研同样进「调研历史」——与页面手动调研同一个出口，
+    # 否则用户会看到"知识库更新了但历史里没有这一条"。
+    with contextlib.suppress(Exception):
+        record_run(
+            None,
+            result=result,
+            company_raw=company,
+            jd=jd,
+            knowledge_entry_id=entry.id if entry is not None else None,
+        )
 
     brief = result["brief"]
     if brief.get("status") != "ok":

@@ -82,7 +82,7 @@ class _InternalToolsMixin:
         status = response.status_code
         # 上游正文可能回显请求或敏感资料，只记录状态码。
         logger.warning("LLM 调用失败 status=%s", status)
-        return payload_rules.status_error(status)
+        return payload_rules.status_error(status, response.headers.get("location"))
 
 
 __all__ = ["_InternalToolsMixin"]

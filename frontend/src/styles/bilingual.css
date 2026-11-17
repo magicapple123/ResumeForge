@@ -32,9 +32,11 @@
   gap: var(--rf-space-2);
 }
 
-/* 主按钮旁的说明（"生成哪种语言、结果去哪"）：窄栏里换到按钮下一行，不挤爆工具条。 */
+/* 主按钮旁的说明（"生成哪种语言、结果去哪"）：**固定独占一行**（T19）。
+   之前是 `flex: 1 1 140px`——宽栏时它和主按钮挤在同一行，读起来像按钮的一部分；
+   100% 的 basis 让它在 wrap 容器里必然换行，与按钮分开。 */
 .bilingual-toolbar__note {
-  flex: 1 1 140px;
+  flex: 1 0 100%;
   min-width: 0;
   font-size: 12px;
   line-height: 1.5;
@@ -53,13 +55,44 @@
   margin: 0;
 }
 
-/* 页签条单独一行并与内容分层：上面是版本信息（版本名/页数/排版卡），这条是页签。 */
+/* 页签条单独一行并与内容分层：上面是版本信息（版本名/页数/排版卡），这条是页签。
+   T19：形态从 `Segmented`（块状选中）换成**下划线页签**——内容页签用下划线，左栏的
+   chip 页签用块状，两者不同层，同页出现时不会读成两套主导航。
+   `padding-bottom: 0` 是必需的：选中项的 2px 色条要压在容器那 1px 底边上，
+   留出内边距就会变成"虚线 + 色条"两条线。 */
 .bilingual-tabs {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  padding-bottom: var(--rf-space-2);
+  gap: var(--rf-space-3);
+  min-width: 0;
+  padding-bottom: 0;
   border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+/* 单个下划线页签：text Button 去掉块状底色与圆角，只留文字与那条 2px 色条。
+   色条用 `::after` 而不是 border-bottom：不参与布局，切换时文字不会上下抖。 */
+.bilingual-tab.ant-btn {
+  position: relative;
+  height: 28px;
+  padding: 0 2px;
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+  border-radius: 0;
+}
+
+.bilingual-tab.ant-btn.is-active {
+  color: var(--rf-brand);
+  font-weight: 500;
+}
+
+.bilingual-tab.ant-btn.is-active::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--rf-brand);
 }
 
 .bilingual-body {

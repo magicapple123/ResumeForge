@@ -26,6 +26,7 @@ import { getConversationContextState, recordContextResult } from "../conversatio
 import { t } from "../../../i18n";
 import type {
   AssistantMessageReferences,
+  AssistantMessageSkill,
   AssistantStreamEvent,
   AssistantSurface,
   ReasoningEffort,
@@ -87,6 +88,15 @@ export interface SendAssistantStreamOptions extends AssistantStreamInstance {
   /** 当前引用的消息 id；发送时随请求带上，之后清空。 */
   quotedMessageId: number | null;
   clearQuote: () => void;
+  /**
+   * T24：**这一条消息**要使用的技能 id（消息级）。空数组时请求里不带 `skill_ids`，
+   * 避免旧后端因 `extra="forbid"` 把空字段当成未知参数。
+   */
+  skillIds?: number[];
+  /** 同一批技能的 id+名字快照（乐观气泡显示「使用 X」）；发送后由页面清空选择。 */
+  skillRefs?: AssistantMessageSkill[];
+  /** 发送已经发起（且会话已拿到）后清空输入区的技能选择：技能只作用于下一条消息。 */
+  clearSkills?: () => void;
 }
 
 /**
@@ -164,6 +174,8 @@ export async function sendAssistantStreamMessage(
     // 引用只对这一次提问有效：发出去就清掉，避免用户以为下一条也带着引用。
     options.clearQuote();
     options.clearContextRefs?.(); // F36：只对这次提问有效，且已拿到 conversationId
+    // T24：技能同样只作用于下一条消息；非空才清（空选择不需要一次无意义的 setState）。
+    if (options.skillIds?.length) options.clearSkills?.();
   }
   const controller = new AbortController();
   setAssistantStreamAbortController(controller);
@@ -174,6 +186,8 @@ export async function sendAssistantStreamMessage(
     pendingSentAt: new Date().toISOString(),
     pendingUserAttachments: optimisticAttachments,
     pendingUserRefs: regenerate ? null : (options.contextRefs ?? null),
+    // T24：乐观气泡立刻显示「使用 X」；落库后同一条信息来自 context.skills。
+    pendingUserSkills: regenerate ? [] : (options.skillRefs ?? []),
     streamingText: "",
     streamingReasoning: "",
     streamingSources: [],
@@ -290,6 +304,8 @@ export async function sendAssistantStreamMessage(
         allow_write: permissionAxes.allowWrite,
         reasoning_effort: options.reasoningEffort,
         quoted_message_id: options.quotedMessageId,
+        // T24：技能只作用于这一条消息；空选择时整个字段都不发（后端 extra=forbid）。
+        ...(options.skillIds && options.skillIds.length > 0 ? { skill_ids: options.skillIds } : {}),
         attachments: attachmentPayload,
         // T25：带上"用户在哪一页、选中了哪条"的结构化线索；标题由后端按当前数据集重查。
         // 查询串只用于白名单参数（`/jobs?job_id=N` 这类抽屉选中），路由表全是静态页，
@@ -328,6 +344,7 @@ export async function sendAssistantStreamMessage(
       pendingUserText: "",
       pendingUserAttachments: [],
       pendingUserRefs: null,
+      pendingUserSkills: [],
       streamingText: "",
       streamingReasoning: "",
       streamingSources: [],

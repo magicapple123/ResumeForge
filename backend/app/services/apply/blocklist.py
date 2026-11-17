@@ -152,6 +152,17 @@ class Blocklist:
         return bool(self.companies or self.keywords)
 
 
+def keyword_is_active(word: str) -> bool:
+    """这个词会不会真的参与匹配：长度够、且不在停用词表里。
+
+    **判定的唯一实现**：``clean_keywords``（决定发不发出去）与 ``inactive_keywords``
+    （决定界面上是否标灰）都走这里。两份各写一遍必然漂移，而漂移的后果是界面说
+    "没生效"、实际却在筛，或者反过来。
+    """
+    text = (word or "").strip()
+    return len(text) >= MIN_KEYWORD_CHARS and text not in KEYWORD_STOPWORDS
+
+
 def clean_keywords(values: list[str]) -> list[str]:
     """收敛关键词：去空白、保序去重、丢掉过短与停用词。
 
@@ -162,7 +173,7 @@ def clean_keywords(values: list[str]) -> list[str]:
     seen: set[str] = set()
     for item in values:
         word = (item or "").strip()
-        if len(word) < MIN_KEYWORD_CHARS or word in KEYWORD_STOPWORDS:
+        if not keyword_is_active(word):
             continue
         folded = word.casefold()
         if folded in seen:
@@ -170,6 +181,28 @@ def clean_keywords(values: list[str]) -> list[str]:
         seen.add(folded)
         cleaned.append(word)
     return cleaned
+
+
+def inactive_keywords(values: list[str]) -> list[str]:
+    """存着但不会生效的关键词（原话、保序去重）。
+
+    与 ``clean_keywords`` 是**同一份规则的互补集合**：``clean_keywords(values)`` +
+    ``inactive_keywords(values)`` 覆盖全部非空输入，只是排序各按各的。
+
+    空串不算"无效项"——它是用户还没填完的空行，标灰只会制造噪声。
+    """
+    rejected: list[str] = []
+    seen: set[str] = set()
+    for item in values:
+        word = (item or "").strip()
+        if not word or keyword_is_active(word):
+            continue
+        folded = word.casefold()
+        if folded in seen:
+            continue
+        seen.add(folded)
+        rejected.append(word)
+    return rejected
 
 
 def build_blocklist(companies: list[str], keywords: list[str]) -> Blocklist:
@@ -238,6 +271,8 @@ __all__ = [
     "build_blocklist",
     "clean_keywords",
     "drop_if_blocked",
+    "inactive_keywords",
+    "keyword_is_active",
     "load_blocklist",
     "skip_if_blocked",
 ]

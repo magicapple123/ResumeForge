@@ -46,12 +46,20 @@ from ...models.profile import utcnow
 from ...models.setting import AppSetting
 from . import memory_events
 from .memory_injection import (
+    INJECT_SETTING_KEY,
     INJECTION_TOP_N,
     active_memories,
     conversation_memory_off,
+    injected_memories,
     latest_user_message,
     relevant_memories,
     render_memory_block,
+)
+from .memory_injection import (
+    memory_injection_enabled as _memory_injection_enabled,
+)
+from .memory_injection import (
+    set_memory_injection as _set_memory_injection,
 )
 
 #: 单条记忆内容上限（一句话事实，不是笔记）。
@@ -173,9 +181,7 @@ def _find_active(db: Session, kind: str, key: str) -> AssistantMemory | None:
     return query.order_by(AssistantMemory.id.desc()).first()
 
 
-def _find_suppressed(
-    db: Session, kind: str, key: str, value: str
-) -> AssistantMemory | None:
+def _find_suppressed(db: Session, kind: str, key: str, value: str) -> AssistantMemory | None:
     """同类同键同值、且被用户停用的行（用于"停用过的别再抽出来"）。"""
     query = db.query(AssistantMemory).filter(
         AssistantMemory.kind == kind,
@@ -436,10 +442,25 @@ def set_auto_extract(db: Session, enabled: bool) -> bool:
     return bool(enabled)
 
 
+def memory_injection_enabled(db: Session) -> bool:
+    """记忆注入总开关（T23）的再导出壳。
+
+    实现在 ``memory_injection``（读轴）：那边不能反过来 import 本模块（写入轴已 import
+    它），而设置接口按 ``memory.xxx`` 取用是既有习惯，所以这里留一层薄委托。
+    """
+    return _memory_injection_enabled(db)
+
+
+def set_memory_injection(db: Session, enabled: bool) -> bool:
+    """打开/关闭记忆注入（设置页开关）。返回保存后的值。"""
+    return _set_memory_injection(db, enabled)
+
+
 __all__ = [
     "AUTO_EXTRACT_IDLE_SECONDS",
     "AUTO_EXTRACT_SETTING_KEY",
     "INJECTION_TOP_N",
+    "INJECT_SETTING_KEY",
     "MAX_MEMORY_KEY_CHARS",
     "MAX_MEMORY_VALUE_CHARS",
     "MemoryValidationError",
@@ -449,12 +470,15 @@ __all__ = [
     "conversation_memory_off",
     "create_memory",
     "delete_memory",
+    "injected_memories",
     "latest_user_message",
     "list_memories",
+    "memory_injection_enabled",
     "memory_or_none",
     "relevant_memories",
     "render_memory_block",
     "set_auto_extract",
+    "set_memory_injection",
     "update_memory",
     "validate_memory",
 ]

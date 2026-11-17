@@ -4,8 +4,10 @@ const assistantMemory = {
   "assistantMemory.title": "Assistant memory",
   "assistantMemory.intro":
     "The assistant only uses job-search preferences you stated yourself. Add one by hand, or delete the memories you no longer want.",
-  /** Left side of the list header. Paused and replaced rows stay listed but are not injected. */
-  "assistantMemory.list.active": "{count} in effect",
+  /** Trust line on the card head (T23): memory stays local. */
+  "assistantMemory.trust.local": "Stored on this device",
+  /** Left side of the list header. {count} is the number of rows, paused and replaced included. */
+  "assistantMemory.list.count": "Memory · {count}",
   /** Accessible name of the row-level "..." icon button. */
   "assistantMemory.list.menu": "More actions",
   "assistantMemory.empty":
@@ -18,16 +20,28 @@ const assistantMemory = {
   "assistantMemory.autoExtract.disableToast": "Memory extraction is off",
   "assistantMemory.autoExtract.saveFailed":
     "Could not save the extraction setting. Please try again.",
+  /** Injection master switch (T23): on by default; off means no memory reaches the prompt. */
+  "assistantMemory.inject.label": "Use memories in chats",
+  "assistantMemory.inject.hint":
+    "When off, the assistant stops consulting the memories below; the entries themselves stay.",
+  "assistantMemory.inject.enableToast": "Memory injection is on",
+  "assistantMemory.inject.disableToast": "Memory injection is off",
   "assistantMemory.source.manual": "Manual",
   "assistantMemory.source.extracted": "Extracted",
   "assistantMemory.status.superseded": "Replaced by a newer value",
   "assistantMemory.confidence": "Confidence {percent}%",
-  /** One row's meta line: source · updated time. */
+  /** One row's meta line: source · updated time (menu + screen-reader text only). */
   "assistantMemory.meta.line": "{source} · {updated}",
   "assistantMemory.updatedAt": "Updated {time}",
-  /** Card footnote: how memories are injected. */
-  "assistantMemory.footnote.injection": "Injected by relevance, at most five per turn.",
+  /** Card footnote: memories stay in the local database. */
+  "assistantMemory.footnote.privacy":
+    "These memories live only in the local database and are never uploaded.",
+  /** Mechanism copy folded into the info tooltip. */
+  "assistantMemory.injection.info":
+    "Each turn injects at most five memories ranked by relevance to your message; turning off “Use memories in chats” injects none.",
+  "assistantMemory.injection.infoLabel": "How memories are used",
   "assistantMemory.sourceExcerpt": "“{text}”",
+  "assistantMemory.source.label": "Source",
   "assistantMemory.openConversation": "Open source conversation",
   "assistantMemory.action.add": "Add memory",
   "assistantMemory.action.edit": "Edit",

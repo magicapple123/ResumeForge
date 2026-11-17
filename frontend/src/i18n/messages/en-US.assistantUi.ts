@@ -56,6 +56,7 @@ const assistantUi = {
   "assistantUi.messageList.thinking": "Thinking…",
   "assistantUi.messageList.streaming": "Generating the answer",
   "assistantUi.messageList.preparing": "Preparing the answer",
+  "assistantUi.messageList.memory.used": "{count} memories used",
   "assistantUi.selectBar.selected": "{count} selected",
   "assistantUi.selectBar.confirm.title": "Delete the selected messages?",
   "assistantUi.selectBar.confirm.content":

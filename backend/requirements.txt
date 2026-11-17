@@ -43,3 +43,6 @@ python-docx==1.2.0
 # Pinyin collation for A->Z sorting (rf_pinyin, see app/services/text_sort.py).
 # Pure Python, MIT, no transitive dependencies: safe for the first-run installer.
 pypinyin==0.55.0
+# 信任操作系统证书库（T05）：杀软/企业网关的 HTTPS 扫描会替换证书，certifi 里没有
+# 这些根，校验必然失败。纯 Python、无传递依赖，且只在开关打开时加载。
+truststore==0.10.4

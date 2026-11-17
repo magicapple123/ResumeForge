@@ -11,7 +11,12 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import type { RefObject } from "react";
-import type { AssistantMessageReferences, AssistantSurface, ReasoningEffort } from "../../../types";
+import type {
+  AssistantMessageReferences,
+  AssistantMessageSkill,
+  AssistantSurface,
+  ReasoningEffort,
+} from "../../../types";
 import type { PendingAttachment } from "../assistantUtils";
 import { useTouTou } from "../../tou-tou/touTouContext";
 import {
@@ -40,6 +45,12 @@ interface Options {
   /** 当前引用的消息 id；发送时随请求带上，之后清空。 */
   quotedMessageId: number | null;
   clearQuote: () => void;
+  /** T24：这一条消息要使用的技能 id（只在非空时随请求发送）。 */
+  skillIds?: number[];
+  /** 同一批技能的 id+名字快照（乐观气泡显示「使用 X」）。 */
+  skillRefs?: AssistantMessageSkill[];
+  /** 发送发起后清空输入区的技能选择。 */
+  clearSkills?: () => void;
 }
 
 export function useAssistantStream(options: Options) {
@@ -60,6 +71,9 @@ export function useAssistantStream(options: Options) {
     surface = "page",
     quotedMessageId,
     clearQuote,
+    skillIds,
+    skillRefs,
+    clearSkills,
   } = options;
   const state = useSyncExternalStore(subscribeAssistantStream, getAssistantStreamState);
   // 流结束收尾（含离场期间结束的场景）需要刷新数据：把当前实例的回调注册给
@@ -88,6 +102,9 @@ export function useAssistantStream(options: Options) {
         surface,
         quotedMessageId,
         clearQuote,
+        skillIds,
+        skillRefs,
+        clearSkills,
       }),
     [
       activeIdRef,
@@ -96,6 +113,7 @@ export function useAssistantStream(options: Options) {
       clearAttachments,
       clearContextRefs,
       clearQuote,
+      clearSkills,
       createConversation,
       jobId,
       loadDetail,
@@ -104,6 +122,8 @@ export function useAssistantStream(options: Options) {
       reloadConversations,
       resumeId,
       setTouTouStatus,
+      skillIds,
+      skillRefs,
       surface,
       webSearch,
     ],

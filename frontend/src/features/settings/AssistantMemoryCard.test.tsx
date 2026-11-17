@@ -12,6 +12,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
+import { formatDateTime } from "../../utils/format";
 import type { AssistantMemory } from "./assistantMemoryApi";
 import AssistantMemoryCard from "./AssistantMemoryCard";
 
@@ -119,10 +120,15 @@ beforeEach(() => {
     { kind: "city", label: "Cities" },
     { kind: "salary_floor", label: "Salary floor" },
   ]);
-  apiMocks.getAssistantMemorySettings.mockReset().mockResolvedValue({ auto_extract: false });
+  apiMocks.getAssistantMemorySettings
+    .mockReset()
+    .mockResolvedValue({ auto_extract: false, inject: true });
   apiMocks.saveAssistantMemorySettings
     .mockReset()
-    .mockImplementation(async (enabled: boolean) => ({ auto_extract: enabled }));
+    .mockImplementation(async (patch: { auto_extract?: boolean; inject?: boolean }) => ({
+      auto_extract: patch.auto_extract ?? false,
+      inject: patch.inject ?? true,
+    }));
   apiMocks.createAssistantMemory.mockReset().mockImplementation(async (input: unknown) => ({
     ...MANUAL,
     id: 9,
@@ -146,21 +152,28 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("AssistantMemoryCard 列表", () => {
-  it("展示内容/类型，来源与更新时间合并成一行元信息", async () => {
+  it("展示内容/类型；来源与更新时间进 `⋯` 菜单，列表头数的是列表长度", async () => {
     renderCard();
 
     expect(await screen.findByText("Backend engineer")).toBeInTheDocument();
     expect(screen.getByText(t("assistantMemory.kind.target_role"))).toBeInTheDocument();
-    // 元信息是一句「来源 · 更新于 时间」，所以按行首的来源码取（两条手填、一条抽取）。
-    expect(
-      screen.getAllByText(new RegExp(`^${t("assistantMemory.source.manual")} · `)),
-    ).toHaveLength(2);
-    expect(
-      screen.getAllByText(new RegExp(`^${t("assistantMemory.source.extracted")} · `)),
-    ).toHaveLength(1);
     expect(screen.getByText(t("assistantMemory.status.superseded"))).toBeInTheDocument();
-    // 列表头数的是「生效」条数：被新说法替换的那条不算。
-    expect(screen.getByText(t("assistantMemory.list.active", { count: 2 }))).toBeInTheDocument();
+    // T23：N = 列表长度（3），不再只数 active。
+    expect(screen.getByText(t("assistantMemory.list.count", { count: 3 }))).toBeInTheDocument();
+
+    // 元信息不再占正文行：读屏文本（sr-only）与 `⋯` 菜单里各有一份。
+    const metaLine = t("assistantMemory.meta.line", {
+      source: t("assistantMemory.source.manual"),
+      updated: t("assistantMemory.updatedAt", {
+        time: formatDateTime(MANUAL.updated_at),
+      }),
+    });
+    expect(
+      within(screen.getByTestId("assistant-memory-1")).getByText(metaLine),
+    ).toBeInTheDocument();
+    await openRowMenu(1);
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByText(metaLine)).toBeInTheDocument();
   });
 
   it("自动抽取的记忆从 `⋯` 菜单回原对话；手填的没有这一项", async () => {
@@ -229,13 +242,14 @@ describe("AssistantMemoryCard 版面判据（I-03）", () => {
     expect(screen.getByLabelText(t("assistantMemory.sort.label"))).toBeInTheDocument();
   });
 
-  it("「清空全部」在列表区之外（Card extra），且 0 条时不渲染", async () => {
+  it("「清空全部」下沉到列表底部，且 0 条时不渲染", async () => {
     renderCard();
     await screen.findByText("Backend engineer");
     const clearButton = screen.getByRole("button", {
       name: buttonName("assistantMemory.action.clearAll"),
     });
-    expect(clearButton.closest('[data-testid="assistant-memory-list"]')).toBeNull();
+    // T23：危险动作在列表区内、列表末尾，不再占 Card extra。
+    expect(clearButton.closest('[data-testid="assistant-memory-list"]')).not.toBeNull();
     cleanup();
 
     apiMocks.listAssistantMemories.mockResolvedValue([]);
@@ -250,13 +264,17 @@ describe("AssistantMemoryCard 版面判据（I-03）", () => {
     renderCard();
     await screen.findByText("Backend engineer");
     expect(screen.queryByText(t("assistantMemory.form.sensitiveHint"))).toBeNull();
-    // 底注改说注入口径。
-    expect(screen.getByText(t("assistantMemory.footnote.injection"))).toBeInTheDocument();
+    // 底注改说隐私；机制说明收进 ⓘ（不常驻一整句）。
+    expect(screen.getByText(t("assistantMemory.footnote.privacy"))).toBeInTheDocument();
+    expect(screen.queryByText(t("assistantMemory.injection.info"))).toBeNull();
+    expect(
+      screen.getByRole("button", { name: t("assistantMemory.injection.infoLabel") }),
+    ).toBeInTheDocument();
   });
 });
 
-describe("AssistantMemoryCard 自动抽取", () => {
-  it("默认关闭；开启时调用设置接口并给成功提示", async () => {
+describe("AssistantMemoryCard 自动抽取与注入开关（T23）", () => {
+  it("自动整理默认关闭；开启时只送自己这一项并给成功提示", async () => {
     renderCard();
 
     const toggle = await screen.findByRole("switch", {
@@ -266,10 +284,28 @@ describe("AssistantMemoryCard 自动抽取", () => {
     expect(toggle).not.toBeChecked();
 
     fireEvent.click(toggle);
-    await waitFor(() => expect(apiMocks.saveAssistantMemorySettings).toHaveBeenCalledWith(true));
+    await waitFor(() =>
+      expect(apiMocks.saveAssistantMemorySettings).toHaveBeenCalledWith({ auto_extract: true }),
+    );
     expect(
       await screen.findByText(t("assistantMemory.autoExtract.enableToast")),
     ).toBeInTheDocument();
+  });
+
+  it("记忆注入默认开启；关闭时只送 inject，不连带改写自动整理", async () => {
+    renderCard();
+
+    const toggle = await screen.findByRole("switch", {
+      name: t("assistantMemory.inject.label"),
+    });
+    await waitFor(() => expect(toggle).not.toBeDisabled());
+    expect(toggle).toBeChecked();
+
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(apiMocks.saveAssistantMemorySettings).toHaveBeenCalledWith({ inject: false }),
+    );
+    expect(await screen.findByText(t("assistantMemory.inject.disableToast"))).toBeInTheDocument();
   });
 });
 

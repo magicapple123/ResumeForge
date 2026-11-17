@@ -38,6 +38,10 @@ from .assistant_compaction_settings import (
     get_compaction_settings,
     save_compaction_settings,
 )
+from .assistant_compaction_skills import (
+    attach_compaction_skill_prompt,
+    build_compaction_skill_prompt,
+)
 from .assistant_persistence import history_snapshot
 
 logger = logging.getLogger(__name__)
@@ -107,6 +111,7 @@ def compaction_state_out(payload: dict[str, Any]) -> dict[str, Any]:
         "model": str(payload.get("model") or ""),
         "created_at": str(payload.get("created_at") or ""),
         "masked_tool_results": int(last_mask.get("count") or 0),
+        "summary": summary_ops.summary_text(summary),
     }
 
 
@@ -178,7 +183,10 @@ def _apply_stored_summary(
     ]
     covered = state.get("covered_until_message_id")
     prefix = core.covered_prefix_length(history_slice, covered) if same else 0
-    return summary_ops.apply_summary(messages, summary, cut_index=1 + prefix)
+    applied = summary_ops.apply_summary(messages, summary, cut_index=1 + prefix)
+    # T24：摘要生成时按"本会话最近用过的技能"记了一段提示（见 assistant_compaction_skills）；
+    # 它每轮都要跟着摘要块一起补回，否则压缩后的追问会失去技能约束。
+    return attach_compaction_skill_prompt(applied, str(state.get("skill_prompt") or ""))
 
 
 def _persist_mask_stats(
@@ -265,6 +273,12 @@ async def compact_before_model(
         turns=plan.summary_region.turns,
     )
     current = summary_ops.apply_summary(current, merged, cut_index=plan.summary_cut_index)
+    # T24：摘要会压掉旧轮次的用户消息，连带压掉它们的技能提示；这里按"本会话最近
+    # 用过的技能"重新挂一段（常量口径见 assistant_compaction_skills），并写进压缩状态，
+    # 后续每轮由 _apply_stored_summary 跟着摘要块补回。
+    with factory() as db:
+        skill_prompt = build_compaction_skill_prompt(db, conversation_id)
+    current = attach_compaction_skill_prompt(current, skill_prompt)
     tokens_after = core.messages_tokens(current)
     payload = {
         "summary": merged,
@@ -274,6 +288,8 @@ async def compact_before_model(
         "model": _provider_model(provider, settings.model),
         "created_at": _now_iso(),
     }
+    if skill_prompt:
+        payload["skill_prompt"] = skill_prompt
     if isinstance(state.get("last_mask"), dict):
         payload["last_mask"] = state["last_mask"]
     with factory() as db:
@@ -420,6 +436,10 @@ def persist_manual_compaction(plan: ManualCompactionPlan, parsed: Any) -> dict[s
     if plan.last_mask is not None:
         stored["last_mask"] = plan.last_mask
     with fresh_session() as db:
+        # T24：手动压缩同样要重挂"最近用过的技能"——摘要落库后每轮都跟着摘要块下发。
+        skill_prompt = build_compaction_skill_prompt(db, plan.conversation_id)
+        if skill_prompt:
+            stored["skill_prompt"] = skill_prompt
         save_compaction(db, plan.conversation_id, stored)
     payload.update(
         {

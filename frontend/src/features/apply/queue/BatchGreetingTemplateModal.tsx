@@ -9,6 +9,7 @@
 import { Button, Modal, Select, Space, Typography, App } from "antd";
 import { useState } from "react";
 import { updateQueueItem } from "../../../api/apply";
+import { markGreetingTemplateUsed } from "../../../api/applyExtras";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { ApplyQueueItem } from "../../../types";
@@ -55,6 +56,12 @@ export function BatchGreetingTemplateModal({
         ),
       );
       const failed = results.filter((result) => result.status === "rejected").length;
+      const applied = items.length - failed;
+      if (applied > 0) {
+        // 计数走**一次**请求带 N（不是 N 次 +1）：批量套用是同一个动作，打 N 次库既慢
+        // 又会在中途失败时留下半截计数。计数失败不回滚已写入的招呼语，所以不 await。
+        void markGreetingTemplateUsed(selected.id, applied).catch(() => undefined);
+      }
       if (failed > 0) {
         message.warning(
           t("applyQueue.template.batchPartial", { ok: items.length - failed, failed }),

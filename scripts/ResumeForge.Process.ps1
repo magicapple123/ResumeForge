@@ -284,23 +284,31 @@ function Start-ResumeForge {
                 $runtimeLockPath = Get-RuntimeLockPath -BackendDirectory $BackendDirectory
                 Assert-RuntimeLockUsable -LockPath $runtimeLockPath | Out-Null
                 Write-Host "首次运行：正在安装后端依赖（约 40 个包，第一次要几分钟）..."
+                # T06：把输出收进变量再分类——用户看到的标题是"这一次的原因"，不是一份
+                # 五步清单；原始输出落到 runtime/pip-install.log，不塞进错误标题。
+                . (Join-Path $PSScriptRoot "PipFailureHint.ps1")
+                $pipLines = @()
                 & $pythonExecutable -m pip install `
                     --require-hashes `
                     --timeout 300 `
                     --retries 10 `
-                    -r $runtimeLockPath
-                if ($LASTEXITCODE -ne 0) {
-                    throw ("后端依赖安装失败。`n" +
+                    -r $runtimeLockPath 2>&1 | Tee-Object -Variable pipLines | Out-Host
+                $pipExitCode = $LASTEXITCODE
+                if ($pipExitCode -ne 0) {
+                    $pipText = ($pipLines | Out-String)
+                    $pipLogPath = Join-Path $RuntimeDirectory "pip-install.log"
+                    try {
+                        $pipText | Set-Content -Path $pipLogPath -Encoding utf8
+                    }
+                    catch {
+                        # 日志写不进去不能盖住真正的原因：路径改为"（日志写入失败）"。
+                        $pipLogPath = "（日志写入失败）"
+                    }
+                    $hint = Get-PipFailureHint -Output $pipText
+                    throw ("后端依赖安装失败：$($hint.Headline)`n" +
+                        "$($hint.Action)`n" +
                         "安装用的是随仓库分发的生产锁 backend\$(Get-RuntimeLockFileName)（逐包 SHA-256 校验），不是顶层 requirements.txt。`n" +
-                        "最常见的原因是网络：默认走官方 PyPI，国内经常很慢或直接超时。`n" +
-                        "怎么办（按顺序试）：`n" +
-                        "  1) 换国内镜像重装（最有效）：`n" +
-                        "     backend\.venv\Scripts\python.exe -m pip install --require-hashes -i https://mirrors.aliyun.com/pypi/simple -r backend\$(Get-RuntimeLockFileName)`n" +
-                        "  2) 需要代理时，先在 PowerShell 里设好 `$env:HTTP_PROXY / `$env:HTTPS_PROXY 再重试；`n" +
-                        "  3) 确认能打开 https://mirrors.aliyun.com/pypi/simple/（打不开就是网络被拦了）；`n" +
-                        "  4) 若报错是哈希不匹配（hash mismatch），说明下载到的文件与锁记录的不一致，`n" +
-                        "     不要绕过校验：把 pip 输出原文发到 GitHub Issues，等锁更新；`n" +
-                        "  5) 仍失败：把上面 pip 的报错原文发到 GitHub Issues。")
+                        "pip 原始输出：$pipLogPath（分类：$($hint.Category)，退出码 $pipExitCode）")
                 }
             }
 

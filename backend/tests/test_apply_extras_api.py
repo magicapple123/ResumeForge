@@ -279,7 +279,8 @@ def test_greeting_templates_roundtrip_keeps_usage_count(client):
     assert template["uses"] == 0
     assert template["tags"] == ["通用"]
 
-    # 套用 3 次后回写 uses（契约里没有单独的计数端点，靠 PUT 带上新值）。
+    # 显式带上 uses 时整表 PUT 仍按绝对值写入（兼容旧客户端的迁移路径）；
+    # 日常计数走 `POST /greeting-templates/{id}/use` 的增量，见 test_apply_greeting_usage。
     used = client.put(
         "/api/apply/greeting-templates",
         json={
@@ -356,10 +357,15 @@ def test_blocklist_roundtrip_strips_and_dedupes(client, db_session):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"companies": ["A公司"], "keywords": ["区块链"]}
+    assert response.json() == {
+        "companies": ["A公司"],
+        "keywords": ["区块链"],
+        "inactive_keywords": [],
+    }
     assert client.get("/api/apply/blocklist").json() == {
         "companies": ["A公司"],
         "keywords": ["区块链"],
+        "inactive_keywords": [],
     }
 
 
@@ -383,4 +389,8 @@ def test_blocklist_empty_payload_is_a_noop(client, db_session, payload):
     response = client.put("/api/apply/blocklist", json=payload)
 
     assert response.status_code == 200
-    assert response.json() == {"companies": [], "keywords": []}
+    assert response.json() == {
+        "companies": [],
+        "keywords": [],
+        "inactive_keywords": [],
+    }

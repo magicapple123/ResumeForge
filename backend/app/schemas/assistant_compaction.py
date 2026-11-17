@@ -33,6 +33,9 @@ class ContextCompactionStateOut(BaseModel):
     created_at: str = ""
     # 上次遮蔽掉的工具结果条数（L1 的量化结果，面板显示为「已遮蔽 N 条」）。
     masked_tool_results: int = 0
+    # 摘要正文（T25）：与发给模型的是同一份渲染结果，按 4000 字截断。
+    # 会话详情与 GET /context-usage 下发同一份，消息流里「查看摘要」直接用它。
+    summary: str = ""
 
 
 class ConversationCompactRequest(BaseModel):

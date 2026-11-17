@@ -21,7 +21,8 @@
  * 如果只有 URL 而没有当前标签页草稿，重放的是**「读到了什么」**，勾选会回到默认；有草稿时则连
  * 勾选、手改值和填充结果一起恢复。这样既不把临时状态塞进 URL，也不会在正常切页时丢失进度。
  */
-import { Alert, App, Button, Collapse } from "antd";
+import { Alert, App, Button, Collapse, Drawer } from "antd";
+import { LockOutlined } from "@ant-design/icons";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDiagnostics } from "../api/system";
 import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
@@ -66,6 +67,7 @@ import { FillModePanel } from "./webform/FillModePanel";
 import { FlowBar } from "./webform/FlowBar";
 import { ResultPanel } from "./webform/ResultPanel";
 import { WebFormOnboarding } from "./webform/WebFormOnboarding";
+import { WebFormRecentRecords } from "./webform/WebFormRecentRecords";
 import { Workbar } from "./webform/Workbar";
 import { WEB_FORM_STATUS_POLL_INTERVAL_MS } from "./webform/constants";
 // 工作台版式（吸顶工具条 + 两栏 + 结果 Tabs）：按需加载，不并进全局样式表。
@@ -132,6 +134,8 @@ export default function WebFormPage() {
   const [learning, setLearning] = useState<WebFormLearningCandidate[]>([]);
   const [learningSaving, setLearningSaving] = useState(false);
   const [browserSettingsOpen, setBrowserSettingsOpen] = useState(false);
+  // 「查看全部」的完整记录列表：初始态右卡只放最近 3 条，完整列表在抽屉里（服务端分页）。
+  const [recentAllOpen, setRecentAllOpen] = useState(false);
   const [targetUrl, setTargetUrl] = useState("");
   const [urlHistory, setUrlHistory] = useState<WebFormUrlHistory[]>([]);
   const aiAvailable = useAiAvailable();
@@ -687,6 +691,28 @@ export default function WebFormPage() {
 
   // 四行开关不再参与"渐进展开"（RF-12 那套折叠已撤）：AI 兜底与放宽模式的说明必须在
   // 默认入口就看得见——把它们藏起来，用户在还没开始填表时根本看不到边界（#37 的教训）。
+  //
+  // 初始态与工作台态**共用同一份**「怎么填」元素：两个分支各写一遍 props，迟早会漏掉
+  // 某个开关，切换时表现成"设置自己变了"。
+  const fillModePanel = (
+    <FillModePanel
+      scope={scope}
+      scopeDisabled={busy === "read"}
+      onScopeChange={handleScopeChange}
+      aiOn={aiOn}
+      aiAvailable={aiAvailable}
+      onAiEnabledChange={setAiEnabled}
+      live={live}
+      liveEnabled={liveEnabled}
+      running={running}
+      busy={busy}
+      rememberPending={rememberPending}
+      alternatives={alternatives}
+      onLiveToggle={handleLiveToggle}
+      onRequestMemoryDialog={handleRequestMemoryDialog}
+    />
+  );
+
   return (
     <div className="webform-workbench">
       <Workbar
@@ -710,61 +736,45 @@ export default function WebFormPage() {
         onEndSession={handleEndSession}
       />
 
-      {/* 安全说明压成一行：只填不交是产品边界，必须一直挂在页面上（不随展开状态消失），
-          但也不该占掉两行高度——标题加粗、正文次要色，窄容器自动换行。 */}
+      {/* 安全说明降级成一行中性小字（锁图标 + 一句话）：只填不交是产品边界，任何状态下
+          都渲染，但不再用黄色警醒块占掉两行高度。 */}
       <p className="webform-safety-strip" role="note">
+        <LockOutlined className="webform-safety-strip-icon" aria-hidden="true" />
         <span className="webform-safety-strip-title">{t("webFormPage.notice.title")}</span>
         <span className="webform-safety-strip-body">{t("webFormPage.notice.body")}</span>
       </p>
 
-      <div className="webform-columns">
-        {/* 左栏：填什么 / 怎么填。步骤条 + 当前步动作，再往下是四行填写方式。 */}
-        <div className="webform-column">
-          <FlowBar
-            step={step}
-            running={running}
-            busy={busy}
-            snapshot={snapshot}
-            onRead={handleRead}
-          />
-          <FillModePanel
-            scope={scope}
-            scopeDisabled={busy === "read"}
-            onScopeChange={handleScopeChange}
-            aiOn={aiOn}
-            aiAvailable={aiAvailable}
-            onAiEnabledChange={setAiEnabled}
-            live={live}
-            liveEnabled={liveEnabled}
-            running={running}
-            busy={busy}
-            rememberPending={rememberPending}
-            alternatives={alternatives}
-            onLiveToggle={handleLiveToggle}
-            onRequestMemoryDialog={handleRequestMemoryDialog}
-          />
-
-          {/* AI 建议已就绪，但当前页面对应的不是那次快照：**由用户点一下**再切过去，
-              绝不自动覆盖他正在核对的这份预览。 */}
-          {stagedAi && snapshot?.snapshot_id !== stagedAi.snapshotId ? (
-            <Alert
-              type="info"
-              showIcon
-              title={t("webFormPage.stagedAi.ready")}
-              action={
-                <Button size="small" onClick={applyStagedAi}>
-                  {t("webFormPage.stagedAi.apply")}
-                </Button>
-              }
+      {preview || result ? (
+        <div className="webform-columns">
+          {/* 左栏：填什么 / 怎么填。步骤条 + 当前步动作，再往下是四行填写方式。 */}
+          <div className="webform-column">
+            <FlowBar
+              step={step}
+              running={running}
+              busy={busy}
+              snapshot={snapshot}
+              onRead={handleRead}
             />
-          ) : null}
-        </div>
+            {fillModePanel}
 
-        {/* 右栏：结果与记录。三块结果合成一组 Tabs；填充记录默认收起（只折叠视觉）。
-            还没读表单时这里换成「三步开始填写」——结果区整块不渲染的话，1440 宽的屏幕上
-            右栏是一块白板，而左栏同时挤着四行开关与四段说明，一边过载一边空着。 */}
-        <div className="webform-column">
-          {preview || result ? (
+            {/* AI 建议已就绪，但当前页面对应的不是那次快照：**由用户点一下**再切过去，
+              绝不自动覆盖他正在核对的这份预览。 */}
+            {stagedAi && snapshot?.snapshot_id !== stagedAi.snapshotId ? (
+              <Alert
+                type="info"
+                showIcon
+                title={t("webFormPage.stagedAi.ready")}
+                action={
+                  <Button size="small" onClick={applyStagedAi}>
+                    {t("webFormPage.stagedAi.apply")}
+                  </Button>
+                }
+              />
+            ) : null}
+          </div>
+
+          {/* 右栏：结果与记录。三块结果合成一组 Tabs；填充记录默认收起（只折叠视觉）。 */}
+          <div className="webform-column">
             <ResultPanel
               preview={preview}
               result={result}
@@ -780,35 +790,62 @@ export default function WebFormPage() {
               onToggle={toggle}
               onValueChange={changeValue}
             />
-          ) : (
-            <WebFormOnboarding running={running} hasSnapshot={Boolean(snapshot)} />
-          )}
 
-          {/* 填充记录：每次填充留一笔，供事后回看"我当时到底填了什么"。
+            {/* 填充记录：每次填充留一笔，供事后回看"我当时到底填了什么"。
               记录里含真实值（证件号、手机号），所以删除是隐私上的必要项，不是便利。
               默认收起但**面板仍挂载**（forceRender）：展开即见，不必重新取数。 */}
-          <Collapse
-            className="webform-records"
-            size="small"
-            items={[
-              {
-                key: "records",
-                forceRender: true,
-                label: (
-                  <span>
-                    {t("webFormPage.card.records")}
-                    <span className="webform-records-hint">
-                      {" · "}
-                      {t("webFormPage.records.hint")}
+            <Collapse
+              className="webform-records"
+              size="small"
+              items={[
+                {
+                  key: "records",
+                  forceRender: true,
+                  label: (
+                    <span>
+                      {t("webFormPage.card.records")}
+                      <span className="webform-records-hint">
+                        {" · "}
+                        {t("webFormPage.records.hint")}
+                      </span>
                     </span>
-                  </span>
-                ),
-                children: <MemoWebFormRecordsPanel refreshKey={recordRefresh} />,
-              },
-            ]}
-          />
+                  ),
+                  children: <MemoWebFormRecordsPanel refreshKey={recordRefresh} />,
+                },
+              ]}
+            />
+          </div>
         </div>
-      </div>
+      ) : (
+        <WebFormOnboarding
+          running={running}
+          hasSnapshot={Boolean(snapshot)}
+          targetUrl={targetUrl}
+          busy={busy}
+          onStart={handleStart}
+          onOpenUrl={handleOpenUrl}
+          onRead={handleRead}
+          fillPanel={fillModePanel}
+          recentPanel={
+            <WebFormRecentRecords
+              refreshKey={recordRefresh}
+              urlHistory={urlHistory}
+              onViewAll={() => setRecentAllOpen(true)}
+              onUseUrl={(item) => setTargetUrl(item.url)}
+            />
+          }
+        />
+      )}
+
+      {/* 初始态右卡只铺最近 3 条；完整列表（含删除与分页）在这里作为只读抽屉打开。 */}
+      <Drawer
+        open={recentAllOpen}
+        onClose={() => setRecentAllOpen(false)}
+        title={t("webFormPage.card.records")}
+        size="large"
+      >
+        <MemoWebFormRecordsPanel refreshKey={recordRefresh} />
+      </Drawer>
 
       <BrowserSettingsModal
         open={browserSettingsOpen}

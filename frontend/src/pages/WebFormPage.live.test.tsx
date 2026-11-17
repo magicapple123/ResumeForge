@@ -203,8 +203,11 @@ describe("WebFormPage", () => {
     // 「结束本次填写」除会话恢复外还依赖浏览器状态轮询的 running 落地，
     // 与「填充到页面」不在同一次状态提交里；CI 高负载下可能晚一拍
     // （#58 在 router 7.18.4 上的一次偶发失败）。这里等待它出现再断言，
-    // 断言本身（role / name / 值）不放松。
-    expect(await screen.findByRole("button", { name: /结束本次填写/ })).toBeInTheDocument();
+    // 断言本身（role / name / 值）不放松——它现在收在「更多」里，先展开菜单。
+    const more = await screen.findByRole("button", { name: "更多浏览器操作" });
+    await waitFor(() => expect(more).toBeEnabled());
+    fireEvent.click(more);
+    expect(await screen.findByRole("menuitem", { name: /结束本次填写/ })).toBeInTheDocument();
     expect(await screen.findByDisplayValue("手动改过的姓名")).toBeInTheDocument();
   });
 
@@ -219,15 +222,22 @@ describe("WebFormPage", () => {
 
     renderPage();
 
-    const endButton = await screen.findByRole("button", { name: /结束本次填写/ });
-    fireEvent.click(endButton);
+    // 「结束本次填写」收进了「更多」：它和「关闭浏览器」（登录态保留）不是一回事，
+    // 放进菜单并标 danger，避免被当成普通关闭。
+    const more = await screen.findByRole("button", { name: "更多浏览器操作" });
+    await waitFor(() => expect(more).toBeEnabled());
+    fireEvent.click(more);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /结束本次填写/ }));
 
     await waitFor(() => expect(apiMocks.stopWebFormLive).toHaveBeenCalled());
     expect(apiMocks.stopWebFormBrowser).toHaveBeenCalled();
     await waitFor(() =>
       expect(window.sessionStorage.getItem(webFormSessionStorageKey("main"))).toBeNull(),
     );
-    expect(screen.queryByRole("button", { name: /结束本次填写/ })).not.toBeInTheDocument();
+    // 结束后菜单里不再有这个收尾动作。
+    fireEvent.click(more);
+    expect(await screen.findByRole("menuitem", { name: /浏览器设置/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /结束本次填写/ })).not.toBeInTheDocument();
   });
 
   it("cannot start the click-to-fill mode before the browser is up", async () => {

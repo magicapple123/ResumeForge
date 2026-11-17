@@ -262,6 +262,22 @@ def apply_summary(
     return [*pin, block, *messages[start:]]
 
 
+#: 下发到界面的摘要正文字符上限（T25）。与 ``MAX_SUMMARY_CHARS`` 同值但用途不同：
+#: 那一份是喂给模型的预算，这一份是消息流里展开面板的展示上限。
+SUMMARY_TEXT_LIMIT = 4000
+
+
+def summary_text(summary: Any) -> str:
+    """把结构化摘要渲染成给用户看的一段文字；没有摘要时是空串。
+
+    与发给模型的是同一份渲染结果（``render_summary_block``），只是再按展示上限截断：
+    用户在消息流里看到的那份必须和模型真正读到的是同一份内容。
+    """
+    if not isinstance(summary, dict) or not summary:
+        return ""
+    return render_summary_block(summary)[:SUMMARY_TEXT_LIMIT]
+
+
 __all__ = [
     "apply_summary",
     "build_summary_prompt",
@@ -269,4 +285,5 @@ __all__ = [
     "parse_summary",
     "render_summary_block",
     "summary_block_tokens",
+    "summary_text",
 ]

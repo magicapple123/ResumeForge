@@ -27,6 +27,9 @@ const applyCollect = {
   "applyCollect.field.perTaskLimit": "单批上限",
   "applyCollect.field.intervalSeconds": "岗位间隔（秒）",
   "applyCollect.field.jitterSeconds": "随机抖动（秒）",
+  "applyCollect.rhythm.summary": "间隔 {interval} 秒 · 抖动 {jitter} 秒 · 约 {minutes} 分钟",
+  "applyCollect.rhythm.adjust": "调整",
+  "applyCollect.rhythm.collapse": "收起",
   "applyCollect.field.saveSamples": "保存本次抓到的站点原文（用于排查解析问题）",
   "applyCollect.hint.saveSamples":
     "会保存搜索与详情两个接口的响应原文；只存到本机 backend/data/captures/，不进仓库、不进备份。",

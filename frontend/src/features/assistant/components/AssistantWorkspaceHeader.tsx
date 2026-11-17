@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 助手工作区页头：标题、说明与浮窗的历史按钮，多选工具条紧随其后。 */
+/**
+ * 助手工作区页头：标题、视角下拉、说明与浮窗的历史按钮，多选工具条紧随其后。
+ *
+ * 视角（T26）从正文首行搬到这里：它是**会话属性**，与"这条消息带哪些技能"无关，
+ * 放在标题右侧才符合"整段对话的一个模式"。搬走后正文首行少了一排 Segmented，
+ * 标题与消息的垂直节奏也不再被 16px 内缩打断。
+ */
 
 import { HistoryOutlined } from "@ant-design/icons";
 import { Button, Space, Switch, Tooltip, Typography } from "antd";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
+import PersonaSwitcher from "../personas/PersonaSwitcher";
 import AssistantSelectBar from "./AssistantSelectBar";
 
 interface Props {
@@ -21,6 +28,11 @@ interface Props {
   removeSelected: () => Promise<void>;
   exitSelecting: () => void;
   title: string;
+  /**
+   * 当前会话 id（`null` = 草稿态）。视角下拉要挂在这一段会话上，
+   * 所以页头必须拿到它——这是 T26 新增的唯一入参。
+   */
+  conversationId?: number | null;
   /**
    * 临时对话（F34）：会话标题区的「本次不记忆」开关。
    * `undefined` = 草稿态（还没有会话），此时不渲染开关——没有可切换的对象。
@@ -39,6 +51,7 @@ export default function AssistantWorkspaceHeader({
   removeSelected,
   exitSelecting,
   title,
+  conversationId = null,
   memoryOff,
   onMemoryOffChange,
 }: Props) {
@@ -53,6 +66,8 @@ export default function AssistantWorkspaceHeader({
         {/* 多选入口已收进消息右键菜单（R8）；浮窗这里只剩历史按钮。
             header 是 space-between 布局，只剩两个子元素时操作全部靠右。 */}
         <Space size={4} className="assistant-header-actions">
+          {/* 视角：整段会话的模式，放在标题右侧；草稿态禁用并给 tooltip。 */}
+          <PersonaSwitcher conversationId={conversationId} />
           {memoryOff !== undefined && onMemoryOffChange ? (
             <Tooltip title={t("assistantUi.memory.offTooltip")} placement="bottom">
               <span className="assistant-memory-toggle">

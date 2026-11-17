@@ -67,12 +67,21 @@ const applySettings = {
   "applySettings.tab.blocklist": "屏蔽清单",
 
   "applySettings.blocklist.intro":
-    "命中的岗位在采集、入队、投递三处都会被拦下；一行填一项，留空即不屏蔽。",
+    "命中的岗位在采集、入队、投递三处都会被拦下；回车添加一项，留空即不屏蔽。",
   "applySettings.blocklist.companies": "屏蔽公司",
-  "applySettings.blocklist.companiesHint": "按公司名比较，忽略空格与大小写。例如：某某科技有限公司",
+  "applySettings.blocklist.companiesHint":
+    "按公司全名精确匹配，忽略空格与大小写：填「字节」不会命中「字节跳动」，要屏蔽就填全名。",
   "applySettings.blocklist.keywords": "屏蔽关键词",
   "applySettings.blocklist.keywordsHint":
-    "岗位名或描述里包含这些词就跳过；至少两个字，避免一个词屏蔽整座城市。例如：外包、驻场",
+    "公司名或岗位名里包含这些词就跳过；至少两个字，避免一个词屏蔽整座城市。例如：外包、驻场",
+  "applySettings.blocklist.batchEdit": "批量编辑",
+  "applySettings.blocklist.backToTags": "完成编辑",
+  "applySettings.blocklist.companyAddAria": "添加屏蔽公司",
+  "applySettings.blocklist.companyAddPlaceholder": "输入公司全名，按回车添加",
+  "applySettings.blocklist.keywordAddAria": "添加屏蔽关键词",
+  "applySettings.blocklist.keywordAddPlaceholder": "输入关键词，按回车添加",
+  "applySettings.blocklist.remove": "移出这一项",
+  "applySettings.blocklist.inactive": "太宽泛，不会生效",
   "applySettings.blocklist.save": "保存屏蔽清单",
   "applySettings.blocklist.saved": "屏蔽清单已保存",
   "applySettings.blocklist.saveFailed": "保存屏蔽清单失败",
@@ -86,6 +95,8 @@ const applySettings = {
   "applySettings.templates.bodyPlaceholder":
     "例如：您好，我是{name}，看到贵司的{job_title}岗位，想进一步沟通。",
   "applySettings.templates.add": "新建模板",
+  "applySettings.templates.edit": "编辑这条模板",
+  "applySettings.templates.collapse": "收起编辑",
   "applySettings.templates.remove": "删除这条模板",
   "applySettings.templates.save": "保存话术库",
   "applySettings.templates.saved": "话术库已保存",

@@ -148,11 +148,12 @@ describe("UserGuideModal", () => {
     // 技能在助手页的入口（输入框里的「技能」按钮 / chip）和新建/编辑入口（工作台）都要指明。
     // 侧栏那一项已经叫「工作台」了（技能 + 简历模板两页），里面的 tab 就叫「技能」，
     // 指南里不能再写旧名字。
-    // T14 起技能按对话启用：入口从"工具条开关"改为"输入区 chip + 技能菜单"，语义也要说出来。
+    // T24 起技能按**消息**生效：入口是输入区 chip + 技能菜单，"发送后清空"要写明。
     // 这里用 textContent 而不是 getByText：文案本身是断言对象（不是控件名），
     // 也避免给 cjkRatchet 的「测试里中文 ByText 断言」额度再添新行。
     expect(document.body).toHaveTextContent("「技能」按钮打开菜单");
-    expect(document.body).toHaveTextContent("只对当前对话生效");
+    expect(document.body).toHaveTextContent("按消息用技能");
+    expect(document.body).toHaveTextContent("下一条消息要用的技能");
     expect(document.body).toHaveTextContent("工作台 → 技能");
   });
 

@@ -66,9 +66,10 @@ describe("AnalyticsPage", () => {
 
     // C6：`color-regression.test.ts` 只读 4 个 CSS + tracker.css，不读 modules.css，
     // 所以项 8 的守卫落在这里——直接读文件原文，断言"按阶段上色"而不是"按列序上色"。
-    // 2026 年样式表拆分后，求职统计页的规则落在 modules-home.css（modules.css 现为 @import 清单）。
+    // 2026 年样式表第二次拆分：统计页规则从 modules-home.css 挪到 modules-analytics.css，
+    // modules.css 仍是 @import 清单。
     const css = readFileSync(
-      [process.cwd(), "src", "styles", "modules-home.css"].join("/"),
+      [process.cwd(), "src", "styles", "modules-analytics.css"].join("/"),
       "utf8",
     );
     expect(css).toContain(
@@ -191,15 +192,19 @@ describe("AnalyticsPage", () => {
     expect(screen.queryByText(/投递没有关联简历/)).toBeNull();
   });
 
-  it("默认拉 6 个月趋势，切换时间范围后按新窗口重新拉取", async () => {
+  it("一次取满 12 个月；切档位只重画，不再发请求（T13）", async () => {
     renderAnalyticsPage();
 
     await screen.findByText("投递总量");
-    await waitFor(() => expect(apiMocks.getAnalyticsDashboard).toHaveBeenCalledWith(6));
+    // 取满最大档位：切档位是纯前端切片，服务端只算一次。
+    await waitFor(() => expect(apiMocks.getAnalyticsDashboard).toHaveBeenCalledWith(12));
+    const before = apiMocks.getAnalyticsDashboard.mock.calls.length;
 
     fireEvent.click(screen.getByText("近1年"));
 
-    await waitFor(() => expect(apiMocks.getAnalyticsDashboard).toHaveBeenCalledWith(12));
+    // 再等一帧，确认没有偷偷发起第二次请求。
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(apiMocks.getAnalyticsDashboard.mock.calls.length).toBe(before);
   });
 });
 
@@ -347,6 +352,12 @@ describe("AnalyticsPage 第 17 条新增", () => {
     fireEvent.click(screen.getByRole("button", { name: t("analyticsPage.goal.save") }));
 
     await waitFor(() => expect(apiMocks.putAnalyticsWeeklyGoal).toHaveBeenCalledWith(8));
-    await waitFor(() => expect(apiMocks.getAnalyticsDashboard).toHaveBeenCalledTimes(2));
+    // T13：保存后**就地合并**，不整页重取（重取会把所有卡片重新挂载一遍）。
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(t("analyticsPage.goal.progress", { done: 2, target: 8 })).length,
+      ).toBeGreaterThan(0),
+    );
+    expect(apiMocks.getAnalyticsDashboard).toHaveBeenCalledTimes(1);
   });
 });

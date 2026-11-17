@@ -25,6 +25,7 @@ from app.services.assistant.assistant_skills import (
     create_skill,
     list_conversation_skill_ids,
     list_conversation_skills,
+    list_skills,
     set_conversation_skills,
 )
 from app.services.assistant_tools import tool_names
@@ -65,33 +66,35 @@ def test_unknown_persona_id_is_rejected():
     assert "未知的助手视角" in str(excinfo.value)
 
 
-# ===== 挂到对话（技能通道）=====
+# ===== 视角是会话属性（T26：不再走技能通道）=====
 
 
-def test_apply_persona_attaches_builtin_skill(db_session):
+def test_apply_persona_writes_the_conversation_column(db_session):
+    """切换视角写 `chat_conversation.persona_id`，**不再**往对话挂技能行。"""
     conversation = _conversation(db_session)
-    ids = personas.apply_persona(db_session, conversation.id, "hr_scan")
-    skills = list_conversation_skills(db_session, conversation.id)
-    assert len(ids) == 1 and len(skills) == 1
-    assert skills[0].name == "视角 · HR 六秒扫描"
-    assert "HR 六秒扫描" in (skills[0].prompt or "")
+    assert personas.apply_persona(db_session, conversation.id, "hr_scan") == "hr_scan"
+
+    db_session.expire_all()
+    assert db_session.get(ChatConversation, conversation.id).persona_id == "hr_scan"
     assert personas.current_persona_id(db_session, conversation.id) == "hr_scan"
+    # 视角不再是技能：一条关联行都不该产生，也不该新建「视角 · X」技能行。
+    assert list_conversation_skills(db_session, conversation.id) == []
+    assert db_session.query(AssistantSkill).filter_by(name="视角 · HR 六秒扫描").count() == 0
 
 
-def test_switch_persona_replaces_only_the_persona_skill(db_session):
+def test_switching_persona_does_not_touch_user_skills(db_session):
+    """用户自己的技能行与视角完全无关：切视角、关视角都不许动它们。"""
     conversation = _conversation(db_session)
     user_skill = create_skill(db_session, name="我的写作规范", prompt="短句优先。")
     set_conversation_skills(db_session, conversation.id, [int(user_skill.id)])
     personas.apply_persona(db_session, conversation.id, "hr_scan")
     personas.apply_persona(db_session, conversation.id, "interviewer")
 
-    skills = list_conversation_skills(db_session, conversation.id)
-    names = [skill.name for skill in skills]
-    assert "视角 · 面试官追问" in names
-    assert "视角 · HR 六秒扫描" not in names
-    assert "我的写作规范" in names  # 用户自己的技能不被视角切换清掉
-    assert int(user_skill.id) in list_conversation_skill_ids(db_session, conversation.id)
     assert personas.current_persona_id(db_session, conversation.id) == "interviewer"
+    assert list_conversation_skill_ids(db_session, conversation.id) == [int(user_skill.id)]
+    assert [skill.name for skill in list_conversation_skills(db_session, conversation.id)] == [
+        "我的写作规范"
+    ]
 
 
 def test_clear_persona_keeps_user_skills(db_session):
@@ -101,23 +104,66 @@ def test_clear_persona_keeps_user_skills(db_session):
     personas.apply_persona(db_session, conversation.id, "headhunter")
     personas.apply_persona(db_session, conversation.id, "")
 
-    names = [skill.name for skill in list_conversation_skills(db_session, conversation.id)]
-    assert names == ["我的写作规范"]
     assert personas.current_persona_id(db_session, conversation.id) == ""
+    assert [skill.name for skill in list_conversation_skills(db_session, conversation.id)] == [
+        "我的写作规范"
+    ]
 
 
-def test_persona_prompt_resyncs_after_file_upgrade(db_session):
+def test_persona_prompt_is_read_from_file_every_request(db_session):
+    """提示词跟着文件走：库里没有副本，也就没有"旧版提示词"可残留。"""
     conversation = _conversation(db_session)
     personas.apply_persona(db_session, conversation.id, "hr_scan")
-    skill = db_session.query(AssistantSkill).filter_by(name="视角 · HR 六秒扫描").one()
-    skill.prompt = "旧版提示词"
-    db_session.commit()
 
-    personas.apply_persona(db_session, conversation.id, "hr_scan")
+    prompt = personas.build_persona_prompt(db_session, conversation.id)
+    assert personas.PERSONA_PROMPT_HEADER in prompt
+    assert "HR 六秒扫描" in prompt
+    # 与直接读文件的结果逐字一致（没有第二份副本需要同步）。
+    assert prompt.endswith(personas.persona_prompt("hr_scan"))
+
+
+def test_persona_is_independent_of_message_skills(db_session):
+    """T26 验收③：视角与"这条消息带哪些技能"无关。"""
+    conversation = _conversation(db_session)
+    personas.apply_persona(db_session, conversation.id, "interviewer")
+    user_skill = create_skill(db_session, name="我的写作规范", prompt="短句优先。")
+    set_conversation_skills(db_session, conversation.id, [int(user_skill.id)])
+
+    # 清空消息级技能之后，视角提示词仍在。
+    set_conversation_skills(db_session, conversation.id, [])
+    assert "面试官追问" in personas.build_persona_prompt(db_session, conversation.id)
+
+
+def test_legacy_skill_link_is_read_once_and_cleared_on_write(db_session):
+    """一个版本的回退读取：老会话的视角还挂在技能行上时仍能认出来；写入时清掉。"""
+    conversation = _conversation(db_session)
+    legacy = create_skill(db_session, name="视角 · 猎头判断", prompt="旧版")
+    set_conversation_skills(db_session, conversation.id, [int(legacy.id)])
+
+    # 列是空的 → 回退到关联行。
     db_session.expire_all()
-    refreshed = db_session.query(AssistantSkill).filter_by(name="视角 · HR 六秒扫描").one()
-    assert "旧版提示词" not in (refreshed.prompt or "")
-    assert "HR 六秒扫描" in (refreshed.prompt or "")
+    assert db_session.get(ChatConversation, conversation.id).persona_id == ""
+    assert personas.current_persona_id(db_session, conversation.id) == "headhunter"
+
+    # 切回通用：列写空串，同时清掉老的视角关联行，回退逻辑不能把它复活。
+    personas.apply_persona(db_session, conversation.id, "")
+    assert personas.current_persona_id(db_session, conversation.id) == ""
+    assert list_conversation_skill_ids(db_session, conversation.id) == []
+
+
+def test_skill_list_hides_builtin_personas(db_session):
+    """T26 验收④：技能库列表不含「视角 · X」（行还在库里，只是不进列表）。"""
+    conversation = _conversation(db_session)
+    legacy = create_skill(db_session, name="视角 · 猎头判断", prompt="旧版")
+    create_skill(db_session, name="我的写作规范", prompt="短句优先。")
+    assert list_conversation_skills(db_session, conversation.id) == []
+
+    visible = [skill.name for skill in list_skills(db_session)]
+    assert visible == ["我的写作规范"]
+    # 显式要"全部"时仍能取到（迁移/排查用），证明行没被删。
+    everything = [skill.name for skill in list_skills(db_session, include_builtin_personas=True)]
+    assert "视角 · 猎头判断" in everything
+    assert int(legacy.id) > 0
 
 
 # ===== 系统提示与工具集 =====

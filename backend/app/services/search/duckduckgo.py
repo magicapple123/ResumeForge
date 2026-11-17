@@ -17,6 +17,8 @@ from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
+from .. import net_proxy
+
 logger = logging.getLogger(__name__)
 
 HTML_ENDPOINT = "https://html.duckduckgo.com/html/"
@@ -99,7 +101,10 @@ def _clean(value: str, limit: int) -> str:
 async def search_duckduckgo(query: str, limit: int = 10) -> list[dict[str, str]]:
     """执行一次 DuckDuckGo HTML 搜索；失败或无结果时返回空列表。"""
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
+        # T03：与模型/抓取同一套出网口径（回环地址仍强制直连）。
+        async with net_proxy.build_async_client(
+            url=HTML_ENDPOINT, timeout=_TIMEOUT, follow_redirects=True
+        ) as client:
             response = await client.post(
                 HTML_ENDPOINT,
                 data={"q": query},

@@ -80,6 +80,8 @@ export interface FormatServerTimeOptions {
   seconds?: boolean;
   /** 只输出日期（`YYYY-MM-DD`），给表格日期列用。 */
   dateOnly?: boolean;
+  /** 只输出时刻（`HH:mm`），给"更新于"这类页头标记用。 */
+  timeOnly?: boolean;
   /**
    * 显式指定时区（IANA 名）。缺省 = 设备时区，这也是产品行为。
    * 只给测试用：断言必须显式传，否则会随跑测试那台机器的 `TZ` 漂。
@@ -114,6 +116,7 @@ export function formatServerTime(value: string, options: FormatServerTimeOptions
   const clock = options.seconds
     ? `${parts.hour}:${parts.minute}:${parts.second}`
     : `${parts.hour}:${parts.minute}`;
+  if (options.timeOnly) return clock;
   return `${dateText} ${clock}`;
 }
 

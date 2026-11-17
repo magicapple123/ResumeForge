@@ -307,6 +307,10 @@
 /* 诊断条：四个入口同一行。`nowrap` 是刻意的——960px 弹窗里短标签合计 ~500px，
    换行会把行高翻倍；窄档交给 `.resume-detail-preview` 的容器查询（见下）。 */
 .resume-diagnostics-bar {
+  /* 本仓没有全局 `box-sizing` 重置（见 `modules-templates.css` 的说明）：这条状态条同时有
+     1px 描边与左右内边距，content-box 下撑到 100% 宽时会从卡片右缘溢出。
+     声明成 border-box，宽度（含 `.is-compact` 的整宽）就落在框内。 */
+  box-sizing: border-box;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -372,7 +376,8 @@
 .resume-diagnostics-bar.is-compact {
   flex-wrap: nowrap;
   gap: 6px;
-  width: 100%;
+  /* 不再写 `width: 100%`：它是块级 flex 容器，宽度本来就铺满；显式整宽在 content-box
+     下会把描边与内边距额外加上去，右缘越过卡片边框（见上一条注释）。 */
   min-width: 0;
   margin-bottom: 6px;
   padding: 3px 8px;

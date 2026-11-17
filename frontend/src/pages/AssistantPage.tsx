@@ -90,23 +90,19 @@ export default function AssistantPage({
     createConversation,
     ensureWelcomeConversation,
   } = conversationsState;
-  // T14：技能按对话启用——已建会话走服务端（GET/PUT .../skills），草稿先暂存选择。
+  // T24：技能改为消息级——勾选只是本机"待发送"状态，发送后清空（不再 PUT 到会话）。
   const {
     catalog: skillCatalog,
     selectedSkills,
+    selectedSkillIds,
     budget: skillBudget,
     loaded: skillsLoaded,
     togglingSkillId,
-    pendingSkillIdsRef,
     toggleSkill,
+    clearSkills,
     reload: reloadSkills,
-  } = useConversationSkills(activeId, surface);
+  } = useConversationSkills(activeId);
   const openSkillWorkbench = () => navigate("/skills");
-  // 草稿态先勾了技能时，第一次发消息建会话要把暂存的选择一起带上（服务端同事务写入）。
-  const createConversationWithSkills = useCallback(
-    () => createConversation(pendingSkillIdsRef.current),
-    [createConversation, pendingSkillIdsRef],
-  );
   const attachmentsState = useAssistantAttachments({ mountedRef });
   const {
     attachments,
@@ -130,7 +126,7 @@ export default function AssistantPage({
     activeIdRef,
     reloadConversations,
     loadDetail,
-    createConversation: createConversationWithSkills,
+    createConversation,
     clearAttachments,
     attachmentReadsRef,
     attachmentsRef,
@@ -142,6 +138,9 @@ export default function AssistantPage({
     webSearch,
     reasoningEffort,
     surface,
+    skillIds: selectedSkillIds,
+    skillRefs: selectedSkills,
+    clearSkills,
   });
   const {
     sending,
@@ -150,6 +149,7 @@ export default function AssistantPage({
     pendingSentAt,
     pendingUserAttachments,
     pendingUserRefs,
+    pendingUserSkills,
     streamingText,
     streamingReasoning,
     streamingSources,
@@ -323,14 +323,13 @@ export default function AssistantPage({
           removeSelected={removeSelected}
           exitSelecting={exitSelecting}
           title={detail?.title || t("responsive.assistant.defaultTitle")}
+          conversationId={activeId}
           memoryOff={activeId === null ? undefined : (detail?.memory_off ?? false)}
           onMemoryOffChange={(value) => void handleMemoryOffChange(activeId, value)}
         />
         <AssistantBreadthPanel
-          conversationId={activeId}
           showDigest={!compact && historyMessages.length === 0 && !awaitingConversation}
           compact={compact}
-          onSkillsChanged={reloadSkills}
         />
         <AssistantMessageList
           detail={detail}
@@ -341,6 +340,7 @@ export default function AssistantPage({
           pendingSentAt={pendingSentAt}
           pendingUserAttachments={pendingUserAttachments}
           pendingUserRefs={pendingUserRefs}
+          pendingUserSkills={pendingUserSkills}
           streamingText={displayText}
           streamingReasoning={displayReasoning}
           streamingSources={streamingSources}

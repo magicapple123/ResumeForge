@@ -152,12 +152,27 @@ class GreetingTemplateSaveIn(BaseModel):
     )
 
 
+class GreetingTemplateUseIn(BaseModel):
+    """套用一次（或批量套用 N 次）的增量。
+
+    **必须是增量**：整表 ``PUT`` 只能写绝对值，两次套用并发时后到的会把前一次的
+    计数覆盖掉；而"用过几次"是首版唯一的统计口径，不能被编辑动作清零。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    count: int = Field(default=1, ge=1, le=MAX_GREETING_TEMPLATES)
+
+
 # ===== 14E 屏蔽清单 =====
 
 
 class ApplyBlocklistOut(BaseModel):
     companies: list[str] = Field(default_factory=list)
     keywords: list[str] = Field(default_factory=list)
+    # 存着但**不会生效**的关键词（太短或太宽泛）。判定复用 ``clean_keywords`` 的同一份规则，
+    # 界面据此把它们渲染成灰标签——静默丢弃会让用户以为保存失败。
+    inactive_keywords: list[str] = Field(default_factory=list)
 
 
 class ApplyBlocklistIn(BaseModel):
@@ -190,6 +205,7 @@ __all__ = [
     "GreetingTemplateListOut",
     "GreetingTemplateOut",
     "GreetingTemplateSaveIn",
+    "GreetingTemplateUseIn",
     "PreflightCode",
     "PreflightSeverity",
 ]

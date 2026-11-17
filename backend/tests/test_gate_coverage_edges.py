@@ -156,9 +156,16 @@ def test_verify_archive_rejects_database_failing_quick_check(tmp_path) -> None:
 
 
 def test_move_library_aside_requires_sqlite_database_file(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(get_settings(), "database_url", "sqlite://")
-    with pytest.raises(legacy_archive.LegacyArchiveError, match="不是本地 SQLite"):
-        legacy_archive.move_library_aside(tmp_path, tmp_path / "archive")
+    # 用 try/finally 显式还原，而不是只靠 monkeypatch 的收尾：数据集作用域的 autouse
+    # 夹具在**比 monkeypatch 更晚**的时机收尾，那时 database_url 还停在 "sqlite://"
+    # 就会在 teardown 抛 DatasetError（本机实测的 ERROR，不是断言失败）。
+    settings = get_settings()
+    monkeypatch.setattr(settings, "database_url", "sqlite://")
+    try:
+        with pytest.raises(legacy_archive.LegacyArchiveError, match="不是本地 SQLite"):
+            legacy_archive.move_library_aside(tmp_path, tmp_path / "archive")
+    finally:
+        monkeypatch.undo()
 
 
 def test_restore_library_skips_existing_targets(tmp_path) -> None:
@@ -184,12 +191,15 @@ def test_unique_stamp_appends_suffix_on_collision(tmp_path) -> None:
 
 
 def test_enforce_returns_fresh_for_in_memory_database(monkeypatch) -> None:
-    monkeypatch.setattr(get_settings(), "database_url", "sqlite://")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "database_url", "sqlite://")
     engine = create_engine("sqlite://")
     try:
         assert startup_gate.enforce(engine) is startup_gate.schema_epoch.EpochDecision.FRESH
     finally:
         engine.dispose()
+        # 同上：先还原配置，别把 "sqlite://" 留到数据集夹具的 teardown。
+        monkeypatch.undo()
 
 
 def test_enforce_restores_library_when_rebind_fails(tmp_path, monkeypatch) -> None:

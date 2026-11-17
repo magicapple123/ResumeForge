@@ -21,7 +21,8 @@ interface Options {
   /** 会话域整体传入：本 hook 只排布它的返回值，不再逐项转手 8 个函数签名。 */
   conversations: ConversationsApi;
   reloadSkills: () => Promise<void>;
-  toggleSkill: (skill: AssistantSkill, enabled: boolean) => Promise<void>;
+  /** T24：勾选只改本地"待发送"状态（同步、不发请求）。 */
+  toggleSkill: (skill: AssistantSkill, enabled: boolean) => void;
   setHistoryOpen: Dispatch<SetStateAction<boolean>>;
   setGroupTarget: Dispatch<SetStateAction<AssistantConversationBrief | null>>;
   setGroupValue: Dispatch<SetStateAction<string>>;

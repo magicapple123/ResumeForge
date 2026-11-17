@@ -36,9 +36,15 @@ export function getLLMConfig(): Promise<LLMConfig> {
  * 「模型窗口参考」：内置窗口表 + 当前模型命中的是哪一条。
  *
  * 纯只读：表是代码里的常量，改表要发版；用户手填的窗口仍在模型配置里。
+ *
+ * `model` 可选：传了它就只问「参考表说这个型号是多少」（设置弹窗里型号可能还没保存，
+ * 「填入参考值」要的是表对这个型号的判断，不掺当前配置里的手填值）。不传时按当前
+ * 生效配置解析，与加这个参数之前逐字一致。
  */
-export function getModelWindowReference(): Promise<ModelWindowReference> {
-  return request("/settings/model-windows");
+export function getModelWindowReference(model?: string): Promise<ModelWindowReference> {
+  const target = (model ?? "").trim();
+  const query = target === "" ? "" : `?model=${encodeURIComponent(target)}`;
+  return request(`/settings/model-windows${query}`);
 }
 
 /**
@@ -123,8 +129,16 @@ export function acknowledgeUpdateInstallResult(): Promise<void> {
 export function testLLM(
   config: LLMConfig,
   budget: RequestBudgetKind = "task",
+  direct = false,
 ): Promise<LLMTestResult> {
-  return request("/settings/llm/test", { method: "POST", body: JSON.stringify(config), budget });
+  // T02「用直连重试」：只在这一次请求上带覆盖头，不写任何全局状态。
+  const headers = direct ? { "X-RF-Net-Direct": "1" } : undefined;
+  return request("/settings/llm/test", {
+    method: "POST",
+    body: JSON.stringify(config),
+    budget,
+    headers,
+  });
 }
 
 export function listLLMConfigRecords(): Promise<LLMConfigRecord[]> {
@@ -472,3 +486,11 @@ export type {
   EmbeddingState,
   EmbeddingStatus,
 } from "./embeddingSettings";
+
+export { getNetworkSettings, saveNetworkSettings } from "./settingsNetwork";
+export type {
+  NetworkSettings,
+  NetworkSettingsPayload,
+  ProxyMode,
+  ProxyView,
+} from "./settingsNetwork";

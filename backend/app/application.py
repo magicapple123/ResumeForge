@@ -24,6 +24,7 @@ from .database import run_sqlite_maintenance
 from .database_migrations import run_database_migrations
 from .middleware import (
     LoopbackOriginGuardMiddleware,
+    NetDirectOverrideMiddleware,
     RequestContextMiddleware,
     RequestIdFilter,
     get_request_id,
@@ -405,6 +406,9 @@ def _frontend_dist_dir() -> Path:
 def create_app() -> FastAPI:
     """创建并装配应用；保留工厂便于离线测试和未来多实例部署。"""
     app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+    # T02：请求级直连覆盖（`X-RF-Net-Direct: 1`）。放在最内层——它只写一个
+    # ContextVar，越靠近路由越不会受其它中间件的任务/上下文切换影响。
+    app.add_middleware(NetDirectOverrideMiddleware)
     app.add_middleware(DatasetRequestMiddleware)
     app.add_middleware(
         RequestContextMiddleware,

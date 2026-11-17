@@ -172,6 +172,40 @@ const settingsUi = {
   "settingsUi.webFormRelaxed.warning":
     "Once on, the program tries to click dropdown and popup options for you and to tick the declaration items you confirmed one by one; something can be picked wrong, so check the form afterwards. " +
     "Four categories are never filled for you: date pickers, file uploads, password / verification code / bank card, and read-only radio or checkbox options without a popup - you need to handle these yourself.",
+  // ── Outbound network & proxy (T02 / T05) ──────────────────
+  "settingsUi.network.title": "Network and proxy",
+  "settingsUi.network.intro":
+    "Models, search and update checks all use the same outbound path. This is the only place to change it; saving takes effect immediately, no restart.",
+  "settingsUi.network.mode.system": "Follow system",
+  "settingsUi.network.mode.direct": "Direct",
+  "settingsUi.network.mode.custom": "Custom proxy",
+  "settingsUi.network.directWarning":
+    "Direct bypasses the system proxy. On proxy-only networks (corporate, some broadband) nothing connects: models, search, updates.",
+  "settingsUi.network.urlPlaceholder": "e.g. http://127.0.0.1:7890",
+  "settingsUi.network.url": "Proxy address",
+  "settingsUi.network.username": "Proxy username",
+  "settingsUi.network.usernamePlaceholder": "Username (optional)",
+  "settingsUi.network.password": "Proxy password",
+  "settingsUi.network.passwordPlaceholder": "Password (optional)",
+  "settingsUi.network.passwordKeep": "Leave blank to keep",
+  "settingsUi.network.socksHint":
+    "Only http:// or https:// proxies are supported. Proxy apps usually expose an http port as well; use that one.",
+  "settingsUi.network.trust": "Trust the system certificate store",
+  "settingsUi.network.trustHint":
+    "Off by default. Turn on only when antivirus or a gateway scans HTTPS with its own certificate; every machine-trusted cert is then accepted.",
+  "settingsUi.network.probe": "Test connection",
+  "settingsUi.network.probeCurrent": "Current settings",
+  "settingsUi.network.probeDirect": "Direct",
+  "settingsUi.network.probeOk": "Connected",
+  "settingsUi.network.detected":
+    "System proxy detected at {proxy} (source: {source}); if the model cannot connect, try Direct first",
+  "settingsUi.network.saved": "Saved - applies to the next request",
+  "settingsUi.network.save": "Save",
+  "settingsUi.network.checklist.title": "When it cannot connect, check these four (one action each):",
+  "settingsUi.network.checklist.proxy": "Proxy: make sure the proxy app is running and the port is right; if unsure, switch to Direct and test again.",
+  "settingsUi.network.checklist.tls": "Certificate: the browser opens the site but this app cannot - usually antivirus or a gateway. Allowlist the app, or trust the system store.",
+  "settingsUi.network.checklist.refused": "Connection refused: the Base URL has a missing or extra /v1, or the port is wrong; follow the provider docs and end it with /v1.",
+  "settingsUi.network.checklist.timeout": "Timeout: test Direct once; if Direct also times out it is the line or the provider - switch networks or retry later.",
 } as const;
 
 export default settingsUi;

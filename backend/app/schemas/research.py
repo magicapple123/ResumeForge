@@ -16,6 +16,11 @@ MAX_COMPANY_CHARS = 80
 MAX_ROLE_CHARS = 80
 MAX_JD_CHARS = 6_000
 
+# 历史分页（T07）：默认 20，上限 50。上限存在的理由是一页要带正文摘要与卡片数，
+# 放大到 200 会让一次列表请求传几 MB；真要看全部，用游标翻页。
+DEFAULT_HISTORY_LIMIT = 20
+MAX_HISTORY_LIMIT = 50
+
 
 class ResearchCompanyRequest(BaseModel):
     """``POST /api/research/company`` 的入参。
@@ -54,7 +59,9 @@ class ResearchCompanyRequest(BaseModel):
 
 
 __all__ = [
+    "DEFAULT_HISTORY_LIMIT",
     "MAX_COMPANY_CHARS",
+    "MAX_HISTORY_LIMIT",
     "MAX_JD_CHARS",
     "MAX_ROLE_CHARS",
     "ResearchCompanyRequest",

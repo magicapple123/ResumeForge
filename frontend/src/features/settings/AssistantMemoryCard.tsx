@@ -27,7 +27,8 @@
  * 置信度不再外露（四家官方产品都不显示），但仍留在库里参与排序。
  * 行内展示、`⋯` 菜单与历史弹窗在 `AssistantMemoryRow`，本文件只管取数、筛选与弹层编排。
  */
-import { App, Button, Card, Divider, Flex, Input, Select, Switch, Typography } from "antd";
+import { InfoCircleOutlined } from "@ant-design/icons";
+import { App, Button, Card, Divider, Flex, Input, Select, Tooltip, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErrorState from "../../components/common/ErrorState";
 import EmptyState from "../../components/common/EmptyState";
@@ -50,6 +51,7 @@ import {
 } from "./assistantMemoryApi";
 import AssistantMemoryEditModal from "./AssistantMemoryEditModal";
 import AssistantMemoryRow from "./AssistantMemoryRow";
+import AssistantMemorySwitches from "./AssistantMemorySwitches";
 import SettingsResetButton from "./SettingsResetButton";
 import { useSettingsResetListener } from "./useSettingsResetListener";
 import { memoryKindLabel } from "./assistantMemoryLabels";
@@ -65,10 +67,10 @@ const FALLBACK_KIND_OPTIONS: MemoryKindOption[] = MEMORY_KINDS.map((kind) => ({
 /**
  * I-10：这张卡能恢复默认的键。
  *
- * 只有「自动记录记忆」这一个开关属于设置项——记忆条目本身是用户数据，恢复设置**不会**
- * 也不该删掉它们，所以这里绝不把记忆列表放进重置范围。
+ * 两个开关都属于设置项（T23 起注入开关也在其中）——记忆条目本身是用户数据，恢复设置
+ * **不会**也不该删掉它们，所以这里绝不把记忆列表放进重置范围。
  */
-const MEMORY_RESET_KEYS = ["assistant_memory_auto_extract"];
+const MEMORY_RESET_KEYS = ["assistant_memory_auto_extract", "assistant_memory_inject"];
 
 /**
  * 出现搜索/排序的最少条数。
@@ -84,6 +86,8 @@ export default function AssistantMemoryCard() {
   const [memories, setMemories] = useState<AssistantMemory[]>([]);
   const [kindOptions, setKindOptions] = useState<MemoryKindOption[]>(FALLBACK_KIND_OPTIONS);
   const [autoExtract, setAutoExtract] = useState(false);
+  // T23：注入总开关默认开（与后端缺行 = 默认开同口径），读失败时保持开。
+  const [inject, setInject] = useState(true);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -108,8 +112,9 @@ export default function AssistantMemoryCard() {
     try {
       const settings = await getAssistantMemorySettings();
       setAutoExtract(settings.auto_extract);
+      setInject(settings.inject);
     } catch {
-      // 读不到开关就保持默认关：宁可不开，也不假装已开。
+      // 读不到开关就保持默认（自动整理关、注入开）：宁可维持原行为，也不假装改过。
     }
   }, []);
 
@@ -154,19 +159,14 @@ export default function AssistantMemoryCard() {
     return rows;
   }, [memories, query, sortMode]);
 
-  /** 「生效」= `status === "active"`：停用与已被替换的条目留在列表里，但不参与注入。 */
-  const activeCount = useMemo(
-    () => memories.filter((item) => item.status === "active").length,
-    [memories],
-  );
-
   const onToggleAutoExtract = async (checked: boolean) => {
     if (savingSettings) return;
     setSavingSettings(true);
     setAutoExtract(checked);
     try {
-      const saved = await saveAssistantMemorySettings(checked);
+      const saved = await saveAssistantMemorySettings({ auto_extract: checked });
       setAutoExtract(saved.auto_extract);
+      setInject(saved.inject);
       message.success(
         t(
           checked
@@ -176,6 +176,28 @@ export default function AssistantMemoryCard() {
       );
     } catch (err) {
       setAutoExtract(!checked);
+      message.error(
+        err instanceof Error ? err.message : t("assistantMemory.autoExtract.saveFailed"),
+      );
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  /** T23：注入总开关。与自动整理共用一个 PUT，但只送自己这一项。 */
+  const onToggleInject = async (checked: boolean) => {
+    if (savingSettings) return;
+    setSavingSettings(true);
+    setInject(checked);
+    try {
+      const saved = await saveAssistantMemorySettings({ inject: checked });
+      setAutoExtract(saved.auto_extract);
+      setInject(saved.inject);
+      message.success(
+        t(checked ? "assistantMemory.inject.enableToast" : "assistantMemory.inject.disableToast"),
+      );
+    } catch (err) {
+      setInject(!checked);
       message.error(
         err instanceof Error ? err.message : t("assistantMemory.autoExtract.saveFailed"),
       );
@@ -282,38 +304,29 @@ export default function AssistantMemoryCard() {
       title={
         <Flex align="center" gap={8}>
           <span>{t("assistantMemory.title")}</span>
-          {/* I-10：卡片级恢复默认（只复位「自动记录记忆」开关，不动任何记忆条目）。 */}
+          {/* I-10：卡片级恢复默认（只复位两个开关，不动任何记忆条目）。 */}
           <SettingsResetButton keys={MEMORY_RESET_KEYS} />
         </Flex>
       }
       className="settings-card"
       extra={
-        // 危险动作进次级位置：0 条时这一颗根本不渲染（disabled 的「清空全部」只会让人去点）。
-        memories.length > 0 ? (
-          <Button type="text" className="rf-memory-clear" onClick={confirmClearAll}>
-            {t("assistantMemory.action.clearAll")}
-          </Button>
-        ) : null
+        // T23 卡头右侧：信任语「只存在本机」。危险动作不再占这个位置（见列表底部）。
+        <span className="rf-memory-trust">{t("assistantMemory.trust.local")}</span>
       }
     >
       <LoadingBlock spinning={loading}>
-        {/* ① 开关区：一行标题 + 开关，说明紧随其后。 */}
-        <div className="rf-memory-switch">
-          <div className="rf-memory-switch-head">
-            <Typography.Text strong>{t("assistantMemory.autoExtract.label")}</Typography.Text>
-            <Switch
-              checked={autoExtract}
-              loading={savingSettings}
-              checkedChildren={t("settingsUi.switch.on")}
-              unCheckedChildren={t("settingsUi.switch.off")}
-              aria-label={t("assistantMemory.autoExtract.label")}
-              onChange={(checked) => void onToggleAutoExtract(checked)}
-            />
-          </div>
-          <Typography.Text type="secondary" className="rf-memory-hint">
-            {t("assistantMemory.autoExtract.hint")}
-          </Typography.Text>
-        </div>
+        {/* T23：intro 此前没有任何渲染点，现在是卡头下方那句信任语。 */}
+        <Typography.Text type="secondary" className="rf-memory-intro">
+          {t("assistantMemory.intro")}
+        </Typography.Text>
+        {/* ① 开关区：两行「标题 + 一句说明 + 开关」，控件本身不再写「开/关」。 */}
+        <AssistantMemorySwitches
+          autoExtract={autoExtract}
+          inject={inject}
+          saving={savingSettings}
+          onToggleAutoExtract={(checked) => void onToggleAutoExtract(checked)}
+          onToggleInject={(checked) => void onToggleInject(checked)}
+        />
 
         <Divider className="rf-memory-divider" />
 
@@ -333,7 +346,8 @@ export default function AssistantMemoryCard() {
             <>
               <div className="rf-memory-list-head">
                 <Typography.Text type="secondary" className="rf-memory-count">
-                  {t("assistantMemory.list.active", { count: activeCount })}
+                  {/* T23：「生效 N 条」→「记忆 · N 条」；N 是列表长度，不再只数 active。 */}
+                  {t("assistantMemory.list.count", { count: memories.length })}
                 </Typography.Text>
                 <Button
                   type="primary"
@@ -381,16 +395,33 @@ export default function AssistantMemoryCard() {
                   ))}
                 </ul>
               )}
+              {/* T23：「清空全部」下沉到列表底部——危险动作不占卡头，也不与「添加」并排。 */}
+              <div className="rf-memory-list-foot">
+                <Button type="text" danger className="rf-memory-clear" onClick={confirmClearAll}>
+                  {t("assistantMemory.action.clearAll")}
+                </Button>
+              </div>
             </>
           )}
         </div>
 
         <Divider className="rf-memory-divider" />
 
-        {/* ③ 底注：注入口径（原来长在 intro 里，和"这里是唯一能改的地方"混成一句）。 */}
-        <Typography.Text type="secondary" className="rf-memory-footnote">
-          {t("assistantMemory.footnote.injection")}
-        </Typography.Text>
+        {/* ③ 底注：隐私句在前，机制说明收进 ⓘ（不再用一整句解释注入算法）。 */}
+        <div className="rf-memory-footnote">
+          <Typography.Text type="secondary">
+            {t("assistantMemory.footnote.privacy")}
+          </Typography.Text>
+          <Tooltip title={t("assistantMemory.injection.info")}>
+            <Button
+              type="text"
+              size="small"
+              className="rf-memory-info"
+              aria-label={t("assistantMemory.injection.infoLabel")}
+              icon={<InfoCircleOutlined />}
+            />
+          </Tooltip>
+        </div>
       </LoadingBlock>
       {modalState ? (
         <AssistantMemoryEditModal

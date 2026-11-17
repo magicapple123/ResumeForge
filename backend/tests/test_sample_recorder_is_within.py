@@ -5,6 +5,7 @@
 防线，需要独立的函数级契约用例：兄弟目录同前缀、root 本身、``..`` 归一化、路径不存在、
 resolve 抛 OSError、软链接逃逸、Windows 大小写/反斜杠等价。
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -118,8 +119,12 @@ def test_is_within_returns_false_when_resolve_raises_oserror(monkeypatch):
         raise OSError("模拟 resolve 失败")
 
     monkeypatch.setattr(Path, "resolve", boom, raising=True)
-
-    assert _is_within(Path("a/b"), Path("a")) is False
+    try:
+        assert _is_within(Path("a/b"), Path("a")) is False
+    finally:
+        # tmp_path 的清理也要 resolve 路径：不先还原，这条用例会以 "ERROR at teardown"
+        # 的形式变红（断言其实早就过了），看起来像产品缺陷。
+        monkeypatch.undo()
 
 
 def test_is_within_follows_a_symlink_that_escapes_captures(tmp_path):

@@ -57,6 +57,9 @@ describe("BarChart", () => {
     expect(svg.textContent).toContain("周一");
     // 计数为 0 时不画数字，但标签仍要在。
     expect(svg.textContent).toContain("周二");
-    expect(svg.textContent).not.toContain("0");
+    // `<title>` 是每根柱的可访问名（T13 加的），本来就会包含计数；要看的是可见文本里
+    // 没有孤零零的「0」标签——那会被读成"渲染坏了"。
+    const visibleTexts = Array.from(svg.querySelectorAll("text")).map((node) => node.textContent);
+    expect(visibleTexts).not.toContain("0");
   });
 });

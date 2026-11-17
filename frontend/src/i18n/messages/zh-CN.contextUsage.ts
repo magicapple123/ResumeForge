@@ -28,11 +28,14 @@ const contextUsage = {
   /** 底栏实测值：与服务商账单口径一致，单独一行，不参与任何换算。 */
   "contextUsage.actual": "上一轮实测输入 {tokens} tokens",
   "contextUsage.actualUnknown": "本次未报告",
-  "contextUsage.noWindow": "未设置上下文窗口",
+  /** 后端 `window === 0` 仍是合法值（未知），所以只说"未知"，不再宣称"不限制"。 */
+  "contextUsage.noWindow": "窗口未知",
   "contextUsage.goSettings": "去设置",
   /** 折叠区标题：窗口与压缩的配置项默认收起，第一层只留读数与动作。 */
   "contextUsage.settings.title": "窗口与压缩设置",
   "contextUsage.window.label": "上下文窗口",
+  /** T01：这一项就是设置页「上下文窗口」同一个字段；写清楚免得被当成"本次对话的偏好"。 */
+  "contextUsage.window.sameAsSettings": "与设置里的同名项是同一个值",
   "contextUsage.window.source.manual": "手动设置",
   "contextUsage.window.source.reference": "参考表",
   "contextUsage.window.source.fallback": "未知模型",
@@ -77,6 +80,12 @@ const contextUsage = {
   "contextUsage.compaction.action.compact": "压缩上下文",
   "contextUsage.compaction.action.now": "立即压缩",
   "contextUsage.compaction.action.restore": "还原原文",
+  "contextUsage.compaction.action.cancel": "取消",
+  /** T25 消息流里的压缩边界：插在摘要覆盖到的最后一条消息下方。 */
+  "contextUsage.compaction.boundary.line": "此前的 {turns} 轮已压缩 · 省下约 {tokens} tokens",
+  "contextUsage.compaction.boundary.earlier": "更早的若干轮已压缩 · 省下约 {tokens} tokens",
+  "contextUsage.compaction.boundary.view": "查看摘要",
+  "contextUsage.compaction.boundary.hide": "收起摘要",
   "contextUsage.compaction.preview": "预计从 {before} 降到 {after}，覆盖 {turns} 轮",
   "contextUsage.compaction.nothing": "最近 6 轮之内无需压缩",
   "contextUsage.compaction.confirmHint": "压缩会消耗一次模型调用",

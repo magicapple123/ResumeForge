@@ -7,7 +7,7 @@
  * 断言文案一律走 `t()`（cjkRatchet 把测试里的中文字面量也算作待迁移文案）。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CompanyResearchResult, ResearchBrief } from "../../api/research";
@@ -18,11 +18,16 @@ import { splitCitations } from "./citations";
 const apiMocks = vi.hoisted(() => ({
   researchCompany: vi.fn(),
   // I-21：页面挂载后会读「最近一次调研」，测试里默认"没有"，避免真发请求。
-  latestCompanyResearch: vi.fn(() => Promise.resolve({ entry: null })),
+  latestCompanyResearch: vi.fn(() => Promise.resolve({ entry: null, count: 0 })),
+  // T07：历史抽屉挂载时才读，默认空列表（历史列表本身由抽屉自己的测试覆盖）。
+  listResearchHistory: vi.fn(() =>
+    Promise.resolve({ items: [], next_cursor: null, total: 0, bytes: 0 }),
+  ),
 }));
 
 // 后端返回的中文（卡片标题、失败原因）是**数据**，不是界面文案：它们不进语言包，
 // 所以先用常量收起来，断言里只引用常量（cjkRatchet 只数 ByText 参数里的中文）。
+const COMPANY = "腾讯";
 const SITE_NAME = "腾讯官网";
 const OFFICIAL_TITLE = "腾讯控股有限公司 - 官方网站";
 const BRIEF_FAILURE = "未配置 DeepSeek Key，无法生成联网简报";
@@ -35,6 +40,7 @@ vi.mock("../../api/research", async (importOriginal) => {
     ...actual,
     researchCompany: apiMocks.researchCompany,
     latestCompanyResearch: apiMocks.latestCompanyResearch,
+    listResearchHistory: apiMocks.listResearchHistory,
   };
 });
 
@@ -237,6 +243,38 @@ describe("CompanyResearchPage 结果展示", () => {
     // antd 会把两个汉字的按钮排成「重 试」，所以按字间允许空白的正则取。
     fireEvent.click(screen.getByRole("button", { name: looseName(t("common.retry")) }));
     await waitFor(() => expect(apiMocks.researchCompany).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("CompanyResearchPage 调研历史入口", () => {
+  it("右上角「调研历史」打开历史抽屉", async () => {
+    renderPage();
+    fireEvent.click(screen.getByTestId("research-history-open"));
+    // 抽屉里没有历史记录时给空态，而不是一片空白。
+    expect(await screen.findByText(t("companyResearch.history.emptyAll"))).toBeTruthy();
+  });
+
+  it("「最近一次调研」区域也能打开抽屉", async () => {
+    apiMocks.researchCompany.mockResolvedValue(
+      result({
+        knowledge_entry: {
+          id: 7,
+          title: `${COMPANY} 调研简报`,
+          company: COMPANY,
+          reason: "主营社交与游戏",
+          updated_at: "2026-11-16T02:00:00",
+        },
+      }),
+    );
+    renderPage();
+    await submitWith(COMPANY);
+
+    const latest = await screen.findByTestId("research-latest");
+    fireEvent.click(
+      within(latest).getByRole("button", { name: t("companyResearch.history.viewAll") }),
+    );
+    // 抽屉带着公司名打开：空态是「这家公司还没有调研历史」。
+    expect(await screen.findByText(t("companyResearch.history.empty"))).toBeTruthy();
   });
 });
 

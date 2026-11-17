@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .model_window import DEFAULT_CONTEXT_WINDOW, WindowSource
+
 # max_tokens 取该值时表示“不限制”：请求体里省略该字段，由服务商/模型决定上限。
 # 发送 0 或 -1 在部分服务商上会被当作非法参数拒绝，所以用省略而非哨兵数值。
 UNLIMITED_MAX_TOKENS = 0
@@ -217,6 +219,11 @@ class LLMGlobalRecordOut(LLMConfig):
     created_at: str = ""
     updated_at: str = ""
     is_active: bool = False
+    # 这条记录**解析后**的上下文窗口（``resolve_model_window`` 的结果）：手填优先，
+    # 否则命中参考表，再否则保守值。卡片上要显示「窗口 1M（参考表）」，让用户看得出
+    # 这个数字是查到的还是估的——型号正则只有后端一份，前端不复制一份去猜。
+    window_tokens: int = Field(default=DEFAULT_CONTEXT_WINDOW, ge=1)
+    window_source: WindowSource = "fallback"
 
 
 class LLMTestRequest(LLMConfig):

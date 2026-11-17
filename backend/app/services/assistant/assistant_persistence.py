@@ -49,6 +49,11 @@ def history_snapshot(
             "role": row.role,
             "content": row.content,
             "attachments": row.attachments or [],
+            # T24：消息级技能提示词随行带走——它必须在**这条消息自己**的正文之前重新
+            # 出现，否则追问的第二轮起技能就"失效"了（用户并不知道还要再勾一次）。
+            "skill_prompt": (
+                str(row.context.get("skill_prompt") or "") if isinstance(row.context, dict) else ""
+            ),
         }
         for row in reversed(rows)
         if row.role in {"user", "assistant"}
@@ -56,7 +61,9 @@ def history_snapshot(
     selected: list[dict[str, Any]] = []
     used_chars = 0
     for message in reversed(history):
-        content_chars = len(str(message.get("content") or ""))
+        content_chars = len(str(message.get("content") or "")) + len(
+            str(message.get("skill_prompt") or "")
+        )
         if selected and used_chars + content_chars > MAX_HISTORY_CHARS:
             break  # 额度用尽：更旧的消息不再带；最近一条无论如何保留
         selected.append(message)

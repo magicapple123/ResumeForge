@@ -162,4 +162,21 @@ describe("PageThumbnailStrip", () => {
     ).toBeNull();
     expect(screen.queryByText(t("pagination.thumbnails.limitReached", { limit: 10 }))).toBeNull();
   });
+
+  it("空态是两行：说明独占第二行，类名留在外层容器（T20）", () => {
+    renderStrip(null);
+    const empty = screen.getByText(t("pagination.thumbnails.empty"));
+    const hint = screen.getByText(t("pagination.thumbnails.hint"));
+    const refresh = screen.getByRole("button", { name: t("pagination.thumbnails.refresh") });
+    const outer = document.querySelector(".resume-page-thumbnails-hint");
+
+    // 类名仍挂在外层容器上（样式与既有选择器都按这一层取）。
+    expect(outer).not.toBeNull();
+    // 第一行：状态句 + 按钮同一父节点（是的，它们还在一行）。
+    expect(empty.parentElement).toBe(refresh.parentElement);
+    // 第二行：说明是**外层容器**的直接子级，不在第一行里——所以它独占一行。
+    expect(hint.parentElement).toBe(outer);
+    expect(empty.parentElement).not.toBe(outer);
+    expect(outer?.contains(refresh)).toBe(true);
+  });
 });

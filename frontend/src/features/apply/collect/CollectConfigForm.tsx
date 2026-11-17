@@ -19,11 +19,12 @@
 import { PlayCircleOutlined, SaveOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Form, Input, InputNumber, Select, Typography } from "antd";
 import type { FormInstance } from "antd";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { CollectConfig } from "../../../types";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import CollectSiteFilters from "../CollectSiteFilters";
+import { readRhythmOpen, writeRhythmOpen } from "./collectRhythmCollapse";
 import "../applyCollectForm.css";
 
 interface Props {
@@ -64,6 +65,16 @@ export default function CollectConfigForm({
   const secondsPerItem =
     (typeof interval === "number" ? interval : 0) + (typeof jitter === "number" ? jitter : 0) / 2;
   const summaryMinutes = Math.max(1, Math.round((summaryCount * secondsPerItem) / 60));
+
+  // 节奏默认折叠成一行摘要（间隔 / 抖动 / 预计时长 + 「调整」）：这两个数字是设一次
+  // 就不再动的参数，常驻两排输入框会把搜索条件与站点筛选挤出首屏。选择记在 localStorage。
+  const [rhythmOpen, setRhythmOpen] = useState(() => readRhythmOpen());
+  const toggleRhythm = (open: boolean) => {
+    setRhythmOpen(open);
+    writeRhythmOpen(open);
+  };
+  const intervalValue = typeof interval === "number" ? interval : 0;
+  const jitterValue = typeof jitter === "number" ? jitter : 0;
 
   return (
     <Form form={form} layout="vertical" className="apply-collect-config">
@@ -137,39 +148,67 @@ export default function CollectConfigForm({
               {t("applyCollect.group.rhythmHint")}
             </Typography.Text>
           </div>
+          {rhythmOpen && (
+            <Button type="link" size="small" onClick={() => toggleRhythm(false)}>
+              {t("applyCollect.rhythm.collapse")}
+            </Button>
+          )}
         </div>
-        <div className="apply-collect-rhythm-grid">
-          <Form.Item name="interval_seconds" label={t("applyCollect.field.intervalSeconds")}>
-            <InputNumber
-              min={1}
-              max={600}
-              addonAfter={t("applyCollect.unit.seconds")}
-              style={{ width: "100%" }}
-            />
-          </Form.Item>
-          <Form.Item name="interval_jitter_seconds" label={t("applyCollect.field.jitterSeconds")}>
-            <InputNumber
-              min={1}
-              max={300}
-              addonAfter={t("applyCollect.unit.seconds")}
-              style={{ width: "100%" }}
-            />
-          </Form.Item>
-          {/* 保存站点原文：排查解析问题 / 做真实样例回归的通道，属于支持路径而非日常流程，
-              所以放在节奏这一行末尾、默认不勾，并把"存什么、存哪、会不会外传"写在下面一行。 */}
-          <div className="apply-collect-field apply-collect-samples-cell">
-            <Checkbox
-              checked={saveSamples}
-              onChange={(event) => onSaveSamplesChange(event.target.checked)}
-              aria-label={t("applyCollect.field.saveSamples")}
-            >
-              {t("applyCollect.field.saveSamples")}
-            </Checkbox>
+        {/* 折叠用 `hidden` 而不是不渲染：`Form.Item` 一旦卸载，`useWatch` 就拿不到值，
+            摘要会显示成「间隔 0 秒」——看起来像设置被清空了。隐藏的元素也不进 Tab 序。 */}
+        <div className="apply-collect-rhythm-body" hidden={!rhythmOpen}>
+          <div className="apply-collect-rhythm-grid">
+            <Form.Item name="interval_seconds" label={t("applyCollect.field.intervalSeconds")}>
+              <InputNumber
+                min={1}
+                max={600}
+                addonAfter={t("applyCollect.unit.seconds")}
+                style={{ width: "100%" }}
+              />
+            </Form.Item>
+            <Form.Item name="interval_jitter_seconds" label={t("applyCollect.field.jitterSeconds")}>
+              <InputNumber
+                min={1}
+                max={300}
+                addonAfter={t("applyCollect.unit.seconds")}
+                style={{ width: "100%" }}
+              />
+            </Form.Item>
+            {/* 保存站点原文：排查解析问题 / 做真实样例回归的通道，属于支持路径而非日常
+                流程，所以放在节奏这一行末尾、默认不勾，并把"存什么、存哪、会不会外传"
+                写在下面一行。 */}
+            <div className="apply-collect-field apply-collect-samples-cell">
+              <Checkbox
+                checked={saveSamples}
+                onChange={(event) => onSaveSamplesChange(event.target.checked)}
+                aria-label={t("applyCollect.field.saveSamples")}
+              >
+                {t("applyCollect.field.saveSamples")}
+              </Checkbox>
+            </div>
           </div>
+          <Typography.Text type="secondary" className="apply-collect-samples-hint">
+            {t("applyCollect.hint.saveSamples")}
+          </Typography.Text>
         </div>
-        <Typography.Text type="secondary" className="apply-collect-samples-hint">
-          {t("applyCollect.hint.saveSamples")}
-        </Typography.Text>
+        {!rhythmOpen && (
+          <div className="apply-collect-rhythm-summary">
+            <Typography.Text type="secondary">
+              {t("applyCollect.rhythm.summary", {
+                interval: intervalValue,
+                jitter: jitterValue,
+                minutes: summaryMinutes,
+              })}
+            </Typography.Text>
+            <Button
+              size="small"
+              aria-label={t("applyCollect.rhythm.adjust")}
+              onClick={() => toggleRhythm(true)}
+            >
+              {t("applyCollect.rhythm.adjust")}
+            </Button>
+          </div>
+        )}
       </section>
 
       <div className="apply-collect-actions">

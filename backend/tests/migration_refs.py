@@ -27,6 +27,10 @@ LEGACY_1X_REVISION = "0046_search_fts"
 # pre-2.0 历史链上的一条 revision（2.0 之前的分段迁移，现已不在当前链里）。
 # 只用于构造「清单记录的 revision 必须取快照库实际值」的回归样本，不代表当前 head。
 LEGACY_0075_REVISION = "0075_profile_section_job_filter"
+#: T26：视角从「对话技能」解耦到 `chat_conversation.persona_id`。
+CONVERSATION_PERSONA_REVISION = "0021_conversation_persona"
+#: T07：公司调研历史表。
+COMPANY_RESEARCH_RUN_REVISION = "0022_company_research_run"
 
 
 def head_revision() -> str:
@@ -57,8 +61,12 @@ def prior_revision(suffix: str) -> str:
         "script_location", str(Path(__file__).resolve().parents[1] / "migrations")
     )
     script = ScriptDirectory.from_config(config)
-    matches = [revision for revision in script.walk_revisions() if revision.revision.endswith(suffix)]
-    assert len(matches) == 1, f"期望恰好一条 revision 以 {suffix!r} 结尾，实际命中 {len(matches)} 条"
+    matches = [
+        revision for revision in script.walk_revisions() if revision.revision.endswith(suffix)
+    ]
+    assert len(matches) == 1, (
+        f"期望恰好一条 revision 以 {suffix!r} 结尾，实际命中 {len(matches)} 条"
+    )
     return str(matches[0].down_revision)
 
 

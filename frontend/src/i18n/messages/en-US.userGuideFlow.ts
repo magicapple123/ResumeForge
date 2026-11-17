@@ -185,9 +185,9 @@ const userGuideFlow = {
   "userGuideFlow.assistant.step1.point9.lead": "Allow web access",
   "userGuideFlow.assistant.step1.point9.text":
     "When on, the assistant gets a search tool and decides for itself what to search and which keywords to try (at most 3 searches per turn, all tool-initiated — nothing is pre-searched for you); sources are collected under “Sources (N)” below the answer, and clicking a title opens the original page.",
-  "userGuideFlow.assistant.step1.point10.lead": "Skills (this conversation only)",
+  "userGuideFlow.assistant.step1.point10.lead": "Skills per message",
   "userGuideFlow.assistant.step1.point10.text":
-    "Skill chips at the top of the input show the skills **enabled for this conversation**; click the × on a chip to disable that one, or the “Skills” button at the end of the row to open the menu and tick more. They **apply to this conversation only — each conversation has its own set**; a new conversation starts with none, at most 8 can be enabled, and skills beyond the injection budget are truncated and marked.",
+    "Skill chips above the composer are **the skills for your next message**: pick them, send, and that message is answered with those skills; the selection clears right after sending. Remove one with the x on its chip, or open the menu from the Skills button. **Skills no longer apply to the whole conversation** - skills enabled in older conversations are no longer injected, and such a conversation shows a one-time notice. Up to 8 skills per message; ones beyond the budget are marked on the chip row.",
   "userGuideFlow.assistant.step1.point11.lead": "New skills",
   "userGuideFlow.assistant.step1.point11.text":
     "To create or edit a prompt, go to “**Workbench → Skills**” in the sidebar; the Skills library no longer has an enable switch — enabling now happens in the conversation input. A skill generated from a conversation starts as “pending validation” and cannot be enabled until you mark it verified.",

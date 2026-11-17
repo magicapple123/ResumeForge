@@ -6,20 +6,43 @@
 /* ===== 设置页「助手记忆」卡（I-03）：三段分区 + 条目卡片化 =====
    改造前是 5 个 Space 平铺：危险动作与主操作并排、1 条数据也摆搜索框、每行 5 个同权重
    蓝字链接。这里的类名只服务这一张卡，前缀统一 `rf-memory-`。 */
-.rf-memory-switch {
+/* T23：开关区从「一行标题 + 开关 + 紧随说明」改成两行等宽行，每行左侧标题与说明、
+   右侧开关。开关自身不再显示「开 / 关」文字。 */
+.rf-memory-switches {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 14px;
+  margin-top: 12px;
 }
 
-.rf-memory-switch-head {
+.rf-memory-switch-row {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rf-memory-switch-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .rf-memory-hint {
   font-size: 12px;
+}
+
+/* 卡头下方那句信任语（原 intro 一直没人渲染）与卡头右侧的「只存在本机」。 */
+.rf-memory-intro {
+  display: block;
+  font-size: 12px;
+}
+
+.rf-memory-trust {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /* 三段分区之间的线：16px 上下，比 antd 默认的 24px 紧一档。 */
@@ -27,9 +50,14 @@
   margin: 16px 0;
 }
 
-/* `清空全部` 进了 Card extra：文字按钮、灰度，不跟主操作抢位置。 */
+/* `清空全部` 在列表底部：文字按钮、危险色，与「添加」分处列表两端。 */
+.rf-memory-list-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
 .rf-memory-clear.ant-btn {
-  color: var(--rf-text-secondary);
   font-size: 12px;
 }
 
@@ -114,6 +142,8 @@
 .rf-memory-value {
   min-width: 0;
   overflow: hidden;
+  /* T23：值是这一行的正文，13px；此前继承默认字号，与标签、动作字重混在一起。 */
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -158,10 +188,22 @@
   font-size: 12px;
 }
 
-/* 元信息合并成一行 11px 次级文字：来源 · 更新时间。 */
-.rf-memory-meta {
+/* 元信息（来源 · 更新时间）已进菜单与读屏文本，不再有正文行的样式。 */
+
+/* T23 第二行：「来源」折叠入口 + 展开后的原句。 */
+.rf-memory-row-second {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rf-memory-source-toggle.ant-btn {
+  height: 18px;
+  padding: 0;
+  color: var(--rf-text-secondary);
   font-size: 11px;
-  line-height: 1.5;
 }
 
 .rf-memory-excerpt {
@@ -169,7 +211,19 @@
   line-height: 1.5;
 }
 
+/* 底注：隐私句 + ⓘ；机制说明在 Tooltip 里，不再占一整行。 */
 .rf-memory-footnote {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.rf-memory-info.ant-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--rf-text-secondary);
   font-size: 11px;
 }
 

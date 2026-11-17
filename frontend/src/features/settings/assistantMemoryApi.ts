@@ -48,6 +48,8 @@ export interface MemoryKindOption {
 
 export interface AssistantMemorySettings {
   auto_extract: boolean;
+  /** 记忆注入总开关（T23）：默认开；关掉后一条记忆都不进系统提示。 */
+  inject: boolean;
 }
 
 export interface AssistantMemoryCreateInput {
@@ -137,12 +139,18 @@ export function getAssistantMemorySettings(): Promise<AssistantMemorySettings> {
   });
 }
 
+/** 只改送来的那一项：另一个开关保持原值（后端 PUT 对缺省字段不动）。 */
+export interface AssistantMemorySettingsPatch {
+  auto_extract?: boolean;
+  inject?: boolean;
+}
+
 export function saveAssistantMemorySettings(
-  autoExtract: boolean,
+  patch: AssistantMemorySettingsPatch,
 ): Promise<AssistantMemorySettings> {
   return request<AssistantMemorySettings>("/assistant/memories/settings", {
     method: "PUT",
-    body: JSON.stringify({ auto_extract: autoExtract }),
+    body: JSON.stringify(patch),
     budget: MEMORY_BUDGET,
   });
 }

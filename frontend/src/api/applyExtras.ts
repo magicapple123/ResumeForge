@@ -8,6 +8,7 @@
  */
 import type {
   ApplyBlocklist,
+  ApplyBlocklistInput,
   ApplyFunnelSummary,
   ApplyPreflightResult,
   ApplyStaleList,
@@ -60,13 +61,31 @@ export function getGreetingTemplates(): Promise<GreetingTemplateList> {
   return request("/apply/greeting-templates");
 }
 
-/** 整份覆盖保存（后端存在 AppSetting 的 JSON 数组里，零迁移）。 */
+/**
+ * 整份覆盖保存（后端存在 AppSetting 的 JSON 数组里，零迁移）。
+ *
+ * **不要带 `uses`**：整表 PUT 写的是绝对值，套用发生在队列页、保存发生在设置页，
+ * 带上本地读到的旧计数会把别处刚累加的值覆盖掉。计数只走 `markGreetingTemplateUsed`。
+ */
 export function saveGreetingTemplates(
-  templates: GreetingTemplate[],
+  templates: Omit<GreetingTemplate, "uses">[],
 ): Promise<GreetingTemplateList> {
   return request("/apply/greeting-templates", {
     method: "PUT",
     body: JSON.stringify({ templates }),
+  });
+}
+
+/**
+ * 套用次数 +`count`（增量）。默认 1；批量套用同一条模板时**一次请求带 N**。
+ */
+export function markGreetingTemplateUsed(
+  templateId: string | number,
+  count = 1,
+): Promise<GreetingTemplate> {
+  return request(`/apply/greeting-templates/${encodeURIComponent(String(templateId))}/use`, {
+    method: "POST",
+    body: JSON.stringify({ count }),
   });
 }
 
@@ -76,6 +95,6 @@ export function getApplyBlocklist(): Promise<ApplyBlocklist> {
   return request("/apply/blocklist");
 }
 
-export function saveApplyBlocklist(payload: ApplyBlocklist): Promise<ApplyBlocklist> {
+export function saveApplyBlocklist(payload: ApplyBlocklistInput): Promise<ApplyBlocklist> {
   return request("/apply/blocklist", { method: "PUT", body: JSON.stringify(payload) });
 }

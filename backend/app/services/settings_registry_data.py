@@ -105,6 +105,12 @@ REGISTRY_ENTRIES: tuple[SettingDefault, ...] = (
         note="后台自动写记忆，默认关（与其它「助手主动行为」同一口径）",
     ),
     SettingDefault(
+        key="assistant_memory_inject",
+        scope="assistant",
+        default=True,
+        note="记忆注入总开关（T23）：默认开，升级不改变既有行为",
+    ),
+    SettingDefault(
         key="agent_task_events_enabled",
         scope="assistant",
         default=False,

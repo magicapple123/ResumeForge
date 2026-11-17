@@ -25,7 +25,8 @@ export default function GoalCostBlock({
   onSaved,
 }: {
   data: AnalyticsDashboard;
-  onSaved: () => void;
+  /** 保存成功后回传新目标值：调用方就地合并，不整页重取（T13）。 */
+  onSaved: (target: number) => void;
 }) {
   useLocale();
   const { message } = App.useApp();
@@ -39,10 +40,11 @@ export default function GoalCostBlock({
     if (saving) return;
     setSaving(true);
     try {
-      await putAnalyticsWeeklyGoal(Number(target) || 0);
-      setDraft(null); // 保存成功后回到服务端值（刷新后由新数据渲染）
+      const saved = Number(target) || 0;
+      await putAnalyticsWeeklyGoal(saved);
+      setDraft(null); // 保存成功后回到服务端值（合并后的数据由调用方持有）
       message.success(t("analyticsPage.goal.saved"));
-      onSaved();
+      onSaved(saved);
     } catch (err) {
       message.error(err instanceof Error ? err.message : t("analyticsPage.goal.saveFailed"));
     } finally {

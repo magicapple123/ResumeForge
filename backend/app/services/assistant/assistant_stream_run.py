@@ -42,7 +42,6 @@ from .assistant_persistence import (
     update_message_context,
 )
 from .assistant_service import current_user_message_for_model, history_messages_for_model
-from .assistant_skills import list_conversation_skills
 from .assistant_stream_budget import AssistantStreamBudget
 from .assistant_stream_run_state import MAX_REASONING_CONTEXT_CHARS as MAX_REASONING_CONTEXT_CHARS
 from .assistant_stream_run_state import StreamRun, _truncate_reasoning
@@ -55,6 +54,7 @@ from .assistant_tool_exec import (
     run_tool_call,
     run_trace_payload,
 )
+from .memory_injection import injected_memories
 
 
 def _open_stream_run(
@@ -92,13 +92,8 @@ def _open_stream_run(
     # 助手这条消息的 context：思考内容与工具记录都挂在这里，供历史回看。
     # 用**同一个** dict 累积再整体写回——`update_message_context` 是整体替换而非合并，
     # 分开写会把先写进去的字段冲掉。
-    # T14：本轮用了哪些技能要可追溯（只记名字，不记提示词正文）。没启用技能时不落这个
-    # 字段——空数组会让前端以为"这轮有技能但列表为空"，而事实是这轮根本没启用。
-    if conversation_id is not None:
-        with factory() as db:
-            skill_names = [skill.name for skill in list_conversation_skills(db, conversation_id)]
-        if skill_names:
-            run.assistant_context["skills"] = skill_names
+    # T24：技能记录不再挂在助手消息上——技能属于**用户那条消息**（context.skills），
+    # 助手 context 只描述"它做了什么"，不再读旧的对话级关联表。
     # RF-14 §2.1.b/§2.2/§2.5：整链预算与用量遥测的协调器（assistant_budget）。
     # 预算秒数**请求开始时读一次** DB 覆盖值（设置页可改）；用户没设过就是 None，
     # 由协调器回落到 config 的部署默认（1800 秒），不把部署侧配置顶掉。
@@ -134,7 +129,12 @@ async def _run_rounds(run: StreamRun) -> AsyncGenerator[str, None]:
     # 计量的内容必须是同一份，否则面板上的数字和真正发出去的东西会对不上。
     history_messages = history_messages_for_model(run.history)
     user_message = current_user_message_for_model(
-        run.payload.content, run.attachments, run.model_context, run.quoted
+        run.payload.content,
+        run.attachments,
+        run.model_context,
+        run.quoted,
+        # T24：本条消息勾选的技能提示词（prepare 阶段已写进 metadata）；只拼一次。
+        str(run.metadata.get("skill_prompt") or ""),
     )
     messages: list[dict[str, Any]] = [{"role": "system", "content": run.system_prompt}]
     messages.extend(history_messages)
@@ -155,6 +155,15 @@ async def _run_rounds(run: StreamRun) -> AsyncGenerator[str, None]:
         config = getattr(run.provider, "config", None) or get_llm_config(db)
         window = configured_model_window(config)
         window_tokens = window.tokens
+        # T23：本轮真正注入的记忆（id + 内容快照）写进助手消息的 context，供消息下方
+        # 一行「参考了 N 条记忆」展开。与注入走同一个 injected_memories，口径一致。
+        try:
+            run.assistant_context["memories"] = [
+                {"id": item.id, "kind": item.kind, "value": item.value}
+                for item in injected_memories(db, run.conversation_id)
+            ]
+        except Exception:  # noqa: BLE001 - 追溯信息失败不能挡住这一轮回答
+            run.assistant_context["memories"] = []
     # 连接器及 MCP 桶 = 界面上下文块 + 项目上下文块 + 附件文本（没有文本就跳过）。
     connectors_source = connectors_text(prompt_parts["client"], run.model_context, run.attachments)
     conversation_source = conversation_text([*history_messages, user_message])

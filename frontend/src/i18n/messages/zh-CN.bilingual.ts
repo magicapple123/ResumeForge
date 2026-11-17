@@ -17,7 +17,7 @@ const bilingual = {
   "bilingual.variant.create": "创建翻译版本",
   "bilingual.variant.layout": "排版：{template} · {pages} 页",
   "bilingual.variant.viewing": "正在查看：{name}",
-  "bilingual.variant.createOption": "+ 未创建",
+  "bilingual.variant.createOption": "+ {language}",
   "bilingual.variant.count": "共 {count} 个语言版本",
   "bilingual.variant.current": "当前版本",
 

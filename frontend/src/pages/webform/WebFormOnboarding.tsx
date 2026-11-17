@@ -1,56 +1,92 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 右栏空态：还没读取表单时，用「三步开始填写」占住结果区。
+ * 初始态版面：三步横排动作卡 + 两栏「怎么填 / 最近填写」。
  *
- * ## 为什么需要它
+ * ## 为什么改成动作卡
  *
- * 在这之前，没有预览也没有填充结果时 `ResultPanel` 整块返回 `null`，右栏只剩一行折叠的
- * 「填写记录」。1440 宽的屏幕上，页面三分之二是白的，看起来像没做完；而左栏同时挤着
- * 四步流程 + 四行开关 + 四段说明——一边过载、一边空着。
+ * 上一版是右栏里一条竖排的三步说明，只能"读"，不能"做"：用户看完还得回到工具条找
+ * 那颗同名按钮。现在每张卡自带按钮（编号 + 状态 + 标题 + 一句说明 + 按钮），当前步
+ * 整块点亮、按钮可用，其余两步的按钮 disabled——同屏只有一个"下一步"。
  *
- * 空态**不放主按钮**：工具条上已经有一颗同名的「开启专用浏览器」，同屏两个一模一样的
- * 主入口只会让人犹豫该点哪个。它只做两件事——把流程讲清楚、指出下一步在哪儿。
+ * ## 为什么第 2 步一启动浏览器就算完成
  *
- * 只读 props，无状态：步骤完成度由 `running` 与 `hasSnapshot` 派生。
+ * 「在浏览器里打开目标网页」发生在受控浏览器内部，前端**观测不到**。把它当成未完成，
+ * 第 3 步（读取）就会永久禁用——而用户完全可能已经在那儿登录并打开了表单。所以
+ * 判据降到"浏览器已启动"，真正的完成度仍由第 3 步的 `hasSnapshot` 决定。
+ *
+ * ## 为什么卡片按钮不是 primary
+ *
+ * 同屏只能有一颗主按钮，它在工具条上（无网址时「开启专用浏览器」、有网址时「打开目标页」）。
+ * 卡片用边框与底色表达"当前步"，不再复制一颗同名主按钮。
+ *
+ * 纯 props：所有 handler 由页面侧 useCallback 稳定。
  */
+import { Button } from "antd";
+import type { ReactNode } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import type { WebFormBusyState } from "./constants";
 
 export function WebFormOnboarding({
   running,
   hasSnapshot,
+  targetUrl,
+  busy,
+  onStart,
+  onOpenUrl,
+  onRead,
+  fillPanel,
+  recentPanel,
 }: {
-  /** 专用浏览器是否在运行（第 1 步完成）。 */
+  /** 专用浏览器是否在运行（第 1、2 步完成）。 */
   running: boolean;
-  /** 是否已经读取过表单（第 2、3 步完成）。 */
+  /** 是否已经读取过表单（第 3 步完成）。 */
   hasSnapshot: boolean;
+  /** 地址栏里的目标网址：决定第 2 步的按钮能不能点。 */
+  targetUrl: string;
+  busy: WebFormBusyState;
+  onStart: () => void;
+  onOpenUrl: () => void;
+  onRead: () => void;
+  /** 左栏「怎么填」：页面的 `FillModePanel`，由页面注入以免在这里复制一套开关。 */
+  fillPanel: ReactNode;
+  /** 右栏「最近填写」：`WebFormRecentRecords`。 */
+  recentPanel: ReactNode;
 }) {
   // 本组件用模块级 t()：订阅语言变化，否则切语言后引导文案不重渲染。
   useLocale();
+  const hasUrl = targetUrl.trim().length > 0;
+  /** 浏览器没起 → 当前步是"开启"；起了 → 当前步是"读取"（页面已在浏览器里打开）。 */
+  const currentIndex = running ? 2 : 0;
   const steps = [
     {
       title: t("webFormPage.onboarding.step1"),
       hint: t("webFormPage.onboarding.step1Hint"),
       done: running,
+      action: t("webFormPage.browserCard.start"),
+      onClick: onStart,
+      loading: busy === "start" && !hasUrl,
+      blocked: false,
     },
     {
       title: t("webFormPage.onboarding.step2"),
       hint: t("webFormPage.onboarding.step2Hint"),
-      done: hasSnapshot,
+      done: running,
+      action: t("webFormPage.urlBar.open"),
+      onClick: onOpenUrl,
+      loading: busy === "start" && hasUrl,
+      blocked: !hasUrl,
     },
     {
       title: t("webFormPage.onboarding.step3"),
       hint: t("webFormPage.onboarding.step3Hint"),
       done: hasSnapshot,
+      action: t("webFormPage.readSnapshot.read"),
+      onClick: onRead,
+      loading: busy === "read",
+      blocked: !running,
     },
   ];
-  /** 第一个没完成的步骤 = 当前步；全完成（极少见）时为 -1，不标任何一步。 */
-  const currentIndex = steps.findIndex((step) => !step.done);
-  const next = !running
-    ? t("webFormPage.onboarding.next.start")
-    : !hasSnapshot
-      ? t("webFormPage.onboarding.next.read")
-      : t("webFormPage.onboarding.next.fill");
 
   return (
     <section
@@ -58,41 +94,55 @@ export function WebFormOnboarding({
       aria-label={t("webFormPage.onboarding.title")}
       data-testid="webform-onboarding"
     >
-      {running ? null : (
-        <span className="webform-onboarding-badge">{t("webFormPage.onboarding.badge")}</span>
-      )}
-      <h3 className="webform-onboarding-title">{t("webFormPage.onboarding.title")}</h3>
-      <p className="webform-onboarding-lead">{t("webFormPage.onboarding.lead")}</p>
+      <div className="webform-onboarding-head">
+        <h3 className="webform-onboarding-title">{t("webFormPage.onboarding.title")}</h3>
+        <p className="webform-onboarding-lead">{t("webFormPage.onboarding.lead")}</p>
+      </div>
+
       <ol className="webform-onboarding-steps">
         {steps.map((step, index) => {
+          const isCurrent = index === currentIndex;
           const className = [
             "webform-onboarding-step",
+            isCurrent ? "is-current" : "",
             step.done ? "is-done" : "",
-            index === currentIndex ? "is-current" : "",
           ]
             .filter(Boolean)
             .join(" ");
-          const stateText = step.done
-            ? t("webFormPage.onboarding.state.done")
-            : index === currentIndex
-              ? t("webFormPage.onboarding.state.now")
+          // 当前步优先于"已完成"：重读同一页时第 3 步既是当前步，也早就完成过。
+          const stateText = isCurrent
+            ? t("webFormPage.onboarding.state.now")
+            : step.done
+              ? t("webFormPage.onboarding.state.done")
               : t("webFormPage.onboarding.state.todo");
           return (
             <li key={step.title} className={className}>
-              {/* 序号是视觉冗余：`ol` 本来就按顺序播报，这里再念一次会变成 "1 第 1 步"。 */}
-              <span className="webform-onboarding-num" aria-hidden="true">
-                {index + 1}
+              <span className="webform-onboarding-step-head">
+                {/* 序号是视觉冗余：`ol` 本来就按顺序播报，这里再念一次会变成 "1 第 1 步"。 */}
+                <span className="webform-onboarding-num" aria-hidden="true">
+                  {index + 1}
+                </span>
+                <span className="webform-onboarding-state">{stateText}</span>
               </span>
-              <span className="webform-onboarding-body">
-                <span className="webform-onboarding-step-title">{step.title}</span>
-                <span className="webform-onboarding-step-hint">{step.hint}</span>
-              </span>
-              <span className="webform-onboarding-state">{stateText}</span>
+              <span className="webform-onboarding-step-title">{step.title}</span>
+              <span className="webform-onboarding-step-hint">{step.hint}</span>
+              <Button
+                className="webform-onboarding-step-action"
+                loading={isCurrent && step.loading}
+                disabled={busy !== null || !isCurrent || step.blocked}
+                onClick={step.onClick}
+              >
+                {step.action}
+              </Button>
             </li>
           );
         })}
       </ol>
-      <p className="webform-onboarding-next">{next}</p>
+
+      <div className="webform-onboarding-columns">
+        {fillPanel}
+        {recentPanel}
+      </div>
     </section>
   );
 }

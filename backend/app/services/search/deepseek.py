@@ -33,6 +33,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from .. import net_proxy
+
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://api.deepseek.com/v1/tools"
@@ -254,7 +256,10 @@ async def search_deepseek(
     if question:
         payload["ori_question"] = question
 
-    async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False) as client:
+    # T03：搜索与模型走同一条出网路径（`direct` 模式下也必须跟着关掉代理）。
+    async with net_proxy.build_async_client(
+        url=SEARCH_ENDPOINT, timeout=_TIMEOUT, follow_redirects=False
+    ) as client:
         response = await _post_with_retry(client, SEARCH_ENDPOINT, payload, api_key)
     if response is None:
         return DeepSeekResults(failure="network")
@@ -329,7 +334,9 @@ async def fetch_deepseek_text(url: str, api_key: str) -> str:
         logger.info("拒绝交给 DeepSeek 抓取的 URL：%s", url)
         return ""
 
-    async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False) as client:
+    async with net_proxy.build_async_client(
+        url=FETCH_ENDPOINT, timeout=_TIMEOUT, follow_redirects=False
+    ) as client:
         response = await _post_with_retry(client, FETCH_ENDPOINT, {"url": target}, api_key)
     if response is None:
         return ""
@@ -359,8 +366,8 @@ def fetch_deepseek_text_sync(
     if not target:
         logger.info("拒绝交给 DeepSeek 抓取的 URL：%s", url)
         return ""
-    with httpx.Client(
-        timeout=timeout, follow_redirects=False, transport=transport
+    with net_proxy.build_client(
+        url=FETCH_ENDPOINT, timeout=timeout, follow_redirects=False, transport=transport
     ) as client:
         response = _post_sync_with_retry(client, FETCH_ENDPOINT, {"url": target}, api_key)
     if response is None:

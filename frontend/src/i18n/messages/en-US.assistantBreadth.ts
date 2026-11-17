@@ -54,6 +54,15 @@ const assistantBreadth = {
   "assistantBreadth.persona.needsConversation":
     "Send the first message before switching perspectives",
   "assistantBreadth.persona.aria": "Assistant perspective",
+  "assistantBreadth.persona.trigger": "Perspective · {name}",
+  "assistantBreadth.persona.desc.default":
+    "No preset stance: answers what you ask, and asks for your goal before judging.",
+  "assistantBreadth.persona.desc.hr_scan":
+    "Simulates a recruiter's 6-second screen: which 3 keywords land in the first third, what is missing, one-line verdict.",
+  "assistantBreadth.persona.desc.interviewer":
+    "10 must-ask questions from the JD and resume, 3 you probably cannot answer, and what each one probes.",
+  "assistantBreadth.persona.desc.headhunter":
+    "Apply or skip, plus effort versus payoff (what to fill, in what order); does not restate match scores.",
 } as const;
 
 export default assistantBreadth;

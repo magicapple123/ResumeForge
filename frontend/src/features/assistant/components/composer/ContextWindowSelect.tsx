@@ -14,23 +14,15 @@ import { App, InputNumber, Select } from "antd";
 import { useState } from "react";
 import { getLLMConfig, saveLLMConfig } from "../../../../api/settings";
 import { t } from "../../../../i18n";
-import type { MessageKey } from "../../../../i18n";
 import { useLocale } from "../../../../i18n/i18nContext";
 import { bumpLLMConfig } from "../../../settings/llmConfigEvents";
-
-/** 预设窗口（value = token 数，label 走语言包：预设名也是用户可见文案）。 */
-const PRESETS: { value: number; labelKey: MessageKey }[] = [
-  { value: 32_000, labelKey: "contextUsage.window.preset32k" },
-  { value: 64_000, labelKey: "contextUsage.window.preset64k" },
-  { value: 128_000, labelKey: "contextUsage.window.preset128k" },
-  { value: 200_000, labelKey: "contextUsage.window.preset200k" },
-  { value: 1_000_000, labelKey: "contextUsage.window.preset1m" },
-];
+import {
+  CONTEXT_WINDOW_MAX as MAX_WINDOW,
+  CONTEXT_WINDOW_PRESETS as PRESETS,
+} from "../../../settings/llm/contextWindowPresets";
 
 /** 「自定义…」的哨兵值：它不是窗口大小，只是让输入框冒出来。 */
 const CUSTOM = "custom";
-/** 后端 `LLMConfig.context_window_tokens` 的上限；填更大值会被拒，界面先挡住。 */
-const MAX_WINDOW = 2_000_000;
 
 export interface ContextWindowSelectProps {
   /** 当前窗口；0 = 未设置。 */
@@ -112,6 +104,10 @@ export default function ContextWindowSelect({
           onBlur={() => draft !== null && draft !== windowTokens && void save(draft)}
         />
       ) : null}
+      {/* T01：这里改的就是设置页「上下文窗口」那一项（同一个 `context_window_tokens`
+          字段，整份保存回模型配置）。写清楚，免得用户以为这是"本次对话的偏好"——
+          设置页里同名项也补了反向的一句「助手面板的百分比分母就是这个值」。 */}
+      <p className="assistant-context-window-hint">{t("contextUsage.window.sameAsSettings")}</p>
       {/* F31：这句「只影响使用这个模型的对话」已由外层与来源名合成一行，这里不再重复。 */}
       {contextMismatch ? <p role="alert">{t("contextUsage.window.mismatch")}</p> : null}
     </div>

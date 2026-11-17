@@ -88,6 +88,15 @@ export interface LLMConfigRecord extends LLMConfig {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  /**
+   * 这条记录**解析后**的上下文窗口（后端 `resolve_model_window`：手填 > 参考表 > 保守值）。
+   *
+   * 由后端算好随记录下发：型号匹配规则只有后端一份，前端不复制正则去猜；卡片上
+   * 「窗口 1M（参考表）」里的「参考表」就是 `window_source`。
+   */
+  window_tokens?: number;
+  /** manual = 用户手填；reference = 命中参考表；fallback = 未知型号的保守值。 */
+  window_source?: "manual" | "reference" | "fallback";
 }
 
 export interface LLMTestResult {

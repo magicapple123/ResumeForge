@@ -14,7 +14,7 @@
  * - 撤销采纳 = 用采纳前的旧文本再采纳一次（任一项失败整批不落，要么全成要么原文不动）；
  * - 只读（`revision === null`）时创建项与翻译按钮都禁用，版本与对照仍可查看。
  */
-import { Alert, Button, Segmented, Tooltip, Typography } from "antd";
+import { Alert, Button, Tooltip, Typography } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ErrorState from "../../../components/common/ErrorState";
 import LoadingBlock from "../../../components/common/LoadingBlock";
@@ -40,6 +40,7 @@ import { adoptTranslation, createLanguageVariant, getVariant, translateVariant }
 import type { VariantBriefOut } from "./api";
 import BilingualCompareView from "./BilingualCompareView";
 import BilingualGlossaryPanel from "./BilingualGlossaryPanel";
+import BilingualTabs from "./BilingualTabs";
 import TranslationCandidatePanel from "./TranslationCandidatePanel";
 import VariantBar from "./VariantBar";
 import VariantLayoutSection from "./VariantLayoutSection";
@@ -361,18 +362,16 @@ export default function BilingualWorkspaceV2({
           onChanged={(next) => setDetail(next)}
         />
       ) : null}
-      <div className="bilingual-tabs">
-        <Segmented
-          size="small"
-          value={tab}
-          options={[
-            { value: "compare", label: bt("bilingual.workspace.tabCompare") },
-            { value: "candidates", label: bt("bilingual.workspace.tabCandidates") },
-            { value: "glossary", label: bt("bilingual.workspace.tabGlossary") },
-          ]}
-          onChange={(value) => setTab(value as WorkspaceTab)}
-        />
-      </div>
+      <BilingualTabs
+        ariaLabel={bt("bilingual.panel.title")}
+        value={tab}
+        onChange={(value) => setTab(value)}
+        items={[
+          { value: "compare", label: bt("bilingual.workspace.tabCompare") },
+          { value: "candidates", label: bt("bilingual.workspace.tabCandidates") },
+          { value: "glossary", label: bt("bilingual.workspace.tabGlossary") },
+        ]}
+      />
       <div className="bilingual-body">
         {tab === "compare" ? (
           <>

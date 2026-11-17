@@ -99,6 +99,34 @@ def _clean_fonts_dir():
 
 
 @pytest.fixture(autouse=True)
+def _isolate_outbound_proxy(monkeypatch):
+    """每个用例从"这台机器没有任何代理"开始。
+
+    出网路径（``net_proxy.resolve_proxy``）会读环境变量与系统代理。不隔离的话，开发机
+    开着 Clash 与 CI 跑出来的是两种环境：同一份断言时红时绿，而失败信息会指向完全无关
+    的业务代码。需要"有代理"的用例自己注入 ``env`` / ``system_proxies``。
+    """
+    from app.services import net_proxy
+
+    for name in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(net_proxy, "_system_proxies_default", lambda: {})
+    # 请求级直连覆盖是 ContextVar：上一个用例忘了复位时，后续用例会静默走直连。
+    net_proxy.DIRECT_OVERRIDE.set(False)
+    yield
+    net_proxy.DIRECT_OVERRIDE.set(False)
+
+
+@pytest.fixture(autouse=True)
 def _clean_global_settings_file():
     """每个用例从"没有全局配置"开始：模型记录与主题都不该跨用例泄漏。"""
     (_GLOBAL_SETTINGS_DIR / "global_settings.json").unlink(missing_ok=True)

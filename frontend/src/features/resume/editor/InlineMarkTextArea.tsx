@@ -23,6 +23,14 @@
  * 标记段在下层也渲染（`visibility: hidden`）——它们的**占位宽度**必须保留，否则后面的字
  * 全部左移，光标就落在两个字的缝隙里。
  *
+ * # 为什么"透明字形"必须挂在 `is-masked` 上，而不是无条件挂在文本域
+ *
+ * 遮罩层只在值里**真的含标记**时才挂载（`decorated`）。文字透明是"字形交给下层画"的
+ * 前提，一旦无条件生效，普通值（不含 `*` / `[` / `{@`）就会变成"上层透明 + 下层不存在"
+ * = 输入框里一片空白——值本身没丢，只是看不见（2026-11 `81bfd19f` 之后的一处 P0 回归）。
+ * 所以 `color: transparent` 与 `::selection` 的透明都收在 `.is-masked` 下，由 `decorated`
+ * 单方面决定；`caret-color` / `background: transparent` 留在基础规则（两层共用）。
+ *
  * ## 三条不变量
  *
  * 1. **文本域的值一个字都不改**（受控值仍是含标记的源串），`onChange` 原样回传字符串；
@@ -92,7 +100,9 @@ export default function InlineMarkTextArea({
   ]
     .filter(Boolean)
     .join(" ");
-  const textareaClassName = ["rf-inline-mark-layer", className].filter(Boolean).join(" ");
+  const textareaClassName = ["rf-inline-mark-layer", decorated ? "is-masked" : "", className]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={fieldClassName}>

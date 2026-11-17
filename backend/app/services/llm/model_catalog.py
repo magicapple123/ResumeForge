@@ -5,6 +5,7 @@
 （DeepSeek、豆包、Kimi、智谱、通义、OpenAI、Ollama 等）都提供该端点；不提供时
 返回明确的提示，让用户手动填写模型名，而不是报一个看不懂的网络错误。
 """
+
 from __future__ import annotations
 
 import json
@@ -12,6 +13,7 @@ import logging
 
 import httpx
 
+from .. import net_proxy
 from .base import LLMError
 from .openai_compat import http_error_message, models_endpoint
 
@@ -34,19 +36,21 @@ async def list_available_models(base_url: str, api_key: str = "") -> list[str]:
         headers["Authorization"] = f"Bearer {api_key}"
 
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        # T02：统一工厂。回环（本地模型 Ollama/vLLM）强制直连；socks 在建客户端前
+        # 就抛明确错误，而不是让 httpx 抛一个穿成 500 的 ImportError。
+        async with net_proxy.build_async_client(url=url, timeout=_TIMEOUT) as client:
             response = await client.get(url, headers=headers)
     except httpx.TimeoutException as exc:
-        raise LLMError("获取模型列表超时，请检查网络后重试") from exc
-    except httpx.RequestError as exc:
-        raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
+        raise LLMError("获取模型列表超时，请检查网络后重试", net_path="timeout") from exc
+    except (net_proxy.ProxyConfigurationError, httpx.RequestError) as exc:
+        proxy = net_proxy.resolve_proxy(target_url=url)
+        kind, message, _detail = net_proxy.classify_and_message(exc, proxy=proxy, url=url)
+        raise LLMError(message, net_path=kind) from exc
 
     if response.status_code != 200:
         logger.warning("模型列表接口返回 status=%s", response.status_code)
         if response.status_code in {400, 404, 405, 501}:
-            raise LLMError(
-                "该服务商没有提供模型列表接口，请在「模型名称」里手动填写要用的模型"
-            )
+            raise LLMError("该服务商没有提供模型列表接口，请在「模型名称」里手动填写要用的模型")
         raise LLMError(http_error_message(response.status_code))
 
     if len(response.content) > _MAX_RESPONSE_BYTES:

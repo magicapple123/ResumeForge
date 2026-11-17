@@ -27,7 +27,7 @@ from app.services import settings_defaults, settings_service
 from app.services.analytics_goal import get_weekly_goal
 from app.services.asr_settings import legacy_asr_settings
 from app.services.assistant.assistant_compaction_settings import get_compaction_settings
-from app.services.assistant.memory import auto_extract_enabled
+from app.services.assistant.memory import auto_extract_enabled, memory_injection_enabled
 from app.services.assistant_limits import (
     get_max_tool_rounds,
     get_stream_budget_seconds,
@@ -95,6 +95,7 @@ _READERS: dict[str, Callable[[Session], Any]] = {
     "assistant_stream_budget_seconds": get_stream_budget_seconds,
     "assistant_tool_result_max_chars": get_tool_result_max_chars,
     "assistant_memory_auto_extract": auto_extract_enabled,
+    "assistant_memory_inject": memory_injection_enabled,
     "agent_task_events_enabled": settings_service.get_agent_task_events_enabled,
     "webform_relaxed_mode": settings_service.get_webform_relaxed_mode,
     "reminder_popup_on_start": settings_service.get_reminder_popup_on_start,

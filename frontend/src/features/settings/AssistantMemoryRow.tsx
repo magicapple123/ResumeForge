@@ -68,11 +68,21 @@ export function AssistantMemoryRow({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [events, setEvents] = useState<AssistantMemoryEvent[] | null>(null);
   const [historyFailed, setHistoryFailed] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
 
   const suppressed = memory.status === "suppressed";
   const superseded = memory.status === "superseded";
   const excerpt = (memory.source_excerpt || "").trim();
   const conversationId = memory.source_conversation_id;
+  /** 元信息（来源 · 更新时间）：T23 起只进 `⋯` 菜单与读屏专用文本，不占正文行。 */
+  const metaLine = t("assistantMemory.meta.line", {
+    source: t(
+      memory.source === "extracted"
+        ? "assistantMemory.source.extracted"
+        : "assistantMemory.source.manual",
+    ),
+    updated: t("assistantMemory.updatedAt", { time: formatDateTime(memory.updated_at) }),
+  });
 
   const openHistory = async () => {
     setHistoryOpen(true);
@@ -95,6 +105,9 @@ export function AssistantMemoryRow({
 
   // 菜单按状态裁剪：停用的只剩「恢复使用」，被替换的只剩「历史 / 删除」。
   const items: MenuProps["items"] = [];
+  // T23：来源与更新时间不再占正文行，挪成菜单头部的只读信息（disabled 不响应点击）。
+  items.push({ key: "meta", label: metaLine, disabled: true });
+  items.push({ type: "divider" });
   if (!suppressed && !superseded) {
     items.push({ key: "suppress", label: t("assistantMemory.action.neverUse") });
   }
@@ -153,24 +166,26 @@ export function AssistantMemoryRow({
             </Dropdown>
           </span>
         </div>
-        {/* 元信息合并成一行：来源 · 更新时间（原来来源是一个紫色 Tag、时间单独一段）。 */}
-        <Typography.Text type="secondary" className="rf-memory-meta">
-          {t("assistantMemory.meta.line", {
-            source: t(
-              memory.source === "extracted"
-                ? "assistantMemory.source.extracted"
-                : "assistantMemory.source.manual",
-            ),
-            updated: t("assistantMemory.updatedAt", {
-              time: formatDateTime(memory.updated_at),
-            }),
-          })}
-        </Typography.Text>
+        {/* T23：第二行只留「来源」折叠入口；来源/更新时间进菜单与读屏文本。 */}
         {excerpt ? (
-          <Typography.Text type="secondary" italic className="rf-memory-excerpt">
-            {t("assistantMemory.sourceExcerpt", { text: excerpt })}
-          </Typography.Text>
+          <div className="rf-memory-row-second">
+            <Button
+              type="link"
+              size="small"
+              className="rf-memory-source-toggle"
+              aria-expanded={sourceOpen}
+              onClick={() => setSourceOpen((open) => !open)}
+            >
+              {t("assistantMemory.source.label")}
+            </Button>
+            {sourceOpen ? (
+              <Typography.Text type="secondary" italic className="rf-memory-excerpt">
+                {t("assistantMemory.sourceExcerpt", { text: excerpt })}
+              </Typography.Text>
+            ) : null}
+          </div>
         ) : null}
+        <span className="rf-sr-only">{metaLine}</span>
       </div>
 
       <Modal

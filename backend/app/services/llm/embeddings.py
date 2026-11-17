@@ -26,6 +26,7 @@ import httpx
 
 from ...config import Settings, get_settings
 from ...runtime.operation_budget import OperationBudget, OperationCancelled
+from .. import net_proxy
 from ..net_policy import ADDRESS_INVALID, non_public_address_reason
 from . import retry
 from .base import LLMError
@@ -211,7 +212,8 @@ class HttpEmbeddingProvider(BaseEmbeddingProvider):
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else None
         remaining_fn = (lambda: budget.remaining()) if budget is not None else None
         gate = retry.StatusRetryGate(deadline_remaining_fn=remaining_fn)
-        client = self._client or get_shared_client()
+        # T02：端点一起传下去（回环地址强制直连，本地 embedding 服务可用）。
+        client = self._client or get_shared_client(url=f"{self.base_url}/embeddings")
         while True:
             timeout = self.timeout
             if budget is not None:
@@ -228,7 +230,14 @@ class HttpEmbeddingProvider(BaseEmbeddingProvider):
                     )
             except (TimeoutError, httpx.TimeoutException) as exc:
                 raise EmbeddingError("embedding 服务响应超时，请稍后重试") from exc
-            except httpx.RequestError as exc:
+            except (net_proxy.ProxyConfigurationError, httpx.RequestError) as exc:
+                # T02：有代理参与时如实说"经哪个代理失败"（socks 则引导换 http 端口）。
+                proxy = net_proxy.resolve_proxy(target_url=f"{self.base_url}/embeddings")
+                kind, message, _detail = net_proxy.classify_and_message(
+                    exc, proxy=proxy, url=f"{self.base_url}/embeddings"
+                )
+                if kind in (net_proxy.NET_PATH_PROXY_REFUSED, net_proxy.NET_PATH_PROXY_SOCKS):
+                    raise EmbeddingError(message) from exc
                 raise EmbeddingError("无法连接 embedding 服务，请检查 Base URL 与网络状态") from exc
             if response.status_code == 200:
                 break

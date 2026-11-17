@@ -184,9 +184,9 @@ const userGuideFlow = {
   "userGuideFlow.assistant.step1.point9.lead": "允许联网",
   "userGuideFlow.assistant.step1.point9.text":
     "打开后助手拿到一个搜索工具，由它自己决定搜什么、换关键词多搜（一轮合计最多 3 次，全部由工具发起，开箱没有开场资料）；来源收在回答下方「参考来源（N）」，点标题可开原网页。",
-  "userGuideFlow.assistant.step1.point10.lead": "对话技能",
+  "userGuideFlow.assistant.step1.point10.lead": "按消息用技能",
   "userGuideFlow.assistant.step1.point10.text":
-    "输入框顶部的技能 chip 显示**本对话已启用的技能**，点 chip 上的 × 停用该个；行末的「技能」按钮打开菜单勾选。**只对当前对话生效，换对话各有一套**；新对话默认不启用，一个对话最多 8 个，超出注入预算的靠后技能会被截断并标出来。",
+    "顶部 chip 是**下一条消息要用的技能**：勾选后发送，这条就按它回答，发送后自动清空。点 × 移除，行末「技能」按钮打开菜单。**技能不再对整个对话生效**：旧会话里的技能不会再注入，首次打开会给一次提示；一条消息最多 8 个。",
   "userGuideFlow.assistant.step1.point11.lead": "新建技能",
   "userGuideFlow.assistant.step1.point11.text":
     "要新建或改提示词，去侧栏的「**工作台 → 技能**」；技能库里不再有启用开关——启用改为在对话输入区勾选。",

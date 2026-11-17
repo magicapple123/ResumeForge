@@ -112,16 +112,20 @@ export default function PageThumbnailStrip({
         ) : null}
       </div>
       {!measured ? (
-        <Flex gap={6} wrap align="center" className="resume-page-thumbnails-hint">
-          <span>{t("pagination.thumbnails.empty")}</span>
-          <Button
-            size="small"
-            loading={loading}
-            disabled={!refresh || undefined}
-            onClick={triggerPaginationReportRefresh}
-          >
-            {t("pagination.thumbnails.refresh")}
-          </Button>
+        /* 空态两行（T20）：第一行"还没有报告 + 取报告"，第二行是那句测量口径。
+           挤在一行时窄左栏会把三段落排成参差的两行半，读起来像一句被折断的话。 */
+        <Flex vertical gap={4} className="resume-page-thumbnails-hint">
+          <Flex gap={6} wrap align="center">
+            <span>{t("pagination.thumbnails.empty")}</span>
+            <Button
+              size="small"
+              loading={loading}
+              disabled={!refresh || undefined}
+              onClick={triggerPaginationReportRefresh}
+            >
+              {t("pagination.thumbnails.refresh")}
+            </Button>
+          </Flex>
           <span>{t("pagination.thumbnails.hint")}</span>
         </Flex>
       ) : (

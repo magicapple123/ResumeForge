@@ -45,6 +45,13 @@ class ChatConversation(Base):
     memory_off: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default="0"
     )
+    # 助手视角（T26，迁移 0021）：空串 = 通用助手（不启用任何视角）。
+    # **不再是"内置技能挂到对话上"**——视角与「对话技能」解耦后，视角是会话自己的属性，
+    # 因此不会被技能预算、技能列表、消息级技能（T24）等任何一条链路顺带改掉。
+    # 取值只允许 `services/assistant/assistant_personas.py` 的 PERSONA_IDS 或空串。
+    persona_id: Mapped[str] = mapped_column(
+        String(16), default="", nullable=False, server_default=""
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     # 上下文压缩状态（问题清单 #10，迁移 0011）：可空 JSON。NULL = 没压缩过（默认）。
@@ -89,9 +96,7 @@ class ChatMessage(Base):
 
     conversation: Mapped[ChatConversation] = relationship(back_populates="messages")
 
-    __table_args__ = (
-        Index("uq_chat_message_proposal_kind", "proposal_id", "kind", unique=True),
-    )
+    __table_args__ = (Index("uq_chat_message_proposal_kind", "proposal_id", "kind", unique=True),)
 
 
 class AssistantSkill(Base):
@@ -225,9 +230,7 @@ class AssistantWriteProposal(Base):
     status: Mapped[str] = mapped_column(
         String(16), default="pending", nullable=False, index=True, server_default="pending"
     )
-    result_summary: Mapped[str] = mapped_column(
-        Text, default="", nullable=False, server_default=""
-    )
+    result_summary: Mapped[str] = mapped_column(Text, default="", nullable=False, server_default="")
     error: Mapped[str] = mapped_column(Text, default="", nullable=False, server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)

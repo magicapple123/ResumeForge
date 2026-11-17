@@ -52,6 +52,7 @@ import HelpDiagnosticsCard from "./HelpDiagnosticsCard";
 import ReminderPopupCard from "./ReminderPopupCard";
 import ConnectionsCard from "./ConnectionsCard";
 import SystemSourcesCard from "./SystemSourcesCard";
+import NetworkProxyCard from "./NetworkProxyCard";
 import OcrEngineCard from "./OcrEngineCard";
 
 /** 组内的子块标题：一组里确实还有两层时才用（不是每个分组都要）。 */
@@ -153,6 +154,8 @@ export function ConnectionsPanel() {
   useLocale();
   return (
     <>
+      {/* 出网与代理（T02/T05）：模型连不上时先看这里。 */}
+      <NetworkProxyCard />
       {/* 识别引擎（T01）：三档说明由后端给，Key 复用联网搜索那一把。 */}
       <OcrEngineCard />
       {/* A/B 组：三态 + 存储方式 + 就地改 / 清除。 */}

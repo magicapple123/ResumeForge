@@ -31,6 +31,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from ...runtime.operation_budget import OperationBudget
+from .. import net_proxy
 from ..net_policy import ADDRESS_INVALID, endpoint_class
 from ..rag.rag_embedding_endpoint import (
     MAX_RESPONSE_BYTES,
@@ -163,8 +164,11 @@ class _HttpBatchProvider(HttpEmbeddingProvider):
         raise NotImplementedError
 
     # ---- 公共编排 ----
-    def _client_or_shared(self) -> httpx.AsyncClient:
-        return self._client if self._client is not None else get_shared_client()
+    def _client_or_shared(self, url: str | None = None) -> httpx.AsyncClient:
+        """注入的客户端优先；否则取共享池（T02：带端点，回环强制直连）。"""
+        if self._client is not None:
+            return self._client
+        return get_shared_client(url=url)
 
     async def aclose(self) -> None:
         """只关闭注入的客户端；共享连接池由进程级池管理（调用方勿关闭）。"""
@@ -177,7 +181,7 @@ class _HttpBatchProvider(HttpEmbeddingProvider):
         host = httpx.URL(url.split("?", 1)[0]).host
         remaining_fn = (lambda: budget.remaining()) if budget is not None else None
         gate = retry.StatusRetryGate(deadline_remaining_fn=remaining_fn)
-        client = self._client_or_shared()
+        client = self._client_or_shared(url)
         while True:
             timeout = self.timeout
             if budget is not None:
@@ -195,7 +199,12 @@ class _HttpBatchProvider(HttpEmbeddingProvider):
                 raise EmbeddingError(
                     "embedding 请求头不合法：请检查自定义 headers 的名称与取值"
                 ) from exc
-            except httpx.RequestError as exc:
+            except (net_proxy.ProxyConfigurationError, httpx.RequestError) as exc:
+                # T02：有代理参与时如实说"经哪个代理失败"（socks 则引导换 http 端口）。
+                proxy = net_proxy.resolve_proxy(target_url=url)
+                kind, message, _detail = net_proxy.classify_and_message(exc, proxy=proxy, url=url)
+                if kind in (net_proxy.NET_PATH_PROXY_REFUSED, net_proxy.NET_PATH_PROXY_SOCKS):
+                    raise EmbeddingError(message) from exc
                 raise EmbeddingError("无法连接 embedding 服务，请检查 Base URL 与网络状态") from exc
             if response.status_code == 200:
                 return response, gate.retries

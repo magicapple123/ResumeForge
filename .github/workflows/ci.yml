@@ -128,6 +128,8 @@ jobs:
           .\scripts\tests\Test-Update-ResumeForge.ps1
           .\scripts\tests\Test-Build-Release.ps1
           .\scripts\tests\Test-PythonRuntimeGuard.ps1
+          # T06：pip 失败分类（纯函数，8 组样例输出 → 类别 + 一条动作）。
+          .\scripts\tests\Test-PipFailureHint.ps1
 
       - name: Run tests with coverage
         env:

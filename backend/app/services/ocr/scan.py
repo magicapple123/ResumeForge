@@ -66,6 +66,11 @@ def user_message_for(exc: OcrError) -> str:
     """把原因码翻成一句中文原因；未知原因退回 "OCR 识别失败" + 原始 detail。"""
     message = _OCR_ERROR_MESSAGES.get(exc.code)
     if message:
+        if exc.code == "network":
+            # T04：代理在用就提代理——同一次断网，不要"模型页说代理、识别页只说网络"。
+            from .. import net_proxy
+
+            return f"{message}{net_proxy.proxy_note()}"
         return message
     suffix = f"（{exc.detail}）" if exc.detail else ""
     return f"OCR 识别失败{suffix}"

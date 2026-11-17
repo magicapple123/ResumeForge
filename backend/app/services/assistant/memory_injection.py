@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import json
+
 from sqlalchemy.orm import Session
 
 from ...models.assistant import ChatConversation, ChatMessage
@@ -14,6 +16,10 @@ from ...models.assistant_memory import (
     MEMORY_STATUS_ACTIVE,
     AssistantMemory,
 )
+from ...models.setting import AppSetting
+
+#: 记忆注入总开关（T23）。**默认 true**：缺行时保持升级前的注入行为。
+INJECT_SETTING_KEY = "assistant_memory_inject"
 
 #: 注入上限（#31B）：按当前用户消息相关性取 top 5，不全塞。
 INJECTION_TOP_N = 5
@@ -105,19 +111,56 @@ def conversation_memory_off(db: Session, conversation_id: int | None) -> bool:
     return bool(conversation is not None and conversation.memory_off)
 
 
+def memory_injection_enabled(db: Session) -> bool:
+    """全局记忆注入开关（T23）：缺行 = 默认开，脏值也按开处理。
+
+    与「本次不记忆」（``conversation_memory_off``）是**与**关系：两个开关任一关闭就
+    不注入。默认开是刻意的——升级不能让已有用户突然失去记忆能力。
+    """
+    row = db.get(AppSetting, INJECT_SETTING_KEY)
+    if row is None:
+        return True
+    try:
+        return bool(json.loads(row.value))
+    except (TypeError, ValueError):
+        return True
+
+
+def set_memory_injection(db: Session, enabled: bool) -> bool:
+    """保存全局记忆注入开关（设置页）。返回保存后的值。"""
+    row = db.get(AppSetting, INJECT_SETTING_KEY)
+    serialized = json.dumps(bool(enabled), ensure_ascii=False)
+    if row is None:
+        db.add(AppSetting(key=INJECT_SETTING_KEY, value=serialized))
+    else:
+        row.value = serialized
+    db.commit()
+    return bool(enabled)
+
+
+def injected_memories(db: Session, conversation_id: int | None) -> list[AssistantMemory]:
+    """本轮真正会被注入的记忆——开关判定与相关性挑选的唯一实现。
+
+    注入链路（``render_memory_block``）与消息快照（助手消息的 ``context.memories``）
+    都走这里，两处不会出现"注入 5 条、却告诉用户 3 条"的分叉。
+    """
+    if not memory_injection_enabled(db) or conversation_memory_off(db, conversation_id):
+        return []
+    message = latest_user_message(db, conversation_id)
+    if message is None:
+        return []
+    return relevant_memories(db, message.content or "")
+
+
 def render_memory_block(db: Session, conversation_id: int | None) -> str:
     """把相关记忆渲染成系统提示里的固定区块；没有相关记忆时返回空串。
 
     位置在系统提示的 base 段（求职偏好之后、本地时间之前）：它是"用户说过的事实"，
     不是系统规则，也不是技能规范。
     """
-    # 临时对话（F34）：不注入任何已有记忆；已保存的记忆一行都不动。
-    if conversation_memory_off(db, conversation_id):
-        return ""
-    message = latest_user_message(db, conversation_id)
-    if message is None:
-        return ""
-    memories = relevant_memories(db, message.content or "")
+    # 全局注入开关（T23）与「本次不记忆」（F34）在与关系下都由 injected_memories 判：
+    # 任一关闭就返回空串；已保存的记忆一行都不动。
+    memories = injected_memories(db, conversation_id)
     if not memories:
         return ""
     lines = [

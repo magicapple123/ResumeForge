@@ -143,66 +143,74 @@
   line-height: 20px;
 }
 
-.apply-page .apply-collect-site-intro {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 10px;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.apply-page .apply-collect-site-intro .ant-typography {
-  font-size: 12px;
-}
-
-/* F05：第二行是说明的续行，缩进对齐正文（18px = 图标宽 + 间距）。 */
-.apply-page .apply-collect-site-intro-rules {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-left: 18px;
-  color: var(--rf-text-tertiary);
-  font-size: 12px;
-}
-
-/* 内联提示：一行，图标 + 文字；`is-warn` 是"需要你做一个动作"（第一次启动浏览器），
- * 用浅琥珀底压成一行，替代原来那块 70px 的 Alert。 */
-.apply-page .apply-collect-inline-note {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--rf-text-secondary);
-}
-
-.apply-page .apply-collect-inline-note > .anticon {
-  color: var(--rf-warning-text);
-}
-
-.apply-page .apply-collect-inline-note.is-warn {
-  padding: 6px 10px;
-  border: 1px solid var(--rf-warning-border);
-  border-radius: 6px;
-  background: var(--rf-warning-bg);
-  color: var(--rf-text-secondary);
-  margin-bottom: 10px;
-}
-
-.apply-page .apply-collect-inline-note.is-warn > span {
-  min-width: 0;
-}
-
 /* 底部操作条：左边摘要、右边按钮，用一条细边与表单分开（不是悬在空白里）。 */
 .apply-page .apply-collect-actions {
   align-items: center;
   padding-top: 12px;
-  border-top: 1px solid var(--rf-border-subtle);
+  border-top: 0.5px solid var(--rf-border-subtle);
 }
 
 .apply-page .apply-collect-summary {
   margin-right: auto;
+  font-size: 12px;
+}
+
+/* ===== 单卡（2026-11-17）=====
+ * 用户反馈「自动采集整页全是卡片」：搜索、站点筛选、节奏各自一张 1px 边 + 8px 圆角的
+ * 白卡，看起来像三个并排的表单，实际它们是一条流程（搜什么 → 站点侧筛什么 → 什么节奏采）。
+ * 现在只有一层卡：`.apply-collect-config` 自己承担边/底/内边距，段与段之间只用一条
+ * 0.5px 分隔线（比 1px 的卡边更轻，才不会读成"卡里还有卡"）。 */
+.apply-page .apply-collect-config {
+  padding: 16px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: var(--rf-surface);
+}
+
+/* 段间分隔：站点筛选在"读不到清单"时会整个不渲染，`+` 相邻选择器因此天然跳过它。
+ * `.is-standalone`（loading / 失败态）自带一层内嵌外观，不再叠一条段间线。 */
+.apply-page .apply-collect-config > .apply-collect-group + .apply-collect-group,
+.apply-page
+  .apply-collect-config
+  > .apply-collect-group
+  + .apply-collect-site-filters:not(.is-standalone),
+.apply-page
+  .apply-collect-config
+  > .apply-collect-site-filters:not(.is-standalone)
+  + .apply-collect-group {
+  padding-top: 16px;
+  border-top: 0.5px solid var(--rf-border-subtle);
+}
+
+/* loading / 失败态是"这一块暂时没法渲染"的独立提示，不参与上面的段间合并：
+ * 给它补回一层**内嵌**外观（用 alt 底色，与外侧白卡区分，避免读成第二张卡）。 */
+.apply-page .apply-collect-config .apply-collect-site-filters.is-standalone {
+  padding: 12px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: var(--rf-surface-alt);
+}
+
+/* 站点筛选栅格：4 列时第二行常常只剩公司规模 / 融资阶段，右侧留一个空格。
+ * 收成 2 列后每行都撑满，公司规模与融资阶段各占 2 列（行业下拉也因此更宽，好搜）。 */
+.apply-page .apply-collect-config .apply-collect-site-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* 节奏展开区：折叠时靠 `hidden` 属性（UA 的 display:none）收起——不卸载 Form.Item，
+ * 否则 useWatch 拿到 undefined，摘要会显示成「间隔 0 秒」。这里只补一个块级约束。 */
+.apply-page .apply-collect-rhythm-body {
+  min-width: 0;
+}
+
+/* 节奏折叠态：一行摘要 + 「调整」，与展开后的两个输入框同高，不再吃掉一排控件。 */
+.apply-page .apply-collect-rhythm-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
   font-size: 12px;
 }
 
@@ -240,12 +248,6 @@
 .apply-page .apply-collect-search-grid .ant-space-compact > .ant-input-number {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-/* 「启动浏览器」那条提示：整行铺满会又变回横幅，按内容宽度收在左侧。 */
-.apply-page .apply-collect-inline-note.is-warn {
-  width: fit-content;
-  max-width: 100%;
 }
 
 /* 底部操作条右侧让出投投悬浮球的位置（与投递台吸底条同一条理由）：

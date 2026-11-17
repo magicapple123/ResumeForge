@@ -125,6 +125,10 @@ class AssistantMessageCreate(BaseModel):
     # 「引用某条消息追问」：指向同一会话里的某条消息，模型会在引用上下文中作答。
     quoted_message_id: int | None = Field(default=None, ge=1)
     attachments: list[AssistantAttachmentInput] = Field(default_factory=list, max_length=4)
+    # T24：本条消息要使用的技能（**消息级**，只作用于这一次发送，发送后前端清空）。
+    # 上限（8 个）由服务层 ``validate_conversation_skill_ids`` 校验并给出中文提示；
+    # 这里只留一个防滥用的硬上限（200 远大于 8）。
+    skill_ids: list[int] = Field(default_factory=list, max_length=200)
     # 本次请求的界面语言（`zh-CN` / `en-US` 这类 BCP 47 标记）。**前端可选传**：
     # 不传就是空串，旧客户端零改动。它不是简历输出语言，只服务 #35 数据边界审计的
     # `language` 一列；权威值仍是用户显式保存的界面语言（`PUT /api/settings/locale`），
@@ -229,6 +233,17 @@ class ConversationSkillOut(BaseModel):
     id: int
     name: str
     description: str = ""
+
+
+class LegacyConversationSkillOut(BaseModel):
+    """旧数据的只读回显（T24）：这段对话在"技能按对话启用"时代挂过的技能。
+
+    只用于前端提示一次「技能已改为按下一条消息生效」；不参与任何提示词组装，
+    也不随 PUT 之后再参与——它读的就是即将废弃的 ``assistant_conversation_skill``。
+    """
+
+    id: int
+    name: str
 
 
 class ConversationSkillLoadOut(BaseModel):
@@ -373,6 +388,12 @@ class ChatConversationDetail(ChatConversationBrief):
     messages: list[ChatMessageOut] = Field(default_factory=list)
     messages_total: int = 0
     has_earlier: bool = False
+    # T25：压缩状态（含摘要正文）。与 GET /context-usage 的 compaction 同一份，
+    # 消息流据此在 covered_until_message_id 那条消息下方画压缩边界。
+    compaction: ContextCompactionStateOut | None = None
+    # T24：旧数据回显（只读）。有值时前端在消息流顶部给一行可关闭的提示，
+    # 说明技能已改成"只作用于下一条消息"，不再影响任何模型请求。
+    legacy_skills: list[LegacyConversationSkillOut] = Field(default_factory=list)
 
 
 class ChatEarlierMessagesOut(BaseModel):

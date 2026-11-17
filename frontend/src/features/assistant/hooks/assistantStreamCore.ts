@@ -24,6 +24,8 @@ export interface AssistantStreamState {
   pendingUserAttachments: PendingAttachment[];
   /** F36：发送瞬间引用的岗位/简历快照（输入区已清空，乐观气泡靠它显示「本轮引用」）。 */
   pendingUserRefs: import("../../../types").AssistantMessageReferences | null;
+  /** T24：发送瞬间勾选的技能快照（乐观气泡显示「使用 X」，与落库后的气泡同款）。 */
+  pendingUserSkills: import("../../../types").AssistantMessageSkill[];
   streamingText: string;
   streamingReasoning: string;
   streamingSources: AssistantSource[];
@@ -49,6 +51,7 @@ const initialState: AssistantStreamState = {
   pendingSentAt: "",
   pendingUserAttachments: [],
   pendingUserRefs: null,
+  pendingUserSkills: [],
   streamingText: "",
   streamingReasoning: "",
   streamingSources: [],

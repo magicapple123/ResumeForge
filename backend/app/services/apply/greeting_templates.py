@@ -26,6 +26,7 @@ from ...schemas.apply import (
     GreetingTemplateSaveIn,
 )
 from ..settings_service import get_apply_greeting_templates, save_apply_greeting_templates
+from ._base import ApplyNotFound
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +112,32 @@ def save_templates(db: Session, payload: GreetingTemplateSaveIn) -> GreetingTemp
     return GreetingTemplateListOut(templates=saved)
 
 
+def mark_used(db: Session, template_id: str, count: int = 1) -> GreetingTemplateOut:
+    """累计「用过几次」：**增量**写入，返回更新后的那一条。
+
+    为什么必须是独立的增量端点：前端每次保存话术库发的是整表（``PUT``），若计数也走
+    那条路，界面上的旧 ``uses`` 会把别处刚累加的值覆盖回去——套用发生在队列里，保存
+    发生在设置里，两者天然会交叉。
+
+    ``count`` 允许 >1：批量套用同一条模板时只发**一次**请求，避免 N 条条目打 N 次库。
+    """
+    templates = list(list_templates(db).templates)
+    index = next(
+        (position for position, item in enumerate(templates) if item.id == template_id), None
+    )
+    if index is None:
+        raise ApplyNotFound(f"话术模板不存在：{template_id}")
+    current = templates[index]
+    updated = current.model_copy(update={"uses": current.uses + max(1, int(count))})
+    templates[index] = updated
+    save_apply_greeting_templates(db, [item.model_dump() for item in templates])
+    return updated
+
+
 __all__ = [
     "PLACEHOLDERS",
     "list_templates",
+    "mark_used",
     "render_greeting_template",
     "save_templates",
 ]

@@ -45,13 +45,14 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from .. import net_proxy
 from .browser_engine import fetch_with_browser
 from .deepseek_fallback import DEEPSEEK_ENGINE, FallbackUnavailable
 from .deepseek_fallback import fetch_text as fetch_deepseek_text
 from .deepseek_fallback import resolve_key as resolve_deepseek_key
 from .errors import WebFetchError
 from .html_utils import has_spa_marker, html_to_text
-from .http_engine import MAX_RESPONSE_BYTES, RawHttpPage, fetch_http
+from .http_engine import MAX_RESPONSE_BYTES, RawHttpPage, fetch_http, user_agent
 from .pagination import find_next_page_url, same_site_host
 from .url_policy import HostRateLimiter, UrlRejected, resolve_and_check
 
@@ -95,6 +96,9 @@ class FetchedPage:
     fetched_on: str
     html: str = ""
     json_payloads: list[Any] = field(default_factory=list)
+    #: 是否经代理抓取（T03）。**三态**：True/False 只由 http 档给出；browser 与
+    #: deepseek 档恒为 None——它们在别的进程/服务端出网，这里没有资格替它们断言。
+    via_proxy: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -145,6 +149,9 @@ class JobFetcher:
         self._db = db
         self._config = config or FetchConfig()
         self._http_transport = http_transport
+        # T04：一次导入会话复用一个客户端（连接池/ TLS 握手只做一次）。只有真正
+        # 走 http 档时才建；注入了传输层的测试路径仍然每次自己造（确定性优先）。
+        self._http_client: httpx.Client | None = None
         self._browser_fetcher = browser_fetcher
         self._resolver = resolver
         self._today = today or today_string
@@ -343,7 +350,29 @@ class JobFetcher:
             timeout=self._config.timeout,
             max_bytes=self._config.max_bytes,
             resolver=self._resolver,
+            client=self._shared_client(),
         )
+
+    def _shared_client(self) -> httpx.Client | None:
+        """本会话的 http 客户端（懒建）；注入传输层时返回 ``None``（由 fetch_http 自建）。"""
+        if self._http_transport is not None:
+            return None
+        if self._http_client is None:
+            self._http_client = net_proxy.build_client(
+                timeout=self._config.timeout,
+                follow_redirects=False,
+                headers={
+                    "User-Agent": user_agent(),
+                    "Accept": "text/html,application/json;q=0.9,*/*;q=0.1",
+                },
+            )
+        return self._http_client
+
+    def close(self) -> None:
+        """归还连接（调用方在导入/预览收尾时调用；可重复调用）。"""
+        if self._http_client is not None:
+            self._http_client.close()
+            self._http_client = None
 
     def _key_from_config(self) -> str:
         """默认的密钥来源：当前全局联网搜索配置里的 DeepSeek Key（未配置 = 不兜底）。"""
@@ -378,15 +407,18 @@ class JobFetcher:
         if not visible.strip() and text.strip():
             # 渲染后的 HTML 可能被上限截断/整段在脚本里：正文以引擎给的 innerText 为准。
             visible = text
+        engine = str(getattr(raw, "engine", "http") or "http")
         return FetchedPage(
             url=str(getattr(raw, "url", "") or url),
             status_code=int(getattr(raw, "status_code", 200) or 200),
             content_type=content_type,
             text=visible,
-            engine=str(getattr(raw, "engine", "http") or "http"),
+            engine=engine,
             fetched_on=self._today(),
             html=html if content_type.startswith("text/html") else "",
             json_payloads=payloads,
+            # 只有 http 档知道自己走没走代理；其余档如实留 None，不谎报 False。
+            via_proxy=(bool(getattr(raw, "via_proxy", False)) if engine == "http" else None),
         )
 
 

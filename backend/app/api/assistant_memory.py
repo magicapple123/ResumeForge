@@ -20,6 +20,7 @@ from ..schemas.assistant_memory import (
     AssistantMemoryEventOut,
     AssistantMemoryOut,
     AssistantMemorySettings,
+    AssistantMemorySettingsUpdate,
     AssistantMemoryUpdate,
 )
 from ..services.assistant import memory, memory_events
@@ -43,15 +44,24 @@ def _out(record: memory.AssistantMemory, db: Session) -> AssistantMemoryOut:
 
 @router.get("/settings", response_model=AssistantMemorySettings)
 def read_memory_settings(db: Session = Depends(get_db)):
-    """读取自动抽取开关（默认 false）。"""
-    return AssistantMemorySettings(auto_extract=memory.auto_extract_enabled(db))
+    """读取两个开关：自动抽取（默认 false）与注入总开关（默认 true）。"""
+    return AssistantMemorySettings(
+        auto_extract=memory.auto_extract_enabled(db),
+        inject=memory.memory_injection_enabled(db),
+    )
 
 
 @router.put("/settings", response_model=AssistantMemorySettings)
-def update_memory_settings(payload: AssistantMemorySettings, db: Session = Depends(get_db)):
-    """打开/关闭自动抽取（#31A 的写入总开关）。"""
-    enabled = memory.set_auto_extract(db, payload.auto_extract)
-    return AssistantMemorySettings(auto_extract=enabled)
+def update_memory_settings(payload: AssistantMemorySettingsUpdate, db: Session = Depends(get_db)):
+    """打开/关闭自动抽取或记忆注入；未传的项保持原值，返回保存后的完整设置。"""
+    if payload.auto_extract is not None:
+        memory.set_auto_extract(db, payload.auto_extract)
+    if payload.inject is not None:
+        memory.set_memory_injection(db, payload.inject)
+    return AssistantMemorySettings(
+        auto_extract=memory.auto_extract_enabled(db),
+        inject=memory.memory_injection_enabled(db),
+    )
 
 
 @router.get("", response_model=list[AssistantMemoryOut])

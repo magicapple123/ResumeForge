@@ -47,8 +47,10 @@ const llmRecord = {
   "llmRecord.aria.maxTokens": "About max output tokens",
   "llmRecord.field.contextWindow": "Context window",
   "llmRecord.hint.contextWindow":
-    "How many tokens this model can hold at once (DeepSeek 64K, GPT 128K, Claude 200K). 0 = unknown: the assistant skips cumulative limits and the context panel hides the percentage. Stored locally, never sent to the provider.",
+    "How many tokens this model can hold at once. Leave blank to follow the model reference (GPT-4.1 1.05M, Claude 200K); unknown models assume 128,000. The assistant panel divides by this same value. Stored locally, never sent to the provider.",
   "llmRecord.aria.contextWindow": "About context window",
+  "llmRecord.contextWindow.placeholder": "Blank = model reference",
+  "llmRecord.contextWindow.applyReference": "Use reference value {window}",
   "llmRecord.aria.unlimited": "About the no-limit option",
   // I-17 second batch: accessible names for the three ⓘ that replace the long
   // `Form.Item tooltip`s on Base URL / timeout / creativity.

@@ -60,7 +60,6 @@ _TOOL_CALL_TOLERANCE = 2
 
 # 简报正文长度上限。8000 字≈一次深度调研的合理产量，再多前端也读不完。
 _MAX_BRIEF_CHARS = 8_000
-_MAX_SOURCE_TITLE_CHARS = 200
 # 读超时要留够深度档的时间：官方演示的深度搜索从 5 秒到 11 秒不等，20 次工具调用的
 # 极端情况会更久。连接超时仍然只给 5 秒（连不上就是连不上）。
 _TIMEOUT = httpx.Timeout(connect=5.0, read=120.0, write=10.0, pool=5.0)
@@ -188,128 +187,16 @@ def _failure_reason(status: int) -> str:
     return f"DeepSeek 没有接受这次请求（HTTP {status}）"
 
 
-def _citation_of(annotation: Any) -> dict[str, str] | None:
-    """从一条注解里取 ``url_citation``；不是 URL 引用就返回 ``None``。"""
-    if not isinstance(annotation, dict):
-        return None
-    if str(annotation.get("type") or "") != "url_citation":
-        return None
-    payload = annotation.get("url_citation")
-    source = payload if isinstance(payload, dict) else annotation
-    url = str(source.get("url") or "").strip()
-    if not url.lower().startswith(("http://", "https://")):
-        return None
-    title = " ".join(str(source.get("title") or "").split())[:_MAX_SOURCE_TITLE_CHARS]
-    return {"title": title or url, "url": url}
-
-
-def collect_sources(annotations: Any) -> list[dict[str, Any]]:
-    """按**首次出现顺序**给引用编号，同一 URL 只占一个号。
-
-    编号就是正文里的 ``[1]``：模型给的正文已经带了标注，我们只负责保证"来源列表
-    的序号与正文里的序号指向同一条 URL"。
-    """
-    sources: list[dict[str, Any]] = []
-    index_by_url: dict[str, int] = {}
-    for annotation in annotations or []:
-        citation = _citation_of(annotation)
-        if citation is None:
-            continue
-        existing = index_by_url.get(citation["url"])
-        if existing is not None:
-            continue
-        number = len(sources) + 1
-        index_by_url[citation["url"]] = number
-        sources.append({"number": number, "title": citation["title"], "url": citation["url"]})
-    return sources
-
-
-def _tool_calls_of(message: dict[str, Any]) -> list[dict[str, Any]]:
-    """把 ``server_tool_calls`` 摊平成一层调用列表（每项含 kind 与 queries/url）。
-
-    官方形状是"一步一组调用"（``step["calls"]``）。同一条目直接就是一次调用时也认
-    ——上游只是加了一层分组，不该让用量统计整段归零。
-    """
-    calls: list[dict[str, Any]] = []
-    for step in message.get("server_tool_calls") or []:
-        if not isinstance(step, dict):
-            continue
-        nested = step.get("calls")
-        if isinstance(nested, list):
-            calls.extend(call for call in nested if isinstance(call, dict))
-        elif "kind" in step or isinstance(step.get("action"), dict):
-            calls.append(step)
-    return calls
-
-
-def _count_queries(calls: list[dict[str, Any]]) -> int:
-    """查询词条数（= 计费次数）：``action.queries`` 是这一次调用实际发出的词列表。"""
-    total = 0
-    for call in calls:
-        action = call.get("action")
-        if not isinstance(action, dict):
-            continue
-        queries = action.get("queries")
-        if isinstance(queries, list):
-            total += sum(1 for query in queries if str(query or "").strip())
-        elif str(queries or "").strip():
-            total += 1
-    return total
-
-
-def _is_search_call(call: dict[str, Any]) -> bool:
-    """这一次工具调用是不是"搜索"（而不是读链接）。
-
-    官方给的是 ``kind`` + ``action``：搜索的 ``action`` 带 ``queries``，读链接的带
-    ``url``。两种特征任一条命中就算搜索——不同版本给的 ``kind`` 文案不一致。
-    """
-    if "search" in str(call.get("kind") or "").casefold():
-        return True
-    action = call.get("action")
-    return isinstance(action, dict) and isinstance(action.get("queries"), list)
-
-
-def _usage_numbers(usage: Any) -> tuple[int, int]:
-    """从 ``usage.server_tool_use`` 取（搜索次数, 抓取页数）；取不到返回 ``(0, 0)``。
-
-    官方把工具用量放在 ``usage`` 的扩展字段里，形状可能是
-    ``{"web_search_requests": 3, "web_fetch_requests": 1}`` 或一个总数
-    （不同版本给的不一样），两种都认；认不出来就由调用方用调用明细兜底。
-    """
-    if not isinstance(usage, dict):
-        return 0, 0
-    payload = usage.get("server_tool_use")
-    if isinstance(payload, (int, float)) and not isinstance(payload, bool):
-        # 只给了一个总数：算作搜索次数（抓取次数在调研里通常是小头）。
-        return int(payload), 0
-    if not isinstance(payload, dict):
-        return 0, 0
-    searches = 0
-    fetches = 0
-    for key, value in payload.items():
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            continue
-        name = str(key).casefold()
-        if "search" in name:
-            searches += int(value)
-        elif "fetch" in name or "read" in name or "url" in name:
-            fetches += int(value)
-    return searches, fetches
-
-
-def _ensure_numbered(markdown: str, sources: list[dict[str, Any]]) -> str:
-    """正文里没有任何 ``[n]`` 标注时，补一段「参考来源」列表。
-
-    模型偶尔会在综述里漏掉行内标注。此时把来源列表接到正文末尾——用户至少还能
-    顺着序号点开原始页面，而不是拿到一段无出处的叙述。
-    """
-    if not sources:
-        return markdown
-    if any(f"[{source['number']}]" in markdown for source in sources):
-        return markdown
-    lines = ["", "参考来源："]
-    lines.extend(f"[{source['number']}] {source['title']} — {source['url']}" for source in sources)
-    return markdown + "\n".join(lines)
+from .company_research_brief_parse import (  # noqa: E402
+    _count_queries,
+    _ensure_numbered,
+    _extract_lead,
+    _is_search_call,
+    _strip_source_block,
+    _tool_calls_of,
+    _usage_numbers,
+    collect_sources,
+)
 
 
 def parse_brief(body: Any, *, deep: bool) -> dict[str, Any]:
@@ -337,7 +224,10 @@ def parse_brief(body: Any, *, deep: bool) -> dict[str, Any]:
             1 for call in calls if "fetch" in str(call.get("kind") or "").casefold()
         )
 
-    markdown = content[:_MAX_BRIEF_CHARS]
+    # 顺序有讲究（T16）：先剥模型自带的来源段 → 再拆结论 → 最后补编号。
+    # 反过来会让模型那份来源列表骗过"正文没有 [n]"的判定。
+    markdown = _strip_source_block(content[:_MAX_BRIEF_CHARS])
+    markdown, lead = _extract_lead(markdown)
     markdown = _ensure_numbered(markdown, sources)
     tool_calls = len(calls)
     budget = max_tool_calls_for(deep)
@@ -359,6 +249,7 @@ def parse_brief(body: Any, *, deep: bool) -> dict[str, Any]:
         "reason": "",
         "reason_code": "",
         "markdown": markdown,
+        "lead": lead,
         "sources": sources,
         "deep": deep,
         "tool_calls": tool_calls,

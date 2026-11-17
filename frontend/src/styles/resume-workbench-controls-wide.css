@@ -1,0 +1,55 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 制作台左栏 · **宽档**排版（T20，2026-11）。
+   左栏可拖宽（默认 380，最宽接近 700）。窄档的列宽算式在 `resume-workbench-controls.css`
+   里：控件列 `minmax(132px, 152px)`、尾部列吃掉 `1fr`——弹性全给了**尾部**，
+   所以列一宽，滑杆仍停在 88，读数被推到行的最右边，中间空出一大段（栏宽 687 时空隙
+   超过 350px，滑杆像"断了"）。
+   宽档改成把弹性给**控件列**：`minmax(152px, 1fr)`（滑杆跟着变长），尾部退回 `min-content`
+   紧贴滑杆。窄档不命中（阈值 520），逐像素保持原样。 */
+
+/* 容器声明落在**分组内容盒**（`.resume-wb-group-body`）而不是整列 `.resume-wb-col-params`：
+   `container-type` 会同时建立 `contain: layout`，于是这一列成为**绝对/固定定位后代的
+   包含块**。整列的子树里有 `ChipStylePopover`（`.document-chip-style-popover` 是
+   `position: fixed` 定位到右键坐标的浮层），声明在整列上会把它困在左栏里、贴着栏目
+   左上角出现。分组内容盒在它下面一层，既覆盖三条网格模板，也不与任何固定定位元素重合。
+   弹层（Tooltip / 下拉 / 取色器 / 排版卡）全部经 `ConfigProvider.getPopupContainer` portal
+   到 `body`（`features/theme/ThemeProvider.tsx`），不受这里影响。 */
+.resume-wb-col-params .resume-wb-group-body {
+  container-type: inline-size;
+  container-name: rf-wb-params;
+}
+
+@container rf-wb-params (min-width: 520px) {
+  /* 三条同款模板一起改（层次与间距的行 / 行距页边距照片的格 / 字号的格）：
+     第二列 `minmax(152px, 1fr)` 吃掉余量，第三列 `min-content` 不再撑开。
+     选择器比 `resume-workbench-controls.css` 的原规则多一层 `.resume-wb-group-body`：
+     本文件在 `@import` 里排在原规则之前，同特异性会输给后面那条。 */
+  .resume-wb-group-body .resume-wb-rows > .resume-wb-row.ant-space,
+  .resume-wb-group-body
+    .resume-wb-col-params
+    .resume-measure-grid.is-stacked
+    > .ant-space:has(.resume-measure-tail),
+  .resume-wb-group-body
+    .resume-wb-col-params
+    .resume-measure-grid.is-stacked
+    > .resume-measure-cell:has(.resume-measure-tail) {
+    grid-template-columns:
+      var(--resume-wb-label-w)
+      minmax(var(--resume-wb-controls-w), 1fr)
+      min-content;
+  }
+
+  /* 分边页边距的四条滑杆：窄档被左栏的"统一 88px 滑杆"规则按 `!important` 钉死，
+     宽档要它们跟着卡片一起变长，否则四行仍是四条短杠。
+     `max-width: none` 不能省：控件列的 88px 上限还挂在滑杆自身与它那一格上。 */
+  .resume-wb-group-body .resume-margin-sides .resume-margin-side-slider.ant-slider {
+    width: auto !important;
+    flex: 1 1 auto !important;
+    max-width: none !important;
+  }
+
+  .resume-wb-group-body .resume-margin-sides .ant-space-item:has(> .resume-margin-side-slider) {
+    flex: 1 1 auto !important;
+    max-width: none !important;
+  }
+}

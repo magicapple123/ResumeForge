@@ -270,6 +270,11 @@ export function sendAssistantMessage(
     reasoning_effort?: ReasoningEffort;
     /** 引用某条历史消息追问；被引用内容的快照会存进消息里。 */
     quoted_message_id?: number | null;
+    /**
+     * T24：**这一条消息**要使用的技能。只在非空时携带（空数组等于不启用，且旧后端
+     * 不认识该字段时会 422——`extra="forbid"`），发送后由调用方清空输入区选择。
+     */
+    skill_ids?: number[];
     attachments?: AssistantAttachmentInput[];
     /** T25：当前界面上下文；后端会重查选中对象，标题不由前端提供。 */
     client_context?: AssistantClientContext;

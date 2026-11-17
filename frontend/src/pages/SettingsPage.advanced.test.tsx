@@ -24,6 +24,15 @@ const apiMocks = vi.hoisted(() => ({
   getNavigationVisibility: vi.fn(),
   getReminderPopupSetting: vi.fn(),
   getSearchConfig: vi.fn(),
+  // T01：模型配置弹窗会读「模型窗口参考」；mock 必须给出这个导出，否则整页
+  // 在渲染时抛 "No getModelWindowReference export is defined on the mock"。
+  getModelWindowReference: vi.fn(() =>
+    Promise.resolve({
+      default_tokens: 128_000,
+      entries: [],
+      current: { model: "", label: null, tokens: 128_000, source: "fallback" },
+    }),
+  ),
   getUpdateDownloadStatus: vi.fn(),
   getUpdateInstallResult: vi.fn(),
   installDownloadedUpdate: vi.fn(),

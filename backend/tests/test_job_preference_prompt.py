@@ -155,23 +155,26 @@ def test_priority_trim_happens_only_after_suffix_removal(monkeypatch):
     assert "写作红线（语气）" not in text
 
 
-def test_block_sits_between_status_block_and_local_time_and_skills(db_session, monkeypatch):
-    """parts 顺序契约：写操作状态 → 求职偏好 → 本地时间 → 技能。"""
+def test_block_sits_between_status_block_and_local_time(db_session, monkeypatch):
+    """parts 顺序契约：写操作状态 → 求职偏好 → 本地时间。
+
+    T24 起**技能不再进系统提示词**（技能提示词挂在下一条用户消息的 `context.skill_prompt`
+    上，见 `test_assistant_message_skills.py`），所以这里不再断言"技能排在最后"——反过来
+    钉住"系统提示词里没有技能块"，避免有人把旧路径加回来（那会让技能对整个会话生效，
+    正是 T24 要修的问题）。
+    """
     _seed(db_session, "target_city", ["杭州"])
     monkeypatch.setattr(
         system_prompt_module,
         "_proposal_status_block",
         lambda _db, _conversation_id: "【本会话写操作状态（权威）】\n无",
     )
-    monkeypatch.setattr(
-        system_prompt_module, "build_skill_prompt", lambda _db, _conversation_id: "[已导入的技能]"
-    )
     prompt = system_prompt_module._system_prompt(db_session, conversation_id=1)
     status_index = prompt.index("【本会话写操作状态（权威）】")
     preference_index = prompt.index(prompt_module.TITLE)
     time_index = prompt.index("【当前时间】")
-    skill_index = prompt.index("[已导入的技能]")
-    assert status_index < preference_index < time_index < skill_index
+    assert status_index < preference_index < time_index
+    assert "已导入的技能" not in prompt
 
 
 def test_no_preferences_means_no_empty_block_in_system_prompt(db_session):

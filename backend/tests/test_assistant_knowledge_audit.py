@@ -33,9 +33,7 @@ from app.services.feature_catalog import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = REPO_ROOT / "frontend"
-NAVIGATION_CONFIG_TSX = (
-    FRONTEND_DIR / "src" / "features" / "shell" / "navigationConfig.ts"
-)
+NAVIGATION_CONFIG_TSX = FRONTEND_DIR / "src" / "features" / "shell" / "navigationConfig.ts"
 GUIDE_STEPS_TS = FRONTEND_DIR / "src" / "features" / "user-guide" / "userGuideSteps.ts"
 # FE3（2026-10-25）把指南步骤数据拆到 user-guide/*.ts，userGuideSteps.ts 只剩 ≤100 行门面
 # （类型再导出 + 组装）；B1 目录合并后指南整域（含门面）移到 features/user-guide/。
@@ -79,6 +77,10 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "附件多格式": ("material_attachment_formats",),
     "文件副本库": ("user_files",),
     "截图与文档识别": ("recognition",),
+    # 扫描件/图片简历走 DeepSeek OCR（与截图识别同一个入口的另一种引擎），仍属识别能力。
+    "扫描件识别": ("recognition",),
+    "实时语音通话": ("interview_voice",),
+    "登录状态": ("login_status",),
     "AI 定制简历": ("resume_generate",),
     "自行编写简历": ("resume_manual",),
     "简历写作增强": ("writing_enhance", "version_diff"),

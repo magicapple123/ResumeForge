@@ -149,6 +149,9 @@ export function TouTouOrbButton({
             <span className="tt-scale">
               <span className="tt-float">
                 <span className="tt-breathe">
+                  {/* T10：光晕是 .tt-breathe 的**同级子元素**，跟着球体一起位移/缩放。
+                      放在 .tt-turn 之前：表情换图时不会把环一起换掉。 */}
+                  <span className="tt-glow" aria-hidden="true" />
                   <span className="tt-turn">
                     {/* 只渲染当前表情这一张：6 张常驻 img 全量进首屏（约 1.4MB）太贵，
                         换 src 即换脸，无需淡入淡出。 */}

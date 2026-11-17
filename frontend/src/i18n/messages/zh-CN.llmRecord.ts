@@ -44,8 +44,10 @@ const llmRecord = {
   "llmRecord.aria.maxTokens": "最大输出 Token 说明",
   "llmRecord.field.contextWindow": "上下文窗口",
   "llmRecord.hint.contextWindow":
-    "这个模型一次能装多少 Token（如 DeepSeek 64K、GPT 128K、Claude 200K）。留 0 = 不知道：助手不做累计上下文限制，上下文面板也不显示百分比。存的是本地设置，不会发给服务商。",
+    "这个模型一次能装多少 Token。留空 = 按型号参考值（如 GPT-4.1 1.05M、Claude 200K），未知型号按 128,000 估算；助手面板的百分比分母就是这个值。存的是本地设置，不会发给服务商。",
   "llmRecord.aria.contextWindow": "上下文窗口说明",
+  "llmRecord.contextWindow.placeholder": "留空 = 按型号参考值",
+  "llmRecord.contextWindow.applyReference": "填入参考值 {window}",
   "llmRecord.aria.unlimited": "不限制说明",
   // I-17 第二批：这三条（超时 57 字 / 服务地址 54 字 / 创意度 48 字）也从 `Form.Item
   // tooltip` 换成标签后的 `ⓘ`；正文仍用上面原有的 `hint.*` key，只补无障碍名。

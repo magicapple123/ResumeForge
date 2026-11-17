@@ -8,6 +8,7 @@ SearXNG 是开源的元搜索服务，自己部署后没有配额限制、也不
 地址由用户提供，因此只接受 http/https，且允许 http 仅限本机（与模型 Base URL 同一
 套判断）：本机部署的实例就是 http://localhost:8080 这种形态。
 """
+
 from __future__ import annotations
 
 import json
@@ -15,6 +16,7 @@ import logging
 
 import httpx
 
+from .. import net_proxy
 from ..llm.openai_compat import validated_base_url
 
 logger = logging.getLogger(__name__)
@@ -40,7 +42,9 @@ async def search_searxng(query: str, base_url: str, limit: int = 10) -> list[dic
 
     params = {"q": query, "format": "json", "language": "zh-CN", "safesearch": "0"}
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False) as client:
+        async with net_proxy.build_async_client(
+            url=endpoint, timeout=_TIMEOUT, follow_redirects=False
+        ) as client:
             response = await client.get(endpoint, params=params)
             if response.status_code != 200:
                 logger.warning("SearXNG 搜索失败 status=%s", response.status_code)

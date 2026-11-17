@@ -98,3 +98,7 @@ mokahr_apply_controls.json
 desktop/payload/
 desktop/out/
 desktop/python-runtime.zip
+
+# 评审截图（本地证据，不进仓库）：每次改界面会用 Playwright 截一组，
+# 体积 1–2 MB/批且与发布产物无关，入库只会让 clone 变慢。
+/screenshots/

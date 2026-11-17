@@ -12,11 +12,10 @@
 
 import re
 from dataclasses import dataclass
-from typing import Literal
 
 # 未知型号的保守值：宁可少塞上下文，也不要发一次必然 400 的请求。
-DEFAULT_CONTEXT_WINDOW = 128_000
-WindowSource = Literal["manual", "reference", "fallback"]
+# 定义在 schemas 层（models/schemas 不得 import services）；这里再导出，既有导入点不变。
+from ..schemas.model_window import DEFAULT_CONTEXT_WINDOW, WindowSource  # noqa: E402
 
 
 @dataclass(frozen=True)

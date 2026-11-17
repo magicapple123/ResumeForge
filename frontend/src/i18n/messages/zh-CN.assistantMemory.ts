@@ -8,11 +8,13 @@
 const assistantMemory = {
   "assistantMemory.title": "助手记忆",
   "assistantMemory.intro": "助手只参考你明确表达过的求职偏好。手动添加一条，或删掉不想再用的记忆。",
+  /** T23 卡头右侧的信任语：记忆是本地数据。 */
+  "assistantMemory.trust.local": "只存在本机",
   /**
-   * 列表头左侧：「生效 {count} 条」。停用/被替换的条目仍显示在列表里，但不参与注入，
-   * 所以这个数字**不是**列表长度。
+   * 列表头左侧：「记忆 · {count} 条」。{count} 是**列表长度**（含停用与已被替换的
+   * 条目），不再是只数 active——用户看到几行，这里就写几条。
    */
-  "assistantMemory.list.active": "生效 {count} 条",
+  "assistantMemory.list.count": "记忆 · {count} 条",
   /** 每条右侧 `⋯` 菜单的无障碍名（图标按钮本身没有文字）。 */
   "assistantMemory.list.menu": "更多操作",
   "assistantMemory.empty": "还没有记忆。添加一条目标岗位或薪资底线，下一轮对话助手就会按它理解你。",
@@ -23,16 +25,26 @@ const assistantMemory = {
   "assistantMemory.autoExtract.enableToast": "已开启自动抽取记忆",
   "assistantMemory.autoExtract.disableToast": "已关闭自动抽取记忆",
   "assistantMemory.autoExtract.saveFailed": "保存自动抽取开关失败，请稍后重试",
+  /** T23 注入总开关：默认开；关掉后一条记忆都不进系统提示。 */
+  "assistantMemory.inject.label": "对话时参考记忆",
+  "assistantMemory.inject.hint": "关掉后助手这一轮不再参考下面的记忆；条目本身不会被删除。",
+  "assistantMemory.inject.enableToast": "已开启记忆注入",
+  "assistantMemory.inject.disableToast": "已关闭记忆注入",
   "assistantMemory.source.manual": "手填",
   "assistantMemory.source.extracted": "自动抽取",
   "assistantMemory.status.superseded": "已被新说法替换",
   "assistantMemory.confidence": "置信度 {percent}%",
-  /** 一行的元信息：来源 · 更新时间（两件事合成一句 11px 次级文字）。 */
+  /** 一行的元信息：来源 · 更新时间（进 `⋯` 菜单与读屏专用文本，不再占正文行）。 */
   "assistantMemory.meta.line": "{source} · {updated}",
   "assistantMemory.updatedAt": "更新于 {time}",
-  /** 卡片底注：注入口径。原来长在 intro 里，和"这里是唯一能改的地方"混成一句。 */
-  "assistantMemory.footnote.injection": "每轮按相关性注入，最多 5 条。",
+  /** 卡底隐私句：记忆是本地数据。 */
+  "assistantMemory.footnote.privacy": "这些记忆只保存在本机数据库，不会上传到任何服务器。",
+  /** 机制说明收进 ⓘ：默认折叠，不占版面。 */
+  "assistantMemory.injection.info":
+    "每轮按与本条消息的相关性注入，最多 5 条；关掉「对话时参考记忆」后一条都不注入。",
+  "assistantMemory.injection.infoLabel": "记忆怎么被使用",
   "assistantMemory.openConversation": "回到原对话",
+  "assistantMemory.source.label": "来源",
   "assistantMemory.sourceExcerpt": "「{text}」",
   "assistantMemory.action.add": "添加记忆",
   "assistantMemory.action.edit": "编辑",

@@ -243,13 +243,6 @@
   container-type: inline-size;
   container-name: rf-collect;
 }
-.apply-collect-group,
-.apply-collect-config .apply-collect-site-filters {
-  padding: 16px;
-  border: 1px solid var(--rf-border-subtle);
-  border-radius: 8px;
-  background: var(--rf-surface);
-}
 .apply-collect-group-head {
   display: flex;
   justify-content: space-between;
@@ -272,9 +265,6 @@
 }
 .apply-collect-config .ant-form-item-label {
   padding-bottom: 4px;
-}
-.apply-collect-site-help {
-  max-width: min(620px, calc(100vw - 48px));
 }
 .apply-collect-actions {
   display: flex;

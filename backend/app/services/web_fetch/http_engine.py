@@ -6,7 +6,10 @@
 - 5s 超时、响应上限 3MB、只接受 text/html 与 application/json；
 - UA 标识应用名（不伪装浏览器）；
 - **手动跟重定向**，每一跳都重新做 SSRF 校验——只查首个 URL 会被
-  「公网 URL 302 到内网」绕过。
+  「公网 URL 302 到内网」绕过；
+- **出网路径由 `net_proxy` 统一决定**（T03）：与 browser 档、搜索、OCR 同一套，
+  不在这里写 `trust_env=False` 或任何"只有抓取才这样"的口径。SSRF 校验与代理无关：
+  即使走代理，目标 IP 仍然逐个解析并检查，校验失败**不放行**。
 
 测试通过注入 httpx.BaseTransport 完全离线跑，不访问外网。
 """
@@ -19,6 +22,7 @@ from urllib.parse import urljoin
 import httpx
 
 from ...config import get_settings
+from .. import net_proxy
 from .errors import WebFetchError
 from .url_policy import resolve_and_check
 
@@ -54,6 +58,8 @@ class RawHttpPage:
     content_type: str
     text: str
     engine: str = "http"
+    #: 本次是否**经代理**抓取（T03）。注入传输层的测试路径恒为 False。
+    via_proxy: bool = False
 
 
 def _base_content_type(raw: str) -> str:
@@ -99,60 +105,102 @@ def fetch_http(
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
     max_bytes: int = MAX_RESPONSE_BYTES,
     resolver=None,
+    client: httpx.Client | None = None,
 ) -> RawHttpPage:
     """抓取一个 http/https 地址；返回页面正文或 JSON 原文。
 
     重定向逐跳校验（resolve_and_check 每次都会重新解析域名并检查 IP）。
+
+    ``client``（T04）：调用方（``JobFetcher`` 一次导入会话）可以传入自己的客户端，
+    整批链接复用一个连接池。**生命周期归调用方**——传进来的客户端本函数不关闭；
+    自己造的才自己关。``transport`` 仍保留为测试注入点（与 ``client`` 二选一）。
     """
     current = resolve_and_check(url, resolver=resolver)
     headers = {
         "User-Agent": user_agent(),
         "Accept": "text/html,application/json;q=0.9,*/*;q=0.1",
     }
+    proxy = net_proxy.resolve_proxy(target_url=current)
+    owned = client is None
+    if owned:
+        # T03：出网路径与本机其它链路同源（`net_proxy` 是唯一决定者）。此前这里硬编码
+        # `trust_env=False`，而 browser 档与 page_reader 都跟随环境——同一份"抓取"三套
+        # 口径，用户开了代理只会有一半生效。
+        try:
+            client = net_proxy.build_client(
+                url=current,
+                follow_redirects=False,
+                timeout=timeout,
+                transport=transport,
+                headers=headers,
+                proxy=proxy,
+            )
+        except (TypeError, net_proxy.SocksProxyUnsupported) as exc:  # pragma: no cover
+            raise WebFetchError("抓取引擎初始化失败") from exc
     try:
-        client = httpx.Client(
-            follow_redirects=False,
-            timeout=timeout,
-            transport=transport,
-            headers=headers,
-            trust_env=False,
+        return _consume(
+            client,
+            current=current,
+            resolver=resolver,
+            max_bytes=max_bytes,
+            proxy=proxy,
+            via_proxy=transport is None and not proxy.is_direct,
         )
-    except TypeError as exc:  # pragma: no cover - 仅在 httpx 版本变化时发生
-        raise WebFetchError("抓取引擎初始化失败") from exc
-    try:
-        with client:
-            for _ in range(MAX_REDIRECTS + 1):
-                try:
-                    with client.stream("GET", current) as response:
-                        if response.status_code in _REDIRECT_STATUSES:
-                            location = response.headers.get("location") or ""
-                            if not location:
-                                raise WebFetchError("页面发生了无法跟随的跳转")
-                            # 每一跳都重新校验：目标可能是内网地址。
-                            current = resolve_and_check(
-                                urljoin(current, location), resolver=resolver
-                            )
-                            continue
-                        if response.status_code >= 400:
-                            raise WebFetchError(f"页面返回 HTTP {response.status_code}，抓不到内容")
-                        content_type_header = response.headers.get("content-type", "")
-                        content_type = _base_content_type(content_type_header)
-                        if not _accepted(content_type):
-                            raise WebFetchError("这个链接不是网页或 JSON，暂不支持抓取")
-                        body = _read_capped(response, max_bytes=max_bytes)
-                        return RawHttpPage(
-                            url=str(response.url),
-                            status_code=response.status_code,
-                            content_type=content_type,
-                            text=_decode(body, content_type_header),
-                        )
-                except httpx.TimeoutException as exc:
-                    raise WebFetchError("抓取超时（5 秒），页面可能太慢或需要登录") from exc
-                except httpx.HTTPError as exc:
-                    raise WebFetchError("网络请求失败，抓不到这个页面") from exc
-            raise WebFetchError("页面重定向次数过多，已停止抓取")
     finally:
-        client.close()
+        if owned:
+            client.close()
+
+
+def _consume(
+    client: httpx.Client,
+    *,
+    current: str,
+    resolver,
+    max_bytes: int,
+    proxy: net_proxy.ProxyInfo,
+    via_proxy: bool,
+) -> RawHttpPage:
+    """逐跳请求并返回第一页可接受的内容（手动跟重定向 + 每跳 SSRF 校验）。"""
+    for _ in range(MAX_REDIRECTS + 1):
+        try:
+            with client.stream("GET", current) as response:
+                if response.status_code in _REDIRECT_STATUSES:
+                    location = response.headers.get("location") or ""
+                    if not location:
+                        raise WebFetchError("页面发生了无法跟随的跳转")
+                    # 每一跳都重新校验：目标可能是内网地址。
+                    current = resolve_and_check(urljoin(current, location), resolver=resolver)
+                    # 跳转可能换域：代理判定跟着目标走，别沿用上一跳的结论。
+                    proxy = net_proxy.resolve_proxy(target_url=current)
+                    via_proxy = not proxy.is_direct
+                    continue
+                if response.status_code >= 400:
+                    raise WebFetchError(f"页面返回 HTTP {response.status_code}，抓不到内容")
+                content_type_header = response.headers.get("content-type", "")
+                content_type = _base_content_type(content_type_header)
+                if not _accepted(content_type):
+                    raise WebFetchError("这个链接不是网页或 JSON，暂不支持抓取")
+                body = _read_capped(response, max_bytes=max_bytes)
+                return RawHttpPage(
+                    url=str(response.url),
+                    status_code=response.status_code,
+                    content_type=content_type,
+                    text=_decode(body, content_type_header),
+                    via_proxy=via_proxy,
+                )
+        except httpx.ProxyError as exc:
+            # 代理在用就提代理：用户才知道该改哪一头（而不是去怀疑链接）。
+            if via_proxy:
+                raise WebFetchError(
+                    f"经代理 {proxy.host_port} 仍失败（来源：{proxy.source_label()}），"
+                    "请确认代理软件在运行，或在设置里改为直连后重试"
+                ) from exc
+            raise WebFetchError("抓取失败：连接被中断") from exc
+        except httpx.TimeoutException as exc:
+            raise WebFetchError("抓取超时（5 秒），页面可能太慢或需要登录") from exc
+        except httpx.HTTPError as exc:
+            raise WebFetchError("网络请求失败，抓不到这个页面") from exc
+    raise WebFetchError("页面重定向次数过多，已停止抓取")
 
 
 __all__ = [

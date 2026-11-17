@@ -136,7 +136,7 @@ const settingsUi = {
    * 消费者使用，但界面按语言包取文——否则英文界面里这句会是中文。
    */
   "settingsUi.help.previewNote":
-    "诊断包只包含脱敏运行事件、系统信息与近期后端日志（桌面壳启动时含桌面壳日志；疑似令牌已兜底抹除）；不包含简历全文、表单填写值、Cookie 或提示词。",
+    "诊断包只含脱敏事件、系统信息与近期日志（桌面壳启动时含桌面壳日志；令牌已抹除）；代理只记来源与端口；不包含简历全文、表单值、Cookie 与提示词。",
   /** 反馈渠道那一行的三段：链接前、群号前、群号后。 */
   "settingsUi.help.feedbackLead": "反馈渠道：",
   "settingsUi.help.feedbackJoin": "，或加用户群",
@@ -210,6 +210,40 @@ const settingsUi = {
   "settingsUi.webFormRelaxed.warning":
     "开启后程序会尝试代点下拉/弹层选项并代勾你逐条确认过的声明项，存在选错可能，填完请核对；" +
     "四类始终不代填：日期选择器、文件上传、密码/验证码/银行卡、无弹层的只读点选框——这些都需要你自己操作。",
+  // ── 出网与代理（T02 / T05）──────────────────────────────────
+  "settingsUi.network.title": "出网与代理",
+  "settingsUi.network.intro":
+    "模型、搜索与更新检查都走同一条出网路径。这里是唯一能改它的地方，改完立即生效，不用重启。",
+  "settingsUi.network.mode.system": "跟随系统",
+  "settingsUi.network.mode.direct": "直连",
+  "settingsUi.network.mode.custom": "自定义代理",
+  "settingsUi.network.directWarning":
+    "直连会绕过系统代理：需要代理才能上网的环境（公司网络、只能走代理的宽带）会因此全部连不上，包括模型、搜索与更新检查。",
+  "settingsUi.network.urlPlaceholder": "例如 http://127.0.0.1:7890",
+  "settingsUi.network.url": "代理地址",
+  "settingsUi.network.username": "代理用户名",
+  "settingsUi.network.usernamePlaceholder": "用户名（可选）",
+  "settingsUi.network.password": "代理口令",
+  "settingsUi.network.passwordPlaceholder": "口令（可选）",
+  "settingsUi.network.passwordKeep": "留空表示不改",
+  "settingsUi.network.socksHint":
+    "只支持 http:// 或 https:// 代理。代理软件通常同时提供一个 http 端口，用它即可。",
+  "settingsUi.network.trust": "信任系统证书库",
+  "settingsUi.network.trustHint":
+    "默认关闭。杀毒软件或公司网关对 HTTPS 做扫描时，会用它们自己的证书替换，这时才需要打开；打开后本机信任的证书都会被接受。",
+  "settingsUi.network.probe": "测试连接",
+  "settingsUi.network.probeCurrent": "按当前设置",
+  "settingsUi.network.probeDirect": "直连",
+  "settingsUi.network.probeOk": "连接成功",
+  "settingsUi.network.detected":
+    "检测到系统代理 {proxy}（来源：{source}）；模型连不上时可先改为直连",
+  "settingsUi.network.saved": "已保存，下一次请求即生效",
+  "settingsUi.network.save": "保存",
+  "settingsUi.network.checklist.title": "连不上时按这四类排查（每类一句话）：",
+  "settingsUi.network.checklist.proxy": "代理：确认代理软件在运行、端口没写错；不确定就先改成「直连」再测一次。",
+  "settingsUi.network.checklist.tls": "证书：浏览器能打开但这里打不开，多半是杀毒软件或公司网关在扫描 HTTPS——加白名单，或打开「信任系统证书库」。",
+  "settingsUi.network.checklist.refused": "连接被拒：Base URL 少了或多了 /v1，或端口不对；照服务商文档改到以 /v1 结尾。",
+  "settingsUi.network.checklist.timeout": "超时：先测一次直连；直连也超时就是线路或服务端问题，换网络或稍后重试。",
 } as const;
 
 export default settingsUi;

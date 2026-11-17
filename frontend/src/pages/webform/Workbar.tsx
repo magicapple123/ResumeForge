@@ -77,13 +77,16 @@ export const Workbar = memo(function Workbar({
   // "关闭还没回来就点了启动"这类交错更难对上账。
   const anyBusy = busy !== null;
   const stateMeta = BROWSER_STATE_META[browserState ?? "stopped"];
+  const hasUrl = targetUrl.trim().length > 0;
+  /** 正在运行、且这次会话里有东西可结束时才把「结束本次填写」放进「更多」。 */
+  const canEndSession = running && (sessionActive || Boolean(liveRunning));
   return (
-    <div className="webform-workbar">
+    <div className="webform-workbar" data-testid="webform-workbar">
       <WebFormBrowserUrlBar
         value={targetUrl}
         history={urlHistory}
         busy={busy === "start"}
-        primary={running}
+        running={running}
         onChange={onChangeTargetUrl}
         onOpen={() => void onOpenUrl()}
         onSelectHistory={(item) => onChangeTargetUrl(item.url)}
@@ -109,7 +112,9 @@ export const Workbar = memo(function Workbar({
         <div className="webform-workbar-actions">
           {/* 按钮职责**互不重合**，各管一件事：
                 起停（启动/关闭浏览器）· 配置（浏览器设置）· 重查（刷新状态）。
-              设置不回显状态、刷新不改配置、起停只碰进程——所以这里也不该让它们并行。 */}
+              设置不回显状态、刷新不改配置、起停只碰进程——所以这里也不该让它们并行。
+              **主按钮每态只有一颗**：有网址时它在地址条上（「打开目标页」），
+              没网址时才是这里这颗「开启专用浏览器」，两者不会同时在 DOM 里。 */}
           {running ? (
             <Tooltip title={t("webFormPage.browserCard.stopTooltip")}>
               <Button
@@ -121,7 +126,7 @@ export const Workbar = memo(function Workbar({
                 {t("webFormPage.browserCard.stop")}
               </Button>
             </Tooltip>
-          ) : (
+          ) : !hasUrl ? (
             <Button
               type="primary"
               icon={<ChromeOutlined />}
@@ -132,7 +137,7 @@ export const Workbar = memo(function Workbar({
             >
               {t("webFormPage.browserCard.start")}
             </Button>
-          )}
+          ) : null}
           <Tooltip title={t("webFormPage.browserCard.refreshTooltip")}>
             <Button
               icon={<ReloadOutlined />}
@@ -142,8 +147,10 @@ export const Workbar = memo(function Workbar({
               aria-label={t("webFormPage.browserCard.refreshAria")}
             />
           </Tooltip>
-          {/* 配置与诊断是"配一次就忘"的动作，常驻两颗按钮会把状态行挤到换行。
-              收进「更多」以后这一行只剩：状态 / 刷新 / 更多 / 一个主按钮。 */}
+          {/* 配置、诊断与「结束本次填写」都是低频动作，收进「更多」以后这一行只剩：
+              状态 / 关闭（或开启）/ 刷新 / 更多 / 地址条上的那一颗主按钮。
+              「结束」是收尾动作，和"关闭浏览器"（登录态保留）不是一回事，所以留在菜单里
+              并标 danger，避免误把它当成普通关闭。 */}
           <Dropdown
             trigger={["click"]}
             menu={{
@@ -162,6 +169,19 @@ export const Workbar = memo(function Workbar({
                   disabled: anyBusy,
                   onClick: () => void onExportDiagnostics(),
                 },
+                ...(canEndSession
+                  ? [
+                      { type: "divider" as const },
+                      {
+                        key: "end",
+                        danger: true,
+                        icon: <StopOutlined />,
+                        label: t("webFormPage.browserCard.end"),
+                        disabled: anyBusy,
+                        onClick: () => void onEndSession(),
+                      },
+                    ]
+                  : []),
               ],
             }}
           >
@@ -171,18 +191,6 @@ export const Workbar = memo(function Workbar({
               aria-label={t("webFormPage.browserCard.moreAria")}
             />
           </Dropdown>
-          {running && (sessionActive || liveRunning) ? (
-            <Tooltip title={t("webFormPage.browserCard.endTooltip")}>
-              <Button
-                danger
-                loading={busy === "end"}
-                disabled={anyBusy}
-                onClick={() => void onEndSession()}
-              >
-                {t("webFormPage.browserCard.end")}
-              </Button>
-            </Tooltip>
-          ) : null}
         </div>
       </div>
     </div>

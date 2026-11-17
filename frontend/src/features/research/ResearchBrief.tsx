@@ -18,6 +18,15 @@ import { useLocale } from "../../i18n/i18nContext";
 import { splitCitations } from "./citations";
 
 /** 编号 → 来源。编号是 1 起的序号，所以按 `number` 建表而不是用数组下标。 */
+/** 来源的域名（列表里显示 `[n] 标题 — 域名`，用户不点开也能判断出处）。 */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./u, "");
+  } catch {
+    return "";
+  }
+}
+
 function sourceIndex(sources: ResearchSource[]): Map<number, ResearchSource> {
   const map = new Map<number, ResearchSource>();
   for (const source of sources) map.set(source.number, source);
@@ -167,8 +176,17 @@ export default function ResearchBriefPanel({
   }
 
   const sources = sourceIndex(brief.sources);
+  const meta = [
+    brief.deep ? t("companyResearch.brief.meta.deep") : t("companyResearch.brief.meta.standard"),
+    t("companyResearch.brief.meta.sources", { count: brief.sources.length }),
+    brief.elapsed_ms ? t("companyResearch.brief.meta.elapsed", { seconds: (brief.elapsed_ms / 1000).toFixed(1) }) : "",
+  ].filter(Boolean);
   return (
     <div className="rf-research-brief">
+      {/* 顶部元信息：深度/来源数/耗时。用户先知道"这份东西值不值得读"。 */}
+      <div className="rf-research-brief-meta">{meta.join(" · ")}</div>
+      {/* 结论带：v2 的「一句话结论」单独成块。旧简报没有 lead 时不渲染空块。 */}
+      {brief.lead ? <div className="rf-research-brief-lead">{brief.lead}</div> : null}
       {renderMarkdown(brief.markdown, sources, citationLabel)}
       {brief.sources.length === 0 ? (
         <Typography.Text type="secondary">{t("companyResearch.brief.noSources")}</Typography.Text>
@@ -182,6 +200,7 @@ export default function ResearchBriefPanel({
               <li key={source.number}>
                 <Typography.Link href={source.url} target="_blank" rel="noreferrer">
                   [{source.number}] {source.title}
+                  {hostOf(source.url) ? ` — ${hostOf(source.url)}` : ""}
                 </Typography.Link>
               </li>
             ))}

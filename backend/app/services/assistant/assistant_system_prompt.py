@@ -2,7 +2,8 @@
 """求职助手系统提示词装配（从 ``api/assistant.py`` 下沉的公共实现）。
 
 每次请求现拼：基础提示（``app/prompts/assistant_system.md``）+ 平台事实 + 能力地图 +
-放宽模式说明 + 写操作状态 + 求职偏好注入块（期二）+ 本地时间 + 本对话技能 + 界面上下文（T25）。
+放宽模式说明 + 写操作状态 + 求职偏好注入块（期二）+ 本地时间 + 视角 + 界面上下文（T25）。
+T24 起技能提示词不在这里：它按消息挂在用户消息正文之前（见 ``message_dispatch``）。
 不缓存是刻意的——改提示词不必重启，启用的技能与新状态即时生效。
 
 联网开关**不再影响这段提示**：打开它只是把 ``web_search`` 工具下发给模型（R08 删掉了
@@ -27,9 +28,9 @@ from ..feature_catalog import build_capability_map
 from ..job_preference_prompt import render_preference_block
 from ..product_knowledge import build_platform_note
 from .assistant_client_context import build_client_context_block
-from .assistant_skills import build_skill_prompt
+from .assistant_personas import build_persona_prompt
 from .assistant_task_rules import build_task_rules_block
-from .memory import render_memory_block
+from .memory import memory_injection_enabled, render_memory_block
 from .memory_extract import schedule_extraction
 
 logger = logging.getLogger(__name__)
@@ -68,8 +69,9 @@ def build_system_prompt_parts(
     三段与 `_system_prompt` 的拼装是同一份实现，**拆分只是为了能分别计量**：
 
     - ``base``：基础提示 + 平台事实 + 能力地图 + 放宽模式说明 + 写操作状态 + 求职偏好
-      + 本地时间（即原 ``parts`` 里除技能与界面上下文之外的全部内容，按空行连接）；
-    - ``skills``：本对话启用的技能提示词；没启用时是空串；
+      + 本地时间（即原 ``parts`` 里除视角与界面上下文之外的全部内容，按空行连接）；
+    - ``skills``：**只剩视角提示词**（T26）；T24 起技能改按消息生效，提示词挂在
+      用户消息正文之前，不再进系统段——否则旧会话的对话级技能会双重注入；
     - ``client``：界面上下文块（T25）；没有时是空串。
 
     ``_system_prompt`` 就是这三段按 ``base`` → ``skills`` → ``client`` 顺序用空行连接
@@ -99,11 +101,15 @@ def build_system_prompt_parts(
         parts.append(preference_block)
     # #31B：按当前用户消息相关性取 top 5 注入固定区块（没有相关记忆时不产生空块）。
     # 位置在求职偏好之后、本地时间之前：它是"用户说过的事实"，不是系统规则。
-    try:
-        memory_block = render_memory_block(db, conversation_id)
-    except Exception:  # noqa: BLE001 - 记忆块是增强项，不能挡住提示词装配
-        logger.warning("助手记忆区块渲染失败", exc_info=True)
-        memory_block = ""
+    # T23：全局开关关掉时连渲染都不进；它与会话级「本次不记忆」是与关系（后者在
+    # render_memory_block 内部判定）。
+    memory_block = ""
+    if memory_injection_enabled(db):
+        try:
+            memory_block = render_memory_block(db, conversation_id)
+        except Exception:  # noqa: BLE001 - 记忆块是增强项，不能挡住提示词装配
+            logger.warning("助手记忆区块渲染失败", exc_info=True)
+            memory_block = ""
     if memory_block:
         parts.append(memory_block)
     # #31A：会话空闲 5 分钟后的抽取在**下一次交互**时登记（不跑定时器、不占本轮生成）。
@@ -114,9 +120,17 @@ def build_system_prompt_parts(
     except Exception:  # noqa: BLE001 - 登记失败不能挡住本轮对话
         logger.warning("助手记忆抽取登记失败", exc_info=True)
     parts.append(_local_time_note())
+    # T26：视角提示词**独立**拼接在技能段之后——它与请求里带哪些技能无关
+    # （旧实现把视角当内置技能挂在对话上，于是"技能按消息启用"会连带把视角带走）。
+    persona_part = ""
+    try:
+        persona_part = build_persona_prompt(db, conversation_id)
+    except Exception:  # noqa: BLE001 - 视角块是增强项，不能挡住提示词装配
+        logger.warning("助手视角区块渲染失败", exc_info=True)
     return {
         "base": "\n\n".join(part for part in parts if part),
-        "skills": build_skill_prompt(db, conversation_id) or "",
+        # T24：技能提示词已从系统段移走（按消息挂在用户消息正文之前）；这里只留视角。
+        "skills": persona_part,
         # T25：界面上下文（route/view/选中对象）——后端重查后的线索，不是用户指令。
         "client": build_client_context_block(db, client_context) or "",
     }

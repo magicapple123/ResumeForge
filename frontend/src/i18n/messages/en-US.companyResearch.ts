@@ -47,6 +47,41 @@ const companyResearch = {
   "companyResearch.usage.billing": "Searches are billed per query term; deep research adds many",
   "companyResearch.notes.title": "Notes for this run",
   "companyResearch.notes.separator": "; ",
+
+  // Research history (T07): the knowledge base still keeps only the latest entry.
+  "companyResearch.history.open": "History",
+  "companyResearch.history.title": "Research history",
+  "companyResearch.history.viewAll": "View history",
+  "companyResearch.history.empty": "No research history for this company yet",
+  "companyResearch.history.emptyAll": "No research history yet",
+  "companyResearch.history.error": "Could not load the research history, try again later",
+  "companyResearch.history.back": "Back to list",
+  "companyResearch.history.rerun": "Run again",
+  "companyResearch.history.detailError": "Could not load this history entry",
+  "companyResearch.history.deepTag": "Deep",
+  "companyResearch.history.status.ok": "Brief ready",
+  "companyResearch.history.status.failed": "Brief failed",
+  "companyResearch.history.status.skipped": "Brief only",
+  "companyResearch.history.stale": "This entry is over 30 days old, so it may be outdated",
+  "companyResearch.history.staleDays": "This entry is {days} days old, so it may be outdated",
+  "companyResearch.history.summary": "{count} entries · about {size}",
+  "companyResearch.history.clear": "Clear all",
+  "companyResearch.history.clearBody":
+    "Clearing cannot be undone; the latest knowledge entry is not affected",
+  "companyResearch.history.clearAction": "Clear {count} entries",
+  "companyResearch.history.clearCancel": "Keep them",
+  "companyResearch.history.delete": "Delete this entry",
+  "companyResearch.history.deleteBody":
+    "Deleting cannot be undone; the knowledge base is not affected",
+  "companyResearch.history.deleted": "Deleted this research history entry",
+  "companyResearch.history.cleared": "Cleared {count} research history entries",
+  "companyResearch.history.jobTitle": "{count} research entries for this company",
+  "companyResearch.history.jobViewAll": "View all",
+  "companyResearch.history.loadMore": "Load more",
+  "companyResearch.brief.meta.deep": "Deep research",
+  "companyResearch.brief.meta.standard": "Standard research",
+  "companyResearch.brief.meta.sources": "{count} sources",
+  "companyResearch.brief.meta.elapsed": "{seconds}s",
 };
 
 export default companyResearch;

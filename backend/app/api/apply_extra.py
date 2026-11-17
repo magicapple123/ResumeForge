@@ -14,7 +14,8 @@
 ``POST /records/{id}/track``  一键写进求职进度（先查重）
 ``GET  /greeting-templates``  话术库
 ``PUT  /greeting-templates``  整表覆盖话术库
-``GET  /blocklist``           屏蔽清单
+``POST /greeting-templates/{id}/use``  套用次数 +N（增量）
+``GET  /blocklist``           屏蔽清单（含不会生效的关键词）
 ``PUT  /blocklist``           整表覆盖屏蔽清单
 ============================  ==========================================
 
@@ -35,10 +36,13 @@ from ..schemas.apply import (
     ApplySummaryOut,
     ApplyTrackLinkOut,
     GreetingTemplateListOut,
+    GreetingTemplateOut,
     GreetingTemplateSaveIn,
+    GreetingTemplateUseIn,
 )
 from ..services.apply import funnel, greeting_templates, preflight
 from ..services.apply._base import ApplyServiceError
+from ..services.apply.blocklist import inactive_keywords
 from ..services.settings_service import get_apply_blocklist, save_apply_blocklist
 from .apply_insights import register_apply_insight_routes
 
@@ -119,15 +123,41 @@ def save_greeting_templates(payload: GreetingTemplateSaveIn, db: Session = Depen
     return greeting_templates.save_templates(db, payload)
 
 
+@extra_router.post("/greeting-templates/{template_id}/use", response_model=GreetingTemplateOut)
+def use_greeting_template(
+    template_id: str,
+    payload: GreetingTemplateUseIn | None = None,
+    db: Session = Depends(get_db),
+):
+    """套用一次（或批量套用 N 次）：**增量**累加 ``uses``，返回更新后的那一条。
+
+    ``count`` 省略 = 1；批量套用一次请求带 N，不打 N 次库。模板不存在返回 404——
+    静默新建一条空模板会让"用过几次"变成一笔无处对账的账。
+    """
+    try:
+        return greeting_templates.mark_used(
+            db, template_id, payload.count if payload is not None else 1
+        )
+    except ApplyServiceError as exc:
+        _raise(exc)
+
+
 # ===== 14E 屏蔽清单 =====
 
 
 @extra_router.get("/blocklist", response_model=ApplyBlocklistOut)
 def get_blocklist(db: Session = Depends(get_db)):
-    """当前屏蔽清单。返回的是**用户填的原话**（不做归一化、不丢停用词），所见即所存。"""
+    """当前屏蔽清单。返回的是**用户填的原话**（不做归一化、不丢停用词），所见即所存。
+
+    ``inactive_keywords`` 是同一份规则判出的"存着但不会生效"的那些词（太短或太宽泛）。
+    它由 ``clean_keywords`` 的判定函数算出，这里不复制停用词表。
+    """
     stored = get_apply_blocklist(db)
+    keywords = stored.get("keywords", [])
     return ApplyBlocklistOut(
-        companies=stored.get("companies", []), keywords=stored.get("keywords", [])
+        companies=stored.get("companies", []),
+        keywords=keywords,
+        inactive_keywords=inactive_keywords(keywords),
     )
 
 
@@ -139,7 +169,12 @@ def save_blocklist(payload: ApplyBlocklistIn, db: Session = Depends(get_db)):
     界面才能如实显示"这条你填了，但它太宽泛、不会生效"。静默丢弃会让用户以为保存失败。
     """
     saved = save_apply_blocklist(db, payload.companies, payload.keywords)
-    return ApplyBlocklistOut(companies=saved["companies"], keywords=saved["keywords"])
+    keywords = saved["keywords"]
+    return ApplyBlocklistOut(
+        companies=saved["companies"],
+        keywords=keywords,
+        inactive_keywords=inactive_keywords(keywords),
+    )
 
 
 def register_apply_extra_routes(router: APIRouter) -> None:

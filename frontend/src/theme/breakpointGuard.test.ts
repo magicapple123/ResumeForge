@@ -210,6 +210,10 @@ describe("断点单一事实源", () => {
       // 与内容宽差 200px 以上，用媒体查询会在 1440 + 展开侧栏时切错列。
       // 该容器内没有 position:fixed 后代（浮球/弹层都 portal 到 body），按 §3.5 判据安全。
       "styles/webform-workbench.css",
+      // T20：制作台左栏的参数网格。容器是 `.resume-wb-col-params .resume-wb-group-body`
+      // （不是整列：整列设 `container-type` 会让 `ChipStylePopover` 的 position:fixed
+      // 浮层被困在列内）。该分组内容盒内没有 fixed 后代，按 §3.5 判据安全。
+      "styles/resume-workbench-controls-wide.css",
     ]);
     const offenders: string[] = [];
     for (const absolute of collectCssFiles()) {

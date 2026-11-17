@@ -32,7 +32,6 @@ export const appTheme: ThemeConfig = {
     motionEaseInOut: "ease-in-out",
   },
   components: {
-    Button: { primaryShadow: "0 2px 4px rgb(22 54 92 / 12%)" },
     Card: { headerFontSize: 16, headerHeight: 56, borderRadiusLG: 16 },
     Table: {
       headerBg: palette.surfaceAlt,

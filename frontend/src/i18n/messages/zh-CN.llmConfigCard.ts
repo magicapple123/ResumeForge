@@ -31,6 +31,8 @@ const llmConfigCard = {
   "llmConfigCard.tooltip.active": "当前生效的配置：简历生成与求职助手正在用它",
   "llmConfigCard.tag.active": "使用中",
   "llmConfigCard.tag.keyConfigured": "密钥已配置",
+  /** T01：记录卡上的窗口与**来源**：「窗口 1M（参考表）」。来源是后端按内置表算的。 */
+  "llmConfigCard.window": "窗口 {window}（{source}）",
 
   /** 记录卡上的三个动作与更多菜单。 */
   "llmConfigCard.action.apply": "使用",

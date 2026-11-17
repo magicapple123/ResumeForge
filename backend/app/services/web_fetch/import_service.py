@@ -65,8 +65,6 @@ FILLABLE_FIELDS = (
 )
 
 
-
-
 def provider_for(db: Session) -> Any:
     """当前配置可用时返回 LLM provider，否则 None（模型层只是兜底，不是前提）。"""
     if db is None:  # 离线测试（不碰 DB 的抓取/抽取）不读配置。
@@ -81,18 +79,6 @@ def provider_for(db: Session) -> Any:
         logger.warning("读取模型配置失败，链接抽取将只用规则层", exc_info=True)
         return None
     return create_provider(config) if llm_is_configured(config) else None
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 @dataclass(frozen=True)
@@ -117,6 +103,22 @@ class DetailsPlan:
     provider: Any
 
 
+def _close_fetcher(fetcher: Any) -> None:
+    """归还抓取客户端；替身没有 ``close`` 或关闭失败都不影响已经拿到的结果。
+
+    T04 让 ``JobFetcher`` 跨页复用一个客户端，因此每条预览/补详情路径都要在收尾归还。
+    但测试与调用方可能传只实现 ``fetch_pages`` 的替身——以前直接 ``fetcher.close()``
+    会把这变成一个 500，用户看到的是"预览失败"而不是真实结果。
+    """
+    close = getattr(fetcher, "close", None)
+    if not callable(close):
+        return
+    try:
+        close()
+    except Exception:  # noqa: BLE001 - 归还连接失败不能覆盖预览结果
+        logger.warning("收尾时关闭抓取客户端失败", exc_info=True)
+
+
 def prepare_preview(
     db: Session | None,
     url: str,
@@ -128,6 +130,7 @@ def prepare_preview(
     pages: int = 1,
 ) -> PreviewPlan:
     """同步准备段：抓 1–10 页并取好 provider，然后归还请求连接。"""
+    fetcher: JobFetcher | None = None
     try:
         fetcher = JobFetcher(db, config=_engine_config(engine))
         # 详情意图天然是单页：用户给的就是一条岗位详情，不跟它的「下一页」。
@@ -144,9 +147,15 @@ def prepare_preview(
         if intent == "auto" and batch.first and classify_page_intent(batch.first) == "job_detail":
             requested = 1
         # db 可为 None（不落库的预览路径）：没有会话就不取「已存在岗位」，与改动前「没有 db 就没有标注」的行为一致。
-        resolved = provider if provider is not None else (provider_for(db) if db is not None else None)
+        resolved = (
+            provider if provider is not None else (provider_for(db) if db is not None else None)
+        )
         return PreviewPlan(batch=batch, provider=resolved, requested=requested, url=url)
     finally:
+        # T04：抓取客户端跟着这次预览会话一起归还（连接池不跨请求泄漏）。
+        # 只关"自己有 close 的东西"：测试与调用方可能传一个只实现了 fetch_pages 的替身，
+        # 收尾不该因此把已经拿到的预览结果变成一个 500。
+        _close_fetcher(fetcher)
         if db is not None:
             db.close()
 
@@ -279,9 +288,10 @@ def preview_rules_from_url(
     if len(rows) > cap:
         warnings.append(f"多页共 {len(rows)} 条，本次最多取 {cap} 条")
         rows = rows[:cap]
-    return rows, batch, warnings
-
-
+    try:
+        return rows, batch, warnings
+    finally:
+        _close_fetcher(fetcher)
 
 
 def prepare_details(
@@ -293,12 +303,15 @@ def prepare_details(
     page_url: str = "",
 ) -> DetailsPlan:
     """同步准备段：还原行、逐条抓详情页（网络 + 限速）、取好 provider，然后归还连接。"""
+    fetcher: JobFetcher | None = None
     try:
         if len(rows) > DETAIL_BATCH_LIMIT:
             raise ValueError(f"一次最多补 {DETAIL_BATCH_LIMIT} 条详情，请分批补齐")
         fetcher = JobFetcher(db, config=_engine_config(engine))
         # db 可为 None（不落库的预览路径）：没有会话就不取「已存在岗位」，与改动前「没有 db 就没有标注」的行为一致。
-        resolved = provider if provider is not None else (provider_for(db) if db is not None else None)
+        resolved = (
+            provider if provider is not None else (provider_for(db) if db is not None else None)
+        )
         prepared: list[tuple[ExtractedRow, FetchedPage | None]] = []
         for raw in rows:
             row = _row_for_detail(raw, page_url=page_url)
@@ -320,6 +333,8 @@ def prepare_details(
             prepared.append((row, page))
         return DetailsPlan(prepared=tuple(prepared), provider=resolved)
     finally:
+        if fetcher is not None:
+            _close_fetcher(fetcher)
         if db is not None:
             db.close()
 
@@ -374,10 +389,6 @@ async def fetch_details(
         page_url=page_url,
     )
     return await collect_detail_rows(plan)
-
-
-
-
 
 
 def fill_empty_fields(job: Job, payload: dict[str, Any]) -> list[str]:

@@ -173,6 +173,9 @@ export interface WeeklyGoal {
 }
 
 export interface AnalyticsDashboard {
+  /** 服务端这次聚合的时间（T13）：页头「更新于 HH:mm」用它，不用本地时钟假装。 */
+  generated_at: string;
+
   // ===== 概览 =====
   total_applications: number;
   valid_applications: number;

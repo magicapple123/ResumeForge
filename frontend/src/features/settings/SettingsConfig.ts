@@ -95,6 +95,9 @@ export function configFromRecord(record: LLMConfigRecord): LLMConfig {
     temperature: record.temperature,
     timeout_seconds: record.timeout_seconds,
     max_tokens: record.max_tokens,
+    // 上下文窗口必须原样带过：`LLMConfig` 是整份替换语义，漏一个字段就等于保存时把它清成
+    // 默认值（0）。这正是 T01 修的 bug——编辑任何记录再保存会把窗口清零。
+    context_window_tokens: record.context_window_tokens ?? 0,
     api_style: record.api_style ?? "openai",
     top_p: record.top_p ?? null,
     frequency_penalty: record.frequency_penalty ?? null,
@@ -141,6 +144,7 @@ export function sameConfig(left: LLMConfig, right: LLMConfig): boolean {
     left.temperature === right.temperature &&
     left.timeout_seconds === right.timeout_seconds &&
     left.max_tokens === right.max_tokens &&
+    (left.context_window_tokens ?? 0) === (right.context_window_tokens ?? 0) &&
     (left.top_p ?? null) === (right.top_p ?? null) &&
     (left.frequency_penalty ?? null) === (right.frequency_penalty ?? null) &&
     (left.presence_penalty ?? null) === (right.presence_penalty ?? null) &&

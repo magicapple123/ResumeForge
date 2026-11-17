@@ -14,6 +14,11 @@
   键里带 loop 对象本身，换循环就换客户端。
 - **注入传输层**：测试注入的 ``MockTransport`` 必须请求间隔离，按 transport 对象
   分键；生产为 ``None``，全部共享一个。
+- **出网路径指纹**（T02）：``net_proxy.ProxyInfo.fingerprint()``。回环目标强制直连，
+  远程目标可能走代理——两者的连接**不能**复用同一个客户端（走代理的池里没有直连
+  连接，反过来也一样）。
+- **generation**（T02）：改一次网络设置（``PUT /api/settings/network``）就 +1，键随之
+  变化 → 下一次调用新建客户端，**不必重启**。旧条目留给淘汰逻辑收尾。
 
 池有上限（防止测试里循环/传输对象频繁更替把池撑大）：超限时淘汰最早的条目。
 **淘汰必须在其所属循环内关闭**（审计 PR-08，修复前只丢引用、连接悬挂到 GC）：
@@ -43,13 +48,15 @@ from contextlib import suppress
 
 import httpx
 
+from .. import net_proxy
+
 logger = logging.getLogger(__name__)
 
 _MAX_CLIENTS = 8
 
-_pool: dict[
-    tuple[httpx.AsyncBaseTransport | None, asyncio.AbstractEventLoop], httpx.AsyncClient
-] = {}
+_PoolKey = tuple[httpx.AsyncBaseTransport | None, asyncio.AbstractEventLoop, str, int]
+
+_pool: dict[_PoolKey, httpx.AsyncClient] = {}
 
 
 class _NoPersistenceJar(http.cookiejar.CookieJar):
@@ -62,8 +69,12 @@ class _NoPersistenceJar(http.cookiejar.CookieJar):
         return None
 
 
-def _new_shared_client(transport: httpx.AsyncBaseTransport | None) -> httpx.AsyncClient:
-    client = httpx.AsyncClient(transport=transport)
+def _new_shared_client(
+    transport: httpx.AsyncBaseTransport | None, proxy: net_proxy.ProxyInfo
+) -> httpx.AsyncClient:
+    # 客户端统一由 net_proxy 的工厂造：它负责 trust_env=False + 显式代理 +
+    # socks 明确报错（T02）。这里不再直接 httpx.AsyncClient(...)。
+    client = net_proxy.build_async_client(transport=transport, proxy=proxy)
     # cookies 隔离（PR-08）：罐永远为空 → 出站请求不带任何存量 Cookie；
     # 入站 Set-Cookie 落不进罐。Authorization/ApiKey 头本来就走每请求注入。
     # 注意要传 jar 本体：传 httpx.Cookies 实例会被 setter 再包一层、丢掉自定义 jar。
@@ -76,7 +87,7 @@ async def _aclose_quietly(client: httpx.AsyncClient) -> None:
         await client.aclose()
 
 
-def _evict(key: tuple[httpx.AsyncBaseTransport | None, asyncio.AbstractEventLoop]) -> None:
+def _evict(key: _PoolKey) -> None:
     """淘汰一个池条目，并在**其所属循环**内关闭客户端（PR-08，取舍见模块说明）。"""
     client = _pool.pop(key, None)
     if client is None:
@@ -95,15 +106,27 @@ def _evict(key: tuple[httpx.AsyncBaseTransport | None, asyncio.AbstractEventLoop
         logger.debug("连接池淘汰：目标事件循环已不可用，放弃关闭 %r", client)
 
 
-def get_shared_client(*, transport: httpx.AsyncBaseTransport | None = None) -> httpx.AsyncClient:
-    """取（或建）当前事件循环下、该传输层对应的共享客户端。"""
+def get_shared_client(
+    *,
+    transport: httpx.AsyncBaseTransport | None = None,
+    url: str | None = None,
+) -> httpx.AsyncClient:
+    """取（或建）当前事件循环下、这条出网路径对应的共享客户端。
+
+    Args:
+        transport: 注入的传输层（测试用）；给了它就不设代理，保证测试确定性。
+        url: 本次要访问的地址。**调用方应尽量传真实端点**——回环地址（本地模型、
+            CDP）必须强制直连，不知道地址就没法做这个判定。
+    """
     loop = asyncio.get_running_loop()
+    proxy = net_proxy.resolve_proxy(target_url=url)
     # 键用**对象本身**而不是 id()：强引用同时防住"id 被回收后复用"的错配——
     # 用 id() 撞上一个已死亡循环的客户端，会把请求发进错误的事件循环。
-    key = (transport, loop)
+    # 后两段是 T02 新增：出网路径指纹 + generation（改设置立刻生效）。
+    key: _PoolKey = (transport, loop, proxy.fingerprint(), net_proxy.generation())
     client = _pool.get(key)
     if client is None:
-        client = _new_shared_client(transport)
+        client = _new_shared_client(transport, proxy)
         _pool[key] = client
         if len(_pool) > _MAX_CLIENTS:
             for stale in [k for k in _pool if k != key][: len(_pool) - _MAX_CLIENTS]:

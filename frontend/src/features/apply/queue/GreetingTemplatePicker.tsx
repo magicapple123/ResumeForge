@@ -7,6 +7,7 @@
  */
 import { Select, Space, Typography } from "antd";
 import { useState } from "react";
+import { markGreetingTemplateUsed } from "../../../api/applyExtras";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { ApplyQueueItem } from "../../../types";
@@ -56,7 +57,11 @@ export function GreetingTemplatePicker({
         onChange={(value: string | undefined) => {
           setChosen(value);
           const picked = templates.find((template) => String(template.id) === value);
-          if (picked) onApply(renderGreetingTemplate(picked.body, greetingValuesOf(item)));
+          if (picked) {
+            onApply(renderGreetingTemplate(picked.body, greetingValuesOf(item)));
+            // 套用一次 = 计数 +1。失败不打扰用户：招呼语已经填进去了，统计不该拦住他。
+            void markGreetingTemplateUsed(picked.id, 1).catch(() => undefined);
+          }
         }}
       />
       {selected && (

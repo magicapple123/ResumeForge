@@ -172,6 +172,11 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
         "create_knowledge",
         "update_knowledge",
     ),
+    # 调研历史（T07）是每次调研的快照：助手已有 list_knowledge 读最新结论，旧快照只在
+    # 调研页/岗位详情回看——给工具反而会让模型把过期结论当成现行事实。
+    "company_research_run": (
+        "不暴露：历史快照仅供页面回看，助手读知识库最新结论即可，避免把旧结论当现行事实。"
+    ),
     "skill": ("list_skills", "get_skill", "create_skill", "update_skill"),
     "question_bank_record": ("list_question_banks",),
     # ===== 面试与演练 =====
@@ -215,7 +220,6 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "用户消息相关性取 top 5 注入固定区块，助手在对话里已经能看到；它的写入来自异步抽取"
     "与用户在设置页的手填（source=manual/extracted），由模型自读自写会形成自我强化循环、"
     "并绕过「用户可见可改」的硬要求（编辑/删除/永不使用只能在设置页做）。",
-
     # T01：写操作提案是**授权状态**（待确认参数 + 目标指纹 + 终态），不是业务数据。
     # 模型只通过系统提示里的状态块得知结果；给它读写工具等于让它查参数甚至自批，
     # 会破坏"用户是唯一确认人"的边界。状态只由服务端批准/拒绝/清理推进。
@@ -231,7 +235,6 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     ),
     "agent_task_step": "不暴露：步骤行仍只在页面任务区展示（task_status 只回进度计数与当前步标题，"
     "不回 output_ref/attempt 等内部状态）；模型不应读写单步行。",
-
     # ===== W12 来源/事实锁/用量 + W13 版本/变体 + W17 表达资产：刻意不暴露 =====
     "resume_source": "不暴露：W12 来源实体是制作台「核对这条要点来自哪份资料」的关系数据；"
     "助手已能经 claim_record / 简历正文回答内容问题，来源链属于界面核对流程，"

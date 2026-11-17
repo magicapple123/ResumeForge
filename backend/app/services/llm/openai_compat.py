@@ -18,12 +18,14 @@ from ...schemas.setting import LLMConfig
 from . import payload as payload_rules
 from . import retry
 from .base import (
-    BaseLLMProvider as BaseLLMProvider,
-)
-from .base import (
+    NETWORK_ERRORS,
     LLMDelta,
     LLMError,
     log_llm_failure,
+    timeout_error,
+)
+from .base import (
+    BaseLLMProvider as BaseLLMProvider,
 )
 from .base import (
     build_request_timeout as build_request_timeout,
@@ -168,10 +170,10 @@ class OpenAICompatProvider(_InternalToolsMixin, OpenAITransport):
                     raise self._translate_deadline_expiry(exc) from exc
                 except httpx.TimeoutException as exc:
                     log_llm_failure("timeout", type(exc).__name__)
-                    raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
-                except httpx.RequestError as exc:
-                    log_llm_failure("disconnect", type(exc).__name__)
-                    raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
+                    raise timeout_error() from exc
+                except NETWORK_ERRORS as exc:
+                    # T02：代理/直连、socks、证书、超时四类分开说（net_path 随错误下发）。
+                    raise self._network_error(exc) from exc
                 try:
                     data = json.loads(body)
                 except (ValueError, UnicodeError) as exc:
@@ -446,8 +448,7 @@ class OpenAICompatProvider(_InternalToolsMixin, OpenAITransport):
         except httpx.TimeoutException as exc:
             # 流中途（已可能产出 delta）不重试：安全点规则（§2.4-2），只做文案转换。
             log_llm_failure("timeout", type(exc).__name__)
-            raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
-        except httpx.RequestError as exc:
+            raise timeout_error() from exc
+        except NETWORK_ERRORS as exc:
             # 流中途（已可能产出 delta）不重试：安全点规则（§2.4-2），只做文案转换。
-            log_llm_failure("disconnect", type(exc).__name__)
-            raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
+            raise self._network_error(exc) from exc

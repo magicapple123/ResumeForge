@@ -1,17 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
-"""助手多视角 preset（18C）：三个角色，一套工具。
+"""助手多视角 preset（18C / T26）：三个角色，一套工具。
 
 设计取舍（关键）：**不是三个新工具，也不是三套独立后端**。每个视角只是"往系统提示里
-换一段视角与输出结构的说明"，工具集完全不变。实现上复用已有的「对话技能」通道：
-把视角 prompt 作为一条内置技能挂到当前对话（build_skill_prompt 拼进 system 段），
-因此：
+换一段视角与输出结构的说明"，工具集完全不变。
 
-- 不需要改系统提示装配（assistant_system_prompt.py 一行不用动）；
-- 视角随对话切换、可被用户看见（菜单里是一条技能）与取消；
-- 切换视角不碰工具注册表，18E 的工具调用序列评测不受影响。
+T26 之前的实现把视角当成"一条内置技能挂到当前对话"，因此视角会跟用户的技能共用同一张
+关联表、同一份字数预算、同一套"按消息启用"的语义（T24）。那三条都不属于视角：
+视角是**会话属性**。现在：
+
+- 会话列 `chat_conversation.persona_id` 是唯一真相（迁移 0021 把历史行搬了进来）；
+- 视角提示词在 `build_skill_prompt` **之后**单独拼接，与请求里的 `skill_ids` 无关；
+- 内置视角技能行保留在库里，但技能列表接口按名字前缀过滤掉（界面不再出现「视角 · X」）。
 
 红线（写进每个 prompt 文件）：三者的结论都必须引用简历字段 / JD 原文 / 系统给出的
 **定性**匹配结论；不允许空口评价，也不允许编数字评分（助手工具返回里本来就没有数字分）。
+
+**一个版本的回退读取**：升级后第一次读到老会话时，若列是空串而关联行里还挂着视角技能
+（例如用户跳过了迁移、或从旧备份恢复），`current_persona_id` 仍按技能名认一次。写入路径
+（`apply_persona`）会顺手清掉这些老关联行，保证"切回通用"不会被回退逻辑复活。
 """
 
 from __future__ import annotations
@@ -23,19 +29,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ...models.assistant import AssistantSkill
-from .assistant_skills import (
-    create_skill,
-    find_skill,
-    list_conversation_skill_ids,
-    set_conversation_skills,
-    update_skill,
-)
+from ...models.assistant import AssistantConversationSkill, AssistantSkill, ChatConversation
+from .assistant_skills import PERSONA_SKILL_PREFIX, list_conversation_skill_ids
 
 #: 视角 prompt 目录：app/prompts/personas/<id>.md。
 _PROMPT_DIR = Path(__file__).resolve().parents[2] / "prompts" / "personas"
-#: 内置视角技能的名字前缀：用户可辨认，也用于从对话技能里认出"这几个是视角"。
-SKILL_NAME_PREFIX = "视角 · "
+#: 内置视角技能的名字前缀。技能列表据此过滤；迁移 0021 与它逐字一致。
+SKILL_NAME_PREFIX = PERSONA_SKILL_PREFIX
 
 
 @dataclass(frozen=True)
@@ -113,27 +113,8 @@ def persona_of_skill_name(name: str) -> str:
     return persona_skill_names().get(str(name or "").strip(), "")
 
 
-def _ensure_skill(db: Session, persona: Persona) -> AssistantSkill:
-    """确保内置视角技能存在，且 prompt 与当前文件一致（升级后自动同步、不改启用状态）。"""
-    name = skill_name_of(persona)
-    prompt = persona_prompt(persona.id)
-    existing = find_skill(db, name)
-    if existing is None:
-        return create_skill(
-            db,
-            name=name,
-            description=f"内置视角：{persona.summary}（工具集不变，只换视角与输出结构）",
-            prompt=prompt,
-            enabled=True,
-        )
-    if (existing.prompt or "").strip() != prompt:
-        updated = update_skill(db, existing.id, prompt=prompt)
-        assert updated is not None  # find_skill 刚取到，删除竞争不在本函数职责内
-        return updated
-    return existing
-
-
 def _persona_skill_ids(db: Session) -> dict[int, str]:
+    """技能 id → 视角 id（只用于回退读取历史关联行）。"""
     ids: dict[int, str] = {}
     for skill in db.query(AssistantSkill).all():
         persona_id = persona_of_skill_name(skill.name)
@@ -142,10 +123,24 @@ def _persona_skill_ids(db: Session) -> dict[int, str]:
     return ids
 
 
+def _stored_persona_id(conversation: ChatConversation | None) -> str:
+    """列里的值：只认白名单，脏值当"通用"（读取不该抛错）。"""
+    raw = str(getattr(conversation, "persona_id", "") or "").strip()
+    return raw if raw in _BY_ID else ""
+
+
 def current_persona_id(db: Session, conversation_id: int | None) -> str:
-    """这个对话当前启用的视角 id；没有视角时返回空串。"""
+    """这个对话当前的视角 id；没有视角时返回空串。
+
+    先读会话列；列是空的才回退到老的关联行（一个版本）。回退只在**读**路径上存在。
+    """
     if conversation_id is None:
         return ""
+    conversation = db.get(ChatConversation, int(conversation_id))
+    stored = _stored_persona_id(conversation)
+    if stored:
+        return stored
+    # 一个版本的回退：老数据/旧备份恢复的会话，视角还挂在对话技能行上。
     mapping = _persona_skill_ids(db)
     for skill_id in list_conversation_skill_ids(db, conversation_id):
         persona_id = mapping.get(int(skill_id))
@@ -154,19 +149,46 @@ def current_persona_id(db: Session, conversation_id: int | None) -> str:
     return ""
 
 
-def apply_persona(db: Session, conversation_id: int, persona_id: str) -> list[int]:
-    """把视角切到 persona_id（空串 = 关闭）：保留用户其它技能，只替换视角那一条。"""
+def apply_persona(db: Session, conversation_id: int, persona_id: str) -> str:
+    """把视角切到 persona_id（空串 = 关闭），写会话列；返回生效后的视角 id。
+
+    顺带清掉"视角"的老关联行：否则用户在把视角切回通用之后，回退读取又把旧视角读回来。
+    用户自己导入的其它技能行**一条不动**。
+    """
     normalized = normalize_persona_id(persona_id)
+    conversation = db.get(ChatConversation, int(conversation_id))
+    if conversation is None:
+        raise ValueError("对话不存在或已被删除")
+    conversation.persona_id = normalized
     mapping = _persona_skill_ids(db)
-    kept = [
+    stale = [
         int(skill_id)
         for skill_id in list_conversation_skill_ids(db, conversation_id)
-        if int(skill_id) not in mapping
+        if int(skill_id) in mapping
     ]
-    if normalized:
-        skill = _ensure_skill(db, _BY_ID[normalized])
-        kept.append(int(skill.id))
-    return set_conversation_skills(db, conversation_id, kept)
+    if stale:
+        db.query(AssistantConversationSkill).filter(
+            AssistantConversationSkill.conversation_id == int(conversation_id),
+            AssistantConversationSkill.skill_id.in_(stale),
+        ).delete(synchronize_session=False)
+    db.commit()
+    return normalized
+
+
+#: 视角提示词的小标题。与技能段并列出现时，模型才能分清"技能=写作规范、视角=看问题方式"。
+PERSONA_PROMPT_HEADER = "## 本次回答使用的视角"
+
+
+def build_persona_prompt(db: Session, conversation_id: int | None) -> str:
+    """视角提示词（没有视角时返回空串）；**与请求里的 skill_ids 无关**。
+
+    每个请求重读 prompt 文件（`persona_prompt` 有 lru_cache），升级提示词后不必重启，
+    也不需要像旧实现那样"再去同步一条技能行的 prompt"。
+    """
+    persona_id = current_persona_id(db, conversation_id)
+    if not persona_id:
+        return ""
+    return f"{PERSONA_PROMPT_HEADER}\n\n{persona_prompt(persona_id)}"
 
 
 def persona_catalog() -> list[dict[str, Any]]:
@@ -182,8 +204,10 @@ __all__ = [
     "PERSONAS",
     "PERSONA_IDS",
     "Persona",
+    "PERSONA_PROMPT_HEADER",
     "SKILL_NAME_PREFIX",
     "apply_persona",
+    "build_persona_prompt",
     "current_persona_id",
     "get_persona",
     "normalize_persona_id",

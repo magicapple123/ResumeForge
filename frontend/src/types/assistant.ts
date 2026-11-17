@@ -225,6 +225,27 @@ export interface AssistantMessageReferences {
 /** 引用片点击后的跳转目标。 */
 export type AssistantReferenceKind = "job" | "resume";
 
+/**
+ * 一条用户消息发送时勾选的技能（T24，消息级）。气泡前缀渲染为「使用 X」；
+ * 提示词正文不在这里（`context.skill_prompt` 只给模型）。
+ */
+export interface AssistantMessageSkill {
+  id: number;
+  name: string;
+}
+
+/**
+ * 助手这一轮参考过的记忆（T23）：只存 id + 当时的 value 快照。
+ *
+ * 存快照而不只存 id，是因为记忆可以被改或删——历史消息要能回答"它当时参考了什么"，
+ * 不能读回今天的那一行。
+ */
+export interface AssistantMessageMemory {
+  id: number;
+  kind: string;
+  value: string;
+}
+
 export interface AssistantMessage {
   id: number;
   conversation_id: number;
@@ -250,10 +271,12 @@ export interface AssistantMessage {
     source_map?: AssistantSourceNumber[];
     tool_calls?: AssistantToolCall[];
     /**
-     * 本轮启用了哪些技能（T14，只记名字不记提示词正文）。没有启用技能时后端不落这个
-     * 字段——空数组与"没启用"语义不同，所以按可选处理。
+     * 这条**用户消息**发送时勾选了哪些技能（T24，消息级）。只记 id 与名字，提示词正文在
+     * `skill_prompt` 里（仅供模型，不进正文）。没勾技能时后端不落这个字段。
      */
-    skills?: string[];
+    skills?: AssistantMessageSkill[];
+    /** 这条用户消息的技能提示词（T24，模型侧注入用）；界面不展示它的正文。 */
+    skill_prompt?: string;
     /**
      * 模型的思考过程（开启思考强度时才有），供用户点开查看。
      *
@@ -276,6 +299,8 @@ export interface AssistantMessage {
      * 那时 `GET /context-usage` 会返回 `partial: true` 的估算值。
      */
     context_usage?: ContextUsage;
+    /** T23：这一轮注入的记忆（id + 内容快照）；没有注入时是空数组或缺失。 */
+    memories?: AssistantMessageMemory[];
   };
   /** superseded（#13A）：被「重新生成」取代的旧回答，后端过滤后不会下发，仅作类型完整。 */
   status: "pending" | "complete" | "error" | "cancelled" | "superseded";
@@ -291,12 +316,31 @@ export interface AssistantMessage {
   created_at: string;
 }
 
+/**
+ * 旧数据（T24）：会话详情里回显的「旧对话技能」。只有 id 与名字，不含提示词正文。
+ * 只用于提示一次「技能已改为只作用于下一条消息」，不参与任何请求。
+ */
+export interface AssistantLegacySkill {
+  id: number;
+  name: string;
+}
+
 export interface AssistantConversationDetail extends AssistantConversationBrief {
   messages: AssistantMessage[];
   /** 会话消息总数（B5 按需加载：messages 被截断到最新 N 条时也如实给全量数）。可选：旧响应没有。 */
   messages_total?: number;
   /** 是否还有更早的消息未加载（has_earlier=true 时列表顶部出「加载更早」）。可选：旧响应没有。 */
   has_earlier?: boolean;
+  /**
+   * 压缩状态（T25）：与 `GET /context-usage` 的 compaction 同一份，含摘要正文。
+   * 消息流据此在 `covered_until_message_id` 那条消息下方画压缩边界。
+   */
+  compaction?: ContextCompactionState | null;
+  /**
+   * 旧数据（T24）：这段对话在「按对话启用技能」时代挂过的技能，只读回显。
+   * 有值时消息流顶部给一行可关闭提示；它不参与任何提示词组装。
+   */
+  legacy_skills?: AssistantLegacySkill[];
 }
 
 export interface AssistantAttachmentInput {
@@ -338,6 +382,8 @@ export interface ContextCompactionState {
   created_at: string;
   /** 上次遮蔽掉的工具结果条数（L1 的量化结果）。 */
   masked_tool_results: number;
+  /** 摘要正文（T25）：与发给模型的是同一份渲染结果，按 4,000 字截断。 */
+  summary?: string;
 }
 
 /**

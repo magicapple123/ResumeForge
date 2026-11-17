@@ -158,7 +158,13 @@ def test_analytics_route_and_action_data_agree(client, db_session):
     route = client.get("/api/analytics/dashboard")
     assert route.status_code == 200
     data = spec.run(db_session, spec.input_model())
-    assert _serialize(spec, data) == route.json()
+    # T13 给看板加了 `generated_at`（页头「更新于 HH:mm」的数据源）：它是**计算时刻**，
+    # 动作与路由各调一次必然差几毫秒——这不是接口不一致，比较前先摘掉。
+    both = _serialize(spec, data)
+    both.pop("generated_at", None)
+    from_route = route.json()
+    from_route.pop("generated_at", None)
+    assert both == from_route
 
 
 def test_apply_queue_route_and_action_data_agree(client, db_session):

@@ -11,7 +11,8 @@ import type { AnalyticsDashboard } from "../types";
 /** 一份"各字段齐全"的看板：字段与后端 `DashboardOut` 一一对应。 */
 export function analyticsDashboard(overrides: Record<string, unknown> = {}): AnalyticsDashboard {
   return {
-    total_applications: 7,
+    generated_at: "2026-11-17T10:00:00Z",
+  total_applications: 7,
     valid_applications: 6,
     interview_count: 2,
     interview_rate: 0.3333,

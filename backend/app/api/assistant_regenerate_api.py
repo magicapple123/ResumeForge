@@ -140,6 +140,12 @@ def _prepare_regeneration(
     language = get_ui_locale(db) or DEFAULT_AUDIT_LANGUAGE
     # 引用的岗位/简历不存在时，`load_local_context` 自己抛固定文案的 404。
     context_blocks, context_metadata = load_local_context(db, replay, relaxed=relaxed_mode)
+    # T24：技能是消息级的，重跑要沿用**原消息**当时勾选的技能提示词——它存在原用户
+    # 消息的 context 里，重放请求不再带 skill_ids（那是发送时的一次性输入）。
+    original_context = user_message.context if isinstance(user_message.context, dict) else {}
+    if original_context.get("skill_prompt"):
+        context_metadata["skill_prompt"] = original_context["skill_prompt"]
+        context_metadata["skills"] = list(original_context.get("skills") or [])
     config = get_llm_config(db)
     if not config.base_url or not config.model:
         raise HTTPException(status_code=400, detail="尚未配置大模型 API")

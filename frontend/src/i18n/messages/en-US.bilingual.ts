@@ -10,7 +10,7 @@ const bilingual = {
   "bilingual.variant.create": "Create translated version",
   "bilingual.variant.layout": "Layout: {template} · {pages} pages",
   "bilingual.variant.viewing": "Viewing: {name}",
-  "bilingual.variant.createOption": "+ Not created",
+  "bilingual.variant.createOption": "Add {language}",
   "bilingual.variant.count": "{count} language versions",
   "bilingual.variant.current": "Current version",
   "bilingual.compare.title": "Field comparison",

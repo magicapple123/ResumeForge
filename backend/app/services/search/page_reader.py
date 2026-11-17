@@ -37,6 +37,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from .. import net_proxy
 from ..net_policy import ADDRESS_INVALID, ADDRESS_SHARED, non_public_address_reason
 
 logger = logging.getLogger(__name__)
@@ -186,8 +187,8 @@ async def _fetch_following_redirects(
 ) -> str:
     """手动跟随重定向：每一跳先过校验再发请求，读满一页正文即返回。"""
     current = url
-    async with httpx.AsyncClient(
-        timeout=_TIMEOUT, follow_redirects=False, transport=transport
+    async with net_proxy.build_async_client(
+        url=current, timeout=_TIMEOUT, follow_redirects=False, transport=transport
     ) as client:
         # 初始请求 + 至多 _MAX_REDIRECTS 次跟随；循环耗尽即超出跳数上限。
         for _hop in range(_MAX_REDIRECTS + 1):

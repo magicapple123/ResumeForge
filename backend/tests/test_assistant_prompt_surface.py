@@ -5,6 +5,7 @@
 都收在这里：设置页思考开关不得泄漏进助手、技能提示词注入与停用、联网搜索 3 次上限、
 工具中文标签与系统提示守卫。
 """
+
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import LLMDelta
 from test_assistant import (
@@ -92,34 +93,42 @@ def test_a_malformed_reasoning_effort_is_rejected(client):
         assert response.status_code == 422, bad
 
 
-def _enable_skills(client, conversation_id: int, skill_ids: list[int]) -> None:
-    response = client.put(
-        f"/api/assistant/conversations/{conversation_id}/skills",
-        json={"skill_ids": skill_ids},
+def _send_with_skills(client, conversation_id: int, content: str, skill_ids: list[int]) -> None:
+    """T24：技能随**这一条消息**发送（不再有"对话级启用"这一步）。"""
+    response = client.post(
+        f"/api/assistant/conversations/{conversation_id}/messages",
+        json={"content": content, "skill_ids": skill_ids},
     )
     assert response.status_code == 200, response.text
 
 
-def test_selected_skills_reach_the_system_prompt(client, monkeypatch):
-    """T14：只有**本对话启用**的技能提示词才进 system 消息，而不是全局 enabled 的那些。"""
+def test_selected_skills_reach_the_user_message_not_the_system_prompt(client, monkeypatch):
+    """T24：技能提示词挂在**发送时那条用户消息**的正文之前，不再进 system。
+
+    这样"勾一次、用一次"才成立：第二条不带 skill_ids 时，新消息不带技能，但历史里
+    第一条仍带着自己的技能提示（续轮不断）。
+    """
     _configure_llm(client)
     provider = _ScriptedProvider([[LLMDelta(text="好。")]])
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
     conversation = _create_conversation(client)
     skill = _import_skill(client, "面试模拟官", "先连问三道八股题，再逐条点评。")
-    _enable_skills(client, conversation["id"], [skill["id"]])
-    _send(client, conversation["id"], "我们开始吧")
+    _send_with_skills(client, conversation["id"], "我们开始吧", [skill["id"]])
 
     system = provider.requests[0]["messages"][0]
     assert system["role"] == "system"
-    assert "面试模拟官" in system["content"]
-    assert "先连问三道八股题，再逐条点评。" in system["content"]
+    assert "面试模拟官" not in system["content"]
+    current = [m for m in provider.requests[0]["messages"] if m["role"] == "user"][-1]
+    assert "面试模拟官" in current["content"]
+    assert "先连问三道八股题，再逐条点评。" in current["content"]
 
-    # 在这个对话里取消勾选后，下一轮就不再注入：系统提示是每条消息现拼的。
-    _enable_skills(client, conversation["id"], [])
+    # 第二条不勾技能：它自己不带，但第一条的历史仍带着（否则追问就丢了技能）。
     _send(client, conversation["id"], "继续")
-
-    assert "面试模拟官" not in provider.requests[1]["messages"][0]["content"]
+    second = provider.requests[1]
+    assert "面试模拟官" not in second["messages"][0]["content"]
+    users = [m for m in second["messages"] if m["role"] == "user"]
+    assert "面试模拟官" in users[0]["content"]
+    assert "面试模拟官" not in users[-1]["content"]
 
 
 def test_knowledge_files_are_listed_but_not_preloaded(client, monkeypatch):
@@ -131,12 +140,11 @@ def test_knowledge_files_are_listed_but_not_preloaded(client, monkeypatch):
     skill = _import_skill(
         client, "面试模拟官", "照题库提问。", files={"题库.md": "压舱石级别的独特句子"}
     )
-    _enable_skills(client, conversation["id"], [skill["id"]])
-    _send(client, conversation["id"], "开始")
+    _send_with_skills(client, conversation["id"], "开始", [skill["id"]])
 
-    system = provider.requests[0]["messages"][0]["content"]
-    assert "题库.md" in system
-    assert "压舱石级别的独特句子" not in system
+    current = [m for m in provider.requests[0]["messages"] if m["role"] == "user"][-1]
+    assert "题库.md" in current["content"]
+    assert "压舱石级别的独特句子" not in current["content"]
 
 
 def test_web_search_never_exceeds_the_documented_limit(client, monkeypatch):
@@ -157,7 +165,9 @@ def test_web_search_never_exceeds_the_documented_limit(client, monkeypatch):
     async def fake_search(query: str, _config, limit=None, *, depth=None) -> list[dict[str, str]]:
         executed.append(query)
         index = len(executed)
-        return [{"title": f"招聘 {index}", "url": f"https://example.com/{index}", "snippet": "摘要"}]
+        return [
+            {"title": f"招聘 {index}", "url": f"https://example.com/{index}", "snippet": "摘要"}
+        ]
 
     # 工具内部是"每次调用现取"（函数内 import），改包上的属性即可。
     monkeypatch.setattr("app.services.search.aggregate_search", fake_search)
@@ -301,4 +311,3 @@ def test_system_prompt_does_not_deny_capabilities_the_tools_provide():
     # 一票否决句不能再回来：把第 20 行改回旧文案（"不能改模板本身"）必须让这条守卫变红。
     for denial in ("结构化条目你也改不了", "不能改模板"):
         assert denial not in prompt, f"系统提示里又出现了否认句：{denial}"
-

@@ -267,7 +267,8 @@ antdOverrideGuard 的非递归扫描能看见它；规则内容与顺序不变�
 
 .tt.is-dragging .tt-float,
 .tt.is-dragging .tt-breathe,
-.tt.is-dragging .tt-turn {
+.tt.is-dragging .tt-turn,
+.tt.is-dragging .tt-glow {
   animation-play-state: paused;
 }
 
@@ -343,16 +344,34 @@ antdOverrideGuard 的非递归扫描能看见它；规则内容与顺序不变�
   outline-offset: 6px;
 }
 
-/* 光晕跟着球体走：位移发生在 .tt-hide 上，而不是固定的 .tt 锚点。
-   `border-radius: 50%` 不能漏——box-shadow 铺在盒子的边框盒上，方形盒子会画出方环。
-   `.tt-hide` 也不能加 `overflow: hidden`：那会把 box-shadow 一起裁掉。 */
-.tt-shell.has-signals .tt-hide {
+/*
+ * T10：光晕必须**跟手**。
+ *
+ * 旧实现把 pulse 挂在 `.tt-hide` 上——那是负责"贴边收起"的位移层，球被拖走/收起时
+ * 环还留在原地（用户看到的是"环不跟手"）。现在环是 `.tt-breathe` 里的一个绝对定位
+ * 子元素：父层怎么动、怎么缩，它都跟着，自己只负责画 ring。
+ *
+ * 两条不能漏的约束：
+ * - `border-radius: 50%`：box-shadow 铺在边框盒上，方形盒子会画出方环；
+ * - `.tt-breathe` 必须 `position: relative`，否则环会相对更外层定位。
+ */
+.tt-breathe {
+  position: relative;
+}
+
+.tt-glow {
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
+  pointer-events: none;
+}
+
+.tt-shell.has-signals .tt-glow {
   animation: tt-signal-pulse 1.8s var(--tt-ease-soft) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tt-shell.has-signals .tt-hide {
+  .tt-shell.has-signals .tt-glow {
     animation: none;
     outline: 2px dashed var(--rf-focus-ring);
     outline-offset: 4px;

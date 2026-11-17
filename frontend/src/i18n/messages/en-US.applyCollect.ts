@@ -29,6 +29,9 @@ const applyCollect = {
   "applyCollect.field.perTaskLimit": "Batch limit",
   "applyCollect.field.intervalSeconds": "Job interval (seconds)",
   "applyCollect.field.jitterSeconds": "Random jitter (seconds)",
+  "applyCollect.rhythm.summary": "{interval}s interval · {jitter}s jitter · roughly {minutes} min",
+  "applyCollect.rhythm.adjust": "Adjust",
+  "applyCollect.rhythm.collapse": "Collapse",
   "applyCollect.field.saveSamples":
     "Save the raw site responses from this run (for debugging parsing issues)",
   "applyCollect.hint.saveSamples":

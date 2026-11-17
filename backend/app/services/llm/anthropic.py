@@ -54,11 +54,13 @@ from .anthropic_messages import (
     uses_adaptive_thinking as uses_adaptive_thinking,
 )
 from .base import (
+    NETWORK_ERRORS,
     BaseLLMProvider,
     LLMDelta,
     LLMError,
     build_request_timeout,
     log_llm_failure,
+    timeout_error,
 )
 from .client_pool import get_shared_client
 from .openai_compat import http_error_message, validated_base_url
@@ -216,10 +218,10 @@ class AnthropicProvider(BaseLLMProvider):
                     raise self._translate_deadline_expiry(exc) from exc
                 except httpx.TimeoutException as exc:
                     log_llm_failure("timeout", type(exc).__name__)
-                    raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
-                except httpx.RequestError as exc:
-                    log_llm_failure("disconnect", type(exc).__name__)
-                    raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
+                    raise timeout_error() from exc
+                except NETWORK_ERRORS as exc:
+                    # T02：代理/直连、socks、证书、超时四类分开说（net_path 随错误下发）。
+                    raise self._network_error(exc) from exc
                 try:
                     data = json.loads(body)
                 except (ValueError, UnicodeError) as exc:
@@ -337,10 +339,10 @@ class AnthropicProvider(BaseLLMProvider):
                 except httpx.TimeoutException as exc:
                     # 流中途（已可能产出 delta）不重试：安全点规则（§2.4-2），只做文案转换。
                     log_llm_failure("timeout", type(exc).__name__)
-                    raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
-                except httpx.RequestError as exc:
-                    log_llm_failure("disconnect", type(exc).__name__)
-                    raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
+                    raise timeout_error() from exc
+                except NETWORK_ERRORS as exc:
+                    # T02：代理/直连、socks、证书、超时四类分开说（net_path 随错误下发）。
+                    raise self._network_error(exc) from exc
         except OperationCancelled:
             finish_reason = self._cancelled_finish_reason()
             raise
@@ -494,7 +496,8 @@ class AnthropicProvider(BaseLLMProvider):
 
     def _client(self) -> httpx.AsyncClient:
         # 连接池共享（AI 提速）：与 OpenAI 兼容层同一份池；超时按请求在 stream() 处传入。
-        return get_shared_client(transport=self._transport)
+        # T02：端点一起传下去，回环地址强制直连（本地模型/自建网关）。
+        return get_shared_client(transport=self._transport, url=self._net_target())
 
     def _timeout(self) -> httpx.Timeout:
         # 与 openai_compat._timeout 同一契约（RF-14 §2.1.c）：分项 read 的"下限保护 +
@@ -683,7 +686,9 @@ class AnthropicProvider(BaseLLMProvider):
                 )
             # 其它情况最常见的 400 是模型名或参数问题，保留更通用的提示。
             return LLMError("请求格式错误：请检查模型名称、max_tokens 与思考预算设置（HTTP 400）")
-        return LLMError(f"{http_error_message(status)}（HTTP {status}）")
+        return LLMError(
+            f"{http_error_message(status, response.headers.get('location'))}（HTTP {status}）"
+        )
 
 
 __all__ = ["AnthropicProvider"]

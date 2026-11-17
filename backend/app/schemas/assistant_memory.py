@@ -68,9 +68,21 @@ class AssistantMemoryUpdate(BaseModel):
 
 
 class AssistantMemorySettings(BaseModel):
-    """自动抽取开关（#31A）。默认关：31C 可见可改之前不自动写入。"""
+    """记忆的两个设置项：自动抽取（默认关）与注入总开关（T23，默认开）。"""
 
     auto_extract: bool = False
+    inject: bool = True
+
+
+class AssistantMemorySettingsUpdate(BaseModel):
+    """PUT /settings 的请求体：只改显式给出的项，未给的一项保持原值。
+
+    两个开关在同一张卡上，各自只送自己那一项——把没动的那项一并回写会顺手把用户
+    刚改的设置顶回去。
+    """
+
+    auto_extract: bool | None = None
+    inject: bool | None = None
 
 
 __all__ = [
@@ -78,5 +90,6 @@ __all__ = [
     "AssistantMemoryEventOut",
     "AssistantMemoryOut",
     "AssistantMemorySettings",
+    "AssistantMemorySettingsUpdate",
     "AssistantMemoryUpdate",
 ]

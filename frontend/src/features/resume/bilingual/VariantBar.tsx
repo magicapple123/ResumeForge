@@ -6,13 +6,14 @@
  * 摘要（`VariantOut` 不含排版字段）；排版详情由 `VariantLayoutSection` 在选中版本后
  * 用 `export-input` 读取，这里的 Segmented 只负责**选哪个语言版本**。
  *
- * 缺版本时不再另起一个按钮：直接把它作为 Segmented 的第三项「+ 未创建」——一眼看出
- * "这个语言还没做"，点它就开始创建。只读模式下这一项禁用（版本仍可查看，不能再创建）。
+ * 2026-11（T19）：切换项**只列已有版本**。曾经把一个「+ 未创建」塞成 Segmented 的第三项，
+ * 于是"还没做的语言"和"已有的版本"长得一样，选项数也不等于版本数。现在缺版时在切换器
+ * 旁边给一颗**虚线按钮**（`+ 英文版` / `+ 中文版`），它是动作、不是选择。
  *
- * 创建入口在"创建后自动翻译"那条流程里要跑几十秒：`busy` 期间该项禁用、文案换成
+ * 创建入口在"创建后自动翻译"那条流程里要跑几十秒：`busy` 期间按钮禁用、文案换成
  * `busyLabel`（进度提示由宿主通过 i18n 传入，本组件不写死文案）。
  */
-import { Segmented, Space, Typography } from "antd";
+import { Button, Segmented, Space, Typography } from "antd";
 import { bt } from "./i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { LanguageVariant } from "./types";
@@ -22,9 +23,9 @@ interface Props {
   /** 当前语言（缺版本时为空串）。 */
   current: string;
   onSwitch: (language: "zh-CN" | "en-US") => void;
-  /** 当前语言还没有版本时提供创建入口；不传 = 不渲染「+ 未创建」这一项。 */
+  /** 当前语言还没有版本时提供创建入口；不传 = 不渲染虚线按钮。 */
   onCreate?: (language: "zh-CN" | "en-US") => void;
-  /** 正在创建/翻译：创建项禁用，文案换成 busyLabel。 */
+  /** 正在创建/翻译：创建按钮禁用，文案换成 busyLabel。 */
   busy?: boolean;
   /** busy 期间的文案（宿主按阶段给"正在创建"/"正在翻译…"）。 */
   busyLabel?: string;
@@ -32,8 +33,10 @@ interface Props {
   disabled?: boolean;
 }
 
-/** Segmented 里"创建"那一项的取值：不与真实语言码混在一起。 */
-const CREATE_VALUE = "create";
+/** 语言码 → 界面名。表在渲染处按需查（`t()` 不能在模块作用域求值）。 */
+function languageLabel(language: "zh-CN" | "en-US"): string {
+  return language === "en-US" ? bt("bilingual.variant.en") : bt("bilingual.variant.zh");
+}
 
 export default function VariantBar({
   variants,
@@ -50,19 +53,10 @@ export default function VariantBar({
   const missing: "zh-CN" | "en-US" | null = !zh ? "zh-CN" : !en ? "en-US" : null;
   const currentVariant = variants.find((item) => item.language === current) ?? null;
 
-  const options: { value: string; label: string; disabled?: boolean }[] = [
-    { value: "zh-CN", label: bt("bilingual.variant.zh") },
-    { value: "en-US", label: bt("bilingual.variant.en") },
-  ];
-  if (missing && onCreate) {
-    options.push({
-      value: CREATE_VALUE,
-      label: busy
-        ? (busyLabel ?? bt("bilingual.variant.creating"))
-        : bt("bilingual.variant.createOption"),
-      disabled: busy || disabled,
-    });
-  }
+  // 只列**真实存在**的版本：选项数 = 版本数，不再有"第三项占位"。
+  const options = (["zh-CN", "en-US"] as const)
+    .filter((language) => (language === "zh-CN" ? Boolean(zh) : Boolean(en)))
+    .map((language) => ({ value: language, label: languageLabel(language) }));
 
   return (
     <div className="variant-bar" data-variant-bar="1">
@@ -70,18 +64,29 @@ export default function VariantBar({
         <Typography.Text type="secondary" className="variant-bar__hint">
           {bt("bilingual.variant.switcher")}
         </Typography.Text>
-        <Segmented
-          value={current}
-          aria-label={bt("bilingual.variant.switcher")}
-          options={options}
-          onChange={(value) => {
-            if (value === CREATE_VALUE) {
-              if (!busy && !disabled && missing) onCreate?.(missing);
-              return;
-            }
-            onSwitch(value === "en-US" ? "en-US" : "zh-CN");
-          }}
-        />
+        {/* 一个版本都没有时不出切换器：空的 Segmented 是个点不动的空盒子。 */}
+        {options.length > 0 ? (
+          <Segmented
+            value={current}
+            aria-label={bt("bilingual.variant.switcher")}
+            options={options}
+            onChange={(value) => onSwitch(value === "en-US" ? "en-US" : "zh-CN")}
+          />
+        ) : null}
+        {missing && onCreate ? (
+          <Button
+            size="small"
+            type="dashed"
+            disabled={busy || disabled || undefined}
+            onClick={() => {
+              if (!busy && !disabled && missing) onCreate(missing);
+            }}
+          >
+            {busy
+              ? (busyLabel ?? bt("bilingual.variant.creating"))
+              : bt("bilingual.variant.createOption", { language: languageLabel(missing) })}
+          </Button>
+        ) : null}
         {/* 纯文本版本名已删：它和 Segmented 的选项同名，读起来像两套控件。
             改成一句"正在看哪一份"，版本名来自服务端（可能是用户改过的名字）。 */}
         {currentVariant ? (

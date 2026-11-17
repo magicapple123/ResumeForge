@@ -16,19 +16,14 @@
  * 「测试是否生效」按钮：把当前选中的项发到后端，在真实站点页面上逐项校验
  * （必要时会导航到筛选栏页读"这个账号可见"的清单），结果逐项展示。
  */
-import {
-  ExperimentOutlined,
-  InfoCircleOutlined,
-  ReloadOutlined,
-  WarningFilled,
-} from "@ant-design/icons";
+import { ExperimentOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { SelectProps } from "antd";
 import {
   Alert,
   App,
   Button,
+  Dropdown,
   Form,
-  Popover,
   Select,
   Space,
   Spin,
@@ -48,7 +43,10 @@ import { t, type MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import HintDetail from "../../components/common/HintDetail";
 
-/** 来源标签：颜色 + 文案 key。文案要说清"这份清单的可信度"，不能只说一个英文枚举值。 */
+/** 来源标签：颜色 + 文案 key。文案要说清"这份清单的可信度"，不能只说一个英文枚举值。
+ *
+ * 2026-11-17：四个来源合并成**一个**状态徽标（原来并排多个 `Tag` + 一条琥珀提示条，
+ * 既重复又抢眼）。颜色只有三档：真实读到 = 绿、通用/快照 = 灰、读不到 = 红。 */
 const SOURCE_TAG: Record<
   CollectFilterSource,
   { color: string; textKey: MessageKey; hintKey: MessageKey }
@@ -59,18 +57,18 @@ const SOURCE_TAG: Record<
     hintKey: "collectFilters.source.session.hint",
   },
   public: {
-    color: "blue",
+    color: "default",
     textKey: "collectFilters.source.public.text",
     hintKey: "collectFilters.source.public.hint",
   },
   snapshot: {
-    color: "orange",
+    color: "default",
     textKey: "collectFilters.source.snapshot.text",
     hintKey: "collectFilters.source.snapshot.hint",
   },
   unavailable: {
-    color: "default",
-    textKey: "collectFilters.source.unavailable.text",
+    color: "error",
+    textKey: "collectFilters.status.failed",
     hintKey: "collectFilters.source.unavailable.hint",
   },
 };
@@ -204,9 +202,25 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
       }
     }
   }, [hiddenKeys, form]);
-  // 来源**按值去重**：七个分组通常来自同一处，逐个渲染就会并排出现七个一模一样的标签，
-  // 那不是在说明来源，只是在制造噪声。混了来源时才逐条列出。
+  // 来源**按值去重**后只报一个状态：混了来源时按"最保守"的那个说——一组没读到时
+  // 不能显示"已读取真实选项"，否则用户会以为整份清单都可信。
   const sources = useMemo(() => [...new Set(groups.map((group) => group.source))], [groups]);
+  const statusSource: CollectFilterSource = sources.includes("unavailable")
+    ? "unavailable"
+    : data?.session_read
+      ? "session"
+      : sources.includes("snapshot")
+        ? "snapshot"
+        : "public";
+  const statusMeta = SOURCE_TAG[statusSource];
+  // 一段说明按整句拼：每条一个语言包 key（英文语序各自成立），`\n` 由 HintDetail 分段。
+  const introDetail = [
+    t("collectFilters.intro"),
+    t("collectFilters.intro.rules"),
+    t("collectFilters.intro.breadth"),
+    t("collectFilters.launch.title"),
+    t("collectFilters.launch.body"),
+  ].join("\n");
 
   // 「测试是否生效」：把当前表单里选中的项发到后端，在真实站点页面上逐项校验。
   const runTest = useCallback(async () => {
@@ -234,26 +248,29 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
   }, [getFilters, message, testing]);
 
   if (failed && !data) {
+    // 这一态不参与"段间合并"：它是整块读不到时的独立提示，需要自己的一层外观
+    // （`.is-standalone` 在 applyCollectForm.css 里补回）。
     return (
-      <Alert
-        type="warning"
-        showIcon
-        title={t("collectFilters.unread.title")}
-        description={t("collectFilters.unread.body")}
-        action={
-          <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()}>
-            {t("collectFilters.action.reload")}
-          </Button>
-        }
-        style={{ marginBottom: 12 }}
-      />
+      <div className="apply-collect-site-filters is-standalone">
+        <Alert
+          type="warning"
+          showIcon
+          title={t("collectFilters.unread.title")}
+          description={t("collectFilters.unread.body")}
+          action={
+            <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()}>
+              {t("collectFilters.action.reload")}
+            </Button>
+          }
+        />
+      </div>
     );
   }
   if (loading && groups.length === 0) {
     // 清单还在读取：渲染一个占位而不是整个消失——用户进入采集页签时若这块是空的，
     // 会误以为"没有站点筛选功能"（实测反馈）。
     return (
-      <div className="apply-collect-site-filters">
+      <div className="apply-collect-site-filters is-standalone">
         {/* 结构与加载完成后的那一份保持一致（head > title > Text）：
             否则占位树与正式树的首个子节点类型不同，React 会整块重建，
             `findByText(title)` 拿到的是已被替换掉的旧节点（用例会报 detached）。 */}
@@ -271,13 +288,11 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
   }
   if (groups.length === 0) return null;
 
-  const sessionRead = data?.session_read ?? false;
-
   return (
     <div className="apply-collect-site-filters">
-      {/* 头部三块：身份（标题 + 来源标签 + 已选数）、右侧两个动作。
-          「已选 N 项」是这一块唯一的进度感来源——七个下拉全是「不限」时，
-          用户看不出自己到底设了几个条件。 */}
+      {/* 头部只剩「身份」与「动作」两栏。三颗按钮（重新读取 / 测试是否生效 / 说明）
+          收成「检查」下拉 + `ⓘ`：这两件事都是"核查清单"，低频且互斥。
+          「已选 N 项」仍是这一块唯一的进度感来源。 */}
       <div className="apply-collect-site-head">
         <Space size={8} wrap className="apply-collect-site-title">
           <Typography.Text strong>{t("collectFilters.section.title")}</Typography.Text>
@@ -286,82 +301,52 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
               {t("applyCollect.filters.selected", { count: selectedCount })}
             </span>
           )}
-          {sources.map((source) => {
-            const meta = SOURCE_TAG[source] ?? SOURCE_TAG.unavailable;
-            return (
-              <Tooltip key={`tag-${source}`} title={t(meta.hintKey)}>
-                <Tag color={meta.color} style={{ marginInlineEnd: 0 }}>
-                  {t(meta.textKey)}
-                </Tag>
-              </Tooltip>
-            );
-          })}
+          <Tooltip title={t(statusMeta.hintKey)}>
+            <Tag color={statusMeta.color} style={{ marginInlineEnd: 0 }}>
+              {t(statusMeta.textKey)}
+            </Tag>
+          </Tooltip>
+          {/* 两段常驻说明（哪些单选/多选、选多了会怎样、清单从哪来）收进 `ⓘ`：
+              它们读一遍就够，常驻只会把七个下拉推到首屏之外。 */}
+          <HintDetail detail={introDetail} label={t("collectFilters.intro.hintAria")} />
         </Space>
         <Space size={4} wrap={false}>
-          <Button
-            size="small"
-            type="link"
-            icon={<ReloadOutlined />}
-            loading={loading}
-            onClick={() => void load()}
+          {(loading || testing) && <Spin size="small" />}
+          <Dropdown
+            trigger={["click"]}
+            menu={{
+              items: [
+                {
+                  key: "reload",
+                  icon: <ReloadOutlined />,
+                  label: t("collectFilters.action.reload"),
+                },
+                {
+                  key: "test",
+                  icon: <ExperimentOutlined />,
+                  label: t("collectFilters.action.test"),
+                },
+              ],
+              onClick: ({ key }) => {
+                if (key === "reload") void load();
+                else void runTest();
+              },
+            }}
           >
-            {t("collectFilters.action.reload")}
-          </Button>
+            {/* aria-label 与可见文字一致：antd 会给两字中文按钮插空格（「检 查」），
+                显式命名让读屏与测试都拿到稳定的一串。 */}
+            <Button size="small" aria-label={t("collectFilters.action.check")}>
+              {t("collectFilters.action.check")}
+            </Button>
+          </Dropdown>
           {/* I-17：46 字的"会临时导航到筛选栏、测试完不影响采集"原本挂在这颗按钮的
               tooltip 上——用户点之前看不到，而那正是决定"敢不敢点"的一句。改成 `ⓘ`。 */}
-          <Button
-            size="small"
-            type="link"
-            icon={<ExperimentOutlined />}
-            loading={testing}
-            onClick={() => void runTest()}
-          >
-            {t("collectFilters.action.test")}
-          </Button>
           <HintDetail
             detail={t("collectFilters.test.hint")}
             label={t("collectFilters.test.hintAria")}
           />
         </Space>
       </div>
-
-      <>
-        <div className="apply-collect-site-intro">
-          {/* F05：整块只留一个 info 图标。第二行是它的缩进续行（不再重复图标，否则读起来像
-              「①①」）；「选得越多越杂」是取舍提醒而不是错误，降级成同行灰字，不再单独占一行。 */}
-          <Typography.Text type="secondary">
-            <InfoCircleOutlined /> {t("collectFilters.intro")}
-          </Typography.Text>
-          <div className="apply-collect-site-intro-rules">
-            <Typography.Text type="secondary">{t("collectFilters.intro.rules")}</Typography.Text>
-            <span>{t("collectFilters.intro.breadth")}</span>
-          </div>
-        </div>
-
-        {!sessionRead && (
-          // 启动提示：整块 Alert（标题 + 两段正文 + 图标，约 70px）压成一行内联提示。
-          // 标题仍是页面上的可见文本（用例也按它查），正文进 Popover——它是"为什么"，
-          // 首次读一次就够，不必常驻占掉首屏。
-          <div className="apply-collect-inline-note is-warn">
-            <WarningFilled />
-            <span>{t("collectFilters.launch.title")}</span>
-            <Popover
-              trigger="click"
-              placement="bottomLeft"
-              title={t("collectFilters.launch.title")}
-              content={
-                <div className="apply-collect-site-help">{t("collectFilters.launch.body")}</div>
-              }
-            >
-              <Button type="link" size="small">
-                {t("applyCollect.flow.instructions")}
-              </Button>
-            </Popover>
-          </div>
-        )}
-      </>
-
-      {testing && <Spin size="small" style={{ marginBottom: 8 }} />}
 
       {testResult && (
         <Alert

@@ -273,7 +273,7 @@ describe("AssistantComposer 对话技能 chip", () => {
 
     expect(screen.getByText(INTERVIEW_SKILL)).toBeInTheDocument();
     expect(screen.getByText(RESUME_SKILL)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "停用技能「面试官追问」" }));
+    fireEvent.click(screen.getByRole("button", { name: "从本条移除技能「面试官追问」" }));
 
     expect(onToggleSkill).toHaveBeenCalledTimes(1);
     expect(onToggleSkill.mock.calls[0][0].id).toBe(1);
@@ -350,7 +350,7 @@ describe("AssistantComposer 对话技能 chip", () => {
     const chip = screen.getByText(INTERVIEW_SKILL).closest(".assistant-skill-chip");
     expect(chip).toHaveClass("is-truncated");
     fireEvent.mouseEnter(screen.getByText(INTERVIEW_SKILL));
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("提示词超出本对话预算");
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("提示词超出本条消息的预算");
   });
 
   it("浮窗（compact）里也渲染技能 chip 行", () => {

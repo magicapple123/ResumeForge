@@ -1,0 +1,65 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* ===== 投递设置里的话术库与屏蔽清单（#14D / #14E）=====
+ * 这两个面板都在 620px 宽的设置弹窗里，可用宽度比采集页窄得多：
+ * - 话术库默认只读，名称与两行正文同屏可见，操作收在行尾；
+ * - 屏蔽清单默认标签模式（一屏看全已填的项），需要整列粘贴时切回 textarea。
+ * 行容器 `.apply-template-row` 的外观仍在 `styles/apply.css`（那份是全局分片），
+ * 这里只补这一批新增的排版。 */
+
+/* 只读摘要：名称吃剩余宽度并省略，计数器与两个动作留在行尾。 */
+.apply-template-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.apply-template-summary-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apply-template-uses {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+/* 正文两行截断：模板正文常见三四行，全展开会把"一屏能看几条"压到 2 条以下。
+ * `-webkit-line-clamp` 在 Chromium / Firefox 都能用；不用 `max-height` 是因为它按
+ * 行高硬算，字号被用户调大时会切出半行。 */
+.apply-template-body {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 头部：说明在左、模式切换在右（与「批量编辑」同一条基线）。 */
+.apply-blocklist-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.apply-blocklist-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 标签区：空的时候也占一行高，否则从"没有标签"到"加了第一个"会整体跳一下。 */
+.apply-blocklist-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 24px;
+}
+
+/* 回车添加的输入框按内容宽度收住，不拉满整个弹窗。 */
+.apply-blocklist-add {
+  max-width: 320px;
+}

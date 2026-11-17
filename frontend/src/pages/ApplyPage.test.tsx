@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyQueueItem, ApplyTask, ApplyTaskDetail, CollectConfigOut } from "../types";
+import { t } from "../i18n";
 import ApplyPage from "./ApplyPage";
 import CollectPanel from "../features/apply/CollectPanel";
 
@@ -380,6 +381,9 @@ describe("CollectPanel", () => {
         </AntdApp>
       </MemoryRouter>,
     );
+
+    // 节奏区默认折叠：先「调整」展开，才看得到保存站点原文的勾选框与说明。
+    fireEvent.click(await screen.findByRole("button", { name: t("applyCollect.rhythm.adjust") }));
 
     // 说明文案必须存在：用户得知道"存什么、存哪、会不会外传"。
     expect(await screen.findByText(/只存到本机 backend\/data\/captures\//)).toBeInTheDocument();

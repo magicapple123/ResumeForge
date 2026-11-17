@@ -18,6 +18,7 @@
 import { t } from "../i18n";
 import type { ResumeFontScale, ResumeFontScaleOption, ResumeLayout } from "../types";
 import type { ResumeFormatConfig } from "../types/resumeFormat";
+import { warnOnce } from "./warnOnce";
 
 /** `format_config` 里字号系数的键，与后端 `FORMAT_FIELDS` 一致。 */
 export const FONT_SCALE_ADJUST_KEY = "font_scale_adjust";
@@ -86,7 +87,9 @@ export function fontTiers(options: ResumeFontScaleOption[] = []): FontTier[] {
   // 退回内置三档只为"别崩"，但**不能静默**——`console.warn` 把它顶到台面上。
   // 注意：目录尚未加载时这里是空数组（正常态），不告警，否则每次首屏渲染都会刷屏。
   if (options.length > 0) {
-    console.warn(
+    // T12：这段在每次选模板/每次重渲染都会走到，只留第一次（见 `warnOnce`）。
+    warnOnce(
+      "resumeFontScale:missing-base-px",
       "[resumeFontScale] 后端下发的字号档位缺少可用的 base_px，已退回内置默认值；" +
         "请确认 GET /api/resumes/templates 的 font_scales 是否包含 base_px。",
     );

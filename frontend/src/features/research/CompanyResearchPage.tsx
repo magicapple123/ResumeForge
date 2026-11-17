@@ -9,9 +9,9 @@
  * 深度开关默认关闭：搜索按查询词条数计费，深度档最多约 20 次工具调用。默认态在界面上
  * **写出来**（`deep.defaultOff`），不能只靠开关的视觉状态。
  */
-import { Alert, Button, Card, Input, Space, Switch, Typography } from "antd";
+import { Alert, App, Button, Card, Input, Space, Switch, Typography } from "antd";
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import {
   latestCompanyResearch,
   researchCompany,
@@ -24,6 +24,7 @@ import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import ResearchBriefPanel from "./ResearchBrief";
 import ResearchCardList from "./ResearchCardList";
+import ResearchHistoryDrawer from "./ResearchHistoryDrawer";
 import "./research.css";
 
 /** 「最近一次调研」的时间说法：只做到"天"，精确到分钟对这个场景没有意义。 */
@@ -38,9 +39,12 @@ function relativeDays(iso: string | null): string {
 }
 
 export default function CompanyResearchPage() {
+  const { message } = App.useApp();
   useLocale();
   const [searchParams] = useSearchParams();
   const [company, setCompany] = useState("");
+  // T17：空公司名是**输入校验**，不是请求失败——不该出现红框面板与「重试」。
+  const [nameInvalid, setNameInvalid] = useState(false);
   const [role, setRole] = useState("");
   const [jd, setJd] = useState("");
   const [deep, setDeep] = useState(false);
@@ -48,6 +52,9 @@ export default function CompanyResearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [latest, setLatest] = useState<ResearchEntrySummary | null>(null);
+  // 历史条数独立于「最近一次调研」：知识条目可能被删过，历史仍在。
+  const [historyCount, setHistoryCount] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
   // I-22：`?company=&role=&job_id=` 只用于**预填**，不自动提交——一打开页面就搜一次
   // 等于替用户花搜索费，而用户可能只是想看看这家公司上次调研过什么。
   const [jobId, setJobId] = useState<number | undefined>(undefined);
@@ -56,28 +63,35 @@ export default function CompanyResearchPage() {
     const presetCompany = searchParams.get("company")?.trim() || "";
     const presetRole = searchParams.get("role")?.trim() || "";
     const presetJob = Number(searchParams.get("job_id") || 0);
+    /* eslint-disable react-hooks/set-state-in-effect -- URL 预填只在挂载时做一次：
+       延后一拍会让用户先看到空表单再跳成预填值，那一下闪烁比级联渲染更糟。 */
     if (presetCompany) setCompany(presetCompany);
     if (presetRole) setRole(presetRole);
     if (presetJob > 0) setJobId(presetJob);
+    // `?history=1`：岗位详情「查看全部」直接打开历史抽屉（仍然不自动提交调研）。
+    if (searchParams.get("history") === "1") setHistoryOpen(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
     // 只在进入页面时读一次：用户改完输入不该被 URL 里的旧值拉回去。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const name = company.trim();
-    if (!name) {
-      setLatest(null);
-      return;
-    }
+    // 不在这里 setState 清空：显示条件随 company 变空而失效（effect 内直接 setState 会级联渲染）。
+    if (!name) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       latestCompanyResearch(name)
         .then((payload) => {
-          if (!cancelled) setLatest(payload.entry);
+          if (cancelled) return;
+          setLatest(payload.entry);
+          setHistoryCount(payload.count ?? 0);
         })
         .catch(() => {
           // 读「最近一次调研」是增强项：失败就当没有，不打扰用户。
-          if (!cancelled) setLatest(null);
+          if (cancelled) return;
+          setLatest(null);
+          setHistoryCount(0);
         });
     }, 400);
     return () => {
@@ -89,9 +103,12 @@ export default function CompanyResearchPage() {
   const submit = async () => {
     const name = company.trim();
     if (!name) {
-      setError(t("companyResearch.error.companyRequired"));
+      // 轻提示 + 输入框自身标错：错误面板只留给真正的请求失败。
+      setNameInvalid(true);
+      message.warning(t("companyResearch.error.companyRequired"));
       return;
     }
+    setNameInvalid(false);
     setLoading(true);
     setError("");
     try {
@@ -156,13 +173,26 @@ export default function CompanyResearchPage() {
 
   return (
     <div className="rf-research-page">
-      <Card title={t("companyResearch.title")} className="rf-research-form">
+      <Card
+        title={t("companyResearch.title")}
+        className="rf-research-form"
+        extra={
+          // 右上角入口：不带公司名也开着，能翻到所有公司的历史。
+          <Button onClick={() => setHistoryOpen(true)} data-testid="research-history-open">
+            {t("companyResearch.history.open")}
+          </Button>
+        }
+      >
         <Typography.Paragraph type="secondary">{t("companyResearch.intro")}</Typography.Paragraph>
-        {latest ? (
+        {company.trim() && (latest || historyCount > 0) ? (
           <Typography.Paragraph type="secondary" data-testid="research-latest">
-            {t("companyResearch.latest.label", { when: relativeDays(latest.updated_at) })}
-            {" · "}
-            <Link to="/knowledge">{t("companyResearch.latest.view")}</Link>
+            {latest
+              ? t("companyResearch.latest.label", { when: relativeDays(latest.updated_at) })
+              : ""}
+            {latest ? " · " : ""}
+            <Button type="link" size="small" onClick={() => setHistoryOpen(true)}>
+              {t("companyResearch.history.viewAll")}
+            </Button>
           </Typography.Paragraph>
         ) : null}
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
@@ -170,10 +200,15 @@ export default function CompanyResearchPage() {
             <span>{t("companyResearch.field.company")}</span>
             <Input
               value={company}
-              onChange={(event) => setCompany(event.target.value)}
+              onChange={(event) => {
+                setCompany(event.target.value);
+                if (nameInvalid) setNameInvalid(false);
+              }}
               placeholder={t("companyResearch.field.companyPlaceholder")}
               aria-label={t("companyResearch.field.company")}
               data-testid="research-company"
+              status={nameInvalid ? "error" : undefined}
+              aria-invalid={nameInvalid || undefined}
               allowClear
             />
           </label>
@@ -268,6 +303,22 @@ export default function CompanyResearchPage() {
           <Typography.Text type="secondary">{t("companyResearch.brief.empty")}</Typography.Text>
         </Card>
       )}
+
+      <ResearchHistoryDrawer
+        open={historyOpen}
+        company={company.trim() || undefined}
+        jobId={jobId}
+        onClose={() => setHistoryOpen(false)}
+        // 「重新调研」只回填：清空上一次的结果，用户看过输入再自己按开始（避免又付一次搜索费）。
+        onRerun={(run) => {
+          setCompany(run.company_raw || run.company);
+          setRole(run.role);
+          setJd(run.jd_excerpt);
+          setJobId(run.job_id ?? undefined);
+          setResult(null);
+          setError("");
+        }}
+      />
     </div>
   );
 }

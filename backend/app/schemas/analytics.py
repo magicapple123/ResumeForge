@@ -9,6 +9,9 @@
 字段全部带默认值：空库时每项都是明确的零/空列表，**不是 None**——前端据此渲染空态，
 不需要到处判空。新增字段一律与 ``frontend/src/types/analytics.ts`` 逐字对应（snake_case）。
 """
+
+from datetime import UTC, datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -228,6 +231,10 @@ class WeeklyGoalIn(BaseModel):
 
 class DashboardOut(BaseModel):
     """看板整体响应：概览指标 + 四个主题区块所需的分组数据。"""
+
+    #: 这次聚合的时间（T13）。页头「更新于 HH:mm · 刷新」直接用它，
+    #: 不再让前端拿本地 `Date.now()` 假装是服务端的取数时间。
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # ===== 概览 =====
     total_applications: int = 0

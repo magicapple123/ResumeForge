@@ -3,12 +3,13 @@
 
 import { UpOutlined } from "@ant-design/icons";
 import { Alert, Button, Checkbox, Tag, Typography } from "antd";
-import { memo } from "react";
+import { Fragment, memo } from "react";
 import type { RefObject } from "react";
 import type {
   AssistantConversationDetail,
   AssistantMessage,
   AssistantMessageReferences,
+  AssistantMessageSkill,
   AssistantReferenceKind,
   AssistantSource,
   AssistantSourceNumber,
@@ -18,6 +19,9 @@ import { formatDateTime } from "../../../utils/format";
 import { RowContextMenu } from "../../../components/common/RowActions";
 import PageSkeleton from "../../../components/common/PageSkeleton";
 import AssistantEmptyState from "./AssistantEmptyState";
+import CompactionBoundary from "./CompactionBoundary";
+import LegacySkillsNotice from "./LegacySkillsNotice";
+import MemoryReferenceNote from "./MemoryReferenceNote";
 import MessageActionsMore from "./MessageActionsMore";
 import MessageCollapse from "./MessageCollapse";
 import MessageReferences from "./MessageReferences";
@@ -51,6 +55,8 @@ interface Props {
   pendingUserAttachments: PendingAttachment[];
   /** 正在发送的那条用户消息引用了哪个岗位/简历（发送后输入区已清空，靠这份快照显示）。 */
   pendingUserRefs?: AssistantMessageReferences | null;
+  /** 正在发送的那条用户消息勾选了哪些技能（T24，发送后输入区已清空）。 */
+  pendingUserSkills?: AssistantMessageSkill[];
   streamingText: string;
   /** 正在流式产出的思考内容（开启思考强度时才有）。 */
   streamingReasoning: string;
@@ -88,6 +94,28 @@ interface Props {
   onMessagesScroll?: () => void;
   /** 点击气泡里的岗位/简历引用片（F36）；缺省不可点。 */
   onOpenReference?: (kind: AssistantReferenceKind, id: number) => void;
+}
+
+/**
+ * 一条用户消息用到的技能（T24，消息级）。
+ *
+ * 落库消息读 `context.skills`，乐观气泡读发送瞬间的快照——两处同一份渲染，
+ * 前缀都写「使用」，不会一边「使用」一边「本对话启用」。
+ */
+function MessageSkills({ skills }: { skills: AssistantMessageSkill[] }) {
+  if (skills.length === 0) return null;
+  return (
+    <div className="assistant-message-skills assistant-message-refs">
+      <span className="assistant-message-refs-label">
+        {t("conversationSkills.message.usedLabel")}
+      </span>
+      {skills.map((skill) => (
+        <Tag key={skill.id} className="assistant-ref-chip">
+          <span className="assistant-ref-chip-text">{skill.name}</span>
+        </Tag>
+      ))}
+    </div>
+  );
 }
 
 interface BubbleProps {
@@ -193,19 +221,12 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
         <MessageAttachments attachments={item.attachments} />
         <MessageSources sources={item.context.sources ?? []} />
         <MessageToolCalls calls={item.context.tool_calls ?? []} />
-        {/* T14 可追溯：这一轮实际注入了哪些技能（只记名字，不含提示词正文）。
-            F36：与「本轮引用」同款 chip；技能属于整段对话，所以前缀写「本对话启用」。 */}
-        {item.context.skills && item.context.skills.length > 0 ? (
-          <div className="assistant-message-skills assistant-message-refs">
-            <span className="assistant-message-refs-label">
-              {t("conversationSkills.message.enabledLabel")}
-            </span>
-            {item.context.skills.map((name) => (
-              <Tag key={name} className="assistant-ref-chip">
-                <span className="assistant-ref-chip-text">{name}</span>
-              </Tag>
-            ))}
-          </div>
+        {/* T24 可追溯：这条**用户消息**发送时用了哪些技能（消息级，只记名字）。
+            F36：与「本轮引用」同款 chip；前缀写「使用」——技能只作用于这一条消息。 */}
+        {item.role === "user" ? <MessageSkills skills={item.context.skills ?? []} /> : null}
+        {/* T23：这一轮注入过哪些记忆（一行小字，可展开快照）。 */}
+        {item.role === "assistant" ? (
+          <MemoryReferenceNote memories={item.context.memories} />
         ) : null}
         {item.status === "error" && item.error && <Alert type="error" title={item.error} />}
         {/* #29B 保存结果：一行「已存：标题」链接，不是操作行。 */}
@@ -229,6 +250,7 @@ export default function AssistantMessageList({
   pendingSentAt,
   pendingUserAttachments,
   pendingUserRefs = null,
+  pendingUserSkills = [],
   streamingText,
   streamingReasoning,
   streamingSources,
@@ -266,6 +288,10 @@ export default function AssistantMessageList({
       .reverse()
       .find((message) => message.role === "assistant" && message.kind !== "proposal_result")?.id ??
     null;
+  // T25：压缩边界插在摘要覆盖到的最后一条消息下方；分页把它挤出已加载范围时退化到顶部。
+  const compaction = detail?.compaction ?? null;
+  const anchorId = compaction?.covered_until_message_id ?? null;
+  const anchorVisible = anchorId !== null && historyMessages.some((item) => item.id === anchorId);
 
   return (
     <div
@@ -274,6 +300,14 @@ export default function AssistantMessageList({
       ref={messagesScrollRef}
       onScroll={onMessagesScroll}
     >
+      {/* T24：旧会话的技能关联已不生效；给一次可关闭的说明（按会话记 localStorage）。 */}
+      {detail && (detail.legacy_skills?.length ?? 0) > 0 ? (
+        <LegacySkillsNotice
+          key={detail.id}
+          conversationId={detail.id}
+          skills={detail.legacy_skills ?? []}
+        />
+      ) : null}
       {showLoading ? (
         <PageSkeleton rows={6} card={false} />
       ) : historyMessages.length === 0 && !(sending && activeStream) ? (
@@ -306,10 +340,13 @@ export default function AssistantMessageList({
               )}
             </div>
           )}
+          {/* T25：锚点不在已加载范围（分页截断）时退化到列表顶部，说明更早的轮次已压缩。 */}
+          {compaction && !anchorVisible ? (
+            <CompactionBoundary conversationId={detail?.id ?? 0} compaction={compaction} degraded />
+          ) : null}
           {historyMessages.map((item) => {
             const bubble = (
               <AssistantMessageBubble
-                key={item.id}
                 item={item}
                 assistantLabel={resolvedAssistantLabel}
                 selected={selectedIds.has(item.id)}
@@ -322,6 +359,16 @@ export default function AssistantMessageList({
                 onOpenReference={onOpenReference}
               />
             );
+            // T25：摘要覆盖到的最后一条消息下方画边界（不是上方：边界之后的消息仍然在上下文里）。
+            const content =
+              compaction && anchorVisible && item.id === anchorId ? (
+                <>
+                  {bubble}
+                  <CompactionBoundary conversationId={detail?.id ?? 0} compaction={compaction} />
+                </>
+              ) : (
+                bubble
+              );
             // 多选时不挂右键菜单：那套操作（引用、复制）此时都用不上，右键还要和勾选抢交互。
             if (selecting) {
               return (
@@ -335,11 +382,11 @@ export default function AssistantMessageList({
                         : t("assistantUi.messageList.aria.selectAssistant")
                     }
                   />
-                  {bubble}
+                  {content}
                 </label>
               );
             }
-            return bubble;
+            return <Fragment key={item.id}>{content}</Fragment>;
           })}
         </>
       )}
@@ -353,6 +400,7 @@ export default function AssistantMessageList({
           </div>
           {/* F36 乐观气泡：发送后输入区已清空，引用的岗位/简历靠发送瞬间的快照显示。 */}
           <MessageReferences refs={pendingUserRefs ?? {}} onOpenReference={onOpenReference} />
+          <MessageSkills skills={pendingUserSkills} />
           <AssistantMessageContent content={pendingUserText} />
           <MessageAttachments attachments={pendingUserAttachments} />
         </article>

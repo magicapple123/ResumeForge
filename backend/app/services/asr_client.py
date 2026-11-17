@@ -30,6 +30,7 @@ import time
 import httpx
 
 from ..schemas.asr import AsrProtocol
+from . import net_proxy
 from .asr_deepseek import fixed_models as deepseek_fixed_models
 from .asr_deepseek import post_asr as post_deepseek_asr
 from .asr_errors import AsrError, raise_for_status, sanitize_upstream_text, upstream_detail
@@ -149,7 +150,13 @@ def _raise_for_status(response: httpx.Response) -> None:
 
 
 async def _post_openai_compatible(
-    *, base_url: str, api_key: str, model: str, content: bytes, content_type: str, language: str,
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    content: bytes,
+    content_type: str,
+    language: str,
     timeout: float,
 ) -> str:
     """whisper 式 ``multipart/form-data`` 转写（OpenAI / Groq / 硅基流动）。"""
@@ -174,7 +181,13 @@ async def _post_openai_compatible(
 
 
 async def _post_dashscope(
-    *, base_url: str, api_key: str, model: str, content: bytes, content_type: str, language: str,
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    content: bytes,
+    content_type: str,
+    language: str,
     timeout: float,
 ) -> str:
     """Qwen-ASR 式 ``chat/completions`` 转写（阿里云百炼）。"""
@@ -246,7 +259,10 @@ async def transcribe_audio(
                 "timeout", f"语音服务响应超时（{effective_timeout:g} 秒），请稍后重试"
             ) from exc
         except httpx.HTTPError as exc:
-            raise AsrError("network", "连不上语音服务，请检查网络与语音服务地址") from exc
+            raise AsrError(
+                "network",
+                "连不上语音服务，请检查网络与语音服务地址" + net_proxy.proxy_note(base_url),
+            ) from exc
     callback = _post_dashscope if protocol == "dashscope" else _post_openai_compatible
     try:
         return await callback(

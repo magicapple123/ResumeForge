@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 助手页的对话技能（T14）：chip 形态、单枚停用、草稿先勾技能随第一条消息建会话。
+ * 助手页的待发送技能（T24）：技能从「按对话启用」改成「只作用于下一条消息」。
  *
- * 从 AssistantPage.conversation.test.tsx 拆出（该文件已贴 500 行预算）：这里只放
- * "输入区技能行 ↔ 服务端"这一域，其余会话行为仍在 conversation 文件里。
- * vi.mock 按测试文件装配，mock 声明必须在本文件内逐字声明（先例：streaming 测试文件）。
+ * 三条性质：
+ * 1. 勾选**只改本地状态**（chip 立刻出现），不再 PUT 到会话；
+ * 2. 点 chip 上的 × 只移除本地选择，也不发请求；
+ * 3. 发送时随请求带 `skill_ids`，发送后输入区 chip 清空（下一轮不再自动生效）。
+ *
+ * 历史里的「使用 X」展示见 `components/AssistantMessageList.skills.test.tsx`。
  */
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,7 +23,7 @@ import { t } from "../i18n";
 // 中文断言文案走变量：ByText 中文字面量会推高 i18n 棘轮（只降不升）。
 const INTERVIEW_SKILL = "面试官追问";
 const RESUME_SKILL = "简历诊断";
-const UNUSED_SKILL = "暂时不用";
+const REMOVE_INTERVIEW = "从本条移除技能「面试官追问」";
 const EMPTY_GREETING = "你好，我是投投";
 
 const apiMocks = vi.hoisted(() => ({
@@ -58,27 +61,20 @@ vi.mock("../api/agentTasks", async (importOriginal) => ({
   listAgentTasks: agentTaskApiMocks.listAgentTasks,
 }));
 
-function conversationSkill(id: number, name: string) {
-  return { id, name, description: "" };
-}
-
-function skillsPayload(ids: number[], names: string[], used = 1_200) {
-  return {
-    skill_ids: ids,
-    skills: ids.map((id, index) => conversationSkill(id, names[index])),
-    budget: {
-      used_chars: used,
-      loaded_chars: used,
-      limit_chars: 12_000,
-      truncated_skill_ids: [],
-    },
-  };
-}
-
 function openFirstConversation() {
   return harnessOpenFirstConversation({
     getAssistantConversation: apiMocks.getAssistantConversation,
   });
+}
+
+/** 打开 `+` → 「技能」二级面板，点一个技能（本地勾选）。 */
+async function pickSkill(name: string) {
+  fireEvent.click(await screen.findByRole("button", { name: t("composerAddMenu.aria.trigger") }));
+  fireEvent.click(await screen.findByText(t("assistantComposer.skills.count", { count: 0 })));
+  const picker = await screen.findByRole("group", {
+    name: t("composerAddMenu.section.skills"),
+  });
+  fireEvent.click(within(picker).getByText(name));
 }
 
 beforeEach(() => {
@@ -96,10 +92,14 @@ beforeEach(() => {
   apiMocks.sendAssistantMessage.mockReset().mockResolvedValue(undefined);
   apiMocks.listJobs.mockReset().mockResolvedValue({ items: [], total: 0 });
   apiMocks.listResumes.mockReset().mockResolvedValue({ items: [], total: 0 });
-  skillApiMocks.listSkills.mockReset().mockResolvedValue([]);
-  conversationSkillApiMocks.getConversationSkills
+  skillApiMocks.listSkills
     .mockReset()
-    .mockResolvedValue(skillsPayload([], []));
+    .mockResolvedValue([makeSkill(1, INTERVIEW_SKILL, true), makeSkill(2, RESUME_SKILL, true)]);
+  conversationSkillApiMocks.getConversationSkills.mockReset().mockResolvedValue({
+    skill_ids: [],
+    skills: [],
+    budget: { used_chars: 0, loaded_chars: 0, limit_chars: 12_000, truncated_skill_ids: [] },
+  });
   conversationSkillApiMocks.setConversationSkills.mockReset();
   agentTaskApiMocks.listAgentTasks.mockReset().mockResolvedValue([]);
 });
@@ -110,86 +110,63 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-describe("对话技能 chip 行", () => {
-  it("只显示本对话启用的技能；每枚可单独停用，入口收在工具栏的 + 面板里", async () => {
-    skillApiMocks.listSkills.mockResolvedValue([
-      makeSkill(1, INTERVIEW_SKILL, true),
-      makeSkill(2, RESUME_SKILL, true),
-      // 技能库里有、但这个对话没启用的技能：不能出现在 chip 行里。
-      makeSkill(3, UNUSED_SKILL, false),
-    ]);
-    conversationSkillApiMocks.getConversationSkills.mockResolvedValue(
-      skillsPayload([1, 2], [INTERVIEW_SKILL, RESUME_SKILL]),
-    );
-
+describe("待发送技能（T24）", () => {
+  it("勾选只改本地 chip，不再 PUT 到会话", async () => {
     renderPage();
     await openFirstConversation();
+    await pickSkill(INTERVIEW_SKILL);
 
-    // 限定在 chip 文本元素里找：18C 的「视角」切换器有一个同名显示项（面试官追问），
-    // 页面级 getByText 会命中两处。这里要验的是"技能 chip 行只显示本对话启用的技能"。
+    expect(await screen.findByRole("button", { name: REMOVE_INTERVIEW })).toBeInTheDocument();
+    expect(conversationSkillApiMocks.setConversationSkills).not.toHaveBeenCalled();
+    // 预算是"按条"算的：没有服务端预算时显示 pending 文案，而不是本对话预算。
     expect(
-      await screen.findByText(INTERVIEW_SKILL, { selector: ".assistant-skill-chip-text" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(RESUME_SKILL, { selector: ".assistant-skill-chip-text" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(UNUSED_SKILL, { selector: ".assistant-skill-chip-text" })).toBeNull();
-    // 停用入口按技能名可寻址（读屏用户也能准确点掉某一枚）。
-    expect(screen.getByRole("button", { name: "停用技能「面试官追问」" })).toBeInTheDocument();
-    // R06-A：空态/追加入口不再是行末那枚「+ 技能」虚线按钮，而是工具栏最左的 `+`。
-    expect(
-      screen.getByRole("button", { name: t("composerAddMenu.aria.trigger") }),
+      screen.getByText(t("conversationSkills.menu.budgetPending", { count: 1 })),
     ).toBeInTheDocument();
   });
 
-  it("点 chip 上的 × 只停用当个：整体替换只提交剩下的技能", async () => {
-    conversationSkillApiMocks.getConversationSkills.mockResolvedValue(
-      skillsPayload([1, 2], [INTERVIEW_SKILL, RESUME_SKILL]),
-    );
-    conversationSkillApiMocks.setConversationSkills.mockResolvedValue(
-      skillsPayload([2], [RESUME_SKILL], 800),
-    );
-
+  it("点 chip 上的 × 只移除本地选择，也不发请求", async () => {
     renderPage();
     await openFirstConversation();
-    fireEvent.click(await screen.findByRole("button", { name: "停用技能「面试官追问」" }));
+    await pickSkill(INTERVIEW_SKILL);
+    fireEvent.click(await screen.findByRole("button", { name: REMOVE_INTERVIEW }));
 
-    await waitFor(() =>
-      expect(conversationSkillApiMocks.setConversationSkills).toHaveBeenCalledWith(1, [2], "page"),
-    );
+    expect(screen.queryByRole("button", { name: REMOVE_INTERVIEW })).toBeNull();
+    expect(conversationSkillApiMocks.setConversationSkills).not.toHaveBeenCalled();
   });
-});
 
-describe("空态先勾技能再发第一条消息", () => {
-  it("建会话请求带上暂存的 skill_ids，创建后按新会话重取", async () => {
-    skillApiMocks.listSkills.mockResolvedValue([makeSkill(1, INTERVIEW_SKILL, true)]);
-    renderPage("/assistant?new=1");
-    await screen.findByText(EMPTY_GREETING);
-
-    // 草稿态：`+` → 技能（二级面板），勾上第一个技能。
-    fireEvent.click(await screen.findByRole("button", { name: t("composerAddMenu.aria.trigger") }));
-    fireEvent.click(await screen.findByText(t("assistantComposer.skills.count", { count: 0 })));
-    const picker = await screen.findByRole("group", {
-      name: t("composerAddMenu.section.skills"),
-    });
-    fireEvent.click(within(picker).getByText(INTERVIEW_SKILL));
-    // 勾上后 chip 立即出现（同一份暂存状态）。
-    expect(
-      await screen.findByRole("button", { name: "停用技能「面试官追问」" }),
-    ).toBeInTheDocument();
+  it("发送时带 skill_ids，发送后 chip 清空（技能只作用于下一条消息）", async () => {
+    renderPage();
+    await openFirstConversation();
+    await pickSkill(INTERVIEW_SKILL);
 
     fireEvent.change(screen.getByPlaceholderText(/输入求职、岗位/), {
       target: { value: "开始面试" },
     });
     fireEvent.click(screen.getByRole("button", { name: /发送/ }));
 
-    // 草稿里的选择随第一次建会话一起提交（服务端同事务写入）。
+    await waitFor(() => expect(apiMocks.sendAssistantMessage).toHaveBeenCalled());
+    const payload = apiMocks.sendAssistantMessage.mock.calls[0][1];
+    expect(payload.skill_ids).toEqual([1]);
+    // 发送后输入区清空：下一轮不会自动带上同一批技能。
     await waitFor(() =>
-      expect(apiMocks.createAssistantConversation).toHaveBeenCalledWith("", { skillIds: [1] }),
+      expect(screen.queryByRole("button", { name: REMOVE_INTERVIEW })).toBeNull(),
     );
-    // 会话建好后技能行以服务端为准（GET 新会话的技能）。
+  });
+
+  it("草稿态不把技能塞进建会话请求（技能不再挂在会话上）", async () => {
+    renderPage("/assistant?new=1");
+    await screen.findByText(EMPTY_GREETING);
+    await pickSkill(INTERVIEW_SKILL);
+
+    fireEvent.change(screen.getByPlaceholderText(/输入求职、岗位/), {
+      target: { value: "开始面试" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /发送/ }));
+
     await waitFor(() =>
-      expect(conversationSkillApiMocks.getConversationSkills).toHaveBeenCalledWith(99, "page"),
+      expect(apiMocks.createAssistantConversation).toHaveBeenCalledWith("", { skillIds: [] }),
     );
+    const payload = apiMocks.sendAssistantMessage.mock.calls[0][1];
+    expect(payload.skill_ids).toEqual([1]);
   });
 });

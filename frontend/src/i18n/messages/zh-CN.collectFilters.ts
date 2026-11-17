@@ -12,12 +12,16 @@ const collectFilters = {
     "不影响采集：关键词与城市照常生效。点下面的「重新读取」可以再试一次。",
   "collectFilters.action.reload": "重新读取",
   "collectFilters.action.test": "测试是否生效",
+  "collectFilters.action.check": "检查",
   "collectFilters.section.title": "按招聘网站的条件筛",
   "collectFilters.section.loading": "正在读取站点的筛选条件…",
   "collectFilters.test.hint":
     "在真实招聘网站页面上逐项检查你选的条件现在能不能选到（会临时导航到筛选栏，测试完不影响采集）",
   // I-17：上面这句 46 字的说明从「测试」按钮的 tooltip 改成旁边的 `ⓘ`，这一条是它的无障碍名。
   "collectFilters.test.hintAria": "测试筛选条件说明",
+  // 两段常驻说明 + 「为什么值得启动浏览器」合并进同一个 `ⓘ`（HintDetail 按 `\n` 分段）：
+  // 它们都是"读一遍就够"的解释，常驻会把七个下拉挤出首屏。仍然每条一个 key——
+  // 拼成一整段在英文里语序会跟着变。
   "collectFilters.intro":
     "这些是招聘网站筛选栏里的条件，网站在搜索时就替你筛掉，比采回来再筛更准，也少翻很多页。选项清单读自站点本身，改版会自动跟着变。",
   "collectFilters.intro.rules":
@@ -26,6 +30,8 @@ const collectFilters = {
   "collectFilters.launch.title": "启动投递专用浏览器，读取你账号可见的完整选项",
   "collectFilters.launch.body":
     "个别选项因人而异（例如学生账号在「求职类型」里能看到「实习」），只有在你已登录的浏览器里才读得到。当前用的是全网通用清单，够用但不一定全。",
+  "collectFilters.intro.hintAria": "站点筛选说明",
+  "collectFilters.status.failed": "读取失败，可重试",
   "collectFilters.result.partial": "有 {count} 项条件没能生效",
   "collectFilters.result.all": "选中的条件全部能在站点上真实选到",
   "collectFilters.result.applied": "已生效",
@@ -35,7 +41,7 @@ const collectFilters = {
   "collectFilters.result.unlimited": "{label}——{detail}",
   "collectFilters.tag.any": "不限",
   "collectFilters.aria.group": "站点筛选-{label}",
-  "collectFilters.source.session.text": "读取自你的登录会话",
+  "collectFilters.source.session.text": "已读取真实选项",
   "collectFilters.source.session.hint": "这是你这个账号在招聘网站上真实能看到的选项，最准。",
   "collectFilters.source.public.text": "全网通用清单",
   "collectFilters.source.public.hint":
@@ -43,7 +49,6 @@ const collectFilters = {
   "collectFilters.source.snapshot.text": "内置快照（离线）",
   "collectFilters.source.snapshot.hint":
     "联网读取失败，用的是内置的一份快照。编码可能已经过期，采集前建议连上网重读一次。",
-  "collectFilters.source.unavailable.text": "本次读不到",
   "collectFilters.source.unavailable.hint": "这一项这次没能从站点读到，暂时不能按它筛。",
 } as const;
 

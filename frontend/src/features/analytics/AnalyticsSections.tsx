@@ -206,7 +206,7 @@ export function TrendSection({
           >
             {hasAppliedDates ? (
               <BarChart
-                points={data.trend.map((point) => ({
+                points={data.trend.slice(-trendMonths).map((point) => ({
                   label: trendMonthLabel(point.month, point.label),
                   count: point.count,
                 }))}

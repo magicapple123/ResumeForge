@@ -9,7 +9,7 @@
  * 其次守的是**冲突不覆盖**：页面上已经有值、且与资料不同时，那一行默认不勾选。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BrowserStatus, WebFormLive, WebFormPreview, WebFormSnapshot } from "../types";
@@ -218,6 +218,25 @@ describe("WebFormPage", () => {
     expect(screen.getByText(/这个功能只负责把资料填进页面，不会替你提交/)).toBeInTheDocument();
   });
 
+  it("安全条在顶部常驻：一行中性小字 + 锁图标，不再是黄色警示块", async () => {
+    renderPage();
+    const note = await screen.findByRole("note");
+
+    expect(note).toHaveClass("webform-safety-strip");
+    expect(note.querySelector("svg")).not.toBeNull();
+    // 降级后不再用 Alert 的样式外壳。
+    expect(note.className).not.toContain("ant-alert");
+  });
+
+  it("初始态是三步动作卡 + 两栏「怎么填 / 最近填写」", async () => {
+    renderPage();
+    await screen.findByTestId("webform-onboarding");
+
+    expect(screen.getByRole("heading", { name: "怎么填" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "最近填写" })).toBeInTheDocument();
+    expect(screen.getByTestId("webform-recent")).toBeInTheDocument();
+  });
+
   it("disables reading the form until the browser is running", async () => {
     apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "running" }));
     renderPage();
@@ -225,6 +244,42 @@ describe("WebFormPage", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /读取当前表单/ })).toBeDisabled(),
     );
+  });
+
+  it("工具条每态只有一颗主按钮：有网址给「打开目标页」，没网址给「开启专用浏览器」", async () => {
+    apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "stopped" }));
+    renderPage();
+    const workbar = await screen.findByTestId("webform-workbar");
+    const primaries = () => workbar.querySelectorAll("button.ant-btn-primary");
+
+    await waitFor(() =>
+      expect(within(workbar).getByRole("button", { name: "开启专用浏览器" })).toBeEnabled(),
+    );
+    expect(primaries()).toHaveLength(1);
+
+    fireEvent.change(within(workbar).getByLabelText("网申投递网址"), {
+      target: { value: "https://example.com/apply" },
+    });
+
+    await waitFor(() => expect(primaries()).toHaveLength(1));
+    // 有了网址，主入口换成「打开目标页」；两颗不再并存。
+    expect(within(workbar).queryByRole("button", { name: "开启专用浏览器" })).toBeNull();
+    expect(
+      within(workbar).getByRole("button", { name: webFormPageZh["webFormPage.urlBar.open"] }),
+    ).toBeEnabled();
+  });
+
+  it("运行中且地址为空时，唯一的主按钮仍是地址条那一颗（禁用），不与关闭按钮并列", async () => {
+    renderPage();
+    const workbar = await screen.findByTestId("webform-workbar");
+
+    await waitFor(() =>
+      expect(within(workbar).getByRole("button", { name: /关闭浏览器/ })).toBeInTheDocument(),
+    );
+    expect(workbar.querySelectorAll("button.ant-btn-primary")).toHaveLength(1);
+    expect(
+      within(workbar).getByRole("button", { name: webFormPageZh["webFormPage.urlBar.open"] }),
+    ).toBeDisabled();
   });
 
   it("允许手动刷新浏览器状态，并把已关闭的窗口显示成未启动", async () => {
@@ -237,7 +292,11 @@ describe("WebFormPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "开启专用浏览器" })).toBeInTheDocument(),
+      expect(
+        within(screen.getByTestId("webform-workbar")).getByRole("button", {
+          name: "开启专用浏览器",
+        }),
+      ).toBeInTheDocument(),
     );
     expect(apiMocks.getWebFormBrowserStatus.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
@@ -364,7 +423,10 @@ describe("WebFormPage", () => {
       .mockResolvedValue(liveStatus({ running: true }));
 
     renderPage();
-    (await screen.findByRole("button", { name: "开启专用浏览器" })).click();
+    // 「开启专用浏览器」现在同时出现在工具条与第 1 张动作卡上：这里点的是工具条那颗
+    // （主入口），卡片那颗只是同一个动作的第二次入口。
+    const workbar = await screen.findByTestId("webform-workbar");
+    (await within(workbar).findByRole("button", { name: "开启专用浏览器" })).click();
 
     await waitFor(() => expect(apiMocks.startWebFormBrowser).toHaveBeenCalled());
     expect(await screen.findByRole("button", { name: "关闭智能逐项填表" })).toBeEnabled();

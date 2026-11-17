@@ -59,43 +59,67 @@
   gap: 2px;
 }
 
-/* I-01：标题与可点项的视觉层级不能靠"字号差 1px + 不可点的反而更粗"来表达。
-   五条判据：字号差 ≥2px、标题更细（500）、加字距、缩进比项少 6px、项带左侧色条。 */
+/* T11：标题靠"字号 + 发丝线"分层，不靠"小一号 + 加宽字距"。
+   旧版把 11px/加宽字距/左色条三件套一起用，看起来像模板站的分区标签。现在只留两件：
+   12px 的 secondary 文字 + 后面一条 1px 发丝线（把标题和它下面那组项连成一段）。 */
 .settings-nav-group-title {
-  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
   padding: 0 10px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  letter-spacing: 0.06em;
-  color: var(--rf-text-tertiary);
+  letter-spacing: 0.02em;
+  color: var(--rf-text-secondary);
+}
+
+.settings-nav-group-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rf-border-subtle);
 }
 
 .settings-nav-item {
-  display: block;
+  /* T11：左侧 12px 是**固定标记槽**（未选中时透明），所以切换项时文字不会位移。
+     不再用 `border-left`：它会参与盒模型，选中/未选中各差 3px，鼠标划过整列会抖。 */
+  display: flex;
+  align-items: center;
+  gap: 6px;
   width: 100%;
-  /* 左内边距 13px + 3px 色条 → 文字左缘 16px，比组标题（10px）右移 6px。 */
-  padding: 7px 10px 7px 13px;
+  padding: 7px 10px;
   font: inherit;
   font-size: 14px;
   color: var(--rf-text-body);
   text-align: left;
   background: none;
   border: 0;
-  border-left: 3px solid transparent;
   border-radius: 8px;
   cursor: pointer;
+}
+
+.settings-nav-item::before {
+  content: "";
+  flex: 0 0 12px;
+  height: 2px;
+  border-radius: 1px;
+  background: transparent;
 }
 
 .settings-nav-item:hover {
   background: var(--rf-fill-secondary);
 }
 
+/* 选中态只有两种手段：字重 600 + 12×2px 品牌短横线。**不要**再加底色/左边框/
+   品牌色文字——四重标注就是这套导航"AI 味"的来源（T11 的验收按 CSS 属性数数）。 */
 .settings-nav-item[aria-current="page"] {
   font-weight: 600;
-  color: var(--rf-brand);
-  background: var(--rf-brand-tint);
-  /* 选中态靠色条 + 底色，不再靠"更粗"与组标题区分（标题 500，这里 600 是允许的层级差）。 */
-  border-left-color: var(--rf-brand);
+  color: var(--rf-text-body);
+}
+
+.settings-nav-item[aria-current="page"]::before {
+  background: var(--rf-brand);
 }
 
 .settings-nav-item:focus-visible {

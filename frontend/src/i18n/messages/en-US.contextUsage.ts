@@ -19,10 +19,11 @@ const contextUsage = {
   "contextUsage.zeroNote": "{count} more categories at 0",
   "contextUsage.actual": "Last measured input: {tokens} tokens",
   "contextUsage.actualUnknown": "Not reported this turn",
-  "contextUsage.noWindow": "No context window set",
+  "contextUsage.noWindow": "Window unknown",
   "contextUsage.goSettings": "Open settings",
   "contextUsage.settings.title": "Window & compaction settings",
   "contextUsage.window.label": "Context window",
+  "contextUsage.window.sameAsSettings": "Same value as the same-named field in Settings",
   "contextUsage.window.source.manual": "Manual setting",
   "contextUsage.window.source.reference": "Model reference",
   "contextUsage.window.source.fallback": "Unknown model",
@@ -69,6 +70,14 @@ const contextUsage = {
   "contextUsage.compaction.action.compact": "Compact context",
   "contextUsage.compaction.action.now": "Compact now",
   "contextUsage.compaction.action.restore": "Restore original",
+  "contextUsage.compaction.action.cancel": "Cancel",
+  /** T25 compaction boundary inside the message stream. */
+  "contextUsage.compaction.boundary.line":
+    "{turns} earlier turns compacted · about {tokens} tokens saved",
+  "contextUsage.compaction.boundary.earlier":
+    "Earlier turns compacted · about {tokens} tokens saved",
+  "contextUsage.compaction.boundary.view": "View summary",
+  "contextUsage.compaction.boundary.hide": "Hide summary",
   "contextUsage.compaction.preview": "About {before} down to {after}, covering {turns} turns",
   "contextUsage.compaction.nothing": "Nothing to compact within the last 6 turns",
   "contextUsage.compaction.confirmHint": "Compacting uses one model call",

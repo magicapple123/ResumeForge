@@ -57,13 +57,21 @@ const applySettings = {
   "applySettings.tab.blocklist": "Block list",
 
   "applySettings.blocklist.intro":
-    "Matching Jobs are stopped at collection, enqueue and apply time. One entry per line; leave it empty to block nothing.",
+    "Matching jobs are stopped at collection, enqueue and apply time. Press Enter to add an entry; leave it empty to block nothing.",
   "applySettings.blocklist.companies": "Blocked companies",
   "applySettings.blocklist.companiesHint":
-    "Compared by company name, ignoring spaces and case. For example: Acme Technologies Ltd.",
+    'Matched against the full company name, ignoring spaces and case: blocking "Byte" does not catch "ByteDance" - enter the full name.',
   "applySettings.blocklist.keywords": "Blocked keywords",
   "applySettings.blocklist.keywordsHint":
-    "Skip a Job when its title or description contains one of these words; at least two characters, so one word cannot block a whole city. For example: outsourcing, on-site vendor",
+    "Skip a job when its company or job title contains one of these words; at least two characters, so one word cannot block a whole city. For example: outsourcing, on-site vendor",
+  "applySettings.blocklist.batchEdit": "Bulk edit",
+  "applySettings.blocklist.backToTags": "Done editing",
+  "applySettings.blocklist.companyAddAria": "Add a blocked company",
+  "applySettings.blocklist.companyAddPlaceholder": "Full company name, then Enter",
+  "applySettings.blocklist.keywordAddAria": "Add a blocked keyword",
+  "applySettings.blocklist.keywordAddPlaceholder": "Keyword, then Enter",
+  "applySettings.blocklist.remove": "Remove this entry",
+  "applySettings.blocklist.inactive": "Too broad to take effect",
   "applySettings.blocklist.save": "Save block list",
   "applySettings.blocklist.saved": "Block list saved",
   "applySettings.blocklist.saveFailed": "Could not save the block list",
@@ -77,6 +85,8 @@ const applySettings = {
   "applySettings.templates.bodyPlaceholder":
     "For example: Hello, I am {name}. I saw the {job_title} role and would like to talk.",
   "applySettings.templates.add": "New template",
+  "applySettings.templates.edit": "Edit this template",
+  "applySettings.templates.collapse": "Collapse editor",
   "applySettings.templates.remove": "Delete this template",
   "applySettings.templates.save": "Save greeting library",
   "applySettings.templates.saved": "Greeting library saved",

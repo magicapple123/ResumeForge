@@ -22,7 +22,6 @@ const webFormPage = {
   "webFormPage.fillMode.hint":
     "These four rows decide how your data enters the page; changes apply immediately.",
   /* I-27 first-screen empty state (three-step guide). */
-  "webFormPage.onboarding.badge": "Not started",
   "webFormPage.onboarding.title": "Three steps to start",
   "webFormPage.onboarding.lead":
     "Start the browser, open the target page, then come back and read the form.",
@@ -32,12 +31,16 @@ const webFormPage = {
   "webFormPage.onboarding.step2Hint": "Sign-in and captchas are yours to handle",
   "webFormPage.onboarding.step3": "Come back and read the form",
   "webFormPage.onboarding.step3Hint": "Review the mapping, then fill in one go",
-  "webFormPage.onboarding.next.start": "Next: “Start dedicated browser” above",
-  "webFormPage.onboarding.next.read": "Next: “Read current form” on the left",
-  "webFormPage.onboarding.next.fill": "Form read; review it, then fill",
   "webFormPage.onboarding.state.now": "Now",
   "webFormPage.onboarding.state.done": "Done",
   "webFormPage.onboarding.state.todo": "Pending",
+  "webFormPage.recent.title": "Recent fills",
+  "webFormPage.recent.viewAll": "View all",
+  "webFormPage.recent.emptyWhat": "What happens here",
+  "webFormPage.recent.emptyBody":
+    "After your first fill, this lists the page and how many fields were filled, newest first.",
+  "webFormPage.recent.urls": "See URLs you opened",
+  "webFormPage.recent.error": "Could not load recent fills",
   "webFormPage.flow.progressTitle": "Fill progress",
   "webFormPage.flow.progressValue": "Step {current} of {total} · {title}",
   "webFormPage.fillMode.boundary":
@@ -165,8 +168,6 @@ const webFormPage = {
   "webFormPage.browserCard.refreshTooltip": "Refresh now",
   "webFormPage.browserCard.refreshAria": "Refresh status",
   "webFormPage.browserCard.diagnostics": "Export this page's diagnostics (no secrets)",
-  "webFormPage.browserCard.endTooltip":
-    "End this web form session: the panel is put away and nothing is cleared. Click Read current form to start again",
   "webFormPage.browserCard.end": "End this session",
   "webFormPage.fillRate.label": "Fill rate {percent}% ({filled}/{total})",
   "webFormPage.fillResult.title": "Fill result",

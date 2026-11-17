@@ -57,6 +57,83 @@
   color: var(--rf-info);
 }
 
+/* ===== T23 消息下方的「参考了 N 条记忆」：一行小字，展开是内容快照 ===== */
+.assistant-memory-refs {
+  margin-top: 4px;
+}
+
+.assistant-memory-refs-toggle.ant-btn {
+  height: 20px;
+  padding: 0;
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+}
+
+.assistant-memory-refs-list {
+  display: grid;
+  gap: 4px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assistant-memory-refs-list li {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.assistant-memory-refs-kind {
+  flex: 0 0 auto;
+  color: var(--rf-text-secondary);
+}
+
+.assistant-memory-refs-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ===== T25 压缩边界：插在摘要覆盖到的最后一条消息下方 ===== */
+.assistant-compaction-boundary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 2px 0;
+}
+
+.assistant-compaction-boundary-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.assistant-compaction-boundary-toggle.ant-btn {
+  height: 20px;
+  padding: 0 4px;
+  font-size: 11px;
+}
+
+/* 展开限高 320px：摘要只用于回溯，不把消息流推走。 */
+.assistant-compaction-summary {
+  max-height: 320px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* ===== 13B 长回答折叠 ===== */
 .assistant-message-collapse {
   position: relative;
