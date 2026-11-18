@@ -69,9 +69,12 @@
 | [模板质量档案（ResumeForge 内置模板）](quality/template-quality-archive.md) | 逐模板质量档案；评分与截图是 1.0.2 快照，页数已按 2.1.0 复核 |
 | [制作台本地性能基线（W21 / plan §11）](quality/workbench-performance-baseline.md) | 单机性能实测快照；重测就新增一节，不改旧数字 |
 
-## 已归档（`docs-archive/`，不进检索索引）· 0 篇
+## 已归档（`docs-archive/`，不进检索索引）· 2 篇
 
-（暂无）
+| 文档 | 归档日 | 原因 | 替代 |
+| --- | --- | --- | --- |
+| [简历制作台 Word 式操作改造清单（W01—W19，已搁置）](../docs-archive/resume-workbench-wordlike-plan-20261118.md) | 2026-11-18 | 工作底稿（不是产品文档）：QW/DF 规格与已搁置的 W01—W19 清单；进 docs/ 会污染助手检索的产品文档排序（test_assistant_document_tools 因此变红）。执行完成后归档。 | — |
+| [简历制作台小步改进与缺陷清单（QW-1—QW-7 / DF-1—DF-10）](../docs-archive/resume-workbench-quick-wins-20261118.md) | 2026-11-18 | 工作底稿（不是产品文档）：QW/DF 规格与已搁置的 W01—W19 清单；进 docs/ 会污染助手检索的产品文档排序（test_assistant_document_tools 因此变红）。执行完成后归档。 | — |
 
 ## 怎么维护这一页
 

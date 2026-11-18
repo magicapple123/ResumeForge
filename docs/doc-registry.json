@@ -389,5 +389,18 @@
       "note": "单机性能实测快照；重测就新增一节，不改旧数字"
     }
   ],
-  "archived": []
+  "archived": [
+    {
+      "path": "docs-archive/resume-workbench-wordlike-plan-20261118.md",
+      "title": "简历制作台 Word 式操作改造清单（W01—W19，已搁置）",
+      "archived_on": "2026-11-18",
+      "reason": "工作底稿（不是产品文档）：QW/DF 规格与已搁置的 W01—W19 清单；进 docs/ 会污染助手检索的产品文档排序（test_assistant_document_tools 因此变红）。执行完成后归档。"
+    },
+    {
+      "path": "docs-archive/resume-workbench-quick-wins-20261118.md",
+      "title": "简历制作台小步改进与缺陷清单（QW-1—QW-7 / DF-1—DF-10）",
+      "archived_on": "2026-11-18",
+      "reason": "工作底稿（不是产品文档）：QW/DF 规格与已搁置的 W01—W19 清单；进 docs/ 会污染助手检索的产品文档排序（test_assistant_document_tools 因此变红）。执行完成后归档。"
+    }
+  ]
 }
