@@ -288,12 +288,24 @@ function Start-ResumeForge {
                 # 五步清单；原始输出落到 runtime/pip-install.log，不塞进错误标题。
                 . (Join-Path $PSScriptRoot "PipFailureHint.ps1")
                 $pipLines = @()
-                & $pythonExecutable -m pip install `
-                    --require-hashes `
-                    --timeout 300 `
-                    --retries 10 `
-                    -r $runtimeLockPath 2>&1 | Tee-Object -Variable pipLines | Out-Host
-                $pipExitCode = $LASTEXITCODE
+                # `2>&1` 之后必须临时放开 ErrorActionPreference（与上面那段依赖探针同一个
+                # 理由）：pip 的下载进度条走 **stderr**，在 `Stop` 下 PowerShell 5.1 会把
+                # 第一条 stderr 记录变成终止性的 NativeCommandError——而进度条那条记录
+                # 只剩回车与空白，异常 Message 因此是空串，用户看到的是"启动失败。"后面
+                # 什么都没有。判定只看退出码，所以这里让 stderr 正常流过。
+                $pipPreference = $ErrorActionPreference
+                $ErrorActionPreference = "Continue"
+                try {
+                    & $pythonExecutable -m pip install `
+                        --require-hashes `
+                        --timeout 300 `
+                        --retries 10 `
+                        -r $runtimeLockPath 2>&1 | Tee-Object -Variable pipLines | Out-Host
+                    $pipExitCode = $LASTEXITCODE
+                }
+                finally {
+                    $ErrorActionPreference = $pipPreference
+                }
                 if ($pipExitCode -ne 0) {
                     $pipText = ($pipLines | Out-String)
                     $pipLogPath = Join-Path $RuntimeDirectory "pip-install.log"
