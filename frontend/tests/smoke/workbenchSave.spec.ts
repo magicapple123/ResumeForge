@@ -22,7 +22,11 @@ async function openBlankWorkbench(page: Page) {
   const creation = page.getByRole("dialog", { name: "从头编写通用简历" });
   await expect(creation).toBeVisible();
   await creation.getByRole("button", { name: "前往简历制作台" }).click();
-  const workbench = page.getByRole("dialog").filter({ hasText: "简历制作台" });
+  // 制作台是整页 Modal，里面还会叠自己的弹层（antd Drawer / 二次确认也是 role="dialog"），
+  // 按标题文本找容器在 macOS runner 上会一次命中 3 个（Windows/Linux 只命中 1 个），
+  // strict mode 直接判失败。这里改成锚在**动作条**上：本测试要断言的三样东西
+  // （「保存修改」、「版式已保存，正文未保存」、「重试正文」）都在这一条里。
+  const workbench = page.locator(".resume-wb-actionbar");
   await expect(workbench).toBeVisible();
   return workbench;
 }
