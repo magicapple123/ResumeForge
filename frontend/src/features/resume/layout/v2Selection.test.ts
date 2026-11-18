@@ -9,6 +9,7 @@ import {
   emptyStyleChange,
   entryIdFromPath,
   entryIdsFromPaths,
+  headerFieldFromPath,
   optionsForIds,
   pathsFromEntryIds,
   placementForDocumentPath,
@@ -110,6 +111,16 @@ describe("路径 → 条目 / 作用范围", () => {
     expect(roleForDocumentPath(document, "education.ob_entry001.ob_item0004")).toBe("meta");
     expect(roleForDocumentPath(document, "education.ob_entry001.ob_item0006")).toBe("body");
     expect(roleForDocumentPath(document, null)).toBe("body");
+  });
+
+  it("roleForDocumentPath：页眉字段→meta（planner 给页眉每一段写的都是 meta）", () => {
+    expect(roleForDocumentPath(document, "header.ob_head0001")).toBe("meta");
+  });
+
+  it("headerFieldFromPath：页眉路径→字段 id 与显示名，非页眉/失效路径→null", () => {
+    expect(headerFieldFromPath(document, "header.ob_head0001")?.id).toBe("ob_head0001");
+    expect(headerFieldFromPath(document, "education.ob_entry001")).toBeNull();
+    expect(headerFieldFromPath(document, "header.nope")).toBeNull();
   });
 });
 

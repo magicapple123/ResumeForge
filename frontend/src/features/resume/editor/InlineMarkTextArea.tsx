@@ -43,6 +43,7 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 import InlineMarkOverlay from "./InlineMarkOverlay";
 import { hasInlineMarks } from "./inlineMarkRuns";
+import { visibleRangeOfSelection } from "./inlineMarkSelection";
 import { registerInlineMarkField } from "./useInlineMarkRange";
 
 interface Props {
@@ -91,7 +92,21 @@ export default function InlineMarkTextArea({
 }: Props) {
   const [scroll, setScroll] = useState<ScrollOffset>({ top: 0, left: 0 });
   const [composing, setComposing] = useState(false);
+  /**
+   * DF-4：选区按**可见文字**下标保存（`visibleRangeOfSelection` 把源串偏移换算过来）。
+   * 源串偏移直接画会在 `{@color=…}` 那 20 个隐形字符上拉出一条空蓝带。
+   */
+  const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
   const decorated = hasInlineMarks(value);
+
+  /** 只读 `currentTarget` 的 selectionStart/End：`document.getSelection()` 读不到 textarea。 */
+  const syncSelection = (element: HTMLTextAreaElement, text: string) => {
+    if (!hasInlineMarks(text)) {
+      setSelection(null);
+      return;
+    }
+    setSelection(visibleRangeOfSelection(text, element.selectionStart, element.selectionEnd));
+  };
 
   const fieldClassName = [
     "rf-inline-mark-field",
@@ -107,7 +122,12 @@ export default function InlineMarkTextArea({
   return (
     <div className={fieldClassName}>
       {decorated ? (
-        <InlineMarkOverlay value={value} scrollTop={scroll.top} scrollLeft={scroll.left} />
+        <InlineMarkOverlay
+          value={value}
+          scrollTop={scroll.top}
+          scrollLeft={scroll.left}
+          selection={selection}
+        />
       ) : null}
       <Input.TextArea
         className={textareaClassName}
@@ -119,13 +139,24 @@ export default function InlineMarkTextArea({
         value={value}
         disabled={disabled || undefined}
         style={resizable ? RESIZABLE_STYLE : undefined}
-        onFocus={registerInlineMarkField}
+        onFocus={(event) => {
+          registerInlineMarkField(event);
+          syncSelection(event.currentTarget, value);
+        }}
+        onBlur={() => setSelection(null)}
+        onSelect={(event) => syncSelection(event.currentTarget, value)}
+        onMouseUp={(event) => syncSelection(event.currentTarget, value)}
+        onKeyUp={(event) => syncSelection(event.currentTarget, value)}
         onScroll={(event) =>
           setScroll({ top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft })
         }
         onCompositionStart={() => setComposing(true)}
         onCompositionEnd={() => setComposing(false)}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          // 值先回传再算选区：偏移必须按**新**源串换算，否则删字后高亮会错位。
+          syncSelection(event.target, event.target.value);
+          onChange(event.target.value);
+        }}
         onKeyDown={(event) => {
           if (!blockEnter || event.key !== "Enter") return;
           // 输入法组合状态下的 Enter 是"确认候选词"，拦掉会让中文输入没法上屏。

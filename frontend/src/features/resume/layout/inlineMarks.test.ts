@@ -6,6 +6,7 @@ import {
   applyStyleMark,
   clearInlineMarks,
   clampInlineSize,
+  COLOR_PRESETS,
   inlineColorValue,
   insertLinkMark,
   isValidLinkUrl,
@@ -170,5 +171,56 @@ describe("inlineMarks · 清除行内格式", () => {
   it("落单的 { 与 ** 原样保留（那是用户真想印出来的字符）", () => {
     expect(clearInlineMarks("a{@size=0.9}b", { start: 0, end: 12 }).text).toBe("a{@size=0.9}b");
     expect(clearInlineMarks("a**b", { start: 0, end: 4 }).text).toBe("a**b");
+  });
+
+  it("只选可见文字也整段清除（DF-9：标记在选区外，旧实现会「点了没反应」）", () => {
+    const styled = "{@color=#c0392b}个人项目{@}";
+    // 开标记长 17，用户拖选的是看得见的四个字中的中间两个。
+    expect(clearInlineMarks(styled, { start: 18, end: 20 }).text).toBe("个人项目");
+    const bold = "**重点**";
+    expect(clearInlineMarks(bold, { start: 3, end: 4 }).text).toBe("重点");
+  });
+
+  it("只碰相邻段的边界时不清别人（相交判定用正文区间，不是整段 raw）", () => {
+    const text = "{@size=0.9}a{@}b";
+    // 选区紧贴 `{@}` 之后的那个 b：a 段一个标记都不该动。
+    expect(clearInlineMarks(text, { start: 15, end: 16 }).text).toBe(text);
+    // 相邻两段只选第一段：第二段保留。
+    const two = "{@size=0.9}x{@}{@color=#c00}y{@}";
+    const onlyFirst = clearInlineMarks(two, { start: 11, end: 12 });
+    expect(onlyFirst.text).toBe(`x{@color=#c00}y{@}`);
+  });
+
+  it("选区只碰到可见文字、不碰任何格式段时不动文本（未闭合标记不成段）", () => {
+    const unclosed = "a{@size=0.9}b";
+    expect(clearInlineMarks(unclosed, { start: 0, end: 1 }).text).toBe(unclosed);
+  });
+
+  it("嵌套样式段按最外层一次清干净", () => {
+    const text = "{@size=0.9}{@color=#c00}嵌套{@}{@}";
+    const from = text.indexOf("嵌套");
+    const cleared = clearInlineMarks(text, { start: from, end: from + 2 });
+    expect(cleared.text).toBe("嵌套");
+    expect(cleared.text.slice(cleared.start, cleared.end)).toBe("嵌套");
+  });
+
+  it("清除后选区落在原来那几个字上（新串上重算，不跳到行尾）", () => {
+    const text = "{@size=0.9}ab{@}cd";
+    const cleared = clearInlineMarks(text, { start: 11, end: 13 });
+    expect(cleared.text).toBe("abcd");
+    expect(cleared.text.slice(cleared.start, cleared.end)).toBe("ab");
+  });
+});
+
+describe("inlineMarks · 预设色板（DF-5 收拢到一处）", () => {
+  it("6 个预设色按用户已写入内容的顺序导出，工具条与右键菜单共用这一份", () => {
+    expect([...COLOR_PRESETS]).toEqual([
+      "#c0392b",
+      "#d97706",
+      "#2f6fd0",
+      "#2f855a",
+      "#6b7280",
+      "#111111",
+    ]);
   });
 });

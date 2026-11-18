@@ -19,6 +19,7 @@ import type { PreviewMode } from "../preview/config";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import WorkbenchLeftTabs, { type WorkbenchLeftTabItem } from "./WorkbenchLeftTabs";
+import { useControlsWidthVar } from "../layout/usePanelNarrow";
 import HistoryPanel from "../versions/HistoryPanel";
 import StructureTab from "../outline/StructureTab";
 import ChipStylePopover, { type ChipStylePopoverState } from "./ChipStylePopover";
@@ -135,6 +136,9 @@ export default function WorkbenchParamsColumnV2({
 
   /** 整列（`.resume-wb-v2-params`）是滚动容器：切页签时要把它的 scrollTop 归零。 */
   const columnRef = useRef<HTMLDivElement>(null);
+  // DF-7：参数行控件列的宽度由分组内容盒量出来，写到本列根元素的
+  // `--resume-wb-controls-w`（只写列根，多实例不串），拖动分隔条时连续跟随。
+  useControlsWidthVar(columnRef);
   const changeTab = useCallback((next: LeftTab) => {
     setTab(next);
     // R-28：上一页签滚到一半的位置会带到下一页签（页签条吸顶后尤其明显——

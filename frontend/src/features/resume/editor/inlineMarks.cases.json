@@ -1,0 +1,73 @@
+{
+  "note": "DF-6 行内标记剥离的共享用例。两份实现互相 import 不到，只能靠同一组 raw → 期望值咬住：前端的 stripInlineMarks 断言 visible（只读展示的可见文字，链接只留 label），后端的 strip_style_markers 断言 style_visible（Markdown 出口的口径：只剥 `{@…}` / `{@}`，`**` 留给 Markdown）。未闭合与越界标记两种口径都必须原样保留。",
+  "cases": [
+    { "raw": "", "visible": "", "style_visible": "" },
+    { "raw": "普通正文", "visible": "普通正文", "style_visible": "普通正文" },
+    {
+      "raw": "{@color=#c0392b}个人项目{@}",
+      "visible": "个人项目",
+      "style_visible": "个人项目"
+    },
+    {
+      "raw": "带 {@size=0.9}8 人{@}团队",
+      "visible": "带 8 人团队",
+      "style_visible": "带 8 人团队"
+    },
+    {
+      "raw": "a{@size=0.9}b{@}c",
+      "visible": "abc",
+      "style_visible": "abc"
+    },
+    {
+      "raw": "{@size=0.9}{@color=#c00}嵌套{@}{@}",
+      "visible": "嵌套",
+      "style_visible": "嵌套"
+    },
+    {
+      "raw": "{@color=#c0392b}a{@}{@color=#2f6fd0}b{@}",
+      "visible": "ab",
+      "style_visible": "ab"
+    },
+    {
+      "raw": "{@size=0.9}未闭合",
+      "visible": "{@size=0.9}未闭合",
+      "style_visible": "{@size=0.9}未闭合"
+    },
+    {
+      "raw": "{@size=9}越界{@}",
+      "visible": "{@size=9}越界{@}",
+      "style_visible": "{@size=9}越界{@}"
+    },
+    {
+      "raw": "{@size=0.9}",
+      "visible": "{@size=0.9}",
+      "style_visible": "{@size=0.9}"
+    },
+    {
+      "raw": "x{@}y",
+      "visible": "x{@}y",
+      "style_visible": "x{@}y"
+    },
+    {
+      "raw": "**加粗**文字",
+      "visible": "加粗文字",
+      "style_visible": "**加粗**文字"
+    },
+    { "raw": "a**b", "visible": "a**b", "style_visible": "a**b" },
+    {
+      "raw": "{@size=0.5}小{@}**粗**",
+      "visible": "小粗",
+      "style_visible": "小**粗**"
+    },
+    {
+      "raw": "[官网](https://example.com)",
+      "visible": "官网",
+      "style_visible": "[官网](https://example.com)"
+    },
+    {
+      "raw": "{@color=#c0392b}[官网](https://example.com){@}",
+      "visible": "官网",
+      "style_visible": "[官网](https://example.com)"
+    }
+  ]
+}

@@ -274,12 +274,24 @@ describe("SectionPaginationPanel · 已设置断页汇总（Q08）", () => {
     expect(next.sections[0].entries[0].layout.start_on_new_page).toBe(true);
   });
 
-  it("历史遗留的板块级 keep_together 不再出现（字段仍在文档里）", () => {
+  it("历史遗留的板块级 keep_together 显示为「旧版规则」，✕ 只清这一个键（QW-3）", () => {
     const document = makeDocument();
     document.sections[0].layout.keep_together = true;
-    renderPanel(document);
-    expect(screen.getByText(t("pagination.breaks.empty"))).toBeInTheDocument();
-    expect(document.sections[0].layout.keep_together).toBe(true);
+    document.sections[0].layout.start_on_new_page = true;
+    const { onChange } = renderPanel(document);
+    const chip = window.document.querySelector<HTMLElement>(
+      '[data-break-chip="section:education:keep_together"]',
+    );
+    if (!chip) throw new Error("missing legacy chip");
+    expect(chip.textContent).toContain(t("pagination.breaks.legacyTag"));
+    expect(screen.getByText(t("pagination.breaks.legacyHint"))).toBeInTheDocument();
+    fireEvent.click(chip.querySelector("button.resume-pagination-break-clear") as HTMLElement);
+    const next = onChange.mock.calls[0][0] as ResumeDocument;
+    expect(next.sections[0].layout.keep_together).toBe(false);
+    expect(next.sections[0].layout.start_on_new_page).toBe(true);
+    // 设置面板里仍然只有「从新页开始」一个开关：旧版规则没有设置入口。
+    const rows = window.document.querySelectorAll(".resume-section-pagination-row");
+    expect(rows[0].querySelectorAll('[role="switch"]').length).toBe(1);
   });
 
   it("有条目级断页时提示「到本份简历结构修改」，只有板块级时不提示", () => {

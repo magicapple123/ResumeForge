@@ -31,6 +31,9 @@ const pagination = {
     "Entry breaks affect that item only; “Restore natural pagination” does not clear them",
   "pagination.breaks.entryHintInStructure":
     "Change entry-level breaks in “This resume’s structure”",
+  "pagination.breaks.legacyTag": "Legacy rule",
+  "pagination.breaks.legacyHint":
+    "This rule comes from an older version and affects export pagination; clearing it may change the page count",
   "pagination.header.startOnNewPage": "New page",
   "pagination.header.keepTogether": "No split",
   "pagination.sectionAria": "“{name}”: {flag}",

@@ -6,7 +6,7 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
-import TouTouSelectionMenu from "./TouTouSelectionMenu";
+import TouTouSelectionMenu, { SELECTION_DEBOUNCE_MS } from "./TouTouSelectionMenu";
 import { renderOrb as renderWithProviders } from "./touTouTestUtils";
 import type { DomSelectionSnapshot } from "./touTouSelection";
 
@@ -138,6 +138,25 @@ describe("TouTouSelectionMenu", () => {
     const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
     document.body.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("右键 mouseup（button=2）后浮条保持关闭，不盖住随后弹出的卡片", async () => {
+    const anchor = mountParagraph("你好");
+    stubSelection({ text: "你", rects: [rect(100, 40, 7, 17)], anchor });
+    renderWithProviders(<TouTouSelectionMenu enabled onAction={vi.fn()} />);
+    // 左键选中文字：浮条正常浮出（正对照）。
+    fireEvent.mouseUp(document);
+    expect(await screen.findByRole("toolbar")).toBeInTheDocument();
+
+    // 右键 mousedown 收起；右键不会清掉输入框选区，mouseup 若也 refresh 就会重开。
+    fireEvent.mouseDown(document.body, { button: 2 });
+    await waitFor(() => expect(document.querySelector(".tt-selection-bar")).toBeNull());
+    fireEvent.mouseUp(document.body, { button: 2 });
+    // 等过 rAF 与 selectionchange 的 debounce，确认浮条没有被重新拉起来。
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, SELECTION_DEBOUNCE_MS + 50));
+    });
+    expect(document.querySelector(".tt-selection-bar")).toBeNull();
   });
 
   it("点动作把选区快照交回宿主，浮条随即收起", async () => {

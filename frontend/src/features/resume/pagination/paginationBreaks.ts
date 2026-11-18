@@ -15,8 +15,16 @@
  * - `SECTION_FLAGS` 只有 `start_on_new_page`（参数页签能设，也能清）；
  * - `ENTRY_FLAGS` 两个都给（结构页签能设，也只能在结构页签清）。
  *
- * **字段不删**：历史 JSON 里可能已有 `section.layout.keep_together = true`，它继续留在
- * 文档里（保存不丢），只是不再被收集、不再展示、也不被「恢复自然分页」触碰——删字段
+ * ## QW-3：旧版规则显示出来并可清除（2026-11-18 用户拍板）
+ *
+ * 与上面矛盾的只有一处例外：`section.layout.keep_together` 在**导出端当真**
+ * （PDF 逐条预留、DOCX 变整块 `keepNext`），字段又删不掉。用户遇到"这一页莫名被推下去"
+ * 时既看不出原因也无法关闭。所以它重新进入汇总条，但标 `legacy: true`：
+ * - 只显示 + 单个 ✕ 清除（`patchSectionLayout` 写 false），**不提供设置入口**；
+ * - 不进 `SECTION_FLAGS`，因此"恢复自然分页"与 `hasSectionPageBreaks` 都不碰它；
+ * - 新建简历不再产生该字段（保持既有口径）。
+ *
+ * **字段不删**：历史 JSON 里可能已有 `section.layout.keep_together = true`，删字段
  * 会让老文档在下次保存时静默改变形状。
  */
 import type { ResumeDocument } from "../../../types/resumeDocument";
@@ -37,10 +45,15 @@ export interface ConfiguredPageBreak {
   path: string;
   /** 条目显示名（与结构树/条目字段排版同一函数）；板块无此项。 */
   entryLabel?: string;
+  /** QW-3：来自旧版本的死字段（当前不可设置，只可清除）。 */
+  legacy?: boolean;
 }
 
 /** 板块级能设的断页开关：只有「从新页开始」（`keep_together` 从未被渲染端消费）。 */
 export const SECTION_FLAGS: readonly PageBreakFlag[] = ["start_on_new_page"];
+
+/** QW-3：旧版本遗留、界面上不再能设置、但导出端仍消费的板块级开关。 */
+export const LEGACY_SECTION_FLAGS: readonly PageBreakFlag[] = ["keep_together"];
 
 /** 条目级能设的断页开关：两个都有效（planner 读 `entry.layout.*`）。 */
 export const ENTRY_FLAGS: readonly PageBreakFlag[] = ["start_on_new_page", "keep_together"];
@@ -57,6 +70,18 @@ export function collectPageBreaks(document: ResumeDocument): ConfiguredPageBreak
         sectionKey: section.key,
         flag,
         path: section.key,
+      });
+    }
+    // QW-3：旧版规则紧随板块级断页之后（同一板块的芯片相邻，便于对照）。
+    for (const flag of LEGACY_SECTION_FLAGS) {
+      if (!section.layout[flag]) continue;
+      rows.push({
+        id: `section:${section.key}:${flag}`,
+        kind: "section",
+        sectionKey: section.key,
+        flag,
+        path: section.key,
+        legacy: true,
       });
     }
     for (const entry of section.entries) {
@@ -100,8 +125,8 @@ export function hasSectionPageBreaks(document: ResumeDocument): boolean {
 /**
  * 「恢复自然分页」：只清**板块级** `start_on_new_page`。
  *
- * 条目级断页由结构页签管理（面板上写明），历史遗留的 `section.layout.keep_together`
- * 既不展示也不清除——它不在 `SECTION_FLAGS` 里，等于「不认识、也不动」。
+ * 条目级断页由结构页签管理（面板上写明）；旧版规则（`section.layout.keep_together`）
+ * 由汇总条上的单个 ✕ 清除（QW-3），这里不碰——"一键恢复"不该顺手改掉用户没看见的那一项。
  */
 export function restoreSectionPagination(document: ResumeDocument): ResumeDocument {
   if (!hasSectionPageBreaks(document)) return document;

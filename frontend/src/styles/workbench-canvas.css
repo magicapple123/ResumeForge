@@ -313,3 +313,10 @@
 .resume-pagination-report > .ant-alert {
   flex: 1 1 100%;
 }
+
+/* QW-3：「旧版规则」标签。它和后面的 ✕ / → 同处一行，长板块名不许把它挤成两行；
+   antd Tag 自带的右外边距在这里是多余的（同行里由父级 gap 统一控制）。 */
+.resume-pagination-break-legacy {
+  white-space: nowrap;
+  margin-inline-end: 0;
+}

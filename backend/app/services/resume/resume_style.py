@@ -41,6 +41,11 @@ def _template_ratios(template: str) -> dict[str, float]:
     }
 
 
+def _list_indent_base(template: str) -> float:
+    """模板 ``ul`` 抬起的基准（= PDF ``layout.li_indent``），字段级缩进做差值用（DF-8）。"""
+    return float(template_role_defaults(template).get("body", {}).get("indent", 0.0))
+
+
 #: 落在**文字元素**上的属性。角色规则 / 对象根规则 / 对象内部角色规则共用这一份。
 #: 三类"必须换目标元素才生效"的属性（项目符号 / 缩进 / 日期位置）走下面的定向选择器。
 _TEXT_PROPS: tuple[str, ...] = (
@@ -132,6 +137,67 @@ def _rule(selector: str, declarations: list[str]) -> str:
     if not declarations:
         return ""
     return f"  {selector} {{ {' '.join(declarations)} }}"
+
+
+#: 字段级覆盖里"承载这个字段"的块（DF-8）。正文块自己就带 ``data-resume-path``
+#: （``li`` / ``p.body-paragraph``），所以不需要 ``:has()``：字段路径只会命中它自己那一行，
+#: 不会连带同一条目里的兄弟字段（相邻要点在 HTML 里共用一个 ``ul``，写 ``ul:has(…)``
+#: 会改掉整段符号）。
+def _field_block_selector(path: str, tag: str) -> str:
+    return f'{tag}[data-resume-path="{path}"]'
+
+
+def _field_indent_declarations(style: RoleStyle, *, list_base: float) -> list[str]:
+    """字段缩进 → 承载块的``padding-left`` / ``margin-left``，值是与列表基准的**有符号差**。
+
+    PDF（``pdf_exporter/style_blocks.py::draw_bullets``）把字段 ``indent`` 当**绝对**行首
+    偏移：``text_left = frame_left + gap_mm(indent)``，**不设下限**。HTML 的 ``li`` 已经被
+    模板 ``ul`` 的 ``padding-left``（= ``li_indent``）抬起，所以这里只写差值，两边纸面上
+    的正文左缘才是同一个位置：
+
+    * ``indent >= li_indent`` → ``padding-left: +(indent - li_indent)``：正差用 padding，
+      承载块的可排宽度同步收窄，与 PDF 的 ``width = frame_width - indent`` 一致（折行点相同）。
+    * ``indent < li_indent`` → ``margin-left: (indent - li_indent)``（负）：**不夹到 0**。
+      夹 0 会让滑杆 0—``li_indent`` 这一整段"拖了没反应"——正是 DF-8 要修的症状；PDF 在
+      这一段是把正文推到基准左侧（符号悬挂进页边距），草稿必须同样动。用 margin 而非
+      padding 是因为 padding 不能为负。
+
+    ``list_base`` 从 ``template_role_defaults`` 取（与面板显示的"模板基准"同源），
+    读不到时为 0（= 退回绝对值，仍与 PDF 一致）。
+
+    残留差异（已知、未修）：PDF 里 ``document_body.py`` 的"带样式字段标签"分支取
+    ``max(indent, li_indent)``，与上面这条批量路径在 ``indent < li_indent`` 时不一致。
+    本函数对齐的是**批量路径**（正文要点的默认出口，覆盖绝大多数条目）。
+    """
+    if style.indent is None:
+        return []
+    delta = round(float(style.indent) - list_base, 3)
+    if delta >= 0:
+        return [f"padding-left: calc(var(--fs) * {_css_number(delta)});"]
+    return [f"margin-left: calc(var(--fs) * {_css_number(delta)});"]
+
+
+def _field_block_rules(path: str, style: RoleStyle, *, list_base: float) -> list[str]:
+    """字段级"换目标元素才生效"的两项（DF-8）。
+
+    * 缩进 → 承载块的 ``padding-left``：``li`` 写差值（见 ``_field_indent_declarations``），
+      ``p.body-paragraph`` 写绝对值（PDF 段落块就是绝对值）。
+    * 项目符号 → ``li`` 的 ``list-style-type``：``::marker`` 用 li 自己的
+      ``list-style-type``，所以只换这一行；写在 ``ul`` 上会把同段其它要点一起改掉。
+
+    为什么不给 span 加 ``display: inline-block`` 或直接写 span：那只推文字、不动符号
+    （``list-style-position: outside`` 的 marker 挂在内容边缘），与 PDF 逐像素对不上。
+    内联板块（技能 / 语言的胶囊 ``li``）没有独立的正文块，也没有 ``data-resume-path``，
+    这里不命中——PDF 侧同样只对正文块应用字段缩进（``document_body`` 按块渲染）。
+    """
+    indent_declarations = _field_indent_declarations(style, list_base=list_base)
+    return [
+        _rule(
+            _field_block_selector(path, "li"),
+            _bullet_declarations(style) + indent_declarations,
+        ),
+        _rule(_field_block_selector(path, "p"), _indent_declarations(style)),
+    ]
 
 
 def _role_rules(role: str, style: RoleStyle, *, base_ratios: Mapping[str, float]) -> list[str]:
@@ -239,6 +305,7 @@ def entry_style_css(style: ResolvedStyle) -> str:
     if not style.objects and not style.object_roles:
         return ""
     ratios = _template_ratios(style.template)
+    list_base = _list_indent_base(style.template)
     rules: list[str] = []
     for object_id in sorted(style.objects):
         object_style = style.objects[object_id]
@@ -287,6 +354,8 @@ def entry_style_css(style: ResolvedStyle) -> str:
             else:
                 prefix += ':not([data-role="field_label"])'
             rules.append(_rule(prefix, _declarations(field_style, ratio=ratios.get(role, 1.0))))
+            # DF-8：缩进 / 项目符号必须落在承载字段的块上（li / p），否则草稿里"拖了没反应"。
+            rules.extend(_field_block_rules(object_id, field_style, list_base=list_base))
             # Paragraph spacing belongs on the block carrying this exact path.
             if field_style.space_before is not None or field_style.space_after is not None:
                 rules.append(_rule(prefix + ":is(span,strong,em)", ["display: inline-block;"]))

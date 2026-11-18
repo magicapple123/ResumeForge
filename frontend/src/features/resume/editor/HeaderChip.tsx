@@ -20,6 +20,7 @@ import type { HeaderItem, ResumeDocument } from "../../../types/resumeDocument";
 import { isPhotoDataUrl, moveHeaderItem } from "../document/headerOrder";
 import { headerSlotOf, keyboardHeaderMoveTarget } from "../document/headerOrder";
 import { enumLabelOf } from "../document/fieldCatalog";
+import { displayText } from "../document/summarize";
 import { useDocumentChipMenu } from "./documentChipMenuContext";
 import { useDocumentDrag } from "./documentDragContext";
 import { useBlockSelectStart } from "./useBlockSelectStart";
@@ -88,11 +89,14 @@ export default function HeaderChip({
   const photo = isPhotoDataUrl(item.value) ? item.value : "";
   // #11b：枚举格式的页眉字段同样走目录 / 语言包（与正文 chip 同一 resolver），
   // 不裸显 `male` / `full_time` 这类原始码；目录没有该枚举时回落原值。
+  // DF-6：chip 上只显示可见文字——`{@color=…}` 这类行内标记留给编辑器里的源串。
   const valueText = photo
     ? ""
-    : item.format === "enum"
-      ? enumLabelOf(null, "basic_info", item.key, item.value, t)
-      : item.value;
+    : displayText(
+        item.format === "enum"
+          ? enumLabelOf(null, "basic_info", item.key, item.value, t)
+          : item.value,
+      );
   // 照片 chip 的可读名只有字段名（不把几百 KB 的 data URL 读出来），图另有 alt。
   const accessibleName = photo ? label : `${label}${valueText ? `\uFF1A${valueText}` : ""}`;
 

@@ -37,7 +37,7 @@ from .pdf_exporter import _PX_TO_PT, PAGE_WIDTH_MM, _photo_bytes, fit_photo_size
 from .pdf_exporter.theme import _hex_to_rgb
 from .resume.document_label_styles import has_styled_labels
 from .resume.field_style_target import is_field_path
-from .resume.resume_contact import WORD_SEPARATOR, pack_contact_lines
+from .resume.resume_contact import WORD_SEPARATOR, contact_field_groups, pack_contact_lines
 from .resume.resume_style import RoleStyle
 
 logger = logging.getLogger(__name__)
@@ -79,6 +79,20 @@ def style_of(
 ) -> RoleStyle | None:
     """角色/对象覆盖查询；无覆盖返回 None（= 模板值）。"""
     return role_style(role, object_id=object_id) if role_style is not None else None
+
+
+def _has_header_field_style(header, role_style: RoleStyleQuery | None) -> bool:
+    """页眉联系方式里是否有**字段级**覆盖（QW-6）：决定整行一个 run 还是按段写。"""
+    if role_style is None:
+        return False
+    for line in header.contact_lines:
+        for segment in line:
+            if not is_field_path(segment.path):
+                continue
+            role = str(getattr(segment, "role", "") or "meta")
+            if style_of(role_style, role, segment.path) != style_of(role_style, role):
+                return True
+    return False
 
 
 def scale_of(style: RoleStyle | None) -> float:
@@ -281,13 +295,17 @@ def draw_header(
                 color=theme.muted_text,
             )
 
-    # 联系方式：**与 PDF 同一套装行算法**（2026-11 #9）。此前把 planner 分好的每组字段
-    # 拼成一个段落交给 Word 自己度量，行分布与预览/PDF 必然不同（字段间隔 2em 时代更明显）。
-    contact_groups = [
-        [str(seg.text or "").strip() for seg in line if str(seg.text or "").strip()]
+    # 联系方式：与 PDF 同一套装行算法（2026-11 #9）。QW-6：planner 把「电话：」与号码拆成两段
+    # （同路径），必须**按字段**合并后再装行，否则标签与值之间会多出一个分隔符。
+    contact_fields = [
+        [field for field in contact_field_groups(line) if plain_text(field)]
         for line in plan.header.contact_lines
     ]
-    contact_groups = [group for group in contact_groups if group]
+    contact_fields = [group for group in contact_fields if group]
+    contact_groups = [[plain_text(field) for field in group] for group in contact_fields]
+    packed: list[list[str]] = []
+    flat: list[list[Inline]] = []  # 装行后的扁平字段（按段写 run 时按行切）
+    styled_contact = _has_header_field_style(plan.header, role_style)
     if contact_groups:
         # 可用宽度 = 版心宽 − 页头左右内边距（PDF 的 inner_width）− 照片栏。
         contact_width_mm = (
@@ -300,22 +318,46 @@ def draw_header(
         measure = make_text_measure(base * layout.contact_ratio, font_key)
         separator = plan.header.contact_separator or WORD_SEPARATOR
         packed = pack_contact_lines(contact_groups, contact_width_mm, measure, separator)
-        contact_lines = [separator.join(line) for line in packed]
+        flat = [field for group in contact_fields for field in group]
     else:
-        contact_lines = []
-    if contact_lines:
+        separator = plan.header.contact_separator or WORD_SEPARATOR
+    if packed:
         contact_node = paragraph(doc)
         header_paragraphs.append(contact_node)
-        for index, line in enumerate(contact_lines):
+        offset = 0  # 当前行在 flat 里的起点
+        for index, line in enumerate(packed):
             if index:
                 contact_node.add_run().add_break()
-            add_rich_runs(
-                contact_node,
-                line,
-                set_font,
-                size_pt=base * layout.contact_ratio * _PX_TO_PT,
-                color=theme.muted_text,
-            )
+            if not styled_contact:
+                add_rich_runs(
+                    contact_node,
+                    separator.join(line),
+                    set_font,
+                    size_pt=base * layout.contact_ratio * _PX_TO_PT,
+                    color=theme.muted_text,
+                )
+                continue
+            fields_here = flat[offset : offset + len(line)]
+            offset += len(line)
+            for position, field in enumerate(fields_here):
+                if position:
+                    add_rich_runs(
+                        contact_node,
+                        separator,
+                        set_font,
+                        size_pt=base * layout.contact_ratio * _PX_TO_PT,
+                        color=theme.muted_text,
+                    )
+                add_segments(
+                    contact_node,
+                    field,
+                    base=base,
+                    layout=layout,
+                    theme=theme,
+                    role_style=role_style,
+                    default_role="meta",
+                    ratio_override=layout.contact_ratio,
+                )
 
     # 页头底色块（modern 的浅色块）：三段各加同色底纹，段距为 0 时连成一整块。
     if getattr(layout, "header_bg", "none") == "soft_accent":

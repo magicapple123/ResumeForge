@@ -109,6 +109,21 @@ export const MAX_INLINE_SIZE = 1.6;
 /** 工具条上的常用字号档（80% / 90% / 110% / 125% / 150%）；100% 是「清除」。 */
 export const INLINE_SIZE_STEPS = [0.8, 0.9, 1.1, 1.25, 1.5] as const;
 
+/**
+ * 6 个预设强调色：**数据，不是主题变量**（用户会把它写进内容，导出后必须逐字一致）。
+ *
+ * 只在这里导出一次：工具条（`InlineMarkButtons`）的色板与右键菜单
+ * （`InlineMarkContextMenu`）的子菜单共用，顺序不可改（用户已按这个顺序取色）。
+ */
+export const COLOR_PRESETS = [
+  "#c0392b",
+  "#d97706",
+  "#2f6fd0",
+  "#2f855a",
+  "#6b7280",
+  "#111111",
+] as const;
+
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const STYLE_ATTR = /^\s*(size|color)\s*=\s*(.+?)\s*$/i;
 
@@ -335,31 +350,96 @@ export function toggleEmphasisMark(text: string, range: InlineRange): InlineEdit
   return applyStyleMark(text, range, { color: "#c0392b" });
 }
 
+/** 一段要删掉的字符区间（标记本身，正文不动）。 */
+interface MarkInterval {
+  start: number;
+  end: number;
+}
+
+/** 成对 `**` 的正文区间 + 它自己的两颗标记；落单的那颗不产出（原样保留）。 */
+function boldRuns(text: string): { from: number; to: number; marks: MarkInterval[] }[] {
+  const hits: number[] = [];
+  for (let at = text.indexOf("**"); at >= 0; at = text.indexOf("**", at + 2)) hits.push(at);
+  const runs: { from: number; to: number; marks: MarkInterval[] }[] = [];
+  for (let index = 0; index + 1 < hits.length; index += 2) {
+    const [open, close] = [hits[index], hits[index + 1]];
+    if (close <= open + 2) continue; // `****` 没有正文可清
+    runs.push({
+      from: open + 2,
+      to: close,
+      marks: [
+        { start: open, end: open + 2 },
+        { start: close, end: close + 2 },
+      ],
+    });
+  }
+  return runs;
+}
+
+/** 把原串下标映射到"删掉这些区间之后"的下标；落在删除区里就收拢到删除点。 */
+function shiftPosition(position: number, removals: readonly MarkInterval[]): number {
+  let shift = 0;
+  let consumed = 0;
+  for (const { start, end } of removals) {
+    const from = Math.max(start, consumed);
+    if (end <= from) continue; // 整段被前一段覆盖（嵌套）
+    if (from >= position) break;
+    shift += Math.min(end, position) - from;
+    consumed = end;
+  }
+  return position - shift;
+}
+
 /**
  * 去掉选区里的行内格式（右键菜单「清除行内格式」）。
  *
- * 只处理**成对**的样式标记（`{@…}…{@}`，含嵌套）与成对的 `**` 加粗；落单的 `{@` / `**`
- * 原样保留——用户真的想印出来的花括号与星号不该被这条菜单吞掉。链接标记（`[字](url)`）
- * 不在清除范围内：那里承载了不可从文字恢复的 URL。
+ * ## 为什么要在**整串**上解析（DF-9）
+ *
+ * 编辑态是两层：标记占位但不可见。用户拖选看得见的"个人项目"时，选区落在
+ * `{@color=#c0392b}` 与 `{@}` **之间**——只在选区切片里找标记会一个都找不到，于是
+ * "点了没反应"。所以这里在整串上找格式段，再判断它与选区是否相交。
+ *
+ * ## 三条规则
+ *
+ * 1. **整段清除**：选区碰到哪个格式段，就把那一段的标记整体去掉（只选了半段也一样，
+ *    2026-11-18 的取舍：不做拆分）；
+ * 2. 相交判定用段的**正文区间**，不是整段 raw 区间——否则"光标紧贴 `{@}` 之后"会被判成
+ *    碰到了上一段，误清相邻格式；
+ * 3. 删除区间按起点排序后一次扫完（嵌套段自然被覆盖），返回的选区内标在新串上重算，
+ *    光标仍落在原来那几个字上。
+ *
+ * 只处理**成对**的样式标记（`{@…}…{@}`，含嵌套）与成对的 `**`；落单的 `{@` / `**` 原样
+ * 保留——用户真想印出来的花括号与星号不该被吞掉。链接（`[字](url)`）不清：URL 无法从文字恢复。
  */
 export function clearInlineMarks(text: string, range: InlineRange): InlineEdit {
   const safe = clampRange(text.length, range);
   if (safe.start === safe.end) return { text, ...safe };
-  const selected = text.slice(safe.start, safe.end);
-  const runs = parseStyleRuns(selected).sort((left, right) => left.start - right.start);
-  let inner = "";
-  let cursor = 0;
-  for (const run of runs) {
-    if (run.start < cursor) continue; // 嵌套区间已随外层一起处理
-    inner += selected.slice(cursor, run.start) + selected.slice(run.contentStart, run.contentEnd);
-    cursor = run.end;
+  const hit = (from: number, to: number): boolean => safe.start < to && safe.end > from;
+
+  const removals: MarkInterval[] = [];
+  for (const run of parseStyleRuns(text)) {
+    if (!hit(run.contentStart, run.contentEnd)) continue;
+    removals.push({ start: run.start, end: run.contentStart });
+    removals.push({ start: run.contentEnd, end: run.end });
   }
-  inner += selected.slice(cursor);
-  // 成对 `**` 才去掉：`String.replace` 会把落单的星号也吞掉，那是两回事。
-  const boldPairs = inner.match(/\*\*/g)?.length ?? 0;
-  if (boldPairs % 2 === 0) inner = inner.replace(/\*\*/g, "");
-  const next = text.slice(0, safe.start) + inner + text.slice(safe.end);
-  return { text: next, start: safe.start, end: safe.start + inner.length };
+  for (const bold of boldRuns(text)) {
+    if (!hit(bold.from, bold.to)) continue;
+    removals.push(...bold.marks);
+  }
+  if (removals.length === 0) return { text, ...safe };
+  removals.sort((left, right) => left.start - right.start);
+
+  let next = "";
+  let cursor = 0;
+  for (const { start, end } of removals) {
+    if (end <= cursor) continue;
+    next += text.slice(cursor, Math.max(start, cursor));
+    cursor = end;
+  }
+  next += text.slice(cursor);
+
+  const start = shiftPosition(safe.start, removals);
+  return { text: next, start, end: Math.max(start, shiftPosition(safe.end, removals)) };
 }
 
 /** 加粗（`**`）：与既有右键菜单的标记一致。 */

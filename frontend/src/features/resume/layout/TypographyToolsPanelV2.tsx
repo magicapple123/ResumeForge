@@ -53,6 +53,7 @@ import {
   entryIdFromPath,
   entryIdsFromPaths,
   findEntryById,
+  headerFieldFromPath,
   optionsForIds,
   pathsFromEntryIds,
   scopeForDocumentPath,
@@ -125,6 +126,9 @@ export default function TypographyToolsPanelV2({
   // Q12：条目内容（无关项判断）与纸面路径推出的默认作用范围。
   const focusedEntry = findEntryById(document, focused?.id);
   const pickedScope = scopeForDocumentPath(document, selectedPath);
+  // QW-6：点纸面上的页眉字段（`header.{id}`）时，左侧面板改为调这个字段——页眉没有
+  // 条目，进不了上面的条目选择列表，需要单独一条挂载路径。
+  const headerField = headerFieldFromPath(document, selectedPath);
   const styleCatalog = readStyleCatalog(catalog ?? undefined);
   const defaults = templateRoleDefaults(styleCatalog, layout.template, OBJECT_ROLE);
   const baseRatio = roleBaseRatio(defaults);
@@ -210,10 +214,30 @@ export default function TypographyToolsPanelV2({
     </section>
   ) : null;
 
+  const headerSection = headerField ? (
+    <section className="resume-typography-panel" aria-label={t("typography.tools.sectionObject")}>
+      <Typography.Text strong>{t("typography.tools.sectionObject")}</Typography.Text>
+      <ObjectStylePanel
+        layout={layout}
+        catalog={catalog}
+        objectId={`header.${headerField.id}`}
+        objectLabel={headerField.label}
+        headerField={headerField}
+        pickedPath={selectedPath}
+        defaultScope="field"
+        fieldRole="meta"
+        disabled={disabled}
+        previewRef={previewRef}
+        onChange={commit}
+      />
+    </section>
+  ) : null;
+
   if (options.length === 0) {
     return (
       <Space orientation="vertical" size={8} style={{ width: "100%" }} data-typography-tools-v2="">
         <Typography.Text type="secondary">{t("typography.tools.selectionEmpty")}</Typography.Text>
+        {headerSection}
         {roleSection}
       </Space>
     );
@@ -253,6 +277,7 @@ export default function TypographyToolsPanelV2({
         </Typography.Text>
       </section>
 
+      {headerSection}
       {focused ? (
         <section
           className="resume-typography-panel"

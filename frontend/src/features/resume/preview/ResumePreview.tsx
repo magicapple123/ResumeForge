@@ -21,6 +21,7 @@ import { useMaxFitScale } from "./usePreviewZoom";
 import { usePreviewAvailableSpace } from "./usePreviewAvailableSpace";
 import { usePreviewProbeHandle } from "./usePreviewProbeHandle";
 import { usePreviewZoomPair } from "./usePreviewZoomPair";
+import { usePreviewZoomAnchor } from "./usePreviewZoomAnchor";
 import ProviewLayer from "./ProviewLayer";
 import ExactPreviewPanel from "./ExactPreviewPanel";
 import type { ExactPreviewOptions } from "./exactPreviewOptions";
@@ -191,7 +192,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   /** 当前口径的缩放状态（缩放条 / Ctrl+滚轮 / 快捷键都只作用于看得见的那一档）。 */
   const zoom = activeZoom.zoom;
   const setZoom = activeZoom.setZoom;
-  const adjustZoom = activeZoom.adjustZoom;
+  const zoomByFactor = activeZoom.zoomByFactor;
   const resetZoom = activeZoom.resetZoom;
   const zoomByWheel = activeZoom.zoomByWheel;
 
@@ -211,18 +212,46 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     reportedPages,
   });
 
+  const geometry = calculatePreviewGeometry({
+    availableSpace,
+    paperHeight,
+    pageLimit,
+    // 草稿几何只由草稿缩放决定：精确那套比例与它无关。
+    zoom: draftZoom.zoom,
+    // 制作台右栏按宽度适应（Q21）：纸宽 ≤ 相框宽，纵向滚动看全。
+    fitMode,
+    overflow,
+    naturalWidth,
+    maxFitScale,
+    // 竖排后画布自己不再画分页条（页与页之间是真实的空白），这个入参只为兼容旧签名。
+    pageGap: 0,
+    measure,
+    // 页数以服务端报告为准（问题 3）；`measure` 退为"不许裁掉内容"的下界。
+    reportedPages,
+  });
+
+  /**
+   * QW-7：缩放前记录光标下的内容点，缩放提交后由 hook 补偿滚动
+   * （纯几何在 `zoomAnchor.ts`，DOM 接线在 `usePreviewZoomAnchor.ts`）。
+   */
+  const captureZoomAnchor = usePreviewZoomAnchor({
+    scale: geometry.scale,
+    viewportRef: containerRef,
+    bodyRef,
+  });
+
   const handleWheel = useCallback(
     (event: globalThis.WheelEvent) => {
       if (event.defaultPrevented) return; // 内层（草稿视口）已经处理过这一拍
       // Ctrl/Cmd：**只缩放、不滚动**（先 preventDefault 挡掉浏览器整页缩放；靠 zoomByWheel 的返回值会掉进"转交滚动"）。
       if (event.ctrlKey || event.metaKey) {
         event.preventDefault();
-        zoomByWheel(event);
+        if (zoomByWheel(event)) captureZoomAnchor(event);
         return;
       }
       if (forwardWheelToParent(containerRef.current, event)) event.preventDefault();
     },
-    [zoomByWheel],
+    [captureZoomAnchor, zoomByWheel],
   );
 
   const { bindFrame } = useFrameInteractions({
@@ -272,23 +301,6 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     [applyLayoutToFrame, bindClickToEdit, bindFrame],
   );
 
-  const geometry = calculatePreviewGeometry({
-    availableSpace,
-    paperHeight,
-    pageLimit,
-    // 草稿几何只由草稿缩放决定：精确那套比例与它无关。
-    zoom: draftZoom.zoom,
-    // 制作台右栏按宽度适应（Q21）：纸宽 ≤ 相框宽，纵向滚动看全。
-    fitMode,
-    overflow,
-    naturalWidth,
-    maxFitScale,
-    // 竖排后画布自己不再画分页条（页与页之间是真实的空白），这个入参只为兼容旧签名。
-    pageGap: 0,
-    measure,
-    // 页数以服务端报告为准（问题 3）；`measure` 退为"不许裁掉内容"的下界。
-    reportedPages,
-  });
   // 刷新（换 html / 页数）时按新旧 fit 的比值补偿缩放，保持纸面显示大小不变。
   // 只对草稿口径生效（Q21）：精确模式下草稿画布隐藏/裁零，fit 抖动不该改任何一套缩放。
   useStablePreviewScale(
@@ -325,6 +337,12 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
    */
   const measuringOnly = canExactPreview && activeMode === "exact";
   const mountDraftCanvas = !measuringOnly || Boolean(onMeasure || onLayoutStatus);
+
+  /** QW-7：`+/-` 按可见比例缩放 5%，锚点取视口中心（纸面比视口小时会夹进纸面）。 */
+  const zoomByVisibleStep = (factor: number) => {
+    captureZoomAnchor(null);
+    zoomByFactor(factor);
+  };
 
   return (
     <div className="resume-preview-root">
@@ -436,8 +454,8 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
         clampedToMin={canExactPreview && activeMode === "exact" ? false : geometry.clampedToMin}
         overflowHint={needsHorizontalScroll ? t("preview.zoom.scrollHint") : undefined}
         hint={zoomHint}
-        onZoomOut={() => adjustZoom(-0.1)}
-        onZoomIn={() => adjustZoom(0.1)}
+        onZoomOut={() => zoomByVisibleStep(1 / 1.05)}
+        onZoomIn={() => zoomByVisibleStep(1.05)}
         onReset={resetZoom}
       />
       {boldMenu ? <BoldContextMenu {...boldMenu} /> : null}

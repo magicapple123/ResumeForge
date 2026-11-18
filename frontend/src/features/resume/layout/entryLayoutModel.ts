@@ -24,6 +24,7 @@ import type {
 import { defaultEntryLayout, defaultSectionLayout } from "../document/defaults";
 import { moveItem, reorderItems } from "../document/placement";
 import { formatListValues } from "../document/format";
+import { fieldDisplayName } from "../document/summarize";
 import { t } from "../../../i18n";
 import { itemPath } from "../document/paths";
 import type { LayoutColumns, LayoutAlign, LayoutJustify } from "./entryRowLayout";
@@ -55,10 +56,8 @@ export interface ShortFieldRow {
 
 function itemLabel(item: ResumeItem, resolveLabel?: (key: string) => string | undefined): string {
   if (item.kind === "text") return "";
-  const explicit = item.label.trim();
-  if (explicit) return explicit;
-  const fromCatalog = resolveLabel?.(item.key)?.trim();
-  return fromCatalog || item.key;
+  // DF-6 / DF-10：与结构树、chip 同一出口——空名显示「未命名字段」，永不露 `custom:`。
+  return fieldDisplayName(item.label, item.key, resolveLabel?.(item.key) ?? "");
 }
 
 /** item 的值预览（作者与列表各拼一行；字段直接取 value）。 */

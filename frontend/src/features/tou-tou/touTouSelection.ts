@@ -20,6 +20,7 @@
  * `EntryLayoutPanel` 的字段行）。找不到就落到"任意文本"，永远不猜。
  */
 import type { MessageKey } from "../../i18n";
+import { anchoredPlacement } from "../../utils/anchoredPlacement";
 
 export type TouTouSelectionRegion = "resume-experience" | "job-description" | "clipboard" | "text";
 
@@ -139,40 +140,22 @@ export interface MenuPlacement {
   placement: "below" | "above";
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(min, value), Math.max(min, max));
-}
-
 /**
  * 浮条落点：默认在选区下方 8px、水平居中；下方放不下就翻到上方，两侧夹回视口。
  *
- * 参数全是纯数字（视口/浮条尺寸由调用方量），所以三种选区形态的定位都能直接测。
+ * 具体算法与行内格式右键菜单共用 `utils/anchoredPlacement`（"一处逻辑一份实现"）；
+ * 这里只固定在投投这一侧的参数：居中、8px 间距、距视口 8px。
  */
 export function selectionMenuPosition(
   anchor: SelectionRect,
   viewport: { width: number; height: number },
   menu: { width: number; height: number },
 ): MenuPlacement {
-  const maxLeft = Math.max(
-    SELECTION_VIEWPORT_MARGIN,
-    viewport.width - menu.width - SELECTION_VIEWPORT_MARGIN,
-  );
-  const left = clamp(
-    anchor.left + anchor.width / 2 - menu.width / 2,
-    SELECTION_VIEWPORT_MARGIN,
-    maxLeft,
-  );
-  const maxTop = Math.max(
-    SELECTION_VIEWPORT_MARGIN,
-    viewport.height - menu.height - SELECTION_VIEWPORT_MARGIN,
-  );
-  const below = anchor.bottom + SELECTION_MENU_GAP;
-  if (below <= maxTop) return { top: below, left, placement: "below" };
-  const above = anchor.top - SELECTION_MENU_GAP - menu.height;
-  if (above >= SELECTION_VIEWPORT_MARGIN) {
-    return { top: above, left, placement: "above" };
-  }
-  return { top: clamp(below, SELECTION_VIEWPORT_MARGIN, maxTop), left, placement: "below" };
+  const placement = anchoredPlacement(anchor, viewport, menu, {
+    gap: SELECTION_MENU_GAP,
+    margin: SELECTION_VIEWPORT_MARGIN,
+  });
+  return { top: placement.top, left: placement.left, placement: placement.side };
 }
 
 const REGION_ATTR = "data-tou-tou-region";

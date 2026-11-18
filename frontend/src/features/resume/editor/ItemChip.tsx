@@ -20,7 +20,8 @@ type ChipKeyEvent = KeyboardEvent<HTMLElement>;
 import { useRef, useState } from "react";
 import { useI18n } from "../../../i18n/i18nContext";
 import type { ResumeDocument, ResumeItem } from "../../../types/resumeDocument";
-import { itemDisplayLabel, itemDisplayValue } from "../document/format";
+import { itemDisplayValue } from "../document/format";
+import { displayText, fieldDisplayName } from "../document/summarize";
 import { enumLabelOf } from "../document/fieldCatalog";
 import { getItemPlacement, moveItem } from "../document";
 import { keyboardMoveTarget, slotOf } from "../document/drag";
@@ -92,14 +93,18 @@ export default function ItemChip({
   const pointerFocusRef = useRef(false);
   const snapshotRef = useRef<ResumeDocument | null>(null);
   const hidden = getItemPlacement(item) === "hidden";
-  const label = itemDisplayLabel(item, catalogLabel);
+  // DF-6 / DF-10：chip 上的名字与值都走展示出口——不显示 `{@color=…}` 源串，也不显示
+  // `custom:` 内部键（空名显示「未命名字段」，规则只在 `fieldDisplayName` 里实现一次）。
+  const label = item.kind === "text" ? "" : fieldDisplayName(item.label, item.key, catalogLabel);
   // #11a：枚举字段显示本地化标签（后端纸面渲染同源），目录没有时回落原值。
-  const value = itemDisplayValue(item, {
-    resolveEnum:
-      item.kind === "field" && item.format === "enum"
-        ? (raw) => enumLabelOf(null, sectionKey, item.key, raw, t)
-        : undefined,
-  });
+  const value = displayText(
+    itemDisplayValue(item, {
+      resolveEnum:
+        item.kind === "field" && item.format === "enum"
+          ? (raw) => enumLabelOf(null, sectionKey, item.key, raw, t)
+          : undefined,
+    }),
+  );
   // 问题 12：正文块也能拖了。但它的正文区是可编辑文本，整块 draggable 会把「拖选一句话里
   // 的几个字」变成「拖走整块」——所以正文块的 draggable 只挂在独立把手上，字段 chip 维持
   // 整块可拖（原有手感不变）。

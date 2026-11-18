@@ -14,8 +14,10 @@
 from __future__ import annotations
 
 import io
+import json
 import re
 import zipfile
+from pathlib import Path
 
 import pypdfium2 as pdfium
 from app.schemas.resume import ResumeContent
@@ -184,6 +186,30 @@ def test_strip_style_markers_keeps_visible_text_and_bold():
     # 未闭合 / 非法属性：整段按字面保留（与解析侧的退化口径一致）
     assert strip_style_markers("{@size=0.9}未闭合") == "{@size=0.9}未闭合"
     assert strip_style_markers("{@size=9}越界{@}") == "{@size=9}越界{@}"
+
+
+def test_strip_style_markers_matches_frontend_shared_cases() -> None:
+    """DF-6：剥离口径的前后端共享用例（`frontend/.../inlineMarks.cases.json`）。
+
+    两份实现互相 import 不到，只能靠同一组 raw → 期望值咬住：这里断言后端
+    `strip_style_markers` 的 `style_visible`，前端 `stripInlineMarks` 断言同一条目的
+    `visible`。未闭合 / 越界标记两边都必须原样保留（不吞字）。
+    """
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "features"
+        / "resume"
+        / "editor"
+        / "inlineMarks.cases.json"
+    )
+    cases = json.loads(path.read_text(encoding="utf-8"))["cases"]
+    assert len(cases) >= 12
+    for case in cases:
+        assert strip_style_markers(case["raw"]) == case["style_visible"], case["raw"]
+        # 展示口径永远不比 Markdown 口径更长（它连 `**` 与链接语法都剥掉）。
+        assert len(case["visible"]) <= len(case["style_visible"]), case["raw"]
 
 
 def test_markdown_keeps_bold_but_drops_style_markers():

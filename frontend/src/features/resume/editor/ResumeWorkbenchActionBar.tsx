@@ -24,10 +24,12 @@ import {
   ColumnWidthOutlined,
   DownloadOutlined,
   EditOutlined,
+  RedoOutlined,
   SaveOutlined,
   SettingOutlined,
+  UndoOutlined,
 } from "@ant-design/icons";
-import { Button, Popconfirm, Typography } from "antd";
+import { Button, Popconfirm, Tooltip, Typography } from "antd";
 import type { MessageKey } from "../../../i18n";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -45,6 +47,17 @@ interface Props {
   conflict: boolean;
   /** 上一次保存失败（非冲突）：留一句"改动还留着"，保存按钮就是重试入口。 */
   saveFailed: boolean;
+  /**
+   * QW-2：版式已保存、正文未保存。只出这一条提示 +「重试正文」，
+   * 并且压掉通用失败提示（否则同一件事说两遍）。
+   */
+  partial: boolean;
+  /** QW-1：统一历史的撤销/恢复（与快捷键调用同一个函数）。 */
+  canUndo: boolean;
+  canRedo: boolean;
+  /** 将要撤销 / 恢复的那一步摘要（`summaryOf`）；没有历史时为空。 */
+  undoSummary?: string;
+  redoSummary?: string;
   /** 版式 PATCH 在飞。 */
   layoutSaving: boolean;
   /** 整体保存的两步正在跑。 */
@@ -56,6 +69,10 @@ interface Props {
   /** 关闭卡片的描述文案（按"丢的是什么"由宿主选好）。 */
   closeBody: MessageKey;
   onSave: () => void;
+  /** 「重试正文」：与保存同一个函数——版式基线已对齐，重跑只发正文那一步。 */
+  onRetryContent: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
   /** `true` = 亮起「取消修改」的就地确认条。 */
   onRequestDiscardConfirm: (next: boolean) => void;
   /** 确认放弃本次修改（内容回填 + 版式回滚）。 */
@@ -90,12 +107,20 @@ export default function ResumeWorkbenchActionBar({
   isDraft,
   conflict,
   saveFailed,
+  partial,
+  canUndo,
+  canRedo,
+  undoSummary,
+  redoSummary,
   layoutSaving,
   saving,
   discardConfirm,
   closeConfirmOpen,
   closeBody,
   onSave,
+  onRetryContent,
+  onUndo,
+  onRedo,
   onRequestDiscardConfirm,
   onDiscard,
   onExport,
@@ -122,12 +147,72 @@ export default function ResumeWorkbenchActionBar({
       ) : null}
       {/* 保存失败：动作条是用户刚才点的地方，把"改动还在"这句话放在这里；重试入口就是
           保存按钮本身（不禁用它——失败后用户最需要的就是再点一次）。 */}
-      {saveFailed && !conflict ? (
+      {saveFailed && !conflict && !partial ? (
         <Typography.Text type="danger" className="resume-wb-actionbar-hint">
           {t("workbench.conflict.save-failed")}
         </Typography.Text>
       ) : null}
       <span className="resume-wb-actionbar-spacer" />
+      {/*
+        QW-1：撤销 → 恢复，与快捷键走同一个函数（`history.undo/redo`），不另存一份状态。
+        禁用条件按口径：没有可撤销/可恢复、正在保存、只读宿主。
+        输入框聚焦时 `mousedown` 被拦下：按钮不抢焦点，输入框的原生撤销也不会被点出来。
+      */}
+      <Tooltip
+        title={
+          canUndo && undoSummary
+            ? t("workbench.history.undo.tooltip", { summary: undoSummary })
+            : t("workbench.history.undo.hint")
+        }
+      >
+        <span className="resume-wb-actionbar-history">
+          <Button
+            size="small"
+            type="text"
+            icon={<UndoOutlined />}
+            aria-label={t("workbench.history.undo")}
+            disabled={!canUndo || saving || !editorEnabled || undefined}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={onUndo}
+          />
+        </span>
+      </Tooltip>
+      <Tooltip
+        title={
+          canRedo && redoSummary
+            ? t("workbench.history.redo.tooltip", { summary: redoSummary })
+            : t("workbench.history.redo.hint")
+        }
+      >
+        <span className="resume-wb-actionbar-history">
+          <Button
+            size="small"
+            type="text"
+            icon={<RedoOutlined />}
+            aria-label={t("workbench.history.redo")}
+            disabled={!canRedo || saving || !editorEnabled || undefined}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={onRedo}
+          />
+        </span>
+      </Tooltip>
+      {/* QW-2：版式已落库、正文没落库——一条提示 + 一个可点的下一步。 */}
+      {partial && !conflict ? (
+        <span
+          role="alert"
+          style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+          className="resume-wb-actionbar-partial"
+        >
+          <Typography.Text type="warning">{t("workbench.conflict.partial-saved")}</Typography.Text>
+          <Button
+            size="small"
+            disabled={saving || layoutSaving || undefined}
+            onClick={onRetryContent}
+          >
+            {t("workbench.action.retry-content")}
+          </Button>
+        </span>
+      ) : null}
       {hasWork && dirty && discardConfirm ? (
         // 复用 `.rf-form-modal-discard`：与弹窗、编辑器里的确认是同一种视觉语言，
         // 也不再新开第二层弹窗（这一屏本来就是一个整屏弹窗）。

@@ -10,7 +10,9 @@ import {
   makeSection,
 } from "../../../test/documentHarness";
 import type { EntryLayout, ResumeDocument } from "../../../types/resumeDocument";
-import { entryLayoutOverrides, restoreEntryLayoutField } from "./entryLayoutModel";
+import { t } from "../../../i18n";
+import { fieldItem } from "../document/documentFixtures";
+import { entryLayoutOverrides, restoreEntryLayoutField, shortFieldRows } from "./entryLayoutModel";
 
 function makeDoc(entryLayout: Partial<EntryLayout>, sectionColumns: 1 | 2 | 3 = 1): ResumeDocument {
   return makeResumeDocument({
@@ -93,5 +95,36 @@ describe("restoreEntryLayoutField", () => {
     const next = restoreEntryLayoutField(doc, "education", "entry_01", "gap");
     expect(next.sections[0].entries[0].layout.gap).toBeNull();
     expect(next.sections[0].layout).toEqual(doc.sections[0].layout);
+  });
+});
+
+describe("shortFieldRows 的字段名（DF-6 / DF-10）", () => {
+  it("空名自定义字段显示「未命名字段」，不露 custom: 内部键", () => {
+    const entry = makeEntry([
+      fieldItem({
+        id: "ob_item0001",
+        key: "custom:ob_jhdfjembnz3u",
+        label: "",
+        value: "证书编号值",
+        placement: "lead",
+      }),
+    ]);
+    const [row] = shortFieldRows(entry, "education");
+    expect(row?.label).toBe(t("document.field.unnamed"));
+    expect(row?.label).not.toContain("custom:");
+  });
+
+  it("用户命名后的字段显示名字（与 chip / 结构树同源）", () => {
+    const entry = makeEntry([
+      fieldItem({
+        id: "ob_item0001",
+        key: "custom:ob_jhdfjembnz3u",
+        label: "证书编号",
+        value: "证书编号值",
+        placement: "lead",
+      }),
+    ]);
+    const [row] = shortFieldRows(entry, "education");
+    expect(row?.label).toBe("证书编号");
   });
 });

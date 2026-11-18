@@ -17,3 +17,29 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/*
+ * DF-3：菜单限高 + 内部滚动。
+ *
+ * 6 项 + 分隔线已接近 280px，「插入链接…」展开后更高；没有上限时 antd 的
+ * `overflow.adjustY` 会把整块菜单往上推，体感就是"总在光标上方"。上限放这里，
+ * 翻转判定仍只用**打开时**测到的高度（子菜单/链接输入框的增高靠这条兜底）。
+ */
+.rf-inline-mark-popup {
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/*
+ * DF-2：透明遮罩（覆盖纸面 iframe）。不承担任何视觉，只负责"点一下关闭"。
+ *
+ * z-index 是兜底值 = `appTheme` 的 zIndexPopupBase（3100）+ antd Dropdown 的 +50 − 1；
+ * 组件打开时会按弹层的实测层级覆盖它。菜单本体始终高一层，所以点击菜单不受影响。
+ */
+.rf-inline-mark-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 3149;
+  background: transparent;
+}

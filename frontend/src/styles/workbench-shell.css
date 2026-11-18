@@ -105,3 +105,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* QW-1：撤销/重做各包一层 Tooltip 锚点。inline-flex 让 24px 图标按钮不再把 56px 的
+   标题行撑高，也不参与 flex 收缩（按钮本身不可压）。 */
+.resume-wb-actionbar-history {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+/* QW-2：部分成功提示条（文案 + 「重试正文」）。窄屏换行时整块不被按钮挤出边界；
+   行内间距由组件的 inline style 给，这里只管收缩与换行。 */
+.resume-wb-actionbar-partial {
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}

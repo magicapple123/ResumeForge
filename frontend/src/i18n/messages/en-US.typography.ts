@@ -83,6 +83,11 @@ const typography = {
   "typography.entryStyle.scope.body": "Body text",
   "typography.entryStyle.scope.meta": "Metadata (gray)",
   "typography.entryStyle.scope.field": "Current field",
+  "typography.headerStyle.scope": "Header field",
+  "typography.headerStyle.hint":
+    "Field label and field value are styled separately—pick a half above",
+  "typography.headerStyle.noLabel":
+    "This field prints no label right now (turn on “show label” to style it)",
   "typography.entryStyle.scopeHint.object":
     "Changes the whole entry: heading, body and metadata all follow",
   "typography.entryStyle.scopeHint.entry_title": "Changes the entry heading line only",

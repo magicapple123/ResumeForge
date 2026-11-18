@@ -177,17 +177,20 @@ describe("ResumeLayoutControls · 字号下限 5px（R7）", () => {
 });
 
 describe("ResumeLayoutControls · 两端 ±0.1px 按钮", () => {
+  /** QW-4 起读数是一个可输入的数值框，值在 `value` 上而不是文本节点里。 */
+  const readout = () => (screen.getByRole("spinbutton") as HTMLInputElement).value;
+
   it("「放大字号」一次 +0.1px，读数与滑块说同一件事", async () => {
     renderControls();
     const slider = await screen.findByRole("slider", { name: /字号/ });
     expect(slider).toHaveAttribute("aria-valuenow", "14");
-    expect(screen.getByText("14px")).toBeInTheDocument();
+    expect(readout()).toBe("14px");
 
     fireEvent.click(screen.getByRole("button", { name: "放大字号" }));
 
     // 读数与 aria-valuenow 必须同步：只更新其中一个是最容易溜过去的错。
     await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "14.1"));
-    expect(screen.getByText("14.1px")).toBeInTheDocument();
+    await waitFor(() => expect(readout()).toBe("14.1px"));
   });
 
   it("「缩小字号」一次 -0.1px；连点三次读数仍是干净的 13.7（没有浮点尾巴）", async () => {
@@ -203,7 +206,7 @@ describe("ResumeLayoutControls · 两端 ±0.1px 按钮", () => {
     // 13.9 - 0.1 - 0.1 在不规整的实现里会变成 13.700000000000001：
     // 那串尾巴会被原样写进 aria-valuenow 和落库系数里。
     await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "13.7"));
-    expect(screen.getByText("13.7px")).toBeInTheDocument();
+    await waitFor(() => expect(readout()).toBe("13.7px"));
   });
 
   it("到下限 5px 时「缩小字号」禁用，「放大字号」仍可用", async () => {
@@ -217,7 +220,7 @@ describe("ResumeLayoutControls · 两端 ±0.1px 按钮", () => {
     });
 
     const minus = await screen.findByRole("button", { name: "缩小字号" });
-    expect(screen.getByText("5px")).toBeInTheDocument();
+    expect(readout()).toBe("5px");
     expect(minus).toBeDisabled();
     expect(screen.getByRole("button", { name: "放大字号" })).toBeEnabled();
   });
@@ -226,7 +229,7 @@ describe("ResumeLayoutControls · 两端 ±0.1px 按钮", () => {
     renderControls({ layout: { ...DEFAULT_LAYOUT, font_scale: "large" } });
 
     const plus = await screen.findByRole("button", { name: "放大字号" });
-    expect(screen.getByText("18px")).toBeInTheDocument();
+    expect(readout()).toBe("18px");
     expect(plus).toBeDisabled();
     expect(screen.getByRole("button", { name: "缩小字号" })).toBeEnabled();
   });
@@ -248,7 +251,7 @@ describe("ResumeLayoutControls · 两端 ±0.1px 按钮", () => {
 
     // 推进量先夹到边界：滑块停在 18（不是 18.1），按钮随之禁用。
     await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "18"));
-    expect(screen.getByText("18px")).toBeInTheDocument();
+    expect(readout()).toBe("18px");
     expect(screen.getByRole("button", { name: "放大字号" })).toBeDisabled();
 
     // 落在档位基准上 → 系数为 1 → 不写覆盖键（等一次防抖提交）。

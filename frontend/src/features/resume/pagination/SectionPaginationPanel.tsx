@@ -25,7 +25,7 @@
  * - 条目级：`document.sections[i].entries[j].layout.*`（本文件的汇总/清除与结构页签同源）。
  * 经 `onChange` 交给工作台记历史/标脏/保存，组件自己不发请求、不写库。
  */
-import { Button, Flex, Switch, Tooltip, Typography } from "antd";
+import { Button, Flex, Switch, Tag, Tooltip, Typography } from "antd";
 import { useMemo } from "react";
 import { useLocale } from "../../../i18n/i18nContext";
 import { t } from "../../../i18n";
@@ -175,7 +175,10 @@ export default function SectionPaginationPanel({
         {document.sections.map((section) => {
           const name = sectionDisplayLabel(section);
           // 已设置断页（任一开关为 true）的板块给一个 5px 圆点：一眼扫出"哪些板块设了"。
-          const configured = Boolean(section.layout.start_on_new_page);
+          // QW-3：旧版规则的 keep_together 同样算"设了"，否则圆点会与汇总条自相矛盾。
+          const configured = Boolean(
+            section.layout.start_on_new_page || section.layout.keep_together,
+          );
           return (
             <div
               key={section.key}
@@ -261,6 +264,15 @@ export default function SectionPaginationPanel({
                     ) : (
                       <span className="resume-pagination-break-label">{label}</span>
                     )}
+                    {/*
+                      QW-3：旧版规则。它来自旧文档、导出端仍当真（PDF/DOCX 会据此分页），
+                      但界面上没有设置入口——只在这里显示与单个 ✕ 清除。
+                    */}
+                    {item.legacy ? (
+                      <Tag className="resume-pagination-break-legacy">
+                        {t("pagination.breaks.legacyTag")}
+                      </Tag>
+                    ) : null}
                     {/* 任务 12：谁能设置，谁才能清除。板块级在这里能设（下方的表），所以这里给 ✕；
                         条目级只能在「本份简历结构」里设，这里只给 → 跳过去，不再给一条清不掉的 ✕。 */}
                     {item.kind === "entry" ? (
@@ -298,6 +310,11 @@ export default function SectionPaginationPanel({
             {breaks.some((item) => item.kind === "entry") ? (
               <Typography.Text type="secondary" className="resume-section-pagination-hint">
                 {t("pagination.breaks.entryHintInStructure")}
+              </Typography.Text>
+            ) : null}
+            {breaks.some((item) => item.legacy) ? (
+              <Typography.Text type="secondary" className="resume-section-pagination-hint">
+                {t("pagination.breaks.legacyHint")}
               </Typography.Text>
             ) : null}
           </>

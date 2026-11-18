@@ -75,6 +75,11 @@ interface Props {
   /** 宿主从纸面路径推出的默认范围（`scopeForDocumentPath`）；缺省 = 整条。 */
   defaultScope?: EntryStyleScope;
   fieldRole?: ResumeRoleKey;
+  /**
+   * QW-6：页眉字段（`header.{id}`）。传入时面板固定为「字段值 / 字段名」两个目标，
+   * 没有范围切换——页眉没有"整条 / 条目头 / 正文 / 灰字"这几层。
+   */
+  headerField?: { id: string; label: string; hasLabel?: boolean } | null;
   /** #7：右键浮层里锁定范围——不提供范围切换（浮层只改右键命中那一块）。 */
   lockScope?: boolean;
   disabled?: boolean;
@@ -93,6 +98,7 @@ export default function ObjectStylePanel({
   pickedPath = null,
   defaultScope = "object",
   fieldRole = "body",
+  headerField = null,
   lockScope = false,
   disabled = false,
   previewRef,
@@ -115,7 +121,13 @@ export default function ObjectStylePanel({
     return <Typography.Text type="secondary">{t("typography.object.empty")}</Typography.Text>;
   }
 
-  const scope = manual && manual.path === pickedPath ? manual.scope : defaultScope;
+  const headerMode = headerField !== null;
+  const targetId = headerMode ? `header.${headerField.id}` : objectId;
+  const scope: EntryStyleScope = headerMode
+    ? "field"
+    : manual && manual.path === pickedPath
+      ? manual.scope
+      : defaultScope;
   const resolvedFieldRole: ResumeRoleKey =
     scope === "field" && fieldTarget === "label" ? "field_label" : fieldRole;
   const scopeRole = entryStyleScopeRole(scope, resolvedFieldRole);
@@ -126,18 +138,25 @@ export default function ObjectStylePanel({
   const styleCatalog = readStyleCatalog(catalog);
   const defaults = templateRoleDefaults(styleCatalog, layout.template, role);
   const ownStyle = scopeRole
-    ? readObjectRoleStyle(domains, objectId, scopeRole)
-    : readObjectStyle(domains, objectId);
+    ? readObjectRoleStyle(domains, targetId, scopeRole)
+    : readObjectStyle(domains, targetId);
   const ownCount = Object.keys(ownStyle).length;
   // 对象级字号同样是"乘在对象基准（=1.0）上的系数"，显示值需要乘回基准。
   const baseRatio = roleBaseRatio(defaults);
   const basePx = catalog?.font_scales?.find((scale) => scale.name === layout.font_scale)?.base_px;
-  const name = objectLabel?.trim() || t("typography.object.untitled");
+  const name = headerMode
+    ? headerField.label.trim() || t("typography.object.untitled")
+    : objectLabel?.trim() || t("typography.object.untitled");
+  const scopeLabelKey = headerMode
+    ? ("typography.headerStyle.scope" as const)
+    : ENTRY_STYLE_SCOPE_LABELS[scope];
   // 只有拿到条目内容时才隐藏"无关项"；目录/宿主没传时不臆断（否则行会凭空消失）。
   const known = entry !== null;
   const availability = entryStyleAvailability(entry);
 
   const rows = entryStyleScopeProps(scope, resolvedFieldRole).filter((prop) => {
+    // DF-8：「日期位置」写的是条目头 flex 容器的 justify-content。字段作用域（含页眉字段）
+    // 的行清单已在 `FIELD_STYLE_PROPS` 里去掉它，这里只剩"条目里有没有灰字"这一层判断。
     if (prop !== "meta_align") return true;
     // Q12：无日期/元信息字段 → 不显示「日期位置」。
     return !known || availability.hasMeta;
@@ -148,21 +167,21 @@ export default function ObjectStylePanel({
   };
   const commit = (prop: StylePropKey, next: ResumeStyleValue | null) => {
     const format_config = scopeRole
-      ? withObjectRoleProp(config, objectId, scopeRole, prop, next)
-      : withObjectProp(config, objectId, prop, next);
+      ? withObjectRoleProp(config, targetId, scopeRole, prop, next)
+      : withObjectProp(config, targetId, prop, next);
     onChange({ ...layout, format_config });
   };
 
   const restore = () => {
     applyProbe("");
     const format_config = scopeRole
-      ? clearObjectRole(config, [objectId], scopeRole)
-      : clearObject(config, objectId);
+      ? clearObjectRole(config, [targetId], scopeRole)
+      : clearObject(config, targetId);
     onChange({ ...layout, format_config });
   };
 
   const restoreLabel = scopeRole
-    ? t("typography.entryStyle.restore", { scope: t(ENTRY_STYLE_SCOPE_LABELS[scope]) })
+    ? t("typography.entryStyle.restore", { scope: t(scopeLabelKey) })
     : t("typography.object.clear");
 
   return (
@@ -170,10 +189,10 @@ export default function ObjectStylePanel({
       <Typography.Text type="secondary">
         {t("typography.entryStyle.status", {
           name,
-          scope: t(ENTRY_STYLE_SCOPE_LABELS[scope]),
+          scope: t(scopeLabelKey),
         })}
       </Typography.Text>
-      {!lockScope && (
+      {!lockScope && !headerMode && (
         <div className="resume-typography-scope" data-entry-style-scope="1">
           <Space size={6} wrap>
             <Typography.Text type="secondary">
@@ -196,6 +215,14 @@ export default function ObjectStylePanel({
           <Typography.Text type="secondary">{t(ENTRY_STYLE_SCOPE_HINTS[scope])}</Typography.Text>
         </div>
       )}
+      {headerMode ? (
+        <Typography.Text type="secondary">{t("typography.headerStyle.hint")}</Typography.Text>
+      ) : null}
+      {headerMode && headerField.hasLabel === false ? (
+        // 这个字段没有标签段（label_mode=hide / 电话这类 auto 只印值）：禁用「字段名」，
+        // 否则会写出一条永远匹配不到的 `object_roles["header.X:field_label"]`。
+        <Typography.Text type="secondary">{t("typography.headerStyle.noLabel")}</Typography.Text>
+      ) : null}
       {scope === "field" ? (
         <Segmented
           size="small"
@@ -203,7 +230,11 @@ export default function ObjectStylePanel({
           onChange={(value) => setFieldTarget(value as "value" | "label")}
           options={[
             { value: "value", label: t("typography.fieldStyle.target.value") },
-            { value: "label", label: t("typography.fieldStyle.target.label") },
+            {
+              value: "label",
+              label: t("typography.fieldStyle.target.label"),
+              disabled: headerMode && headerField.hasLabel === false,
+            },
           ]}
           aria-label={t("typography.fieldStyle.target.aria")}
         />

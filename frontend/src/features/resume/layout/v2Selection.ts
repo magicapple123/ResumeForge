@@ -12,12 +12,17 @@
  * 全部纯函数、不做 i18n（label 用文档数据；板块标题优先用目录的本地化标题）。
  */
 import { ITEM_PLACEMENTS } from "../../../types/resumeDocument";
-import type { ResumeDocument, ResumeEntry, ResumeSection } from "../../../types/resumeDocument";
+import type {
+  HeaderItem,
+  ResumeDocument,
+  ResumeEntry,
+  ResumeSection,
+} from "../../../types/resumeDocument";
 import type { ResumeFormatConfig } from "../../../types/resumeFormat";
 import type { DocumentFieldCatalog } from "../../../types/resumeDocument";
 import { catalogSectionOf } from "../document/fieldCatalog";
 import { getItemPlacement } from "../document/placement";
-import { entryPath, parseDocumentPath } from "../document/paths";
+import { entryPath, findHeaderItem, parseDocumentPath } from "../document/paths";
 import type { ResumeRoleKey } from "./styleCatalog";
 import type { TextLevelScope } from "./textLevels";
 import { readStyleDomains } from "./styleOverrides";
@@ -123,6 +128,41 @@ export function findEntryById(
   return null;
 }
 
+/**
+ * 纸面路径 → 页眉字段（QW-6）；非页眉路径或字段已被删除返回 null。
+ *
+ * `label` 只用于面板状态行（"正在调整：13800000000"），取用户起的名字，没名字才用值。
+ * `hasLabel` = 这个字段在当前设置下**真的印出了「字段名：」**——`label_mode=hide`、
+ * 电话这类 auto 只印值的字段没有标签段，面板必须禁用「字段名」，否则会写出一条永远
+ * 匹配不到的 `object_roles["header.X:field_label"]`。
+ */
+export function headerFieldFromPath(
+  document: ResumeDocument,
+  path: string | null | undefined,
+): { id: string; label: string; hasLabel: boolean } | null {
+  const located = findHeaderItem(document, path);
+  if (!located) return null;
+  const item = located.item;
+  return {
+    id: item.id,
+    label: (item.label || item.value || item.key).trim(),
+    hasLabel: headerFieldPrintsLabel(item),
+  };
+}
+
+/** 页眉字段是否印字段名（与 `plan_header` 的 label_mode 三态、`_LABELLED_CONTACT` 同口径）。 */
+export function headerFieldPrintsLabel(item: HeaderItem): boolean {
+  const mode = item.label_mode ?? (item.show_label === false ? "hide" : "auto");
+  if (mode === "hide") return false;
+  // 姓名行永远只有值；性别只在 show 时印「性别：」（auto 是「（男）」括号形态）。
+  if (item.placement === "name") return false;
+  if (item.key === "gender") return mode === "show" && item.value.trim() !== "";
+  if (mode === "show") return true;
+  // auto：求职意向与「GitHub / 个人主页 / 自定义字段」历史上有前缀，电话/邮箱/城市/年份没有。
+  if (item.placement === "subtitle") return item.show_label !== false;
+  return item.key === "github" || item.key === "personal_website" || item.label.trim() !== "";
+}
+
 /** 路径 → 条目 id（header / 板块 / 非法路径返回 null）。 */
 export function entryIdFromPath(path: string | null | undefined): string | null {
   const parsed = parseDocumentPath(path);
@@ -165,6 +205,9 @@ export function roleForDocumentPath(
   document: ResumeDocument,
   path: string | null | undefined,
 ): ResumeRoleKey {
+  // QW-6：页眉字段的**值段**由 planner 统一写成 `role="meta"`（姓名段也一样，
+  // 容器上的 data-role="name" 只管继承），所以字段级覆盖要按 meta 写。
+  if (parseDocumentPath(path)?.kind === "header") return "meta";
   const placement = placementForDocumentPath(document, path);
   if (placement === "title") return "entry_title";
   if (placement === "meta" || placement === "lead" || placement === "trail") return "meta";

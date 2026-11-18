@@ -6,7 +6,7 @@
  * 自定义字段 `source = null`（计划 §9.2）。
  */
 import { PlusOutlined } from "@ant-design/icons";
-import { Button, Dropdown, Tag } from "antd";
+import { Button, Dropdown, Input, Tag } from "antd";
 import { useI18n } from "../../../i18n/i18nContext";
 import type {
   DocumentFieldCatalog,
@@ -22,8 +22,13 @@ import {
   itemPath,
 } from "../document";
 import { addItem } from "../document/mutations";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { newObjectId } from "../document/identity";
+import FormModal from "../../../components/common/FormModal";
+import { useFormDraft } from "../../../hooks/useFormDraft";
+
+/** 字段名长度上限：名字只上 chip，太长会把 chip 撑开（与目录标签的观感对齐）。 */
+const FIELD_NAME_MAX_CHARS = 24;
 
 interface Props {
   document: ResumeDocument;
@@ -72,6 +77,19 @@ export default function AddFieldMenu({
     () => catalog?.sections.find((candidate) => candidate.key === sectionKey) ?? null,
     [catalog, sectionKey],
   );
+  /**
+   * DF-10：自定义字段先弹框起名（可留空）。空名显示「未命名字段」，**key 的生成规则不变**
+   * （`custom:` 前缀是 fieldPairs / coverageGroups / fieldCatalog 的判据）。
+   */
+  const [naming, setNaming] = useState(false);
+  const [fieldName, setFieldName] = useState("");
+  const draftValues = useMemo(() => ({ label: fieldName }), [fieldName]);
+  const draft = useFormDraft({
+    scope: `document.customField#${sectionKey}.${entryId}.${placement}`,
+    values: draftValues,
+    open: naming,
+    isEmpty: (values) => !String(values.label ?? "").trim(),
+  });
 
   if (readOnly) return null;
 
@@ -86,6 +104,27 @@ export default function AddFieldMenu({
     onChange(addItem(document, sectionKey, entryId, item));
     onSelectPath(itemPath(sectionKey, entryId, item.id));
     onNotice(t("document.toast.fieldAdded"), "info");
+  };
+
+  /** 命名弹框提交：名字只写进 `label`（显示用），`key` 的生成规则一个字都不改。 */
+  const addCustomField = () => {
+    const item = defaultFieldItem({
+      key: `custom:${newObjectId()}`,
+      placement,
+      label: fieldName.trim(),
+    });
+    onChange(addItem(document, sectionKey, entryId, item));
+    onSelectPath(itemPath(sectionKey, entryId, item.id));
+    onNotice(t("document.toast.fieldAdded"), "info");
+    draft.clear();
+    setNaming(false);
+    setFieldName("");
+  };
+
+  const closeNaming = () => {
+    // 有内容时草稿留着（关闭无损，下次打开由恢复条询问）；空名不写草稿，所以也不会有残渣。
+    setNaming(false);
+    setFieldName("");
   };
 
   const addField = (key: string) => {
@@ -133,42 +172,71 @@ export default function AddFieldMenu({
       ];
 
   return (
-    <Dropdown
-      trigger={["click"]}
-      menu={{
-        items: menuItems,
-        onClick: ({ key }) => {
-          if (key === "__bodyBlock") {
-            addBodyBlock();
-            return;
-          }
-          if (key === "__empty" || key === "__divider") return;
-          if (key === "__custom") {
-            const item = defaultFieldItem({ key: `custom:${newObjectId()}`, placement });
-            onChange(addItem(document, sectionKey, entryId, item));
-            onSelectPath(itemPath(sectionKey, entryId, item.id));
-            onNotice(t("document.toast.fieldAdded"), "info");
-            return;
-          }
-          addField(key);
-        },
-      }}
-    >
-      {variant === "cell" ? (
-        <button
-          type="button"
-          className="document-add-cell"
-          aria-label={label}
-          title={hint || label}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <PlusOutlined aria-hidden="true" />
-        </button>
-      ) : (
-        <Button size="small" type="dashed" icon={<PlusOutlined />} aria-label={label}>
-          {label}
-        </Button>
-      )}
-    </Dropdown>
+    <>
+      <Dropdown
+        trigger={["click"]}
+        menu={{
+          items: menuItems,
+          onClick: ({ key }) => {
+            if (key === "__bodyBlock") {
+              addBodyBlock();
+              return;
+            }
+            if (key === "__empty" || key === "__divider") return;
+            if (key === "__custom") {
+              setFieldName("");
+              setNaming(true);
+              return;
+            }
+            addField(key);
+          },
+        }}
+      >
+        {variant === "cell" ? (
+          <button
+            type="button"
+            className="document-add-cell"
+            aria-label={label}
+            title={hint || label}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <PlusOutlined aria-hidden="true" />
+          </button>
+        ) : (
+          <Button size="small" type="dashed" icon={<PlusOutlined />} aria-label={label}>
+            {label}
+          </Button>
+        )}
+      </Dropdown>
+      <FormModal
+        open={naming}
+        title={t("document.addField.customTitle")}
+        okText={t("document.addField.customSubmit")}
+        width={400}
+        onSubmit={addCustomField}
+        onCancel={closeNaming}
+        hasDraft={Boolean(draft.pending)}
+        draftBar={
+          draft.pending
+            ? {
+                savedAt: draft.pending.savedAt,
+                fieldCount: 1,
+                onRestore: () => setFieldName(String(draft.adopt()?.label ?? "")),
+                onDiscard: () => draft.discard(),
+              }
+            : null
+        }
+      >
+        <Input
+          autoFocus
+          value={fieldName}
+          maxLength={FIELD_NAME_MAX_CHARS}
+          placeholder={t("document.field.labelPlaceholder")}
+          aria-label={t("document.addField.customLabel")}
+          onChange={(event) => setFieldName(event.target.value)}
+          onPressEnter={addCustomField}
+        />
+      </FormModal>
+    </>
   );
 }

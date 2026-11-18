@@ -29,6 +29,22 @@ function signature(value: unknown): string {
   }
 }
 
+/** 一步保存的终态（QW-2 的二维结果：版式 / 正文各一格）。 */
+export type SaveStepStatus = "saved" | "unchanged" | "failed" | "conflict";
+
+/**
+ * 一次整体保存的二维结果。
+ *
+ * `unchanged` 同时表示"这一维没有脏值、没发请求"与"服务端说不用写"——两者对用户是同一件事；
+ * 版式失败后正文**不发请求**，那一格也是 `unchanged`（不是 `failed`：没有请求失败）。
+ */
+export interface SaveResult {
+  /** 既有状态机消费的终态（冲突 / 失败 / 成功只由它决定）。 */
+  outcome: SaveOutcome;
+  layout: SaveStepStatus;
+  document: SaveStepStatus;
+}
+
 export interface WorkbenchV2SaveOptions {
   open: boolean;
   /** 当前草稿文档（用户眼前这一版）。 */
@@ -44,6 +60,19 @@ export interface WorkbenchV2SaveOptions {
   onCommitLayout?: () => Promise<boolean>;
   onPublishDraft?: () => Promise<boolean>;
   isDraft?: boolean;
+  /**
+   * QW-2：只存了版式（正文没脏）时的**唯一**一条成功提示。
+   *
+   * 以前版式那一步自己弹 toast，正文随后失败时用户先看到"保存成功"——现在成功提示只在
+   * 真正确定"这一趟要存的东西都存上了"之后发一次：正文存了由宿主弹「简历修改已保存」，
+   * 只存了版式才走这里。
+   */
+  notifyLayoutSaved?: () => void;
+  /**
+   * QW-5：恢复会话草稿时带上草稿的基准版本。保存用它做条件写——服务端版本已前进时
+   * 自然拿到 409，走既有三选一浮层，而不是静默覆盖。
+   */
+  overrideRevision?: number | null;
   /** 取消：把本地文档退回宿主那一版。 */
   onResetDocument?: () => void;
   /**
@@ -62,6 +91,13 @@ export interface WorkbenchV2Save {
   saving: boolean;
   conflict: boolean;
   saveFailed: boolean;
+  /** QW-2：最近一次保存的二维结果（版式 / 正文各自的终态）；没存过为 null。 */
+  lastResult: SaveResult | null;
+  /**
+   * QW-2：版式已落库、正文没落库。动作条只出这一条提示 +「重试正文」，
+   * 不再同时弹版式成功 toast、也不再重复渲染通用失败提示。
+   */
+  partialFailure: boolean;
   save: () => Promise<void>;
   cancel: () => void;
   settleConflict: () => void;
@@ -81,6 +117,8 @@ export function useWorkbenchV2Save({
   onCommitLayout,
   onPublishDraft,
   isDraft = false,
+  notifyLayoutSaved,
+  overrideRevision = null,
   onResetDocument,
   onRestoreLayout,
 }: WorkbenchV2SaveOptions): WorkbenchV2Save {
@@ -123,6 +161,7 @@ export function useWorkbenchV2Save({
   const dirty = documentDirty || layoutDirty;
 
   const [discardConfirm, setDiscardConfirm] = useState(false);
+  const [lastResult, setLastResult] = useState<SaveResult | null>(null);
 
   const commitLayoutLegacy = async (): Promise<SaveOutcome> => {
     if (!onCommitLayout) return { status: "unchanged", revision: 0 };
@@ -139,29 +178,53 @@ export function useWorkbenchV2Save({
       : { status: "saved", revision: 0 };
   };
 
+  /**
+   * 一次完整保存：先版式、后正文，结果按**两维**记录。
+   *
+   * 与改动前相同的是顺序与"失败即停"；差别在对外表达：以前只回一个把两半揉在一起的
+   * `SaveOutcome`，于是版式成功、正文失败时界面只有一句笼统的"保存没有成功"，而版式那半
+   * 其实已经落库（宿主还会先弹一句成功 toast）。现在版式 / 正文各记一格，动作条据此
+   * 只出一条「版式已保存，正文未保存」+「重试正文」。
+   */
   const perform = async (): Promise<SaveOutcome> => {
+    setLastResult(null);
+    let revision = overrideRevision ?? documentPipeline?.revision ?? 0;
     let written = false;
-    let revision = documentPipeline?.revision ?? 0;
     let savedLayout = false;
     let savedDocument = false;
+    let layoutStatus: SaveStepStatus = "unchanged";
+    let documentStatus: SaveStepStatus = "unchanged";
+    let documentTried = false;
+    let outcome: SaveOutcome | null = null;
+
     if (layoutDirty) {
-      const outcome = documentPipeline
+      const layoutOutcome = documentPipeline
         ? await documentPipeline.saveLayout(revision)
         : await commitLayoutLegacy();
-      if (outcome.status === "conflict" || outcome.status === "failed") return outcome;
-      written = outcome.status === "saved" || written;
-      revision = outcome.revision;
-      savedLayout = true;
+      layoutStatus = layoutOutcome.status;
+      if (layoutOutcome.status === "conflict" || layoutOutcome.status === "failed") {
+        // 版式没落库：正文**不发请求**（否则正文会写在一个连版式都没对齐的版本上）。
+        outcome = layoutOutcome;
+      } else {
+        written = layoutOutcome.status === "saved" || written;
+        revision = layoutOutcome.revision;
+        savedLayout = true;
+      }
     }
-    if (documentDirty) {
+
+    if (!outcome && documentDirty) {
+      documentTried = true;
+      documentStatus = "failed";
       if (documentPipeline) {
         try {
           revision = await documentPipeline.saveContent(document, revision);
           written = true;
           savedDocument = true;
+          documentStatus = "saved";
         } catch (error) {
-          const outcome = outcomeFromError(error);
-          if (outcome.status === "conflict" || outcome.status === "failed") return outcome;
+          const failed = outcomeFromError(error);
+          documentStatus = failed.status === "conflict" ? "conflict" : "failed";
+          outcome = failed;
         }
       } else if (onSaveContent) {
         try {
@@ -169,22 +232,43 @@ export function useWorkbenchV2Save({
           if (typeof next === "number") revision = next;
           written = true;
           savedDocument = true;
+          documentStatus = "saved";
         } catch (error) {
-          return outcomeFromError(error);
+          const failed = outcomeFromError(error);
+          documentStatus = failed.status === "conflict" ? "conflict" : "failed";
+          outcome = failed;
         }
       }
     }
-    if (isDraft && !documentDirty && !layoutDirty) {
+
+    if (!outcome && isDraft && !documentDirty && !layoutDirty) {
       const published = documentPipeline
         ? await documentPipeline.publishDraft(revision)
         : await publishDraftLegacy();
-      if (published.status === "conflict" || published.status === "failed") return published;
-      written = written || published.status === "saved";
+      if (published.status === "conflict" || published.status === "failed") {
+        outcome = published;
+      } else {
+        written = written || published.status === "saved";
+      }
     }
+
     // 对应的一步真的落库之后才对齐基线（失败/冲突那半保持脏，用户能重试）。
     if (savedLayout) setLayoutSnapshot(layout ? cloneLayout(layout) : null);
     if (savedDocument) setDocumentBaseline(documentSig);
-    return written ? { status: "saved", revision } : { status: "unchanged", revision };
+
+    const finalOutcome: SaveOutcome =
+      outcome ?? (written ? { status: "saved", revision } : { status: "unchanged", revision });
+    setLastResult({
+      outcome: finalOutcome,
+      // 版式失败后正文没跑：`failed` 只属于"发过请求并失败"，这里保留 unchanged。
+      layout: layoutStatus,
+      document: documentStatus,
+    });
+    // 只存了版式（正文没脏 / 没有正文通道）时补唯一一条成功提示；正文成功由宿主弹。
+    if (savedLayout && !savedDocument && !documentTried && finalOutcome.status === "saved") {
+      notifyLayoutSaved?.();
+    }
+    return finalOutcome;
   };
 
   const documentSave = useDocumentSave({ perform });
@@ -212,6 +296,8 @@ export function useWorkbenchV2Save({
     saving: documentSave.saving,
     conflict: documentSave.conflict,
     saveFailed: documentSave.status === "failed",
+    lastResult,
+    partialFailure: lastResult?.layout === "saved" && lastResult.document === "failed",
     save: documentSave.save,
     cancel,
     settleConflict: documentSave.settleConflict,

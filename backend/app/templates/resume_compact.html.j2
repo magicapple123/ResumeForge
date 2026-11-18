@@ -34,6 +34,8 @@
   .header .intent { font-size: calc(var(--fs) * 1); color: var(--muted); margin-top: calc(var(--fs) * 0.2); }
   .header .contact { font-size: calc(var(--fs) * 0.9); color: var(--muted); margin-top: calc(var(--fs) * 0.3); }
   .header .contact span { margin-right: var(--fs); white-space: nowrap; }
+  /* QW-6：标签段与值段是同一个字段的两半，标签不再挂字段之间的那段间隔。 */
+  .header .contact .contact-label { margin-right: 0; }
  .profile-photo { position: absolute; top: 0; right: 0; width: calc(var(--fs) * 5.4 * var(--photo-scale, 1)); height: calc(var(--fs) * 7 * var(--photo-scale, 1)); object-fit: contain; border: 1px solid var(--line); }
   .section { margin-bottom: calc(var(--fs) * 0.85); }
   .section-title { font-size: calc(var(--fs) * 1.05 * var(--section-title-scale, 1)); font-weight: 700; letter-spacing: 0.5px; border-bottom: 1px solid var(--line); padding-bottom: calc(var(--fs) * 0.14); margin-bottom: calc(var(--fs) * 0.5); }

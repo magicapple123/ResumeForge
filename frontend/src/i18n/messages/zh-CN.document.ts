@@ -84,6 +84,8 @@ const document = {
   "document.addField.action": "添加字段",
   "document.addField.custom": "自定义字段",
   "document.addField.customLabel": "字段标签",
+  "document.addField.customTitle": "新建自定义字段",
+  "document.addField.customSubmit": "创建字段",
   "document.addField.empty": "没有可添加的字段",
   "document.addField.fromProfile": "来自资料",
   "document.addField.materialOnly": "仅素材",
@@ -128,6 +130,8 @@ const document = {
   "document.inlineFormat": "行内格式",
   "document.field.label": "标签",
   "document.field.labelPlaceholder": "字段标签",
+  /** DF-10：自定义字段允许留空名；所有显示位置都用这一句兜底，绝不显示 `custom:` 内部键。 */
+  "document.field.unnamed": "未命名字段",
   /** F22：字段名可改可清；清空 = 跟随目录（同时恢复「字段语言」联动）。 */
   "document.field.labelReset": "恢复默认字段名",
   "document.field.labelResetHint": "清空后跟随目录与字段语言；填了就不再跟随切换",

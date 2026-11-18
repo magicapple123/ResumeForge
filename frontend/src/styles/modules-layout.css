@@ -226,6 +226,26 @@
   font-size: 12px;
 }
 
+/* QW-4：读数是可直接输入的数值框。宽度按「18.4px」这个最长读数定（70 = 文字 40 +
+   内边距 12 + 边框 2 + 抖动余量），左缘与其它两行的读数仍落在同一条竖线上。
+   不带 antd 自带的上下箭头（`controls={false}`），步进交给两侧 ± 与方向键。 */
+.resume-font-input.ant-input-number {
+  flex: 0 0 70px;
+  width: 70px;
+}
+
+.resume-font-input.ant-input-number .ant-input-number-input {
+  padding-inline: 6px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* 空输入 / 非法值的提示：与字号下限提示同一位置（单独占一整行）。 */
+.resume-font-input-error {
+  flex: 1 0 100%;
+  font-size: 12px;
+}
+
 /* `width: 100%` 只在"尾部单独占一个 Space 子项"时给：这样它铺满整格、内容靠右。
    为什么不写进上面那条基础规则：紧凑模式（工具栏）里没有这条宽度来源，百分比宽度
    在收缩型 flex 子项里算不稳，而 `.is-compact` 这次不该有任何变化。 */

@@ -3,7 +3,13 @@
 
 .tt-selection-bar {
   position: fixed;
-  z-index: var(--rf-layer-orb-tooltip);
+  /*
+   * 3300：高于编辑器 Modal 与 antd 单层容器链（3200），低于所有投投卡片（3400+）。
+   * 浮条永远不该盖住由它触发的卡片。边界：它仍高于 Modal 内 antd 弹层
+   * （约 3250—3280），所以「浮条压住行内格式菜单」不靠层级解决，靠鼠标事件
+   * 只处理主键（见 TouTouSelectionMenu.tsx 的 onMouseUp）。
+   */
+  z-index: var(--rf-layer-selection-bar);
   display: flex;
   flex-wrap: wrap;
   align-items: center;

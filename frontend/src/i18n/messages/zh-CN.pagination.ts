@@ -64,6 +64,9 @@ const pagination = {
   /** 条目芯片的说明：两层断页互不干扰，别让用户以为「恢复自然分页」能清掉条目断页。 */
   "pagination.breaks.entryHint": "条目断页只作用于这一条，「恢复自然分页」不会清除它",
   "pagination.breaks.entryHintInStructure": "条目级断页请到「本份简历结构」修改",
+  /** QW-3：旧版规则标签与旁注（只显示 + 清除，不提供设置入口）。 */
+  "pagination.breaks.legacyTag": "旧版规则",
+  "pagination.breaks.legacyHint": "这条规则来自旧版本、会影响导出分页；清除后页数可能变化",
 
   // ── 板块开关表（R-07：表头写一次，行内只留开关）──────────────
   /** 表头列名。表头 `aria-hidden`：语义由每行的开关承载，不给读屏重复播报。 */

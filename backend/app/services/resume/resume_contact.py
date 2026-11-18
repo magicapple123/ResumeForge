@@ -33,8 +33,14 @@ contact_breaks = ["email", "github"]   # 键取自 CONTACT_FIELDS；在列出的
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from typing import TypeVar
 
 from ...schemas.resume import ResumeContent
+
+# 分组函数对**任何**带 `path` / `text` 属性的段类型都成立：HTML/PDF/DOCX 各有一套段类型，
+# 泛型让三个调用点各自拿到自己的类型，而不是把 `object` 带进下游（pyright 在
+# `docx_document_parts` 里就撞上了 `list[object]` 不能赋给 `list[Inline]`）。
+_ContactSegment = TypeVar("_ContactSegment")
 
 #: `format_config` 里的键名（与前端 `CONTACT_BREAKS_KEY` 逐字一致）。
 CONTACT_BREAKS_KEY = "contact_breaks"
@@ -176,6 +182,18 @@ def contact_lines(items: list[dict], separator: str) -> list[str]:
     return [separator.join(group) for group in contact_groups(items)]
 
 
+def group_fields_by_line(fields, packed):
+    """把扁平字段按装行结果切成"每行一组"（QW-6：按段写 run 时按行取字段）。
+
+    ``packed`` 是 ``pack_contact_lines`` 返回的每行文本，长度即该行字段数。
+    """
+    groups, cursor = [], 0
+    for line in packed:
+        groups.append(fields[cursor : cursor + len(line)])
+        cursor += len(line)
+    return groups
+
+
 def pack_contact_lines(
     groups: Sequence[Sequence[str]],
     width: float,
@@ -228,6 +246,41 @@ def pack_contact_lines(
     return result
 
 
+def contact_field_groups(segments: Sequence[_ContactSegment]) -> list[list[_ContactSegment]]:
+    """一行段 → **字段**分组（QW-6：同一字段的标签段与值段并成一组）。
+
+    `plan_header` 把「电话：」与号码拆成两段并共用同一条路径，好让两半各自取样式。
+    但"字段"仍是装行与分隔的最小单元：两半之间不能插分隔符、也不能在中间换行。
+    本函数按 `path` 合并相邻段，是 HTML 模板（同一条路径不插 `<wbr>`）、PDF、Word
+    三处共用的唯一判据。
+    """
+    groups: list[list[_ContactSegment]] = []
+    last_path: str | None = None
+    for segment in segments:
+        path = getattr(segment, "path", None)
+        text = str(getattr(segment, "text", "") or "")
+        if groups and path and path == last_path:
+            groups[-1].append(segment)
+            continue
+        if not text.strip():
+            # 空段不建组：字段文本为空时 PDF/Word 都不该多出一个分隔符。
+            last_path = path
+            continue
+        groups.append([segment])
+        last_path = path
+    return groups
+
+
+def contact_field_texts(segments: Sequence[object]) -> list[str]:
+    """一行段 → 每个**字段**的展示文本（标签段 + 值段拼回一整串）。"""
+    texts: list[str] = []
+    for group in contact_field_groups(segments):
+        text = "".join(str(getattr(seg, "text", "") or "") for seg in group).strip()
+        if text:
+            texts.append(text)
+    return texts
+
+
 __all__ = [
     "CONTACT_BREAKS_KEY",
     "CONTACT_SEPARATOR_KEY",
@@ -237,6 +290,8 @@ __all__ = [
     "PDF_SEPARATOR",
     "WORD_SEPARATOR",
     "contact_entries",
+    "contact_field_groups",
+    "contact_field_texts",
     "contact_separator_text",
     "contact_groups",
     "contact_items",

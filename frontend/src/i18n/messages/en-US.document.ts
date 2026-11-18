@@ -78,6 +78,8 @@ const document = {
   "document.addField.action": "Add field",
   "document.addField.custom": "Custom field",
   "document.addField.customLabel": "Field label",
+  "document.addField.customTitle": "New custom field",
+  "document.addField.customSubmit": "Create field",
   "document.addField.empty": "No fields left to add",
   "document.addField.fromProfile": "From profile",
   "document.addField.materialOnly": "Material only",
@@ -122,6 +124,7 @@ const document = {
   "document.inlineFormat": "Inline format",
   "document.field.label": "Label",
   "document.field.labelPlaceholder": "Field label",
+  "document.field.unnamed": "Unnamed field",
   "document.field.labelReset": "Restore default field name",
   "document.field.labelResetHint":
     "Cleared, it follows the catalog and field language; once filled it stops following language switches",

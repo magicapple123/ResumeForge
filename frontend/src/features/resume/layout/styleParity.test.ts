@@ -20,7 +20,13 @@ import {
   STYLE_PROP_KINDS,
   type StylePropKey,
 } from "../../../utils/resumeStyleParams";
-import { OBJECT_STYLE_PROPS, RESUME_ROLES, ROLE_STYLE_PROPS } from "./styleCatalog";
+import {
+  FIELD_EXCLUDED_PROPS,
+  FIELD_STYLE_PROPS,
+  OBJECT_STYLE_PROPS,
+  RESUME_ROLES,
+  ROLE_STYLE_PROPS,
+} from "./styleCatalog";
 
 // `@types/node` 没装：只声明本文件用到的那一小块（与 cjkRatchet 同一做法）。
 declare const process: { cwd(): string };
@@ -161,5 +167,26 @@ describe("W07 对拍 · 前端属性表 = 后端 STYLE_PROPS", () => {
   it("对象级属性 = 后端 OBJECT_PROPS（全部 12 项）", () => {
     expect(source).toContain("OBJECT_PROPS: tuple[str, ...] = PROP_KEYS");
     expect([...OBJECT_STYLE_PROPS].sort()).toEqual(backend.map((prop) => prop.key).sort());
+  });
+
+  it("字段作用域的无落点属性清单与后端 FIELD_EXCLUDED_PROPS 逐项相等（DF-8）", () => {
+    // 后端只允许这一种写法：FIELD_EXCLUDED_PROPS 是单独的元组字面量，
+    // FIELD_ROLE_PROPS 由它推导——前端读同一份清单，不另抄"哪些角色没有 meta_align"。
+    expect(source).toContain('FIELD_EXCLUDED_PROPS: tuple[str, ...] = ("meta_align",)');
+    expect(source).toContain("FIELD_ROLE_PROPS: dict[str, tuple[str, ...]] = {");
+    expect([...FIELD_EXCLUDED_PROPS]).toEqual(["meta_align"]);
+  });
+
+  it("字段作用域行清单 = 角色属性 - 无落点属性（GF：面板可调 ⊆ 有落点）", () => {
+    for (const role of RESUME_ROLES) {
+      expect([...FIELD_STYLE_PROPS[role]]).toEqual(
+        [...ROLE_STYLE_PROPS[role]].filter((prop) => !FIELD_EXCLUDED_PROPS.includes(prop)),
+      );
+    }
+    // 缩进 / 项目符号必须留在正文字段里（DF-8 已给它们补了 li / p 落点）。
+    expect(FIELD_STYLE_PROPS.body).toContain("indent");
+    expect(FIELD_STYLE_PROPS.body).toContain("bullet");
+    // 灰字字段不再提供「日期位置」。
+    expect(FIELD_STYLE_PROPS.meta).not.toContain("meta_align");
   });
 });

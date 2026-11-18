@@ -83,9 +83,11 @@
  *   用 `:where()` 把特异性压成 0：任何组件自己写的 `min-width`（含 antd 的）都能盖过它，
  *   这条只是"没人管的时候的默认值"。
  *
- * R2（降级）：`@container (max-width: 420px)` 下标签与控件竖排、Segmented 竖排、
- *   Select 全宽。420 是"一行里放下 4 字标签 + 控件 + 尾部读数"的下限（见
- *   `resume-workbench-controls.css` 里的 72 + 6 + 152 + 6 + 102 算式）。
+ * R2（降级）：`@container (max-width: 340px)` 下标签与控件竖排、Select 全宽。340 是
+ *   "一行里放下 4 字标签 + 控件 + 尾部读数"的下限。DF-7 把阈值从 420 降到 340：
+ *   380–440 的参数栏（默认值就在这个区间）本来放得下，420 会把分段控件过早竖起来；
+ *   真正的下限是 `resume-workbench-controls.css` 里那条连续算式
+ *   （分组内容盒宽 − 72 − 102 − 12，下限 128）。
  *
  * R3（全文）：一切 `text-overflow: ellipsis` 必须配 `title` / `Tooltip`。
  *   这条在 CSS 里无法表达，落点是各组件（结构树 `StructureRows.tsx` 已按此补 `title`）。
@@ -120,7 +122,7 @@
 }
 
 /* R2：窄档竖排。只作用于"标签 + 控件"这类并排行，不动纯文本段落。 */
-@container wb-params (max-width: 420px) {
+@container wb-params (max-width: 340px) {
   .resume-wb-v2-params .ant-form-item-label,
   .resume-wb-v2-params .resume-measure-label {
     flex-basis: 100%;

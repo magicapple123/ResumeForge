@@ -39,6 +39,8 @@
   .header .intent { font-size: calc(var(--fs) * 0.95); color: var(--muted); margin-top: calc(var(--fs) * 0.3); }
   .header .contact { font-size: calc(var(--fs) * 0.88); color: var(--muted); margin-top: calc(var(--fs) * 0.15); }
   .header .contact span { margin-right: calc(var(--fs) * 0.9); white-space: nowrap; }
+  /* QW-6：标签段与值段是同一个字段的两半，标签不再挂字段之间的那段间隔。 */
+  .header .contact .contact-label { margin-right: 0; }
   /* 有照片时是右上角的方形块；没有照片时宏不渲染这个元素，所以不会留空洞。 */
   .profile-photo { position: absolute; top: 0; right: 0; width: calc(var(--fs) * 5 * var(--photo-scale, 1)); height: calc(var(--fs) * 5 * var(--photo-scale, 1)); object-fit: contain; }
   .section { margin-bottom: calc(var(--fs) * 0.75); }

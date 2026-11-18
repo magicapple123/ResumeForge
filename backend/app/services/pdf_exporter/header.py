@@ -28,13 +28,27 @@ from io import BytesIO
 
 from fpdf.enums import XPos, YPos
 
-from ...schemas.resume_document_plan import HeaderPlan
-from ..resume.resume_contact import PDF_SEPARATOR, pack_contact_lines
+from ...schemas.resume_document_plan import HeaderPlan, Inline
+from ..resume.field_style_target import is_field_path
+from ..resume.resume_contact import (
+    PDF_SEPARATOR,
+    contact_field_groups,
+    contact_field_texts,
+    pack_contact_lines,
+)
 
 # 别名导入：本模块的 RoleStyle 是"查询函数"的类型别名（见下），与同名 dataclass 不同义。
 from ..resume.resume_style import RoleStyle as _RoleStyle
 from .canvas import _ResumePDF
-from .document_fields import draw_label_segments, has_styled_labels, label_height, label_lines
+from .document_fields import (
+    _draw_lines,
+    _glyphs,
+    _lines,
+    draw_label_segments,
+    has_styled_labels,
+    label_height,
+    label_lines,
+)
 from .fonts import FONT_FAMILY
 from .layout import _PX_TO_MM, _PX_TO_PT, PAGE_WIDTH_MM
 from .media import _photo_bytes, fit_photo_size
@@ -80,9 +94,45 @@ def _plain(segments) -> str:
     return "".join(str(getattr(seg, "text", "") or "") for seg in segments).strip()
 
 
-def _contact_segment_text(segment) -> str:
-    """联系方式里**单个字段段**的展示文本：字段之间由 `PDF_SEPARATOR` 分隔，不能再 join 掉。"""
-    return str(getattr(segment, "text", "") or "").strip()
+def _has_header_field_style(header: HeaderPlan, style: RoleStyle) -> bool:
+    """页眉字段是否有**字段级**覆盖（与角色层不同才算）。
+
+    这个判据决定走哪条绘制路径：没有字段级覆盖时继续用"整行字符串 + cell"，
+    PDF 产物逐字节不变；有覆盖时改用按段的 glyph 渲染，标签段与值段各取自己的样式。
+    """
+    for line in header.contact_lines:
+        for segment in line:
+            if not is_field_path(segment.path):
+                continue
+            if style(segment.role, object_id=segment.path) != style(segment.role):
+                return True
+    return False
+
+
+def _contact_glyph_lines(
+    pdf: _ResumePDF,
+    header: HeaderPlan,
+    *,
+    base: float,
+    style: RoleStyle,
+    width: float,
+    ratio: float,
+    separator: str,
+) -> list[list]:
+    """联系方式按**字段段**排版：同一字段的标签段与值段之间不插分隔符（QW-6）。"""
+    lines: list[list] = []
+    for line in header.contact_lines:
+        group: list[Inline] = []
+        for field in contact_field_groups(line):
+            if group:
+                group.append(Inline(text=separator, role="meta"))
+            group.extend(field)  # type: ignore[arg-type]
+        if not group:
+            continue
+        lines.extend(
+            _lines(_glyphs(pdf, group, base, style, None, meta_ratio=ratio), width)
+        )
+    return lines
 
 
 def _pack_contact_lines(
@@ -125,10 +175,7 @@ def draw_header(
     # planner 的 contact_lines 是"每行若干字段段"；这里必须**按段**保留分隔符再交给
     # `_pack_contact_lines` 装行。整行 `"".join` 会把字段粘成一串（2026-10-30 实机六出口
     # 检查：PDF 页头 "138-0000-0000zhang@example.com上海2001"，HTML / Word 正常）。
-    contact_groups = [
-        [text for text in (_contact_segment_text(segment) for segment in line) if text]
-        for line in header.contact_lines
-    ]
+    contact_groups = [contact_field_texts(line) for line in header.contact_lines]
 
     photo_w = layout.gap_mm(layout.photo_width_ratio)
     photo_h = layout.gap_mm(layout.photo_height_ratio)
@@ -180,15 +227,24 @@ def draw_header(
 
     contact_size = base * layout.contact_ratio * meta_scale
     contact_lines: list[str] = []
+    # QW-6：有页眉字段级覆盖时，联系方式改按**段**渲染（标签段与值段各取自己的样式）；
+    # 否则沿用"整行字符串 + cell"，没有字段覆盖的简历产物逐字节不变。
+    contact_segment_lines: list[list] | None = None
     if contact_groups:
         pdf.set_font(FONT_FAMILY, "", contact_size * _PX_TO_PT)
-        contact_lines = _pack_contact_lines(
-            pdf,
-            contact_groups,
-            text_width,
-            # planner 给了可见分隔文本（bar/dot）就用它，否则沿用历史的四空格。
-            header.contact_separator or PDF_SEPARATOR,
-        )
+        separator = header.contact_separator or PDF_SEPARATOR
+        if _has_header_field_style(header, style):
+            contact_segment_lines = _contact_glyph_lines(
+                pdf,
+                header,
+                base=base,
+                style=style,
+                width=text_width,
+                ratio=layout.contact_ratio,
+                separator=separator,
+            )
+        else:
+            contact_lines = _pack_contact_lines(pdf, contact_groups, text_width, separator)
 
     # 先量页头正文高度（不落笔）：modern 的底色块按它定尺寸、画在文字之下。
     if name_text:
@@ -222,7 +278,13 @@ def draw_header(
             text_height += pdf.text_block_height(
                 subtitle_text, width=text_width, size_px=base * layout.intent_ratio * meta_scale
             )
-    if contact_lines:
+    if contact_segment_lines is not None:
+        text_height += layout.gap_mm(layout.contact_gap)
+        text_height += sum(
+            max((pdf.line_advance(glyph.size) for glyph in line), default=0)
+            for line in contact_segment_lines
+        )
+    elif contact_lines:
         text_height += layout.gap_mm(layout.contact_gap)
         text_height += len(contact_lines) * pdf.line_advance(contact_size)
     # I-31：照片**脱流**（绝对定位）——页眉高度只跟文字，照片可以压住下方正文。
@@ -333,7 +395,18 @@ def draw_header(
                 new_x=XPos.LMARGIN,
                 new_y=YPos.NEXT,
             )
-    if contact_lines:
+    if contact_segment_lines is not None:
+        if name_plan is not None or subtitle_text:
+            pdf.ln(layout.gap_mm(layout.contact_gap))
+        _draw_lines(
+            pdf,
+            contact_segment_lines,
+            text_left,
+            pdf.get_y(),
+            text_width,
+            center=header_centered,
+        )
+    elif contact_lines:
         pdf.set_font(FONT_FAMILY, "", contact_size * _PX_TO_PT)
         pdf.set_text_color(*(meta_color or pdf.muted_text))
         if name_plan is not None or subtitle_text:

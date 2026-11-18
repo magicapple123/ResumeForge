@@ -47,6 +47,11 @@ const conflict = {
   // ── 保存失败（非冲突）──────────────────────────────────────
   /** 保存失败后顶部那条提示：明确"改动还在"，避免用户以为白改了。 */
   "workbench.conflict.save-failed": "保存没有成功，改动还留着，可以重试",
+  /**
+   * QW-2：两步保存里版式落了库、正文没落库。只出这一条（不再先弹「排版设置已保存」），
+   * 右侧「重试正文」复用保存按钮同一条函数。
+   */
+  "workbench.conflict.partial-saved": "版式已保存，正文未保存",
 
   // ── 宿主的保存结果提示（W02 从 `ResumeDetailModal` 搬出来，走 t()）────
   /** 正文保存成功：成功提示必须含对象（改的是这份简历）。 */
@@ -88,6 +93,9 @@ const conflict = {
   /** 撤销 / 恢复禁用时的说明（Tooltip）。 */
   "workbench.history.undo.hint": "没有可撤销的步骤",
   "workbench.history.redo.hint": "没有可恢复的步骤",
+  /** QW-1：动作条按钮的 Tooltip——用历史摘要说清"将要撤销/恢复什么"。 */
+  "workbench.history.undo.tooltip": "撤销「{summary}」",
+  "workbench.history.redo.tooltip": "恢复「{summary}」",
   /** 预览某一步时的两个动作：真正回退到那一步 / 取消选中。 */
   "workbench.history.jumpTo": "回到这一步",
   "workbench.history.backToCurrent": "回到当前",

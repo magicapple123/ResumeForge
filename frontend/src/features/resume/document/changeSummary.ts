@@ -26,6 +26,7 @@ import type { ResumeDocument, ResumeEntry, ResumeItem } from "../../../types/res
 import type { ResumeLayout } from "../../../types";
 import { t } from "../../../i18n";
 import { sectionDisplayLabel } from "../outline/sectionLabels";
+import { displayText } from "./summarize";
 
 /** 历史快照的形状（与 `useWorkbenchV2History` 的 WorkbenchV2Snapshot 同构）。 */
 export interface ChangeSnapshot {
@@ -60,8 +61,14 @@ export interface ChangeReport {
 
 const MAX_NAME = 24;
 
+/**
+ * 摘要里的名字先剥掉行内标记（DF-6）：否则历史面板会显示 `{@color=…}职位{@}`。
+ *
+ * **只作用于展示**：改动判定（`valueOf` 的相等比较）仍留在源串上——若拿剥过的文本比较，
+ * "只改了颜色"会显示成"没有变化"，那是最坏的一种说谎。
+ */
 function clip(text: string): string {
-  const trimmed = text.trim();
+  const trimmed = displayText(text).trim();
   if (!trimmed) return "";
   return trimmed.length > MAX_NAME ? `${trimmed.slice(0, MAX_NAME)}…` : trimmed;
 }

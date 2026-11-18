@@ -94,11 +94,11 @@ describe("restoreSectionPagination", () => {
     expect(restoreSectionPagination(document)).toBe(document);
   });
 
-  it("板块级只收 start_on_new_page、条目级两个都收（任务 12）", () => {
+  it("板块级只收 start_on_new_page；历史 keep_together 单独收成 legacy 芯片（QW-3）", () => {
     const document = makeDocument({
       sections: [
         section({
-          // 历史遗留的死开关：planner 不消费板块级 keep_together，界面也不该再列它。
+          // 历史遗留的死开关：planner 不消费板块级 keep_together，但导出端仍当真。
           layout: { ...defaultSectionLayout(), start_on_new_page: true, keep_together: true },
           entries: [entry({ layout: { ...defaultEntryLayout(), start_on_new_page: true } })],
         }),
@@ -108,10 +108,32 @@ describe("restoreSectionPagination", () => {
     const rows = collectPageBreaks(document);
     expect(rows.map((row) => `${row.kind}:${row.flag}`)).toEqual([
       "section:start_on_new_page",
+      "section:keep_together",
       "entry:start_on_new_page",
     ]);
+    // 旧版规则带 legacy 标记：面板据此显示「旧版规则」标签，且不给设置入口。
+    expect(rows[0].legacy).toBeUndefined();
+    expect(rows[1].legacy).toBe(true);
     // 字段本身不被删：历史 JSON 里的 section.keep_together 仍留在文档里。
     expect(document.sections[0].layout.keep_together).toBe(true);
+  });
+
+  it("旧版规则可以单独清除，其它分页设置不受影响（QW-3）", () => {
+    const document = makeDocument({
+      sections: [
+        section({
+          layout: { ...defaultSectionLayout(), start_on_new_page: true, keep_together: true },
+          entries: [],
+        }),
+      ],
+    });
+    const legacy = collectPageBreaks(document).find((row) => row.legacy);
+    expect(legacy?.flag).toBe("keep_together");
+    const next = clearPageBreak(document, legacy!);
+    expect(next.sections[0].layout.keep_together).toBe(false);
+    expect(next.sections[0].layout.start_on_new_page).toBe(true);
+    // 芯片消失：再收集时只剩板块级断页。
+    expect(collectPageBreaks(next).map((row) => row.flag)).toEqual(["start_on_new_page"]);
   });
 
   it("「恢复自然分页」不碰历史遗留的板块级 keep_together", () => {

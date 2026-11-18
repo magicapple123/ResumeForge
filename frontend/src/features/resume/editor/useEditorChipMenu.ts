@@ -106,8 +106,9 @@ export function useEditorChipMenu({
           { type: "divider" as const, key: "collect-divider" },
         ]
       : []),
-    // #7 的「调整排版」只对可排版的正文 item 有语义（页眉字段没有条目/位置样式可调）。
-    ...(onLayoutChange && chipMenuTarget?.kind === "item"
+    // #7 的「调整排版」对正文 item 与页眉字段都有语义（QW-6 起页眉字段也能逐字段调
+    // 字段名/字段值）；条目/板块路径没有字段级落点，不出现这一项。
+    ...(onLayoutChange && (chipMenuTarget?.kind === "item" || chipMenuTarget?.kind === "header")
       ? [
           { key: "style", label: t("document.editor.styleEntry") },
           { type: "divider" as const, key: "style-divider" },

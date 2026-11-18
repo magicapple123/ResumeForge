@@ -137,6 +137,16 @@ const workbench = {
   "workbench.action.publish": "保存到简历中心",
   /** 草稿态下标题旁的浅色提示：说清"现在还看不见它"。 */
   "workbench.draft.hint": "未保存，保存后才会出现在简历中心",
+  /** QW-2：部分成功提示里的动作——只重试正文那一步（版式已落库）。 */
+  "workbench.action.retry-content": "重试正文",
+  /** QW-5：会话草稿条上的基准版本。 */
+  "workbench.draft.baseline": "暂存于第 {revision} 版",
+  /** QW-5：服务端版本已前进时，恢复后保存会先走冲突处理（不静默覆盖）。 */
+  "workbench.draft.revision-ahead": "服务端已有更新版本，保存时会先处理冲突",
+  /** QW-5：超出预算不截短，明确告知"未能暂存"。 */
+  "workbench.draft.too-large": "草稿超过 256 KB，未能暂存；改动还在这张页面里",
+  /** QW-5：存储不可用时同样明确告知（与通用表单的静默降级不同）。 */
+  "workbench.draft.unavailable": "浏览器不允许暂存草稿，改动还在这张页面里",
 
   // ── 编辑器的 8 个标签页（与弹窗逐字一致）───────────────────
   "editor.tab.basic": "基本信息",
@@ -161,6 +171,13 @@ const workbench = {
   "resume.measure.fontSizeDecrease": "缩小字号",
   "resume.measure.fontSizeIncrease": "放大字号",
   "resume.measure.fontSizeSliderAria": "字号（拖动调整，方向键微调）",
+  /** QW-4：直接输入字号的提示（0.1px 精度，px 是纸面字号，不是 pt/mm）。 */
+  "resume.measure.fontSizeInputAria": "字号数值（可输入，回车确认）",
+  "resume.measure.fontSizeInputHint": "可直接输入字号，回车确认",
+  /** 空输入不是一个值：提示后不写入（不要当成 0）。 */
+  "resume.measure.fontSizeInputEmpty": "请输入字号",
+  /** 非法值（非数字 / 越界）提示：`{min}`、`{max}` 是允许范围。 */
+  "resume.measure.fontSizeInputInvalid": "字号需在 {min} 到 {max}px 之间",
   /** 字号过小的打印提示：`{px}` 是最小安全字号。 */
   "resume.measure.fontTooSmall": "小于 {px}px 打印可能看不清",
   /** 「字体」这一行的标签（`ResumeFontControl` 的自有文案不动）。 */

@@ -416,20 +416,28 @@ export function parseInlineMarkRuns(raw: string): InlineMarkRun[] {
   return placedRuns(raw).map(toVisible);
 }
 
-/** 可读纯文本：剥掉全部标记；链接只留 label（URL 不印刷）。 */
+/**
+ * 可读纯文本：**剪掉已识别的标记区间、其余原样保留**；链接只留 label（URL 不印刷）。
+ *
+ * 为什么是"剪区间"而不是"拼可见片段"：`tokenize` 对未闭合 / 属性非法 / 落单收口的
+ * `{@…}` **一律退回普通字符**（第 2 条规则），所以它们本来就落在某个 run 里，
+ * 原样出现；反过来，标记原子与四层标记语法永远不在 runs 里。两条合起来等于
+ * "只删认出来的标记"——与后端 `strip_style_markers` 的保守剥离同一口径
+ * （共享用例 `inlineMarks.cases.json` 双边断言）。
+ *
+ * 直接从源串切片（而不是 `run.text`）是刻意的：切片的字节一定等于原文那一段，
+ * 不会因为缓冲拼装引入任何重排。
+ */
 export function stripInlineMarks(raw: string): string {
   if (!hasInlineMarks(raw)) return raw;
-  return placedRuns(raw)
-    .map((run) => run.text)
-    .join("");
+  let visible = "";
+  for (const run of placedRuns(raw)) visible += raw.slice(run.rawStart, run.rawEnd);
+  return visible;
 }
 
-/** 可见字符数（标记不计）。 */
+/** 可见字符数（标记不计）。与 `stripInlineMarks` 同一口径：只删认出来的标记。 */
 export function visibleInlineMarkLength(raw: string): number {
-  if (!hasInlineMarks(raw)) return raw.length;
-  let total = 0;
-  for (const run of placedRuns(raw)) total += run.text.length;
-  return total;
+  return stripInlineMarks(raw).length;
 }
 
 /** 分段的"样式签名"：签名相同才能合并成一段（纯渲染优化，不改变语义）。 */

@@ -1,11 +1,18 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* 制作台左栏 · **宽档**排版（T20，2026-11）。
-   左栏可拖宽（默认 380，最宽接近 700）。窄档的列宽算式在 `resume-workbench-controls.css`
-   里：控件列 `minmax(132px, 152px)`、尾部列吃掉 `1fr`——弹性全给了**尾部**，
-   所以列一宽，滑杆仍停在 88，读数被推到行的最右边，中间空出一大段（栏宽 687 时空隙
-   超过 350px，滑杆像"断了"）。
-   宽档改成把弹性给**控件列**：`minmax(152px, 1fr)`（滑杆跟着变长），尾部退回 `min-content`
-   紧贴滑杆。窄档不命中（阈值 520），逐像素保持原样。 */
+/* 制作台左栏 · 宽档排版（T20，2026-11 / DF-7 之后只剩容器声明）。
+ *
+ * 2026-11-18 之前这里是一条 `@container rf-wb-params (min-width: 520px)`：命中后把
+ * 三条列模板改成"弹性给控件列"，分边页边距的四条滑杆再用 `!important` 解锁。代价是
+ * **断点式**——拖到 520 前后滑杆一次弹长，用户看到的是"跳一下"而不是"变长"
+ * （DF-7 的原始症状）。
+ *
+ * DF-7 把那一档撤了：控件列宽由 `useControlsWidthVar`（`layout/usePanelNarrow.ts`）
+ * 逐帧量分组内容盒得出，写到列根元素的 `--resume-wb-controls-w`；滑杆 100% 填满控件列，
+ * 分边滑杆的宽度上限在 `resume-workbench-controls.css` 里已经解除。连续值不再需要
+ * 第二条列模板，也不需要断点。
+ *
+ * 容器声明保留：它是**量测点**的锚（`.resume-wb-group-body` 就是 JS 量宽度的那个元素），
+ * 将来要加真正的容器查询时也不用再搬迁一次。 */
 
 /* 容器声明落在**分组内容盒**（`.resume-wb-group-body`）而不是整列 `.resume-wb-col-params`：
    `container-type` 会同时建立 `contain: layout`，于是这一列成为**绝对/固定定位后代的
@@ -17,39 +24,4 @@
 .resume-wb-col-params .resume-wb-group-body {
   container-type: inline-size;
   container-name: rf-wb-params;
-}
-
-@container rf-wb-params (min-width: 520px) {
-  /* 三条同款模板一起改（层次与间距的行 / 行距页边距照片的格 / 字号的格）：
-     第二列 `minmax(152px, 1fr)` 吃掉余量，第三列 `min-content` 不再撑开。
-     选择器比 `resume-workbench-controls.css` 的原规则多一层 `.resume-wb-group-body`：
-     本文件在 `@import` 里排在原规则之前，同特异性会输给后面那条。 */
-  .resume-wb-group-body .resume-wb-rows > .resume-wb-row.ant-space,
-  .resume-wb-group-body
-    .resume-wb-col-params
-    .resume-measure-grid.is-stacked
-    > .ant-space:has(.resume-measure-tail),
-  .resume-wb-group-body
-    .resume-wb-col-params
-    .resume-measure-grid.is-stacked
-    > .resume-measure-cell:has(.resume-measure-tail) {
-    grid-template-columns:
-      var(--resume-wb-label-w)
-      minmax(var(--resume-wb-controls-w), 1fr)
-      min-content;
-  }
-
-  /* 分边页边距的四条滑杆：窄档被左栏的"统一 88px 滑杆"规则按 `!important` 钉死，
-     宽档要它们跟着卡片一起变长，否则四行仍是四条短杠。
-     `max-width: none` 不能省：控件列的 88px 上限还挂在滑杆自身与它那一格上。 */
-  .resume-wb-group-body .resume-margin-sides .resume-margin-side-slider.ant-slider {
-    width: auto !important;
-    flex: 1 1 auto !important;
-    max-width: none !important;
-  }
-
-  .resume-wb-group-body .resume-margin-sides .ant-space-item:has(> .resume-margin-side-slider) {
-    flex: 1 1 auto !important;
-    max-width: none !important;
-  }
 }

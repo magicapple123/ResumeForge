@@ -6,7 +6,7 @@
  * 守的是「只改一个字段」：回退链断了会把整条样式一起改掉，而界面上只会显示「已调整」。
  */
 import { describe, expect, it } from "vitest";
-import { isFieldStylePath } from "./fieldStyleTarget";
+import { fieldStyleEntryId, isFieldStylePath, isHeaderStylePath } from "./fieldStyleTarget";
 import { entryStyleScopeProps, entryStyleScopeRole } from "./entryStyleScopes";
 import {
   readStyleDomains,
@@ -52,5 +52,28 @@ describe("exact field typography", () => {
     expect(css).toContain(`[data-resume-path="${field}"]`);
     expect(css).not.toContain(`[data-object-id="${entry}"]`);
     expect(css).toContain("margin-top:");
+  });
+
+  it("accepts header field paths without widening two-segment paths", () => {
+    // QW-6：页眉字段是两段路径，单开一条规则；其他两段路径仍不算字段路径。
+    expect(isHeaderStylePath("header.hd_00000001")).toBe(true);
+    expect(isFieldStylePath("header.hd_00000001")).toBe(true);
+    expect(isFieldStylePath("projects.ob_entry0001")).toBe(false);
+    expect(isFieldStylePath("header.short")).toBe(false);
+    expect(fieldStyleEntryId("header.hd_00000001")).toBeNull();
+    expect(fieldStyleEntryId(field)).toBe(entry);
+  });
+
+  it("writes header label and value to the same object with different roles", () => {
+    const headerPath = "header.hd_00000001";
+    const label = withObjectRoleProp({}, headerPath, "field_label", "bold", true);
+    const both = withObjectRoleProp(label, headerPath, "meta", "font_scale", 1.2);
+    const domains = readStyleDomains(both);
+    expect(domains.objectRoles[`${headerPath}:field_label`]).toEqual({ bold: true });
+    expect(domains.objectRoles[`${headerPath}:meta`]).toEqual({ font_scale: 1.2 });
+    // 页眉字段没有所属条目：值不应回落到某个条目对象上。
+    expect(resolvedPropValue(domains, { role: "meta", objectId: headerPath, prop: "color" })).toBe(
+      undefined,
+    );
   });
 });

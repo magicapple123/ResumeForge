@@ -1,0 +1,88 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 制作台左栏 · 滑杆宽度与连续伸缩（从 `resume-workbench-controls.css` 拆出，行预算）。
+ *
+ * 排位：由 `resume.css` 在 `resume-workbench-controls.css` **之后**导入，层叠顺序与
+ * 拆分前一致（这些规则原本就在 controls 的滑杆段，位于基础列模板之后）。
+ * 拆分是纯搬迁：选择器、声明、`!important` 逐字未改。 */
+
+/* ===== 滑杆跟着控件列连续伸缩（2026-10-23 / 2026-11-06：88px / DF-7：连续） ===== */
+/* 症状（DF-7 改前）：左栏四组的滑杆几乎不动，只有拖到某个宽度之后「分边页边距」的四条
+   才一下弹长。根因是控件列写死 `minmax(132px, 152px)`、滑杆封顶 88，而弹性全给了尾部
+   那列；宽档再靠 `@container (min-width: 520px)` 整体换一次列模板——于是是**断点式**。
+   改法：控件列由 `--resume-wb-controls-w` 给值（JS 逐帧量），滑杆 100% 填满这一列，
+   不再有上限、也不再按档位换算式。宽度 = 控件列 − 64（± 各 30 + 两道 2px 间距）。
+   `!important` 必需：`PhotoScaleControl` / `LineHeightControl` / `PagePaddingControl`
+   都写了内联 `flex` / `minWidth` / `margin`，只有 `!important` 压得过。
+   同一条理由：`margin-inline: 0` 也带 `!important`（antd 的 `.ant-slider` 自带
+   `margin: 14px 6px`，不清零时滑杆实际占的宽度比控件列多 12px，尾部会被顶出去）。
+   代价：滑块圆点按轨道端点居中，值在两端时各溢出轨道 6px——落在 ± 按钮的透明内边距上。
+   只作用于 `.resume-wb-col-params`：弹窗与预览工具栏的滑杆由各自的 `.is-stacked` 定宽。
+   分边页边距的四条滑杆（`.resume-margin-side-slider`）走下面单独那条：它们在 flex 行里
+   自己吃剩余宽度，宽度不能锁成 100%（否则会把读数与复位位挤出行外）。 */
+.resume-wb-col-params .ant-slider {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  min-width: 64px !important;
+  max-width: none !important;
+  margin-inline: 0 !important;
+}
+
+/* 滑杆外面那一格才是真正占位的那一层（antd 的 `Space` 给每个子节点包一层
+   `.ant-space-item`）：`flex-basis: 0` 让它按**剩余空间**定宽，而不是按滑杆自己的
+   内容宽（滑杆是 `width: 100%`，用 `auto` 基准会互相依赖、最后落到 min-width 56——
+   2026-11 实测 152 的控件列里滑杆只有 56，中间空出 32px）。
+   两条选择器各比"常规版"多一层祖先类，靠特异性压过本文件的
+   `.resume-wb-row .ant-space-item:has(> .resume-wb-slider)`（`flex: 1 1 90px`）与
+   `modules-layout.css` 的 `min-width: 112px`。注意写的是**后代** `.ant-space .ant-space-item`
+   （不是 `> .ant-space >`）：滑杆那一格在「行 Space → item → 控件 Space → item → slider」
+   的第四层上。 */
+.resume-wb-col-params .resume-wb-rows .ant-space-item:has(> .resume-wb-slider),
+.resume-wb-col-params
+  .resume-measure-grid.is-stacked
+  .ant-space
+  .ant-space-item:has(> .ant-slider) {
+  flex: 1 1 0;
+  min-width: 64px;
+  max-width: none;
+}
+
+/* 控件组（`− 滑杆 +`）自己必须铺满控件列：它默认是 `inline-flex`（收缩到内容宽），
+   不铺满时滑杆即使在 `flex-basis: 0` 下也没有"剩余空间"可分。三处网格模板各有一条。 */
+.resume-wb-col-params .resume-wb-row-controls,
+.resume-wb-col-params .resume-wb-rows > .resume-wb-row.ant-space > .ant-space-item > .ant-space,
+.resume-wb-col-params
+  .resume-measure-grid.is-stacked
+  > .ant-space:has(.resume-measure-tail)
+  > .ant-space-item
+  > .ant-space,
+.resume-wb-col-params .resume-measure-cell > .ant-space {
+  width: 100%;
+}
+
+/* 分边页边距的四条：只解除宽度上限（DF-7），宽度仍由 flex 行分配——`.resume-margin-sides-list`
+   的 `auto-fit` 栅格负责"够宽时两列"。改前它们由 `@container (min-width: 520px)` 里的
+   一段 `!important` 解锁，撤掉断点后放在这里，四条从最窄到最宽都连续。 */
+.resume-wb-col-params .resume-margin-side-slider.ant-slider {
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
+/* ===== 滑杆宽度（2026-10-23 回退） ===== */
+/* 这里曾经有一段"把滑杆格 `min-width` 降到 0 让它在窄栏里让位"的规则。它解决了溢出，
+   却把滑杆本身压成了 0 宽——用户截图里「条目间距 / 姓名大小 / 小节标题大小」三行只剩
+   `— +`，中间的轨道整条消失。
+   根因不在滑杆，在于当时的参数栏下限 380 比"所有行一行放下"所需的 400 少了 20px。
+   现在参数栏是**固定 380 且不可拖动**（`WORKBENCH_PARAMS_WIDTH`），空间够用，
+   所以把 `min-width` 还原成两条既有规则里的值（70 / 112），滑杆不再被压没。
+   教训：**窄容器要压的是"哪一项"，不能在没验证渲染结果的情况下把 `min-width` 归零**。 */
+
+.resume-wb-row .ant-space-item:has(> .resume-wb-slider) {
+  flex: 1 1 90px;
+  min-width: 70px;
+}
+
+.resume-wb-col-editor .resume-wb-slider,
+.resume-wb-slider {
+  min-width: 0;
+}

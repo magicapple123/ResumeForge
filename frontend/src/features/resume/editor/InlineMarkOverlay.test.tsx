@@ -28,7 +28,10 @@ import { FieldValueEditor } from "./itemValueEditors";
 declare const process: { cwd(): string };
 
 function readInlineMarkCss(): string {
-  return readFileSync([process.cwd(), "src", "styles", "inline-mark-overlay.css"].join("/"), "utf8");
+  return readFileSync(
+    [process.cwd(), "src", "styles", "inline-mark-overlay.css"].join("/"),
+    "utf8",
+  );
 }
 
 /** 只认"字色"声明：`caret-color: transparent` 不算（它前面是连字符，不是 `;` 或行首）。 */
@@ -319,16 +322,53 @@ describe("普通值的字必须可见（P0 回归守卫）", () => {
     ).toBe(true);
   });
 
-  it("CSS：::selection 的透明与字形透明同进同出（只搬一半会让选中文字消失）", () => {
+  it("CSS：选区底色交给遮罩层自绘，文本域那层只保留透明（DF-4）", () => {
     const rules = cssRules(readInlineMarkCss());
-    const selectionRules = rules.filter(
-      (rule) => rule.selector.includes("::selection") && rule.selector.includes("rf-inline-mark-layer"),
+    const masked = rules.filter(
+      (rule) =>
+        rule.selector.includes("::selection") &&
+        rule.selector.includes("rf-inline-mark-layer") &&
+        rule.selector.includes("is-masked") &&
+        !rule.selector.includes("is-composing"),
     );
-    expect(selectionRules.length).toBeGreaterThan(0);
-    for (const rule of selectionRules) {
-      expect(rule.selector).toContain("is-masked");
-      // 选区底色仍要半透明，否则会把下层文字整片盖住。
-      expect(rule.body).toContain("color-mix");
+    expect(masked.length).toBeGreaterThan(0);
+    for (const rule of masked) {
+      // 源串选区会把 `{@color=…}` 那 20 个隐形字符也染上 → 一条没有文字的空蓝带。
+      // 底色因此必须由遮罩层按可见文字自绘，文本域这一层不许再有底色。
+      expect(rule.body).toContain("background: transparent");
+      expect(rule.body).toContain("color: transparent");
+      expect(rule.body).not.toContain("color-mix");
     }
+    // 自绘高亮仍然半透明（不透明会把下层文字盖住）。
+    const highlight = rules.find((rule) => rule.selector.includes(".rf-inline-mark-selection"));
+    expect(highlight?.body).toContain("color-mix");
+    // 组合期遮罩层让位，选区反馈必须交回文本域。
+    const composing = rules.find(
+      (rule) => rule.selector.includes("is-composing") && rule.selector.includes("::selection"),
+    );
+    expect(composing?.body).toContain("color-mix");
+  });
+});
+
+describe("DF-4 · 遮罩层自绘选区", () => {
+  it("高亮只覆盖可见文字，隐形标记不进高亮", () => {
+    const raw = "a{@color=#c0392b}个人项目{@}b";
+    const { container } = render(
+      <InlineMarkOverlay value={raw} selection={{ start: 0, end: 6 }} />,
+    );
+    const marks = [...container.querySelectorAll(".rf-inline-mark-selection")];
+    const highlighted = marks.map((node) => node.textContent).join("");
+    expect(highlighted).toBe("a个人项目b");
+    expect(highlighted).not.toContain("{@");
+  });
+
+  it("选区只覆盖可见文字的一部分时按字符切开", () => {
+    const raw = "{@size=0.9}重点{@}说明";
+    const { container } = render(
+      <InlineMarkOverlay value={raw} selection={{ start: 0, end: 2 }} />,
+    );
+    expect(
+      [...container.querySelectorAll(".rf-inline-mark-selection")].map((n) => n.textContent),
+    ).toEqual(["重点"]);
   });
 });

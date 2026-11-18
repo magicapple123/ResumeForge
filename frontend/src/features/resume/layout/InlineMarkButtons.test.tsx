@@ -117,6 +117,18 @@ describe("InlineMarkButtons", () => {
     expect(screen.getByLabelText(t("typography.inline.color"))).toBeInTheDocument();
   });
 
+  // DF-5：颜色按钮是中性图标，不再是"恒显红块"的默认取色触发器。
+  it("DF-5：颜色按钮用中性图标，工具条上不出现色块", () => {
+    renderHarness();
+    const button = screen.getByRole("button", { name: t("typography.inline.color") });
+    expect(button.className).toContain("ant-btn-text");
+    expect(button.querySelector("svg")).toBeTruthy();
+    // 默认触发器（带色块的那个）不应再出现。
+    expect(document.querySelector(".ant-color-picker-trigger")).toBeNull();
+    const toolbar = button.closest(".resume-typography-inline") as HTMLElement;
+    expect(toolbar.querySelector('[style*="background"]')).toBeNull();
+  });
+
   it("链接：输入合法地址后插入 [label](url)", () => {
     const { container, onCommit } = renderHarness();
     select(container, 2, 4);

@@ -104,6 +104,35 @@ export const ROLE_LABELS: Record<ResumeRoleKey, MessageKey> = {
 };
 
 /**
+ * 字段作用域（`object_roles["<字段路径>:<role>"]`）里**没有落点**的属性（DF-8）。
+ *
+ * 只列 `meta_align`：它写的是条目头 flex 容器的 `justify-content`，字段层没有这个容器，
+ * PDF / Word 也从不按字段路径读它。面板给滑杆只会"拖了没反应"。
+ * 与后端 `resume_style_schema.FIELD_EXCLUDED_PROPS` **逐项相等**（`styleParity.test.ts` 钉住）。
+ */
+export const FIELD_EXCLUDED_PROPS: readonly StylePropKey[] = ["meta_align"];
+
+/**
+ * 字段作用域真正有落点的属性 = 角色属性去掉 `FIELD_EXCLUDED_PROPS`。
+ *
+ * 与后端 `resume_style_schema.FIELD_ROLE_PROPS` 逐项相等。`indent` / `bullet` 有落点：
+ * 后端把它们写到承载字段的 `li` / `p.body-paragraph` 上（DF-8），所以能留在面板里。
+ *
+ * 由 `ROLE_STYLE_PROPS` **推导**而不是逐角色手写六行：手写那版把角色名当实参
+ * （`body: reachableForField("body")`），
+ * 属性名 `body` 恰在 `COPY_PROPERTIES` 里、而值又是调用表达式，AST 文案守卫会把这个
+ * 技术枚举值当成"新增产品文案"（`cjkRatchet.test.ts`：unregistered product copy）。
+ * 循环里没有字面量，既不会被误判，也不会漏掉将来新增的角色。
+ */
+export const FIELD_STYLE_PROPS: Record<ResumeRoleKey, readonly StylePropKey[]> = (() => {
+  const result = {} as Record<ResumeRoleKey, readonly StylePropKey[]>;
+  for (const role of Object.keys(ROLE_STYLE_PROPS) as ResumeRoleKey[]) {
+    result[role] = ROLE_STYLE_PROPS[role].filter((prop) => !FIELD_EXCLUDED_PROPS.includes(prop));
+  }
+  return result;
+})();
+
+/**
  * 角色 → 「控制纸面哪里」的一句说明（F25）。
  *
  * 只写名字时用户分不清「字段名」调的是值前面的「技术栈：」还是值本身；这六句是

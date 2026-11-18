@@ -169,6 +169,10 @@
    *                      Modal/Drawer 自动 +100 容器偏移：单层 Modal/Drawer 实际
    *                      3200，Drawer 内嵌 Modal 3300，再嵌 +100/层。
    *   3110 editor-modal  简历编辑器 Modal（打开时无并存容器）。
+   *   3300 selection-bar 划词浮条：高于编辑器 Modal 与单层容器链（3200），低于
+   *                      全部投投卡片（3400+）。浮条永远不该盖住由它触发的卡片；
+   *                      但它仍高于 Modal 内弹层（约 3250—3280），管不到行内格式
+   *                      菜单——那半靠行为修复，见下方 token 注释。
    *   3400 assistant-card 投投助手卡：高于容器链两层（3200/3300）。
    *   3450 save-card     投投资料保存卡——是 .tt-shell（isolation: isolate）的
    *                      壳内地标，不参与全局排序，只需壳内 tip > save。
@@ -186,6 +190,16 @@
    */
   --rf-layer-popup-base: 3100;
   --rf-layer-editor-modal: 3110;
+  /*
+   * 划词浮条：高于编辑器 Modal（3110）、antd 单层容器链（3200），低于所有投投
+   * 卡片（3400+）。**浮条永远不该盖住由它触发的卡片。**
+   *
+   * 边界：3300 仍高于 Modal 内 antd 弹层（约 3250—3280），所以这一档管不到
+   * 「浮条压住行内格式菜单」——那半只能靠行为修复（右键不再让浮条重新浮出，
+   * 两者不同时出现）。要连这一半也靠层级解决，浮条需降到 3210 左右，但未实测，
+   * 且会被 Drawer / 嵌套 Modal（3300）盖住，本期不采用，留待验证。
+   */
+  --rf-layer-selection-bar: 3300;
   --rf-layer-assistant-card: 3400;
   --rf-layer-save-card: 3450;
   --rf-layer-clipboard-card: 3500;

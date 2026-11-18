@@ -139,6 +139,10 @@ const typography = {
   "typography.entryStyle.scope.body": "正文",
   "typography.entryStyle.scope.meta": "灰字",
   "typography.entryStyle.scope.field": "当前字段",
+  /** QW-6：页眉字段的作用范围名与说明（字段名 / 字段值分别调）。 */
+  "typography.headerStyle.scope": "页眉字段",
+  "typography.headerStyle.hint": "字段名与字段值分开调：上面选哪一半，下面的参数就只改那一半",
+  "typography.headerStyle.noLabel": "这个字段当前不显示字段名（可在字段设置里改成「显示」）",
   /** 段控下方的一句范围说明：说清这次只动哪一块。 */
   "typography.entryStyle.scopeHint.object": "整条一起改：标题、正文、灰字都跟随",
   "typography.entryStyle.scopeHint.entry_title": "只改条目标题这一行",

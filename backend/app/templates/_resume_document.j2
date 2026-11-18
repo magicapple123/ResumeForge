@@ -201,8 +201,14 @@
       {%- for line in document_plan.header.contact_lines -%}
       {%- for seg in line -%}
       {%- set href = safe_link(seg.link) -%}
-      {%- if href %}<a href="{{ href }}" data-resume-path="{{ seg.path }}">{{ seg.text }}</a>{% else %}<span data-resume-path="{{ seg.path }}">{{ seg.text }}</span>{% endif -%}
-      {%- if not loop.last %}{% if document_plan.header.contact_separator %}<span class="contact-sep">{{ document_plan.header.contact_separator }}</span>{% else %}<wbr />{% endif %}{% endif -%}
+      {#- QW-6：标签段另带一个**类名**，模板据此清掉 span 之间的分隔外边距。
+      不用 `[data-role="field_label"]` 属性选择器：默认路径必须零角色 CSS
+      （`test_resume_render_overrides` 钉着"[data-role=" 不出现）。 -#}
+      {%- set role_attr = ' class="contact-label" data-role="field_label"' if seg.role == 'field_label' else '' -%}
+      {%- if href %}<a href="{{ href }}" data-resume-path="{{ seg.path }}"{{ role_attr|safe }}>{{ seg.text }}</a>{% else %}<span data-resume-path="{{ seg.path }}"{{ role_attr|safe }}>{{ seg.text }}</span>{% endif -%}
+      {#- QW-6：标签段与值段共用同一条路径，属于**同一个字段**——两者之间不插分隔符，
+          否则纸面会在「电话：」和号码之间多出一段间隔（PDF/Word 侧按同一规则合并）。 #}
+      {%- if not loop.last and line[loop.index0 + 1].path != seg.path %}{% if document_plan.header.contact_separator %}<span class="contact-sep">{{ document_plan.header.contact_separator }}</span>{% else %}<wbr />{% endif %}{% endif -%}
       {%- endfor -%}
       {%- if not loop.last %}<br />{% endif -%}
       {%- endfor %}

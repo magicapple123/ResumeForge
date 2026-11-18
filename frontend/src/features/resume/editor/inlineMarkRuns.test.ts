@@ -17,6 +17,7 @@
 // @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import sharedCases from "./inlineMarks.cases.json";
 import type { InlineMarkRun } from "./inlineMarkRuns";
 import {
   hasInlineMarks,
@@ -206,5 +207,39 @@ describe("行内标记 · 局部性质", () => {
     ]);
     const runs: InlineMarkRun[] = parseInlineMarkRuns("ab{@color=#c0392b}cd{@}");
     expect(runs.map((run) => run.text).join("")).toBe("abcd");
+  });
+});
+
+interface StripCase {
+  raw: string;
+  visible: string;
+  style_visible: string;
+}
+
+const stripCases = (sharedCases as { cases: StripCase[] }).cases;
+
+describe("DF-6 · 剥离与后端共享用例（inlineMarks.cases.json）", () => {
+  it("用例集覆盖退化路径：未闭合 / 越界 / 落单收口 / 嵌套", () => {
+    expect(stripCases.length).toBeGreaterThanOrEqual(12);
+    expect(stripCases.some((item) => item.raw === "")).toBe(true);
+    expect(stripCases.some((item) => item.raw === "{@size=0.9}未闭合")).toBe(true);
+    expect(stripCases.some((item) => item.raw.startsWith("{@size=9}"))).toBe(true);
+    expect(stripCases.some((item) => item.raw === "x{@}y")).toBe(true);
+    expect(stripCases.some((item) => item.raw.includes("**"))).toBe(true);
+  });
+
+  it.each(stripCases.map((item) => [item.raw, item] as const))(
+    "剥离 %s 只剪掉认出来的标记",
+    (_raw, item) => {
+      expect(stripInlineMarks(item.raw)).toBe(item.visible);
+    },
+  );
+
+  it("`style_visible` 由后端 strip_style_markers 断言（这里只钉住它存在且更长或相等）", () => {
+    // 后端口径保留 `**` 与链接语法，所以只会比"展示口径"长或相等；具体值在
+    // `backend/tests/test_resume_inline_style.py` 里逐条比对同一个文件。
+    for (const item of stripCases) {
+      expect(item.style_visible.length).toBeGreaterThanOrEqual(item.visible.length);
+    }
   });
 });

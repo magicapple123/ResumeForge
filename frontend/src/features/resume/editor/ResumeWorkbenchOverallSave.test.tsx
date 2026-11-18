@@ -12,21 +12,34 @@
  * 5. Esc / × 在有改动时先就地确认，且确认句点名丢的是排版参数还是内容；
  * 6. 草稿（isDraft）什么都没改时按钮是「保存到简历中心」，关闭也要问一句。
  *
- * 断言文案一律走 `t()`（cjkRatchet 的 tests 口径逐文件卡中文）。
+ * QW-2 的"部分成功"矩阵单独成文件（`*.partial.test.tsx`），共享装配见
+ * `workbenchSaveFixtures.tsx`。断言文案一律走 `t()`。
  */
-import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { useState } from "react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
-import { makeResumeDetail, makeResumeDocument } from "../../../test/documentHarness";
-import { headerFieldInput } from "../../../test/headerChip";
 import { TEMPLATE_CATALOG } from "../../../test/resumeFixtures";
-import type { ResumeDetail, ResumeDocument, ResumeLayout } from "../../../types";
-import type { ResumeDocumentPipeline } from "../document/types";
-import { DEFAULT_LAYOUT } from "../layout/ResumeLayoutControls.testkit";
-import ResumeDetailPreview from "../preview/ResumeDetailPreview";
+import type { ResumeDetail, ResumeDocument } from "../../../types";
+import { readActiveDatasetId } from "../../../utils/datasetScope";
+import {
+  DETAIL,
+  EDITED_NAME,
+  NAME,
+  OPENING_LAYOUT,
+  changeLayout,
+  closeButton,
+  documentWithName,
+  makePipeline,
+  nameInput,
+  openWorkbench,
+  renderWorkbench,
+  topCancel,
+  topPublish,
+  topRedo,
+  topSave,
+  topUndo,
+} from "../../../../tests/helpers/workbenchSaveFixtures";
+import { writeResumeDraft } from "./useWorkbenchResumeDraft";
 
 vi.mock("../../../hooks/useResumeTemplateCatalog", () => ({
   useResumeTemplateCatalog: () => ({ catalog: TEMPLATE_CATALOG }),
@@ -58,165 +71,6 @@ vi.mock("../../../api/profile", () => ({
     awards: [],
   })),
 }));
-
-/** 打开时的版式：format_config 为空；点一次色板就能造出"版式脏"。 */
-const OPENING_LAYOUT: ResumeLayout = { ...DEFAULT_LAYOUT, format_config: {} };
-
-const NAME = "Alex";
-const EDITED_NAME = "\u674e\u56db";
-
-function documentWithName(name: string): ResumeDocument {
-  const document = makeResumeDocument();
-  const item = document.header.items.find((candidate) => candidate.key === "name");
-  if (item) item.value = name;
-  return document;
-}
-
-const DETAIL: ResumeDetail = {
-  ...makeResumeDetail({ id: 42, title: "我的简历", revision: 3 }),
-  content: documentWithName(NAME),
-};
-
-/**
- * 版式变化必须走 V2 自己的参数面板（色板）——与真用户同一条链路：
- * 参数面板 → history.recordLayout → 宿主 onApplyLayout → layout prop 回灌。
- */
-interface RenderOptions {
-  detail?: ResumeDetail;
-  commitLayout?: () => Promise<boolean>;
-  withoutCommitLayout?: boolean;
-  pipeline?: ResumeDocumentPipeline;
-}
-
-function renderWorkbench(options: RenderOptions = {}) {
-  const onApplyLayout = vi.fn<(next: ResumeLayout) => void>();
-  const onSaveContent = vi.fn<(next: ResumeDocument, revision?: number) => Promise<void>>(
-    async () => undefined,
-  );
-  const onCommitLayout = vi.fn(options.commitLayout ?? (async () => true));
-  const onPublishDraft = vi.fn(async () => true);
-  const detail = options.detail ?? DETAIL;
-
-  function Harness() {
-    const [layout, setLayout] = useState<ResumeLayout>(OPENING_LAYOUT);
-    return (
-      <MemoryRouter>
-        <AntdApp>
-          <ResumeDetailPreview
-            detail={detail}
-            html="<html></html>"
-            layout={layout}
-            layoutStatus={null}
-            measure={null}
-            pdfDirectAvailable
-            relayouting={false}
-            previewRef={{ current: null }}
-            onLayoutStatus={vi.fn()}
-            onMeasure={vi.fn()}
-            onApplyLayout={(next) => {
-              onApplyLayout(next);
-              setLayout(next);
-            }}
-            onApplyFittedFormat={vi.fn()}
-            onSaveEditedResume={onSaveContent}
-            suggestionsGenerated={false}
-            suggestionsResetKey={0}
-            onSuggestionsGenerated={vi.fn()}
-            {...(options.withoutCommitLayout ? {} : { onCommitLayout })}
-            onPublishDraft={onPublishDraft}
-            documentPipeline={options.pipeline}
-          />
-        </AntdApp>
-      </MemoryRouter>
-    );
-  }
-
-  render(<Harness />);
-  return { onApplyLayout, onSaveContent, onCommitLayout, onPublishDraft };
-}
-
-function makePipeline() {
-  const revision = 3;
-  const saveLayout = vi.fn(async () => ({ status: "saved" as const, revision: 4 }));
-  const saveContent = vi.fn(async () => 5);
-  const pipeline: ResumeDocumentPipeline = {
-    revision,
-    saveLayout,
-    saveContent,
-    publishDraft: vi.fn(async () => ({ status: "saved" as const, revision: 5 })),
-    fetchLatest: vi.fn(async () => {
-      throw new Error("not used");
-    }),
-    adoptLatest: vi.fn(),
-    saveAsCopy: vi.fn(async () => {
-      throw new Error("not used");
-    }),
-  };
-  return { pipeline, saveLayout, saveContent };
-}
-
-async function openWorkbench(): Promise<void> {
-  fireEvent.click(screen.getByRole("button", { name: new RegExp(t("workbench.title")) }));
-  await screen.findByRole("dialog", { name: t("workbench.title") });
-}
-
-function actionbar(): HTMLElement {
-  const node = document.querySelector<HTMLElement>(".resume-wb-actionbar");
-  expect(node).not.toBeNull();
-  return node as HTMLElement;
-}
-
-function topSave(): HTMLElement | null {
-  return within(actionbar()).queryByRole("button", {
-    name: new RegExp(t("workbench.action.save-changes")),
-  });
-}
-
-function topPublish(): HTMLElement | null {
-  return within(actionbar()).queryByRole("button", {
-    name: new RegExp(t("workbench.action.publish")),
-  });
-}
-
-function topCancel(): HTMLElement | null {
-  return within(actionbar()).queryByRole("button", {
-    name: new RegExp(t("workbench.action.cancel-changes")),
-  });
-}
-
-/** #10：页眉字段是 chip，值输入框在展开态里（见 src/test/headerChip.ts）。 */
-function nameInput(): HTMLInputElement {
-  return headerFieldInput("document.headerField.name");
-}
-
-/**
- * 点一次预设色板 = 改一处**版式**。
- *
- * #12 把四行颜色改成了手风琴且**默认全部收起**（规格：四行总高 ≤120px、先选行才出色板），
- * 所以这里要先展开一行——只点行头箭头，不动其它断言；色板已经在（上一次调用展开过）时
- * 不再点，否则第二次调用会把它收起。
- *
- * 四行颜色各有一块同名色块（读屏名就是颜色名），按 role 查会命中多颗；这里要的只是
- * "改一处版式"，改哪一行都一样。
- */
-function pickSwatch(): void {
-  if (!document.querySelector(".resume-wb-swatches")) {
-    const toggle = document.querySelector<HTMLElement>(".resume-wb-color-toggle");
-    expect(toggle).not.toBeNull();
-    fireEvent.click(toggle as HTMLElement);
-  }
-  fireEvent.click(screen.getAllByRole("button", { name: t("workbench.color.navy") })[0]);
-}
-
-/** 改版式并等到"有改动"信号出现（顶部出现保存按钮）。 */
-async function changeLayout(): Promise<void> {
-  pickSwatch();
-  await waitFor(() => expect(topSave()).not.toBeNull());
-}
-
-function closeButton(): HTMLElement {
-  return within(actionbar()).getByRole("button", { name: t("common.action.close") });
-}
 
 beforeEach(() => {
   localStorage.clear();
@@ -368,5 +222,130 @@ describe("制作台 · 草稿（0051）", () => {
 
     await screen.findByText(t("workbench.close.body-draft"));
     expect(screen.getByRole("dialog", { name: t("workbench.title") })).toBeInTheDocument();
+  });
+});
+
+describe("制作台 · 顶栏撤销 / 恢复（QW-1）", () => {
+  it("没有历史时两颗按钮都禁用；改一次正文后可撤销、撤销后可用恢复", async () => {
+    renderWorkbench();
+    await openWorkbench();
+
+    expect(topUndo()).toBeDisabled();
+    expect(topRedo()).toBeDisabled();
+
+    fireEvent.change(nameInput(), { target: { value: EDITED_NAME } });
+    await waitFor(() => expect(topUndo()).toBeEnabled(), { timeout: 3000 });
+
+    fireEvent.click(topUndo());
+    await waitFor(() => expect(nameInput().value).toBe(NAME));
+    expect(topRedo()).toBeEnabled();
+
+    fireEvent.click(topRedo());
+    await waitFor(() => expect(nameInput().value).toBe(EDITED_NAME));
+  });
+
+  it("输入框聚焦时点击撤销不丢焦点（按钮不抢焦点）", async () => {
+    renderWorkbench();
+    await openWorkbench();
+    fireEvent.change(nameInput(), { target: { value: EDITED_NAME } });
+    await waitFor(() => expect(topUndo()).toBeEnabled(), { timeout: 3000 });
+
+    const input = nameInput();
+    input.focus();
+    fireEvent.mouseDown(topUndo());
+    fireEvent.click(topUndo());
+
+    await waitFor(() => expect(nameInput().value).toBe(NAME));
+    expect(document.activeElement).toBe(nameInput());
+  });
+
+  it("Tooltip 用历史摘要说清将要撤销什么", async () => {
+    renderWorkbench();
+    await openWorkbench();
+    fireEvent.change(nameInput(), { target: { value: EDITED_NAME } });
+    await waitFor(() => expect(topUndo()).toBeEnabled(), { timeout: 3000 });
+
+    // React 的 onMouseEnter 由 mouseover 合成，直接派发 mouseenter 不会触发。
+    fireEvent.mouseOver(topUndo().parentElement as HTMLElement);
+
+    // 摘要形态：「撤销「…」」——具体步骤名由 changeSummary 决定，这里钉两件事：
+    // 不是"没有可撤销"的空态提示，且带上了这一步改到的内容（姓名）。
+    // 用 role=tooltip 而不是 `.ant-tooltip-inner`：antd 会先挂一个空的内层节点，
+    // 按 class 取第一个会稳定拿到空串。
+    const tooltip = await screen.findByRole("tooltip");
+    await waitFor(() => {
+      const text = tooltip.textContent ?? "";
+      expect(text).not.toBe(t("workbench.history.undo.hint"));
+      expect(text).toContain(EDITED_NAME);
+    });
+  });
+});
+
+describe("制作台 · 会话草稿恢复（QW-5）", () => {
+  it("改正文 → 重新打开 → 出现恢复条 → 点恢复后内容回到刷新前", async () => {
+    const first = renderWorkbench();
+    await openWorkbench();
+    fireEvent.change(nameInput(), { target: { value: EDITED_NAME } });
+    // 卸载即 flush：草稿是"刷新/误关"那一下的兜底，不需要等 450ms 防抖。
+    first.unmount();
+    expect(sessionStorage.length).toBeGreaterThan(0);
+
+    renderWorkbench();
+    await openWorkbench();
+
+    await screen.findByText(t("draft.restore.title"));
+    // 恢复条同时说清这份草稿基于哪一版（没注入 pipeline 的宿主 revision 为 0）。
+    expect(screen.getByText(t("workbench.draft.baseline", { revision: 0 }))).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: t("draft.restore.action") }));
+
+    await waitFor(() => expect(nameInput().value).toBe(EDITED_NAME));
+    // 恢复条取用后消失（不重复问）。
+    expect(screen.queryByText(t("draft.restore.title"))).toBeNull();
+  });
+
+  it("点「放弃」后草稿被删除，再次打开不再出现恢复条", async () => {
+    const first = renderWorkbench();
+    await openWorkbench();
+    fireEvent.change(nameInput(), { target: { value: EDITED_NAME } });
+    first.unmount();
+
+    const second = renderWorkbench();
+    await openWorkbench();
+    await screen.findByText(t("draft.restore.title"));
+    fireEvent.click(screen.getByRole("button", { name: t("draft.discard.action") }));
+    second.unmount();
+
+    renderWorkbench();
+    await openWorkbench();
+    // 不自动应用，也不该再有草稿可恢复。
+    await waitFor(() => expect(nameInput().value).toBe(NAME));
+    expect(screen.queryByText(t("draft.restore.title"))).toBeNull();
+  });
+
+  it("服务端版本已前进：恢复后保存用草稿的基准版本做条件写（走冲突，不静默覆盖）", async () => {
+    // 草稿写于第 3 版；打开时服务端已经是第 5 版。
+    writeResumeDraft(
+      { resumeId: 42, datasetId: readActiveDatasetId() },
+      3,
+      documentWithName(EDITED_NAME),
+      OPENING_LAYOUT,
+      Date.now(),
+    );
+    const { pipeline, saveContent } = makePipeline();
+    pipeline.revision = 5;
+    renderWorkbench({ pipeline });
+    await openWorkbench();
+
+    await screen.findByText(t("draft.restore.title"));
+    fireEvent.click(screen.getByRole("button", { name: t("draft.restore.action") }));
+
+    // 明确告知：这份草稿基于旧版，下一次保存会先走冲突处理。
+    await screen.findByText(t("workbench.draft.revision-ahead"));
+    expect(nameInput().value).toBe(EDITED_NAME);
+
+    fireEvent.click(topSave() as HTMLElement);
+    await waitFor(() => expect(saveContent).toHaveBeenCalledTimes(1));
+    // 条件写带草稿的 3（不是当前 5）：服务端据此返回 409 → 既有三选一。
+    expect(saveContent.mock.calls[0][1]).toBe(3);
   });
 });

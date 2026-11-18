@@ -107,6 +107,20 @@ ROLE_PROPS: dict[str, tuple[str, ...]] = {
 }
 OBJECT_PROPS: tuple[str, ...] = PROP_KEYS
 
+#: 字段作用域（``object_roles["<字段路径>:<role>"]``）里**没有落点**的属性（DF-8）。
+#:
+#: 只列 ``meta_align``：它写的是 ``.entry-head`` 的 ``justify-content``，字段层没有这个
+#: flex 容器；PDF / Word 也从不按字段路径读它（``pdf_exporter`` 只在条目头查对象层）。
+#: 面板因此少给一个"拖了没反应"的滑杆，校验侧同步丢弃——否则用户能存进一个三出口都不读的值。
+FIELD_EXCLUDED_PROPS: tuple[str, ...] = ("meta_align",)
+
+#: 字段作用域真正有落点的属性 = 角色白名单去掉 ``FIELD_EXCLUDED_PROPS``。
+#: 前端 ``styleCatalog.FIELD_STYLE_PROPS`` 与这里逐项相等（``styleParity.test.ts`` 钉住）。
+FIELD_ROLE_PROPS: dict[str, tuple[str, ...]] = {
+    role: tuple(key for key in props if key not in FIELD_EXCLUDED_PROPS)
+    for role, props in ROLE_PROPS.items()
+}
+
 # 区间与步长单独暴露一份：前端区间表校验、输入控件的步进都读它（不重复抄数字）。
 PROP_BOUNDS: dict[str, tuple[float, float]] = {
     prop["key"]: (float(prop["min"]), float(prop["max"]))
@@ -216,8 +230,10 @@ def validate_objects_domain(raw: object) -> dict | None:
 def validate_object_roles_domain(raw: object) -> dict | None:
     """§1.2 的 ``object_roles`` 域校验（W3：文字级别按选中字段/角色生效）。
 
-    键形如 ``"<object_id>:<role>"``：对象 id 必须过 ``is_object_id``、角色必须是
-    ``ROLES`` 之一，属性按该角色的 ``ROLE_PROPS[role]`` 收窄（meta 不允许段距等）。
+    键形如 ``"<object_id>:<role>"``：对象 id 必须过 ``is_object_id``（字段路径过
+    ``is_field_path``）、角色必须是 ``ROLES`` 之一，属性按该角色的 ``ROLE_PROPS[role]``
+    收窄（meta 不允许段距等）；字段路径再按 ``FIELD_ROLE_PROPS[role]`` 收窄（DF-8：
+    自定义字段没有条目头容器，``meta_align`` 存进去也没有出口读它）。
     ≤400 条；空域返回 ``None``（R3：不落库）。畸形键**整条丢弃**，不猜语义。
     """
     if not isinstance(raw, dict):
@@ -228,13 +244,11 @@ def validate_object_roles_domain(raw: object) -> dict | None:
         if name == "version":
             continue
         object_id, sep, role = name.rpartition(":")
-        if (
-            not sep
-            or not (is_object_id(object_id) or is_field_path(object_id))
-            or role not in ROLES
-        ):
+        is_field = is_field_path(object_id)
+        if not sep or not (is_object_id(object_id) or is_field) or role not in ROLES:
             continue
-        cleaned = _validate_style_payload(payload, allowed=ROLE_PROPS[role])
+        allowed = FIELD_ROLE_PROPS[role] if is_field else ROLE_PROPS[role]
+        cleaned = _validate_style_payload(payload, allowed=allowed)
         if cleaned:
             result[f"{object_id}:{role}"] = cleaned
         if len(result) >= MAX_OBJECT_ROLES:
@@ -321,6 +335,8 @@ def role_fields_catalog() -> list[dict]:
 
 
 __all__ = [
+    "FIELD_EXCLUDED_PROPS",
+    "FIELD_ROLE_PROPS",
     "MAX_OBJECTS",
     "MAX_OBJECT_ROLES",
     "MAX_ROLE_PROPS",

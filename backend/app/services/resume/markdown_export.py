@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from ...schemas.resume_document_plan import BlockPlan, DocumentPlan, Inline
 from .document_html import coerce_document, join_cell_texts, paper_document
+from .resume_contact import contact_field_texts
 from .resume_inline_style import strip_style_markers
 from .resume_labels import DEFAULT_RESUME_LANGUAGE, normalize_language
 
@@ -111,10 +112,10 @@ def _header_lines(plan: DocumentPlan, *, sep: str) -> list[str]:
     if title:
         lines.append("# " + title)
     for line in plan.header.contact_lines:
-        # 行内字段之间用 · 分隔（HTML 靠 CSS 间距、PDF/Word 靠各自的字段分隔符，同义）。
-        text = sep.join(
-            str(seg.text or "").strip() for seg in line if str(seg.text or "").strip()
-        )
+        # 行内**字段之间**用 · 分隔（HTML 靠 CSS 间距、PDF/Word 靠各自的字段分隔符，同义）。
+        # QW-6：同一个字段的标签段与值段共用一条路径，必须并回一整串——否则会印成
+        # 「电话： · 139 0176 4428」，与拆分前不再逐字相同。
+        text = sep.join(contact_field_texts(line))
         if text:
             lines.append(text)
     return lines

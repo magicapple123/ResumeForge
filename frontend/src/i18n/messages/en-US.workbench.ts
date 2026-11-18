@@ -54,6 +54,14 @@ const workbench = {
   "workbench.action.cancel-changes": "Cancel changes",
   "workbench.action.publish": "Save to Resume Center",
   "workbench.draft.hint": "Not saved. Save to make it appear in Resume Center",
+  "workbench.action.retry-content": "Retry content",
+  "workbench.draft.baseline": "Draft based on revision {revision}",
+  "workbench.draft.revision-ahead":
+    "A newer version exists on the server; saving will resolve the conflict first",
+  "workbench.draft.too-large":
+    "The draft exceeds 256 KB and was not stashed; your changes are still on this page",
+  "workbench.draft.unavailable":
+    "The browser does not allow stashing drafts; your changes are still on this page",
   "editor.tab.basic": "Basic information",
   "editor.tab.education": "Education",
   "editor.tab.experience": "Internships / Work",
@@ -72,6 +80,10 @@ const workbench = {
   "resume.measure.fontSizeDecrease": "Decrease font size",
   "resume.measure.fontSizeIncrease": "Increase font size",
   "resume.measure.fontSizeSliderAria": "Font size (drag to adjust, arrow keys for fine adjustment)",
+  "resume.measure.fontSizeInputAria": "Font size value (type a number, press Enter to confirm)",
+  "resume.measure.fontSizeInputHint": "Type a font size directly; press Enter to confirm",
+  "resume.measure.fontSizeInputEmpty": "Enter a font size",
+  "resume.measure.fontSizeInputInvalid": "Font size must be between {min} and {max}px",
   "resume.measure.fontTooSmall": "Sizes below {px}px may be hard to read in print",
   "resume.measure.fontLabel": "Font",
   "resume.measure.more": "More typography",

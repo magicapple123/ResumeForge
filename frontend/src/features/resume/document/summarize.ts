@@ -15,6 +15,8 @@ import type {
   ResumeItem,
   ResumeSection,
 } from "../../../types/resumeDocument";
+import { t } from "../../../i18n";
+import { stripInlineMarks } from "../editor/inlineMarkRuns";
 import { getItemPlacement } from "./placement";
 
 export type StructureNodeKind = "header-entry" | "section" | "entry" | "group" | "item";
@@ -95,23 +97,36 @@ export function truncateLabel(value: string, max = ENTRY_LABEL_MAX_CHARS): strin
   return chars.slice(0, max - 1).join("") + "…";
 }
 
+/**
+ * 展示给用户的纯文本（DF-6）：**所有只读展示都从这里取值**，不要在别处直接读 `item.value`。
+ *
+ * 树行、chip、分页芯片、拖拽标签、变更摘要、`view.ts` 的取数都走它——六处各剥一遍时，
+ * 漏一处就会在界面上露出 `{@color=…}` 源串；剥离必须**只有一份实现**（`stripInlineMarks`，
+ * 与后端的保守剥离同口径：未闭合 / 越界标记原样保留，不吞字）。
+ *
+ * 编辑态输入框**不**走这里：那里必须保留标记，否则光标与写回链路全乱。
+ */
+export function displayText(raw: string): string {
+  return stripInlineMarks(raw);
+}
+
 /** item 的纯文本值（列表/作者各拼一行；字段直接取 value）。 */
 function itemPlainValue(item: ResumeItem): string {
   switch (item.kind) {
     case "field":
-      return item.value.trim();
+      return displayText(item.value.trim());
     case "list":
       return item.values
-        .map((value) => value.trim())
+        .map((value) => displayText(value.trim()))
         .filter(Boolean)
         .join("\u3001");
     case "authors":
       return item.authors
-        .map((author) => author.name.trim())
+        .map((author) => displayText(author.name.trim()))
         .filter(Boolean)
         .join(", ");
     case "text":
-      return item.text.trim();
+      return displayText(item.text.trim());
     default:
       return "";
   }
@@ -150,23 +165,51 @@ export type FieldLabelResolver = (key: string, sectionKey?: string) => string | 
 /** #11a：枚举字段值的显示名解析（sectionKey + fieldKey + 原值 → 本地化标签或原值）。 */
 export type EnumValueResolver = (sectionKey: string, fieldKey: string, value: string) => string;
 
+/** 字段名的最终兜底（DF-10）：**永远不显示 `custom:…` 这类内部键**。 */
+function unnamedField(): string {
+  return t("document.field.unnamed");
+}
+
+/**
+ * 字段名兜底（DF-10 的唯一实现）：`custom:ob_xxx` 这种内部键换成「未命名字段」；
+ * 其余 key 原样返回——目录没加载到时显示 `school` 虽然不好看，但比谎称"未命名"诚实。
+ */
+export function fieldFallbackLabel(key: string): string {
+  return key.startsWith("custom:") ? unnamedField() : key;
+}
+
+/**
+ * 字段名的展示值（DF-6 + DF-10 的唯一出口）：用户 label > 目录标签 > key 兜底。
+ *
+ * 目录标签本身也可能是 `custom:…`（`ItemChipRow` 用它把已解析的标签传给 chip），
+ * 所以那一档也要过一遍同样的判据——否则 chip 上还是会露出内部键。
+ */
+export function fieldDisplayName(label: string, key: string, catalogLabel = ""): string {
+  const name =
+    displayText(label) || (catalogLabel.startsWith("custom:") ? "" : displayText(catalogLabel));
+  return name || fieldFallbackLabel(key);
+}
+
 function itemLabel(
   item: ResumeItem,
   sectionKey: string,
   resolveLabel?: FieldLabelResolver,
   resolveEnumValue?: EnumValueResolver,
 ): string {
-  if (item.kind === "text") return item.text;
+  if (item.kind === "text") return displayText(item.text);
   const catalogLabel = resolveLabel?.(item.key, sectionKey) ?? "";
   if (item.kind === "field") {
     // #11a：枚举字段显示本地化标签（与 chip 同源），没有匹配再落回原值。
     const value =
       item.format === "enum" && resolveEnumValue
         ? resolveEnumValue(sectionKey, item.key, item.value)
-        : item.value;
-    return item.label || value || catalogLabel || item.key;
+        : displayText(item.value);
+    // 自定义字段的 label 可以留空（用户选了"允许空名"）：那时给「未命名字段」，
+    // 不落到 item.key —— `custom:` 前缀是内部判据（fieldPairs / coverageGroups /
+    // fieldCatalog 都按它分支），露出来只会像乱码。
+    return displayText(item.label) || value || catalogLabel || fieldFallbackLabel(item.key);
   }
-  return item.label || catalogLabel || item.key;
+  return displayText(item.label) || catalogLabel || fieldFallbackLabel(item.key);
 }
 
 function itemNode(
@@ -194,7 +237,9 @@ function itemNode(
     fieldLabel:
       item.kind === "text"
         ? undefined
-        : item.label || resolveLabel?.(item.key, sectionKey) || item.key,
+        : displayText(item.label) ||
+          resolveLabel?.(item.key, sectionKey) ||
+          fieldFallbackLabel(item.key),
     children: [],
   };
 }
@@ -275,7 +320,7 @@ function sectionNode(
     kind: "section",
     key: section.key,
     path: section.key,
-    label: section.layout.title_override || section.title || section.key,
+    label: displayText(section.layout.title_override || section.title) || section.key,
     sectionKey: section.key,
     children: section.entries.map((entry, index) =>
       entryNode(entry, section.key, index, options, resolveLabel, resolveEnumValue),
@@ -292,8 +337,11 @@ function headerNode(item: HeaderItem, resolveLabel?: FieldLabelResolver): Struct
     key: `header.${item.id}`,
     path: `header.${item.id}`,
     label: binaryValue
-      ? item.label || catalogLabel || item.key
-      : item.label || item.value || catalogLabel || item.key,
+      ? displayText(item.label) || catalogLabel || fieldFallbackLabel(item.key)
+      : displayText(item.label) ||
+        displayText(item.value) ||
+        catalogLabel ||
+        fieldFallbackLabel(item.key),
     placement: undefined,
     headerPlacement: item.placement,
     itemId: item.id,
@@ -301,7 +349,7 @@ function headerNode(item: HeaderItem, resolveLabel?: FieldLabelResolver): Struct
     lock: null,
     itemKind: "field",
     itemKey: item.key,
-    fieldLabel: item.label || catalogLabel || item.key,
+    fieldLabel: displayText(item.label) || catalogLabel || fieldFallbackLabel(item.key),
     children: [],
   };
 }

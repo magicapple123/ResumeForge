@@ -221,7 +221,9 @@ export function createResumeDocumentHost(options: ResumeDocumentHostOptions): Re
       setSavedLayout(nextLayout);
       setHtml(await render(updated.content, nextLayout));
       bumpResumeList();
-      message.success(t("workbench.save.layout-saved"));
+      // 成功提示不在这里弹（QW-2）：整体保存是两步，版式先成功就弹 toast 会让用户先看到
+      // "保存成功"，而正文那一步随后仍可能失败。只在"这一趟要存的东西都存上了"之后由
+      // 调用点发一条；失败提示仍然只在这里弹一次。
       return { status: "saved", revision: revisionOf(updated) };
     } catch (error) {
       // 冲突不进 toast：整体保存会把冲突交给"三选一"浮层；老链路（主预览底部保存）没有

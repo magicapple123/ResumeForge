@@ -83,6 +83,10 @@ export default function TouTouSelectionMenu({ enabled, onAction }: Props) {
     };
     const onSelectionChange = () => schedule();
     const onMouseUp = (event: MouseEvent) => {
+      // 只处理主键：右键/中键交给原生菜单与浏览器。右键 mousedown 已收起浮条，
+      // 但右键不会清掉输入框选区（activeElement.selectionStart/End），若这里也
+      // refresh 就会让浮条一帧后重新浮出，压住随后的「行内格式」菜单。
+      if (event.button !== 0) return;
       // 点浮条自身不重算（按钮点击会先折叠选区再触发 selectionchange）。
       if (barRef.current?.contains(event.target as Node)) return;
       if (frame !== null) window.cancelAnimationFrame(frame);

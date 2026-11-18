@@ -35,6 +35,8 @@
   .header .intent { font-size: var(--fs); color: var(--muted); margin-top: calc(var(--fs) * 0.36); letter-spacing: 2px; }
   .header .contact { font-size: calc(var(--fs) * 0.9); color: var(--muted); margin-top: calc(var(--fs) * 0.5); }
   .header .contact span { margin: 0 calc(var(--fs) * 0.57); white-space: nowrap; }
+  /* QW-6：标签段与值段是同一个字段的两半，标签不再挂字段之间的那段间隔。 */
+  .header .contact .contact-label { margin-right: 0; }
  .profile-photo { position: absolute; top: 0; left: 0; width: calc(var(--fs) * 5.6 * var(--photo-scale, 1)); height: calc(var(--fs) * 7.2 * var(--photo-scale, 1)); object-fit: contain; border: 1px solid var(--line); }
   .section { margin-bottom: calc(var(--fs) * 1.35); }
   .section-title { font-family: "Songti SC", "SimSun", Georgia, serif; font-size: calc(var(--fs) * 1.11 * var(--section-title-scale, 1)); font-weight: 600; color: var(--accent); letter-spacing: 3px; text-align: center; border-bottom: 1px solid var(--line); padding-bottom: calc(var(--fs) * 0.28); margin-bottom: calc(var(--fs) * 0.8); }

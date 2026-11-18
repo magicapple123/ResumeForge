@@ -19,6 +19,7 @@ const conflict = {
     "The copy was saved, but the original did not sync; close and reopen it",
   "workbench.conflict.save-failed":
     "Saving did not succeed; your changes are still here, so you can try again",
+  "workbench.conflict.partial-saved": "Typography saved; content not saved",
   "workbench.save.content-saved": "Resume changes saved",
   "workbench.save.layout-saved": "Typography settings saved",
   "workbench.save.layout-failed": "Could not save typography settings; try again",
@@ -40,6 +41,8 @@ const conflict = {
   "workbench.history.current": "Current state",
   "workbench.history.undo.hint": "Nothing to undo",
   "workbench.history.redo.hint": "Nothing to redo",
+  "workbench.history.undo.tooltip": "Undo “{summary}”",
+  "workbench.history.redo.tooltip": "Redo “{summary}”",
   "workbench.history.jumpTo": "Go back to this step",
   "workbench.history.backToCurrent": "Back to current",
   "workbench.history.jumpTo.confirm":

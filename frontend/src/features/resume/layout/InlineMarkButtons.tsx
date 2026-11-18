@@ -23,7 +23,12 @@
  * 中栏表单的输入框由 `ItemEditor` / `itemValueEditors` 拥有；本组件只拿 `getTarget`
  * （读最近聚焦的输入框）、`getRememberedRange` 与 `onCommit`，不 import 任何宿主文件。
  */
-import { BoldOutlined, FontSizeOutlined, LinkOutlined } from "@ant-design/icons";
+import {
+  BoldOutlined,
+  FontColorsOutlined,
+  FontSizeOutlined,
+  LinkOutlined,
+} from "@ant-design/icons";
 import {
   App,
   Button,
@@ -40,6 +45,7 @@ import { useState, type ReactNode } from "react";
 import { t, type MessageKey } from "../../../i18n";
 import {
   applyStyleMark,
+  COLOR_PRESETS,
   inlineColorValue,
   insertLinkMark,
   INLINE_SIZE_STEPS,
@@ -75,9 +81,6 @@ const HINT_KEYS: Record<"noTarget" | "selectFirst" | "invalidUrl", MessageKey> =
   selectFirst: "typography.inline.selectFirst",
   invalidUrl: "typography.inline.invalidUrl",
 };
-
-/** 6 个预设强调色：色板是**数据**（用户会把它存进内容），不是主题变量。 */
-const COLOR_PRESETS = ["#c0392b", "#d97706", "#2f6fd0", "#2f855a", "#6b7280", "#111111"];
 
 /** 一次点击读到的编辑对象：文本 + 该用哪一段（可能是空区间 = 光标）。 */
 interface Picked {
@@ -336,19 +339,30 @@ export default function InlineMarkButtons({
         </span>
       </Dropdown>
       <Tooltip title={t("typography.inline.color")}>
-        <ColorPicker
-          size="small"
-          aria-label={t("typography.inline.color")}
-          disabled={disabled || undefined}
-          // ColorPicker 给的是 `AggregationColor`；颜色标记只认 hex，一律先 toHexString()。
-          // `defaultValue` 只是色块初值（不是"当前选区已有颜色"的指示），给强调红避免透明色警告。
-          defaultValue={COLOR_PRESETS[0]}
-          allowClear
-          disabledAlpha
-          presets={[{ label: t("typography.inline.colorPresets"), colors: COLOR_PRESETS }]}
-          onChange={applyColor}
-          onClear={() => applyStyle({ color: null })}
-        />
+        <span>
+          {/* DF-5：触发器是中性图标按钮，不再是"恒显红块"的默认色块（那会被读成
+              "当前颜色 = 红"）。`defaultValue` 只决定取色面板的初值，取正文黑
+              `#111111`；保持非受控——本期不反推选区已有颜色。 */}
+          <ColorPicker
+            size="small"
+            disabled={disabled || undefined}
+            // ColorPicker 给的是 `AggregationColor`；颜色标记只认 hex，一律先 toHexString()。
+            defaultValue="#111111"
+            allowClear
+            disabledAlpha
+            presets={[{ label: t("typography.inline.colorPresets"), colors: [...COLOR_PRESETS] }]}
+            onChange={applyColor}
+            onClear={() => applyStyle({ color: null })}
+          >
+            <Button
+              size="small"
+              type="text"
+              icon={<FontColorsOutlined />}
+              aria-label={t("typography.inline.color")}
+              disabled={disabled}
+            />
+          </ColorPicker>
+        </span>
       </Tooltip>
       <Popover
         open={linkSnapshot !== null}

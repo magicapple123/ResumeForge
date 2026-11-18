@@ -21,7 +21,7 @@
  * 的默认值（系数缺省 1.0）完全不受影响。
  */
 import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Slider, Space, Tooltip, Typography } from "antd";
+import { Button, InputNumber, Slider, Space, Tooltip, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { ResumePreviewHandle } from "../preview/ResumePreview";
@@ -87,6 +87,13 @@ export default function FontSizeControl({
   useLocale();
   // 拖动过程中的即时值：非 null 时覆盖 value，让滑块与读数跟着手指走。
   const [draggingPx, setDraggingPx] = useState<number | null>(null);
+  // QW-4：数值输入框的草稿。空输入与非法值只改草稿与提示，**不写入 layout**——
+  // 空不等于 0，越界也不该被悄悄夹成边界值。
+  const [typedText, setTypedText] = useState("");
+  const [inputEdited, setInputEdited] = useState(false);
+  const [inputError, setInputError] = useState<"empty" | "invalid" | null>(null);
+  // 回车与失焦可能连着触发两次提交：同一个值只写一次（否则会多打一个 PATCH）。
+  const lastCommittedInputRef = useRef<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 字号签名一变（提交成功或外部改动），交回权威值并清掉拖动中的即时值。
@@ -94,7 +101,16 @@ export default function FontSizeControl({
   if (prevSignature !== signature) {
     setPrevSignature(signature);
     setDraggingPx(null);
+    setTypedText("");
+    setInputEdited(false);
+    setInputError(null);
   }
+
+  // "上一次已提交"的去重标记在**事件处理器**里读写；签名变化时用 effect 清空
+  // （渲染期写 ref 会被 `react-hooks/refs` 拦下，而它只是一个防重复提交的缓存）。
+  useEffect(() => {
+    lastCommittedInputRef.current = null;
+  }, [signature]);
 
   // 关掉组件时清掉未触发的提交，避免对已卸载的父组件调用 onChange。
   useEffect(
@@ -109,7 +125,6 @@ export default function FontSizeControl({
   // 但「放大」按钮还亮着"这种自相矛盾的状态。规整到 0.1 后，读数、滑块与两端按钮的
   // 可用性说的是同一件事；真正落库时仍由 `layoutForFontPx` 做 2 位精度换算。
   const shownPx = Math.round((draggingPx ?? value) * 10) / 10;
-  const shownPxText = `${Number(shownPx.toFixed(1))}px`;
 
   const change = (px: number) => {
     // 0.1px 步长下浮点尾巴会直接漏到读数与落库值里（14.100000000000001），所以入口
@@ -117,6 +132,11 @@ export default function FontSizeControl({
     // 否则"看到的"和"存下的"会差那么一点点，回填时读数还会跳一下。
     const nextPx = Math.round(px * 10) / 10;
     setDraggingPx(nextPx);
+    // 滑杆/步进一旦动过，输入框交回权威值，错误提示也一并消失。
+    setTypedText("");
+    setInputEdited(false);
+    setInputError(null);
+    lastCommittedInputRef.current = null;
     // 即时反馈：直接改预览里的 `--fs`，不外发请求。探针保持到下一次重渲染（iframe 重新
     // 加载时自然销毁），所以从"拖动中的字号"到"最终渲染的字号"之间不会跳回旧值。
     previewRef?.current?.setLiveProbe(fontProbeCss(nextPx));
@@ -139,6 +159,49 @@ export default function FontSizeControl({
    */
   const stepPx = (delta: number) => {
     change(clampToBounds(Math.round((shownPx + delta) * 10) / 10));
+  };
+
+  /** 输入框里显示的仍是纸面 px（与读数一致）；**不出现 pt/mm**。 */
+  const fontPxFormatter = (raw?: string | number): string => {
+    if (raw === undefined || raw === null || raw === "") return "";
+    const text = String(raw);
+    return text.endsWith("px") ? text : `${text}px`;
+  };
+  const fontPxParser = (text?: string): string => (text ?? "").replace(/[^\d.-]/g, "");
+
+  /**
+   * 提交直接输入。三条规则（QW-4 验收）：
+   * 1. 空输入不是 0：提示后**不写**；
+   * 2. 非数字 / 越界：提示后**不写**（不夹成边界值，否则用户以为填进去了）；
+   * 3. 与当前值相同不提交（失焦本身不该产生一次"看起来没变"的写入）。
+   */
+  const commitTypedInput = () => {
+    if (!inputEdited) return;
+    const text = typedText.trim();
+    if (text === "") {
+      setInputError("empty");
+      return;
+    }
+    const parsed = Number(text);
+    if (!Number.isFinite(parsed)) {
+      setInputError("invalid");
+      return;
+    }
+    const nextPx = Math.round(parsed * 10) / 10;
+    if (nextPx < bounds.min || nextPx > bounds.max) {
+      setInputError("invalid");
+      return;
+    }
+    setInputError(null);
+    if (lastCommittedInputRef.current === nextPx || nextPx === shownPx) {
+      setInputEdited(false);
+      setTypedText("");
+      lastCommittedInputRef.current = nextPx;
+      return;
+    }
+    change(nextPx);
+    // `change()` 会清空"已提交"标记；回车后紧跟的失焦不应再提交一次。
+    lastCommittedInputRef.current = nextPx;
   };
 
   const reset = () => {
@@ -214,16 +277,52 @@ export default function FontSizeControl({
           onClick={() => stepPx(0.1)}
         />
       </Space>
-      {/* 读数落在与行距/页边距同一条竖线上：尾部左对齐 + 定宽读数列（见 modules-layout.css）。 */}
+      {/* 读数落在与行距/页边距同一条竖线上：尾部左对齐 + 定宽读数列（见 modules-layout.css）。
+          QW-4：读数本身改成可直接输入的数值框——输入框左缘就是原来读数的左缘，
+          三行的读数仍对齐；px 是纸面字号，界面不出现 pt/mm。 */}
       <span className="resume-measure-tail">
-        <Typography.Text type="secondary" className="resume-measure-value">
-          {shownPxText}
-        </Typography.Text>
+        <Tooltip title={t("resume.measure.fontSizeInputHint")}>
+          <InputNumber
+            size="small"
+            className="resume-font-input"
+            step={0.1}
+            // 不交给 antd 夹 min/max：越界值要**提示且不写入**（验收要求），而不是被
+            // 静默夹成边界值。范围校验在 `commitTypedInput` 里做。
+            // 自带上下箭头会把这个格子撑宽、把「恢复」挤出行外；步进仍由两侧 ± 与方向键承担。
+            controls={false}
+            disabled={disabled}
+            status={inputError ? "error" : undefined}
+            value={inputEdited ? (typedText === "" ? null : typedText) : shownPx}
+            formatter={fontPxFormatter}
+            parser={fontPxParser}
+            aria-label={t("resume.measure.fontSizeInputAria")}
+            onChange={(next) => {
+              const text = next === null || next === undefined ? "" : String(next);
+              setTypedText(text);
+              setInputEdited(true);
+              lastCommittedInputRef.current = null;
+              if (inputError) setInputError(null);
+            }}
+            onBlur={commitTypedInput}
+            onPressEnter={commitTypedInput}
+          />
+        </Tooltip>
         {/* 与行距/页边距同一处入口：改过之后在读数右侧长出 ↺（同一格，不新增列）。 */}
         {restore?.visible ? (
           <ParamResetButton label={t("resume.measure.fontSize")} onReset={restore.onReset} />
         ) : null}
       </span>
+      {/* 空输入 / 非法值：说清楚为什么没写进去，同时保持输入框里的原样（不悄悄改数）。 */}
+      {inputError ? (
+        <Typography.Text type="danger" className="resume-font-input-error">
+          {inputError === "empty"
+            ? t("resume.measure.fontSizeInputEmpty")
+            : t("resume.measure.fontSizeInputInvalid", {
+                min: Number(bounds.min.toFixed(1)),
+                max: Number(bounds.max.toFixed(1)),
+              })}
+        </Typography.Text>
+      ) : null}
       {/* 提示而不是禁用：字号偏小是用户自己的判断题（偶尔确实要压进一页），
           我们的责任是把"打印出来可能看不清"这件事说在动手之前。
           单独占一整行：挤在读数后面时这一格只剩几十像素，提示会被压成竖排的窄条。 */}

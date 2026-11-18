@@ -45,12 +45,20 @@
   color: transparent;
 }
 
-/* 选区必须半透明（文本域在下层之上，不透明高亮会把下层文字整片盖住），且字色透明要与
-   上一条**同进同出**——只搬一半会让普通字段选中文字消失。 */
+/* 选区：**不再由文本域画底色**（DF-4）。文本域的选区是源串偏移，`{@color=…}` 那 20 个
+   隐形字符也会被染上，于是选中一段带颜色的文字时会拉出一条没有文字的空蓝带。底色改由
+   遮罩层按**可见文字**自绘（`.rf-inline-mark-selection`）；文本域只保留"字色透明"，
+   否则两层会叠出第二条带。 */
 .ant-input.rf-inline-mark-layer.is-masked::selection,
 .ant-input.rf-value-textarea.rf-inline-mark-layer.is-masked::selection {
-  background: color-mix(in srgb, var(--rf-info) 26%, transparent);
+  background: transparent;
   color: transparent;
+}
+
+/* 遮罩层自绘的选区高亮：只覆盖可见字符，颜色与原来的 26% 底色一致。 */
+.rf-inline-mark-selection {
+  background: color-mix(in srgb, var(--rf-info) 26%, transparent);
+  border-radius: 2px;
 }
 
 /* 容器：遮罩层与文本域的公共定位上下文。 */
@@ -113,4 +121,12 @@
 
 .rf-inline-mark-field.is-composing .ant-input.rf-inline-mark-layer {
   color: var(--rf-text-body);
+}
+
+/* 组合期遮罩层让位，选区反馈必须交回文本域——否则打拼音时看不到自己选了哪些字。
+   这是 `.is-masked::selection` 透明化的唯一例外（DF-4）。 */
+.rf-inline-mark-field.is-composing .ant-input.rf-inline-mark-layer::selection,
+.rf-inline-mark-field.is-composing .ant-input.rf-value-textarea.rf-inline-mark-layer::selection {
+  background: color-mix(in srgb, var(--rf-info) 26%, transparent);
+  color: inherit;
 }

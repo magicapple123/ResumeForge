@@ -19,7 +19,12 @@ import { placeMenu } from "../../context-menu/positioning";
 import { useI18n } from "../../../i18n/i18nContext";
 import { ENTRY_STYLE_SCOPE_LABELS, type EntryStyleScope } from "../layout/entryStyleScopes";
 import { isFieldStylePath } from "../layout/fieldStyleTarget";
-import { entryIdFromPath, findEntryById, roleForDocumentPath } from "../layout/v2Selection";
+import {
+  entryIdFromPath,
+  findEntryById,
+  headerFieldFromPath,
+  roleForDocumentPath,
+} from "../layout/v2Selection";
 import type { ResumeDocument } from "../../../types/resumeDocument";
 import type { ResumeLayout } from "../../../types";
 import type { ResumeTemplateCatalog } from "../../../types";
@@ -77,23 +82,33 @@ export default function ChipStylePopover({
 
   if (!state || !layout || !onLayoutChange) return null;
   const entryId = entryIdFromPath(state.path);
-  if (!entryId) return null;
+  // QW-6：页眉字段（`header.{id}`）没有条目，但它有两半（字段名 / 字段值）可调。
+  const headerField = headerFieldFromPath(document, state.path);
+  if (!entryId && !headerField) return null;
   // 两个入口共用这个浮层，路径形态不同、落点也不同：
   // - 字段右键（`section.entry.item`）：只改**这一个字段** → `field`，键用字段路径
   //   （后端 `object_roles["<path>:<role>"]` 按 `[data-resume-path]` 出规则）；
   // - 结构树条目行右键「排版整条…」（`section.entry`）：改**整条** → `object`，键用条目 id
-  //   （否则会写出一条没人读的 `objects["<路径>"]`，点了等于没改）。
+  //   （否则会写出一条没人读的 `objects["<路径>"]`，点了等于没改）；
+  // - 页眉字段（`header.{id}`）：固定 `field`，角色由 planner 实际写的 role 决定（meta）。
   const fieldLevel = isFieldStylePath(state.path);
-  const scope: EntryStyleScope = fieldLevel ? "field" : "object";
-  const objectId = fieldLevel ? state.path : entryId;
-  const fieldRole = fieldLevel ? roleForDocumentPath(document, state.path) : "body";
-  const entry = findEntryById(document, entryId);
+  const scope: EntryStyleScope = headerField || fieldLevel ? "field" : "object";
+  const objectId = headerField || fieldLevel ? state.path : (entryId as string);
+  const fieldRole = headerField
+    ? "meta"
+    : fieldLevel
+      ? roleForDocumentPath(document, state.path)
+      : "body";
+  const entry = headerField ? null : findEntryById(document, entryId);
   const titleValue = (entry?.items ?? [])
     .filter((item) => item.kind === "field" && item.placement === "title")
     .map((item) => (item.kind === "field" ? item.value : ""))
     .find((value) => value?.trim());
-  const label = titleValue?.trim();
+  const label = headerField ? headerField.label : titleValue?.trim();
   const placement = placeMenu({ x: state.x, y: state.y }, size ?? { width: 300, height: 420 });
+  const scopeLabel = headerField
+    ? t("typography.headerStyle.scope")
+    : t(ENTRY_STYLE_SCOPE_LABELS[scope]);
 
   return (
     <div
@@ -103,13 +118,13 @@ export default function ChipStylePopover({
       role="dialog"
       aria-label={t("typography.entryStyle.status", {
         name: label || t("typography.object.untitled"),
-        scope: t(ENTRY_STYLE_SCOPE_LABELS[scope]),
+        scope: scopeLabel,
       })}
     >
       <div className="document-chip-style-popover-head">
         <span className="document-chip-style-popover-title">
           {t("document.editor.stylePopoverTitle", {
-            scope: t(ENTRY_STYLE_SCOPE_LABELS[scope]),
+            scope: scopeLabel,
           })}
         </span>
         <Button size="small" type="text" onClick={onClose}>
@@ -122,6 +137,7 @@ export default function ChipStylePopover({
         objectId={objectId}
         objectLabel={label}
         entry={entry}
+        headerField={headerField}
         pickedPath={state.path}
         defaultScope={scope}
         fieldRole={fieldRole}

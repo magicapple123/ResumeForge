@@ -119,6 +119,11 @@ def plan_header(header: ResumeHeader, language: str, contact_separator: str = ""
 
     字段名前缀由 `label_mode` 三态决定（F20）：`auto` 保持历史行为（电话只印值、
     GitHub/自定义/求职意向印前缀），`show` 一律印「标签：」，`hide` 一律只印值。
+
+    **QW-6：标签与值拆成两段**。两段共用同一条 `header.{id}` 路径，标签段带
+    `role="field_label"`、值段带 `role="meta"`——这样"只把字段名改红"和"只把字段值放大"
+    都能落到各自的段上。最终可见文本逐字节不变（`：` 只出现一次，跟着标签段走）；
+    值段为空时仍合成**一段**，与拆分前的节点数一致（空字段没有可区分的两块）。
     """
     labels = field_labels(language)
     name: list[Inline] = []
@@ -126,31 +131,47 @@ def plan_header(header: ResumeHeader, language: str, contact_separator: str = ""
     subtitle: list[Inline] = []
     contact_items = []
     photo: str | None = None
+
+    def label_segment(text: str, path: str) -> Inline:
+        """字段名段：`：` 归属标签段（跟着标签一起被样式化），不另起标点段。"""
+        return Inline(text=text + "：", role="field_label", path=path)
+
+    def field_segments(label: str, value: str, path: str) -> list[Inline]:
+        """标签 + 值 → 段列表；值为空时退回一段（节点数与拆分前相同）。"""
+        if not value:
+            return [Inline(text=label + "：" if label else "", role="meta", path=path)]
+        segments = [label_segment(label, path)] if label else []
+        segments.append(Inline(text=value, role="meta", path=path))
+        return segments
+
     for item in header.items:
-        display = item.value
         mode = _label_mode(item)
-        if item.placement == "name_meta" and item.key == "gender":
+        path = "header." + item.id
+        if item.placement == "name":
+            name.append(Inline(text=item.value, role="meta", path=path))
+        elif item.placement == "name_meta":
+            if item.key != "gender":
+                name_meta.append(Inline(text=item.value, role="meta", path=path))
+                continue
             # v1 的「姓名（性别）」口径：gender 在自己的字段里，渲染时套语言括号。
             # show 改「性别：男」并不再叠括号；hide 只印值（F20）。
             if mode == "show" and item.value:
-                display = f"{labels.get('gender', '性别')}：{item.value}"
+                name_meta.extend(field_segments(labels.get("gender", "性别"), item.value, path))
             elif mode == "hide":
-                display = item.value
+                name_meta.append(Inline(text=item.value, role="meta", path=path))
             else:
-                display = gender_text(item.value, language)
-        segments = [Inline(text=display, role="meta", path="header." + item.id)]
-        if item.placement == "name":
-            name.extend(segments)
-        elif item.placement == "name_meta":
-            name_meta.extend(segments)
+                name_meta.append(
+                    Inline(text=gender_text(item.value, language), role="meta", path=path)
+                )
         elif item.placement == "subtitle":
             # 求职意向行沿用 v1 的「求职意向：值」前缀（标签文案来自目录 + 语言包，
-            # 四个出口都只画 plan，不各写一份）。标签段不带 path（点标签不定位字段）。
+            # 四个出口都只画 plan，不各写一份）。标签段与值段共用同一条路径，点标签与
+            # 点值定位到同一个字段（QW-6）。
             spec = catalog.header_field_spec(item.key)
             prefix = labels.get(spec.label_key, "") if spec is not None else ""
             if prefix and (mode == "show" or (mode == "auto" and item.show_label)):
-                subtitle.append(Inline(text=prefix + "：", role="field_label"))
-            subtitle.extend(segments)
+                subtitle.append(label_segment(prefix, path))
+            subtitle.append(Inline(text=item.value, role="meta", path=path))
         elif item.placement == "contact":
             contact_items.append(item)
         elif item.placement == "photo":
@@ -166,18 +187,17 @@ def plan_header(header: ResumeHeader, language: str, contact_separator: str = ""
         label_key = _LABELLED_CONTACT.get(item.key)
         if mode == "hide":
             # F20：hide 一律只印值——包括 GitHub/主页/自定义字段。
-            display = item.value
+            label = ""
         elif label_key:
-            display = labels.get(label_key, label_key) + "：" + item.value
+            label = labels.get(label_key, label_key)
         elif item.label.strip():
             # #10：自定义页眉字段把用户起的名字印在值前面（与 github/website 同形），
             # 否则纸面上只剩裸值「13800000000」，看不出这项是什么。
-            display = item.label.strip() + "：" + item.value
+            label = item.label.strip()
         else:
             # auto 对电话/邮箱/城市/出生年份只印值（历史行为）；show 才补前缀。
-            prefix = labels.get(item.key, "") if mode == "show" else ""
-            display = prefix + "：" + item.value if prefix else item.value
-        current.append(Inline(text=display, role="meta", path="header." + item.id))
+            label = labels.get(item.key, "") if mode == "show" else ""
+        current.extend(field_segments(label, item.value, "header." + item.id))
     if current:
         lines.append(current)
     return HeaderPlan(

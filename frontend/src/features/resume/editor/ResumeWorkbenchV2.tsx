@@ -12,10 +12,13 @@
  * 已删除的 v1 机制：antd 表单 + 编辑器句柄、草稿 store、纸面加粗 overlay、大纲命令/路径重映射、
  * v1 field_layout 面板。
  */
-import { App } from "antd";
+import { App, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ResumeDetail } from "../../../types";
 import type { ResumeDocument } from "../../../types/resumeDocument";
+import { t } from "../../../i18n";
+import { summarizeDraftDiff } from "../../../utils/draftDiff";
+import DraftRestoreBar from "../../../components/common/DraftRestoreBar";
 import { asResumeDocument, documentName, layoutFromDetail } from "../document/resumeDocumentHost";
 import { useOpenLayoutBaseline } from "../document/useOpenLayoutBaseline";
 import { useMediaQuery } from "../../../hooks/useMediaQuery";
@@ -39,12 +42,13 @@ import { useAssetCollect } from "../assets/useAssetCollect";
 import PreflightModal from "../preflight/PreflightModal";
 import VersionsModal from "../versions/VersionsModal";
 import type { VersionRestoreOut } from "../versions/types";
-import { useWorkbenchV2Shortcuts } from "./useWorkbenchV2Shortcuts";
+import { useWorkbenchHistoryControls } from "./useWorkbenchHistoryControls";
 import { useWorkbenchV2Preflight } from "./useWorkbenchV2Preflight";
 import { useWorkbenchColumns } from "./useWorkbenchColumns";
 import { useWorkbenchV2History } from "./useWorkbenchV2History";
 import { useWorkbenchSelectionSync } from "./useWorkbenchSelectionSync";
 import { useWorkbenchV2Save } from "./useWorkbenchV2Save";
+import { useWorkbenchResumeDraft } from "./useWorkbenchResumeDraft";
 import { useWorkbenchCloseGuard } from "./useWorkbenchCloseGuard";
 import { useStructureHighlightTargets } from "../outline/useStructureHighlightTargets";
 import "./workbench-v2.css";
@@ -116,6 +120,8 @@ export default function ResumeWorkbenchV2({
     layout,
     onApplyLayout,
   });
+  // QW-5：恢复草稿时把草稿的基准版本交给保存做条件写——服务端已前进时自然 409。
+  const [draftBaseRevision, setDraftBaseRevision] = useState<number | null>(null);
   const save = useWorkbenchV2Save({
     open,
     document: history.document,
@@ -127,6 +133,9 @@ export default function ResumeWorkbenchV2({
     onCommitLayout,
     onPublishDraft,
     isDraft,
+    // QW-2：只存了版式时由这里补唯一一条成功提示（正文成功由宿主弹）。
+    notifyLayoutSaved: () => message.success(t("workbench.save.layout-saved")),
+    overrideRevision: draftBaseRevision,
     onResetDocument: () => {
       if (safeDocument) history.resetDocument(safeDocument, layout);
     },
@@ -146,14 +155,38 @@ export default function ResumeWorkbenchV2({
   useEffect(() => {
     onEditorDirtyChange?.(save.dirty);
   }, [onEditorDirtyChange, save.dirty]);
+  // QW-5：会话草稿（只 sessionStorage；不自动应用，恢复条问一次）。
+  const draft = useWorkbenchResumeDraft({
+    open,
+    resumeId,
+    baseRevision: documentPipeline?.revision ?? 0,
+    document: history.document,
+    layout: history.layout,
+    enabled: editorEnabled,
+    dirty: save.dirty,
+    onNotice: (text) => message.warning(text),
+  });
+  const { restore: restoreFromDraft } = draft;
+  const restoreDraft = useCallback(() => {
+    const restored = restoreFromDraft();
+    if (!restored) return;
+    history.resetDocument(restored.document, restored.layout);
+    onApplyLayout?.(restored.layout);
+    // 基准版本落后：下一次保存用草稿的版本做条件写 → 409 → 既有三选一（不静默覆盖）。
+    if (restored.baseRevision < (documentPipeline?.revision ?? 0)) {
+      setDraftBaseRevision(restored.baseRevision);
+      message.warning(t("workbench.draft.revision-ahead"));
+    }
+  }, [documentPipeline?.revision, restoreFromDraft, history, message, onApplyLayout]);
+  useEffect(() => {
+    // 保存成功 / 放弃 / 恢复版本后回到干净态：撤掉草稿基准，之后的保存用当前版本。
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 与 dirty 同步的单点复位
+    if (!save.dirty) setDraftBaseRevision(null);
+  }, [save.dirty]);
   // 纸面点击 → 选中字段（中栏 DocumentEditor 自动切页签并定位；右栏不再二次滚动）。
   const pickFromPaper = selection.pickFromPaper;
-  // Q03：全站快捷键体系（设置页可改键；输入框内 undo/redo 让给浏览器原生）。
-  useWorkbenchV2Shortcuts({
-    undo: history.undo,
-    redo: history.redo,
-    enabled: open && editorEnabled,
-  });
+  // QW-1 + Q03：撤销/恢复的动作条按钮与全站快捷键共用同一份历史接线。
+  const undoRedo = useWorkbenchHistoryControls(history, open && editorEnabled);
   // Q01：统一检查（W11）入口；草稿正文与版式按眼前这一版送检。
   const preflight = useWorkbenchV2Preflight({
     resumeId,
@@ -339,6 +372,19 @@ export default function ResumeWorkbenchV2({
       bilingualPanel={bilingualPanel}
     />
   ) : null;
+  const draftBar = draft.pending ? (
+    <>
+      <DraftRestoreBar
+        savedAt={draft.pending.savedAt}
+        changes={summarizeDraftDiff(history.document, draft.pending.document)}
+        onRestore={restoreDraft}
+        onDiscard={draft.discard}
+      />
+      <Typography.Text type="secondary" style={{ padding: "0 16px", fontSize: 12 }}>
+        {t("workbench.draft.baseline", { revision: draft.pending.baseRevision })}
+      </Typography.Text>
+    </>
+  ) : null;
   const conflictBar =
     save.conflict && documentPipeline && resumeId != null && editorEnabled ? (
       <ResumeWorkbenchConflict
@@ -400,12 +446,16 @@ export default function ResumeWorkbenchV2({
           isDraft={isDraft}
           conflict={save.conflict}
           saveFailed={save.saveFailed}
+          partial={save.partialFailure}
+          // QW-1：canUndo/canRedo + 栈顶摘要 + onUndo/onRedo（与快捷键同一份函数）。
+          {...undoRedo}
           layoutSaving={layoutSaving}
           saving={save.saving}
           discardConfirm={save.discardConfirm}
           closeConfirmOpen={closeGuard.closeConfirmOpen}
           closeBody={closeGuard.closeBody}
           onSave={() => void save.save()}
+          onRetryContent={() => void save.save()}
           onRequestDiscardConfirm={save.setDiscardConfirm}
           onDiscard={closeGuard.cancelAll}
           onExport={onExport}
@@ -423,7 +473,10 @@ export default function ResumeWorkbenchV2({
         />
       }
     >
-      <ScenarioContextBar snapshot={contextSnapshot}>{body}</ScenarioContextBar>
+      <ScenarioContextBar snapshot={contextSnapshot}>
+        {draftBar}
+        {body}
+      </ScenarioContextBar>
       <WorkbenchPanelsDrawer
         openPanel={openPanel}
         onClose={() => setOpenPanel(null)}

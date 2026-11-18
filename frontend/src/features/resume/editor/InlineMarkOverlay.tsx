@@ -45,6 +45,7 @@ import { useMemo } from "react";
 import type { CSSProperties } from "react";
 
 import { inlineMarkSegmentStyle, parseInlineMarkSegments } from "./inlineMarkRuns";
+import type { InlineMarkSegment } from "./inlineMarkRuns";
 import "../../../styles/inline-mark-overlay.css";
 
 interface Props {
@@ -53,6 +54,11 @@ interface Props {
   /** 文本域的纵向滚动量：两层不同步的话，长文本一滚就错位。 */
   scrollTop?: number;
   scrollLeft?: number;
+  /**
+   * DF-4：文本域的选区，**已换算到可见文字下标**（`visibleRangeOfSelection`）。
+   * 遮罩层自绘高亮——`::selection` 画的是源串选区，会把隐形标记也染成一条空蓝带。
+   */
+  selection?: { start: number; end: number } | null;
 }
 
 /** 分段 → 类名：样式全部靠类（颜色/字号走内联样式，见 `inlineMarkSegmentStyle`）。 */
@@ -64,25 +70,75 @@ function segmentClassName(segment: { hidden?: boolean; bold?: boolean; href?: st
   return names.join(" ");
 }
 
-export default function InlineMarkOverlay({ value, scrollTop = 0, scrollLeft = 0 }: Props) {
+/**
+ * 给每个分段标上它在**可见文字**里的区间（隐藏段为 -1）。
+ *
+ * 纯函数、模块级：累加只在函数自己的局部变量上做，渲染期不再改任何闭包变量
+ * （`react-hooks/immutability` 与 StrictMode 双渲染都会盯着这一步）。
+ */
+function placeSegments(
+  segments: InlineMarkSegment[],
+): { segment: InlineMarkSegment; start: number; end: number }[] {
+  const placed: { segment: InlineMarkSegment; start: number; end: number }[] = [];
+  let cursor = 0;
+  for (const segment of segments) {
+    if (segment.hidden) {
+      placed.push({ segment, start: -1, end: -1 });
+      continue;
+    }
+    const start = cursor;
+    cursor += segment.text.length;
+    placed.push({ segment, start, end: cursor });
+  }
+  return placed;
+}
+
+export default function InlineMarkOverlay({
+  value,
+  scrollTop = 0,
+  scrollLeft = 0,
+  selection = null,
+}: Props) {
   const segments = useMemo(() => parseInlineMarkSegments(value), [value]);
   // 滚动的两层同步：遮罩层不滚，而是把内容反向平移（它的盒子和文本域一样大、且 overflow hidden）。
   const mirrorStyle: CSSProperties = useMemo(
     () => ({ transform: `translate(${-scrollLeft}px, ${-scrollTop}px)` }),
     [scrollLeft, scrollTop],
   );
+  // 可见文字下标：只在**非 hidden**段上累加（标记段不占可见位置）。放在 useMemo 里算完
+  // 再渲染——渲染期改闭包变量会被 `react-hooks/immutability` 拦下，且 StrictMode 下会算两遍。
+  const placed = useMemo(() => placeSegments(segments), [segments]);
   return (
     <div className="rf-inline-mark-overlay" aria-hidden="true">
       <div className="rf-inline-mark-mirror rf-inline-mark-layer" style={mirrorStyle}>
-        {segments.map((segment, index) => (
-          <span
-            key={index}
-            className={segmentClassName(segment)}
-            style={inlineMarkSegmentStyle(segment)}
-          >
-            {segment.text}
-          </span>
-        ))}
+        {placed.map(({ segment, start, end }, index) => {
+          const className = segmentClassName(segment);
+          const style = inlineMarkSegmentStyle(segment);
+          if (segment.hidden) {
+            return (
+              <span key={index} className={className} style={style}>
+                {segment.text}
+              </span>
+            );
+          }
+          const overlaps = selection !== null && selection.end > start && selection.start < end;
+          if (!overlaps) {
+            return (
+              <span key={index} className={className} style={style}>
+                {segment.text}
+              </span>
+            );
+          }
+          const from = Math.max(0, selection.start - start);
+          const to = Math.min(segment.text.length, selection.end - start);
+          return (
+            <span key={index} className={className} style={style}>
+              {segment.text.slice(0, from)}
+              <span className="rf-inline-mark-selection">{segment.text.slice(from, to)}</span>
+              {segment.text.slice(to)}
+            </span>
+          );
+        })}
         {/*
           末尾补一个换行：`white-space: pre-wrap` 下文本域会把结尾的换行算成一行空行，
           div 默认不占这一行，补上之后两层的滚动高度才一致。

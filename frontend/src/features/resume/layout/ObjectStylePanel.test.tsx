@@ -79,6 +79,89 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("ObjectStylePanel · 页眉字段（QW-6）", () => {
+  const HEADER_ID = "hd_12345678";
+  const HEADER_PATH = `header.${HEADER_ID}`;
+
+  it("没有作用范围切换，只有「字段值 / 字段名」两个目标", () => {
+    renderPanel({
+      objectId: HEADER_PATH,
+      headerField: { id: HEADER_ID, label: "13800000000" },
+      pickedPath: HEADER_PATH,
+      defaultScope: "field",
+      fieldRole: "meta",
+      entry: null,
+    });
+    expect(
+      screen.queryByRole("radio", { name: t("typography.entryStyle.scope.object") }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("radio", { name: t("typography.fieldStyle.target.value") }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("radio", { name: t("typography.fieldStyle.target.label") }),
+    ).toBeTruthy();
+  });
+
+  it("改字段值写 meta，改字段名写 field_label，都不碰 objects", async () => {
+    const onChange = renderPanel({
+      objectId: HEADER_PATH,
+      headerField: { id: HEADER_ID, label: "13800000000" },
+      pickedPath: HEADER_PATH,
+      defaultScope: "field",
+      fieldRole: "meta",
+      entry: null,
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: t("typography.row.increaseAria", { label: t("typography.prop.font_scale") }),
+      }),
+    );
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    let domains = readStyleDomains(lastLayout(onChange).format_config);
+    expect(domains.objectRoles[`${HEADER_PATH}:meta`]).toMatchObject({ font_scale: 1.02 });
+    expect(domains.objects[HEADER_PATH]).toBeUndefined();
+
+    fireEvent.click(screen.getByRole("radio", { name: t("typography.fieldStyle.target.label") }));
+    await waitFor(() => expect(screen.getByTestId("style-row-object-font_scale")).toBeTruthy());
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: t("typography.row.increaseAria", { label: t("typography.prop.font_scale") }),
+      }),
+    );
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(2));
+    domains = readStyleDomains(lastLayout(onChange).format_config);
+    expect(domains.objectRoles[`${HEADER_PATH}:field_label`]).toHaveProperty("font_scale");
+  });
+
+  it("没有标签段的字段禁用「字段名」，并给出可操作说明", () => {
+    renderPanel({
+      objectId: HEADER_PATH,
+      headerField: { id: HEADER_ID, label: "139 0176 4428", hasLabel: false },
+      pickedPath: HEADER_PATH,
+      defaultScope: "field",
+      fieldRole: "meta",
+      entry: null,
+    });
+    expect(screen.getByText(t("typography.headerStyle.noLabel"))).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: t("typography.fieldStyle.target.label") }),
+    ).toBeDisabled();
+  });
+
+  it("页眉字段不出现「日期位置」（没有条目头 flex 容器）", () => {
+    renderPanel({
+      objectId: HEADER_PATH,
+      headerField: { id: HEADER_ID, label: "13800000000" },
+      pickedPath: HEADER_PATH,
+      defaultScope: "field",
+      fieldRole: "meta",
+      entry: null,
+    });
+    expect(screen.queryByTestId("style-row-object-meta_align")).toBeNull();
+  });
+});
+
 describe("ObjectStylePanel · 单字段（I-28）", () => {
   it("字段作用域下可切换「字段值 / 字段名」，两者行清单不同", async () => {
     renderPanel({ defaultScope: "field", pickedPath: "exp_12345678.ob_item0002", lockScope: true });
@@ -101,6 +184,50 @@ describe("ObjectStylePanel · 单字段（I-28）", () => {
     expect(
       screen.queryByRole("radio", { name: t("typography.fieldStyle.target.label") }),
     ).toBeNull();
+  });
+});
+
+describe("ObjectStylePanel · 字段作用域的落点（DF-8）", () => {
+  it("正文字段：缩进 / 项目符号留在清单里（草稿已有 li / p 落点）", () => {
+    renderPanel({
+      defaultScope: "field",
+      pickedPath: `${OBJECT_ID}.ob_item0003`,
+      lockScope: true,
+    });
+    expect(document.querySelector(rowTestId("indent"))).not.toBeNull();
+    expect(document.querySelector(rowTestId("bullet"))).not.toBeNull();
+  });
+
+  it("灰字字段：字段层没有条目头容器，「日期位置」不出现（即使条目里真有灰字）", () => {
+    renderPanel({
+      defaultScope: "field",
+      fieldRole: "meta",
+      pickedPath: `${OBJECT_ID}.ob_item0002`,
+      lockScope: true,
+    });
+    // entry 里有 placement=meta 的字段（hasMeta=true），隐藏它的不是可用性判断而是属性清单。
+    expect(document.querySelector(rowTestId("meta_align"))).toBeNull();
+    expect(document.querySelector(rowTestId("color"))).not.toBeNull();
+  });
+
+  it("字段缩进写到该字段路径的 object_roles，不碰条目 objects", async () => {
+    const fieldPath = `projects.${OBJECT_ID}.ob_item0003`;
+    const onChange = renderPanel({
+      objectId: fieldPath,
+      defaultScope: "field",
+      pickedPath: fieldPath,
+      lockScope: true,
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: t("typography.row.increaseAria", { label: t("typography.prop.indent") }),
+      }),
+    );
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    const domains = readStyleDomains(lastLayout(onChange).format_config);
+    expect(domains.objectRoles[`${fieldPath}:body`]).toMatchObject({ indent: expect.any(Number) });
+    expect(domains.objects[fieldPath]).toBeUndefined();
+    expect(domains.objects[OBJECT_ID]).toBeUndefined();
   });
 });
 
