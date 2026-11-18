@@ -12,7 +12,7 @@ import type { AnalyticsDashboard } from "../types";
 export function analyticsDashboard(overrides: Record<string, unknown> = {}): AnalyticsDashboard {
   return {
     generated_at: "2026-11-17T10:00:00Z",
-  total_applications: 7,
+    total_applications: 7,
     valid_applications: 6,
     interview_count: 2,
     interview_rate: 0.3333,

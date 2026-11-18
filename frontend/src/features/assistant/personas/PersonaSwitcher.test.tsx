@@ -99,8 +99,7 @@ describe("PersonaSwitcher", () => {
     // 非默认视角 = 品牌色文字 + wash 底（类名是那条样式的挂载点）。
     await waitFor(() =>
       expect(
-        screen
-          .getByRole("button", { name: triggerName(t("assistantBreadth.persona.interviewer")) })
+        screen.getByRole("button", { name: triggerName(t("assistantBreadth.persona.interviewer")) })
           .className,
       ).toContain("is-customized"),
     );

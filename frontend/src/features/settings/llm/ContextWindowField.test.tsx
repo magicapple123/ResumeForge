@@ -83,9 +83,7 @@ describe("ContextWindowField（T01）", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: referenceButtonName(1_047_576) }));
 
-    await waitFor(() =>
-      expect(formRef?.getFieldValue("context_window_tokens")).toBe(1_047_576),
-    );
+    await waitFor(() => expect(formRef?.getFieldValue("context_window_tokens")).toBe(1_047_576));
   });
 
   it("未知型号（fallback）不给「填入参考值」", async () => {
@@ -95,9 +93,7 @@ describe("ContextWindowField（T01）", () => {
     await waitFor(() =>
       expect(apiMocks.getModelWindowReference).toHaveBeenCalledWith("mystery-model-v9"),
     );
-    expect(
-      screen.queryByRole("button", { name: referenceButtonName(128_000) }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: referenceButtonName(128_000) })).toBeNull();
   });
 
   it("型号为空时不查参考表；控件仍可手填", async () => {

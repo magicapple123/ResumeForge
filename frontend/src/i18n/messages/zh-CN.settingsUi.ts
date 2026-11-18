@@ -240,10 +240,14 @@ const settingsUi = {
   "settingsUi.network.saved": "已保存，下一次请求即生效",
   "settingsUi.network.save": "保存",
   "settingsUi.network.checklist.title": "连不上时按这四类排查（每类一句话）：",
-  "settingsUi.network.checklist.proxy": "代理：确认代理软件在运行、端口没写错；不确定就先改成「直连」再测一次。",
-  "settingsUi.network.checklist.tls": "证书：浏览器能打开但这里打不开，多半是杀毒软件或公司网关在扫描 HTTPS——加白名单，或打开「信任系统证书库」。",
-  "settingsUi.network.checklist.refused": "连接被拒：Base URL 少了或多了 /v1，或端口不对；照服务商文档改到以 /v1 结尾。",
-  "settingsUi.network.checklist.timeout": "超时：先测一次直连；直连也超时就是线路或服务端问题，换网络或稍后重试。",
+  "settingsUi.network.checklist.proxy":
+    "代理：确认代理软件在运行、端口没写错；不确定就先改成「直连」再测一次。",
+  "settingsUi.network.checklist.tls":
+    "证书：浏览器能打开但这里打不开，多半是杀毒软件或公司网关在扫描 HTTPS——加白名单，或打开「信任系统证书库」。",
+  "settingsUi.network.checklist.refused":
+    "连接被拒：Base URL 少了或多了 /v1，或端口不对；照服务商文档改到以 /v1 结尾。",
+  "settingsUi.network.checklist.timeout":
+    "超时：先测一次直连；直连也超时就是线路或服务端问题，换网络或稍后重试。",
 } as const;
 
 export default settingsUi;

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+﻿# SPDX-License-Identifier: Apache-2.0
 <#
 .SYNOPSIS
     把 pip 安装失败的原始输出归成"一句可执行的原因 + 一条动作"（T06）。

@@ -12,6 +12,36 @@ STAGED_TS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|ts
 
 FAIL=0
 
+# 分批调用：读 stdin 的路径列表，每 $1 个一批执行剩下的命令。
+#
+# 为什么不用 `xargs -n N`：MSYS2 / Git-Bash 的 xargs 在环境变量很大时会直接断言崩溃
+# （`assertion "bc_ctl.arg_max >= LINE_MAX" failed: xargs.c:512`），退出码非 0 又被
+# `|| FAIL=1` 当成 lint 失败——2026-11-18 实测一次 14 个文件的提交被它拦下，ruff 与
+# eslint 一个字都没输出，看起来像"代码有问题"，实际是工具链自己崩了。分批仍然保留：
+# 大批量提交（几百个文件）铺进 argv 会撞命令行长度上限，报的是 "Argument list too long"。
+run_batched() {
+  _limit=$1
+  shift
+  _buf=""
+  _n=0
+  while IFS= read -r _f; do
+    [ -z "$_f" ] && continue
+    _buf="$_buf $_f"
+    _n=$((_n + 1))
+    if [ "$_n" -ge "$_limit" ]; then
+      # shellcheck disable=SC2086  # 故意按空白切分：这里就是一串路径
+      "$@" $_buf || return 1
+      _buf=""
+      _n=0
+    fi
+  done
+  if [ -n "$_buf" ]; then
+    # shellcheck disable=SC2086
+    "$@" $_buf || return 1
+  fi
+  return 0
+}
+
 # 0) 行尾：暂存的文本文件必须是 LF（.gitattributes 的 `* text=auto eol=lf`）
 #
 # 2026-11-16 实测：457 个已跟踪文本文件在工作区是 CRLF（索引与提交内容一直是 LF，
@@ -54,12 +84,12 @@ if [ -n "$STAGED_P" ]; then
     echo "[pre-commit] ruff check..."
     # 逐批传参：暂存文件多时（如批量加了文件头）一次性把路径铺进 argv 会撞
     # Windows 的命令行长度上限，报 "Argument list too long" 而不是真的 lint 失败。
-    printf '%s\n' "$STAGED_P" | xargs -n 200 "$RUFF" check || FAIL=1
+    printf '%s\n' "$STAGED_P" | run_batched 200 "$RUFF" check || FAIL=1
     # 格式检查只覆盖本次新增的文件。仓库存量代码有数百个文件不符合
     # `ruff format`（2026-10-20 实测 HEAD 就有 462 个），对「批量改已有文件」
     # 一律要求格式化，会把无关的格式 churn 混进提交。新文件仍必须格式化。
     if [ -n "$STAGED_P_NEW" ]; then
-      printf '%s\n' "$STAGED_P_NEW" | xargs -n 200 "$RUFF" format --check || FAIL=1
+      printf '%s\n' "$STAGED_P_NEW" | run_batched 200 "$RUFF" format --check || FAIL=1
     fi
   else
     echo "[pre-commit] WARNING: ruff not found, skipped"
@@ -73,8 +103,8 @@ for f in $STAGED_TS; do
 done
 if [ -n "$STAGED_TS_REL" ] && [ -d "frontend/node_modules" ]; then
   echo "[pre-commit] eslint on staged files..."
-  # 同上，分批传参避免 argv 超长
-  printf '%s\n' $STAGED_TS_REL | (cd frontend && xargs -n 100 ./node_modules/.bin/eslint) || FAIL=1
+  # 同上：不用 xargs（MSYS2 下会断言崩溃），改成 shell 内分批。
+  printf '%s\n' $STAGED_TS_REL | (cd frontend && run_batched 100 ./node_modules/.bin/eslint) || FAIL=1
 fi
 
 # 3) Backend structural guards (fast tests)

@@ -25,6 +25,7 @@ from ...schemas.assistant import (
     ChatConversationForkRequest,
     ChatConversationUpdate,
     ChatMessageOut,
+    ContextCompactionStateOut,
     ConversationSurface,
     LegacyConversationSkillOut,
 )
@@ -251,12 +252,17 @@ def read_conversation(
         for skill in list_conversation_skills(db, conversation_id)
         if not skill.name.startswith(PERSONA_SKILL_PREFIX)
     ]
+    # 压缩状态落库是 `dict`，`ChatConversationDetail` 要的是契约模型：空 dict 表示
+    # "没有压缩过"，给 `None` 而不是验证一个空对象（否则前端会拿到一个全零的边界）。
+    compaction_payload = compaction_state_out(load_compaction(db, conversation_id))
     return ChatConversationDetail(
         **brief.model_dump(),
         messages=[ChatMessageOut.model_validate(row) for row in rows],
         messages_total=messages_total,
         has_earlier=has_earlier,
-        compaction=compaction_state_out(load_compaction(db, conversation_id)) or None,
+        compaction=ContextCompactionStateOut.model_validate(compaction_payload)
+        if compaction_payload
+        else None,
         legacy_skills=legacy_skills,
     )
 

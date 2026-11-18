@@ -51,7 +51,9 @@ describe("AnalyticsNav（T13）", () => {
     const target = document.getElementById("analytics-trend");
     expect(target?.scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
     expect(
-      screen.getByRole("button", { name: t("analyticsPage.nav.trend") }).getAttribute("aria-current"),
+      screen
+        .getByRole("button", { name: t("analyticsPage.nav.trend") })
+        .getAttribute("aria-current"),
     ).toBe("true");
   });
 });

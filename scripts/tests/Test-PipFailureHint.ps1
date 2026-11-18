@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+﻿# SPDX-License-Identifier: Apache-2.0
 # Test-PipFailureHint.ps1 - 依赖安装失败分类（T06）。
 #
 # 为什么值得一条守卫：分类错不会崩，只会让用户按错的方案折腾（把哈希不匹配当网络问题

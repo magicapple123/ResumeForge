@@ -201,11 +201,16 @@ const settingsUi = {
     "System proxy detected at {proxy} (source: {source}); if the model cannot connect, try Direct first",
   "settingsUi.network.saved": "Saved - applies to the next request",
   "settingsUi.network.save": "Save",
-  "settingsUi.network.checklist.title": "When it cannot connect, check these four (one action each):",
-  "settingsUi.network.checklist.proxy": "Proxy: make sure the proxy app is running and the port is right; if unsure, switch to Direct and test again.",
-  "settingsUi.network.checklist.tls": "Certificate: the browser opens the site but this app cannot - usually antivirus or a gateway. Allowlist the app, or trust the system store.",
-  "settingsUi.network.checklist.refused": "Connection refused: the Base URL has a missing or extra /v1, or the port is wrong; follow the provider docs and end it with /v1.",
-  "settingsUi.network.checklist.timeout": "Timeout: test Direct once; if Direct also times out it is the line or the provider - switch networks or retry later.",
+  "settingsUi.network.checklist.title":
+    "When it cannot connect, check these four (one action each):",
+  "settingsUi.network.checklist.proxy":
+    "Proxy: make sure the proxy app is running and the port is right; if unsure, switch to Direct and test again.",
+  "settingsUi.network.checklist.tls":
+    "Certificate: the browser opens the site but this app cannot - usually antivirus or a gateway. Allowlist the app, or trust the system store.",
+  "settingsUi.network.checklist.refused":
+    "Connection refused: the Base URL has a missing or extra /v1, or the port is wrong; follow the provider docs and end it with /v1.",
+  "settingsUi.network.checklist.timeout":
+    "Timeout: test Direct once; if Direct also times out it is the line or the provider - switch networks or retry later.",
 } as const;
 
 export default settingsUi;

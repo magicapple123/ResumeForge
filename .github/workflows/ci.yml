@@ -1493,6 +1493,28 @@ jobs:
           fi
           echo "OK：全部文本文件均为 LF（.bat/.cmd 按 eol=crlf 声明放行）。"
 
+      - name: Reject non-ASCII PowerShell scripts without a UTF-8 BOM
+        # Windows PowerShell 5.1（启动器就是用 `powershell -File` 调起来的）按 **ANSI**
+        # 解码没有 BOM 的 .ps1：中文变乱码、引号与花括号跟着错位，脚本直接语法错。
+        # 2026-11-18 的 `scripts/PipFailureHint.ps1` 就是这么让 Windows end-to-end 整格
+        # 红的（本地 pwsh 7 读 UTF-8，看不出问题）。仓库里其余 .ps1 都带 BOM，这里钉住。
+        run: |
+          set -eu
+          offenders=""
+          while IFS= read -r f; do
+            # 纯 ASCII 的脚本不需要 BOM：ANSI 与 UTF-8 解码结果完全一样。
+            if ! LC_ALL=C grep -qP '[^\x00-\x7F]' "$f"; then continue; fi
+            bom=$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n')
+            if [ "$bom" != "efbbbf" ]; then offenders="${offenders}${f}"$'\n'; fi
+          done < <(git ls-files '*.ps1' '*.psm1')
+          if [ -n "$offenders" ]; then
+            echo "::error::以下 PowerShell 脚本含非 ASCII 却缺 UTF-8 BOM，Windows PowerShell 5.1 会读成 ANSI"
+            printf '%s' "$offenders"
+            echo "修复：在文件最开头补 EF BB BF（行尾不动，仍为 LF）。"
+            exit 1
+          fi
+          echo "OK：含非 ASCII 的 .ps1/.psm1 全部带 UTF-8 BOM。"
+
   docs-guards:
     name: Docs guards
     # 只读文档、只用标准库，几秒即可跑完；独立作业是为了让它在 PR 列表里

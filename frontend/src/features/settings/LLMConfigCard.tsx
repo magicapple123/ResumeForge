@@ -31,10 +31,7 @@ import { formatDateTime } from "../../utils/format";
 import { llmRecordDisplayName } from "../../utils/displayNames";
 import type { LLMConfigSummary } from "./SettingsConfig";
 import { CUSTOM_PRESET_LABEL_KEY, matchingPreset } from "./SettingsConfig";
-import {
-  contextWindowSourceKey,
-  formatContextWindow,
-} from "./llm/contextWindowPresets";
+import { contextWindowSourceKey, formatContextWindow } from "./llm/contextWindowPresets";
 import type { RecordFormValues } from "./useLLMRecordTools";
 import { useCollapsedList } from "../../components/common/useCollapsedList";
 import LLMRecordModal from "./LLMRecordModal";

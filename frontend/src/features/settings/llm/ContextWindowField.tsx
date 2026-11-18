@@ -104,18 +104,15 @@ function ContextWindowInput({ value, onChange, reference }: InputProps) {
           style={{ width: "100%" }}
           value={current}
           placeholder={t("contextUsage.window.customPlaceholder")}
-          onChange={(next) => onChange?.(typeof next === "number" ? clampContextWindow(next) : null)}
+          onChange={(next) =>
+            onChange?.(typeof next === "number" ? clampContextWindow(next) : null)
+          }
         />
       ) : null}
       {/* 只有**命中参考表**时才给这颗按钮：未知型号的 128K 是保守估算，把它写成
           "用户确认过的手填值"反而掩盖了"这个数不是查到的"这件事。 */}
       {reference !== null && reference.source === "reference" ? (
-        <Button
-          type="link"
-          size="small"
-          style={{ paddingInline: 0 }}
-          onClick={applyReference}
-        >
+        <Button type="link" size="small" style={{ paddingInline: 0 }} onClick={applyReference}>
           {t("llmRecord.contextWindow.applyReference", {
             window: formatContextWindow(reference.tokens),
           })}

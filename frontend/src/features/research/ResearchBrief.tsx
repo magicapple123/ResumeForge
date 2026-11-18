@@ -179,7 +179,9 @@ export default function ResearchBriefPanel({
   const meta = [
     brief.deep ? t("companyResearch.brief.meta.deep") : t("companyResearch.brief.meta.standard"),
     t("companyResearch.brief.meta.sources", { count: brief.sources.length }),
-    brief.elapsed_ms ? t("companyResearch.brief.meta.elapsed", { seconds: (brief.elapsed_ms / 1000).toFixed(1) }) : "",
+    brief.elapsed_ms
+      ? t("companyResearch.brief.meta.elapsed", { seconds: (brief.elapsed_ms / 1000).toFixed(1) })
+      : "",
   ].filter(Boolean);
   return (
     <div className="rf-research-brief">
