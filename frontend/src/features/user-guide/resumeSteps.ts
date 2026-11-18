@@ -32,6 +32,12 @@ export const RESUME_STEPS: GuideStep[] = [
         textKey: "userGuideFlow.resume.step1.point5.text",
       },
       {
+        // I-18：入口与「从资料填入」并排，指南里也紧跟在它后面——用户才知道两者的分工
+        // 是"导入已有资料"vs"口述新建"。
+        leadKey: "voiceMemo.guide.lead",
+        textKey: "voiceMemo.guide.text",
+      },
+      {
         leadKey: "userGuideFlow.resume.step1.point6.lead",
         textKey: "userGuideFlow.resume.step1.point6.text",
       },

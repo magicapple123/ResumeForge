@@ -129,7 +129,7 @@ afterEach(() => {
 });
 
 describe("ResumesPage 列头排序（T2）", () => {
-  it("默认按最近修改拉取，列头没有箭头，「恢复默认排序」禁用", async () => {
+  it("默认按最近修改拉取，列头没有箭头，「恢复默认排序」不渲染", async () => {
     renderPage();
     await screen.findByText(RESUME.title);
 
@@ -138,7 +138,8 @@ describe("ResumesPage 列头排序（T2）", () => {
     );
     // 默认排序是接口不带参数时的行为，不是用户的选择：不给箭头、不写 URL。
     expect(header("最近修改").className).not.toContain("ant-table-column-sort");
-    expect(screen.getByRole("button", { name: "恢复默认排序" })).toBeDisabled();
+    // I-38：默认态整颗不渲染，DOM 里没有这个按钮也没有等宽占位。
+    expect(screen.queryByRole("button", { name: "恢复默认排序" })).toBeNull();
     expect(screen.getByTestId("location").textContent).not.toContain("sort=");
   });
 
@@ -173,7 +174,7 @@ describe("ResumesPage 列头排序（T2）", () => {
     );
     expect(header("简历标题").className).not.toContain("ant-table-column-sort");
     await waitFor(() => expect(screen.getByTestId("location").textContent).not.toContain("sort="));
-    expect(screen.getByRole("button", { name: "恢复默认排序" })).toBeDisabled();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "恢复默认排序" })).toBeNull());
   });
 
   it("「恢复默认排序」把非默认状态拉回最近修改在前", async () => {
@@ -194,7 +195,8 @@ describe("ResumesPage 列头排序（T2）", () => {
       ),
     );
     expect(header("简历标题").className).not.toContain("ant-table-column-sort");
-    expect(reset).toBeDisabled();
+    // I-38：回到默认态后按钮整颗消失，而不是变灰。
+    await waitFor(() => expect(screen.queryByRole("button", { name: "恢复默认排序" })).toBeNull());
   });
 
   it("深链 ?sort=title_desc：首屏请求与列头箭头一致", async () => {
@@ -215,7 +217,7 @@ describe("ResumesPage 列头排序（T2）", () => {
     expect(apiMocks.listResumes).toHaveBeenCalledWith(
       expect.objectContaining({ sort: "updated_desc" }),
     );
-    expect(screen.getByRole("button", { name: "恢复默认排序" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "恢复默认排序" })).toBeNull();
   });
 
   it("排序变化时回到第 1 页（否则会停在新排序下不存在的页上）", async () => {

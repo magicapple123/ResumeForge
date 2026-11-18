@@ -30,6 +30,8 @@
  * 症状，而它一旦出现，用户会以为导出也会这样。
  */
 import { clamp } from "../../ai-polish/overlayGeometry";
+import { renderRichValue } from "../inline/richRuns";
+import type { RichValue } from "../inline/richRuns";
 
 /** 加粗标记。与后端 `resume_rich_text.MARKER` 同一串。 */
 export const RICH_MARKER = "**";
@@ -50,16 +52,17 @@ export interface RichRun {
 }
 
 /**
- * 右键加粗的最小契约（宿主实现，预览只调用）。
+ * 纸面右键菜单的最小契约（宿主实现，预览只调用）。
  *
- * 三个方法都**必须**在拿不到当前值时给出空结果而不是抛错：菜单是一次点击，抛错会让整个
- * 预览白屏，而用户只是右键了一下。
+ * I-13 起**读写都是结构化值**（`value` 纯文本 + `rich.runs`）：菜单改的是样式，不再拼
+ * `**` / `{@` 标记串。三个方法都必须在拿不到当前值时给出空结果而不是抛错：菜单是一次点击，
+ * 抛错会让整个预览白屏，而用户只是右键了一下。
  */
 export interface RichTextEditAdapter {
-  /** 读这条路径当前的源串（含 `**`）。读不到返回 `null`（菜单不劫持原生右键）。 */
-  read: (path: string) => string | null;
-  /** 写入新的源串；`base` 是加粗前的原文，宿主用它判断"这条 overlay 是否已过期"。 */
-  toggle: (path: string, next: string, base: string) => void;
+  /** 读这条路径当前的值（纯文本 + runs）。读不到返回 `null`（菜单不劫持原生右键）。 */
+  read: (path: string) => RichValue | null;
+  /** 写入新的值；`base` 是改动前的值，宿主用它判断"这条 overlay 是否已过期"。 */
+  write: (path: string, next: RichValue, base: RichValue) => void;
   /** 菜单里的「编辑这一栏」。缺省时退化为宿主的 `onPickField`（同一个动作）。 */
   onPick?: (path: string) => void;
 }
@@ -427,4 +430,17 @@ export function paintRichField(element: Element | null, raw: string): void {
   const doc = element.ownerDocument;
   while (element.firstChild) element.removeChild(element.firstChild);
   element.appendChild(renderRichFragment(doc, raw));
+}
+
+/**
+ * I-13：把一份**结构化值**就地画进纸面元素（菜单点完立刻看到结果，不等整份重渲染）。
+ *
+ * 与 `paintRichField` 的差别只在于数据来源：那条走标记串，这条走 runs。两条都不会把
+ * 标记字符写进 DOM——纸面上露出 `{@` 是"解析漏了一段"最直观的症状。
+ */
+export function paintRichValue(element: Element | null, value: RichValue): void {
+  if (!element || !element.isConnected) return;
+  const doc = element.ownerDocument;
+  while (element.firstChild) element.removeChild(element.firstChild);
+  element.appendChild(renderRichValue(doc, value));
 }

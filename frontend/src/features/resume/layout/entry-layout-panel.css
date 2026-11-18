@@ -78,6 +78,31 @@
   max-width: 100%;
 }
 
+/* ===== I-08（2026-11-18，用户拍板方案 C）：开关行整行可点、开关靠右 =====
+   行元素由组件换成 `<label htmlFor>`：点标签文字由浏览器原生转发给 `<button role="switch">`，
+   不写 onClick 也就没有"点一次切两次"的风险。本文件只负责命中区域与右对齐——
+   `padding-inline: 6px` + 等量负 `margin-inline` 让 hover 底色外扩，内容左缘与同面板
+   其它行保持逐像素对齐（不加负 margin 会整体右移 6px，与「列数」行左缘错开）。
+   不改 `.rf-entry-layout-row` 基础规则：同面板 7 行都靠它。 */
+.rf-entry-layout-row.is-switch {
+  justify-content: space-between;
+  min-height: 30px;
+  padding-inline: 6px;
+  margin-inline: -6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.rf-entry-layout-row.is-switch:hover {
+  background: var(--rf-fill-secondary);
+}
+
+/* 键盘入口仍只有那颗真开关（整行不加 tabIndex）：焦点在开关上时给整行一圈描边。 */
+.rf-entry-layout-row.is-switch:has(.ant-switch:focus-visible) {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: -2px;
+}
+
 /* ===== 逐列宽度 / 逐间隔（任务 13）=====
    一行里要放 N 个数字框 + 应用 + 恢复，360px 栏放不下：数字框固定 56px、整体允许换行，
    换行后仍然左对齐（不要让 antd 的包装 span 自己撑成一列）。 */
@@ -243,6 +268,33 @@
   /* 行内直接挂的开关（条目断页）不跟着拉伸成整条灰条。 */
   .rf-entry-layout-row > .ant-switch {
     align-self: flex-start;
+  }
+
+  /* I-05：列间距行在窄档 = 滑杆独占一行，第二行左读数、右 ↺（用户 2026-11-18 拍板）。
+     加 `.rf-entry-layout` 前缀提高特异性：本文件与 `entry-column-controls.css` 的加载
+     顺序取决于 import 顺序，靠顺序压不稳。 */
+  .rf-entry-layout .rf-entry-column-gap-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "slider slider"
+      "value reset";
+    row-gap: 2px;
+  }
+
+  .rf-entry-layout .rf-entry-column-gap-value {
+    text-align: left;
+  }
+
+  /* I-08：开关行在窄档仍保持横排（标签左、开关右）。否则上面的
+     `flex-direction: column` + `space-between` 会变成纵向分配，开关被推到行底；
+     同时盖掉 `.rf-entry-layout-row > .ant-switch { align-self: flex-start }`。 */
+  .rf-entry-layout-row.is-switch {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .rf-entry-layout-row.is-switch > .ant-switch {
+    align-self: center;
   }
 
   /* 竖排的分段控件在浅底卡片上对比度偏低：选中项加一圈边框 + 加粗，一眼能看出选了哪个。 */

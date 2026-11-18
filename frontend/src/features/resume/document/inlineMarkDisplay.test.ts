@@ -112,6 +112,41 @@ describe("DF-6 · 只读展示剥离行内标记", () => {
     expect(describeChange(report!)).not.toContain("{@");
   });
 
+  it("摘要里的条目标题也剥掉行内标记（I-17 附带发现）", () => {
+    const build = (value: string) =>
+      makeDocument({
+        sections: [
+          section({
+            entries: [
+              entry({
+                id: "ob_entry010",
+                items: [
+                  fieldItem({
+                    id: "ob_item0101",
+                    key: "name",
+                    placement: "title",
+                    value: "{@color=#2f855a}校园二手交易平台{@}",
+                  }),
+                  fieldItem({
+                    id: "ob_item0102",
+                    key: "note",
+                    placement: "body",
+                    value,
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      });
+    const report = summarizeChange(snap(build("V1.0")), snap(build("V1.1")));
+    expect(report).not.toBeNull();
+    const text = describeChange(report!);
+    // 标题来自 document 里的源串，摘要出口必须与其它只读出口同一口径。
+    expect(text).toContain("校园二手交易平台");
+    expect(text).not.toMatch(/\{@|\*\*/);
+  });
+
   it("view 的取数返回可见文字（字段 / 正文 / 列表 / 作者）", () => {
     expect(itemValue(fieldItem({ value: "{@size=0.9}清华{@}" }))).toBe("清华");
     expect(itemValue(textItem({ text: "**重点**" }))).toBe("重点");

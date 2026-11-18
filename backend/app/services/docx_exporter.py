@@ -75,12 +75,19 @@ class ResumeDOCX:
 
 
 def _role_style_query(overrides):
-    """把 RenderOverrides 收成绘制层的查询函数；None = 模板默认（不做任何覆盖）。"""
+    """把 RenderOverrides 收成绘制层的查询函数；None = 模板默认（不做任何覆盖）。
+
+    ``field_only=True`` 只取字段层，理由与 PDF 侧同一条（见
+    `pdf_exporter.fit._role_style_query`）：姓名 span 在 HTML 里只带
+    `data-resume-path`、不带 `data-role`，所以「灰字角色」不该染到姓名上。
+    """
     style = overrides.style if overrides is not None else None
     if style is None:
         return None
 
-    def query(role: str, object_id: str | None = None):
+    def query(role: str, object_id: str | None = None, *, field_only: bool = False):
+        if field_only:
+            return style.entry_role(role, object_id)
         return style.effective(role, object_id=object_id)
 
     return query

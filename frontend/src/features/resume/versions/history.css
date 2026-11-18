@@ -58,11 +58,45 @@
   min-height: 0;
 }
 
-.resume-history-hint {
-  margin: 0;
-  color: var(--rf-text-secondary);
+/* ===== 预览条（I-17）：常驻占位，高度恒定 ===== */
+/* 症状：连点同一张历史卡，左栏滚动条会跳。根因不是代码滚动，而是这条**在列表上方**的
+   预览条随选中态挂载/卸载，内容高度一变，浏览器的滚动锚定就改写 scrollTop。
+   修法：常驻（未选中时是一句灰字提示）+ 恒定高度。高度用 em/line-height 算，
+   不写死 px——全局字号放大时 1.5em 跟着长，文字不会被裁。
+   5em = 主行 1.5em + gap 0.5em + 动作行 2em + 上下内边距 2×0.5em（12px 字号下 = 60px）。 */
+.resume-history-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* 未选中（.is-empty）只有主行也必须占满两行的高度，否则"选中"那一刻仍会变高。 */
+  min-height: 5em;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  padding: 6px 8px;
+  background: var(--rf-surface-alt);
   font-size: 12px;
-  line-height: 18px;
+  line-height: 1.5;
+}
+
+/* 主行固定单行：摘要超长走省略号，`title` 给全文（折行会把高度撑变，正是要避免的事）。 */
+.resume-history-preview-main {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.resume-history-preview-main strong,
+.resume-history-preview-label,
+.resume-history-preview-time {
+  flex: 0 0 auto;
+}
+
+.resume-history-preview-placeholder {
+  overflow: hidden;
+  color: var(--rf-text-secondary);
+  text-overflow: ellipsis;
 }
 
 /* 分组标题：12/600 secondary，与步骤列表 4px。 */
@@ -138,29 +172,24 @@
   background: var(--rf-brand-tint) !important;
 }
 
-/* ===== 预览条 ===== */
 /* 摘要在上、动作在下：按钮不挤在一行文字里，窄栏也不会把时间顶掉。 */
-.resume-history-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border: 1px solid var(--rf-border-subtle);
-  border-radius: var(--rf-radius-control);
-  padding: 6px 8px;
-  background: var(--rf-surface-alt);
-  font-size: 12px;
-  line-height: 18px;
-}
-
 .resume-history-preview strong {
   font-weight: 600;
 }
 
-/* 「当时：」前缀、时间与摘要同为 12px secondary：读起来是"快照"，而不是列表里的一行。 */
+/* 「当时：」前缀、时间与摘要同为 12px secondary：读起来是"快照"，而不是列表里的一行。
+   摘要是**可伸缩**的那一项：前三项不缩，省略号只落在摘要上。 */
 .resume-history-preview-label,
 .resume-history-preview-summary,
 .resume-history-preview-time {
   color: var(--rf-text-secondary);
+}
+
+.resume-history-preview-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .resume-history-preview-time {

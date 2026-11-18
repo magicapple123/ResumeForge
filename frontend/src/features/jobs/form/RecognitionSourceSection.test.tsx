@@ -44,4 +44,20 @@ describe("RecognitionSourceSection", () => {
     fireEvent.change(screen.getByLabelText("完整招聘信息"), { target: { value: "JD 文本" } });
     expect(onRawTextChange).toHaveBeenCalled();
   });
+
+  it("识别警告每条一个列表项，不再拼成带「。；」的长句（I-34）", () => {
+    render(
+      <RecognitionSourceSection
+        {...baseProps}
+        parseWarnings={["请手动填写。", "未识别到岗位信息。"]}
+      />,
+    );
+
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0].textContent).toBe("请手动填写。");
+    expect(items[1].textContent).toBe("未识别到岗位信息。");
+    // 旧写法 `join("；")` 留下的痕迹不能出现在任何文本节点里。
+    expect(document.body.textContent).not.toContain("。；");
+  });
 });

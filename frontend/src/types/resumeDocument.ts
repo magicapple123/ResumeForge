@@ -60,6 +60,29 @@ export interface FieldSource {
   field_id: string;
 }
 
+/**
+ * I-12：一段带样式的区间（下标基于**纯文本** `value`，左闭右开，UTF-16 码元）。
+ *
+ * 与后端 `schemas/resume_document.RichTextRun` 一一对应；**只写非缺省键**——
+ * `bold` 缺省 = "这一项没有覆盖"，`bold: false` = "用户明确取消加粗"，磁盘上是两个意思。
+ */
+export interface RichRun {
+  start: number;
+  end: number;
+  bold?: boolean;
+  /** 链接地址；这一段的文字就是显示文字。 */
+  link?: string;
+  /** 相对字号的系数（0.5–1.6）。 */
+  size?: number;
+  /** `#rgb` / `#rrggbb`（已小写）。 */
+  color?: string;
+}
+
+/** `item.rich`：结构化行内样式。**没有样式时不写这个键**（后端按 `None` 处理）。 */
+export interface RichText {
+  runs: RichRun[];
+}
+
 interface ItemBase {
   id: string;
   placement: Placement;
@@ -78,6 +101,8 @@ export interface FieldItem extends ItemBase {
   wrap: ItemWrap;
   body_style: BodyStyle;
   source?: FieldSource | null;
+  /** I-12：行内样式（`value` 是纯文本）。缺省 = 旧标记串或纯文本。 */
+  rich?: RichText | null;
 }
 
 export interface ListItem extends ItemBase {
@@ -108,6 +133,8 @@ export interface TextItem {
   style: BodyStyle;
   text: string;
   hidden: boolean;
+  /** I-12：文本块的行内样式（`text` 是纯文本）。与 `FieldItem.rich` 同形。 */
+  rich?: RichText | null;
 }
 
 export type ResumeItem = FieldItem | ListItem | AuthorsItem | TextItem;
@@ -123,6 +150,14 @@ export interface HeaderItem {
   show_label?: boolean;
   /** F20 三态；缺省时后端按 `show_label === false ? "hide" : "auto"` 回落。 */
   label_mode?: LabelMode;
+  /**
+   * I-02：隐藏前的位置；隐藏后再显示由前端恢复到此处（与正文 `_ItemBase.hidden_from` 同构）。
+   * planner 不消费它；后端 `HeaderItem` 有同名字段，缺了会在保存时被 `extra="ignore"` 静默丢弃。
+   * 旧文档没有这个键 → 按 `FALLBACK_HEADER_FIELDS` 的 placement 回落。
+   */
+  hidden_from?: HeaderPlacement | null;
+  /** I-12：行内样式（`value` 是纯文本）。缺省 = 旧标记串或纯文本。 */
+  rich?: RichText | null;
 }
 
 export interface ResumeHeader {

@@ -113,6 +113,46 @@ describe("照片非破坏裁剪（D09 / #18）", () => {
     expect(screen.getByRole("button", { name: t("proview.photo.apply") })).toBeEnabled();
   });
 
+  // ── I-37：画框比例 → 默认预设 + 一句提示 ────────────────────────────────
+  it("画框 6.3:8：默认选中 4:5，并提示「画框比例约 6.3:8」", () => {
+    renderModal({ frameAspectRatio: 0.7875376565720628 });
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.landscape") })).toBeChecked();
+    expect(
+      screen.getByText(
+        t("proview.photo.frameHint", {
+          frame: "6.3:8",
+          aspect: t("proview.photo.aspect.landscape"),
+        }),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("默认比例跟着画框走：1:1 画框（modern）选 1:1，不是写死的 4:5", () => {
+    renderModal({ frameAspectRatio: 1 });
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.square") })).toBeChecked();
+    expect(
+      screen.getByText(
+        t("proview.photo.frameHint", {
+          frame: "1:1",
+          aspect: t("proview.photo.aspect.square"),
+        }),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("有已保存的裁剪（含 free）时不强制改比例，只显示提示", () => {
+    const saved = createRectCropParams(SOURCE, { x: 0.2, y: 0.1, w: 0.5, h: 0.4 }, "free");
+    renderModal({ initialCrop: saved, frameAspectRatio: 0.7875 });
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.original") })).toBeChecked();
+    expect(screen.getByText(/6\.3:8/)).toBeInTheDocument();
+  });
+
+  it("量不到画框（没有 viewportRef）时保持「原图」默认，行为不变", () => {
+    renderModal();
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.original") })).toBeChecked();
+    expect(screen.queryByTestId("photo-frame-hint")).not.toBeInTheDocument();
+  });
+
   it("移除照片是独立危险动作，就地确认后走宿主回调", () => {
     const onRemove = vi.fn();
     renderModal({ onRemove });

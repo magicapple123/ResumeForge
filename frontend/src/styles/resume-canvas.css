@@ -88,9 +88,11 @@
 .resume-preview-page {
   position: relative;
   flex: 0 0 auto;
-  /* 纸面容器底色（问题 19）：浅色 = 白（与 `--rf-paper` 同值），深色 = 黑。
+  /* 纸面容器底色（问题 19 / I-36）：浅色 = 白（与 `--rf-paper` 同值），深色 = 炭灰
+     `#1e1e1e`（比应用底色亮一档；纯黑会读成"页面被挖空"）。iframe 内部由
+     `paperTheme.ts` 注入反算色 `#e1e1e1` 对齐同一个值。
      **这不影响导出**：导出的纸由服务端模板绘制，`--rf-paper` 仍是"导出与打印看到的那张纸"。
-     加载瞬间 iframe 还没画出来时，这一层就是纸的颜色——不先用深色打底就会闪一下白边。 */
+     加载瞬间 iframe 还没画出来时，这一层就是纸的颜色——不与注入色同值就会闪一下边。 */
   background: var(--rf-preview-paper);
   border: 1px solid var(--rf-border-subtle);
   border-radius: 2px;
@@ -159,6 +161,7 @@
 /* 深色主题的草稿纸（问题 19 方案 A）：整张纸反色，照片/图标由 iframe 内部注入的样式
    抵消一次（见 `features/resume/preview/paperTheme.ts`）。为什么是滤镜而不是改模板
    的 `--bg`：那会覆盖用户自选的「页面背景色」，且要给 9 个模板各写一套深色映射。
+   纸底不是靠调 `invert` 的档位，而是由注入样式反向写 `#e1e1e1` 的 body 底色（I-36）。
    **这里只影响屏幕**——导出走服务端渲染，打印另有 `@media print` 关闭。 */
 .resume-iframe.is-dark-paper {
   filter: invert(1) hue-rotate(180deg);

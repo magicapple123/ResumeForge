@@ -13,6 +13,7 @@
  * 这样"取消"在界面上看得见，也不依赖编辑器自己维护第二份文档。
  */
 import { HolderOutlined } from "@ant-design/icons";
+import { Tooltip } from "antd";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 
 type DragSourceEvent = DragEvent<HTMLElement>;
@@ -284,51 +285,62 @@ export default function ItemChip({
             <HolderOutlined aria-hidden="true" />
           </button>
         ) : null}
-        <button
-          type="button"
-          className="document-chip-main"
-          aria-pressed={selected}
-          aria-expanded={expanded}
-          aria-describedby={grabbed ? `${path}-drag-hint` : undefined}
-          draggable={canMove && !dragOnHandleOnly}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onPointerDown={() => {
-            selectedAtPointerDownRef.current = selected;
-            pointerFocusRef.current = true;
-            window.setTimeout(() => {
-              pointerFocusRef.current = false;
-            }, 0);
-          }}
-          // #8：单击只选中（高亮/结构树联动），双击/F2 才展开字段编辑器——
-          // 扫视字段时点一下就弹出一大块编辑器，容易误触。焦点事件只负责选中。
-          onClick={(event) => {
-            const wasSelected = selectedAtPointerDownRef.current ?? selected;
-            selectedAtPointerDownRef.current = null;
-            // 双击的第二下 = 展开/收起，并且**不**翻转选中——否则「没展开 + 取消选中」。
-            if (consumePairSecondClick(event.detail)) return;
-            onSelect(wasSelected ? null : path);
-          }}
-          onDoubleClick={(event) => {
-            event.preventDefault();
-            handleDoubleClick();
-          }}
-          onFocus={() => {
-            if (!selected && !pointerFocusRef.current) onSelect(path);
-          }}
-          onKeyDown={handleKeyDown}
+        {/* I-14：chip 的悬停提示换成 antd Tooltip（原生 `title` 有约 1 秒延迟、样式不可控）。
+            包的是**主按钮**而不是那枚被省略号截断的 `<span>`：Tooltip 的键盘可达依赖
+            focus，而 `<span>` 不可聚焦；包按钮后 Tab 聚焦即弹出全文（mouseEnterDelay 250ms）。
+            宽度上限 320px（antd 默认 250px），长值在这里换行而不是一行铺开。
+            **不要再给值节点加 `title`**：原生气泡会和 antd 的叠在一起。 */}
+        <Tooltip
+          title={value || undefined}
+          // antd 6 的 Tooltip 默认只响应 hover（`trigger` 缺省值是 'hover'），
+          // focus 必须显式写上，否则 Tab 聚焦时看不到全文。
+          trigger={["hover", "focus"]}
+          mouseEnterDelay={0.25}
+          styles={{ root: { maxWidth: 320 } }}
         >
-          {canMove && !dragOnHandleOnly ? (
-            <HolderOutlined className="document-chip-drag" aria-hidden="true" />
-          ) : null}
-          {label ? <span className="document-chip-label">{label}</span> : null}
-          <span
-            className={`document-chip-value${value ? "" : " document-chip-placeholder"}`}
-            title={value || undefined}
+          <button
+            type="button"
+            className="document-chip-main"
+            aria-pressed={selected}
+            aria-expanded={expanded}
+            aria-describedby={grabbed ? `${path}-drag-hint` : undefined}
+            draggable={canMove && !dragOnHandleOnly}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onPointerDown={() => {
+              selectedAtPointerDownRef.current = selected;
+              pointerFocusRef.current = true;
+              window.setTimeout(() => {
+                pointerFocusRef.current = false;
+              }, 0);
+            }}
+            // #8：单击只选中（高亮/结构树联动），双击/F2 才展开字段编辑器——
+            // 扫视字段时点一下就弹出一大块编辑器，容易误触。焦点事件只负责选中。
+            onClick={(event) => {
+              const wasSelected = selectedAtPointerDownRef.current ?? selected;
+              selectedAtPointerDownRef.current = null;
+              // 双击的第二下 = 展开/收起，并且**不**翻转选中——否则「没展开 + 取消选中」。
+              if (consumePairSecondClick(event.detail)) return;
+              onSelect(wasSelected ? null : path);
+            }}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              handleDoubleClick();
+            }}
+            onFocus={() => {
+              if (!selected && !pointerFocusRef.current) onSelect(path);
+            }}
+            onKeyDown={handleKeyDown}
           >
-            {value || t("document.item.untitled")}
-          </span>
-        </button>
+            {canMove && !dragOnHandleOnly ? (
+              <HolderOutlined className="document-chip-drag" aria-hidden="true" />
+            ) : null}
+            {label ? <span className="document-chip-label">{label}</span> : null}
+            <span className={`document-chip-value${value ? "" : " document-chip-placeholder"}`}>
+              {value || t("document.item.untitled")}
+            </span>
+          </button>
+        </Tooltip>
         {materialOnly ? (
           <span className="document-chip-badge is-material">{t("document.item.materialOnly")}</span>
         ) : null}

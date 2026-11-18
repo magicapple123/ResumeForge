@@ -166,8 +166,17 @@ export default function ResumeWorkbenchV2EditorColumn({
       ) : null}
       <div className="resume-wb-v2-fill-menu">
         {fillMenu}
-        {/* 口述入口：整份文档级的全局入口（不属于某个字段），与「从资料填入」同一行。 */}
-        <VoiceMemoButton document={document} onChange={onChange} catalog={fieldCatalog} />
+        {/* 口述入口：整份文档级的全局入口（不属于某个字段），与「从资料填入」同一行。
+            I-20：插入成功后把第一条新路径交给宿主选择——`selectPath` 会切页签、展开条目并
+            触发 reveal 滚动；多条插入只跳第一条，0 条时这里拿不到路径（组件已过滤）。 */}
+        <VoiceMemoButton
+          document={document}
+          onChange={onChange}
+          catalog={fieldCatalog}
+          onInserted={(paths) => {
+            if (paths.length > 0) onSelectPath?.(paths[0]);
+          }}
+        />
       </div>
       {/* #24 24E：标注走 context，而不是给 DocumentEditor 加 prop——那个文件正好 500 行，
           而 chip 在它下面三层，透传要改四处签名。空表用模块级常量（引用稳定，不会让

@@ -43,6 +43,11 @@ import {
   type PhotoCropParams,
 } from "../preview/photoCrop";
 import { DEFAULT_PRINTED_WIDTH_MM, estimateRectClarity } from "../preview/photoClarity";
+import {
+  frameRatioLabel,
+  nearestCropAspect,
+  usePhotoFrameAspect,
+} from "../preview/photoFrameAspect";
 import { usePhotoDimensions } from "../preview/usePhotoDimensions";
 import PhotoCropBox from "../preview/PhotoCropBox";
 
@@ -78,6 +83,11 @@ export default function PhotoCropDialog({
 }: Props) {
   const { t } = useI18n();
   const dimensions = usePhotoDimensions(open ? photo : null);
+  // I-37：画框比例从同页的纸面 iframe 实测（制作台里预览与编辑器同文档）；
+  // 量不到时保持「原图」，不替用户瞎猜比例。
+  const frameAspect = usePhotoFrameAspect(open);
+  const presetAspect = nearestCropAspect(frameAspect);
+  const frameLabel = frameRatioLabel(frameAspect);
   const source = dimensions ? buildPhotoSource(photo, dimensions.width, dimensions.height) : null;
   // 照片换了（哈希不一致）→ 旧裁剪失效，不能把旧取景套到新照片上。
   const cropInvalidated = Boolean(
@@ -85,7 +95,8 @@ export default function PhotoCropDialog({
   );
   const activeCrop = cropInvalidated ? null : initialCrop;
 
-  const [aspect, setAspect] = useState<PhotoAspect>(activeCrop?.aspect ?? "free");
+  const [aspectTouched, setAspectTouched] = useState(false);
+  const [aspect, setAspect] = useState<PhotoAspect>(activeCrop?.aspect ?? presetAspect ?? "free");
   const [rect, setRect] = useState<CropRect>(
     activeCrop ? clampCropRect(activeCrop.rect) : FULL_FRAME,
   );
@@ -95,18 +106,26 @@ export default function PhotoCropDialog({
   if (wasOpen !== open) {
     setWasOpen(open);
     if (open) {
-      const nextAspect: PhotoAspect = activeCrop?.aspect ?? "free";
+      setAspectTouched(false);
+      const nextAspect: PhotoAspect = activeCrop?.aspect ?? presetAspect ?? "free";
       setAspect(nextAspect);
       setRect(activeCrop ? clampCropRect(activeCrop.rect) : FULL_FRAME);
     }
   }
 
+  // I-37：画框比例打开后才实测到。没有已保存裁剪、用户也没手动改过比例时，套最近的预设。
+  useEffect(() => {
+    if (!open || activeCrop || aspectTouched || !presetAspect) return;
+    setAspect((current) => (current === "free" ? presetAspect : current));
+  }, [open, activeCrop, aspectTouched, presetAspect]);
+
   // 换照片后旧裁剪失效：把框与比例一起复位，避免"新照片套旧取景"。
   useEffect(() => {
     if (!cropInvalidated) return;
-    setAspect("free");
+    setAspectTouched(false);
+    setAspect(presetAspect ?? "free");
     setRect(FULL_FRAME);
-  }, [cropInvalidated]);
+  }, [cropInvalidated, presetAspect]);
 
   const sourceWidth = dimensions?.width ?? 0;
   const sourceHeight = dimensions?.height ?? 0;
@@ -127,6 +146,7 @@ export default function PhotoCropDialog({
   const clarity = source ? estimateRectClarity(source, safeRect, DEFAULT_PRINTED_WIDTH_MM) : null;
 
   const selectAspect = (next: PhotoAspect) => {
+    setAspectTouched(true);
     setAspect(next);
     setRect((current) => fitCropRectToAspect(current, next, source));
   };
@@ -200,6 +220,18 @@ export default function PhotoCropDialog({
             onChange={(next) => selectAspect(next as PhotoAspect)}
             style={{ marginBottom: 8 }}
           />
+          {frameLabel && presetAspect ? (
+            <Typography.Text
+              type="secondary"
+              data-testid="photo-frame-hint"
+              style={{ display: "block", marginBottom: 6, fontSize: 12 }}
+            >
+              {t("proview.photo.frameHint", {
+                frame: frameLabel,
+                aspect: t(ASPECT_KEYS[presetAspect]),
+              })}
+            </Typography.Text>
+          ) : null}
           <Typography.Text type="secondary" style={{ display: "block", fontSize: 12 }}>
             {source
               ? t("proview.photo.source", { width: source.width, height: source.height })

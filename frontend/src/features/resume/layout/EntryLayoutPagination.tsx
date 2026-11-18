@@ -7,6 +7,7 @@
  * - 本会话第一次拨动开关时给一条轻提示（与分页面板共用 sessionStorage 标记）。
  */
 import { Switch } from "antd";
+import { useId } from "react";
 import { useLocale } from "../../../i18n/i18nContext";
 import { t } from "../../../i18n";
 import type { EntryLayout, ResumeDocument, ResumeEntry } from "../../../types/resumeDocument";
@@ -34,6 +35,13 @@ export default function EntryLayoutPagination({
   onNotice,
 }: EntryLayoutPaginationProps) {
   useLocale();
+  /* I-08（2026-11-18，方案 C）：整行是开关的标签。
+     `<label htmlFor>` 把点击原生转发给 `<button role="switch">`——不写 onClick，也就
+     没有"点一次切两次"；整行不加 `role="switch"` / `tabIndex`，键盘入口仍只有那颗开关
+     （Tab 不会多出一个空停点）。 */
+  const switchIdBase = useId();
+  const breakBeforeId = `${switchIdBase}-break-before`;
+  const keepTogetherId = `${switchIdBase}-keep-together`;
   const entryName = entryDisplayLabel(entry) || t("structure.badge.untitledEntry");
   const setEntryPagination = (patch: Pick<EntryLayout, "start_on_new_page" | "keep_together">) => {
     if (!entry.id) return;
@@ -50,9 +58,10 @@ export default function EntryLayoutPagination({
     >
       <div className="rf-entry-layout-group-title">{t("pagination.entry.title")}</div>
       <div className="rf-entry-layout-fields-hint">{t("structure.layout.entryPaginationHint")}</div>
-      <div className="rf-entry-layout-row">
+      <label className="rf-entry-layout-row is-switch" htmlFor={breakBeforeId}>
         <span className="rf-entry-layout-label">{t("pagination.breakBefore")}</span>
         <Switch
+          id={breakBeforeId}
           size="small"
           checked={Boolean(entry.layout.start_on_new_page)}
           disabled={disabled || undefined}
@@ -62,10 +71,11 @@ export default function EntryLayoutPagination({
           })}
           onChange={(checked) => setEntryPagination({ start_on_new_page: checked })}
         />
-      </div>
-      <div className="rf-entry-layout-row">
+      </label>
+      <label className="rf-entry-layout-row is-switch" htmlFor={keepTogetherId}>
         <span className="rf-entry-layout-label">{t("structure.pagination.keepTogether")}</span>
         <Switch
+          id={keepTogetherId}
           size="small"
           checked={Boolean(entry.layout.keep_together)}
           disabled={disabled || undefined}
@@ -75,7 +85,7 @@ export default function EntryLayoutPagination({
           })}
           onChange={(checked) => setEntryPagination({ keep_together: checked })}
         />
-      </div>
+      </label>
     </section>
   );
 }

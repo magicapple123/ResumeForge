@@ -22,18 +22,9 @@ const webFormPage = {
   "webFormPage.fillMode.hint":
     "These four rows decide how your data enters the page; changes apply immediately.",
   /* I-27 first-screen empty state (three-step guide). */
-  "webFormPage.onboarding.title": "Three steps to start",
-  "webFormPage.onboarding.lead":
-    "Start the browser, open the target page, then come back and read the form.",
-  "webFormPage.onboarding.step1": "Open the dedicated browser",
-  "webFormPage.onboarding.step1Hint": "A separate window; your open pages stay untouched",
-  "webFormPage.onboarding.step2": "Open the target page in that browser",
-  "webFormPage.onboarding.step2Hint": "Sign-in and captchas are yours to handle",
-  "webFormPage.onboarding.step3": "Come back and read the form",
-  "webFormPage.onboarding.step3Hint": "Review the mapping, then fill in one go",
-  "webFormPage.onboarding.state.now": "Now",
-  "webFormPage.onboarding.state.done": "Done",
-  "webFormPage.onboarding.state.todo": "Pending",
+  /* One flow track only (I-24): step names come from `webFormPage.readSnapshot.step.*`
+     so onboarding and the working state share the same four steps. */
+  "webFormPage.onboarding.title": "Fill-in flow",
   "webFormPage.recent.title": "Recent fills",
   "webFormPage.recent.viewAll": "View all",
   "webFormPage.recent.emptyWhat": "What happens here",

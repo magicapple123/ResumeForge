@@ -16,7 +16,7 @@ const shortcutSettings = {
   "shortcutSettings.action.save": "Save current edit",
   "shortcutSettings.action.search": "Search",
   "shortcutSettings.action.assistant": "Open or close the assistant",
-  "shortcutSettings.action.showHints": "Show hints (expand all page guidance)",
+  "shortcutSettings.action.showHints": "Show hints (expand this page's guidance)",
   "shortcutSettings.action.newJob": "New job",
   "shortcutSettings.action.toggleTheme": "Toggle dark or light theme",
   "shortcutSettings.action.openSettings": "Open settings",

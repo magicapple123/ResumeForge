@@ -90,15 +90,19 @@
    格子宽度被 `1fr` 锁死在等分（五个按钮时约 176px），而 antd Button 默认
    `white-space: nowrap` + `overflow: visible`——英文标签比格子宽时**从盒子里溢出来**，
    压到右边那个按钮的左边框上，两个按钮之间看起来没有边界。
-   这里把"比格子宽"的兜底从"溢出"改成"折行"：`height: auto` + `min-height: 32px`
+   这里把"比格子宽"的兜底从"溢出"改成"折行"：`height: auto` + `min-height`
    保住与同行按钮同一档的高度，`line-height: 1.35` 让两行不至于顶出格子。
-   **必须是直接子元素（`>`）**：尾行（质量检测 / 离线分享 / 导出）住在
-   `.resume-detail-footer-tail` 里，它的按钮高度不能被这条规则改掉。
+
+   I-23（2026-11-18）：选择器从**直接子元素**改成**后代**，min-height 统一到 36。
+   原来的 `>` 是刻意把尾行（质量检测 / 离线分享 / 导出）排除在外，结果同一个页脚里
+   并存三套高度（第一排 32 / 尾行 antd 默认 40 / 导出因容器 center 不拉伸），
+   实测三者差 8px，肉眼就是"没对齐"。现在是"整排一起定高 + 整排一起长高"：
+   不钉死 `height` 是因为英文最长标签会折两行，钉死会把第二行裁掉。
    不用 `text-overflow: ellipsis`：被截成「Revise with A…」比折行更难读，而且 antd 的
    省略需要额外 `overflow: hidden`，会把图标一起裁掉。 */
-.resume-detail-footer > .ant-btn {
+.resume-detail-footer .ant-btn {
   height: auto;
-  min-height: 32px;
+  min-height: 36px;
   padding-block: 4px;
   line-height: 1.35;
   white-space: normal;
@@ -110,7 +114,9 @@
    对它已不起作用，删掉以免下次误读成"导出仍参与列布局"。 */
 .resume-detail-footer-export {
   display: flex;
-  align-items: center;
+  /* I-23：`center` 会让「导出」在同行变高时**原地不动**（它是这一排最显眼的动作，
+     差 8px 最扎眼）。stretch 让整排一起长高。 */
+  align-items: stretch;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
@@ -134,7 +140,8 @@
   grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  /* I-23：显式写 stretch（flex 默认值就是它，写出来是防止以后被改成 center 又退回去）。 */
+  align-items: stretch;
   gap: 12px 8px;
 }
 
@@ -440,7 +447,9 @@
 
 /* 导出按钮上的琥珀点（问题 8 的配套）：只做视觉提示，不拦导出。 */
 .resume-export-pending {
-  display: inline-flex;
+  display: flex;
+  /* I-23：Badge 包住导出时多一层 span，不写 stretch 的话整排的"一起长高"传到这里就断了。 */
+  align-items: stretch;
 }
 
 /* 版面诊断 / 自动一页 / 板块顺序 / 缩放提示：2026-11 问题 20 时按分段机械切到

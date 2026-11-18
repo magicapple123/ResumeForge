@@ -129,50 +129,62 @@ export default function HistoryPanel({
         <EmptyState inline description={t("workbench.history.empty")} />
       ) : (
         <div className="resume-history-body">
-          <p className="resume-history-hint">{t("workbench.history.preview.hint")}</p>
-          {previewed ? (
-            // 预览条放在列表**上方**、紧挨说明句：它是"当前选中的快照"，不是列表里的一步；
-            // 继续放底部会与刚点的行逐字重复，看起来像多出一行。
-            <div className="resume-history-preview">
-              <div role="status" className="resume-history-preview-main">
-                <span className="resume-history-preview-label">
-                  {t("workbench.history.preview.label")}
-                </span>
-                <strong>{previewed.label}</strong>
-                {typeof previewed.at === "number" ? (
-                  <span className="resume-history-preview-time">
-                    {formatStepTime(previewed.at)}
+          {/* I-17：预览条**常驻占位**。它挂在列表上方，随选中态挂载/卸载时内容高度变化，
+              浏览器会为保持可视区稳定改写 `scrollTop`——用户看到的是"点两次卡片，滚动条
+              动了"。常驻后高度恒定（未选中时是一句灰字提示），滚动条就完全不动。
+              摘要只占一行：`title` 给全文，超长走省略号（不要换行撑高）。 */}
+          <div
+            className={`resume-history-preview${previewed ? "" : " is-empty"}`}
+            title={previewed ? previewed.summary : undefined}
+          >
+            {previewed ? (
+              <>
+                <div role="status" className="resume-history-preview-main">
+                  <span className="resume-history-preview-label">
+                    {t("workbench.history.preview.label")}
                   </span>
-                ) : null}
-                <span className="resume-history-preview-summary"> · {previewed.summary}</span>
-              </div>
-              <div className="resume-history-preview-actions">
-                <Popconfirm
-                  title={t("workbench.history.jumpTo.confirm")}
-                  okText={t("workbench.history.jumpTo")}
-                  cancelText={t("common.action.cancel")}
-                  onConfirm={jumpTo}
-                  disabled={!onJumpTo}
-                >
+                  <strong>{previewed.label}</strong>
+                  {typeof previewed.at === "number" ? (
+                    <span className="resume-history-preview-time">
+                      {formatStepTime(previewed.at)}
+                    </span>
+                  ) : null}
+                  <span className="resume-history-preview-summary"> · {previewed.summary}</span>
+                </div>
+                <div className="resume-history-preview-actions">
+                  <Popconfirm
+                    title={t("workbench.history.jumpTo.confirm")}
+                    okText={t("workbench.history.jumpTo")}
+                    cancelText={t("common.action.cancel")}
+                    onConfirm={jumpTo}
+                    disabled={!onJumpTo}
+                  >
+                    <Button
+                      size="small"
+                      type="primary"
+                      className="resume-history-jump"
+                      disabled={!onJumpTo || undefined}
+                    >
+                      {t("workbench.history.jumpTo")}
+                    </Button>
+                  </Popconfirm>
                   <Button
                     size="small"
-                    type="primary"
-                    className="resume-history-jump"
-                    disabled={!onJumpTo || undefined}
+                    className="resume-history-jump-current"
+                    onClick={() => setPreview(null)}
                   >
-                    {t("workbench.history.jumpTo")}
+                    {t("workbench.history.backToCurrent")}
                   </Button>
-                </Popconfirm>
-                <Button
-                  size="small"
-                  className="resume-history-jump-current"
-                  onClick={() => setPreview(null)}
-                >
-                  {t("workbench.history.backToCurrent")}
-                </Button>
+                </div>
+              </>
+            ) : (
+              <div role="status" className="resume-history-preview-main">
+                <span className="resume-history-preview-placeholder">
+                  {t("workbench.history.preview.hint")}
+                </span>
               </div>
-            </div>
-          ) : null}
+            )}
+          </div>
           {pastSteps.length > 0 ? (
             <StepGroup
               title={t("workbench.history.past")}

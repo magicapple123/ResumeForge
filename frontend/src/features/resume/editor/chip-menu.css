@@ -13,13 +13,29 @@
   pointer-events: none;
 }
 
-/* #7：右键「调整排版」浮层（fixed 定位在右键坐标；窄卡不超出视口由 max-width 兜底）。 */
+/* #7：右键「调整排版」浮层（fixed 定位在右键坐标；窄卡不超出视口由 max-width 兜底）。
+ *
+ * I-21 实测（2026-11-18）：原来是 `z-index: 1200`，而制作台是个 antd Modal——它的
+ * `.ant-modal-wrap` 是 `position: fixed; z-index: 3300`（起一个新 stacking context）。
+ * 1200 远低于它，于是整张浮层（以及照片框浮层，同一个类）**被弹窗盖住**：DOM 里有、
+ * 截图里没有、`elementFromPoint` 命中的是左栏结构树的提示条，连组头都点不动。
+ * 这不是落位问题，是层级问题——只量 rect 量不出来，只有截图 / 命中测试能看见。
+ *
+ * 下面这个值是**没有模态时的兜底**（popup-base + 49，同 `.rf-inline-mark-mask`）；
+ * 有模态时组件按宿主实测层级覆盖，见 `overlayLayer.ts`。 */
 .document-chip-style-popover {
   position: fixed;
-  z-index: 1200;
+  z-index: calc(var(--rf-layer-popup-base, 3100) + 49);
   width: 300px;
   max-width: calc(100vw - 24px);
-  max-height: min(70vh, 560px);
+  /* I-21：卡片高度上限 360（原来 70vh/560——点击点 y=522、视口 900 时下方只剩 378，
+     536 的卡只能上翻，正好压住左栏下半屏）。分组后对象范围最高 347（行距与缩进），
+     不需要滚动；字段范围最多 10 个属性（字号/加粗/颜色/段前/段后/行距/缩进/项目符号/
+     对齐/字距），展开「行距与缩进」约 447——这一档靠卡内滚动兜住，**不缩字号**。 */
+  max-height: min(70vh, 360px);
+  /* 显式 border-box：`max-height` 在 content-box 下不含上下 padding（10 + 12），
+     实测卡片会变成 382 而不是 360。 */
+  box-sizing: border-box;
   overflow: auto;
   padding: 10px 12px 12px;
   border-radius: 8px;
@@ -56,4 +72,12 @@
   flex: 1 1 120px;
   min-width: 80px;
   margin-inline: 4px;
+}
+
+/* I-21：滑杆的 antd 默认外边距（14px 上下）在浮层里没人清——左栏有一条
+   `.resume-wb-col-params .resume-typography-row .ant-slider { margin-block: 0 }`，
+   但浮层是 portal 到 body 的，祖先链里没有那个类。不清零时每条数字行的控件行是
+   40 而不是 30，两条数字行的组就多出 20px（实测 362 → 342）。 */
+.document-chip-style-popover .resume-typography-row .ant-slider {
+  margin-block: 0;
 }

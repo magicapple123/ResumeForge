@@ -36,73 +36,36 @@
  * - `parseInlineMarkSegments`：**覆盖整串**（含标记，标记段带 `hidden`）；遮罩层按它排版，
  *   字形位置才与文本域里那些"透明但占位"的字逐个对应——光标、换行、滚动高度都靠这一点。
  */
-import type { CSSProperties } from "react";
-
-/** 样式区间的收口标记（与后端 `resume_inline_style.STYLE_CLOSE` 同一串）。 */
-export const STYLE_CLOSE = "{@}";
-
-/** 字号系数的合法区间（与后端 `MIN_SIZE` / `MAX_SIZE` 同值）。 */
-export const MIN_INLINE_SIZE = 0.5;
-export const MAX_INLINE_SIZE = 1.6;
-
-/** 链接 URL 长度上限（与后端 `MAX_LINK_URL_LENGTH` 逐字一致）。 */
-export const MAX_LINK_URL_LENGTH = 512;
-
-/** 一段可见文字及其样式。`bold`/`size`/`color`/`href` 缺省表示"无这一项覆盖"。 */
-export interface InlineMarkRun {
-  text: string;
-  bold?: boolean;
-  /** 相对当前字号的系数（0.5–1.6）；渲染成 `font-size: N%`。 */
-  size?: number;
-  /** `#rgb` / `#rrggbb`（已小写）。 */
-  color?: string;
-  /** 链接地址；`text` 是它的显示文字。 */
-  href?: string;
-}
-
-/** 覆盖整串的分段：`hidden` 为真的段是标记语法，遮罩层把它渲染成"占位但不可见"。 */
-export interface InlineMarkSegment extends InlineMarkRun {
-  hidden?: boolean;
-}
-
-interface InlineStyleAttributes {
-  size?: number;
-  color?: string;
-}
-
-/**
- * 标记串里的一个"排版原子"。
- *
- * 普通字符与样式标记（`{@…}` / `{@}`）都是原子：把标记收成**一个**原子，是为了让
- * 加粗/斜体/链接这三层解析在"去掉标记后的字符序列"上跑（标记不该参与配对），
- * 同时又保留它在源串里的区间——遮罩层要靠这个区间把标记渲染成不可见占位。
- */
-interface Atom {
-  /** 源串区间 `[rawStart, rawEnd)`。 */
-  rawStart: number;
-  rawEnd: number;
-  /** 普通字符的本体；样式标记（`{@…}` / `{@}`）为 `null`。 */
-  char: string | null;
-  /** 起始标记的属性；收口标记只有 `close`。 */
-  style?: InlineStyleAttributes;
-  close?: boolean;
-}
-
-/** 参与解析的中间结果：一段连续原子 + 它在这一层的样式。 */
-interface Piece {
-  /** 原子下标区间 `[start, end)`。 */
-  start: number;
-  end: number;
-  bold: boolean;
-  href?: string;
-}
-
-const LINK_SCHEMES = ["http://", "https://", "mailto:"] as const;
-const HREF_UNSAFE = /[<>"]/;
-const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
-const ATTRIBUTE = /^\s*(size|color)\s*=\s*([^,]+?)\s*$/i;
-/** 样式标记在解析序列里占的"字符"：不含 `*` / `[` / `]`，不会干扰后三层解析。 */
-const PLACEHOLDER = "\ue000";
+export {
+  ATTRIBUTE,
+  HEX_COLOR,
+  HREF_UNSAFE,
+  LINK_SCHEMES,
+  MAX_INLINE_SIZE,
+  MAX_LINK_URL_LENGTH,
+  MIN_INLINE_SIZE,
+  PLACEHOLDER,
+  STYLE_CLOSE,
+} from "./inlineMarkTypes";
+export type {
+  Atom,
+  InlineMarkRun,
+  InlineMarkSegment,
+  InlineStyleAttributes,
+  Piece,
+} from "./inlineMarkTypes";
+import {
+  ATTRIBUTE,
+  HEX_COLOR,
+  HREF_UNSAFE,
+  LINK_SCHEMES,
+  MAX_INLINE_SIZE,
+  MAX_LINK_URL_LENGTH,
+  MIN_INLINE_SIZE,
+  PLACEHOLDER,
+  STYLE_CLOSE,
+} from "./inlineMarkTypes";
+import type { Atom, InlineMarkRun, InlineStyleAttributes, Piece } from "./inlineMarkTypes";
 
 /**
  * `size=0.9,color=#c00` → 属性对象；**任何一项非法就整份作废**（返回 `null`）。
@@ -339,7 +302,7 @@ interface PlacedRun extends InlineMarkRun {
 }
 
 /** 去掉内部区间，只留可见文字与样式（两种投影共用这一处）。 */
-function toVisible(run: PlacedRun): InlineMarkRun {
+export function toVisible(run: PlacedRun): InlineMarkRun {
   const visible: InlineMarkRun = { text: run.text, bold: run.bold };
   if (run.size !== undefined) visible.size = run.size;
   if (run.color) visible.color = run.color;
@@ -393,7 +356,7 @@ function styleRuns(atoms: Atom[], piece: Piece): PlacedRun[] {
 }
 
 /** 全部可见 run（含源串区间），按源串顺序排列。 */
-function placedRuns(raw: string): PlacedRun[] {
+export function placedRuns(raw: string): PlacedRun[] {
   if (!raw) return [];
   const atoms = tokenize(raw);
   const text = atomText(atoms);
@@ -440,57 +403,4 @@ export function visibleInlineMarkLength(raw: string): number {
   return stripInlineMarks(raw).length;
 }
 
-/** 分段的"样式签名"：签名相同才能合并成一段（纯渲染优化，不改变语义）。 */
-function signatureOf(segment: InlineMarkSegment): string {
-  if (segment.hidden) return "hidden";
-  return [
-    segment.bold ? "b" : "",
-    segment.size ?? "",
-    segment.color ?? "",
-    segment.href ?? "",
-  ].join("|");
-}
-
-/**
- * 解析成**覆盖整串**的分段（含被隐藏的标记段），供遮罩层排版。
- *
- * 契约：`segments.map((segment) => segment.text).join("") === raw`。标记段带 `hidden: true`，
- * 遮罩层把它们渲染成"占位但不可见"的字形——正是这一点让两层换行位置与滚动高度逐像素一致。
- */
-export function parseInlineMarkSegments(raw: string): InlineMarkSegment[] {
-  if (!raw) return [];
-  const segments: InlineMarkSegment[] = [];
-  const push = (segment: InlineMarkSegment): void => {
-    const last = segments[segments.length - 1];
-    if (last && signatureOf(last) === signatureOf(segment)) {
-      last.text += segment.text;
-      return;
-    }
-    segments.push(segment);
-  };
-  const pushHidden = (text: string): void => {
-    if (text) push({ text, hidden: true });
-  };
-  let cursor = 0;
-  for (const run of placedRuns(raw)) {
-    if (run.rawStart > cursor) pushHidden(raw.slice(cursor, run.rawStart));
-    push(toVisible(run));
-    cursor = run.rawEnd;
-  }
-  if (cursor < raw.length) pushHidden(raw.slice(cursor));
-  return segments;
-}
-
-/**
- * 分段的渲染样式：只覆盖**不改变字形宽度**的属性。
- *
- * 字号是唯一例外（`font-size` 必然改变前进宽度）——它在遮罩层里会带来横向漂移，见
- * `InlineMarkOverlay` 的注释；颜色与加粗（描边模拟）都保持与原字形逐像素等宽。
- */
-export function inlineMarkSegmentStyle(segment: InlineMarkSegment): CSSProperties | undefined {
-  if (segment.hidden) return undefined;
-  const style: CSSProperties = {};
-  if (segment.size !== undefined) style.fontSize = `${Math.round(segment.size * 100)}%`;
-  if (segment.color) style.color = segment.color;
-  return Object.keys(style).length > 0 ? style : undefined;
-}
+export { inlineMarkSegmentStyle, parseInlineMarkSegments } from "./inlineMarkSegments";

@@ -13,6 +13,9 @@ const photoFrame = {
   "resume.photo.frame.offsetX": "左右偏移",
   "resume.photo.frame.offsetY": "上下偏移",
   "resume.photo.frame.stepHint": "滑杆步进：边框、圆角 1px，偏移 0.5mm",
+  "resume.photo.frame.menu": "照片框…",
+  "resume.photo.frame.back": "返回字段排版",
+  "resume.photo.frame.panelHint": "照片按比例缩放。裁剪、取景、换图在左栏「个人照片」里。",
 };
 
 export default photoFrame;

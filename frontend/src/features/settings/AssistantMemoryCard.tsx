@@ -27,14 +27,14 @@
  * 置信度不再外露（四家官方产品都不显示），但仍留在库里参与排序。
  * 行内展示、`⋯` 菜单与历史弹窗在 `AssistantMemoryRow`，本文件只管取数、筛选与弹层编排。
  */
-import { InfoCircleOutlined } from "@ant-design/icons";
-import { App, Button, Card, Divider, Flex, Input, Select, Tooltip, Typography } from "antd";
+import { App, Button, Card, Divider, Flex, Input, Select, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErrorState from "../../components/common/ErrorState";
 import EmptyState from "../../components/common/EmptyState";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { HintDetail } from "../../components/common/HintDetail";
 import {
   MEMORY_KINDS,
   createAssistantMemory,
@@ -412,15 +412,12 @@ export default function AssistantMemoryCard() {
           <Typography.Text type="secondary">
             {t("assistantMemory.footnote.privacy")}
           </Typography.Text>
-          <Tooltip title={t("assistantMemory.injection.info")}>
-            <Button
-              type="text"
-              size="small"
-              className="rf-memory-info"
-              aria-label={t("assistantMemory.injection.infoLabel")}
-              icon={<InfoCircleOutlined />}
-            />
-          </Tooltip>
+          {/* I-28：同一条说明从 Tooltip 换到 HintDetail——默认仍是"点开看"，但 Alt+H
+              下会原地展开（Tooltip 不参与提示模式）。文案与无障碍名都复用原键。 */}
+          <HintDetail
+            detail={t("assistantMemory.injection.info")}
+            label={t("assistantMemory.injection.infoLabel")}
+          />
         </div>
       </LoadingBlock>
       {modalState ? (

@@ -15,6 +15,18 @@
  * 图做**同一组滤镜抵消一次**（否则证件照会变成负片）。`invert(1)` 是唯一有精确反函数的
  * 档位：`invert(0.88)` 这类"温柔"档位还原不回去，照片会发灰。
  *
+ * ## 纸底靠反算色，不靠调 invert（I-36）
+ *
+ * 反色后的纸底 = 模板 `--bg` 的反相。白纸会翻成 **#000 纯黑**，比应用底色还暗，读成
+ * "页面被挖空了一块"。解决办法不是把 `invert(1)` 调成小数（照片会跟着发灰），而是给
+ * 深色纸**反向写一个 #e1e1e1 的 body 底色**：`invert(1)` 正好得回 #1e1e1e 中性炭灰
+ * （`hue-rotate(180deg)` 对无彩度灰是恒等）。顺带把用户自选的页面背景色统一掉——这是
+ * I-36 拍板的取舍，导出 / 打印仍用模板原色。
+ *
+ * 这条 body 底色**必须包在 `@media screen` 里**：样式注入同样作用于 `Ctrl+P` 的打印
+ * 预览，不包就会打出一张灰纸（父页面的 `@media print { filter: none }` 只关滤镜，
+ * 关不掉这条背景）。
+ *
  * ## 边界（三条都不能破）
  *
  * 1. **只作用于预览**。样式注入的是 iframe **内部**的文档（父页面样式进不去），导出走服务端
@@ -30,16 +42,29 @@ export const PAPER_DARK_CLASS = "rf-paper-dark";
 /** 注入 iframe 的那个 `<style>` 的 id（重复注入靠它判重）。 */
 export const PAPER_DARK_STYLE_ID = "rf-paper-dark-style";
 
+/** 深色纸底经过 `invert(1)` 之后要落地成的颜色（与 `--rf-preview-paper` 同值）。 */
+export const DARK_PAPER_BG = "#1e1e1e";
+
 /**
- * 注入 iframe 的样式：只抵消图片与内联矢量图。
+ * 深色纸底的**反算色**：`invert(1)` 把 `#e1e1e1` 翻回 `#1e1e1e`。
+ *
+ * 直接写 `#1e1e1e` 会被滤镜再翻一次，纸会变成浅灰 `#e1e1e1`。
+ */
+export const DARK_PAPER_BG_INVERSE = "#e1e1e1";
+
+/**
+ * 注入 iframe 的样式：抵消图片与内联矢量图，并把纸底反算成炭灰。
  *
  * 用 `img` / `svg` 两个元素选择器而不是"排除法"：模板里的装饰性色块（分隔线、标题竖条）
  * 本来就该跟着一起反色，只有**照片与图标**需要保持原样。`svg` 一并抵消是为了不让图标
  * 在深色纸上变成一块白底负片。
+ *
+ * 第二条 `body` 底色包在 `@media screen` 里：打印预览必须还是模板原本的白纸（I-36）。
  */
 export const PAPER_DARK_CSS = [
   `html.${PAPER_DARK_CLASS} img,html.${PAPER_DARK_CLASS} svg`,
   "{filter:invert(1) hue-rotate(180deg)}",
+  `@media screen{html.${PAPER_DARK_CLASS} body{background: ${DARK_PAPER_BG_INVERSE} !important}}`,
 ].join("");
 
 /**

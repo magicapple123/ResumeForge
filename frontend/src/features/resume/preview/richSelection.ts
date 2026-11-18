@@ -15,7 +15,7 @@
  * 函数，所以属性一律走 `getAttribute`，元素判断一律走 `nodeType` / `tagName`。
  */
 import { clamp, VIEWPORT_MARGIN } from "../../ai-polish/overlayGeometry";
-import { isBoldVisible, visibleLength } from "./richText";
+import { isBoldIn, type RichValue } from "../inline/richRuns";
 
 /** 后端模板给每处文本打的属性名（与 `clickToEdit.ts` 同一串）。 */
 const PATH_ATTR = "data-resume-path";
@@ -31,9 +31,9 @@ export interface RichSelectionHit {
   /** 元素所在的文档（iframe 里那个）。 */
   doc: Document;
   path: string;
-  /** 这一栏当前的源串（含 `**`）。 */
-  raw: string;
-  /** 选区起止（**渲染态**偏移，标记不计）。 */
+  /** 这一栏当前的值（纯文本 + runs）。 */
+  value: RichValue;
+  /** 选区起止（**纯文本**下标；结构化值没有隐形标记，与渲染态 1:1）。 */
   start: number;
   end: number;
   /** 选区是否整段已经加粗：决定菜单显示「加粗」还是「取消加粗」。 */
@@ -82,7 +82,7 @@ function offsetWithin(root: Element, node: Node, offset: number, doc: Document):
  */
 export function resolveRichSelection(
   doc: Document | null,
-  read: (path: string) => string | null,
+  read: (path: string) => RichValue | null,
   selection?: Selection | null,
 ): RichSelectionHit | null {
   if (!doc) return null;
@@ -95,24 +95,24 @@ export function resolveRichSelection(
   const tail = pathAt(range.endContainer);
   // 跨两个字段（或只命中一边）→ 不加粗：一对标记不许跨字段。
   if (!head || !tail || head.element !== tail.element) return null;
-  const raw = read(head.path);
-  if (raw === null) return null;
+  const value = read(head.path);
+  if (value === null) return null;
   const start = offsetWithin(head.element, range.startContainer, range.startOffset, doc);
   const end = offsetWithin(head.element, range.endContainer, range.endOffset, doc);
   if (start === null || end === null) return null;
   const [first, second] = start <= end ? [start, end] : [end, start];
   if (first === second) return null;
-  // 偏移量必须与源串对得上：否则宁可放行原生菜单，也不要猜着插标记。
+  // 偏移量必须与纯文本对得上：否则宁可放行原生菜单，也不要猜着改样式。
   const rendered = head.element.textContent ?? "";
-  if (rendered.length !== visibleLength(raw) || second > rendered.length) return null;
+  if (rendered.length !== value.text.length || second > rendered.length) return null;
   return {
     element: head.element,
     doc,
     path: head.path,
-    raw,
+    value,
     start: first,
     end: second,
-    isBold: isBoldVisible(raw, first, second),
+    isBold: isBoldIn(value, { start: first, end: second }),
   };
 }
 

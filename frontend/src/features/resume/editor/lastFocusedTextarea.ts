@@ -24,6 +24,7 @@
  * 监听只在登记时挂一次（`WeakSet` 去重），所以每个用 `onFocus` 登记过的输入框都自动具备。
  */
 import type { InlineEdit, InlineRange } from "../layout/inlineMarks";
+import type { RichValue } from "../inline/richRuns";
 
 /** 能被行内格式写入的目标：单行 `Input` 与多行 `Input.TextArea`。 */
 export type InlineMarkField = HTMLInputElement | HTMLTextAreaElement;
@@ -94,6 +95,39 @@ export function applyInlineEdit(edit: InlineEdit): void {
   element.focus();
   element.setSelectionRange(edit.start, edit.end);
   remembered = { element, range: { start: edit.start, end: edit.end } };
+}
+
+/**
+ * I-13：**结构化（runs）字段**的写回契约。
+ *
+ * 标记版走 `applyInlineEdit`：把新源串塞回 DOM 再派发 `input`。结构化字段没有"新源串"——
+ * `value` 恒为纯文本，样式是旁挂的 runs，所以写回必须回到文档（`onChange` → patch item），
+ * 由 React 重新渲染文本域。
+ *
+ * 选区坐标与文本域 1:1（纯文本没有隐形标记），不再需要源串 ↔ 可见文字换算。
+ */
+export interface RichFieldTarget {
+  /** 读当前值（受控 props 的最新一份）。 */
+  read: () => RichValue;
+  /** 写回并恢复选区（`selection` 是纯文本下标）。 */
+  commit: (next: RichValue, selection: InlineRange) => void;
+}
+
+const RICH_TARGETS = new WeakMap<InlineMarkField, RichFieldTarget>();
+
+/** 字段把"自己是一份结构化字段"登记进来（与 `markFocusedField` 同一拍，见 `InlineMarkTextArea`）。 */
+export function registerRichField(element: InlineMarkField, target: RichFieldTarget): void {
+  RICH_TARGETS.set(element, target);
+}
+
+/**
+ * 当前聚焦输入框的结构化写回器；不是结构化字段（或没聚焦）= `null`。
+ *
+ * 工具条 / 右键菜单在改样式前先问这一句：有就走 runs（写磁盘），没有才退回标记串（兼容读）。
+ */
+export function getRichTarget(): RichFieldTarget | null {
+  const element = getFocusedField();
+  return element ? (RICH_TARGETS.get(element) ?? null) : null;
 }
 
 /** 测试用：清掉登记与记忆，避免用例之间互相命中。 */

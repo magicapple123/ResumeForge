@@ -88,6 +88,37 @@ afterEach(() => {
 });
 
 describe("口径与结构", () => {
+  it("剩余段把未使用窗口画成灰底：25.5% 时 flex-grow 是 74.5（I-30）", () => {
+    renderPopover(USAGE);
+    const rest = document.querySelector(".assistant-context-usage-rest") as HTMLElement | null;
+    expect(rest).toBeTruthy();
+    expect(Number(rest?.style.flexGrow)).toBeCloseTo(74.5, 5);
+    // 彩色段之和仍是 25.5（不是 100）——铺满就说明又按已用部分归一化了。
+    const used = barSegments().reduce(
+      (sum, el) => sum + Number((el as HTMLElement).style.flexGrow || 0),
+      0,
+    );
+    expect(used).toBeCloseTo(25.5, 5);
+    // 剩余段不能混进 `-seg` 类，否则「五段」断言会被它顶掉。
+    expect(rest?.className).not.toContain("assistant-context-usage-seg");
+  });
+
+  it("100% 时剩余段为 0，0% 时整条全灰（I-30）", () => {
+    const { unmount } = renderPopover({ ...USAGE, percent: 100 });
+    const full = document.querySelector(".assistant-context-usage-rest") as HTMLElement | null;
+    expect(Number(full?.style.flexGrow)).toBeCloseTo(0, 5);
+    unmount();
+
+    renderPopover({
+      ...USAGE,
+      percent: 0,
+      buckets: USAGE.buckets.map((b) => ({ ...b, percent: 0, tokens: 0 })),
+    });
+    const zero = document.querySelector(".assistant-context-usage-rest") as HTMLElement | null;
+    expect(Number(zero?.style.flexGrow)).toBeCloseTo(100, 5);
+    expect(barSegments()).toHaveLength(0);
+  });
+
   it("五行图例齐全（名称按顺序、百分比右对齐在每一行里）", () => {
     renderPopover(USAGE);
     const names = [

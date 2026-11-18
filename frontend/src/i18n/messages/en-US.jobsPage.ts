@@ -49,8 +49,6 @@ const jobsPage = {
   "jobsPage.filter.backfill": "Fill in details",
   "jobsPage.filter.importCsv": "Import CSV",
   "jobsPage.filter.addManual": "Add manually",
-  "jobsPage.filter.sortResetHintDefault":
-    "Already using the default order: most recently imported first",
   "jobsPage.filter.sortResetHint": "Restore the default order: most recently imported first",
   "jobsPage.filter.sortReset": "Restore default order",
   "jobsPage.filter.sourceCollected": "Collected automatically",

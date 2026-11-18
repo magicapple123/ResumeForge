@@ -35,13 +35,17 @@ import {
   writeStoredClickToEdit,
 } from "./clickToEdit";
 import { forwardWheelToParent } from "./useFrameInteractions";
+import { paintRichValue, type RichTextEditAdapter } from "./richText";
 import {
-  paintRichField,
-  STYLE_OPENERS,
-  toggleBold,
-  toggleStyle,
-  type RichTextEditAdapter,
-} from "./richText";
+  applyRunPatch,
+  clearRunStyles,
+  colorIn,
+  toggleBoldRuns,
+  toggleColorRuns,
+  toggleSizeRuns,
+  type InlineRange,
+  type RichValue,
+} from "../inline/richRuns";
 import { menuPoint, resolveRichSelection, restoreRichSelection } from "./richSelection";
 
 export type { RichTextEditAdapter } from "./richText";
@@ -64,9 +68,35 @@ export interface BoldMenuState {
   x: number;
   y: number;
   isBold: boolean;
-  onToggle: () => void;
+  onToggleBold: () => void;
+  /** 字号一档（系数，如 1.1）；同值再点 = 清除。传 `null` = 显式清除字号。 */
+  onSize: (size: number | null) => void;
+  /** 颜色一档（`#rrggbb`）；同值再点 = 清除。传 `null` = 显式清除颜色。 */
+  onColor: (hex: string | null) => void;
+  /** 「自定义颜色…」：关掉菜单，在同一坐标打开拾色弹层（见 `colorPicker`）。 */
+  onCustomColor: () => void;
+  /** 清除行内格式（加粗/字号/颜色；链接保留）。 */
+  onClear: () => void;
   onPick: () => void;
   onClose: () => void;
+}
+
+/**
+ * 拾色弹层要渲染的全部内容。
+ *
+ * 两个浮层刻意**不同时存在**：菜单是单例宿主、点任意项即关；弹层是第二个宿主，
+ * 坐标与菜单同一份（`placeMenu` 同一套夹取），所以视觉上是"在原点接力"。
+ */
+export interface RichColorPickerState {
+  /** 与菜单相同的指针位置（父页面视口坐标）。 */
+  x: number;
+  y: number;
+  /** 选区当前颜色（runs 里那一档）；`null` = 未设色 / 跨了两种颜色。 */
+  initial: string | null;
+  /** 应用选中颜色：按属性替换（不是 toggle），写 run 的 `color`。 */
+  onApply: (hex: string) => void;
+  /** 取消 / Esc / 点外部：不改内容、不写宿主。 */
+  onCancel: () => void;
 }
 
 export interface ClickToEditPreviewApi {
@@ -81,6 +111,8 @@ export interface ClickToEditPreviewApi {
   bindDocument: (doc: Document | null) => void;
   /** 右键菜单；`null` = 没打开（调用方据此决定渲不渲染 `<BoldContextMenu/>`）。 */
   boldMenu: BoldMenuState | null;
+  /** 拾色弹层；`null` = 没打开（与 `boldMenu` 互斥，见 `RichColorPickerState`）。 */
+  colorPicker: RichColorPickerState | null;
 }
 
 /** 一次右键命中的快照（菜单期间不变：内容还没被改）。 */
@@ -88,11 +120,16 @@ interface BoldTarget {
   x: number;
   y: number;
   path: string;
-  raw: string;
+  value: RichValue;
   start: number;
   end: number;
   isBold: boolean;
   element: Element | null;
+}
+
+/** 拾色弹层的快照 = 同一个命中 + 面板初值（选区颜色）。 */
+interface ColorPickerTarget extends BoldTarget {
+  initial: string | null;
 }
 
 export function useClickToEditPreview({
@@ -103,6 +140,8 @@ export function useClickToEditPreview({
 }: ClickToEditPreviewOptions): ClickToEditPreviewApi {
   const [checked, setCheckedState] = useState(readStoredClickToEdit);
   const [target, setTarget] = useState<BoldTarget | null>(null);
+  /** 拾色弹层的快照；与 `target` 互斥（打开它之前一定先把菜单关掉）。 */
+  const [picker, setPicker] = useState<ColorPickerTarget | null>(null);
   const available = Boolean(onPickField);
   // 勾选的是"点击定位"这条链路；右键加粗是它的增量能力（宿主给了 `richEdit` 才有），
   // 所以 `active` 不把 `richEdit` 算进去——只读宿主给了 `onPickField` 时复选框照旧可用。
@@ -163,7 +202,7 @@ export function useClickToEditPreview({
       x: point.x,
       y: point.y,
       path: hit.path,
-      raw: hit.raw,
+      value: hit.value,
       start: hit.start,
       end: hit.end,
       isBold: hit.isBold,
@@ -228,42 +267,64 @@ export function useClickToEditPreview({
   const closeBoldMenu = useCallback(() => setTarget(null), []);
 
   /**
-   * 点「加粗 / 取消加粗」：先就地改 iframe 里那一栏（立刻看到粗体，用户不必等一次网络往返），
-   * 再把新源串交给宿主——宿主记进 overlay 并把内容标脏，整份重渲染负责收口。
+   * 把一次样式改动落到某个右键快照上（菜单项与拾色弹层共用）。
    *
-   * 顺序不能反：先改 overlay 会让 R5 的实时预览提前重渲染整份文档，iframe 一换，
+   * 顺序不能反：先就地改 iframe 里那一栏（立刻看到结果，用户不必等一次网络往返），
+   * 再把新值交给宿主——宿主记进 overlay 并把内容标脏，整份重渲染负责收口。
+   *
+   * 反过来的代价：先改 overlay 会让 R5 的实时预览提前重渲染整份文档，iframe 一换，
    * 这里拿到的 `element` 就成了孤儿，局部更新会静默失败（体感是"点了没反应"）。
    */
-  const applyBold = useCallback(() => {
-    const current = target;
-    const rich = richRef.current;
-    if (!current || !rich) return;
-    setTarget(null);
-    const { next, range } = toggleBold(current.raw, current.start, current.end);
-    if (next === current.raw) return;
-    paintRichField(current.element, next);
-    restoreRichSelection(current.element, range[0], range[1]);
-    rich.toggle(current.path, next, current.raw);
-  }, [target]);
-
-  /** R-11：行内字号 / 强调色。与加粗同一套"先就地改、再交给宿主"的顺序。 */
-  const applyStyle = useCallback(
-    (opener: string) => {
-      const current = target;
+  const commitOn = useCallback(
+    (current: BoldTarget | null, mutate: (value: RichValue, range: InlineRange) => RichValue) => {
       const rich = richRef.current;
       if (!current || !rich) return;
-      setTarget(null);
-      const { next, range } = toggleStyle(current.raw, current.start, current.end, opener);
-      if (next === current.raw) return;
-      paintRichField(current.element, next);
-      restoreRichSelection(current.element, range[0], range[1]);
-      rich.toggle(current.path, next, current.raw);
+      const range = { start: current.start, end: current.end };
+      const next = mutate(current.value, range);
+      if (next === current.value) return;
+      paintRichValue(current.element, next);
+      restoreRichSelection(current.element, range.start, range.end);
+      rich.write(current.path, next, current.value);
     },
-    [target],
+    [],
   );
 
-  const applySmall = useCallback(() => applyStyle(STYLE_OPENERS.small), [applyStyle]);
-  const applyEmphasis = useCallback(() => applyStyle(STYLE_OPENERS.emphasis), [applyStyle]);
+  /** 菜单项：先关菜单，再把改动落到刚才那份快照上。 */
+  const applyChange = useCallback(
+    (mutate: (value: RichValue, range: InlineRange) => RichValue) => {
+      const current = target;
+      setTarget(null);
+      commitOn(current, mutate);
+    },
+    [commitOn, target],
+  );
+
+  const applyBold = useCallback(
+    () => applyChange((value, range) => toggleBoldRuns(value, range)),
+    [applyChange],
+  );
+  const applySize = useCallback(
+    (size: number | null) =>
+      applyChange((value, range) =>
+        size === null
+          ? applyRunPatch(value, range, { size: null })
+          : toggleSizeRuns(value, range, size),
+      ),
+    [applyChange],
+  );
+  const applyColor = useCallback(
+    (hex: string | null) =>
+      applyChange((value, range) =>
+        hex === null
+          ? applyRunPatch(value, range, { color: null })
+          : toggleColorRuns(value, range, hex),
+      ),
+    [applyChange],
+  );
+  const applyClear = useCallback(
+    () => applyChange((value, range) => clearRunStyles(value, range)),
+    [applyChange],
+  );
 
   const pickFromMenu = useCallback(() => {
     const current = target;
@@ -273,19 +334,75 @@ export function useClickToEditPreview({
     pick?.(current.path);
   }, [target]);
 
+  /**
+   * 「自定义颜色…」：菜单先关（单例宿主的契约一个字不改），拾色弹层在同一坐标后开。
+   *
+   * 中间那次 `restoreRichSelection` 是两层浮层之间的衔接：菜单卸载、焦点回到父页面，
+   * iframe 里的高亮容易掉；重新声明一次选区，用户才看得出"要改的还是这一段"。
+   * 应用时再放一次（DOM 被就地替换后原选区已失效），与菜单项走同一条路径。
+   */
+  const openColorPicker = useCallback(() => {
+    const current = target;
+    if (!current) return;
+    const range = { start: current.start, end: current.end };
+    setTarget(null);
+    restoreRichSelection(current.element, range.start, range.end);
+    setPicker({ ...current, initial: colorIn(current.value, range) });
+  }, [target]);
+
+  /**
+   * 应用自定义色。
+   *
+   * 用 `applyRunPatch({ color })` 而**不是** `toggleColorRuns`：用户在这里点的是「应用」，
+   * 不是"再点一次取消"。同为 toggle 语义时"应用与选区同色"会把颜色**清掉**；
+   * 打补丁则得到与原值逐字节相同的 runs，`commitOn` 判定无变化后不产生任何写入。
+   */
+  const applyCustomColor = useCallback(
+    (hex: string) => {
+      const current = picker;
+      setPicker(null);
+      commitOn(current, (value, range) => applyRunPatch(value, range, { color: hex }));
+    },
+    [commitOn, picker],
+  );
+
+  const closeColorPicker = useCallback(() => setPicker(null), []);
+
   const boldMenu = useMemo<BoldMenuState | null>(() => {
     if (!target) return null;
     return {
       x: target.x,
       y: target.y,
       isBold: target.isBold,
-      onToggle: applyBold,
-      onToggleSmall: applySmall,
-      onToggleEmphasis: applyEmphasis,
+      onToggleBold: applyBold,
+      onSize: applySize,
+      onColor: applyColor,
+      onCustomColor: openColorPicker,
+      onClear: applyClear,
       onPick: pickFromMenu,
       onClose: closeBoldMenu,
     };
-  }, [applyBold, applySmall, applyEmphasis, closeBoldMenu, pickFromMenu, target]);
+  }, [
+    applyBold,
+    applySize,
+    applyColor,
+    applyClear,
+    closeBoldMenu,
+    openColorPicker,
+    pickFromMenu,
+    target,
+  ]);
 
-  return { checked, setChecked, available, active, bindDocument, boldMenu };
+  const colorPicker = useMemo<RichColorPickerState | null>(() => {
+    if (!picker) return null;
+    return {
+      x: picker.x,
+      y: picker.y,
+      initial: picker.initial,
+      onApply: applyCustomColor,
+      onCancel: closeColorPicker,
+    };
+  }, [applyCustomColor, closeColorPicker, picker]);
+
+  return { checked, setChecked, available, active, bindDocument, boldMenu, colorPicker };
 }

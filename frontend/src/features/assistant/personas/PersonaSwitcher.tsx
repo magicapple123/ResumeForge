@@ -103,7 +103,6 @@ export default function PersonaSwitcher({ conversationId, onChanged }: Props) {
       aria-haspopup="menu"
       aria-expanded={open}
       disabled={disabled}
-      onClick={() => setOpen((current) => !current)}
     >
       {t("assistantBreadth.persona.trigger", { name })}
       <span className="assistant-persona-caret" aria-hidden>

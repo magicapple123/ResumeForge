@@ -3,8 +3,9 @@
  * 参数栏两个下拉弹层的**宽度守卫**。
  *
  * 为什么要有这条测试：`104px` 与 `216px` 这两个数字是"与触发框等宽（此前框 88 / 层 130，
- * 现统一为 104px）"与"字体下拉竖排两层需要的最小宽度"的直接体现，但它们藏在一条 CSS 声明里——把
- * `.resume-params-dropdown.resume-format-dropdown { width: 104px }` 整条删掉，
+ * 现统一为 104px；I-06 起触发框会伸缩，104 退化成弹层的**最小**宽度）"与"字体下拉竖排两层
+ * 需要的最小宽度"的直接体现，但它们藏在一条 CSS 声明里——把
+ * `.resume-params-dropdown.resume-format-dropdown` 整条删掉，
  * 组件用例仍然全绿（jsdom 不求值布局，`classList` 里有那个类就够了），界面上却会
  * 退回 216px 的宽弹层。用户当初提的就是"版式下拉太宽"这条，所以它值得一条专门的守卫。
  *
@@ -48,17 +49,30 @@ describe("参数栏下拉弹层的宽度", () => {
     expect(shared).toContain("max-width: calc(100vw - 32px)");
   });
 
-  it("版式下拉收窄到 104px（与触发框等宽），且必须是组合选择器", () => {
+  it("版式下拉的最小宽度是 104px（四个字 + 箭头），宽度跟随触发框而不是写死", () => {
     const source = css();
     const formatOnly = blockOf(source, ".resume-params-dropdown.resume-format-dropdown {");
     expect(formatOnly, "版式下拉的专属收窄规则不见了").not.toBeNull();
-    // 104 = 版式触发框的宽度；CHANGELOG：触发框与弹层统一成 104px（此前框 88 / 层 130），
-    // 两者不等宽时弹层比框宽出一截，视觉上像"点开跳出来一块"（用户截图）。
-    expect(formatOnly).toContain("width: 104px");
+    // I-06（2026-11-18）：触发框改为跟随左栏控件列伸缩（104 → 封顶 320），弹层不能再写死
+    // 104——宽栏下会变成"框 320、层 104"。现在 `width: auto` + `min-width: 104px`：
+    // 实际宽度由 rc-select 按触发框宽度下发内联 `min-width`（见下一条用例）。
+    expect(formatOnly).toContain("width: auto");
+    expect(formatOnly).toContain("min-width: 104px");
 
     // 必须是组合选择器：单类 `.resume-format-dropdown` 会把**任何**带这个类的弹层
     // 收到 104px（字体下拉也带共用类，样式一旦被别处复用就会连带收窄）。
     expect(/^\s*\.resume-format-dropdown\s*\{/m.test(source)).toBe(false);
+  });
+
+  it("版式下拉不能关掉 `popupMatchSelectWidth`：关掉后弹层按内容算，就不再与触发框等宽", () => {
+    // jsdom 不求值布局，这条契约只能读源码原文（与上面几条同一个做法）。
+    const component = readFileSync(
+      [process.cwd(), "src", "features", "resume", "layout", "ResumeTemplateControls.tsx"].join(
+        "/",
+      ),
+      "utf8",
+    );
+    expect(component).not.toContain("popupMatchSelectWidth={false}");
   });
 
   it("两条规则的范围不互相越界：共用块不写 104px，专属块不改共用宽度以外的东西", () => {

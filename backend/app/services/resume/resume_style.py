@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import overload
 
 from .field_style_target import is_field_path
 from .resume_style_schema import (
@@ -31,6 +32,34 @@ from .resume_style_types import ResolvedStyle, RoleStyle
 
 def _css_number(value: float) -> str:
     return f"{value:g}"
+
+
+#: 字距（em，× 基准字号）的下限：再负下去相邻字形会互相压字。
+#: **一处分界，三个出口共用**：HTML（此处 `_declarations`）、PDF
+#: （`pdf_exporter.name_gender`）、Word（`docx_document_header`）都调
+#: :func:`clamp_letter_spacing`，否则同一份简历在纸面上比草稿里宽/窄一截（I-41 验收 1）。
+MIN_LETTER_SPACING: float = -0.1
+
+
+@overload
+def clamp_letter_spacing(value: None) -> None: ...
+
+
+@overload
+def clamp_letter_spacing(value: float) -> float: ...
+
+
+def clamp_letter_spacing(value: float | None) -> float | None:
+    """字距夹取：只夹下限，``None`` 原样返回（= 未设置，调用方沿用模板默认）。
+
+    两个 ``@overload`` 不是为了好看：调用方判过 ``style.letter_spacing is not None``
+    之后拿到的必须是 ``float``，否则每一处 ``_css_number(clamp_letter_spacing(...))``
+    都会被 pyright 判成 ``float | None`` 不可赋值。收窄写在重载上，比在每个调用点
+    ``assert`` 更省事，也不会在 ``python -O`` 下消失。
+    """
+    if value is None:
+        return None
+    return max(MIN_LETTER_SPACING, float(value))
 
 
 def _template_ratios(template: str) -> dict[str, float]:
@@ -97,9 +126,9 @@ def _declarations(
     if "align" in wanted and style.align is not None:
         declarations.append(f"text-align: {style.align};")
     if "letter_spacing" in wanted and style.letter_spacing is not None:
-        declarations.append(
-            f"letter-spacing: calc(var(--fs) * {_css_number(style.letter_spacing)});"
-        )
+        # I-41：三端同一条夹取（下限 -0.1em），见 `clamp_letter_spacing` 的注释。
+        spacing = clamp_letter_spacing(style.letter_spacing)
+        declarations.append(f"letter-spacing: calc(var(--fs) * {_css_number(spacing)});")
     return declarations
 
 

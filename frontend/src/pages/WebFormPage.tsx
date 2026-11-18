@@ -734,6 +734,8 @@ export default function WebFormPage() {
         onRefreshStatus={handleRefreshStatus}
         onExportDiagnostics={handleExportDiagnostics}
         onEndSession={handleEndSession}
+        // 初始态的主 CTA 只在流程轨道右端（I-24）：工具条只留状态与地址。
+        onboarding={!preview && !result}
       />
 
       {/* 安全说明降级成一行中性小字（锁图标 + 一句话）：只填不交是产品边界，任何状态下

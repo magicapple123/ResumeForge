@@ -13,7 +13,8 @@ import type { AuthorsItem, FieldItem, ListItem } from "../../../types/resumeDocu
 import { enumOptionsOf } from "../document/fieldCatalog";
 import { joinDateRange, splitDateRange } from "../document/format";
 import InlineMarkTextArea from "./InlineMarkTextArea";
-import ResizableValueTextArea from "./ResizableValueTextArea";
+import AutoGrowValueTextArea from "./AutoGrowValueTextArea";
+import { readRichValue, richItemPatch } from "./inlineMarkWrite";
 import { registerInlineMarkField } from "./useInlineMarkRange";
 
 interface FieldValueProps {
@@ -76,8 +77,8 @@ export function FieldValueEditor({
       return (
         <div className="document-field-row">
           <span className="document-field-label">{t("document.field.value")}</span>
-          {/* 问题 8：单行语义 + 可拖高的文本域（自由输入的枚举字段同样要能看全文）。 */}
-          <ResizableValueTextArea
+          {/* 问题 8 / I-14：单行语义 + 按内容自适应（1–4 行），自由输入的枚举字段同样要能看全文。 */}
+          <AutoGrowValueTextArea
             ariaLabel={t("document.field.value")}
             placeholder={t("document.field.enumPlaceholder")}
             value={item.value}
@@ -107,6 +108,15 @@ export function FieldValueEditor({
       ? t("document.field.urlPlaceholder")
       : t("document.field.valuePlaceholder");
   const multiline = item.placement === "body";
+  /**
+   * I-13：文本值的读写都走结构化模型（`value` 纯文本 + `rich.runs`）。
+   * 旧文档没有 `rich` 时 `readRichValue` 会把标记串换算过来（兼容读，勿删）。
+   */
+  const richValue = readRichValue(item);
+  const rich = {
+    runs: richValue.runs,
+    onChange: (next: typeof richValue) => onChange(richItemPatch(next)),
+  };
   return (
     <div className="document-field-row">
       <span className="document-field-label">{t("document.field.value")}</span>
@@ -118,17 +128,19 @@ export function FieldValueEditor({
           ariaLabel={t("document.field.value")}
           placeholder={t("document.field.textPlaceholder")}
           autoSize={{ minRows: 2, maxRows: 8 }}
-          value={item.value}
+          value={richValue.text}
+          rich={rich}
           onChange={(value) => onChange({ value })}
         />
       ) : (
-        // 问题 8：单行值也换成"一行高、可拖高"的文本域。
-        // 多行字段（`placement === "body"`）仍然走上面的 `autoSize`——那里**要**自动长高，
-        // 与"可拖手柄"互斥，两者各自服务不同的语义。
-        <ResizableValueTextArea
+        // 问题 8 / I-14：单行值同样用文本域，但走"按内容自适应（1–4 行）"而不是 `rows={1}`——
+        // 后者会把长值压在 30px 里，第二行起藏进框内滚动且没有任何提示。
+        // 多行字段（`placement === "body"`）仍然走上面的 `autoSize 2..8`：那是字段语义。
+        <AutoGrowValueTextArea
           ariaLabel={t("document.field.value")}
           placeholder={placeholder}
-          value={item.value}
+          value={richValue.text}
+          rich={rich}
           disabled={disabled}
           onChange={(value) => onChange({ value })}
         />

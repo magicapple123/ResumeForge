@@ -19,13 +19,22 @@ import { useSyncExternalStore } from "react";
 
 export interface HelpModeSnapshot {
   readonly active: boolean;
+  /** 当前页面已挂载的 `HintDetail` 条数（I-28：徽标显示"本页 N 条说明"）。 */
+  readonly hintCount: number;
 }
 
-const INACTIVE: HelpModeSnapshot = Object.freeze({ active: false });
-const ACTIVE: HelpModeSnapshot = Object.freeze({ active: true });
-
-let snapshot: HelpModeSnapshot = INACTIVE;
+let activeFlag = false;
+/**
+ * 已挂载的说明，**用 `Set<symbol>` 而不是自增/自减**。
+ *
+ * React StrictMode 会把组件挂载两次（挂载 → 卸载 → 再挂载）：`+1/-1` 在两次挂载之间
+ * 会漂成 2，卸载一次又掉回 1，徽标上的数字就永远不准。按身份登记/注销则天然幂等。
+ */
+const hints = new Set<symbol>();
 const listeners = new Set<() => void>();
+
+let snapshot: HelpModeSnapshot = Object.freeze({ active: false, hintCount: 0 });
+const SERVER_SNAPSHOT: HelpModeSnapshot = Object.freeze({ active: false, hintCount: 0 });
 
 let detachWindowListeners: (() => void) | null = null;
 
@@ -34,9 +43,10 @@ function notify(): void {
   for (const listener of [...listeners]) listener();
 }
 
-function publish(next: HelpModeSnapshot): void {
-  if (snapshot.active === next.active) return;
-  snapshot = next;
+function publish(): void {
+  const next: HelpModeSnapshot = { active: activeFlag, hintCount: hints.size };
+  if (snapshot.active === next.active && snapshot.hintCount === next.hintCount) return;
+  snapshot = Object.freeze(next);
   notify();
 }
 
@@ -69,9 +79,9 @@ export function getHelpModeSnapshot(): HelpModeSnapshot {
   return snapshot;
 }
 
-/** 服务端 / 首屏快照：与 `localeStore` 同一口径——默认关。 */
+/** 服务端 / 首屏快照：与 `localeStore` 同一口径——默认关、0 条。 */
 export function getServerHelpModeSnapshot(): HelpModeSnapshot {
-  return INACTIVE;
+  return SERVER_SNAPSHOT;
 }
 
 export function subscribeHelpMode(listener: () => void): () => void {
@@ -87,22 +97,40 @@ export function isHelpModeActive(): boolean {
 
 export function enterHelpMode(): void {
   attachWindowListeners();
-  publish(ACTIVE);
+  activeFlag = true;
+  publish();
 }
 
 export function exitHelpMode(): void {
-  publish(INACTIVE);
+  activeFlag = false;
+  publish();
   detachWindowListeners?.();
 }
 
 /** 返回切换后的状态，方便调用方（快捷键）就地决定要不要 `preventDefault`。 */
 export function toggleHelpMode(): boolean {
-  if (snapshot.active) {
+  if (activeFlag) {
     exitHelpMode();
     return false;
   }
   enterHelpMode();
   return true;
+}
+
+/**
+ * 登记一条说明（I-28）：返回注销函数，组件在 `useEffect` 的清理里调用。
+ *
+ * 登记发生在**两种模式都挂载**的前提下（`HintDetail` 平时也渲染 ⓘ），所以计数在进入
+ * 提示模式之前就已经正确；若改成"进入时才数"，徽标第一帧永远是 0。
+ */
+export function registerHint(): () => void {
+  const id = Symbol("hint");
+  hints.add(id);
+  publish();
+  return () => {
+    if (!hints.delete(id)) return;
+    publish();
+  };
 }
 
 /** 订阅组件用：提示模式是否开着。 */
@@ -113,4 +141,14 @@ export function useHelpMode(): boolean {
     getServerHelpModeSnapshot,
   );
   return current.active;
+}
+
+/** 订阅组件用：本页已挂载的说明条数（徽标文案）。 */
+export function useHintCount(): number {
+  const current = useSyncExternalStore(
+    subscribeHelpMode,
+    getHelpModeSnapshot,
+    getServerHelpModeSnapshot,
+  );
+  return current.hintCount;
 }

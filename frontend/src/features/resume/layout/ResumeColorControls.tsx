@@ -8,20 +8,25 @@
  * 落点 `format_config[<key>]`，由 `format_css` 翻成 `:root { --accent: …; }`。**不新增键**，
  * 所以目录下发什么标签这里就显示什么——`label` 只有一份来源（与「自制版式」编辑器同一份）。
  *
- * ## 取色只有两条路：预设色板与自由取色
+ * ## I-09：四行手风琴换成 2×2 色卡
  *
- * 色板是 5 个"简历上真能用"的深色（纯黑/深灰/深蓝/墨绿/暗红），一键就落；其余走 antd 的
- * `ColorPicker`。色板值写在模块常量里而不是 CSS：它们是**数据**（用户会把它存进
- * `format_config` 并跟着导出走），不是主题色 token——`docs` 里禁的是"界面自己画颜色"，
- * 不是"把用户选的颜色传下去"。渲染时通过 `--resume-wb-swatch` 这个内联自定义属性交给
- * CSS，避免在 `style={{ background: "#…" }}` 上写死颜色（`inlineColorGuard` 的口径）。
+ * 老形态是「▸ 箭头 | 标签 | 20px 色块 | 空读数格 | 随模板胶囊」，色块在"随模板"时统一传
+ * 占位色 `#374151`——四行长得一模一样，看不出四个颜色各是什么。现在每格一张卡：
+ * 色块（22px，带 1px 边框）+ 名称 + 色值，点卡片任意位置打开取色器。
  *
- * ## 恢复默认 = 删键
+ * 色块显示的是**生效色**，四级：`自己的覆盖 > 版式预设 > 模板配色（后端按模板下发）
+ * > 占位`。第四级（自制模板 / 旧后端没有 palette）画斜纹 + 「随模板」，**不编造假色值**。
  *
- * 删掉即回到模板自己的 `:root` 变量，而不是把"模板默认色"抄进 `format_config`：
- * 以后模板换配色时，这些简历才跟着变。
+ * 取色器只有一个实例，跟着"点开的那一格"移动——四格各挂一个会明显加重左栏渲染开销。
+ *
+ * ## 恢复 = 删键
+ *
+ * 删掉即回到上一级来源（版式预设 → 模板的 `:root` 变量），而不是把"上一级的颜色"抄进
+ * `format_config`：以后模板/预设换配色时，这些简历才跟着变。卡右上那颗 ↺ 与双击名称是
+ * 同一个动作（老用户的快捷手势保留）。
  */
-import { ColorPicker, Tooltip, Typography } from "antd";
+import { ColorPicker, Tooltip } from "antd";
+import { UndoOutlined } from "@ant-design/icons";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, RefObject } from "react";
 import type { ResumeLayout, ResumeTemplateCatalog } from "../../../types";
@@ -33,7 +38,7 @@ import { formatKeysDiffer, restoreFormatKeys } from "../../../utils/paramRestore
 import ParamResetButton from "./ParamResetButton";
 import { useLocale } from "../../../i18n/i18nContext";
 
-/** 四个颜色键（顺序即左栏里的行序，与目录 `FORMAT_FIELDS` 同序）。 */
+/** 四个颜色键（顺序即左栏里的格序，与目录 `FORMAT_FIELDS` 同序）。 */
 const COLOR_KEYS = ["accent", "text_color", "muted_color", "line_color"] as const;
 
 type ColorKey = (typeof COLOR_KEYS)[number];
@@ -57,7 +62,7 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 interface Props {
   layout: ResumeLayout;
-  /** 打开这份简历时的版式快照：每行右侧那颗 ↺ 恢复的就是它（只有制作台传）。 */
+  /** 打开这份简历时的版式快照（面板里其它行用它做「恢复到打开时的值」）。 */
   baseline?: ResumeLayout;
   catalog?: ResumeTemplateCatalog;
   disabled?: boolean;
@@ -74,16 +79,19 @@ export default function ResumeColorControls({
   previewRef,
   onChange,
 }: Props) {
-  // 外观四行的行名与 `aria-label` 都读这一个 `locale`：英文界面取目录的 `label_en`，
+  // 外观四格的名称与 `aria-label` 都读这一个 `locale`：英文界面取目录的 `label_en`，
   // 取不到回落 `label`（中文界面输出与改动前逐字相同）。
   const locale = useLocale();
-  // #12：色板手风琴——一次只展开一行，**默认全部收起**（规格：四行总高 ≤120px、先选行才
-  // 出色板）。四行各挂一排色块时外观组高得离谱且视觉噪音大；点这一行任意位置或行头箭头
-  // 展开它，展开新行时自动收起旧行。初值刻意不是 "accent"：默认展开一行会让"外观"一进来
-  // 就有 40px 的色板把后面几行挤出可视区。
-  const [openKey, setOpenKey] = useState<ColorKey | null>(null);
-  // 防抖/即时提交要读"提交那一刻"的 layout：与度量控件同一个理由（父组件可能在
-  // 这期间改了页数或模板，用旧快照会把那些改动覆盖回去）。
+  /** 当前打开取色器的那一格；`null` = 弹层关着（**只渲染一个** ColorPicker）。 */
+  const [pickerKey, setPickerKey] = useState<ColorKey | null>(null);
+  // 弹层开合由本组件受控：点另一张卡时要先关旧的，否则会两个弹层叠着。
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // 上面那个 state 的同步镜像：旧取色器卸载 / 点外关闭时会补一次 `onOpenChange(false)`，
+  // 那一下晚于"点新卡"的 onClick，会把新卡的 `open` 又按回 false。判据必须是"这个事件
+  // 属于当前这张卡"，而不是"弹层关了"。**同步写**（不能放 useEffect）：卡的卸载发生在
+  // 这次点击的提交阶段，effect 还没跑。
+  const pickerKeyRef = useRef<ColorKey | null>(null);
+  // 提交要读"提交那一刻"的 layout：与度量控件同一个理由（父组件可能在这期间改了别的行）。
   const layoutRef = useRef(layout);
   useEffect(() => {
     layoutRef.current = layout;
@@ -97,21 +105,30 @@ export default function ResumeColorControls({
   const defaultHint = presetConfig
     ? t("resume.measure.hintPreset")
     : t("resume.measure.hintTemplate");
+  // 模板配色：后端按模板下发（`resume_template_palette`）；旧后端 / 自制模板取不到。
+  const templatePalette =
+    catalog?.templates.find((item) => item.name === layout.template)?.palette ?? null;
 
   /** 读这一项自己的覆盖：只认合法十六进制，别的一律当"没设过"。 */
   const ownColor = (key: ColorKey): string | null => {
     const raw = config?.[key];
     return typeof raw === "string" && HEX_COLOR.test(raw) ? raw.toLowerCase() : null;
   };
-  /** 生效值：自己的覆盖 > 版式预设 > `null`（= 模板自己的 `:root`）。 */
-  const effectiveColor = (key: ColorKey): string | null => {
-    const own = ownColor(key);
-    if (own) return own;
+  /** 版式预设里的这一项（合法十六进制才算）。 */
+  const presetColor = (key: ColorKey): string | null => {
     const preset = presetConfig?.[key];
     return typeof preset === "string" && HEX_COLOR.test(preset) ? preset.toLowerCase() : null;
   };
+  /** 模板自己 `:root` 里的这一项。 */
+  const templateColor = (key: ColorKey): string | null => {
+    const value = templatePalette?.[key];
+    return typeof value === "string" && HEX_COLOR.test(value) ? value.toLowerCase() : null;
+  };
+  /** 生效值：自己的覆盖 > 版式预设 > 模板配色 > `null`（没有任何配色数据）。 */
+  const effectiveColor = (key: ColorKey): string | null =>
+    ownColor(key) ?? presetColor(key) ?? templateColor(key);
 
-  /** 写颜色：`null` = 删键（回到模板/版式）。 */
+  /** 写颜色：`null` = 删键（回到上一级来源）。 */
   const writeColor = (key: ColorKey, value: string | null) => {
     const current = layoutRef.current;
     const rest = { ...(current.format_config ?? {}) };
@@ -123,141 +140,152 @@ export default function ResumeColorControls({
     onChange({ ...current, format_config: rest });
   };
 
-  const applyProbe = (css: string) => {
-    previewRef?.current?.setLiveProbe(css);
-  };
-
   /** 预览里立刻生效 + 落库（颜色是离散选择，没有连续拖动，所以不做防抖）。 */
   const commit = (key: ColorKey, value: string) => {
     const text = value.toLowerCase();
-    applyProbe(colorProbeCss(key, text));
+    previewRef?.current?.setLiveProbe(colorProbeCss(key, text));
     writeColor(key, text);
   };
 
   const reset = (key: ColorKey) => {
     if (ownColor(key) === null) return;
-    applyProbe("");
+    previewRef?.current?.setLiveProbe("");
     writeColor(key, null);
   };
 
   /**
    * 「恢复到打开时的值」：把基线里这个键的取值搬回来（基线没有就删掉）。
-   * 与 `reset`（删键回模板/版式）是两件事，见 `utils/paramRestore` 的表。
+   * 与 `reset`（删键回上一级来源）是两件事，见 `utils/paramRestore` 的表。
    */
   const restoreColor = (key: ColorKey) => {
-    applyProbe("");
+    previewRef?.current?.setLiveProbe("");
     onChange({
       ...layout,
       format_config: restoreFormatKeys(layout.format_config, baseline?.format_config, [key]),
     });
   };
 
+  /** 关弹层 = 卸载那一个取色器（不要留一个 `open=false` 的空壳在卡片里）。 */
+  const closePicker = () => {
+    pickerKeyRef.current = null;
+    setPickerOpen(false);
+    setPickerKey(null);
+  };
+
   return (
-    <div className="resume-wb-rows">
+    <div className="resume-wb-colors">
       {COLOR_KEYS.map((key) => {
         const label = formatFieldLabelOf(catalog?.format_fields, key, locale, key);
         const current = effectiveColor(key);
         const customized = ownColor(key) !== null;
-        // 与打开时不同才长出 ↺：这一格本来就是"来源说明"的位置，两者互斥。
+        // 与打开时不同才长出「恢复到打开时的值」：这一格本来就是 ↺ 的位置，两者互斥。
         const canRestore = baseline
           ? formatKeysDiffer(config, baseline.format_config, [key])
           : false;
-        const expanded = openKey === key;
+        // 来源说明：只有"不是自己的覆盖"时才说得出口（随版式 / 随模板）。
+        const sourceHint = customized ? "" : defaultHint;
+        const active = pickerKey === key;
         return (
-          <div
-            className="resume-wb-color-row"
-            key={key}
-            onClick={(event) => {
-              // 整行可点：不必先找到行头那颗小箭头。取色器 / 色板 / 恢复默认按钮 /
-              // 来源胶囊自己处理点击，冒泡到这一层时直接放行，否则点开取色器会顺手把行收起。
-              const target = event.target;
-              if (!(target instanceof Element)) return;
-              if (
-                target.closest(
-                  ".resume-wb-color-toggle, .resume-wb-swatches, .resume-measure-source, .ant-color-picker",
-                )
-              ) {
-                return;
-              }
-              setOpenKey(expanded ? null : key);
-            }}
-          >
-            <div className="resume-wb-color-head">
-              {/* #12：行头箭头 = 展开该行色板（一次只展开一行）；整行点击与它同义。 */}
+          <div className={`resume-wb-color-card${active ? " is-open" : ""}`} key={key}>
+            <button
+              type="button"
+              className="resume-wb-color-main"
+              disabled={disabled}
+              // 读屏要能听出"这是什么颜色、从哪来"：名称 + 色值 + 来源，缺一不可。
+              aria-label={[
+                t("workbench.param.colorAria", { label }),
+                current ?? defaultHint,
+                sourceHint,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              onClick={() => {
+                // 弹层受控：开一张卡要同时把 `open` 置真；再点同一张已打开的卡才收起。
+                if (active && pickerOpen) {
+                  closePicker();
+                } else {
+                  pickerKeyRef.current = key;
+                  setPickerKey(key);
+                  setPickerOpen(true);
+                }
+              }}
+            >
+              <span
+                className={`resume-wb-color-chip${current ? "" : " is-fallback"}`}
+                // 颜色值是**数据**（用户选的颜色跟导出走），经自定义属性交给 CSS，
+                // 不写 `style={{ background }}`（`inlineColorGuard` 的口径）。
+                style={current ? ({ "--resume-wb-chip": current } as CSSProperties) : undefined}
+              />
+              <span className="resume-wb-color-text">
+                <Tooltip title={t("workbench.param.reset")}>
+                  <span
+                    className="resume-wb-color-name"
+                    // 双击名称 = 删键回上一级来源（老用户手势，与卡片右上 ↺ 同一个动作）。
+                    onDoubleClick={() => {
+                      closePicker();
+                      reset(key);
+                    }}
+                  >
+                    {label}
+                  </span>
+                </Tooltip>
+                <span className="resume-wb-color-value">
+                  {current ?? t("workbench.color.followTemplate")}
+                  {/* 有色值且不是自己的覆盖时，才在色值后面补来源词（随模板 / 随版式）；
+                      没有色值时上一句已经是「随模板」，再补一次就是重复。 */}
+                  {current && !customized ? (
+                    <span className="resume-wb-color-source"> · {defaultHint}</span>
+                  ) : null}
+                </span>
+              </span>
+            </button>
+            {canRestore ? (
+              <ParamResetButton label={label} onReset={() => restoreColor(key)} />
+            ) : customized ? (
               <button
                 type="button"
-                className="resume-wb-color-toggle"
-                aria-expanded={expanded}
-                aria-label={t("workbench.param.paletteAria", { label })}
-                onClick={() => setOpenKey(expanded ? null : key)}
-              >
-                {expanded ? "▾" : "▸"}
-              </button>
-              {/* 双击标题恢复默认：与滑杆那几行同一套手势（键盘侧 Enter / 空格）。 */}
-              <Tooltip title={t("workbench.param.reset")}>
-                <span
-                  className="resume-measure-label"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={t("workbench.param.resetLabel", { label })}
-                  onDoubleClick={() => reset(key)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return;
-                    event.preventDefault();
-                    reset(key);
-                  }}
-                >
-                  {label}
-                </span>
-              </Tooltip>
-              <ColorPicker
-                size="small"
+                className="resume-wb-color-reset"
                 disabled={disabled}
-                // 无覆盖时显示中性深灰起步（红斜线占位会被当成"坏了"）；值列如实说「跟随模板」。
+                title={t("workbench.param.reset")}
+                aria-label={`${label} · ${t("workbench.param.reset")}`}
+                onClick={() => {
+                  closePicker();
+                  reset(key);
+                }}
+              >
+                <UndoOutlined />
+              </button>
+            ) : null}
+            {active ? (
+              <ColorPicker
+                // 一个实例跟着"点开的那一格"走：四格各挂一个会明显加重左栏渲染开销。
+                className="resume-wb-color-picker"
+                open={pickerOpen}
+                onOpenChange={(open) => {
+                  // 只认"当前这张卡"的开合：旧实例卸载时补的那一次 false 必须丢掉。
+                  if (open) setPickerOpen(true);
+                  else if (pickerKeyRef.current === key) closePicker();
+                }}
+                disabled={disabled}
                 value={current ?? "#374151"}
-                aria-label={t("workbench.param.colorAria", { label })}
-                // 拖动色轮期间不要提交：`onChangeComplete` 只在选定后触发一次，
-                // 一次取色 = 一次重渲染请求。
+                presets={[
+                  {
+                    label: t("workbench.color.palette"),
+                    colors: PALETTE.map((item) => item.value),
+                    defaultOpen: true,
+                  },
+                ]}
+                // antd 的**预设色块**走 `onChange`（`ColorPresets` 只接 `onChange`），
+                // 色轮 / HEX 才走 `onChangeComplete`。只听后者会让"点一下预设"毫无反应。
+                // 所以这里只在命中那 5 个预设时立即提交；拖动色轮期间 `onChange` 给的
+                // 是连续值，不匹配任何预设，仍然等松手后的 `onChangeComplete` 提交一次。
+                onChange={(color) => {
+                  const hex = color.toHexString().toLowerCase();
+                  if (PALETTE.some((item) => item.value === hex)) commit(key, hex);
+                }}
                 onChangeComplete={(color) => commit(key, color.toHexString())}
               />
-              {/* 读数格只放**值**：无覆盖时它是空的（问题 23）。原来这里回落到
-                  「随模板」，而右侧来源胶囊说的也是「随模板」——同一句话在一行里出现
-                  两次，既让人以为有两列状态，又白吃 44 + 6 = 50px。滑杆那几行的分工
-                  本来就是"读数放值、胶囊放来源"，颜色行跟着对齐。 */}
-              <Typography.Text type="secondary" className="resume-measure-value">
-                {current ?? ""}
-              </Typography.Text>
-              <span className={`resume-measure-source${customized ? " is-empty" : ""}`}>
-                {canRestore ? (
-                  <ParamResetButton label={label} onReset={() => restoreColor(key)} />
-                ) : customized ? (
-                  ""
-                ) : (
-                  defaultHint
-                )}
-              </span>
-            </div>
-            {/* 预设色板：手风琴展开行才渲染；色值经自定义属性交给 CSS。 */}
-            {expanded && (
-              <div
-                className="resume-wb-swatches"
-                role="group"
-                aria-label={t("workbench.color.palette")}
-              >
-                {PALETTE.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    className={`resume-wb-swatch${current === item.value ? " is-active" : ""}`}
-                    aria-label={t(item.labelKey)}
-                    aria-pressed={current === item.value}
-                    disabled={disabled}
-                    style={{ "--resume-wb-swatch": item.value } as CSSProperties}
-                    onClick={() => commit(key, item.value)}
-                  />
-                ))}
-              </div>
-            )}
+            ) : null}
           </div>
         );
       })}

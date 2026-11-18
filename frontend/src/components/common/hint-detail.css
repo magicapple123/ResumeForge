@@ -1,0 +1,17 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * I-28：「提示模式开着」必须**在没展开的地方也看得见**。
+ *
+ * `HintDetail` 展开时写 `data-help-mode="active"`，但全仓原先没有一条 CSS 命中它——
+ * 于是进入模式后，除了说明变长，界面没有任何"我现在处在某个模式里"的信号。
+ *
+ * 极轻的底纹 + 左侧竖线：不加 `outline`（会和焦点环混淆），不改字号行高（会二次撑开
+ * 表格列）。竖线用 `box-shadow: inset` 而不是 `border-left`：后者会让块的左侧多出 2px，
+ * 在表格里把文字整体推右、列宽跟着跳。
+ */
+[data-help-mode="active"] {
+  box-shadow: inset 2px 0 0 var(--rf-accent, #1677ff);
+  background: var(--rf-fill-quaternary, rgba(0, 0, 0, 0.03));
+  border-radius: 2px;
+  padding-inline-start: 6px;
+}

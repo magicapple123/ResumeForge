@@ -46,8 +46,9 @@ import {
 import { readAsDataUrl } from "../../../utils/attachments";
 import CroppedPhotoThumb from "./CroppedPhotoThumb";
 import PhotoCropDialog from "./PhotoCropDialog";
-import ResizableValueTextArea from "./ResizableValueTextArea";
+import AutoGrowValueTextArea from "./AutoGrowValueTextArea";
 import { applyInlineEdit } from "./lastFocusedTextarea";
+import { readRichValue, richItemPatch } from "./inlineMarkWrite";
 import { registerInlineMarkField } from "./useInlineMarkRange";
 import InlineMarkContextMenu from "../layout/InlineMarkContextMenu";
 
@@ -207,6 +208,14 @@ export default function HeaderItemEditor({
   const inlineCommit = (next: { text: string; selection: { start: number; end: number } }) =>
     applyInlineEdit({ text: next.text, start: next.selection.start, end: next.selection.end });
 
+  /**
+   * I-13：值的**读写都走结构化模型**。
+   *
+   * 读：有 `rich` 用它，没有就把旧标记串解析成纯文本 + runs（兼容读，见 `readRichValue`）。
+   * 写：`value` 恒为纯文本，样式落 `rich.runs`——标记串不再被拼出来。
+   */
+  const richValue = readRichValue(item);
+
   return (
     <InlineMarkContextMenu onCommit={inlineCommit} disabled={readOnly}>
       <div className="document-item-editor document-header-editor" data-document-path={path}>
@@ -221,11 +230,13 @@ export default function HeaderItemEditor({
             onChange={(event) => patch({ label: event.target.value })}
           />
         ) : null}
-        {/* 值输入：问题 8 起改成"单行语义、可拖高"的文本域（自定义标签那颗 Input 保持不动）。 */}
-        <ResizableValueTextArea
+        {/* 值输入：问题 8 起是"单行语义"的文本域，I-14 起按内容自适应（1–4 行）；
+            自定义标签那颗 Input 保持不动。 */}
+        <AutoGrowValueTextArea
           ariaLabel={label}
           placeholder={t("document.field.valuePlaceholder")}
-          value={item.value}
+          value={richValue.text}
+          rich={{ runs: richValue.runs, onChange: (next) => patch(richItemPatch(next)) }}
           disabled={readOnly}
           onChange={(value) => patch({ value })}
         />

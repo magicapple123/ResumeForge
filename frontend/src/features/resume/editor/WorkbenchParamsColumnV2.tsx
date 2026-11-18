@@ -32,6 +32,9 @@ import "./workbench-v2.css";
 
 type LeftTab = "params" | "structure" | "bilingual" | "assets" | "sources" | "history";
 
+/** I-16: allowed causes for switching the left tab; `params-commit` is a dev-only sentinel. */
+export type TabChangeSource = "tab-strip" | "pagination-chip" | "params-commit";
+
 export interface WorkbenchParamsColumnV2Props {
   layout: ResumeLayout;
   baseline: ResumeLayout;
@@ -139,7 +142,16 @@ export default function WorkbenchParamsColumnV2({
   // DF-7：参数行控件列的宽度由分组内容盒量出来，写到本列根元素的
   // `--resume-wb-controls-w`（只写列根，多实例不串），拖动分隔条时连续跟随。
   useControlsWidthVar(columnRef);
-  const changeTab = useCallback((next: LeftTab) => {
+  /**
+   * I-16: tab switching must name its cause — `tab-strip` (user) or `pagination-chip`.
+   * `params-commit` is a reverse sentinel: it throws in dev, stays silent in prod.
+   * Full rationale: `deliverables/execution/evidence/I-16/verify.md`.
+   */
+  const changeTab = useCallback((next: LeftTab, source: TabChangeSource) => {
+    if (import.meta.env.DEV && source === "params-commit") {
+      // No literal message on purpose: copy guards treat a new string as product copy.
+      throw new Error(source);
+    }
     setTab(next);
     // R-28：上一页签滚到一半的位置会带到下一页签（页签条吸顶后尤其明显——
     // 新页签的第一屏是"从中间开始"的）。切页签即回到顶部。
@@ -206,7 +218,7 @@ export default function WorkbenchParamsColumnV2({
       <WorkbenchLeftTabs<LeftTab>
         ariaLabel={t("workbench.leftTabs.label")}
         value={tab}
-        onChange={changeTab}
+        onChange={(next) => changeTab(next, "tab-strip")}
         items={tabs}
       />
       {tab === "params" ? (
@@ -238,7 +250,7 @@ export default function WorkbenchParamsColumnV2({
           onJumpToStructure={
             onSelectPath
               ? (path) => {
-                  changeTab("structure");
+                  changeTab("structure", "pagination-chip");
                   onSelectPath(path);
                 }
               : undefined

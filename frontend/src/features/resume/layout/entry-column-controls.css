@@ -63,20 +63,53 @@
   outline-offset: -2px;
 }
 
+/* 一条间距行：`[滑杆][读数][↺]`（I-05 / I-07，2026-11-18）。
+   宽档三列一行：读数固定 66px（写 `auto` 会随数字宽度抖动，滑杆跟着忽长忽短），
+   ↺ 占第三列，只在有覆盖值时渲染（没有这个格子时 `auto` 宽度为 0，[列数] 那几行不受影响）。
+   窄档（≤420）由 `entry-layout-panel.css` 的容器查询改成「滑杆一行 + 读数左 / ↺ 右」。 */
 .rf-entry-column-gap-row {
   display: grid;
-  grid-template-columns: minmax(60px, 1fr) 66px;
+  grid-template-columns: minmax(72px, 1fr) 66px auto;
+  grid-template-areas: "slider value reset";
   align-items: center;
   gap: 8px;
+  min-height: 30px;
   min-width: 0;
   width: 100%;
 }
 
+.rf-entry-column-gap-row > .ant-slider {
+  grid-area: slider;
+  /* 行高按「列数」行（30px）对齐：antd 自带 14px 上下外边距会把本行撑到 39.5px。 */
+  margin-block: 0 !important;
+}
+
+/* I-05：手柄在 `value=0` / `max` 时各溢出轨道（手柄直径 12.5 + 命中区，实测 10px）。
+   参数栏全局规则把 `.ant-slider` 的 `margin-inline` 清成 0（那一排行有 ± 按钮的透明
+   内边距吸收溢出），本行没有 ±，于是手柄被裁成半个圆。这里补回呼吸：清单写 6px，
+   实测要 **11px** 才同时满足两件事——① 圆在两端完整显示（6.25px 就够）；
+   ② `scrollWidth === clientWidth`（手柄 + 命中区的实际溢出是 10px，6px 时右侧多出
+   3px，见 evidence/I-05/verify.md）。代价是行程少 22px（`step=0.1` 实测仍可精细拖）。
+   `width: auto` 是必需的：全局规则写的是 `width: 100% !important`，宽度按 100% 算完
+   再把外边距加上去 → 右侧溢出、`scrollWidth` 比 `clientWidth` 大（I-05 验收 3）。 */
+.resume-wb-col-params .rf-entry-column-gap-row .ant-slider {
+  width: auto !important;
+  margin-inline: 11px !important;
+}
+
 .rf-entry-column-gap-value {
+  grid-area: value;
   color: var(--rf-text-tertiary);
   font-size: var(--rf-font-size-xs, 12px);
   text-align: right;
   white-space: nowrap;
+}
+
+/* I-07：恢复继承 = 清除覆盖，语义与「恢复到打开时的值」不同，所以自带文案（组件里传）。
+   20×20 的形态复用 `.resume-param-restore`，这里只管网格位置。 */
+.rf-entry-column-gap-reset.ant-btn {
+  grid-area: reset;
+  justify-self: end;
 }
 
 .rf-entry-column-gap-warning {

@@ -171,20 +171,22 @@ export function nameInput(): HTMLInputElement {
 /**
  * 点一次预设色板 = 改一处**版式**。
  *
- * #12 把四行颜色改成了手风琴且**默认全部收起**（规格：四行总高 ≤120px、先选行才出色板），
- * 所以这里要先展开一行——只点行头箭头，不动其它断言；色板已经在（上一次调用展开过）时
- * 不再点，否则第二次调用会把它收起。
+ * 结构随 I-09 变过一次：**2×2 色卡 + 单一取色器**（原来"手风琴 + 四下色块列表"）。
+ * 即旧的 `.resume-wb-swatches` / `.resume-wb-color-toggle` 已不存在，改成：
+ * 先点某张卡的 `.resume-wb-color-main`（打开取色器），再点 antd 的预设色块。
+ * 取色器只有一个实例、随 `pickerKey` 移动，所以"已经开着"就不要再点卡（会关掉）。
  *
- * 四行颜色各有一块同名色块（读屏名就是颜色名），按 role 查会命中多颗；这里要的只是
- * "改一处版式"，改哪一行都一样。
+ * 改哪一行都一样，这里固定点第一张卡。
  */
 export function pickSwatch(): void {
-  if (!document.querySelector(".resume-wb-swatches")) {
-    const toggle = document.querySelector<HTMLElement>(".resume-wb-color-toggle");
-    expect(toggle).not.toBeNull();
-    fireEvent.click(toggle as HTMLElement);
+  if (!document.querySelector(".ant-color-picker-presets-color")) {
+    const cardMain = document.querySelector<HTMLElement>(".resume-wb-color-main");
+    expect(cardMain).not.toBeNull();
+    fireEvent.click(cardMain as HTMLElement);
   }
-  fireEvent.click(screen.getAllByRole("button", { name: t("workbench.color.navy") })[0]);
+  const preset = document.querySelector<HTMLElement>(".ant-color-picker-presets-color");
+  expect(preset).not.toBeNull();
+  fireEvent.click(preset as HTMLElement);
 }
 
 /** 改版式并等到"有改动"信号出现（顶部出现保存按钮）。 */

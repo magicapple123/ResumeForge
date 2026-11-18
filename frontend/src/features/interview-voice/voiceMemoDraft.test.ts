@@ -24,11 +24,11 @@ import { joinDateRange } from "../resume/document/format";
 import { applyMemoProposals, memoProposals, type MemoDraftSection } from "./voiceMemoDraft";
 
 /**
- * 目录夹具**照后端 `field-placement-catalog` 的口径**造：`source_field_id` 是**资料字段 id**
- * （`experiences.title`），文档字段 key 是纸面 key（`role`），两者本来就不总相等；
- * 起止时间在资料侧是两条、纸面侧合成一个 `period`（`format: "date_range"`）。
- * 用真实目录形状而不是 `buildFallbackCatalog`，是因为后者只知道纸面 key——
- * 拿它当夹具会把"映射不上"测成"实现错了"。
+ * 目录夹具**照后端 `field-placement-catalog` 的口径**造：`source_field_id` 是纸面目录认的
+ * 资料字段 id，文档字段 key 是纸面 key。两处**不总是同名**——经历角色在解析结果是
+ * `experiences.title`（资料目录的叫法），纸面目录写的却是 `role` + `experiences.role`。
+ * 用真实目录形状而不是 `buildFallbackCatalog`，是因为后者按纸面 key 拼 source，会把
+ * "映射不上"测成"实现错了"（I-20 的 bug 正是这样漏掉的）。
  */
 const EXPERIENCE_FIELD = (
   key: string,
@@ -58,7 +58,8 @@ const CATALOG: DocumentFieldCatalog = {
       material_only: false,
       fields: [
         EXPERIENCE_FIELD("company", "公司", "company"),
-        EXPERIENCE_FIELD("role", "职位", "title"),
+        // 实测（2026-11-18）：目录给的是 `experiences.role`，解析接口给的是 `experiences.title`。
+        EXPERIENCE_FIELD("role", "职位", "role"),
         EXPERIENCE_FIELD("period", "时间", "period", "date_range"),
         EXPERIENCE_FIELD("description", "工作内容", "description"),
       ],
@@ -184,6 +185,22 @@ describe("memoProposals", () => {
     const result = memoProposals(draft, CATALOG);
     expect(result.proposals[0].values).toEqual({ company: "字节跳动" });
   });
+
+  /**
+   * I-20 的原始缺陷：口述「2023年6月到2024年3月，我在某某公司做后端开发」只认出公司。
+   *
+   * 解析结果给 `experiences.title`，纸面目录认 `experiences.role`——精确匹配必然落空，
+   * 落进"后缀不是 start/end"的分支被静默丢弃。这条用例钉住**别名表**，删掉它就会红。
+   */
+  it("口述经历的三个字段全部落位：公司 / 角色 / 时间（I-20）", () => {
+    const result = memoProposals(EXPERIENCE_DRAFT, CATALOG);
+    expect(result.proposals).toHaveLength(1);
+    expect(result.proposals[0].values).toEqual({
+      company: "字节跳动",
+      role: "后端开发",
+      period: joinDateRange("2023-03", "2025-06"),
+    });
+  });
 });
 
 describe("applyMemoProposals", () => {
@@ -202,6 +219,8 @@ describe("applyMemoProposals", () => {
     );
     expect(byKey.get("company")?.value).toBe("字节跳动");
     expect(byKey.get("role")?.value).toBe("后端开发");
+    // I-20：插入后要能把界面定位到这条新条目，所以必须回传路径。
+    expect(result.insertedPaths).toEqual([`experience.${created.id}`]);
     // 新 entry 的默认字段槽保留（与「添加一条」同形），只是被填上了值。
     expect(created.items.length).toBeGreaterThan(2);
   });
@@ -213,6 +232,8 @@ describe("applyMemoProposals", () => {
     const second = applyMemoProposals(first.document, proposals, CATALOG);
     expect(second.inserted).toBe(0);
     expect(second.duplicates).toBe(1);
+    // 被去重的那条**不产生路径**：否则"插入 0 条"也会把用户拉去某条旧内容。
+    expect(second.insertedPaths).toEqual([]);
     expect(second.document.sections[0].entries).toHaveLength(2);
   });
 
@@ -222,6 +243,7 @@ describe("applyMemoProposals", () => {
     const result = applyMemoProposals(document, proposals, CATALOG);
     expect(result.inserted).toBe(0);
     expect(result.dropped).toBe(1);
+    expect(result.insertedPaths).toEqual([]);
     expect(result.document).toBe(document);
   });
 });

@@ -159,7 +159,14 @@ def _clamp(text: str, start: int, end: int) -> tuple[int, int]:
 
 
 def is_bold(text: str, start: int, end: int) -> bool:
-    """选区 [start, end) 是否**整段**都加粗（空选区恒为 False）。"""
+    """选区 [start, end) 是否**整段**都加粗（空选区恒为 False）。
+
+    .. deprecated:: I-12
+       编辑器已改为结构化 `item.rich.runs`（P2），后端这条"按源串偏移判断"的入口没有
+        任何调用方了（`grep -rn is_bold app/` 只有定义与 re-export）。**保留**是因为它仍是
+        `toggle_bold` 的语义说明与解析器的回归锚点；等 I-12 P4 完成且存量数据全部迁移后
+        连同 `toggle_bold` 一起删。
+    """
     first, second = _clamp(text, start, end)
     if first == second:
         return False
@@ -209,6 +216,12 @@ def toggle_bold(text: str, start: int, end: int) -> str:
     """在**源串偏移**上切换加粗：已全粗则取消，否则整段加粗。
 
     只增删标记，可见文本一个字节都不变，也不会留下空标记（四个星号）。
+
+    .. deprecated:: I-12
+       这是后端**最后一处"拼标记串"的实现**（`**…**`）。编辑器改用 `item.rich.runs`
+       之后它已无调用方；本轮不删（旧备份 + 存量标记串的兼容读还依赖同一套偏移语义），
+       等 I-12 P4 完成且存量数据全部迁移后再删。新代码不要再调用它——写样式请写
+       `rich.runs`（见 `resume_rich_marks`）。
     """
     first, second = _clamp(text, start, end)
     if first == second:

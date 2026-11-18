@@ -100,15 +100,31 @@ describe("HistoryPanel", () => {
     expect(times[0]).not.toBe("");
   });
 
-  it("「回到当前」取消选中：预览条消失、不触发回退", () => {
+  it("「回到当前」取消选中：预览条常驻但回到灰字提示，不触发回退", () => {
     const { onJumpTo } = renderPanel();
     fireEvent.click(
       screen.getByRole("button", { name: new RegExp(t("workbench.history.label.layout")) }),
     );
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(t("workbench.history.preview.label"));
     fireEvent.click(buttonByText(t("workbench.history.backToCurrent")));
-    expect(screen.queryByRole("status")).toBeNull();
+    // I-17：条不能消失（消失会改变列表上方高度，滚动锚定就把滚动条挪了），
+    // 但选中态的内容要退回提示语。
+    const bar = document.querySelector<HTMLElement>(".resume-history-preview");
+    expect(bar).not.toBeNull();
+    expect(bar).toHaveTextContent(t("workbench.history.preview.hint"));
+    expect(bar).not.toHaveTextContent(t("workbench.history.preview.label"));
+    // 动作行只在有选中快照时出现（空态不该有两个无效按钮）。
+    expect(bar?.querySelector(".resume-history-preview-actions")).toBeNull();
     expect(onJumpTo).not.toHaveBeenCalled();
+  });
+
+  it("未选中时预览条也常驻（高度恒定的前提），并显示灰字提示", () => {
+    renderPanel();
+    const bar = document.querySelector<HTMLElement>(".resume-history-preview");
+    expect(bar).not.toBeNull();
+    expect(bar).toHaveTextContent(t("workbench.history.preview.hint"));
+    // 提示在条内（不是列表上方另起一段——那会随段落与条的显隐再次改变高度）。
+    expect(bar?.querySelector(".resume-history-preview-placeholder")).not.toBeNull();
   });
 
   it("「回到这一步」要二次确认，确认后才让宿主回退到该下标", () => {

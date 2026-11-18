@@ -38,6 +38,7 @@ import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import { registerJobCreateHandler } from "../features/shortcuts/runtimeTargets";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import { DEFAULT_JOB_SORT_STATE, isDefaultJobSort } from "../utils/jobSort";
 
 export default function JobsPage() {
   useLocale();
@@ -313,6 +314,12 @@ export default function JobsPage() {
         onImportCsv={() => setImportCsvOpen(true)}
         selectionMode={selectionMode}
         extraActions={<ImportFromUrlLauncher buttonSize="small" onImported={() => void reload()} />}
+        // 排序复位（I-39）：只在离开默认排序时渲染，位置由 JobFilterBar 的尾槽保证
+        // 是这一行的最右。复位后回到「最近导入在前」，并且 applySort 已经把页码拉回 1。
+        sortReset={{
+          changed: !isDefaultJobSort(sortState),
+          onReset: () => applySort(DEFAULT_JOB_SORT_STATE),
+        }}
       />
 
       <BatchToolbar

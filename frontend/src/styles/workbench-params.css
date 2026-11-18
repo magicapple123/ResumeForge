@@ -58,6 +58,13 @@
   width: var(--resume-wb-params);
   padding: 20px;
   background: var(--rf-surface);
+  /* I-16：本列是滚动容器，而列里的内容高度会随参数提交变化（版面状态条的占用率 /
+     需要几页文案、分页汇总的芯片行）。浏览器的滚动锚定会在内容增高时**改写 scrollTop**
+     来保持"看上去没动"，代价是滚动条拇指会跳一下——用户报的"调完参数跳走了"就是这个。
+     关掉锚定后 scrollTop 恒等于用户自己滚到的数值（`evidence/I-16` 实测 427 → 427）。
+     代价：上方内容若真的增减，视口内会跟着位移；本列里的增减都发生在当前视口之上/之下
+     的分组里，实测（380 / 640 两档）无可见位移。 */
+  overflow-anchor: none;
 }
 
 .resume-wb-col-editor {
@@ -208,11 +215,99 @@ body.is-slider-dragging iframe {
   display: grid;
   grid-template-columns: var(--resume-wb-field-label-w) minmax(0, 1fr);
   align-items: center;
-  /* 网格项默认 `stretch`：分段控件、下拉的包装 span 都会被拉到整格宽，宽栏下看着像
-     「控件贴到右边」。统一靠左按内容排，四行控件因此都是左对齐的一小截。 */
   justify-items: start;
   column-gap: 8px;
   min-width: 0;
+}
+
+/* ===== I-06（2026-11-18）：控件跟随栏宽弹性伸缩，封顶 320px =====
+ *
+ * 改前：`justify-items: start` 让控件按内容宽排——栏宽 380 → 640 时它们纹丝不动，只有
+ * 滑杆会变长。那条注释写的是"避免宽栏下控件贴到右边"；2026-11-18 用户拍板的正是被否掉
+ * 的那一版，所以策略改成「铺满控件列 + 封顶 320」：320 以上不再变宽（640 栏里把单值
+ * 下拉拉成一条巨长条并不好读），控件左缘与滑杆落在同一条竖线上。
+ *
+ * 全部挂在 `.resume-wb-col-params` 下：同一个 `.resume-wb-field-row` 还出现在生成配置
+ * 弹窗与预览工具栏，那里的宽度必须逐像素不变。
+ */
+.resume-wb-col-params {
+  --resume-wb-control-max: 320px;
+}
+
+.resume-wb-col-params .resume-wb-field-row {
+  justify-items: stretch;
+}
+
+/* 带 `ⓘ`（HintDetail）的行：`[控件][ⓘ]` 两格。控件吃满第一格、`ⓘ` 固定第二格——
+   控件 `width: 100%` 之后不这么写会把 `ⓘ` 顶出行外（四行都有这个问题）。
+   第一格写 `minmax(0, 320px)` 而不是 `1fr`：宽栏下控件停在 320、`ⓘ` 紧贴其右，
+   多出来的空白留在行尾，而不是把 `ⓘ` 推到面板最右边去。 */
+.resume-wb-col-params .resume-wb-field-row > .resume-wb-field-control {
+  display: grid;
+  grid-template-columns: minmax(0, var(--resume-wb-control-max)) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.resume-wb-col-params .resume-wb-field-row > span {
+  min-width: 0;
+}
+
+/* 控件本身也要 `width: 100%`：grid 的 stretch 只拉包装层，`.ant-select` /
+   `.ant-segmented` 是 `inline-flex` 的固有宽度，不跟就会被包在一个变宽的空盒子里。 */
+.resume-wb-col-params .resume-wb-field-row .ant-select,
+.resume-wb-col-params .resume-wb-field-row .ant-segmented,
+.resume-wb-col-params .resume-wb-field-row .resume-format-select {
+  width: 100%;
+  min-width: 0;
+  max-width: var(--resume-wb-control-max);
+}
+
+/* 分段控件整条变宽后选项仍挤在左边：均分每一格（选中滑块跟着格子走）。 */
+.resume-wb-col-params .resume-wb-field-row .ant-segmented .ant-segmented-item {
+  flex: 1 1 0;
+}
+
+/* 「篇幅上限」是唯一带内联宽度的下拉（`DocumentModeSwitch.tsx` 的
+   `style={{ width: 96 }}`，那是"四行同一条标签列"时期的定宽）。内联样式优先级最高，
+   上一条类选择器压不过它，于是同组里只有这一行停在 96px——I-06 要求控件铺满控件列，
+   所以这里必须 `!important`。作用范围仍被 `.resume-wb-col-params .resume-wb-field-row`
+   限死：弹窗、导出面板、网申页里的同款下拉不受影响。 */
+.resume-wb-col-params .resume-wb-field-row .ant-select {
+  width: 100% !important;
+}
+
+/* 「模板 + 版式」保持同一行：模板按内容宽、版式吃剩余宽度（用户 2026-11-18 拍板）。
+   两层 `.ant-space` 都要改：antd 的 Space 是 `inline-flex`，只改外层时里层的下拉仍是
+   104px 一小截。`:has` 只挑「装版式下拉」的那一组，模板那一组继续按内容宽。 */
+.resume-wb-col-params .resume-template-controls {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
+}
+
+.resume-wb-col-params .resume-template-controls > .ant-space-item {
+  min-width: 0;
+}
+
+/* 版式下拉的触发框本身也封顶 320（它不在 `.resume-wb-field-row` 里，吃不到上面那条
+   通用规则；基础规则的 104px 是「四个字 + 箭头」的下限，保留为最小宽度）。 */
+.resume-wb-col-params .resume-template-controls .resume-format-select {
+  width: 100%;
+  min-width: 104px;
+  max-width: var(--resume-wb-control-max);
+}
+
+.resume-wb-col-params
+  .resume-template-controls
+  > .ant-space-item:has(.resume-format-select)
+  > .ant-space {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
 }
 
 /* 组件内部自带两行以上时（文档模式 + 篇幅上限）用它包一层：行间距与

@@ -83,6 +83,8 @@ const proview = {
   "proview.photo.button": "Crop photo",
   "proview.photo.title": "Crop photo",
   "proview.photo.hint": "The original photo is preserved and can be restored at any time",
+  "proview.photo.frameHint":
+    "The frame is about {frame}; {aspect} is the closest fit. If the photo has its own white border, zoom the crop out to the subject's edge.",
   "proview.photo.aspect": "Aspect ratio lock",
   "proview.photo.aspect.original": "Original",
   "proview.photo.aspect.square": "1:1",

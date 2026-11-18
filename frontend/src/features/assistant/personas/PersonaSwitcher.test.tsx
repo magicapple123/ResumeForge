@@ -82,6 +82,26 @@ describe("PersonaSwitcher", () => {
     );
   });
 
+  it("点击一次后菜单保持打开，且能选中其中的选项（I-31 回归）", async () => {
+    renderSwitcher(7);
+    await waitFor(() => expect(apiMocks.readConversationPersona).toHaveBeenCalled());
+
+    fireEvent.click(
+      screen.getByRole("button", { name: triggerName(t("assistantBreadth.persona.default")) }),
+    );
+    await waitFor(() => expect(screen.getByRole("menu")).toBeTruthy());
+
+    // 退出动画期间菜单仍在 DOM 里，只断言"出现过"抓不到"同一帧又被关掉"。
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(screen.getByRole("menu")).toBeTruthy();
+
+    // 还开着的直接证据：能点到里面的选项并保存。
+    fireEvent.click(screen.getByText(t("assistantBreadth.persona.hr_scan")));
+    await waitFor(() =>
+      expect(apiMocks.saveConversationPersona).toHaveBeenCalledWith(7, "hr_scan"),
+    );
+  });
+
   it("选中预设后保存、变品牌色并通知刷新", async () => {
     const { onChanged } = renderSwitcher(7);
     await waitFor(() => expect(apiMocks.readConversationPersona).toHaveBeenCalled());

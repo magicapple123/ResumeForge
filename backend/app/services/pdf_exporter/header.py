@@ -36,9 +36,11 @@ from ..resume.resume_contact import (
     contact_field_texts,
     pack_contact_lines,
 )
+from ..resume.resume_header_style import name_block_styles
 
 # 别名导入：本模块的 RoleStyle 是"查询函数"的类型别名（见下），与同名 dataclass 不同义。
 from ..resume.resume_style import RoleStyle as _RoleStyle
+from ..resume.resume_style import clamp_letter_spacing
 from .canvas import _ResumePDF
 from .document_fields import (
     _draw_lines,
@@ -168,7 +170,8 @@ def draw_header(
     include_photo=False 时连照片预留空间都不给：导出选项里关掉照片意味着这一版内容就
     没有照片，页头高度与后面的分页都要按"无照片"来算。
     """
-    style = role_style or (lambda role, object_id=None: None)
+    # 无覆盖时的空查询：接受 `field_only` 等关键字，与真实查询函数同形。
+    style = role_style or (lambda role, object_id=None, **_kwargs: None)
     name_text = _plain(header.name)
     name_meta_text = _plain(header.name_meta)
     subtitle_text = _plain(header.subtitle)
@@ -207,7 +210,10 @@ def draw_header(
     header_centered = layout.header_align == "center"
     header_text_align = "C" if header_centered else "L"
 
-    name_style = style("name")
+    # I-03：姓名段/性别段的样式走**同一份** resolver（字段级 > 姓名角色级 > 无覆盖）。
+    # 之前这里只查 `style("name")`（没有 object_id），字段级永远不生效，
+    # 于是"把姓名改成红色"在草稿生效、在 PDF 里没反应。
+    name_style, gender_style = name_block_styles(header, style)
     meta_style = style("meta")
     name_scale = (
         float(name_style.font_scale) if name_style is not None and name_style.font_scale else 1.0
@@ -215,12 +221,33 @@ def draw_header(
     meta_scale = (
         float(meta_style.font_scale) if meta_style is not None and meta_style.font_scale else 1.0
     )
+    gender_scale = (
+        float(gender_style.font_scale)
+        if gender_style is not None and gender_style.font_scale
+        else 1.0
+    )
     name_size = base * layout.name_ratio * name_scale
-    extra_size = base * layout.name_extra_ratio
+    # 性别字号同受字段级 font_scale 影响（量高与画字用同一个值，否则页头高度会错）。
+    extra_size = base * layout.name_extra_ratio * gender_scale
     name_color = (
         parse_color(name_style.color) if name_style is not None and name_style.color else None
     )
     name_bold = name_style.bold if name_style is not None and name_style.bold is not None else True
+    # I-41：字距只在 `name` 角色上存在（`letter_spacing` 的角色白名单不含 meta，字段级
+    # 无处可存），所以合并结果里出现它必然是角色级设置。三端同一条下限夹取。
+    name_letter_spacing = (
+        base * float(clamp_letter_spacing(name_style.letter_spacing) or 0.0)
+        if name_style is not None
+        else 0.0
+    )
+    extra_color = (
+        parse_color(gender_style.color) if gender_style is not None and gender_style.color else None
+    )
+    extra_bold = (
+        gender_style.bold
+        if gender_style is not None and gender_style.bold is not None
+        else False
+    )
     meta_color = (
         parse_color(meta_style.color) if meta_style is not None and meta_style.color else None
     )
@@ -255,6 +282,9 @@ def draw_header(
             width=text_width,
             name_size=name_size,
             extra_size=extra_size,
+            name_bold=bool(name_bold),
+            name_letter_spacing=name_letter_spacing,
+            extra_bold=bool(extra_bold),
         )
         text_height = name_plan.height
     else:
@@ -368,6 +398,9 @@ def draw_header(
             align=layout.header_align,
             name_color=name_color,
             name_bold=bool(name_bold),
+            name_letter_spacing=name_letter_spacing,
+            extra_color=extra_color,
+            extra_bold=bool(extra_bold),
         )
     pdf.set_text_color(*pdf.body_text)
     if subtitle_text:

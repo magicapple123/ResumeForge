@@ -3,6 +3,7 @@ import { App as AntdApp } from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import JobFormModal from "./JobFormModal";
+import { t } from "../../i18n";
 
 const apiMocks = vi.hoisted(() => ({
   createJob: vi.fn(),
@@ -66,8 +67,11 @@ describe("JobFormModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /识别并填充/ }));
 
     await waitFor(() => expect(apiMocks.parseJobsMultiple).toHaveBeenCalledOnce());
-    expect(screen.getByLabelText("其他招聘信息（选填）")).toHaveValue(
-      "提供员工宿舍，面试包含门店案例分析",
+    // 逐字段落位（I-35）：每个字段隔 60ms 写一次，所以要等到最后一步。
+    await waitFor(() =>
+      expect(screen.getByLabelText("其他招聘信息（选填）")).toHaveValue(
+        "提供员工宿舍，面试包含门店案例分析",
+      ),
     );
     await waitFor(() =>
       expect(screen.getByLabelText("发布时间（选填）")).toHaveValue("2026-08-20"),
@@ -152,7 +156,7 @@ describe("JobFormModal 图片识别", () => {
     expect(payload.images[0].data.startsWith("data:image/png;base64,")).toBe(true);
     // 只有图片、没有文本时不该再提示"请先粘贴招聘信息"
     expect(screen.queryByText("请先粘贴招聘信息，或添加截图、上传文档")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("岗位名称")).toHaveValue("门店店长");
+    await waitFor(() => expect(screen.getByLabelText("岗位名称")).toHaveValue("门店店长"));
   });
 
   it("sends an uploaded document in its own field", async () => {
@@ -206,6 +210,11 @@ describe("JobFormModal 图片识别", () => {
     const toggle = await screen.findByText("查看模型识别到的原文（请对照截图核对）");
     fireEvent.click(toggle);
     expect(await screen.findByText("门店店长 示例超市 成都市武侯区")).toBeInTheDocument();
+
+    // 逐字段落位要走完才能保存（岗位描述是必填，且是第 5 步）。
+    await waitFor(() =>
+      expect(screen.getByLabelText("岗位描述（JD）")).toHaveValue("负责门店经营"),
+    );
 
     // 按 role 找按钮：警告条里也有"保存"两个字
     fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
@@ -317,5 +326,103 @@ describe("JobFormModal 图片识别", () => {
     expect(screen.getByLabelText("岗位名称")).toHaveValue("我手填的岗位");
     expect(await screen.findByText("没有识别到内容，请检查资料或稍后重试")).toBeInTheDocument();
     expect(await screen.findByText(/图片识别失败/)).toBeInTheDocument();
+  });
+});
+
+/** I-35：识别结果逐字段落位。用假定时器推进，断言"顺序"而不是"多久"。 */
+describe("JobFormModal 逐字段落位", () => {
+  const TEXTAREA = "完整招聘信息";
+
+  async function startRecognition() {
+    fireEvent.change(screen.getByLabelText(TEXTAREA), { target: { value: "门店店长" } });
+    fireEvent.click(screen.getByRole("button", { name: /识别并填充/ }));
+    // 先让接口 promise 落地（不推进定时器，此时一个字段都还没写）
+    await act(async () => {});
+  }
+
+  it("fills fields in the fixed order instead of all at once", async () => {
+    vi.useFakeTimers();
+    try {
+      apiMocks.parseJobsMultiple.mockResolvedValue({ items: [DRAFT] });
+      renderModal();
+      await startRecognition();
+
+      // 第一步：岗位名称（顺序表的第一项）
+      await act(async () => {
+        vi.advanceTimersByTime(0);
+      });
+      expect(screen.getByLabelText("岗位名称")).toHaveValue("门店店长");
+      // 岗位描述排在第 5 步，此时必须还是空的
+      expect(screen.getByLabelText("岗位描述（JD）")).toHaveValue("");
+
+      await act(async () => {
+        vi.advanceTimersByTime(240);
+      });
+      expect(screen.getByLabelText("岗位描述（JD）")).toHaveValue("负责门店经营");
+
+      // 走完之后：所有有值的字段都到了，没有值的字段不被写（不会闪一下再变空）
+      await act(async () => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(screen.getByLabelText("公司名称")).toHaveValue("示例超市");
+      expect(screen.getByLabelText("薪资范围")).toHaveValue("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops writing fields once the dialog is closed mid-fill", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    apiMocks.parseJobsMultiple.mockResolvedValue({ items: [DRAFT] });
+    renderModal();
+    await startRecognition();
+
+    // 第一步刚写进去就关窗：剩下的 5 个字段还排在队列里
+    await waitFor(() => expect(screen.getByLabelText("岗位名称")).toHaveValue("门店店长"));
+    fireEvent.click(screen.getByRole("button", { name: /取\s*消/ }));
+
+    // 关闭后继续走时间：不能在已卸载的表单上继续写（React 会报 update on unmounted）
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+    expect(consoleError.mock.calls.filter((call) => String(call[0]).includes("unmounted"))).toEqual(
+      [],
+    );
+    consoleError.mockRestore();
+  });
+
+  it("shows how many seconds the recognition has been running", async () => {
+    vi.useFakeTimers();
+    let release!: (value: { items: unknown[] }) => void;
+    apiMocks.parseJobsMultiple.mockReturnValue(
+      new Promise<{ items: unknown[] }>((resolve) => {
+        release = resolve;
+      }),
+    );
+    try {
+      renderModal();
+      await startRecognition();
+
+      await act(async () => {
+        vi.advanceTimersByTime(3000);
+      });
+      // 读数只在等待期出现：没有它，"识别中"就是一枚永远转的圈。
+      // 文案复用既有的 `backgroundTasks.bar.elapsed`（不新增键），所以按该键取。
+      expect(
+        screen.getByText(t("backgroundTasks.bar.elapsed", { seconds: 3 })),
+      ).toBeInTheDocument();
+
+      await act(async () => {
+        release({ items: [DRAFT] });
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(
+        screen.queryByText(t("backgroundTasks.bar.elapsed", { seconds: 4 })),
+      ).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

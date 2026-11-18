@@ -64,6 +64,7 @@ const document = {
   "document.entry.empty": "这个板块还没有条目",
   "document.entry.copy": "复制条目",
   "document.entry.remove": "移除条目",
+  "document.entry.selectAria": "选择第 {index} 条：{title}",
   "document.entry.hide": "隐藏条目",
   "document.entry.show": "显示条目",
   "document.entry.moveUp": "上移条目",

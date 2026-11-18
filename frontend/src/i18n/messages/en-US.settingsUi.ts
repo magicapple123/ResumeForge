@@ -179,6 +179,8 @@ const settingsUi = {
   "settingsUi.network.mode.system": "Follow system",
   "settingsUi.network.mode.direct": "Direct",
   "settingsUi.network.mode.custom": "Custom proxy",
+  "settingsUi.network.dirty": "Unsaved changes",
+  "settingsUi.network.probeBlocked": "Save first, then test",
   "settingsUi.network.directWarning":
     "Direct bypasses the system proxy. On proxy-only networks (corporate, some broadband) nothing connects: models, search, updates.",
   "settingsUi.network.urlPlaceholder": "e.g. http://127.0.0.1:7890",

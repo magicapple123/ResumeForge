@@ -77,6 +77,11 @@ const EXEMPTIONS: Record<string, Exemption> = {
     reason: "照片缩略图容器的定位类，尺寸由父级槽位与图片组件自身控制",
     expires: REVIEW_DATE,
   },
+  "document-photo-frame-popover": {
+    reason:
+      "照片框浮层的识别类：外壳样式全部来自 .document-chip-style-popover（同一定位/边框/阴影），这一层不追加视觉，只供选择器区分两个浮层",
+    expires: REVIEW_DATE,
+  },
   "document-zone-hidden": {
     reason: "与 .document-zone 同时出现（该类有样式），本类只标识隐藏投放区供拖拽逻辑选中",
     expires: REVIEW_DATE,
@@ -150,10 +155,6 @@ const EXEMPTIONS: Record<string, Exemption> = {
   },
   "resume-font-slider": {
     reason: "antd Slider 上的定位类，滑杆视觉由 antd token 承担",
-    expires: REVIEW_DATE,
-  },
-  "resume-history-preview-main": {
-    reason: "历史预览主体容器，标签与数值由子元素类承担（role=status 供读屏）",
     expires: REVIEW_DATE,
   },
   "resume-line-height-slider": {

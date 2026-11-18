@@ -1,0 +1,60 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「出网与代理」卡：分区线、结果区固定高度、footer 脏状态（I-33）。
+   与卡片同目录的局部样式（同 navigationSettings.css 的组织方式），不挤进 resume-panels.css
+   的 500 行预算。 */
+
+/* 分区线：只承担"下面这块是连通性"的分隔，不加文案（不新增 i18n 键）。 */
+.network-divider.ant-divider {
+  margin: 0;
+}
+
+/* 结果区常驻：两行高度打底，出现/消失时 footer 不位移。用 min-height 而不是 height，
+   窄屏两行换行时允许长高，不裁字。 */
+.network-probe-area {
+  min-height: 44px;
+}
+
+.network-probe-icon {
+  font-size: 12px;
+}
+
+.network-probe-icon.is-ok {
+  color: var(--rf-success, #52c41a);
+}
+
+.network-probe-icon.is-bad {
+  color: var(--rf-danger, #ff4d4f);
+}
+
+/* footer：左侧脏状态、右侧保存，高度固定。 */
+.network-footer {
+  min-height: 32px;
+}
+
+.network-dirty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+/* 无改动时不可见但占位：`opacity` 而不是 `display: none`，footer 高度不变。 */
+.network-dirty.is-visible {
+  opacity: 1;
+}
+
+.network-dirty-dot {
+  color: var(--rf-warning, #faad14);
+  font-size: 10px;
+}
+
+/* 底部灰字与告警条同一句话的另一种写法：比正文略小、不抢位置。 */
+.network-notice {
+  display: block;
+  font-size: 12px;
+  line-height: 18px;
+}

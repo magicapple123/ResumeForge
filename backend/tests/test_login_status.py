@@ -45,6 +45,26 @@ def test_unknown_is_preserved_not_downgraded_to_expired(db_session):
     assert login_status.read_status(db_session, "track_cookie")["status"] == "unknown"
 
 
+def test_logged_out_survives_the_roundtrip(db_session):
+    """I-29：新状态必须同时在写与读的白名单里，否则会被**静默**读成 `unchecked`。"""
+    login_status._save_status(db_session, "apply_browser", "logged-out", "页面显示登录入口")
+    assert login_status.read_status(db_session, "apply_browser")["status"] == "logged-out"
+
+    login_status_sites._save_site_status(
+        db_session, "a.example.com", "logged-out", "停在登录页", "https://a.example.com/jobs"
+    )
+    site = login_status_sites._read_site_status(
+        db_session, "a.example.com", "https://a.example.com/jobs"
+    )
+    assert site["status"] == "logged-out"
+
+
+def test_legacy_expired_is_still_read_as_expired(db_session):
+    """旧数据里的 `expired` 仍显示「已失效」，不被读成「未检测」。"""
+    login_status._save_status(db_session, "apply_browser", "expired", "停在登录页")
+    assert login_status.read_status(db_session, "apply_browser")["status"] == "expired"
+
+
 def test_broken_json_falls_back_to_unchecked(db_session):
     """历史数据被手改坏时回落 unchecked，不让整页 500。"""
     login_status._write_setting(db_session, login_status._status_key("track_cookie"), "{not json")
@@ -162,18 +182,40 @@ def test_check_site_rejects_host_outside_inventory(db_session):
 @pytest.mark.parametrize(
     ("state", "expected"),
     [
-        ({"href": "https://x.example.com/passport/login?next=1", "text": "随便"}, "expired"),
-        ({"href": "https://x.example.com/jobs", "text": "密码登录 扫码登录"}, "expired"),
+        ({"href": "https://x.example.com/passport/login?next=1", "text": "随便"}, "logged-out"),
+        ({"href": "https://x.example.com/jobs", "text": "密码登录 扫码登录"}, "logged-out"),
         (
             {
                 "href": "https://ats.example.com/apply",
                 "text": "Sign in to continue. Password",
                 "hasPassword": True,
             },
-            "expired",
+            "logged-out",
         ),
-        ({"href": "https://x.example.com/jobs", "text": "岗位列表 " * 40}, "ok"),
+        # I-29：公开页内容完整也不再是 ok——"没看到登录墙"对公开页恒真。
+        ({"href": "https://x.example.com/jobs", "text": "岗位列表 " * 40}, "unknown"),
         ({"href": "https://x.example.com/jobs", "text": ""}, "unknown"),
+        # 账号标记是唯一的正面证据。
+        (
+            {"href": "https://x.example.com/jobs", "text": "我的投递 个人中心 " * 40},
+            "ok",
+        ),
+        # 独立的「登录」CTA：页面有内容但没登录。
+        (
+            {
+                "href": "https://x.example.com/jobs",
+                "text": "校园招聘 岗位列表 " * 20 + "\n登录\n",
+            },
+            "logged-out",
+        ),
+        # 「退出登录」含「登录」：不能把已登录的页面判成未登录。
+        (
+            {
+                "href": "https://x.example.com/jobs",
+                "text": "岗位列表 " * 40 + "\n退出登录",
+            },
+            "ok",
+        ),
     ],
 )
 def test_judge_site_matrix(state, expected):
@@ -232,6 +274,105 @@ def test_parent_row_aggregates_sites_and_stops_solo_probing(db_session, monkeypa
     # 汇总行不探测：结果与 list_statuses 一致，且不占限流（连续两次都不会 429）。
     assert result["status"] == "expired"
     assert login_status.check(db_session, "webform_browser")["status"] == "expired"
+
+
+def test_parent_row_reports_logged_out_over_other_states(db_session):
+    """I-29：1 个未登录 + 4 个未检测 → 父行「未登录」，detail 里要有「1 未登录」。"""
+    for index in range(5):
+        _visit(db_session, f"https://s{index}.example.com/jobs", f"S{index}", minutes=index)
+    login_status_sites._save_site_status(
+        db_session, "s0.example.com", "logged-out", "页面显示登录入口", "https://s0.example.com/jobs"
+    )
+
+    row = next(
+        item for item in login_status.list_statuses(db_session) if item["id"] == "webform_browser"
+    )
+
+    assert row["status"] == "logged-out"
+    assert row["detail"] == "5 个站点 · 0 正常 · 1 未登录"
+
+
+# ===== I-29：受限页探测（GATED_PROBE）与回退路径 =====
+
+
+def _stub_state(monkeypatch, state: dict, opened: list[str]) -> None:
+    def fake_read(_db, url: str) -> dict:
+        opened.append(url)
+        return state
+
+    monkeypatch.setattr(login_status_sites, "_read_state", fake_read)
+
+
+def test_gated_probe_prefers_the_restricted_page(db_session, monkeypatch):
+    """受限页可访问 = 登录的硬证据：detail 要写明这一点。"""
+    _visit(db_session, "https://jobs.bytedance.com/campus/position", "字节校招", minutes=1)
+    opened: list[str] = []
+    _stub_state(
+        monkeypatch,
+        {
+            "href": "https://jobs.bytedance.com/campus/position/application",
+            "text": "我的投递 应聘记录 " * 30,
+        },
+        opened,
+    )
+
+    row = login_status_sites.check_webform_site(db_session, "jobs.bytedance.com")
+
+    assert opened == ["https://jobs.bytedance.com/campus/position/application"]
+    assert row["status"] == "ok"
+    assert row["detail"] == "受限页可访问"
+
+
+def test_gated_probe_bounced_to_login_is_logged_out(db_session, monkeypatch):
+    """受限页被弹回登录 → logged-out，detail 说明「停在登录页」。"""
+    _visit(db_session, "https://jobs.bytedance.com/campus/position", "字节校招", minutes=1)
+    _stub_state(
+        monkeypatch,
+        {
+            "href": (
+                "https://jobs.bytedance.com/campus/login"
+                "?redirect_path=%2Fposition%2Fapplication"
+            ),
+            "text": "登录 扫码登录",
+        },
+        [],
+    )
+
+    row = login_status_sites.check_webform_site(db_session, "jobs.bytedance.com")
+
+    assert row["status"] == "logged-out"
+    assert row["detail"] == "停在登录页"
+
+
+def test_gated_probe_empty_shell_is_unknown_not_ok(db_session, monkeypatch):
+    """受限页返回空壳 / 404 时落 unknown：不能因为"没看到登录页"又回到 ok。"""
+    _visit(db_session, "https://jobs.bytedance.com/campus/position", "字节校招", minutes=1)
+    _stub_state(monkeypatch, {"href": "https://jobs.bytedance.com/x", "text": ""}, [])
+
+    assert login_status_sites.check_webform_site(db_session, "jobs.bytedance.com")["status"] == (
+        "unknown"
+    )
+
+
+def test_fallback_public_page_never_reports_ok(db_session, monkeypatch):
+    """未配置受限页的站点退回岗位页：内容再正常也只能「无法判断」。"""
+    _visit(db_session, "https://plain.example.com/jobs", "某站", minutes=1)
+    _stub_state(
+        monkeypatch,
+        {"href": "https://plain.example.com/jobs", "text": "岗位列表 " * 40},
+        [],
+    )
+
+    row = login_status_sites.check_webform_site(db_session, "plain.example.com")
+
+    assert row["status"] == "unknown"
+
+
+def test_gated_sites_only_the_ones_with_hard_evidence_are_configured():
+    """不要猜 URL：本轮只有 bytedance 两条证据都成立，其余 4 站必须留空走回退。"""
+    assert login_status_sites.GATED_PROBE == {
+        "jobs.bytedance.com": "/campus/position/application"
+    }
 
 
 def test_webform_site_routes_are_not_swallowed_by_source_route(client):

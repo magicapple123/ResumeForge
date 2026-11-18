@@ -51,7 +51,6 @@ const jobsPage = {
   "jobsPage.filter.backfill": "补齐详情",
   "jobsPage.filter.importCsv": "导入 CSV",
   "jobsPage.filter.addManual": "手动添加",
-  "jobsPage.filter.sortResetHintDefault": "当前已是默认排序：最近导入在前",
   "jobsPage.filter.sortResetHint": "恢复默认排序：最近导入在前",
   "jobsPage.filter.sortReset": "恢复默认排序",
 

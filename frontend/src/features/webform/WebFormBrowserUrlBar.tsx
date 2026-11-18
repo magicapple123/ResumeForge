@@ -33,6 +33,11 @@ interface Props {
   busy: boolean;
   /** 浏览器是否在运行：运行中即使还没输入网址，这颗附着按钮仍是主操作位。 */
   running: boolean;
+  /**
+   * 是否渲染附着的「打开目标页」。onboarding 态的主 CTA 只放在流程轨道右端（I-24），
+   * 这里再画一颗同名的 primary 就会变成"同屏两个主按钮"。回车（`onSearch`）仍然可用。
+   */
+  showOpenButton?: boolean;
   onChange: (value: string) => void;
   onOpen: () => void;
   onSelectHistory: (item: WebFormUrlHistory) => void;
@@ -44,6 +49,7 @@ export default function WebFormBrowserUrlBar({
   history,
   busy,
   running,
+  showOpenButton = true,
   onChange,
   onOpen,
   onSelectHistory,
@@ -135,13 +141,15 @@ export default function WebFormBrowserUrlBar({
       onChange={(event) => onChange(event.target.value)}
       onSearch={() => onOpen()}
       enterButton={
-        <Button
-          type={hasUrl || running ? "primary" : "default"}
-          loading={busy}
-          disabled={busy || !hasUrl}
-        >
-          {t("webFormPage.urlBar.open")}
-        </Button>
+        showOpenButton ? (
+          <Button
+            type={hasUrl || running ? "primary" : "default"}
+            loading={busy}
+            disabled={busy || !hasUrl}
+          >
+            {t("webFormPage.urlBar.open")}
+          </Button>
+        ) : undefined
       }
       aria-label={t("webFormPage.urlBar.inputAria")}
     />

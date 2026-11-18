@@ -1,4 +1,11 @@
 /* SPDX-License-Identifier: Apache-2.0 */
+/* 筛选栏尾槽（I-39）：外层原来是一个带 `marginBottom: 16` 的行内样式 div，
+   换成共享的 FilterResetSlot 后把这条间距搬到这里，布局与改动前一致。
+   行内对齐由 FilterResetSlot 自己的 `.filter-row` 负责。 */
+.jobs-filter-row {
+  margin-bottom: 16px;
+}
+
 .jobs-filter-bar {
   width: 100%;
 }
@@ -243,6 +250,41 @@
 
 .jobs-import-hint {
   font-size: 12px;
+}
+
+/* 识别警告逐条一行（I-34）：原先 join("；") 会把自带句号的几条拼成「。；」。 */
+.job-recognition-warnings {
+  margin: 0;
+  padding-inline-start: 18px;
+}
+
+.job-recognition-warnings > li {
+  margin: 0;
+}
+
+.job-recognition-warnings > li + li {
+  margin-top: 4px;
+}
+
+/* 识别结果逐字段落位（I-35）：拿到值的字段亮 400ms 的浅底。
+   用 box-shadow 而不是 padding/background 铺满：外扩的 halo 不改变任何盒尺寸，
+   逐个高亮时整页不会跟着抖。底色走 color-mix + token，深浅色都成立。 */
+.job-form-field {
+  border-radius: 8px;
+  transition:
+    box-shadow 200ms ease,
+    background-color 200ms ease;
+}
+
+.job-form-field.is-filling {
+  background: color-mix(in srgb, var(--rf-accent, #1677ff) 8%, transparent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--rf-accent, #1677ff) 8%, transparent);
+}
+
+/* 等待期的秒数：按钮左边的一枚小读数。 */
+.job-parse-elapsed {
+  font-variant-numeric: tabular-nums;
+  color: var(--rf-text-secondary);
 }
 
 /* 空态改成居中的整块，高度与只有表头时的预览区接近，避免"抓取前后页面跳一下"。 */

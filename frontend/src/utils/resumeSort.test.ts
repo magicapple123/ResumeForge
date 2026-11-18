@@ -12,7 +12,6 @@ import {
   isDefaultResumeSort,
   nextSortState,
   parseResumeSort,
-  resumeSortResetHint,
   sortDirectionsFor,
   sortOrderFor,
   toResumeSort,
@@ -121,13 +120,10 @@ describe("sortDirectionsFor", () => {
   });
 });
 
-describe("isDefaultResumeSort / resumeSortResetHint", () => {
-  it("默认态禁用「恢复默认排序」，文案说清现状；非默认可点，文案说清动作", () => {
+describe("isDefaultResumeSort", () => {
+  it("默认态 true、显式排序 false（「恢复默认排序」按钮据此不渲染，I-38）", () => {
     expect(isDefaultResumeSort(DEFAULT_RESUME_SORT_STATE)).toBe(true);
-    expect(resumeSortResetHint(DEFAULT_RESUME_SORT_STATE)).toContain("当前已是默认排序");
-
     const sorted = { field: "title", order: "asc", explicit: true } as const;
     expect(isDefaultResumeSort(sorted)).toBe(false);
-    expect(resumeSortResetHint(sorted)).toContain("恢复默认排序");
   });
 });

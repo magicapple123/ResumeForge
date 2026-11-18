@@ -115,11 +115,24 @@ describe("联系方式换行控件（排版参数）", () => {
     expect(onChange).toHaveBeenCalledWith({ accent: "#123456" });
   });
 
-  it("下拉宽 104px（能看见四个字），窄屏按 100% 收窄", () => {
+  it("非 compact：下拉铺满控件列（I-06），包装层是 .resume-wb-field-control", () => {
     renderControl();
     const select = document.querySelector<HTMLElement>(".resume-contact-break-select");
     expect(select).not.toBeNull();
-    // Select 撑满外层包裹层；包裹层定宽 104px（四个中文字符），再 maxWidth 100% 适配窄屏。
+    // I-06（2026-11-18）：非 compact 分支进「版面」组的两列网格，控件铺满控件列并封顶
+    // 320px（规则在 `workbench-params.css`，jsdom 不求值）。这里钉两件结构上的事：
+    // ① 下拉自己写 width:100%；② 包装层是网格壳，不再是 104px 定宽 span。
+    expect(select?.style.width).toBe("100%");
+    const wrap = select?.parentElement as HTMLElement;
+    expect(wrap.className).toContain("resume-wb-field-control");
+    expect(wrap.style.width).toBe("");
+  });
+
+  it("compact（工具栏）：下拉仍定宽 104px（能看见四个字），窄屏按 100% 收窄", () => {
+    renderControl({}, { compact: true });
+    const select = document.querySelector<HTMLElement>(".resume-contact-break-select");
+    expect(select).not.toBeNull();
+    // 工具栏里没有「版面」组的标签列，按内容排：104px（四个中文字符），maxWidth 100% 适配窄屏。
     // 早先是 260px：空白比字多（2026-10-28 用户口径"能看见四个字就好"）。
     expect(select?.style.width).toBe("100%");
     const wrap = select?.parentElement as HTMLElement;

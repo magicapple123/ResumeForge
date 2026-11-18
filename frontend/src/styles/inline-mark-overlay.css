@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /**
- * 行内标记遮罩层（I-26）：`InlineMarkOverlay` + `ResizableValueTextArea` 专用。
+ * 行内标记遮罩层（I-26）：`InlineMarkOverlay` + `AutoGrowValueTextArea` 专用。
  *
  * 三件事在这里定死，改动前先看全：
  *

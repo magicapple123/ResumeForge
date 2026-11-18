@@ -157,6 +157,7 @@ const applyUi = {
   "applyUi.loginStatus.status.expired": "已失效",
   "applyUi.loginStatus.status.unknown": "无法判断",
   "applyUi.loginStatus.status.unchecked": "未检测",
+  "applyUi.loginStatus.status.logged-out": "未登录",
   "applyUi.loginStatus.checkedAt": "上次检测：{time}",
   "applyUi.loginStatus.never": "还没检测过",
   "applyUi.loginStatus.action.check": "检测",

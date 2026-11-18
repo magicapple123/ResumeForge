@@ -213,6 +213,16 @@ def parse_rich_runs(text: str) -> list[RichSpan]:
 
     性质：各 span.text 的拼接恒等于 strip_markers(x)；解析两次结果相同（幂等）；
     空串返回空列表。
+
+    .. note:: I-12 之后本函数在读路径上有**两个身份**，都不要提前删：
+
+        1. 渲染层的输入变换——`resume_rich_marks.runs_to_marks` 把 `rich.runs` 投影成
+           协议串，四个出口（HTML/PDF/Word/TXT）再靠这里解析回来（往返由
+           tests/test_inline_rich_runs_export.py 钉住）；
+        2. **存量数据的退回路径**——没有 `rich` 的旧 item 仍是"标记串在 value 里"，
+           读的时候就是这里在解析（`resume_rich_marks.item_text` 的唯一分支）。
+
+        等 I-12 P4 完成且存量数据全部迁移后，(2) 才允许消失。
     """
     if not text:
         return []

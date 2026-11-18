@@ -4,7 +4,7 @@
  * 只负责一行的外观与行内交互：标题/元信息、重命名输入框、批量选择勾选框、
  * 三点操作菜单。操作清单本身由父组件生成后传入（保持"一处逻辑一份实现"）。
  */
-import { EyeInvisibleOutlined, MoreOutlined, SaveOutlined } from "@ant-design/icons";
+import { MoreOutlined, SaveOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Input, Popconfirm, Popover, Tooltip, Typography } from "antd";
 import type { RowActionItem } from "../../../components/common/RowActions";
 import { ListyItem } from "../../../components/common/ListyItem";
@@ -160,11 +160,11 @@ export default function ConversationSidebarRow({
             {formatDateTime(conversation.updated_at)}
             {conversation.memory_off ? (
               <Tooltip title={t("assistantUi.memory.offBadge")}>
-                <EyeInvisibleOutlined
-                  className="assistant-conversation-memory-off"
-                  role="img"
-                  aria-label={t("assistantUi.memory.offBadge")}
-                />
+                {/* 文字胶囊而不是眼睛：同页页头「视角」用的是睁眼图标，两个眼睛两种含义会混（I-32）。
+                    节点本身已是文字，不再挂 role="img"/aria-label，否则读屏会读两遍。 */}
+                <span className="assistant-conversation-memory-off">
+                  {t("assistantUi.memory.offShort")}
+                </span>
               </Tooltip>
             ) : null}
           </Typography.Text>

@@ -2,7 +2,7 @@
 /**
  * 带行内标记遮罩的文本域**唯一壳**（I-26）。
  *
- * 制作台里所有"值输入"文本框都走这里：单行语义的值输入框（`ResizableValueTextArea`）、
+ * 制作台里所有"值输入"文本框都走这里：单行语义的值输入框（`AutoGrowValueTextArea`）、
  * 字段正文（`itemValueEditors`）、条目正文（`ItemEditor`）。三处渲染的必须是**同一份**
  * 容器 + 透明文本域 + 遮罩层逻辑——否则同一条简历里有的框藏标记、有的框露 `{@size=1.1}`，
  * 而且"藏"的那几处还会各自漂移。
@@ -39,15 +39,16 @@
  * 3. **焦点时遮罩层不撤**：只有输入法组合期让位（预编辑串只画在文本域上，透明就看不见拼音）。
  */
 import { Input } from "antd";
-import { useState } from "react";
-import type { CSSProperties } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import InlineMarkOverlay from "./InlineMarkOverlay";
 import { hasInlineMarks } from "./inlineMarkRuns";
 import { visibleRangeOfSelection } from "./inlineMarkSelection";
-import { registerInlineMarkField } from "./useInlineMarkRange";
+import { registerInlineMarkField, registerRichField } from "./useInlineMarkRange";
+import { normalizeRuns, replaceRichText, richSegments } from "../inline/richRuns";
+import type { RichRun, RichValue } from "../inline/richRuns";
 
 interface Props {
-  /** 当前值（受控，含行内标记的源串）。 */
+  /** 当前值（受控）。结构化模式下是**纯文本**，否则是含行内标记的源串。 */
   value: string;
   /** 无障碍名：沿用各调用点原有的 `aria-label`，测试按它定位。 */
   ariaLabel: string;
@@ -55,22 +56,26 @@ interface Props {
   disabled?: boolean;
   /** 值变化：**只回传字符串**，写回由调用方决定（字段 / 页眉 / 条目文本的 patch）。 */
   onChange: (value: string) => void;
+  /**
+   * I-13：结构化模式。给了它 = `value` 是纯文本、样式旁挂 `runs`，样式改动经
+   * `onChange(next)` 回到文档（不再拼接 `**` / `{@`）。`runs` 为空仍算结构化模式：
+   * 字段从此按 runs 写，存量标记串在 `readRichValue` 里已经换算成纯文本。
+   */
+  rich?: { runs: RichRun[]; onChange: (next: RichValue) => void } | null;
   /** 额外类名（值输入框挂 `rf-value-textarea` 拿 min-height / max-height）。 */
   className?: string;
-  /** 起始行数。值输入框必须用 1：短字段不能一上来就两行高。 */
+  /** 起始行数。值输入框用 1：短字段不能一上来就两行高 —— I-14 后改由 `autoSize` 决定。 */
   rows?: number;
   /** antd 尺寸档：值输入框用 `small`（与旁边单行输入框同高）。 */
   size?: "small" | "middle" | "large";
-  /** 自动长高（多行正文用）。与 `resizable` 互斥：antd 会把 `resize` 强制成 `none`。 */
+  /**
+   * 自动长高：值输入框 `1..4`、正文 `2..8`。antd 会把 `resize` 强制成 `none`
+   * （rc-textarea 自己量高度）——本壳**不再**提供"手动拖高"，两者互斥且只能二选一。
+   */
   autoSize?: { minRows?: number; maxRows?: number };
-  /** 允许纵向拖高（单行语义的值输入框用）：**只**纵向，横向拖宽会破坏中栏栅格。 */
-  resizable?: boolean;
   /** 单行语义：拦 Enter（输入法组合中的 Enter 放行，那是确认候选词）。 */
   blockEnter?: boolean;
 }
-
-/** 拖高手柄必须由浏览器持有：React 只托管它声明过的内联属性，`height` 不在此列。 */
-const RESIZABLE_STYLE: CSSProperties = { resize: "vertical" };
 
 interface ScrollOffset {
   top: number;
@@ -83,11 +88,11 @@ export default function InlineMarkTextArea({
   placeholder,
   disabled = false,
   onChange,
+  rich = null,
   className,
   rows = 1,
   size,
   autoSize,
-  resizable = false,
   blockEnter = false,
 }: Props) {
   const [scroll, setScroll] = useState<ScrollOffset>({ top: 0, left: 0 });
@@ -95,12 +100,40 @@ export default function InlineMarkTextArea({
   /**
    * DF-4：选区按**可见文字**下标保存（`visibleRangeOfSelection` 把源串偏移换算过来）。
    * 源串偏移直接画会在 `{@color=…}` 那 20 个隐形字符上拉出一条空蓝带。
+   * 结构化模式下纯文本与可见文字 1:1，不需要换算。
    */
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
-  const decorated = hasInlineMarks(value);
+  const richMode = rich !== null;
+  /** 每次渲染后刷新：结构化写回的 `read()` 必须读到最新受控值（不是登记那一拍的快照）。
+   *
+   * 用 `useLayoutEffect` 而不是在 render 里直接赋值——后者属于"render 期间写 ref"，
+   * React 的编译期规则会报错，且并发渲染下可能写到被丢弃的那一版。
+   * 所有读取点都在事件回调里（提交、write 之后），layout effect 已经跑过，读到的是最新值。
+   */
+  const latest = useRef({ value, rich });
+  useLayoutEffect(() => {
+    latest.current = { value, rich };
+  }, [value, rich]);
+
+  const runs = useMemo(
+    () => (rich ? normalizeRuns(rich.runs, value.length) : []),
+    [rich, value.length],
+  );
+  /** 结构化模式的分段（纯文本，无隐藏段）；没有样式时 `null` = 不挂遮罩层。 */
+  const richSegmentList = useMemo(
+    () => (richMode && runs.length > 0 ? richSegments({ text: value, runs }) : null),
+    [richMode, runs, value],
+  );
+  const decorated = richMode ? richSegmentList !== null : hasInlineMarks(value);
 
   /** 只读 `currentTarget` 的 selectionStart/End：`document.getSelection()` 读不到 textarea。 */
   const syncSelection = (element: HTMLTextAreaElement, text: string) => {
+    if (richMode) {
+      const start = element.selectionStart ?? 0;
+      const end = element.selectionEnd ?? start;
+      setSelection(end > start ? { start, end } : null);
+      return;
+    }
     if (!hasInlineMarks(text)) {
       setSelection(null);
       return;
@@ -119,11 +152,37 @@ export default function InlineMarkTextArea({
     .filter(Boolean)
     .join(" ");
 
+  /**
+   * I-13：登记结构化写回器。`read()` 走 ref（受控值每次渲染都可能是新的），
+   * `commit()` 先把新值交给宿主，再在新值落地后恢复选区——链接插入会改变文本长度，
+   * 同步 setSelectionRange 会被随后的一次重渲染冲回末尾。
+   */
+  const registerRich = (element: HTMLTextAreaElement) => {
+    if (!rich) return;
+    registerRichField(element, {
+      read: () => {
+        const snapshot = latest.current;
+        const text = snapshot.value;
+        const baseRuns = snapshot.rich ? normalizeRuns(snapshot.rich.runs, text.length) : [];
+        return { text, runs: baseRuns };
+      },
+      commit: (next, range) => {
+        latest.current.rich?.onChange(next);
+        window.setTimeout(() => {
+          if (!element.isConnected) return;
+          element.focus();
+          element.setSelectionRange(range.start, range.end);
+        }, 0);
+      },
+    });
+  };
+
   return (
     <div className={fieldClassName}>
       {decorated ? (
         <InlineMarkOverlay
           value={value}
+          segments={richSegmentList}
           scrollTop={scroll.top}
           scrollLeft={scroll.left}
           selection={selection}
@@ -138,9 +197,9 @@ export default function InlineMarkTextArea({
         placeholder={placeholder}
         value={value}
         disabled={disabled || undefined}
-        style={resizable ? RESIZABLE_STYLE : undefined}
         onFocus={(event) => {
           registerInlineMarkField(event);
+          registerRich(event.currentTarget);
           syncSelection(event.currentTarget, value);
         }}
         onBlur={() => setSelection(null)}
@@ -155,6 +214,13 @@ export default function InlineMarkTextArea({
         onChange={(event) => {
           // 值先回传再算选区：偏移必须按**新**源串换算，否则删字后高亮会错位。
           syncSelection(event.target, event.target.value);
+          if (rich) {
+            const current = latest.current;
+            const text = current.value;
+            const baseRuns = current.rich ? normalizeRuns(current.rich.runs, text.length) : [];
+            current.rich?.onChange(replaceRichText({ text, runs: baseRuns }, event.target.value));
+            return;
+          }
           onChange(event.target.value);
         }}
         onKeyDown={(event) => {

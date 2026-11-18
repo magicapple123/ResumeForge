@@ -10,6 +10,7 @@
  * 本组件不持有状态：四行的开关语义分别由各自的子组件与页面 handler 负责。
  */
 import HintDetail from "../../components/common/HintDetail";
+import { LockOutlined } from "@ant-design/icons";
 import { useLocale } from "../../i18n/i18nContext";
 import { t } from "../../i18n";
 import type { WebFormLive, WebFormScope } from "../../types";
@@ -77,8 +78,10 @@ export function FillModePanel({
         onRequestMemoryDialog={onRequestMemoryDialog}
       />
       {/* 四类「始终不代填」压成一行常驻文字（#37 的边界不能藏），完整风险说明与
-          "选错请核对"的提醒收进 ⓘ——那是开启前该读一次、之后不必占两行的内容。 */}
+          "选错请核对"的提醒收进 ⓘ——那是开启前该读一次、之后不必占两行的内容。
+          锁图标是"这是产品边界、不是补充说明"的第二重线索（I-24）。 */}
       <div className="webform-mode-boundary">
+        <LockOutlined className="webform-mode-boundary-icon" aria-hidden="true" />
         <span className="webform-mode-boundary-text">{t("webFormPage.fillMode.boundary")}</span>
         <HintDetail
           detail={t("webFormPage.relaxed.risk")}

@@ -137,6 +137,32 @@ class FieldSource(BaseModel):
     field_id: str = Field(default="", max_length=64)
 
 
+class RichTextRun(BaseModel):
+    """一段带样式的区间（下标基于**纯文本** `value`，左闭右开）。
+
+    I-12 的磁盘形态：`value` 是纯文本，行内样式旁挂在 `item.rich.runs`。`None` 表示
+    "这一项没有覆盖"，与 `False`（用户明确取消加粗）不是一回事——后者在读路径上按
+    "不加粗"处理，因为标记语法表达不了"取消"。
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    start: int = 0
+    end: int = 0
+    bold: bool | None = None
+    link: str | None = None
+    size: float | None = None
+    color: str | None = None
+
+
+class RichText(BaseModel):
+    """`item.rich`：一个 item 的结构化行内样式（没有样式时不写这个键）。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    runs: list[RichTextRun] = Field(default_factory=list)
+
+
 class _ItemBase(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -144,6 +170,9 @@ class _ItemBase(BaseModel):
     placement: Placement = "trail"
     show_label: bool = True
     solo: bool = False
+    #: I-12：结构化行内样式。`None`（默认）+ `exclude_none` 序列化 = 旧文档字节不变。
+    #: 读路径入口是 `resume_rich_marks.item_text`，**不要**在渲染器里直接读它。
+    rich: RichText | None = None
     # 编辑态辅助：隐藏前的位置；隐藏后再显示由前端恢复到此处。
     # 归 item 一起持久化（document_to_json 只在非 None 时写出），planner 不消费。
     hidden_from: Placement | None = None
@@ -210,6 +239,10 @@ class TextItem(BaseModel):
     style: BodyStyle = "bullet"
     text: str = Field(default="", max_length=MAX_RESUME_TEXT_CHARS)
     hidden: bool = False
+    #: I-12：文本块也能带行内样式（前端 `ItemEditor` 的 text 分支改写的目标）。
+    #: 与 `_ItemBase.rich` 同形；`text` 是纯文本，样式旁挂。`exclude_none` 序列化，
+    #: 旧文档字节不变。
+    rich: RichText | None = None
 
     @field_validator("id", mode="before")
     @classmethod
@@ -249,6 +282,12 @@ class HeaderItem(BaseModel):
     #: F20 三态：auto = 按字段类型自动决定（默认，现状逐字节不变）；show = 印「电话：」；
     #: hide = 只印值。**旧文档**没有这个键时按 `show_label === false ? "hide" : "auto"` 回落。
     label_mode: LabelMode = "auto"
+    #: I-02：隐藏前的位置；隐藏后再显示由前端恢复到此处（与 `_ItemBase.hidden_from` 同义）。
+    #: **planner 不消费**；它只解决"恢复时没有记忆只能猜 contact"的状态机缺陷。
+    #: 序列化走 `exclude_none=True`，未隐藏的文档字节不变；只在隐藏期间多一个键。
+    hidden_from: HeaderPlacement | None = None
+    #: I-12：与 `_ItemBase.rich` 同形（页眉字段也能有行内样式）。
+    rich: RichText | None = None
 
     @field_validator("id", mode="before")
     @classmethod

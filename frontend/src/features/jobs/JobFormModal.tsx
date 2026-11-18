@@ -12,6 +12,7 @@ import JobFormFields from "./form/JobFormFields";
 import NoteImagesField from "./form/NoteImagesField";
 import RecognitionSourceSection from "./form/RecognitionSourceSection";
 import { RECOGNIZED_CONTENT_FIELDS } from "./form/jobFormOptions";
+import { useSequentialFill } from "./form/useSequentialFill";
 import { MAX_NOTE_IMAGES } from "./form/NoteImagesField";
 import type {
   Job,
@@ -74,6 +75,8 @@ export default function JobFormModal({
   const [draftsEngine, setDraftsEngine] = useState<RecognitionSource>("local");
   const [savingDrafts, setSavingDrafts] = useState(false);
   const { files, reading, addFiles, removeFile, clear, onPaste } = useRecognitionFiles();
+  // 识别结果按字段顺序逐个落位（I-35）：一次性写 9 个字段用户看不出哪些是新填的。
+  const { fillingField, fill, cancel: cancelFill } = useSequentialFill(form);
   const parseRequestId = useRef(0);
   const submittingRef = useRef(false);
   const isEdit = !!initial;
@@ -164,6 +167,8 @@ export default function JobFormModal({
     }
 
     setParsing(true);
+    // 新的识别开始：上一条结果可能还在逐字段落位，先停掉，避免两套字段交错写入。
+    cancelFill();
     const requestId = ++parseRequestId.current;
     // 记录这次识别用的是什么输入，保存时写进「来源」字段。
     const hasImages = files.some((file) => file.kind === "image");
@@ -202,10 +207,10 @@ export default function JobFormModal({
       } = result.items[0];
       // 没有任何识别内容时（图片识别失败时的本地草稿就是这样）不要回填：无条件写入
       // 会把用户已经手填的标题、公司一起抹掉。判定只看**内容字段**——job_type 和
-      // status 永远有默认值，把它们算进去会让这个判断恒为真。有内容时仍然全量覆盖，
-      // 避免残留上一次识别的字段。
+      // status 永远有默认值，把它们算进去会让这个判断恒为真。有内容时按固定顺序
+      // 逐字段落位（只写有值的那些，空字段不闪一下再变空）。
       if (RECOGNIZED_CONTENT_FIELDS.some((field) => draft[field].trim())) {
-        form.setFieldsValue(draft);
+        fill(draft);
       } else {
         message.warning(t("jobForm.parse.noFields"));
       }
@@ -281,6 +286,7 @@ export default function JobFormModal({
     const { warnings, parse_engine, recognized_text, ...fields } = draft;
     void warnings;
     void recognized_text;
+    cancelFill();
     form.setFieldsValue(fields);
     setDrafts([]);
     setRecognitionSource(parse_engine);
@@ -303,6 +309,8 @@ export default function JobFormModal({
   const close = (force = false) => {
     if (submittingRef.current && !force) return;
     parseRequestId.current += 1;
+    // 关窗就把排队中的字段写入叫停：弹窗销毁后再写会往已卸载的表单里塞值。
+    cancelFill();
     setParsing(false);
     onClose();
   };
@@ -425,7 +433,7 @@ export default function JobFormModal({
               onParse={() => void parseImport()}
             />
           )}
-          <JobFormFields />
+          <JobFormFields fillingField={fillingField} />
           <NoteImagesField
             noteImages={noteImages}
             onAddImage={(file) => void addNoteImage(file)}

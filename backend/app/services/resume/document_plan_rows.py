@@ -22,6 +22,7 @@ from ...schemas.resume_document import (
 )
 from .document_plan_format import body_style_of, item_inlines, wants_paren
 from .resume_labels import list_separator
+from .resume_rich_marks import item_text
 
 
 def _joined_segments(
@@ -101,7 +102,10 @@ def _body_blocks(
             blocks.append(
                 BlockPlan(
                     kind=item.style,
-                    segments=[Inline(text=item.text, role="body", path=path)],
+                    segments=[
+                        # I-12：文本块的正文在 `text` 上（不是 value），读路径同一个入口。
+                        Inline(text=item_text(item, key="text"), role="body", path=path)
+                    ],
                     path=path,
                 )
             )

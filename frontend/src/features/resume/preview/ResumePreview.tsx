@@ -30,6 +30,7 @@ import PreviewAlerts from "./PreviewAlerts";
 import PreviewZoomBar from "./PreviewZoomBar";
 import ResumePreviewToolbar from "./ResumePreviewToolbar";
 import BoldContextMenu, { type RichTextEditAdapter } from "./BoldContextMenu";
+import RichColorPickerPopover from "./RichColorPickerPopover";
 import { useClickToEditPreview } from "./useClickToEditPreview";
 import { forwardWheelToParent, useFrameInteractions } from "./useFrameInteractions";
 import { usePreviewBodyHeight } from "./usePreviewBodyHeight";
@@ -233,11 +234,30 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   /**
    * QW-7：缩放前记录光标下的内容点，缩放提交后由 hook 补偿滚动
    * （纯几何在 `zoomAnchor.ts`，DOM 接线在 `usePreviewZoomAnchor.ts`）。
+   *
+   * I-40：**吃什么量什么**——精确模式没有 `.resume-preview-scale-box`（那是草稿画布），
+   * 改量 `.exact-preview-paper-column` 的宽度算比例，横向滚动容器换成 `.exact-preview`
+   * （它只在放大后才有 `overflow-x: auto`）。几何算法一行没动。
    */
+  const draftContentEl = () =>
+    containerRef.current?.querySelector<HTMLElement>(".resume-preview-scale-box") ?? null;
+  const exactContentEl = () =>
+    bodyRef.current?.querySelector<HTMLElement>(".exact-preview-paper-column") ?? null;
   const captureZoomAnchor = usePreviewZoomAnchor({
-    scale: geometry.scale,
-    viewportRef: containerRef,
-    bodyRef,
+    scaleValue: activeZoom.zoom,
+    contentEl: () => (exactActive ? exactContentEl() : draftContentEl()),
+    hScroller: () =>
+      exactActive
+        ? (bodyRef.current?.querySelector<HTMLElement>(".exact-preview") ?? null)
+        : containerRef.current,
+    vScroller: () => bodyRef.current,
+    scale: () => {
+      if (!exactActive) return geometry.scale;
+      // 精确模式现量：`pageWidth = floor(layoutWidth * zoom)`，缓存值与真实渲染会差 1px。
+      const column = exactContentEl();
+      const width = column?.getBoundingClientRect().width ?? 0;
+      return width > 0 ? width / A4_WIDTH_PX : 1;
+    },
   });
 
   const handleWheel = useCallback(
@@ -277,6 +297,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     active,
     bindDocument: bindClickToEdit,
     boldMenu,
+    colorPicker,
   } = useClickToEditPreview({ containerRef, draftMode, onPickField, richEdit });
 
   // 命令式测量接口（"自动一页"逐档试版式 / 滑块实时探针）拆到 `usePreviewProbeHandle`。
@@ -459,6 +480,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
         onReset={resetZoom}
       />
       {boldMenu ? <BoldContextMenu {...boldMenu} /> : null}
+      {colorPicker ? <RichColorPickerPopover {...colorPicker} /> : null}
     </div>
   );
 });

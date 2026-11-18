@@ -151,11 +151,10 @@ export default function ResumeTemplateControls({
                 // 下拉只有一行可见文字时，读屏软件读到的仍是"combobox"——补一个与视觉标签
                 // 同名的无障碍名（工具栏里现在有两个下拉，按名字定位也才稳）。
                 aria-label={t("resume.format.label")}
-                // 宽度只够框住 4 个中文字符（见 `.resume-format-select`）：原来是 min-width:120，
-                // 框比文字宽出一大截，和同一行的其它控件疏密不匀。名字更长的自制版式
-                // （如「宽松（自制）」）在触发框里走省略号，展开后的列表按内容撑开。
+                // I-06：触发框现在跟着左栏控件列伸缩（104 → 封顶 320）。弹层跟着触发框
+                // 一起变宽，所以不再关掉 `popupMatchSelectWidth`——关掉时弹层按内容宽算，
+                // 宽栏里会变成"框 320、层 130"，点开像跳出来一小块。
                 className="resume-format-select"
-                popupMatchSelectWidth={false}
                 // 弹层宽度：字体下拉与版式下拉共用 `.resume-params-dropdown`（216px，字体是
                 // 竖排两层，需要那个宽度），版式下拉再由 `.resume-format-dropdown` 收窄到
                 // 6 个中文字符宽（见 resume-workbench-controls.css）。触发框宽度不受影响

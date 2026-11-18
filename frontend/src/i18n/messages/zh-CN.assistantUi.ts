@@ -101,6 +101,7 @@ const assistantUi = {
   "assistantUi.memory.off": "本次不记忆",
   "assistantUi.memory.offTooltip": "这段对话不读取也不写入助手记忆；已保存的记忆不会被删除",
   "assistantUi.memory.offBadge": "这段对话不记忆",
+  "assistantUi.memory.offShort": "不记",
   "assistantUi.sidebar.moreAria": "更多对话操作",
   "assistantUi.sidebar.saveTitleTooltip": "保存标题（回车也可以）",
   "assistantUi.sidebar.saveTitleAria": "保存对话标题",

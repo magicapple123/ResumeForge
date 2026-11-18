@@ -420,6 +420,15 @@ const typography = {
   "typography.tools.sectionBatch": "批量调整",
   "typography.tools.sectionRole": "同类段落",
   "typography.tools.roleHint": "同类段落默认按条目正文继承",
+  "typography.photoFrame": "照片框",
+  "typography.photoFrameHint": "照片框尺寸由模板决定，不能单独调节。",
+  "typography.photoFrameEmpty": "选中照片后，这里会显示它的画框比例与建议裁剪比例。",
+  "typography.photoGuide.text": "照片的大小、边框、圆角与偏移在左栏「照片框」里调整",
+  "typography.photoGuide.action": "去「照片框」",
+  "typography.objectGroup.text": "文字与颜色",
+  "typography.objectGroup.spacing": "行距与缩进",
+  "typography.objectGroup.list": "列表与对齐",
+  "typography.objectGroup.meta": "日期与字距",
 } as const;
 
 export default typography;

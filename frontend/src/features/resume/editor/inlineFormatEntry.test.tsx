@@ -3,7 +3,7 @@
  * 行内格式的编辑入口（R-11 / F22）端到端：**受控输入框 + 工具条**。
  *
  * 这条用例覆盖"用户在字段框里选中几个字 → 点字号 → 框里的值变成带标记的源串"，
- * 而输入框与按钮是制作台里的同一对组件（`ResizableValueTextArea` / `Input` +
+ * 而输入框与按钮是制作台里的同一对组件（`AutoGrowValueTextArea` / `Input` +
  * `InlineMarkButtons`）。断言必须看**受控 state**：只看 DOM 值会漏掉"React 没收到 input"
  * 这一类失败。
  *
@@ -16,7 +16,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { t } from "../../../i18n";
 import InlineMarkButtons from "../layout/InlineMarkButtons";
-import ResizableValueTextArea from "./ResizableValueTextArea";
+import AutoGrowValueTextArea from "./AutoGrowValueTextArea";
 import {
   applyInlineEdit,
   getFocusedField,
@@ -44,12 +44,12 @@ function Toolbar() {
   );
 }
 
-/** 多行文本域（正文/单行语义的可拖高文本域都走它）。 */
+/** 多行文本域（正文/单行语义的自适应高度文本域都走它）。 */
 function TextAreaHarness({ initial }: { initial: string }) {
   const [value, setValue] = useState(initial);
   return (
     <AntdApp>
-      <ResizableValueTextArea value={value} ariaLabel="摘要" onChange={setValue} />
+      <AutoGrowValueTextArea value={value} ariaLabel="摘要" onChange={setValue} />
       <Toolbar />
       <output data-testid="value">{value}</output>
     </AntdApp>

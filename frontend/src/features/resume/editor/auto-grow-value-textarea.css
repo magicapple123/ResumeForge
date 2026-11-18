@@ -1,15 +1,17 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /**
- * 可拖高的值输入框（问题 8）：`ResizableValueTextArea` 专用。
+ * 自适应高度的值输入框（I-14）：`AutoGrowValueTextArea` 专用。
  *
  * - `min-height: 30px`：与旁边 `size="small"` 的单行输入框**同高**（实测 antd v6 的 small input
  *   是 30px；不覆盖的话文本域会被 antd 的 `min-height: 40px` 顶到 40px，替换之后输入框会凭空长高 10px）；
- * - `max-height: 40vh`：防"一口气拖到视口外"；
- * - `resize: vertical`：只允许纵向拖，不允许拖宽破坏中栏栅格。
+ * - `max-height: 40vh`：窄视口（720 高）下的硬上限——`autoSize` 的 `maxRows: 4` 在矮窗里
+ *   可能仍然超过 40vh，那时由这里兜住并出现内部滚动条。
+ *
+ * **不再有 `resize`**：`autoSize` 下 rc-textarea 会把 `resize` 强制成 `none`（它自己量高度），
+ * 写 `resize: vertical` 只会让人以为还有拖高手柄。
  *
  * 选择器带 `.ant-input` 是为了压过 antd 运行期注入的 `.ant-input` 规则：
- * 同特异性下后注入者胜，而我们的静态样式表永远在前。`autoSize` 一律不传——
- * 传了 rc-textarea 会把 `resize` 强制成 `none`，手柄消失。
+ * 同特异性下后注入者胜，而我们的静态样式表永远在前。
  *
  * **内边距与行高不在这里写**：I-26 起文本域与行内标记遮罩层必须逐像素对齐，字体度量
  * （`padding` / `line-height` / `font-size` / 换行规则）只允许有一个出处——
@@ -19,5 +21,4 @@
 .ant-input.rf-value-textarea {
   min-height: 30px;
   max-height: 40vh;
-  resize: vertical;
 }

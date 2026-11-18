@@ -10,16 +10,41 @@
  * 与拆分前逐字一致；单独成 hook 是因为这段只有"操作 iframe 文档"一件事，与缩放/口径/
  * 渲染都无关，放在组件里会挤掉真正属于组件的那部分。
  */
-import { useImperativeHandle } from "react";
+import { useCallback, useEffect, useImperativeHandle } from "react";
 import type { ForwardedRef, RefObject } from "react";
 import { measureResumeLayout } from "../../../utils/resumeLayoutMeasure";
 import { LIVE_PROBE_STYLE_ID, PROBE_STYLE_ID, type ResumePreviewHandle } from "./config";
+import { registerLiveProbe } from "./liveProbeRegistry";
 
 export function usePreviewProbeHandle(
   ref: ForwardedRef<ResumePreviewHandle>,
   iframeRef: RefObject<HTMLIFrameElement | null>,
   pageCount: number,
 ): void {
+  /**
+   * I-15：实时探针同时挂到登记处——没有 `previewRef` 通道的宿主（字段右键的排版浮层 /
+   * 照片框浮层）走那里，写的是同一个 iframe、同一条 `LIVE_PROBE_STYLE_ID` 样式。
+   */
+  const setLiveProbe = useCallback(
+    (css: string) => {
+      const frameDocument = iframeRef.current?.contentDocument;
+      const head = frameDocument?.head;
+      if (!frameDocument || !head) return;
+      const existing = frameDocument.getElementById(LIVE_PROBE_STYLE_ID) as HTMLStyleElement | null;
+      if (!css) {
+        existing?.remove();
+        return;
+      }
+      const style = existing ?? frameDocument.createElement("style");
+      style.id = LIVE_PROBE_STYLE_ID;
+      style.textContent = css;
+      if (!existing) head.appendChild(style);
+    },
+    [iframeRef],
+  );
+
+  useEffect(() => registerLiveProbe(setLiveProbe), [setLiveProbe]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -44,21 +69,8 @@ export function usePreviewProbeHandle(
           if (style && previousLayoutCss !== null) style.textContent = previousLayoutCss;
         }
       },
-      setLiveProbe(css: string) {
-        const document = iframeRef.current?.contentDocument;
-        const head = document?.head;
-        if (!document || !head) return;
-        const existing = document.getElementById(LIVE_PROBE_STYLE_ID) as HTMLStyleElement | null;
-        if (!css) {
-          existing?.remove();
-          return;
-        }
-        const style = existing ?? document.createElement("style");
-        style.id = LIVE_PROBE_STYLE_ID;
-        style.textContent = css;
-        if (!existing) head.appendChild(style);
-      },
+      setLiveProbe,
     }),
-    [iframeRef, pageCount],
+    [iframeRef, pageCount, setLiveProbe],
   );
 }

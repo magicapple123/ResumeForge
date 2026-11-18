@@ -26,13 +26,13 @@ from ..schemas.resume_document_plan import DocumentPlan, EntryPlan, Inline, Sect
 from .docx_blocks import DocxTheme, entry_head, paragraph, section_title, section_title_gap_mm
 from .docx_document_body import apply_field_spacing
 from .docx_document_fields import draw_field_split_head
+from .docx_document_header import draw_header
 from .docx_document_parts import (
     RoleStyleQuery,
     add_segments,
     align_value,
     draw_blocks,
     draw_cell_rows,
-    draw_header,
     plain_text,
     style_of,
 )

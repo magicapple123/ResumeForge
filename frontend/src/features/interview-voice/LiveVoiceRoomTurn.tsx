@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 通话主栏顶部的「当前问答」卡（F15 从 `LiveVoiceRoomStage` 拆出）。
+ * 时间线末尾的「当前轮」（F15 从 `LiveVoiceRoomStage` 拆出，I-27 再改成时间线的一段）。
  *
- * 为什么搬出左栏：左栏原来是"形象 + 当前问答"两件事挤在一列，问答卡被 `flex: 1` 拉到
- * 整列高度，两行内容时留下大块空白，而右栏的对话记录反倒被压到 300–420px。现在左栏只
- * 留形象与摄像头，主栏是"当前问答（可滚） → 对话记录"，重心落在真正有内容的一侧。
+ * 为什么不再是一张独立卡：它和上方的历史记录本来就是同一条对话流，另开一张卡会让
+ * "最新 → 历史 → 又是最新"的错觉复活（I-25 刚修掉顺序）。现在它是时间线的**尾巴**：
+ * 左侧一条强调竖线 + 「正在问」标记，视觉上接着上一条气泡，语义上仍是当前轮。
  *
  * 编辑态留在组件内部：草稿只在"正在改这一条回答"时有意义，换一轮（`answer.id` 变）就
  * 丢弃——否则草稿会挂到下一轮上，看起来像"改错了题"。
@@ -43,74 +43,80 @@ export function LiveVoiceRoomTurn({
     setEditingId(turn.answer?.id ?? null);
   };
 
+  // 没有当前轮时整段不渲染：空态由时间线那句「等待面试官提问」负责，两处各说一句
+  // 会在同一屏上出现两个"还没有内容"的提示。
+  if (!turn.question && !turn.answer) return null;
+
   return (
     <section
       className="interview-live-room__turn"
       aria-label={t("interviewVoice.room.currentTurn")}
+      data-current-turn="true"
     >
-      <Typography.Text type="secondary" className="interview-live-room__turn-label">
-        {t("interviewVoice.room.currentTurn")}
-      </Typography.Text>
-      {turn.question || turn.answer ? (
-        <>
-          {turn.question ? (
-            <div className="interview-live-room__turn-question">
-              <MarkdownBlock content={turn.question} />
-            </div>
-          ) : null}
-          {turn.answer ? (
-            <div className="interview-live-room__turn-answer">
-              {editing ? (
-                <>
-                  <Input.TextArea
-                    value={draft}
-                    autoSize={{ minRows: 2, maxRows: 6 }}
-                    onChange={(event) => setDraft(event.target.value)}
-                    aria-label={t("interviewVoice.room.revise")}
-                  />
-                  <Typography.Text type="secondary" className="interview-live-room__turn-hint">
-                    {t("interviewVoice.room.reviseHint")}
-                  </Typography.Text>
-                  <div className="interview-live-room__turn-actions">
-                    <Button size="small" onClick={() => setEditingId(null)}>
-                      {t("interviewVoice.room.reviseCancel")}
-                    </Button>
-                    <Button
-                      size="small"
-                      type="primary"
-                      danger
-                      disabled={!draft.trim() || revising}
-                      onClick={() => {
-                        onRevise?.(turn.answer!.id, draft.trim());
-                        setEditingId(null);
-                      }}
-                    >
-                      {t("interviewVoice.room.reviseSubmit")}
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <MarkdownBlock content={turn.answer.content} />
-                  {onRevise ? (
-                    <Button
-                      size="small"
-                      type="text"
-                      icon={<EditOutlined aria-hidden="true" />}
-                      className="interview-live-room__turn-edit"
-                      onClick={startEditing}
-                    >
-                      {t("interviewVoice.room.revise")}
-                    </Button>
-                  ) : null}
-                </>
-              )}
-            </div>
-          ) : null}
-        </>
-      ) : (
-        <Typography.Text type="secondary">{t("interviewVoice.room.noTurn")}</Typography.Text>
-      )}
+      <div className="interview-live-room__turn-head">
+        {turn.question ? (
+          <span className="interview-live-room__asking-pill">
+            {t("interviewVoice.room.asking")}
+          </span>
+        ) : null}
+        <Typography.Text type="secondary" className="interview-live-room__turn-label">
+          {t("interviewVoice.room.currentTurn")}
+        </Typography.Text>
+      </div>
+      {turn.question ? (
+        <div className="interview-live-room__turn-question">
+          <MarkdownBlock content={turn.question} />
+        </div>
+      ) : null}
+      {turn.answer ? (
+        <div className="interview-live-room__turn-answer">
+          {editing ? (
+            <>
+              <Input.TextArea
+                value={draft}
+                autoSize={{ minRows: 2, maxRows: 6 }}
+                onChange={(event) => setDraft(event.target.value)}
+                aria-label={t("interviewVoice.room.revise")}
+              />
+              <Typography.Text type="secondary" className="interview-live-room__turn-hint">
+                {t("interviewVoice.room.reviseHint")}
+              </Typography.Text>
+              <div className="interview-live-room__turn-actions">
+                <Button size="small" onClick={() => setEditingId(null)}>
+                  {t("interviewVoice.room.reviseCancel")}
+                </Button>
+                <Button
+                  size="small"
+                  type="primary"
+                  danger
+                  disabled={!draft.trim() || revising}
+                  onClick={() => {
+                    onRevise?.(turn.answer!.id, draft.trim());
+                    setEditingId(null);
+                  }}
+                >
+                  {t("interviewVoice.room.reviseSubmit")}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <MarkdownBlock content={turn.answer.content} />
+              {onRevise ? (
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<EditOutlined aria-hidden="true" />}
+                  className="interview-live-room__turn-edit"
+                  onClick={startEditing}
+                >
+                  {t("interviewVoice.room.revise")}
+                </Button>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }

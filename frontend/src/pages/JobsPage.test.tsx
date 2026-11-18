@@ -358,6 +358,27 @@ describe("JobsPage URL 状态化", () => {
     expect(document.querySelector(".ant-table-column-sort")).toBeNull();
   });
 
+  it("排序后出现「恢复默认排序」并贴在尾槽，复位后箭头与按钮一起消失（I-39）", () => {
+    renderPageWithProbe();
+    const resetLabel = "恢复默认排序";
+    // 默认排序（最近导入在前）：按钮**不渲染**，不是灰着。
+    expect(screen.queryByRole("button", { name: resetLabel })).toBeNull();
+
+    const header = screen.getByRole("columnheader", { name: "发布时间" });
+    fireEvent.click(header);
+    expect(header).toHaveAttribute("aria-sort", "descending");
+
+    const reset = screen.getByRole("button", { name: resetLabel });
+    // 尾槽结构：按钮必须是 `.filter-row` 的**直接 flex 子项**，`margin-inline-start:auto`
+    // 才推得动；塞进 antd Space 的话它会被 `.ant-space-item` 包住，贴不到行右。
+    expect(reset.className).toContain("filter-reset");
+    expect(reset.closest(".filter-row")).not.toBeNull();
+
+    fireEvent.click(reset);
+    expect(header).not.toHaveAttribute("aria-sort");
+    expect(screen.queryByRole("button", { name: resetLabel })).toBeNull();
+  });
+
   it("进页面时从 URL 恢复筛选与页码", () => {
     mocks.jobs = Array.from({ length: 12 }, (_, index) =>
       makeJob({ id: index + 1, title: `示例岗位${index + 1}` }),

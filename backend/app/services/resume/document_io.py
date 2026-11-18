@@ -18,6 +18,8 @@ document_converter / schemas.resume_document）。
 
 from __future__ import annotations
 
+import logging
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -56,6 +58,44 @@ __all__ = [
 ]
 
 
+logger = logging.getLogger(__name__)
+
+#: I-02：照片 data URI 前缀。只判前缀、不解码（省掉每次保存一次 base64 decode）。
+_PHOTO_DATA_URL_RE = re.compile(r"^data:image/(?:jpeg|jpg|png|webp|gif);base64,", re.IGNORECASE)
+
+
+def _heal_header_photo_placements(document: dict) -> list[dict[str, str]]:
+    """I-02 保存侧自愈：`placement="contact"` 但值其实是图片 data URI 的页眉字段写回 `photo`。
+
+    返回被修复的字段（`item_id` / `key`），调用方拿它写结构化日志。
+    `header.photo` 已被占用时**不重复**占用：那个字段原样留在 contact，由 planner 跳过，
+    不在保存路径上静默删用户的字段。
+    """
+    header = document.get("header")
+    if not isinstance(header, dict):
+        return []
+    items = header.get("items")
+    if not isinstance(items, list):
+        return []
+    has_photo = any(
+        isinstance(item, dict) and item.get("placement") == "photo" and item.get("value")
+        for item in items
+    )
+    healed: list[dict[str, str]] = []
+    for item in items:
+        if not isinstance(item, dict) or item.get("placement") != "contact":
+            continue
+        value = item.get("value")
+        if not isinstance(value, str) or not _PHOTO_DATA_URL_RE.match(value):
+            continue
+        if has_photo:
+            continue
+        item["placement"] = "photo"
+        has_photo = True
+        healed.append({"item_id": str(item.get("id") or ""), "key": str(item.get("key") or "")})
+    return healed
+
+
 def ensure_document_version(
     content: Any,
     *,
@@ -84,6 +124,10 @@ def prepare_document_for_save_with_report(
     """同 prepare_document_for_save，但额外返回 v1→v2 的转换报告（None = 本来就是 v2）。
 
     创建/保存响应里的 document_conversion 用它：只有真的发生过转换才提示"旧简历已升级"。
+
+    I-02 保存侧自愈：历史缺陷把照片写成 `placement="contact"` 的文档，在这里写回 `photo`。
+    渲染侧的容忍（planner 跳过图片型 contact）只保证"看起来对"，不自愈的话这个键会永远留着，
+    下一次导出仍要走一遍跳过判断。写回时记一条结构化日志，不打扰用户。
     """
     document, report = ensure_document_version_with_report(
         content,
@@ -95,6 +139,12 @@ def prepare_document_for_save_with_report(
         from .resume_labels import normalize_language
 
         document["language"] = normalize_language(language)
+    healed = _heal_header_photo_placements(document)
+    if healed:
+        logger.info(
+            "resume_document.header_photo_placement_healed",
+            extra={"healed_fields": healed, "healed_count": len(healed)},
+        )
     normalized = parse_document(document)
     validate_document_ids_v2(normalized)
     return document_to_json(normalized), report

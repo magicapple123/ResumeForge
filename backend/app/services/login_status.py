@@ -17,18 +17,27 @@
 ## 状态存哪
 
 `AppSetting` 的 KV（`login_status.<source>` 一行 JSON），**零迁移**：
-`{"status": "ok|expired|unknown|unchecked", "checked_at": "...", "detail": "..."}`
+`{"status": "ok|logged-out|expired|unknown|unchecked", "checked_at": "...", "detail": "..."}`
 探测 URL 也存 KV（`login_status.probe_url.<source>`），因为站点改版就得换，不能写死成唯一真相。
+
+## I-29：为什么不是"没看到登录墙 = 已登录"
+
+公开岗位页永远不会有登录墙，所以"没看到登录墙"对岗位页是**恒真**的——旧判据结构上就不可能
+发现"未登录"。现在的判据只有三态来源：登录页特征 / 独立「登录」CTA → `logged-out`；
+账号标记（退出登录 / 个人中心…）→ `ok`；其余 → `unknown`。**公开页的内容本身永远不给 `ok`。**
+`expired` 只保留读取（老数据仍显示「已失效」），探测器不再新写。
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from sqlalchemy.orm import Session
 
@@ -39,7 +48,56 @@ from .track_probe_settings import read_cookie, write_settings
 
 logger = logging.getLogger(__name__)
 
-LoginStatusValue = Literal["ok", "expired", "unknown", "unchecked"]
+LoginStatusValue = Literal["ok", "logged-out", "expired", "unknown", "unchecked"]
+
+#: 状态 JSON 的白名单。**加新状态必须同时加到这里**，否则存进去会被静默读成 `unchecked`。
+_STATUS_VALUES = ("ok", "logged-out", "expired", "unknown", "unchecked")
+
+# 判定登录页的 URL path 特征（只认路径段，避免 `?redirect=/login` 这类参数误伤）。
+_LOGIN_PATH = re.compile(r"/(login|signin|sign-in|passport|sso|auth)(/|$)", re.IGNORECASE)
+# 英文 ATS 的登录页措辞：命中 >=2 个 **且** 短页 **且** 有密码框才判 logged-out。
+_LOGIN_WORDS = (
+    "sign in",
+    "log in",
+    "login",
+    "password",
+    "forgot password",
+    "create account",
+    "username",
+    "email address",
+)
+#: 账号标记：页面上出现这些词说明**已经登录**（比"没看到登录墙"硬得多）。
+_ACCOUNT_MARKERS = (
+    "退出登录",
+    "个人中心",
+    "我的投递",
+    "我的简历",
+    "账号设置",
+    "sign out",
+    "log out",
+    "my applications",
+    "my profile",
+    "account settings",
+)
+#: 「退出登录」里含「登录」：匹配登录 CTA 前必须先剔除这些短语，否则登录后的页会被判成未登录。
+_LOGOUT_PHRASES = re.compile(r"退出\s*登录|安全退出|登出")
+#: 独立的登录 CTA：整行只写这几个字（按钮在 `innerText` 里通常独占一行）。
+_LOGIN_CTA_TOKENS = frozenset(
+    {
+        "登录",
+        "立即登录",
+        "去登录",
+        "请登录",
+        "马上登录",
+        "登录/注册",
+        "登录 | 注册",
+        "sign in",
+        "log in",
+        "login",
+        "sign in / register",
+        "sign in or register",
+    }
+)
 
 #: 三个来源。`id` 同时也是 KV 后缀与前端行标识；`browser=True` 的会真的拉起浏览器。
 SOURCES: tuple[dict[str, Any], ...] = (
@@ -177,7 +235,7 @@ def _parse_status_record(
     if not isinstance(parsed, dict):
         return empty
     status = parsed.get("status")
-    if status not in ("ok", "expired", "unknown", "unchecked"):
+    if status not in _STATUS_VALUES:
         status = "unchecked"
     recorded = str(parsed.get("probe_url") or "")
     if "probe_url" not in parsed:
@@ -217,20 +275,30 @@ def _save_status(
 
 
 def _aggregate_sites(sites: list[dict[str, Any]]) -> dict[str, Any]:
-    """父行状态由站点聚合：任一 expired → expired；全 ok → ok；否则 unknown。"""
+    """父行状态由站点聚合：`logged-out` > `expired` > 全 `ok` > `unknown`。
+
+    未登录必须压过"已失效"：前者是可操作状态（去登录就行），后者是故障。
+    """
     statuses = [site["status"] for site in sites]
-    if "expired" in statuses:
-        status: LoginStatusValue = "expired"
+    if "logged-out" in statuses:
+        status: LoginStatusValue = "logged-out"
+    elif "expired" in statuses:
+        status = "expired"
     elif statuses and all(value == "ok" for value in statuses):
         status = "ok"
     else:
         status = "unknown"
     ok_count = sum(1 for value in statuses if value == "ok")
+    out_count = sum(1 for value in statuses if value == "logged-out")
+    detail = f"{len(sites)} 个站点 · {ok_count} 正常"
+    if out_count:
+        # 不写这一截，父行会永远是「无法判断」，而子行明明已经确定。
+        detail += f" · {out_count} 未登录"
     checked = [str(site["checked_at"]) for site in sites if site["checked_at"]]
     return {
         "status": status,
         "checked_at": max(checked) if checked else "",
-        "detail": f"{len(sites)} 个站点 · {ok_count} 正常",
+        "detail": detail,
     }
 
 
@@ -277,11 +345,44 @@ def reset_cooldowns() -> None:
         _cooldowns.clear()
 
 
-def _judge(text: str) -> tuple[LoginStatusValue, str]:
-    """一处实现，两个来源共用：登录页特征 → expired，其余 → ok。"""
-    if looks_like_login_page(text):
-        return "expired", "停在登录页"
-    return "ok", ""
+def _has_login_cta(text: str) -> bool:
+    """页面上是否有一个**独立的**「登录」入口（按钮 / 链接，整行只有它）。
+
+    先剔除「退出登录」类短语：登录后的页面导航里也有「登录」两个字，不剔除就会把
+    已登录的页面判成未登录。
+    """
+    for line in _LOGOUT_PHRASES.sub("", text).splitlines():
+        token = line.strip().strip("·|/>»").strip().lower()
+        if token in _LOGIN_CTA_TOKENS:
+            return True
+    return False
+
+
+def _judge(
+    text: str, *, href: str = "", has_password: bool = False
+) -> tuple[LoginStatusValue, str]:
+    """登录态判定：**一处实现**，Cookie / 投递浏览器 / 网申站点共用。
+
+    顺序固定，`ok` 只能来自账号标记（受限页可访问由 `login_status_sites` 另行给出）：
+    公开页即使正文完整、看起来一切正常，也只能是 `unknown`——"没看到登录墙"对公开页恒真。
+    """
+    body = str(text or "")
+    path = urlsplit(href).path if href else ""
+    if path and _LOGIN_PATH.search(path):
+        return "logged-out", "停在登录页"
+    if looks_like_login_page(body):
+        return "logged-out", "停在登录页"
+    lowered = body.lower()
+    hits = sum(1 for word in _LOGIN_WORDS if word in lowered)
+    if hits >= 2 and len(body) < 600 and has_password:
+        return "logged-out", "页面像登录页（英文）"
+    if any(marker in lowered for marker in _ACCOUNT_MARKERS):
+        return "ok", "页面有账号标记"
+    if _has_login_cta(body):
+        return "logged-out", "页面显示登录入口"
+    if len(body.strip()) < 20:
+        return "unknown", "页面内容过少，无法判断"
+    return "unknown", ""
 
 
 def _probe_cookie(db: Session, url: str | None = None) -> tuple[LoginStatusValue, str]:
@@ -295,8 +396,8 @@ def _probe_cookie(db: Session, url: str | None = None) -> tuple[LoginStatusValue
     result = track_probe._read_page(db, target, cookie, None)  # noqa: SLF001 - 复用 SSRF 逐跳校验
     if isinstance(result, str):
         return "unknown", result
-    text, _final_url = result
-    return _judge(text)
+    text, final_url = result
+    return _judge(text, href=str(final_url or ""))
 
 
 def _probe_browser(db: Session, source: str, url: str) -> tuple[LoginStatusValue, str]:

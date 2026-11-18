@@ -50,6 +50,7 @@ export const Workbar = memo(function Workbar({
   onRefreshStatus,
   onExportDiagnostics,
   onEndSession,
+  onboarding = false,
 }: {
   targetUrl: string;
   onChangeTargetUrl: (url: string) => void;
@@ -69,6 +70,11 @@ export const Workbar = memo(function Workbar({
   onRefreshStatus: () => void;
   onExportDiagnostics: () => void;
   onEndSession: () => void;
+  /**
+   * 初始态（I-24）：工具条**只留状态与地址**，主 CTA 全部让给流程轨道右端。
+   * 这样「开启专用浏览器」在全页只出现一次。
+   */
+  onboarding?: boolean;
 }) {
   // 本组件用模块级 t()：订阅语言变化，否则切语言后这些按钮与提示不重渲染。
   useLocale();
@@ -87,6 +93,7 @@ export const Workbar = memo(function Workbar({
         history={urlHistory}
         busy={busy === "start"}
         running={running}
+        showOpenButton={!onboarding}
         onChange={onChangeTargetUrl}
         onOpen={() => void onOpenUrl()}
         onSelectHistory={(item) => onChangeTargetUrl(item.url)}
@@ -126,7 +133,7 @@ export const Workbar = memo(function Workbar({
                 {t("webFormPage.browserCard.stop")}
               </Button>
             </Tooltip>
-          ) : !hasUrl ? (
+          ) : onboarding ? null : !hasUrl ? (
             <Button
               type="primary"
               icon={<ChromeOutlined />}

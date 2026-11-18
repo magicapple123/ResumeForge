@@ -122,6 +122,62 @@ describe("路径 → 条目 / 作用范围", () => {
     expect(headerFieldFromPath(document, "education.ob_entry001")).toBeNull();
     expect(headerFieldFromPath(document, "header.nope")).toBeNull();
   });
+
+  /**
+   * I-01：照片字段的名字不能是 data URI。
+   *
+   * 旧兜底链是 `label || value || key`——照片没有 label，值就是十万字符的 base64，
+   * 于是「正在调整：data:image/jpeg;base64,/9j/4AAQ…」把六行参数全挤出可视区，
+   * 屏幕阅读器还会把整串念一遍。照片一律给空串 + `photo: true`，由调用方回落到「照片」。
+   */
+  it("headerFieldFromPath：照片字段的 label 不是 data URI（0 个 data:image）", () => {
+    const withPhoto = makeDocument();
+    withPhoto.header.items = [
+      ...withPhoto.header.items,
+      {
+        kind: "field",
+        id: "ob_head_photo",
+        key: "photo",
+        label: "",
+        value: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==",
+        placement: "photo",
+        format: "text",
+        wrap: "none",
+        show_label: false,
+        solo: false,
+        source: null,
+        body_style: "bullet",
+      } as unknown as (typeof withPhoto.header.items)[number],
+    ];
+    const field = headerFieldFromPath(withPhoto, "header.ob_head_photo");
+    expect(field?.label).toBe("");
+    expect(field?.label ?? "").not.toContain("data:image");
+    expect(field?.photo).toBe(true);
+  });
+
+  it("headerFieldFromPath：超长 / 多行值也不当名字（自定义字段塞长文本）", () => {
+    const withLong = makeDocument();
+    withLong.header.items = [
+      ...withLong.header.items,
+      {
+        kind: "field",
+        id: "ob_head_long",
+        key: "custom:long",
+        label: "",
+        value: "x".repeat(200),
+        placement: "contact",
+        format: "text",
+        wrap: "none",
+        show_label: false,
+        solo: false,
+        source: null,
+        body_style: "bullet",
+      } as unknown as (typeof withLong.header.items)[number],
+    ];
+    expect(headerFieldFromPath(withLong, "header.ob_head_long")?.label).toBe("");
+    // 回归：短值仍当名字（"正在调整：13800000000" 比"未命名"有用）。
+    expect(headerFieldFromPath(withLong, "header.ob_head0001")?.label).not.toBe("");
+  });
 });
 
 describe("选择集合换算", () => {

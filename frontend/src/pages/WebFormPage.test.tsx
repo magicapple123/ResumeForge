@@ -182,6 +182,9 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
+/** 图标会带自己的 aria-label，可访问名不是纯文案，所以用片段匹配。 */
+const startName = new RegExp(webFormPageZh["webFormPage.browserCard.start"]);
+
 describe("WebFormPage", () => {
   it("has no button whose label says 提交", async () => {
     // 这是这个功能的硬边界：程序只填不交。任何文案里带"提交"的按钮都是违规的。
@@ -228,58 +231,74 @@ describe("WebFormPage", () => {
     expect(note.className).not.toContain("ant-alert");
   });
 
-  it("初始态是三步动作卡 + 两栏「怎么填 / 最近填写」", async () => {
+  it("初始态是一条流程轨道 + 两栏「怎么填 / 最近填写」", async () => {
     renderPage();
     await screen.findByTestId("webform-onboarding");
 
+    // 步骤只有一套表达：轨道（四个节点）取代了原来的三张动作卡。
+    expect(screen.getByTestId("webform-flow-wide")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
     expect(screen.getByRole("heading", { name: "怎么填" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "最近填写" })).toBeInTheDocument();
     expect(screen.getByTestId("webform-recent")).toBeInTheDocument();
   });
 
-  it("disables reading the form until the browser is running", async () => {
-    apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "running" }));
+  it("浏览器未启动时没有「读取当前表单」，主 CTA 换成「开启专用浏览器」", async () => {
+    apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "stopped" }));
     renderPage();
+    const slot = await screen.findByTestId("webform-flow-wide");
 
+    // 起浏览器之前读不到表单：入口不再"灰着放那儿"，而是整颗换成第 1 步的动作。
+    expect(within(slot).queryByRole("button", { name: /读取当前表单/ })).toBeNull();
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /读取当前表单/ })).toBeDisabled(),
+      expect(within(slot).getByRole("button", { name: startName })).toBeEnabled(),
     );
   });
 
-  it("工具条每态只有一颗主按钮：有网址给「打开目标页」，没网址给「开启专用浏览器」", async () => {
+  it("主按钮只在轨道右端：工具条零颗，轨道恰一颗；有网址时换成「打开目标页」", async () => {
     apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "stopped" }));
     renderPage();
     const workbar = await screen.findByTestId("webform-workbar");
-    const primaries = () => workbar.querySelectorAll("button.ant-btn-primary");
+    const slot = await screen.findByTestId("webform-flow-wide");
 
     await waitFor(() =>
-      expect(within(workbar).getByRole("button", { name: "开启专用浏览器" })).toBeEnabled(),
+      expect(within(slot).getByRole("button", { name: startName })).toBeEnabled(),
     );
-    expect(primaries()).toHaveLength(1);
+    expect(slot.querySelectorAll("button.ant-btn-primary")).toHaveLength(1);
+    // 初始态工具条只留状态与地址（I-24）：主 CTA 不再出现第二次。
+    expect(workbar.querySelectorAll("button.ant-btn-primary")).toHaveLength(0);
 
     fireEvent.change(within(workbar).getByLabelText("网申投递网址"), {
       target: { value: "https://example.com/apply" },
     });
 
-    await waitFor(() => expect(primaries()).toHaveLength(1));
-    // 有了网址，主入口换成「打开目标页」；两颗不再并存。
-    expect(within(workbar).queryByRole("button", { name: "开启专用浏览器" })).toBeNull();
-    expect(
-      within(workbar).getByRole("button", { name: webFormPageZh["webFormPage.urlBar.open"] }),
-    ).toBeEnabled();
+    await waitFor(() =>
+      expect(
+        within(slot).getByRole("button", {
+          name: new RegExp(webFormPageZh["webFormPage.urlBar.open"]),
+        }),
+      ).toBeEnabled(),
+    );
+    expect(within(slot).queryByRole("button", { name: startName })).toBeNull();
+    expect(slot.querySelectorAll("button.ant-btn-primary")).toHaveLength(1);
   });
 
-  it("运行中且地址为空时，唯一的主按钮仍是地址条那一颗（禁用），不与关闭按钮并列", async () => {
+  it("运行中：唯一主按钮是轨道里的「读取当前表单」，工具条只留关闭", async () => {
     renderPage();
     const workbar = await screen.findByTestId("webform-workbar");
+    const slot = await screen.findByTestId("webform-flow-wide");
 
     await waitFor(() =>
       expect(within(workbar).getByRole("button", { name: /关闭浏览器/ })).toBeInTheDocument(),
     );
-    expect(workbar.querySelectorAll("button.ant-btn-primary")).toHaveLength(1);
+    expect(workbar.querySelectorAll("button.ant-btn-primary")).toHaveLength(0);
     expect(
-      within(workbar).getByRole("button", { name: webFormPageZh["webFormPage.urlBar.open"] }),
-    ).toBeDisabled();
+      within(slot).getByRole("button", {
+        name: new RegExp(webFormPageZh["webFormPage.readSnapshot.read"]),
+      }),
+    ).toBeEnabled();
+    // 页面其它区域（引导浮层等）也有按钮，这里只要求「轨道里只有这一颗主按钮」。
+    expect(slot.querySelectorAll("button.ant-btn-primary")).toHaveLength(1);
   });
 
   it("允许手动刷新浏览器状态，并把已关闭的窗口显示成未启动", async () => {
@@ -293,9 +312,7 @@ describe("WebFormPage", () => {
 
     await waitFor(() =>
       expect(
-        within(screen.getByTestId("webform-workbar")).getByRole("button", {
-          name: "开启专用浏览器",
-        }),
+        within(screen.getByTestId("webform-flow-wide")).getByRole("button", { name: startName }),
       ).toBeInTheDocument(),
     );
     expect(apiMocks.getWebFormBrowserStatus.mock.calls.length).toBeGreaterThanOrEqual(2);
@@ -423,10 +440,9 @@ describe("WebFormPage", () => {
       .mockResolvedValue(liveStatus({ running: true }));
 
     renderPage();
-    // 「开启专用浏览器」现在同时出现在工具条与第 1 张动作卡上：这里点的是工具条那颗
-    // （主入口），卡片那颗只是同一个动作的第二次入口。
-    const workbar = await screen.findByTestId("webform-workbar");
-    (await within(workbar).findByRole("button", { name: "开启专用浏览器" })).click();
+    // 初始态主 CTA 只在轨道右端（I-24）：工具条在本态不渲染它。
+    const slot = await screen.findByTestId("webform-flow-wide");
+    (await within(slot).findByRole("button", { name: startName })).click();
 
     await waitFor(() => expect(apiMocks.startWebFormBrowser).toHaveBeenCalled());
     expect(await screen.findByRole("button", { name: "关闭智能逐项填表" })).toBeEnabled();

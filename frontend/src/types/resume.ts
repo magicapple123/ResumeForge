@@ -58,6 +58,23 @@ export interface ResumeTemplateOption {
    * 而不是对所有模板都摆一条与事实无关的提示。旧后端不下发时按 `false`（不提示）。
    */
   serif_heading?: boolean;
+  /**
+   * 这个模板**真实用的四色**（I-09）：左栏「外观」组的 2×2 色卡在"随模板"时显示它们。
+   *
+   * 后端从 `app/templates/resume_*.html.j2` 的 `:root` 镜像而来（`--accent` / `--text` /
+   * `--muted` / `--line`），与纸面用色同源。**可能缺省或为 `null`**：自制模板的 HTML 由
+   * 用户自己写，后端读不到 `:root`；旧后端也不下发。两种情况前端都按"没有配色数据"
+   * 处理（斜纹占位 + 「随模板」），不编造假色值。
+   */
+  palette?: ResumeTemplatePalette | null;
+}
+
+/** 模板配色的四个键（与 `FORMAT_FIELDS` 里 `type: "color"` 的四项同名同序）。 */
+export interface ResumeTemplatePalette {
+  accent: string;
+  text_color: string;
+  muted_color: string;
+  line_color: string;
 }
 
 export interface ResumeFontScaleOption {

@@ -32,6 +32,13 @@ const interviewVoice = {
   "interviewVoice.room.interviewer": "面试官",
   "interviewVoice.room.you": "我",
   "interviewVoice.room.conversation": "对话记录",
+  "interviewVoice.camera.notice.off": "摄像头总开关未开启，开启后才能使用",
+  "interviewVoice.camera.notice.denied": "打不开摄像头（系统权限被拒绝）",
+  "interviewVoice.camera.notice.no-device": "打不开摄像头（未找到摄像头设备）",
+  "interviewVoice.camera.notice.busy": "打不开摄像头（被其他程序占用）",
+  "interviewVoice.camera.notice.unsupported": "当前浏览器不支持摄像头",
+  "interviewVoice.camera.notice.unknown": "打不开摄像头，请检查系统权限后重试",
+  "interviewVoice.room.historyEmpty": "更早的问答会显示在这里",
   "interviewVoice.room.waiting": "等待面试官提问",
   "interviewVoice.room.speaking": "面试官正在说话",
   "interviewVoice.room.speechUnsupported": "当前浏览器无法朗读面试官回复，文字对话仍可继续",
@@ -50,7 +57,6 @@ const interviewVoice = {
   "interviewVoice.room.micIdle": "未开启",
   "interviewVoice.room.speakingBadge": "正在播报",
   "interviewVoice.room.currentTurn": "当前问答",
-  "interviewVoice.room.noTurn": "还没有问答，先开启麦克风或直接说话",
   "interviewVoice.room.settings": "通话设置",
   "interviewVoice.room.expand": "展开设置",
   /** 合成失败回落浏览器音色时的说明：不许静默无声。 */
@@ -60,6 +66,18 @@ const interviewVoice = {
   "interviewVoice.room.reviseHint": "确认后会作废这一轮的面试官点评并重新提问，不能撤销。",
   "interviewVoice.room.reviseSubmit": "确认重问",
   "interviewVoice.room.reviseCancel": "取消",
+
+  // ===== I-27：在场条 / 点评栏 / 当前轮标记 =====
+  /** 在场条上的题号；只在已经问过至少一题时出现。 */
+  "interviewVoice.room.questionCount": "第 {count} 题",
+  /** 时间线末尾那条提问的标记（代替原「当前问答」整张卡）。 */
+  "interviewVoice.room.asking": "正在问",
+  /** 点评栏：从气泡里搬出来的独立一栏。 */
+  "interviewVoice.room.review": "本轮点评",
+  "interviewVoice.room.reviewEmpty": "本轮暂无点评",
+  "interviewVoice.room.reviewCollapsed": "点评已收起",
+  "interviewVoice.room.reviewExpand": "展开点评",
+  "interviewVoice.room.reviewCollapse": "收起点评",
 
   // ===== 识别待确认气泡（Q1-C L1）=====
   "interviewVoice.pending.title": "识别结果",

@@ -12,13 +12,13 @@
  * Ctrl/⌘/Alt；浏览器保留组合拒绝；与其它动作冲突拒绝。被拒绝时红字提示且**不落库**，
  * 用户不会在"以为改好了"之后发现按了没反应。
  */
-import { QuestionCircleOutlined } from "@ant-design/icons";
-import { App, Button, Card, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Card, Popconfirm, Space, Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { t } from "../../i18n";
 import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { HintDetail } from "../../components/common/HintDetail";
 import {
   SCOPE_LABEL_KEYS,
   SHORTCUT_ACTIONS,
@@ -164,20 +164,26 @@ export default function ShortcutSettingsCard() {
     {
       title: t("shortcutSettings.column.action"),
       key: "label",
+      // I-28：给动作列一个**显式宽度**。auto 布局下这一列只有约 80px（键盘列把余量吸走），
+      // 提示模式展开的 45 字会被挤成"每行 6 字"的竖条；固定 200px 后两种情况列宽一致，
+      // 切换模式只长高、不跳列。
+      width: 200,
       render: (_, action) => {
         const hintKey = ACTION_HINT_KEYS[action.id];
-        return (
-          <Space size={4}>
-            <Typography.Text>{t(action.labelKey)}</Typography.Text>
-            {hintKey ? (
-              <Tooltip title={t(hintKey)}>
-                <QuestionCircleOutlined
-                  aria-label={t("shortcutSettings.actionHelp", { label: t(action.labelKey) })}
-                />
-              </Tooltip>
-            ) : null}
-          </Space>
-        );
+        // I-28：长说明从 Tooltip 换成 HintDetail（默认点开看，Alt+H 原地展开）。
+        // `variant="block"` 是给这一列用的：动作列约 200px，inline 会把 45 字挤成竖条。
+        // 文案一字不改，只换载体；`actionHelp` 仍是无障碍名。
+        if (hintKey) {
+          return (
+            <HintDetail
+              variant="block"
+              detail={t(hintKey)}
+              label={t("shortcutSettings.actionHelp", { label: t(action.labelKey) })}
+              summary={t(action.labelKey)}
+            />
+          );
+        }
+        return <Typography.Text>{t(action.labelKey)}</Typography.Text>;
       },
     },
     {

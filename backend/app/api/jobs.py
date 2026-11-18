@@ -11,6 +11,7 @@ from starlette.responses import Response
 from ..database import get_db
 from ..models.job import JOB_STATUSES, Job
 from ..runtime.blocking import run_sync
+from ..schemas.extraction import MAX_RECOGNIZED_TEXT_CHARS
 from ..schemas.job import (
     JobBatchDeleteResult,
     JobBatchRequest,
@@ -51,9 +52,23 @@ from ..services.job.job_sorting import JobSort, JobSortOrder, job_order_by
 from ..services.job_text_parser import parse_job_text
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
+from ..services.ocr import load_ocr_context
+from ..services.recognition_route import (
+    JOB_CONTENT_FIELDS,
+    RecognitionSetup,
+    blocked_image_warning,
+    decide_route,
+    dropped_images_warning,
+    filled_field_count,
+    ocr_rescue,
+    ocr_to_text,
+    recognition_setup,
+    trim_recognized_text,
+)
 from ..services.settings_service import get_llm_config
 from ..services.text_extraction import (
     ai_failed_warning,
+    attach_warnings,
     extract_job_text,
     finalize_recognition_result,
     llm_is_configured,
@@ -115,16 +130,19 @@ def list_job_ids(
 add_action_route(router, job_actions()["create_job"])
 
 
-def _prepare_parse_llm(db: Session):
-    """读模型配置、构造调用器，然后归还请求连接（整段同步工作单元）。
+def _prepare_parse_llm(db: Session) -> RecognitionSetup:
+    """读模型配置、能力声明、OCR 上下文，然后归还请求连接（整段同步工作单元）。
 
     识别可能持续几十秒：会话留在事件循环线程上（哪怕只是 ``close``）会让同进程的其它
-    请求排在这条 SQLite 连接后面。未配置模型时返回 ``None``，调用方走本地兜底。
+    请求排在这条 SQLite 连接后面。**三份上下文都必须在 ``close`` 之前取**——OCR 的 Key
+    与引擎档位也是查库拿的，放到 close 之后会静默变成"OCR 不可用"。未配置模型时
+    ``provider`` 为 ``None``，调用方走本地兜底。
     """
     config = get_llm_config(db)
     provider = create_provider(config) if llm_is_configured(config) else None
+    setup = recognition_setup(config, provider, load_ocr_context(db))
     db.close()
-    return provider
+    return setup
 
 
 @router.post("/parse-text", response_model=JobTextParseResult)
@@ -150,13 +168,47 @@ async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depen
     # 字段锚定也仍然对着原文，比图片那条"让模型自己抄录再核对"的路子强。
     source_text = "\n\n".join(part for part in (payload.text, documents.text) if part.strip())
     local_draft = parse_job_text(source_text)
-    provider = await run_sync(_prepare_parse_llm, db)
+    setup = await run_sync(_prepare_parse_llm, db)
+    provider = setup.provider
     if provider is None:
         return finalize_recognition_result(
             mark_local_fallback(local_draft, no_model_warning(has_images, has_documents)),
             has_images=has_images,
             document_warnings=documents.warnings,
         )
+    # I-34：先看能力表再决定发什么。文本模型收到 image_url 只会 400，等失败再猜原因
+    # 是在替用户读报错；这里直接按"有图 / 能看图 / 能用 OCR"四条出口走。
+    route = decide_route(
+        has_images=has_images,
+        vision=setup.vision,
+        ocr_usable=setup.ocr_available,
+        ocr_forced=setup.ocr_forced,
+    )
+    extra_warnings: list[str] = []
+    ocr_text = ""
+    if route == "blocked":
+        # 一个请求都不发：本地规则 + 精确提示（含模型名与两条出路）。
+        return finalize_recognition_result(
+            mark_local_fallback(
+                local_draft,
+                blocked_image_warning(setup.model, ocr_engine=setup.ocr_engine),
+            ),
+            has_images=has_images,
+            document_warnings=documents.warnings,
+        )
+    if route == "ocr":
+        prep = await ocr_to_text(
+            source_text=source_text,
+            image_urls=image_urls,
+            ctx=setup.ocr,
+            parse_local=parse_job_text,
+        )
+        extra_warnings.extend(prep.warnings)
+        if prep.dropped_images:
+            extra_warnings.append(dropped_images_warning(prep.dropped_images))
+        source_text, local_draft, ocr_text = prep.source_text, prep.local_draft, prep.ocr_text
+        # OCR 文本与原图**不同时发**：双倍计费，且锚定会同时对着两套文字。
+        image_urls = []
     try:
         result = await extract_job_text(provider, source_text, local_draft, image_urls)
     except LLMError as exc:
@@ -169,8 +221,33 @@ async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depen
         result = mark_local_fallback(
             local_draft, ai_failed_warning(has_images, has_documents=has_documents)
         )
-    return finalize_recognition_result(
-        result, has_images=has_images, document_warnings=documents.warnings
+    if route == "vision" and setup.ocr_available and not filled_field_count(
+        result, JOB_CONTENT_FIELDS
+    ):
+        # 视觉跑完一个字段都没回填 = 前端不会有任何变化：补一次 OCR，取内容更多的那份。
+        try:
+            rescue = await ocr_rescue(
+                source_text=source_text,
+                image_urls=image_urls,
+                ctx=setup.ocr,
+                parse_local=parse_job_text,
+                run_extraction=lambda text, draft, urls: extract_job_text(
+                    provider, text, draft, urls
+                ),
+            )
+        except Exception:  # noqa: BLE001 - 兜底失败不该盖掉已有结果
+            logger.warning("岗位视觉结果为空，OCR 兜底失败", exc_info=True)
+            rescue = None
+        if rescue is not None and filled_field_count(rescue.result, JOB_CONTENT_FIELDS) > 0:
+            result, ocr_text = rescue.result, rescue.ocr_text
+            extra_warnings.extend(rescue.warnings)
+    if ocr_text:
+        result = trim_recognized_text(result, ocr_text, MAX_RECOGNIZED_TEXT_CHARS)
+    return attach_warnings(
+        finalize_recognition_result(
+            result, has_images=has_images, document_warnings=documents.warnings
+        ),
+        extra_warnings,
     )
 
 
@@ -213,7 +290,8 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
             drafts = [parse_job_text("")]
         return [mark_local_fallback(draft, reason) for draft in drafts]
 
-    provider = await run_sync(_prepare_parse_llm, db)
+    setup = await run_sync(_prepare_parse_llm, db)
+    provider = setup.provider
     if provider is None:
         items = _local_items(no_model_warning(has_images, has_documents))
         return JobMultiTextParseResult(
@@ -225,6 +303,36 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
             ],
             parse_engine="local",
         )
+    # 与单份解析共用同一套路由：无 vision 时先把图片换成文字，原图不再下发。
+    route = decide_route(
+        has_images=has_images,
+        vision=setup.vision,
+        ocr_usable=setup.ocr_available,
+        ocr_forced=setup.ocr_forced,
+    )
+    extra_warnings: list[str] = []
+    if route == "blocked":
+        items = _local_items(blocked_image_warning(setup.model, ocr_engine=setup.ocr_engine))
+        return JobMultiTextParseResult(
+            items=[
+                finalize_recognition_result(
+                    item, has_images=has_images, document_warnings=documents.warnings
+                )
+                for item in items
+            ],
+            parse_engine="local",
+        )
+    if route == "ocr":
+        prep = await ocr_to_text(
+            source_text=source_text,
+            image_urls=image_urls,
+            ctx=setup.ocr,
+            parse_local=parse_job_text,
+        )
+        extra_warnings.extend(prep.warnings)
+        if prep.dropped_images:
+            extra_warnings.append(dropped_images_warning(prep.dropped_images))
+        source_text, image_urls = prep.source_text, []
 
     try:
         results = await extract_multiple_jobs(provider, source_text, image_urls)
@@ -239,8 +347,11 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
         engine = "local"
 
     items = [
-        finalize_recognition_result(
-            item, has_images=has_images, document_warnings=documents.warnings
+        attach_warnings(
+            finalize_recognition_result(
+                item, has_images=has_images, document_warnings=documents.warnings
+            ),
+            extra_warnings,
         )
         for item in results
     ]

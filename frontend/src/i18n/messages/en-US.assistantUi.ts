@@ -105,6 +105,7 @@ const assistantUi = {
   "assistantUi.memory.offTooltip":
     "This conversation reads and writes no assistant memory. Saved memories are kept.",
   "assistantUi.memory.offBadge": "No memory in this conversation",
+  "assistantUi.memory.offShort": "Off",
   "assistantUi.sidebar.moreAria": "More conversation actions",
   "assistantUi.sidebar.saveTitleTooltip": "Save the title (Enter also works)",
   "assistantUi.sidebar.saveTitleAria": "Save conversation title",

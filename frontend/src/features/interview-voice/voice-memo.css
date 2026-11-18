@@ -23,6 +23,20 @@
   max-width: 320px;
 }
 
+/* I-18：悬停提示两行（用途在前、限制在后）。
+   `max-width` 由 Tooltip 的 `styles.root` 给到 320px——antd 默认 250px 会把用途那句
+   压成三行，窄屏 1080 下还会顶到按钮边缘。这里只管行内排版。 */
+.voice-memo-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.voice-memo-tooltip-limit {
+  opacity: 0.72;
+  font-size: 12px;
+}
+
 .voice-memo-recording {
   display: inline-flex;
   align-items: center;

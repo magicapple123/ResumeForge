@@ -146,7 +146,6 @@ const resume = {
   "resume.fieldDiff.line": "{label}: {value}",
   "resume.fieldDiff.listSeparator": ", ",
 
-  "resume.sort.resetHintDefault": "Already using the default sort: recently updated first",
   "resume.sort.resetHint": "Restore the default sort: recently updated first",
 
   "resume.fontScale.small": "Small",

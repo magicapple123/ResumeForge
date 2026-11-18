@@ -58,6 +58,7 @@ const document = {
   "document.entry.empty": "This section has no entries yet",
   "document.entry.copy": "Copy entry",
   "document.entry.remove": "Remove entry",
+  "document.entry.selectAria": "Select entry {index}: {title}",
   "document.entry.hide": "Hide entry",
   "document.entry.show": "Show entry",
   "document.entry.moveUp": "Move entry up",

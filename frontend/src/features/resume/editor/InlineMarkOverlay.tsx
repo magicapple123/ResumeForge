@@ -51,6 +51,11 @@ import "../../../styles/inline-mark-overlay.css";
 interface Props {
   /** 源串（含标记），与文本域里的值**逐字相同**。 */
   value: string;
+  /**
+   * I-13：结构化字段的分段（纯文本 + runs，没有隐藏段）。给了它就不再解析 `value`——
+   * 那类字段的 `value` 本来就没有标记字符，解析一遍只会得到同样的结果、白白多一份实现。
+   */
+  segments?: InlineMarkSegment[] | null;
   /** 文本域的纵向滚动量：两层不同步的话，长文本一滚就错位。 */
   scrollTop?: number;
   scrollLeft?: number;
@@ -95,11 +100,12 @@ function placeSegments(
 
 export default function InlineMarkOverlay({
   value,
+  segments: provided = null,
   scrollTop = 0,
   scrollLeft = 0,
   selection = null,
 }: Props) {
-  const segments = useMemo(() => parseInlineMarkSegments(value), [value]);
+  const segments = useMemo(() => provided ?? parseInlineMarkSegments(value), [provided, value]);
   // 滚动的两层同步：遮罩层不滚，而是把内容反向平移（它的盒子和文本域一样大、且 overflow hidden）。
   const mirrorStyle: CSSProperties = useMemo(
     () => ({ transform: `translate(${-scrollLeft}px, ${-scrollTop}px)` }),

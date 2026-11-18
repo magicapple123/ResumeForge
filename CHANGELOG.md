@@ -59,6 +59,10 @@
 
 ### Changed
 
+- **行内格式改为结构化富文本：磁盘上不再有 `{@…}` 标记（I-12，XL）。** 此前"加粗 / 字号 / 颜色 / 链接"编码在 `item.value` 的标记串里，编辑器只是把标记画成透明——**占位宽度仍在**，于是文字被推右一大截、光标停在文字左边一段空白里；未闭合的标记还会原样露出来。现在 `item.value` 是**纯文本**，样式旁挂 `item.rich.runs`（`{start,end,bold?,link?,size?,color?}`，下标基于纯文本、左闭右开，`bold=None` 与 `bold=false` 是两个意思）。四个导出出口（HTML / PDF / Word / 纯文本）统一在 planner 层读一次 runs，不再各自解析标记——改在四个 exporter 各接一次会变成四份真源。
+  **这是单向升级**：升级后旧版本客户端读到的 `value` 是纯文本，**行内样式会丢**。旧数据（`value` 里仍有 `{@…}`）读写都兼容，**保存一次即被升级**为 runs。迁移工具 `backend/scripts/migrate_inline_marks.py` 支持 `--dry-run` / `--limit` / `--only <document_id>`、幂等、按条报告"解析不掉的畸形串"；**迁移不可逆**，回滚用整库 zip 备份，不要试图把 runs 反向拼回标记串。
+- **姓名字距在精确模式与 Word 上生效（I-41）。** 此前姓名角色的「字距」只有草稿认：草稿的 `letter-spacing` 变了，PDF 没有 `set_char_spacing`、Word 没有 `w:spacing`，所以同一个 `+0.5` 在两种导出里一点变化都没有。现在两条导出支路与草稿共用 `resume_header_style` 的同一份取值与同一条下限（低于 `-0.1em` 按 `-0.1em`），姓名宽度按「字距 × (字符数−1)」计入（末字符后不加间距，与 fpdf2 / Word 行为一致），量宽与画宽走同一个函数——不会出现"文字画出去被裁"或"性别被挤到下一行"。未设字距的简历产物零变化。
+- **性别（`name_meta`）的颜色 / 字号 / 字重现在跟随 `meta` 角色（I-42）。** 此前精确模式与 Word 的性别段是固定浅灰 + 固定比例字号，只有草稿认角色级样式。取值顺序固定为 **字段级 > `meta` 角色级 > 历史固定值**，字号变化会同时进入"姓名与性别能否同行"的判定与页头高度。**调过 `meta` 角色样式的存量简历，导出后性别段的外观会变**——这是修正（草稿早就是这样）；从未调过的人不受影响（PDF 绘制日志逐项相同、Word 除时间戳成员外逐字节相同）。
 - **页眉「标签」与「值」分开调参（QW-6）。** planner 把「电话：」与号码拆成同一路径的两段（`field_label` / `meta`），样式白名单放行 `header.{id}`，排版浮层增加「字段值 / 字段名」目标（无标签段的字段直接禁用「字段名」，不写死键）；HTML / PDF / Word / Markdown 四出口的文本逐字不变。
 - **字段级缩进与项目符号落到承载块（DF-8）。** 缩进写到真正承载文本的 `li` / `p.body-paragraph`，并与列表基准对齐：草稿左缘与 PDF 差 ≤0.02px，Word 的 `w:ind` 与 PDF 同值；兄弟条目的 `list-style` 不受影响。
 - **行内标记在展示与 AI 上下文里剥离（DF-6）。** `displayText` / `fieldDisplayName` 成为唯一出口（结构树、变更摘要、chip、页眉 chip、助手上下文），源码里的 `{@color=…}` / `{@size=…}` 不再出现在界面与模型提示里；变更判定仍在源串上做，只改颜色仍算一次改动。
@@ -137,6 +141,11 @@
 
 ### Fixed
 
+- **「登录状态」不再把公开页报成「正常」（I-29）。** 根因是判据写反了：「没看到登录墙」被当成「已登录」，而公开岗位页永远没有登录墙——这条判据对岗位页 **恒真**，探测器在结构上就不可能发现"未登录"。现在判据三态：命中登录路径 / 登录页特征 / 独立「登录」CTA（且无账号标记）→ **未登录**（detail 写明是"停在登录页"还是"页面显示登录入口"）；有账号标记（退出登录 / 个人中心 / 我的投递 / 我的简历 / 账号设置）→ **正常**；其余 → **无法判断**。`ok` 只能来自账号标记或"受限页可访问"，**公开页内容本身永不给 `ok`**。新增 `logged-out` 状态（老数据里的 `expired` 仍显示「已失效」，但探测器不再新写）；`jobs.bytedance.com` 配了受限页 `/campus/position/application` 作为硬证据，其余 4 站未探测到硬证据 → 留空走回退（只会显示「无法判断」，不会误报）。父行汇总优先级改为 `logged-out > expired > 全 ok > unknown`，detail 写「N 个站点 · X 正常 · Y 未登录」。匹配登录 CTA 前先把「退出登录」从文本里剔除，否则登录后的页面会被判成未登录。
+- **草稿模式纸面右键菜单补齐（I-13）。** 原来只有四项（加粗 / 缩小一号 / 强调色 / 编辑这一栏），字号写死一档、颜色写死一种。现在与编辑器对齐：加粗、字号多档、颜色（6 个预设 + 清除）、清除行内格式；**链接仍走「编辑这一栏」**（纸面没有输入 URL 的落点）。写回走 `applyStyleMark` 的"按属性替换"——用 `toggleStyle` 会在同属性换值时嵌套成 `{@size=1.1}{@size=0.9}…{@}{@}`。
+- **行内格式的颜色按钮不再是「像下划线」的图标（I-10）。** `FontColorsOutlined`（A + 横杠）容易被读成下划线按钮，换成自绘 16×16 调色板，`1em` / `currentColor` / `aria-hidden`，交互与读屏名不变。
+- **行内格式菜单不再先在外层闪一帧（I-11）。** `visibility: hidden` 以前只加在内层 `.rf-inline-mark-popup`，antd 的 `.ant-dropdown` 外壳仍可见，于是菜单先在宿主左上角闪一张空白壳再跳到光标旁。现在 Dropdown 的 `styles.root` 隐藏**最外层**，且测量重试有上限（30 帧后强制显示），不会因为量不到尺寸永久隐身。
+- **灰色短字段的长值不再只显示一行（I-14）。** 输入框从 `rows={1}` 改成按内容自适应 1–4 行（`autoSize`），长值不用再在框内滚动才能看全；4 行以上保留内部滚动条与 `40vh` 硬上限。组件随之改名 `ResizableValueTextArea → AutoGrowValueTextArea`（它已经不能拖高了）。列表 chip 的悬停提示从原生 `title`（约 1 秒延迟、样式不可控）换成 antd `Tooltip`，**原生 `title` 已删除**，否则两个气泡会叠在一起。
 - **PowerShell 脚本缺 BOM 导致 Windows 启动器语法错（P0 回归）。** `scripts/PipFailureHint.ps1` 与 `scripts/tests/Test-PipFailureHint.ps1` 是 UTF-8 无 BOM 且含中文，Windows PowerShell 5.1 按 ANSI 解码后在字符串处解析失败——`Start-ResumeForge.ps1` 首次装依赖时直接「启动失败」，Windows end-to-end 整格红。补上 BOM（与仓库其余 `.ps1` 一致），并在 `repo-hygiene` 加一条守卫：含非 ASCII 的 `.ps1` / `.psm1` 必须带 UTF-8 BOM。
 - **后端 `pyright` 在 HEAD 上就是红的（两处）。** `assistant_conversations` 把落库的 `dict` 直接塞进 `ChatConversationDetail.compaction`（契约要 `ContextCompactionStateOut`），改成显式 `model_validate`；`contact_field_groups` 的 `Sequence[object]` 改成泛型，`docx_document_parts` 里 `list[object]` 不再污染下游类型。
 - **前端 10 个文件在 HEAD 上没过 `prettier --check`。** 只是换行与缩进，无语义变化；`format:check` 恢复为绿。

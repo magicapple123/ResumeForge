@@ -39,6 +39,7 @@ import {
   type PhotoSourceInfo,
 } from "./photoCrop";
 import { DEFAULT_PRINTED_WIDTH_MM, estimateRectClarity, printedWidthMm } from "./photoClarity";
+import { frameRatioLabel, nearestCropAspect, usePhotoFrameAspect } from "./photoFrameAspect";
 import { usePhotoDimensions } from "./usePhotoDimensions";
 import PhotoCropBox from "./PhotoCropBox";
 
@@ -53,6 +54,8 @@ interface Props {
   printedWidthMm?: number;
   /** 预览视口：用于量"照片在纸面上实际多宽"（只读 DOM，且在 effect 里读 ref）。 */
   viewportRef?: RefObject<HTMLElement | null>;
+  /** 画框宽高比覆盖值（宿主已量好时传入；不传 = 从 `viewportRef` 里量）。 */
+  frameAspectRatio?: number;
   /** 应用裁剪（`null` = 恢复原图）。 */
   onApply: (params: PhotoCropParams | null) => void;
   /** 移除照片（走宿主的内容保存链路）；不传 = 不提供该动作。 */
@@ -82,12 +85,19 @@ export default function PhotoCropModal({
   initialCrop = null,
   printedWidthMm: printedWidthMmValue,
   viewportRef,
+  frameAspectRatio,
   onApply,
   onRemove,
 }: Props) {
   useLocale();
   const { message } = App.useApp();
   const dimensions = usePhotoDimensions(open ? photo : null);
+  // I-37：画框比例从纸面 iframe 实测（`object-fit: contain` 不改元素盒子），
+  // 换模板就跟着变；量不到时 `presetAspect` 为 null，保持原来的「原图」默认。
+  const measuredFrameAspect = usePhotoFrameAspect(open, viewportRef);
+  const frameAspect = frameAspectRatio ?? measuredFrameAspect;
+  const presetAspect = nearestCropAspect(frameAspect);
+  const frameLabel = frameRatioLabel(frameAspect);
   // 纸面宽度从这个 iframe 实测：裁剪参数是相对原图的，清晰度提示却取决于"纸上多大"。
   const [measuredWidth, setMeasuredWidth] = useState<number | undefined>(undefined);
   const decodedSource: PhotoSourceInfo | null = dimensions
@@ -100,7 +110,9 @@ export default function PhotoCropModal({
   const savedCrop = cropInvalidated ? null : initialCrop;
   const source: PhotoSourceInfo | null = decodedSource ?? savedCrop?.source ?? null;
 
-  const [aspect, setAspect] = useState<PhotoAspect>(savedCrop?.aspect ?? "free");
+  // 用户手动改过比例之后，晚到的实测结果不能把他的选择拽回去。
+  const [aspectTouched, setAspectTouched] = useState(false);
+  const [aspect, setAspect] = useState<PhotoAspect>(savedCrop?.aspect ?? presetAspect ?? "free");
   const [rect, setRect] = useState<CropRect>(
     savedCrop ? clampCropRect(savedCrop.rect) : FULL_FRAME,
   );
@@ -111,17 +123,26 @@ export default function PhotoCropModal({
   if (wasOpen !== open) {
     setWasOpen(open);
     if (open) {
-      setAspect(savedCrop?.aspect ?? "free");
+      setAspectTouched(false);
+      setAspect(savedCrop?.aspect ?? presetAspect ?? "free");
       setRect(savedCrop ? clampCropRect(savedCrop.rect) : FULL_FRAME);
     }
   }
 
+  // I-37：画框比例是打开后才实测到的。量到之前先用「原图」，量到且没有已保存裁剪、
+  // 用户也没手动改过比例时，才套最接近的预设（默认模板 → 4:5，modern → 1:1）。
+  useEffect(() => {
+    if (!open || savedCrop || aspectTouched || !presetAspect) return;
+    setAspect((current) => (current === "free" ? presetAspect : current));
+  }, [open, savedCrop, aspectTouched, presetAspect]);
+
   // 旧裁剪因换照片失效：框与比例一起复位。
   useEffect(() => {
     if (!cropInvalidated) return;
-    setAspect("free");
+    setAspectTouched(false);
+    setAspect(presetAspect ?? "free");
     setRect(FULL_FRAME);
-  }, [cropInvalidated]);
+  }, [cropInvalidated, presetAspect]);
 
   const sourceWidth = dimensions?.width ?? 0;
   const sourceHeight = dimensions?.height ?? 0;
@@ -164,6 +185,7 @@ export default function PhotoCropModal({
   }));
 
   const selectAspect = (next: PhotoAspect) => {
+    setAspectTouched(true);
     setAspect(next);
     setRect((current) => fitCropRectToAspect(current, next, source));
   };
@@ -250,6 +272,18 @@ export default function PhotoCropModal({
             onChange={(next) => selectAspect(next as PhotoAspect)}
             style={{ display: "flex", marginTop: 4 }}
           />
+          {frameLabel && presetAspect ? (
+            <Typography.Text
+              type="secondary"
+              data-testid="photo-frame-hint"
+              style={{ display: "block", marginTop: 6, fontSize: 12 }}
+            >
+              {t("proview.photo.frameHint", {
+                frame: frameLabel,
+                aspect: t(ASPECT_LABEL_KEYS[presetAspect]),
+              })}
+            </Typography.Text>
+          ) : null}
           <Typography.Text
             type="secondary"
             style={{ display: "block", marginTop: 6, fontSize: 12 }}

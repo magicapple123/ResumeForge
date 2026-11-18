@@ -11,6 +11,7 @@ Markdown / TXT 五个出口都**只消费 plan**：字段拼装、排序、换�
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -48,6 +49,11 @@ from .resume_labels import (
     gender_text,
     normalize_language,
 )
+from .resume_rich_marks import item_text
+
+#: I-02：照片 data URI 的前缀判据。只 match 前缀、不做 base64 解码——
+#: `validate_photo_data_url` 会 decode，5MB 照片每次渲染都解一遍，热路径不能用。
+_PHOTO_DATA_URL_RE = re.compile(r"^data:image/(?:jpeg|jpg|png|webp|gif);base64,", re.IGNORECASE)
 
 __all__ = [
     "build_document_plan",
@@ -147,18 +153,22 @@ def plan_header(header: ResumeHeader, language: str, contact_separator: str = ""
     for item in header.items:
         mode = _label_mode(item)
         path = "header." + item.id
+        # I-12：页眉自由文本字段同样优先读 `rich.runs`（`item_text` 是唯一读路径入口；
+        # 没有 rich 时原样返回 value，页眉产物逐字节不变）。性别是**枚举**，不参与投影
+        # ——它的值要过 `gender_text` 词表，标记串会破坏匹配。
+        text = item_text(item)
         if item.placement == "name":
-            name.append(Inline(text=item.value, role="meta", path=path))
+            name.append(Inline(text=text, role="meta", path=path))
         elif item.placement == "name_meta":
             if item.key != "gender":
-                name_meta.append(Inline(text=item.value, role="meta", path=path))
+                name_meta.append(Inline(text=text, role="meta", path=path))
                 continue
             # v1 的「姓名（性别）」口径：gender 在自己的字段里，渲染时套语言括号。
             # show 改「性别：男」并不再叠括号；hide 只印值（F20）。
             if mode == "show" and item.value:
-                name_meta.extend(field_segments(labels.get("gender", "性别"), item.value, path))
+                name_meta.extend(field_segments(labels.get("gender", "性别"), text, path))
             elif mode == "hide":
-                name_meta.append(Inline(text=item.value, role="meta", path=path))
+                name_meta.append(Inline(text=text, role="meta", path=path))
             else:
                 name_meta.append(
                     Inline(text=gender_text(item.value, language), role="meta", path=path)
@@ -171,8 +181,17 @@ def plan_header(header: ResumeHeader, language: str, contact_separator: str = ""
             prefix = labels.get(spec.label_key, "") if spec is not None else ""
             if prefix and (mode == "show" or (mode == "auto" and item.show_label)):
                 subtitle.append(label_segment(prefix, path))
-            subtitle.append(Inline(text=item.value, role="meta", path=path))
+            subtitle.append(Inline(text=text, role="meta", path=path))
         elif item.placement == "contact":
+            # I-02 读取侧容忍：历史缺陷（页眉 hide→show 把 placement 写死成 contact）会把
+            # 照片的 data URI 留在这里。它一旦进 contact_items，HTML 因 nowrap 横向溢出，
+            # PDF 因 `_has_header_field_style` 走逐字符分行 → 每页都刷满 base64。
+            # 判据只用**前缀正则**，不调 validate_photo_data_url（那个会 base64 decode，
+            # 5MB 照片每次渲染都解一遍）。
+            if _PHOTO_DATA_URL_RE.match(item.value):
+                if photo is None:
+                    photo = item.value
+                continue
             contact_items.append(item)
         elif item.placement == "photo":
             photo = item.value
@@ -197,7 +216,7 @@ def plan_header(header: ResumeHeader, language: str, contact_separator: str = ""
         else:
             # auto 对电话/邮箱/城市/出生年份只印值（历史行为）；show 才补前缀。
             label = labels.get(item.key, "") if mode == "show" else ""
-        current.extend(field_segments(label, item.value, "header." + item.id))
+        current.extend(field_segments(label, item_text(item), "header." + item.id))
     if current:
         lines.append(current)
     return HeaderPlan(

@@ -75,6 +75,30 @@ export interface MemoProposalResult {
 }
 
 /**
+ * 解析接口的字段 id → 文档字段 key 的**显式别名表**（I-20）。
+ *
+ * 为什么会不一致：`parse-text` 的 `field_id` 来自**资料**定义目录，纸面目录的
+ * `source_field_id` 却有自己的 key——两处都自称"目录"，但经历角色在资料侧叫
+ * `experiences.title`、在纸面侧叫 `role`；奖项同名同理。实测（2026-11-18）：
+ *
+ * | 解析接口 | 纸面目录 |
+ * |---|---|
+ * | `experiences.title` | `role`（source `experiences.role`） |
+ * | `educations.core_courses` | `courses`（source `educations.courses`） |
+ * | `awards.title` | `name`（source `awards.name`） |
+ * | `awards.awarded_at` | `date`（source `awards.date`） |
+ *
+ * **只做显式映射，不做模糊匹配**：`team_size` / `experience_kind` 这类字段一模糊就会串。
+ * 注释里的删除条件是"后端按纸面目录 key 输出"，在那之前这张表是唯一真源。
+ */
+const SOURCE_ALIASES: Readonly<Record<string, string>> = {
+  "experiences.title": "role",
+  "educations.core_courses": "courses",
+  "awards.title": "name",
+  "awards.awarded_at": "date",
+};
+
+/**
  * 目录里找得到文档字段 key 的那些值（找不到 = 目录与后端不同步，跳过该字段）。
  *
  * ## 起止时间为什么要单独合一次
@@ -90,14 +114,20 @@ function valuesOf(
   specs: readonly FieldCatalogField[],
 ): { values: Record<string, string>; labels: Record<string, string> } {
   const bySource = new Map<string, FieldCatalogField>();
-  for (const spec of specs) bySource.set(spec.source_field_id, spec);
+  for (const spec of specs) {
+    bySource.set(spec.source_field_id, spec);
+    // 别名表按"文档字段 key"回查：目录把 role 的 source 写成 `experiences.role` 时，
+    // 解析结果给的是 `experiences.title`，只有 key 这一层还能对上（见 SOURCE_ALIASES）。
+    if (!bySource.has(spec.key)) bySource.set(spec.key, spec);
+  }
   const values: Record<string, string> = {};
   const labels: Record<string, string> = {};
   const dateParts: { start: string; end: string } = { start: "", end: "" };
   for (const field of fields) {
     const value = (field.value ?? "").trim();
     if (!value) continue;
-    const spec = bySource.get(field.field_id);
+    const alias = SOURCE_ALIASES[field.field_id];
+    const spec = bySource.get(field.field_id) ?? (alias ? bySource.get(alias) : undefined);
     if (spec) {
       if (spec.material_only) continue;
       values[spec.key] = value;
@@ -240,6 +270,13 @@ export interface MemoApplyResult {
   duplicates: number;
   /** 文档里没有该板块 / 目录对不上而丢弃的条数。 */
   dropped: number;
+  /**
+   * 本次**真的插进去**的条目路径（`<sectionKey>.<entryId>`，顺序 = 插入顺序）。
+   *
+   * I-20：界面据此选中并滚动到最新一条。被去重 / 丢弃的条目**不产生路径**，
+   * 否则"插入 0 条"也会触发一次跳转。
+   */
+  insertedPaths: string[];
 }
 
 /** 板块里是否已经有一条把 `values` 全覆盖了（值全等即可，不做模糊匹配）。 */
@@ -278,6 +315,7 @@ export function applyMemoProposals(
   let inserted = 0;
   let duplicates = 0;
   let dropped = 0;
+  const insertedPaths: string[] = [];
   for (const proposal of proposals) {
     const section = next.sections.find((candidate) => candidate.key === proposal.sectionKey);
     const entry = section ? buildEntry(proposal, section, catalog) : null;
@@ -289,8 +327,10 @@ export function applyMemoProposals(
       duplicates += 1;
       continue;
     }
-    next = addEntry(next, proposal.sectionKey, entry).document;
+    const added = addEntry(next, proposal.sectionKey, entry);
+    next = added.document;
+    insertedPaths.push(`${proposal.sectionKey}.${added.entryId}`);
     inserted += 1;
   }
-  return { document: next, inserted, duplicates, dropped };
+  return { document: next, inserted, duplicates, dropped, insertedPaths };
 }

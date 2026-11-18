@@ -32,6 +32,8 @@ import { useLocale } from "../../i18n/i18nContext";
 
 const STATUS_COLOR: Record<LoginStatusValue, string> = {
   ok: "success",
+  // 未登录是可操作状态（去登录就行），不是故障：用琥珀，不要用红。「已失效」保留红色。
+  "logged-out": "warning",
   expired: "error",
   unknown: "default",
   unchecked: "default",
@@ -40,6 +42,7 @@ const STATUS_COLOR: Record<LoginStatusValue, string> = {
 /** 状态 → 文案 key 的映射写死成表：`t()` 的键是字面量联合类型，模板串拼出来的键过不了类型检查。 */
 const STATUS_LABEL_KEY = {
   ok: "applyUi.loginStatus.status.ok",
+  "logged-out": "applyUi.loginStatus.status.logged-out",
   expired: "applyUi.loginStatus.status.expired",
   unknown: "applyUi.loginStatus.status.unknown",
   unchecked: "applyUi.loginStatus.status.unchecked",

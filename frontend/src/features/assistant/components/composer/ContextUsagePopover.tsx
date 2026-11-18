@@ -173,7 +173,9 @@ export default function ContextUsagePopover({
               })}
             </span>
           </div>
-          {/* 五段条：0 的段不画（画了会留一条看不见的缝），段间白缝靠 CSS gap。 */}
+          {/* 五段条：0 的段不画（画了会留一条看不见的缝），段间白缝靠 CSS gap。
+              末尾的「剩余段」把未使用的窗口显式画出来：flex-grow 是相对值，
+              只画已用段的话不论总和多少条永远是满的（I-30）。 */}
           <div className="assistant-context-usage-bar">
             {visibleBuckets
               .filter((bucket) => bucket.tokens > 0)
@@ -184,6 +186,10 @@ export default function ContextUsagePopover({
                   style={{ flex: `${bucket.percent ?? 0} 0 0` }}
                 />
               ))}
+            <span
+              className="assistant-context-usage-rest"
+              style={{ flex: `${Math.max(0, 100 - (usage?.percent ?? 0))} 0 0` }}
+            />
           </div>
           <ul className="assistant-context-usage-legend">
             {visibleBuckets.map((bucket) => (

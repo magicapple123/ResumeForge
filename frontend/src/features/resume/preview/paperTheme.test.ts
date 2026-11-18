@@ -8,6 +8,8 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  DARK_PAPER_BG,
+  DARK_PAPER_BG_INVERSE,
   PAPER_DARK_CLASS,
   PAPER_DARK_STYLE_ID,
   paintLoadedPaperFrames,
@@ -49,6 +51,20 @@ describe("深色草稿纸的样式注入", () => {
     // 同一组滤镜的原函数：不是"调淡一点"，否则照片还原不回去。
     expect(css).toContain("invert(1)");
     expect(css).toContain("hue-rotate(180deg)");
+  });
+
+  it("纸底用反算色 #e1e1e1（反色后 = #1e1e1e），且只作用于屏幕（I-36）", () => {
+    const doc = makeDoc();
+    paintPaperTheme(doc, true);
+    const css = doc.getElementById(PAPER_DARK_STYLE_ID)?.textContent ?? "";
+    expect(DARK_PAPER_BG).toBe("#1e1e1e");
+    expect(DARK_PAPER_BG_INVERSE).toBe("#e1e1e1");
+    expect(css).toContain("background: #e1e1e1 !important");
+    expect(css).toContain("@media screen");
+    // 打印预览必须仍是模板原本的白纸：这条底色不能漏到 `@media print` 之外。
+    expect(css.indexOf("@media screen")).toBeLessThan(css.indexOf("background: #e1e1e1"));
+    // 反算色而不是目标色：写 #1e1e1e 会被滤镜再翻一次，纸变浅灰。
+    expect(css).not.toContain("background: #1e1e1e");
   });
 
   it("文档还没解析完（null）时安全返回", () => {

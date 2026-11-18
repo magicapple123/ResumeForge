@@ -10,6 +10,7 @@ import type {
   EntryLayout,
   FieldItem,
   HeaderItem,
+  HeaderPlacement,
   ListItem,
   ResumeDocument,
   ResumeEntry,
@@ -18,7 +19,14 @@ import type {
   SectionLayout,
   TextItem,
 } from "../../../types/resumeDocument";
+import { FALLBACK_HEADER_FIELDS } from "./fieldCatalogData";
 import { locatePath } from "./paths";
+
+/** I-02：页眉字段没有 `hidden_from` 记忆时的回落位置——查目录，查不到就维持旧行为（contact）。 */
+function fallbackHeaderPlacement(key: string): HeaderPlacement {
+  const spec = FALLBACK_HEADER_FIELDS.find((field) => field.key === key);
+  return spec?.placement ?? "contact";
+}
 
 function replaceSectionAt(
   document: ResumeDocument,
@@ -106,15 +114,29 @@ export function updateTextItem(
  * 切换 item 隐藏：field/list/authors 改 placement，text 改 hidden 布尔。
  *
  * #10：页眉字段也走这里（chip 菜单只有一份，右键页眉 chip 的"隐藏/显示"必须真的生效）。
- * 页眉没有 `hidden_from` 字段，恢复位置统一回落到 `contact`——与结构面板
- * （`structureCommands`）对页眉的处置保持一致。
+ *
+ * I-02：页眉恢复位置不再写死 `contact`。与正文同构——隐藏时把原位置记进 `hidden_from`，
+ * 显示时读回来。老文档没有 `hidden_from` 时按 `FALLBACK_HEADER_FIELDS` 的 placement 回落
+ * （photo → photo、job_intent → subtitle…），目录里没有的自定义字段仍回落 `contact`。
+ * 写死 contact 的后果不是"位置不对"那么轻：照片的 data URI 会变成联系方式文本，
+ * PDF 因 `_has_header_field_style` 逐字符拆行，页数暴涨且每页都刷满 base64。
  */
 export function toggleItemHidden(document: ResumeDocument, path: string): ResumeDocument {
   const located = locatePath(document, path);
   if (!located) return document;
   if (located.kind === "header") {
-    const hidden = located.item.placement === "hidden";
-    return updateHeaderItem(document, path, { placement: hidden ? "contact" : "hidden" });
+    if (located.item.placement === "hidden") {
+      const remembered = located.item.hidden_from;
+      const restored: HeaderPlacement =
+        remembered && remembered !== "hidden"
+          ? remembered
+          : fallbackHeaderPlacement(located.item.key);
+      return updateHeaderItem(document, path, { placement: restored, hidden_from: null });
+    }
+    return updateHeaderItem(document, path, {
+      placement: "hidden",
+      hidden_from: located.item.placement,
+    });
   }
   if (located.kind !== "item") return document;
   const item = located.item;

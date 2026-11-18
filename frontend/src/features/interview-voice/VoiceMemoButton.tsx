@@ -50,6 +50,13 @@ export interface VoiceMemoButtonProps {
   catalog?: DocumentFieldCatalog | null;
   /** 只读预览里不出现这个入口。 */
   readOnly?: boolean;
+  /**
+   * 插入成功后回调新条目路径（`<sectionKey>.<entryId>`）。
+   *
+   * I-20：宿主接上 `DocumentEditor.select` 那条链路，插入后自动定位到新条目；
+   * 组件本身**不做滚动**（它拿不到中栏的滚动容器）。
+   */
+  onInserted?: (paths: string[]) => void;
 }
 
 export function VoiceMemoButton({
@@ -57,6 +64,7 @@ export function VoiceMemoButton({
   onChange,
   catalog = null,
   readOnly = false,
+  onInserted,
 }: VoiceMemoButtonProps) {
   useLocale();
   const { message } = App.useApp();
@@ -117,6 +125,8 @@ export function VoiceMemoButton({
     if (result.inserted > 0) onChange(result.document);
     if (result.inserted > 0) {
       message.success(t("voiceMemo.toast.inserted", { count: result.inserted }));
+      // 只在真的插进去时跳转：`insertedPaths` 已排除被去重/丢弃的条目。
+      onInserted?.(result.insertedPaths);
     }
     if (result.duplicates > 0) {
       message.info(t("voiceMemo.toast.covered", { count: result.duplicates }));
@@ -140,6 +150,21 @@ export function VoiceMemoButton({
     });
   };
 
+  /**
+   * I-18：tooltip **第一行写用途、第二行写限制**。
+   *
+   * 缺陷原形：唯一的用途说明只在 `aria-label` 里，视觉用户悬停后只看到"单段最长 180 秒"
+   * ——那是限制，不是这件东西是干什么的。顺序不能反：限制一占首行，用户又只会看到它。
+   */
+  const tooltip = (
+    <span className="voice-memo-tooltip">
+      <span>{t("voiceMemo.hint.purpose")}</span>
+      <span className="voice-memo-tooltip-limit">
+        {t("voiceMemo.hint.limit", { seconds: maxSeconds })}
+      </span>
+    </span>
+  );
+
   const control = recording ? (
     <button
       type="button"
@@ -153,12 +178,15 @@ export function VoiceMemoButton({
       <StopOutlined aria-hidden="true" />
     </button>
   ) : (
-    <Tooltip title={t("voiceMemo.hint.limit", { seconds: maxSeconds })}>
+    <Tooltip
+      title={tooltip}
+      classNames={{ root: "voice-memo-tooltip-root" }}
+      styles={{ root: { maxWidth: 320 } }}
+    >
       <Button
         size="small"
         icon={<AudioOutlined />}
         loading={transcribing || undefined}
-        disabled={readOnly || undefined}
         aria-label={t("voiceMemo.buttonAria")}
         onClick={() => {
           voice.clearError();
@@ -169,6 +197,9 @@ export function VoiceMemoButton({
       </Button>
     </Tooltip>
   );
+
+  // I-19：只读预览里**不渲染**这个入口（置灰的录音键仍然占位，也仍然在问"为什么点不了"）。
+  if (readOnly) return null;
 
   return (
     <span className="voice-memo">

@@ -22,13 +22,14 @@
  * 「固定这条的当前样式」放在面板底部，与恢复成对；按**当前作用范围**执行（整条 → objects，
  * 子范围 → object_roles）。写入由宿主（`onFreeze`）完成，本组件只管把范围传出去。
  */
-import { BgColorsOutlined } from "@ant-design/icons";
+import { BgColorsOutlined, DownOutlined, RightOutlined } from "@ant-design/icons";
 import { Button, Segmented, Space, Tag, Tooltip, Typography } from "antd";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { ResumeLayout, ResumeTemplateCatalog } from "../../../types";
 import type { ResumeEntry } from "../../../types/resumeDocument";
 import type { ResumePreviewHandle } from "../preview/ResumePreview";
+import { writeLiveProbe } from "../preview/liveProbeRegistry";
 import { t } from "../../../i18n";
 import { styleProbeCss } from "../../../utils/resumeFormatProbe";
 import { STYLE_PROP_LABELS, type StylePropKey } from "../../../utils/resumeStyleParams";
@@ -60,6 +61,7 @@ import {
 import StyleValueRow from "./StyleValueRow";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { ResumeRoleKey } from "./styleCatalog";
+import { groupStyleRows, type ObjectStyleGroupId } from "./objectStyleGroups";
 
 interface Props {
   layout: ResumeLayout;
@@ -82,6 +84,12 @@ interface Props {
   headerField?: { id: string; label: string; hasLabel?: boolean } | null;
   /** #7：右键浮层里锁定范围——不提供范围切换（浮层只改右键命中那一块）。 */
   lockScope?: boolean;
+  /**
+   * I-21：把行折成「文字与颜色 / 行距与缩进 / 列表与对齐 / 日期与字距」四组，一次只
+   * 展开一组（见 `objectStyleGroups.ts`）。只给右键浮层用：那里受点击点下方的
+   * 视口空间限制，平铺 536px 会把触发内容压住；左栏参数面板有纵向空间，保持平铺。
+   */
+  collapsibleGroups?: boolean;
   disabled?: boolean;
   previewRef?: RefObject<ResumePreviewHandle | null>;
   onChange: (layout: ResumeLayout) => void;
@@ -100,6 +108,7 @@ export default function ObjectStylePanel({
   fieldRole = "body",
   headerField = null,
   lockScope = false,
+  collapsibleGroups = false,
   disabled = false,
   previewRef,
   onChange,
@@ -113,10 +122,35 @@ export default function ObjectStylePanel({
   // I-28：单字段作用域下再分"字段值 / 字段名"。字段名走 `field_label` 角色，
   // **不能**复用默认的 `fieldRole`（那是 body/meta，会把字段名样式悄悄写成正文）。
   const [fieldTarget, setFieldTarget] = useState<"value" | "label">("value");
+  /**
+   * I-21：分组手风琴的展开态。三态是刻意的——`auto` = 默认展开第一组（换作用范围时回到
+   * 这里）、`none` = 用户把当前组也收起了、其余 = 用户点开的那一组。只有一个 state，
+   * 所以"展开另一组"天生是**替换**：高度不随点击累积。
+   */
+  const [openGroup, setOpenGroup] = useState<ObjectStyleGroupId | "auto" | "none">("auto");
+  const [groupsKey, setGroupsKey] = useState<string | null>(null);
   const setManualScope = (next: { path: string | null; scope: EntryStyleScope }) => {
     if (lockScope) return;
     setManual(next);
   };
+  /**
+   * I-15：实时探针按属性累积。
+   *
+   * `setLiveProbe` 是**单条覆盖**（整段 `style.textContent = css`）：先调字号再调颜色，
+   * 第二条会把第一条顶掉，表现就是"刚调好的字号在 600ms 内回退"。所以这里按 prop 各存
+   * 一份，每次变更后合并成一条串整体写入。
+   */
+  const probeByProp = useRef(new Map<StylePropKey, string>());
+  // 换目标（字段 / 作用范围 / 字段值·字段名）或卸载时把上一个目标的探针撤掉，
+  // 否则旧对象的规则会留在纸面（"双份样式"：探针 + 正式）。
+  useEffect(
+    () => () => {
+      probeByProp.current.clear();
+      if (previewRef?.current) previewRef.current.setLiveProbe("");
+      else writeLiveProbe("");
+    },
+    [fieldTarget, headerField?.id, manual, objectId, previewRef],
+  );
   if (!objectId) {
     return <Typography.Text type="secondary">{t("typography.object.empty")}</Typography.Text>;
   }
@@ -162,8 +196,41 @@ export default function ObjectStylePanel({
     return !known || availability.hasMeta;
   });
 
+  /**
+   * I-21：分组只在浮层里开。行清单（= 作用范围）一变就回到「默认展开第一组」，
+   * 否则上一个范围的组 id 在这个范围里可能根本不存在，会剩下四个都收起的组头。
+   */
+  const groupedRows = collapsibleGroups ? groupStyleRows(rows) : [];
+  const rowsKey = rows.join(",");
+  if (collapsibleGroups && rowsKey !== groupsKey) {
+    setGroupsKey(rowsKey);
+    setOpenGroup("auto");
+  }
+  const openGroupId =
+    openGroup === "auto"
+      ? (groupedRows[0]?.group.id ?? null)
+      : openGroup === "none"
+        ? null
+        : openGroup;
+
+  /**
+   * 写探针：有 `previewRef` 走句柄（左栏原有行为），没有就走登记处
+   * （字段右键浮层 / 照片框浮层——宿主没有 ref 通道，I-15）。
+   */
+  const flushProbe = () => {
+    const css = [...probeByProp.current.values()].join("\n");
+    if (previewRef?.current) previewRef.current.setLiveProbe(css);
+    else writeLiveProbe(css);
+  };
+  const setProbe = (prop: StylePropKey, css: string) => {
+    if (css) probeByProp.current.set(prop, css);
+    else probeByProp.current.delete(prop);
+    flushProbe();
+  };
   const applyProbe = (css: string) => {
-    previewRef?.current?.setLiveProbe(css);
+    // 只为"整段清空"保留：恢复 / 固定当前样式时把这条的全部探针撤掉。
+    if (!css) probeByProp.current.clear();
+    flushProbe();
   };
   const commit = (prop: StylePropKey, next: ResumeStyleValue | null) => {
     const format_config = scopeRole
@@ -183,6 +250,40 @@ export default function ObjectStylePanel({
   const restoreLabel = scopeRole
     ? t("typography.entryStyle.restore", { scope: t(scopeLabelKey) })
     : t("typography.object.clear");
+
+  /** 一行属性控件（平铺与分组共用，避免两条渲染路径各改一半）。 */
+  const renderRow = (prop: StylePropKey) => {
+    // 正文没有要点时项目符号无效：灰显 + 下方说明，而不是让用户拖了没反应。
+    const bulletUnavailable =
+      prop === "bullet" && known && scope === "body" && !availability.hasBullets;
+    return (
+      <StyleValueRow
+        key={prop}
+        prop={prop}
+        label={t(STYLE_PROP_LABELS[prop])}
+        value={resolvedPropValue(domains, {
+          role,
+          prop,
+          objectId,
+          templateDefaults: defaults,
+        })}
+        own={ownStyle[prop]}
+        source={styleSourceOf(config, { role, prop, objectId })}
+        disabled={disabled || bulletUnavailable || undefined}
+        basePx={basePx}
+        toProbeCss={(value) =>
+          styleProbeCss(scopeRole ? { objectId, role: scopeRole } : { objectId }, {
+            [prop]: value,
+          })
+        }
+        onProbe={(css) => setProbe(prop, css)}
+        onCommit={(next) =>
+          commit(prop, next === null ? null : storedStyleValue(prop, next, baseRatio))
+        }
+        testId={`style-row-object-${prop}`}
+      />
+    );
+  };
 
   return (
     <section className="resume-typography-panel" aria-label={t("typography.object.more")}>
@@ -239,44 +340,49 @@ export default function ObjectStylePanel({
           aria-label={t("typography.fieldStyle.target.aria")}
         />
       ) : null}
-      <div className="resume-typography-rows">
-        {rows.map((prop) => {
-          // 正文没有要点时项目符号无效：灰显 + 下方说明，而不是让用户拖了没反应。
-          const bulletUnavailable =
-            prop === "bullet" && known && scope === "body" && !availability.hasBullets;
-          return (
-            <StyleValueRow
-              key={prop}
-              prop={prop}
-              label={t(STYLE_PROP_LABELS[prop])}
-              value={resolvedPropValue(domains, {
-                role,
-                prop,
-                objectId,
-                templateDefaults: defaults,
-              })}
-              own={ownStyle[prop]}
-              source={styleSourceOf(config, { role, prop, objectId })}
-              disabled={disabled || bulletUnavailable || undefined}
-              basePx={basePx}
-              toProbeCss={(value) =>
-                styleProbeCss(scopeRole ? { objectId, role: scopeRole } : { objectId }, {
-                  [prop]: value,
-                })
-              }
-              onProbe={applyProbe}
-              onCommit={(next) =>
-                commit(prop, next === null ? null : storedStyleValue(prop, next, baseRatio))
-              }
-              testId={`style-row-object-${prop}`}
-            />
-          );
-        })}
-      </div>
+      {collapsibleGroups ? (
+        // I-21：组头单行（12px 字号 + 20px 行高 + 箭头靠右），内容只画当前那一组。
+        <div className="resume-typography-groups">
+          {groupedRows.map(({ group, rows: groupRows }) => {
+            const open = group.id === openGroupId;
+            return (
+              <div
+                key={group.id}
+                className={`resume-typography-group${open ? " is-open" : ""}`}
+                data-object-style-group={group.id}
+              >
+                <button
+                  type="button"
+                  className="resume-typography-group-head"
+                  aria-expanded={open}
+                  disabled={disabled || undefined}
+                  data-testid={`style-group-${group.id}`}
+                  onClick={() => setOpenGroup(open ? "none" : group.id)}
+                >
+                  <span className="resume-typography-group-name">{t(group.label)}</span>
+                  {open ? (
+                    <DownOutlined className="resume-typography-group-caret" />
+                  ) : (
+                    <RightOutlined className="resume-typography-group-caret" />
+                  )}
+                </button>
+                {open ? (
+                  <div className="resume-typography-rows">{groupRows.map(renderRow)}</div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="resume-typography-rows">{rows.map(renderRow)}</div>
+      )}
       {known && scope === "body" && !availability.hasBullets ? (
         <Typography.Text type="secondary">{t("typography.entryStyle.noBullets")}</Typography.Text>
       ) : null}
-      {scope !== "field" ? (
+      {scope !== "field" && !collapsibleGroups ? (
+        // I-21：这句在浮层里不画——它解释的是「字号/加粗/段前段后去哪调」，而浮层的
+        // 字段范围本来就把这四项列在「文字与颜色」组里（字段层没有文字级别面板）；
+        // 300px 宽这一句要吃两行 40px，正是超出 360 的那 40px。
         <Typography.Text type="secondary">{t("typography.object.levelHint")}</Typography.Text>
       ) : null}
       <Space size={8} wrap>

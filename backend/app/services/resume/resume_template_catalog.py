@@ -3,6 +3,8 @@
 
 from pathlib import Path
 
+from .resume_template_palette import palette_for
+
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent / "templates"
 DEFAULT_TEMPLATE = "classic"
 DEFAULT_PAGE_LIMIT = 1
@@ -104,6 +106,10 @@ def template_options() -> list[dict]:
 
     每个条目都带上 ``serif_heading``：前端据此只在"标题字族真的和精确预览不同"的模板上
     给那句字族说明，而不是对所有模板都摆一条与事实无关的提示。
+
+    也带 ``palette``：左栏「外观」组的 2×2 色卡在"随模板"时要显示**这个模板真实用的**
+    四个色（否则四张卡只能是同一个占位色，看不出区别）。表在
+    ``resume_template_palette``，与模板 `:root` 的比对由测试钉住。
     """
     options: list[dict] = []
     for name in VISIBLE_TEMPLATE_NAMES:
@@ -116,6 +122,7 @@ def template_options() -> list[dict]:
                 "label": item["label"],
                 "description": item["description"],
                 "serif_heading": bool(item.get("serif_heading", False)),
+                "palette": palette_for(item["name"]),
             }
         )
     return options
@@ -139,6 +146,9 @@ def template_options_with_custom(custom: list[dict]) -> list[dict]:
                 "description": item.get("description", ""),
                 "custom": True,
                 "serif_heading": False,
+                # 自制模板的 HTML/CSS 由用户自己写，后端读不到 `:root`——给 `None`，
+                # 前端据此显示斜纹占位 + 「随模板」，不编造一个假色值。
+                "palette": None,
             }
         )
     return options

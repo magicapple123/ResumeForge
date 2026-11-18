@@ -23,12 +23,7 @@
  * 中栏表单的输入框由 `ItemEditor` / `itemValueEditors` 拥有；本组件只拿 `getTarget`
  * （读最近聚焦的输入框）、`getRememberedRange` 与 `onCommit`，不 import 任何宿主文件。
  */
-import {
-  BoldOutlined,
-  FontColorsOutlined,
-  FontSizeOutlined,
-  LinkOutlined,
-} from "@ant-design/icons";
+import { BoldOutlined, FontSizeOutlined, LinkOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
@@ -54,8 +49,16 @@ import {
   type InlineRange,
   type InlineStylePatch,
 } from "./inlineMarks";
+import {
+  richClearAttribute,
+  richSetLink,
+  richToggleBold,
+  richToggleColor,
+  richToggleSize,
+} from "../editor/inlineMarkWrite";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { InlineMarkField } from "../editor/lastFocusedTextarea";
+import PaletteGlyph from "./PaletteGlyph";
 
 export interface InlineMarkCommit {
   text: string;
@@ -197,12 +200,25 @@ export default function InlineMarkButtons({
 
   const applyStyle = (patch: InlineStylePatch) => {
     const picked = requireSelection();
-    if (picked) commitIfChanged(picked, applyStyleMark(picked.text, picked.range, patch));
+    if (!picked) return;
+    // I-13：结构化字段先走 runs（落盘写 `rich.runs`）；没登记才退回标记串（兼容路径）。
+    if (typeof patch.size === "number" && richToggleSize(picked.range, patch.size)) return;
+    if (typeof patch.color === "string" && richToggleColor(picked.range, patch.color)) return;
+    if (patch.size === null || patch.color === null) {
+      const cleared = richClearAttribute(picked.range, {
+        size: patch.size === null ? null : undefined,
+        color: patch.color === null ? null : undefined,
+      });
+      if (cleared) return;
+    }
+    commitIfChanged(picked, applyStyleMark(picked.text, picked.range, patch));
   };
 
   const applyBold = () => {
     const picked = requireSelection();
-    if (picked) commitIfChanged(picked, toggleBoldMark(picked.text, picked.range));
+    if (!picked) return;
+    if (richToggleBold(picked.range)) return;
+    commitIfChanged(picked, toggleBoldMark(picked.text, picked.range));
   };
 
   const applyColor = (color: { toHexString(): string }) => {
@@ -226,6 +242,8 @@ export default function InlineMarkButtons({
       return;
     }
     setLinkSnapshot(null);
+    // I-13：结构化字段写成 `link` run（URL 不需要合法之外的任何加工）。
+    if (richSetLink(linkSnapshot.range, url.trim())) return;
     onCommit(toCommit(edit));
   };
 
@@ -357,7 +375,7 @@ export default function InlineMarkButtons({
             <Button
               size="small"
               type="text"
-              icon={<FontColorsOutlined />}
+              icon={<PaletteGlyph />}
               aria-label={t("typography.inline.color")}
               disabled={disabled}
             />

@@ -2,7 +2,7 @@
 /** 「登录状态」面板的前端契约（Q12 / F07）：来源读取、单项检测、重登、Cookie 写入、网申站点。 */
 import { request } from "./client";
 
-export type LoginStatusValue = "ok" | "expired" | "unknown" | "unchecked";
+export type LoginStatusValue = "ok" | "logged-out" | "expired" | "unknown" | "unchecked";
 
 /** 一个网申站点（F07）：host 是服务端派生的唯一标识，前端只传它，不传 URL。 */
 export interface LoginStatusSite {

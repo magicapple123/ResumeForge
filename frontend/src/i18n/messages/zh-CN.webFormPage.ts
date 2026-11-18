@@ -19,17 +19,9 @@ const webFormPage = {
   "webFormPage.fillMode.hint": "这四行决定资料怎么进页面，改完立刻生效。",
   /* I-27 首屏空态（三步引导）：右栏此前在没有预览时整块不渲染，只剩一行折叠记录，
      2/3 的屏幕是白的。这三步只是「怎么开始」，真实动作仍在工具条与左栏。 */
-  "webFormPage.onboarding.title": "三步开始填写",
-  "webFormPage.onboarding.lead": "先起浏览器，再打开目标页，最后回来读取。",
-  "webFormPage.onboarding.step1": "打开专用浏览器",
-  "webFormPage.onboarding.step1Hint": "独立窗口，不碰你已开着的页面",
-  "webFormPage.onboarding.step2": "在浏览器里打开目标网页",
-  "webFormPage.onboarding.step2Hint": "登录、验证码由你自己过",
-  "webFormPage.onboarding.step3": "回来读取表单",
-  "webFormPage.onboarding.step3Hint": "核对映射，确认后才一键填充",
-  "webFormPage.onboarding.state.now": "当前",
-  "webFormPage.onboarding.state.done": "已完成",
-  "webFormPage.onboarding.state.todo": "待完成",
+  /* 初始态只剩一条流程轨道（I-24）：步骤名统一取 `webFormPage.readSnapshot.step.*`
+     （与预览态同一套四步），这里只留整块的无障碍标题。 */
+  "webFormPage.onboarding.title": "填写流程",
   /* 初始态右卡「最近填写」：只铺最近 3 条，完整列表在「查看全部」的抽屉里。
      空态要说清"现在没有 / 之后会出现什么 / 还能去哪儿"。 */
   "webFormPage.recent.title": "最近填写",

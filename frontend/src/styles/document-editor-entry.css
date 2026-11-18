@@ -19,8 +19,13 @@
   gap: 8px;
 }
 
+/* 选中整条（I-22）：只换 1px 边框在深色主题下几乎看不出来（基础边框本来就很浅），
+   所以边框 + 极浅品牌底 + inset 描边三件一起上；inset 不占布局，卡片不会因选中而位移。
+   字段 chip 的选中态在卡片内部，层级/颜色仍能区分（chip 是边框 + tint，整卡是描边 + 底色）。 */
 .document-entry.is-selected {
   border-color: var(--rf-brand);
+  background: var(--rf-brand-wash);
+  box-shadow: inset 0 0 0 1px var(--rf-brand);
 }
 
 .document-entry.is-hidden {
@@ -38,6 +43,36 @@
   color: var(--rf-text-secondary);
   font-size: 12px;
   min-width: 28px;
+}
+
+/* I-22：#N 从 span 变 button。原生按钮的字体/内边距/行高必须显式 reset，否则它比
+   原来的 12px 灰字更大更挤，条目头会被顶高。只读态仍是 span，不受这条影响。 */
+button.document-entry-index {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--rf-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.document-entry-index:hover {
+  color: var(--rf-text-body);
+}
+
+button.document-entry-index:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 2px;
+}
+
+/* 选中时编号也点亮：与整卡描边同一个来源（selectedContainsEntry / aria-pressed）。 */
+button.document-entry-index[aria-pressed="true"] {
+  color: var(--rf-brand);
+  font-weight: 600;
 }
 
 /* R-05 ⑤：三种标题布局的图标按钮。**位置已改**（问题 6）：这一组不再挂在条目头，

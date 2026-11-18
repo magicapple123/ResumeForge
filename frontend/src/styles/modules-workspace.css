@@ -311,9 +311,16 @@
 }
 
 .assistant-conversation-memory-off {
+  display: inline-block;
   margin-inline-start: 4px;
+  padding: 0 5px;
+  border: 0.5px solid var(--rf-border);
+  border-radius: 999px;
   color: var(--rf-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 15px;
+  vertical-align: 1px;
+  white-space: nowrap;
 }
 
 .assistant-reasoning-control {

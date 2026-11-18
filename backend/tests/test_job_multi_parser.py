@@ -296,7 +296,14 @@ def test_parse_multiple_image_only_returns_one_draft_when_ai_fails(client, monke
             yield ""
 
     provider = FailingProvider()
-    monkeypatch.setattr("app.api.jobs.get_llm_config", lambda _db: _config())
+    # 用声明了 vision 的模型（I-34）：文本模型收到截图会直接判 blocked，连请求都不发，
+    # 那样测不到"AI 失败后重试一次再回退"这条路径。
+    monkeypatch.setattr(
+        "app.api.jobs.get_llm_config",
+        lambda _db: LLMConfig(
+            base_url="https://api.openai.com/v1", api_key="sk-test", model="gpt-4o"
+        ),
+    )
     monkeypatch.setattr("app.api.jobs.create_provider", lambda _config: provider)
 
     response = client.post(

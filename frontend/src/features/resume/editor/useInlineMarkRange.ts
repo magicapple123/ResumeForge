@@ -21,6 +21,14 @@ export function registerInlineMarkField(
   markFocusedField(event.currentTarget);
 }
 
+/**
+ * I-13：结构化字段的登记入口（`InlineMarkTextArea` 在 `onFocus` 里连带调用）。
+ *
+ * 单独转发一行而不是让组件直接从 `lastFocusedTextarea` 取：组件已经 import 了本模块的
+ * `registerInlineMarkField`，两件事永远同一拍，多一条 import 只会让"忘了登记"更容易发生。
+ */
+export { registerRichField } from "./lastFocusedTextarea";
+
 export interface InlineMarkRangeReader {
   /** 最近一次非空选区；没有 = 按实时选区/光标处理。 */
   getRange: () => InlineRange | null;

@@ -169,6 +169,7 @@ const applyUi = {
   "applyUi.loginStatus.status.expired": "Expired",
   "applyUi.loginStatus.status.unknown": "Unknown",
   "applyUi.loginStatus.status.unchecked": "Not checked",
+  "applyUi.loginStatus.status.logged-out": "Not signed in",
   "applyUi.loginStatus.checkedAt": "Last checked: {time}",
   "applyUi.loginStatus.never": "Never checked",
   "applyUi.loginStatus.action.check": "Check",

@@ -195,3 +195,46 @@ describe("ChipStylePopover（#7 排版并入右键）", () => {
     expect(objects).not.toHaveProperty("education.ob_entry001");
   });
 });
+
+/**
+ * I-21：浮层里的 Escape 只能关浮层，不能连带关掉制作台弹窗。
+ *
+ * 浮层 portal 到 body，Esc 不再经过 `.document-editor` 的 A3 分层（那里会 stopPropagation
+ * 拦住工作台弹窗），所以浮层自己在 `window` 的**捕获阶段**吃掉 Esc。这条测试用"挂在
+ * window 冒泡阶段的制作台弹窗"做哨兵：捕获阶段 stopPropagation 之后，冒泡阶段的监听器
+ * 必须一个都收不到。谁把 stopPropagation 删了，这里立刻红。
+ */
+describe("ChipStylePopover · Escape 分层（I-21）", () => {
+  it("浮层里按 Esc → 浮层关闭，制作台弹窗仍开着", () => {
+    const onClose = vi.fn();
+    const closeWorkbench = vi.fn();
+    render(
+      <I18nProvider>
+        <DocumentExpandContext.Provider
+          value={{ expandedPath: null, toggleExpand: () => {}, setExpanded: () => {} }}
+        >
+          <ChipStylePopover
+            state={STATE}
+            document={makeDoc()}
+            layout={makeLayout()}
+            onClose={onClose}
+            onLayoutChange={vi.fn()}
+          />
+        </DocumentExpandContext.Provider>
+      </I18nProvider>,
+    );
+    // 制作台弹窗的 Esc：真实实现挂在 document / window 的冒泡阶段（antd Modal 同款）。
+    const onWorkbenchKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeWorkbench();
+    };
+    window.addEventListener("keydown", onWorkbenchKey);
+    try {
+      // 从浮层内部按下（真实焦点落在浮层控件上）。
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    } finally {
+      window.removeEventListener("keydown", onWorkbenchKey);
+    }
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(closeWorkbench).not.toHaveBeenCalled();
+  });
+});

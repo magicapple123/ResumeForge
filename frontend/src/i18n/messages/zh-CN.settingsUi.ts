@@ -213,10 +213,12 @@ const settingsUi = {
   // ── 出网与代理（T02 / T05）──────────────────────────────────
   "settingsUi.network.title": "出网与代理",
   "settingsUi.network.intro":
-    "模型、搜索与更新检查都走同一条出网路径。这里是唯一能改它的地方，改完立即生效，不用重启。",
+    "模型、搜索与更新检查都走同一条出网路径。这里是唯一能改它的地方，保存后立即生效，不用重启。",
   "settingsUi.network.mode.system": "跟随系统",
   "settingsUi.network.mode.direct": "直连",
   "settingsUi.network.mode.custom": "自定义代理",
+  "settingsUi.network.dirty": "有未保存的更改",
+  "settingsUi.network.probeBlocked": "先保存再测试",
   "settingsUi.network.directWarning":
     "直连会绕过系统代理：需要代理才能上网的环境（公司网络、只能走代理的宽带）会因此全部连不上，包括模型、搜索与更新检查。",
   "settingsUi.network.urlPlaceholder": "例如 http://127.0.0.1:7890",

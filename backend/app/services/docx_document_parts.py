@@ -11,33 +11,25 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from functools import partial
-from io import BytesIO
 
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Mm
 
 from ..schemas.resume_document import RowLayout
-from ..schemas.resume_document_plan import CellPlan, DocumentPlan, Inline
+from ..schemas.resume_document_plan import CellPlan, Inline
 from .docx_blocks import (
     DocxTheme,
-    decorate_paragraph,
-    float_picture,
     meta_line,
     paragraph,
     set_run_font,
 )
 from .docx_column_geometry import apply_column_geometry as apply_column_geometry
-from .docx_decorate import border_sz_from_px
 from .docx_document_body import apply_field_spacing
 from .docx_document_body import draw_blocks as draw_blocks
-from .docx_photo import outline_picture
 from .docx_rich import add_rich_runs
-from .docx_text_measure import make_text_measure
-from .pdf_exporter import _PX_TO_PT, PAGE_WIDTH_MM, _photo_bytes, fit_photo_size
-from .pdf_exporter.theme import _hex_to_rgb
+from .pdf_exporter import _PX_TO_PT
 from .resume.document_label_styles import has_styled_labels
 from .resume.field_style_target import is_field_path
-from .resume.resume_contact import WORD_SEPARATOR, contact_field_groups, pack_contact_lines
 from .resume.resume_style import RoleStyle
 
 logger = logging.getLogger(__name__)
@@ -175,218 +167,6 @@ def add_segments(
         )
 
 
-def draw_header(
-    doc,
-    plan: DocumentPlan,
-    *,
-    layout,
-    base: float,
-    include_photo: bool,
-    theme: DocxTheme,
-    accent: tuple[int, int, int],
-    accent_soft: tuple[int, int, int],
-    font_key: str | None = None,
-    role_style: RoleStyleQuery | None = None,
-) -> None:
-    """页眉：姓名 + 姓名附带字段 + 意向 + 联系方式（planner 已给好每行）+ 浮动照片。
-
-    `font_key` 是这份简历选的字体键（`format_config` 的字体项）：联系方式装行要用它
-    解析字体文件来量文本宽度（与 PDF 同一条解析链），不传则跟随当前全局字体/系统候选。
-    """
-    set_font = partial(set_run_font, font_name=theme.font_name)
-    name_text = plain_text(plan.header.name)
-    meta_text = plain_text(plan.header.name_meta)
-    subtitle_text = plain_text(plan.header.subtitle)
-
-    name_node = paragraph(doc)
-    header_paragraphs = [name_node]
-    if name_text:
-        add_rich_runs(
-            name_node,
-            name_text,
-            set_font,
-            bold=True,
-            size_pt=base * layout.name_ratio * _PX_TO_PT,
-            color=accent,
-        )
-    if meta_text:
-        add_rich_runs(
-            name_node,
-            "　" + meta_text,
-            set_font,
-            size_pt=base * layout.name_extra_ratio * _PX_TO_PT,
-            color=theme.muted_text,
-        )
-
-    photo = _photo_bytes(plan.header.photo) if (plan.header.photo and include_photo) else None
-    # 照片栏宽度（mm）：装行时要从可用宽度里扣掉，与 PDF 的 `text_width = inner - photo_box`
-    # 同口径。照片坏了/没有时为 0。
-    photo_box_mm = 0.0
-    if photo:
-        try:
-            photo_w = layout.gap_mm(layout.photo_width_ratio)
-            photo_h = layout.gap_mm(layout.photo_height_ratio)
-            draw_w, draw_h = fit_photo_size(photo, photo_w, photo_h)
-            picture_run = name_node.add_run()
-            picture_run.add_picture(BytesIO(photo), width=Mm(draw_w))
-            # R-10：偏移换算成"照片左沿相对版心左缘"的绝对位置；没设偏移时仍走
-            # align（旧产物的 XML 逐字节不变）。
-            header_left = float(layout.margin_left) + layout.gap_mm(layout.header_pad_x)
-            inner_width_mm = (
-                PAGE_WIDTH_MM
-                - float(layout.margin_left)
-                - float(layout.margin_right)
-                - 2 * layout.gap_mm(layout.header_pad_x)
-            )
-            natural_x = (
-                header_left
-                if layout.header_photo_side == "left"
-                else header_left + inner_width_mm - photo_w
-            )
-            shifted_x = min(
-                max(natural_x + layout.photo_offset_x, header_left),
-                header_left + inner_width_mm - photo_w,
-            )
-            float_picture(
-                picture_run,
-                align="left" if layout.header_photo_side == "left" else "right",
-                vertical_offset_mm=max(0.0, (photo_h - draw_h) / 2) + layout.photo_offset_y,
-                horizontal_offset_mm=(
-                    None
-                    if abs(layout.photo_offset_x) < 1e-6
-                    else shifted_x - float(layout.margin_left)
-                ),
-            )
-            # R-07：边框与圆角（与 PDF 的 rect 同口径；边框贴图片而不是照片框，
-            # 因为 Word 的图片边框只能作用于图片本身——已在报告里披露）。
-            if layout.photo_border_width > 0:
-                outline_picture(
-                    picture_run,
-                    width_px=layout.photo_border_width,
-                    color_hex=layout.photo_border_color or theme.line_text,
-                    radius_px=layout.photo_radius,
-                    width_mm=draw_w,
-                    height_mm=draw_h,
-                )
-            photo_box_mm = photo_w + 6
-        except Exception:  # noqa: BLE001 - 照片坏了不能阻断导出
-            logger.warning("简历照片无法写入 Word，已跳过", exc_info=True)
-
-    if subtitle_text:
-        subtitle_node = paragraph(doc)
-        header_paragraphs.append(subtitle_node)
-        if has_styled_labels(plan.header.subtitle, role_style):
-            add_segments(
-                subtitle_node,
-                plan.header.subtitle,
-                base=base,
-                layout=layout,
-                theme=theme,
-                role_style=role_style,
-                default_role="meta",
-                ratio_override=layout.intent_ratio,
-            )
-        else:
-            add_rich_runs(
-                subtitle_node,
-                subtitle_text,
-                set_font,
-                size_pt=base * layout.intent_ratio * _PX_TO_PT,
-                color=theme.muted_text,
-            )
-
-    # 联系方式：与 PDF 同一套装行算法（2026-11 #9）。QW-6：planner 把「电话：」与号码拆成两段
-    # （同路径），必须**按字段**合并后再装行，否则标签与值之间会多出一个分隔符。
-    contact_fields = [
-        [field for field in contact_field_groups(line) if plain_text(field)]
-        for line in plan.header.contact_lines
-    ]
-    contact_fields = [group for group in contact_fields if group]
-    contact_groups = [[plain_text(field) for field in group] for group in contact_fields]
-    packed: list[list[str]] = []
-    flat: list[list[Inline]] = []  # 装行后的扁平字段（按段写 run 时按行切）
-    styled_contact = _has_header_field_style(plan.header, role_style)
-    if contact_groups:
-        # 可用宽度 = 版心宽 − 页头左右内边距（PDF 的 inner_width）− 照片栏。
-        contact_width_mm = (
-            PAGE_WIDTH_MM
-            - float(layout.margin_left)
-            - float(layout.margin_right)
-            - 2 * layout.gap_mm(layout.header_pad_x)
-            - photo_box_mm
-        )
-        measure = make_text_measure(base * layout.contact_ratio, font_key)
-        separator = plan.header.contact_separator or WORD_SEPARATOR
-        packed = pack_contact_lines(contact_groups, contact_width_mm, measure, separator)
-        flat = [field for group in contact_fields for field in group]
-    else:
-        separator = plan.header.contact_separator or WORD_SEPARATOR
-    if packed:
-        contact_node = paragraph(doc)
-        header_paragraphs.append(contact_node)
-        offset = 0  # 当前行在 flat 里的起点
-        for index, line in enumerate(packed):
-            if index:
-                contact_node.add_run().add_break()
-            if not styled_contact:
-                add_rich_runs(
-                    contact_node,
-                    separator.join(line),
-                    set_font,
-                    size_pt=base * layout.contact_ratio * _PX_TO_PT,
-                    color=theme.muted_text,
-                )
-                continue
-            fields_here = flat[offset : offset + len(line)]
-            offset += len(line)
-            for position, field in enumerate(fields_here):
-                if position:
-                    add_rich_runs(
-                        contact_node,
-                        separator,
-                        set_font,
-                        size_pt=base * layout.contact_ratio * _PX_TO_PT,
-                        color=theme.muted_text,
-                    )
-                add_segments(
-                    contact_node,
-                    field,
-                    base=base,
-                    layout=layout,
-                    theme=theme,
-                    role_style=role_style,
-                    default_role="meta",
-                    ratio_override=layout.contact_ratio,
-                )
-
-    # 页头底色块（modern 的浅色块）：三段各加同色底纹，段距为 0 时连成一整块。
-    if getattr(layout, "header_bg", "none") == "soft_accent":
-        for node in header_paragraphs:
-            decorate_paragraph(
-                node,
-                fill=accent_soft,
-                edges=("top", "left", "bottom", "right"),
-                border_color=accent_soft,
-                border_sz=4,
-                space_pt=6,
-            )
-
-    # 页头底边线（1-A）：`header_border_width` / `header_border_color` / `header_pad_bottom`
-    # 早就在 `resolve_layout()` 的返回值里，PDF 画了、Word 没读（同一份简历，PDF 在联系方式
-    # 下方有一条 2px 强调色横线，Word 直接接到「实习/工作经历」）。2px ≈ 1.5pt ≈ `w:sz=12`。
-    # `soft_accent` 色块（modern / split）不叠线：它们的 `header_border_width` 本来就是 0。
-    border_width_px = float(getattr(layout, "header_border_width", 0.0) or 0.0)
-    if border_width_px > 0 and getattr(layout, "header_bg", "none") != "soft_accent":
-        decorate_paragraph(
-            header_paragraphs[-1],
-            edges=("bottom",),
-            border_color=_hex_to_rgb(str(getattr(layout, "header_border_color", ""))) or accent,
-            border_sz=border_sz_from_px(border_width_px),
-            # I-31：段落底边框的 space 加上用户微调（mm → pt），与草稿/PDF 同口径。
-            space_pt=base * float(getattr(layout, "header_pad_bottom", 0.0) or 0.0) * _PX_TO_PT
-            + float(getattr(layout, "header_rule_gap", 0.0) or 0.0) * _MM_TO_PT,
-        )
-
 
 def draw_cell_rows(
     doc,
@@ -490,7 +270,6 @@ __all__ = [
     "color_of",
     "draw_blocks",
     "draw_cell_rows",
-    "draw_header",
     "plain_text",
     "rich_text",
     "role_ratio",

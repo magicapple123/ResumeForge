@@ -39,6 +39,7 @@ import "./document-editor.css";
 import "./chip-menu.css";
 import { DocumentExpandContext } from "./documentExpandContext";
 import ChipStylePopover from "./ChipStylePopover";
+import PhotoFramePopover from "./PhotoFramePopover";
 import DocumentNotice, { type NoticeState } from "./DocumentNotice";
 import { useEditorChipMenu } from "./useEditorChipMenu";
 import type { ResumeLayout } from "../../../types";
@@ -200,32 +201,6 @@ export default function DocumentEditor({
     if (path !== selectedPath) suppressRevealRef.current = true;
     onSelectPath?.(path);
   };
-  const setExpanded = useCallback(
-    (path: string | null) => {
-      setNotice(null);
-      setExpandedPath(path);
-      if (path && selectedPath !== path) {
-        suppressRevealRef.current = true;
-        onSelectPath?.(path);
-      }
-    },
-    [onSelectPath, selectedPath],
-  );
-  const toggleExpand = useCallback(
-    (path: string) => {
-      setNotice(null);
-      if (expandedPath === path) {
-        setExpandedPath(null);
-        return;
-      }
-      setExpandedPath(path);
-      if (selectedPath !== path) {
-        suppressRevealRef.current = true;
-        onSelectPath?.(path);
-      }
-    },
-    [expandedPath, onSelectPath, selectedPath],
-  );
   const report = (text: string, tone: "info" | "warning" = "info") => setNotice({ text, tone });
 
   /**
@@ -256,17 +231,15 @@ export default function DocumentEditor({
     if (!onLayoutChange || !layout) return undefined;
     return (next: ResumeFormatConfig) => onLayoutChange({ ...layout, format_config: next });
   }, [layout, onLayoutChange]);
-  const expandHost = useMemo(
-    () => ({ expandedPath, toggleExpand, setExpanded }),
-    [expandedPath, setExpanded, toggleExpand],
-  );
   // 拖拽上下文（`rejectRef` 身份稳定，文档变化不会让所有 chip 重渲染）。
   const dragHost = useDocumentDragHost(draggedPath, setDraggedPath);
   const {
     chipMenu,
     stylePopover,
+    photoFramePopover,
     closeChipMenu,
     closeStylePopover,
+    closePhotoFramePopover,
     chipMenuHost,
     chipMenuItems,
     onChipMenuClick,
@@ -279,7 +252,63 @@ export default function DocumentEditor({
     onNotice: report,
     onLayoutChange,
     onCollectAsset,
+    // I-04 第 1 条边：右键菜单 / 排版浮层 / 照片框浮层一开，先收起展开中的字段编辑器。
+    onOverlayOpen: () => setExpandedPath(null),
   });
+  /**
+   * I-04 第 2 条边：展开字段编辑器时关掉右键菜单与排版浮层。
+   *
+   * 只在**展开**（`path` 非空）时关：`select()` 每次选择都会调 `setExpandedPath(null)`，
+   * 若"收起"也关浮层，"浮层开着点纸面预览"的既有工作流会被破坏。
+   * 这两回调必须定义在 `useEditorChipMenu` 之后（要用它的关闭函数），所以 `expandHost`
+   * 也一并挪到这里。
+   */
+  const setExpanded = useCallback(
+    (path: string | null) => {
+      setNotice(null);
+      setExpandedPath(path);
+      if (path) {
+        closeChipMenu();
+        closeStylePopover();
+        closePhotoFramePopover();
+      }
+      if (path && selectedPath !== path) {
+        suppressRevealRef.current = true;
+        onSelectPath?.(path);
+      }
+    },
+    [closeChipMenu, closePhotoFramePopover, closeStylePopover, onSelectPath, selectedPath],
+  );
+  const toggleExpand = useCallback(
+    (path: string) => {
+      setNotice(null);
+      if (expandedPath === path) {
+        setExpandedPath(null);
+        return;
+      }
+      // 展开即互斥：菜单 / 浮层不能与编辑器同屏（"卡片压卡片"）。
+      closeChipMenu();
+      closeStylePopover();
+      closePhotoFramePopover();
+      setExpandedPath(path);
+      if (selectedPath !== path) {
+        suppressRevealRef.current = true;
+        onSelectPath?.(path);
+      }
+    },
+    [
+      closeChipMenu,
+      closePhotoFramePopover,
+      closeStylePopover,
+      expandedPath,
+      onSelectPath,
+      selectedPath,
+    ],
+  );
+  const expandHost = useMemo(
+    () => ({ expandedPath, toggleExpand, setExpanded }),
+    [expandedPath, setExpanded, toggleExpand],
+  );
 
   /**
    * A3：焦点在展开出来的字段编辑器里（输入框 / 下拉）时，Esc 也先收编辑器并**把焦点还给
@@ -384,6 +413,19 @@ export default function DocumentEditor({
                 disabled={readOnly}
                 onClose={closeStylePopover}
                 onLayoutChange={onLayoutChange}
+              />
+            ) : null}
+            {/* I-01：照片字段的「照片框…」——与「调整排版」互斥，同一浮层位置只开一个。 */}
+            {photoFramePopover ? (
+              <PhotoFramePopover
+                state={photoFramePopover}
+                formatConfig={layout?.format_config ?? null}
+                disabled={readOnly}
+                onClose={closePhotoFramePopover}
+                onChange={(format_config) => {
+                  if (!layout || !onLayoutChange) return;
+                  onLayoutChange({ ...layout, format_config });
+                }}
               />
             ) : null}
           </div>

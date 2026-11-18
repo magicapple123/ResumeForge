@@ -5,6 +5,7 @@
  */
 import { FileSearchOutlined } from "@ant-design/icons";
 import { Alert, Button, Form } from "antd";
+import { useEffect, useState } from "react";
 import type { ChangeEvent, ClipboardEvent } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -28,6 +29,25 @@ interface Props {
   onRemoveFile: (id: number) => void;
   onPaste: (event: ClipboardEvent<HTMLElement>) => void;
   onParse: () => void;
+}
+
+/** 等待期读数：识别一次要 10–30 秒，没有秒数时按钮"像卡住了"（I-35）。 */
+function ParseElapsed() {
+  const [seconds, setSeconds] = useState(0);
+  // 复用已有的「已运行 {seconds} 秒」键：本组件不新增文案，也不动 jobsForm 语言包。
+  useLocale();
+  useEffect(() => {
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <span className="job-parse-elapsed" aria-live="polite">
+      {t("backgroundTasks.bar.elapsed", { seconds })}
+    </span>
+  );
 }
 
 export default function RecognitionSourceSection({
@@ -72,20 +92,32 @@ export default function RecognitionSourceSection({
         style={{
           display: "flex",
           justifyContent: "flex-end",
+          alignItems: "center",
+          gap: 8,
           marginTop: -12,
           marginBottom: 16,
         }}
       >
+        {parsing && <ParseElapsed />}
         <Button type="primary" icon={<FileSearchOutlined />} loading={parsing} onClick={onParse}>
           {t("jobsForm.recognition.submit")}
         </Button>
       </div>
       <RecognitionOutcome source={recognitionSource} text={recognizedText} />
       {parseWarnings.length > 0 && (
+        // 一条一行。此前用 `join("；")` 拼成一句，而每条警告自带句号 →
+        // 界面上出现「请手动填写。；未识别到…」。也不新增文案 key（jobsForm 域
+        // 不在本组可改范围），列表本身说明一切。
         <Alert
           type="warning"
           showIcon
-          title={parseWarnings.join(t("jobsForm.recognition.warningSeparator"))}
+          title={
+            <ul className="job-recognition-warnings">
+              {parseWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          }
           style={{ marginBottom: 16 }}
         />
       )}

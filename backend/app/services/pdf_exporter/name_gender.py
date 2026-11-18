@@ -34,6 +34,37 @@ class NameGenderPlan:
     height: float      # 整块高度（mm）：同行 = 两种字号行高中较大者；换行 = 姓名 + 性别两段
 
 
+def _char_spacing_mm(letter_spacing_px: float) -> float:
+    """字距（× 基准字号的 px）→ 文档单位 mm（画布 unit=mm，与 `style_blocks` 同口径）。"""
+    return float(letter_spacing_px) * _PX_TO_MM
+
+
+def name_text_width(
+    pdf: _ResumePDF,
+    name: str,
+    *,
+    name_size: float,
+    name_bold: bool = True,
+    letter_spacing_px: float = 0.0,
+) -> float:
+    """姓名**实际绘制**的横向宽度（mm，含字距）——测量与绘制共用这一处（I-41）。
+
+    fpdf2 的 `get_string_width` **不含** `set_char_spacing` 的额外间距，而 char space
+    不加在最后一个字符之后（reportlab/fpdf2 同口径），所以附加量是 ``(len - 1) × 字距``。
+    写成 ``len ×`` 会让"陈可"多出 1 个字距、四字姓名多出 2 个字距。
+
+    只改绘制不改这里，表现是"文字画出去被裁"或"性别被挤到下一行"，且不会报错——
+    所以 `plan_name_gender` 与 `draw_name_gender` **都必须**调本函数，不许各自
+    `get_string_width` 一次。
+    """
+    pdf.set_font(FONT_FAMILY, "B" if name_bold else "", name_size * _PX_TO_PT)
+    width = pdf.get_string_width(name)
+    spacing = _char_spacing_mm(letter_spacing_px)
+    if spacing:
+        width += spacing * max(0, len(name) - 1)
+    return width
+
+
 def plan_name_gender(
     pdf: _ResumePDF,
     name: str,
@@ -42,24 +73,43 @@ def plan_name_gender(
     width: float,
     name_size: float,
     extra_size: float,
+    name_bold: bool = True,
+    name_letter_spacing: float = 0.0,
+    extra_bold: bool = False,
 ) -> NameGenderPlan:
     """量出"姓名（+ 性别）"块的排法（只量不画），与 `draw_name_gender` 严格互逆。
 
     ``name_size`` / ``extra_size`` 是字号（px），分别乘 `name_ratio` / `name_extra_ratio`
     得到（调用方从 `ResumeLayout` 取，本函数不碰注册表）。
+    ``name_letter_spacing`` 是**字距 × 基准字号后的 px 值**（调用方乘完 `base` 再传）。
+
+    I-41：字距会同时影响"姓名是否折行"与"性别能否同行"，所以量高的可用宽度先扣掉
+    整段字距（``name_height`` 走的那条 `multi_cell` 不知道字距）。扣多了只会让折行更早
+    发生——保守方向，不会画出界。
     """
     # 姓名也走同一份标记协议：`**张三**` / `{@color=…}` 不能把标记原样印在纸面上。
-    # 姓名本身已按 `name_bold` 画粗体，所以这里只需剥壳（行内字号/颜色不在此处生效，
-    # 姓名的粗体/字号/颜色由版式参数统一决定）。
+    # 姓名本身按 `name_bold` 画，所以这里只需剥壳（行内字号/颜色不在此处生效，
+    # 姓名的粗体/字号/颜色/字距由版式参数统一决定）。
     name = strip_markers(name)
-    name_height = pdf.text_block_height(name, width=width, size_px=name_size, bold=True)
+    spacing_extra = _char_spacing_mm(name_letter_spacing) * max(0, len(name) - 1)
+    name_height = pdf.text_block_height(
+        name,
+        width=max(1e-6, width - spacing_extra),
+        size_px=name_size,
+        bold=name_bold,
+    )
     gender_text = (gender or "").strip()
     if not gender_text:
         return NameGenderPlan(same_line=False, gender_text="", gender_width=0.0, height=name_height)
 
-    pdf.set_font(FONT_FAMILY, "B", name_size * _PX_TO_PT)
-    name_width = pdf.get_string_width(name)
-    pdf.set_font(FONT_FAMILY, "", extra_size * _PX_TO_PT)
+    name_width = name_text_width(
+        pdf,
+        name,
+        name_size=name_size,
+        name_bold=name_bold,
+        letter_spacing_px=name_letter_spacing,
+    )
+    pdf.set_font(FONT_FAMILY, "B" if extra_bold else "", extra_size * _PX_TO_PT)
     # 与预览一致：两个 span 之间就是一个空格，间隔算进性别那段的宽度里。
     inline_text = f" {gender_text}"
     inline_width = pdf.get_string_width(inline_text)
@@ -69,7 +119,9 @@ def plan_name_gender(
         row_height = max(pdf.line_advance(name_size), pdf.line_advance(extra_size))
         return NameGenderPlan(same_line=True, gender_text=inline_text, gender_width=inline_width, height=row_height)
     # 放不下：性别折到姓名下一行（预览的 inline 折行行为），各按各的字号计高。
-    own_height = pdf.text_block_height(gender_text, width=width, size_px=extra_size)
+    own_height = pdf.text_block_height(
+        gender_text, width=width, size_px=extra_size, bold=extra_bold
+    )
     return NameGenderPlan(same_line=False, gender_text=gender_text, gender_width=inline_width, height=name_height + own_height)
 
 
@@ -84,6 +136,9 @@ def draw_name_gender(
     align: str = "left",
     name_color: tuple[int, int, int] | None = None,
     name_bold: bool = True,
+    name_letter_spacing: float = 0.0,
+    extra_color: tuple[int, int, int] | None = None,
+    extra_bold: bool = False,
 ) -> None:
     """按 `plan` 画"姓名（+ 性别）"块：姓名用姓名字号/粗体/强调色，性别用 extra 口径。
 
@@ -98,23 +153,38 @@ def draw_name_gender(
 
     画完把光标放回块左下角（x 回到起笔处、y 前进 ``plan.height``），与 multi_cell 的
     收尾行为一致，调用方不必知道这块是几个 cell 画出来的。
+
+    I-41：``name_letter_spacing`` 是"字距 × 基准字号"的 px 值，与 `plan_name_gender`
+    收同一个数——宽度一律走 `name_text_width`，量宽与画宽同源。``set_char_spacing``
+    以文档单位（mm）收值，画完立刻归零，免得后续正文段落继承姓名的字距。
     """
     left = pdf.get_x()
     top = pdf.get_y()
     centered = align == "center"
+    spacing = _char_spacing_mm(name_letter_spacing)
     # 与 `plan_name_gender` 同一份剥壳结果，保证"量的就是画的"。
     name = strip_markers(name)
     pdf.set_text_color(*(name_color or pdf.accent))
     if plan.same_line:
-        pdf.set_font(FONT_FAMILY, "B" if name_bold else "", name_size * _PX_TO_PT)
-        name_width = pdf.get_string_width(name)
+        name_width = name_text_width(
+            pdf,
+            name,
+            name_size=name_size,
+            name_bold=name_bold,
+            letter_spacing_px=name_letter_spacing,
+        )
         if centered:
             # 整块宽度 = 姓名 + 性别（含前导空格）；超出可用宽度时不左移（max(0, ...)）。
             block_width = name_width + plan.gender_width
             pdf.set_x(left + max(0.0, (width - block_width) / 2))
+        if spacing:
+            pdf.set_char_spacing(spacing)
         pdf.cell(name_width, plan.height, name, new_x=XPos.RIGHT, new_y=YPos.TOP)
-        pdf.set_font(FONT_FAMILY, "", extra_size * _PX_TO_PT)
-        pdf.set_text_color(*pdf.muted_text)
+        if spacing:
+            pdf.set_char_spacing(0)
+        pdf.set_font(FONT_FAMILY, "B" if extra_bold else "", extra_size * _PX_TO_PT)
+        # I-03：性别段的颜色也要能取到字段级覆盖；None 时保持历史的 muted。
+        pdf.set_text_color(*(extra_color or pdf.muted_text))
         # 基线对齐补偿：把性别那格加高 2×0.3×字号差，两种字号的基线即重合
         # （cell 文字起点还各带一段左右内边距，两种字号下正好互相抵消，不另补）。
         baseline_gap = _CELL_BASELINE_FONT_FACTOR * (name_size - extra_size) * _PX_TO_MM
@@ -130,6 +200,8 @@ def draw_name_gender(
         # 相对定位，用 `"C"` 才是与草稿 `text-align: center` 等价的行为。
         line_align = "C" if centered else "L"
         pdf.set_font(FONT_FAMILY, "B" if name_bold else "", name_size * _PX_TO_PT)
+        if spacing:
+            pdf.set_char_spacing(spacing)
         pdf.multi_cell(
             width,
             pdf.line_advance(name_size),
@@ -138,9 +210,11 @@ def draw_name_gender(
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
         )
+        if spacing:
+            pdf.set_char_spacing(0)
         if plan.gender_text:
-            pdf.set_font(FONT_FAMILY, "", extra_size * _PX_TO_PT)
-            pdf.set_text_color(*pdf.muted_text)
+            pdf.set_font(FONT_FAMILY, "B" if extra_bold else "", extra_size * _PX_TO_PT)
+            pdf.set_text_color(*(extra_color or pdf.muted_text))
             pdf.set_x(left)
             pdf.multi_cell(
                 width,

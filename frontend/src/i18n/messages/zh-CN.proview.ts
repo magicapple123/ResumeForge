@@ -184,6 +184,9 @@ const proview = {
   "proview.photo.title": "照片裁剪",
   /** 非破坏承诺。 */
   "proview.photo.hint": "原始照片不会被覆盖，随时可以恢复",
+  /** I-37：画框比例提示（当前画框比例 + 最接近的预设比例）。 */
+  "proview.photo.frameHint":
+    "画框比例约 {frame}；{aspect} 最接近。照片本身带白底时，把取景放大到主体边缘即可贴边。",
   /** 比例锁定控件标签。 */
   "proview.photo.aspect": "比例锁定",
   /** 原图比例。 */

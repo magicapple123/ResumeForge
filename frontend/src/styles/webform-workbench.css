@@ -306,7 +306,9 @@
 /* ===== 代填边界条：四类「始终不代填」常驻一行，完整风险说明在旁边的 ⓘ ===== */
 
 .webform-mode-boundary {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   margin-top: 8px;
   padding: 7px 10px;
   border-radius: var(--rf-radius-control);
@@ -314,6 +316,13 @@
   color: var(--rf-text-secondary);
   font-size: 12px;
   line-height: 18px;
+  flex-wrap: wrap;
+}
+
+/* 锁图标：产品边界的第二重线索（不是补充说明）。 */
+.webform-mode-boundary-icon {
+  flex: 0 0 auto;
+  color: var(--rf-text-tertiary);
 }
 
 .webform-mode-boundary-text {

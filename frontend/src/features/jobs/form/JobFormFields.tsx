@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 岗位表单的静态字段（岗位名称 → 备注）。
  *
- * 零 props：Form.Item 经 Form context 注册到 JobFormModal 持有的同一个 form 实例。
+ * Form.Item 经 Form context 注册到 JobFormModal 持有的同一个 form 实例。
+ * 唯一的 prop 是"正在落位"的字段（I-35）：给它加 `is-filling` 亮一下浅底，
+ * 让用户看清识别结果是一个个填进去的。
  */
 import { DatePicker, Form, Input, Select } from "antd";
 import dayjs from "dayjs";
@@ -10,9 +12,18 @@ import { t } from "../../../i18n";
 import { JOB_STATUS_LABEL_KEYS, JOB_TYPE_LABEL_KEYS } from "../../../i18n/enum/jobs";
 import { useLocale } from "../../../i18n/i18nContext";
 import { HintedTextArea } from "../../../components/common/MaxLengthHint";
+import type { FillingField } from "./useSequentialFill";
 
-export default function JobFormFields() {
+interface Props {
+  /** 正在逐字段落位的那一项；高亮 400ms 后自动回到 null。 */
+  fillingField?: FillingField;
+}
+
+export default function JobFormFields({ fillingField = null }: Props) {
   useLocale();
+  // 高亮加在 Form.Item 外层（不是 input）：antd 输入框自带背景与 focus 样式，叠加会脏。
+  const itemClass = (name: string) =>
+    fillingField === name ? "job-form-field is-filling" : "job-form-field";
   // 下拉的 value 仍是落库的协议值（types/job.ts 的选项表），只有展示名在渲染期取：
   // 放模块作用域会让切语言后停在旧文案。
   const jobTypeOptions = Object.entries(JOB_TYPE_LABEL_KEYS).map(([value, key]) => ({
@@ -27,28 +38,38 @@ export default function JobFormFields() {
     <>
       <Form.Item
         name="title"
+        className={itemClass("title")}
         label={t("jobForm.field.title")}
         rules={[{ required: true, message: t("jobForm.required.title") }]}
       >
         <Input placeholder={t("jobForm.placeholder.title")} />
       </Form.Item>
-      <Form.Item name="company" label={t("jobForm.field.company")}>
+      <Form.Item name="company" className={itemClass("company")} label={t("jobForm.field.company")}>
         <Input placeholder={t("jobForm.placeholder.company")} />
       </Form.Item>
-      <Form.Item name="location" label={t("jobForm.field.location")}>
+      <Form.Item
+        name="location"
+        className={itemClass("location")}
+        label={t("jobForm.field.location")}
+      >
         <Input placeholder={t("jobForm.placeholder.location")} />
       </Form.Item>
-      <Form.Item name="salary" label={t("jobForm.field.salary")}>
+      <Form.Item name="salary" className={itemClass("salary")} label={t("jobForm.field.salary")}>
         <Input placeholder={t("jobForm.placeholder.salary")} />
       </Form.Item>
-      <Form.Item name="job_type" label={t("jobForm.field.jobType")}>
+      <Form.Item
+        name="job_type"
+        className={itemClass("job_type")}
+        label={t("jobForm.field.jobType")}
+      >
         <Select options={jobTypeOptions} />
       </Form.Item>
-      <Form.Item name="status" label={t("jobForm.field.status")}>
+      <Form.Item name="status" className={itemClass("status")} label={t("jobForm.field.status")}>
         <Select options={statusOptions} />
       </Form.Item>
       <Form.Item
         name="source_url"
+        className={itemClass("source_url")}
         label={t("jobForm.field.sourceUrl")}
         rules={[{ type: "url", message: t("jobForm.required.url") }]}
       >
@@ -56,6 +77,7 @@ export default function JobFormFields() {
       </Form.Item>
       <Form.Item
         name="posted_at"
+        className={itemClass("posted_at")}
         label={t("jobForm.field.postedAt")}
         // DatePicker 值走 Dayjs，但 JobPayload.posted_at 是字符串：getValueProps 把存的
         // 字符串转成 Dayjs 给控件，normalize 再把 Dayjs 转回 YYYY-MM-DD 存进表单。
@@ -66,6 +88,7 @@ export default function JobFormFields() {
       </Form.Item>
       <Form.Item
         name="description"
+        className={itemClass("description")}
         label={t("jobForm.field.description")}
         rules={[{ required: true, message: t("jobForm.required.description") }]}
       >
@@ -75,10 +98,18 @@ export default function JobFormFields() {
           placeholder={t("jobForm.placeholder.description")}
         />
       </Form.Item>
-      <Form.Item name="requirements" label={t("jobForm.field.requirements")}>
+      <Form.Item
+        name="requirements"
+        className={itemClass("requirements")}
+        label={t("jobForm.field.requirements")}
+      >
         <Input.TextArea rows={3} placeholder={t("jobForm.placeholder.requirements")} />
       </Form.Item>
-      <Form.Item name="additional_info" label={t("jobForm.field.additionalInfo")}>
+      <Form.Item
+        name="additional_info"
+        className={itemClass("additional_info")}
+        label={t("jobForm.field.additionalInfo")}
+      >
         <Input.TextArea rows={4} placeholder={t("jobForm.placeholder.additionalInfo")} />
       </Form.Item>
       <Form.Item name="note" label={t("jobForm.field.note")}>

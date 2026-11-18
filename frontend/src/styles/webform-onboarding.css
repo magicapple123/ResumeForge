@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* 网申填表页：初始态版式（三步动作卡 + 两栏「怎么填 / 最近填写」）与地址条内嵌历史。
+/* 网申填表页：初始态版式（流程轨道 + 两栏「填写方式 / 最近填写」）与地址条内嵌历史。
    由 `webform-workbench.css` 顶部 `@import` 聚合（@import 必须位于任何规则之前）。
 
    ## 为什么单独成片
    `webform-workbench.css` 已贴着 500 行预算，而初始态是另一套版式：三步从竖排说明
-   变成横排动作卡，右栏从结果区变成「最近填写」预览。新规则写在这里，workbench 片只删。
+   变成一条整页宽的流程轨道，右栏从结果区变成「最近填写」预览。新规则写在这里。
 
    ## 为什么用容器查询而不是媒体查询
    `.webform-workbench` 是页面内容根（`container-type: inline-size` 在 workbench 片声明）。
@@ -42,7 +42,7 @@
   color: var(--rf-text-secondary);
 }
 
-/* ===== 初始态：标题 + 三步横排动作卡 ===== */
+/* ===== 初始态：一条流程轨道 + 两栏（1.6 : 1） ===== */
 
 .webform-onboarding {
   display: flex;
@@ -50,62 +50,52 @@
   gap: 12px;
 }
 
-.webform-onboarding-head {
+/* 宽档轨道：整页一条，节点横排，主 CTA 在最右端。
+   `min-height` 而不是 padding 撑高：按钮 loading 时高度不变，整行不会跳。
+   必须显式写 `flex-direction: row`：基础规则 `.webform-flow-bar` 是竖排（窄档的文字 + 条 +
+   动作各占一行），不重置的话 `align-items: center` 会把整条 CTA 居中掉到节点下面一行。 */
+.webform-flow-bar.is-wide {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.webform-onboarding-title {
-  margin: 0;
-  color: var(--rf-text-body);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 22px;
-}
-
-.webform-onboarding-lead {
-  margin: 0;
-  color: var(--rf-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-/* 三列等宽：卡片内部用 flex 纵向排，按钮 `margin-top:auto` 贴底，
-   三张卡的按钮因此永远在同一条基线上，不随说明文字长短参差。 */
-.webform-onboarding-steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.webform-onboarding-step {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 14px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  min-height: 56px;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
   border: 1px solid var(--rf-border-subtle);
   border-radius: var(--rf-radius-control);
   background: var(--rf-surface);
 }
 
-/* 当前步点亮：整块引导里只有一处重色，视线自然落在这里。 */
-.webform-onboarding-step.is-current {
-  border-color: var(--rf-brand);
-  background: var(--rf-brand-wash);
-  box-shadow: inset 0 0 0 1px var(--rf-brand);
+/* 窄档文案：容器不够宽时才出现（见文件末尾的容器查询）。 */
+.webform-flow-compact-text {
+  display: none;
+  min-width: 0;
+  color: var(--rf-text-body);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.webform-onboarding-step-head {
+.webform-flow-nodes {
   display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.webform-flow-node {
+  display: flex;
+  min-width: 0;
   align-items: center;
   gap: 8px;
 }
 
-.webform-onboarding-num {
+.webform-flow-node-num {
   display: flex;
   width: 22px;
   height: 22px;
@@ -119,56 +109,64 @@
   line-height: 1;
 }
 
-.webform-onboarding-step.is-current .webform-onboarding-num {
+/* 名称不换行不断字：放不下时由外层容器查询整条退回窄档，而不是把「自动浏 / 览」折断。 */
+.webform-flow-node-title {
+  flex: 0 0 auto;
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+/* 连接线吃掉剩余宽度：节点本身保持内容宽度，轨道才能铺满整行。 */
+.webform-flow-link {
+  width: auto;
+  height: 1px;
+  flex: 1 1 24px;
+  min-width: 16px;
+  margin: 0 10px;
+  background: var(--rf-border-subtle);
+}
+
+.webform-flow-link.is-done {
+  background: var(--rf-brand);
+}
+
+.webform-flow-node.is-current .webform-flow-node-num {
   border-color: transparent;
   background: var(--rf-brand);
   color: #ffffff;
 }
 
-.webform-onboarding-step.is-done .webform-onboarding-num {
-  border-color: var(--rf-border-subtle);
-  color: var(--rf-text-tertiary);
-}
-
-.webform-onboarding-state {
-  color: var(--rf-text-tertiary);
-  font-size: 12px;
-  line-height: 18px;
-  white-space: nowrap;
-}
-
-.webform-onboarding-step.is-current .webform-onboarding-state {
-  color: var(--rf-brand);
-  font-weight: 600;
-}
-
-.webform-onboarding-step-title {
+.webform-flow-node.is-current .webform-flow-node-title {
   color: var(--rf-text-body);
-  font-size: 13px;
   font-weight: 600;
-  line-height: 20px;
 }
 
-.webform-onboarding-step-hint {
-  color: var(--rf-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
+.webform-flow-node.is-done .webform-flow-node-num {
+  border-color: var(--rf-brand);
+  color: var(--rf-brand);
 }
 
-.webform-onboarding-step-action {
-  align-self: flex-start;
-  margin-top: auto;
-  padding-top: 4px;
+.webform-flow-node.is-done .webform-flow-node-title {
+  color: var(--rf-text-body);
 }
 
-/* ===== 两栏「怎么填 / 最近填写」 =====
-   `align-items: stretch` + 右卡 `height: 100%`：左卡行数多时右卡跟着长高，
-   两张卡的下边缘在同一条线上；右卡内部再用 `flex: 1` 把空白交给空态垂直居中。 */
+.webform-flow-slot {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ===== 两栏「填写方式 / 最近填写」 =====
+   宽度 1.6 : 1（左 62% / 右 38%）：左侧四行设置、右侧三条记录，等分必然一边空。
+   `align-items: start`：右栏不再被拉到与左栏等高（那会把空态撑出一大片空白）。 */
 
 .webform-onboarding-columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
 }
 
@@ -176,9 +174,10 @@
   min-width: 0;
 }
 
+/* 右卡高度由内容决定（I-24）：不再 `height: 100%` 跟左卡等高，
+   否则三条记录下面就是一大片空白。 */
 .webform-recent {
   display: flex;
-  height: 100%;
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
@@ -276,11 +275,24 @@
   line-height: 18px;
 }
 
-/* 窄容器塌单列：三步卡与两栏一起塌，避免 3×230px 把标题断成竖排。 */
+/* 两栏在窄容器塌单列（1080 及以下会塌，避免右栏被压到读不出记录标题）。 */
 @container (max-width: 720px) {
-  .webform-onboarding-steps,
   .webform-onboarding-columns {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 轨道在窄容器退回 `2 / 4 · 标题` 一行文字（与左栏那一条同一套文案）。
+   阈值取 1080：1440 宽能放下四个步骤名 + 右端按钮，1280 与 1080 放不下——
+   宁可退回一行文字，也不把「自动浏 / 览」折断。 */
+@container (max-width: 1080px) {
+  .webform-flow-bar.is-wide .webform-flow-nodes {
+    display: none;
+  }
+
+  .webform-flow-bar.is-wide .webform-flow-compact-text {
+    display: block;
+    flex: 1 1 auto;
   }
 }
 

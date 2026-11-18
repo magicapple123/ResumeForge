@@ -19,11 +19,14 @@ import { useLocation } from "react-router-dom";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { layer } from "../../theme/tokens";
-import { exitHelpMode, useHelpMode } from "./helpModeStore";
+import { exitHelpMode, useHelpMode, useHintCount } from "./helpModeStore";
 
 export default function HelpModeBadge() {
   useLocale();
   const active = useHelpMode();
+  // I-28：本页可展开的条数。`HintDetail` 平时就挂载并登记，所以这个数在进入模式之前
+  // 就已成立；0 条时也要说清楚"没有"，否则用户按了 Alt+H 会以为快捷键坏了。
+  const hintCount = useHintCount();
   const location = useLocation();
   const pathnameRef = useRef(location.pathname);
 
@@ -60,6 +63,9 @@ export default function HelpModeBadge() {
       }}
     >
       <span>{t("helpMode.badge")}</span>
+      <span className="help-mode-badge-count">
+        {hintCount > 0 ? t("helpMode.badgeCount", { count: hintCount }) : t("helpMode.badgeEmpty")}
+      </span>
       <Button size="small" type="text" onClick={exitHelpMode} aria-label={t("helpMode.exit")}>
         {t("helpMode.exit")}
       </Button>

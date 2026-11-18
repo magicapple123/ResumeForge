@@ -10,10 +10,18 @@
  * 拖动/键盘的几何由 `cropGeometry` 与 `photoCrop.test.ts` 的纯函数守，这里只测接线。
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
 import { buildPhotoSource, createRectCropParams, type PhotoCropParams } from "../preview/photoCrop";
 import PhotoCropDialog from "./PhotoCropDialog";
+
+/** I-37：画框比例由 hook 实测，测试里直接给一个值（默认 undefined = 量不到）。 */
+let mockFrameAspect: number | undefined;
+
+vi.mock("../preview/photoFrameAspect", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../preview/photoFrameAspect")>();
+  return { ...actual, usePhotoFrameAspect: () => mockFrameAspect };
+});
 
 // jsdom 不解码图片，`usePhotoDimensions` 永远拿不到尺寸；这里直接给尺寸。
 vi.mock("../preview/usePhotoDimensions", () => ({
@@ -36,7 +44,14 @@ function renderDialog(props: Partial<Parameters<typeof PhotoCropDialog>[0]> = {}
   return render(<PhotoCropDialog {...base} {...props} />);
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  mockFrameAspect = undefined;
+});
+
+beforeEach(() => {
+  mockFrameAspect = undefined;
+});
 
 describe("PhotoCropDialog · 四边可拖的裁剪框（#18）", () => {
   it("默认整幅：8 个手柄可聚焦，四边/四角都有名字", () => {
@@ -107,5 +122,40 @@ describe("PhotoCropDialog · 四边可拖的裁剪框（#18）", () => {
     const params = onApply.mock.calls[0][0] as PhotoCropParams;
     expect(params.rect).toEqual({ x: 0, y: 0, w: 1, h: 1 });
     expect(params.aspect).toBe("free");
+  });
+
+  // ── I-37：画框比例 → 默认预设 + 一句提示 ────────────────────────────────
+  it("画框 6.3:8：默认选中 4:5，提示同时出现", () => {
+    mockFrameAspect = 0.7875376565720628;
+    renderDialog();
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.landscape") })).toBeChecked();
+    expect(
+      screen.getByText(
+        t("proview.photo.frameHint", {
+          frame: "6.3:8",
+          aspect: t("proview.photo.aspect.landscape"),
+        }),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("默认比例跟画框走：1:1 画框选 1:1（不写死 4:5）", () => {
+    mockFrameAspect = 1;
+    renderDialog();
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.square") })).toBeChecked();
+  });
+
+  it("已有保存的裁剪（free）时不强制改比例，只显示提示", () => {
+    mockFrameAspect = 0.7875;
+    const saved = createRectCropParams(SOURCE, { x: 0.2, y: 0.1, w: 0.5, h: 0.4 }, "free");
+    renderDialog({ initialCrop: saved });
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.original") })).toBeChecked();
+    expect(screen.getByText(/6\.3:8/)).toBeInTheDocument();
+  });
+
+  it("量不到画框时保持「原图」，不出现提示", () => {
+    renderDialog();
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.original") })).toBeChecked();
+    expect(screen.queryByTestId("photo-frame-hint")).not.toBeInTheDocument();
   });
 });

@@ -115,8 +115,10 @@
      草稿画布在深色下整体反色显示，纸面容器底色用 `--rf-preview-paper`；
      `--rf-paper` 仍表示"导出与打印看到的那张纸"。 */
   --rf-paper: #ffffff;
-  /* 草稿画布在深色下的纸面容器底色：与反色后的 iframe 同色，加载瞬间也不会透出白边。 */
-  --rf-preview-paper: #000000;
+  /* 草稿画布在深色下的纸面容器底色：炭灰（#1e1e1e）——纸要比应用底色亮一档，
+     纯黑会读成"页面被挖空了一块"（I-36）。iframe 里的纸底由 `paperTheme.ts` 注入
+     反算色 `#e1e1e1`（经 `invert(1)` 得回 #1e1e1e），两处必须同色，否则加载瞬间闪边。 */
+  --rf-preview-paper: #1e1e1e;
 }
 
 [data-theme="dark"] body {

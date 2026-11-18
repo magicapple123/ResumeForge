@@ -32,8 +32,8 @@
  *   不整页重取，免得相邻行闪一下。
  */
 
-import { InfoCircleOutlined, MoreOutlined } from "@ant-design/icons";
-import { Alert, Button, Dropdown, Input, Popover } from "antd";
+import { MoreOutlined } from "@ant-design/icons";
+import { Alert, Button, Dropdown, Input } from "antd";
 import { useState } from "react";
 import { resetSystemSource, saveSystemSource } from "../../api/connections";
 import { useRowActionMenu } from "../../components/common/rowActionMenu";
@@ -41,6 +41,7 @@ import type { RowActionItem } from "../../components/common/rowActionMenu";
 import { useToast } from "../../hooks/useToast";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { HintDetail } from "../../components/common/HintDetail";
 import type { ConnectionItem, ConnectionsPayload } from "../../types";
 import { clearConnectionSecret, writeConnectionSecret } from "./connectionKeyWrite";
 import {
@@ -80,22 +81,22 @@ function primaryLabel(item: ConnectionItem, variant: ConnectionRowVariant): stri
 }
 
 /** `ⓘ` 展开的内容：一句"怎么改" + 存储形态 + （系统来源）出厂值。 */
-function RowDetails({ item, variant }: { item: ConnectionItem; variant: ConnectionRowVariant }) {
+/**
+ * 一行连接的全部说明（I-28）：原来是一个 `Popover` + 自绘 `RowDetails`，现在拼成一段
+ * 带换行的纯文本交给 `HintDetail`——默认仍是"点开看"，但提示模式下会原地展开。
+ * 三段原文一字不改；`pre-line` 让换行符保持换行，视觉上与原来的三行一致。
+ */
+function rowHintText(item: ConnectionItem, variant: ConnectionRowVariant): string {
   const protection = connectionProtectionLabel(item);
-  return (
-    <div className="connection-row__hint">
-      <div>{connectionItemHint(item)}</div>
-      <div className="connection-row__hint-line">
-        {t("connections.hint.storage", { label: protection })}
-        {item.protection_description ? ` · ${item.protection_description}` : ""}
-      </div>
-      {variant === "value" ? (
-        <div className="connection-row__hint-line">
-          {t("connections.system.factoryValue", { value: item.default_value })}
-        </div>
-      ) : null}
-    </div>
-  );
+  return [
+    connectionItemHint(item),
+    `${t("connections.hint.storage", { label: protection })}${
+      item.protection_description ? ` · ${item.protection_description}` : ""
+    }`,
+    variant === "value" ? t("connections.system.factoryValue", { value: item.default_value }) : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function ConnectionListRow({ item, variant, onChanged, onApplied }: ConnectionListRowProps) {
@@ -242,19 +243,11 @@ export function ConnectionListRow({ item, variant, onChanged, onApplied }: Conne
           <span className="connection-row__dot" aria-hidden="true" />
           {connectionStatusLabel(item)}
         </span>
-        <Popover
-          trigger="click"
-          placement="topLeft"
-          content={<RowDetails item={item} variant={variant} />}
-        >
-          <Button
-            type="text"
-            size="small"
-            className="connection-row__info"
-            aria-label={t("connections.hint.aria", { name: label })}
-            icon={<InfoCircleOutlined />}
-          />
-        </Popover>
+        <HintDetail
+          className="connection-row__info"
+          detail={rowHintText(item, variant)}
+          label={t("connections.hint.aria", { name: label })}
+        />
       </div>
 
       <div className="connection-row__main">

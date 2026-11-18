@@ -99,10 +99,12 @@ describe("局部排版行 · 读数宽度与控件宽度", () => {
     expect(value).toContain("white-space: nowrap");
   });
 
-  it("滑杆 88–140 弹性、输入框 76（参数栏内容宽 380 内一行放下）", () => {
+  it("滑杆 88 起、宽栏放开（I-06 取消 140 封顶）、输入框 76（参数栏内容宽 380 内一行放下）", () => {
     const slider = block(TYPOGRAPHY, ".resume-wb-col-params .resume-typography-row .ant-slider");
     expect(slider).toContain("min-width: 88px !important");
-    expect(slider).toContain("max-width: 140px !important");
+    // I-06：原来封顶 140px，宽栏下右侧留一大片空白；改为 `max-width: none` 让滑杆吃掉剩余宽度。
+    // 一行放下的实质由 min-width: 88 + 输入框固定 76 保证，不依赖这个上限。
+    expect(slider).toContain("max-width: none !important");
     // antd 滑杆自带 14px 上下外边距：不清零时控件行是 40，数字行会超过 56。
     expect(slider).toContain("margin-block: 0 !important");
     expect(

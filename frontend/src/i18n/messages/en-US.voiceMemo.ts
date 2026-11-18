@@ -9,6 +9,8 @@ const voiceMemo = {
   "voiceMemo.buttonAria": "Dictate one item: speak and it becomes resume entries",
   "voiceMemo.status.recording": "Recording, tap to stop",
   "voiceMemo.status.transcribing": "Transcribing",
+  /** I-18: purpose comes first, the limit second. */
+  "voiceMemo.hint.purpose": "Speak one experience; it becomes a resume entry",
   "voiceMemo.hint.limit": "Up to {seconds} seconds per clip",
   "voiceMemo.hint.streamLimited":
     "This service does not stream, so clips stop at {seconds} seconds",
@@ -24,6 +26,10 @@ const voiceMemo = {
   "voiceMemo.toast.covered": "{count} already exist and were skipped",
   "voiceMemo.toast.basicOnly": "Only contact basics were recognised, fill them on the profile page",
   "voiceMemo.toast.nothing": "Nothing to insert",
+  // User-guide entry (I-18): written by the same hand as the UI copy above.
+  "voiceMemo.guide.lead": "Dictate one item",
+  "voiceMemo.guide.text":
+    "In the resume workbench, choose Dictate, speak one experience, then check and insert it as an editable entry.",
 
   // ── Transcribe provider preset: the DeepSeek tier (T08) ─────────────
   //

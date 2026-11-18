@@ -30,9 +30,11 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import type { CSSProperties } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import { anchoredPlacement, triggerTargetOffset } from "../../../utils/anchoredPlacement";
+import { FALLBACK_MENU_SIZE, MEASURE_RETRY_LIMIT } from "./inlineMarkMenuMeasure";
 import {
   applyStyleMark,
   clearInlineMarks,
@@ -43,11 +45,36 @@ import {
   type InlineEdit,
   type InlineRange,
 } from "./inlineMarks";
+import {
+  richClearAttribute,
+  richClearStyles,
+  richSetLink,
+  richToggleBold,
+  richToggleColor,
+  richToggleSize,
+} from "../editor/inlineMarkWrite";
 import type { InlineMarkCommit } from "./InlineMarkButtons";
 import "../../../styles/inline-mark-menu.css";
 
 /** DF-3：菜单与光标之间的间距（下方看下沿、上方看上沿，都不贴死指针）。 */
 const MENU_GAP = 4;
+
+/**
+ * I-11：测量重试的上限与兜底判定住在 `inlineMarkMenuMeasure`（纯函数，可逐值断言）。
+ * portal 因异常一直没挂上时**不能**让菜单永远不可见——退化成"位置可能不准但能用"，
+ * 比"右键点了没反应"好。
+ */
+
+/**
+ * I-11：菜单外壳的隐藏样式——**落点还没算出来时连 antd 的 `.ant-dropdown` 一起隐藏**。
+ *
+ * 之前 `visibility: hidden` 只挂在 `popupRender` 的内层，白底圆角的外壳仍会在宿主左上角
+ * 闪一帧（首帧 `targetOffset` 是 `[0, 0]`，语义是"贴宿主左上角"）。导出成纯函数是为了
+ * 让结构守卫能直接断言这一条，而不必去追 antd portal 的渲染时序。
+ */
+export function menuRootStyle(placed: boolean): CSSProperties | undefined {
+  return placed ? undefined : { visibility: "hidden" };
+}
 
 interface Props {
   onCommit: (next: InlineMarkCommit) => void;
@@ -112,6 +139,8 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
+  /** I-11：本轮打开已经重试了几次（超限后强制显示）。 */
+  const attempts = useRef(0);
 
   const close = () => {
     setOpen(false);
@@ -132,12 +161,19 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
   useLayoutEffect(() => {
     if (!open) return;
     let cancelled = false;
+    attempts.current = 0;
     const measure = () => {
       if (cancelled) return;
       const node = popupRef.current;
       if (!node) {
         // 弹层由 antd portal 挂载，可能比这次 commit 晚一拍；等一帧再量。
-        window.setTimeout(measure, 0);
+        // I-11：但重试必须有上限——无限等下去会让菜单永远停在 `visibility: hidden`。
+        attempts.current += 1;
+        if (attempts.current >= MEASURE_RETRY_LIMIT) {
+          setMenuSize(FALLBACK_MENU_SIZE);
+          return;
+        }
+        window.setTimeout(measure, 16);
         return;
       }
       const rect = node.getBoundingClientRect();
@@ -266,19 +302,56 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
   const onClick: MenuProps["onClick"] = ({ key }) => {
     if (!snapshot) return;
     const { text, range } = snapshot;
-    if (key === "bold") return commit(toggleBoldMark(text, range));
+    // I-13：结构化字段先走 runs（磁盘上落 `rich.runs`，不再拼接标记串）。
+    if (key === "bold") {
+      if (richToggleBold(range)) {
+        close();
+        return;
+      }
+      return commit(toggleBoldMark(text, range));
+    }
     if (key === "link") {
       linkModeRef.current = true;
       setLinkMode(true);
       return;
     }
-    if (key === "clear") return commit(clearInlineMarks(text, range));
-    if (key === "size:clear") return commit(applyStyleMark(text, range, { size: null }));
-    if (key === "color:clear") return commit(applyStyleMark(text, range, { color: null }));
-    if (key.startsWith("size:"))
-      return commit(applyStyleMark(text, range, { size: Number(key.slice(5)) }));
-    if (key.startsWith("color:"))
-      return commit(applyStyleMark(text, range, { color: key.slice(6) }));
+    if (key === "clear") {
+      if (richClearStyles(range)) {
+        close();
+        return;
+      }
+      return commit(clearInlineMarks(text, range));
+    }
+    if (key === "size:clear") {
+      if (richClearAttribute(range, { size: null })) {
+        close();
+        return;
+      }
+      return commit(applyStyleMark(text, range, { size: null }));
+    }
+    if (key === "color:clear") {
+      if (richClearAttribute(range, { color: null })) {
+        close();
+        return;
+      }
+      return commit(applyStyleMark(text, range, { color: null }));
+    }
+    if (key.startsWith("size:")) {
+      const size = Number(key.slice(5));
+      if (richToggleSize(range, size)) {
+        close();
+        return;
+      }
+      return commit(applyStyleMark(text, range, { size }));
+    }
+    if (key.startsWith("color:")) {
+      const color = key.slice(6);
+      if (richToggleColor(range, color)) {
+        close();
+        return;
+      }
+      return commit(applyStyleMark(text, range, { color }));
+    }
   };
 
   const items: MenuProps["items"] = [
@@ -318,7 +391,13 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
   const confirmLink = () => {
     if (!snapshot) return;
     const edit = insertLinkMark(snapshot.text, snapshot.range, url);
-    if (edit) commit(edit);
+    if (!edit) return;
+    // I-13：结构化字段写成 `link` run。
+    if (richSetLink(snapshot.range, url.trim())) {
+      close();
+      return;
+    }
+    commit(edit);
   };
 
   return (
@@ -345,6 +424,9 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
         trigger={[]}
         // I-25：宽度由样式表收口（此前长标签把菜单撑到半屏）。
         overlayClassName="rf-inline-mark-menu"
+        // I-11：首帧落点还没算出来时，**连 antd 的外壳一起隐藏**。
+        // 之前只隐藏内层 `.rf-inline-mark-popup`，白底圆角的外壳仍在宿主左上角闪一帧。
+        styles={{ root: menuRootStyle(placement !== null) }}
         menu={{ items, onClick }}
         align={{
           // 两个方向都用「菜单左上角贴目标左上角」，目标点由 `targetOffset` 换算到 `placement`。
@@ -367,7 +449,8 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
             ref={popupRef}
             className="rf-inline-mark-popup"
             data-placement={placement?.side ?? "below"}
-            // 测量完成前不可见：避免先出现在一个错误的位置再跳。
+            // 双保险：真正让首帧不可见的是上方的 `styles.root`（外层），这里保留内层隐藏，
+            // 免得 antd 某次升级把 `styles.root` 合并进 class 之后又闪回来。
             style={placement ? undefined : { visibility: "hidden" }}
           >
             {/* I-25：菜单项 mousedown 会夺走输入框焦点、选区随之消失（点完「加粗」没反应）。

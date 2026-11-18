@@ -12,7 +12,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
-import InlineMarkContextMenu from "./InlineMarkContextMenu";
+import InlineMarkContextMenu, { menuRootStyle } from "./InlineMarkContextMenu";
 import { applyInlineEdit, resetInlineMarkFieldsForTests } from "../editor/lastFocusedTextarea";
 import { registerInlineMarkField } from "../editor/useInlineMarkRange";
 
@@ -93,6 +93,31 @@ function mockPopupSize(width: number, height: number) {
 }
 
 describe("InlineMarkContextMenu", () => {
+  /**
+   * I-11：首帧闪一张空壳，是因为隐藏只加在内层 `.rf-inline-mark-popup` 上，antd 的外壳
+   * （白底、圆角、阴影）仍然可见。结构守卫钉住"落点未算出 → 外层也隐藏"这一条；真机上
+   * "第一帧就在最终位置"只能靠录屏，jsdom 测不了（清单里已写明）。
+   */
+  it("I-11：落点未算出时外层隐藏，算出来后恢复", () => {
+    expect(menuRootStyle(false)).toEqual({ visibility: "hidden" });
+    expect(menuRootStyle(true)).toBeUndefined();
+  });
+
+  it("I-11：首次打开仍能正常出现（外层没有被永久隐藏）", async () => {
+    mockPopupSize(220, 280);
+    render(<Harness initial="abcdef" />);
+    const input = screen.getByRole("textbox", { name: "字段值" }) as HTMLInputElement;
+    input.focus();
+    input.setSelectionRange(2, 4);
+    rightClick(input);
+
+    expect(await screen.findByRole("menu")).toBeTruthy();
+    await waitFor(() => {
+      const dropdown = document.querySelector(".ant-dropdown") as HTMLElement | null;
+      expect(dropdown?.style.visibility ?? "").not.toBe("hidden");
+    });
+  });
+
   it("选中文字右键：接管菜单，点「加粗」写回受控值", async () => {
     render(<Harness initial="abcdef" />);
     const input = screen.getByRole("textbox", { name: "字段值" }) as HTMLInputElement;

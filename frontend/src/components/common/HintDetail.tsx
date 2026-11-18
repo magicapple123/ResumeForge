@@ -28,7 +28,9 @@
 import { InfoCircleOutlined } from "@ant-design/icons";
 import { Popover, Space } from "antd";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
-import { useHelpMode } from "../../features/help-mode/helpModeStore";
+import { useEffect } from "react";
+import { registerHint, useHelpMode } from "../../features/help-mode/helpModeStore";
+import "./hint-detail.css";
 
 export interface HintDetailProps {
   /** 完整说明（长文案，通常是语言包里那条被替下来的 tooltip）。空串时组件不渲染。 */
@@ -41,6 +43,14 @@ export interface HintDetailProps {
    */
   summary?: string;
   className?: string;
+  /**
+   * 排版：`inline`（默认）用于表单 label / 段落里；`block` 用于表格「动作」列这类窄列。
+   *
+   * I-28：表格列约 200px，把 45 字说明塞进 `inline-flex` 会被挤成 4~5 行竖条、行高爆炸；
+   * `block` 让 `summary` 与正文各占一行（`width: 100%`），列宽不变、只长高。
+   * **默认必须保持 inline**——表单 label 里换成 block 会把同一行拆成两行。
+   */
+  variant?: "inline" | "block";
 }
 
 /** 触发按钮与内联块共用的一套排版：12px、次要文字色、不参与行高撑开。 */
@@ -76,6 +86,14 @@ const INLINE_STYLE: CSSProperties = {
   gap: 4,
 };
 
+/** I-28：表格 / 窄列的竖排——标签一行、正文一行，宽度跟着列走。 */
+const BLOCK_STYLE: CSSProperties = {
+  ...BASE_STYLE,
+  display: "block",
+  width: "100%",
+  marginTop: 2,
+};
+
 /**
  * 正文容器：`pre-line` 让 `detail` 里的 `\n` 真的换行。
  *
@@ -95,9 +113,24 @@ const DETAIL_STYLE: CSSProperties = {
  * 参数与用法见 `HintDetailProps`；本组件自己不读语言包——文案全部由调用方 `t()` 之后传入，
  * 语言切换时的重渲染责任也就留在调用方（与仓库其它"纯展示"组件一致）。
  */
-export function HintDetail({ detail, label, summary, className }: HintDetailProps) {
+export function HintDetail({
+  detail,
+  label,
+  summary,
+  className,
+  variant = "inline",
+}: HintDetailProps) {
   const helpMode = useHelpMode();
   const text = detail.trim();
+  const block = variant === "block";
+
+  // I-28：挂载即登记，**与提示模式无关**——徽标要显示"本页 N 条说明"，这个数在进入
+  // 模式之前就必须成立。空说明不参与计数（它的 ⓘ 根本不渲染）。
+  useEffect(() => {
+    if (text === "") return undefined;
+    return registerHint();
+  }, [text]);
+
   if (text === "") return null;
 
   // 提示模式：就在原地展开，用户不必逐个点开。
@@ -108,16 +141,20 @@ export function HintDetail({ detail, label, summary, className }: HintDetailProp
         role="note"
         aria-label={label}
         data-help-mode="active"
-        style={INLINE_STYLE}
+        style={block ? BLOCK_STYLE : INLINE_STYLE}
       >
-        {summary ? <span>{summary}</span> : null}
-        <span style={{ whiteSpace: "pre-line" }}>{text}</span>
+        {summary ? <span style={block ? { display: "block" } : undefined}>{summary}</span> : null}
+        <span
+          style={block ? { display: "block", whiteSpace: "pre-line" } : { whiteSpace: "pre-line" }}
+        >
+          {text}
+        </span>
       </span>
     );
   }
 
   return (
-    <span className={className} style={WRAP_STYLE}>
+    <span className={className} style={block ? BLOCK_STYLE : WRAP_STYLE}>
       {summary ? <span>{summary}</span> : null}
       <Popover content={<span style={DETAIL_STYLE}>{text}</span>} trigger="click" placement="top">
         <button

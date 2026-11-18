@@ -25,6 +25,14 @@ const interviewVoice = {
   "interviewVoice.room.interviewer": "Interviewer",
   "interviewVoice.room.you": "You",
   "interviewVoice.room.conversation": "Conversation",
+  "interviewVoice.camera.notice.off": "Camera is switched off; turn it on first",
+  "interviewVoice.camera.notice.denied": "Cannot open the camera (permission denied)",
+  "interviewVoice.camera.notice.no-device": "Cannot open the camera (no camera found)",
+  "interviewVoice.camera.notice.busy": "Cannot open the camera (in use by another app)",
+  "interviewVoice.camera.notice.unsupported": "This browser does not support the camera",
+  "interviewVoice.camera.notice.unknown":
+    "Cannot open the camera; check system permissions and retry",
+  "interviewVoice.room.historyEmpty": "Earlier exchanges will appear here",
   "interviewVoice.room.waiting": "Waiting for the interviewer",
   "interviewVoice.room.speaking": "Interviewer is speaking",
   "interviewVoice.room.speechUnsupported":
@@ -44,7 +52,6 @@ const interviewVoice = {
   "interviewVoice.room.micIdle": "off",
   "interviewVoice.room.speakingBadge": "Speaking",
   "interviewVoice.room.currentTurn": "Current exchange",
-  "interviewVoice.room.noTurn": "No exchange yet - turn on the microphone or just start talking",
   "interviewVoice.room.settings": "Call settings",
   "interviewVoice.room.expand": "Open settings",
   "interviewVoice.room.fallbackLocal":
@@ -56,6 +63,15 @@ const interviewVoice = {
     "Confirming discards this round's interviewer reply and asks again; it cannot be undone.",
   "interviewVoice.room.reviseSubmit": "Re-ask",
   "interviewVoice.room.reviseCancel": "Cancel",
+
+  // ===== I-27: presence bar / review column / current-turn marker =====
+  "interviewVoice.room.questionCount": "Question {count}",
+  "interviewVoice.room.asking": "Asking",
+  "interviewVoice.room.review": "Round feedback",
+  "interviewVoice.room.reviewEmpty": "No feedback for this round yet",
+  "interviewVoice.room.reviewCollapsed": "Feedback collapsed",
+  "interviewVoice.room.reviewExpand": "Show feedback",
+  "interviewVoice.room.reviewCollapse": "Hide feedback",
 
   // ===== Transcript confirmation bubble (Q1-C L1) =====
   "interviewVoice.pending.title": "Recognized",

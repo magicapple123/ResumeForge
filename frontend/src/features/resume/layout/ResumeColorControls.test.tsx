@@ -1,37 +1,55 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 参数 · **外观**组：四个颜色键的写入语义（P1-1）。
+ * 参数 · **外观**组：2×2 色卡（I-09）与四个颜色键的写入语义（P1-1）。
  *
- * 这一组是本轮"后端早就支持、前端没有入口"的五项里最容易接错的一项：颜色不是滑杆，
- * 没有 `line_height` 那样的既有实现可抄，而三条性质都只在出错时可见：
+ * 这一组最容易接错的地方都不在"看上去对不对"：
  *
- * 1. 一次取色**只写自己那个键**（写错成整份 `format_config` 覆盖 = 把别人调好的行距
- *    一起抹掉）；
+ * 1. 一次取色**只写自己那个键**（写成整份 `format_config` 覆盖 = 把别人调好的行距一起抹掉）；
  * 2. 恢复默认 = **删键**（写回"模板默认色"会让以后模板换配色时这些简历不跟着变）；
  * 3. 探针与后端 `format_css` 的 `:root` 声明**逐字一致**（`:root { --accent: #1e3a8a; }`），
- *    否则松手后颜色会跳一下。
+ *    否则松手后颜色会跳一下；
+ * 4. 色块显示的是**生效色**：`自己的覆盖 > 版式预设 > 模板配色（后端下发） > 占位`，
+ *    第四级必须是斜纹 + 「随模板」，不能编一个假色值（I-09 的验收口径）。
  *
  * 断言文案一律走 `t()` 或取目录里的 `label`；中文只出现在注释里（`cjkRatchet` 口径）。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 // @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
 import { readFileSync } from "node:fs";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../../../test/resumeFixtures";
 import { t } from "../../../i18n";
-import type { ResumeLayout } from "../../../types";
+import type { ResumeLayout, ResumeTemplateCatalog } from "../../../types";
 import { DEFAULT_LAYOUT, makePreviewRef } from "./ResumeLayoutControls.testkit";
 import ResumeColorControls from "./ResumeColorControls";
 
 declare const process: { cwd(): string };
 
-/** 强调色那一行的标签由目录下发（`format_fields[].label` 只有一份来源）。 */
+/** 强调色的标签由目录下发（`format_fields[].label` 只有一份来源）。 */
 const ACCENT_LABEL =
   TEMPLATE_CATALOG.format_fields?.find((field) => field.key === "accent")?.label ?? "accent";
 
 const BASE: ResumeLayout = { ...DEFAULT_LAYOUT, format_config: {} };
+
+/** classic 的四色（与后端 `resume_template_palette` 同值）；夹具默认不下发 palette。 */
+const CLASSIC_PALETTE = {
+  accent: "#16365c",
+  text_color: "#1f2937",
+  muted_color: "#6b7280",
+  line_color: "#d9dee7",
+};
+
+/** 给 classic 下发 palette 的目录副本（模拟新后端）。 */
+function catalogWithPalette(): ResumeTemplateCatalog {
+  return {
+    ...TEMPLATE_CATALOG,
+    templates: TEMPLATE_CATALOG.templates.map((item) =>
+      item.name === "classic" ? { ...item, palette: { ...CLASSIC_PALETTE } } : item,
+    ),
+  };
+}
 
 function renderGroup(
   props: Partial<ComponentProps<typeof ResumeColorControls>> = {},
@@ -50,18 +68,25 @@ function renderGroup(
   return onChange;
 }
 
-/**
- * 第一行（强调色）的预设色板：色块顺序与 `PALETTE` 一致。
- *
- * #12 之后默认**全部收起**，所以取色板前必须先展开该行；已展开就不要再点（再点会收起）。
- */
-function firstRowSwatches(): HTMLElement[] {
-  const row = document.querySelectorAll<HTMLElement>(".resume-wb-color-row")[0];
-  if (!row.querySelector(".resume-wb-swatches")) {
-    fireEvent.click(row.querySelector(".resume-measure-label") as HTMLElement);
-  }
-  const palettes = screen.getAllByRole("group", { name: t("workbench.color.palette") });
-  return within(palettes[0]).getAllByRole("button");
+function cards(): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>(".resume-wb-color-card"));
+}
+
+/** 卡片主按钮（唯一合法的点击区）。 */
+function cardMain(index: number): HTMLElement {
+  const button = cards()[index].querySelector<HTMLElement>(".resume-wb-color-main");
+  if (!button) throw new Error(`第 ${index} 张色卡没有主按钮`);
+  return button;
+}
+
+/** 打开某张卡（取色器只有一个实例，随 `pickerKey` 移动）。 */
+function openCard(index: number) {
+  fireEvent.click(cardMain(index));
+}
+
+/** antd 预设色块（`ColorPresets` 渲染的是 div，不是 button）；顺序即 `PALETTE`。 */
+function presetSwatches(): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>(".ant-color-picker-presets-color"));
 }
 
 function lastLayout(onChange: ReturnType<typeof vi.fn>): ResumeLayout {
@@ -76,15 +101,16 @@ afterEach(() => {
 });
 
 describe("ResumeColorControls · 写入语义", () => {
-  it("点色板：只写 accent，其它覆盖原样保留，并先注入逐字一致的探针", () => {
+  it("点预设：只写 accent，其它覆盖原样保留，并先注入逐字一致的探针", () => {
     const { ref, setLiveProbe } = makePreviewRef();
     const onChange = renderGroup({
       layout: { ...BASE, format_config: { line_height: 1.6 } },
       previewRef: ref,
     });
 
-    const navy = firstRowSwatches()[2];
-    expect(navy).toHaveAttribute("aria-label", t("workbench.color.navy"));
+    openCard(0);
+    const navy = presetSwatches()[2];
+    expect(navy).toBeDefined();
     fireEvent.click(navy);
 
     // 探针 = 后端 `format_css` 的 `:root` 声明（同一串字符）。
@@ -93,171 +119,194 @@ describe("ResumeColorControls · 写入语义", () => {
     expect(next.format_config).toEqual({ line_height: 1.6, accent: "#1e3a8a" });
   });
 
-  it("clicking a color row expands its palette and writes that row's key", () => {
+  it("点第二张卡（正文）的预设写的是 text_color，不是 accent", () => {
     const onChange = renderGroup();
-    const rows = Array.from(document.querySelectorAll<HTMLElement>(".resume-wb-color-row"));
-    expect(rows).toHaveLength(4);
-    // #12：默认全部收起（一行色板都不渲染）。
-    expect(rows.filter((row) => row.querySelector(".resume-wb-swatches"))).toHaveLength(0);
 
-    // 点第二行（正文）的标签，而不是行头那颗小箭头：第二行展开、其它行保持收起。
-    fireEvent.click(rows[1].querySelector(".resume-measure-label") as HTMLElement);
-    const openRows = rows.filter((row) => row.querySelector(".resume-wb-swatches"));
-    expect(openRows).toHaveLength(1);
-    expect(openRows[0]).toBe(rows[1]);
+    openCard(1);
+    fireEvent.click(presetSwatches()[2]);
 
-    // 该行色板能直接改色：写的是 text_color，不是 accent。
-    const navy = openRows[0].querySelectorAll<HTMLElement>(".resume-wb-swatch")[2];
-    fireEvent.click(navy);
     expect(lastLayout(onChange).format_config).toEqual({ text_color: "#1e3a8a" });
   });
 
-  it("#12 默认全部收起：初次渲染没有色板，四行 aria-expanded 全为 false", () => {
+  it("取色器只有一个实例：换一张卡时前一个卸载，卡片开合状态跟着走", () => {
     renderGroup();
+    expect(document.querySelectorAll(".resume-wb-color-picker")).toHaveLength(0);
 
-    expect(document.querySelectorAll(".resume-wb-swatches")).toHaveLength(0);
-    const toggles = Array.from(
-      document.querySelectorAll<HTMLButtonElement>(".resume-wb-color-toggle"),
-    );
-    expect(toggles).toHaveLength(4);
-    for (const toggle of toggles) {
-      expect(toggle).toHaveAttribute("aria-expanded", "false");
-    }
+    openCard(0);
+    expect(document.querySelectorAll(".resume-wb-color-picker")).toHaveLength(1);
+    expect(cards()[0]).toHaveClass("is-open");
+    // 只有一个预设面板（四格各挂一个取色器会渲染四份）。
+    expect(presetSwatches()).toHaveLength(5);
+
+    openCard(1);
+    expect(document.querySelectorAll(".resume-wb-color-picker")).toHaveLength(1);
+    expect(cards()[1]).toHaveClass("is-open");
+    expect(cards()[0]).not.toHaveClass("is-open");
+
+    // 再点同一张已打开的卡：收起。
+    openCard(1);
+    expect(document.querySelectorAll(".resume-wb-color-picker")).toHaveLength(0);
   });
 
-  it("#12 点行才展开：一次只开一行，换行时前一行收起", () => {
-    renderGroup();
-    const rows = Array.from(document.querySelectorAll<HTMLElement>(".resume-wb-color-row"));
-
-    // 点「强调色」行 → 恰好一个色板，且该行展开。
-    fireEvent.click(rows[0].querySelector(".resume-measure-label") as HTMLElement);
-    expect(document.querySelectorAll(".resume-wb-swatches")).toHaveLength(1);
-    expect(rows[0].querySelector(".resume-wb-color-toggle")).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
-
-    // 再点「正文」行 → 前者收起、后者展开。
-    fireEvent.click(rows[1].querySelector(".resume-measure-label") as HTMLElement);
-    const openRows = rows.filter((row) => row.querySelector(".resume-wb-swatches"));
-    expect(openRows).toHaveLength(1);
-    expect(openRows[0]).toBe(rows[1]);
-    expect(rows[0].querySelector(".resume-wb-color-toggle")).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-    expect(rows[1].querySelector(".resume-wb-color-toggle")).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
-  });
-
-  it("恢复默认：双击标题删掉该键（不是写回模板默认色）", () => {
+  it("恢复默认：双击名称删掉该键（不是写回模板默认色）", () => {
     const onChange = renderGroup({
       layout: { ...BASE, format_config: { accent: "#1e3a8a", line_height: 1.6 } },
     });
 
-    fireEvent.doubleClick(
-      screen.getByRole("button", {
-        name: t("workbench.param.resetLabel", { label: ACCENT_LABEL }),
-      }),
-    );
+    fireEvent.doubleClick(screen.getByText(ACCENT_LABEL, { selector: ".resume-wb-color-name" }));
 
     const next = lastLayout(onChange);
     expect(next.format_config).toEqual({ line_height: 1.6 });
     expect(next.format_config).not.toHaveProperty("accent");
   });
 
-  it("没设过时双击标题不产生变更（没有可复位的东西）", () => {
+  it("没设过时双击名称不产生变更（没有可复位的东西）", () => {
     const onChange = renderGroup();
 
-    fireEvent.doubleClick(
-      screen.getByRole("button", {
-        name: t("workbench.param.resetLabel", { label: ACCENT_LABEL }),
-      }),
-    );
+    fireEvent.doubleClick(screen.getByText(ACCENT_LABEL, { selector: ".resume-wb-color-name" }));
 
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("已设过的颜色：对应的色块标为按下，来源胶囊不再出现", () => {
+  it("有基线且与当前不同：↺ 变成「恢复到打开时的值」，点它只搬这一个键", () => {
+    const baseline: ResumeLayout = {
+      ...BASE,
+      format_config: { accent: "#111111", line_height: 1.4 },
+    };
+    const onChange = renderGroup({
+      layout: { ...BASE, format_config: { accent: "#222222", line_height: 1.4 } },
+      baseline,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: t("workbench.param.restoreToOpenedAria", { label: ACCENT_LABEL }),
+      }),
+    );
+
+    expect(lastLayout(onChange).format_config).toEqual({
+      accent: "#111111",
+      line_height: 1.4,
+    });
+  });
+});
+
+describe("ResumeColorControls · 生效色四级链路", () => {
+  it("模板配色：四张卡显示后端下发的真实色值，并标「随模板」", () => {
+    renderGroup({ catalog: catalogWithPalette() });
+
+    const values = cards().map((card) => card.querySelector(".resume-wb-color-value")?.textContent);
+    expect(values).toEqual([
+      `${CLASSIC_PALETTE.accent} · ${t("resume.measure.hintTemplate")}`,
+      `${CLASSIC_PALETTE.text_color} · ${t("resume.measure.hintTemplate")}`,
+      `${CLASSIC_PALETTE.muted_color} · ${t("resume.measure.hintTemplate")}`,
+      `${CLASSIC_PALETTE.line_color} · ${t("resume.measure.hintTemplate")}`,
+    ]);
+    // 色块颜色经内联自定义属性下发（不是 `style.background`）。
+    const chip = cards()[0].querySelector<HTMLElement>(".resume-wb-color-chip");
+    expect(chip?.style.getPropertyValue("--resume-wb-chip")).toBe(CLASSIC_PALETTE.accent);
+    expect(chip).not.toHaveClass("is-fallback");
+  });
+
+  it("版式预设压过模板：色值取预设，来源词变「随版式」", () => {
+    const catalog: ResumeTemplateCatalog = {
+      ...catalogWithPalette(),
+      format_presets: [
+        {
+          name: "compact-preset",
+          label: "紧凑预设",
+          description: "",
+          config: { accent: "#7f1d1d" },
+        },
+      ],
+    };
+    renderGroup({ catalog, layout: { ...BASE, format_name: "compact-preset" } });
+
+    const value = cards()[0].querySelector(".resume-wb-color-value")?.textContent;
+    expect(value).toBe(`#7f1d1d · ${t("resume.measure.hintPreset")}`);
+  });
+
+  it("自己的覆盖压过模板与预设，且不再显示来源词", () => {
+    renderGroup({
+      catalog: catalogWithPalette(),
+      layout: { ...BASE, format_config: { accent: "#1e3a8a" } },
+    });
+
+    expect(cards()[0].querySelector(".resume-wb-color-value")?.textContent).toBe("#1e3a8a");
+    expect(cards()[0].querySelector(".resume-wb-color-source")).toBeNull();
+  });
+
+  it("自制模板没有 palette：斜纹占位 + 「随模板」，不编造假色值", () => {
+    const catalog: ResumeTemplateCatalog = {
+      ...TEMPLATE_CATALOG,
+      templates: [
+        ...TEMPLATE_CATALOG.templates,
+        { name: "my-own", label: "我的模板", description: "" },
+      ],
+    };
+    renderGroup({ catalog, layout: { ...BASE, template: "my-own" } });
+
+    for (const card of cards()) {
+      expect(card.querySelector(".resume-wb-color-chip")).toHaveClass("is-fallback");
+      expect(card.querySelector(".resume-wb-color-value")?.textContent).toBe(
+        t("workbench.color.followTemplate"),
+      );
+      // 没有色值就不能再补一个来源词（否则同一句话出现两次）。
+      expect(card.querySelector(".resume-wb-color-source")).toBeNull();
+    }
+  });
+
+  it("非法颜色按「没设过」处理：不进入色块，也不当成用户的选择", () => {
+    renderGroup({
+      catalog: catalogWithPalette(),
+      layout: { ...BASE, format_config: { accent: "red" } },
+    });
+
+    const chip = cards()[0].querySelector<HTMLElement>(".resume-wb-color-chip");
+    expect(chip).not.toHaveClass("is-fallback");
+    expect(chip?.style.getPropertyValue("--resume-wb-chip")).toBe(CLASSIC_PALETTE.accent);
+    expect(cards()[0].querySelector(".resume-wb-color-value")?.textContent).toBe(
+      `${CLASSIC_PALETTE.accent} · ${t("resume.measure.hintTemplate")}`,
+    );
+  });
+});
+
+describe("ResumeColorControls · 结构与无障碍", () => {
+  it("卡片主按钮的读屏名包含：动作 + 名称 + 色值 + 来源", () => {
+    renderGroup({ catalog: catalogWithPalette() });
+
+    expect(cardMain(0)).toHaveAccessibleName(
+      `${t("workbench.param.colorAria", { label: ACCENT_LABEL })} · ${CLASSIC_PALETTE.accent} · ${t("resume.measure.hintTemplate")}`,
+    );
+  });
+
+  it("↺ 与主按钮平级：卡片内不存在嵌套 button", () => {
     renderGroup({ layout: { ...BASE, format_config: { accent: "#1e3a8a" } } });
 
-    const navy = firstRowSwatches()[2];
-    expect(navy).toHaveAttribute("aria-pressed", "true");
-    // 另外四个色块不是当前值。
-    expect(firstRowSwatches()[0]).toHaveAttribute("aria-pressed", "false");
-    // 自定义状态下**这一行**不再显示「随模板 / 随版式」：那一格是空字符串（占位仍在）。
-    const accentRow = screen
-      .getByRole("button", {
-        name: t("workbench.param.resetLabel", { label: ACCENT_LABEL }),
-      })
-      .closest(".resume-wb-color-row") as HTMLElement;
-    expect(accentRow).not.toBeNull();
-    expect(within(accentRow).queryByText(t("resume.measure.hintTemplate"))).not.toBeInTheDocument();
+    expect(cards()[0].querySelector(".resume-wb-color-main button")).toBeNull();
+    const reset = cards()[0].querySelector(".resume-wb-color-reset");
+    expect(reset?.parentElement).toBe(cards()[0]);
   });
 
-  it("配置里存着非法颜色（手工请求写坏的）时按「没设过」处理", () => {
-    renderGroup({ layout: { ...BASE, format_config: { accent: "red" } } });
-
-    const accentRow = document.querySelectorAll<HTMLElement>(".resume-wb-color-row")[0];
-    // 读数是**空的**而不是 `red`：非法值不进入探针，也不当成用户的选择。
-    // 2026-11 问题 23 起读数格也不再回落成「随模板」——那句话只由来源胶囊说一次。
-    expect(accentRow.querySelector(".resume-measure-value")?.textContent).toBe("");
-    expect(accentRow.querySelector(".resume-measure-source")?.textContent).toBe(
-      t("resume.measure.hintTemplate"),
-    );
-    expect(firstRowSwatches()[0]).toHaveAttribute("aria-pressed", "false");
-  });
-
-  it("每行只有一个「随模板」：读数格不再重复来源胶囊的状态词（问题 23）", () => {
+  it("四个键各一张卡，标签优先取目录 `format_fields`，缺省回落键名", () => {
     renderGroup();
 
-    const rows = [...document.querySelectorAll<HTMLElement>(".resume-wb-color-row")];
-    expect(rows).toHaveLength(4);
-    for (const row of rows) {
-      // 读数格：无覆盖时为空（有覆盖时才是色值）。
-      expect(row.querySelector(".resume-measure-value")?.textContent).toBe("");
-      // 整行里「随模板」只出现一次，且就在来源胶囊里。
-      const hits = (row.textContent ?? "").split(t("resume.measure.hintTemplate")).length - 1;
-      expect(hits).toBe(1);
-      expect(row.querySelector(".resume-measure-source")?.textContent).toBe(
-        t("resume.measure.hintTemplate"),
-      );
-    }
-  });
-
-  it("四个颜色键各自一行，标签优先取目录 `format_fields`", () => {
-    renderGroup();
-
-    expect(
-      screen.getByRole("button", {
-        name: t("workbench.param.resetLabel", { label: ACCENT_LABEL }),
-      }),
-    ).toBeInTheDocument();
-    // 目录未下发 label 的三项回落到键名（不会渲染成空标签）。
-    for (const key of ["text_color", "muted_color", "line_color"]) {
-      expect(
-        screen.getByRole("button", {
-          name: t("workbench.param.resetLabel", { label: key }),
-        }),
-      ).toBeInTheDocument();
-    }
+    const names = cards().map((card) => card.querySelector(".resume-wb-color-name")?.textContent);
+    // 目录只下发了 accent 的 label，其余三项回落到键名（不会渲染成空标签）。
+    expect(names).toEqual([ACCENT_LABEL, "text_color", "muted_color", "line_color"]);
   });
 });
 
 /**
- * 色板行对齐（2026-11 用户截图）。
+ * 2×2 色卡的结构约定（jsdom 没有布局引擎，量不出真实几何，只能钉 CSS 原文）。
  *
- * 症状是"下面那排色块比上面那行控件宽、右边界对不齐，四组之间还各偏一点"。jsdom 没有
- * 布局引擎，量不出真实几何，所以这里钉**结构与样式原文**——恰恰是这三条决定了结果：
- *
- * 1. 色板必须是**行 grid 的直接子级**（中间再包一层，列宽就由内容各自决定）；
- * 2. 行是四列 grid、`head` 是 `display: contents`（四段直接落进列里）；
- * 3. 色板跨 `2 / -1`（左边界 = 取色器，右边界 = 行尾），标签列由**一个共用变量**定宽
- *    （四行才会共用同一条起跑线）。
+ * 三条决定"看起来是对的四张卡"：
+ * 1. 容器必须是两列 grid（不是 flex wrap：列宽会随内容抖）；
+ * 2. 色块必须有 1px 边框（白色 / 浅色色块没有边框会融进卡片）；
+ * 3. 旧手风琴的类名必须全部消失（`resume-wb-swatches` / `resume-wb-swatch` /
+ *    `resume-wb-color-toggle`）——留着它们说明"删一半"，两条渲染路径会同时生效。
  */
-describe("ResumeColorControls · 色板行对齐", () => {
+describe("ResumeColorControls · 2×2 色卡样式", () => {
   function colorCss(): string {
     return readFileSync(
       [process.cwd(), "src", "styles", "resume-workbench-controls.css"].join("/"),
@@ -265,7 +314,6 @@ describe("ResumeColorControls · 色板行对齐", () => {
     );
   }
 
-  /** 取某条选择器的声明块；找不到直接抛错（改名/删规则时用例立刻红，不会静默通过）。 */
   function ruleBlock(css: string, selector: string): string {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const match = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(css);
@@ -273,58 +321,47 @@ describe("ResumeColorControls · 色板行对齐", () => {
     return (match as RegExpExecArray)[1];
   }
 
-  it("色板与控件头都是行 grid 的直接子级（中间不许再包一层）", () => {
-    renderGroup();
-
-    const rows = Array.from(document.querySelectorAll<HTMLElement>(".resume-wb-color-row"));
-    expect(rows).toHaveLength(4);
-    for (const row of rows) {
-      expect(row.querySelector(".resume-wb-color-head")?.parentElement).toBe(row);
-    }
-    // #12：色板手风琴默认全部收起；展开一行后色板仍是行 grid 的直接子级。
-    fireEvent.click(rows[0].querySelector(".resume-measure-label") as HTMLElement);
-    const expanded = rows.filter((row) => row.querySelector(".resume-wb-swatches"));
-    expect(expanded).toHaveLength(1);
-    expect(expanded[0].querySelector(".resume-wb-swatches")?.parentElement).toBe(expanded[0]);
+  it("容器是两列 grid，窄栏不会把卡片挤成一行", () => {
+    const colors = ruleBlock(colorCss(), ".resume-wb-colors");
+    expect(colors).toMatch(/display:\s*grid/);
+    expect(colors).toMatch(/grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
   });
 
-  it("行是五列 grid，head 用 display: contents 让各段落进列里", () => {
-    const css = colorCss();
-
-    const row = ruleBlock(css, ".resume-wb-color-row");
-    expect(row).toMatch(/display:\s*grid/);
-    // 五列：展开箭头 / 标签 / 取色器 / 读数 / 来源。标签列用共用变量，不是各行自己的 auto。
-    expect(row).toMatch(
-      /grid-template-columns:\s*auto\s+var\(--resume-wb-color-label-w\)\s+auto\s+minmax\(0,\s*1fr\)\s+auto/,
-    );
-    expect(ruleBlock(css, ".resume-wb-color-head")).toMatch(/display:\s*contents/);
+  it("色块带 1px 边框（浅色块不融进背景），颜色来自自定义属性", () => {
+    const chip = ruleBlock(colorCss(), ".resume-wb-color-chip");
+    expect(chip).toMatch(/border:\s*1px\s+solid/);
+    expect(chip).toMatch(/background:\s*var\(--resume-wb-chip\)/);
   });
 
-  it("色板跨「取色器 → 行尾」，左右边界因此与上面那行重合", () => {
-    const css = colorCss();
-
-    const swatches = ruleBlock(css, ".resume-wb-swatches");
-    expect(swatches).toMatch(/grid-column:\s*3\s*\/\s*-1/);
-    // 当初"色板比上面那行左移 2px"就是这条 padding 造成的；留着它左边界永远差 2px。
-    expect(swatches).not.toMatch(/padding-left/);
-  });
-
-  it("标签列由共用的自定义属性定宽（四行同一条起跑线）", () => {
-    const css = colorCss();
-
-    expect(css).toMatch(/\.resume-wb-rows\s*\{[^}]*--resume-wb-color-label-w:\s*\d+px/);
-    // 不许退回 `max-content`：每行都是独立的 grid，各算各的列宽就又错开了。
-    expect(ruleBlock(css, ".resume-wb-color-row")).not.toMatch(/max-content/);
-  });
-
-  it("没有用 !important 硬压", () => {
+  it("旧手风琴的类名已全部删除（两条渲染路径不许并存）", () => {
     const css = colorCss();
     for (const selector of [
+      ".resume-wb-swatches",
+      ".resume-wb-swatch",
+      ".resume-wb-color-toggle",
       ".resume-wb-color-row",
       ".resume-wb-color-head",
-      ".resume-wb-swatches",
     ]) {
-      expect(ruleBlock(css, selector)).not.toMatch(/!important/);
+      expect(css).not.toContain(selector);
     }
+  });
+
+  it("↺ 绝对定位在卡片右上角，且只在悬停 / 聚焦时显形", () => {
+    const css = colorCss();
+    // 自定义 ↺ 与 ParamResetButton 共用同一条定位规则（选择器列表，两条都要在）。
+    const positioned =
+      /\.resume-wb-color-card > \.resume-wb-color-reset,\s*\.resume-wb-color-card > \.resume-param-restore\s*\{([^}]*)\}/.exec(
+        css,
+      );
+    expect(positioned, "找不到 ↺ 的定位规则").not.toBeNull();
+    expect(positioned?.[1]).toMatch(/position:\s*absolute/);
+    expect(positioned?.[1]).toMatch(/opacity:\s*0/);
+    // 悬停 / 键盘聚焦时才显形（`:focus-within` 覆盖 Tab 到主按钮与 ↺ 两种情形）。
+    expect(css).toMatch(
+      /\.resume-wb-color-card:hover > \.resume-wb-color-reset[\s\S]*?opacity:\s*1/,
+    );
+    expect(css).toMatch(
+      /\.resume-wb-color-card:focus-within > \.resume-wb-color-reset[\s\S]*?opacity:\s*1/,
+    );
   });
 });

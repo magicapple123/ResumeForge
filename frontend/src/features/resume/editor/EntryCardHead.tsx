@@ -39,6 +39,7 @@ import {
   toggleEntryHidden,
 } from "../document";
 import { useDocumentChipMenu } from "./documentChipMenuContext";
+import { entryDisplayLabel } from "../document/summarize";
 import { buildEntryMenuItems, type EntryMenuKey, type EntryMenuLabels } from "./entryMenuItems";
 
 interface Props {
@@ -47,6 +48,8 @@ interface Props {
   entry: ResumeEntry;
   entryIndex: number;
   entryPath: string;
+  /** 这一条**正好**是当前选中项（子字段选中不算）；`#N` 据此给 `aria-pressed`。 */
+  selected?: boolean;
   readOnly?: boolean;
   onChange: (next: ResumeDocument) => void;
   onSelectPath: (path: string | null) => void;
@@ -59,6 +62,7 @@ export default function EntryCardHead({
   entry,
   entryIndex,
   entryPath,
+  selected = false,
   readOnly = false,
   onChange,
   onSelectPath,
@@ -66,6 +70,8 @@ export default function EntryCardHead({
 }: Props) {
   const { t } = useI18n();
   const { requestStyle } = useDocumentChipMenu();
+  /** 读屏播报要一个具体名字：标题位置的字段值 → 首个非空字段（与结构树同源）。 */
+  const entryName = entryDisplayLabel(entry) || t("structure.badge.untitledEntry");
   /** 受控打开 + 键盘等价物（问题 25）：键盘打开回落到元素锚点，指针打开贴鼠标。 */
   const menuState = useDropdownContextMenu();
   const headRef = useRef<HTMLDivElement>(null);
@@ -143,6 +149,23 @@ export default function EntryCardHead({
         className="document-entry-head"
         tabIndex={readOnly ? undefined : 0}
         onContextMenuCapture={rememberPointer}
+        onClick={(event) => {
+          // I-22：头部空白也可选中整条。守卫必须用 `closest` 而不是 `tagName === "BUTTON"`：
+          // `⋯` 是 button、`#N` 是 button、以后加进来的输入框 / 链接 / 菜单都得放行，
+          // 否则点它们会连带把整条选中（或把刚打开的菜单关掉）。
+          if (readOnly) return;
+          const target = event.target;
+          if (!(target instanceof Element)) return;
+          if (
+            target.closest(
+              "button, input, textarea, a, select, [role='menu'], [contenteditable='true']",
+            )
+          ) {
+            return;
+          }
+          // 空白处**只选中、不取消**：误触清空选中比多选一次更让人措手不及。
+          onSelectPath(entryPath);
+        }}
         onKeyDown={(event) => {
           // Shift+F10 / 菜单键是右键菜单的键盘等价物；只在条目头自身聚焦时响应，
           // 不抢内部按钮（`⋯`）的按键。
@@ -154,7 +177,27 @@ export default function EntryCardHead({
           }
         }}
       >
-        <span className="document-entry-index">#{entryIndex + 1}</span>
+        {readOnly ? (
+          // 只读宿主（生成预览 / 分享页）：编号保持纯文本，不给手型、不进 Tab 序。
+          <span className="document-entry-index">#{entryIndex + 1}</span>
+        ) : (
+          <button
+            type="button"
+            className="document-entry-index"
+            aria-pressed={selected}
+            aria-label={t("document.entry.selectAria", {
+              index: entryIndex + 1,
+              title: entryName,
+            })}
+            onClick={(event) => {
+              // 与字段 chip 同一手势：再点一次取消（按钮自己的点击不再冒到头部空白那条）。
+              event.stopPropagation();
+              onSelectPath(selected ? null : entryPath);
+            }}
+          >
+            #{entryIndex + 1}
+          </button>
+        )}
         {entry.hidden ? (
           <span className="document-chip-badge">{t("document.entry.hidden")}</span>
         ) : null}

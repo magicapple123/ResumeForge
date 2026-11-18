@@ -15,7 +15,7 @@
  *
  * 断言里不出现中文：`cjkRatchet` 的 tests 口径按文件卡中文 `*ByText`，新文件基线为 0。
  */
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContextMenuHost } from "../../context-menu/ContextMenuHost";
 import ResumePreview from "./ResumePreview";
@@ -23,6 +23,7 @@ import { t } from "../../../i18n";
 import { CLICK_TO_EDIT_CLASS, CLICK_TO_EDIT_STYLE_ID } from "./clickToEdit";
 import { clearPreviewCache } from "./exactPreviewCache";
 import type { RichTextEditAdapter } from "./richText";
+import type { RichValue } from "../inline/richRuns";
 
 // 精确预览会去服务端要 PDF；这里只关心"复选框在精确模式下是否禁用"，让请求永远悬着
 // （= 还在排版），就不必在 jsdom 里伪造 objectURL。
@@ -110,11 +111,11 @@ function contextMenuOn(node: Element): MouseEvent {
   return event;
 }
 
-/** 宿主侧的加粗契约（`toggle` 是 mock，用来断言"交出去的是什么"）。 */
-function richAdapter(raw = "Alex") {
-  const toggle = vi.fn();
-  const read = (path: string): string | null => (path === "name" ? raw : null);
-  return { read, toggle } satisfies RichTextEditAdapter;
+/** 宿主侧的富文本契约（`write` 是 mock，用来断言"交出去的是什么"）。 */
+function richAdapter(value: RichValue = { text: "Alex", runs: [] }) {
+  const write = vi.fn();
+  const read = (path: string): RichValue | null => (path === "name" ? value : null);
+  return { read, write } satisfies RichTextEditAdapter;
 }
 
 describe("ResumePreview · 草稿模式编辑的组件接线", () => {
@@ -205,7 +206,7 @@ describe("ResumePreview · 右键加粗的放行场景", () => {
     const event = contextMenuOn(field);
     expect(event.defaultPrevented).toBe(false);
     expect(screen.queryByRole("menu")).toBeNull();
-    expect(rich.toggle).not.toHaveBeenCalled();
+    expect(rich.write).not.toHaveBeenCalled();
   });
 
   it("精确预览模式：纸面是一张 PDF，不接管右键", () => {
@@ -302,14 +303,18 @@ describe("ResumePreview · 右键加粗的接管路径", () => {
     expect(menu).toBeInTheDocument();
     fireEvent.click(within(menu).getByRole("menuitem", { name: t("rich.menu.bold") }));
 
-    expect(rich.toggle).toHaveBeenCalledWith("name", "**Alex**", "Alex");
+    expect(rich.write).toHaveBeenCalledWith(
+      "name",
+      { text: "Alex", runs: [{ start: 0, end: 4, bold: true }] },
+      { text: "Alex", runs: [] },
+    );
     // 纸面立刻看到粗体：等整份重渲染要一个网络往返。
     expect(field.innerHTML).toBe("<strong>Alex</strong>");
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("选区已经整段加粗：菜单第一项变成「取消加粗」", () => {
-    const rich = richAdapter("**Alex**");
+    const rich = richAdapter({ text: "Alex", runs: [{ start: 0, end: 4, bold: true }] });
     // 右键菜单走全局单例宿主（`features/context-menu`）：生产里由 `AppShell` 挂一份，
     // 这里单独渲染 `ResumePreview` 时要自己带上，否则菜单无处渲染。
     render(
@@ -330,5 +335,121 @@ describe("ResumePreview · 右键加粗的接管路径", () => {
     contextMenuOn(field);
     const menu = screen.getByRole("menu");
     expect(within(menu).getByRole("menuitem", { name: t("rich.menu.unbold") })).toBeInTheDocument();
+  });
+});
+
+/**
+ * I-13 收尾：「自定义颜色…」是两个浮层接力，不是把面板塞进菜单。
+ *
+ * 三条都不能靠肉眼发现：
+ *
+ * 1. **两层同时出现**：菜单没关就开面板，用户看到叠在一起的两块浮层；
+ * 2. **坐标跳位**：面板不用菜单那个落点，就会"菜单在指针这儿、面板在屏幕另一头"；
+ * 3. **写的是标记串**：`{@color=#123456}` 会污染正文（本项目只写 `rich.runs`）。
+ */
+describe("ResumePreview · 纸面自定义颜色", () => {
+  /** 面板里的 HEX 输入框（antd 把 className 挂在 affix 外壳或 input 本身上，两种都收）。 */
+  function hexInput(): HTMLInputElement | null {
+    return document.querySelector<HTMLInputElement>(
+      ".ant-color-picker-hex-input input, input.ant-color-picker-hex-input",
+    );
+  }
+
+  function openMenu(field: Element): HTMLElement {
+    fireEvent.click(screen.getByRole("checkbox"));
+    selectText(field, 0, 4);
+    contextMenuOn(field);
+    return screen.getByRole("menu");
+  }
+
+  it("点「自定义颜色…」：菜单先关、弹层在同一坐标后开，应用后写的是 runs", async () => {
+    const rich = richAdapter();
+    render(
+      <ContextMenuHost>
+        <ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />
+      </ContextMenuHost>,
+    );
+
+    const field = paperField(getPreviewFrame());
+    const menu = openMenu(field);
+    // 菜单与弹层必须落在同一点：先把菜单的落点记下来，再点进弹层。
+    const menuLeft = menu.style.left;
+    const menuTop = menu.style.top;
+    fireEvent.click(within(menu).getByRole("menuitem", { name: t("rich.menu.colorCustom") }));
+
+    // 1. 菜单先关（单例宿主的契约不变），两层永不同时存在。
+    expect(screen.queryByRole("menu")).toBeNull();
+    // 2. 弹层后开，且锚点就是菜单刚才那个坐标。
+    const dialog = screen.getByRole("dialog", { name: t("typography.inline.color") });
+    expect(dialog.style.left).toBe(menuLeft);
+    expect(dialog.style.top).toBe(menuTop);
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+
+    // 3. 选色 → 应用：交出去的是结构化值（runs），正文里没有任何标记字符。
+    await waitFor(() => expect(hexInput()).not.toBeNull());
+    fireEvent.change(hexInput()!, { target: { value: "#123456" } });
+    fireEvent.click(screen.getByRole("button", { name: t("rich.menu.colorApply") }));
+
+    expect(rich.write).toHaveBeenCalledWith(
+      "name",
+      { text: "Alex", runs: [{ start: 0, end: 4, color: "#123456" }] },
+      { text: "Alex", runs: [] },
+    );
+    expect(field.innerHTML).not.toContain("{@");
+    expect(field.textContent).toBe("Alex");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("应用与选区**同色**：保留该色（不是 toggle 回去）", async () => {
+    // 这条是「必须按属性替换」的哨兵：`toggleColorRuns` 在"同值"时会把颜色**清掉**，
+    // 用户点的是「应用」不是「取消」，纸面不该被改回无色。
+    const rich = richAdapter({ text: "Alex", runs: [{ start: 0, end: 4, color: "#c0392b" }] });
+    render(
+      <ContextMenuHost>
+        <ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />
+      </ContextMenuHost>,
+    );
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    const doc = paperBody(
+      getPreviewFrame(),
+      "<span data-resume-path='name'><span style='color:#c0392b'>Alex</span></span>",
+    );
+    const field = doc.querySelector("[data-resume-path]");
+    if (!field) throw new Error("字段未渲染");
+    selectText(field, 0, 4);
+    contextMenuOn(field);
+    fireEvent.click(
+      within(screen.getByRole("menu")).getByRole("menuitem", { name: t("rich.menu.colorCustom") }),
+    );
+
+    // 初值就是选区那个色（面板不该从别的颜色起步）。
+    const dialog = screen.getByRole("dialog", { name: t("typography.inline.color") });
+    expect(dialog).toHaveAttribute("data-rf-color", "#c0392b");
+
+    fireEvent.click(screen.getByRole("button", { name: t("rich.menu.colorApply") }));
+    // 新值与原值逐字节相同 → 什么都不写（toggle 语义在这里会写成 `runs: []`）。
+    expect(rich.write).not.toHaveBeenCalled();
+    expect(field.textContent).toBe("Alex");
+  });
+
+  it("点「取消」：内容一字不变（不写宿主、纸面不动）", async () => {
+    const rich = richAdapter();
+    render(
+      <ContextMenuHost>
+        <ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />
+      </ContextMenuHost>,
+    );
+
+    const field = paperField(getPreviewFrame());
+    const menu = openMenu(field);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: t("rich.menu.colorCustom") }));
+    await waitFor(() => expect(hexInput()).not.toBeNull());
+    fireEvent.change(hexInput()!, { target: { value: "#123456" } });
+
+    fireEvent.click(screen.getByRole("button", { name: t("rich.menu.colorCancel") }));
+    expect(rich.write).not.toHaveBeenCalled();
+    expect(field.innerHTML).toBe("Alex");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

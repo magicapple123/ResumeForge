@@ -134,24 +134,82 @@
 }
 
 /* 滑杆：全局参数栏把它钉成 `flex: 0 0 88px !important`（给「层次与间距」那种一栏
-   放四件的行）；本面板的 ± 与输入框要和滑杆挤在同一行里，滑杆吃剩余宽度（88–140）。
+   放四件的行）；本面板的 ± 与输入框要和滑杆挤在同一行里，滑杆吃剩余宽度（≥88，无上限）。
    两条都是 `!important`，靠多一层 `.resume-typography-row` 提高特异性胜出；
    `margin-block: 0` 去掉 antd 自带的 14px 上下外边距——不清零时控件行是 40 而不是
-   30，数字行会胖到 64（设计目标 52–56）。 */
+   30，数字行会胖到 64（设计目标 52–56）。
+   2026-11-18（I-06）：原来封顶 140px，宽栏下右边留一大片空白；改为 `max-width: none`，
+   滑杆跟着控件列连续变长，数字框仍是定宽 76（精确输入不需要变宽，拉长只会把滑杆挤短）。 */
 .resume-wb-col-params .resume-typography-row .ant-slider {
   flex: 1 1 88px !important;
   width: auto !important;
   min-width: 88px !important;
-  max-width: 140px !important;
+  max-width: none !important;
   margin-block: 0 !important;
 }
 
 /* 直接输入框定宽 76（原来是内联 88）。算式：
    标签 72 + 列间距 8 + [− 30 + 6 + 滑杆 + 6 + + 30 + 6 + 输入 76]；
-   参数栏内容宽 380 → 控件列 278 → 滑杆 124（落在 88–140 区间内），一行放下。 */
+   参数栏内容宽 380 → 控件列 278 → 滑杆 124（≥88，无上限），一行放下。 */
 .resume-typography-row .resume-typography-number {
   flex: 0 0 76px;
   width: 76px;
+}
+
+/* ===== I-21：右键浮层里的分组手风琴 ===== */
+/* 11 个属性平铺 = 536px：浮层挂在右键点上，下方视口只剩 378px，`placeMenu` 只能上翻，
+   正好盖住触发行。分组后高度只跟"最高的那一组"有关（约 136px），点另一组只是替换。
+   组头压到**单行 20px**（12px 字号，与浮层标题同号，不缩到看不清）：两行组头 × 4 组
+   比一行行平铺还高，等于没分组。箭头靠右，`aria-expanded` 在组件里。 */
+.resume-typography-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.resume-typography-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.resume-typography-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  /* 18 = 12px 字号的行高；组头是导航不是正文，两行组头 × 4 组会把"只展开一组"省下的
+     高度又还回去。 */
+  min-height: 18px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.resume-typography-group-head:hover:not(:disabled) {
+  color: var(--rf-accent, #1677ff);
+}
+
+.resume-typography-group-head:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.resume-typography-group:not(.is-open) .resume-typography-group-name {
+  color: var(--rf-text-secondary, #666);
+}
+
+.resume-typography-group-caret {
+  font-size: 10px;
+  color: var(--rf-text-secondary, #8c8c8c);
 }
 
 /* Collapse 收紧：默认 small 的 header 是 8/12、body 12，六个角色一屏放不下。

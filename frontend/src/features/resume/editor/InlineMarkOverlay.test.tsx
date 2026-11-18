@@ -22,7 +22,7 @@ import { fieldItem, makeDocument, textItem } from "../document/documentFixtures"
 import InlineMarkOverlay from "./InlineMarkOverlay";
 import InlineMarkTextArea from "./InlineMarkTextArea";
 import ItemEditor from "./ItemEditor";
-import ResizableValueTextArea from "./ResizableValueTextArea";
+import AutoGrowValueTextArea from "./AutoGrowValueTextArea";
 import { FieldValueEditor } from "./itemValueEditors";
 
 declare const process: { cwd(): string };
@@ -126,7 +126,7 @@ function Harness({ initial, onChange }: { initial: string; onChange?: (value: st
   const [value, setValue] = useState(initial);
   return (
     <AntdApp>
-      <ResizableValueTextArea
+      <AutoGrowValueTextArea
         ariaLabel="summary"
         value={value}
         onChange={(next) => {
@@ -138,7 +138,7 @@ function Harness({ initial, onChange }: { initial: string; onChange?: (value: st
   );
 }
 
-describe("ResizableValueTextArea · 行内标记接入", () => {
+describe("AutoGrowValueTextArea · 行内标记接入", () => {
   it("值里有标记时渲染遮罩层，但文本域的值仍是原始源串", () => {
     const raw = "x{@size=1.2}y{@}**z**";
     render(<Harness initial={raw} />);
@@ -211,15 +211,17 @@ describe("三处入口都渲染遮罩层", () => {
     return textarea;
   }
 
-  it("单行字段值（ResizableValueTextArea）", () => {
+  it("单行字段值（AutoGrowValueTextArea）", () => {
     render(
       <AntdApp>
-        <ResizableValueTextArea ariaLabel="value" value={RAW} onChange={() => undefined} />
+        <AutoGrowValueTextArea ariaLabel="value" value={RAW} onChange={() => undefined} />
       </AntdApp>,
     );
     const textarea = expectDecorated();
-    // 单行语义保留：可拖高 + 拦 Enter。
-    expect(textarea.style.resize).toBe("vertical");
+    // I-14：单行语义保留（拦 Enter 见下），但高度改由 autoSize 驱动——
+    // rc-textarea 在 autoSize 下强制 `resize: none`，可拖手柄必须消失。
+    expect(textarea.style.resize).toBe("none");
+    expect(textarea.className).toContain("rf-value-textarea");
   });
 
   it("壳本身：autoSize 模式不设 resize（自动长高与可拖手柄互斥）", () => {
@@ -250,7 +252,17 @@ describe("三处入口都渲染遮罩层", () => {
         />
       </AntdApp>,
     );
-    expectDecorated();
+    // I-13：字段正文走结构化读——文本域里是**纯文本**，标记在读取时已经换算成 runs。
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("xyz l");
+    expect(textarea.value).not.toContain("{@");
+    expect(textarea.value).not.toContain("**");
+    expect(textarea.className).toContain("rf-inline-mark-layer");
+    const overlay = document.querySelector(".rf-inline-mark-overlay");
+    expect(overlay).toBeTruthy();
+    expect(overlay?.getAttribute("aria-hidden")).toBe("true");
+    // 纯文本没有隐藏段：遮罩层逐字等于文本域里的值。
+    expect(overlay?.textContent).toBe("xyz l\n");
   });
 
   it("条目正文（ItemEditor，kind=text 的 autoSize 分支）", () => {
@@ -265,7 +277,13 @@ describe("三处入口都渲染遮罩层", () => {
         />
       </AntdApp>,
     );
-    expectDecorated();
+    // I-12：文本块与字段同一条结构化读路径（后端 `TextItem.rich` 已补齐），
+    // 文本域里是纯文本，标记在读取时已经换算成 runs。
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("xyz l");
+    expect(textarea.value).not.toContain("{@");
+    expect(textarea.value).not.toContain("**");
+    expect(document.querySelector(".rf-inline-mark-overlay")?.textContent).toBe("xyz l\n");
   });
 });
 

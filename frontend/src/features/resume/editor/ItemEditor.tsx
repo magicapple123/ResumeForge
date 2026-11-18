@@ -28,6 +28,7 @@ import InlineMarkContextMenu from "../layout/InlineMarkContextMenu";
 import InlineMarkTextArea from "./InlineMarkTextArea";
 import { AuthorsValuesEditor, FieldValueEditor, ListValuesEditor } from "./itemValueEditors";
 import { applyInlineEdit, getFocusedField } from "./lastFocusedTextarea";
+import { readRichValue, richTextPatch } from "./inlineMarkWrite";
 import { registerInlineMarkField, useInlineMarkRange } from "./useInlineMarkRange";
 import "./document-item-editor.css";
 
@@ -132,6 +133,11 @@ export default function ItemEditor({
     else if (item.kind === "field") updateField({ body_style: value });
     else if (item.kind === "list") updateList({ body_style: value });
   };
+  /**
+   * I-12 / I-13：正文文本块也走结构化模型（后端 `TextItem.rich` 已补齐）。
+   * 读：有 `rich` 用它，没有就把旧标记串换算成纯文本 + runs；写：`text` 纯文本 + `rich.runs`。
+   */
+  const textValue = item.kind === "text" ? readRichValue(item) : null;
 
   return (
     <InlineMarkContextMenu onCommit={inlineCommit} disabled={readOnly}>
@@ -198,7 +204,7 @@ export default function ItemEditor({
             onChange={(patch) => updateAuthors(patch)}
           />
         ) : null}
-        {item.kind === "text" ? (
+        {item.kind === "text" && textValue ? (
           <div className="document-field-row">
             <span className="document-field-label">{t("document.field.value")}</span>
             {/* I-26：条目正文同样走行内标记遮罩层（三处入口共用 `InlineMarkTextArea`）。 */}
@@ -206,7 +212,11 @@ export default function ItemEditor({
               ariaLabel={t("document.field.value")}
               placeholder={t("document.field.textPlaceholder")}
               autoSize={{ minRows: 2, maxRows: 8 }}
-              value={item.text}
+              value={textValue.text}
+              rich={{
+                runs: textValue.runs,
+                onChange: (next) => updateText(richTextPatch(next)),
+              }}
               disabled={readOnly}
               onChange={(text) => updateText({ text })}
             />

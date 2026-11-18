@@ -214,135 +214,166 @@
   grid-column: 1 / -1;
 }
 
-/* ===== 颜色行：色板与取色器 / 尾部共用同一条竖线（2026-11-05） ===== */
-/* 症状（用户截图）：四组颜色里，「标签 + 取色器 + 色值 + 来源」那一行与它下面的色板行
-   右边界对不齐；四组之间也各偏一点（标签文案长度不同）。
-   根因三条，缺一不可：
-   1. 行是 flex 纵排，色板行是一条独立的 flex——它的宽度只由 5 个 20px 色块决定，
-      与上面那一行的宽度毫无关系；
-   2. 标签是 `min-width: 34px` + 内容宽（「强调色」36 /「辅助文字颜色」72），四行的
-      第二列起点因此各不相同；
-   3. 来源胶囊靠 `margin-left: auto` 收口，而色板行里没有那一条"auto"。
-   改法：把行本身做成 grid，`head` 用 `display: contents` 让它的几段**直接**落进列里，
-   色板跨"取色器那一列 → 行尾"——于是"色板左边界 = 取色器左边界"、"右边界 = 尾部右边界"，
-   标签列定宽之后四行共用同一条起跑线。
-   #12 起多了第一列（展开箭头），列数 4 → 5、色板起点 2 → 3，其余对齐结论不变。 */
-.resume-wb-rows {
-  /* 颜色行的标签列宽：目录里最长的一条是「辅助文字颜色」（6 字 × 12px = 72px，78 留一点
-     字宽取整的余量）。用固定值而不是 `max-content`——每一行都是**独立的** grid，
-     `max-content` 会各自算各自的，第二列起点就又错开了（那正是截图里的症状）。 */
-  --resume-wb-color-label-w: 78px;
-}
-
-.resume-wb-color-row {
+/* ===== 外观组：2×2 色卡（I-09，2026-11-18） ===== */
+/* 老形态是「▸ 箭头｜标签｜20px 色块｜读数｜来源胶囊」+ 手风琴色板：色块在"随模板"时
+   统一传占位色 `#374151`，四行长得一模一样；候选色一次只能看一行。现在四格常驻，每格
+   「22px 色块（1px 边框）+ 名称 + 色值/来源」，点卡片任意位置打开同一个取色器。
+   色块颜色经内联自定义属性下发（用户选的颜色是**数据**，不是主题 token）。
+   高度：2 × 约 52 + 10 = 约 114，仍低于 #12 定的 120 预算（#12 的手风琴因此可以退场）。 */
+.resume-wb-colors {
   display: grid;
-  /* 五列：展开箭头 / 标签 / 取色器 / 读数 / 来源（#12 加了行头箭头，四列会把来源挤到第二行）。 */
-  grid-template-columns: auto var(--resume-wb-color-label-w) auto minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 6px;
-  row-gap: 6px;
-  min-width: 0;
-  cursor: pointer;
+  /* 窄档（参数栏 380 → 分组内容盒 314）两列各约 152；`minmax(0, 1fr)` 防长标签撑破格子。 */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
-/* #12：行头展开箭头。原生 button 画成一颗 caret：透明底、无边框，20×20 触达区。
-   antd-override 不适用——这不是 .ant-* 覆写，是私有形态的私有类。 */
-.resume-wb-color-toggle {
-  display: inline-flex;
+.resume-wb-color-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: var(--rf-surface);
+}
+
+/* 展开 / 悬停 / 键盘聚焦都要能看出来：只换 1px 边框在深色主题下太弱，再叠一层极浅品牌底。 */
+.resume-wb-color-card:hover,
+.resume-wb-color-card.is-open,
+.resume-wb-color-card:focus-within {
+  border-color: var(--rf-brand);
+  background: var(--rf-brand-wash);
+}
+
+/* 卡片整体是点击区：内部「色块 + 文字」是一个 <button>（不许嵌套按钮）。 */
+.resume-wb-color-main {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 16px;
-  min-width: 16px;
-  height: 20px;
-  padding: 0;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  /* 右侧多留 10px 给绝对定位的 ↺（它平时透明，只在 hover / 聚焦时出现）。 */
+  padding: 8px 20px 8px 10px;
   border: 0;
+  border-radius: 7px;
   background: none;
-  color: var(--rf-text-tertiary);
-  font-size: 10px;
-  line-height: 1;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
-.resume-wb-color-toggle:hover {
-  color: var(--rf-text-body);
+.resume-wb-color-main:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
-.resume-wb-color-toggle:focus-visible {
-  border-radius: 2px;
+.resume-wb-color-main:focus-visible {
   outline: 2px solid var(--rf-focus-visible);
-  outline-offset: 1px;
+  outline-offset: -1px;
 }
 
-/* 各段直接成为行 grid 的项：中间再包一层 flex，列宽就由内容各自决定，跨列对不上。 */
-.resume-wb-color-head {
-  display: contents;
+/* 色块必须带 1px 边框：白色 / 浅色色块没有边框会融进卡片背景（I-09 设计依据）。 */
+.resume-wb-color-chip {
+  flex: 0 0 22px;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+  background: var(--resume-wb-chip);
 }
 
-/* 标签列定宽后不再需要 `min-width`；`overflow: hidden` 是兜底——将来出现更长的标签时
-   截断，而不是顶进取色器那一列。 */
-.resume-wb-color-row .resume-measure-label {
+/* 四级降级（自制模板 / 旧后端没有 palette）：斜纹 + 「随模板」，不编造假色值。 */
+.resume-wb-color-chip.is-fallback {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--rf-border-subtle) 0 3px,
+    var(--rf-surface) 3px 6px
+  );
+}
+
+.resume-wb-color-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   min-width: 0;
+}
+
+.resume-wb-color-name {
   overflow: hidden;
+  color: var(--rf-text-body);
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-/* 读数留在自己那一格的左端（`minmax(0, 1fr)` 会把格子撑满，不写会居中/拉伸）。 */
-.resume-wb-color-row .resume-measure-value {
-  justify-self: start;
+/* 色值用等宽数字：四个十六进制并排时不会因字宽不同而参差。
+   窄档（380）放不下「#6b7280 · 随模板」时允许在来源词前折行——裁成省略号等于把来源
+   藏起来，而"随模板 / 随版式"正是这一格要说的第二件事（验收：hex 可折到第二行）。 */
+.resume-wb-color-value {
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
 }
 
-/* 颜色行的读数不是数字而是**状态词**（无覆盖时写「随模板 / Template」），
-   所以它不能沿用参数栏给数字定的 44px 定宽：14px 下 4 个汉字要 56px，
-   实测 `clientWidth 44 / scrollWidth 56`，靠 `overflow: visible` 才"看起来没问题"，
-   代价是这一格的右边界失效、真放不下时会压到来源胶囊上。
-   这里改成"按内容定宽、下限 44"：中文 3 字 42px、英文 `Template` 约 58px 都装得下，
-   而 `min-width` 保住与上下数字行同一列的观感。所在列是 `minmax(0, 1fr)`，
-   宽度由内容决定、富余留白交给这一列的右半边（来源胶囊仍靠右收口）。
-   **只影响颜色行**：滑杆那几行的 44px 读数定宽是三条尾巴对齐的前提，不能顺手改。 */
-.resume-wb-col-params .resume-wb-color-row .resume-measure-value {
-  flex: 0 1 auto;
-  width: auto;
-  min-width: 44px;
+/* 来源词（随模板 / 随版式）跟在色值后面，比色值再淡一档。 */
+.resume-wb-color-source {
+  opacity: 0.85;
 }
 
-/* 来源胶囊落在最后一列的右缘：与同栏其它参数行尾部那条竖线是同一条（那些行的尾部走
-   `justify-self: end`，右边界都是行的内容盒右缘）。 */
-.resume-wb-color-row .resume-measure-source {
-  justify-self: end;
+/* ↺ 钉在卡片右上角：与主按钮**平级**（嵌套 <button> 在 HTML 里非法）。
+   `ParamResetButton`（恢复到打开时的值）与"删键回上一级"共用这个位置。 */
+.resume-wb-color-card > .resume-wb-color-reset,
+.resume-wb-color-card > .resume-param-restore {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
 }
 
-/* 色板：从**取色器那一列**起，一直铺到行尾。`padding-left` 去掉了——它正是当初
-   "色板比上面那行左移 2px"的来源。列号随 #12 的五行网格 +1。 */
-.resume-wb-swatches {
-  display: flex;
-  grid-column: 3 / -1;
-  grid-row: 2;
-  gap: 6px;
+.resume-wb-color-card:hover > .resume-wb-color-reset,
+.resume-wb-color-card:hover > .resume-param-restore,
+.resume-wb-color-card:focus-within > .resume-wb-color-reset,
+.resume-wb-color-card:focus-within > .resume-param-restore {
+  opacity: 1;
 }
 
-/* 色块：颜色值来自内联自定义属性（用户选的颜色是**数据**，不是主题 token）。 */
-.resume-wb-swatch {
-  width: 20px;
-  height: 20px;
+/* 自定义 ↺：22px 触达区，尺寸与 `ParamResetButton` 的小号文字按钮同档。 */
+.resume-wb-color-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  border: 1px solid var(--rf-border-subtle);
-  border-radius: 4px;
-  background: var(--resume-wb-swatch);
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
   cursor: pointer;
 }
 
-.resume-wb-swatch:hover {
-  border-color: var(--rf-border);
+.resume-wb-color-reset:hover {
+  background: var(--rf-fill-tertiary);
+  color: var(--rf-text-body);
 }
 
-.resume-wb-swatch.is-active {
+.resume-wb-color-reset:focus-visible {
   outline: 2px solid var(--rf-focus-visible);
   outline-offset: 1px;
 }
 
-.resume-wb-swatch:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+/* 取色器：只渲染一个，跟着"点开的那一格"移动。触发器铺满卡片但不接收指针事件——
+   开合由卡片按钮 + `open` 受控（弹层本身是 portal，不受影响）。 */
+.resume-wb-color-card > .resume-wb-color-picker {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ===== 参数栏下拉的弹层宽度（2026-11-06 → 2026-11 收窄到 260 → 2026-10-24 收到 216） ===== */
@@ -383,9 +414,13 @@
    antd 的选项内边距若变了，按「6 个字 + 省略号刚好放得下」重新校准，并同步
    `resume-dropdown-width.test.ts`。 */
 .resume-params-dropdown.resume-format-dropdown {
-  /* 与触发框（`.resume-format-select`，104px）一致：两者不等宽时，弹层比框宽出一截，
-     视觉上像是"点开跳出来一块"（用户截图）。 */
-  width: 104px;
+  /* 与触发框一致：两者不等宽时，弹层比框宽出一截，视觉上像是"点开跳出来一块"（用户截图）。
+     I-06（2026-11-18）：触发框改为跟随左栏控件列伸缩（104 → 封顶 320），定宽 104 不再
+     可能"等宽"，改成 `auto` + `min-width: 104`——**最小**宽度仍是"四个字 + 箭头"那档，
+     实际宽度由 rc-select 的 `popupMatchSelectWidth` 按触发框宽度设成内联 `min-width`，
+     长自制版式名才有地方显示；容器再窄时也不会塌到放不下四个字。 */
+  width: auto;
+  min-width: 104px;
 }
 
 /* 选项行单行省略：弹层宽度定死之后，长字体名 / 长文件名不能换行把行高撑乱。

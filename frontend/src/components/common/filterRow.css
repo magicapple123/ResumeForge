@@ -1,0 +1,23 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 筛选栏尾槽（I-39）：筛选区可收缩可折行，复位按钮贴行右。
+   注意：`margin-inline-start: auto` 必须写在尾槽的**直接 flex 子项**上，
+   写进 `Space` 内部的 `.ant-space-item` 是推不动的（见组件文件头）。 */
+
+.filter-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 筛选区吃满剩余宽度：它自己内部已经有 `wrap`，窄屏照常折行。 */
+.filter-row > .ant-space {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 复位按钮只在排序变化时出现，永远贴在这一行的最右。 */
+.filter-reset {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}

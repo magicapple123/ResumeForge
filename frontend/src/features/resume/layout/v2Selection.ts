@@ -21,6 +21,7 @@ import type {
 import type { ResumeFormatConfig } from "../../../types/resumeFormat";
 import type { DocumentFieldCatalog } from "../../../types/resumeDocument";
 import { catalogSectionOf } from "../document/fieldCatalog";
+import { isPhotoDataUrl } from "../document/headerOrder";
 import { getItemPlacement } from "../document/placement";
 import { entryPath, findHeaderItem, parseDocumentPath } from "../document/paths";
 import type { ResumeRoleKey } from "./styleCatalog";
@@ -128,6 +129,16 @@ export function findEntryById(
   return null;
 }
 
+/** 页眉字段的排版目标（`headerFieldFromPath` 的返回值）。 */
+export interface HeaderFieldRef {
+  id: string;
+  /** 显示名：用户起的名 → 短值 → 短 key；照片与超长值一律空串。 */
+  label: string;
+  hasLabel: boolean;
+  /** I-01：照片字段（位置是 photo 或值是 data URL）——它没有字段级排版的落点。 */
+  photo: boolean;
+}
+
 /**
  * 纸面路径 → 页眉字段（QW-6）；非页眉路径或字段已被删除返回 null。
  *
@@ -139,15 +150,35 @@ export function findEntryById(
 export function headerFieldFromPath(
   document: ResumeDocument,
   path: string | null | undefined,
-): { id: string; label: string; hasLabel: boolean } | null {
+): HeaderFieldRef | null {
   const located = findHeaderItem(document, path);
   if (!located) return null;
   const item = located.item;
+  const photo = headerFieldIsPhoto(item);
   return {
     id: item.id,
-    label: (item.label || item.value || item.key).trim(),
+    // I-01：照片的值是十万字符的 data URI，绝不能当名字铺到状态行 / dialog aria-label 里
+    // （同一判据先例：`HeaderChip.tsx` 的 `isPhotoDataUrl` 分支）。照片一律给空串，
+    // 由调用方回落到「照片」。长文本 / 多行值同样不能当名字；`key` 是内部标识（`custom:x`），
+    // 不当显示名。
+    label: photo ? "" : displayNameOf(item.label) || displayNameOf(item.value),
     hasLabel: headerFieldPrintsLabel(item),
+    photo,
   };
+}
+
+/** 能当显示名的一串文本：非空、单行、≤ 40 字符；照片 data URI 一律不合格。 */
+function displayNameOf(value: string | null | undefined): string {
+  const text = (value ?? "").trim();
+  if (!text || isPhotoDataUrl(text)) return "";
+  if (text.length > 40) return "";
+  if (text.includes("\n") || text.includes("\r")) return "";
+  return text;
+}
+
+/** 页眉字段是不是照片：按位置判（后端目录的 photo）或按值判（自定义字段塞了图）。 */
+export function headerFieldIsPhoto(item: HeaderItem): boolean {
+  return item.placement === "photo" || isPhotoDataUrl(item.value);
 }
 
 /** 页眉字段是否印字段名（与 `plan_header` 的 label_mode 三态、`_LABELLED_CONTACT` 同口径）。 */

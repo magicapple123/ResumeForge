@@ -315,6 +315,18 @@ const typography = {
   "typography.tools.sectionBatch": "Batch adjust",
   "typography.tools.sectionRole": "Paragraph roles",
   "typography.tools.roleHint": "Paragraph roles inherit from the entry body by default",
+  "typography.photoFrame": "Photo frame",
+  "typography.photoFrameHint":
+    "The frame size comes from the template and cannot be set separately.",
+  "typography.photoFrameEmpty":
+    "Select the photo to see its frame ratio and the suggested crop ratio.",
+  "typography.photoGuide.text":
+    "Photo size, border, radius and offsets are adjusted in the Photo frame control on the left",
+  "typography.photoGuide.action": "Go to Photo frame",
+  "typography.objectGroup.text": "Text and color",
+  "typography.objectGroup.spacing": "Spacing and indent",
+  "typography.objectGroup.list": "List and align",
+  "typography.objectGroup.meta": "Date and letter spacing",
 } as const;
 
 export default typography;

@@ -67,62 +67,72 @@ export default function ContactBreaksControl({
   }));
 
   /**
-   * 控件本体（两个分支共用一份，避免"compact 与组内"两处各写一遍选择器配置）。
+   * 两个下拉本体（紧凑与非紧凑两个分支共用，避免各写一遍选择器配置）。
    *
-   * 包一层 span 的两个理由：① 禁用态的下拉不接收指针事件，Tooltip 只能挂在外层；
-   * ② 宽度——不设时限宽会让 antd Select 缩到内容宽（实测 34px），弹层变成一条缝；
-   * 但 260px 又太宽、空白比字多（2026-10-28 用户口径"能看见四个字就好"）。
-   * 104px 与同一行「版式」下拉同宽，四个中文字符放得下；多选的已选标签由
-   * `maxTagCount="responsive"` 收成 +N，`maxWidth: 100%` 让窄栏按容器收窄。
+   * 宽度：紧凑分支由外面的定宽 span 管（104 / 76，工具栏里按内容排即可）；
+   * 非紧凑分支交给 `.resume-wb-field-control` + `.resume-wb-field-row .ant-select`
+   * （I-06：铺满控件列、封顶 320）。所以这里不写死宽度，只由 `width` 参数决定。
    */
-  /* 分隔符与"在哪换行"是两件事，但必须挨在一起：用户改完换行就会想调分隔符。 */
-  const separatorControl = (
-    <>
-      <Space size={4} align="center">
-        <Select
-          size="small"
-          aria-label={t("workbench.contactSeparator.label")}
-          className="resume-contact-separator-select"
-          style={{ width: 76 }}
-          disabled={disabled || undefined}
-          value={separator}
-          options={separatorOptions}
-          onChange={(next: ContactSeparatorStyle) =>
-            onChange(withContactSeparator(formatConfig, next))
-          }
-        />
-      </Space>
-      <HintDetail
-        detail={t("contactSeparator.hint")}
-        label={t("workbench.contactSeparator.label")}
-      />
-    </>
+  const buildBreakSelect = () => (
+    <Select
+      size="small"
+      mode="multiple"
+      allowClear
+      maxTagCount="responsive"
+      aria-label={t("workbench.contactBreak.label")}
+      placeholder={t("workbench.contactBreak.placeholder")}
+      className="resume-contact-break-select"
+      style={{ width: "100%" }}
+      disabled={disabled || undefined}
+      value={value}
+      options={options}
+      onChange={(next: ContactFieldKey[]) => onChange(withContactBreaks(formatConfig, next))}
+    />
   );
 
+  /* `fill` 决定「铺满控件列」还是「保持紧凑工具栏里的 76px」。宽度只写在 `style` 里：
+     直接往 JSX 里传 `"100%"` 这种裸字符串会被 `cjkRatchet` 的文案扫描判成"新增产品文案"
+     （2026-11-18 实测三条 unregistered product copy），而 `style` 是技术语境、不参与扫描。 */
+  const buildSeparatorSelect = (fill = false) => (
+    <Select
+      size="small"
+      aria-label={t("workbench.contactSeparator.label")}
+      className="resume-contact-separator-select"
+      style={{ width: fill ? "100%" : 76 }}
+      disabled={disabled || undefined}
+      value={separator}
+      options={separatorOptions}
+      onChange={(next: ContactSeparatorStyle) => onChange(withContactSeparator(formatConfig, next))}
+    />
+  );
+
+  const breakHint = (
+    <HintDetail
+      detail={t("workbench.contactBreak.hint")}
+      label={t("workbench.contactBreak.label")}
+    />
+  );
+  const separatorHint = (
+    <HintDetail detail={t("contactSeparator.hint")} label={t("workbench.contactSeparator.label")} />
+  );
+
+  /* 分隔符与"在哪换行"是两件事，但必须挨在一起：用户改完换行就会想调分隔符。 */
   const control = (
     <>
       <Space size={4} align="center">
         <span style={{ display: "inline-block", width: 104, maxWidth: "100%" }}>
-          <Select
-            size="small"
-            mode="multiple"
-            allowClear
-            maxTagCount="responsive"
-            aria-label={t("workbench.contactBreak.label")}
-            placeholder={t("workbench.contactBreak.placeholder")}
-            className="resume-contact-break-select"
-            style={{ width: "100%" }}
-            disabled={disabled || undefined}
-            value={value}
-            options={options}
-            onChange={(next: ContactFieldKey[]) => onChange(withContactBreaks(formatConfig, next))}
-          />
+          {buildBreakSelect()}
         </span>
       </Space>
-      <HintDetail
-        detail={t("workbench.contactBreak.hint")}
-        label={t("workbench.contactBreak.label")}
-      />
+      {breakHint}
+    </>
+  );
+  const separatorControl = (
+    <>
+      <Space size={4} align="center">
+        {buildSeparatorSelect()}
+      </Space>
+      {separatorHint}
     </>
   );
 
@@ -136,18 +146,26 @@ export default function ContactBreaksControl({
     );
   }
 
-  /* 任务 4：非 compact 分支进「版面」组的两列网格——控件列与其他三行同一条竖线。
+  /* 任务 4：非 compact 分支进「版面」组的两列网格——控件列与其他四行同一条竖线。
      F26：分隔符不再藏在「联系方式换行」这一行的第二个下拉里，改成独立一行并带可见标签；
-     行名只讲换行、下拉又没有标签时，用户会以为"分隔符"这个功能没做。 */
+     行名只讲换行、下拉又没有标签时，用户会以为"分隔符"这个功能没做。
+     I-06：控件包在 `.resume-wb-field-control` 里（控件铺满控件列、ⓘ 固定第二格），
+     不再用 `Space`——Space 的子项按内容宽，下拉会一直停在 104px。 */
   return (
     <>
       <div className="resume-wb-field-row">
         <span className="resume-wb-field-label">{t("workbench.contactBreak.label")}</span>
-        <Space size={6}>{control}</Space>
+        <span className="resume-wb-field-control">
+          {buildBreakSelect()}
+          {breakHint}
+        </span>
       </div>
       <div className="resume-wb-field-row">
         <span className="resume-wb-field-label">{t("workbench.contactSeparator.label")}</span>
-        <Space size={6}>{separatorControl}</Space>
+        <span className="resume-wb-field-control">
+          {buildSeparatorSelect(true)}
+          {separatorHint}
+        </span>
       </div>
     </>
   );

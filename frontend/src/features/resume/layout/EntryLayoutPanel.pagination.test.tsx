@@ -71,3 +71,42 @@ describe("EntryLayoutPanel · 条目级断页（Q08）", () => {
     expect(onNotice).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("EntryLayoutPanel · 断页开关整行可点（I-08）", () => {
+  it("两行都是 `<label for>`，指向行内那颗真开关（不额外加 tab 停点）", () => {
+    const { container } = render(<Harness initial={makeDocument()} />);
+    const group = container.querySelector<HTMLElement>("[data-entry-layout-pagination]");
+    if (!group) throw new Error("missing entry pagination group");
+    const rows = [...group.querySelectorAll<HTMLLabelElement>(".rf-entry-layout-row.is-switch")];
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      // 行本身就是 label：整行命中区域，但无障碍入口仍是那颗开关。
+      expect(row.tagName).toBe("LABEL");
+      expect(row.hasAttribute("tabindex")).toBe(false);
+      expect(row.getAttribute("role")).toBeNull();
+      const switchNode = row.querySelector<HTMLButtonElement>('button[role="switch"]');
+      if (!switchNode) throw new Error("missing switch inside switch row");
+      expect(switchNode.id).toBeTruthy();
+      // `htmlFor` 必须与开关 id 一致，否则点标签不会转发。
+      expect(row.getAttribute("for")).toBe(switchNode.id);
+    }
+  });
+
+  it("点标签文字只切换一次（原生 label 转发，没有手写 onClick）", () => {
+    const calls: unknown[][] = [];
+    const { container } = render(
+      <Harness initial={makeDocument()} onChange={(doc) => calls.push([doc])} />,
+    );
+    const group = container.querySelector<HTMLElement>("[data-entry-layout-pagination]");
+    if (!group) throw new Error("missing entry pagination group");
+    const label = group.querySelector<HTMLElement>(
+      ".rf-entry-layout-row.is-switch .rf-entry-layout-label",
+    );
+    if (!label) throw new Error("missing switch label text");
+    fireEvent.click(label);
+    const layout = latest(calls).sections[0].entries[0].layout;
+    // 一次点击 → 一次写回（若整行 onClick 与开关 onChange 同时生效，会切两次回到 false）。
+    expect(calls).toHaveLength(1);
+    expect(layout.start_on_new_page).toBe(true);
+  });
+});

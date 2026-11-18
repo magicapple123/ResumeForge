@@ -1,0 +1,34 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 纸面「自定义颜色…」的拾色弹层（I-13 收尾）。
+ *
+ * 定位与层级都由组件写 inline（`placeMenu` 算落点、`layer.aiPolish` 给层级）：
+ * 这里只收口"锚点不可见"与面板内部的按钮行，不写死任何一个坐标或颜色。
+ */
+
+.rf-rich-color-popover {
+  position: fixed;
+  /* 面板自己带阴影与圆角（antd），这一层只做定位容器。 */
+  width: 0;
+  height: 0;
+}
+
+/* 触发器：1px 透明锚点。面板才是可见物，锚点只为让 antd 知道"弹哪儿"。 */
+.rf-rich-color-anchor {
+  display: block;
+  width: 1px;
+  height: 1px;
+  background: transparent;
+}
+
+/* 按钮行挂在 antd 面板底部（`panelRender`），与色块 / HEX 输入框同一张卡里。 */
+.rf-rich-color-panel {
+  width: 100%;
+}
+
+.rf-rich-color-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}

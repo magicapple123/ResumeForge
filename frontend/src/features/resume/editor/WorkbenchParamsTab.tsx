@@ -207,10 +207,11 @@ export default function WorkbenchParamsTab({
         <div className="resume-wb-field-row">
           <span className="resume-wb-field-label">{t("resume.language.label")}</span>
           {/* I-17：40 字的"只改小节标题、不翻译正文"原本是包住整个下拉的 tooltip——
-              悬停才看得见，且会盖住主操作。现在它是下拉右侧的 `ⓘ`。 */}
-          <span
-            style={{ justifySelf: "start", display: "inline-flex", alignItems: "center", gap: 6 }}
-          >
+              悬停才看得见，且会盖住主操作。现在它是下拉右侧的 `ⓘ`。
+              I-06：包装层不再写内联 `justifySelf` / `inline-flex`（内联优先级最高，会让
+              "控件铺满控件列"整条 CSS 白改）；`.resume-wb-field-control` 负责
+              「控件吃满第一格、ⓘ 固定第二格」。 */}
+          <span className="resume-wb-field-control">
             <ResumeLanguageSelect
               value={layout.language ?? "zh-CN"}
               disabled={relayouting || undefined}

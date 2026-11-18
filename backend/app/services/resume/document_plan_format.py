@@ -32,6 +32,7 @@ from .resume_labels import (
     patent_status_text,
     publication_status_text,
 )
+from .resume_rich_marks import item_text
 from .resume_rich_text import strip_markers
 
 __all__ = [
@@ -204,7 +205,8 @@ def item_inlines(
     lang = normalize_language(language)
     path = item_path(section_key, entry_id, item.id)
     if isinstance(item, TextItem):
-        return [Inline(text=item.text, role="body", path=path)]
+        # I-12：正文在 `text` 上；与字段的 `value` 走同一个读路径入口。
+        return [Inline(text=item_text(item, key="text"), role="body", path=path)]
     label_text = field_label_text(item, section_key, lang)
     want_label = item.show_label if show_label is None else show_label
     body: list[Inline] = []
@@ -216,7 +218,9 @@ def item_inlines(
             kind = spec.enum_kind if spec is not None else ""
             display = enum_text(item, kind, lang)
         else:
-            display = item.value
+            # I-12：有 `rich.runs` 时 `value` 是纯文本、样式旁挂，统一由 `item_text`
+            # 投影一次（没有 rich 时原样返回 value，下游解析器行为逐字节不变）。
+            display = item_text(item)
         body = [
             Inline(
                 text=display,

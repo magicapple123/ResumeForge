@@ -331,6 +331,7 @@ function EntryCard({
         entry={entry}
         entryIndex={entryIndex}
         entryPath={entryPath}
+        selected={selectedPath === entryPath}
         readOnly={readOnly}
         onChange={onChange}
         onSelectPath={onSelectPath}
