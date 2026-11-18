@@ -31,12 +31,17 @@ async function openBlankWorkbench(page: Page) {
   return workbench;
 }
 
-/** 改一处版式：展开第一行颜色并点「深蓝」色块。 */
+/** 改一处版式：打开第一张色卡的取色器，再点 antd 的预设色块。
+ *
+ * 结构随 I-09 变过一次：**2×2 色卡 + 单一取色器**（原来是"手风琴 + 四下色块列表"），
+ * 旧的 `.resume-wb-swatches` / `.resume-wb-color-toggle` 已经不存在了。
+ * 取色器只有一个实例、随 `pickerKey` 移动，所以"已经开着"就不要再点卡（会把它关掉）。
+ */
 async function changeLayout(page: Page) {
-  if ((await page.locator(".resume-wb-swatches").count()) === 0) {
-    await page.locator(".resume-wb-color-toggle").first().click();
+  if ((await page.locator(".ant-color-picker-presets-color").count()) === 0) {
+    await page.locator(".resume-wb-color-main").first().click();
   }
-  await page.getByRole("button", { name: "深蓝" }).first().click();
+  await page.locator(".ant-color-picker-presets-color").first().click();
 }
 
 /** 改一处正文：双击展开页眉的「名称」chip（预填值来自资料），再填新值。 */
