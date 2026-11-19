@@ -99,6 +99,8 @@ _READERS: dict[str, Callable[[Session], Any]] = {
     "agent_task_events_enabled": settings_service.get_agent_task_events_enabled,
     "webform_relaxed_mode": settings_service.get_webform_relaxed_mode,
     "reminder_popup_on_start": settings_service.get_reminder_popup_on_start,
+    "editor_inline_format_preview": settings_service.get_editor_inline_format_preview,
+    "tray_icon_follow_system": settings_service.get_tray_icon_follow_system,
     "assistant_orb_enabled": _read_orbs,
     "navigation_visibility": _read_navigation,
     "apply_blocklist": settings_service.get_apply_blocklist,

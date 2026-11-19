@@ -241,6 +241,9 @@ class LiveSession(LiveRememberMixin):
         self._last_ask_sequence: int | None = None
         self._enabled = True
         self._last_control_sequence: int | None = None
+        # 最后一次聚焦的**原始控件描述**。换取数范围时要按同一个框重算建议（焦点没变，
+        # 变的是资料），而这期间页面可能已经失焦/收起面板——只有这份留底还认得那个框。
+        self._last_control_raw: Any = None
         self._last_autofill_sequence: int | None = None
         # 「可能是这几个」——按**当前焦点控件**从完整清单里挑出的前几条，随面板一起推给页面。
         #
@@ -369,6 +372,10 @@ class LiveSession(LiveRememberMixin):
 
         重新走一次 data_loader：loader 里的范围持有者已被 ``_scope_setter`` 改掉，所以
         资料、清单、空态原因在同一次刷新里一起变，不会出现"清单按全部、预填按当前组"。
+
+        **还要按同一个框重算一次建议**：换的只是资料，焦点那个框没变。不重算的话面板上
+        仍然是旧范围下的结论——开关写着「全部资料」、建议仍是"当前方案未包含…"，这才是
+        用户说的"错乱"。重算只走规则，不花模型调用（见 :meth:`_recompute_current`）。
         """
         next_scope = normalize_scope(scope)
         if next_scope == self._scope:
@@ -376,7 +383,19 @@ class LiveSession(LiveRememberMixin):
         if self._scope_setter is not None:
             self._scope_setter(next_scope)
         self._refresh_data()
+        self._recompute_current()
         self._attach()
+
+    def _recompute_current(self) -> None:
+        """换代后按**当前焦点那个框**重算建议（只重算规则，绝不重跑 AI）。
+
+        焦点没变、只是资料/清单换了，所以这里**不重新取数**（调用方刚取过），也
+        **不降级 AI 结论**（见 ``_on_focus`` 的 ``allow_ai``）。
+        """
+        raw = self._last_control_raw
+        if raw is None:
+            return
+        self._on_focus(raw, allow_ai=False, refresh=False)
 
     def adopt_scope(self, scope: str, scope_setter: Callable[[str], None] | None = None) -> None:
         """复用已有会话时对齐范围持有者（不重取数——调用方紧接着会 update_data）。"""
@@ -731,11 +750,22 @@ class LiveSession(LiveRememberMixin):
         if isinstance(remember, dict):
             busy = True
             self._on_remember(remember)
+        # **面板还开着就算忙碌**：用户正盯着这块看、随时会点「填入 / 换个资料… / 切范围」，
+        # 这时候退到 1.5s 慢档，点了开关要等一秒半才动——实测反馈的"点下去没反应"。
+        # 判据用 `__rfFocus`：它在页面 ``hide()`` 里被清空，非空即"面板正显示着某个框"。
+        if payload.get("control"):
+            busy = True
         return busy
 
     # ===== 焦点变化：算建议、显示面板 =====
 
-    def _on_focus(self, raw: Any) -> None:
+    def _on_focus(self, raw: Any, *, allow_ai: bool = True, refresh: bool = True) -> None:
+        """算这个框的建议并推面板。
+
+        两个关键字只在"换代后按同一个框重算"时用（``request_scope`` →
+        ``_recompute_current``）：``allow_ai=False`` 表示**绝不**再花一次模型调用，
+        ``refresh=False`` 表示调用方刚取过数、不要再取一遍。
+        """
         if not isinstance(raw, dict):
             # 焦点落到了**不填**的控件上（单选、复选、下拉、附件…）。页面那边已经把面板
             # 收掉了，这边也要跟着清——否则 ResumeForge 页面上还挂着上一条"将填入"，
@@ -755,7 +785,11 @@ class LiveSession(LiveRememberMixin):
         control = self._build_control(raw)
         if control is None:
             return
-        self._refresh_data()
+        # 留底：换范围时按同一个框重算（见 ``_recompute_current``）。只存**能认出来的**
+        # 那种，认不出/被拦下的控件不必再算一遍。
+        self._last_control_raw = raw
+        if refresh:
+            self._refresh_data()
         with self._lock:
             data = dict(self._data)
             catalog = list(self._catalog)
@@ -763,6 +797,25 @@ class LiveSession(LiveRememberMixin):
         # AI 在想 / AI 回来了）推出去的面板都带着同一份。显示名与清单同源（英文界面下
         # 也不能露中文），`label` / `group` 仍是原值——点这一行时回传的就是它们。
         self._related = self._display_catalog(related_entries(control, catalog))
+        # **AI 判过的屏不因换范围而降级**：上一屏那个值是模型按上下文推的，规则本来就
+        # 认不出这个框——重算一遍只会得到"没认出来"，用户会以为换个范围把建议弄丢了。
+        # 保留 AI 的值与来源，只让「可能是这几个」跟着新清单换一份。
+        if not allow_ai and self.state.get("source") == SOURCE_AI:
+            self._publish(
+                {
+                    "status": self.state.get("status", ""),
+                    "field_label": self.state.get("field_label", ""),
+                    "value": self.state.get("value", ""),
+                    "note": self.state.get("note", ""),
+                    "source": SOURCE_AI,
+                    "confidence": self.state.get("confidence"),
+                    "evidence": self.state.get("evidence", ""),
+                    "remember_field_key": self.state.get("remember_field_key", ""),
+                    "alternatives": list(self.state.get("alternatives") or []),
+                    "accept_label": self.state.get("accept_label", ""),
+                }
+            )
+            return
         custom_labels = custom_labels_from_catalog(catalog)
         suggestion = self._suggest_custom_field(control, data) or suggest_for(
             control,
@@ -792,7 +845,12 @@ class LiveSession(LiveRememberMixin):
             # 放宽模式下规则没认出字段的点选类控件：交给 AI 兜底识别（与批量 enrichment
             # 同一套纪律——只发字段名、终局判定不放宽、额度上限）。三种"没接住"都保持
             # blocked 文案不变：没开 AI、额度用完、模型没帮上忙。
-            if is_relaxed_ai_candidate(control) and self._ai_enabled and self._begin_ai_call():
+            if (
+                allow_ai
+                and is_relaxed_ai_candidate(control)
+                and self._ai_enabled
+                and self._begin_ai_call()
+            ):
                 self._publish(
                     {
                         "status": "ai_thinking",
@@ -849,6 +907,11 @@ class LiveSession(LiveRememberMixin):
 
         # **三种"没问成"要分开说**：没开 AI、次数用完、模型没帮上忙。混成一句话的话，
         # 用户分不清"是不是我哪里没设置"和"它尽力了"。
+        if not allow_ai:
+            # 换代后的重算：只走规则。换范围不是"再认一次这个框"，不该花一次模型调用
+            # （钱与延迟都不该由一次开关点击来付）。
+            self._publish_unmatched(UNMATCHED_NOTE)
+            return
         if not self._ai_enabled:
             self._publish_unmatched(UNMATCHED_NOTE)
             return

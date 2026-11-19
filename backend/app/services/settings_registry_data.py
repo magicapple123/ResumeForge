@@ -137,6 +137,18 @@ REGISTRY_ENTRIES: tuple[SettingDefault, ...] = (
         note="悬浮球三开关默认全开（与 AssistantOrbSetting() 一致）",
     ),
     SettingDefault(
+        key="editor_inline_format_preview",
+        scope="ui",
+        default=False,
+        note="未编辑时按真实行内样式预览；默认关，避免每次点击多一拍",
+    ),
+    SettingDefault(
+        key="tray_icon_follow_system",
+        scope="ui",
+        default=False,
+        note="桌面版：托盘图标跟随系统主题（兜底开关）；默认关，应用内主题优先",
+    ),
+    SettingDefault(
         key="navigation_visibility",
         scope="ui",
         default={"hidden": []},

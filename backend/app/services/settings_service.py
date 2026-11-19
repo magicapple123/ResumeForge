@@ -73,6 +73,14 @@ from .settings_defaults import default_for
 
 # 对外兼容面：联网搜索设置的实现在 web_search_settings（全局文件，所有数据集共用）；
 # 既有调用点与测试仍按本模块取符号，逐个 as 同名重导出。
+# 对外兼容面：桌面版托盘图标开关的实现在 settings_tray_icon（拆出以守住 500 行预算），
+# 既有调用点与测试仍按本模块取符号，逐个 as 同名重导出。
+from .settings_tray_icon import (
+    get_tray_icon_follow_system as get_tray_icon_follow_system,
+)
+from .settings_tray_icon import (
+    save_tray_icon_follow_system as save_tray_icon_follow_system,
+)
 from .web_search_settings import get_search_config as get_search_config
 from .web_search_settings import (
     get_search_config_with_secrets as get_search_config_with_secrets,
@@ -93,6 +101,9 @@ _APPLY_GREETING_TEMPLATES_KEY = "apply_greeting_templates"
 _REMINDER_POPUP_KEY = "reminder_popup_on_start"
 _ASSISTANT_ORB_KEY = "assistant_orb_enabled"
 _NAVIGATION_VISIBILITY_KEY = "navigation_visibility"
+# 制作台：未编辑时按真实行内样式预览（含字号）。默认**关**——打开后失焦字段会从文本域
+# 换成静态富文本块，属于"每次点击多一拍的摩擦"，不能替用户默认打开。
+_EDITOR_INLINE_FORMAT_PREVIEW_KEY = "editor_inline_format_preview"
 _WEBFORM_RELAXED_MODE_KEY = "webform_relaxed_mode"
 _EXPORT_SAVE_LOCATION_KEY = "export_save_location"
 # 自动备份间隔（天）的运行时设置：调度线程每次到期检查时读取，保存后下次检查生效。
@@ -435,3 +446,32 @@ def save_apply_greeting_templates(
     cleaned = [dict(item) for item in templates if isinstance(item, dict)]
     _write_json_setting(db, _APPLY_GREETING_TEMPLATES_KEY, cleaned)
     return cleaned
+
+
+# ===== 制作台：行内格式预览开关 =====
+
+
+def get_editor_inline_format_preview(db: Session) -> bool:
+    """读取「未编辑时预览行内格式」开关；缺失或脏数据退回注册表的出厂值（默认关）。"""
+    fallback = bool(default_for(_EDITOR_INLINE_FORMAT_PREVIEW_KEY))
+    row = db.get(AppSetting, _EDITOR_INLINE_FORMAT_PREVIEW_KEY)
+    if row is None:
+        return fallback
+    try:
+        value = json.loads(row.value)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("行内格式预览设置数据损坏，已重置为默认值")
+        return fallback
+    return value if isinstance(value, bool) else fallback
+
+
+def save_editor_inline_format_preview(db: Session, enabled: bool) -> bool:
+    """持久化「未编辑时预览行内格式」开关。"""
+    row = db.get(AppSetting, _EDITOR_INLINE_FORMAT_PREVIEW_KEY)
+    serialized = json.dumps(bool(enabled))
+    if row is None:
+        db.add(AppSetting(key=_EDITOR_INLINE_FORMAT_PREVIEW_KEY, value=serialized))
+    else:
+        row.value = serialized
+    db.commit()
+    return bool(enabled)

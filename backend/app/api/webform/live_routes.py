@@ -116,6 +116,13 @@ def _start_live_session(
     也不会再弹浏览器窗口——所以浏览器启动/打开页面后可以放心地自动调一次。
     ``want_ai=None`` 表示按默认开启 AI（未配模型时会话内部自动降级为纯规则）。
     """
+    # 示例数据集只做「有的可看」：它的虚构资料不该被填进真实网申表单，这里直接拒绝，
+    # 前端也因此把入口灰掉（同一条文案，见 dataset_guard）。
+    if webform_service.active_dataset_blocks_fill():
+        raise HTTPException(
+            status_code=409,
+            detail=webform_service.SAMPLE_FILL_BLOCKED_DETAIL,
+        )
     manager = webform_service.browser.get_browser_manager(db)
     if not manager.is_active():
         raise HTTPException(

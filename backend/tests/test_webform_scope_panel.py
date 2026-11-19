@@ -7,6 +7,8 @@
 却能在任何一处被改回去时立刻变红。
 """
 
+import time
+
 import pytest
 from app.services.webform import ai as ai_module
 from app.services.webform import live_scripts
@@ -16,9 +18,13 @@ from app.services.webform.live_scripts import _scope_script
 from app.services.webform.panel_copy import localize_panel
 from app.services.webform.webform_copy import ui_text
 from test_webform_live import FakeLiveClient, raw_control
-from test_webform_live_ai import ScriptedProvider
+from test_webform_live_ai import UNKNOWN_LABEL, ScriptedProvider
 
 SECTIONS = [{"key": "education", "display": "教育经历"}]
+
+# 清单里只有一条，但**值放在「全部资料」那一份**：这样"换范围之后建议有没有重算"
+# 就能从面板状态上直接读出来，不必去猜内部走了哪条分支。
+SCOPE_ROWS = [{"group": "身份信息", "label": "姓名", "value": "张三"}]
 
 
 @pytest.fixture(autouse=True)
@@ -127,3 +133,120 @@ def test_note_copy_keeps_the_two_reasons_apart():
     assert "当前方案未包含" not in empty
     assert "resume plan leaves out" in ui_text("en-US", "note.sectionFiltered", section="Education")
     assert "no value" in ui_text("en-US", "note.recognizeNoValue", label="Laboratory")
+
+
+# ===== 换范围之后：点下去立刻有反馈 + 当前字段跟着重算 =====
+
+
+def _scoped_session(client: FakeLiveClient, *, provider=None, ai_enabled: bool = False):
+    """按"当前范围"出数的会话：只有「全部资料」那份才带姓名。
+
+    值分档放是为了让断言能直接读面板——换范围到底有没有重算当前字段，看 ``value``
+    从空变成"张三"就是答案，不必去猜内部走了哪条分支。
+    """
+    scopes: list[str] = []
+
+    def loader():
+        scope = scopes[-1] if scopes else "group"
+        data = {"research_direction": "分布式系统"}
+        if scope == "all":
+            data["name"] = "张三"
+        return (
+            data,
+            SCOPE_ROWS,
+            {"scope": scope, "filtered_sections": [], "filtered_rows": []},
+        )
+
+    session = LiveSession(
+        client,
+        {},
+        catalog=SCOPE_ROWS,
+        provider=provider,
+        ai_enabled=ai_enabled,
+        data_loader=loader,
+        scope_setter=scopes.append,
+    )
+    return session, scopes
+
+
+def test_switching_scope_recomputes_the_focused_field():
+    """**"错乱"的根治**：换的只是资料，焦点那个框没变，所以必须拿新资料重算一遍。
+
+    不重算的话面板上仍是旧范围下的结论——开关写着「全部资料」、建议还写着"资料里
+    还没填"，两句话互相打脸。
+    """
+    client = FakeLiveClient()
+    session, scopes = _scoped_session(client)
+    session._attach()
+    client.focus_on(raw_control(label="姓名"))
+    session._tick()
+    assert client.panels[-1]["status"] == "unmatched"
+    assert client.panels[-1]["value"] == ""
+
+    before = len(client.panels)
+    session.request_scope("all")
+
+    assert scopes == ["all"]
+    assert len(client.panels) > before, "换代后没有重发当前字段的面板"
+    panel = client.panels[-1]
+    assert panel["field_label"] == "姓名"
+    assert panel["status"] == "matched"
+    assert panel["value"] == "张三"
+
+
+def test_switching_scope_never_downgrades_an_ai_verdict():
+    """AI 判过的屏**不因换范围降级**：保留模型给的值与来源，只让候选清单跟着新资料走。
+
+    降级的后果是用户看到"换个范围把建议弄丢了"——而规则本来就认不出这个框，重算
+    只会得到"没认出来"。同时这条守住"绝不重跑 AI"：一次开关点击不该花一次模型调用。
+    """
+    provider = ScriptedProvider({"matches": [{"index": 0, "field": "research_direction"}]})
+    client = FakeLiveClient()
+    session, _scopes = _scoped_session(client, provider=provider, ai_enabled=True)
+    session.start()
+    try:
+        client.focus_on(raw_control(label=UNKNOWN_LABEL))
+        session._tick()
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline and session.state.get("value") != "分布式系统":
+            time.sleep(0.02)
+        assert session.state["source"] == "ai"
+        assert session.state["value"] == "分布式系统"
+        assert provider.calls == 1
+
+        before = len(client.panels)
+        session.request_scope("all")
+
+        assert provider.calls == 1, "换范围重跑了一次模型调用"
+        assert len(client.panels) > before, "换代后面板没有被重发"
+        panel = client.panels[-1]
+        assert panel["source"] == "ai", panel
+        assert panel["value"] == "分布式系统", panel
+    finally:
+        session.stop()
+
+
+def test_the_switch_paints_optimistically_and_rolls_back_without_ack():
+    """点下去**当场**变色并挡住连点；2.5s 没等到回推就回滚到上一份已确认范围。
+
+    轮询最快 350ms、慢档 1.5s——在此之前按钮毫无变化，用户看到的就是"点了没反应"。
+    """
+    assert "paintScope(button.dataset.scope)" in FOCUS_LISTENER_SCRIPT
+    assert "setScopePending(true)" in FOCUS_LISTENER_SCRIPT
+    assert "elScope.setAttribute('aria-busy', 'true')" in FOCUS_LISTENER_SCRIPT
+    assert "elScope.removeAttribute('aria-busy')" in FOCUS_LISTENER_SCRIPT
+    assert "button.disabled = !!pending" in FOCUS_LISTENER_SCRIPT
+    assert "SCOPE_PENDING_MS = 2500" in FOCUS_LISTENER_SCRIPT
+    # 回推到了要**停表**，否则 2.5s 后那次回滚会把刚确认的新档画回旧档。
+    assert "clearScopePending();" in FOCUS_LISTENER_SCRIPT
+    # 回滚时按 `__rfScope`（上一份已确认值）重画，不是按用户点的那个。
+    assert "paintScope();" in FOCUS_LISTENER_SCRIPT
+
+
+def test_rebuilding_the_list_keeps_the_scroll_position():
+    """整块重建（几百行）不能把用户滚到的位置弄丢；搜索词与命中数照常重算。"""
+    assert "const keepScroll = elList.scrollTop;" in FOCUS_LISTENER_SCRIPT
+    # 两处出口都要回写：空态分支早退，另一处是正常结尾。
+    assert FOCUS_LISTENER_SCRIPT.count("elList.scrollTop = keepScroll;") == 2
+    assert "renderList(elSearch.value)" in FOCUS_LISTENER_SCRIPT
+    assert "elHits.textContent = needle ?" in FOCUS_LISTENER_SCRIPT

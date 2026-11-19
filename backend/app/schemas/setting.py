@@ -153,6 +153,18 @@ class ReminderPopupSetting(BaseModel):
     enabled: bool = True
 
 
+class InlineFormatPreviewSetting(BaseModel):
+    """制作台：未编辑时按真实行内样式预览（含字号，默认关）。"""
+
+    enabled: bool = False
+
+
+class TrayIconFollowSystemSetting(BaseModel):
+    """桌面版：托盘图标是否跟随系统主题（默认关，应用内主题优先）。"""
+
+    enabled: bool = False
+
+
 class WebFormRelaxedModeSetting(BaseModel):
     """网申填表「放宽模式」开关（默认关）。
 

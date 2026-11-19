@@ -311,3 +311,53 @@ def test_the_fill_button_only_records_the_click_never_writes(page_client):
     assert isinstance(accept, dict) and accept.get("value") == "张三"
     # 页面上那个框本身**没有被写**。
     assert page_client.evaluate("document.querySelector('#deep-name').value") == ""
+
+
+# ===== 取数范围开关：点下去立刻有反馈 =====
+
+_SCOPE_STATE = (
+    "(() => {"
+    " const root = document.getElementById('__rf_live_host__').shadowRoot;"
+    " const box = root.querySelector('.scope');"
+    " const group = root.querySelector('[data-scope=\"group\"]');"
+    " const all = root.querySelector('[data-scope=\"all\"]');"
+    " return {groupOn: group.classList.contains('on'),"
+    "   allOn: all.classList.contains('on'),"
+    "   busy: box.getAttribute('aria-busy'),"
+    "   disabled: [group.disabled, all.disabled],"
+    "   request: window.__rfScopeRequest || null};"
+    "})()"
+)
+
+
+def test_clicking_the_scope_switch_paints_before_python_answers(page_client):
+    """点开关必须**当场**落到新档（`.on`）、`aria-busy`、两键禁用。
+
+    轮询最快 350ms 才把新数据换回来，此前开关毫无变化——用户看到的就是"点了没反应"
+    然后连点。这里跑真脚本，所以断的是实际 DOM 状态，不是"脚本里有这行字"。
+    """
+    from app.services.webform.engine import FOCUS_LISTENER_SCRIPT
+    from app.services.webform.live_scripts import _ACK_SCOPE_SCRIPT, _scope_script
+
+    page_client.evaluate(FOCUS_LISTENER_SCRIPT)
+    page_client.evaluate(_scope_script("group", []))
+
+    page_client.evaluate(
+        "document.getElementById('__rf_live_host__')"
+        ".shadowRoot.querySelector('[data-scope=\"all\"]').click()"
+    )
+    pending = page_client.evaluate(_SCOPE_STATE)
+    assert pending["allOn"] is True and pending["groupOn"] is False, pending
+    assert pending["busy"] == "true", pending
+    assert pending["disabled"] == [True, True], pending
+    # 请求全局照旧只置一个，由 Python 侧消费。
+    assert pending["request"] == "all", pending
+
+    # Python 回推（先确认请求全局，再换代）：以回推值为准，同时清掉等待态。
+    page_client.evaluate(_ACK_SCOPE_SCRIPT)
+    page_client.evaluate(_scope_script("all", []))
+    settled = page_client.evaluate(_SCOPE_STATE)
+    assert settled["allOn"] is True and settled["groupOn"] is False, settled
+    assert settled["busy"] is None, settled
+    assert settled["disabled"] == [False, False], settled
+    assert settled["request"] is None, settled

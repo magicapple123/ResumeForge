@@ -73,6 +73,50 @@ class SharePackageError(Exception):
         self.status_code = status_code
 
 
+_SHARE_FOOTER_MARK = "<!--rf-share-footer-->"
+
+# 页脚品牌标识：单色线稿，24px。内联 SVG 而不是引用图片文件——分享包要能离线双击打开，
+# `data:`/相对路径都可能被浏览器拦或丢，内联是唯一自带的形态。
+_SHARE_LOGO_SVG = (
+    '<svg width="24" height="24" viewBox="0 0 512 512" fill="none" '
+    'stroke="#16365c" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<rect x="11" y="11" width="490" height="490" rx="55" stroke-width="12"/>'
+    '<path stroke-width="14" d="M326 100C379 107 431 111 464 116C476 118 482 128 478 139'
+    "C437 245 388 355 335 454C330 464 320 469 310 466C268 455 221 440 186 431"
+    "C149 395 98 384 43 360C34 356 29 346 35 335C87 246 135 144 168 59C173 47 183 42 194 46"
+    'C223 57 289 79 326 100Z"/>'
+    '<path stroke-width="12" d="M326 100C316.6 130 305.7 161 293.9 192.3'
+    'M251.7 295.7C230.4 344.2 207.9 390.6 186 431"/>'
+    "</svg>"
+)
+
+
+def _with_share_footer(content: bytes, created_at: datetime) -> bytes:
+    """在分享版 HTML 末尾追加「由简历通生成 · 日期」页脚（WF-18）。
+
+    只动分享包这一份产物：简历导出的 PDF/Word **不加任何 logo**（用户 2026-11-19 选的口径），
+    分享包里的 ``resume.pdf`` 也保持干净。所以注入点必须在这里，而不是 ``export_pipeline``。
+
+    找不到 ``</body>`` 就原样返回：宁可没有页脚，也不要把一份能正常打开的 HTML 改坏。
+    """
+    footer = (
+        f'<footer class="rf-share-footer" style="margin:28px auto 18px;max-width:720px;'
+        f"display:flex;align-items:center;justify-content:center;gap:8px;"
+        f"font-family:inherit;font-size:12px;line-height:1.6;color:#8a94a6;"
+        f"border-top:1px solid #e7ebf0;padding-top:12px;\">"
+        f"{_SHARE_LOGO_SVG}"
+        f"<span>由简历通生成 · {created_at:%Y-%m-%d}</span>"
+        f"</footer>{_SHARE_FOOTER_MARK}"
+    )
+    text = content.decode("utf-8", errors="replace")
+    lower = text.lower()
+    index = lower.rfind("</body>")
+    if index < 0:
+        return content
+    patched = f"{text[:index]}{footer}{text[index:]}"
+    return patched.encode("utf-8")
+
+
 def _write_atomically(path: Path, content: bytes) -> None:
     """先写临时文件再原子改名。
 
@@ -287,7 +331,14 @@ def create_share_package(
         "created_at": utcnow().isoformat(),
     }
     files = [
-        _file_entry(directory, _HTML_FILE, html_artifact.content, "html"),
+        # 分享版**只有这一份**带「由简历通生成」页脚（WF-18）：导出接口与分享包里的
+        # resume.pdf 都不加 logo，所以注入点必须在这里而不是 export_pipeline。
+        _file_entry(
+            directory,
+            _HTML_FILE,
+            _with_share_footer(html_artifact.content, utcnow()),
+            "html",
+        ),
         _file_entry(directory, _PDF_FILE, pdf_artifact.content, "pdf"),
         _text_file_entry(
             directory,

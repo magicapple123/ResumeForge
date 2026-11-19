@@ -93,11 +93,18 @@ from ..services.settings_service import (
 )
 from .assistant_compaction_api import register_compaction_setting_routes
 from .model_window_api import register_model_window_routes
+from .settings_inline_format_preview import router as inline_format_preview_router
 from .settings_reset_api import register_settings_reset_routes
+from .settings_tray_icon import router as tray_icon_router
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+# 行内格式预览的端点已拆到独立模块（见模块注释），这里挂回同一前缀。
+router.include_router(inline_format_preview_router)
+# 桌面版托盘图标跟随系统主题（WF-20）：同样拆成独立模块，本文件只留注册一行。
+router.include_router(tray_icon_router)
 # 上下文压缩的三个设置项（#10）单独一层模块：本文件已贴 500 行硬预算，只留注册一行。
 register_compaction_setting_routes(router)
 # 「模型窗口参考」只读列表（R-18 的旁路展示）：同样只留注册一行。

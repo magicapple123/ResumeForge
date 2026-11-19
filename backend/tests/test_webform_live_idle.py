@@ -15,7 +15,7 @@ from app.services.webform.live import (
     POLL_INTERVAL_SECONDS,
     LiveSession,
 )
-from test_webform_live import FakeLiveClient
+from test_webform_live import FakeLiveClient, raw_control
 
 
 def _record_delays(monkeypatch, tick_results: list[bool]) -> list[float]:
@@ -80,6 +80,56 @@ def test_error_keeps_fast_interval(monkeypatch: pytest.MonkeyPatch) -> None:
     session._loop()
     assert delays[IDLE_AFTER_QUIET_TICKS] == POLL_INTERVAL_SECONDS
     assert delays[IDLE_AFTER_QUIET_TICKS + 1] == POLL_INTERVAL_SECONDS
+
+
+def test_visible_panel_never_falls_into_the_idle_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """**面板开着就不算空闲**：用户正盯着它，随时会点「填入 / 换个资料 / 切范围」。
+
+    实测的反馈就出在这里：面板开着、用户去点范围开关时，轮询正好处在 1.5s 慢档——
+    点下去之后要等一秒半才有任何变化，看起来就是"点了没反应"。判据是页面状态里的
+    ``control``（``__rfFocus``）：面板一收起 ``hide()`` 就把它清空，非空即"面板正显示着"。
+
+    这条**只能靠真 ``_tick``**：前几条都 monkeypatch 了 ``_tick``，喂进去的是布尔值，
+    根本碰不到"面板可见"这个条件。
+    """
+    client = FakeLiveClient()
+    session = LiveSession(client, {"name": "张三"})
+    # 让面板"显示着"：焦点落在一个框上，且不消费它（不再 tick 出新的 seq）。
+    client.focus_on(raw_control(label="姓名"))
+    rounds = IDLE_AFTER_QUIET_TICKS + 2
+    delays: list[float] = []
+
+    def fake_wait(seconds: float) -> bool:
+        delays.append(seconds)
+        if len(delays) >= rounds:
+            session._stop.set()
+        return True
+
+    monkeypatch.setattr(session._stop, "wait", fake_wait)
+    session._loop()
+
+    assert delays == [POLL_INTERVAL_SECONDS] * rounds, (
+        f"面板可见时进了慢档：{delays}"
+    )
+
+
+def test_a_hidden_panel_goes_back_to_idle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """反面：面板收起（``control`` 为空）后**必须**能回到慢档，否则这条判据等于没有。"""
+    client = FakeLiveClient()
+    session = LiveSession(client, {"name": "张三"})
+    rounds = IDLE_AFTER_QUIET_TICKS + 2
+    delays: list[float] = []
+
+    def fake_wait(seconds: float) -> bool:
+        delays.append(seconds)
+        if len(delays) >= rounds:
+            session._stop.set()
+        return True
+
+    monkeypatch.setattr(session._stop, "wait", fake_wait)
+    session._loop()
+
+    assert delays[-1] == IDLE_POLL_INTERVAL_SECONDS, delays
 
 
 @pytest.mark.parametrize(

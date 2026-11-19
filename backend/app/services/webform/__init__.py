@@ -38,6 +38,12 @@ from .data import (
     build_webform_view,
     normalize_scope,
 )
+from .dataset_guard import (
+    SAMPLE_FILL_BLOCKED_DETAIL,
+    SAMPLE_SOURCE,
+    active_dataset_blocks_fill,
+    dataset_blocks_fill,
+)
 from .engine import ApplyOutcome, Control, FieldMapping, FormEngine, MatchResult, SkipNote
 from .extra_profile import EXTRA_FIELD_KEYS, list_entries, save_entries
 from .fields import FIELD_KEYS, FIELD_LABELS, FORM_FIELDS, SENSITIVE_FIELD_KEYS, FormField
@@ -94,6 +100,7 @@ __all__ = [
     "live_status", "read_snapshot", "recognize_field", "record_or_none",
     "normalize_scope", "request_live_scope",
     "remember_live_choice", "remember_target", "resolve_choice",
-    "resolve_select_option", "save_entries", "set_live_enabled", "start_live",
-    "stop_live",
+    "resolve_select_option", "SAMPLE_FILL_BLOCKED_DETAIL", "SAMPLE_SOURCE",
+    "save_entries", "set_live_enabled", "start_live", "stop_live",
+    "active_dataset_blocks_fill", "dataset_blocks_fill",
 ]

@@ -82,6 +82,12 @@ async def preview(payload: WebFormPreviewIn, db: Session = Depends(get_db)):
     配了模型且开着 AI 时，规则认不出的那些控件会**用一次调用**批量交给模型识别，
     命中的并进 ``items`` 并标成 ``source="ai"``（**默认不勾选**）。
     """
+    # 示例数据集不做真实填表：预览是填表的第一步，在这里就拦住（与 live/start 同一判据）。
+    if webform_service.active_dataset_blocks_fill():
+        raise HTTPException(
+            status_code=409,
+            detail=webform_service.SAMPLE_FILL_BLOCKED_DETAIL,
+        )
     try:
         snapshot = webform_service.get_snapshot_store().get(payload.snapshot_id)
         # build_form_data/build_preview（规则匹配是纯计算热路径）都是同步重活，
