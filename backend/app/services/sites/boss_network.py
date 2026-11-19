@@ -24,6 +24,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 from .boss_network_salary import format_salary, parse_salary_text
+from .boss_probe import note_encoded_digits
 from .boss_text import normalize_text, split_job_fields, split_title_salary
 
 logger = logging.getLogger(__name__)
@@ -189,6 +190,16 @@ def parse_search_response(payload: Any) -> list[dict[str, Any]] | None:
     if not items:
         # 空列表也可能是真的没搜到——但那由上层结合页面状态判断，这里只说"没解析出东西"。
         return None
+
+    # 探针：接口侧出现私用区字符吗？只记日志，不改变解析结果（见 boss_probe）。
+    note_encoded_digits(
+        "接口列表",
+        (
+            f"{_first(item, 'salaryDesc', 'salaryText', 'salary') or ''} "
+            f"{_first(item, 'jobName', 'jobTitle', 'positionName', 'title') or ''}"
+            for item in items
+        ),
+    )
 
     results: list[dict[str, Any]] = []
     untitled = 0

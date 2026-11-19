@@ -17,6 +17,7 @@ from ..browser.cdp_client import CdpClient, CdpError
 from .base import SearchPage, SearchResult, SiteFailure
 from .boss_network import DETAIL_MARKERS, SEARCH_MARKERS, api_error
 from .boss_page import BOSS_DISPLAY_NAME
+from .boss_probe import note_encoded_digits
 from .boss_search_scripts import NETWORK_RESPONSE_EVENT
 from .boss_text import looks_like_salary, normalize_text, split_job_fields, split_title_salary
 
@@ -32,6 +33,16 @@ def parse_search_payload(
     results: list[SearchResult] = []
     items = payload.get("items")
     if isinstance(items, list):
+        # 探针：只记「这一页有没有私用区字符」，不参与解析。见 boss_probe 的模块说明。
+        note_encoded_digits(
+            "DOM 列表",
+            (
+                f"{item.get('salary') or ''} {item.get('title') or ''}"
+                for item in items
+                if isinstance(item, dict)
+            ),
+            url=str(payload.get("url") or ""),
+        )
         for item in items:
             if not isinstance(item, dict):
                 continue
