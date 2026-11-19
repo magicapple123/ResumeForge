@@ -1,20 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 """BOSS 薪资字体解密测试。
 
-数据来源两档：
-- 合成字体（fontTools 现场构建，无网络无系统字体）：验证轮廓比对机制本身；
-- 真实夹具（docs/job-hunt-fixtures/，缺了就 skip，E18）：验证明文对照 + 约束求解
-  在真实页面数据上的行为，断言只落在**有实证**的符号上。
+全部用 fontTools 现场构建的合成字体与构造数据，**不依赖任何 HTML 夹具**：
+夹具是登录态浏览器导出的真实页面、按仓库规则不进 git，靠它做断言的用例在任何
+干净环境里都只会 skip。这里验证的是三条动态路径的逻辑本身。
 """
+
 from __future__ import annotations
 
 import base64
 import io
 import re
 
-
 import app.services.job_hunt.sites.boss_font as bf
-
+from fontTools.pens.ttGlyphPen import TTGlyphPen
 
 # ---------------------------------------------------------------------------
 # decode_salary：纯替换逻辑（硬编码映射，不依赖夹具）
@@ -124,9 +123,18 @@ def _digit_pen_points(d: int) -> list[tuple[float, float]]:
     return [(0, 0), (500, 0), (250, 600 + d * 40)]
 
 
+def _triangle_glyph(a: tuple[int, int], b: tuple[int, int], c: tuple[int, int]):
+    """用一个三角形描出字形（测试只关心轮廓签名，不关心形状像不像数字）。"""
+    pen = TTGlyphPen(None)
+    pen.moveTo(a)
+    pen.lineTo(b)
+    pen.lineTo(c)
+    pen.closePath()
+    return pen.glyph()
+
+
 def _build_synthetic_font() -> bytes:
     from fontTools.fontBuilder import FontBuilder
-    from fontTools.pens.ttGlyphPen import TTGlyphPen
 
     fb = FontBuilder(1000, isTTF=True)
     order = ["gPad", *(f"g{d}" for d in range(10)), *(f"p{d}" for d in range(10)), "g0copy"]
@@ -134,26 +142,22 @@ def _build_synthetic_font() -> bytes:
     glyph_map: dict[str, object] = {}
     # 垫片字形（不进 cmap）：fontTools fontBuilder 编译 cmap format 4 时会把
     # glyphId=1 的映射丢掉（实测），垫一个不参与映射的字形把真实字形顶到 ≥2。
-    pen = TTGlyphPen(None)
-    pen.moveTo((0, 0)); pen.lineTo((7, 0)); pen.lineTo((3, 11)); pen.closePath()
-    glyph_map["gPad"] = pen.glyph()
+    glyph_map["gPad"] = _triangle_glyph((0, 0), (7, 0), (3, 11))
     for d in range(10):
-        pen = TTGlyphPen(None)
         pts = _digit_pen_points(d)
-        pen.moveTo(pts[0]); pen.lineTo(pts[1]); pen.lineTo(pts[2]); pen.closePath()
-        glyph_map[f"g{d}"] = pen.glyph()
+        glyph_map[f"g{d}"] = _triangle_glyph(*pts)
         # PUA 0xE031+d = 数字 d 字形的逐点拷贝（厂商混淆的真实做法）
-        pen = TTGlyphPen(None)
-        pen.moveTo(pts[0]); pen.lineTo(pts[1]); pen.lineTo(pts[2]); pen.closePath()
-        glyph_map[f"p{d}"] = pen.glyph()
+        glyph_map[f"p{d}"] = _triangle_glyph(*pts)
     # 复合字形：引用 g0 平移 (137,-11)，归一化后应仍匹配 '0'
     pen = TTGlyphPen(glyph_map)
     pen.addComponent("g0", (1, 0, 0, 1, 137, -11))
     glyph_map["g0copy"] = pen.glyph()
 
-    cmap = {**{ord(str(d)): f"g{d}" for d in range(10)},
-            **{0xE031 + d: f"p{d}" for d in range(10)},
-            0xE040: "g0copy"}
+    cmap = {
+        **{ord(str(d)): f"g{d}" for d in range(10)},
+        **{0xE031 + d: f"p{d}" for d in range(10)},
+        0xE040: "g0copy",
+    }
     fb.setupCharacterMap(cmap)
     fb.setupGlyf(glyph_map)  # type: ignore[arg-type]
     fb.setupHorizontalMetrics({name: (600, 0) for name in order})
@@ -223,3 +227,27 @@ _DET_SALARY_RE = re.compile(r'<span class="salary">([^<]+)</span>')
 # 结论：删掉，不再保留「用夹具验证固定映射」这类用例。映射的正确性只能靠**外部**
 # 证据判定（同一岗位的明文对照、或字体文件本身的字形轮廓），本文件其余用例验证的
 # 是三条动态路径的**逻辑**（给定输入产出什么），不预设任何字符→数字的对应关系。
+
+
+# ---------------------------------------------------------------------------
+# salary_for_display：决定「最终展示/入库什么」
+# ---------------------------------------------------------------------------
+#
+# 这条不变式比三条解码路径本身更要紧：**未解码时绝不回退到混淆原文**。
+# 回退的话，`\ue032\ue033K` 这类私用区字符会直接写进库、在界面上显示成一串方块，
+# 比留空更糟——留空至少不骗人。
+
+
+def test_salary_for_display_uses_decoded_when_ok():
+    """解码成功就用解码值。"""
+    assert bf.salary_for_display("23-26K", "\ue032\ue033-\ue032\ue036K", ok=True) == "23-26K"
+
+
+def test_salary_for_display_returns_empty_for_undecoded_encoded_text():
+    """未解码且原始串仍含混淆字符 → 返回空串，绝不把乱码透出去。"""
+    assert bf.salary_for_display("\ue032\ue033K", "\ue032\ue033K", ok=False) == ""
+
+
+def test_salary_for_display_falls_back_to_plain_raw():
+    """未解码但 raw 是明文（如详情页给的）→ 用 raw，它是可信的。"""
+    assert bf.salary_for_display("", "8-12K", ok=False) == "8-12K"

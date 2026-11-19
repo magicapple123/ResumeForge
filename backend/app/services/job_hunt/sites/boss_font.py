@@ -12,6 +12,10 @@ BOSS 搜索列表的薪资文本（如 "8-12K"）用自定义字体渲染：HTML
    用 fontTools 读 glyf 坐标 → 归一化签名 → 相等即映射。字体文件嵌在页面里时
    （base64 data URL）由 ``extract_font_bytes`` 就地提取；外链字体夜间不下载
    （红线），由采集运行时经 CDP 截获后传入。
+
+   **格式支持范围：ttf / otf / ttc，以及 woff。woff2 需要额外装 ``brotli``**
+   （fontTools 的 ``[woff]`` extra 才带它，是非默认的可选依赖）。没装 brotli 时
+   本路径对 woff2 返回 ``None``，由下面两条路径兜底——不是故障，但要知道它生效不了。
 2. **明文对照**（``mapping_from_pairs``）：同一岗位在别处出现过明文薪资——详情页
    主岗位薪资就是明文（``<span class="salary">8-12K</span>``），与列表卡片按标题
    配对后逐位对齐即得映射。每个岗位详情都会新增对照对，采得越多映射越全。
@@ -22,6 +26,7 @@ BOSS 搜索列表的薪资文本（如 "8-12K"）用自定义字体渲染：HTML
 解码接口（``decode_salary``）永远不抛异常：映射缺了就保留原字符并在结果上标
 ``ok=False``，调用方据此决定要不要展示"薪资(未还原)"。
 """
+
 from __future__ import annotations
 
 import base64
@@ -29,9 +34,9 @@ import binascii
 import io
 import logging
 import re
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from itertools import permutations
-from typing import Iterable, Mapping
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +80,7 @@ class SalaryDecode:
 def salary_for_display(decoded: str, raw: str, *, ok: bool) -> str:
     """挑一个能安全展示/入库的薪资文本。
 
-    **未解码（``ok=False``）时绝不回退到混淆原文**：那会把 ``K`` 这类
+    **未解码（``ok=False``）时绝不回退到混淆原文**：那会把 ``\ue032\ue033K`` 这类
     私用区字符直接写进库里，界面上是一串方块，而且比留空更糟——留空至少不骗人。
 
     优先级：解码成功 → 用解码值；否则用 ``raw``（它可能是详情页的明文，也可能与
@@ -244,7 +249,7 @@ def mapping_from_pairs(pairs: Iterable[tuple[str, str]]) -> dict[str, str]:
     for encoded, plain in pairs:
         if not encoded or not plain or len(encoded) != len(plain):
             continue
-        for enc_ch, plain_ch in zip(encoded, plain):
+        for enc_ch, plain_ch in zip(encoded, plain, strict=True):
             if not is_encoded_char(enc_ch):
                 continue
             if not (plain_ch.isdigit() and len(plain_ch) == 1):
@@ -312,9 +317,9 @@ def mapping_from_constraints(
 
     for perm in permutations(free_digits, len(symbols)):
         assign = dict(fixed)
-        assign.update(zip(symbols, perm))
+        assign.update(zip(symbols, perm, strict=True))
         ok = True
-        for (lo, hi), (low, high, max_span) in zip(pairs_list, bounds):
+        for (lo, hi), (low, high, max_span) in zip(pairs_list, bounds, strict=True):
             try:
                 a, b = value(lo, assign), value(hi, assign)
             except ValueError:  # 混淆字符未映射干净（不该发生，防御）
@@ -324,7 +329,7 @@ def mapping_from_constraints(
                 ok = False
                 break
         if ok:
-            for s, d in zip(symbols, perm):
+            for s, d in zip(symbols, perm, strict=True):
                 candidates[s].add(d)
     certain = dict(fixed)
     for s, opts in candidates.items():
