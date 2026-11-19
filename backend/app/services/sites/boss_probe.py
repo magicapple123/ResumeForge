@@ -51,17 +51,24 @@ def scan(values: Iterable[str]) -> tuple[int, set[str], list[str]]:
 
 
 def note_encoded_digits(surface: str, values: Iterable[str], *, url: str = "") -> None:
-    """出现私用区字符时记一条 INFO；没有就什么都不做（这是绝大多数情况）。"""
+    """出现私用区字符时记一条 INFO；没有就什么都不做（这是绝大多数情况）。
+
+    **只记码位，不记原文**：`values` 是抓取到的页面文本，可能夹带岗位名、公司名、
+    薪资等具体内容，原样落盘等于把抓取结果写进日志（CodeQL
+    `py/clear-text-logging-sensitive-data` 就是这么判的）。码位足够定位"哪个区段被打乱"，
+    而排查时本来也不需要看到原文。
+    """
     count, symbols, samples = scan(values)
     if not count:
         return
+    codepoints = " ".join(f"U+{ord(char):04X}" for char in sorted(symbols))
     logger.info(
-        "BOSS %s 出现私用区字符：%d 处 / %d 个符号 %s；样本=%s；url=%s",
+        "BOSS %s 出现私用区字符：%d 处 / %d 个符号 %s；样本数=%d；url=%s",
         surface,
         count,
         len(symbols),
-        "".join(sorted(symbols)),
-        samples,
+        codepoints,
+        len(samples),
         url or "-",
     )
 
