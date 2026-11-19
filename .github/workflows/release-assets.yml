@@ -72,7 +72,11 @@ jobs:
     name: Windows installer (Setup.exe)
     needs: target
     runs-on: windows-latest
-    timeout-minutes: 60
+    # 90 分钟 = 构建与打包约 10 分钟 + 等人工批准的 60 分钟窗口（见
+    # wait-for-completion-timeout-in-seconds）+ 回签、算哈希、上传的余量。
+    # 切到生产证书后每一次签名请求都要 Approver 在 SignPath 后台手工点批准，
+    # 这个 job 会停在提交请求之后等，所以作业超时必须比等待窗口明显更长。
+    timeout-minutes: 90
     # 顶层只写了 contents: write，GitHub 会把没列出来的权限一律清零。SignPath 的
     # action 要通过 GitHub API 回读本次 run 的 artifact（origin verification 的
     # 依据），所以这里必须显式补上 actions: read，否则运行时 403。
@@ -197,11 +201,13 @@ jobs:
           artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
           github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
           wait-for-completion: true
-          # 默认等待上限是 600 秒（10 分钟），从请求提交起算。但 SignPath Foundation
-          # 要求每一次签名请求都由 Approver 在后台手工批准，人还没来得及点就已经超时，
-          # 表现是「莫名其妙的超时」而不是可操作的错误。放到 1800 秒（仍在 job 的
-          # 60 分钟 timeout 之内），留出足够的人工批准窗口。
-          wait-for-completion-timeout-in-seconds: 1800
+          # 默认等待上限是 600 秒（10 分钟），从请求提交起算，对人工审批远远不够。
+          # SignPath Foundation 要求每一次签名请求都由 Approver 在后台手工批准
+          # （生产证书尤其如此），人还没来得及点就超时，表现是「莫名其妙的超时」
+          # 而不是可操作的错误。这里给到 3600 秒（1 小时）：够你收到通知再打开后台，
+          # 而不必守着触发按钮。job 的 timeout-minutes 相应提到 90 分钟，否则作业
+          # 会先于等待窗口被砍掉，报错会指向「作业超时」而不是「审批没点」。
+          wait-for-completion-timeout-in-seconds: 3600
           output-artifact-directory: desktop/out/signed
 
       # 这一步产出的正是要回信给 SignPath 的两个链接，所以紧跟在提交之后：
