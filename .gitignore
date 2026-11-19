@@ -98,6 +98,10 @@ mokahr_apply_controls.json
 desktop/payload/
 desktop/out/
 desktop/python-runtime.zip
+# `Build-PythonRuntime.ps1` 解压嵌入版 Python 的暂存目录（实测 32 MB）。
+# 它只是打包中间产物：漏了这条会以"未跟踪文件"身份躺在工作区里，很容易被
+# `git add -A` 一把带进仓库。
+desktop/runtime-staging/
 
 # 评审截图（本地证据，不进仓库）：每次改界面会用 Playwright 截一组，
 # 体积 1–2 MB/批且与发布产物无关，入库只会让 clone 变慢。
