@@ -1,36 +1,52 @@
 // SPDX-License-Identifier: Apache-2.0
 "use strict";
 
-// 托盘菜单（问题清单 §18.2-C 的恢复入口 + §19 保持原生 Menu）。
+// 托盘（§18.2-C 的恢复入口 + §19 的常驻形态）。
 //
-// 托盘必须是原生 Menu（React 画不出来），所以它和标题栏的 React 菜单是**两套**，
-// 但决策只有一处：菜单结构按 getRemembered() 现算，"勾上即清掉记忆"由
-// close-behavior 的 clearRemembered 完成，这里只负责重建菜单让勾选态回到真相。
+// 2026-11-20 起托盘右键菜单是**自绘**的（`desktop/tray-menu.html` +
+// `lib/tray-menu-window.js`）：原生 Menu 的内边距/勾选列/行高 Electron 完全不暴露，
+// 菜单项左端被一条永久预留的勾选列推开、卡片整体过宽。所以这里只产出**纯数据模型**
+// —— `buildMenuModel()` 返回 `[{ id, type, label, checked?, danger?, disabled? }]`，
+// HTML 渲染与离线用例吃同一份数据，不必启动 Electron。
 //
-// 文案跟随应用内语言（lib/shell-locale.js）：模板每次构造时按 getLocale() 现查表，
-// 语言切换时重建一次菜单即可（main.js 的 desktop:set-locale 处理器调用 refresh，
-// tooltip 与菜单项在同一次重建里一起换）。
+// 决策仍只有一处：模型按 `getAsk()` 现算（"关闭窗口时询问"从此是真开关，不再
+// 反射"有没有记住关闭行为"）；动作交给 `choose(id)`，它和标题栏菜单走同一条
+// `runMenuAction` 分发链路。
 //
-// 模板构造函数是纯函数（不 new Tray），离线用例可以只断言结构与点击行为。
+// 文案跟随应用内语言（lib/shell-locale.js）：模型每次打开时按 `getLocale()` 现查表，
+// 所以切换语言后**不需要**重建任何东西 —— 下次打开自然就是新语言。
+//
+// 本模块不 require("electron")，用例可以直接构造假 Tray。
 
+const path = require("node:path");
 const { t } = require("./shell-locale");
 
 /**
  * 托盘新增的四项（Q11）：**不重写实现**，全部走 `registerDesktopShellIpc` 返回的
- * `menu.run(id)`——那是渲染层菜单的同一条链路，动作 id 也就必须是它认的那些。
+ * 动作分发器 `run(id)`——那是渲染层菜单的同一条链路，动作 id 也就必须是它认的那些。
  *
  * 「检查更新」特殊：现有链路把结果交回渲染层的「关于」弹窗，托盘侧没有消费者。
  * 所以先 `showWindow()` 把主窗口唤到前台再走既有流程，否则用户点了像没反应。
  *
- * 这里只存用途键：翻译只能在构造模板时求值（模块作用域求值会锁死语言）。
+ * `id` 直接用动作 id：模型、HTML 回执、`choose()` 三处的键因此不可能漂移。
  */
 const TRAY_ACTION_ITEMS = [
-  { labelKey: "tray.openDataDir", action: "file.openDataDir" },
-  { labelKey: "tray.openLogDir", action: "help.openLogDir" },
-  { labelKey: "tray.diagnostics", action: "help.getDiagnostics" },
+  { id: "file.openDataDir", labelKey: "tray.openDataDir" },
+  { id: "help.openLogDir", labelKey: "tray.openLogDir" },
+  { id: "help.getDiagnostics", labelKey: "tray.diagnostics" },
   // `focusWindow: true` 的项＝结果要在界面上看，必须先唤起窗口。
-  { labelKey: "tray.checkUpdate", action: "help.checkUpdate", focusWindow: true },
+  { id: "help.checkUpdate", labelKey: "tray.checkUpdate", focusWindow: true },
 ];
+
+/** 模型里的固定 id（HTML 与用例都按它认项，改名字要一起改）。 */
+const MENU_IDS = {
+  open: "open",
+  askOnClose: "askOnClose",
+  quit: "quit",
+  actionsSeparator: "separator-actions",
+  askSeparator: "separator-ask",
+  quitSeparator: "separator-quit",
+};
 
 /**
  * 当前语言下的托盘文案（菜单项 + tooltip）。
@@ -59,140 +75,99 @@ function currentLocale(deps) {
 }
 
 /**
- * 构造托盘菜单模板。
+ * 托盘图标（多尺寸 ICO，16/20/24/32/48/64 帧）。
+ *
+ * 打包态读 extraResources 的那一份（Tray 读 asar 内的 ICO 不可靠），开发态读 desktop/
+ * 根。图标**固定**这一枚浅色版：不再随任务栏明暗换图（2026-11-20 用户决定）。
  *
  * @param {object} deps
- * @param {function(): (object|null)} deps.getWindow 当前主窗口
- * @param {object} deps.app Electron app（退出只发 app.quit()）
- * @param {function(): (string|null)} deps.getRemembered 当前"记住的关闭行为"
- * @param {function(): void} deps.clearRemembered 清掉记忆（恢复每次询问）
- * @param {function(): void} deps.refresh 重建托盘菜单
- * @param {function(): ("zh" | "en")} [deps.getLocale] 当前壳层语言
- * @param {function(string): void} [deps.runMenuAction] 走注册好的菜单动作分发器
+ * @param {object} deps.app Electron app（isPackaged）
+ * @param {string} deps.dirname 开发态 desktop/ 目录
+ * @param {function(): string} [deps.resourcesPath] 打包态 resources 目录
  */
-function buildTrayTemplate(deps) {
-  const { getWindow, app, getRemembered, clearRemembered, refresh, runMenuAction } = deps;
-  const labels = trayLabelsFor(currentLocale(deps));
+function resolveTrayIconPath(deps) {
+  const { app, dirname, resourcesPath = () => process.resourcesPath } = deps;
+  return app && app.isPackaged
+    ? path.join(resourcesPath(), "tray.ico")
+    : path.join(dirname, "tray.ico");
+}
 
-  const showWindow = () => {
-    const win = getWindow();
-    if (!win) return;
-    try {
-      win.show();
-      win.focus();
-    } catch {
-      // 窗口已销毁（退出流程中）：恢复动作静默失败即可。
-    }
-  };
-
-  const actionItems =
-    typeof runMenuAction === "function"
-      ? TRAY_ACTION_ITEMS.map((item) => ({
-          label: t(currentLocale(deps), item.labelKey),
-          click: () => {
-            if (item.focusWindow) showWindow();
-            runMenuAction(item.action);
-          },
-        }))
-      : [];
+/**
+ * 托盘菜单模型（纯数据，可直接喂给 `tray-menu.html`）。
+ *
+ * @param {object} deps
+ * @param {function(): boolean} [deps.getAsk] 「关闭窗口时询问」当前开关
+ * @param {function(): ("zh" | "en")} [deps.getLocale] 当前壳层语言
+ * @param {function(string): void} [deps.runMenuAction] 动作分发器是否存在
+ *   （缺失时四项标 `disabled`，而不是从模型里消失——菜单高度不会跳）
+ * @returns {Array<{id: string, type: "item" | "separator", label?: string,
+ *   checked?: boolean, danger?: boolean, disabled?: boolean}>}
+ */
+function buildMenuModel(deps = {}) {
+  const locale = currentLocale(deps);
+  const labels = trayLabelsFor(locale);
+  const actionsAvailable = typeof deps.runMenuAction === "function";
+  const ask = typeof deps.getAsk === "function" ? deps.getAsk() : true;
 
   return [
-    { label: labels.open, click: showWindow },
-    ...(actionItems.length > 0 ? [{ type: "separator" }, ...actionItems] : []),
-    { type: "separator" },
-    {
-      label: labels.askOnClose,
-      type: "checkbox",
-      // 状态取自"没有记忆"：有记忆时 unchecked，点一下（勾上）即清掉记忆恢复询问。
-      checked: !getRemembered(),
-      click: (item) => {
-        if (item && item.checked) {
-          // clearRemembered 在 main.js 里会触发 onPreferenceChanged -> refresh，
-          // 这里不再重建一次（否则每点一下刷两次菜单）。
-          clearRemembered();
-          return;
-        }
-        // 取消勾选没有可执行语义（记一个"不询问"等于替用户做决定）：重建菜单
-        // 让勾选态回到"是否已记住"，而不是停在用户刚点出来的假状态。
-        refresh();
-      },
-    },
-    { type: "separator" },
-    {
-      label: labels.quit,
-      click: () => {
-        // 不在这里短路 quitting：app.quit() 触发 before-quit，唯一停止点在那里
-        //（审计 PR-05：继续遵守"托盘退出不走捷径"的既有约定）。
-        app.quit();
-      },
-    },
+    { id: MENU_IDS.open, type: "item", label: labels.open },
+    { id: MENU_IDS.actionsSeparator, type: "separator" },
+    ...TRAY_ACTION_ITEMS.map((item) => ({
+      id: item.id,
+      type: "item",
+      label: t(locale, item.labelKey),
+      disabled: !actionsAvailable,
+    })),
+    { id: MENU_IDS.askSeparator, type: "separator" },
+    { id: MENU_IDS.askOnClose, type: "item", label: labels.askOnClose, checked: Boolean(ask) },
+    { id: MENU_IDS.quitSeparator, type: "separator" },
+    { id: MENU_IDS.quit, type: "item", label: labels.quit, danger: true },
   ];
 }
 
 /**
- * 托盘生命周期（创建 / 重建 / 销毁 / 换图）。
+ * 托盘生命周期（创建 / 刷新 tooltip / 右键打开自绘菜单 / 销毁）。
  *
  * @param {object} deps
  * @param {function(string): object} deps.Tray Electron Tray 构造器
- * @param {object} deps.Menu Electron Menu（buildFromTemplate）
- * @param {string} deps.iconPath 托盘图标（窗口图标同源）
- * @param {string} [deps.darkIconPath] 暗色主题下的托盘图标（tray-dark.ico）
- * @param {function(): boolean} [deps.getIsDark] 创建时该用哪一枚（见 main.js 的
- *   trayIsDark：兜底开关优先，其次应用内主题）
- * @param {object} deps.app Electron app
+ * @param {string} deps.iconPath 托盘图标（`resolveTrayIconPath` 的结果，固定浅色版）
+ * @param {object} deps.app Electron app（退出只发 app.quit()）
  * @param {function(): (object|null)} deps.getWindow
- * @param {function(): (string|null)} deps.getRemembered
- * @param {function(): void} deps.clearRemembered
+ * @param {function(): boolean} [deps.getAsk] 「关闭窗口时询问」
+ * @param {function(boolean): void} [deps.setAsk] 写开关（勾选/取消勾选）
+ * @param {function(string): void} [deps.runMenuAction] 动作分发器
+ * @param {function({model: Array, anchor: object|null}): void} [deps.openMenu]
+ *   打开自绘菜单（lib/tray-menu-window.js）；缺失时右键不做任何事
  * @param {function(): ("zh" | "en")} [deps.getLocale] 当前壳层语言
- * @param {function(string): void} [deps.runMenuAction]
  * @param {function(string): void} [deps.logLine]
  */
 function createTrayManager(deps) {
-  const { Tray, Menu, iconPath, darkIconPath, app, getWindow, getRemembered, clearRemembered } = deps;
-  const { runMenuAction, logLine = () => {}, getIsDark = () => false } = deps;
+  const {
+    Tray,
+    iconPath,
+    app,
+    getWindow,
+    getAsk = () => true,
+    setAsk = () => {},
+    runMenuAction,
+    openMenu,
+    getLocale,
+    logLine = () => {},
+  } = deps;
   let tray = null;
-  let isDark = false;
 
-  function iconFor(dark) {
-    // 暗色图缺失（旧包 / 开发目录被清过）时退回彩色图标：托盘不能因此变空白。
-    return dark && darkIconPath ? darkIconPath : iconPath;
+  function model() {
+    return buildMenuModel({ getAsk, getLocale, runMenuAction });
   }
 
   /**
-   * 换图标（WF-20）。同一状态重复调用直接返回：托盘 setImage 会让 Windows 重建
-   * 通知区图标，主题没变时没必要闪一下。
+   * 刷新：只同步 tooltip。
+   *
+   * 菜单**不再**在 `refresh()` 里重建 —— 模型是打开那一刻现算的（语言切换 / 勾选
+   * 变化都自然生效），这也正是"取消勾选不再是假动作"的前提。
    */
-  function setTheme(dark) {
-    const next = Boolean(dark);
-    if (!tray || next === isDark) return;
-    isDark = next;
-    try {
-      tray.setImage(iconFor(next));
-    } catch (err) {
-      logLine(`tray: setImage failed: ${err}`);
-    }
-  }
-
-  /** 重建菜单并同步 tooltip：语言切换与勾选态变化都走这里，保证两者永远同源。 */
   function refresh() {
     if (!tray) return;
-    try {
-      tray.setContextMenu(
-        Menu.buildFromTemplate(
-          buildTrayTemplate({
-            getWindow,
-            app,
-            getRemembered,
-            clearRemembered,
-            refresh,
-            runMenuAction,
-            getLocale: () => currentLocale(deps),
-          }),
-        ),
-      );
-    } catch (err) {
-      logLine(`tray: rebuild menu failed: ${err}`);
-    }
     try {
       tray.setToolTip(t(currentLocale(deps), "tray.tooltip"));
     } catch {
@@ -207,17 +182,68 @@ function createTrayManager(deps) {
       win.show();
       win.focus();
     } catch {
-      // 同 buildTrayTemplate.showWindow。
+      // 窗口已销毁（退出流程中）：恢复动作静默失败即可。
     }
   }
 
+  function trayBounds() {
+    try {
+      return tray && typeof tray.getBounds === "function" ? tray.getBounds() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** 右键：打开自绘菜单（模型在这一刻生成）。 */
+  function openContextMenu() {
+    if (typeof openMenu !== "function") {
+      logLine("tray: menu window unavailable");
+      return;
+    }
+    try {
+      openMenu({ model: model(), anchor: trayBounds() });
+    } catch (err) {
+      logLine(`tray: open menu failed: ${err}`);
+    }
+  }
+
+  /**
+   * 执行模型里的一项（HTML 回执走这里，用例也直接调它）。
+   *
+   * 勾选项在**主进程**翻转：渲染层只负责把"用户点了这一项"报上来，状态真相
+   * 永远是 close-behavior 的那份 preference，避免"看起来勾上了、关窗还在问"。
+   */
+  function choose(id) {
+    if (id === MENU_IDS.open) {
+      showWindow();
+      return;
+    }
+    if (id === MENU_IDS.askOnClose) {
+      setAsk(!getAsk());
+      refresh();
+      return;
+    }
+    if (id === MENU_IDS.quit) {
+      // 不在这里短路 quitting：app.quit() 触发 before-quit，唯一停止点在那里
+      //（审计 PR-05：继续遵守"托盘退出不走捷径"的既有约定）。
+      app.quit();
+      return;
+    }
+    const item = TRAY_ACTION_ITEMS.find((entry) => entry.id === id);
+    if (!item) {
+      logLine(`tray: unknown menu id: ${id}`);
+      return;
+    }
+    if (item.focusWindow) showWindow();
+    if (typeof runMenuAction === "function") runMenuAction(item.id);
+  }
+
   function create() {
-    // 创建时就要用对主题：先按主进程当前判定落图标，再建菜单。
-    isDark = Boolean(getIsDark());
-    tray = new Tray(iconFor(isDark));
+    tray = new Tray(iconPath);
     refresh();
-    // 左键也唤起窗口（Windows 惯例）。
+    // 左键唤起窗口（Windows 惯例），右键出自绘菜单。
     tray.on("click", showWindow);
+    tray.on("right-click", openContextMenu);
   }
 
   function destroy() {
@@ -230,7 +256,22 @@ function createTrayManager(deps) {
     tray = null;
   }
 
-  return { create, refresh, destroy, setTheme, getTray: () => tray };
+  return {
+    create,
+    refresh,
+    destroy,
+    choose,
+    getMenuModel: model,
+    openContextMenu,
+    getTray: () => tray,
+  };
 }
 
-module.exports = { TRAY_ACTION_ITEMS, buildTrayTemplate, createTrayManager, trayLabelsFor };
+module.exports = {
+  MENU_IDS,
+  TRAY_ACTION_ITEMS,
+  buildMenuModel,
+  createTrayManager,
+  resolveTrayIconPath,
+  trayLabelsFor,
+};

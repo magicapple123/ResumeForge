@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 "use strict";
 
-// lib/shell-theme.js 的离线用例（WF-20）。
+// lib/shell-theme.js 的离线用例（WF-20 → 2026-11-20 收敛）。
 //
-// 验收要求覆盖"应用内浅/深 × 系统浅/深"四种组合与兜底开关的开/关——这四组组合在
-// 真机上要靠改系统设置才能复现，所以这里把它们钉成纯逻辑断言，再用一张真机截图补
-// "图标确实换过去了"的观感证据。
+// 契约变了：托盘图标**固定一枚浅色版**，不再随应用内主题 / 系统主题换图。
+// 所以这里不再有"浅/深组合矩阵"，改为断言：
+//   1. shell-theme 根本不持有托盘句柄，也就没有 setTheme / setImage 可调用；
+//   2. `nativeTheme.on("updated")` 这条订阅仍在（它驱动"应用内主题跟随系统"）；
+//   3. 图标路径：窗口图标走 resources/ 或 desktop/，托盘图标固定是 tray.ico。
 
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { test } = require("node:test");
 
 const { createShellTheme } = require("../lib/shell-theme");
+const { resolveTrayIconPath } = require("../lib/tray-menu");
 
 /** 假 nativeTheme：可改 shouldUseDarkColors，并能触发 updated 订阅。 */
 function fakeNativeTheme(dark) {
@@ -32,17 +35,6 @@ function fakeNativeTheme(dark) {
   return theme;
 }
 
-/** 假托盘：只记录每次 setImage 换算后的"暗色与否"。 */
-function fakeTray() {
-  const calls = [];
-  return {
-    calls,
-    setTheme(isDark) {
-      calls.push(isDark);
-    },
-  };
-}
-
 function makeTheme({ systemDark = false, packaged = false } = {}) {
   const nativeTheme = fakeNativeTheme(systemDark);
   const shellTheme = createShellTheme({
@@ -52,7 +44,7 @@ function makeTheme({ systemDark = false, packaged = false } = {}) {
     resourcesPath: () => "D:/apps/resources",
     logLine: () => {},
   });
-  return { nativeTheme, shellTheme, tray: fakeTray() };
+  return { nativeTheme, shellTheme };
 }
 
 test("splash 首帧只看系统主题（此时还没有应用内主题）", () => {
@@ -62,74 +54,54 @@ test("splash 首帧只看系统主题（此时还没有应用内主题）", () =
   assert.equal(dark.shellTheme.splashTheme(), "dark");
 });
 
-test("默认托盘跟应用内主题：应用内深色时用**浅色**图标", () => {
-  // 契约 2026-11-20 反转：图标按**托盘底色的明暗**选，不按"应用主题叫 dark"。
-  // 深色界面 → 深色任务栏 → 要浅色图；原来映射反了，暗色模式下托盘图标发闷（真机反馈）。
-  const { shellTheme, tray, nativeTheme } = makeTheme({ systemDark: false });
-  shellTheme.attachTray(tray);
-  shellTheme.setAppTheme("dark");
-  assert.deepEqual(tray.calls.at(-1), false, "应用内暗色 → 浅色托盘图标");
-  assert.equal(shellTheme.isFollowingSystem(), false);
-  assert.equal(nativeTheme.shouldUseDarkColors, false);
-});
-
-test("兜底开关打开后托盘忽略应用内主题，只跟系统", () => {
-  const { shellTheme, tray, nativeTheme } = makeTheme({ systemDark: false });
-  shellTheme.attachTray(tray);
-  shellTheme.setAppTheme("dark");
-  shellTheme.setFollowSystem(true);
-  assert.equal(tray.calls.at(-1), true, "系统浅色 → 深色图标（即使应用内是暗色）");
-
-  // 系统切换要立刻反映（这是开关存在的意义）。
-  nativeTheme.setDark(true);
-  assert.equal(tray.calls.at(-1), false, "系统深色 → 浅色图标");
-
-  // 关掉开关 → 回到应用内主题（暗色 → 浅色图标）。
-  shellTheme.setFollowSystem(false);
-  assert.equal(shellTheme.isFollowingSystem(), false);
-  assert.equal(tray.calls.at(-1), false);
-});
-
-test("四种组合的最终图标（应用内浅/深 × 系统浅/深）", () => {
-  const cases = [
-    // dark = "用深色图" = 底色是浅的
-    { app: "light", system: false, follow: false, dark: true },
-    { app: "dark", system: false, follow: false, dark: false },
-    { app: "light", system: true, follow: false, dark: true },
-    { app: "dark", system: true, follow: false, dark: false },
-    { app: "light", system: false, follow: true, dark: true },
-    { app: "dark", system: false, follow: true, dark: true },
-    { app: "light", system: true, follow: true, dark: false },
-    { app: "dark", system: true, follow: true, dark: false },
-  ];
-  for (const item of cases) {
-    const { shellTheme, tray } = makeTheme({ systemDark: item.system });
-    shellTheme.attachTray(tray);
-    shellTheme.setAppTheme(item.app);
-    shellTheme.setFollowSystem(item.follow);
-    assert.equal(
-      shellTheme.trayIsDark(),
-      item.dark,
-      `app=${item.app} system=${item.system ? "dark" : "light"} follow=${item.follow}`,
-    );
+test("托盘图标固定：主题与兜底开关都不再换图，托盘相关 API 已删除", () => {
+  const { shellTheme, nativeTheme } = makeTheme({ systemDark: false });
+  // 2026-11-20 决定：永远只用浅色那一枚（浅色任务栏下对比低也接受）。
+  // 换图链路（trayIsDark → applyTray → tray.setTheme → iconFor）整体删除，
+  // 断言这些入口不存在，防止有人照着旧注释加回来。
+  for (const name of ["attachTray", "trayIsDark", "applyTray", "trayIconPath"]) {
+    assert.equal(shellTheme[name], undefined, `${name} 必须已删除`);
   }
+  // 主题上报与兜底开关仍然要能接收（IPC 会推），只是不再影响图标。
+  assert.doesNotThrow(() => shellTheme.setAppTheme("dark"));
+  assert.doesNotThrow(() => shellTheme.setFollowSystem(true));
+  assert.equal(shellTheme.isFollowingSystem(), true);
+  nativeTheme.setDark(true);
+  assert.doesNotThrow(() => shellTheme.onNativeThemeUpdated());
+  assert.doesNotThrow(() => shellTheme.setAppTheme("light"));
+  assert.doesNotThrow(() => shellTheme.setFollowSystem(false));
+  assert.equal(shellTheme.isFollowingSystem(), false);
 });
 
-test("托盘尚未创建时切换主题不报错（启动早期）", () => {
+test("nativeTheme.on(\"updated\") 仍被订阅（应用内主题跟随系统的触发点）", () => {
+  const { nativeTheme, shellTheme } = makeTheme({ systemDark: false });
+  shellTheme.setFollowSystem(true);
+  // 订阅存在 = 系统切换会走到 onNativeThemeUpdated；不抛错即可（托盘已不参与）。
+  assert.doesNotThrow(() => nativeTheme.setDark(true));
+  assert.doesNotThrow(() => nativeTheme.setDark(false));
+});
+
+test("托盘尚未创建 / 缺少 nativeTheme 时切换主题不报错（启动早期）", () => {
   const { shellTheme } = makeTheme({ systemDark: true });
   assert.doesNotThrow(() => shellTheme.setAppTheme("light"));
   assert.doesNotThrow(() => shellTheme.setFollowSystem(true));
+  const bare = createShellTheme({ app: { isPackaged: false }, dirname: "D:/apps/desktop" });
+  assert.equal(bare.splashTheme(), "light");
+  assert.doesNotThrow(() => bare.onNativeThemeUpdated());
 });
 
-test("图标路径：打包态读 resources/，开发态读 desktop/", () => {
+test("图标路径：窗口图标读 resources/ 或 desktop/，托盘固定 tray.ico", () => {
   const packaged = makeTheme({ packaged: true });
-  assert.equal(
-    packaged.shellTheme.trayIconPath(),
-    path.join("D:/apps/resources", "tray-dark.ico"),
-  );
   assert.equal(packaged.shellTheme.windowIconPath(), path.join("D:/apps/resources", "icon.png"));
+  assert.equal(
+    resolveTrayIconPath({ app: { isPackaged: true }, dirname: "D:/apps/desktop", resourcesPath: () => "D:/apps/resources" }),
+    path.join("D:/apps/resources", "tray.ico"),
+  );
 
   const dev = makeTheme({ packaged: false });
-  assert.equal(dev.shellTheme.trayIconPath(), path.join("D:/apps/desktop", "tray-dark.ico"));
   assert.equal(dev.shellTheme.windowIconPath(), path.join("D:/apps/desktop", "icon.png"));
+  assert.equal(
+    resolveTrayIconPath({ app: { isPackaged: false }, dirname: "D:/apps/desktop" }),
+    path.join("D:/apps/desktop", "tray.ico"),
+  );
 });

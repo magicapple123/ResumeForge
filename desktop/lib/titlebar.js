@@ -7,10 +7,11 @@
 //
 // 三条硬约束：
 //   1. 三颗窗口按钮由系统绘制（titleBarStyle: "hidden" + titleBarOverlay），不自己画；
-//      标题栏覆盖层颜色必须与应用自绘标题栏背景逐值一致，否则深浅色下都会出现色块；
+//      覆盖层**不画底色**（透明），标题栏背景由页面 CSS 负责 —— 否则覆盖层会盖掉
+//      页面标题栏的下边框，并在遮罩下露出一块不变暗的亮板；
 //   2. macOS 的红绿灯在左上角：只给 trafficLightPosition，不给 overlay（overlay 仅
 //      win32/linux 支持），React 侧给菜单区加左内边距；
-//   3. 主题切换时主进程要同步 setTitleBarOverlay，否则深色界面顶着浅色按钮条。
+//   3. 主题切换时主进程要同步 setTitleBarOverlay，否则深色界面顶着浅色按钮图标。
 
 /** 自绘标题栏高度（与 React 侧 CSS / WCO overlay 高度必须同值）。 */
 const TITLEBAR_HEIGHT = 32;
@@ -35,8 +36,14 @@ function titleBarFallbackCss(height = TITLEBAR_HEIGHT) {
 }
 
 /**
- * 标题栏覆盖层配色：与应用 CSS 的 `--rf-titlebar-bg` 逐值一致（浅 #f5f7fa / 深 #151b23）。
- * symbolColor 取对应主题的正文色系，保证最小化/最大化/关闭图标在两种底色上都清晰。
+ * 标题栏覆盖层配色：**不画底色**（`color` 透明，2026-11-20 决定）。
+ *
+ * 曾经要求"覆盖层 `color` 与 CSS `--rf-titlebar-bg` 逐值一致"，但 Windows 的
+ * titleBarOverlay 是画在页面**之上**的一块不透明矩形：它会盖掉 `.app-titlebar` 自己的
+ * 1px 下边框，页面被遮罩/抽屉投影压暗时那块也不跟着暗，三颗按钮看起来像浮在亮板上。
+ * 透明之后底色完全由页面标题栏负责（那条逐值一致的约束随之作废，不要再加回来）。
+ *
+ * `symbolColor` 保留：图标/悬停态由系统画，必须自己保证在任意底色上可读。
  */
 const TITLEBAR_THEME = {
   light: { color: "#f5f7fa", symbolColor: "#3d4a5c" },
@@ -48,7 +55,7 @@ function normalizeTheme(theme) {
   return theme === "dark" ? "dark" : "light";
 }
 
-/** 覆盖层选项：颜色随主题，高度恒为 32px（不再跟随系统标题栏高度）。 */
+/** 覆盖层选项：color 恒为全透明（底色由页面标题栏负责），只有 symbolColor 随主题。 */
 function titleBarOverlayFor(theme) {
   const colors = TITLEBAR_THEME[normalizeTheme(theme)];
   return { color: colors.color, symbolColor: colors.symbolColor, height: TITLEBAR_HEIGHT };

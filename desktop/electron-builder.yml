@@ -50,8 +50,13 @@ files:
   # 「帮助 → 复制诊断信息」（#34D）的日志侧：desktop-shell-ipc.js 顶层 require 它，
   # 漏打包会让这个菜单项在安装版里抛 MODULE_NOT_FOUND（同 updater.js 当年那类事故）。
   - lib/diagnostic-summary.js
-  # 托盘菜单（§18 的「关闭窗口时询问」恢复入口，§19 保持原生 Menu）。
+  # 托盘菜单（§18 的「关闭窗口时询问」恢复入口）。2026-11-20 起右键菜单是**自绘**的：
+  # 模型在 lib/tray-menu.js，窗口壳在 lib/tray-menu-window.js，页面与 preload 与
+  # main.js 同层（asar 根）。这四个漏一个 = 右键托盘没反应或白框。
   - lib/tray-menu.js
+  - lib/tray-menu-window.js
+  - tray-menu.html
+  - tray-menu-preload.js
   # 媒体权限（麦克风）：语音输入在桌面壳里要用它，策略与理由见该文件；main.js 一行 require。
   - lib/media-permissions.js
   # 标题栏 IPC 注册与发送方校验（§19）：main.js 顶层 require。
@@ -77,8 +82,8 @@ files:
   - lib/window-state.js
   # 启动页最短可见 1.0s（T05）：main.js 顶层 require，漏打包 = 安装版启动即崩。
   - lib/splash-timing.js
-  # 托盘图标跟随系统主题（WF-20）：tray-menu.js 顶层 require 它取深浅两套 ICO，
-  # 漏打包会让托盘装配抛 MODULE_NOT_FOUND（守卫 tests/test_desktop_asar_deps_check.py 抓到的就是这条）。
+  # 壳层主题裁决（splash 主题 / 窗口图标）：main.js 顶层 require，漏打包 =
+  # 安装版启动即崩（守卫 tests/test_desktop_asar_deps_check.py 抓到过这条）。
   - lib/shell-theme.js
   # 开机自启的应用内开关（WF-08）：desktop-shell-ipc.js 的 deps 由 main.js 注入它，
   # 漏打包 = 设置卡永远"不支持"，守卫 scripts/check-asar-deps.js 会拦。
@@ -124,10 +129,11 @@ extraResources:
     to: payload
   - from: icon.png
     to: icon.png
-  # 暗色托盘图标（WF-20）。和 icon.png 一样放 resources/：main.js 在打包态按
-  # process.resourcesPath 取它（Tray 读 asar 内的 ICO 不可靠）。
-  - from: tray-dark.ico
-    to: tray-dark.ico
+  # 托盘图标（2026-11-20）：多尺寸 tray.ico（16/20/24/32/48/64），内容 = icon.png 的
+  # 浅色版。**固定只这一枚**，不再按任务栏明暗换图。和 icon.png 一样放 resources/：
+  # 打包态按 process.resourcesPath 取它（Tray 读 asar 内的 ICO 不可靠）。
+  - from: tray.ico
+    to: tray.ico
   # ⚠️ icon-intro.svg **不能**放这里。electron-builder 会把 extraResources 的匹配项
   # 当成 app 文件的排除项（platformPackager.js 的 excludePatterns），结果就是
   # files: 里那一行被静默吃掉、asar 里没有这个文件，而 splash.html 在 asar 根目录，

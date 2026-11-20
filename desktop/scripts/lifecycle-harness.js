@@ -109,7 +109,9 @@ function loadMain(options = {}) {
       // Q11：自绘关闭卡片是**无边框子窗口**（frame:false + parent）。用例不真的跑
       // 那个 HTML，而是在 loadURL 之后按 state 里预设的选择替用户点一下。
       this.options = options ?? {};
-      this.isCloseDialog = this.options.frame === false;
+      // 关闭卡片：无边框 + 带父窗口的模态子窗。托盘右键菜单也是 frame:false，
+      // 但它没有 parent（且是透明置顶窗），所以这里必须一起判 parent。
+      this.isCloseDialog = this.options.frame === false && Boolean(this.options.parent);
       if (this.isCloseDialog) events.closeDialogPrompts.push({ parent: this.options.parent });
       this.webContents = {
         send: (channel, payload) => {
@@ -235,24 +237,20 @@ function loadMain(options = {}) {
     restore() {}
   }
 
-  const menuHolder = {};
+  // 托盘：右键菜单自绘后没有原生模板可读，菜单内容改由 trayManager.getMenuModel() 观测。
   class TrayStub {
     setToolTip(tooltip) {
       this.toolTip = tooltip;
       events.trayToolTips.push(tooltip);
     }
-    setContextMenu(menu) {
-      menuHolder.menu = menu;
-      menuHolder.setCount = (menuHolder.setCount ?? 0) + 1;
+    on(name, handler) {
+      events.trayHandlers = this.handlers = Object.assign(this.handlers || {}, { [name]: handler });
     }
-    on() {}
-    destroy() {
-      events.trayDestroyed = true;
-    }
+    getBounds() { return { x: 1880, y: 1020, width: 24, height: 24 }; }
+    destroy() { events.trayDestroyed = true; }
   }
-  const MenuStub = {
-    buildFromTemplate: (template) => ({ template }),
-  };
+  // 自绘菜单不再用原生 Menu：误用 buildFromTemplate 直接抛，别静默回到旧实现。
+  const MenuStub = { buildFromTemplate: () => { throw new Error("native tray menu is gone"); } };
 
   // 「启动失败」的用例把 state.startBackend 设成一个抛错的函数，start() 就失败——
   // 这是唯一不需要真的起后端就能走到 whenReady catch 的办法。
@@ -433,6 +431,7 @@ function loadMain(options = {}) {
               workArea: { x: 0, y: 0, width: 1920, height: 1040 },
               workAreaSize: { width: 1920, height: 1040 },
             }),
+            getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1040 } }),
             getAllDisplays: () => [{ workArea: { x: 0, y: 0, width: 1920, height: 1040 } }],
           },
           shell: shellStub,
@@ -467,8 +466,8 @@ function loadMain(options = {}) {
   return {
     events,
     appStub,
-    menuHolder,
     backendInstances,
+    trayManager: sandbox.module.exports.trayManager, // 菜单模型 / 点击都从它走
     // 启动失败的可操作对话框用例要读窗口上的 close 处理器。
     windowInstances: browserWindowInstances,
     exports: sandbox.module.exports,
@@ -490,7 +489,7 @@ async function waitForShellReady(loaded) {
   // The whenReady handler is async: window + tray + backend start.
   await flush();
   await flush();
-  assert.ok(loaded.menuHolder.menu, "tray menu should have been created");
+  assert.ok(loaded.events.trayToolTips.length >= 1, "tray should have been created");
   assert.ok(loaded.backendInstances.length >= 1, "backend should have been created");
 }
 

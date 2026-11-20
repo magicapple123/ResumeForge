@@ -19,16 +19,12 @@
 // the window or sets quitting before app.quit(). Window chrome (self-drawn
 // 32px title bar + WCO buttons) lives in lib/titlebar.js + lib/tray-menu.js.
 
-const { app, BrowserWindow, Tray, Menu, clipboard, dialog, ipcMain, nativeTheme, screen, session, shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, Tray, clipboard, dialog, ipcMain, nativeTheme, screen, session, shell, systemPreferences } = require("electron");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
 const { createShellLogging, announceDegradedOnReady } = require("./lib/preflight");
 const { linuxRuntimeDir, resolveLogDir } = require("./lib/shell-paths");
-const {
-  clampToWorkArea,
-  createWindowStateStore,
-  initialBounds,
-} = require("./lib/window-state");
+const { clampToWorkArea, createWindowStateStore, initialBounds } = require("./lib/window-state");
 const { createQuitLifecycle } = require("./lib/quit-lifecycle");
 // 桌面自绘标题栏 / 托盘 / 关闭行为 / 启动失败出口（§18 §19）：决策都在 lib/ 下，
 // 本文件只保留装配与 Electron 事件注册，500 行预算不会被这些分支吃光。
@@ -169,19 +165,18 @@ const promptClose = createClosePrompt({
   getShellLocale: () => shellLocaleRuntime.getLocale(),
   logLine,
 });
-let desktopShellMenu = null;
+let desktopShellIpc = null;
 const { closeBehavior, trayManager } = createWindowShell({
-  app, Tray, Menu, iconPath: shellTheme.windowIconPath(), clipboard,
-  darkIconPath: shellTheme.trayIconPath(), getIsDark: shellTheme.trayIsDark, promptClose,
+  app, Tray, BrowserWindow, ipcMain, screen, dirname: __dirname,
+  clipboard, promptClose,
   getWindow: () => mainWindow,
   isQuitting: () => quitting,
   setQuitting: (value) => { quitting = value; },
   store: createPreferenceStore({ app }),
-  getMenu: () => desktopShellMenu,
+  getMenu: () => desktopShellIpc,
   getLocale: () => shellLocaleRuntime.getLocale(),
   logLine,
 });
-shellTheme.attachTray(trayManager);
 
 function createWindow() {
   const remembered = windowState.read();
@@ -472,9 +467,10 @@ require("./print").registerPrintHandler({ getMainWindow: () => mainWindow });
 ipcMain.on("app:quit-request", () => app.quit());
 
 // 自绘标题栏的 IPC（§19）：动作表在 lib/desktop-menu.js，注册与发送方校验在
-// lib/desktop-shell-ipc.js。动作只认固定 id；「关闭窗口」走 mainWindow.close()，
-// 触发第 18 条那条 close handler，绝不直接 destroy()。
-desktopShellMenu = registerDesktopShellIpc({
+// lib/desktop-shell-ipc.js，动作只认固定 id；「关闭窗口」走 mainWindow.close()（触发
+// 第 18 条 close handler），绝不 destroy()。返回值是 `{ menu, channels }` 返回壳：
+// 托盘用的是 `desktopShellIpc.menu.run`。
+desktopShellIpc = registerDesktopShellIpc({
   ipcMain,
   app,
   getWindow: () => mainWindow,
@@ -496,4 +492,5 @@ desktopShellMenu = registerDesktopShellIpc({
 
 // Test hooks for the VM-based lifecycle probes (desktop/scripts/test-lifecycle.js).
 // The packaged app runs main.js as its entry and never imports it as a module, so this is inert.
-module.exports = { requestInstallAndQuit: quitLifecycle.requestInstallAndQuit };
+// `trayManager` 给用例读 `getMenuModel() / choose(id)`（与用户点托盘菜单同一条路径）。
+module.exports = { requestInstallAndQuit: quitLifecycle.requestInstallAndQuit, trayManager };

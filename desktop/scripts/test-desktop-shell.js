@@ -3,8 +3,9 @@
  * 自绘标题栏（问题清单 §19）的离线用例：
  *  - lib/titlebar.js：窗口壳选项、覆盖层配色、主题同步、窗口状态推送；
  *  - lib/desktop-menu.js：菜单动作真的落在对应 Electron API 上，且只认固定动作 id；
- *  - lib/tray-menu.js：「关闭窗口时询问」勾选态来自记忆，勾上即清掉记忆；
  *  - preload.js 的 desktopShell 桥：通道名必须与 desktop-shell-ipc.js 逐字一致。
+ *
+ * 托盘与自绘菜单（模型 / 定位 / 动作分发）的用例在 test-tray-menu.js（500 行预算）。
  *
  * 这些模块都不 require("electron")，所以这里全部用假对象断言，不需要真窗口。
  *
@@ -25,15 +26,15 @@ const {
   createTitleBarController,
 } = require("../lib/titlebar");
 const { EXTERNAL_URLS, clampZoom, createDesktopMenuActions } = require("../lib/desktop-menu");
-const { buildTrayTemplate, createTrayManager, trayLabelsFor } = require("../lib/tray-menu");
 const { CHANNELS } = require("../lib/desktop-shell-ipc");
 
 // ---- lib/titlebar.js --------------------------------------------------------
 
-test("窗口壳：win32/linux 用 hidden + titleBarOverlay，mac 用红绿灯位置", () => {
+test("窗口壳：win32/linux 用 hidden + 透明覆盖层，mac 用红绿灯位置", () => {
   const win = windowChromeOptions({ platform: "win32" });
   assert.equal(win.titleBarStyle, "hidden");
   assert.deepEqual(win.titleBarOverlay, {
+    // 2026-11-20：覆盖层不画底色（透明），底色交给页面标题栏。
     color: "#f5f7fa",
     symbolColor: "#3d4a5c",
     height: TITLEBAR_HEIGHT,
@@ -79,11 +80,11 @@ test("标题栏兜底 padding 必须条件化，否则与 flex 标题栏叠加�
   assert.equal(titleBarFallbackCss(40), "html:not(:has(.app-titlebar)) body{padding-top:40px}");
 });
 
-test("覆盖层配色与标题栏背景逐值一致，深色主题另有一套", () => {
+test("覆盖层不画底色（两套主题都是全透明），symbolColor 仍按主题区分", () => {
   assert.equal(typeof titleBarOverlayFor("light").color, "string");
   assert.equal(titleBarOverlayFor("light").color, "#f5f7fa");
   const dark = titleBarOverlayFor("dark");
-  assert.equal(dark.color, "#151b23");
+  assert.equal(dark.color, "#151b23", "深色主题用深色覆盖层底色");
   assert.notEqual(dark.symbolColor, titleBarOverlayFor("light").symbolColor);
   // "system" 无法在纯函数里判定，按浅色兜底（初始主题也是浅色，避免启动闪深）。
   assert.equal(normalizeTheme("system"), "light");
@@ -100,6 +101,7 @@ test("主题同步：调用 setTitleBarOverlay；窗口不可用 / 平台不支�
   assert.equal(controller.applyTheme("dark"), true);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].color, "#151b23");
+  assert.equal(calls[0].symbolColor, "#c9d4e0");
 
   const mac = createTitleBarController({ getWindow: () => win, platform: "darwin" });
   assert.equal(mac.applyTheme("dark"), false, "macOS 没有覆盖层可同步");
@@ -293,123 +295,6 @@ test("未知动作 / 主窗口缺失 / openPath 返回错误字符串：都返�
   const outcome = await failing.run("file.openDataDir");
   assert.equal(outcome.ok, false);
   assert.match(outcome.error, /EPERM/);
-});
-
-// ---- lib/tray-menu.js -------------------------------------------------------
-
-function makeTrayTemplateHarness(remembered = null) {
-  const calls = { cleared: 0, refreshed: 0, quits: 0, shows: 0 };
-  const win = {
-    show() {
-      calls.shows += 1;
-    },
-    focus() {},
-  };
-  const template = buildTrayTemplate({
-    getWindow: () => win,
-    app: {
-      quit() {
-        calls.quits += 1;
-      },
-    },
-    getRemembered: () => remembered,
-    clearRemembered: () => {
-      calls.cleared += 1;
-      remembered = null;
-    },
-    refresh: () => {
-      calls.refreshed += 1;
-    },
-  });
-  return { template, calls, getRemembered: () => remembered };
-}
-
-test("托盘菜单：打开 / 关闭窗口时询问（checkbox）/ 退出，勾选态取自记忆", () => {
-  // 模板没注入 getLocale 时按壳层缺省语言（英文）出文案；中文/切换用例见
-  // scripts/test-shell-locale.js（那里逐项断言两套语言）。
-  const labels = trayLabelsFor("en");
-  const noMemory = makeTrayTemplateHarness(null);
-  const itemLabels = noMemory.template
-    .filter((item) => item.type !== "separator")
-    .map((item) => item.label);
-  assert.deepEqual(itemLabels, [labels.open, labels.askOnClose, labels.quit]);
-  const ask = noMemory.template.find((item) => item.label === labels.askOnClose);
-  assert.equal(ask.type, "checkbox");
-  assert.equal(ask.checked, true, "没有记忆时勾上 = 每次询问");
-
-  const remembered = makeTrayTemplateHarness("minimize");
-  const askRemembered = remembered.template.find((item) => item.label === labels.askOnClose);
-  assert.equal(askRemembered.checked, false, "已记住时取消勾选");
-
-  // 勾上 → 清掉记忆（main.js 的 onPreferenceChanged 会重建菜单，这里不重复刷）。
-  askRemembered.click({ checked: true });
-  assert.equal(remembered.calls.cleared, 1);
-  assert.equal(remembered.calls.refreshed, 0);
-  assert.equal(remembered.getRemembered(), null);
-  // 取消勾选没有语义：重建菜单让勾选态回到真相。
-  askRemembered.click({ checked: false });
-  assert.equal(remembered.calls.refreshed, 1);
-
-  // 托盘「退出」永远是真退出，不读记忆、不弹窗（app.quit() 交给 before-quit）。
-  const exitItem = noMemory.template.find((item) => item.label === labels.quit);
-  exitItem.click();
-  assert.equal(noMemory.calls.quits, 1);
-});
-
-test("托盘生命周期：create 装菜单与左键唤起；refresh 重建；destroy 可重复", () => {
-  const contexts = [];
-  class TrayFake {
-    constructor(icon) {
-      this.icon = icon;
-      this.handlers = {};
-      TrayFake.instance = this;
-    }
-    setToolTip(tooltip) {
-      this.toolTip = tooltip;
-    }
-    setContextMenu(menu) {
-      contexts.push(menu);
-    }
-    on(name, handler) {
-      this.handlers[name] = handler;
-    }
-    destroy() {
-      this.destroyed = true;
-    }
-  }
-  let remembered = null;
-  let shows = 0;
-  const manager = createTrayManager({
-    Tray: TrayFake,
-    Menu: { buildFromTemplate: (template) => ({ template }) },
-    iconPath: "icon.png",
-    app: { quit() {} },
-    getWindow: () => ({
-      show() {
-        shows += 1;
-      },
-      focus() {},
-    }),
-    getRemembered: () => remembered,
-    clearRemembered: () => {
-      remembered = null;
-    },
-  });
-  manager.create();
-  assert.equal(TrayFake.instance.icon, "icon.png");
-  assert.equal(contexts.length, 1);
-  TrayFake.instance.handlers.click();
-  assert.equal(shows, 1);
-
-  remembered = "quit";
-  manager.refresh();
-  assert.equal(contexts.length, 2);
-  const ask = contexts[1].template.find((item) => item.label === trayLabelsFor("en").askOnClose);
-  assert.equal(ask.checked, false);
-
-  manager.destroy();
-  assert.equal(manager.getTray(), null);
-  manager.destroy(); // 重复销毁不抛
 });
 
 // ---- preload 桥 -------------------------------------------------------------

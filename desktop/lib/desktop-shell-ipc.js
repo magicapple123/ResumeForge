@@ -31,6 +31,7 @@ const CHANNELS = {
   // 主进程据此重建托盘菜单 / tooltip 与窗口标题兜底。
   setLocale: "desktop:set-locale",
   // WF-20：设置项「托盘图标跟随系统主题」的开关（默认关）。单向、只收布尔。
+  // 2026-11-20 起托盘图标固定为浅色版，这条只影响壳层主题快照（不再换图）。
   trayFollowSystem: "desktop:set-tray-follow-system",
   // WF-08 第三处联动：开机自启。两条都是**读写系统真相**（HKCU\...\Run），
   // 应用内不存第二份布尔（见 lib/launch-at-login.js 顶部说明）。
@@ -158,14 +159,15 @@ function registerDesktopShellIpc(deps) {
   ipcMain.on(CHANNELS.setTheme, (event, theme) => {
     if (!trusted(event)) return;
     titleBar.applyTheme(theme);
-    // 同一个上报还有第二个消费者：托盘图标（WF-20）。标题栏只关心 win32/linux 的
-    // 覆盖层配色，托盘在每个平台都要跟着换图。
+    // 同一个上报还有第二个消费者：壳层主题快照（lib/shell-theme.js）。2026-11-20 起
+    // 托盘图标固定一枚浅色图，不再跟着换图；这里只更新快照（splash / 后续消费者）。
     const shellTheme = typeof getShellTheme === "function" ? getShellTheme() : null;
     if (shellTheme) shellTheme.setAppTheme(theme === "dark" ? "dark" : "light");
   });
 
   // WF-20 兜底开关：只看布尔，不接收任意载荷。开关本身存在后端（注册表出厂值 false），
   // 主进程不读数据库，所以每次挂载/切换都由渲染层推一次。
+  // 注意：托盘图标已固定（2026-11-20），这条通道现在只更新"应用内主题跟随系统"的快照。
   ipcMain.on(CHANNELS.trayFollowSystem, (event, value) => {
     if (!trusted(event)) return;
     const shellTheme = typeof getShellTheme === "function" ? getShellTheme() : null;

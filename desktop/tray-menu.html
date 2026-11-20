@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- 自绘托盘右键菜单（2026-11-20）：原生 Menu 的内边距 / 勾选列 / 行高不可调，
+         一项 checkbox 就会把整张菜单的文字推远。这里按内容收缩宽度：未勾选时没有
+         ✓ 前缀，卡片自然更窄。
+         文案不在这里：模型由主进程按壳层语言算好，经 preload 推过来（tray-menu:model）。
+         本页面只负责渲染 + 键盘导航，不做任何决策。 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>ResumeForge</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #1f2328;
+        --muted: #5c6672;
+        --border: #e3e6ea;
+        --primary: #1668dc;
+        --hover: #f0f4fa;
+        --danger: #d4380d;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1c1f24;
+          --fg: #e6e8eb;
+          --muted: #9aa4b2;
+          --border: #2f343c;
+          --primary: #3c89f0;
+          --hover: #262b33;
+          --danger: #ff7a45;
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: max-content;
+        background: transparent;
+      }
+      body {
+        font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+        font-size: 12.5px;
+        color: var(--fg);
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #menu {
+        width: max-content;
+        min-width: 108px;
+        max-width: 280px;
+        padding: 6px 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        outline: none;
+      }
+      .item {
+        display: flex;
+        align-items: center;
+        height: 30px;
+        padding: 0 10px;
+        line-height: 30px;
+        white-space: nowrap;
+        cursor: default;
+      }
+      .item .check {
+        flex: none;
+        width: 14px;
+        color: var(--primary);
+        font-size: 12px;
+      }
+      .item .label {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .item.active { background: var(--hover); }
+      .item.danger { color: var(--danger); }
+      .item.disabled { opacity: 0.45; }
+      .sep {
+        height: 1px;
+        margin: 4px 0;
+        background: var(--border);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="menu" role="menu" aria-orientation="vertical" tabindex="-1"></div>
+    <script>
+      var api = window.trayMenu;
+      var menu = document.getElementById("menu");
+      // 模型里的项（分隔线不在键盘导航里）与当前高亮的下标。
+      var items = [];
+      var activeIndex = -1;
+
+      function clearChildren() {
+        while (menu.firstChild) menu.removeChild(menu.firstChild);
+      }
+
+      function setActive(index) {
+        if (index < 0 || index >= items.length) return;
+        activeIndex = index;
+        for (var i = 0; i < items.length; i += 1) {
+          items[i].node.classList.toggle("active", i === index);
+        }
+        var node = items[index].node;
+        menu.setAttribute("aria-activedescendant", node.id);
+        if (typeof node.scrollIntoView === "function") node.scrollIntoView({ block: "nearest" });
+      }
+
+      function move(step) {
+        if (items.length === 0) return;
+        var index = activeIndex;
+        for (var guard = 0; guard < items.length; guard += 1) {
+          index = (index + step + items.length) % items.length;
+          if (!items[index].disabled) {
+            setActive(index);
+            return;
+          }
+        }
+      }
+
+      function activate(index) {
+        if (index < 0 || index >= items.length) return;
+        var item = items[index];
+        if (item.disabled) return;
+        // 主进程先 hide() 再执行动作（见 lib/tray-menu-window.js）。
+        api.choose(item.id);
+      }
+
+      function render(payload) {
+        var model = (payload && payload.model) || [];
+        clearChildren();
+        items = [];
+        activeIndex = -1;
+        // 主进程靠这个标记确认"这一版已经画好"，才量尺寸定位（见 lib/tray-menu-window.js）。
+        if (payload && payload.token) menu.setAttribute("data-token", payload.token);
+        for (var i = 0; i < model.length; i += 1) {
+          var entry = model[i];
+          if (entry.type === "separator") {
+            var sep = document.createElement("div");
+            sep.className = "sep";
+            sep.setAttribute("role", "separator");
+            menu.appendChild(sep);
+            continue;
+          }
+          var node = document.createElement("div");
+          node.id = "tray-item-" + entry.id;
+          node.className = "item" + (entry.danger ? " danger" : "") + (entry.disabled ? " disabled" : "");
+          node.setAttribute("role", "menuitem");
+          node.setAttribute("tabindex", "-1");
+          // aria-checked 只在可勾选项上出现：读屏据此报"已勾选/未勾选"。
+          if (typeof entry.checked === "boolean") {
+            node.setAttribute("aria-checked", entry.checked ? "true" : "false");
+          }
+          if (entry.disabled) node.setAttribute("aria-disabled", "true");
+          if (entry.checked) {
+            var check = document.createElement("span");
+            check.className = "check";
+            check.textContent = "✓";
+            node.appendChild(check);
+          }
+          var label = document.createElement("span");
+          label.className = "label";
+          label.textContent = entry.label;
+          node.appendChild(label);
+          menu.appendChild(node);
+          items.push({ id: entry.id, node: node, disabled: Boolean(entry.disabled) });
+        }
+        // 首项默认高亮（原生菜单同款），键盘可直接上下移动。
+        if (items.length > 0) setActive(0);
+      }
+
+      // hover 跟随高亮：鼠标移到哪一项，高亮就跟到哪一项。
+      menu.addEventListener("mousemove", function (event) {
+        var target = event.target;
+        while (target && target !== menu && target.className.indexOf("item") < 0) {
+          target = target.parentNode;
+        }
+        if (!target || target === menu) return;
+        for (var i = 0; i < items.length; i += 1) {
+          if (items[i].node === target) {
+            if (!items[i].disabled) setActive(i);
+            return;
+          }
+        }
+      });
+
+      menu.addEventListener("click", function (event) {
+        var target = event.target;
+        while (target && target !== menu && target.className.indexOf("item") < 0) {
+          target = target.parentNode;
+        }
+        if (!target || target === menu) return;
+        for (var i = 0; i < items.length; i += 1) {
+          if (items[i].node === target) {
+            activate(i);
+            return;
+          }
+        }
+      });
+
+      window.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          api.close();
+          return;
+        }
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          activate(activeIndex);
+          return;
+        }
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          move(1);
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          move(-1);
+        }
+      });
+
+      // 失焦即关（点外部 / 切到别的应用）；主进程侧还有一道 blur 兜底。
+      window.addEventListener("blur", function () {
+        api.close();
+      });
+
+      api.onModel(function (payload) {
+        render(payload);
+      });
+    </script>
+  </body>
+</html>

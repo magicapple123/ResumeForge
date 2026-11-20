@@ -20,7 +20,23 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 /**
- * 造一个 `promptClose(win, { isMac }) => Promise<{action:"hide"|"quit", remember:boolean}>`。
+ * 卡片高度按**语言**给，不再按平台。
+ *
+ * 2026-11-20 重排后是三段结构（标题+正文 / 选项行 / 分隔线+操作区），操作区
+ * `margin-top:auto` 沉底，所以高度只需要"装得下 + 留一点呼吸"，多出来的空白会落在
+ * 内容与分隔线之间，不会再把按钮顶到卡片中间。
+ *
+ * 数值是用 Chromium 在 420px 宽、真实字体下量出来的（正文 zh 2 行 / en 3 行）：
+ *   zh 需要 178（194 = 16px 呼吸）；en 需要 199（214 = 15px 呼吸）。
+ * mac 与 win 的正文长度相当，量出来同样是 142 / 163，所以不另给一套值。
+ */
+const CARD_HEIGHT = { zh: 194, en: 214 };
+
+/** 卡片宽度：重排前后不变（420 是视觉契约里的宽度）。 */
+const CARD_WIDTH = 420;
+
+/**
+ * 造一个 `promptClose(win) => Promise<{action:"hide"|"quit", remember:boolean}>`。
  *
  * @param {object} deps
  * @param {object} deps.BrowserWindow Electron BrowserWindow 构造器
@@ -58,8 +74,11 @@ function createClosePrompt(deps) {
     }
   }
 
-  return function promptClose(parent, options = {}) {
-    const isMac = Boolean(options.isMac);
+  return function promptClose(parent) {
+    // 文案语言决定高度：英文正文比中文多一行（见 CARD_HEIGHT 的测量说明）。
+    // 平台口径（macOS 没有托盘惯例）由 IPC `close-dialog:platform` 给渲染层，不影响尺寸。
+    const locale = getShellLocale();
+    const height = CARD_HEIGHT[locale === "zh" ? "zh" : "en"];
     return new Promise((resolve, reject) => {
       const host = parent && !parent.isDestroyed() ? parent : getWindow();
       if (!host) {
@@ -67,8 +86,8 @@ function createClosePrompt(deps) {
         return;
       }
       const win = new BrowserWindow({
-        width: 420,
-        height: isMac ? 236 : 244,
+        width: CARD_WIDTH,
+        height,
         parent: host,
         modal: true,
         frame: false,

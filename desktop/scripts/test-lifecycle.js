@@ -25,10 +25,12 @@ test("tray exit does NOT stop the backend (audit R: stop call count is 0)", asyn
   const loaded = loadMain();
   try {
     await waitForShellReady(loaded);
-    const exitItem = loaded.menuHolder.menu.template.find((i) => i.label === "退出");
-    assert.ok(exitItem, "tray menu should contain the exit item");
+    assert.ok(
+      loaded.trayManager.getMenuModel().some((item) => item.id === "quit"),
+      "tray menu should contain the exit item",
+    );
 
-    exitItem.click();
+    loaded.trayManager.choose("quit");
     assert.ok(loaded.events.quitCalls.length >= 1, "tray exit should request app.quit()");
     assert.strictEqual(
       loaded.events.stopCalls.length,
@@ -63,8 +65,7 @@ test("tray exit: app.quit() resumes only AFTER backend.stop() completes", async 
     const deferred = makeDeferred();
     loaded.state.stopBackend = () => deferred.promise;
 
-    const exitItem = loaded.menuHolder.menu.template.find((i) => i.label === "退出");
-    exitItem.click();
+    loaded.trayManager.choose("quit");
     const quitsBeforeStop = loaded.events.quitCalls.length;
     const handler = loaded.events.beforeQuitHandler;
     const event = { preventDefault: () => {} };
@@ -234,8 +235,7 @@ test("plain quit: an unverified stop is logged, NOT shown as an error box (R3)",
     loaded.state.stopBackend = () =>
       Promise.resolve({ ok: false, reason: "x", verified: false });
 
-    const exitItem = loaded.menuHolder.menu.template.find((i) => i.label === "退出");
-    exitItem.click();
+    loaded.trayManager.choose("quit");
     const quitsBeforeStop = loaded.events.quitCalls.length;
     loaded.events.beforeQuitHandler({ preventDefault() {} });
     await flush();
@@ -257,8 +257,7 @@ test("plain quit: an unverified stop does not arm the install-path timeout (R3)"
     await waitForShellReady(loaded);
     loaded.state.stopBackend = () => new Promise(() => {});
 
-    const exitItem = loaded.menuHolder.menu.template.find((i) => i.label === "退出");
-    exitItem.click();
+    loaded.trayManager.choose("quit");
     loaded.events.beforeQuitHandler({ preventDefault() {} });
     await flush();
 
@@ -288,8 +287,7 @@ test("plain quit: an unknown port probe (ok + warning) is a normal exit (R3)", a
     loaded.state.stopBackend = () =>
       Promise.resolve({ ok: true, reason: "", verified: false, warning: "端口探测未能确认后端已停止" });
 
-    const exitItem = loaded.menuHolder.menu.template.find((i) => i.label === "退出");
-    exitItem.click();
+    loaded.trayManager.choose("quit");
     loaded.events.beforeQuitHandler({ preventDefault() {} });
     await flush();
     await flush();

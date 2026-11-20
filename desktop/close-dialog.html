@@ -5,6 +5,8 @@
     <!-- 自绘关闭卡片（Q11）：原生 MessageBox 的标题栏/图标/按钮全由系统画，
          参数里没有任何旋钮能改外观，所以只能自己开一个无边框窗口。
          这里只有一个窗口、两个视图：视图 1 主问，视图 2 二次确认（只在"勾了记住 + 选退出"时出现）。
+         排版（2026-11-20 重排）：三段结构 —— 标题+正文 / 选项行 / 分隔线+操作区。
+         操作区 `margin-top:auto` 沉底右对齐，卡片高度变化时不会"悬在中间"。
          文案跟随应用内语言：壳层语言由主进程拼进 URL（?locale=zh|en，见 lib/close-dialog.js），
          页面内联 zh/en 两份表选定一份；缺省英文（静态 HTML 也是英文，避免非中文环境闪一下中文）。 -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
@@ -19,7 +21,10 @@
         --primary: #1668dc;
         --primary-fg: #ffffff;
         --danger: #d4380d;
-        --surface: #f6f7f9;
+        --danger-border: #f2c9ba;
+        --danger-hover: #fdf1ec;
+        --label: #3f4854;
+        --hint: #8a94a0;
       }
       /* 深色：跟随系统（与 nativeTheme.shouldUseDarkColors 同源）。 */
       @media (prefers-color-scheme: dark) {
@@ -31,76 +36,126 @@
           --primary: #3c89f0;
           --primary-fg: #0b1220;
           --danger: #ff7a45;
-          --surface: #23272e;
+          --danger-border: #6f3a24;
+          --danger-hover: #2b1e19;
+          --label: #c3cbd6;
+          --hint: #7d8794;
         }
       }
       * { box-sizing: border-box; }
       html, body { height: 100%; margin: 0; }
       body {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        padding: 22px 24px;
+        padding: 20px 22px 16px;
         font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
         color: var(--fg);
         background: var(--bg);
         user-select: none;
+        -webkit-user-select: none;
       }
-      h1 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
-      p { margin: 0 0 16px; font-size: 13px; line-height: 1.6; color: var(--muted); }
-      .row { display: flex; gap: 10px; justify-content: flex-end; }
+      /* 两个视图都是"整卡三段"：内容在上、操作区用 margin-top:auto 沉底。 */
+      #ask, #confirm {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 15.5px;
+        line-height: 21px;
+        font-weight: 600;
+        letter-spacing: 0.1px;
+      }
+      p { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+
+      /* 选项行：左「记住我的选择」，右 Esc 提示 —— 合并成一行，提示不再像 checkbox 的注解。 */
+      .options {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 14px;
+      }
+      .remember {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12.5px;
+        color: var(--label);
+        cursor: default;
+      }
+      .remember input {
+        width: 13px;
+        height: 13px;
+        margin: 0;
+        accent-color: var(--primary);
+      }
+      .hint { font-size: 11.5px; color: var(--hint); white-space: nowrap; }
+
+      /* 操作区：分隔线 + 沉底右对齐。 */
+      .actions {
+        margin-top: auto;
+        padding-top: 13px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
       button {
-        min-width: 96px;
-        padding: 7px 14px;
+        height: 30px;
+        min-width: 88px;
+        padding: 0 14px;
         border: 1px solid var(--border);
         border-radius: 6px;
-        font-size: 13px;
+        font-family: inherit;
+        font-size: 12.5px;
+        font-weight: 500;
         color: var(--fg);
-        background: var(--surface);
+        background: var(--bg);
         cursor: pointer;
       }
-      button:hover { border-color: var(--primary); }
       button.primary {
         border-color: var(--primary);
         color: var(--primary-fg);
         background: var(--primary);
+        box-shadow: 0 1px 2px rgba(22, 104, 220, 0.28);
       }
-      button.danger { border-color: var(--danger); color: var(--danger); background: transparent; }
-      .remember {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin: 14px 0 4px;
-        font-size: 13px;
-        color: var(--muted);
+      /* 危险项默认只描边（红字 + 浅红边），hover 才泛红底。 */
+      button.danger { color: var(--danger); border-color: var(--danger-border); background: transparent; }
+      button.danger:hover { background: var(--danger-hover); }
+      button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+      /* 主按钮本身就是实心蓝：焦点环改成外发光，避免"双蓝边"。 */
+      button.primary:focus-visible {
+        outline: none;
+        box-shadow: 0 1px 2px rgba(22, 104, 220, 0.28), 0 0 0 3px rgba(22, 104, 220, 0.3);
       }
-      .hint { margin-top: 10px; font-size: 12px; color: var(--muted); }
       [hidden] { display: none !important; }
     </style>
   </head>
   <body>
-    <!-- 视图 1：主问 -->
+    <!-- 视图 1：主问。按钮顺序：危险项在左、安全项（主按钮）贴右下角。 -->
     <section id="ask">
       <h1 id="ask-title">Close ResumeForge?</h1>
       <p id="ask-detail"></p>
-      <div class="row">
-        <button id="hide" class="primary"></button>
-        <button id="quit" class="danger"></button>
+      <div class="options">
+        <label class="remember">
+          <input id="remember" type="checkbox" />
+          <span id="remember-label">Remember my choice</span>
+        </label>
+        <span class="hint" id="ask-hint"></span>
       </div>
-      <label class="remember">
-        <input id="remember" type="checkbox" />
-        <span id="remember-label">Remember my choice</span>
-      </label>
-      <div class="hint" id="ask-hint"></div>
+      <div class="actions">
+        <button id="quit" class="danger" type="button"></button>
+        <button id="hide" class="primary" type="button"></button>
+      </div>
     </section>
 
     <!-- 视图 2：二次确认（勾了记住 + 选了退出） -->
     <section id="confirm" hidden>
       <h1>Closing the window will quit the app from now on</h1>
       <p>Any generation or collection in progress will be interrupted. You can turn "Ask when closing the window" back on in the tray menu at any time.</p>
-      <div class="row">
-        <button id="confirm-quit" class="danger">Quit and remember</button>
-        <button id="confirm-once" class="primary">Just this time</button>
+      <div class="actions">
+        <button id="confirm-quit" class="danger" type="button">Quit and remember</button>
+        <button id="confirm-once" class="primary" type="button">Just this time</button>
       </div>
     </section>
 
@@ -177,6 +232,8 @@
       var api = window.closeDialog;
       var ask = document.getElementById("ask");
       var confirm = document.getElementById("confirm");
+      var remember = document.getElementById("remember");
+      var hideButton = document.getElementById("hide");
       var action = "hide";
 
       // 平台口径由主进程给：macOS 没有"最小化到托盘"的惯例，退化为「关闭窗口」。
@@ -184,7 +241,7 @@
         .platform()
         .then(function (isMac) {
           document.getElementById("ask-title").textContent = copy.askTitle;
-          document.getElementById("hide").textContent = isMac ? copy.hideClose : copy.hideMinimize;
+          hideButton.textContent = isMac ? copy.hideClose : copy.hideMinimize;
           document.getElementById("quit").textContent = copy.quit;
           document.getElementById("ask-detail").textContent = isMac
             ? copy.detailClose
@@ -194,22 +251,28 @@
         .catch(function () {
           // 主进程没回平台口径也不能留空白按钮：按 Windows 惯例填上（可关闭/可退出）。
           document.getElementById("ask-title").textContent = copy.askTitle;
-          document.getElementById("hide").textContent = copy.hideMinimize;
+          hideButton.textContent = copy.hideMinimize;
           document.getElementById("quit").textContent = copy.quit;
           document.getElementById("ask-detail").textContent = copy.detailMinimize;
           document.getElementById("ask-hint").textContent = copy.hintMinimize;
+        })
+        .then(function () {
+          // 默认焦点落在安全动作上：Enter 与 Esc 因此都"最小化"而不是误退出。
+          // Tab 顺序 = checkbox → 退出应用 → 最小化（由 DOM 顺序决定）。
+          hideButton.focus();
         });
 
       function finish(payload) {
         api.resolve(payload);
       }
 
-      document.getElementById("hide").addEventListener("click", function () {
-        finish({ action: "hide", remember: false });
+      // 两个按钮都读「记住我的选择」：勾了就记下本次动作（ask=false + action），
+      // 下次点 × 直接执行，不再询问。Esc 例外 —— 它永远不记录。
+      hideButton.addEventListener("click", function () {
+        finish({ action: "hide", remember: remember.checked });
       });
       document.getElementById("quit").addEventListener("click", function () {
-        var remember = document.getElementById("remember").checked;
-        if (!remember) {
+        if (!remember.checked) {
           finish({ action: "quit", remember: false });
           return;
         }
@@ -226,7 +289,7 @@
         finish({ action: action, remember: false });
       });
 
-      // Esc = 安全默认（最小化 / 关闭窗口），绝不等于退出。
+      // Esc = 安全默认（最小化 / 关闭窗口），绝不等于退出，也绝不记录偏好。
       window.addEventListener("keydown", function (event) {
         if (event.key !== "Escape") return;
         event.preventDefault();

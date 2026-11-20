@@ -27,7 +27,7 @@ const {
   t,
 } = require("../lib/shell-locale");
 const { createShellLocaleRuntime } = require("../lib/shell-locale-runtime");
-const { buildTrayTemplate, createTrayManager, trayLabelsFor } = require("../lib/tray-menu");
+const { buildMenuModel, createTrayManager, trayLabelsFor } = require("../lib/tray-menu");
 const { createDesktopMenuActions } = require("../lib/desktop-menu");
 const { preflightNoticeText, presentPreflightNotice } = require("../lib/preflight");
 const { createStartupFailureReporter } = require("../lib/startup-failure");
@@ -137,32 +137,39 @@ test("t：替换 {name}、缺 key 返回 key 本身、未知语言回落英文",
 
 // ---- 托盘 / 菜单 / 对话框：两套语言下各拿到什么 --------------------------------
 
-function trayTemplate(locale, remembered = null) {
-  return buildTrayTemplate({
-    getWindow: () => ({ show() {}, focus() {} }),
-    app: { quit() {} },
-    getRemembered: () => remembered,
-    clearRemembered: () => {},
-    refresh: () => {},
+function trayModel(locale, ask = true) {
+  return buildMenuModel({
+    getAsk: () => ask,
+    runMenuAction: () => {},
     getLocale: () => locale,
   });
 }
 
-test("托盘菜单：语言由 getLocale 决定，菜单项与 tooltip 都来自壳层文案表", () => {
+test("托盘菜单：语言由 getLocale 决定，模型与 tooltip 都来自壳层文案表", () => {
   for (const locale of ["zh", "en"]) {
     const labels = trayLabelsFor(locale);
-    const template = trayTemplate(locale);
-    const itemLabels = template
-      .filter((item) => item.type !== "separator")
-      .map((item) => item.label);
-    assert.deepEqual(itemLabels, [labels.open, labels.askOnClose, labels.quit], locale);
+    const model = trayModel(locale);
+    const labelsInModel = model.filter((item) => item.type === "item").map((item) => item.label);
+    assert.deepEqual(
+      labelsInModel,
+      [
+        labels.open,
+        labels.openDataDir,
+        labels.openLogDir,
+        labels.diagnostics,
+        labels.checkUpdate,
+        labels.askOnClose,
+        labels.quit,
+      ],
+      locale,
+    );
     // 工具提示与菜单来自同一张表：不应出现"菜单英文、tooltip 中文"。
     assert.equal(labels.tooltip, t(locale, "tray.tooltip"));
   }
   assert.notEqual(trayLabelsFor("zh").open, trayLabelsFor("en").open);
 });
 
-test("托盘生命周期：refresh 同时重建菜单与 tooltip（语言切换后两者同源）", () => {
+test("托盘生命周期：refresh 同步 tooltip；菜单模型在打开时按当前语言现算", () => {
   const trayCalls = [];
   class TrayFake {
     constructor() {
@@ -170,9 +177,6 @@ test("托盘生命周期：refresh 同时重建菜单与 tooltip（语言切换�
     }
     setToolTip(tooltip) {
       trayCalls.push(["tooltip", tooltip]);
-    }
-    setContextMenu(menu) {
-      trayCalls.push(["menu", menu]);
     }
     on(name) {
       this.handlers[name] = true;
@@ -182,12 +186,12 @@ test("托盘生命周期：refresh 同时重建菜单与 tooltip（语言切换�
   let locale = "zh";
   const manager = createTrayManager({
     Tray: TrayFake,
-    Menu: { buildFromTemplate: (template) => ({ template }) },
-    iconPath: "icon.png",
+    iconPath: "tray.ico",
     app: { quit() {} },
     getWindow: () => null,
-    getRemembered: () => null,
-    clearRemembered: () => {},
+    getAsk: () => true,
+    setAsk: () => {},
+    runMenuAction: () => {},
     getLocale: () => locale,
   });
   manager.create();
@@ -197,9 +201,10 @@ test("托盘生命周期：refresh 同时重建菜单与 tooltip（语言切换�
   const tooltips = trayCalls.filter((entry) => entry[0] === "tooltip").map((entry) => entry[1]);
   assert.equal(zhTooltip, "简历通");
   assert.equal(tooltips[tooltips.length - 1], "ResumeForge");
-  const menus = trayCalls.filter((entry) => entry[0] === "menu");
-  const lastLabels = menus[menus.length - 1][1].template.map((item) => item.label);
-  assert.ok(lastLabels.includes(t("en", "tray.quit")), "重建后的菜单必须是英文");
+  // 自绘菜单不再有"重建"这一步：模型每次打开现算，所以语言切完立刻是英文。
+  const labels = manager.getMenuModel().map((item) => item.label);
+  assert.ok(labels.includes(t("en", "tray.quit")), "打开时的菜单必须是英文");
+  assert.ok(!labels.includes(t("zh", "tray.quit")), "不得残留旧语言菜单项");
 });
 
 test("标题栏菜单回执：中文/英文两套错误文案都来自壳层表", async () => {
