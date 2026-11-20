@@ -105,6 +105,8 @@ Var /GLOBAL RFDstBytes
 !macro RF_DIAG MSG
   !ifdef RF_DIAG_LOG
     FileOpen $R8 "${RF_DIAG_LOG}" a
+    # 与 RF_LOG 同一个坑：末尾不 seek，每条都会覆盖第一条。诊断通道丢行等于没开。
+    FileSeek $R8 0 END
     FileWrite $R8 "${MSG}$\r$\n"
     FileClose $R8
   !endif
@@ -232,6 +234,15 @@ FunctionEnd
     Sleep 1000
     Goto rf_wait_loop
   rf_wait_timeout:
+    # 静默（自动更新走 `/S`）时**不能弹框**：更新器用 ExecWait 等这个进程，一个没有
+    # 父窗口的模态框会把升级挂死，而且现场没人能点它。改成日志 + DetailPrint +
+    # 非 0 退出码（4 = 应用 60 秒内没退出，见 wizard.nsh 的退出码一览）。
+    ${If} $RFSilent == "1"
+      !insertmacro RF_LOG "app still running after 60s: ${PRODUCT_FILENAME}.exe, aborting (silent)"
+      DetailPrint "[ResumeForge] ${PRODUCT_FILENAME}.exe is still running; installation aborted"
+      SetErrorLevel 4
+      Quit
+    ${EndIf}
     ${If} $LANGUAGE == 2052
     ${OrIf} $LANGUAGE == 1028
       MessageBox MB_ICONSTOP|MB_OK "检测到「简历通」正在运行。$\r$\n$\r$\n请先从托盘菜单退出应用，再重新运行安装程序。旧版本的数据会原样保留。"
@@ -242,10 +253,153 @@ FunctionEnd
   rf_wait_done:
 !macroend
 
+# ----------------------------------------------------------------------------
+# 抢占式卸旧（2026-11-2x，给已经发出去的 2.1.0 补桥）
+#
+# 2.1.0 的卸载器里编进了一个缺陷：模板 `_CHECK_APP_RUNNING` 按**镜像路径前缀**
+# 找进程，而 `_?=<dir>` 模式下卸载器就地运行、路径就在 $INSTDIR 里 → 命中自己 →
+# Stop-Process 自己 → 退出码非 0、一个文件没删。那个二进制已经在用户机器上了，
+# 改不了，所以新安装器**不把"卸旧"交给 installUtil 的 `_?=` 调用**，自己先跑一遍：
+#
+#   * **不带 `_?=`**：旧卸载器把自己复制到 %TEMP% 再运行，镜像路径不在 $INSTDIR 里，
+#     那个路径前缀判据就不可能命中自己（现场实测：去掉 `_?=` 就 exit 0、卸载正常，
+#     而带 `_?=` 是 exit 2 且什么都没删）；
+#   * exit 0 → 清掉安装登记，`installUtil.nsh` 的 `uninstallOldVersion` 读不到
+#     UninstallString 与 InstallLocation 会直接 return（该文件 178-182 行），
+#     后续安装按全新安装走；
+#   * 非 0 → **保留**登记键，只写日志，让模板按原样重试 —— 不比今天更差，绝不中止；
+#   * 全程不弹框（`/S` 与交互模式都一样）：ExecWait 里的 MessageBox 会把自动更新挂死。
+#
+# 为什么是 !macro 而不是 Function：`${UNINSTALL_REGISTRY_KEY}` / `${INSTALL_REGISTRY_KEY}`
+# 由 `multiUser.nsh` 定义，而本文件被 electron-builder 放在生成脚本**最顶部**（早于
+# multiUser.nsh）。Function 是就地编译的，用这些常量会 warning 6000 → -WX 打包失败
+# （2026-11-2x 实测，同 `${UNINSTALL_FILENAME}` 那一条）；宏在插入点展开，
+# 而插入点 customInit 位于模板 .onInit 之内，那时常量已经定义。
+#
+# 调用点的两条前置条件（见 customInit 末尾）：
+#   1. 必须在**旧数据抢救之后**：旧卸载器会删掉整个 $INSTDIR，payload 时代的数据在里面；
+#   2. `$RFRescueState == "ok"`（数据只存在于 $PLUGINSDIR 里）时**不跑**：$PLUGINSDIR
+#      是临时目录，用户中途取消安装就没了，而那时旧版本已经被删——这是唯一可能丢数据
+#      的组合，所以这一档保持旧行为，交给模板。
+# ----------------------------------------------------------------------------
+!macro RF_PREEMPTIVE_UNINSTALL
+  ${If} $RFExistingVersion == ""
+    !insertmacro RF_LOG "pre-uninstall: nothing registered, skipped"
+  ${ElseIf} $RFRescueState == "ok"
+    !insertmacro RF_LOG "pre-uninstall: skipped (legacy data only lives in $PLUGINSDIR)"
+  ${Else}
+    # 卸载登记读的是 UNINSTALL_REGISTRY_KEY：UninstallString 由 electron-builder 写在
+    # 那里（模板 installer.nsh 的 registryAddInstallInfo），installUtil.nsh 也读同一个键。
+    # 两个键都由宏拼出（内含 APP_GUID），这里不写死任何 GUID。
+    ReadRegStr $R0 SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" "UninstallString"
+    ${If} $R0 == ""
+      !insertmacro RF_LOG "pre-uninstall: no UninstallString under ${UNINSTALL_REGISTRY_KEY}"
+    ${Else}
+      # UninstallString **不是纯路径**：electron-builder 写的是 `'"$2" $0'`
+      # （include/installer.nsh:122），实际形如
+      #     "C:\...\Uninstall ResumeForge.exe" /currentuser
+      # 所以不能"只剥首尾引号"——那样得到的是 `...exe" /currentuser`，FileExists
+      # 恒假，每次都被误判成悬空登记：删登记键、旧卸载器却压根没跑（QA 实测）。
+      # 正确做法：剥掉开引号后**向前扫到闭引号为止**，取中间那一段作为路径。
+      # 扫不到闭引号 = 解析失败 → 什么都不做（见下面的分支）。
+      StrCpy $R1 "$R0"
+      StrCpy $R3 ""
+      StrCpy $R2 "$R1" 1
+      ${If} $R2 == '"'
+        StrCpy $R1 "$R1" "" 1  # 去掉开引号
+        StrCpy $R2 0
+        ${Do}
+          StrCpy $R4 "$R1" 1 $R2
+          ${If} $R4 == '"'
+            StrCpy $R3 '"'
+            ${ExitDo}
+          ${EndIf}
+          ${If} $R4 == ""
+            ${ExitDo}  # 扫到结尾都没有闭引号
+          ${EndIf}
+          IntOp $R2 $R2 + 1
+        ${Loop}
+        ${If} $R3 == '"'
+          StrCpy $R1 "$R1" $R2  # 闭引号之前的那一段 = 纯路径
+        ${Else}
+          StrCpy $R1 ""
+        ${EndIf}
+      ${Else}
+        # 未加引号：整串当路径。electron-builder 不会写这种形态，保守处理即可。
+        StrCpy $R3 '"'
+      ${EndIf}
+
+      # 解析失败一律**不动登记**：路径都没解析出来就删键，等于抹掉一条真实存在的
+      # 卸载信息、还卸不掉任何东西（QA 实测过的后果），比不修更糟。
+      ${If} $R1 == ""
+        !insertmacro RF_LOG "pre-uninstall: cannot parse UninstallString, keeping registration: $R0"
+        DetailPrint "[ResumeForge] cannot parse the uninstall command; leaving it to the template"
+      ${Else}
+        !insertmacro RF_LOG "pre-uninstall: string=$R0 exe=$R1 instdir=$INSTDIR"
+
+        ${IfNot} ${FileExists} "$R1"
+          # 悬空登记（解析出的路径确实不存在）：留着它只会让模板再走 5 次重试、
+          # 再弹一次 $(appCannotBeClosed) —— 现场用户正是手工清掉登记才装上的。
+          !insertmacro RF_LOG "pre-uninstall: uninstaller missing, dropping stale registration"
+          DeleteRegKey SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}"
+          DeleteRegKey SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}"
+        ${Else}
+          # 用 $RFInstallMode 快照而不是 $installMode：后者由 multiUser.nsh 声明，
+          # 本宏在 rfPrecheck（header 里编译）里展开时它还不存在（warning 6000）。
+          ${If} $RFInstallMode == "all"
+            StrCpy $R3 "/allusers"
+          ${Else}
+            StrCpy $R3 "/currentuser"
+          ${EndIf}
+
+          # **没有 `_?=`**：这是本轮根因的开关，见上面的注释，别加回来。
+          # `--updated` 保留：它让旧卸载器跳过"用户主动卸载"的默认值（备份/删数据的
+          # 那条路径），用户数据在 %APPDATA% 里，不能被一次升级动掉。
+          ClearErrors
+          ExecWait '"$R1" /S $R3 --updated' $R0
+          ${If} ${Errors}
+            StrCpy $R0 "-1"
+          ${EndIf}
+          !insertmacro RF_LOG "pre-uninstall: exit=$R0"
+
+          ${If} $R0 == "0"
+            DeleteRegKey SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}"
+            DeleteRegKey SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}"
+            !insertmacro RF_LOG "pre-uninstall: ok, registration cleared"
+            # 旧卸载器把 $INSTDIR 整个删掉了（`--updated` 也删目录，只是不删用户数据）。
+            # 目录与"当前输出目录"都要重建，否则后面的 File 指令会写进一个不存在的路径 ——
+            # 现场那句「不能打开要写入的文件」就长这样。
+            ClearErrors
+            CreateDirectory "$INSTDIR"
+            SetOutPath "$INSTDIR"
+            Call rfProbeWritable
+            !insertmacro RF_LOG "pre-uninstall: install dir recreated: $INSTDIR probe=$RFProbeState lasterror=$RFProbeError"
+          ${Else}
+            # 不清登记：交给 installUtil 按原样重试（与今天一致），原因已经在日志里。
+            !insertmacro RF_LOG "pre-uninstall: FAILED exit=$R0, keeping registration for the template path"
+            DetailPrint "[ResumeForge] previous version could not be removed (exit $R0); falling back to the template uninstall path"
+          ${EndIf}
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+!macroend
+
 # 安装开始前（.onInit，早于 installSection 里对旧卸载器的调用）把旧数据抢救出来。
 !macro customInit
-  # 向导侧的开场（日志 / 已有安装探测 / 修复模式 / 升级前备份）先跑：它要读
-  # $installMode（initMultiUser 已算好），并且升级备份必须在旧卸载器动手之前完成。
+  # 第一件事：日志（preInit 已经建过文件，这里幂等，只追加一行 phase）——
+  # 2026-11-2x 那次真机安装"连日志都没写出来"，原因就是日志原来排在一串可能
+  # 提前退出的步骤之后。环境快照里的 $INSTDIR / $installMode 此刻才由
+  # initMultiUser 定好，所以要在 preInit 之外再打一次。
+  !insertmacro RF_LOG_OPEN "customInit"
+  !insertmacro RF_LOG_ENV
+
+  # 第二件事：写探针 + 自动降级。必须早于任何文件落盘（也在下面这次抢救复制之前：
+  # 如果 $INSTDIR 写不进去，先把用户数据往一个写不进去的目录里搬只会更难收场）。
+  !insertmacro RF_WRITE_PROBE "customInit"
+
+  # 向导侧的开场（已有安装探测 / 修复模式 / 升级前备份）：
+  # 它要读 $installMode（initMultiUser 已算好），并且升级备份必须在旧卸载器动手之前完成。
   !insertmacro RF_INSTALL_INIT
 
   StrCpy $RFRescueState "none"
@@ -282,6 +436,14 @@ FunctionEnd
   Pop $R9
 
   StrCmp $RFRescueState "failed" 0 rf_init_ok
+    # 静默路径不弹框（同上）：日志 + DetailPrint + 退出码 8。
+    # 这里必须**真的退出**：数据还在旧安装目录里，继续装下去旧目录会被删掉。
+    ${If} $RFSilent == "1"
+      !insertmacro RF_LOG "legacy rescue copy FAILED, aborting (silent): from=$RFOldDataDir"
+      DetailPrint "[ResumeForge] legacy data could not be copied out of the install directory; installation aborted"
+      SetErrorLevel 8
+      Quit
+    ${EndIf}
     ${If} $LANGUAGE == 2052
     ${OrIf} $LANGUAGE == 1028
       MessageBox MB_ICONSTOP|MB_OK "旧版本的数据保存在安装目录内，但复制到临时目录时校验失败（常见原因：磁盘空间不足或权限受限）。$\r$\n$\r$\n为避免数据丢失，安装已中止；旧版本数据保持原样，未做任何改动。"
@@ -298,6 +460,19 @@ FunctionEnd
   DetailPrint "legacy payload data rescued: $RFDstBytes bytes"
 
   rf_init_done:
+
+  # 抢救已经落定，才轮到"先把旧版本自己卸掉"（旧卸载器会删 $INSTDIR，顺序反了就丢数据）。
+  # 它只在"登记着旧版本、且旧数据不在 $PLUGINSDIR 里"时真的动手，其余情况只写一行日志。
+  #
+  # **静默模式才在这里跑（Medium 3）**：静默没有页面，不在这里做就没有第二次机会。
+  # 交互模式挪到 rfPrecheck（目录页之后、INSTFILES 之前的最后一站）——customInit 早于
+  # 目录页，此时用户还能改目录、还能取消；在"还能取消"的时点就把旧版本删掉、把卸载
+  # 登记清掉，用户一取消，磁盘上旧程序没了、Add/Remove 里 0 条记录，比不装更糟。
+  ${If} $RFSilent == "1"
+    !insertmacro RF_PREEMPTIVE_UNINSTALL
+  ${Else}
+    !insertmacro RF_LOG "pre-uninstall: interactive run, deferred to the tasks page (after the dir page)"
+  ${EndIf}
 !macroend
 
 # 安装完成（新 payload 已就位）后把数据放回应用的旧数据位置，让首次启动的
@@ -329,11 +504,20 @@ FunctionEnd
     Push ""
     Call RF_CopyTree
     Pop $R9
-    ${If} $LANGUAGE == 2052
-    ${OrIf} $LANGUAGE == 1028
-      MessageBox MB_ICONEXCLAMATION|MB_OK "旧版本的数据未能放回应用数据位置，已完整保留在：$\r$\n$R1$\r$\n$\r$\n应用首次启动后，请把该目录里的内容复制到应用提示的位置，或联系维护者协助处理。"
+    # 静默路径不弹框：数据在 $R1 里，落日志 + DetailPrint 就够；退出码 9 让更新器
+    # 的后台对账知道"这次升级没把旧数据放回原位"。**不 Quit**——程序本身装好了，
+    # 为了几条数据把整个安装判死只会让用户连应用都用不上。
+    ${If} $RFSilent == "1"
+      !insertmacro RF_LOG "legacy restore FAILED, data preserved at $R1 (silent)"
+      DetailPrint "[ResumeForge] legacy data preserved at $R1"
+      SetErrorLevel 9
     ${Else}
-      MessageBox MB_ICONEXCLAMATION|MB_OK "The old data could not be put back where the app expects it. It is fully preserved at:$\r$\n$R1$\r$\n$\r$\nAfter the app has started once, copy that folder's contents to the location it asks for, or contact the maintainer for help."
+      ${If} $LANGUAGE == 2052
+      ${OrIf} $LANGUAGE == 1028
+        MessageBox MB_ICONEXCLAMATION|MB_OK "旧版本的数据未能放回应用数据位置，已完整保留在：$\r$\n$R1$\r$\n$\r$\n应用首次启动后，请把该目录里的内容复制到应用提示的位置，或联系维护者协助处理。"
+      ${Else}
+        MessageBox MB_ICONEXCLAMATION|MB_OK "The old data could not be put back where the app expects it. It is fully preserved at:$\r$\n$R1$\r$\n$\r$\nAfter the app has started once, copy that folder's contents to the location it asks for, or contact the maintainer for help."
+      ${EndIf}
     ${EndIf}
 
   rf_restore_done:
@@ -341,6 +525,9 @@ FunctionEnd
 
   # 向导侧收尾：按用户勾选收拾快捷方式、写/清开机自启、落安装日志。
   !insertmacro RF_INSTALL_FINISH
+
+  # 最后一步：装完自检（缺文件就非 0 退出，绝不"假装成功"）。
+  !insertmacro RF_INSTALL_SELFCHECK
 !macroend
 
 !endif

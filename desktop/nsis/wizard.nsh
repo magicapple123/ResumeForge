@@ -31,6 +31,38 @@
 !define RF_DATA_DIR "$APPDATA\ResumeForge\data"
 !define RF_RUNTIME_DIR "$LOCALAPPDATA\ResumeForge\runtime"
 
+# 用户选定（或沿用注册表里）的安装目录写不进去时改用的位置。
+# 与 electron-builder 的 per-user 默认值一致（multiUser.nsh 的
+# `$LocalAppData\Programs\${APP_FILENAME}`），所以降级后的产物和一次"常规安装"
+# 完全等价：注册表、快捷方式、自动更新都按这个目录走。
+!define RF_FALLBACK_INSTDIR "$LOCALAPPDATA\Programs\ResumeForge"
+
+# 写探针的临时文件名（见 rfProbeWritable）。放在 $INSTDIR 里而不是 $TEMP：
+# 要验证的正是"程序文件能不能写进这个目录"，这才是 2026-11-2x 那次
+# `不能打开要写入的文件：…\uninstallerIcon.ico` 失败的本质。
+!define RF_PROBE_FILE ".rf-write-probe"
+
+# ----------------------------------------------------------------------------
+# 两个注册表键路径：与模板 `multiUser.nsh` 的 `!define /ifndef` **逐字一致**。
+#
+# 为什么我们自己也要定义一遍：`${INSTALL_REGISTRY_KEY}` / `${UNINSTALL_REGISTRY_KEY}`
+# 由 multiUser.nsh 定义，而它在模板 body 里、晚于我们整个 include。**Function 是就地
+# 编译的**，在我们的函数里直接用这两个常量会 `warning 6000` → `-WX` 打包失败
+# （2026-11-2x 已在 `${UNINSTALL_FILENAME}` 上踩过一次）。抢占式卸旧现在要在
+# `rfPrecheck`（交互路径，header 里编译的函数）里也调用，所以常量必须在这里就可见。
+#
+# `!ifndef` 不会和模板撞车：multiUser.nsh 用的也是 `!define /ifndef`，谁先定义用谁，
+# 而两边表达式逐字相同，语义不变。`${APP_GUID}` / `${UNINSTALL_APP_KEY}` 由
+# electron-builder 以 `-D` 传入（NsisTarget.js 的 defines），任何位置都可用。
+# 漂移由 `scripts/test-nsis-install-hardening.js` 与 multiUser.nsh 逐字比对拦下。
+# ----------------------------------------------------------------------------
+!ifndef INSTALL_REGISTRY_KEY
+  !define INSTALL_REGISTRY_KEY "Software\${APP_GUID}"
+!endif
+!ifndef UNINSTALL_REGISTRY_KEY
+  !define UNINSTALL_REGISTRY_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTALL_APP_KEY}"
+!endif
+
 # 使用指南地址（应用内「帮助 → 使用指南」是同一份文档）。
 !define RF_GUIDE_URL "https://github.com/magicapple123/ResumeForge/blob/main/docs/user-guide.md"
 
@@ -42,6 +74,9 @@
 # 守卫外时，另一趟就会报它，且**每轮只报第一个**——一轮一条，代价是每次 70 秒的打包。
 Var /GLOBAL RFLogFile
 Var /GLOBAL RFPage
+# 静默/交互：日志与"要不要弹框"都读它，`${Silent}` 在宏里展开会变成多处跳转，
+# 落到一个变量上更好追踪（每次 RF_LOG_OPEN 都会重算）。
+Var /GLOBAL RFSilent
 
 # ----------------------------------------------------------------------------
 # 文案：RF_STR 一次铺 26 个 LCID（默认英文，简繁中文单独给）
@@ -202,6 +237,44 @@ Var /GLOBAL RFPage
   !insertmacro RF_STR RF_BACKUP_FAILED \
     "数据备份未完成，已取消删除；你的数据保持原样。日志：" \
     "The data backup did not finish, so deletion was cancelled and your data is untouched. Log: "
+  # ---------------------------------------------------------------------------
+  # 安装器自报的失败文案（RF_ERR_*，2026-11-2x）。
+  #
+  # **不要复用 `$(appCannotBeClosed)`**：那句是 electron-builder 模板的文案，含义是
+  # "应用关不掉，卸载失败"，而我们真正遇到的三类失败（目录写不进去 / 程序文件没复制
+  # 完整 / 装完自检没过）都不是那个原因。真机上就是因为文案指错了方向，
+  # 排查跑了一整轮（用户去 tasklist 里找 ResumeForge.exe，而那个进程根本不存在）。
+  #
+  # 路径一律**运行期拼接**（LangString 里的 $变量不会被展开）：所以每一条都写成
+  # "……："结束的半句，调用处再补 $INSTDIR / 缺失文件名 / 日志路径。
+  # ---------------------------------------------------------------------------
+  !insertmacro RF_STR RF_ERR_DIR_UNWRITABLE \
+    "这个安装位置写不进去（权限受限或目录只读）。已改用默认位置继续安装，原目录里的旧文件不会被改动：$\r$\n" \
+    "This install folder is not writable (restricted permissions or read-only). Setup continues in the default location; files in the original folder are left untouched:$\r$\n"
+  !insertmacro RF_STR RF_ERR_NO_WRITABLE_DIR \
+    "默认位置也写不进去，安装无法继续。程序文件一个都没有写入，旧版本保持原样。$\r$\n$\r$\n可以改用免安装的 zip 版：把发布页的 win-unpacked 解压到任意你有写权限的目录，直接运行 ResumeForge.exe。$\r$\n" \
+    "The default location is not writable either, so setup cannot continue. No files were written and your previous install is untouched.$\r$\n$\r$\nYou can use the portable zip instead: unzip win-unpacked from the release page into any folder you can write to and run ResumeForge.exe directly.$\r$\n"
+  !insertmacro RF_STR RF_ERR_COPY_FAILED \
+    "程序文件没有完整写入安装目录（复制阶段失败）。这次安装不完整，请重新运行安装程序；连续失败可以改用免安装的 zip 版。$\r$\n" \
+    "The program files were not fully copied into the install folder. This install is incomplete - run setup again; if it keeps failing, use the portable zip instead.$\r$\n"
+  !insertmacro RF_STR RF_ERR_SELFCHECK \
+    "安装自检没通过：安装目录里缺少程序文件。缺失项：$\r$\n" \
+    "The post-install check failed: program files are missing from the install folder. Missing:$\r$\n"
+  !insertmacro RF_STR RF_ERR_APP_RUNNING \
+    "简历通仍在运行，装下去会覆盖正在使用的文件。$\r$\n$\r$\n请从托盘菜单退出后重试（数据不会丢）。" \
+    "ResumeForge is still running and would be overwritten while in use.$\r$\n$\r$\nQuit it from the tray menu, then try again (your data is safe)."
+
+  # ---------------------------------------------------------------------------
+  # 非 0 退出码一览（静默路径不弹框，改成"写日志 + 退出码"，所以这些数字就是
+  # 静默安装唯一的对外信号，读日志时按这张表对原因）：
+  #   3 = 应用还在运行（customCheckAppRunning：静默且非 --updated）
+  #   4 = 应用 60 秒内没退出（RF_WaitForAppExit 超时，静默路径）
+  #   5 = 两个候选安装目录都不可写
+  #   6 = 装完自检不通过 / 程序文件没复制完整
+  #   7 = 卸载后仍留下别人的文件
+  #   8 = 旧版数据抢救失败（复制到临时目录校验不过，静默路径）
+  #   9 = 旧版数据没能放回应用的数据位置（静默路径）
+  # ---------------------------------------------------------------------------
 !macroend
 
 # ----------------------------------------------------------------------------
@@ -216,10 +289,164 @@ Var /GLOBAL RFPage
     ClearErrors
     FileOpen $R9 "$RFLogFile" a
     ${IfNot} ${Errors}
+      # **必须**先 FileSeek 0 END：NSIS 的 "a" 模式只表示"文件不存在就创建"，
+      # 它**不会**把写入位置移到文件尾。少了这一句，每条日志都从偏移 0 开始覆盖，
+      # 结果是"文件里只剩最后一行 + 最长那行的尾巴"（QA 用 makensis 3.0.4.1 实测：
+      # 连写 4 行只剩 1 行，补上本句后 4 行完整）。2026-11-2x 那份"没有日志"的
+      # 取证有一半就是这么丢的：日志在写，但每行都在覆盖上一行。
+      FileSeek $R9 0 END
       FileWrite $R9 "${MSG}$\r$\n"
       FileClose $R9
     ${EndIf}
   ${EndIf}
+!macroend
+
+# ----------------------------------------------------------------------------
+# 开工第一件事：把日志文件建出来（2026-11-2x 真机取证）。
+#
+# 那次安装的取证结论是"本次安装连日志都没写出来"——原来的实现是在 customInit
+# 里 FileOpen w，而 customInit 排在 `ALLOW_ONLY_ONE_INSTALLER_INSTANCE` /
+# `initMultiUser` 之后：一旦更早的步骤退出（模板的 appRunning 分支、UAC 判定），
+# 日志就永远不会产生，用户和我们手里都没有证据。所以改成两级：
+#
+#   * preInit（.onInit 里 `SetOutPath $INSTDIR` 之后最早能拿到控制权的钩子）
+#     就调一次本宏 → 文件立刻存在；
+#   * customInit 再调一次 → 幂等（$RFLogFile 已定就只追加一行 phase），
+#     此时才拿得到 initMultiUser 算好的 $INSTDIR / $installMode。
+#
+# %TEMP% 写不进去时退到 $LOCALAPPDATA\ResumeForge\setup.log：同一次真机安装里
+# %TEMP% 连 ns*.tmp 都没有生成，说明整个临时目录不可写 —— 日志跟着落在那里等于没有。
+# 两处都失败时**不中断安装**（用户要的是能用的程序），但用 DetailPrint 在安装器
+# 详细视图里留一行，避免"没有日志"变成无迹可寻。
+# ----------------------------------------------------------------------------
+!macro RF_LOG_OPEN PHASE
+  ${If} $RFSilent == ""
+    StrCpy $RFSilent "0"
+  ${EndIf}
+  ${If} ${Silent}
+    StrCpy $RFSilent "1"
+  ${EndIf}
+
+  ${If} $RFLogFile == ""
+    ClearErrors
+    StrCpy $RFLogFile "$TEMP\ResumeForge-Setup.log"
+    # 安装器用 w（每次安装一份干净证据），卸载器用 a：升级时**旧卸载器会在新安装器
+    # 跑到一半时执行**，如果它截断同名日志，新安装器刚写下的探针/预检记录就没了 ——
+    # 那正是 2026-11-2x 现场"日志时间停在更早的一次手动卸载"的成因之一。
+    !ifdef BUILD_UNINSTALLER
+      FileOpen $9 "$RFLogFile" a
+      # 同 RF_LOG：a 模式不定位到文件尾，头两行会覆盖已有日志。卸载器是唯一
+      # 走追加模式的一趟，所以这个 seek 只在这里需要。
+      FileSeek $9 0 END
+    !else
+      FileOpen $9 "$RFLogFile" w
+    !endif
+    ${If} ${Errors}
+      StrCpy $RFLogFile "$LOCALAPPDATA\ResumeForge\setup.log"
+      CreateDirectory "$LOCALAPPDATA\ResumeForge"
+      ClearErrors
+      !ifdef BUILD_UNINSTALLER
+        FileOpen $9 "$RFLogFile" a
+        FileSeek $9 0 END
+      !else
+        FileOpen $9 "$RFLogFile" w
+      !endif
+      ${If} ${Errors}
+        StrCpy $RFLogFile ""
+      ${EndIf}
+    ${EndIf}
+
+    ${If} $RFLogFile == ""
+      DetailPrint "[ResumeForge] setup log unavailable: $TEMP and $LOCALAPPDATA are both not writable"
+    ${Else}
+      FileWrite $9 "=== ResumeForge ${VERSION} ${PHASE} ===$\r$\n"
+      FileWrite $9 "exe=$EXEPATH$\r$\n"
+      FileClose $9
+    ${EndIf}
+  ${EndIf}
+
+  !insertmacro RF_LOG "phase=${PHASE}"
+!macroend
+
+# 一条能对上真机的环境快照：时间 / 安装目录 / 临时目录 / 安装器所在目录 /
+# 静默还是交互 / 安装方式。$installMode 在 preInit 时还没被 initMultiUser 赋值
+# （那时是空串），所以本宏在 customInit 里还会再打一次，两次的差异本身就是信息。
+!macro RF_LOG_ENV
+  ${GetTime} "" "L" $R0 $R1 $R2 $R3 $R4 $R5 $R6
+  !insertmacro RF_LOG "time=$R0-$R1-$R2 $R3:$R4:$R5 instdir=$INSTDIR"
+  !insertmacro RF_LOG "temp=$TEMP exedir=$EXEDIR silent=$RFSilent installmode=$installMode"
+!macroend
+
+# ----------------------------------------------------------------------------
+# 应用是否还在运行（替换 electron-builder 的 `customCheckAppRunning`）。
+#
+# **这个钩子是 `_?=` 卸载失败（exit 2、一个文件没删）的根因修复，不要改回路径判定。**
+# 模板的实现（include/allowOnlyOneInstallerInstance.nsh 的 `_CHECK_APP_RUNNING`）
+# 用 PowerShell 找"镜像路径以 $INSTDIR 开头的进程"，命中就 Stop-Process。而
+# `_?=<dir>` 模式下的卸载器**就地**从 $INSTDIR 里运行，它自己就满足那个判据：
+#   → 判成"应用在跑" → 把自己 Stop-Process 掉 → 进程半路死亡，退出码非 0、
+#     卸载一个文件都没做。实测：`Uninstall ResumeForge.exe /S "_?=D:\…"` → exit 2
+#     且目录原样；同一台机器去掉 `_?=`（卸载器被复制到 %TEMP% 运行）→ exit 0、
+#     卸载正常。installUtil.nsh 正是用旧卸载器的退出码判断成败，于是 5 次重试后
+#     弹 `$(appCannotBeClosed)`，而 tasklist 里根本没有 ResumeForge.exe —— 与现场
+#     完全一致。
+# 改成**只看镜像名**（tasklist + find，和 RF_WaitForAppExit 同一套、不需要插件）：
+# 卸载器/安装器自己的镜像名永远不是 `${APP_EXECUTABLE_FILENAME}`，结构上不可能
+# 命中自己。另外两处刻意不同：
+#   * 不再强杀进程（--updated 也一样）——强杀会丢用户正在编辑的草稿，而"文件被占用"
+#     由装后自检如实报告（RF_INSTALL_SELFCHECK），不会变成假成功；
+#   * 自动更新（--updated）不弹框：那条路径没有人在旁边点它，弹框就是卡死。
+!macro customCheckAppRunning
+  # 先把日志立起来（幂等：安装器那趟在 preInit 就建过，这里只追加一行 phase）。
+  # 卸载器那趟很需要它：`un.onInit` 调 un.checkAppRunning 早于 customUnInit，
+  # 此时 $RFLogFile 还是空串，RF_LOG 是**静默空操作** —— 这个函数在卸载路径上的
+  # 判断（等 5 秒、放弃强杀、退出码）一条都不会留下证据（QA 发现的 Low 2）。
+  !insertmacro RF_LOG_OPEN "app-check"
+
+  # 静默/更新两个标志在这里自己算：本宏在卸载器里跑得比 customUnInit 还早
+  # （un.onInit 的 un.checkAppRunning），那时 $RFSilent 与 $RFLogFile 都还没定，
+  # 所以不能依赖 RF_LOG_OPEN 的结果。
+  StrCpy $R2 "0"
+  ${If} ${Silent}
+    StrCpy $R2 "1"
+  ${EndIf}
+  !insertmacro RF_IS_UPDATED $R3
+
+  StrCpy $R1 "0"
+  rf_app_check_loop:
+    nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /NH | find /I "${APP_EXECUTABLE_FILENAME}" >nul'
+    Pop $R0
+    StrCmp $R0 "0" 0 rf_app_check_done
+    # 命中：先给它收尾的机会（自动更新拉起安装器时应用可能刚发完退出请求）。
+    IntOp $R1 $R1 + 1
+    IntCmp $R1 5 rf_app_check_still_running
+    Sleep 1000
+    Goto rf_app_check_loop
+
+  rf_app_check_still_running:
+    !insertmacro RF_LOG "app still running after 5s: ${APP_EXECUTABLE_FILENAME} silent=$R2 updated=$R3"
+    ${If} $R3 == "1"
+      # 自动更新：不弹框、不杀进程，让安装继续 —— 真实结果由装后自检报告，
+      # 用户不会看到"安装完成"却打不开应用那种假成功。
+      !insertmacro RF_LOG "update run: continue without killing the app"
+      Goto rf_app_check_done
+    ${EndIf}
+    ${If} $R2 == "1"
+      # 静默但非更新的安装（管理员手动 /S）：没有界面可弹，直接以非 0 退出，
+      # 让调用方（或用户的下一条命令）看到失败，而不是卡在一个看不见的框上。
+      !insertmacro RF_LOG "silent run: aborting, set errorlevel 3"
+      SetErrorLevel 3
+      Quit
+    ${EndIf}
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(RF_ERR_APP_RUNNING)" IDRETRY rf_app_check_retry
+      !insertmacro RF_LOG "user cancelled: app still running"
+      SetErrorLevel 3
+      Quit
+    rf_app_check_retry:
+    StrCpy $R1 "0"
+    Goto rf_app_check_loop
+
+  rf_app_check_done:
 !macroend
 
 # ----------------------------------------------------------------------------
@@ -265,6 +492,145 @@ Var /GLOBAL RFDesktopCheck
 Var /GLOBAL RFStartMenuCheck
 Var /GLOBAL RFAutostartCheck
 Var /GLOBAL RFExistingVersion
+# $installMode 的**快照**：那个变量由 multiUser.nsh 声明（模板 body），而抢占式卸旧
+# 现在要在 rfPrecheck 里也能跑，那个函数是 header 里编译的 —— 直接引用 $installMode
+# 会 `warning 6000` → `-WX` 打包失败（2026-11-2x 实测 "unknown variable/constant
+# installMode ... macro:_==:1"）。所以在 customInit（模板 body、$installMode 已定）
+# 把它抄进我们自己声明的变量，后面一律读这个。
+Var /GLOBAL RFInstallMode
+# 写探针 / 降级（下文的 rfProbeWritable 与 RF_WRITE_PROBE）与装后自检的状态。
+Var /GLOBAL RFInstallDirOriginal
+Var /GLOBAL RFProbeState
+Var /GLOBAL RFProbeError
+Var /GLOBAL RFDowngraded
+Var /GLOBAL RFSelfCheckState
+Var /GLOBAL RFSelfCheckMissing
+
+# ----------------------------------------------------------------------------
+# 写探针（2026-11-2x 真机取证的核心兜底）
+#
+# 现场：安装到 `D:\ResumeForge-desktop-user` 时中途弹
+# 「不能打开要写入的文件：…\uninstallerIcon.ico」，选"忽略"后到 55% 又弹
+# 「无法关闭」。而 D: 根 ACL 正常、手动建目录成功、磁盘充足 —— 也就是说这个目录
+# 在某些上下文里写不进去，但 NSIS 的 `File` 指令只会甩一个 Windows 原始对话框，
+# 既不写日志也没有下一步。所以这里在**任何文件落盘之前**先自己试写一次：
+#
+#   * 探针成功 → 一切照旧；
+#   * 探针失败 → 记日志（含 GetLastError），改到 RF_FALLBACK_INSTDIR 继续；
+#     那里也写不进去才终止，并给出"可改用 zip 版"的出路。
+#
+# 探针文件落在 $INSTDIR 里而不是 $TEMP%：要验的正是"程序文件能不能写进这个目录"，
+# 而 %TEMP% 的写入能力另由 RF_LOG_OPEN 的降级路径覆盖（那次真机 %TEMP% 连
+# ns*.tmp 都没生成过）。
+# ----------------------------------------------------------------------------
+Function rfProbeWritable
+  # 入参：$INSTDIR（已被 initMultiUser / 目录页定好）
+  # 出参：$RFProbeState = "ok" / "dir" / "write"，$RFProbeError = GetLastError
+  StrCpy $RFProbeState "ok"
+  StrCpy $RFProbeError "0"
+
+  ${If} $INSTDIR == ""
+    # initMultiUser 之前理论上不该调用；真发生了就当"不可写"，走降级而不是写相对路径。
+    StrCpy $RFProbeState "dir"
+    Return
+  ${EndIf}
+
+  # 首次安装时目录还不存在。SetOutPath 会创建它，但失败是静默的；这里自己建，
+  # 并且**不**用 `IfFileExists "$INSTDIR\*.*"` 反查 —— 空目录在它眼里"不存在"，
+  # 那会把一个完全可写的空目录误判成失败（本仓库在抢救复制里踩过同一个坑）。
+  ClearErrors
+  CreateDirectory "$INSTDIR"
+
+  ClearErrors
+  FileOpen $9 "$INSTDIR\${RF_PROBE_FILE}" w
+  ${If} ${Errors}
+    StrCpy $RFProbeState "write"
+    Call rfCaptureLastError
+    Return
+  ${EndIf}
+  ClearErrors
+  FileWrite $9 "probe"
+  FileClose $9
+  ${If} ${Errors}
+    StrCpy $RFProbeState "write"
+    Call rfCaptureLastError
+  ${EndIf}
+
+  ClearErrors
+  Delete "$INSTDIR\${RF_PROBE_FILE}"
+  ${If} ${Errors}
+    # 能写不能删（少见：目录上有删除权限限制）。安装只写不删，所以仍算可用，
+    # 但留一条日志——用户日后在安装目录里看到这个文件时有据可查。
+    !insertmacro RF_LOG "probe cleanup failed: $INSTDIR\${RF_PROBE_FILE}"
+  ${EndIf}
+FunctionEnd
+
+Function rfCaptureLastError
+  # GetLastError 只能"尽力"：NSIS 的 FileOpen 包装在失败之后可能又调过别的
+  # Win32 API，last-error 有被覆盖的可能。这个值**只进日志**，不参与任何判断
+  # （判断只看错误位），免得一个被污染的数字把降级逻辑带偏。
+  System::Call 'kernel32::GetLastError() i .R0'
+  StrCpy $RFProbeError "$R0"
+FunctionEnd
+
+# 探针 + 降级。TAG 只用于日志前缀（本宏在 customInit 与 rfPrecheck 两处插入，
+# 全部用 LogicLib 分支、不用裸标签，避免 `${__LINE__}` 在宏体内是定义行导致的撞标签）。
+!macro RF_WRITE_PROBE TAG
+  # $RFDowngraded 只置 1、**从不清 0**：本宏在 customInit 与 rfPrecheck 各插入一次，
+  # 第二次（目录页之后）即使在降级后的目录上探针成功，也不能把"这次安装降级过"
+  # 擦掉 —— 收尾日志与完成页都要读它。
+  StrCpy $RFInstallDirOriginal "$INSTDIR"
+  Call rfProbeWritable
+  !insertmacro RF_LOG "${TAG} probe: dir=$INSTDIR result=$RFProbeState lasterror=$RFProbeError"
+
+  ${If} $RFProbeState != "ok"
+    ${If} $RFSilent == "1"
+      # 自动更新走 /S：这条路径没有人在旁边点框，弹一个就是卡死。
+      !insertmacro RF_LOG "${TAG} probe failed -> silent fallback to ${RF_FALLBACK_INSTDIR}"
+    ${EndIf}
+
+    StrCpy $INSTDIR "${RF_FALLBACK_INSTDIR}"
+    Call rfProbeWritable
+    !insertmacro RF_LOG "${TAG} fallback probe: dir=$INSTDIR result=$RFProbeState lasterror=$RFProbeError"
+
+    ${If} $RFProbeState == "ok"
+      StrCpy $RFDowngraded "1"
+      # 只改 $INSTDIR 一处就够：electron-builder 的安装段（文件复制 / 注册表 /
+      # 快捷方式 / 卸载器登记）自始至终只读 $INSTDIR；写成 $OUTDIR 或另存一个变量
+      # 才会漂移。SetOutPath 让"当前输出目录"也跟着走，避免后续相对路径写进旧目录。
+      SetOutPath "$INSTDIR"
+      !insertmacro RF_LOG "${TAG} downgraded: original=$RFInstallDirOriginal now=$INSTDIR"
+      ${If} $RFSilent != "1"
+        # 提示放在降级**之后**：要把"从哪来、到哪去"同时说清，用户才知道
+        # 以后去哪里找程序（旧的失败方式是一句 Windows 原始对话框，什么都没说）。
+        MessageBox MB_ICONEXCLAMATION|MB_OK "$(RF_ERR_DIR_UNWRITABLE)$RFInstallDirOriginal -> $INSTDIR"
+      ${EndIf}
+    ${Else}
+      !insertmacro RF_LOG "${TAG} fatal: no writable install dir (original=$RFInstallDirOriginal)"
+      ${If} $RFSilent == "1"
+        # 静默路径**不弹框**（ExecWait 里的 MessageBox 会把自动更新挂死，
+        # 而"挂死"正是本轮要消灭的现象）。留 DetailPrint + 非 0 退出码，
+        # 让更新器的启动对账如实报失败。
+        DetailPrint "[ResumeForge] no writable install directory: ${RF_FALLBACK_INSTDIR}"
+      ${Else}
+        ${If} ${Cmd} `MessageBox MB_ICONSTOP|MB_YESNO "$(RF_ERR_NO_WRITABLE_DIR)$(RF_LOG_HINT)$RFLogFile$\r$\n$(RF_LOG_ASK)" IDYES`
+          ExecShell "open" "$RFLogFile"
+        ${EndIf}
+      ${EndIf}
+      SetErrorLevel 5
+      Quit
+    ${EndIf}
+  ${EndIf}
+!macroend
+
+# .onInit 里 `SetOutPath $INSTDIR` 之后最早能拿到控制权的钩子。日志必须在这里就存在：
+# 那次真机安装"连日志都没写出来"，而更早的步骤（模板的 appRunning 分支 / UAC 判定）
+# 退出时我们连一行证据都留不下。此时 initMultiUser 还没跑（$INSTDIR / $installMode
+# 仍是空），所以这里只建文件 + 打环境快照，写探针留给 customInit。
+!macro preInit
+  !insertmacro RF_LOG_OPEN "preInit"
+  !insertmacro RF_LOG_ENV
+!macroend
 
 !macro RF_PRECHECK_FAIL TEXT
   # 分支交给 LogicLib：`${__LINE__}` 在 !macro 体内是**定义行**常量，同一函数里插两次
@@ -351,6 +717,22 @@ Function rfPrecheck
     !insertmacro RF_PRECHECK_FAIL "$(RF_PRECHECK_SPACE)"
     Return
   ${EndIf}
+
+  # 4) 写探针（第二次）：customInit 那次早于"选择安装位置"页，用户完全可能改到
+  #    另一个写不进去的目录。这里再探一次，交互模式照样能自动降级 —— 否则就会
+  #    重演现场那句「不能打开要写入的文件」，那是 Windows 的原始对话框，既没有
+  #    下一步也没有日志。降级只改 $INSTDIR，不阻断流程。
+  !insertmacro RF_WRITE_PROBE "precheck"
+  ${If} $RFDowngraded == "1"
+    !insertmacro RF_LOG "precheck: install dir downgraded to $INSTDIR"
+  ${EndIf}
+
+  # 5) 抢占式卸旧（交互路径的最后一站，Medium 3）：目录页之后、INSTFILES 之前。
+  #    这一页的 leave 一旦通过，后面就只剩进度条，用户已经没有取消的机会了 ——
+  #    这正是"删旧版本 + 清卸载登记"应该发生的时点。静默没有页面（到不了这里），
+  #    那条路径在 customInit 里做（legacy-data-rescue.nsh 的 rf_init_done 之后）。
+  #    探针在前面：先确认能写，再动旧版本，顺序反了会在不可写目录上白删一遍。
+  !insertmacro RF_PREEMPTIVE_UNINSTALL
 
   !insertmacro RF_LOG "precheck ok: $INSTDIR"
 FunctionEnd
@@ -606,15 +988,13 @@ FunctionEnd
 # 安装期装配（由 legacy-data-rescue.nsh 的 customInit / customInstall 末尾插入）
 # ----------------------------------------------------------------------------
 
-# customInit 的第一段：开日志 → 读出已有安装 → 定默认值 → 升级备份。
+# customInit 的中段：读出已有安装 → 定默认值 → 升级备份。
+# （日志与写探针由 legacy-data-rescue.nsh 的 customInit 在本宏之前先跑，
+#   日志因此从"开工第一行"就存在，探针也早于任何文件落盘。）
 !macro RF_INSTALL_INIT
-  StrCpy $RFLogFile "$TEMP\ResumeForge-Setup.log"
-  FileOpen $9 "$RFLogFile" w
-  FileWrite $9 "=== ResumeForge setup ===$\r$\n"
-  FileWrite $9 "exe=$EXEPATH$\r$\n"
-  FileWrite $9 "instdir=$INSTDIR$\r$\n"
-  FileClose $9
-
+  # 快照安装方式：本宏在 customInit（模板 body）里展开，$installMode 此刻有效；
+  # 后面的 rfPrecheck / 抢占式卸旧读这个快照（理由见 Var 声明处）。
+  StrCpy $RFInstallMode "$installMode"
   StrCpy $RFExistingVersion ""
   StrCpy $RFExistingMode ""
   StrCpy $RFRepairMode "0"
@@ -689,7 +1069,66 @@ FunctionEnd
     !insertmacro RF_LOG "autostart: not requested"
   ${EndIf}
 
-  !insertmacro RF_LOG "install done: version=${VERSION} repair=$RFRepairMode"
+  !insertmacro RF_LOG "install done: version=${VERSION} repair=$RFRepairMode instdir=$INSTDIR downgraded=$RFDowngraded"
+!macroend
+
+# ----------------------------------------------------------------------------
+# 装完自检（2026-11-2x）：**不许"假装成功"**。
+#
+# 现场最终是用 `robocopy desktop\out\win-unpacked → 安装目录` 绕过去的，说明包本身
+# 没问题、坏的是安装器"失败也要装作成功"的处理：进度条走完、弹出"安装完成"，
+# 而目录里 0 个文件。自检把这件事变成不可能 —— 缺文件就以非 0 退出码收场。
+#
+# 分两档判据，因为要给出**不同的**下一步：
+#   a) `resources\payload\backend\app\main.py` 缺失 = 复制阶段没成（现场那一档）；
+#   b) `ResumeForge.exe` / `resources\app.asar` 缺失 = 壳本体不全（装了也打不开）。
+# 弹窗文案对应 RF_ERR_COPY_FAILED / RF_ERR_SELFCHECK，两者都不是 `$(appCannotBeClosed)`。
+!macro RF_INSTALL_SELFCHECK
+  StrCpy $RFSelfCheckState "ok"
+  StrCpy $RFSelfCheckMissing ""
+
+  ${IfNot} ${FileExists} "$INSTDIR\resources\payload\backend\app\main.py"
+    StrCpy $RFSelfCheckState "copy"
+    StrCpy $RFSelfCheckMissing "resources\payload\backend\app\main.py"
+    !insertmacro RF_LOG "self-check: payload missing under $INSTDIR"
+  ${EndIf}
+
+  ${IfNot} ${FileExists} "$INSTDIR\${PRODUCT_FILENAME}.exe"
+    StrCpy $RFSelfCheckState "files"
+    StrCpy $RFSelfCheckMissing "${PRODUCT_FILENAME}.exe"
+    !insertmacro RF_LOG "self-check: missing ${PRODUCT_FILENAME}.exe under $INSTDIR"
+  ${EndIf}
+
+  ${IfNot} ${FileExists} "$INSTDIR\resources\app.asar"
+    StrCpy $RFSelfCheckState "files"
+    ${If} $RFSelfCheckMissing == ""
+      StrCpy $RFSelfCheckMissing "resources\app.asar"
+    ${Else}
+      StrCpy $RFSelfCheckMissing "$RFSelfCheckMissing, resources\app.asar"
+    ${EndIf}
+    !insertmacro RF_LOG "self-check: missing resources\app.asar under $INSTDIR"
+  ${EndIf}
+
+  !insertmacro RF_LOG "self-check: state=$RFSelfCheckState instdir=$INSTDIR missing=$RFSelfCheckMissing"
+
+  ${If} $RFSelfCheckState != "ok"
+    ${If} $RFSelfCheckState == "copy"
+      StrCpy $R1 "$(RF_ERR_COPY_FAILED)"
+    ${Else}
+      StrCpy $R1 "$(RF_ERR_SELFCHECK)$RFSelfCheckMissing"
+    ${EndIf}
+    ${If} $RFSilent == "1"
+      # 静默（自动更新）：不弹框，DetailPrint + 非 0 退出码，让更新器的启动对账
+      # 如实报"这次没装成"，而不是下个版本起来才发现文件少了。
+      DetailPrint "[ResumeForge] self-check failed: $RFSelfCheckMissing"
+    ${Else}
+      MessageBox MB_ICONSTOP|MB_OK "$R1$\r$\n$(RF_LOG_HINT)$RFLogFile"
+    ${EndIf}
+    SetErrorLevel 6
+    Quit
+  ${EndIf}
+
+  !insertmacro RF_LOG "self-check ok: $INSTDIR"
 !macroend
 
 !endif
@@ -721,13 +1160,16 @@ Var /GLOBAL RFUDst
 Var /GLOBAL RFUCopyFailed
 
 !macro RF_UNINSTALL_INIT
-  StrCpy $RFLogFile "$TEMP\ResumeForge-Setup.log"
+  # 日志用同一套开工逻辑（含 %TEMP% 不可写时退到 %LOCALAPPDATA% 的降级）：
+  # 卸载器也要在"最早能拿到控制权"的地方留下证据，否则卸载失败同样无从排查。
+  !insertmacro RF_LOG_OPEN "uninstall"
+  !insertmacro RF_LOG_ENV
   StrCpy $RFUnDeleteData "0"
   StrCpy $RFUnBackupData "1"
   StrCpy $RFUnBackupDir ""
   StrCpy $RFUnRetryCount "0"
   StrCpy $RFNeedRetry "0"
-  !insertmacro RF_LOG "=== ResumeForge uninstall === instdir=$INSTDIR"
+  !insertmacro RF_LOG "uninstall init: instdir=$INSTDIR data=${RF_DATA_DIR}"
 !macroend
 
 !macro customUnInit
@@ -970,6 +1412,40 @@ Function un.rfPathSize
   ${EndIf}
 FunctionEnd
 
+# ----------------------------------------------------------------------------
+# 安装目录里还剩不剩"别人的"文件（$R6 = "1" 还有 / "0" 已经干净）。
+#
+# 为什么要这个函数：`_?=<dir>` 模式下卸载器**就地**从 $INSTDIR 运行，那份
+# `Uninstall ResumeForge.exe` 正在被执行，Windows 不允许删除运行中的镜像 —— 于是
+# 目录永远不会真正变空。旧判据只看 `IfFileExists "$INSTDIR\*.*"`，会把它当成
+# "有文件未能删除"，最多重试 3 次后显示失败页；而 installUtil.nsh 正是拿退出码
+# 判断旧卸载器成败 → 升级被卡住。**成功不能报成失败**，所以这里把"只剩卸载器
+# 自己"归为干净。
+# ----------------------------------------------------------------------------
+Function un.rfHasForeignEntries
+  # 用**本进程的镜像名**判断，而不是 `${UNINSTALL_FILENAME}`：那个常量在 common.nsh
+  # 里才有定义，而本文件被 electron-builder 放在生成脚本最顶部（早于 common.nsh），
+  # 函数是就地编译的，写常量会直接 warning 6000 → -WX 打包失败（2026-11-2x 实测）。
+  # $EXEPATH 在 `_?=` 就地模式下正好是 "$INSTDIR\<卸载器>.exe"，非就地模式下在
+  # %TEMP%，此时 $INSTDIR 里那份同名文件若还在就**是**残留，判据依旧正确。
+  ${GetFileName} "$EXEPATH" $R8
+  StrCpy $R6 "0"
+  FindFirst $R5 $R7 "$INSTDIR\*.*"
+  un_rf_foreign_loop:
+    StrCmp $R7 "" un_rf_foreign_done
+    StrCmp $R7 "." un_rf_foreign_next
+    StrCmp $R7 ".." un_rf_foreign_next
+    StrCmp $R7 "$R8" un_rf_foreign_next
+    StrCpy $R6 "1"
+    !insertmacro RF_LOG "uninstall residue: $R7"
+    Goto un_rf_foreign_done
+  un_rf_foreign_next:
+    FindNext $R5 $R7
+    Goto un_rf_foreign_loop
+  un_rf_foreign_done:
+  FindClose $R5
+FunctionEnd
+
 Function un.rfResiduePageShow
   # 删不掉时先问一次要不要重试（WF-08 #8：重试 / 关掉占用程序后重试）。
   # 用原生标签循环而不是 `Goto` 回本函数名：NSIS 的 Goto 只认**标签**，
@@ -977,7 +1453,8 @@ Function un.rfResiduePageShow
   # （实测 2026-11-19 makensis 原文）；回跳进 LogicLib 的 ${If} 块同样非法。
   un_rf_residue_prompt:
   IntCmp $RFUnRetryCount 3 un_rf_residue_measured
-  IfFileExists "$INSTDIR\*.*" 0 un_rf_residue_measured
+  Call un.rfHasForeignEntries
+  StrCmp $R6 "1" 0 un_rf_residue_measured
   MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(RF_RETRY_TITLE)$\r$\n$\r$\n$(RF_RETRY_TEXT)" IDRETRY un_rf_residue_retry
   Goto un_rf_residue_measured
   un_rf_residue_retry:
@@ -987,6 +1464,19 @@ Function un.rfResiduePageShow
   RMDir /r "$INSTDIR"
   Goto un_rf_residue_prompt
   un_rf_residue_measured:
+
+  # 退出码要说真话（installUtil.nsh 拿它判断升级能否继续）：
+  #   只剩卸载器自己（或目录已空）→ 0；仍有别人的文件 → 7，并把条目写进日志。
+  # 静默路径（/S，自动更新）不经过页面，退出码保持 NSIS 的默认值：正常结束为 0，
+  # 模板里 `Abort` 掉的分支非 0 —— 这里不去覆盖它，免得把失败"擦"成成功。
+  Call un.rfHasForeignEntries
+  ${If} $R6 == "1"
+    !insertmacro RF_LOG "uninstall finished with residue: $INSTDIR"
+    SetErrorLevel 7
+  ${Else}
+    !insertmacro RF_LOG "uninstall clean: $INSTDIR"
+    SetErrorLevel 0
+  ${EndIf}
 
   nsDialogs::Create 1018
   Pop $RFPage

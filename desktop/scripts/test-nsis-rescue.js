@@ -210,17 +210,29 @@ test("customHeader is defined outside the installer-only guard", () => {
 test("every user-facing message box is bilingual", () => {
   const source = readRescue();
   const branches = (source.match(/\$\{If\} \$LANGUAGE/g) || []).length;
-  const elses = (source.match(/\$\{Else\}/g) || []).length;
-  const endifs = (source.match(/\$\{EndIf\}/g) || []).length;
   const boxes = (source.match(/^\s*MessageBox\b/gm) || []).length;
   assert.ok(branches > 0, "the installer messages must branch on $LANGUAGE");
-  assert.strictEqual(elses, branches, "each language branch needs an ${Else} English fallback");
-  assert.strictEqual(endifs, branches, "each language branch must be closed");
   assert.strictEqual(
     boxes,
     branches * 2,
     "each message box needs one Chinese and one English variant",
   );
+
+  // 逐块校验，而不是**全文件**数 `${Else}` / `${EndIf}`：2026-11-2x 加了抢占式卸旧
+  // （RF_PREEMPTIVE_UNINSTALL，里面有 4 组自己的 ${If}/${Else}/${EndIf}）之后，
+  // 全文件计数把无关分支也算了进来，守卫于是误红。改成"每个 $LANGUAGE 分支内部
+  // 必须有 中文 MessageBox → ${Else} → English MessageBox → ${EndIf}"，
+  // 判定比原来更严：只有语言分支里漏了英文那一条才会红。
+  const blocks = [...source.matchAll(/\$\{If\} \$LANGUAGE\b[\s\S]*?\$\{EndIf\}/g)].map((m) => m[0]);
+  assert.strictEqual(blocks.length, branches, "each $LANGUAGE branch must be closed by ${EndIf}");
+  for (const block of blocks) {
+    const elseAt = block.indexOf("${Else}");
+    assert.ok(elseAt > 0, "each language branch needs an ${Else} English fallback");
+    const zh = block.slice(0, elseAt);
+    const en = block.slice(elseAt);
+    assert.strictEqual((zh.match(/^\s*MessageBox\b/gm) || []).length, 1, "one Chinese message box");
+    assert.strictEqual((en.match(/^\s*MessageBox\b/gm) || []).length, 1, "one English message box");
+  }
 });
 
 test("the recursive copy detects directories without IfFileExists", () => {
