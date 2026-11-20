@@ -248,6 +248,14 @@
      放大时纸本来就该比相框宽，宽度由内联样式给（面板的 `pageWidth`）。 */
   max-width: 100%;
   min-width: 0;
+  /* 裁剪（2026-11-20 条目 14，第二道防线）：位图的 CSS 宽是 `Math.floor` 出来的整数，
+     位图本身按 `width × dpr × 2` 渲染，125% 缩放下浏览器会把纸的右缘多画半个/一个
+     设备像素——那一条白就压在页脚上。
+     ⚠️ **不要**改成去动 `.exact-preview` 自己的 `overflow-x/overflow-y`：横向 `auto` 是
+     放大后**唯一允许**的横向滚动条（见上方 `is-zoomed` 的那段注释），把相框的 overflow
+     收紧会直接杀掉放大后的横向滚动。裁剪放在纸张层：它是滚动内容本身，裁的正是自己
+     的绘制溢出，滚动条不受影响。 */
+  contain: paint;
 }
 
 .exact-preview.is-zoomed .exact-preview-paper-column {

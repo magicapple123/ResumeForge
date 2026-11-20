@@ -23,11 +23,12 @@
  * - `EntryLayoutShortFields`：灰色短字段顺序与显示（Q07/Q08/Q20 + R-10）；
  * - `EntryLayoutNodeInspector`：选中字段的就地编辑（两处渲染共用）。
  */
-import { Button, Empty, Segmented, Select, Typography } from "antd";
+import { Button, Segmented, Select, Typography } from "antd";
 import { useCallback, useMemo, useState } from "react";
 import { useLocale } from "../../../i18n/i18nContext";
 import { t } from "../../../i18n";
 import type { MessageKey } from "../../../i18n";
+import EmptyState from "../../../components/common/EmptyState";
 import type { ResumeDocument, SectionLayout, EntryLayout } from "../../../types/resumeDocument";
 import { findItem } from "../document/paths";
 import { entryDisplayLabel } from "../document/summarize";
@@ -376,10 +377,7 @@ export default function EntryLayoutPanel({
         </Button>
       </div>
       {scope === "entry" && noEntries ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={t("structure.layout.entryEmpty")}
-        />
+        <EmptyState inline description={t("structure.layout.entryEmpty")} />
       ) : null}
 
       {/* R-11-6：字段检查器在面板**底部**——选中字段时它只往下长，上面的参数区不动。 */}

@@ -76,8 +76,8 @@ export const fontSize = {
  * 嵌套被保证）。message（+1010=4110）/notification（+1050=4150）仍高于整个
  * 投投族——toast 不被卡片遮挡，几何上也互不重叠（toast 顶部、卡片底部）。
  *
- * 梯度：悬浮球 tip3700＞球3650＞卡内弹层3550＞剪贴板3500＞保存卡3450（壳内
- * 地标，不参与全局排序）＞助手3400；ResumeEditorModal 3110 盖在旧语义的宿主
+ * 梯度：悬浮球 tip3700=标题栏菜单3700＞球3650＞卡内弹层3550＞剪贴板3500＞保存卡3450
+ * （壳内地标，不参与全局排序）＞助手3400；ResumeEditorModal 3110 盖在旧语义的宿主
  * 弹窗之上（其打开场景无并存容器，见 ResumeEditorModal.tsx 注释）。
  * 剪贴板卡刻意压在助手卡之上：两卡同时弹出时剪贴板不能被大尺寸的助手卡盖住。
  */
@@ -102,6 +102,16 @@ export const layer = {
   cardPopup: 3550,
   /** 投投悬浮球。 */
   orb: 3650,
+  /**
+   * 标题栏系统菜单的下拉（`DesktopMenuDropdown`）。
+   *
+   * **不跟随 popupBase**：它永远要在 antd 容器链之上。antd 6 按容器层级递增
+   * （popupBase + 100 × 层数），制作台是整屏 Modal、容器链已抬到 3200+，跟随 3100 会让
+   * 六个菜单整块被弹窗盖住（2026-11-20 条目 12：只有按下态、选项看不见）。
+   * 取 3700：与 orbTooltip 同档（两者几何上不重叠），仍低于 aiPolish 3710 与
+   * message 4110 / notification 4150。
+   */
+  titlebarMenu: 3700,
   /** 悬浮球身 Tooltip 的例外抬层（高于球身）。 */
   orbTooltip: 3700,
   /**

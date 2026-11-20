@@ -11,7 +11,6 @@ import {
   App,
   Button,
   Card,
-  Empty,
   Space,
   Collapse,
   Dropdown,
@@ -23,6 +22,7 @@ import {
   Upload,
 } from "antd";
 import LoadingBlock from "../components/common/LoadingBlock";
+import EmptyState from "../components/common/EmptyState";
 import type { TableColumnsType } from "antd";
 import type { HTMLAttributes } from "react";
 import { useState } from "react";
@@ -374,7 +374,7 @@ export default function SkillsPage() {
               onRetry={() => void load()}
             />
           ) : skills.length === 0 ? (
-            <Empty description={t("skills.empty")} />
+            <EmptyState description={t("skills.empty")} />
           ) : (
             <Table
               rowKey="id"

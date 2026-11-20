@@ -300,7 +300,7 @@ export default function DesktopMenuDropdown({
       className="app-titlebar-menu-dropdown"
       role="menu"
       aria-label={t(menu.labelKey)}
-      style={{ left: position.left, top: position.top, zIndex: layer.popupBase }}
+      style={{ left: position.left, top: position.top, zIndex: layer.titlebarMenu }}
       onKeyDown={handleKeyDown}
     >
       <div ref={listRef} className="app-titlebar-menu-list" role="none">

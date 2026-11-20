@@ -14,11 +14,12 @@
  * `aria-activedescendant` 报给读屏。快捷键本身由快捷键系统（`commandPalette` 动作）
  * 触发，显示文本由 `formatShortcut` 按用户当前键位生成——不硬编码 Ctrl+K。
  */
-import { App, Empty, Input, Modal, Typography } from "antd";
+import { App, Input, Modal, Typography } from "antd";
 import type { InputRef } from "antd";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
+import EmptyState from "../../../components/common/EmptyState";
 import {
   cycleActiveIndex,
   filterCommands,
@@ -192,11 +193,9 @@ export default function CommandPalette({ open, onClose, commands }: Props) {
         style={{ maxHeight: 320, overflowY: "auto", marginTop: 8 }}
       >
         {entries.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={t("proview.command.empty")}
-            style={{ margin: "16px 0" }}
-          />
+          <div style={{ margin: "16px 0" }}>
+            <EmptyState inline description={t("proview.command.empty")} />
+          </div>
         ) : (
           entries.map((entry, index) => (
             <Fragment key={entry.command.id}>

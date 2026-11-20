@@ -11,8 +11,9 @@
  * （单文件 500 行硬预算；本文件只保留数据、弹层开关与列表交互）。
  */
 import { CheckSquareOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Card, Empty, Form, Listy, Pagination, Segmented, Select, Space } from "antd";
+import { App, Button, Card, Form, Listy, Pagination, Segmented, Select, Space } from "antd";
 import FormModal from "../../components/common/FormModal";
+import EmptyState from "../../components/common/EmptyState";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { useClientPagination } from "../../hooks/useClientPagination";
 import dayjs from "dayjs";
@@ -320,7 +321,7 @@ export default function ReminderPanel() {
       ) : loading ? (
         <LoadingBlock />
       ) : rangedItems.length === 0 ? (
-        <Empty
+        <EmptyState
           description={items.length === 0 ? t("reminder.empty") : t("reminder.emptyFiltered")}
         />
       ) : (

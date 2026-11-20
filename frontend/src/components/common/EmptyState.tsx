@@ -2,13 +2,14 @@
 /**
  * 空态（RF-12 固化的通用模式之一）。
  *
- * 薄封装而非新组件库：统一「simple 插图 + 一句说明 + 可选动作」的空态形态，
- * 避免各页面自己拼 <Empty> 时插图口径、按钮排布各写一套。已确认「确实没有
- * 数据」时用它；请求失败请改用同目录的 ErrorState（语义与视觉都不同）。
+ * 薄封装而非新组件库：统一「线稿水印 + 一句说明 + 可选动作」的空态形态，避免各页面
+ * 自己拼 <Empty> 时插图口径、按钮排布各写一套。已确认「确实没有数据」时用它；
+ * 请求失败请改用同目录的 ErrorState（语义与视觉都不同）。
  *
  * `inline`：表格 emptyText / Listy 空列表 / Drawer 侧栏这类**已经处在紧凑容器里**的
  * 位置，`EmptyState` 外层的 `.rf-state` 带 `min-height:192px`，会凭空把行高撑起来
- * （密度不匹配）。`inline` 时只输出 `<Empty>` 本身，不套外壳。
+ * （密度不匹配）。`inline` 时只输出 `<Empty>` 本身，不套外壳——**插图仍统一**，只是
+ * 尺寸收到 48px。
  */
 import { Button, Empty } from "antd";
 import type { ReactNode } from "react";
@@ -75,7 +76,7 @@ export default function EmptyState({
   onAction?: () => void;
   /** 紧凑容器内使用：不渲染 `.rf-state` 外壳（避免 192px 最小高度撑高行）。 */
   inline?: boolean;
-  /** 自定义插图（如 `<EmptyWatermark />`）；不传维持 antd simple，现有调用零改动。 */
+  /** 自定义插图；不传统一用线稿水印（整块 72px / inline 48px）。 */
   image?: ReactNode;
   /** 需要自定义动作区时的出口（不渲染默认按钮）。 */
   children?: ReactNode;
@@ -90,14 +91,15 @@ export default function EmptyState({
       </Button>
     ) : null;
 
-  // 默认插图（WF-18 收口）：**整块空态**统一用产品线稿，`inline`（表格 emptyText、
-  // 侧栏、下拉）仍保留 antd simple——那些位置的槽位只有 40px 上下，72px 线稿会把行高撑开。
-  // 之所以做成默认值而不是让每个调用点自己传：全库 71 个调用点只有 7 个传了，
-  // 于是"有的页面换了、有的没换"（2026-11-20 用户截图）。
+  // 全站只用一套插图（2026-11-20）：`inline` 只决定**是否套 `.rf-state` 外壳**
+  //（外壳带 192px 最小高度，会把表格空行撑开），插图统一是线稿水印，仅尺寸收一档。
   const empty = (
     <Empty
-      image={image ?? (inline ? Empty.PRESENTED_IMAGE_SIMPLE : <EmptyWatermark />)}
+      image={image ?? <EmptyWatermark size={inline ? 48 : 72} />}
       description={description}
+      // inline 没有 `.rf-state` 外壳，antd 会给插画位固定 100px（`.ant-empty-image`）；
+      // 默认水印显式收到 48px 才真正紧凑（自定义 image 仍交给调用方与 antd 原规则）。
+      styles={inline && !image ? { image: { height: 48, marginBottom: 8 } } : undefined}
     >
       {action ? <div className="rf-state-actions">{action}</div> : null}
     </Empty>

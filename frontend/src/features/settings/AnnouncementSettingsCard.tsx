@@ -9,11 +9,12 @@
  * **当场看不到公告条**（同一页的 `UpdateCard` 正在说同一件事）。回到任意其它页面立刻出现
  * ——这是设计使然，不是 bug，所以恢复成功的 Toast 写的是"回到页面就能看到"。
  */
-import { Button, Card, Empty, Space, Typography } from "antd";
+import { Button, Card, Space, Typography } from "antd";
 import { useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { useToast } from "../../hooks/useToast";
+import EmptyState from "../../components/common/EmptyState";
 import type { AnnouncementCode } from "../announcements/announcementCodes";
 import { listMutedCodes, unmuteAnnouncement } from "../announcements/announcementMute";
 import { notifyAnnouncements } from "../announcements/announcementStore";
@@ -41,10 +42,7 @@ export default function AnnouncementSettingsCard() {
     // 漏掉就会和下一张「帮助与诊断」贴在一起。
     <Card title={t("announcement.settings.title")} size="small" className="settings-card">
       {muted.length === 0 ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={t("announcement.settings.empty")}
-        />
+        <EmptyState inline description={t("announcement.settings.empty")} />
       ) : (
         <Space orientation="vertical" size={8} style={{ width: "100%" }}>
           {muted.map((code) => (

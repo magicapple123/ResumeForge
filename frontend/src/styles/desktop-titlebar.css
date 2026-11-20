@@ -115,6 +115,26 @@ html:has(.app-titlebar:not([data-hidden="true"])) .ant-drawer-content-wrapper {
   height: calc(100% - var(--rf-titlebar-height));
 }
 
+/* 抽屉 / 整屏弹窗顶到标题栏下沿时的**分界线**（2026-11-20，替代"覆盖层透明"方案）。
+ *
+ * 为什么需要它：Windows 的 `titleBarOverlay` 会用不透明底色盖住右上角约 138×32 的区域，
+ * 把 `.app-titlebar` 自己的 `border-bottom` 也一并盖掉；于是页面左侧有分界、按钮区没有，
+ * 抽屉的白头直接接上浅灰标题栏（两者只差 10 级），三颗系统按钮看起来"浮"在面板上。
+ *
+ * 覆盖层透明（`color: "#00000000"`）能根除这个问题，但 2026-11-20 真机实测：
+ * **三颗按钮完全不渲染**（截图按钮区 0 个深色像素），窗口无法最小化/关闭 ——
+ * 所以改回不透明底色，由页面在抽屉顶边补回那 1px。
+ *
+ * 必须用 `border-top` 而不是 `inset box-shadow`：内阴影绘制在内容之下，
+ * `.ant-drawer-header` 的白底会把它盖掉。也必须显式 `border-box`：
+ * 上面那条 `height: calc(100% - ...)` 是 content-box，加边框会多出 1px 溢出。
+ */
+html:has(.app-titlebar:not([data-hidden="true"])) .ant-drawer-content-wrapper,
+html:has(.app-titlebar:not([data-hidden="true"])) .resume-zoom-workbench-wrap {
+  box-sizing: border-box;
+  border-top: 1px solid var(--rf-titlebar-border);
+}
+
 /* 制作台：wrap 上挂的是**行内** `inset:0`（`WorkbenchModalFrame` 的 styles.wrapper），
    普通规则压不过，必须 `!important`。wrap 让位后，里面那个 `top:0/height:100dvh` 的
    modal 改成填满 wrap，否则底部会多出 32px 滚动。 */
@@ -199,7 +219,8 @@ html:has(.app-titlebar:not([data-hidden="true"])) .resume-zoom-workbench-wrap .a
   outline-offset: -2px;
 }
 
-/* 下拉：portal 到 body，层级由组件按 layer.popupBase 注入（盖过吸顶页头）。 */
+/* 下拉：portal 到 body，层级由组件按 layer.titlebarMenu 注入（3700，压在 antd 容器链
+   之上——制作台是整屏 Modal，容器链已到 3200+，用 popupBase 会被整块盖住）。 */
 .app-titlebar-menu-dropdown {
   position: fixed;
   min-width: 208px;

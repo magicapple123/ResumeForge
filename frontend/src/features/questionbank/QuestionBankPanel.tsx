@@ -13,8 +13,9 @@ import {
   SaveOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Alert, App, Breadcrumb, Button, Card, Empty, Flex, Space, Tag, Typography } from "antd";
+import { Alert, App, Breadcrumb, Button, Card, Flex, Space, Tag, Typography } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
+import EmptyState from "../../components/common/EmptyState";
 import { useState } from "react";
 import {
   deleteQuestionBank,
@@ -289,7 +290,7 @@ export default function QuestionBankPanel({
       ) : error ? (
         <Alert type="error" showIcon title={error} />
       ) : !viewData ? (
-        <Empty
+        <EmptyState
           description={
             record
               ? t("questionBankPanel.empty.recordEmpty")

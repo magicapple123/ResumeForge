@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import type { TouTouStatus } from "./touTouTypes";
+import { readTopInset } from "./touTouTopInset";
 
 /** 兜底尺寸：真实直径从元素上量——`≤767px` 时 CSS 会把它调成 56px。 */
 const DEFAULT_ORB_SIZE = 64;
@@ -90,10 +91,10 @@ function clampLeft(left: number, metrics: OrbMetrics): number {
   return clamp(left, edge, readViewport().width - size - edge);
 }
 
-/** 拖动过程中的纵向夹取：上下同样各留 `edge`（顶部不再特殊让开 64px 页头）。 */
-function clampTop(top: number, metrics: OrbMetrics): number {
+/** 拖动过程中的纵向夹取：上下同样各留 `edge`；顶部再让开桌面壳标题栏（`topInset`）。 */
+function clampTop(top: number, metrics: OrbMetrics, topInset = 0): number {
   const { size, edge } = metrics;
-  return clamp(top, edge, readViewport().height - size - edge);
+  return clamp(top, edge + topInset, readViewport().height - size - edge);
 }
 
 /**
@@ -101,19 +102,23 @@ function clampTop(top: number, metrics: OrbMetrics): number {
  *
  * `prefer` 只在**完全等距**时决胜（贴边缝隙是 2px，沿边拖动时"同时贴两条边"是常态）：
  * 竖向拖动更该吸到上/下边，横向拖动更该吸到左/右边。默认横向，与历史行为一致。
+ *
+ * `topInset` 是桌面壳标题栏的高度：顶部可用区从它下沿才开始，算"离上边多远"时必须
+ * 减掉它，否则球永远离顶 ≥34、顶部吸附不可达（`is-edge-top` 会变成死码）。
  */
 export function nearestEdge(
   left: number,
   top: number,
   size: number,
   prefer: "horizontal" | "vertical" = "horizontal",
+  topInset = 0,
 ): TouTouOrbSide {
   const viewport = readViewport();
   const distances: Record<TouTouOrbSide, number> = {
     bottom: Math.max(0, viewport.height - (top + size)),
     left,
     right: Math.max(0, viewport.width - (left + size)),
-    top,
+    top: Math.max(0, top - topInset),
   };
   const order: TouTouOrbSide[] =
     prefer === "vertical" ? ["top", "bottom", "left", "right"] : ["right", "left", "bottom", "top"];
@@ -131,15 +136,16 @@ export function pinToSide(
   left: number,
   top: number,
   metrics: OrbMetrics,
+  topInset = 0,
 ): Pick<TouTouOrbPosition, "left" | "side" | "top"> {
   const pinnedLeft = clampLeft(left, metrics);
-  const pinnedTop = clampTop(top, metrics);
+  const pinnedTop = clampTop(top, metrics, topInset);
   if (side === "left") return { left: metrics.edge, side, top: pinnedTop };
   if (side === "right") {
     const { size, edge } = metrics;
     return { left: Math.max(edge, readViewport().width - size - edge), side, top: pinnedTop };
   }
-  if (side === "top") return { left: pinnedLeft, side, top: metrics.edge };
+  if (side === "top") return { left: pinnedLeft, side, top: metrics.edge + topInset };
   const { size, edge } = metrics;
   return { left: pinnedLeft, side, top: Math.max(edge, readViewport().height - size - edge) };
 }
@@ -151,7 +157,14 @@ function snapToEdge(
   metrics: OrbMetrics,
   prefer: "horizontal" | "vertical",
 ): Pick<TouTouOrbPosition, "left" | "side" | "top"> {
-  return pinToSide(nearestEdge(left, top, metrics.size, prefer), left, top, metrics);
+  const topInset = readTopInset();
+  return pinToSide(
+    nearestEdge(left, top, metrics.size, prefer, topInset),
+    left,
+    top,
+    metrics,
+    topInset,
+  );
 }
 
 export function useTouTouOrbDrag({ scheduleIdle, setVisualStatus, wake }: UseTouTouOrbDragOptions) {
@@ -174,7 +187,7 @@ export function useTouTouOrbDrag({ scheduleIdle, setVisualStatus, wake }: UseTou
       setPosition((current) => {
         // 还没拖过：位置交给 CSS（right/bottom + --tt-edge），天然就是贴边的。
         if (current.left === null || current.top === null) return current;
-        const pinned = pinToSide(current.side, current.left, current.top, metrics);
+        const pinned = pinToSide(current.side, current.left, current.top, metrics, readTopInset());
         if (pinned.left === current.left && pinned.top === current.top) return current;
         return { ...current, ...pinned };
       });
@@ -209,6 +222,8 @@ export function useTouTouOrbDrag({ scheduleIdle, setVisualStatus, wake }: UseTou
     const viewport = readViewport();
     const fallbackLeft = position.left ?? viewport.width - metrics.edge - metrics.size;
     const fallbackTop = position.top ?? viewport.height - metrics.edge - metrics.size;
+    // 标题栏高度在本次拖动内不会变：一次读取，避免每个 pointermove 都去 getComputedStyle。
+    const topInset = readTopInset();
     pointerOriginRef.current = {
       left: rect?.left || fallbackLeft,
       pointerX: event.clientX,
@@ -229,12 +244,12 @@ export function useTouTouOrbDrag({ scheduleIdle, setVisualStatus, wake }: UseTou
         suppressClickRef.current = true;
       }
       const nextLeft = clampLeft(origin.left + deltaX, metrics);
-      const nextTop = clampTop(origin.top + deltaY, metrics);
+      const nextTop = clampTop(origin.top + deltaY, metrics, topInset);
       dragPositionRef.current = { left: nextLeft, top: nextTop };
       setPosition((current) => ({
         ...current,
         left: nextLeft,
-        side: nearestEdge(nextLeft, nextTop, metrics.size),
+        side: nearestEdge(nextLeft, nextTop, metrics.size, "horizontal", topInset),
         top: nextTop,
       }));
     };

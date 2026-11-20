@@ -10,13 +10,14 @@
  * 所以蒙层不可关（`mask.closable: false`，与 `AGENTS.md` 的弹层规则一致）。
  */
 import { ArrowLeftOutlined, ImportOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
-import { App, Button, Drawer, Empty, Input, Pagination, Space, Typography } from "antd";
+import { App, Button, Drawer, Input, Pagination, Space, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteCandidateJob, getCandidateJob, listCandidateJobsPage } from "../../api/candidateJob";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { CandidateJob, CandidateJobDetail } from "../../types";
 import FormModalFooter from "../../components/common/FormModalFooter";
+import EmptyState from "../../components/common/EmptyState";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { useDiscardGuard } from "../../components/common/useDiscardGuard";
 import CandidateBatchToolbar from "./CandidateBatchToolbar";
@@ -390,16 +391,16 @@ export default function CandidateJobsDrawer({
             <LoadingBlock />
           ) : items.length === 0 ? (
             committedKeyword ? (
-              <Empty
+              <EmptyState
+                inline
                 description={t("jobs.candidate.empty-search", { keyword: committedKeyword })}
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
               >
                 <Button size="small" onClick={() => setKeyword("")}>
                   {t("jobs.candidate.empty-search-clear")}
                 </Button>
-              </Empty>
+              </EmptyState>
             ) : (
-              <Empty description={t("jobs.candidate.empty-list")} />
+              <EmptyState description={t("jobs.candidate.empty-list")} />
             )
           ) : (
             <>

@@ -12,8 +12,9 @@ import {
   SolutionOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
-import { Alert, Card, Empty, Input, Listy, Space, Tag, Typography } from "antd";
+import { Alert, Card, Input, Listy, Space, Tag, Typography } from "antd";
 import { ListyItem } from "../../components/common/ListyItem";
+import EmptyState from "../../components/common/EmptyState";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { searchAll } from "../../api/search";
@@ -109,7 +110,7 @@ export function SearchCard() {
             {t("homePage.search.jobsTitle", { count: result?.jobs.length ?? 0 })}
           </Typography.Title>
           {(result?.jobs.length ?? 0) === 0 ? (
-            <Empty description={t("homePage.search.jobsEmpty")} />
+            <EmptyState inline description={t("homePage.search.jobsEmpty")} />
           ) : (
             <Listy
               items={result?.jobs ?? []}
@@ -133,7 +134,7 @@ export function SearchCard() {
             {t("homePage.search.resumesTitle", { count: result?.resumes.length ?? 0 })}
           </Typography.Title>
           {(result?.resumes.length ?? 0) === 0 ? (
-            <Empty description={t("homePage.search.resumesEmpty")} />
+            <EmptyState inline description={t("homePage.search.resumesEmpty")} />
           ) : (
             <Listy
               items={result?.resumes ?? []}

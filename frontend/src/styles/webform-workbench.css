@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 @import "./webform-onboarding.css";
-/* 网申填表工作台（I-11）：吸顶工具条 + 两栏 + 结果区 Tabs + 折叠记录。
+/* 网申填表工作台（I-11）：工具条 + 两栏 + 结果区 Tabs + 折叠记录。
    原来 9 张同级 Card 把「启动浏览器 → 读取 → 核对 → 填充 → 看结果」这条线性流程
    摊成九块面板，用户得先数一遍卡片才知道下一步在哪。这里改成：
-     1) 一条吸顶工具条（网址 + 状态点 + 启停）——滚动时入口始终够得着；
+     1) 一条工具条（网址 + 状态点 + 启停）——**不吸顶**，随页面滚走；
      2) 左栏「填什么 / 怎么填」，右栏「结果与记录」；
      3) 容器宽 ≥1080 才切两栏，窄了自然回落单列（顺序仍是先控制后结果）。
 
@@ -18,9 +18,10 @@
    body（在容器外）；网申页面上的目标浮球由后端注入到被控浏览器的网页里，不在 React 树中。
    因此这里开容器查询是安全的——这也是本文件在 `breakpointGuard` 里登记的理由。
 
-   ## 吸顶只能用 sticky
-   `position: fixed` 会脱离文档流、盖住结果区，而且在上面这套 container 包含块语义下
-   会相对内容区而不是视口定位、滚动即漂走。 */
+   ## 工具条不参与吸顶
+   这块**没有** `position: sticky`，也**不要**加：`position: fixed` 会脱离文档流、盖住结果区，
+   而且在上面这套 container 包含块语义下会相对内容区而不是视口定位、滚动即漂走；而
+   sticky 常驻占高被判定为得不偿失（见 `.webform-workbar` 的注释）。 */
 
 .webform-workbench {
   container-type: inline-size;
@@ -31,18 +32,14 @@
   min-width: 0;
 }
 
-/* ===== 吸顶工具条 ===== */
+/* ===== 工具条（刻意不吸顶） ===== */
 
 .webform-workbar {
-  position: sticky;
-  /* `top` 为什么是负值：sticky 的偏移基准是滚动容器（`.app-content`）的**内容盒**，
-     而它还有一层 `padding: var(--rf-content-pad)`（本档 24px）。`top: 0` 只把工具条
-     贴到内容盒顶边，上面那条内边距没人盖——滚动内容就从这 24px 缝里穿过去，
-     卡片标题会露半截（实测 1440×620 滚 300px：条顶 88、内容区顶 64，缝恒 24）。
-     向上吃掉这一段，条才真正贴住滚动区顶边（leak=0）。必须用 token：≤1092 档是 16px、
-     A 档 32px，写死只在一档正确。与 `modules-analytics.css` 的看板分段导航同一处理。 */
-  top: calc(-1 * var(--rf-content-pad));
-  z-index: 20;
+  /* 刻意不吸顶，别再给它 sticky：2026-11-20 讨论确认「完全取消」，这块随页面滚走即可。
+     （历史上一度是 `position: sticky` + `top: calc(-1 * var(--rf-content-pad))`，负 top
+     用来吃掉 `.app-content` 的内边距；那套写法连同 `z-index: 20` 一并删掉了。）
+     采集运行中地址条与「停止」按钮会随页滚出视口——这是已知取舍。若有人抱怨跑起来后
+     找不到停止，正确做法是加一个右下角浮动停止键，**不要**把吸顶加回来。 */
   display: flex;
   flex-direction: column;
   gap: 8px;

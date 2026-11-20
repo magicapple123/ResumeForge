@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 面经知识库（R-15）：真实面经的增删改查，可绑定岗位、沉淀真实问题清单。 */
 import { EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Card, Empty, Form, Input, Listy, Select, Space, Tag } from "antd";
+import { App, Button, Card, Form, Input, Listy, Select, Space, Tag } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
+import EmptyState from "../../components/common/EmptyState";
 import { useCallback, useEffect, useState } from "react";
 import {
   batchDeleteInterviewExperiences,
@@ -241,7 +242,7 @@ export default function InterviewExperiencePanel() {
       {loading ? (
         <LoadingBlock />
       ) : items.length === 0 ? (
-        <Empty description={t("interviewExperience.empty")} />
+        <EmptyState description={t("interviewExperience.empty")} />
       ) : (
         <Listy
           className="rf-card-list"

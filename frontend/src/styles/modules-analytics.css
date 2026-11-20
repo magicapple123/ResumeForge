@@ -280,7 +280,13 @@
    而它还有一层 `padding: var(--rf-content-pad)` 的内边距；`top: 0` 只把栏贴到内容盒
    顶边，上面那条内边距没人盖，滚动内容就从缝里穿过去（实测 leak 恒等于 padding：
    24 / 16 / 16）。向上吃掉这一段，栏才真正贴住滚动区顶边（leak=0）。
-   必须用 token：≤1092 档是 16px、A 档是 32px，写死只在一档正确。 */
+   必须用 token：≤1092 档是 16px、A 档是 32px，写死只在一档正确。
+
+   `margin` 的负值（2026-11-20，条目 7）：白底横带要**出血到内容区两端**，否则左右各
+   留一条 24px 的灰缝、下边框在半空断开。负 margin 抵消 `.app-content` 的横向内边距，
+   再用等值的 `padding` 把菜单项推回 24px 网格——所以两者**必须同 token**、同进同退；
+   只有一档写死就会在该档错位。`.app-content` 上有 `overflow-x: hidden`，不会拉出横向
+   滚动条（该声明若被移除需重新验证）。 */
 .analytics-nav {
   position: sticky;
   top: calc(-1 * var(--rf-content-pad));
@@ -288,8 +294,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin: 0 0 16px;
-  padding: 8px 0;
+  margin: 0 calc(-1 * var(--rf-content-pad)) 16px;
+  padding: 8px var(--rf-content-pad);
   background: var(--rf-surface);
   border-bottom: 1px solid var(--rf-border-subtle);
 }

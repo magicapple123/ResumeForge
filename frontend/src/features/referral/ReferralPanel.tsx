@@ -9,8 +9,9 @@
  * - `ReferralListItem`：列表一行的渲染与行菜单
  * - `ReferralFormModal` + `ReferralFormFields`：新建 / 编辑弹窗
  */
-import { App, Empty, Form, Listy, Pagination, Space, Upload } from "antd";
+import { App, Form, Listy, Pagination, Space, Upload } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
+import EmptyState from "../../components/common/EmptyState";
 import { useCallback, useEffect, useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -306,7 +307,7 @@ export default function ReferralPanel() {
       {loading ? (
         <LoadingBlock />
       ) : items.length === 0 ? (
-        <Empty description={t("componentsMisc2.referral.empty")} />
+        <EmptyState description={t("componentsMisc2.referral.empty")} />
       ) : (
         <>
           <Listy

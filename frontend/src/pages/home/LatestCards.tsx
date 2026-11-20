@@ -3,8 +3,9 @@
  * 最近动态三卡：最近岗位 / 最近生成的简历 / 最近投出去的。
  * （自 HomePage 拆出，逐字搬运，行为等价。）
  */
-import { Card, Col, Empty, Listy, Row, Space, Tag, Typography } from "antd";
+import { Card, Col, Listy, Row, Space, Tag, Typography } from "antd";
 import { ListyItem } from "../../components/common/ListyItem";
+import EmptyState from "../../components/common/EmptyState";
 import { Link } from "react-router-dom";
 import type { Stats } from "../../types";
 import { formatDateTime } from "../../utils/format";
@@ -23,7 +24,7 @@ export function LatestCards({ stats }: { stats: Stats | undefined }) {
             extra={<Link to="/jobs">{t("homePage.action.viewAll")}</Link>}
           >
             {(stats?.latest_jobs.length ?? 0) === 0 ? (
-              <Empty description={t("homePage.latest.jobs.empty")} />
+              <EmptyState inline description={t("homePage.latest.jobs.empty")} />
             ) : (
               <Listy
                 items={stats?.latest_jobs ?? []}
@@ -49,7 +50,7 @@ export function LatestCards({ stats }: { stats: Stats | undefined }) {
             extra={<Link to="/resumes">{t("homePage.action.viewAll")}</Link>}
           >
             {(stats?.latest_resumes.length ?? 0) === 0 ? (
-              <Empty description={t("homePage.latest.resumes.empty")} />
+              <EmptyState inline description={t("homePage.latest.resumes.empty")} />
             ) : (
               <Listy
                 items={stats?.latest_resumes ?? []}

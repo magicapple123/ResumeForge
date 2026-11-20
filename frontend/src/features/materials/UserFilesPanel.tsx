@@ -8,8 +8,9 @@
  */
 
 import { FolderOpenOutlined, SearchOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Drawer, Empty, Image, Input, Table, Tag, Typography } from "antd";
+import { Alert, App, Button, Drawer, Image, Input, Table, Tag, Typography } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
+import EmptyState from "../../components/common/EmptyState";
 import type { TableColumnsType, TablePaginationConfig } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -277,7 +278,7 @@ export default function UserFilesPanel() {
       {loading ? (
         <LoadingBlock />
       ) : rows.length === 0 ? (
-        <Empty description={t("materials.files.empty")} />
+        <EmptyState description={t("materials.files.empty")} />
       ) : (
         <Table
           rowKey="id"

@@ -9,8 +9,9 @@
  * 换成用户自己的简历会让每开一次都触发一份大简历的排版（慢），也让人分不清
  * "这是模板的效果还是我内容的效果"。要看自己的内容，制作台右栏一直是实时预览。
  */
-import { App, Button, Empty, Modal, Segmented, Space, Tag, Typography } from "antd";
+import { App, Button, Modal, Segmented, Space, Tag, Typography } from "antd";
 import LoadingBlock from "../../../components/common/LoadingBlock";
+import EmptyState from "../../../components/common/EmptyState";
 import A4PreviewFrame from "../../templates/A4PreviewFrame";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchResumeTemplates, previewResumeTemplate } from "../../../api/resumes";
@@ -393,7 +394,7 @@ export default function TemplateGalleryModal({
           }}
         />
       ) : templates.length === 0 && !loading ? (
-        <Empty description={t("gallery.empty.noTemplates")} />
+        <EmptyState description={t("gallery.empty.noTemplates")} />
       ) : (
         body
       )}

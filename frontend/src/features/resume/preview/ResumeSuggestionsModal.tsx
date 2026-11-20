@@ -13,20 +13,9 @@ import {
   ReloadOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Empty,
-  Listy,
-  Modal,
-  Popconfirm,
-  Space,
-  Tag,
-  Typography,
-  theme,
-} from "antd";
+import { Alert, App, Button, Listy, Modal, Popconfirm, Space, Tag, Typography, theme } from "antd";
 import PageSkeleton from "../../../components/common/PageSkeleton";
+import EmptyState from "../../../components/common/EmptyState";
 import { ListyItem } from "../../../components/common/ListyItem";
 import { useEffect, useRef, useState } from "react";
 import { reviseResume } from "../../../api/resumes";
@@ -336,7 +325,7 @@ function SuggestionList({
           }}
         />
       ) : (
-        <Empty description={t("resumeSuggestions.empty")} />
+        <EmptyState description={t("resumeSuggestions.empty")} />
       )}
     </div>
   );

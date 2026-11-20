@@ -23,8 +23,9 @@ export interface ThemeTransitionOrigin {
   y: number;
 }
 
-/** 开灯慢、关灯快：深色→浅色要看清"灯亮起来"，浅色→深色只需确认已经切了。 */
-export const REVEAL_DURATION_MS: Record<ResolvedTheme, number> = { light: 380, dark: 280 };
+/** 开灯慢、关灯快：深色→浅色要看清"灯亮起来"，浅色→深色只需确认已经切了。
+ *  2026-11-20：380/280 → 560/460（社区主流 500–560ms；600 以上会像卡住，别再往上加）。 */
+export const REVEAL_DURATION_MS: Record<ResolvedTheme, number> = { light: 560, dark: 460 };
 
 type ViewTransitionLike = { finished: Promise<void> };
 type ViewTransitionDocument = Document & {

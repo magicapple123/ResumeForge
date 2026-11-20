@@ -75,6 +75,9 @@
 .resume-detail-footer {
   position: sticky;
   bottom: 0;
+  /* 必须留在定位层之上（2026-11-20 条目 14）：纸张层 `.exact-preview` 也是定位元素，
+     125% 缩放下纸的右缘会多出约 1 个设备像素、落到页脚的绘制边界之外，像一条白线
+     贯穿页脚。这里是第一道防线。 */
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -84,6 +87,9 @@
   padding: 12px 0 4px;
   background: var(--rf-surface, var(--rf-surface));
   border-top: 1px solid var(--rf-border, var(--rf-border));
+  /* 兜边（第三道防线）：页脚底色向右多铺 1px，盖住纸缘取整留下的那一条。
+     用页脚自己的背景变量而不是 `#fff`：深色主题下页脚不是白的。 */
+  box-shadow: 1px 0 0 var(--rf-surface, var(--rf-surface));
 }
 
 /* 主按钮行允许折行（2026-11 问题 20b，只在英文界面暴露）。

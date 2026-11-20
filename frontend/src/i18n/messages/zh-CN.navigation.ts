@@ -34,6 +34,8 @@ const navigation = {
 
   /** 「我的空间」菜单的触发按钮文字，同时用作它的无障碍名。 */
   "navigation.mySpace.label": "我的空间",
+  /** 当前正处在组内某一页时按钮的无障碍名（可见文字是该名的子串）。 */
+  "navigation.mySpace.currentAria": "我的空间：{name}",
   /** 侧栏与移动端抽屉里的使用指南入口。 */
   "navigation.guide.open": "使用指南",
 

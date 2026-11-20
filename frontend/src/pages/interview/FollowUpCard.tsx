@@ -10,9 +10,10 @@
  *   另起一段，两段记录互不干扰——刷新页面后轮次读数也就不会因为追问而变大。
  */
 import { MessageOutlined, SendOutlined, StopOutlined } from "@ant-design/icons";
-import { App, Button, Card, Empty, Input, Space, Typography } from "antd";
+import { App, Button, Card, Input, Space, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { submitInterviewFollowUp, updateInterviewFollowUpState } from "../../api/interview";
+import EmptyState from "../../components/common/EmptyState";
 import MarkdownBlock from "../../components/common/MarkdownBlock";
 import { appendTranscript } from "../../features/interview-voice/appendTranscript";
 import { VoiceButton } from "../../features/interview-voice/VoiceButton";
@@ -142,10 +143,7 @@ export function FollowUpCard({
       <Typography.Text type="secondary">{t("interviewPage.followUp.hint")}</Typography.Text>
       <div className="interview-followup-list">
         {lines.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={t("interviewPage.followUp.empty")}
-          />
+          <EmptyState inline description={t("interviewPage.followUp.empty")} />
         ) : (
           // 一问一答之间留 8px：`.interview-followup-line` 自己没有间距，原先靠
           // 段落自带的 margin-bottom，改成块级渲染后就没有了。

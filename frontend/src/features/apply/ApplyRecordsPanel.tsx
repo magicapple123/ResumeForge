@@ -13,8 +13,9 @@
  * 记录只保存展示快照（岗位、公司、简历名、招呼语），不含完整个人资料——失败条目带上
  * 后端给的中文分类说明与可操作诊断，用户可以直接把这条信息回传给我们定位站点改版。
  */
-import { App, Empty, Pagination, Typography } from "antd";
+import { App, Pagination, Typography } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
+import EmptyState from "../../components/common/EmptyState";
 import { useCallback, useEffect, useState } from "react";
 import ApplyRecordDetailDrawer from "./ApplyRecordDetailDrawer";
 import ApplyRecordsToolbar from "./ApplyRecordsToolbar";
@@ -303,7 +304,7 @@ export default function ApplyRecordsPanel({
           <LoadingBlock />
         </div>
       )}
-      {!loading && batches.length === 0 && <Empty description={t("applyRecords.empty")} />}
+      {!loading && batches.length === 0 && <EmptyState description={t("applyRecords.empty")} />}
 
       <div className="apply-records-batches">
         {batches.map((batch) => (

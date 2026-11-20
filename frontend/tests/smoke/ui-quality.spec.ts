@@ -71,6 +71,52 @@ test("mobile navigation works by keyboard and returns focus on Escape", async ({
   await expect(page.getByRole("main")).toBeFocused();
 });
 
+test("网申工具条随页面滚走，不再吸顶（条目 6 守卫）", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto("/webform");
+  await page.waitForLoadState("networkidle");
+  const workbar = page.locator('[data-testid="webform-workbar"]');
+  await expect(workbar).toBeAttached();
+  // 滚动容器是 `.app-content`（`overflow-y: auto`），**不是** window：
+  // `window.scrollTo` 在这套壳里滚不动任何东西，用例会假绿。
+  //
+  // 断言用"位移 === scrollTop"而不是 `top < 0`：`/webform` 空态只有 ~84px 可滚，
+  // 写死 300 会滚不到底、`top` 停在 4px，用例在**实现正确时**也红（2026-11-20 实测）。
+  // 位移等于滚动量 = 它就是普通流内元素；一旦有人加回 `position: sticky`，位移会变成 0。
+  const before = await workbar.evaluate((element) => element.getBoundingClientRect().top);
+  const scrolled = await page.locator(".app-content").evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    return element.scrollTop;
+  });
+  expect(scrolled).toBeGreaterThan(0);
+  await expect
+    .poll(async () => {
+      const after = await workbar.evaluate((element) => element.getBoundingClientRect().top);
+      return Math.abs(before - after - scrolled);
+    })
+    .toBeLessThanOrEqual(2);
+});
+
+test("求职统计顶部导航出血到内容区两端（条目 7 守卫）", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto("/analytics");
+  await page.waitForLoadState("networkidle");
+  await expect(page.locator(".analytics-nav")).toBeVisible();
+  const bounds = await page.evaluate(() => {
+    const nav = document.querySelector(".analytics-nav");
+    const content = document.querySelector(".app-content");
+    if (!nav || !content) return null;
+    return {
+      navWidth: nav.getBoundingClientRect().width,
+      // clientWidth 含 padding、不含滚动条——正是出血后的导航应有的宽度。
+      contentWidth: content.clientWidth,
+    };
+  });
+  // 不断言 left === 0：`.app-content` 在侧栏右侧，视口坐标的 left 本来就不是 0。
+  expect(bounds).not.toBeNull();
+  expect(Math.abs(bounds!.navWidth - bounds!.contentWidth)).toBeLessThan(1);
+});
+
 test("all pages have no serious or critical WCAG violations", async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1200, height: 900 });

@@ -15,8 +15,9 @@
  * 而不是"你得了 62 分"。
  */
 import { CopyOutlined, DownloadOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Card, Empty, Input, Progress, Space, Tag, Typography } from "antd";
+import { Alert, App, Button, Card, Input, Progress, Space, Tag, Typography } from "antd";
 import LoadingBlock from "../../../components/common/LoadingBlock";
+import EmptyState from "../../../components/common/EmptyState";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { runAtsCheck } from "../../../api/ats";
 import { getJob } from "../../../api/jobs";
@@ -391,7 +392,7 @@ export default function AtsCheckPanel({ resumeId, jobId }: Props) {
           )}
 
           {data.issues.length === 0 ? (
-            <Empty description={t("atsCheck.empty")} />
+            <EmptyState description={t("atsCheck.empty")} />
           ) : (
             grouped.map((group) =>
               group.issues.length === 0 ? null : (

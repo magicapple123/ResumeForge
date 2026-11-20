@@ -12,6 +12,7 @@ import {
   type PointerEvent,
   type RefObject,
 } from "react";
+import { readTopInset } from "./touTouTopInset";
 
 /** 拖动时留在视口里的最小边距（与悬浮球拖拽一致）。 */
 const VIEWPORT_MARGIN = 8;
@@ -65,18 +66,21 @@ function readCardMetrics(element: HTMLElement | null, fallback: CardMetrics): Ca
   };
 }
 
-/** 把视口内任一点夹回「卡片完全可见」的范围；窗口缩放后也要落在界内。 */
+/** 把视口内任一点夹回「卡片完全可见」的范围；窗口缩放后也要落在界内。
+ *  `topInset` 是桌面壳标题栏占用的高度（浏览器版传 0），顶边不许低于它 + `TOP_MARGIN`。 */
 export function clampCardPosition(
   left: number,
   top: number,
   metrics: CardMetrics,
+  topInset = 0,
 ): { left: number; top: number } {
   const maxLeft = Math.max(VIEWPORT_MARGIN, window.innerWidth - metrics.width - VIEWPORT_MARGIN);
+  const minTop = topInset + TOP_MARGIN;
   // 高度方向只需保住把手：底部允许伸出视口（视口比卡片矮时仍能拖回来）。
-  const maxTop = Math.max(TOP_MARGIN, window.innerHeight - TOP_MARGIN);
+  const maxTop = Math.max(minTop, window.innerHeight - TOP_MARGIN);
   return {
     left: Math.min(Math.max(VIEWPORT_MARGIN, left), maxLeft),
-    top: Math.min(Math.max(TOP_MARGIN, top), maxTop),
+    top: Math.min(Math.max(minTop, top), maxTop),
   };
 }
 
@@ -110,18 +114,20 @@ function readOrbGeometry(): { left: number; top: number; size: number; edge: str
 function positionNextToOrb(
   orb: { left: number; top: number; size: number; edge: string },
   metrics: CardMetrics,
+  topInset = 0,
 ): { left: number; top: number } {
   const gap = ORB_GAP_PX;
   switch (orb.edge) {
     case "left":
       // 球贴左 → 卡片在球右侧，顶部对齐球顶。
-      return clampCardPosition(orb.left + orb.size + gap, orb.top, metrics);
+      return clampCardPosition(orb.left + orb.size + gap, orb.top, metrics, topInset);
     case "top":
       // 球贴顶 → 卡片在球下方，右缘对齐球右缘。
       return clampCardPosition(
         orb.left + orb.size - metrics.width,
         orb.top + orb.size + gap,
         metrics,
+        topInset,
       );
     case "bottom":
       // 球贴底 → 卡片在球上方，右缘对齐球右缘。
@@ -129,6 +135,7 @@ function positionNextToOrb(
         orb.left + orb.size - metrics.width,
         orb.top - metrics.height - gap,
         metrics,
+        topInset,
       );
     default:
       // 球贴右 → 卡片在球左侧，底缘对齐球底缘。
@@ -136,6 +143,7 @@ function positionNextToOrb(
         orb.left - metrics.width - gap,
         orb.top + orb.size - metrics.height,
         metrics,
+        topInset,
       );
   }
 }
@@ -186,6 +194,7 @@ export function useTouTouCardDrag(options: UseTouTouCardDragOptions = {}): CardD
           current.left,
           current.top,
           readCardMetrics(findCard(), optionsRef.current.fallback),
+          readTopInset(),
         );
       });
     };
@@ -214,7 +223,7 @@ export function useTouTouCardDrag(options: UseTouTouCardDragOptions = {}): CardD
    */
   const placeNextToOrb = useCallback(() => {
     const metrics = readCardMetrics(findCard(), optionsRef.current.fallback);
-    setFreePosition(positionNextToOrb(readOrbGeometry(), metrics));
+    setFreePosition(positionNextToOrb(readOrbGeometry(), metrics, readTopInset()));
   }, []);
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -243,7 +252,12 @@ export function useTouTouCardDrag(options: UseTouTouCardDragOptions = {}): CardD
         movedRef.current = true;
       }
       if (!movedRef.current) return;
-      const next = clampCardPosition(origin.left + deltaX, origin.top + deltaY, origin.metrics);
+      const next = clampCardPosition(
+        origin.left + deltaX,
+        origin.top + deltaY,
+        origin.metrics,
+        readTopInset(),
+      );
       setFreePosition(next);
     };
     const handleUp = () => {
@@ -277,7 +291,7 @@ export function useTouTouCardDrag(options: UseTouTouCardDragOptions = {}): CardD
         left: card ? card.getBoundingClientRect().left : VIEWPORT_MARGIN,
         top: card ? card.getBoundingClientRect().top : TOP_MARGIN,
       };
-      return clampCardPosition(base.left + delta[0], base.top + delta[1], metrics);
+      return clampCardPosition(base.left + delta[0], base.top + delta[1], metrics, readTopInset());
     });
   };
 

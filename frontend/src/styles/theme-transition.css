@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* WF-09 主题切换圆形扩散：View Transitions 的两张整页快照叠放，新快照用 clip-path
    圆形从主题按钮位置长出来。圆心/半径/时长由 `features/theme/themeTransition.ts`
-   写到 <html> 的行内自定义属性上（视图过渡伪元素继承自根元素）。 */
+   写到 <html> 的行内自定义属性上（视图过渡伪元素继承自根元素）。
+   时长亮 560ms / 暗 460ms（2026-11-20 起），下方 CSS 的兜底值只在变量缺失时生效，
+   与实际值同步到 560ms。 */
 
 /* 默认的整页淡入淡出必须关掉：不关就会"一边淡入一边扩散"，中间帧是两层半透明叠色。 */
 ::view-transition-old(root),
@@ -17,7 +19,7 @@
 
 ::view-transition-new(root) {
   z-index: 2;
-  animation: rf-theme-reveal var(--rf-theme-duration, 380ms) cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation: rf-theme-reveal var(--rf-theme-duration, 560ms) cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
 @keyframes rf-theme-reveal {

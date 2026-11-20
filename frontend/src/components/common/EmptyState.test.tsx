@@ -38,16 +38,20 @@ describe("EmptyState", () => {
     expect(container.querySelector(".rf-state-actions")).toBeNull();
   });
 
-  it("不传 image 时整块空态默认用产品线稿（inline 仍用 antd simple）", () => {
-    // 契约在 2026-11-20 变了：原来默认是 antd 的 simple 插画，于是全库 71 个调用点里
-    // 只有 7 个传了 image，用户看到的就是"有的界面换了、有的没换"。现在默认给线稿，
-    // 紧凑位置（表格 emptyText / 侧栏）仍保留 simple，避免 72px 把行高撑开。
+  it("不传 image 时两种档位都用产品线稿（inline 只是尺寸小一档）", () => {
+    // 契约在 2026-11-20 再收一档：inline 的判据从"换一张图"变成"不套 .rf-state 外壳"，
+    // 插图全站统一为线稿水印，紧凑位置只把尺寸收到 48px。
     const block = render(<EmptyState description="空" />);
-    expect(block.container.querySelector('[data-testid="rf-empty-watermark"]')).not.toBeNull();
+    const blockMark = block.container.querySelector('[data-testid="rf-empty-watermark"]');
+    expect(blockMark?.getAttribute("width")).toBe("72");
 
     const compact = render(<EmptyState inline description="空" />);
-    expect(compact.container.querySelector('[data-testid="rf-empty-watermark"]')).toBeNull();
-    expect(compact.container.querySelector(".ant-empty-image")).not.toBeNull();
+    const compactMark = compact.container.querySelector('[data-testid="rf-empty-watermark"]');
+    expect(compactMark?.getAttribute("width")).toBe("48");
+    // inline 没有 `.rf-state` 外壳，antd 默认插画位是 100px；必须显式收到 48，否则行高反而变高。
+    expect(compact.container.querySelector<HTMLElement>(".ant-empty-image")?.style.height).toBe(
+      "48px",
+    );
   });
 
   it("传 image 时用自定义插图替换 antd 默认插图", () => {

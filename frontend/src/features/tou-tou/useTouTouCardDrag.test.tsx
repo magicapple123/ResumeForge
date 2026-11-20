@@ -3,6 +3,8 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { clampCardPosition, useTouTouCardDrag } from "./useTouTouCardDrag";
+import { pinToSide } from "./useTouTouOrbDrag";
+import { readTopInset } from "./touTouTopInset";
 
 function Harness(
   props: { selector?: string; fallbackWidth?: number; fallbackHeight?: number } = {},
@@ -174,3 +176,38 @@ function screenByPlace(): HTMLElement {
   if (!button) throw new Error("place button not rendered");
   return button;
 }
+
+describe("desktop titlebar top inset", () => {
+  it("lifts the card's top edge by the inset (32 → 40), and stays 8 without it", () => {
+    expect(clampCardPosition(-50, -50, { width: 760, height: 680 }, 32)).toEqual({
+      left: 8,
+      top: 40,
+    });
+    expect(clampCardPosition(-50, -50, { width: 760, height: 680 }, 0)).toEqual({
+      left: 8,
+      top: 8,
+    });
+  });
+
+  it("reads the inset from the titlebar: absent → 0, present → value, hidden → 0", () => {
+    expect(readTopInset()).toBe(0);
+
+    const bar = document.createElement("div");
+    bar.className = "app-titlebar";
+    document.body.appendChild(bar);
+    document.documentElement.style.setProperty("--rf-titlebar-height", "40px");
+    try {
+      expect(readTopInset()).toBe(40);
+      bar.setAttribute("data-hidden", "true");
+      expect(readTopInset()).toBe(0);
+    } finally {
+      document.documentElement.style.removeProperty("--rf-titlebar-height");
+      bar.remove();
+    }
+  });
+
+  it("pins the orb below the titlebar when snapped to the top", () => {
+    expect(pinToSide("top", 100, 500, { size: 64, edge: 2 }, 32).top).toBe(34);
+    expect(pinToSide("top", 100, 500, { size: 64, edge: 2 }).top).toBe(2);
+  });
+});

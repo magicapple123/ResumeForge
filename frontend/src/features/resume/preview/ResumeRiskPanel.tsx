@@ -15,7 +15,6 @@ import {
   Button,
   Card,
   Collapse,
-  Empty,
   Listy,
   Space,
   Switch,
@@ -25,6 +24,7 @@ import {
 } from "antd";
 import { createKnowledgeFromSource } from "../../../api/knowledge";
 import LoadingBlock from "../../../components/common/LoadingBlock";
+import EmptyState from "../../../components/common/EmptyState";
 import { ListyItem } from "../../../components/common/ListyItem";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -235,7 +235,7 @@ export default function ResumeRiskPanel({ resumeId, contentSignature }: Props) {
         ))}
 
         {total === 0 ? (
-          <Empty description={t("riskPanel.empty")} />
+          <EmptyState description={t("riskPanel.empty")} />
         ) : (
           grouped.map((group) =>
             group.points.length === 0 ? null : (

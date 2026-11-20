@@ -11,8 +11,9 @@
  * 3. **三档都可见**：命中价通常只有未命中的 1/10，合成一个"输入价"会把省下的钱算没。
  */
 import { CheckCircleFilled, DeleteOutlined, MoreOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Dropdown, Empty, Input, InputNumber, Space, Tag, Typography } from "antd";
+import { App, Button, Dropdown, Input, InputNumber, Space, Tag, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
+import EmptyState from "../../components/common/EmptyState";
 import { pt } from "../resume/provenance/i18n";
 import {
   activateUsagePricingRecord,
@@ -280,8 +281,8 @@ export default function UsagePricingCard() {
           {pt("settings.provenance.pricing.recordsTitle")}
         </Typography.Text>
         {records.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          <EmptyState
+            inline
             description={
               loading
                 ? pt("settings.provenance.pricing.recordsLoading")

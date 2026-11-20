@@ -98,7 +98,7 @@ describe("startThemeTransition", () => {
     delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
   });
 
-  it("支持时先写圆心/半径/时长，再在回调里完成切换（开灯 380ms、关灯 280ms）", () => {
+  it("支持时先写圆心/半径/时长，再在回调里完成切换（开灯 560ms、关灯 460ms）", () => {
     stubReducedMotion(false);
     const apply = vi.fn();
     let callback: (() => void | Promise<void>) | null = null;
@@ -122,7 +122,7 @@ describe("startThemeTransition", () => {
 
     startThemeTransition("dark", { x: 120, y: 60 }, apply);
     expect(root.style.getPropertyValue("--rf-theme-duration")).toBe(`${REVEAL_DURATION_MS.dark}ms`);
-    expect(REVEAL_DURATION_MS).toEqual({ light: 380, dark: 280 });
+    expect(REVEAL_DURATION_MS).toEqual({ light: 560, dark: 460 });
 
     delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
   });

@@ -5,7 +5,7 @@
  * 字符串字段做词级高亮、列表字段做条目级 +/- 对照、照片显示为 [图片] 占位。后端下发的
  * 源码 diff 降级为底部的「查看原始差异」折叠兜底，保留既有能力。
  */
-import { Card, Collapse, Empty, Tag, Typography } from "antd";
+import { Card, Collapse, Tag, Typography } from "antd";
 import type { CSSProperties } from "react";
 import type { DiffToken } from "../../../types/resumeWriting";
 import type {
@@ -18,6 +18,7 @@ import type {
   SubFieldDiff,
 } from "../../../types/resumeFieldDiff";
 import ResumeDiffView from "./ResumeDiffView";
+import EmptyState from "../../../components/common/EmptyState";
 import { t } from "../../../i18n";
 import type { MessageKey } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -257,7 +258,7 @@ export default function ResumeFieldDiffView({ data }: { data: DiffViewData }) {
       </div>
 
       {field.changed.length === 0 ? (
-        <Empty description={t("resumeFieldDiffView.emptyDescription")} />
+        <EmptyState description={t("resumeFieldDiffView.emptyDescription")} />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {field.changed.map((section) => (

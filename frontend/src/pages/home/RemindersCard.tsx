@@ -5,8 +5,9 @@
  * REMINDER_VIEW_KEY、URGENCY_DOT_COLORS 随唯一消费者下沉；CalendarView import 随迁。）
  */
 import { CalendarOutlined } from "@ant-design/icons";
-import { Card, Empty, Listy, Segmented, Space, Typography } from "antd";
+import { Card, Listy, Segmented, Space, Typography } from "antd";
 import { ListyItem } from "../../components/common/ListyItem";
+import EmptyState from "../../components/common/EmptyState";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import type { ReminderUpcoming } from "../../types";
@@ -97,7 +98,7 @@ export function RemindersCard({
       {reminderView === "calendar" ? (
         <CalendarView compact />
       ) : (reminders ?? []).length === 0 ? (
-        <Empty description={t("homePage.reminders.empty")} />
+        <EmptyState inline description={t("homePage.reminders.empty")} />
       ) : (
         <Listy
           items={reminders ?? []}

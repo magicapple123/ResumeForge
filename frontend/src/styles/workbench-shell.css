@@ -22,10 +22,13 @@
   align-items: center;
   height: 56px;
   margin: 0;
-  /* 64px 右内边距：antd 6 的 `.ant-modal-close` 是 **40px** 宽的按钮，`inset-inline-end`
-     是 14px，所以它占 14–54px；留 64px 才有 10px 呼吸位。（按 32px 的旧印象算过 56px，
-     那在 40px 按钮下只剩 2px —— 动作条一窄，「导出」就贴到 × 上。） */
-  padding: 0 64px 0 16px;
+  /* 左右对称 16px：64px 右内边距是给 **antd 自带关闭按钮**（40px 按钮 + 14px 偏移 +
+     10px 呼吸）让位的，而 `WorkbenchModalFrame.tsx` 设了 `closable={false}`，× 是动作条
+     最右那颗自绘按钮 —— 让位后只是凭空多出约 48px 白空（2026-11-20 条目 13）。
+     ⚠️ 耦合：`padding: 0 16px` **只在 `closable={false}` 时成立**。若把 antd 关闭按钮
+     加回来，必须同步把 64px 右侧内边距加回来（`padding: 0 64px 0 16px`），否则 × 会压到
+     动作条按钮上。 */
+  padding: 0 16px;
   border-bottom: 1px solid var(--rf-border-subtle);
 }
 
@@ -35,13 +38,6 @@
   flex: 1 1 auto;
   width: auto;
   min-width: 0;
-}
-
-/* 关闭按钮落在动作条垂直居中的位置（默认是 header 顶部对齐）。
-   算术：header 56px 高、按钮 40px 高 → (56 - 40) / 2 = 8。写 16 会让按钮整体偏低 8px。 */
-.resume-zoom-workbench-wrap .ant-modal-close {
-  top: 8px;
-  inset-inline-end: 14px;
 }
 
 .resume-wb-actionbar {
