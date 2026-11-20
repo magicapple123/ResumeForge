@@ -204,6 +204,99 @@ test("the app-running check opens the log before it judges anything", () => {
   );
 });
 
+// ------------------------------------------------- 7. app-exit gate (Medium 2)
+
+// 软等待宏的正文（与 RF_WaitForAppExit 同一套判定、不同的超时后果）。
+function softWaitBody() {
+  const rescue = code(readRescue());
+  const at = rescue.indexOf("!macro RF_WAIT_APP_EXIT_SOFT");
+  assert.ok(at >= 0, "RF_WAIT_APP_EXIT_SOFT must exist");
+  return rescue.slice(at, rescue.indexOf("!macroend", at));
+}
+
+test("the app is confirmed gone before the old uninstaller runs", () => {
+  // 模板的 CHECK_APP_RUNNING 排在安装段开头（installSection.nsh:33），而桥跑在
+  // `.onInit` 的 customInit / 目录页之后的 rfPrecheck —— 两者都早于那次提问。
+  // 静默升级时应用可能还开着，此时旧卸载器会把 $INSTDIR 整个删掉。
+  const body = preUninstallBody();
+  const waitAt = body.indexOf("!insertmacro RF_WAIT_APP_EXIT_SOFT");
+  const execAt = body.indexOf("ExecWait");
+  assert.ok(waitAt > 0, "the bridge must ask whether the app is gone (RF_WAIT_APP_EXIT_SOFT)");
+  assert.ok(execAt > waitAt, "that question must come *before* launching the old uninstaller");
+  assert.ok(
+    body.indexOf('${If} $RFAppStillRunning == "1"') > waitAt,
+    "the result of the wait must actually gate the ExecWait",
+  );
+
+  // 还在跑 → **放弃卸旧**：保留登记、安装继续。删登记或中止安装都比今天更差。
+  const giveUpAt = body.indexOf('${If} $RFAppStillRunning == "1"');
+  const giveUpElse = body.indexOf("${Else}", giveUpAt);
+  assert.ok(giveUpElse > giveUpAt, "the give-up branch must have an else (the real uninstall)");
+  const giveUp = body.slice(giveUpAt, giveUpElse);
+  assert.doesNotMatch(giveUp, /DeleteRegKey/, "an app that is still running must keep its registration");
+  assert.doesNotMatch(giveUp, /Quit|Abort|SetErrorLevel/, "leaving the old version in place must never abort the install");
+  assert.match(giveUp, /RF_LOG/, "the give-up must be logged");
+  assert.match(giveUp, /DetailPrint/, "and leave a trace in the details view");
+});
+
+test("the soft wait probes by image name only, and gives up instead of aborting", () => {
+  const body = softWaitBody();
+
+  // 判定方式必须与 RF_WaitForAppExit / customCheckAppRunning 一致：tasklist + find。
+  // 路径前缀判据是 `_?=` 卸载失败的根因，绝不能借这条路径回来。
+  assert.match(
+    body,
+    /nsExec::Exec 'cmd \/c tasklist \/FI "IMAGENAME eq \$\{PRODUCT_FILENAME\}\.exe" \/NH \| find \/I "\$\{PRODUCT_FILENAME\}\.exe" >nul'/,
+    "the probe must ask tasklist for the image name (no path prefix, no plugin)",
+  );
+  assert.doesNotMatch(body, /StartsWith|Get-CimInstance|Stop-Process|taskkill/, "the wait must not kill anything");
+  assert.doesNotMatch(body, /\$INSTDIR/, "the wait must not judge by the install path");
+  assert.doesNotMatch(body, /nsProcess::/, "the nsProcess plugin is not in the packaged plugin set");
+
+  // 有界轮询：静默上限 60 秒（题干要求 ≤60s），交互先给 10 秒再问人。
+  assert.match(body, /StrCpy \$R4 "60"/, "the silent bound must be 60 seconds");
+  assert.match(body, /StrCpy \$R4 "10"/, "interactive runs ask after a short grace period");
+  assert.match(body, /IntCmp \$R1 \$R4 rf_soft_wait_timeout/, "the loop must be bounded by that value");
+  assert.match(body, /Sleep 1000/, "polling interval");
+
+  // 静默分支：不弹框、不中止 —— 只把"应用仍在运行"写进日志并放弃。
+  const silentAt = body.indexOf('StrCmp $RFSilent "1" 0 rf_soft_wait_ask');
+  const askAt = body.indexOf("rf_soft_wait_ask:");
+  assert.ok(silentAt > 0 && askAt > silentAt, "the silent branch must be a separate, clearly delimited block");
+  const silent = body.slice(silentAt, askAt);
+  assert.doesNotMatch(silent, /MessageBox/, "no dialog on /S: the updater ExecWait's this process");
+  assert.doesNotMatch(silent, /Quit|Abort|SetErrorLevel/, "a running app must not abort the install (unlike RF_WaitForAppExit)");
+  assert.match(silent, /StrCpy \$RFAppStillRunning "1"/, "silent timeout means 'do not touch the old version'");
+  assert.match(silent, /RF_LOG/, "and it must be in the log");
+
+  // 交互分支：我们自己的提示 + 重试（重试要重置计数，否则第二次提问立刻超时）。
+  assert.match(
+    body,
+    /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$\(RF_BRIDGE_APP_RUNNING\)" IDRETRY rf_soft_wait_retry/,
+    "the interactive prompt must be ours and offer retry",
+  );
+  const retryAt = body.indexOf("rf_soft_wait_retry:");
+  assert.ok(retryAt > askAt, "the retry label must exist");
+  assert.match(body.slice(retryAt), /StrCpy \$R1 "0"\s*\n\s*Goto rf_soft_wait_loop/, "a retry restarts the bounded wait");
+  assert.match(body, /StrCpy \$RFAppStillRunning "0"[\s\S]*?RF_LOG "app exited/, "a clean exit must be logged too");
+});
+
+test("the abort-confirmation copy knows whether the old version is gone", () => {
+  // wizard.nsh 的 .onUserAbort 有两档文案，靠这个标志选。它只能在"旧卸载器 exit 0"
+  // 的分支里被置 1，否则取消确认会对用户说错话。
+  const body = preUninstallBody();
+  const okAt = body.indexOf('${If} $R0 == "0"');
+  const failAt = body.indexOf("pre-uninstall: FAILED");
+  assert.ok(okAt >= 0 && failAt > okAt, "the exit-code branch must exist");
+  const okBlock = body.slice(okAt, failAt);
+  assert.match(okBlock, /StrCpy \$RFOldVersionRemoved "1"/, "the flag is set when the old version really went away");
+  assert.strictEqual(
+    (body.match(/StrCpy \$RFOldVersionRemoved "1"/g) || []).length,
+    1,
+    "and nowhere else (a failed uninstall must not claim the old version is gone)",
+  );
+});
+
 test("the bridge is silent and runs after the user data is safe", () => {
   const body = preUninstallBody();
   assert.doesNotMatch(body, /MessageBox/, "no dialog: the auto-updater waits on this process with ExecWait");

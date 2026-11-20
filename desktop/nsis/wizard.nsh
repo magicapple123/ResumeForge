@@ -18,10 +18,21 @@
 !include "nsDialogs.nsh"
 !include "WinMessages.nsh"
 
-# 可执行文件名一律写 `${PRODUCT_FILENAME}.exe`（与模板 common.nsh 同源）。
-# 不用 APP_EXECUTABLE_FILENAME：它只在 common.nsh 里定义，而本文件的宏有插入点早于
-# 那次 define，实测会命中 warning 6000 "unknown variable/constant ..."，打包用 -WX
-# （警告即错误）会直接失败。PRODUCT_FILENAME 是命令行 -D，任何位置都可用。
+# 可执行文件名怎么拼，取决于这段代码**在哪里编译**（2026-11-2x 两次踩坑的结论）：
+#
+#   * **header 里就地编译的 Function**：只能用 `${PRODUCT_FILENAME}.exe`。
+#     `APP_EXECUTABLE_FILENAME` 由 common.nsh 定义，而本文件被 electron-builder 放在
+#     生成脚本最顶部（早于 common.nsh）；Function 是就地编译的，此刻那个常量还不存在
+#     → warning 6000 "unknown variable/constant ..."，而打包用 -WX（警告即错误）。
+#     `${PRODUCT_FILENAME}` 是命令行 -D，任何位置都可用（同理还有 `${APP_FILENAME}`、
+#     `${APP_GUID}`）。
+#   * **宏体（`!macro` 里的指令）**：可以用 `APP_EXECUTABLE_FILENAME`。宏是在**插入点**
+#     展开的，而 `customCheckAppRunning` 的插入点在模板正文（common.nsh 之后），那时
+#     常量已经定义好 —— 所以那个宏里写 `tasklist /FI "IMAGENAME eq
+#     ${APP_EXECUTABLE_FILENAME}"` 是合法的，不是漏改。
+#
+# 口诀：**就地编译看谁先，宏看插入点。** 拿不准就写 `${PRODUCT_FILENAME}.exe`：
+# 它在两种情形下都对。
 
 # 安装盘与系统盘的最低剩余空间（MB）。当前包体解压后约 360 MB，留 ~3 倍余量：
 # 首启还要把运行时解压到 %LOCALAPPDATA%，300 MB 边缘的机器装上也跑不起来。
@@ -36,6 +47,25 @@
 # `$LocalAppData\Programs\${APP_FILENAME}`），所以降级后的产物和一次"常规安装"
 # 完全等价：注册表、快捷方式、自动更新都按这个目录走。
 !define RF_FALLBACK_INSTDIR "$LOCALAPPDATA\Programs\ResumeForge"
+
+# per-machine 安装的降级目标（Low 1）。**不能**和上面那条混用：`$installMode` 是
+# "注册表写 HKLM 还是 HKCU、快捷方式放 Common 桌面还是用户桌面"的总开关，降级时
+# 只换目录不改它 —— 于是 per-machine 的安装一旦降到 `$LOCALAPPDATA`，就会出现
+# "文件在单用户目录里、注册表在 HKLM、快捷方式在 Common 桌面"的三处错位。
+# 所以这一档只在相同的用户上下文里换一个可写子目录（同样带 APP_FILENAME，
+# 因此 instFilesPre 不会再追加一层）。
+#
+# ⚠️ 为什么是 `$PROGRAMFILES` 而不是模板用的 `$PROGRAMFILES64`：模板 multiUser.nsh
+# （79-84 行）在 `!ifdef APP_64` + `${RunningX64}` 时选后者，那是**默认安装目录**的
+# 算法；这里是**兜底目录**，两者不必同源。兜底只在"用户选的目录写不进去"时启用，
+# 需要的是"在任何 x86/x64 Windows 上都存在且不是用户目录"，`$PROGRAMFILES` 两个架构
+# 下都有（x86 系统上 `$PROGRAMFILES64` 是空的，反而会把降级目标拼成 `\ResumeForge`，
+# 落在当前盘根）。另外 `${RunningX64}` 由 x64.nsh 提供，本文件里就地编译的 Function
+# 引用它很可能又撞 warning 6000 → -WX（见文件顶部那条注释）。
+# 代价：64 位机器上这一档会落到 `Program Files (x86)`，与"常规 per-machine 安装"不
+# 同目录 —— 可接受：`perMachine: false`（electron-builder.yml:170），这档今天走不到，
+# 真要走也只发生在"用户选的目录不可写"的机器上，能装进去比装进哪个 Program Files 重要。
+!define RF_FALLBACK_INSTDIR_MACHINE "$PROGRAMFILES\${APP_FILENAME}"
 
 # 写探针的临时文件名（见 rfProbeWritable）。放在 $INSTDIR 里而不是 $TEMP：
 # 要验证的正是"程序文件能不能写进这个目录"，这才是 2026-11-2x 那次
@@ -263,6 +293,21 @@ Var /GLOBAL RFSilent
   !insertmacro RF_STR RF_ERR_APP_RUNNING \
     "简历通仍在运行，装下去会覆盖正在使用的文件。$\r$\n$\r$\n请从托盘菜单退出后重试（数据不会丢）。" \
     "ResumeForge is still running and would be overwritten while in use.$\r$\n$\r$\nQuit it from the tray menu, then try again (your data is safe)."
+  # 桥（RF_PREEMPTIVE_UNINSTALL）在**动旧版本之前**的那一问。与上面那条的区别：
+  # 这条是"重试 / 跳过这一步"，选跳过安装会继续（Medium 2）；上面那条是"整台安装
+  # 停在这里"。
+  !insertmacro RF_STR RF_BRIDGE_APP_RUNNING \
+    "旧版本还在运行，没法先把它卸载。$\r$\n$\r$\n请从托盘菜单退出简历通，再点「重试」。点「取消」会跳过这一步，安装照常继续，旧版本之后由安装程序自己处理。" \
+    "The previous version is still running, so it cannot be removed first.$\r$\n$\r$\nQuit ResumeForge from the tray menu, then choose Retry. Choose Cancel to skip this step: setup continues and handles the old version itself."
+  # 进度页取消（Medium 3 残余）。两档文案只差"旧版本还在不在"：
+  # 桥已经把旧版本卸掉之后取消，用户手里就只剩"重新跑一遍安装程序"这一条路，
+  # 必须直说；旧版本没动过时则强调"重装即可修复，什么都没丢"。
+  !insertmacro RF_STR RF_ABORT_AFTER_UNINSTALL \
+    "安装还没完成。$\r$\n$\r$\n旧版本已经被移除了，中断之后需要重新运行安装程序才能继续使用简历通。已经复制到一半的程序文件会留在安装目录里，重新安装会覆盖它们。$\r$\n$\r$\n确定要中断安装吗？" \
+    "Setup is not finished.$\r$\n$\r$\nThe previous version has already been removed, so if you stop now you must run the installer again before ResumeForge can be used. Half-copied program files stay in the install folder; running setup again overwrites them.$\r$\n$\r$\nStop the installation?"
+  !insertmacro RF_STR RF_ABORT_PLAIN \
+    "安装还没完成。$\r$\n$\r$\n现在中断会留下不完整的程序文件；重新运行安装程序即可修复，旧版本与你的数据都不受影响。$\r$\n$\r$\n确定要中断安装吗？" \
+    "Setup is not finished.$\r$\n$\r$\nStopping now leaves an incomplete set of program files; running setup again repairs it. The previous version and your data are untouched.$\r$\n$\r$\nStop the installation?"
 
   # ---------------------------------------------------------------------------
   # 非 0 退出码一览（静默路径不弹框，改成"写日志 + 退出码"，所以这些数字就是
@@ -505,6 +550,10 @@ Var /GLOBAL RFProbeError
 Var /GLOBAL RFDowngraded
 Var /GLOBAL RFSelfCheckState
 Var /GLOBAL RFSelfCheckMissing
+# 桥有没有真的把旧版本卸掉。取消确认（下文的 rfAbortHandler）要按它分两档文案：
+# 旧版本已经删了就必须直说"中断后要重新运行安装程序"，没删则说"重装即可修复"。
+# 只在 RF_PREEMPTIVE_UNINSTALL 的成功分支（旧卸载器 exit 0）置 "1"，别处不改。
+Var /GLOBAL RFOldVersionRemoved
 
 # ----------------------------------------------------------------------------
 # 写探针（2026-11-2x 真机取证的核心兜底）
@@ -579,17 +628,34 @@ FunctionEnd
   # $RFDowngraded 只置 1、**从不清 0**：本宏在 customInit 与 rfPrecheck 各插入一次，
   # 第二次（目录页之后）即使在降级后的目录上探针成功，也不能把"这次安装降级过"
   # 擦掉 —— 收尾日志与完成页都要读它。
-  StrCpy $RFInstallDirOriginal "$INSTDIR"
+  # $RFInstallDirOriginal **只在为空时**记一次（Low 3）：本宏插入两次，customInit 那次
+  # 记下的才是"这次安装原本想装到哪"。precheck 那次无条件覆盖它，会让收尾日志里的
+  # `downgraded=1` 与"原始目录"对不上真实情况（用户看到的是一份自相矛盾的证据）。
+  ${If} $RFInstallDirOriginal == ""
+    StrCpy $RFInstallDirOriginal "$INSTDIR"
+  ${EndIf}
   Call rfProbeWritable
   !insertmacro RF_LOG "${TAG} probe: dir=$INSTDIR result=$RFProbeState lasterror=$RFProbeError"
 
   ${If} $RFProbeState != "ok"
+    # 降级目标按**安装方式**分档（Low 1）：per-machine 时降到用户目录会让
+    # "文件在 $LOCALAPPDATA、注册表在 HKLM、快捷方式在 Common 桌面"三处错位。
+    # `$installMode` 本身**绝不改**——它是注册表与快捷方式位置的开关，改了只会让
+    # 错位更隐蔽；这里只换一个仍属同一用户上下文、且可写的目录。
+    # 读 $RFInstallMode 快照而不是 $installMode：本宏会在 rfPrecheck（header 里
+    # 编译的函数）里展开，那时模板的 $installMode 还不存在（warning 6000）。
+    ${If} $RFInstallMode == "all"
+      StrCpy $INSTDIR "${RF_FALLBACK_INSTDIR_MACHINE}"
+    ${Else}
+      StrCpy $INSTDIR "${RF_FALLBACK_INSTDIR}"
+    ${EndIf}
     ${If} $RFSilent == "1"
       # 自动更新走 /S：这条路径没有人在旁边点框，弹一个就是卡死。
-      !insertmacro RF_LOG "${TAG} probe failed -> silent fallback to ${RF_FALLBACK_INSTDIR}"
+      !insertmacro RF_LOG "${TAG} probe failed -> silent fallback to $INSTDIR (mode=$RFInstallMode)"
+    ${Else}
+      !insertmacro RF_LOG "${TAG} probe failed -> fallback to $INSTDIR (mode=$RFInstallMode)"
     ${EndIf}
 
-    StrCpy $INSTDIR "${RF_FALLBACK_INSTDIR}"
     Call rfProbeWritable
     !insertmacro RF_LOG "${TAG} fallback probe: dir=$INSTDIR result=$RFProbeState lasterror=$RFProbeError"
 
@@ -610,8 +676,9 @@ FunctionEnd
       ${If} $RFSilent == "1"
         # 静默路径**不弹框**（ExecWait 里的 MessageBox 会把自动更新挂死，
         # 而"挂死"正是本轮要消灭的现象）。留 DetailPrint + 非 0 退出码，
-        # 让更新器的启动对账如实报失败。
-        DetailPrint "[ResumeForge] no writable install directory: ${RF_FALLBACK_INSTDIR}"
+        # 让更新器的启动对账如实报失败。打印的是刚才试过的那个目录（$INSTDIR），
+        # 不写死常量——per-machine 与 per-user 的降级目标不是同一个。
+        DetailPrint "[ResumeForge] no writable install directory: $INSTDIR"
       ${Else}
         ${If} ${Cmd} `MessageBox MB_ICONSTOP|MB_YESNO "$(RF_ERR_NO_WRITABLE_DIR)$(RF_LOG_HINT)$RFLogFile$\r$\n$(RF_LOG_ASK)" IDYES`
           ExecShell "open" "$RFLogFile"
@@ -680,6 +747,45 @@ Function rfIsSyncFolder
   ${EndIf}
 FunctionEnd
 
+# ----------------------------------------------------------------------------
+# 把 $INSTDIR 补成 **INSTFILES 之后真正的安装目录**（Low 4）。
+#
+# 模板 assistedInstaller.nsh:33-39 的 `instFilesPre`（挂在 MUI_PAGE_INSTFILES 的
+# `MUI_PAGE_CUSTOMFUNCTION_PRE` 上）会在进度页出现之前做一件事：$INSTDIR 里若还没有
+# `${APP_FILENAME}` 这一层，就把应用子目录追加进去。而我们的两次写探针分别在
+# customInit（目录页**之前**）与 rfPrecheck（目录页之后、INSTFILES 之前）—— 后者探的
+# 是"用户选的父目录"，真正的文件却写进"父目录\<应用名>"。现场那句
+# 「不能打开要写入的文件：…\uninstallerIcon.ico」正是发生在子目录里，所以探父目录
+# 等于没探。
+#
+# 这里按**同一条规则**先把子目录补上（幂等：补过之后 instFilesPre 的 StrContains
+# 会命中，不会再追加一层），于是探针打的就是最终目录。
+#
+# 三条实现约束：
+#   * 不能用 `${StrContains}`：它由 include/StrContains.nsh 提供，而那一趟 include 在
+#     assistedInstaller.nsh 里、**晚于**本文件（本文件被放在生成脚本最顶部）。Function
+#     是就地编译的，这里展开它等于 warning 6000 → -WX 打包失败（同
+#     `${INSTALL_REGISTRY_KEY}` 那一条）。
+#   * 判定必须与 StrContains **同义**：NSIS 的 StrCmp 不区分大小写，所以模板那句
+#     "含不含子目录名"实际也不区分大小写。这里用 shlwapi 的 StrStrIW（同样不区分
+#     大小写，rfIsSyncFolder 已在用）。写成区分大小写会让 "D:\resumeforge" 这类路径
+#     与模板的判定分叉，凭空多套一层目录。
+#   * 模板没有 MUI_PAGE_DIRECTORY（`allowToChangeInstallationDirectory` 关掉）时
+#     instFilesPre 根本不存在，这时**不能**替它追加，否则安装目录会和模板不一致。
+# ----------------------------------------------------------------------------
+Function rfResolveFinalInstallDir
+  # 入参/出参：$INSTDIR
+  !ifdef allowToChangeInstallationDirectory
+    !ifdef APP_FILENAME
+      StrCpy $R6 "0"
+      System::Call 'shlwapi::StrStrIW(w "$INSTDIR", w "${APP_FILENAME}") p .R6'
+      ${If} $R6 == 0
+        StrCpy $INSTDIR "$INSTDIR\${APP_FILENAME}"
+      ${EndIf}
+    !endif
+  !endif
+FunctionEnd
+
 Function rfPrecheck
   StrCpy $RFPrecheckFailed "0"
   # 1) 盘型：拒绝可移动盘(2)与网络盘(4)。取 $INSTDIR 所在根；此时 $INSTDIR 可能
@@ -718,7 +824,12 @@ Function rfPrecheck
     Return
   ${EndIf}
 
-  # 4) 写探针（第二次）：customInit 那次早于"选择安装位置"页，用户完全可能改到
+  # 4) 先补成**最终**目录，再在那里探（Low 4）：模板的 instFilesPre 会在 INSTFILES
+  #    之前把应用子目录追加到 $INSTDIR，我们若探父目录，验的就不是真正落盘的位置。
+  Call rfResolveFinalInstallDir
+  !insertmacro RF_LOG "precheck: final install dir=$INSTDIR"
+
+  # 5) 写探针（第二次）：customInit 那次早于"选择安装位置"页，用户完全可能改到
   #    另一个写不进去的目录。这里再探一次，交互模式照样能自动降级 —— 否则就会
   #    重演现场那句「不能打开要写入的文件」，那是 Windows 的原始对话框，既没有
   #    下一步也没有日志。降级只改 $INSTDIR，不阻断流程。
@@ -727,7 +838,7 @@ Function rfPrecheck
     !insertmacro RF_LOG "precheck: install dir downgraded to $INSTDIR"
   ${EndIf}
 
-  # 5) 抢占式卸旧（交互路径的最后一站，Medium 3）：目录页之后、INSTFILES 之前。
+  # 6) 抢占式卸旧（交互路径的最后一站，Medium 3）：目录页之后、INSTFILES 之前。
   #    这一页的 leave 一旦通过，后面就只剩进度条，用户已经没有取消的机会了 ——
   #    这正是"删旧版本 + 清卸载登记"应该发生的时点。静默没有页面（到不了这里），
   #    那条路径在 customInit 里做（legacy-data-rescue.nsh 的 rf_init_done 之后）。
@@ -994,6 +1105,10 @@ FunctionEnd
 !macro RF_INSTALL_INIT
   # 快照安装方式：本宏在 customInit（模板 body）里展开，$installMode 此刻有效；
   # 后面的 rfPrecheck / 抢占式卸旧读这个快照（理由见 Var 声明处）。
+  # ⚠️ legacy-data-rescue.nsh 的 customInit 已经在本宏之前抄过一次了 —— 那次是必须的，
+  # 因为写探针（RF_WRITE_PROBE）要按安装方式选降级目标，而探针排在本宏之前。这里再抄
+  # 一次只为了"本宏单独看也是自洽的"（幂等，同一个值）。两处都必须读 $installMode
+  # 的**同一个来源**，不要在这里换成别的判据。
   StrCpy $RFInstallMode "$installMode"
   StrCpy $RFExistingVersion ""
   StrCpy $RFExistingMode ""
@@ -1130,6 +1245,63 @@ FunctionEnd
 
   !insertmacro RF_LOG "self-check ok: $INSTDIR"
 !macroend
+
+# ----------------------------------------------------------------------------
+# 进度页取消（Medium 3 残余）：**不试图还原旧版本，但也不许糊里糊涂地点掉。**
+#
+# 现状是：交互模式的桥在 rfTasksPageLeave（目录页之后、INSTFILES 之前）跑，用户还能
+# 取消；可一旦进了进度页再点取消，旧版本已被卸载，而新的安装登记要等到 section
+# 末尾才写（installSection.nsh:67 的 `registryAddInstallInfo`）—— 于是磁盘上旧程序
+# 没了、Add/Remove 里 0 条记录。还原旧版本做不到（旧卸载器已经把文件删了），能做
+# 的两件事只有：
+#   * 说清后果（"旧版本已被移除，中断后需要重新运行安装程序"）；
+#   * 留一份可核对的日志（$INSTDIR + 复制到哪一步 + 旧版本有没有被删）。
+#
+# 为什么挂在 `MUI_CUSTOMFUNCTION_ABORT` 上，而不是自己定义 `.onUserAbort`：
+# MUI2 的 `MUI_FUNCTION_ABORTWARNING`（Interface.nsh:323-341）**无条件**定义了
+# `.onUserAbort` —— 自己再定义一遍就是 "Function named .onUserAbort already exists"
+# （实测 2026-11-2x 打包原文），整台打包直接失败。它给的扩展点就是这两条：
+#   * `MUI_CUSTOMFUNCTION_ABORT`：`.onUserAbort` 里最先 Call 的函数（我们用它）；
+#   * `MUI_ABORTWARNING` + `MUI_ABORTWARNING_TEXT`：MUI 自带的通用确认框。
+# 我们**不用**后者：那句是通用文案 `$(MUI_TEXT_ABORTWARNING)`，说不清"旧版本已经
+# 不在了"，而这正是用户此刻最需要知道的一件事；而且 MUI 那条没有静默判断。
+#
+# 静默（`/S`，自动更新）不经过任何页面，`.onUserAbort` 根本不会被调用；万一被调用
+# （模板以后改了），这里也**不弹框**并取消这次中止：更新器用 ExecWait 等这个进程，
+# 一个框就是挂死。
+# ----------------------------------------------------------------------------
+!define MUI_CUSTOMFUNCTION_ABORT "rfAbortHandler"
+
+Function rfAbortHandler
+  # "复制到哪一步"用最实在的判据：新 payload 由 installApplicationFiles 写入，
+  # 它在不在，就是"文件复制开始了没有"。比另设一个阶段变量可靠（少一处同步点）。
+  ${If} ${FileExists} "$INSTDIR\resources\payload\backend\app\main.py"
+    StrCpy $R1 "1"
+  ${Else}
+    StrCpy $R1 "0"
+  ${EndIf}
+  !insertmacro RF_LOG "abort requested: instdir=$INSTDIR old_version_removed=$RFOldVersionRemoved files_copied=$R1 silent=$RFSilent"
+
+  ${If} ${Silent}
+    # 静默路径既不许弹框，也不许因为"有人点了取消"就停下（这里 `Abort` 的语义是
+    # **取消这次中止请求**，安装继续）。
+    Abort
+  ${EndIf}
+
+  # 先选文案再弹：两档文案只差"旧版本还在不在"。
+  StrCpy $R2 "$(RF_ABORT_PLAIN)"
+  ${If} $RFOldVersionRemoved == "1"
+    StrCpy $R2 "$(RF_ABORT_AFTER_UNINSTALL)"
+  ${EndIf}
+  # 用 `${Cmd}` 包住 MessageBox 而不是 `IDYES +2` 相对跳转：后者按**指令条数**偏移，
+  # 紧跟其后的任何宏（RF_LOG 会展开成一串指令）都会让偏移落到块中间。
+  ${If} ${Cmd} `MessageBox MB_YESNO|MB_ICONEXCLAMATION "$R2$\r$\n$\r$\n$(RF_LOG_HINT)$RFLogFile" IDYES`
+    !insertmacro RF_LOG "abort confirmed by the user: instdir=$INSTDIR old_version_removed=$RFOldVersionRemoved"
+  ${Else}
+    # 选"否"= 不中断，留在进度页继续装。
+    Abort
+  ${EndIf}
+FunctionEnd
 
 !endif
 
@@ -1319,7 +1491,14 @@ Function un.rfCopyTree
     Goto un_rf_copy_next
   un_rf_copy_failed:
     StrCpy $RFUCopyFailed "1"
+    # **必须**先保存 $R9 再写日志：本函数用 $R9 传递归参数，而 `RF_LOG` 内部拿 $R9
+    # 当文件句柄（见 wizard.nsh 的 RF_LOG：`FileOpen $R9 ...`）。一次复制失败之后
+    # 如果不还原，$R9 就变成了一个数字句柄，接着的递归会拼出 "1234\user_files"
+    # 这种垃圾路径 —— 备份目录里于是静默缺一层，而日志只写"copy failed"。
+    # 改 RF_LOG 的全局寄存器约定会牵连所有调用点，所以在这里就地保存/恢复。
+    Push $R9
     !insertmacro RF_LOG "backup copy failed: $R7\$R6"
+    Pop $R9
 
   un_rf_copy_next:
     FindNext $R5 $R6

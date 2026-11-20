@@ -98,6 +98,9 @@ Var /GLOBAL RFSrc
 Var /GLOBAL RFDst
 Var /GLOBAL RFSrcBytes
 Var /GLOBAL RFDstBytes
+# RF_WAIT_APP_EXIT_SOFT 的出参："1" 应用还在跑 / "0" 已退出。
+# 与 RF_WaitForAppExit 的区别只有超时后的动作（见那个宏的注释）。
+Var /GLOBAL RFAppStillRunning
 
 # 诊断通道：只在调用方定义 RF_DIAG_LOG 时编译进去（生产安装包不定义，产物里没有
 # 这段代码）。复制失败时逐条记录"哪个文件、哪一步失败"，供测试装置与排障使用——
@@ -254,6 +257,70 @@ FunctionEnd
 !macroend
 
 # ----------------------------------------------------------------------------
+# 「应用退出了吗」的**软**版本（Medium 2，2026-11-2x）：桥在真正执行旧卸载器之前
+# 必须确认应用已经退出，否则就会在应用运行时删掉它的安装目录 —— 静默升级尤其危险
+# （那时应用可能还开着，用户在托盘里根本没点"退出"）。
+#
+# 为什么不能直接复用 `RF_WaitForAppExit`：那个宏超时之后**中止安装**。它用在旧数据
+# 抢救那里是对的（复制一个正在写入的 SQLite 库 = 撕裂拷贝，必须停），但用在"卸旧"
+# 这里是错的 —— 卸不掉旧版本只是退化成旧行为，为它把整台安装判死没有必要，而且
+# 静默路径一旦 `Quit`，自动更新那一侧看到的就是"升级失败"，用户手里还是老版本。
+#
+# 所以这一版的超时后果是**放弃卸旧**：
+#   * 保留卸载登记（不 DeleteRegKey），交给模板原路径自己按旧逻辑处理；
+#   * 安装继续（不清任何状态、不改退出码）；
+#   * 日志里写明"应用仍在运行"以及等了多少秒。
+#
+# 判定方式与 `RF_WaitForAppExit` / `customCheckAppRunning` **完全一致**：tasklist 加
+# find，**只按镜像名**。不用路径前缀 —— 那正是 `_?=` 卸载失败（exit 2、一个文件没删）
+# 的根因（路径前缀判据在卸载器就地运行时命中它自己）。按镜像名则结构上不可能命中
+# 安装器/卸载器自己。
+#
+# 两档上限：静默 60 秒（没人能在旁边点框）后放弃；交互 10 秒后弹**我们自己的**提示，
+# 给「重试 / 跳过这一步」。`/S` 下永不弹框 —— 更新器用 ExecWait 等这个进程。
+#
+# 出参：$RFAppStillRunning = "1"（还在跑，别卸旧）/ "0"（已退出，可以卸）。
+# 全程用裸标签（函数作用域内唯一，本宏每处只展开一次），与 RF_WaitForAppExit 同风格；
+# 不用 `${__LINE__}` 拼标签，那个在宏体里是定义行常量，展开两次会撞。
+# ----------------------------------------------------------------------------
+!macro RF_WAIT_APP_EXIT_SOFT
+  StrCpy $RFAppStillRunning "0"
+  StrCpy $R1 "0"
+  StrCpy $R4 "10"
+  StrCmp $RFSilent "1" 0 rf_soft_wait_loop
+  StrCpy $R4 "60"
+
+  rf_soft_wait_loop:
+    nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq ${PRODUCT_FILENAME}.exe" /NH | find /I "${PRODUCT_FILENAME}.exe" >nul'
+    Pop $R2
+    StrCmp $R2 "0" 0 rf_soft_wait_exited
+    IntOp $R1 $R1 + 1
+    IntCmp $R1 $R4 rf_soft_wait_timeout
+    Sleep 1000
+    Goto rf_soft_wait_loop
+
+  rf_soft_wait_timeout:
+    StrCmp $RFSilent "1" 0 rf_soft_wait_ask
+      !insertmacro RF_LOG "app still running after $R4s: ${PRODUCT_FILENAME}.exe -> skipping the pre-uninstall (registration kept)"
+      StrCpy $RFAppStillRunning "1"
+      Goto rf_soft_wait_done
+
+  rf_soft_wait_ask:
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(RF_BRIDGE_APP_RUNNING)" IDRETRY rf_soft_wait_retry
+      !insertmacro RF_LOG "user skipped the pre-uninstall (app still running)"
+      StrCpy $RFAppStillRunning "1"
+      Goto rf_soft_wait_done
+  rf_soft_wait_retry:
+    StrCpy $R1 "0"
+    Goto rf_soft_wait_loop
+
+  rf_soft_wait_exited:
+    StrCpy $RFAppStillRunning "0"
+    !insertmacro RF_LOG "app exited: ${PRODUCT_FILENAME}.exe gone after $R1s, safe to remove the old version"
+  rf_soft_wait_done:
+!macroend
+
+# ----------------------------------------------------------------------------
 # 抢占式卸旧（2026-11-2x，给已经发出去的 2.1.0 补桥）
 #
 # 2.1.0 的卸载器里编进了一个缺陷：模板 `_CHECK_APP_RUNNING` 按**镜像路径前缀**
@@ -268,7 +335,13 @@ FunctionEnd
 #     UninstallString 与 InstallLocation 会直接 return（该文件 178-182 行），
 #     后续安装按全新安装走；
 #   * 非 0 → **保留**登记键，只写日志，让模板按原样重试 —— 不比今天更差，绝不中止；
-#   * 全程不弹框（`/S` 与交互模式都一样）：ExecWait 里的 MessageBox 会把自动更新挂死。
+#   * **执行旧卸载器之前先确认应用退出了**（Medium 2）。模板的 `CHECK_APP_RUNNING`
+#     排在安装段开头（installSection.nsh:33），而桥跑在 `.onInit` 里的 customInit /
+#     目录页之后的 rfPrecheck —— 两者都**早于**那次提问。静默升级时应用可能还开着，
+#     此时旧卸载器会把 $INSTDIR 整个删掉，删掉的就是那个正在运行的程序。所以等待逻辑
+#     见 `RF_WAIT_APP_EXIT_SOFT`：已退出才卸；还在跑就放弃卸旧（保留登记、安装继续）。
+#   * 除了那一问（交互模式下会弹**我们自己的**重试/跳过提示），全程不弹框：
+#     ExecWait 里的 MessageBox 会把自动更新挂死。
 #
 # 为什么是 !macro 而不是 Function：`${UNINSTALL_REGISTRY_KEY}` / `${INSTALL_REGISTRY_KEY}`
 # 由 `multiUser.nsh` 定义，而本文件被 electron-builder 放在生成脚本**最顶部**（早于
@@ -276,11 +349,12 @@ FunctionEnd
 # （2026-11-2x 实测，同 `${UNINSTALL_FILENAME}` 那一条）；宏在插入点展开，
 # 而插入点 customInit 位于模板 .onInit 之内，那时常量已经定义。
 #
-# 调用点的两条前置条件（见 customInit 末尾）：
+# 调用点的三条前置条件（见 customInit 末尾）：
 #   1. 必须在**旧数据抢救之后**：旧卸载器会删掉整个 $INSTDIR，payload 时代的数据在里面；
 #   2. `$RFRescueState == "ok"`（数据只存在于 $PLUGINSDIR 里）时**不跑**：$PLUGINSDIR
 #      是临时目录，用户中途取消安装就没了，而那时旧版本已经被删——这是唯一可能丢数据
-#      的组合，所以这一档保持旧行为，交给模板。
+#      的组合，所以这一档保持旧行为，交给模板；
+#   3. 应用已退出 —— 由宏内部的 RF_WAIT_APP_EXIT_SOFT 现问，不再靠调用方前置。
 # ----------------------------------------------------------------------------
 !macro RF_PREEMPTIVE_UNINSTALL
   ${If} $RFExistingVersion == ""
@@ -355,29 +429,47 @@ FunctionEnd
           # **没有 `_?=`**：这是本轮根因的开关，见上面的注释，别加回来。
           # `--updated` 保留：它让旧卸载器跳过"用户主动卸载"的默认值（备份/删数据的
           # 那条路径），用户数据在 %APPDATA% 里，不能被一次升级动掉。
-          ClearErrors
-          ExecWait '"$R1" /S $R3 --updated' $R0
-          ${If} ${Errors}
-            StrCpy $R0 "-1"
-          ${EndIf}
-          !insertmacro RF_LOG "pre-uninstall: exit=$R0"
-
-          ${If} $R0 == "0"
-            DeleteRegKey SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}"
-            DeleteRegKey SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}"
-            !insertmacro RF_LOG "pre-uninstall: ok, registration cleared"
-            # 旧卸载器把 $INSTDIR 整个删掉了（`--updated` 也删目录，只是不删用户数据）。
-            # 目录与"当前输出目录"都要重建，否则后面的 File 指令会写进一个不存在的路径 ——
-            # 现场那句「不能打开要写入的文件」就长这样。
-            ClearErrors
-            CreateDirectory "$INSTDIR"
-            SetOutPath "$INSTDIR"
-            Call rfProbeWritable
-            !insertmacro RF_LOG "pre-uninstall: install dir recreated: $INSTDIR probe=$RFProbeState lasterror=$RFProbeError"
+          #
+          # 但**先确认应用真的退出了**（Medium 2）：模板的 `CHECK_APP_RUNNING` 排在
+          # 安装段开头（installSection.nsh:33），而本节所在的 customInit 属 `.onInit`
+          # ——也就是说桥、升级备份、旧数据抢救全都跑在"应用是否在运行"被问之前。
+          # 静默升级时应用完全可能还开着，此时旧卸载器会把 $INSTDIR 整个删掉，
+          # 删的正是那个正在运行的程序的目录。所以这一问放在 ExecWait 之前：
+          #   * 已退出 → 照常卸旧；
+          #   * 还在跑 → **放弃卸旧**（保留登记、交给模板原路径），安装继续。
+          #     "宁可退回旧行为，也不要在应用运行时删它的目录"。
+          !insertmacro RF_WAIT_APP_EXIT_SOFT
+          ${If} $RFAppStillRunning == "1"
+            !insertmacro RF_LOG "pre-uninstall: skipped, app still running (registration kept for the template path)"
+            DetailPrint "[ResumeForge] ResumeForge is still running; the previous version is left for the template to remove"
           ${Else}
-            # 不清登记：交给 installUtil 按原样重试（与今天一致），原因已经在日志里。
-            !insertmacro RF_LOG "pre-uninstall: FAILED exit=$R0, keeping registration for the template path"
-            DetailPrint "[ResumeForge] previous version could not be removed (exit $R0); falling back to the template uninstall path"
+            ClearErrors
+            ExecWait '"$R1" /S $R3 --updated' $R0
+            ${If} ${Errors}
+              StrCpy $R0 "-1"
+            ${EndIf}
+            !insertmacro RF_LOG "pre-uninstall: exit=$R0"
+
+            ${If} $R0 == "0"
+              # 旧版本真的没了：取消确认（wizard.nsh 的 rfAbortHandler，挂在
+              # MUI_CUSTOMFUNCTION_ABORT 上）要按这个标志换一档更重的文案。
+              StrCpy $RFOldVersionRemoved "1"
+              DeleteRegKey SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}"
+              DeleteRegKey SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}"
+              !insertmacro RF_LOG "pre-uninstall: ok, registration cleared"
+              # 旧卸载器把 $INSTDIR 整个删掉了（`--updated` 也删目录，只是不删用户数据）。
+              # 目录与"当前输出目录"都要重建，否则后面的 File 指令会写进一个不存在的路径 ——
+              # 现场那句「不能打开要写入的文件」就长这样。
+              ClearErrors
+              CreateDirectory "$INSTDIR"
+              SetOutPath "$INSTDIR"
+              Call rfProbeWritable
+              !insertmacro RF_LOG "pre-uninstall: install dir recreated: $INSTDIR probe=$RFProbeState lasterror=$RFProbeError"
+            ${Else}
+              # 不清登记：交给 installUtil 按原样重试（与今天一致），原因已经在日志里。
+              !insertmacro RF_LOG "pre-uninstall: FAILED exit=$R0, keeping registration for the template path"
+              DetailPrint "[ResumeForge] previous version could not be removed (exit $R0); falling back to the template uninstall path"
+            ${EndIf}
           ${EndIf}
         ${EndIf}
       ${EndIf}
@@ -393,6 +485,13 @@ FunctionEnd
   # initMultiUser 定好，所以要在 preInit 之外再打一次。
   !insertmacro RF_LOG_OPEN "customInit"
   !insertmacro RF_LOG_ENV
+
+  # $installMode 的**快照**必须在这里就落地，不能等 RF_INSTALL_INIT：下面的写探针
+  # 要按安装方式选降级目标（per-machine 不许降到用户目录，Low 1），而 RF_INSTALL_INIT
+  # 排在探针之后。（这个变量是我们自己声明的：$installMode 由 multiUser.nsh 声明，
+  # 而 rfPrecheck / RF_WRITE_PROBE 会在 header 里就地编译 —— 那里引用它等于
+  # warning 6000 → -WX 打包失败。）
+  StrCpy $RFInstallMode "$installMode"
 
   # 第二件事：写探针 + 自动降级。必须早于任何文件落盘（也在下面这次抢救复制之前：
   # 如果 $INSTDIR 写不进去，先把用户数据往一个写不进去的目录里搬只会更难收场）。

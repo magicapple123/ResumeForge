@@ -210,28 +210,44 @@ test("customHeader is defined outside the installer-only guard", () => {
 test("every user-facing message box is bilingual", () => {
   const source = readRescue();
   const branches = (source.match(/\$\{If\} \$LANGUAGE/g) || []).length;
-  const boxes = (source.match(/^\s*MessageBox\b/gm) || []).length;
   assert.ok(branches > 0, "the installer messages must branch on $LANGUAGE");
-  assert.strictEqual(
-    boxes,
-    branches * 2,
-    "each message box needs one Chinese and one English variant",
-  );
 
   // 逐块校验，而不是**全文件**数 `${Else}` / `${EndIf}`：2026-11-2x 加了抢占式卸旧
   // （RF_PREEMPTIVE_UNINSTALL，里面有 4 组自己的 ${If}/${Else}/${EndIf}）之后，
   // 全文件计数把无关分支也算了进来，守卫于是误红。改成"每个 $LANGUAGE 分支内部
   // 必须有 中文 MessageBox → ${Else} → English MessageBox → ${EndIf}"，
   // 判定比原来更严：只有语言分支里漏了英文那一条才会红。
-  const blocks = [...source.matchAll(/\$\{If\} \$LANGUAGE\b[\s\S]*?\$\{EndIf\}/g)].map((m) => m[0]);
+  const blocks = [...source.matchAll(/\$\{If\} \$LANGUAGE\b[\s\S]*?\$\{EndIf\}/g)];
   assert.strictEqual(blocks.length, branches, "each $LANGUAGE branch must be closed by ${EndIf}");
-  for (const block of blocks) {
+  for (const match of blocks) {
+    const block = match[0];
     const elseAt = block.indexOf("${Else}");
     assert.ok(elseAt > 0, "each language branch needs an ${Else} English fallback");
     const zh = block.slice(0, elseAt);
     const en = block.slice(elseAt);
     assert.strictEqual((zh.match(/^\s*MessageBox\b/gm) || []).length, 1, "one Chinese message box");
     assert.strictEqual((en.match(/^\s*MessageBox\b/gm) || []).length, 1, "one English message box");
+  }
+
+  // 剩下的 MessageBox 必须走**本地化文案通道**：`$(RF_...)`，由 wizard.nsh 的 RF_STR
+  // 一次铺满 26 个 LCID。原来是"全文件 MessageBox 数 === 语言分支数 × 2"，那个等式在
+  // 2026-11-2x 之后不再成立 —— 桥的"旧版本还在运行"提示用 `$(RF_BRIDGE_APP_RUNNING)`
+  // 而不是复制一份中文/英文，那是对的写法，却会被纯计数误判成"少了一条英文"。
+  //
+  // ⚠️ 判据必须是"开引号后**紧跟** LangString"，不能只测"这一行里出现过 $(RF_*)"：
+  // QA 注入过 `MessageBox ... "正在恢复数据。$(RF_LOG_HINT)$RFLogFile"` —— 硬编码中文
+  // 散文 + 一个 LangString 尾巴，用子串判定 39 条全绿（2026-11-2x 复验发现的真洞）。
+  // 允许 LangString 后面接运行期变量（$RFLogFile / $INSTDIR），不允许它前面有散文。
+  const ranges = blocks.map((match) => [match.index, match.index + match[0].length]);
+  const boxes = [...source.matchAll(/^\s*MessageBox\b[^\n]*$/gm)];
+  assert.ok(boxes.length >= branches * 2, "every $LANGUAGE branch box must still be found by the scan");
+  for (const box of boxes) {
+    const inLanguageBlock = ranges.some(([start, end]) => box.index > start && box.index < end);
+    const localized = /^\s*MessageBox\b[^"\n]*"\$\(RF_[A-Z0-9_]+\)/.test(box[0]);
+    assert.ok(
+      inLanguageBlock || localized,
+      `unlocalised message box (neither a $LANGUAGE branch nor an $(RF_*) LangString right after the opening quote): ${box[0].trim()}`,
+    );
   }
 });
 
