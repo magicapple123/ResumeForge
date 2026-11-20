@@ -236,11 +236,16 @@ const settingsUi = {
     "四类始终不代填：日期选择器、文件上传、密码/验证码/银行卡、无弹层的只读点选框——这些都需要你自己操作。",
   // ── 出网与代理（T02 / T05）──────────────────────────────────
   "settingsUi.network.title": "出网与代理",
-  "settingsUi.network.intro":
-    "模型、搜索与更新检查都走同一条出网路径。这里是唯一能改它的地方，保存后立即生效，不用重启。",
+  "settingsUi.network.intro": "模型、搜索与更新检查共用这条出网路径。",
+  "settingsUi.network.instantHint": "改动保存后即时生效",
+  "settingsUi.network.modeLabel": "出网方式",
   "settingsUi.network.mode.system": "跟随系统",
+  "settingsUi.network.mode.systemHint": "用系统代理与证书",
   "settingsUi.network.mode.direct": "直连",
+  "settingsUi.network.mode.directHint": "绕过任何代理",
   "settingsUi.network.mode.custom": "自定义代理",
+  "settingsUi.network.mode.customHint": "手动填地址",
+  "settingsUi.network.clean": "没有改动",
   "settingsUi.network.dirty": "有未保存的更改",
   "settingsUi.network.probeBlocked": "先保存再测试",
   "settingsUi.network.directWarning":
@@ -261,8 +266,8 @@ const settingsUi = {
   "settingsUi.network.probeCurrent": "按当前设置",
   "settingsUi.network.probeDirect": "直连",
   "settingsUi.network.probeOk": "连接成功",
-  "settingsUi.network.detected":
-    "检测到系统代理 {proxy}（来源：{source}）；模型连不上时可先改为直连",
+  "settingsUi.network.detected": "检测到系统代理 {proxy}（来源：{source}）",
+  "settingsUi.network.useDirect": "改为直连",
   "settingsUi.network.saved": "已保存，下一次请求即生效",
   "settingsUi.network.save": "保存",
   "settingsUi.network.checklist.title": "连不上时按这四类排查（每类一句话）：",

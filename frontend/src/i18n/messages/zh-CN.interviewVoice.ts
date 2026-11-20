@@ -75,9 +75,12 @@ const interviewVoice = {
   /** 点评栏：从气泡里搬出来的独立一栏。 */
   "interviewVoice.room.review": "本轮点评",
   "interviewVoice.room.reviewEmpty": "本轮暂无点评",
-  "interviewVoice.room.reviewCollapsed": "点评已收起",
   "interviewVoice.room.reviewExpand": "展开点评",
   "interviewVoice.room.reviewCollapse": "收起点评",
+  /** 顶栏状态点（R3-03）：三态各一条可访问名称，不许只靠颜色表达。 */
+  "interviewVoice.room.liveDotIdle": "通话未开始",
+  "interviewVoice.room.liveDotLive": "通话进行中",
+  "interviewVoice.room.liveDotEnded": "通话已结束",
 
   // ===== 识别待确认气泡（Q1-C L1）=====
   "interviewVoice.pending.title": "识别结果",

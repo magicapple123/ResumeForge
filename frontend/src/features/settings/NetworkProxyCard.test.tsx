@@ -188,21 +188,116 @@ describe("NetworkProxyCard", () => {
     expect(screen.queryByTestId("network-probe-lines")).toBeNull();
   });
 
-  it("检测提示与底部灰字互斥：关掉 Alert 后灰字才出现", async () => {
+  it("检测条与底部灰字互斥：有检测条时不出灰字，点「改为直连」后改成直连", async () => {
     // 这句是**后端下发的 notice**（不是界面文案，没有 i18n 键）：提成常量，
     // 免得 cjkRatchet 把 `getByText("…")` 里的中文当成新增的硬编码界面文案。
     const NOTICE = "已按系统代理出网";
-    renderCard();
-    await waitFor(() => expect(apiMocks.getNetworkSettings).toHaveBeenCalled());
-    // BASE.notice 为空，这里换成有 notice 的响应，才能验证"两者不同时出现"。
-    cleanup();
     apiMocks.getNetworkSettings.mockResolvedValue({ ...BASE, notice: NOTICE });
     renderCard();
-    await waitFor(() => expect(screen.getByText(/127\.0\.0\.1:7890/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("network-detected")).toBeTruthy());
 
     expect(screen.queryByText(NOTICE)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /close/i }));
-    await waitFor(() => expect(screen.getByText(NOTICE)).toBeTruthy());
+    // 状态条不再有"关掉就算了"的 ×：它给的是出路，不是一句可以遮住的提示。
+    expect(screen.queryByRole("button", { name: /close/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: t("settingsUi.network.useDirect") }));
+    expect(screen.queryByTestId("network-detected")).toBeNull();
+    // 切成直连后，灰字（只在非直连时出现的那句）也不该冒出来。
+    expect(screen.queryByText(NOTICE)).toBeNull();
+  });
+
+  // ===== R3-05：单选卡 / 状态条动作 / 工具栏 =====
+
+  const directCard = () => screen.getByTestId("network-mode-direct");
+  const customCard = () => screen.getByTestId("network-mode-custom");
+  const urlInput = () => screen.queryByLabelText(t("settingsUi.network.url"));
+
+  it("三档是 radiogroup 里的三张单选项，选中态由 aria-checked 表达", async () => {
+    renderCard();
+    await waitFor(() => expect(apiMocks.getNetworkSettings).toHaveBeenCalled());
+
+    expect(screen.getByRole("radiogroup")).toBeTruthy();
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
+    expect(screen.getByTestId("network-mode-system")).toHaveAttribute("aria-checked", "true");
+    expect(directCard()).toHaveAttribute("aria-checked", "false");
+    expect(customCard()).toHaveAttribute("aria-checked", "false");
+    // 每张卡自带一句说明：裸单选不自解释。
+    expect(screen.getByText(t("settingsUi.network.mode.systemHint"))).toBeTruthy();
+  });
+
+  /**
+   * 状态条的动作必须**真的切换选中项**。这条用例是它的守卫：
+   * 去掉 `onClick` 里的 `selectMode("direct")` 后，`aria-checked` 会停在 false、保存仍禁用，
+   * 三处断言同时变红（已实测）。
+   */
+  it("点「改为直连」把选中项切成直连，并让保存可用", async () => {
+    renderCard();
+    await waitFor(() => expect(apiMocks.getNetworkSettings).toHaveBeenCalled());
+    expect(directCard()).toHaveAttribute("aria-checked", "false");
+    expect(saveButton()).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: t("settingsUi.network.useDirect") }));
+
+    expect(directCard()).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("network-mode-system")).toHaveAttribute("aria-checked", "false");
+    expect(saveButton()).toBeEnabled();
+    expect(screen.getByText(t("settingsUi.network.dirty"))).toBeTruthy();
+  });
+
+  it("方向键在单选项之间移动，并把焦点带过去", async () => {
+    renderCard();
+    await waitFor(() => expect(apiMocks.getNetworkSettings).toHaveBeenCalled());
+
+    const system = screen.getByTestId("network-mode-system");
+    system.focus();
+    fireEvent.keyDown(system, { key: "ArrowRight" });
+    expect(directCard()).toHaveAttribute("aria-checked", "true");
+    expect(directCard()).toHaveFocus();
+
+    fireEvent.keyDown(directCard(), { key: "ArrowLeft" });
+    expect(system).toHaveAttribute("aria-checked", "true");
+    expect(system).toHaveFocus();
+  });
+
+  it("选自定义代理时地址框出现并拿到焦点，切走再切回填的内容还在", async () => {
+    renderCard();
+    await waitFor(() => expect(apiMocks.getNetworkSettings).toHaveBeenCalled());
+    expect(urlInput()).toBeNull();
+
+    fireEvent.click(customCard());
+    await waitFor(() => expect(urlInput()).toHaveFocus());
+
+    fireEvent.change(urlInput()!, { target: { value: "http://127.0.0.1:7890" } });
+    fireEvent.click(screen.getByTestId("network-mode-system"));
+    expect(urlInput()).toBeNull();
+
+    fireEvent.click(customCard());
+    expect(urlInput()).toHaveValue("http://127.0.0.1:7890");
+  });
+
+  it("开关行整行可点：点标签也能切，且一次点击只翻一次", async () => {
+    renderCard();
+    await waitFor(() => expect(apiMocks.getNetworkSettings).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByText(t("settingsUi.network.trust")));
+    expect(screen.getByLabelText(t("settingsUi.network.trust"))).toBeChecked();
+
+    // 点控件本身不能既走 onChange 又走行点击，否则等于没点。
+    fireEvent.click(screen.getByLabelText(t("settingsUi.network.trust")));
+    expect(screen.getByLabelText(t("settingsUi.network.trust"))).not.toBeChecked();
+  });
+
+  it("工具栏常驻「没有改动」，保存成功后从脏状态回到它", async () => {
+    renderCard();
+    await waitFor(() => expect(apiMocks.getNetworkSettings).toHaveBeenCalled());
+    expect(screen.getByText(t("settingsUi.network.clean"))).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText(t("settingsUi.network.trust")));
+    expect(screen.queryByText(t("settingsUi.network.clean"))).toBeNull();
+    expect(screen.getByText(t("settingsUi.network.dirty"))).toBeTruthy();
+
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(screen.getByText(t("settingsUi.network.clean"))).toBeTruthy());
   });
 
   it("卡片吃到设置卡的统一间距类", async () => {

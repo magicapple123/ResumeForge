@@ -15,6 +15,22 @@
   background: var(--rf-surface-alt);
 }
 
+/* R3-01：桌面版让出标题栏那 32px（否则整页浮层盖住应用名 / 菜单 / 拖拽区，
+   右上角「退出通话」还会落进 Windows 画的系统按钮区——网页的 z-index 盖不过覆盖层）。
+ *
+ * 判据必须是「DOM 里真有 `.app-titlebar` 且没被隐藏」，**不能只写
+ * `inset: var(--rf-titlebar-height, 0px)`**：`--rf-titlebar-height` 在
+ * `desktop-titlebar.css` 的 `:root` 里无条件定义，而那张样式表随主包一起加载
+ * （打包产物 `index-*.css` 里就有 `:root{--rf-titlebar-height:32px}`），所以回退值
+ * 永远不会生效——只写变量的话，浏览器发行版与桌面全屏（标题栏 `display:none`）
+ * 都会白留一条 32px。
+ *
+ * 与 `desktop-titlebar.css` 给 `.app-sider` 写的那两条、以及
+ * `touTouTopInset.readTopInset()` 用的是同一个判据。 */
+html:has(.app-titlebar:not([data-hidden="true"])) .interview-live-room {
+  inset-block-start: var(--rf-titlebar-height, 0px);
+}
+
 .interview-live-room__header,
 .interview-live-room__controls {
   display: flex;
@@ -26,18 +42,69 @@
 }
 
 .interview-live-room__header {
-  min-height: 60px;
+  /* R3-01 补充决策：标题栏回来之后「32 + 60 = 92px」太高，房间头压到 44px。
+     纵向内边距取 6px 而不是 8px：头里最高的是 antd 默认 32px 的「退出通话」按钮，
+     32 + 6×2 正好 44；写 8px 会变成 48（`min-height` 只是下限，撑不住时会长）。
+     按钮尺寸与可点区域都不动。`padding` 在这里覆盖上面那条合写规则（底栏仍是 14px）。 */
+  min-height: 44px;
+  padding: 6px 22px;
   flex: 0 0 auto;
   border-bottom: 1px solid var(--rf-border-subtle);
 }
 
+/* ===== 通话状态指示点（R3-03）=====
+   原来是恒亮的红点 + 4px 光晕，读起来就是"正在录制"，而同一屏的在场条写「未开始」。
+   现在三态**形状/光晕都不同**，不只靠颜色深浅（色弱用户看不出深浅差异）：
+   - 未开始 `is-idle`：中性灰小点，无光晕；
+   - 通话中 `is-live`：红点 + 光晕 + 2s 呼吸；
+   - 已结束 `is-ended`：灰点 + 一条短横（"不再进行"的通用写法）。
+   盒子固定 18×9：三态切换时标题不会左右跳（宽度由文字决定的话每次都会挪一下）。 */
 .interview-live-room__live-dot {
-  width: 9px;
+  display: inline-flex;
+  width: 18px;
   height: 9px;
   flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.interview-live-room__live-dot::before {
+  content: "";
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
+  background: var(--rf-text-tertiary);
+}
+
+.interview-live-room__live-dot.is-live::before {
   background: var(--rf-danger);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--rf-danger) 15%, transparent);
+  animation: interview-live-room-live-dot 2s ease-in-out infinite;
+}
+
+.interview-live-room__live-dot.is-ended::before {
+  width: 6px;
+  height: 6px;
+}
+
+.interview-live-room__live-dot.is-ended::after {
+  content: "";
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--rf-text-tertiary);
+}
+
+/* 只动透明度：不动尺寸/位置，避免每帧重排。 */
+@keyframes interview-live-room-live-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
 }
 
 /* ===== 在场条（I-27）：48px 取代原 300px 左轨 =====
@@ -158,6 +225,16 @@
   margin: 0 auto;
   padding: 16px 24px;
   overflow: hidden;
+}
+
+/* R3-02：点评收起后右列从 260px 收到 44px。
+   用 `:has()` 读子元素的 `data-collapsed`，不把 `collapsed` 提升到 `LiveVoiceRoom`
+   （提升就要多一处状态同步，还得给栅格传 prop）。仓库已有 `:has()` 先例：
+   `desktop-titlebar.css` 用它做抽屉让位。
+   特异性（0,3,0）高于下面 `@media (max-width: 1100px)` 的 220px 分支（0,1,0），
+   所以窄档不用再写一遍；≤860px 是 flex 布局，这条自然失效。 */
+.interview-live-room__content:has(> .interview-live-room__review[data-collapsed="true"]) {
+  grid-template-columns: minmax(0, 1fr) 44px;
 }
 
 .interview-live-room__thread {
@@ -385,6 +462,11 @@ body[data-immersive="interview"] .tt-shell {
 @media (prefers-reduced-motion: reduce) {
   .interview-live-room__presence-avatar.is-speaking,
   .interview-live-room__rec-dot {
+    animation: none;
+  }
+
+  /* R3-03：呼吸停了，光晕留着——静止的红点 + 光晕仍与"未开始 / 已结束"有形状差异。 */
+  .interview-live-room__live-dot.is-live::before {
     animation: none;
   }
 }

@@ -199,11 +199,16 @@ const settingsUi = {
     "Four categories are never filled for you: date pickers, file uploads, password / verification code / bank card, and read-only radio or checkbox options without a popup - you need to handle these yourself.",
   // ── Outbound network & proxy (T02 / T05) ──────────────────
   "settingsUi.network.title": "Network and proxy",
-  "settingsUi.network.intro":
-    "Models, search and update checks all use the same outbound path. This is the only place to change it; saving takes effect immediately, no restart.",
+  "settingsUi.network.intro": "Models, search and updates share this outbound path.",
+  "settingsUi.network.instantHint": "Changes apply as soon as you save",
+  "settingsUi.network.modeLabel": "Outbound mode",
   "settingsUi.network.mode.system": "Follow system",
+  "settingsUi.network.mode.systemHint": "Uses the system proxy and certs",
   "settingsUi.network.mode.direct": "Direct",
+  "settingsUi.network.mode.directHint": "Bypasses every proxy",
   "settingsUi.network.mode.custom": "Custom proxy",
+  "settingsUi.network.mode.customHint": "Enter an address yourself",
+  "settingsUi.network.clean": "No changes",
   "settingsUi.network.dirty": "Unsaved changes",
   "settingsUi.network.probeBlocked": "Save first, then test",
   "settingsUi.network.directWarning":
@@ -224,8 +229,8 @@ const settingsUi = {
   "settingsUi.network.probeCurrent": "Current settings",
   "settingsUi.network.probeDirect": "Direct",
   "settingsUi.network.probeOk": "Connected",
-  "settingsUi.network.detected":
-    "System proxy detected at {proxy} (source: {source}); if the model cannot connect, try Direct first",
+  "settingsUi.network.detected": "System proxy detected at {proxy} (source: {source})",
+  "settingsUi.network.useDirect": "Switch to Direct",
   "settingsUi.network.saved": "Saved - applies to the next request",
   "settingsUi.network.save": "Save",
   "settingsUi.network.checklist.title":

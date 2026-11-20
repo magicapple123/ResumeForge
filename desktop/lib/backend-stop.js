@@ -39,6 +39,12 @@ const PORT_STATE_UNKNOWN = "unknown";
 const PORT_PROBE_DELAYS_MS = [0, 250, 750];
 const PORT_PROBE_TIMEOUT_MS = 1000;
 
+// Exit-confirmation cadence on the quit path (R3-B). taskkill has already been
+// asked to kill the tree, so it is typically gone within a frame or two; a flat
+// 300ms poll made every quit wait for a tick that had nothing left to observe.
+// The first four polls run at 50ms, the long tail falls back to 300ms.
+const EXIT_CONFIRM_POLL = { intervalMs: 300, fastIntervalMs: 50, fastAttempts: 4 };
+
 // errno values that mean "nothing is listening (any more)" rather than
 // "we cannot tell". Kept as a Set so probePortOnce stays a pure lookup.
 const PORT_CLOSED_ERROR_CODES = new Set([
@@ -55,6 +61,15 @@ function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+// Quit timing (R3 acceptance evidence): lib/quit-lifecycle hands a recorder down
+// through `manager.quitTimeline`, so each stop stage can stamp itself without
+// this module owning a logger. Optional everywhere -- a manager without one
+// (unit tests, a stop outside a quit) simply records nothing.
+function markQuitTimeline(manager, label) {
+  const timeline = manager && manager.quitTimeline;
+  if (timeline && typeof timeline.mark === "function") timeline.mark(label);
 }
 
 // One probe attempt. Resolves to { state, detail } -- never rejects.
@@ -207,6 +222,7 @@ async function stopBackend(manager) {
     // (spawnFn / killFn / processExistsFn / portOpenFn) so the three states can
     // be exercised without a real socket.
     const probe = await probeBackendPort(manager, manager.portProbeFn);
+    markQuitTimeline(manager, "port probe");
     if (probe.state === PORT_STATE_OPEN) {
       // Still reachable: fail closed, exactly as before (an update must not be
       // installed over a backend that is demonstrably alive).
@@ -288,11 +304,14 @@ async function confirmTermination(manager, pid, child) {
       }
       setTimeout(() => done(null), 8000).unref();
     });
+    markQuitTimeline(manager, "taskkill exit");
     const gone = await processIdentity.waitForProcessExit(pid, {
+      ...EXIT_CONFIRM_POLL,
       timeoutMs: manager.exitConfirmTimeoutMs,
       existsFn: manager.processExistsFn,
     });
     if (gone) {
+      markQuitTimeline(manager, "process gone");
       return { ok: true, reason: "", verified: true };
     }
     return {
@@ -335,10 +354,14 @@ async function confirmTermination(manager, pid, child) {
     }
   }
   const gone = await processIdentity.waitForProcessExit(pid, {
+    ...EXIT_CONFIRM_POLL,
     timeoutMs: manager.exitConfirmTimeoutMs,
     existsFn: manager.processExistsFn,
   });
-  if (gone) return { ok: true, reason: "", verified: true };
+  if (gone) {
+    markQuitTimeline(manager, "process gone");
+    return { ok: true, reason: "", verified: true };
+  }
   if (!child) {
     // Adopted pid, still alive after SIGTERM: escalate once, then re-check.
     try {
@@ -347,10 +370,14 @@ async function confirmTermination(manager, pid, child) {
       // Raced with the exit.
     }
     const killed = await processIdentity.waitForProcessExit(pid, {
+      ...EXIT_CONFIRM_POLL,
       timeoutMs: manager.exitConfirmTimeoutMs,
       existsFn: manager.processExistsFn,
     });
-    if (killed) return { ok: true, reason: "", verified: true };
+    if (killed) {
+      markQuitTimeline(manager, "process gone");
+      return { ok: true, reason: "", verified: true };
+    }
   }
   return { ok: false, reason: `进程 ${pid} 在停止请求后仍然存在`, verified: false };
 }

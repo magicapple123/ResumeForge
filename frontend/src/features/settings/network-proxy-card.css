@@ -1,14 +1,194 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* 「出网与代理」卡：分区线、结果区固定高度、footer 脏状态（I-33）。
+/* 「出网与代理」卡：状态条、三张单选卡、开关行、底部工具栏（R3-05）。
    与卡片同目录的局部样式（同 navigationSettings.css 的组织方式），不挤进 resume-panels.css
-   的 500 行预算。 */
+   的 500 行预算。颜色一律走 `--rf-*`：这里没有一处写死的色值。 */
 
-/* 分区线：只承担"下面这块是连通性"的分隔，不加文案（不新增 i18n 键）。 */
-.network-divider.ant-divider {
-  margin: 0;
+/* 卡头：标题 + 「改动保存后即时生效」。约束挨着标题说，比埋在正文里更容易读到。 */
+.network-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
-/* 结果区常驻：两行高度打底，出现/消失时 footer 不位移。用 min-height 而不是 height，
+/* 卡头本身是单行（antd 给 `.ant-card-head-title` 加了 nowrap + ellipsis）：
+   窄屏时让**标题**省略，约束那一句保持完整可读。 */
+.network-head-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 12px 三级色：是"约束"，不是第二个标题，所以比标题轻两档。 */
+.network-head-hint {
+  flex: 0 0 auto;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.network-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 说明只留一行：限宽 52ch，宽屏下不会拉成横贯整卡的一条长线。 */
+.network-lede {
+  max-width: 52ch;
+  margin: 0;
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ===== 检测到的系统代理：中性底状态条 + 一个动作 =====
+   不用 info 蓝底：它不是"提示信息"，而是"这台机器的现状 + 一条出路"。 */
+.network-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 10px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface-alt);
+}
+
+/* 6px 小点：只表示"这是机器检测到的状态"，不承担红/绿语义。 */
+.network-status-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rf-accent-amber);
+}
+
+.network-status-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* 动作按钮压成文字按钮：一行里三个元素，按钮不能和文案抢视觉重心。 */
+.network-status-action.ant-btn {
+  flex: 0 0 auto;
+  height: auto;
+  padding-inline: 4px;
+  font-size: 12.5px;
+}
+
+/* ===== 三张单选卡 ===== */
+.network-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* 用 button 而不是 div：原生可聚焦、空格/回车天然可用，方向键由容器统一处理。 */
+.network-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--rf-motion-duration) ease,
+    background var(--rf-motion-duration) ease;
+}
+
+.network-mode:hover {
+  border-color: var(--rf-border-strong);
+}
+
+.network-mode:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 2px;
+}
+
+/* 选中态：浅底 + 强调边框 + 标题换色。三种线索叠加，深色主题下不只靠底色深浅分辨。 */
+.network-mode.is-active {
+  border-color: var(--rf-brand);
+  background: var(--rf-surface-alt);
+}
+
+.network-mode-title {
+  color: var(--rf-text-body);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.network-mode.is-active .network-mode-title {
+  color: var(--rf-brand);
+}
+
+.network-mode-desc {
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* 窄屏降成单列：三列时每张只剩 ~110px，说明会挤成逐字换行。 */
+@media (max-width: 720px) {
+  .network-modes {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== 开关行：标签左、控件右 ===== */
+.network-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  cursor: pointer;
+}
+
+.network-row-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.network-row-label {
+  color: var(--rf-text-body);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* 限宽 50ch：说明是三句话，铺满整卡会拉成一条长线再折回来，形成锯齿。 */
+.network-row-hint {
+  max-width: 50ch;
+  margin: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.network-row-switch.ant-switch {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+/* 地址框下的一句提示与结果区清单同字号。 */
+.network-hint {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 结果区常驻：两行高度打底，出现/消失时工具栏不位移。用 min-height 而不是 height，
    窄屏两行换行时允许长高，不裁字。 */
 .network-probe-area {
   min-height: 44px;
@@ -19,42 +199,54 @@
 }
 
 .network-probe-icon.is-ok {
-  color: var(--rf-success, #52c41a);
+  color: var(--rf-accent-green);
 }
 
 .network-probe-icon.is-bad {
-  color: var(--rf-danger, #ff4d4f);
+  color: var(--rf-danger);
 }
 
-/* footer：左侧脏状态、右侧保存，高度固定。 */
-.network-footer {
+/* ===== 底部工具栏：左测试、中状态、右保存 ===== */
+.network-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
   min-height: 32px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border-subtle);
 }
 
-.network-dirty {
+/* 中间的状态用两侧 auto 外边距顶到中间；窄屏换行时它自然落到下一行。 */
+.network-toolbar-state {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin-inline: auto;
   color: var(--rf-text-secondary);
   font-size: 12px;
   line-height: 20px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
 }
 
-/* 无改动时不可见但占位：`opacity` 而不是 `display: none`，footer 高度不变。 */
-.network-dirty.is-visible {
-  opacity: 1;
+.network-toolbar-state.is-dirty {
+  color: var(--rf-warning-text);
 }
 
-.network-dirty-dot {
-  color: var(--rf-warning, #faad14);
+.network-toolbar-dot {
+  color: var(--rf-accent-amber);
   font-size: 10px;
 }
 
-/* 底部灰字与告警条同一句话的另一种写法：比正文略小、不抢位置。 */
+/* "先保存再测试"跟在测试按钮右侧，是那个按钮的注解，不参与中间状态。 */
+.network-toolbar-reason {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* 底部灰字与状态条同一句话的另一种写法：比正文略小、不抢位置。 */
 .network-notice {
   display: block;
+  max-width: 52ch;
   font-size: 12px;
   line-height: 18px;
 }

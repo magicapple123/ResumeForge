@@ -319,6 +319,72 @@ test("install path: an unknown port probe (ok but unverified) still blocks the i
   }
 });
 
+test("quit hides the main window BEFORE the backend stop (R3-A, main.js wiring)", async () => {
+  const loaded = loadMain();
+  try {
+    await waitForShellReady(loaded);
+    const win = loaded.windowInstances[0];
+    const order = [];
+    const realHide = win.hide.bind(win);
+    win.hide = () => {
+      order.push("hide");
+      realHide();
+    };
+    const deferred = makeDeferred();
+    loaded.state.stopBackend = () => {
+      order.push("stop");
+      return deferred.promise;
+    };
+
+    loaded.trayManager.choose("quit");
+    loaded.events.beforeQuitHandler({ preventDefault() {} });
+
+    assert.deepStrictEqual(order, ["hide", "stop"],
+      `the window must be hidden before the stop starts (order: ${order.join(" -> ")})`);
+    assert.strictEqual(win.hidden, 1, "the window is hidden exactly once");
+    assert.strictEqual(win.closeCalls, 0, "hide must not run the ask-on-close handler");
+    assert.strictEqual(loaded.events.closeDialogPrompts.length, 0,
+      "hiding for a quit must never re-open the close prompt");
+    assert.strictEqual(win.destroyed, false, "the window is hidden, not destroyed");
+
+    deferred.resolve();
+    await flush();
+    await flush();
+    assert.strictEqual(win.hidden, 1, "the resuming before-quit pass must not hide again");
+  } finally {
+    loaded.cleanup();
+  }
+});
+
+test("the quit stage stamps land in the runtime log (R3-04 acceptance evidence)", async () => {
+  const fs = require("fs");
+  const path = require("path");
+  const loaded = loadMain();
+  try {
+    await waitForShellReady(loaded);
+    loaded.trayManager.choose("quit");
+    loaded.events.beforeQuitHandler({ preventDefault() {} });
+    await flush();
+    await flush();
+
+    const logFile = path.join(loaded.userDataDir, "ResumeForge", "runtime", "logs", "desktop-main.log");
+    assert.ok(fs.existsSync(logFile), `the runtime log must exist at ${logFile}`);
+    const text = fs.readFileSync(logFile, "utf-8");
+    // ① 收到退出请求 / A 窗口隐藏：各自一行。
+    for (const stage of ["stop requested", "window hidden"]) {
+      assert.match(text, new RegExp(`quit timing: ${stage} \\+\\d+ms`),
+        `missing stage stamp in desktop-main.log: ${stage}`);
+    }
+    // ⑤ 放行退出：收尾的那一行把五个节点一次读完（②③④ 由 backend-stop 补）。
+    assert.match(text,
+      /quit timing: stop requested at \+\d+ms, taskkill exit (n\/a|\+\d+ms), process gone (n\/a|\+\d+ms), port probe (n\/a|\+\d+ms), releasing quit \+\d+ms/,
+      "the one-line quit summary must be in the runtime log");
+    assert.match(text, /taskkill exit n\/a/, "the harness backend never runs taskkill: n/a, not a fake number");
+  } finally {
+    loaded.cleanup();
+  }
+});
+
 test("restart budget: >3 crashes within 5 minutes give up with an error dialog", async () => {
   const loaded = loadMain();
   try {

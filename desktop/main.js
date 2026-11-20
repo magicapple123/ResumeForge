@@ -389,6 +389,7 @@ const quitLifecycle = createQuitLifecycle({
   dialog,
   logLine,
   getBackend: () => backend,
+  getWindow: () => mainWindow,
   getRestartTimer: () => restartTimer,
   getLocale: () => shellLocaleRuntime.getLocale(),
   setQuitting: (value) => {

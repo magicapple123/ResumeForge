@@ -69,9 +69,11 @@ const interviewVoice = {
   "interviewVoice.room.asking": "Asking",
   "interviewVoice.room.review": "Round feedback",
   "interviewVoice.room.reviewEmpty": "No feedback for this round yet",
-  "interviewVoice.room.reviewCollapsed": "Feedback collapsed",
   "interviewVoice.room.reviewExpand": "Show feedback",
   "interviewVoice.room.reviewCollapse": "Hide feedback",
+  "interviewVoice.room.liveDotIdle": "Call not started",
+  "interviewVoice.room.liveDotLive": "Call in progress",
+  "interviewVoice.room.liveDotEnded": "Call ended",
 
   // ===== Transcript confirmation bubble (Q1-C L1) =====
   "interviewVoice.pending.title": "Recognized",

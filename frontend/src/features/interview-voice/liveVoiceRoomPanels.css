@@ -75,12 +75,69 @@
 }
 
 .interview-live-room__review-body {
-  min-height: 120px;
   flex: 1 1 auto;
   overflow-y: auto;
   font-size: 13px;
   line-height: 1.7;
   overflow-wrap: anywhere;
+}
+
+/* 正文的 120px 下限**只在展开态**成立：收起态已经不渲染 body（R3-02），
+   把下限写在展开分支上是为了让"框为什么满高"这件事在样式里也读得出来。 */
+.interview-live-room__review[data-collapsed="false"] .interview-live-room__review-body {
+  min-height: 120px;
+}
+
+/* ===== 收起态：44px 竖排窄轨（R3-02）=====
+   `align-self: start` 是关键：不写它就退回 grid item 默认的 stretch，
+   卡片仍会把整列高度吃满，正是用户抱怨的"空壳"。 */
+.interview-live-room__review[data-collapsed="true"] {
+  align-self: start;
+  gap: 0;
+  padding: 10px 0;
+}
+
+.interview-live-room__review-rail {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--rf-text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.interview-live-room__review-rail:hover {
+  color: var(--rf-text-body);
+}
+
+.interview-live-room__review-rail:focus-visible {
+  outline: 2px solid var(--rf-focus-ring);
+  outline-offset: -2px;
+}
+
+.interview-live-room__review-rail-label {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  /* 竖排 + 正立：中文字符按字正立，不跟着基线转 90°。 */
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+}
+
+/* 箭头用两条边框转 45° 画（不用 emoji / 字体图标：字形随主题与字体变，还会被当正文朗读）。
+   指向左侧 = "往时间线那边展开"。 */
+.interview-live-room__review-chevron {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-bottom: 1.5px solid currentColor;
+  border-left: 1.5px solid currentColor;
+  transform: rotate(45deg);
 }
 
 .interview-live-room__review-empty {
@@ -198,7 +255,33 @@
     max-height: 240px;
   }
 
-  .interview-live-room__review-body {
+  /* R3-02：堆叠布局下窄轨复位成**通栏横条**——竖排 + `align-self: start` 会在
+     时间线下方立一根 44px 的柱子，文字还被压成一列。 */
+  .interview-live-room__review[data-collapsed="true"] {
+    align-self: stretch;
+    padding: 4px 12px;
+  }
+
+  .interview-live-room__review-rail {
+    min-height: 32px;
+    flex-direction: row;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .interview-live-room__review-rail-label {
+    letter-spacing: 0.02em;
+    writing-mode: horizontal-tb;
+  }
+
+  /* 横条：内容在下方展开，箭头朝下。 */
+  .interview-live-room__review-chevron {
+    transform: rotate(-45deg);
+  }
+
+  /* 要跟着展开态一起写：上面那条 `[data-collapsed="false"] ... __review-body`
+     特异性更高（0,3,0），只写 `.interview-live-room__review-body` 会被它按回 120px。 */
+  .interview-live-room__review[data-collapsed="false"] .interview-live-room__review-body {
     min-height: 72px;
   }
 

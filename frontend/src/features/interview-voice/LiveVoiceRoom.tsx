@@ -46,6 +46,13 @@ import type { VoiceOption } from "./VoiceSettingsPopover";
 import "./live-voice-room.css";
 import "./liveVoiceRoomPanels.css";
 
+/** R3-03：三态指示点的可访问名称（中英各一条，见 `i18n/messages/*.interviewVoice.ts`）。 */
+const LIVE_DOT_LABELS = {
+  idle: "interviewVoice.room.liveDotIdle",
+  live: "interviewVoice.room.liveDotLive",
+  ended: "interviewVoice.room.liveDotEnded",
+} as const;
+
 export function LiveVoiceRoom({
   voice,
   mode,
@@ -93,6 +100,14 @@ export function LiveVoiceRoom({
   // 上一次 `getUserMedia` 为什么没成（权限 / 没有设备 / 被占用）。与 `cameraSettings.enabled`
   // 一起收成一句话：左栏小字、底栏悬停提示、点击后的轻提示，三处同源（见 liveVoiceRoomCamera）。
   const [cameraFailure, setCameraFailure] = useState<CameraFailure | null>(null);
+  /**
+   * R3-03：这次房间里**开启过**通话吗？只增不减。
+   *
+   * 三态指示点需要把「从没开过」和「开过又停了」分开，而控制器只有 `enabled` 这个
+   * 当下值——没有"曾经开过"的位。用一个本地标记补上，**不新增任何接口轮询**：
+   * 状态源仍是 `voice.enabled`（在场条状态胶囊也读它）。
+   */
+  const [everLive, setEverLive] = useState(false);
   // 摄像头请求序号：每次开/关/卸载都 +1，异步结果回来时只有序号没变才允许落地。
   const cameraRequest = useRef(0);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -148,6 +163,10 @@ export function LiveVoiceRoom({
       delete document.body.dataset.immersive;
     };
   }, []);
+
+  // R3-03：把"开过"这件事记下来。写在渲染期（React 官方"按 props 调整 state"的写法）而不是
+  // effect 里：effect 里 setState 会多一次级联提交，且触发 react-hooks/set-state-in-effect。
+  if (voice.enabled && !everLive) setEverLive(true);
 
   /** 两处按钮共用的那句话（`null` = 一切正常，显示"本机预览"）。 */
   const cameraMessage = cameraNotice(cameraSettings.enabled, cameraFailure);
@@ -239,6 +258,13 @@ export function LiveVoiceRoom({
               : "interviewVoice.status.listening"
         : "interviewVoice.room.micIdle";
 
+  // R3-03：红点的三态。`starting`（申请麦克风还没成功）算**未开始**——确实还没在通话。
+  const callState: keyof typeof LIVE_DOT_LABELS = voice.enabled
+    ? "live"
+    : everLive
+      ? "ended"
+      : "idle";
+
   // 「当前问答」= 最后一条面试官提问 + 最后一条用户回答（都只看正式问答阶段）。
   const formal = messages.filter((item) => item.phase !== "followup");
   const lastQuestion = [...formal].reverse().find((item) => item.role === "interviewer");
@@ -269,7 +295,13 @@ export function LiveVoiceRoom({
     <section className="interview-live-room" aria-label={t("interviewVoice.room.title")}>
       <header className="interview-live-room__header">
         <Space align="center" size={12}>
-          <span className="interview-live-room__live-dot" aria-hidden="true" />
+          {/* R3-03：三态（未开始 / 通话中 / 已结束）。不写 `aria-hidden`——它现在是有
+              信息量的状态，读屏用户也要听得到（原来恒亮的装饰点只能骗过眼睛）。 */}
+          <span
+            className={`interview-live-room__live-dot is-${callState}`}
+            role="img"
+            aria-label={t(LIVE_DOT_LABELS[callState])}
+          />
           <Typography.Text strong>{t("interviewVoice.room.title")}</Typography.Text>
         </Space>
         <Button autoFocus icon={<CloseOutlined aria-hidden="true" />} onClick={onClose}>

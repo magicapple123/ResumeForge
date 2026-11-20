@@ -251,15 +251,33 @@ function processExists(pid) {
   }
 }
 
+// R3-B adaptive cadence: after a kill the tree is usually gone within a frame
+// or two, so the first `fastAttempts` polls run at `fastIntervalMs` and only the
+// long tail (a tree still unwinding) falls back to `intervalMs`. Both default to
+// 0 = "no fast phase", so any caller that does not opt in keeps the exact old
+// cadence; backend-stop passes 50ms x 4 on the quit path.
+// `scheduleFn` / `nowFn` are injectable so the offline tests can drive a fake
+// clock instead of sleeping for real.
 async function waitForProcessExit(
   pid,
-  { timeoutMs = 5000, intervalMs = 300, existsFn = processExists } = {},
+  {
+    timeoutMs = 5000,
+    intervalMs = 300,
+    fastIntervalMs = 0,
+    fastAttempts = 0,
+    existsFn = processExists,
+    scheduleFn = setTimeout,
+    nowFn = Date.now,
+  } = {},
 ) {
-  const deadline = Date.now() + timeoutMs;
+  const deadline = nowFn() + timeoutMs;
+  let attempt = 0;
   for (;;) {
     if (!existsFn(pid)) return true;
-    if (Date.now() >= deadline) return false;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    if (nowFn() >= deadline) return false;
+    const delay = attempt < fastAttempts ? fastIntervalMs : intervalMs;
+    attempt += 1;
+    await new Promise((resolve) => scheduleFn(resolve, delay));
   }
 }
 

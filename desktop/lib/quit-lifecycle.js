@@ -22,6 +22,8 @@
 //     handed down instead of the module's globals.
 //   * `requireChildProcess` -- a lazy accessor, so the installer spawn keeps using
 //     the shell's `child_process` (stubbed in the probes) and stays lazy as before.
+//   * `getWindow` -- the main window handle (R3-A hides it before the stop). Same
+//     reason as `app`/`dialog`: this module must stay electron-free.
 //
 // 用户可见的两条错误框文案跟随应用内语言（lib/shell-locale.js）；日志行保持原样。
 
@@ -36,6 +38,47 @@ const STOP_TIMEOUT_MS = 6_000;
 const INSTALL_STOP_TIMEOUT_MS = 15_000;
 
 /**
+ * Per-quit stopwatch (R3-04 acceptance evidence).
+ *
+ * The quit used to be a black box that felt like 400–700ms of nothing; every
+ * stage now stamps itself relative to the quit request and lands in
+ * desktop-main.log. `mark()` logs the stage on its own line; `summary()` closes
+ * the run with the one-line shape the issue asked for:
+ *
+ *   quit timing: stop requested at +0ms, taskkill exit +182ms, process gone
+ *   +341ms, port probe +347ms, releasing quit +348ms
+ *
+ * A stage that never happened (no backend running, no taskkill on posix) reads
+ * "n/a" instead of a made-up number.
+ *
+ * @param {number} startedAt `Date.now()` at the quit request.
+ * @param {function(string): void} emit Log sink.
+ */
+function createQuitTimeline(startedAt, emit) {
+  const marks = new Map();
+  const elapsed = () => Date.now() - startedAt;
+  const at = (label) => (marks.has(label) ? `+${marks.get(label)}ms` : "n/a");
+  return {
+    mark(label) {
+      const ms = elapsed();
+      marks.set(label, ms);
+      emit(`quit timing: ${label} +${ms}ms`);
+      return ms;
+    },
+    summary(label) {
+      const ms = elapsed();
+      marks.set(label, ms);
+      emit(
+        `quit timing: stop requested at ${at("stop requested")}, taskkill exit ${at("taskkill exit")}, ` +
+          `process gone ${at("process gone")}, port probe ${at("port probe")}, ` +
+          `${label} ${at(label)}`,
+      );
+      return ms;
+    },
+  };
+}
+
+/**
  * Builds the quit-lifecycle closure for the desktop shell.
  *
  * Everything that runs on a quit is created here; the returned functions are the
@@ -46,6 +89,8 @@ const INSTALL_STOP_TIMEOUT_MS = 15_000;
  * @param {object} deps.dialog Electron `dialog` module.
  * @param {function(string): void} deps.logLine Runtime log sink (user-profile log).
  * @param {function(): (object|null)} deps.getBackend Returns the current BackendManager.
+ * @param {function(): (object|null)} [deps.getWindow] Returns the current main window;
+ *     it is hidden before the backend stop (R3-A), so the user sees the quit immediately.
  * @param {function(): any} deps.getRestartTimer Returns the pending crash-restart timer.
  * @param {function(boolean): void} deps.setQuitting Writes main.js' `quitting` flag.
  * @param {function(string, number): {file: string, args: string[]}} deps.installerWaitCommand
@@ -72,6 +117,7 @@ function createQuitLifecycle(deps) {
     clearTimeout: cancelTimeout,
   } = deps;
   const getLocale = typeof deps.getLocale === "function" ? deps.getLocale : () => "en";
+  const getWindow = typeof deps.getWindow === "function" ? deps.getWindow : () => null;
 
   // Set by the updater's installAndQuit dependency; the installer spawns in
   // before-quit AFTER the backend stop completes.
@@ -106,13 +152,39 @@ function createQuitLifecycle(deps) {
     app.quit();
   }
 
+  // R3-A: get the window out of sight BEFORE the backend stop. The stop takes
+  // hundreds of milliseconds (spawn taskkill, confirmation polls, port probe);
+  // with the window still up, the user reads that wait as "the click did
+  // nothing". hide() is deliberately not close(): the close handler in main.js
+  // is the ask-on-close / minimize-to-tray branch, and re-entering it here would
+  // pop the dialog again (or turn the quit into a hide-to-tray). Electron's
+  // hide() emits no "close" event, so `closeBehavior` is not reachable from here.
+  // A window that is already gone (startup failure, macOS dock quit) is fine:
+  // the stop must proceed either way.
+  function hideMainWindow(timeline) {
+    const win = getWindow();
+    if (!win) return;
+    try {
+      if (typeof win.isDestroyed === "function" && win.isDestroyed()) return;
+      win.hide();
+      timeline.mark("window hidden");
+    } catch (err) {
+      // A hide that throws must never hold the quit: the stop below still runs.
+      logLine(`quit: main window hide failed: ${err}`);
+    }
+  }
+
   // Stop the backend and normalise the outcome to { ok, reason }. The call
   // itself stays synchronous (the quit path must ask immediately); only the
   // result is awaited. A manager that reports nothing is treated as "completed"
   // (the pre-RR-02 contract) -- only an explicit ok:false blocks the install.
-  function stopBackendSafely() {
+  //
+  // `timeline` rides down through the manager so lib/backend-stop can stamp the
+  // taskkill / process-gone / port-probe stages it owns.
+  function stopBackendSafely(timeline) {
     const backend = getBackend();
     if (!backend) return Promise.resolve({ ok: true, reason: "", verified: true });
+    backend.quitTimeline = timeline;
     let started;
     try {
       started = backend.stop();
@@ -169,6 +241,9 @@ function createQuitLifecycle(deps) {
     event.preventDefault();
     setQuitting(true);
     stopInFlight = true;
+    // R3-04: the five stage stamps of this quit (see createQuitTimeline).
+    const timeline = createQuitTimeline(Date.now(), logLine);
+    timeline.mark("stop requested");
     const restartTimer = getRestartTimer();
     if (restartTimer) cancelTimeout(restartTimer);
     // Hold quit until the backend tree is down; a dangling uvicorn would
@@ -185,7 +260,11 @@ function createQuitLifecycle(deps) {
     // box -- that is the one path where continuing would corrupt an install.
     const installPending = Boolean(getPendingInstallerPath());
     const stopTimeoutMs = installPending ? INSTALL_STOP_TIMEOUT_MS : STOP_TIMEOUT_MS;
-    const stopPromise = stopBackendSafely();
+    // Window first, backend second: the install path hides too, but the
+    // installer still waits for the stop (below) and the native error boxes
+    // (shellDialogs / dialog.showErrorBox) stay visible without the window.
+    hideMainWindow(timeline);
+    const stopPromise = stopBackendSafely(timeline);
     const stopCapped = Promise.race([
       stopPromise,
       new Promise((resolve) => {
@@ -237,6 +316,7 @@ function createQuitLifecycle(deps) {
           logLine(`backend stop warning: ${outcome.warning} (url=${backendUrl}; detail=${probeDetail})`);
         }
       }
+      timeline.summary("releasing quit");
       app.quit();
     });
   }
