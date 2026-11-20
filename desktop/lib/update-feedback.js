@@ -29,6 +29,54 @@ const {
 const RELEASES_PAGE = "https://github.com/magicapple123/ResumeForge/releases/latest";
 
 /**
+ * "手动下载"引导的 body 文案，按平台选。
+ *
+ * 为什么必须分开：这条出口只服务**没有 NSIS 安装器协议**的平台（win32 在
+ * `runManualUpdateCheck` 里就走 checkAndOfferUpdate 了），而 macOS 与 Linux 的包形态
+ * 相反——`.dmg` 拖进「应用程序」 vs 单文件 AppImage 原地替换。两者曾共用
+ * `update.manual.body`，于是 Linux 用户被告知"下载 .dmg 拖进应用程序"（用户可见缺陷）。
+ *
+ * 表里没有的平台按 Linux 讲：有构建产物的平台只有 win32 / darwin / linux
+ * （见 desktop/electron-builder.yml），win32 到不了这条出口，其余平台没有发行包。
+ * 新增平台时必须在这里补一条，否则会重演上面那个"文案串味"的问题。
+ */
+const MANUAL_BODY_KEYS = Object.freeze({
+  darwin: "update.manual.body",
+  linux: "update.manual.bodyLinux",
+});
+
+/** 上表未列平台用的 body key（见 MANUAL_BODY_KEYS 的注释）。 */
+const FALLBACK_MANUAL_BODY_KEY = "update.manual.bodyLinux";
+
+/**
+ * 这次进程跑在哪个平台上。
+ *
+ * 可以注入（`deps.platform`）：平台相关的文案必须能在用例里被覆盖，否则测试只能验证
+ * "当前这台机器的那一个分支"。**不要在 shell-locale.js 里读**它——那一层是纯文案表。
+ *
+ * `undefined` / `null` 才表示"没注入"，落到 `process.platform`；其余值（含空串）**原样
+ * 采用**。不要写成 `injected || process.platform`：那样 `platform: ""`（用例里手滑写空）
+ * 会静默退化成宿主平台，于是同一条用例在 win32 上偶然变绿、在 darwin 上变红——宿主相关
+ * 的用例比红掉的用例更难查。空串现在确定性地走 MANUAL_BODY_KEYS 的 fallback 分支。
+ *
+ * @param {{platform?: string}} [deps]
+ * @returns {string}
+ */
+function resolvePlatform(deps) {
+  return deps && deps.platform != null ? deps.platform : process.platform;
+}
+
+/**
+ * 手动下载引导该用哪一条 body 文案。
+ *
+ * @param {string} platform
+ * @returns {string} shell-locale.js 里的 key
+ */
+function manualBodyKey(platform) {
+  return MANUAL_BODY_KEYS[platform] || FALLBACK_MANUAL_BODY_KEY;
+}
+
+/**
  * 当前用户可见文案的语言。
  *
  * @param {{getLocale?: function(): string}} deps
@@ -51,7 +99,8 @@ function resolveLocale(deps, app) {
  * @param {{app: object, dialog: object, shell: object}} electron Electron 的三个模块
  *   （注入而不是 require，见文件头约束 1）
  * @param {{getLocale?: function(): string, getLogDir?: function(): (string|null),
- *   logLine?: function(string): void}} [deps]
+ *   logLine?: function(string): void, platform?: string}} [deps] platform 只给用例注入，
+ *   生产环境留空即取 `process.platform`（见 resolvePlatform）
  * @returns {object} 见下方返回对象
  */
 function createUpdateFeedback(electron, deps = {}) {
@@ -59,6 +108,7 @@ function createUpdateFeedback(electron, deps = {}) {
   const log = typeof deps.logLine === "function" ? deps.logLine : () => {};
 
   const locale = () => resolveLocale(deps, app);
+  const platform = () => resolvePlatform(deps);
 
   /**
    * 窗口可能正藏在托盘里：弹任何更新对话框之前先把它带回来并抢焦点。
@@ -212,13 +262,20 @@ function createUpdateFeedback(electron, deps = {}) {
         detail: t(locale(), "update.upToDate.body", { version }),
         buttons: [t(locale(), "update.button.ok")],
       }),
-    /** macOS 没有 NSIS 安装器协议：如实引导到发布页，不假装能静默升级。 */
-    manualMac: () =>
+    /**
+     * 没有 NSIS 安装器协议的平台（macOS / Linux）没有应用内自动安装：如实引导到
+     * 发布页，不假装能静默升级。
+     *
+     * 名字是平台中性的：这条出口同时服务 macOS 与 Linux，叫 manualMac 时 Linux 拿到
+     * 的就是 macOS 的句子（用户可见缺陷）。平台只影响**用哪一条 body 文案**，
+     * 见 MANUAL_BODY_KEYS / manualBodyKey。
+     */
+    manualPlatform: () =>
       dialog
         .showMessageBox({
           type: "info",
           message: t(locale(), "update.manual.message"),
-          detail: t(locale(), "update.manual.body"),
+          detail: t(locale(), manualBodyKey(platform())),
           buttons: [t(locale(), "update.button.openReleases"), t(locale(), "update.button.close")],
           defaultId: 0,
           cancelId: 1,
@@ -245,4 +302,12 @@ function createUpdateFeedback(electron, deps = {}) {
   };
 }
 
-module.exports = { RELEASES_PAGE, createUpdateFeedback, resolveLocale };
+module.exports = {
+  RELEASES_PAGE,
+  MANUAL_BODY_KEYS,
+  FALLBACK_MANUAL_BODY_KEY,
+  createUpdateFeedback,
+  manualBodyKey,
+  resolveLocale,
+  resolvePlatform,
+};

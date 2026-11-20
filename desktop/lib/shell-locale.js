@@ -173,9 +173,23 @@ const messages = Object.freeze({
       "上一次更新（{from} → {to}）没有安装成功，当前仍是 {from}。\n\n" +
       "你的简历、岗位与资料都保存在用户目录，没有受到任何影响；" +
       "可以手动下载安装包再试一次。",
+    // 这条"手动下载"出口同时服务 macOS 与 Linux（win32 走 checkAndOfferUpdate，到不了
+    // 这里），而两个平台的包形态**相反**：.dmg 拖进「应用程序」 vs 单文件 AppImage
+    // 原地替换。所以宁可两条 key，也不要一句"谁都能用、谁都不对"的通用话——此前两者
+    // 共用 body，Linux 用户看到的就是"下载 .dmg 拖进应用程序"。
     "update.manual.message": "当前平台的更新需要手动下载",
     "update.manual.body":
       "macOS 版请在发布页下载最新的 .dmg 安装包；打开后把应用拖进「应用程序」即可。",
+    // 架构名写 arm64，不是 aarch64：AppImage 的产物名是
+    // ResumeForge-<ver>-arm64.AppImage（electron-builder 只对 pacman/rpm/flatpak 把
+    // arm64 改写成 aarch64；x64 在 AppImage 上才是 x86_64）。用户要在发布页按名字找
+    // 文件，写错就等于指了个不存在的东西——用例里有守卫（test-update-feedback.js）。
+    // 版本号写成占位符：这条文案是常驻的，写死某个版本发一次就过期。
+    "update.manual.bodyLinux":
+      "Linux 版是单文件 AppImage，不需要安装：在发布页按架构（x86_64 / arm64）下载最新的 " +
+      ".AppImage 文件（形如 ResumeForge-<版本>-x86_64.AppImage），用它替换你现在启动的那个" +
+      "文件即可，重启应用就是新版本。\n\n" +
+      "AppImage 运行时挂在只读的 squashfs 上，程序没法就地改自己，所以这一步只能手动做。",
     "update.error.title": "检查更新失败",
     "update.error.body": "请检查网络后重试。\n\n{reason}",
     "update.button.install": "立即更新",
@@ -292,9 +306,23 @@ const messages = Object.freeze({
       "The last update ({from} → {to}) did not install successfully; you are still on {from}.\n\n" +
       "Your resumes and data live in your user folder and were not affected. " +
       "You can download the installer manually and try again.",
+    // Same split as the zh table: this exit serves macOS and Linux, whose package
+    // shapes are opposites (.dmg vs single-file AppImage), so one shared sentence
+    // would always be wrong for one of them.
     "update.manual.message": "This platform needs a manual download to update",
     "update.manual.body":
       "On macOS, download the latest .dmg from the release page and drag the app into Applications.",
+    // Architecture is spelled arm64, not aarch64: AppImages are published as
+    // ResumeForge-<ver>-arm64.AppImage (electron-builder only rewrites arm64 to
+    // aarch64 for pacman/rpm/flatpak; x64 is x86_64 for AppImage). The version is a
+    // placeholder for the same reason as the zh table: this copy is permanent.
+    "update.manual.bodyLinux":
+      "The Linux build is a single-file AppImage and there is nothing to install: download the " +
+      "latest .AppImage for your architecture (x86_64 / arm64) from the release page -- for " +
+      "example ResumeForge-<version>-x86_64.AppImage -- and replace the file you are running now. " +
+      "Restart the app and you are on the new version.\n\n" +
+      "An AppImage runs from a read-only squashfs mount, so the app cannot rewrite itself in " +
+      "place; that replacement has to be done by hand.",
     "update.error.title": "Update check failed",
     "update.error.body": "Check your network connection and try again.\n\n{reason}",
     "update.button.install": "Update now",

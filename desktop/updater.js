@@ -387,13 +387,15 @@ function wantsManualUpdateCheck(argv = process.argv) {
  * 与后台定时检查的区别只有两点：立刻查、以及**必须给一个可见的结果**。双击之后什么都
  * 不发生，用户无法区分"没有新版本"和"坏了"。
  *
- * macOS 没有 NSIS 安装器协议（自动安装链路是 Windows 专用），这里如实引导到发布页，
- * 不假装能静默升级。
+ * 非 Windows 平台没有 NSIS 安装器协议（自动安装链路是 Windows 专用），这里如实引导到
+ * 发布页，不假装能静默升级。**文案按平台分**（macOS: .dmg / Linux: AppImage），判定在
+ * lib/update-feedback.js 的 manualPlatform —— 它从 `deps.platform || process.platform`
+ * 读平台，所以这条出口既能服务两个平台，也能被用例覆盖。
  */
 function runManualUpdateCheck(parentWindow, logLine, deps = {}) {
   const feedback = createUpdateFeedback({ app, dialog, shell }, { ...deps, logLine });
   if (process.platform !== "win32") {
-    feedback.manualMac();
+    feedback.manualPlatform();
     return;
   }
   checkAndOfferUpdate(parentWindow, {
