@@ -19,7 +19,7 @@
 // the window or sets quitting before app.quit(). Window chrome (self-drawn
 // 32px title bar + WCO buttons) lives in lib/titlebar.js + lib/tray-menu.js.
 
-const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, screen, session, shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, Tray, Menu, clipboard, dialog, ipcMain, nativeTheme, screen, session, shell, systemPreferences } = require("electron");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
 const { createShellLogging, announceDegradedOnReady } = require("./lib/preflight");
@@ -36,6 +36,8 @@ const { createPreferenceStore } = require("./lib/close-behavior");
 const { createClosePrompt } = require("./lib/close-dialog");
 const { createWindowShell } = require("./lib/window-shell");
 const { createTitleBarController, installTitleBarFallbackOnLoad } = require("./lib/titlebar");
+const { createSplashClock } = require("./lib/splash-timing");
+const { createShellTheme } = require("./lib/shell-theme");
 
 const { registerDesktopShellIpc } = require("./lib/desktop-shell-ipc");
 const { createShellDialogs } = require("./lib/shell-dialogs");
@@ -72,14 +74,6 @@ function projectRoot() {
     : path.join(__dirname, "..");
 }
 
-function shellIcon() {
-  // electron-builder may drop icon.png from the asar (buildResources clash),
-  // so the packaged app reads the extraResources copy next to the payload.
-  return app.isPackaged
-    ? path.join(process.resourcesPath, "icon.png")
-    : path.join(__dirname, "icon.png");
-}
-
 function runtimeDir() {
   // Windows: %LOCALAPPDATA%\ResumeForge\runtime（安装版与便携版共用）。
   // macOS: userData 已按 productName 分好目录，再拼一次会让桌面壳与
@@ -111,6 +105,8 @@ const shellLogging = createShellLogging({
   degradedHint: () => (backend && backend.logHint ? backend.logHint() : null),
 });
 const logLine = shellLogging.log;
+
+const shellTheme = createShellTheme({ app, nativeTheme, dirname: __dirname, logLine });
 
 // 壳层语言（应用内语言）：渲染进程挂载后推送，之前用系统语言兜底。切换后由 runtime
 // 重建托盘菜单 / tooltip 与窗口标题兜底（逻辑与用例都在 lib/shell-locale-runtime.js）。
@@ -159,14 +155,15 @@ function sendStage(stage, detail) {
 
 /** 窗口尺寸 / 位置 / 缩放的读写（纯函数在 lib/window-state.js，有离线用例）。 */
 const windowState = createWindowStateStore({ app, getWindow: () => mainWindow });
+/** 启动页最短可见 1.0s（用户 2026-11-19 拍板，逻辑与用例在 lib/splash-timing.js）。 */
+const splashClock = createSplashClock();
 
 // 窗口壳（§18 §19 + Q11）：托盘 / 关闭卡片 / 标题栏覆盖层全部在 lib/ 下，决策可离线断言。
 const titleBar = createTitleBarController({ getWindow: () => mainWindow, logLine });
 // Q11：关闭提示改成**自绘无边框窗口**（原生 MessageBox 的外观没有任何可调参数）。
 // 决策逻辑仍在 lib/close-behavior.js：这里只把"怎么弹"注入进去。
 const promptClose = createClosePrompt({
-  BrowserWindow,
-  ipcMain,
+  BrowserWindow, ipcMain,
   getWindow: () => mainWindow,
   dirname: __dirname,
   getShellLocale: () => shellLocaleRuntime.getLocale(),
@@ -174,7 +171,8 @@ const promptClose = createClosePrompt({
 });
 let desktopShellMenu = null;
 const { closeBehavior, trayManager } = createWindowShell({
-  app, Tray, Menu, iconPath: shellIcon(), promptClose,
+  app, Tray, Menu, iconPath: shellTheme.windowIconPath(), clipboard,
+  darkIconPath: shellTheme.trayIconPath(), getIsDark: shellTheme.trayIsDark, promptClose,
   getWindow: () => mainWindow,
   isQuitting: () => quitting,
   setQuitting: (value) => { quitting = value; },
@@ -183,6 +181,7 @@ const { closeBehavior, trayManager } = createWindowShell({
   getLocale: () => shellLocaleRuntime.getLocale(),
   logLine,
 });
+shellTheme.attachTray(trayManager);
 
 function createWindow() {
   const remembered = windowState.read();
@@ -209,7 +208,7 @@ function createWindow() {
     // §19：系统画三颗按钮（titleBarOverlay），自绘 32px 标题栏由 React 渲染。
     ...titleBar.windowOptions(),
     backgroundColor: "#f5f7fa",
-    icon: shellIcon(),
+    icon: shellTheme.windowIconPath(),
     // 静态兜底标题：页面加载前任务栏/Alt-Tab 显示它。运行时双语由渲染层
     // RouteAccessibility 接管（document.title 随页面与语言变化），主进程不重复实现。
     title: "ResumeForge",
@@ -252,8 +251,12 @@ function createWindow() {
     });
   }
 
-  mainWindow.loadFile(path.join(__dirname, "splash.html"));
-  mainWindow.once("ready-to-show", () => mainWindow.show());
+  // splash 首帧只能看系统主题（渲染进程还没上报），明暗两套 SVG 结构一致只是配色。
+  mainWindow.loadFile(path.join(__dirname, "splash.html"), {
+    query: { theme: shellTheme.splashTheme() },
+  });
+  // 计时基准：窗口真的可见那一刻（splash 动画也正是在这之后才被用户看到）。
+  mainWindow.once("ready-to-show", () => { splashClock.markShown(); mainWindow.show(); });
 
   // × 的关闭行为（§18）：quitting 时放行默认关闭（before-quit 的退出流程）；
   // 其余情况由 lib/close-behavior.js 决定——弹「最小化到托盘 / 退出应用」并支持
@@ -307,6 +310,8 @@ function handleUnexpectedExit(info) {
 
 async function startBackend() {
   const url = await backend.start((stage) => sendStage(stage));
+  // 切界面前补足启动页最短可见时长：服务就绪得再快，也不能把开场动画切成闪一下。
+  await splashClock.hold();
   // P1-1 方案 3（主进程兜底）：加载完成后确认 React 真的渲染出了 32px 标题栏；缺了就补
   // 一条 body padding 并写 warning（决策与常量在 lib/titlebar.js）。必须挂在 loadURL
   // **之前**，否则事件可能已经过去了。
@@ -484,6 +489,8 @@ desktopShellMenu = registerDesktopShellIpc({
   getShellLocale: () => shellLocaleRuntime.getLocale(),
   // 语言切换后的重建入口：托盘菜单 + tooltip + 窗口标题兜底（见 lib/shell-locale-runtime.js）。
   onShellLocaleChanged: (locale) => shellLocaleRuntime.apply(locale),
+  // 主题（WF-20）：渲染进程上报的生效主题 → 托盘图标；开关由设置卡推过来（同一个对象）。
+  getShellTheme: () => shellTheme,
   logLine,
 });
 

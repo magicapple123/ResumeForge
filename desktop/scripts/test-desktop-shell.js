@@ -20,6 +20,7 @@ const {
   TITLEBAR_HEIGHT,
   normalizeTheme,
   titleBarOverlayFor,
+  titleBarFallbackCss,
   windowChromeOptions,
   createTitleBarController,
 } = require("../lib/titlebar");
@@ -46,6 +47,36 @@ test("窗口壳：win32/linux 用 hidden + titleBarOverlay，mac 用红绿灯位
   assert.equal(mac.titleBarStyle, "hidden");
   assert.equal(mac.titleBarOverlay, undefined, "macOS 不支持 titleBarOverlay");
   assert.deepEqual(mac.trafficLightPosition, { x: 12, y: 10 });
+});
+
+test("关闭卡片资源与 main.js 同层，路径里不能多一个 ..", () => {
+  // 真机事故 2026-11-20：close-dialog.js 用 path.join(dirname, "..", "close-dialog.html")，
+  // 而 dirname 是 main.js 所在的层（打包态 = app.asar 根），于是解析到 resources/ 下、
+  // loadURL 永远 ERR_FILE_NOT_FOUND，catch 回落"最小化到托盘" —— 用户看到"点 × 没反应"。
+  const desktopDir = path.join(__dirname, "..");
+  assert.ok(fs.existsSync(path.join(desktopDir, "close-dialog.html")), "卡片就在这一层");
+  assert.ok(fs.existsSync(path.join(desktopDir, "close-dialog-preload.js")), "preload 也在这一层");
+  const code = fs
+    .readFileSync(path.join(desktopDir, "lib", "close-dialog.js"), "utf8")
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*(\/\/|\*)/.test(line)) // 注释里描述旧写法，不算违规
+    .join("\n");
+  assert.ok(
+    !code.includes('"..", "close-dialog'),
+    "别再用 .. 往上拼：dirname 已经是包含这些资源的那一层",
+  );
+});
+
+test("标题栏兜底 padding 必须条件化，否则与 flex 标题栏叠加（真机事故 2026-11-20）", () => {
+  const css = titleBarFallbackCss();
+  assert.ok(
+    css.startsWith("html:not(:has(.app-titlebar))"),
+    "兜底只在标题栏缺席时生效：did-finish-load 早于 React 挂载，此时 .app-titlebar 必然还没有，" +
+      "无条件注入会让 body padding 与 .app-titlebar（纵向 flex 第一项）叠加，整页被顶下 32px、" +
+      "系统三颗按钮浮在自绘标题栏上方",
+  );
+  assert.ok(css.includes(`padding-top:${TITLEBAR_HEIGHT}px`), "高度仍从 TITLEBAR_HEIGHT 取，不写字面量");
+  assert.equal(titleBarFallbackCss(40), "html:not(:has(.app-titlebar)) body{padding-top:40px}");
 });
 
 test("覆盖层配色与标题栏背景逐值一致，深色主题另有一套", () => {

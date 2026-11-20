@@ -424,6 +424,8 @@ function loadMain(options = {}) {
           Menu: MenuStub,
           dialog: dialogStub,
           ipcMain: ipcMainStub,
+          // WF-20：壳主题要读 shouldUseDarkColors（桩给浅色，且可订阅）。
+          nativeTheme: { shouldUseDarkColors: false, on() {}, off() {}, removeListener() {} },
           session: sessionStub,
           // 屏幕信息：默认尺寸按工作区算（方案 §2.3.1），桩给一块 1920x1040 的主屏。
           screen: {

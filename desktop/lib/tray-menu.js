@@ -130,12 +130,15 @@ function buildTrayTemplate(deps) {
 }
 
 /**
- * 托盘生命周期（创建 / 重建 / 销毁）。
+ * 托盘生命周期（创建 / 重建 / 销毁 / 换图）。
  *
  * @param {object} deps
  * @param {function(string): object} deps.Tray Electron Tray 构造器
  * @param {object} deps.Menu Electron Menu（buildFromTemplate）
  * @param {string} deps.iconPath 托盘图标（窗口图标同源）
+ * @param {string} [deps.darkIconPath] 暗色主题下的托盘图标（tray-dark.ico）
+ * @param {function(): boolean} [deps.getIsDark] 创建时该用哪一枚（见 main.js 的
+ *   trayIsDark：兜底开关优先，其次应用内主题）
  * @param {object} deps.app Electron app
  * @param {function(): (object|null)} deps.getWindow
  * @param {function(): (string|null)} deps.getRemembered
@@ -145,9 +148,30 @@ function buildTrayTemplate(deps) {
  * @param {function(string): void} [deps.logLine]
  */
 function createTrayManager(deps) {
-  const { Tray, Menu, iconPath, app, getWindow, getRemembered, clearRemembered } = deps;
-  const { runMenuAction, logLine = () => {} } = deps;
+  const { Tray, Menu, iconPath, darkIconPath, app, getWindow, getRemembered, clearRemembered } = deps;
+  const { runMenuAction, logLine = () => {}, getIsDark = () => false } = deps;
   let tray = null;
+  let isDark = false;
+
+  function iconFor(dark) {
+    // 暗色图缺失（旧包 / 开发目录被清过）时退回彩色图标：托盘不能因此变空白。
+    return dark && darkIconPath ? darkIconPath : iconPath;
+  }
+
+  /**
+   * 换图标（WF-20）。同一状态重复调用直接返回：托盘 setImage 会让 Windows 重建
+   * 通知区图标，主题没变时没必要闪一下。
+   */
+  function setTheme(dark) {
+    const next = Boolean(dark);
+    if (!tray || next === isDark) return;
+    isDark = next;
+    try {
+      tray.setImage(iconFor(next));
+    } catch (err) {
+      logLine(`tray: setImage failed: ${err}`);
+    }
+  }
 
   /** 重建菜单并同步 tooltip：语言切换与勾选态变化都走这里，保证两者永远同源。 */
   function refresh() {
@@ -188,7 +212,9 @@ function createTrayManager(deps) {
   }
 
   function create() {
-    tray = new Tray(iconPath);
+    // 创建时就要用对主题：先按主进程当前判定落图标，再建菜单。
+    isDark = Boolean(getIsDark());
+    tray = new Tray(iconFor(isDark));
     refresh();
     // 左键也唤起窗口（Windows 惯例）。
     tray.on("click", showWindow);
@@ -204,7 +230,7 @@ function createTrayManager(deps) {
     tray = null;
   }
 
-  return { create, refresh, destroy, getTray: () => tray };
+  return { create, refresh, destroy, setTheme, getTray: () => tray };
 }
 
 module.exports = { TRAY_ACTION_ITEMS, buildTrayTemplate, createTrayManager, trayLabelsFor };

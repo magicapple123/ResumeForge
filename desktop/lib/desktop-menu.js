@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 "use strict";
 
+const fs = require("node:fs");
+
 // 标题栏菜单的**主进程动作表**（问题清单 §19.3）：编辑 / 视图 / 窗口 / 文件目录类
 // 动作走 IPC，渲染层只发动作 id，不认识 Electron API。URL 一律用本文件的固定常量，
 // 渲染层不能传任意 URL 给 shell.openExternal（contextIsolation 下的最小暴露面）。
@@ -99,6 +101,13 @@ function createDesktopMenuActions(deps) {
 
   function openPath(target) {
     if (!target) throw new Error(t(getLocale(), "menu.error.noDirectory"));
+    // 目录不存在时 explorer 会**静默失败**（shell.openPath 返回错误串，托盘那条路径
+    // 又不看返回值，用户看到的就是"点了没反应"，2026-11-20）。先建出来再打开。
+    try {
+      fs.mkdirSync(target, { recursive: true });
+    } catch {
+      // 建不出来不是致命：下面 openPath 会把真正的错误报出来。
+    }
     // openPath 用"返回错误字符串"而不是 reject 来报告失败；这里统一成异常，
     // 让渲染层拿到 ok:false（打不开目录不该静默）。
     return Promise.resolve(shell.openPath(target)).then((error) => {

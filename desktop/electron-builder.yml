@@ -20,6 +20,13 @@ files:
   - preload.js
   - splash.html
   - icon.png
+  # 启动页的开场动画（splash.html 里 <img src="icon-intro.svg">）。splash.html 位于
+  # asar 根目录，两者是同级，所以这份素材**只能**留在 asar 内（不要挪去
+  # extraResources，原因见 extraResources: 段末尾的说明）。
+  - icon-intro.svg
+  # 暗色启动动画（WF-20）：splash.html 按 ?theme=dark 换成这一枚。与 icon-intro.svg
+  # 同理只能留在 asar 内，不能进 extraResources（见下面的排除规则说明）。
+  - icon-intro-dark.svg
   - backend-manager.js
   # 运行期可写位置的裁决（诊断 P0）：安装目录只读，日志/pid 记录只能落在用户
   # 目录。backend-manager.js 与 lib/preflight.js 都 require 它，漏打包即崩。
@@ -68,6 +75,14 @@ files:
   # 窗口尺寸/位置/缩放的持久化（2026-10-23 适配）：main.js 顶层 require，
   # 漏打包会让 createWindow 直接崩（和 updater.js 当年同一类事故）。
   - lib/window-state.js
+  # 启动页最短可见 1.0s（T05）：main.js 顶层 require，漏打包 = 安装版启动即崩。
+  - lib/splash-timing.js
+  # 托盘图标跟随系统主题（WF-20）：tray-menu.js 顶层 require 它取深浅两套 ICO，
+  # 漏打包会让托盘装配抛 MODULE_NOT_FOUND（守卫 tests/test_desktop_asar_deps_check.py 抓到的就是这条）。
+  - lib/shell-theme.js
+  # 开机自启的应用内开关（WF-08）：desktop-shell-ipc.js 的 deps 由 main.js 注入它，
+  # 漏打包 = 设置卡永远"不支持"，守卫 scripts/check-asar-deps.js 会拦。
+  - lib/launch-at-login.js
   # SQLite snapshot helpers used by lib/data-migration.js (RR-06).
   - lib/sqlite-snapshot.js
   # Runtime unpacking / log rotation used by backend-manager.js (line-budget split).
@@ -109,6 +124,15 @@ extraResources:
     to: payload
   - from: icon.png
     to: icon.png
+  # 暗色托盘图标（WF-20）。和 icon.png 一样放 resources/：main.js 在打包态按
+  # process.resourcesPath 取它（Tray 读 asar 内的 ICO 不可靠）。
+  - from: tray-dark.ico
+    to: tray-dark.ico
+  # ⚠️ icon-intro.svg **不能**放这里。electron-builder 会把 extraResources 的匹配项
+  # 当成 app 文件的排除项（platformPackager.js 的 excludePatterns），结果就是
+  # files: 里那一行被静默吃掉、asar 里没有这个文件，而 splash.html 在 asar 根目录，
+  # `src="icon-intro.svg"` 直接 404 → 静默退回静态 PNG，看起来像"动画没做"。
+  # 实测（2026-11-19，--win --dir）：加在这里时 resources/ 有它、app.asar 里没有。
 
 win:
   icon: icon.png
@@ -141,8 +165,21 @@ nsis:
   # `$(RF_SHORTCUT)` 解析成空串（快捷方式变成 ".lnk"）。
   shortcutName: "$(RF_SHORTCUT)"
   artifactName: ResumeForge-Setup-${version}.${ext}
+  # 品牌（WF-07）：资源放在 desktop/ 根目录（directories.buildResources: .），
+  # 不是默认的 build/。位图与 ICO 由 D:/rf_tools/WF-07/make_brand_assets.py 生成
+  # （脚本不入库，产物入库）——手工换品牌时重新跑一次，不要直接改 BMP。
+  # ICO 必须是"小尺寸 BMP 帧 + 256 PNG 帧"：设计稿给的三枚 ICO 所有帧都是 PNG，
+  # 在部分 Windows 资源管理器版本里会显示成空白。
+  installerIcon: installerIcon.ico
+  uninstallerIcon: uninstallerIcon.ico
+  installerHeaderIcon: installerHeaderIcon.ico
+  installerSidebar: installerSidebar.bmp
+  uninstallerSidebar: uninstallerSidebar.bmp
+  installerHeader: installerHeader.bmp
   # 旧版（payload-era）数据抢救：在调用旧卸载器之前把安装目录里的用户数据复制出来，
   # 装完再交回应用的 ADR-0004 迁移流程。守卫测试见 scripts/test-nsis-rescue.js。
+  # 该文件末尾 include 了 nsis/wizard.nsh（向导页序 + WF-08 八项）；electron-builder
+  # 的 include 只接受一个路径，所以两者共用这一个入口。
   include: nsis/legacy-data-rescue.nsh
 
 mac:

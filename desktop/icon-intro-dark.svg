@@ -1,0 +1,230 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="ii-dark-title">
+  <title id="ii-dark-title">简历通 · 暗色启动动画 / ResumeForge dark intro</title>
+  <style>
+    .ii-dark-layer { animation-fill-mode: backwards; animation-iteration-count: 1 }
+    .ii-dark-plate { transform-origin: 256px 256px; animation-name: ii-dark-plate-in; animation-duration: 250ms; animation-timing-function: cubic-bezier(.2,.72,.28,1) }
+    .ii-dark-landing { transform-origin: 256px 242px; animation-name: ii-dark-land; animation-duration: 250ms; animation-timing-function: linear }
+    .ii-dark-book { animation-name: ii-dark-center; animation-duration: 600ms; animation-delay: 250ms; animation-timing-function: cubic-bezier(.28,.65,.48,1) }
+    .ii-dark-left-clip { animation-name: ii-dark-unfold-left; animation-duration: 600ms; animation-delay: 250ms; animation-timing-function: cubic-bezier(.3,.55,.45,1) }
+    .ii-dark-right-clip { animation-name: ii-dark-unfold-right; animation-duration: 600ms; animation-delay: 250ms; animation-timing-function: cubic-bezier(.3,.55,.45,1) }
+    .ii-dark-left { animation-name: ii-dark-left-in; animation-duration: 100ms; animation-delay: 250ms; animation-timing-function: ease-out }
+    .ii-dark-cover { transform-origin: 250px 255px; animation-name: ii-dark-cover-in; animation-duration: 600ms; animation-delay: 250ms; animation-timing-function: cubic-bezier(.25,.65,.35,1) }
+    .ii-dark-row { transform-box: fill-box; transform-origin: right center; animation-name: ii-dark-write; animation-duration: 100ms; animation-delay: var(--ii-dark-delay); animation-timing-function: cubic-bezier(.2,.72,.28,1) }
+    .ii-dark-right .ii-dark-row { transform-origin: left center }
+    .ii-dark-photo, .ii-dark-pill { animation-name: ii-dark-poster-in; animation-duration: 170ms; animation-timing-function: ease-out }
+    .ii-dark-photo { animation-delay: 765ms }
+    .ii-dark-pill { animation-delay: 635ms }
+    .ii-dark-halo { transform-origin: 264px 236px; animation-name: ii-dark-halo-in; animation-duration: 350ms; animation-delay: 950ms; animation-timing-function: cubic-bezier(.2,.62,.34,1) }
+    .ii-dark-crescent { transform-origin: 264px 236px; animation-name: ii-dark-crescent-in; animation-duration: 350ms; animation-delay: 950ms; animation-timing-function: cubic-bezier(.25,.65,.35,1) }
+
+    @keyframes ii-dark-plate-in { from { opacity: 0; transform: scale(.94) } to { opacity: 1; transform: scale(1) } }
+    @keyframes ii-dark-land {
+      0% { opacity: 0; transform: translateY(-31px) scale(.87); animation-timing-function: cubic-bezier(.38,.02,.64,.62) }
+      73% { opacity: 1; transform: translateY(2px) scale(1.008); animation-timing-function: ease-out }
+      100% { opacity: 1; transform: translateY(0) scale(1) }
+    }
+    @keyframes ii-dark-center { from { transform: translateX(-66px) } to { transform: translateX(0) } }
+    @keyframes ii-dark-cover-in {
+      from { opacity: 0; transform: translateX(-20px) scale(.57,.72) }
+      46% { opacity: 1 }
+      to { opacity: 1; transform: translateX(0) scale(1) }
+    }
+    @keyframes ii-dark-unfold-left {
+      0% { d: path("M326 100 C333.28 79 339.95 57 343.42 46 C344.67 42 342.28 47 337.2 59 C301.36 144 258.04 246 219.9 335 C215.2 346 211.29 356 209.97 360 C202.1 384 199.4 395 186 431 C237 337 291 211 326 100 Z") }
+      36% { d: path("M326 100 C308.27 75.52 273.9 47.8 259.03 34.24 C253.36 29.28 246.68 33.68 241.64 45.68 C207.4 130.91 161.44 232.54 115.47 320.45 C110.04 331.35 111.16 342.05 115.67 346.86 C143.31 375.81 170.94 391.03 186 431 C237 337 291 211 326 100 Z") }
+      68% { d: path("M326 100 C293.13 77.26 233.91 52.4 207.94 40.12 C198.08 35.64 188.79 40.34 183.78 52.34 C150.52 137.45 102.95 239.27 52.24 327.72 C46.37 338.67 50.53 349.02 58.57 353.43 C107.71 379.9 153.7 393.02 186 431 C237 337 291 211 326 100 Z") }
+      100% { d: path("M326 100 C289 79 223 57 194 46 C183 42 173 47 168 59 C135 144 87 246 35 335 C29 346 34 356 43 360 C98 384 149 395 186 431 C237 337 291 211 326 100 Z") }
+    }
+    @keyframes ii-dark-unfold-right {
+      0% { d: path("M326 100 C369.49 107 412.36 111 439.39 116 C449.21 118 453.47 128 449.36 139 C407.7 245 359.12 355 308.02 454 C303.15 464 294.49 469 286.4 466 C252.33 455 214.4 440 186 431 C237 337 291 211 326 100 Z") }
+      36% { d: path("M326 100 C372.84 103.81 418.94 104.75 448.08 107.75 C458.66 109.02 463.54 118.44 459.47 129.4 C418.04 235.18 369.32 345.32 317.54 444.96 C312.62 455 303.49 460.45 294.73 458.09 C257.86 449.75 216.73 437.79 186 431 C237 337 291 211 326 100 Z") }
+      68% { d: path("M326 100 C377.88 105.58 428.81 108.22 461.1 112.34 C472.85 114.01 478.64 123.75 474.63 134.73 C433.55 240.64 384.6 350.7 331.83 449.98 C326.84 460 317 465.2 307.22 462.49 C266.16 452.67 220.22 439.02 186 431 C237 337 291 211 326 100 Z") }
+      100% { d: path("M326 100 C379 107 431 111 464 116 C476 118 482 128 478 139 C437 245 388 355 335 454 C330 464 320 469 310 466 C268 455 221 440 186 431 C237 337 291 211 326 100 Z") }
+    }
+    @keyframes ii-dark-left-in { from { opacity: 0 } to { opacity: 1 } }
+    @keyframes ii-dark-write { from { opacity: 0; transform: scaleX(0) } 25% { opacity: 1 } to { opacity: 1; transform: scaleX(1) } }
+    @keyframes ii-dark-halo-in {
+      0% { opacity: 0; transform: scale(.28) }
+      65% { opacity: .95; transform: scale(1.05) }
+      100% { opacity: 1; transform: none }
+    }
+    @keyframes ii-dark-crescent-in {
+      0% { opacity: 0; transform: scale(0) rotate(-12deg) }
+      62% { opacity: 1; transform: scale(1.08) rotate(3deg) }
+      100% { opacity: 1; transform: none }
+    }
+    @keyframes ii-dark-poster-in { from { opacity: 0 } to { opacity: 1 } }
+
+
+    .ii-dark-spine { animation: ii-dark-poster-in 100ms 350ms ease-out backwards; }
+    .ii-dark-halo-inner, .ii-dark-halo-outer {
+      transform-origin: 264px 236px;
+      animation-name: ii-dark-moon-wave;
+      animation-timing-function: cubic-bezier(.22,.65,.34,1);
+    }
+    .ii-dark-halo-inner { animation-delay: 1000ms; animation-duration: 330ms; }
+    .ii-dark-halo-outer { animation-delay: 1050ms; animation-duration: 350ms; }
+    @keyframes ii-dark-moon-wave {
+      0% { opacity: 0; transform: scale(.66); }
+      42% { opacity: .88; }
+      100% { opacity: 1; transform: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ii-dark-layer { animation: none !important; }
+    }
+  </style>
+  <defs>
+    <linearGradient id="ii-dark-plate-fill" x2="20%" y2="100%">
+      <stop stop-color="#2D425D" />
+      <stop offset="1" stop-color="#172235" />
+    </linearGradient>
+    <radialGradient id="ii-dark-plate-light" cx="15%" cy="20%" r="78%">
+      <stop stop-color="#3A536F" />
+      <stop offset="1" stop-color="#2D455F" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="ii-dark-cover-fill" x1="14%" y1="12%" x2="87%" y2="94%">
+      <stop stop-color="#426D9E" />
+      <stop offset=".43" stop-color="#3B6797" />
+      <stop offset=".72" stop-color="#234A7B" />
+      <stop offset="1" stop-color="#325B84" />
+    </linearGradient>
+    <linearGradient id="ii-dark-left-paper" gradientUnits="userSpaceOnUse" x1="135" y1="132" x2="336" y2="275">
+      <stop stop-color="#B6CBDE" />
+      <stop offset=".76" stop-color="#AFC2D8" />
+      <stop offset="1" stop-color="#90AAC4" />
+    </linearGradient>
+    <linearGradient id="ii-dark-right-paper" gradientUnits="userSpaceOnUse" x1="390" y1="120" x2="223" y2="475">
+      <stop stop-color="#D8E6F2" />
+      <stop offset="1" stop-color="#ACBED1" />
+    </linearGradient>
+    <linearGradient id="ii-dark-row-fill" x2="100%" y2="100%">
+      <stop stop-color="#657F9C" />
+      <stop offset="1" stop-color="#546F8E" />
+    </linearGradient>
+    <linearGradient id="ii-dark-photo-fill" x2="100%" y2="100%">
+      <stop stop-color="#6888A9" />
+      <stop offset="1" stop-color="#527293" />
+    </linearGradient>
+    <linearGradient id="ii-dark-pill-fill" x2="100%" y2="100%">
+      <stop stop-color="#FDB35B" />
+      <stop offset="1" stop-color="#FDA349" />
+    </linearGradient>
+    <linearGradient id="ii-dark-crescent-fill" x1="12%" y1="0" x2="82%" y2="100%">
+      <stop stop-color="#FFF6D9" />
+      <stop offset=".54" stop-color="#FCE2A5" />
+      <stop offset="1" stop-color="#E5AE58" />
+    </linearGradient>
+    <radialGradient id="ii-dark-halo-fill">
+      <stop stop-color="#FFE3A1" stop-opacity=".43" />
+      <stop offset=".58" stop-color="#F2C675" stop-opacity=".16" />
+      <stop offset="1" stop-color="#E59A50" stop-opacity="0" />
+    </radialGradient>
+    <filter id="ii-dark-cover-shadow" x="-24%" y="-24%" width="150%" height="157%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="-1" dy="23" stdDeviation="22" flood-color="#080F1A" flood-opacity=".24" />
+    </filter>
+    <filter id="ii-dark-book-shadow" x="-16%" y="-16%" width="135%" height="139%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="1" dy="6" stdDeviation="11" flood-color="#080F1A" flood-opacity=".19" />
+    </filter>
+    <clipPath id="ii-dark-safe">
+      <rect x="32" y="32" width="448" height="448" />
+    </clipPath>
+    <clipPath id="ii-dark-plate-clip">
+      <rect width="512" height="512" rx="57" />
+    </clipPath>
+    <clipPath id="ii-dark-left-leaf">
+      <path d="M326 100 C289 79 223 57 194 46 C183 42 173 47 168 59 C135 144 87 246 35 335 C29 346 34 356 43 360 C98 384 149 395 186 431 C237 337 291 211 326 100 Z" class="ii-dark-layer ii-dark-left-clip" />
+    </clipPath>
+    <clipPath id="ii-dark-right-leaf">
+      <path d="M326 100 C379 107 431 111 464 116 C476 118 482 128 478 139 C437 245 388 355 335 454 C330 464 320 469 310 466 C268 455 221 440 186 431 C237 337 291 211 326 100 Z" class="ii-dark-layer ii-dark-right-clip" />
+    </clipPath>
+    <path id="ii-dark-crescent-shape" d="M279 181 C249 175 220 191 207 219 C193 249 206 281 234 294                      C264 308 298 297 315 269 Q317 266 313 268                      C289 276 265 265 253 246 C240 225 250 197 279 183 Q282 182 279 181 Z" />
+  </defs>
+  <g class="ii-dark-layer ii-dark-viewport" clip-path="url(#ii-dark-safe)">
+    <g transform="translate(32 32) scale(.875)">
+      <g>
+        <g>
+          <g class="ii-dark-layer ii-dark-plate">
+            <rect width="512" height="512" rx="57" fill="url(#ii-dark-plate-fill)" />
+            <rect x="1.5" y="1.5" width="509" height="509" rx="55.5" fill="none" stroke="#5C7390" stroke-opacity=".65" stroke-width="3" />
+            <rect width="512" height="512" rx="57" fill="url(#ii-dark-plate-light)" />
+          </g>
+          <g clip-path="url(#ii-dark-plate-clip)">
+            <g class="ii-dark-layer ii-dark-cover">
+              <path d="M97 105Q100 83 123 82L417 74Q440 73 440 97L430 293 404 416Q400 438 379 436L79 414Q54 412 57 388Z" fill="url(#ii-dark-cover-fill)" stroke="#5D82A9" stroke-opacity=".85" filter="url(#ii-dark-cover-shadow)" />
+            </g>
+            <g class="ii-dark-layer ii-dark-landing">
+              <g filter="url(#ii-dark-book-shadow)" class="ii-dark-layer ii-dark-book">
+                <path d="M322 110C290 215 240 330 191 420" fill="none" stroke="#A8BBCD" stroke-width="9" stroke-linecap="round" class="ii-dark-layer ii-dark-spine" />
+                <g clip-path="url(#ii-dark-left-leaf)" class="ii-dark-layer ii-dark-left">
+                  <rect x="25" y="30" width="310" height="410" fill="url(#ii-dark-left-paper)" />
+                  <g fill="url(#ii-dark-row-fill)">
+                    <g transform="translate(186 87) rotate(20)">
+                      <rect width="101" height="21" rx="10.5" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:600ms" />
+                    </g>
+                    <g transform="translate(171 125) rotate(20)">
+                      <rect width="100" height="14" rx="7" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:650ms" />
+                    </g>
+                    <g transform="translate(157 156) rotate(20)">
+                      <rect width="106" height="14" rx="7" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:700ms" />
+                    </g>
+                    <g transform="translate(143 188) rotate(21)">
+                      <rect width="110" height="14" rx="7" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:750ms" />
+                    </g>
+                    <g transform="translate(127 222) rotate(21)">
+                      <rect width="108" height="14" rx="7" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:800ms" />
+                    </g>
+                    <g transform="translate(110 256) rotate(21)">
+                      <rect width="107" height="14" rx="7" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:850ms" />
+                    </g>
+                  </g>
+                  <rect x="0" y="0" width="105" height="57" rx="7" transform="translate(96 287) rotate(21)" fill="url(#ii-dark-photo-fill)" class="ii-dark-layer ii-dark-photo" />
+                </g>
+                <g clip-path="url(#ii-dark-right-leaf)" class="ii-dark-right">
+                  <rect x="175" y="80" width="310" height="400" fill="url(#ii-dark-right-paper)" />
+                  <path d="M326 100C291 211 237 337 186 431" fill="none" stroke="#E8F3FF" stroke-opacity=".62" stroke-width="2.3" />
+                  <g fill="url(#ii-dark-row-fill)">
+                    <g transform="translate(320 182) rotate(8)">
+                      <rect width="104" height="13" rx="6.5" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:600ms" />
+                    </g>
+                    <g transform="translate(306 216) rotate(8)">
+                      <rect width="102" height="13" rx="6.5" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:650ms" />
+                    </g>
+                    <g transform="translate(290 251) rotate(8)">
+                      <rect width="103" height="13" rx="6.5" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:700ms" />
+                    </g>
+                    <g transform="translate(274 285) rotate(9)">
+                      <rect width="102" height="13" rx="6.5" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:750ms" />
+                    </g>
+                    <g transform="translate(266 319) rotate(10)">
+                      <rect width="95" height="13" rx="6.5" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:800ms" />
+                    </g>
+                    <g transform="translate(250 353) rotate(11)">
+                      <rect width="95" height="13" rx="6.5" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:850ms" />
+                    </g>
+                    <g transform="translate(235 385) rotate(12)">
+                      <rect width="95" height="13" rx="6.5" class="ii-dark-layer ii-dark-row" style="--ii-dark-delay:900ms" />
+                    </g>
+                  </g>
+                  <rect width="81" height="18" rx="6" transform="translate(361 142) rotate(7) skewX(-15)" fill="url(#ii-dark-pill-fill)" stroke="#F5953D" class="ii-dark-layer ii-dark-pill" />
+                </g>
+              </g>
+            </g>
+            <g aria-hidden="true">
+              <ellipse cx="256" cy="239" rx="114" ry="106" fill="url(#ii-dark-halo-fill)" class="ii-dark-layer ii-dark-halo" />
+              <g class="ii-dark-layer ii-dark-halo-outer">
+                <use href="#ii-dark-crescent-shape" transform="translate(264 236) scale(1.39) translate(-258 -239)" fill="#FFE0A3" fill-opacity=".22" stroke="#FFE7B9" stroke-opacity=".19" stroke-width="10" stroke-linejoin="round" />
+              </g>
+              <g class="ii-dark-layer ii-dark-halo-inner">
+                <use href="#ii-dark-crescent-shape" transform="translate(264 236) scale(1.20) translate(-258 -239)" fill="#FEC76F" fill-opacity=".32" stroke="#FFD38A" stroke-opacity=".24" stroke-width="6" stroke-linejoin="round" />
+              </g>
+              <g class="ii-dark-layer ii-dark-crescent">
+                <use href="#ii-dark-crescent-shape" transform="translate(6 -3)" fill="url(#ii-dark-crescent-fill)" stroke="#FFE1A4" stroke-width="2" stroke-linejoin="round" />
+                <path d="M264 184 C241 189 221 204 212 224 C203 245 210 269 221 279" transform="translate(6 -3)" fill="none" stroke="#FFFBEA" stroke-opacity=".78" stroke-width="2.3" stroke-linecap="round" />
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

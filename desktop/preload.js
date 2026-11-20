@@ -41,6 +41,21 @@ contextBridge.exposeInMainWorld("desktopShell", {
   setEditableFocus: (editable) => ipcRenderer.send("desktop:editable-focus", Boolean(editable)),
   // 应用内语言：只发固定两个值之一，主进程侧同样校验发送方与取值。
   setLocale: (locale) => ipcRenderer.send("desktop:set-locale", locale),
+  /**
+   * WF-20 兜底开关：托盘图标是否跟随系统主题（设置项 tray_icon_follow_system）。
+   * 只发布尔；主进程侧校验发送方，且开关状态由渲染层持有（偏好存 localStorage，
+   * 与其它布尔偏好同一口径），主进程不读数据库。
+   */
+  setTrayIconFollowSystem: (enabled) =>
+    ipcRenderer.send("desktop:set-tray-follow-system", Boolean(enabled)),
+  /**
+   * WF-08：开机自启（读写系统真相，见 lib/launch-at-login.js）。
+   * 两个都返回 `{ supported, enabled }`：`supported=false` 表示当前平台/安装方式管不到，
+   * 设置卡据此把开关渲染成不可用（不假装能切）。
+   */
+  getLaunchAtLogin: () => ipcRenderer.invoke("desktop:get-launch-at-login"),
+  setLaunchAtLogin: (enabled) =>
+    ipcRenderer.invoke("desktop:set-launch-at-login", Boolean(enabled)),
 });
 
 /**

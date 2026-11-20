@@ -22,9 +22,16 @@ const TITLEBAR_HEIGHT = 32;
  * 定义在 frontend/src/styles/desktop-titlebar.css）逐值一致。** 只要有一个漂移，兜底层
  * 就会让页面要么差一条 32px 的缝，要么继续与系统三颗按钮互相遮挡（P1-1 症状）。
  * 所以这里从 TITLEBAR_HEIGHT 拼字符串，绝不写字面量 32。
+ *
+ * 选择器带 `:not(:has(.app-titlebar))` 是 2026-11-20 真机事故的修复：
+ * `did-finish-load` 早于 React 挂载，此刻 `.app-titlebar` 必然还不存在，兜底会**误判**
+ * 并注入一条无条件的 `body{padding-top:32px}`；随后标题栏自己挂载（它本来就是纵向
+ * flex 的第一项），两条 32px 叠加 → 整页内容被顶下去 32px，系统三颗按钮浮在自绘标题栏
+ * **上方**，页头/操作条与品牌条错位。条件化之后，这条 padding 只在标题栏真的不存在时
+ * 生效，标题栏一挂载就自动失效（`:has()` 在 Electron 45 / Chromium 156 可用）。
  */
 function titleBarFallbackCss(height = TITLEBAR_HEIGHT) {
-  return `body{padding-top:${height}px}`;
+  return `html:not(:has(.app-titlebar)) body{padding-top:${height}px}`;
 }
 
 /**
@@ -154,9 +161,15 @@ function padForMissingTitleBar(deps) {
   if (!webContents || typeof webContents.executeJavaScript !== "function") {
     return Promise.resolve(false);
   }
-  return Promise.resolve(
-    webContents.executeJavaScript("document.querySelector('.app-titlebar') !== null", true),
-  )
+  const probe = () =>
+    webContents.executeJavaScript("document.querySelector('.app-titlebar') !== null", true);
+  return Promise.resolve(probe())
+    .then((present) => {
+      if (present) return false;
+      // did-finish-load 早于 React 挂载：先给渲染层 800ms 把标题栏挂出来，
+      // 免得把"还没挂载"误报成"旧 dist 没有标题栏"（2026-11-20 真机事故）。
+      return new Promise((resolve) => setTimeout(resolve, 800)).then(probe);
+    })
     .then((present) => {
       if (present) return false;
       // warning 级别：启动器与壳的诊断都是按 warning 收的，info 会被整条吞掉。

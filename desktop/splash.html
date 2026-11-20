@@ -1,94 +1,221 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <title>ResumeForge</title>
+    <!-- 图标是 22KB 的动画 SVG：预载 + decode() 之后才显示，窗口不会先亮一个空框。
+         用哪一枚由主进程传进来的 ?theme= 决定（WF-20）：splash 早于渲染进程，
+         读不到 themeStore，所以主题只能从 URL 参数来。 -->
+    <script>
+      (function () {
+        var dark = /(?:^|[?&])theme=dark(?:&|$)/.test(location.search);
+        var link = document.createElement("link");
+        link.rel = "preload";
+        link.as = "image";
+        link.href = dark ? "icon-intro-dark.svg" : "icon-intro.svg";
+        document.head.appendChild(link);
+        if (dark && document.documentElement) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
     <style>
       :root {
-        --bg: #f5f7fa;
-        --card: #ffffff;
         --brand: #1f5eff;
-        --track: #e2e8f0;
-        --text: #1f2329;
-        --muted: #5f6b7a;
-        --error: #d4380d;
+        --ink: #16181d;
+        --muted: #6a7484;
+        --track: rgba(22, 24, 29, 0.075);
+        --error: #c0392b;
+      }
+      /* 暗色：与应用内 --rf-* 的深色底（#151b23 一带）对齐，避免"启动页亮一下再变暗"。 */
+      :root[data-theme="dark"] {
+        --brand: #6f9bff;
+        --ink: #e6ebf2;
+        --muted: #8b99ab;
+        --track: rgba(230, 235, 242, 0.1);
+        --error: #ff9b8f;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       html, body { height: 100%; }
       body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--bg);
+        background: linear-gradient(180deg, #fbfcfd 0%, #f5f7fa 62%, #f1f4f8 100%);
         font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
-        color: var(--text);
+        color: var(--ink);
         user-select: none;
+        display: flex;
+        /* 顶部 32px 是自绘拖拽条（.chrome），内容在剩下的高度里居中 */
+        padding-top: 32px;
       }
-      .card {
-        width: 380px;
+
+      /*
+       * 启动期的"伪标题栏"（2026-11-20 真机）。
+       *
+       * 主窗口是 titleBarStyle:"hidden" + titleBarOverlay(32px)，三颗按钮由系统画在右上角；
+       * 而 splash 这一屏原本没有任何标题栏元素，于是按钮悬在光板上、整窗也**拖不动**
+       * （没有 -webkit-app-region: drag 的区域）。这里补一条 32px 的条：底色与覆盖层
+       * 逐值一致（浅 #f5f7fa / 深 #151b23），既能拖动，也把按钮"接"回界面里。
+       * 右端 138px 交给系统按钮，不设 drag，避免拖窗口时误触关闭。
+       */
+      .chrome {
+        position: fixed;
+        inset: 0 0 auto 0;
+        height: 32px;
+        background: #f5f7fa;
+        border-bottom: 1px solid #e6eaf0;
+        -webkit-app-region: drag;
+        z-index: 10;
+      }
+      .chrome::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 138px;
+        height: 100%;
+        -webkit-app-region: no-drag;
+      }
+      :root[data-theme="dark"] .chrome {
+        background: #151b23;
+        border-bottom-color: #232b36;
+      }
+      :root[data-theme="dark"] body {
+        background: linear-gradient(180deg, #0e1319 0%, #121820 62%, #151b23 100%);
+      }
+
+      /* 唯一构型（v7 定稿）：图标 → 标题 → 副标题 → 2px 细线 → 状态字，全部同轴。 */
+      .center {
+        margin: auto;
+        padding: 24px 40px 30px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
         text-align: center;
-        background: var(--card);
-        border: 1px solid var(--track);
-        border-radius: 16px;
-        padding: 48px 40px 40px;
-        box-shadow: 0 8px 30px rgba(31, 35, 41, 0.06);
+        max-width: 100%;
       }
+
       .logo {
-        width: 88px;
-        height: 88px;
-        margin: 0 auto 20px;
-        border-radius: 20px;
+        width: clamp(120px, 10.6vw, 172px);
+        height: clamp(120px, 10.6vw, 172px);
         display: block;
+        opacity: 0; /* 解码完成后再挂出来（.is-decoded），避免首帧是碎图 */
+        filter: drop-shadow(0 6px 16px rgba(16, 24, 40, 0.1));
+        /* 不要在这里加淡入/缩放：SVG 自带开场，外层再演一次会盖掉它的前 0.4s。 */
       }
-      h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
-      .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 32px; }
+      .logo.is-decoded { opacity: 1; }
+
+      h1 {
+        margin-top: 26px;
+        font-size: clamp(26px, 1.95vw, 30px);
+        font-weight: 600;
+        line-height: 1.28;
+        letter-spacing: 1px;
+        animation: rise 420ms 640ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+      }
+      .subtitle {
+        margin-top: 8px;
+        font-size: 13px;
+        line-height: 20px;
+        letter-spacing: 0.15px;
+        color: var(--muted);
+        animation: rise 420ms 740ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+      }
+      @keyframes rise {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: none; }
+      }
+
+      .progress {
+        margin-top: 44px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        animation: rise 420ms 300ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+      }
       .track {
-        height: 6px;
-        border-radius: 3px;
+        position: relative;
+        width: clamp(220px, 19vw, 300px);
+        height: 2px;
         background: var(--track);
-        overflow: hidden;
+        border-radius: 1px;
       }
       .bar {
+        position: relative;
         height: 100%;
         width: 0%;
-        border-radius: 3px;
+        border-radius: 1px;
         background: var(--brand);
-        transition: width 0.45s ease;
+        transition: width 560ms cubic-bezier(0.33, 1, 0.68, 1), background-color 240ms;
       }
-      .bar.indeterminate {
-        width: 36%;
-        animation: slide 1.2s ease-in-out infinite;
+      /* 进度头（状态圆点）是 .bar 的伪元素：不进 #stage，也不多一个节点。 */
+      .bar::after {
+        content: "";
+        position: absolute;
+        right: -2px;
+        top: 50%;
+        width: 5px;
+        height: 5px;
+        margin-top: -2.5px;
+        border-radius: 50%;
+        background: inherit;
+        animation: headPulse 1.9s ease-in-out infinite;
       }
-      @keyframes slide {
-        0% { margin-left: -36%; }
-        100% { margin-left: 100%; }
+      @keyframes headPulse {
+        0%, 100% { box-shadow: 0 0 0 3px rgba(31, 94, 255, 0.12); }
+        50% { box-shadow: 0 0 0 6px rgba(31, 94, 255, 0.05); }
       }
-      .stage { margin-top: 18px; font-size: 13px; color: var(--muted); min-height: 18px; }
+
+      .stage {
+        margin-top: 13px;
+        font-size: 12px;
+        letter-spacing: 0.2px;
+        color: var(--muted);
+        min-height: 16px;
+      }
+
       .error {
         display: none;
-        margin-top: 18px;
+        width: min(460px, 100%);
+        margin-top: 26px;
         text-align: left;
         font-size: 12px;
-        line-height: 1.6;
+        line-height: 1.65;
         color: var(--error);
-        background: #fff2e8;
-        border: 1px solid #ffbb96;
+        background: #fff7f5;
+        border: 1px solid #f3d6cf;
         border-radius: 8px;
         padding: 10px 12px;
         word-break: break-all;
+        white-space: pre-line;
       }
       .error.show { display: block; }
+
+      /* 窄窗（最小 1120 宽其实不会命中，留着给开发者缩放窗口预览用） */
+      @media (max-width: 900px) {
+        .center { padding: 20px 24px 26px; }
+        h1 { font-size: 24px; }
+        .progress { margin-top: 34px; }
+      }
+
+      /* 减少动效：静帧直出，不留"从透明开始的空窗" */
+      @media (prefers-reduced-motion: reduce) {
+        h1, .subtitle, .progress { animation: none; }
+        .bar::after { animation: none; }
+        .bar { transition: none; }
+      }
     </style>
   </head>
   <body>
-    <div class="card">
+    <div class="chrome" aria-hidden="true"></div>
+    <main class="center">
       <img id="logo" class="logo" alt="ResumeForge" />
       <h1 id="app-name">ResumeForge</h1>
       <div id="subtitle" class="subtitle">AI-tailored resumes · local workbench</div>
-      <div class="track"><div id="bar" class="bar indeterminate"></div></div>
-      <div id="stage" class="stage">Starting…</div>
+      <div class="progress">
+        <div class="track"><div id="bar" class="bar"></div></div>
+        <div id="stage" class="stage">Starting…</div>
+      </div>
       <div id="error" class="error"></div>
-    </div>
+    </main>
     <script>
       (function () {
         // 这个页面在主应用加载前就显示，CI 截到的也正是它，所以文案必须自己双语：
@@ -154,14 +281,26 @@
 
         var logo = document.getElementById("logo");
         if (logo) logo.alt = copy.alt;
-        // Build resources may be excluded from app.asar even when listed in
-        // files. Packaged shells carry a controlled extraResources copy beside
-        // app.asar; source trees use the local copy. Never read a URL from query.
+
+        // 动画 SVG 是一次性开场（约 1.4s）：src 一赋值就开始播，不能等 JS 做别的。
+        // 失败才退回 extraResources 里的静态 PNG（打包态在 resources/icon.png）。
+        var DARK = document.documentElement.getAttribute("data-theme") === "dark";
+        function revealLogo() {
+          if (logo && logo.classList) logo.classList.add("is-decoded");
+        }
         logo.addEventListener("error", function extraResourcesIcon() {
           logo.removeEventListener("error", extraResourcesIcon);
           logo.src = "../icon.png";
+          logo.addEventListener("load", revealLogo, { once: true });
         });
-        logo.src = "icon.png";
+        logo.src = DARK ? "icon-intro-dark.svg" : "icon-intro.svg";
+        // decode() 完成才让它可见：窗口先亮、图标后到的话第一帧就是空框。
+        if (typeof logo.decode === "function") {
+          logo.decode().then(revealLogo, revealLogo);
+        } else {
+          logo.addEventListener("load", revealLogo, { once: true });
+        }
+
         var bar = document.getElementById("bar");
         var stage = document.getElementById("stage");
         if (stage) stage.textContent = copy.starting;

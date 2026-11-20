@@ -74,6 +74,9 @@
   LangString RF_SHORTCUT 1055 "ResumeForge"  ; tr_TR
   LangString RF_SHORTCUT 1054 "ResumeForge"  ; th_TH
   LangString RF_SHORTCUT 1066 "ResumeForge"  ; vi_VN
+
+  # 向导文案（WF-07/08）：同样必须在 addLangs 之后定义，见 wizard.nsh 顶部说明。
+  !insertmacro RF_WIZARD_LANGS
 !macroend
 
 !ifndef BUILD_UNINSTALLER
@@ -212,10 +215,17 @@ Function RF_CopyTree
 FunctionEnd
 
 # 等应用退出（最多 60 秒）。还在跑就中止安装：不动文件是唯一安全的选项。
+#
+# ⚠️ 不用 nsProcess 插件：它不在 electron-builder 拉下来的 NSIS 插件目录里，实测
+# 2026-11-19 报 `Plugin not found, cannot call nsProcess::_FindProcess`（`!addplugindir`
+# 指向的 x86-unicode 目录里确实有 nsProcess.dll，但 makensis 只认 NSISDIR 下的默认目录，
+# 加插件目录无效）。改用系统自带的 tasklist + find：
+# find 命中返回 0、未命中返回 1，不需要解析任何文本。
 !macro RF_WaitForAppExit
   StrCpy $R1 0
   rf_wait_loop:
-    ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R2
+    nsExec::Exec 'cmd /c tasklist /FI "IMAGENAME eq ${PRODUCT_FILENAME}.exe" /NH | find /I "${PRODUCT_FILENAME}.exe" >nul'
+    Pop $R2
     StrCmp $R2 "0" 0 rf_wait_done
     IntOp $R1 $R1 + 1
     IntCmp $R1 60 rf_wait_timeout
@@ -234,6 +244,10 @@ FunctionEnd
 
 # 安装开始前（.onInit，早于 installSection 里对旧卸载器的调用）把旧数据抢救出来。
 !macro customInit
+  # 向导侧的开场（日志 / 已有安装探测 / 修复模式 / 升级前备份）先跑：它要读
+  # $installMode（initMultiUser 已算好），并且升级备份必须在旧卸载器动手之前完成。
+  !insertmacro RF_INSTALL_INIT
+
   StrCpy $RFRescueState "none"
   StrCpy $RFSrcBytes "0"
   StrCpy $RFDstBytes "0"
@@ -324,6 +338,15 @@ FunctionEnd
 
   rf_restore_done:
   rf_install_done:
+
+  # 向导侧收尾：按用户勾选收拾快捷方式、写/清开机自启、落安装日志。
+  !insertmacro RF_INSTALL_FINISH
 !macroend
 
 !endif
+
+# 向导（WF-07/08）与卸载器页面：同一份脚本里编译，见 wizard.nsh 顶部说明。
+# 放在安装器守卫之外——卸载器那一趟会整段跳过守卫，卸载器自己的页面必须编进去。
+# `${__FILEDIR__}` 不带尾部反斜杠（NSIS 的既有约定），拼接时必须补一个 `\`，
+# 否则会去找 "<desktop>\nsiswizard.nsh" 并直接 abort（实测 2026-11-19 makensis 原文）。
+!include "${__FILEDIR__}\wizard.nsh"

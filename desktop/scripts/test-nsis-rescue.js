@@ -55,17 +55,43 @@ test("the rescue script starts with a UTF-8 BOM", () => {
 // 注意用例名只说"抢救体"：文件顶部故意有**不属于**这个守卫的内容——`LogicLib` 的
 // include 与 `customHeader` 里的 26 条 `LangString RF_SHORTCUT`。它们是"两趟都要编"的
 // 例外：卸载器也会调用 setLinkVars 算快捷方式路径（见下面 customHeader 那条用例），
-// 所以必须同时出现在安装器与卸载器两个构建里。守卫本身仍要求"恰好一处 !ifndef、
-// 且一直开到文件末尾"——把 LangString 塞进守卫里会让卸载器那一趟解析不出快捷方式名。
+// 所以必须同时出现在安装器与卸载器两个构建里。
+//
+// 2026-11-19（WF-07/WF-08）：文件末尾多了一行 `!include "${__FILEDIR__}\wizard.nsh"`，
+// **故意放在守卫之外**——wizard.nsh 里既有安装器页面也有卸载器页面，卸载器那一趟会
+// 整段跳过守卫，放进去就等于卸载器没有自己的页面。守卫的语义因此变成"抢救体只编进
+// 安装器"，由下面三条断言钉住：守卫恰好一处、抢救体在守卫内、向导 include 在守卫之后。
 test("the rescue body compiles into the installer only", () => {
   const source = readRescue();
   const guards = source.match(/!ifndef\s+BUILD_UNINSTALLER/g) || [];
   assert.strictEqual(guards.length, 1, "exactly one BUILD_UNINSTALLER guard");
+
+  const guardAt = source.search(/!ifndef\s+BUILD_UNINSTALLER/);
+  const closeAt = source.lastIndexOf("\n!endif");
+  assert.ok(closeAt > guardAt, "the guard must be closed before the shared wizard include");
+  for (const marker of ["!macro customInit", "!macro customInstall", "Function RF_CopyTree"]) {
+    const at = source.indexOf(marker);
+    assert.ok(
+      at > guardAt && at < closeAt,
+      `${marker} must stay inside the installer-only guard (uninstallers cannot use non-un. functions)`,
+    );
+  }
+
   const lastLine = source.trimEnd().split("\n").pop().trim();
   assert.strictEqual(
     lastLine,
-    "!endif",
-    "the BUILD_UNINSTALLER guard must stay open for the whole file and close at the end",
+    '!include "${__FILEDIR__}\\wizard.nsh"',
+    "the shared wizard include must come after the guard closes (the uninstaller build skips the guard)",
+  );
+  assert.ok(
+    fs.existsSync(path.join(DESKTOP, "nsis", "wizard.nsh")),
+    "the included wizard.nsh must exist",
+  );
+  const wizard = fs.readFileSync(path.join(DESKTOP, "nsis", "wizard.nsh"));
+  assert.deepStrictEqual(
+    [...wizard.subarray(0, 3)],
+    [0xef, 0xbb, 0xbf],
+    "wizard.nsh carries Chinese copy, so it needs a UTF-8 BOM as well",
   );
 });
 
@@ -106,7 +132,14 @@ test("the rescue is keyed on resume_forge.db and never overwrites an existing da
 test("the rescue fails closed on a running app and on copy failure", () => {
   const source = readRescue();
   // Running app: wait, then abort with an explanation instead of copying a live database.
-  assert.match(source, /\$\{nsProcess::FindProcess\}/, "must check whether the app is running");
+  // 判据是"有没有探测进程在跑"，不是"用不用 nsProcess"：该插件不在 electron-builder
+  // 的 NSIS 插件目录里（2026-11-19 实测 `Plugin not found, cannot call
+  // nsProcess::_FindProcess`），所以改成系统自带的 tasklist + find。
+  assert.match(
+    source,
+    /nsExec::Exec[^\n]*tasklist[^\n]*find\s+\/I\s+"\$\{PRODUCT_FILENAME\}\.exe"/,
+    "must check whether the app is running",
+  );
   const aborts = source.match(/\bAbort\b/g) || [];
   assert.strictEqual(aborts.length, 2, "exactly two abort paths: app running, rescue copy failed");
   assert.match(

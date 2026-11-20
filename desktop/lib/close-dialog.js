@@ -80,7 +80,7 @@ function createClosePrompt(deps) {
         show: false,
         backgroundColor: "#00000000",
         webPreferences: {
-          preload: path.join(dirname, "..", "close-dialog-preload.js"),
+          preload: path.join(dirname, "close-dialog-preload.js"),
           contextIsolation: true,
           nodeIntegration: false,
           sandbox: true,
@@ -105,7 +105,11 @@ function createClosePrompt(deps) {
         if (pendingWindow === win) pendingWindow = null;
       });
 
-      const file = path.join(dirname, "..", "close-dialog.html");
+      // dirname 是**包含 main.js 的那一层**（打包态 = app.asar 根，开发态 = desktop/），
+      // close-dialog.html / close-dialog-preload.js 就在这一层。原来写成 `..` 拼到了上一级
+      // （resources/），于是 loadURL 永远 ERR_FILE_NOT_FOUND、catch 回落"最小化到托盘" ——
+      // 用户看到的就是"点 × 没有任何提示"（2026-11-20 真机日志实锤）。
+      const file = path.join(dirname, "close-dialog.html");
       // 文案跟随应用内语言：这个窗口不加载 React，读不到前端语言包，所以壳层语言
       // 拼进 query，由页面内联的 zh/en 两份文案表按 location.search 选（缺省英文）。
       // 已打开的卡片不热切换：语言切换只影响下一次打开——有意取舍（简单、无闪烁）。

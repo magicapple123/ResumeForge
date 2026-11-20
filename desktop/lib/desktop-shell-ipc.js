@@ -13,6 +13,7 @@ const {
 } = require("./desktop-menu");
 const { readRecentProblems } = require("./diagnostic-summary");
 const { normalizeShellLocale } = require("./shell-locale");
+const { createLaunchAtLogin } = require("./launch-at-login");
 
 /** 通道名：preload.js 与 frontend 的 desktopShell 桥必须逐字一致。 */
 const CHANNELS = {
@@ -29,6 +30,12 @@ const CHANNELS = {
   // 应用内语言（不是系统语言）：渲染进程 React 挂载后把当前 locale 推过来，
   // 主进程据此重建托盘菜单 / tooltip 与窗口标题兜底。
   setLocale: "desktop:set-locale",
+  // WF-20：设置项「托盘图标跟随系统主题」的开关（默认关）。单向、只收布尔。
+  trayFollowSystem: "desktop:set-tray-follow-system",
+  // WF-08 第三处联动：开机自启。两条都是**读写系统真相**（HKCU\...\Run），
+  // 应用内不存第二份布尔（见 lib/launch-at-login.js 顶部说明）。
+  getLaunchAtLogin: "desktop:get-launch-at-login",
+  setLaunchAtLogin: "desktop:set-launch-at-login",
 };
 
 /** 窗口是否置顶（#34A）：拿不到窗口 / API 缺失一律按 false，绝不让快照抛错。 */
@@ -68,8 +75,9 @@ function isMainWindowSender(event, getWindow) {
  * @param {function(): ("zh" | "en")} [deps.getShellLocale] 当前壳层语言（菜单错误文案用）
  * @param {function("zh" | "en"): void} [deps.onShellLocaleChanged] 语言切换后的重建入口
  *   （由 main.js 装配：托盘菜单 + tooltip + 窗口标题；本模块只管通道校验与分发）
- * @param {function(string): void} [deps.logLine]
- */
+ * @param {function(object): object} [deps.getShellTheme] 主题裁决句柄（lib/shell-theme.js），
+ *   提供 setAppTheme / setFollowSystem；缺省时主题只作用于标题栏
+ * @param {function(string): void} [deps.logLine] */
 function registerDesktopShellIpc(deps) {
   const {
     ipcMain,
@@ -82,8 +90,12 @@ function registerDesktopShellIpc(deps) {
     titleBar,
     getShellLocale = () => "en",
     onShellLocaleChanged,
+    getShellTheme,
     logLine = () => {},
   } = deps;
+
+  // WF-08：开机自启默认自己造（读写 HKCU\...\Run）；deps 传了就用注入的（测试用）。
+  const launchAtLogin = deps.launchAtLogin || createLaunchAtLogin({ app, logLine });
 
   // #34F 的实态：渲染层每次焦点进出可编辑区都会报一次；getWindowState 把它一起交回去。
   let editableFocus = false;
@@ -144,8 +156,44 @@ function registerDesktopShellIpc(deps) {
   });
 
   ipcMain.on(CHANNELS.setTheme, (event, theme) => {
-    if (trusted(event)) titleBar.applyTheme(theme);
+    if (!trusted(event)) return;
+    titleBar.applyTheme(theme);
+    // 同一个上报还有第二个消费者：托盘图标（WF-20）。标题栏只关心 win32/linux 的
+    // 覆盖层配色，托盘在每个平台都要跟着换图。
+    const shellTheme = typeof getShellTheme === "function" ? getShellTheme() : null;
+    if (shellTheme) shellTheme.setAppTheme(theme === "dark" ? "dark" : "light");
   });
+
+  // WF-20 兜底开关：只看布尔，不接收任意载荷。开关本身存在后端（注册表出厂值 false），
+  // 主进程不读数据库，所以每次挂载/切换都由渲染层推一次。
+  ipcMain.on(CHANNELS.trayFollowSystem, (event, value) => {
+    if (!trusted(event)) return;
+    const shellTheme = typeof getShellTheme === "function" ? getShellTheme() : null;
+    if (shellTheme) shellTheme.setFollowSystem(Boolean(value));
+  });
+
+  // WF-08：开机自启（读写 HKCU\...\Run 的 ResumeForge 值）。
+  // 不在 deps 里注入实现时两条通道都不注册 —— 旧壳/测试环境不会出现"点了没反应"的假开关。
+  if (typeof ipcMain.handle === "function") {
+    ipcMain.handle(CHANNELS.getLaunchAtLogin, (event) => {
+      if (!trusted(event)) return { supported: false, enabled: false };
+      try {
+        return launchAtLogin.read();
+      } catch (err) {
+        logLine(`launch-at-login read failed: ${err}`);
+        return { supported: false, enabled: false };
+      }
+    });
+    ipcMain.handle(CHANNELS.setLaunchAtLogin, (event, value) => {
+      if (!trusted(event)) return { supported: false, enabled: false };
+      try {
+        return launchAtLogin.write(Boolean(value));
+      } catch (err) {
+        logLine(`launch-at-login write failed: ${err}`);
+        return { supported: false, enabled: false };
+      }
+    });
+  }
 
   // 应用内语言：只接受 "zh" / "en"（其它值静默忽略，渲染层传错不会影响壳层状态）。
   // 收到后交给 main.js 重建主进程侧的用户可见文案：托盘菜单 + tooltip、主窗口标题
