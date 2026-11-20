@@ -74,11 +74,11 @@ const update = {
   // 张卡片里跑，所以这里必须写清"谁在检查 + 手动入口在哪"。标题与第一段正文是
   // `zh-CN.ts` 里的 `update.desktop.title` / `update.desktop.description`（既有 key，
   // 改文案就地改值，不新建）。
-  /** ② 手动检查的两个固定入口。 */
+  /** ② 手动检查入口；update.cmd 仅适用于 Windows。 */
   "update.desktop.manual":
-    "想手动检查有两个入口：菜单里的「帮助 → 检查更新」，或双击安装目录下的 update.cmd。",
-  /** ③ 保底出口：发布页手动下载安装包。链接本身在卡片里紧跟这句。 */
-  "update.desktop.releaseHint": "也可以在发布页面下载 Setup.exe，双击手动安装。",
+    "可在菜单「帮助 → 检查更新」手动检查；Windows 也可双击安装目录中的 update.cmd。",
+  /** ③ 保底出口：发布页提供各平台安装包。链接本身在卡片里紧跟这句。 */
+  "update.desktop.releaseHint": "发布页提供各平台安装包，可按系统选择后手动安装。",
   /** 「重新检查」的 60 秒冷却态；`{seconds}` 是剩余秒数（见 UpdateCard 的最小点击间隔）。 */
   "update.action.recheckIn": "重新检查（{seconds} 秒）",
   /** 桌面壳里「检查更新」走 IPC：结果由主进程用系统弹窗给出，页面里没有进度可看。 */

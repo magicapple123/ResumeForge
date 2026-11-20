@@ -8,11 +8,11 @@ const core = {
   "resume.language.zh-CN": "Chinese",
   "resume.language.en-US": "English",
   "update.method.desktop":
-    "The app checks and installs updates itself; Setup.exe is downloadable from the release page.",
+    "Windows supports in-app installation; macOS/Linux require a manual update from the release page.",
   "update.method.in-app": "Download in the app, then approve replacement and restart (Windows).",
   "update.desktop.title": "The desktop app checks for updates itself",
   "update.desktop.description":
-    "The desktop app checks for updates on its own: once after launch, then every 6 hours.",
+    "The app checks for updates on launch; only the Windows desktop app supports in-app installation.",
   "update.downloaded.title": "Update package downloaded",
   "update.check.available": "New version {version} available",
   "update.check.latest": "Already on the latest version: {version}",

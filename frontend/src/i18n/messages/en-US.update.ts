@@ -64,9 +64,9 @@ const update = {
   // the first paragraph are `update.desktop.title` / `update.desktop.description` in
   // en-US.core.ts (existing keys, reworded in place).
   "update.desktop.manual":
-    "To check manually, use Help → Check for updates in the menu, or double-click update.cmd in the install folder.",
+    "Use Help → Check for updates in the menu. Windows also has update.cmd in the install folder.",
   "update.desktop.releaseHint":
-    "You can also download Setup.exe from the release page and install it manually.",
+    "The release page has packages for each platform. Choose the matching one to install manually.",
   "update.action.recheckIn": "Check again ({seconds}s)",
   "update.toast.desktopStarted": "Checking in the desktop app; the result will appear in a dialog",
 

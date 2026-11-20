@@ -92,33 +92,40 @@ afterEach(() => {
 });
 
 describe("UpdateCard（形态与降级）", () => {
-  it("桌面形态不给页面内下载/安装入口，改成引导用 Setup.exe", async () => {
-    // 桌面安装里 PROJECT_ROOT 是 resources/payload，更新包是源码形态整包（没有
-    // python-runtime.zip、没有 desktop/）：页面内"下载 zip 并安装"补不齐依赖，
-    // 装上去只会半新半旧。所以按钮必须消失，只留检查更新 + 安装包指引。
-    apiMocks.getAppForm.mockResolvedValue({
-      desktop: true,
-      platform: "win32",
-      app_version: "1.0.2",
-    });
+  it.each(["win32", "darwin", "linux"] as const)(
+    "desktop update guidance works on %s",
+    async (platform) => {
+      // 桌面安装里 PROJECT_ROOT 是 resources/payload，更新包是源码形态整包（没有
+      // python-runtime.zip、没有 desktop/）：页面内"下载 zip 并安装"补不齐依赖，
+      // 装上去只会半新半旧。所以按钮必须消失，只留检查更新 + 平台安装包指引。
+      apiMocks.getAppForm.mockResolvedValue({
+        desktop: true,
+        platform,
+        app_version: "1.0.2",
+      });
 
-    renderCard();
-    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+      renderCard();
+      fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
 
-    // 有更新（mock 里 update_available=true），但桌面形态不出现下载/安装按钮。
-    expect(await screen.findByText(t("update.desktop.title"))).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "下载更新" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "重启并安装" })).not.toBeInTheDocument();
-    // 后台下载开关也随之消失（它是下载入口的一部分）。
-    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-    // 检查/重新检查保留；发布页面可以打开。
-    expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重新检查" })).toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: "打开发布页面" })).toHaveAttribute(
-      "href",
-      "https://example.com/release",
-    );
-  });
+      // 有更新（mock 里 update_available=true），但桌面形态不出现下载/安装按钮。
+      expect(await screen.findByText(t("update.desktop.title"))).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "下载更新" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "重启并安装" })).not.toBeInTheDocument();
+      // 后台下载开关也随之消失（它是下载入口的一部分）。
+      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+      // 检查/重新检查保留；发布页面可以打开。
+      expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "重新检查" })).toBeInTheDocument();
+      expect(await screen.findByRole("link", { name: "打开发布页面" })).toHaveAttribute(
+        "href",
+        "https://example.com/release",
+      );
+      expect(screen.getByText(t("update.desktop.description"))).toBeInTheDocument();
+      expect(screen.getByText(t("update.desktop.manual"))).toBeInTheDocument();
+      expect(screen.getByText(t("update.desktop.releaseHint"))).toBeInTheDocument();
+      expect(screen.queryByText(/Setup\.exe/)).not.toBeInTheDocument();
+    },
+  );
 
   it("桌面形态即使后端说「已下载完成」也不显示重启并安装", async () => {
     apiMocks.getAppForm.mockResolvedValue({
