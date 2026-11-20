@@ -227,6 +227,12 @@
   gap: 10px;
 }
 
+/* T08：第 5 格「条目标题」与它的 ⓘ 各占整行（其余四格仍是 2×2）。 */
+.resume-wb-color-card.is-wide,
+.resume-wb-colors-hint {
+  grid-column: 1 / -1;
+}
+
 .resume-wb-color-card {
   position: relative;
   display: flex;

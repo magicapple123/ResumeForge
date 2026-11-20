@@ -88,31 +88,38 @@
   border-top: 1px solid var(--rf-border-subtle);
 }
 
-/* antd-override: 私有形态 —— 确认弹窗顶部的焦点色带（其余弹窗按语义换色） */
-.ant-modal-confirm .ant-modal-container {
-  border-top: 3px solid var(--rf-focus-ring);
+/* antd-override: 私有形态 —— 确认弹窗的语义色收进 34px 圆角色块，容器不再画顶边色带。
+   2026-11-19（WF-19）：原先四条 `border-top: 3px solid …` 被用户评价"AI 味很重"。
+   颜色一律走语义 token（`--rf-warning-*` / `--rf-error-*`），颜色守卫不允许硬编码色值；
+   `--rf-error-text` 与确认按钮的 danger 实底同色，色块与按钮因此天然同色系。
+   `.rf-modal-assist` / `.rf-modal-editor` 两条规则**没有任何调用点**，本次随色带一并删除。 */
+.ant-modal-confirm .ant-modal-confirm-body > .anticon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-inline-end: 12px;
+  border-radius: 10px;
+  font-size: 18px;
+  background: var(--rf-warning-bg);
+  color: var(--rf-warning-text);
 }
 
-/* antd-override: 私有形态 —— 确认弹窗标题用品牌色 + 700，与普通弹窗区分 */
+.rf-modal-danger .ant-modal-confirm-body > .anticon {
+  background: var(--rf-error-bg);
+  color: var(--rf-error-text);
+}
+
+/* antd-override: 私有形态 —— 确认弹窗标题与普通弹窗统一：深灰蓝 + 600（原品牌蓝 + 700） */
 .ant-modal-confirm .ant-modal-confirm-title {
-  color: var(--rf-brand);
-  font-weight: 700;
+  color: var(--rf-text-body);
+  font-weight: 600;
 }
 
 /* antd-override: 私有形态 —— 确认弹窗正文的行高与正文色（--rf-text-body） */
 .ant-modal-confirm .ant-modal-confirm-content {
   color: var(--rf-text-body);
   line-height: 1.7;
-}
-
-.rf-modal-danger .ant-modal-container {
-  border-top: 3px solid var(--rf-accent-red);
-}
-
-.rf-modal-assist .ant-modal-container {
-  border-top: 3px solid var(--rf-accent-violet);
-}
-
-.rf-modal-editor .ant-modal-container {
-  border-top: 3px solid var(--rf-accent-green);
 }

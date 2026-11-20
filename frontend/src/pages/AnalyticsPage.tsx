@@ -18,7 +18,7 @@
  * 第 17 条（2026-11-10）把既有区块拆到 features/analytics/AnalyticsSections.tsx，
  * 页面只保留编排与加载态——本文件已接近 500 行预算，不要再往里塞展示逻辑。
  */
-import { Button, Empty, Space, Typography } from "antd";
+import { Button, Space, Typography } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
 import ErrorState from "../components/common/ErrorState";
 import { useState } from "react";
@@ -44,6 +44,7 @@ import { FUNNEL_STATUSES } from "../types";
 import type { AnalyticsDashboard, FunnelStage } from "../types";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import EmptyState from "../components/common/EmptyState";
 
 /**
  * UI 最大档位 = 一次取满的月数（T13）。
@@ -115,7 +116,7 @@ export default function AnalyticsPage() {
             onRetry={() => void reload()}
           />
         ) : (
-          <Empty description={t("analyticsPage.empty.noData")} />
+          <EmptyState description={t("analyticsPage.empty.noData")} />
         )
       ) : (
         <AnalyticsBody

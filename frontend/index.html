@@ -7,6 +7,31 @@
     <link rel="apple-touch-icon" href="/resumeforge-icon-256.png" />
     <!-- 大图兜底：老书签/缓存的默认 favicon 请求路径。 -->
     <link rel="icon" type="image/png" href="/resumeforge-icon.png" />
+    <!-- WF-11：首屏前置。等 React 挂载后再换 favicon 会先闪一下浅色图标，所以这里
+         按 localStorage 的 rf.theme 直接把 href 改到暗色文件。判定必须与
+         themeStore 的 resolveTheme 一致：dark 直接暗；system 看系统；其它（含 null）是浅。
+         映射规则与 themeStore.syncFavicon 保持一致，改一处要改两处。 -->
+    <script>
+      (function () {
+        try {
+          var mode = localStorage.getItem("rf.theme");
+          var dark =
+            mode === "dark" ||
+            (mode === "system" &&
+              typeof window.matchMedia === "function" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (!dark) return;
+          var links = document.querySelectorAll('link[rel="icon"]');
+          for (var i = 0; i < links.length; i++) {
+            var sizes = links[i].getAttribute("sizes");
+            var size = sizes ? sizes.split("x")[0] : "256";
+            links[i].setAttribute("href", "/resumeforge-icon-dark-" + size + ".png");
+          }
+        } catch (e) {
+          // localStorage 被禁用（隐私模式）时保持浅色图标，不影响页面加载。
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ResumeForge</title>
   </head>

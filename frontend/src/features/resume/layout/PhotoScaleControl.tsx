@@ -21,7 +21,7 @@
  */
 import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Slider, Space, Tooltip, Typography } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import {
@@ -32,6 +32,7 @@ import {
 } from "../../../utils/pageMargins";
 import { photoScaleProbeCss } from "../../../utils/resumeFormatProbe";
 import ParamResetButton from "./ParamResetButton";
+import "./resume-measure-photo.css";
 
 /**
  * 提交防抖（毫秒）。与页边距 / 行距同值：一次提交就要后端重渲染一次。
@@ -65,6 +66,11 @@ interface Props {
   onChange: (percent: number | null) => void;
   /** 拖动中的即时反馈：`:root { --photo-scale: …; }`。空串 = 清掉探针。 */
   onProbe?: (css: string) => void;
+  /**
+   * WF-13：「边框与位置」按钮。传了就并进这一格，占第二行（左内边距对齐滑杆起点），
+   * 于是左栏只出现一个「照片」标签；不传时这一格与旧版完全一致。
+   */
+  frameSlot?: ReactNode;
 }
 
 export default function PhotoScaleControl({
@@ -76,6 +82,7 @@ export default function PhotoScaleControl({
   restore,
   onChange,
   onProbe,
+  frameSlot,
 }: Props) {
   useLocale();
   const [dragging, setDragging] = useState<number | null>(null);
@@ -143,7 +150,11 @@ export default function PhotoScaleControl({
   };
 
   return (
-    <Space size={6}>
+    // WF-13：标签 / 控件 / 尾部是这一格的**直接子级**（不再是 Space 的三段）。
+    // 制作台参数栏（`styles/resume-workbench-controls.css`）原本就是按
+    // 「直接子级三段 = 三列 grid」对齐滑杆的；合并后要保持同一条竖线，
+    // 这一层必须继续暴露这三段（见 resume-measure-photo.css 的三列覆盖）。
+    <div className="resume-measure-photo">
       {/* 双击标题恢复默认（与行距 / 页边距 / 字号同一套交互）。
           提示走 Tooltip 而不是原生 title：后者只对鼠标可见，键盘 / 读屏用户拿不到
           "这里可双击"这条唯一可发现性信息。 */}
@@ -205,7 +216,7 @@ export default function PhotoScaleControl({
           {shown}%
         </Typography.Text>
         {/* 没有照片时这个位置写原因，而不是留空：滑杆灰着又没有任何解释，用户会以为
-            控件坏了。位置始终占着，读数才不会左右跳。 */}
+              控件坏了。位置始终占着，读数才不会左右跳。 */}
         <span className={`resume-measure-source${customized && !noPhoto ? " is-empty" : ""}`}>
           {noPhoto ? (
             t("resume.photo.scale.noPhoto")
@@ -219,6 +230,7 @@ export default function PhotoScaleControl({
           )}
         </span>
       </span>
-    </Space>
+      {frameSlot ? <div className="resume-measure-photo-slot">{frameSlot}</div> : null}
+    </div>
   );
 }

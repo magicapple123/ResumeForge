@@ -1,0 +1,49 @@
+/* SPDX-License-Identifier: Apache-2.0
+ *
+ * WF-14：「未收录资料」默认折叠。
+ *
+ * 标题行从 `<div>` 变成 `<button>`（原生折叠触发器），这里只做三件事：
+ * 压掉浏览器默认的按钮外观、给箭头一个旋转过渡、给键盘焦点一个可见描边。
+ * 布局本身（flex / gap）仍由 `workbench-v2.css` 的 `.resume-wb-coverage-head` 决定。
+ */
+.resume-wb-coverage-head {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.resume-wb-coverage-caret {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--rf-text-tertiary);
+  transition: transform 120ms ease;
+}
+
+.resume-wb-coverage-caret.is-open {
+  transform: rotate(90deg);
+  color: var(--rf-text-secondary);
+}
+
+.resume-wb-coverage-head:hover .resume-wb-coverage-caret {
+  color: var(--rf-text-secondary);
+}
+
+/* 这颗按钮没有底色，焦点环是键盘用户唯一的"我在这里"信号。 */
+.resume-wb-coverage-head:focus-visible {
+  outline: 2px solid var(--rf-accent, #2563eb);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 说明文字与分组卡一起收进面板：默认只留标题 + 条数。 */
+.resume-wb-coverage-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}

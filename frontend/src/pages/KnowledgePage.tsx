@@ -23,7 +23,7 @@ import {
 } from "../api/knowledge";
 import BatchActionBar from "../components/common/BatchActionBar";
 import BatchDeleteButton from "../components/common/BatchDeleteButton";
-import EmptyState from "../components/common/EmptyState";
+import EmptyState, { EmptyWatermark } from "../components/common/EmptyState";
 import ErrorState from "../components/common/ErrorState";
 import LoadingBlock from "../components/common/LoadingBlock";
 import KnowledgeCardGrid from "../features/knowledge/KnowledgeCardGrid";
@@ -284,12 +284,13 @@ export default function KnowledgePage() {
         // total=0 时区分「库里真没东西」和「筛选后没结果」：库空时把主按钮内嵌进空态。
         total === 0 && filtersEmpty ? (
           <EmptyState
+            image={<EmptyWatermark />}
             description={t("knowledgePage.empty.none")}
             actionLabel={t("knowledgePage.action.create")}
             onAction={openCreate}
           />
         ) : (
-          <EmptyState description={t("knowledgePage.empty.filtered")} />
+          <EmptyState image={<EmptyWatermark />} description={t("knowledgePage.empty.filtered")} />
         )
       ) : (
         <>

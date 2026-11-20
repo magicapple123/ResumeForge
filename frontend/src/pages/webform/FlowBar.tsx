@@ -52,6 +52,7 @@ export const FlowBar = memo(function FlowBar({
   onRead,
   variant = "compact",
   action,
+  sampleLocked = false,
 }: {
   step: number;
   running: boolean;
@@ -62,6 +63,8 @@ export const FlowBar = memo(function FlowBar({
   variant?: "compact" | "wide";
   /** 宽档的轨道右端动作：唯一主 CTA 由页面按当前状态给，本组件不判断该点哪个。 */
   action?: ReactNode;
+  /** 当前数据集是「体验示例」：读取当前表单这一步不成立（示例数据不参与真实填表）。 */
+  sampleLocked?: boolean;
 }) {
   // 本组件用模块级 t()：订阅语言变化，否则切语言后进度与摘要不重渲染。
   useLocale();
@@ -123,14 +126,18 @@ export const FlowBar = memo(function FlowBar({
         <Button
           type="primary"
           icon={<FileSearchOutlined />}
-          disabled={!running}
+          disabled={!running || sampleLocked}
           loading={busy === "read"}
           onClick={onRead}
         >
           {t("webFormPage.readSnapshot.read")}
         </Button>
         <Typography.Text type="secondary" className="webform-flow-reason">
-          {running ? t("webFormPage.readSnapshot.hint") : t("webFormPage.flow.reason.browserOff")}
+          {sampleLocked
+            ? t("webFormPage.sampleLocked.hint")
+            : running
+              ? t("webFormPage.readSnapshot.hint")
+              : t("webFormPage.flow.reason.browserOff")}
         </Typography.Text>
       </div>
       {snapshot ? (

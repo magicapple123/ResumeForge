@@ -127,17 +127,17 @@ const resumeEditor = {
   "editor.profileFill.placeholder.entry": "选择资料条目",
   /** #22：候选搜索框的占位符（菜单第一行）。 */
   "editor.profileFill.search": "搜索资料…",
-  /** #22：搜索框下方一行的可添加项计数（随搜索/目标过滤实时变化）。 */
-  "editor.profileFill.count": "{count} 项可添加",
+  /** 计数行（随搜索/目标过滤实时变化）：可填字段数**不是**候选条数。 */
+  "editor.profileFill.countFillable": "{count} 项可填",
+  "editor.profileFill.countFilled": "{count} 项已填",
   "editor.profileFill.aria.entry": "从我的资料选择填入本条",
-  "editor.profileFill.empty": "没有可填入的条目",
+  "editor.profileFill.empty": "这条已经没有空字段了（只补空白，不覆盖已有内容）",
   "editor.profileFill.success": "已从资料填入 {count} 个字段",
   "editor.profileFill.needTarget": "先在中栏选中这条经历，再填入对应资料",
-  "editor.profileFill.wrongSection": "这条资料属于其他板块",
-  "editor.profileFill.allBlocked": "资料里的{label}都已经在这份简历里了",
   "editor.profileFill.fillEntryAria": "填入本条的{label}",
   "editor.profileFill.action.fill": "填入",
-  "editor.profileFill.onlyBlank": "只填空字段",
+  /** 已填满的候选在列表右侧的标记（候选仍然列出，只是不可点）。 */
+  "editor.profileFill.state.filled": "已填",
   /** 候选的「标题（次要说明）」拼接；括号是全角，与资料页的展示一致。 */
   "editor.profileFill.option": "{label}（{hint}）",
   "editor.profileFill.suffix.current": "当前条目",

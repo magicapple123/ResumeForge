@@ -13,14 +13,11 @@
  * 这个域。**换照片 / 移除照片时必须同步清掉它**：`source.sha256` 指向旧图，留着就是死数据
  * （后端会判失效、保存时再由 `prune_overrides` 裁掉，但界面会短暂地"裁剪还在"）。
  */
-import { CameraOutlined, DeleteOutlined, ScissorOutlined } from "@ant-design/icons";
+import { DeleteOutlined } from "@ant-design/icons";
 import Button from "antd/es/button";
 import Input from "antd/es/input";
 import Select from "antd/es/select";
 import Tooltip from "antd/es/tooltip";
-import Space from "antd/es/space";
-import Upload from "antd/es/upload";
-import { useState } from "react";
 import type { MessageKey } from "../../../i18n";
 import { useI18n } from "../../../i18n/i18nContext";
 import type { ResumeFormatConfig } from "../../../types/resumeFormat";
@@ -43,19 +40,15 @@ import {
   readPhotoCropFromFormatConfig,
   withPhotoCrop,
 } from "../preview/photoCrop";
-import { readAsDataUrl } from "../../../utils/attachments";
-import CroppedPhotoThumb from "./CroppedPhotoThumb";
-import PhotoCropDialog from "./PhotoCropDialog";
+import PhotoAssetEditor from "./PhotoAssetEditor";
 import AutoGrowValueTextArea from "./AutoGrowValueTextArea";
 import { applyInlineEdit } from "./lastFocusedTextarea";
 import { readRichValue, richItemPatch } from "./inlineMarkWrite";
 import { registerInlineMarkField } from "./useInlineMarkRange";
 import InlineMarkContextMenu from "../layout/InlineMarkContextMenu";
 
-const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 //: 字段名开关适用的位置：name / photo 不提供（F20）。
 const LABEL_MODE_PLACEMENTS = new Set<HeaderPlacement>(["contact", "subtitle", "name_meta"]);
-const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
 interface Props {
   document: ResumeDocument;
@@ -83,7 +76,6 @@ export default function HeaderItemEditor({
   onNotice,
 }: Props) {
   const { t } = useI18n();
-  const [cropOpen, setCropOpen] = useState(false);
   const isPhoto = item.key === "photo";
   const photo = isPhotoDataUrl(item.value) ? item.value : "";
   const cropParams: PhotoCropParams | null = isPhoto
@@ -98,33 +90,7 @@ export default function HeaderItemEditor({
     onFormatConfigChange(withPhotoCrop(formatConfig, null));
   };
 
-  const uploadPhoto = (file: File) => {
-    if (!PHOTO_TYPES.has(file.type)) {
-      onNotice(t("document.photo.formatError"), "warning");
-      return;
-    }
-    if (file.size > PHOTO_MAX_BYTES) {
-      onNotice(t("document.photo.tooLarge"), "warning");
-      return;
-    }
-    void readAsDataUrl(file)
-      .then((dataUrl) => {
-        clearCrop();
-        patch({ value: dataUrl });
-        onNotice(t("document.photo.updated"), "info");
-      })
-      .catch(() => onNotice(t("document.photo.readFailed"), "warning"));
-  };
-
-  /**
-   * 打开裁剪：弹窗自己按**已保存参数**还原矩形（没有参数就是整幅），
-   * 这里不再持有一份 draft，避免"两套状态各说各话"。
-   */
-  const openCrop = () => {
-    setCropOpen(true);
-  };
-
-  /** `params = null` = 恢复原图（删掉 `photo_crop` 域）。 */
+  /** 裁剪参数写回：`null` = 恢复原图（删掉 `photo_crop` 域）。 */
   const applyCrop = (params: PhotoCropParams | null) => {
     if (!onFormatConfigChange) {
       onNotice(t("document.photo.cropFailed"), "warning");
@@ -137,68 +103,23 @@ export default function HeaderItemEditor({
   if (isPhoto) {
     return (
       <div className="document-item-editor document-header-editor" data-document-path={path}>
-        <div className="document-photo-editor">
-          <div className="document-photo-frame">
-            {photo ? (
-              <CroppedPhotoThumb
-                photo={photo}
-                crop={cropParams}
-                className="document-photo-thumb"
-                alt={t("document.photo.thumbnail")}
-              />
-            ) : (
-              <span className="document-photo-empty">{t("document.photo.empty")}</span>
-            )}
-          </div>
-          <Space wrap>
-            <Upload
-              accept="image/jpeg,image/png,image/webp"
-              showUploadList={false}
-              disabled={readOnly}
-              beforeUpload={(file) => {
-                uploadPhoto(file as File);
-                return Upload.LIST_IGNORE;
-              }}
-            >
-              <Button size="small" icon={<CameraOutlined />} disabled={readOnly}>
-                {t("document.photo.replace")}
-              </Button>
-            </Upload>
-            <Button
-              size="small"
-              icon={<ScissorOutlined />}
-              disabled={readOnly || !photo}
-              onClick={openCrop}
-            >
-              {t("document.photo.crop")}
-            </Button>
-            <Button
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              disabled={readOnly || !photo}
-              onClick={() => {
-                clearCrop();
-                patch({ value: "" });
-                onNotice(t("document.photo.removed"), "info");
-              }}
-            >
-              {t("document.photo.remove")}
-            </Button>
-          </Space>
-        </div>
+        {/* T02：上传/裁剪/删除抽到 `PhotoAssetEditor`，与左栏「照片」页签共用一份实现。 */}
+        <PhotoAssetEditor
+          photo={photo}
+          crop={cropParams}
+          disabled={readOnly}
+          variant="compact"
+          onCropChange={onFormatConfigChange ? applyCrop : undefined}
+          onPhotoChange={(dataUrl) => {
+            clearCrop();
+            patch({ value: dataUrl });
+          }}
+          onNotice={onNotice}
+        />
         <PlacementSelect
           value={item.placement}
           disabled={readOnly}
           onChange={(placement) => patch({ placement })}
-        />
-        <PhotoCropDialog
-          open={cropOpen}
-          photo={photo}
-          initialCrop={cropParams}
-          onClose={() => setCropOpen(false)}
-          onApply={applyCrop}
-          onNotice={onNotice}
         />
       </div>
     );

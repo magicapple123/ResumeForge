@@ -120,16 +120,18 @@ const resumeEditor = {
   "editor.profileFill.placeholder.entry": "Choose a Profile entry",
   /** #22: placeholder of the candidate search box (first row of the menu). */
   "editor.profileFill.search": "Search profile…",
-  "editor.profileFill.count": "{count} items to add",
+  /** Count row: fillable fields (not candidate rows); the two counts are joined with " · ". */
+  "editor.profileFill.countFillable": "{count} fillable",
+  "editor.profileFill.countFilled": "{count} filled",
   "editor.profileFill.aria.entry": "Choose a Profile entry to fill this entry",
-  "editor.profileFill.empty": "No entries to fill in",
+  "editor.profileFill.empty":
+    "Nothing blank left here — filling only adds blanks, it never overwrites",
   "editor.profileFill.success": "Filled {count} fields from your profile",
   "editor.profileFill.needTarget": "Select this experience in the middle panel first",
-  "editor.profileFill.wrongSection": "This profile entry belongs to another section",
-  "editor.profileFill.allBlocked": "All {label} entries in My Profile are already in this Resume",
   "editor.profileFill.fillEntryAria": "Fill this {label} entry",
   "editor.profileFill.action.fill": "Fill",
-  "editor.profileFill.onlyBlank": "Blank fields only",
+  /** Badge on the right of a candidate that has no blank fields left (still listed, not clickable). */
+  "editor.profileFill.state.filled": "Filled",
   /** Candidate title plus its secondary hint; English uses half-width brackets. */
   "editor.profileFill.option": "{label} ({hint})",
   "editor.profileFill.suffix.current": "This entry",

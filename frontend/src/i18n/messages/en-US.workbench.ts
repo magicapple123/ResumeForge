@@ -40,6 +40,13 @@ const workbench = {
   /** 颜色行的值列（同 zh-CN：与 `resume.measure.hintTemplate` 同批缩短，
       原来 `Template default` 在参数栏那一格里要 103px，溢出到来源胶囊上）。 */
   "workbench.color.followTemplate": "Template",
+  /** 外观第 5 格「条目标题」未单独设色时的状态（entry titles inherit the body color）。 */
+  "workbench.color.followBody": "Body",
+  /** 第 5 格的 ⓘ：角色级覆盖与单条覆盖的优先级。 */
+  "workbench.color.entryTitleHint":
+    "Follows the body color by default; same value as Role styles → Entry title. A color set on one entry wins.",
+  /** 上面那句 ⓘ 的无障碍名。 */
+  "workbench.color.entryTitleHintAria": "About entry title color",
   "workbench.param.paletteAria": "Toggle palette for {label}",
   "workbench.column.editor": "Resume content",
   "workbench.resizer.params":

@@ -40,6 +40,7 @@ export function ResultPanel({
   onFill,
   onToggle,
   onValueChange,
+  sampleLocked = false,
 }: {
   preview: WebFormPreview | null;
   result: WebFormFillResult | null;
@@ -56,6 +57,8 @@ export function ResultPanel({
   onFill: () => void;
   onToggle: (index: number) => void;
   onValueChange: (index: number, value: string) => void;
+  /** 当前数据集是「体验示例」：「填充到页面」不成立（示例数据不参与真实填表）。 */
+  sampleLocked?: boolean;
 }) {
   // 本组件用模块级 t()：订阅语言变化，否则切语言后标签与分组名不重渲染。
   useLocale();
@@ -83,6 +86,7 @@ export function ResultPanel({
           onFill={onFill}
           onToggle={onToggle}
           onValueChange={onValueChange}
+          sampleLocked={sampleLocked}
         />
       ),
     });

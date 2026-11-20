@@ -9,6 +9,13 @@
 .rf-inline-mark-menu .ant-dropdown-menu {
   min-width: 168px;
   max-width: 240px;
+  /* DF-3 / T09：限高 + 滚动**挂在菜单本身**。
+     挂到父级 `.rf-inline-mark-popup` 时，父级的 `overflow-y: auto` 会把子元素
+     （`.ant-dropdown-menu`，antd v6 的 boxShadow 宿主）的阴影裁掉——四边缺一条。
+     元素自己的 overflow 不裁自己的阴影，所以必须在这一层。 */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .rf-inline-mark-menu .ant-dropdown-menu-item,
@@ -26,9 +33,9 @@
  * 翻转判定仍只用**打开时**测到的高度（子菜单/链接输入框的增高靠这条兜底）。
  */
 .rf-inline-mark-popup {
-  max-height: calc(100vh - 16px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  /* 限高与滚动已挪到 `.rf-inline-mark-menu .ant-dropdown-menu`（见上）。
+     这里**不能再写 overflow** —— 父级滚动容器会裁掉子菜单的 boxShadow。 */
+  overflow: visible;
 }
 
 /*

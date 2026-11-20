@@ -19,6 +19,7 @@
  * 现在三个出口都按同一组默认值画；只有用户**动过**某一项才写 `format_config`，
  * 因此「没调过」的旧简历 HTML 一个字节都不变。
  */
+import { BorderOutlined } from "@ant-design/icons";
 import { Button, Popover, Space } from "antd";
 import { useRef, useState } from "react";
 import { t } from "../../../i18n";
@@ -43,6 +44,11 @@ interface Props {
   onChange: (next: ResumeFormatConfig) => void;
   /** 拖动中的即时反馈：`.profile-photo { … }`。空串 = 清掉探针。 */
   onProbe?: (css: string) => void;
+  /**
+   * WF-13：并进「照片」格时不渲染标签（标签只出现一次），也不套第二层 Space——
+   * 这一模式下按钮是合并格第二行的唯一内容，外层由 `PhotoScaleControl` 的槽位负责。
+   */
+  inline?: boolean;
 }
 
 export default function PhotoFrameControl({
@@ -51,6 +57,7 @@ export default function PhotoFrameControl({
   hasPhoto,
   onChange,
   onProbe,
+  inline = false,
 }: Props) {
   useLocale();
   const [open, setOpen] = useState(false);
@@ -58,26 +65,28 @@ export default function PhotoFrameControl({
   const customized = photoFrameCustomized(formatConfig);
   const noPhoto = hasPhoto === false;
 
-  return (
-    // I-01：左栏「选中照片 → 去『照片框』」的跳转锚点。`PhotoFrameFields` 在弹层里，
-    // 未展开时不可见，所以锚点必须落在这层壳上（否则 scrollIntoView 滚到一个 0 高节点）。
-    <Space size={6} data-workbench-photo-card="">
-      <span className="resume-measure-label">{t("resume.photo.frame.label")}</span>
-      <Popover
-        open={open}
-        trigger="click"
-        placement="leftTop"
-        onOpenChange={(next) => {
-          // 关闭时先把挂起的那一次写进去，再清探针——否则最后一个 120ms 内的拖动会丢。
-          if (next) {
-            setOpen(true);
-            return;
-          }
-          flushRef.current?.();
-          onProbe?.("");
-          setOpen(false);
-        }}
-        content={
+  // I-01：左栏「选中照片 → 去『照片框』」的跳转锚点。`PhotoFrameFields` 在弹层里，
+  // 未展开时不可见，所以锚点必须落在这层壳上（否则 scrollIntoView 滚到一个 0 高节点）。
+  // WF-13：并进「照片」格后锚点跟着按钮走，仍是同一个可滚动到的壳。
+  const trigger = (
+    <Popover
+      open={open}
+      trigger="click"
+      placement="leftTop"
+      onOpenChange={(next) => {
+        // 关闭时先把挂起的那一次写进去，再清探针——否则最后一个 120ms 内的拖动会丢。
+        if (next) {
+          setOpen(true);
+          return;
+        }
+        flushRef.current?.();
+        onProbe?.("");
+        setOpen(false);
+      }}
+      content={
+        // T02：面板宽度改成"宿主决定"，这里是**唯一**需要 300 的宿主
+        // （popover 的 shrink-to-fit 会按 `1fr` 的最小内容宽度塌成一条）。
+        <div style={{ width: 300 }}>
           <PhotoFrameFields
             formatConfig={formatConfig}
             disabled={disabled}
@@ -86,12 +95,41 @@ export default function PhotoFrameControl({
             flushRef={flushRef}
             onChange={onChange}
           />
+        </div>
+      }
+    >
+      <Button
+        size="small"
+        icon={inline ? <BorderOutlined /> : undefined}
+        disabled={disabled || noPhoto || undefined}
+        aria-expanded={open}
+        // 图标自带 `aria-label`（"border"），会把无障碍名拼成 "border 边框与位置"；
+        // 显式写 aria-label 让读屏与测试都拿到同一句文案（与按钮文字同源）。
+        aria-label={
+          customized
+            ? t("resume.photo.frame.openCustom")
+            : inline
+              ? t("resume.photo.frame.entry")
+              : t("resume.photo.frame.open")
         }
       >
-        <Button size="small" disabled={disabled || noPhoto || undefined} aria-expanded={open}>
-          {customized ? t("resume.photo.frame.openCustom") : t("resume.photo.frame.open")}
-        </Button>
-      </Popover>
+        {customized
+          ? t("resume.photo.frame.openCustom")
+          : inline
+            ? t("resume.photo.frame.entry")
+            : t("resume.photo.frame.open")}
+      </Button>
+    </Popover>
+  );
+
+  if (inline) {
+    return <div data-workbench-photo-card="">{trigger}</div>;
+  }
+
+  return (
+    <Space size={6} data-workbench-photo-card="">
+      <span className="resume-measure-label">{t("resume.photo.frame.label")}</span>
+      {trigger}
     </Space>
   );
 }

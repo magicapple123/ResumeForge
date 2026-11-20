@@ -340,7 +340,10 @@ export default function AddMenu({
 
   return (
     <>
-      <Tooltip title={t("composerAddMenu.tooltip")} placement="top">
+      {/* T12：菜单打开时**撤掉** tooltip。
+        气泡与菜单同锚点，指针停在按钮上不会触发 leave，菜单展开后气泡仍在下面露一截。
+        不删 Tooltip：未打开时它是"这个 + 能干什么"的唯一说明。 */}
+      <Tooltip title={open ? null : t("composerAddMenu.tooltip")} placement="top">
         <span className="composer-add-wrap">
           <Dropdown
             open={open}

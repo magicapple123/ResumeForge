@@ -37,10 +37,28 @@
  * 2. **容器始终存在**：没有标记时 `display: contents`。若按"有标记才包一层"渲染，用户打出
  *    第一个 `*` 的瞬间文本域会被重挂 → 焦点与光标一起丢；
  * 3. **焦点时遮罩层不撤**：只有输入法组合期让位（预编辑串只画在文本域上，透明就看不见拼音）。
+ *
+ * ## T01：什么时候换成静态预览（`InlineMarkStatic`）
+ *
+ * 遮罩层**永远不画字号 / 字重 / 颜色**（会改字宽、与文本域错位，且"打字时字突然变大变色"
+ * 正是这条待办要消除的干扰）。要看真实样式就换形态：开关
+ * `editor_inline_format_preview`（默认关）+ **有格式** + **已失焦到条目编辑器之外**时，
+ * 渲染静态富文本块；点它换回文本域并把光标落到点击处。
+ *
+ * 判断"失焦"必须看下一拍的 `document.activeElement` 是否仍在同一个
+ * `.document-item-editor` 里——点「加粗 / 字号 / 位置下拉 / 标签」都会让文本域先 blur，
+ * 若在这里直接切预览，输入框会在用户眼前消失。
  */
 import { Input } from "antd";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import InlineMarkOverlay from "./InlineMarkOverlay";
+import InlineMarkStatic from "./InlineMarkStatic";
+import {
+  isInlineFormatPreviewEnabled,
+  subscribeInlineFormatPreview,
+} from "./inlineFormatPreviewStore";
 import { hasInlineMarks } from "./inlineMarkRuns";
 import { visibleRangeOfSelection } from "./inlineMarkSelection";
 import { registerInlineMarkField, registerRichField } from "./useInlineMarkRange";
@@ -95,6 +113,8 @@ export default function InlineMarkTextArea({
   autoSize,
   blockEnter = false,
 }: Props) {
+  // 模块级 `t()` 必须订阅语言变化，否则静态块的「回车编辑」提示切语言后不更新。
+  useLocale();
   const [scroll, setScroll] = useState<ScrollOffset>({ top: 0, left: 0 });
   const [composing, setComposing] = useState(false);
   /**
@@ -103,6 +123,20 @@ export default function InlineMarkTextArea({
    * 结构化模式下纯文本与可见文字 1:1，不需要换算。
    */
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
+  /**
+   * T01：`editing` 只决定"用不用静态预览块"，**不改变文本域的受控值**。初始 `true`
+   * = 一进来就是可输入的文本域（旧行为）；只有"开关开 + 有格式 + 已失焦到编辑器外"
+   * 三者同时成立才切成静态块。
+   */
+  const [editing, setEditing] = useState(true);
+  const previewEnabled = useSyncExternalStore(
+    subscribeInlineFormatPreview,
+    isInlineFormatPreviewEnabled,
+    isInlineFormatPreviewEnabled,
+  );
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  /** 静态块点击算出的光标位：`setEditing(true)` 之后在 layout effect 里落地。 */
+  const pendingCaret = useRef<number | null>(null);
   const richMode = rich !== null;
   /** 每次渲染后刷新：结构化写回的 `read()` 必须读到最新受控值（不是登记那一拍的快照）。
    *
@@ -125,6 +159,27 @@ export default function InlineMarkTextArea({
     [richMode, runs, value],
   );
   const decorated = richMode ? richSegmentList !== null : hasInlineMarks(value);
+  /**
+   * 可预览 = 开关开 + 有格式 + 可编辑。**只认结构化 `runs`**：兼容路径（`rich === null`）
+   * 的 `value` 是含标记的源串，交给静态块会把 `{@size=1.2}` 原样画出来。
+   */
+  const previewable = previewEnabled && !disabled && richMode && runs.length > 0;
+  const showStatic = previewable && !editing;
+
+  /**
+   * 点静态块进入编辑：`focus()` + `setSelectionRange` 必须在**挂载之后**跑。
+   * 用 layout effect 而不是 `setTimeout(0)`：前者在同一帧、可被测试断言。
+   */
+  useLayoutEffect(() => {
+    if (!editing) return;
+    const caret = pendingCaret.current;
+    if (caret === null) return;
+    pendingCaret.current = null;
+    const area = hostRef.current?.querySelector("textarea");
+    if (!area) return;
+    area.focus();
+    area.setSelectionRange(caret, caret);
+  }, [editing, showStatic]);
 
   /** 只读 `currentTarget` 的 selectionStart/End：`document.getSelection()` 读不到 textarea。 */
   const syncSelection = (element: HTMLTextAreaElement, text: string) => {
@@ -143,7 +198,8 @@ export default function InlineMarkTextArea({
 
   const fieldClassName = [
     "rf-inline-mark-field",
-    decorated ? "" : "is-plain",
+    // 静态块自己就是块级元素：此时不能 `display: contents`，否则它不占位。
+    decorated || showStatic ? "" : "is-plain",
     composing ? "is-composing" : "",
   ]
     .filter(Boolean)
@@ -178,58 +234,99 @@ export default function InlineMarkTextArea({
   };
 
   return (
-    <div className={fieldClassName}>
-      {decorated ? (
-        <InlineMarkOverlay
+    <div className={fieldClassName} ref={hostRef}>
+      {showStatic ? (
+        <InlineMarkStatic
           value={value}
-          segments={richSegmentList}
-          scrollTop={scroll.top}
-          scrollLeft={scroll.left}
-          selection={selection}
+          runs={runs}
+          ariaLabel={ariaLabel}
+          className={className}
+          enterHint={t("document.inlinePreview.enterHint")}
+          onEnterEdit={(offset) => {
+            pendingCaret.current = Math.max(0, Math.min(offset, value.length));
+            setEditing(true);
+          }}
         />
       ) : null}
-      <Input.TextArea
-        className={textareaClassName}
-        size={size}
-        rows={rows}
-        autoSize={autoSize}
-        aria-label={ariaLabel}
-        placeholder={placeholder}
-        value={value}
-        disabled={disabled || undefined}
-        onFocus={(event) => {
-          registerInlineMarkField(event);
-          registerRich(event.currentTarget);
-          syncSelection(event.currentTarget, value);
-        }}
-        onBlur={() => setSelection(null)}
-        onSelect={(event) => syncSelection(event.currentTarget, value)}
-        onMouseUp={(event) => syncSelection(event.currentTarget, value)}
-        onKeyUp={(event) => syncSelection(event.currentTarget, value)}
-        onScroll={(event) =>
-          setScroll({ top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft })
-        }
-        onCompositionStart={() => setComposing(true)}
-        onCompositionEnd={() => setComposing(false)}
-        onChange={(event) => {
-          // 值先回传再算选区：偏移必须按**新**源串换算，否则删字后高亮会错位。
-          syncSelection(event.target, event.target.value);
-          if (rich) {
-            const current = latest.current;
-            const text = current.value;
-            const baseRuns = current.rich ? normalizeRuns(current.rich.runs, text.length) : [];
-            current.rich?.onChange(replaceRichText({ text, runs: baseRuns }, event.target.value));
-            return;
-          }
-          onChange(event.target.value);
-        }}
-        onKeyDown={(event) => {
-          if (!blockEnter || event.key !== "Enter") return;
-          // 输入法组合状态下的 Enter 是"确认候选词"，拦掉会让中文输入没法上屏。
-          if (event.nativeEvent.isComposing) return;
-          event.preventDefault();
-        }}
-      />
+      {/*
+        **两种渲染永不同框**：静态块存在时文本域与遮罩层都不挂载。
+        只把遮罩层藏掉、文本域还在，就是"静态块 + 输入框"叠在一起（T01 实现期踩过）。
+      */}
+      {showStatic ? null : (
+        <>
+          {decorated ? (
+            <InlineMarkOverlay
+              value={value}
+              segments={richSegmentList}
+              scrollTop={scroll.top}
+              scrollLeft={scroll.left}
+              selection={selection}
+            />
+          ) : null}
+          <Input.TextArea
+            className={textareaClassName}
+            size={size}
+            rows={rows}
+            autoSize={autoSize}
+            aria-label={ariaLabel}
+            placeholder={placeholder}
+            value={value}
+            disabled={disabled || undefined}
+            onFocus={(event) => {
+              registerInlineMarkField(event);
+              registerRich(event.currentTarget);
+              syncSelection(event.currentTarget, value);
+            }}
+            onBlur={() => {
+              setSelection(null);
+              if (!previewable) return;
+              const host = hostRef.current;
+              if (!host) return;
+              // **失焦 ≠ 离开字段**：点「加粗 / 字号 / 位置下拉 / 标签」时焦点会短暂离开文本域。
+              // 下一拍看焦点是否仍在同一个条目编辑器根里——在里面就保持编辑态，
+              // 否则点一下工具条输入框就消失（这正是 T01 要防的回归）。
+              window.setTimeout(() => {
+                const active = document.activeElement;
+                const root = host.closest(".document-item-editor");
+                if (active && root && root.contains(active)) return;
+                if (active && host.contains(active)) return;
+                setEditing(false);
+              }, 0);
+            }}
+            onSelect={(event) => syncSelection(event.currentTarget, value)}
+            onMouseUp={(event) => syncSelection(event.currentTarget, value)}
+            onKeyUp={(event) => syncSelection(event.currentTarget, value)}
+            onScroll={(event) =>
+              setScroll({
+                top: event.currentTarget.scrollTop,
+                left: event.currentTarget.scrollLeft,
+              })
+            }
+            onCompositionStart={() => setComposing(true)}
+            onCompositionEnd={() => setComposing(false)}
+            onChange={(event) => {
+              // 值先回传再算选区：偏移必须按**新**源串换算，否则删字后高亮会错位。
+              syncSelection(event.target, event.target.value);
+              if (rich) {
+                const current = latest.current;
+                const text = current.value;
+                const baseRuns = current.rich ? normalizeRuns(current.rich.runs, text.length) : [];
+                current.rich?.onChange(
+                  replaceRichText({ text, runs: baseRuns }, event.target.value),
+                );
+                return;
+              }
+              onChange(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (!blockEnter || event.key !== "Enter") return;
+              // 输入法组合状态下的 Enter 是"确认候选词"，拦掉会让中文输入没法上屏。
+              if (event.nativeEvent.isComposing) return;
+              event.preventDefault();
+            }}
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -102,9 +102,10 @@
   visibility: hidden;
 }
 
-/* 加粗：描边加厚笔画但不改变字形宽度（`font-weight: 700` 会变宽 → 两层错位）。 */
+/* 加粗：**只服务静态块**（`.rf-inline-mark-static`）。遮罩层不再加这个类——描边模拟是
+   "为了不改字宽"的妥协，静态块不在文本域下面，可以直接用真实字重。 */
 .rf-inline-mark-bold {
-  -webkit-text-stroke: 0.6px currentColor;
+  font-weight: 700;
 }
 
 /* 链接：只加下划线，颜色交给用户设置的 `color`（没设置时跟随正文色，与导出的 a 标签不同色，
@@ -129,4 +130,39 @@
 .rf-inline-mark-field.is-composing .ant-input.rf-value-textarea.rf-inline-mark-layer::selection {
   background: color-mix(in srgb, var(--rf-info) 26%, transparent);
   color: inherit;
+}
+
+/* ===== 静态预览块（T01：开关 `editor_inline_format_preview`） ===== */
+
+/**
+ * 未编辑 + 有格式时的富文本预览。**度量必须与 `.rf-inline-mark-layer` 同源**：
+ * 字体、字号、行高、内边距、圆角、min-height 全部复用同一组值——否则点进点出会跳高，
+ * 而跳高会被用户读成"内容变了"。
+ *
+ * `overflow: auto` + `max-height: 40vh`：超长字段不把整栏顶开；滚动发生在这一层内部。
+ */
+.rf-inline-mark-static {
+  box-sizing: border-box;
+  padding: 4px 7px;
+  min-height: 30px;
+  max-height: 40vh;
+  overflow: auto;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: normal;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  tab-size: 4;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+  color: var(--rf-text-body);
+  cursor: text;
+  user-select: text;
+}
+
+.rf-inline-mark-static:focus-visible {
+  outline: 2px solid var(--rf-info);
+  outline-offset: -1px;
 }

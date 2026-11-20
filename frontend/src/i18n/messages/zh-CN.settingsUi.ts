@@ -176,6 +176,30 @@ const settingsUi = {
   "settingsUi.reminderPopup.soundAria": "任务完成时播放提示音",
   "settingsUi.reminderPopup.soundHint": "默认开启。浏览器若拦截自动播放，会静默跳过。",
 
+  // ── 桌面版托盘图标（WF-20，仅桌面壳显示） ──────────────────────
+  "settingsUi.desktopTray.title": "桌面托盘图标",
+  "settingsUi.desktopTray.intro":
+    "托盘图标默认跟随应用内主题。如果任务栏是浅色、应用内又是暗色，图标会不够清楚——打开这个开关让它只跟系统深浅色。",
+  "settingsUi.desktopTray.toggleAria": "托盘图标跟随系统主题",
+  "settingsUi.desktopTray.enableToast": "已开启：托盘图标跟随系统主题",
+  "settingsUi.desktopTray.disableToast": "已关闭：托盘图标跟随应用内主题",
+  "settingsUi.desktopTray.loadFailed": "加载托盘图标设置失败",
+  "settingsUi.desktopTray.saveFailed": "保存托盘图标设置失败",
+  "settingsUi.desktopTray.defaultHint": "默认关闭（跟随应用内主题）。仅桌面版可见。",
+
+  // ── 开机自启（WF-08，仅桌面壳显示） ──────────────────────────
+  "settingsUi.launchAtLogin.title": "开机时自动启动",
+  "settingsUi.launchAtLogin.intro":
+    "登录 Windows 后自动启动 ResumeForge。这里读的就是安装器写的那条启动项，两边不会各存一份。",
+  "settingsUi.launchAtLogin.toggleAria": "登录 Windows 时自动启动 ResumeForge",
+  "settingsUi.launchAtLogin.enableToast": "已开启：登录 Windows 后会自动启动",
+  "settingsUi.launchAtLogin.disableToast": "已关闭：登录 Windows 后不再自动启动",
+  "settingsUi.launchAtLogin.loadFailed": "读取开机自启状态失败",
+  "settingsUi.launchAtLogin.saveFailed": "修改开机自启失败",
+  "settingsUi.launchAtLogin.unsupported":
+    "当前安装包无法代为管理开机自启，请到「任务管理器 → 启动」里调整。",
+  "settingsUi.launchAtLogin.hint": "值取自 Windows 本身，与安装器写入的是同一条。",
+
   // ── 助手技能卡（只读摘要） ────────────────────────────────────
   "settingsUi.skills.title": "助手技能",
   /** 说明段的第一段：技能 = 提示词；第二段在 introPrompt 与 introMiddle 之间。 */

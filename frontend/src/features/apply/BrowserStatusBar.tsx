@@ -295,7 +295,16 @@ export default function BrowserStatusBar() {
                   disabled={!canOpenSite || busy || undefined}
                   onClick={() => void handleOpenSite()}
                 >
-                  {t("browserStatus.action.openSite")}
+                  {/* 标签槽用「较长的那个标签」定宽（见 apply-browser-status.css 的
+                      `.apply-browser-cta`）：两态文案差一个字（6 vs 5 个汉字 = 14px），
+                      不这样两态动作簇就永远差 14px。占位标签 `visibility:hidden`，
+                      不进无障碍树、也不写死像素——换语言自动跟着变。 */}
+                  <span className="apply-browser-cta">
+                    <span>{t("browserStatus.action.openSite")}</span>
+                    <span className="apply-browser-cta-sizer" aria-hidden>
+                      {t("browserStatus.action.start")}
+                    </span>
+                  </span>
                 </Button>
               </Tooltip>
             ) : (
@@ -306,10 +315,15 @@ export default function BrowserStatusBar() {
                 disabled={actionsLocked || running || busy || undefined}
                 onClick={() => void handleStart()}
               >
-                {t("browserStatus.action.start")}
+                <span className="apply-browser-cta">
+                  <span>{t("browserStatus.action.start")}</span>
+                  <span className="apply-browser-cta-sizer" aria-hidden>
+                    {t("browserStatus.action.openSite")}
+                  </span>
+                </span>
               </Button>
             ))}
-          {running && !error && (
+          {running && !error ? (
             <Tooltip
               title={t(compact ? "browserStatus.hint.expand" : "browserStatus.hint.collapse")}
             >
@@ -323,6 +337,15 @@ export default function BrowserStatusBar() {
                 onClick={toggleDetails}
               />
             </Tooltip>
+          ) : (
+            /* 静止态用**同一个** antd 小按钮占住这个槽位（不是写死的 px，换主题/尺寸自动跟随），
+               只是不可见、不可聚焦、不进无障碍树：两种形态的动作簇因此严格等宽，而「⋯」
+               在启停前后也钉在原地。没有把它挪到左侧状态文案行，是因为实测那样会让
+               `.apply-browser-main` 多出一行（标题 22.4 + 按钮 30），整条卡片在运行态
+               长高 8px——那等于用横向跳动换成纵向跳动。 */
+            <span className="apply-browser-toggle-slot" aria-hidden>
+              <Button size="small" type="text" icon={<DownOutlined />} tabIndex={-1} />
+            </span>
           )}
           {/* 「⋯」里的动作同样依赖状态：没读到状态时连菜单都不开，
               免得用户在「未知」上做选择（轮询会自动重试，恢复是自动的）。 */}

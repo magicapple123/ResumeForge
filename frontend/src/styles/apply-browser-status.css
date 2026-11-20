@@ -36,3 +36,35 @@
   min-width: 0;
   height: 18px;
 }
+
+/*
+ * 动作簇「两态严格等宽」（2026-11-20）。
+ *
+ * 静止态是 [启动浏览器][⋯]，运行态是 [打开招聘网站][⌃][⋯]。两处不等宽：
+ * 1. 折叠/展开那颗只在运行态渲染（30px 小按钮 + 8px 间隙 = 38px）；
+ * 2. 主按钮文案本身差一个字（5 vs 6 个汉字 = 14px）。
+ * 这里分别用「同尺寸的不可见槽位」和「按较长标签定宽的标签槽」把两处补平：
+ * 都不写死像素，尺寸由同一个 antd 组件 / 同一套字体算出来，换主题、换语言自动跟随。
+ * 补平的是**布局宽度**，不是视觉：静止态里那颗占位按钮 `visibility:hidden`，
+ * 既不可聚焦也不进无障碍树（wrapper 上还有 aria-hidden）。
+ */
+.apply-page .apply-browser-toggle-slot {
+  display: inline-flex;
+  visibility: hidden;
+}
+
+/* 两个标签叠在同一个网格单元里，列宽取两者中较宽的那个（= 较长文案），
+   再把占位的那一份隐藏：文字居中，视觉上永远只是一颗正常的主按钮。 */
+.apply-page .apply-browser-cta {
+  display: inline-grid;
+  align-items: center;
+  justify-items: center;
+}
+
+.apply-page .apply-browser-cta > * {
+  grid-area: 1 / 1;
+}
+
+.apply-page .apply-browser-cta > .apply-browser-cta-sizer {
+  visibility: hidden;
+}

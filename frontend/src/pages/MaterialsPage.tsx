@@ -22,7 +22,7 @@ import {
   Typography,
 } from "antd";
 import LoadingBlock from "../components/common/LoadingBlock";
-import EmptyState from "../components/common/EmptyState";
+import EmptyState, { EmptyWatermark } from "../components/common/EmptyState";
 import { useMemo, useState } from "react";
 import {
   batchDeleteMaterials,
@@ -298,12 +298,13 @@ export default function MaterialsPage() {
             // （不再用「点右上角」这种方位词指路——位置会随响应式变），筛选后为空只提示调整条件。
             total === 0 && !keyword && !category ? (
               <EmptyState
+                image={<EmptyWatermark />}
                 description={t("materials.empty.none")}
                 actionLabel={t("materials.action.create")}
                 onAction={openCreate}
               />
             ) : (
-              <EmptyState description={t("materials.empty.filtered")} />
+              <EmptyState image={<EmptyWatermark />} description={t("materials.empty.filtered")} />
             )
           ) : (
             <>

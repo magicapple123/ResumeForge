@@ -144,6 +144,31 @@ const settingsUi = {
   "settingsUi.reminderPopup.soundHint":
     "On by default. If the browser blocks autoplay, the sound is skipped silently.",
 
+  // Desktop tray icon (WF-20, desktop shell only).
+  "settingsUi.desktopTray.title": "Desktop tray icon",
+  "settingsUi.desktopTray.intro":
+    "The tray icon follows the app theme by default. Turn this on to follow the system theme instead, e.g. a light taskbar with a dark app.",
+  "settingsUi.desktopTray.toggleAria": "Follow the system theme for the tray icon",
+  "settingsUi.desktopTray.enableToast": "On: the tray icon follows the system theme",
+  "settingsUi.desktopTray.disableToast": "Off: the tray icon follows the app theme",
+  "settingsUi.desktopTray.loadFailed": "Could not load the tray icon setting",
+  "settingsUi.desktopTray.saveFailed": "Could not save the tray icon setting",
+  "settingsUi.desktopTray.defaultHint": "Off by default (follows the app theme). Desktop only.",
+
+  // Start at login (WF-08, desktop shell only). Value comes from Windows itself.
+  "settingsUi.launchAtLogin.title": "Start when you sign in",
+  "settingsUi.launchAtLogin.intro":
+    "ResumeForge can start when you sign in to Windows. This is the same startup entry the installer writes.",
+  "settingsUi.launchAtLogin.toggleAria": "Start ResumeForge when you sign in to Windows",
+  "settingsUi.launchAtLogin.enableToast": "On: ResumeForge starts when you sign in",
+  "settingsUi.launchAtLogin.disableToast": "Off: ResumeForge no longer starts when you sign in",
+  "settingsUi.launchAtLogin.loadFailed": "Could not read the startup setting",
+  "settingsUi.launchAtLogin.saveFailed": "Could not change the startup setting",
+  "settingsUi.launchAtLogin.unsupported":
+    "This build cannot manage startup for you. Use Task Manager > Startup instead.",
+  "settingsUi.launchAtLogin.hint":
+    "Read from Windows itself, so it matches what the installer set.",
+
   // ── Assistant skills summary card (read only) ───────────────
   "settingsUi.skills.title": "Assistant skills",
   "settingsUi.skills.introLead": "A skill is a ",

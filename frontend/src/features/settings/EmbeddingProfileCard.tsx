@@ -12,6 +12,7 @@
  */
 import { ApiOutlined, MoreOutlined, SwapOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Dropdown, Flex, Tag, Tooltip, Typography } from "antd";
+import { useState } from "react";
 import type { EmbeddingProbeResult, EmbeddingProfile } from "../../api/settings";
 import { embeddingGuidanceKey, profilePresetLabelKey } from "./embeddingHelpers";
 import type { EmbeddingActionId } from "./useEmbeddingSettings";
@@ -50,6 +51,12 @@ export default function EmbeddingProfileCard({
   onDelete,
 }: Props) {
   useLocale();
+  /**
+   * T12：这个 Dropdown 原来是非受控的，外面拿不到"开没开"，于是 Tooltip 在菜单展开后
+   * 仍然挂着（指针停在 ⋮ 上不会 leave）——气泡与菜单同锚点，只露出来一截。
+   * 受控之后按 `open` 撤掉 title；不删 Tooltip：未打开时它是这一列图标的唯一说明。
+   */
+  const [moreOpen, setMoreOpen] = useState(false);
   const cardBusy = busy !== null;
   return (
     <Card
@@ -111,9 +118,17 @@ export default function EmbeddingProfileCard({
           >
             {t("embeddingSearch.remote.profile.test")}
           </Button>
-          <Tooltip title={t("embeddingSearch.remote.profile.moreActions", { name: profile.name })}>
+          <Tooltip
+            title={
+              moreOpen
+                ? null
+                : t("embeddingSearch.remote.profile.moreActions", { name: profile.name })
+            }
+          >
             <Dropdown
               trigger={["click"]}
+              open={moreOpen}
+              onOpenChange={setMoreOpen}
               disabled={cardBusy}
               menu={{
                 items: [

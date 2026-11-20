@@ -107,6 +107,14 @@ const workbench = {
   /** 颜色行的值列：无覆盖时这一格写的不是色值而是状态。**最多 3 个字**——
       参数栏里这一格是 44px（14px 字号 × 3 = 42），4 个汉字会溢出（问题 21）。 */
   "workbench.color.followTemplate": "随模板",
+  /** 外观第 5 格「条目标题」未单独设色时的状态：条目标题继承正文色。
+      与「随模板」同长（3 字），参数栏那一格不会溢出。 */
+  "workbench.color.followBody": "随正文",
+  /** 第 5 格的 ⓘ：说明它写的是角色级覆盖，以及单条覆盖为什么优先。 */
+  "workbench.color.entryTitleHint":
+    "默认跟随正文颜色；与「角色样式 → 条目标题」同一个值。单条设过色的以单条为准。",
+  /** 上面那句 ⓘ 的无障碍名。 */
+  "workbench.color.entryTitleHintAria": "条目标题颜色说明",
   "workbench.param.paletteAria": "展开{label}的色板",
 
   // ── 编辑器（中栏与弹窗共用）────────────────────────────────

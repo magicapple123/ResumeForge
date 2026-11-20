@@ -97,10 +97,17 @@
   margin-inline: 11px !important;
 }
 
+/* 读数格子**必须定宽**（WF-15）：拖动中读数在「1.0 mm → 7.60 mm」之间变长，
+   不定宽就会从滑杆那一列借宽度——行宽一变，滑杆长度跟着抖，读数也会左右跳。
+   66px = 12px 字号下 `16.00 mm` 的宽度，tabular-nums 让数字等宽不抖。 */
 .rf-entry-column-gap-value {
   grid-area: value;
+  box-sizing: border-box;
+  width: 66px;
+  min-width: 66px;
   color: var(--rf-text-tertiary);
   font-size: var(--rf-font-size-xs, 12px);
+  font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
 }

@@ -77,11 +77,6 @@ const EXEMPTIONS: Record<string, Exemption> = {
     reason: "照片缩略图容器的定位类，尺寸由父级槽位与图片组件自身控制",
     expires: REVIEW_DATE,
   },
-  "document-photo-frame-popover": {
-    reason:
-      "照片框浮层的识别类：外壳样式全部来自 .document-chip-style-popover（同一定位/边框/阴影），这一层不追加视觉，只供选择器区分两个浮层",
-    expires: REVIEW_DATE,
-  },
   "document-zone-hidden": {
     reason: "与 .document-zone 同时出现（该类有样式），本类只标识隐藏投放区供拖拽逻辑选中",
     expires: REVIEW_DATE,

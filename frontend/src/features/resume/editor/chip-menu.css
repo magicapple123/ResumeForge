@@ -43,6 +43,12 @@
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
 }
 
+/* 照片框右键卡（T02）：宽度沿用上面的 300（唯一的宽度真源）；高度**不套** 360 的通用上限
+   ——六行参数 + 越界说明在 300 宽下约 400 高，360 会把最后一条说明裁掉、逼出竖向滚动条。 */
+.document-photo-frame-popover {
+  max-height: calc(100vh - 24px);
+}
+
 .document-chip-style-popover-head {
   display: flex;
   align-items: center;

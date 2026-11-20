@@ -35,7 +35,13 @@
 
 .webform-workbar {
   position: sticky;
-  top: 0;
+  /* `top` 为什么是负值：sticky 的偏移基准是滚动容器（`.app-content`）的**内容盒**，
+     而它还有一层 `padding: var(--rf-content-pad)`（本档 24px）。`top: 0` 只把工具条
+     贴到内容盒顶边，上面那条内边距没人盖——滚动内容就从这 24px 缝里穿过去，
+     卡片标题会露半截（实测 1440×620 滚 300px：条顶 88、内容区顶 64，缝恒 24）。
+     向上吃掉这一段，条才真正贴住滚动区顶边（leak=0）。必须用 token：≤1092 档是 16px、
+     A 档 32px，写死只在一档正确。与 `modules-analytics.css` 的看板分段导航同一处理。 */
+  top: calc(-1 * var(--rf-content-pad));
   z-index: 20;
   display: flex;
   flex-direction: column;
@@ -53,9 +59,13 @@
   gap: 8px 16px;
 }
 
+/* 状态行：允许换行，因为橙色示例数据提示要独占一行（见下）。
+   两段提示都是 `flex-shrink: 0`：它们拼的是两句完整的话，被挤窄就会折成
+   1–2 个字的孤行（实测 1024 档两段各 44.8px = 两行）。 */
 .webform-workbar-status {
   display: flex;
   flex: 1 1 260px;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -75,8 +85,17 @@
 }
 
 .webform-workbar-hint {
+  flex: 0 0 auto;
   min-width: 0;
-  overflow-wrap: anywhere;
+  /* 不换行：这两句都是完整的一句话，折行的结果是 1–2 个字的孤行（实测 45px 高）。
+     真的放不下时由下方 `@container` 一档放开，不走"任何宽度都折"。 */
+  white-space: nowrap;
+}
+
+/* 橙色示例数据提示自成一行：它与灰色说明重要度不同（一个是背景机制，
+   一个是"现在填了也不作数"），挤在同一行只会互相压缩。 */
+.webform-workbar-sample-hint {
+  flex-basis: 100%;
 }
 
 .webform-workbar-actions {
@@ -164,21 +183,23 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 18px 20px 14px;
   border: 1px solid var(--rf-border-subtle);
   border-radius: var(--rf-radius-control);
   background: var(--rf-surface);
 }
 
-/* 一行 = 标签 + 控件（同一行，控件贴右）+ 说明（独占下一行）。
-   用 flex 而不是定宽栅格：左栏只有 400px，标签「放宽模式（代点下拉与确认勾选）」
-   这类长标题在定宽列里会被压成三行。 */
+/* 一行 = 标签（左）+ 控件（右，定宽 240）+ 说明（下一行，跨两列）。
+   2026-11-19（用户）：原来用 flex，控件按内容宽度排、ⓘ 跟着控件右缘跑，四行的右缘
+   参差不齐。改成两列网格后，控件列定宽 → 所有控件右缘与所有 ⓘ 各成一条竖线；
+   说明从"独占一整行"改成"跨两列的第二行"，行高仍然是两行，不额外增重。
+   240 = 最宽的「仅当前方案 / 全部资料」分段控件（约 200）+ ⓘ 与间距。 */
 .webform-mode-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
   align-items: center;
-  gap: 4px 10px;
-  padding: 10px 0;
+  gap: 4px 16px;
+  padding: 12px 0;
   border-top: 1px solid var(--rf-border-subtle);
 }
 
@@ -187,25 +208,41 @@
 }
 
 .webform-mode-label {
-  flex: 1 1 150px;
   min-width: 0;
   color: var(--rf-text-body);
   font-size: 13px;
   line-height: 20px;
 }
 
+/* 控件列定宽 240（见 `.webform-mode-row`），内容仍靠右：分段控件、开关、按钮、ⓘ
+   右缘因此全部落在同一条竖线上。`min-width: 0` 防长文案把格子顶宽。
+
+   WF-06：右侧固定预留 20px 的「ⓘ 槽位」（12 + gap 8）。四行里只有三行有 `ⓘ`，
+   放宽模式（以及未配置大模型时的 AI 行）没有——没有槽位时那颗控件会独自顶到列右缘，
+   比其它三行右移 20px。留白交给内边距后，有没有 `ⓘ` 的行都从同一条线起步。
+   不用「两列 grid」：智能逐项填表在运行态是 按钮 + 状态 Tag + Tag + 小按钮 + ⓘ
+   五个子项，grid 的自动投放会把它们按列摆成两三行；flex 对任意个数都成立。 */
 .webform-mode-control {
+  --wf-mode-control-gutter: 20px;
+
   display: flex;
-  flex: 0 1 auto;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
   min-width: 0;
+  padding-inline-end: var(--wf-mode-control-gutter);
+}
+
+/* `ⓘ` 用负外边距退回预留槽：右缘回到控件列右缘（与行右缘同一条线），
+   它前面的控件因此统一停在 `列右缘 − 20`。负值必须与变量同源，
+   只改槽宽时两处一起跟着走。 */
+.webform-mode-control > .webform-mode-info {
+  margin-inline-end: calc(-1 * var(--wf-mode-control-gutter));
 }
 
 .webform-mode-hint {
-  flex: 1 1 100%;
+  grid-column: 1 / -1;
   min-width: 0;
   color: var(--rf-text-secondary);
   font-size: 12px;
@@ -339,5 +376,23 @@
 @container (max-width: 1079px) {
   .webform-columns > .webform-column {
     max-width: 720px;
+  }
+}
+
+/* 窄容器：240 的控件列放不下时改成上下两行（标签一行、控件一行）。
+   此时右侧没有对齐对象，控件贴左更省空间；说明仍是跨列的第二行。 */
+@container (max-width: 560px) {
+  .webform-mode-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .webform-mode-control {
+    justify-content: flex-start;
+  }
+
+  /* 窄容器里两段提示按可用宽度换行：`white-space: nowrap` 会顶穿卡片。
+     这一档是兜底，不是主路径——1440 / 1024 两档必须保持单行。 */
+  .webform-workbar-hint {
+    white-space: normal;
   }
 }

@@ -48,6 +48,20 @@ export interface DesktopShellBridge {
   onWindowState?: (callback: (state: DesktopWindowState) => void) => void;
   setTheme?: (theme: "light" | "dark") => void;
   /**
+   * 托盘图标是否跟随系统主题（WF-20 的兜底开关，设置项 `tray_icon_follow_system`）。
+   * 只发布尔；旧壳没有这个入口时安静降级（设置卡也会因为探测不到而隐藏）。
+   */
+  setTrayIconFollowSystem?: (enabled: boolean) => void;
+  /**
+   * 开机自启（WF-08）：读写的是 Windows 注册表里安装器写的那条，**不是库里的一份布尔**。
+   * `supported=false` 表示当前平台/安装方式管不到 —— 设置卡会渲染成 disabled 并说明原因，
+   * 而不是假装能切。旧壳没有这两个入口时设置卡整张不渲染。
+   */
+  getLaunchAtLogin?: () => Promise<{ supported: boolean; enabled: boolean } | undefined>;
+  setLaunchAtLogin?: (
+    enabled: boolean,
+  ) => Promise<{ supported: boolean; enabled: boolean } | undefined>;
+  /**
    * 把**应用内语言**报给壳层（托盘 / 原生对话框 / 关闭卡片跟随它，而不是系统语言）。
    * 主进程只接受 "zh" / "en"，其它值忽略；旧壳没有这个入口时安静降级。
    */

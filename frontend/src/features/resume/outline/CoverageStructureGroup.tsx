@@ -22,8 +22,9 @@
  *    上下文；这一类分区（技能 / 语言 / 自我介绍）在文档里已经有可写字段，直接去中栏改
  *    比再开一个弹窗更顺手。
  */
+import { RightOutlined } from "@ant-design/icons";
 import { App, Tag, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { appendProfileEntries, getResume } from "../../../api/resumes";
 import { useI18n } from "../../../i18n/i18nContext";
 import type { ResumeCoverageNote } from "../../../types";
@@ -34,6 +35,7 @@ import {
   resolveCoverageAction,
   type CoverageGroup,
 } from "../document/coverageGroups";
+import "./coverage-structure-group.css";
 
 export interface CoverageStructureGroupProps {
   /** 记录 id；缺省（只读宿主 / 生成中的临时预览）时整组不渲染。 */
@@ -56,6 +58,12 @@ export default function CoverageStructureGroup({
   const [recordRevision, setRecordRevision] = useState<number | null>(null);
   /** 正在补入的那一组（只锁这一组的按钮，别的组仍可操作）。 */
   const [appendingKey, setAppendingKey] = useState<string | null>(null);
+  /**
+   * WF-14：默认收起，且**不持久化**——用户要的是"每次进来都先看到标题与条数"，
+   * 记住上次展开状态会让"默认折叠"在第二次访问时失效。
+   */
+  const [expanded, setExpanded] = useState(false);
+  const bodyId = useId();
 
   const notify = useCallback(
     (text: string) => {
@@ -131,27 +139,43 @@ export default function CoverageStructureGroup({
   if (total === 0) return null;
   return (
     <section className="resume-wb-coverage" aria-label={t("resume.diagnostics.entry.coverage")}>
-      <div className="resume-wb-coverage-head">
+      {/* 折叠时标题 + 计数都要留着：条数是"值不值得点开"的唯一判据（WF-14）。
+          原生 button = Tab 可聚焦、Enter / Space 可切换，不需要自己写 keydown。 */}
+      <button
+        type="button"
+        className="resume-wb-coverage-head"
+        aria-expanded={expanded}
+        aria-controls={bodyId}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <RightOutlined
+          className={`resume-wb-coverage-caret${expanded ? " is-open" : ""}`}
+          aria-hidden="true"
+        />
         <Typography.Text strong>{t("resume.coverage.title")}</Typography.Text>
         <Tag style={{ marginInlineEnd: 0 }}>{t("resume.coverage.summary", { count: total })}</Tag>
-      </div>
-      <Typography.Text type="secondary" className="resume-wb-coverage-hint">
-        {t("workbench.coverage.savedHint")}
-      </Typography.Text>
-      {groups.map((group) => (
-        <CoverageGroupCard
-          key={group.key}
-          group={group}
-          action={resolveCoverageAction(group, true)}
-          appendPending={appendingKey === group.key}
-          onAppend={(target) => {
-            void handleAppend(target);
-          }}
-          // 「AI 补上这段」在制作台里没有修订弹窗可用：如实指到中栏，不假装能做。
-          onRevise={() => notify(t("workbench.coverage.reviseHint"))}
-          onOpenEditor={() => notify(t("workbench.coverage.reviseHint"))}
-        />
-      ))}
+      </button>
+      {expanded ? (
+        <div id={bodyId} className="resume-wb-coverage-body">
+          <Typography.Text type="secondary" className="resume-wb-coverage-hint">
+            {t("workbench.coverage.savedHint")}
+          </Typography.Text>
+          {groups.map((group) => (
+            <CoverageGroupCard
+              key={group.key}
+              group={group}
+              action={resolveCoverageAction(group, true)}
+              appendPending={appendingKey === group.key}
+              onAppend={(target) => {
+                void handleAppend(target);
+              }}
+              // 「AI 补上这段」在制作台里没有修订弹窗可用：如实指到中栏，不假装能做。
+              onRevise={() => notify(t("workbench.coverage.reviseHint"))}
+              onOpenEditor={() => notify(t("workbench.coverage.reviseHint"))}
+            />
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

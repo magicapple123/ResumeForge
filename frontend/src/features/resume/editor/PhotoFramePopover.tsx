@@ -39,7 +39,8 @@ interface Props {
   onChange: (next: ResumeFormatConfig) => void;
 }
 
-const ESTIMATED_SIZE = { width: 280, height: 260 };
+// 兜底：卡宽 300（外壳真源）+ 六行参数约 400 高。只在量不到真实尺寸时用。
+const ESTIMATED_SIZE = { width: 300, height: 400 };
 
 export default function PhotoFramePopover({
   state,

@@ -126,7 +126,11 @@
 
 .user-guide-steps {
   grid-area: steps;
-  padding-top: 4px;
+  /* WF-12：这 24px = 原 4px + 从 `.user-guide-modal-content` 搬来的 20px。
+     20px 留在父容器时，sticky 的左栏一滚动就会跳过这 20px（贴的是滚动容器的
+     padding box 顶边），表现为"左栏往上跳 20px"。放到左栏自己身上，滚前滚后
+     它的 top 就都是 0（相对滚动容器）。 */
+  padding-top: 24px;
   /* 左栏跟随滚动（2026-10-24 用户口径："上下滑时最左侧栏固定不动"）。
      滚动容器是弹窗本体（`.ant-modal-body` 的 `overflowY: auto`），所以 sticky 的参照系
      就是它；`align-self: start` 来自父级 `align-items: start`，不必重复写。
@@ -144,7 +148,14 @@
   padding-top: 0;
 }
 
+/* WF-12：内边距不再放在内容容器上（那会让 sticky 左栏滚动时跳过 20px），
+   20px 由两栏各自承担：`.user-guide-steps` 24px / `.user-guide-step-content` 20px。
+   首启动的快速开始视图没有左栏，自己补回这 20px（见 `.user-guide-quickstart`）。 */
 .user-guide-modal-content {
+  padding-top: 0;
+}
+
+.user-guide-quickstart {
   padding-top: 20px;
 }
 
@@ -173,7 +184,8 @@
   grid-area: content;
   gap: 20px;
   min-width: 0;
-  padding: 0 0 12px;
+  /* WF-12：20px 从内容容器搬到这里——右栏正文与左栏步骤仍在同一条基线上。 */
+  padding: 20px 0 12px;
 }
 
 .user-guide-step-icon {

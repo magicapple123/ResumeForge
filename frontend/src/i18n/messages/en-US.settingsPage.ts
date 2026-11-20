@@ -99,6 +99,7 @@ const settingsPage = {
   "settings.reset.key.agent_task_events_enabled": "Task cards from due reminders",
   "settings.reset.key.webform_relaxed_mode": "Web form relaxed mode",
   "settings.reset.key.reminder_popup_on_start": "Reminder popup on start",
+  "settings.reset.key.editor_inline_format_preview": "Preview inline formatting",
   "settings.reset.key.assistant_orb_enabled": "Floating assistant orb",
   "settings.reset.key.navigation_visibility": "Sidebar entries",
   "settings.reset.key.apply_blocklist": "Application blocklist",

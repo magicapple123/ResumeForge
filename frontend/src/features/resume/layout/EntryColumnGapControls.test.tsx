@@ -11,7 +11,7 @@
  *
  * 布局本身（行高、手柄是否被裁、窄档两行）jsdom 不求值，落在 Playwright 实机验收。
  */
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
@@ -71,5 +71,63 @@ describe("EntryColumnGapControls · 标签与恢复继承（I-05 / I-07）", () 
   it("不可继承（inheritable=false）时即使有值也不渲染 ↺", () => {
     renderGap({ gap: 0.5, inheritable: false });
     expect(screen.queryByRole("button", { name: t("structure.layout.restore.gap") })).toBeNull();
+  });
+});
+
+/**
+ * WF-15：拖动提交频率。
+ *
+ * 每次 `onPatch` 都会提交**一整份文档**（入历史栈 + 触发重排），所以"拖一次提交一次"
+ * 是硬要求；拖满全程几十次提交正是卡顿与"撤销一次只退一格"的来源。
+ * rc-slider 的键盘方向键与拖拽走同一条 `onChange`，`keyUp` 对应 `onChangeComplete`。
+ */
+describe("EntryColumnGapControls · 拖动提交频率（WF-15）", () => {
+  const pressArrow = (target: Element, direction: "ArrowLeft" | "ArrowRight") => {
+    const keyCode = direction === "ArrowRight" ? 39 : 37;
+    fireEvent.keyDown(target, { key: direction, keyCode, which: keyCode });
+  };
+
+  /** 松手：rc-slider 在 keyUp 上触发 `onChangeComplete`。 */
+  const release = (target: Element) => {
+    fireEvent.keyUp(target, { key: "ArrowRight", keyCode: 39, which: 39 });
+  };
+
+  it("连续 40 步拖动，拖动中 0 次提交，松手只提交 1 次", () => {
+    const { onPatch } = renderGap({ gap: null });
+    const slider = screen.getByRole("slider", { name: t("structure.layout.gapMmAria") });
+
+    for (let step = 0; step < 40; step += 1) pressArrow(slider, "ArrowRight");
+    expect(onPatch).not.toHaveBeenCalled();
+
+    release(slider);
+    expect(onPatch).toHaveBeenCalledTimes(1);
+    expect(onPatch.mock.calls[0][0]).toMatchObject({ gap: expect.any(Number) });
+  });
+
+  it("拖动中读数立刻跟手（本地草稿，不等提交）", () => {
+    const { container, onPatch } = renderGap({ gap: null });
+    const slider = screen.getByRole("slider", { name: t("structure.layout.gapMmAria") });
+    expect(container.querySelector(".rf-entry-column-gap-value")?.textContent).toBe(
+      t("structure.layout.inherit"),
+    );
+
+    pressArrow(slider, "ArrowRight");
+    // 提交还没发生，但读数已经是拖动后的值。
+    expect(onPatch).not.toHaveBeenCalled();
+    expect(container.querySelector(".rf-entry-column-gap-value")?.textContent).toBe(
+      t("structure.layout.gapMillimeters", { value: "0.10" }),
+    );
+  });
+
+  it("不松手时由 120ms 防抖兜底：一串连续改动仍只提交一次", async () => {
+    const { onPatch } = renderGap({ gap: null });
+    const slider = screen.getByRole("slider", { name: t("structure.layout.gapMmAria") });
+
+    for (let step = 0; step < 12; step += 1) pressArrow(slider, "ArrowRight");
+    expect(onPatch).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(onPatch).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    expect(onPatch).toHaveBeenCalledTimes(1);
   });
 });

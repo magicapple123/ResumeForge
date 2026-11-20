@@ -13,7 +13,7 @@
  */
 import { CheckSquareOutlined, DeleteOutlined, UndoOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Popconfirm, Segmented, Space, Table, Tag, Typography } from "antd";
-import EmptyState from "../components/common/EmptyState";
+import EmptyState, { EmptyWatermark } from "../components/common/EmptyState";
 import PageSkeleton from "../components/common/PageSkeleton";
 import ErrorState from "../components/common/ErrorState";
 import type { TableColumnsType } from "antd";
@@ -367,7 +367,7 @@ export default function TrashPage() {
       ) : loading && !data ? (
         <PageSkeleton rows={5} />
       ) : items.length === 0 ? (
-        <EmptyState description={t("trash.emptyState.description")} />
+        <EmptyState image={<EmptyWatermark />} description={t("trash.emptyState.description")} />
       ) : (
         <Table
           rowKey={(row) => `${row.type}-${row.id}`}

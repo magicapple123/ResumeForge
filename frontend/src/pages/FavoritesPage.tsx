@@ -15,7 +15,7 @@ import {
 } from "../api/jobs";
 import { listResumes, updateResumeFavorite } from "../api/resumes";
 import { RowActions, RowContextMenu, type RowActionItem } from "../components/common/RowActions";
-import EmptyState from "../components/common/EmptyState";
+import EmptyState, { EmptyWatermark } from "../components/common/EmptyState";
 import ErrorState from "../components/common/ErrorState";
 import FavoriteJobsTable from "../features/favorites/FavoriteJobsTable";
 import FavoritesBatchBar from "../features/favorites/FavoritesBatchBar";
@@ -412,7 +412,9 @@ export default function FavoritesPage() {
               setPageSize(nextPageSize);
             },
           }}
-          emptyText={<EmptyState description={t("favorites.empty.jobs")} />}
+          emptyText={
+            <EmptyState image={<EmptyWatermark />} description={t("favorites.empty.jobs")} />
+          }
           onOpenJob={(job) => navigate("/jobs?job_id=" + job.id)}
           onUnfavorite={(job) => void removeJobFavorite(job)}
           onEnqueue={(job) => void enqueueJobs([job])}

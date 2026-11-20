@@ -84,16 +84,36 @@
    `padding-inline: 6px` + 等量负 `margin-inline` 让 hover 底色外扩，内容左缘与同面板
    其它行保持逐像素对齐（不加负 margin 会整体右移 6px，与「列数」行左缘错开）。
    不改 `.rf-entry-layout-row` 基础规则：同面板 7 行都靠它。 */
+/* T10：底色改成**绘制属性**（::before 绝对定位），不占布局。
+   原来用 `padding-inline: 6px` + `margin-inline: -6px` 外扩 hover 底色，那 6px 会被计入
+   滚动容器的 `scrollWidth`：结构页签于是多出一条"内容没溢出、却能拖动"的横向滚动条
+   （实测 thumb 占 98.8%，与 6–7px 溢出吻合）。
+   `::before` 同样计入 scrollable overflow，所以宿主那一侧还要配 `overflow-x: clip`
+   ——两条缺一不可。 */
+/* WF-16：`::before` 是**定位元素**，普通流里的标签文字是**非定位元素**——不在同一个
+   堆叠上下文里时，定位元素永远画在上面，hover 底色于是把「从新页开始」这几个字整块盖住
+   （实测 hover 后标签像素里的墨点从 221 掉到 0）。两行一起解决：
+   - 行自己建堆叠上下文（`isolation: isolate`），`z-index` 只在本行内部比较；
+   - 让底色落到 `-1`：本行背景之上、文字与开关之下。 */
 .rf-entry-layout-row.is-switch {
+  position: relative;
+  isolation: isolate;
   justify-content: space-between;
   min-height: 30px;
-  padding-inline: 6px;
-  margin-inline: -6px;
   border-radius: 6px;
   cursor: pointer;
 }
 
-.rf-entry-layout-row.is-switch:hover {
+.rf-entry-layout-row.is-switch::before {
+  content: "";
+  position: absolute;
+  inset: 0 -6px;
+  z-index: -1;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.rf-entry-layout-row.is-switch:hover::before {
   background: var(--rf-fill-secondary);
 }
 
@@ -272,12 +292,14 @@
 
   /* I-05：列间距行在窄档 = 滑杆独占一行，第二行左读数、右 ↺（用户 2026-11-18 拍板）。
      加 `.rf-entry-layout` 前缀提高特异性：本文件与 `entry-column-controls.css` 的加载
-     顺序取决于 import 顺序，靠顺序压不稳。 */
+     顺序取决于 import 顺序，靠顺序压不稳。
+     WF-15：读数那一列写死 66px（不再 `auto` / `1fr`），拖动中读数变长时**不借**滑杆
+     与 ↺ 的宽度——列宽一变，行高与滚动位置就跟着抖。 */
   .rf-entry-layout .rf-entry-column-gap-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 66px minmax(0, 1fr) auto;
     grid-template-areas:
-      "slider slider"
-      "value reset";
+      "slider slider slider"
+      "value . reset";
     row-gap: 2px;
   }
 

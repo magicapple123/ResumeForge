@@ -72,7 +72,11 @@ vi.mock("../utils/aiTaskEntry", async () => {
   });
 });
 
-const settingsMocks = vi.hoisted(() => ({ getLLMConfig: vi.fn() }));
+// `listDatasets` 是 `useSampleDatasetLock` 的取数口：默认返回空列表（= 非示例数据集）。
+const settingsMocks = vi.hoisted(() => ({
+  getLLMConfig: vi.fn(),
+  listDatasets: vi.fn(() => Promise.resolve([])),
+}));
 
 vi.mock("../api/settings", () => settingsMocks);
 

@@ -21,7 +21,7 @@
  * 如果只有 URL 而没有当前标签页草稿，重放的是**「读到了什么」**，勾选会回到默认；有草稿时则连
  * 勾选、手改值和填充结果一起恢复。这样既不把临时状态塞进 URL，也不会在正常切页时丢失进度。
  */
-import { Alert, App, Button, Collapse, Drawer } from "antd";
+import { Alert, App, Button, Collapse } from "antd";
 import { LockOutlined } from "@ant-design/icons";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDiagnostics } from "../api/system";
@@ -76,6 +76,7 @@ import { readWebFormScope, writeWebFormScope } from "../features/webform/webForm
 import { useAiAvailable } from "./webform/useAiAvailable";
 import { useLiveSession } from "./webform/useLiveSession";
 import { useSnapshotUrl } from "./webform/useSnapshotUrl";
+import { useSampleDatasetLock } from "./webform/useSampleDatasetLock";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import {
@@ -135,10 +136,11 @@ export default function WebFormPage() {
   const [learningSaving, setLearningSaving] = useState(false);
   const [browserSettingsOpen, setBrowserSettingsOpen] = useState(false);
   // 「查看全部」的完整记录列表：初始态右卡只放最近 3 条，完整列表在抽屉里（服务端分页）。
-  const [recentAllOpen, setRecentAllOpen] = useState(false);
   const [targetUrl, setTargetUrl] = useState("");
   const [urlHistory, setUrlHistory] = useState<WebFormUrlHistory[]>([]);
   const aiAvailable = useAiAvailable();
+  // 体验示例数据集：虚构资料不参与真实填表（后端 409 的同一判据）。
+  const sampleLocked = useSampleDatasetLock();
   const [aiEnabled, setAiEnabled] = useState(restoredSession.aiEnabled);
   // Data range: remembered per dataset in localStorage, defaulting to "current plan only"
   // so the remembering mechanism cannot change anyone's pre-switch default.
@@ -736,6 +738,7 @@ export default function WebFormPage() {
         onEndSession={handleEndSession}
         // 初始态的主 CTA 只在流程轨道右端（I-24）：工具条只留状态与地址。
         onboarding={!preview && !result}
+        sampleLocked={sampleLocked}
       />
 
       {/* 安全说明降级成一行中性小字（锁图标 + 一句话）：只填不交是产品边界，任何状态下
@@ -756,6 +759,7 @@ export default function WebFormPage() {
               busy={busy}
               snapshot={snapshot}
               onRead={handleRead}
+              sampleLocked={sampleLocked}
             />
             {fillModePanel}
 
@@ -791,6 +795,7 @@ export default function WebFormPage() {
               onFill={handleFill}
               onToggle={toggle}
               onValueChange={changeValue}
+              sampleLocked={sampleLocked}
             />
 
             {/* 填充记录：每次填充留一笔，供事后回看"我当时到底填了什么"。
@@ -828,26 +833,16 @@ export default function WebFormPage() {
           onOpenUrl={handleOpenUrl}
           onRead={handleRead}
           fillPanel={fillModePanel}
+          sampleLocked={sampleLocked}
           recentPanel={
             <WebFormRecentRecords
               refreshKey={recordRefresh}
               urlHistory={urlHistory}
-              onViewAll={() => setRecentAllOpen(true)}
               onUseUrl={(item) => setTargetUrl(item.url)}
             />
           }
         />
       )}
-
-      {/* 初始态右卡只铺最近 3 条；完整列表（含删除与分页）在这里作为只读抽屉打开。 */}
-      <Drawer
-        open={recentAllOpen}
-        onClose={() => setRecentAllOpen(false)}
-        title={t("webFormPage.card.records")}
-        size="large"
-      >
-        <MemoWebFormRecordsPanel refreshKey={recordRefresh} />
-      </Drawer>
 
       <BrowserSettingsModal
         open={browserSettingsOpen}

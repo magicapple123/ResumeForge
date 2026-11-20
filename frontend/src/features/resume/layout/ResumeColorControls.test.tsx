@@ -12,87 +12,33 @@
  *    第四级必须是斜纹 + 「随模板」，不能编一个假色值（I-09 的验收口径）。
  *
  * 断言文案一律走 `t()` 或取目录里的 `label`；中文只出现在注释里（`cjkRatchet` 口径）。
+ *
+ * 2026-11-19 行数预算拆分批：T08 第 5 格「条目标题」的用例移到
+ * `ResumeColorControls.entryTitle.test.tsx`，共用夹具在 `ResumeColorControls.testkit.tsx`。
+ * 本文件只留前四格的写入语义、四级生效色与样式原文。**纯搬迁**，断言逐字不变。
  */
-import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 // @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
 import { readFileSync } from "node:fs";
-import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../../../test/resumeFixtures";
 import { t } from "../../../i18n";
 import type { ResumeLayout, ResumeTemplateCatalog } from "../../../types";
-import { DEFAULT_LAYOUT, makePreviewRef } from "./ResumeLayoutControls.testkit";
-import ResumeColorControls from "./ResumeColorControls";
+import { makePreviewRef } from "./ResumeLayoutControls.testkit";
+import {
+  ACCENT_LABEL,
+  BASE,
+  CLASSIC_PALETTE,
+  cards,
+  cardMain,
+  catalogWithPalette,
+  lastLayout,
+  openCard,
+  presetSwatches,
+  renderGroup,
+} from "./ResumeColorControls.entryTitle.test";
 
 declare const process: { cwd(): string };
-
-/** 强调色的标签由目录下发（`format_fields[].label` 只有一份来源）。 */
-const ACCENT_LABEL =
-  TEMPLATE_CATALOG.format_fields?.find((field) => field.key === "accent")?.label ?? "accent";
-
-const BASE: ResumeLayout = { ...DEFAULT_LAYOUT, format_config: {} };
-
-/** classic 的四色（与后端 `resume_template_palette` 同值）；夹具默认不下发 palette。 */
-const CLASSIC_PALETTE = {
-  accent: "#16365c",
-  text_color: "#1f2937",
-  muted_color: "#6b7280",
-  line_color: "#d9dee7",
-};
-
-/** 给 classic 下发 palette 的目录副本（模拟新后端）。 */
-function catalogWithPalette(): ResumeTemplateCatalog {
-  return {
-    ...TEMPLATE_CATALOG,
-    templates: TEMPLATE_CATALOG.templates.map((item) =>
-      item.name === "classic" ? { ...item, palette: { ...CLASSIC_PALETTE } } : item,
-    ),
-  };
-}
-
-function renderGroup(
-  props: Partial<ComponentProps<typeof ResumeColorControls>> = {},
-  onChange = vi.fn(),
-) {
-  render(
-    <AntdApp>
-      <ResumeColorControls
-        layout={BASE}
-        catalog={TEMPLATE_CATALOG}
-        onChange={onChange}
-        {...props}
-      />
-    </AntdApp>,
-  );
-  return onChange;
-}
-
-function cards(): HTMLElement[] {
-  return Array.from(document.querySelectorAll<HTMLElement>(".resume-wb-color-card"));
-}
-
-/** 卡片主按钮（唯一合法的点击区）。 */
-function cardMain(index: number): HTMLElement {
-  const button = cards()[index].querySelector<HTMLElement>(".resume-wb-color-main");
-  if (!button) throw new Error(`第 ${index} 张色卡没有主按钮`);
-  return button;
-}
-
-/** 打开某张卡（取色器只有一个实例，随 `pickerKey` 移动）。 */
-function openCard(index: number) {
-  fireEvent.click(cardMain(index));
-}
-
-/** antd 预设色块（`ColorPresets` 渲染的是 div，不是 button）；顺序即 `PALETTE`。 */
-function presetSwatches(): HTMLElement[] {
-  return Array.from(document.querySelectorAll<HTMLElement>(".ant-color-picker-presets-color"));
-}
-
-function lastLayout(onChange: ReturnType<typeof vi.fn>): ResumeLayout {
-  const calls = onChange.mock.calls;
-  return calls[calls.length - 1]?.[0] as ResumeLayout;
-}
 
 afterEach(() => {
   cleanup();
@@ -192,7 +138,7 @@ describe("ResumeColorControls · 写入语义", () => {
 });
 
 describe("ResumeColorControls · 生效色四级链路", () => {
-  it("模板配色：四张卡显示后端下发的真实色值，并标「随模板」", () => {
+  it("模板配色：五张卡显示后端下发的真实色值，并标「随模板」/「随正文」", () => {
     renderGroup({ catalog: catalogWithPalette() });
 
     const values = cards().map((card) => card.querySelector(".resume-wb-color-value")?.textContent);
@@ -201,6 +147,8 @@ describe("ResumeColorControls · 生效色四级链路", () => {
       `${CLASSIC_PALETTE.text_color} · ${t("resume.measure.hintTemplate")}`,
       `${CLASSIC_PALETTE.muted_color} · ${t("resume.measure.hintTemplate")}`,
       `${CLASSIC_PALETTE.line_color} · ${t("resume.measure.hintTemplate")}`,
+      // 第 5 格未设时显示它真正继承到的颜色（正文色），状态词是「随正文」。
+      `${CLASSIC_PALETTE.text_color} · ${t("workbench.color.followBody")}`,
     ]);
     // 色块颜色经内联自定义属性下发（不是 `style.background`）。
     const chip = cards()[0].querySelector<HTMLElement>(".resume-wb-color-chip");
@@ -236,7 +184,7 @@ describe("ResumeColorControls · 生效色四级链路", () => {
     expect(cards()[0].querySelector(".resume-wb-color-source")).toBeNull();
   });
 
-  it("自制模板没有 palette：斜纹占位 + 「随模板」，不编造假色值", () => {
+  it("自制模板没有 palette：前四格斜纹占位 + 「随模板」，不编造假色值", () => {
     const catalog: ResumeTemplateCatalog = {
       ...TEMPLATE_CATALOG,
       templates: [
@@ -246,7 +194,8 @@ describe("ResumeColorControls · 生效色四级链路", () => {
     };
     renderGroup({ catalog, layout: { ...BASE, template: "my-own" } });
 
-    for (const card of cards()) {
+    // 前四格走模板变量；第 5 格没有模板变量，它的状态词是「随正文」（见下一个用例）。
+    for (const card of cards().slice(0, 4)) {
       expect(card.querySelector(".resume-wb-color-chip")).toHaveClass("is-fallback");
       expect(card.querySelector(".resume-wb-color-value")?.textContent).toBe(
         t("workbench.color.followTemplate"),
@@ -254,6 +203,11 @@ describe("ResumeColorControls · 生效色四级链路", () => {
       // 没有色值就不能再补一个来源词（否则同一句话出现两次）。
       expect(card.querySelector(".resume-wb-color-source")).toBeNull();
     }
+    const entryTitle = cards()[4];
+    expect(entryTitle.querySelector(".resume-wb-color-chip")).toHaveClass("is-fallback");
+    expect(entryTitle.querySelector(".resume-wb-color-value")?.textContent).toBe(
+      t("workbench.color.followBody"),
+    );
   });
 
   it("非法颜色按「没设过」处理：不进入色块，也不当成用户的选择", () => {
@@ -288,12 +242,19 @@ describe("ResumeColorControls · 结构与无障碍", () => {
     expect(reset?.parentElement).toBe(cards()[0]);
   });
 
-  it("四个键各一张卡，标签优先取目录 `format_fields`，缺省回落键名", () => {
+  it("五个键各一张卡：前四格取目录 `format_fields` 的标签，第 5 格复用角色名", () => {
     renderGroup();
 
     const names = cards().map((card) => card.querySelector(".resume-wb-color-name")?.textContent);
-    // 目录只下发了 accent 的 label，其余三项回落到键名（不会渲染成空标签）。
-    expect(names).toEqual([ACCENT_LABEL, "text_color", "muted_color", "line_color"]);
+    // 目录只下发了 accent 的 label，其余三项回落到键名（不会渲染成空标签）；
+    // 第 5 格与「角色样式 → 条目标题」共用同一条词条（`typography.role.entry_title`）。
+    expect(names).toEqual([
+      ACCENT_LABEL,
+      "text_color",
+      "muted_color",
+      "line_color",
+      t("typography.role.entry_title"),
+    ]);
   });
 });
 

@@ -38,6 +38,7 @@ import { DocumentChipMenuContext } from "./documentChipMenuContext";
 import "./document-editor.css";
 import "./chip-menu.css";
 import { DocumentExpandContext } from "./documentExpandContext";
+import { loadInlineFormatPreview } from "./inlineFormatPreviewStore";
 import ChipStylePopover from "./ChipStylePopover";
 import PhotoFramePopover from "./PhotoFramePopover";
 import DocumentNotice, { type NoticeState } from "./DocumentNotice";
@@ -157,6 +158,14 @@ export default function DocumentEditor({
   useEffect(() => {
     if (needsIds(document)) onChange(ensureIds(document));
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * T01：行内格式预览开关是**全局 KV 设置**，在文档编辑器挂载时读一次（模块级 store 里
+   * 全进程只发一次请求）。页眉与三个值入口都在本组件下面，所以这一个挂载点覆盖全部字段。
+   */
+  useEffect(() => {
+    void loadInlineFormatPreview();
   }, []);
 
   const fallbackCatalog = useMemo(() => buildFallbackCatalog(t), [t]);

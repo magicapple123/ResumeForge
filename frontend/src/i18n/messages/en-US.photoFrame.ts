@@ -2,7 +2,9 @@
 /** Photo border & position (R-07 / R-10). */
 const photoFrame = {
   "resume.photo.frame.label": "Photo frame",
+  "resume.photo.tab": "Photo",
   "resume.photo.frame.open": "Border & position",
+  "resume.photo.frame.entry": "Border & position",
   "resume.photo.frame.openCustom": "Adjusted",
   "resume.photo.frame.width": "Border width",
   "resume.photo.frame.color": "Border color",

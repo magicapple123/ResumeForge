@@ -58,10 +58,11 @@ export function parseInlineMarkSegments(raw: string): InlineMarkSegment[] {
 }
 
 /**
- * 分段的渲染样式：只覆盖**不改变字形宽度**的属性。
+ * 分段的渲染样式：**只服务静态预览块**（`InlineMarkStatic`）。
  *
- * 字号是唯一例外（`font-size` 必然改变前进宽度）——它在遮罩层里会带来横向漂移，见
- * `InlineMarkOverlay` 的注释；颜色与加粗（描边模拟）都保持与原字形逐像素等宽。
+ * T01 之后遮罩层不再调用它——遮罩层与文本域逐字叠在一起，任何改变前进宽度的属性
+ * （字号、字重）都会让光标落在两个字的缝隙里；颜色虽不改宽度，但"打字时字突然变色"
+ * 正是这条待办要消除的干扰。静态块不在文本域下面，可以如实渲染。
  */
 export function inlineMarkSegmentStyle(segment: InlineMarkSegment): CSSProperties | undefined {
   if (segment.hidden) return undefined;

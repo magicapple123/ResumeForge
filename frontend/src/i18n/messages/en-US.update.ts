@@ -69,6 +69,30 @@ const update = {
     "You can also download Setup.exe from the release page and install it manually.",
   "update.action.recheckIn": "Check again ({seconds}s)",
   "update.toast.desktopStarted": "Checking in the desktop app; the result will appear in a dialog",
+
+  // ── Startup update prompt (UP-01) ────────────────────────────
+  "update.startup.title": "Version {version} is available",
+  "update.startup.current": "Current",
+  "update.startup.latest": "Latest",
+  "update.startup.size": "Download size",
+  "update.startup.notes": "What's new",
+  "update.startup.expand": "Show all",
+  "update.startup.collapse": "Show less",
+  "update.startup.noNotes": "This release has no notes.",
+  "update.startup.updateNow": "Update now",
+  "update.startup.later": "Later",
+  "update.startup.laterHint": "Don't remind me for 24 hours",
+  "update.startup.skip": "Skip this version",
+  "update.startup.skipHint": "Don't remind me about this version",
+  "update.startup.hide": "Hide",
+  "update.startup.ready": "Downloaded and verified (SHA-256)",
+  "update.startup.readyHint":
+    "Restarting replaces program files only. Jobs, resumes, chats and settings in data/ are kept.",
+  "update.startup.install": "Restart and install",
+  "update.startup.downloadPackage": "Download installer",
+  "update.startup.release": "Open release page",
+  "update.startup.unsupported":
+    "In-app installation isn't available on this platform. Download the installer and update manually.",
 } as const;
 
 export default update;

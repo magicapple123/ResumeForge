@@ -16,12 +16,15 @@ import JobResumeGraphModal from "./graph/JobResumeGraphModal";
 import { JOB_STATUS_META, type JobList, type Page } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
+import { useToast } from "../../hooks/useToast";
 import SkillTags from "./SkillTags";
 import { JOB_SOURCE_LABEL_KEYS, jobSourceKind } from "../../utils/jobSource";
 import { nextSortState, sortOrderFor, type JobSortState } from "../../utils/jobSort";
 import { t } from "../../i18n";
-import { jobStatusLabelKey, jobTypeLabelKey } from "../../i18n/enum/jobs";
+import { jobTypeLabelKey } from "../../i18n/enum/jobs";
 import { useLocale } from "../../i18n/i18nContext";
+import { jobCopyMenu } from "./jobRowCopyActions";
+import { jobStatusText, normalizeJobStatus } from "./jobStatusText";
 
 // 值域与 pages/jobs/jobFilterOptions.ts 的 BatchAction 保持一致（新增动作两处同步改）；
 // 此处只判「有无批量操作进行中」，不区分具体动作。类型本地持有是因为 components
@@ -55,17 +58,9 @@ interface Props {
 }
 
 /**
- * `active` / `open` 是历史落库值：显示前先归一到「开放中」，再查 JOB_STATUS_META
- * （颜色）与 jobStatusLabelKey()（展示名），兼容层别删。
- *
- * 归一后的值仍是落库的协议值，不是语言包 key：把它换成 key 会让颜色查不到
- * （静默掉成 default），所以归一表保持原样。
+ * `active` / `open` 是历史落库值：显示前先归一到「开放中」再查颜色与展示名。
+ * 归一逻辑在 `jobStatusText.ts`，列表 Tag 与「复制整行」共用同一份。
  */
-const STATUS_LABELS: Record<string, string> = {
-  active: "开放中", // i18n-ok: 归一化目标是落库的数据值（JOB_STATUS_META 的键），不是界面文案
-  open: "开放中", // i18n-ok: 同上，历史落库值共用同一个归一化目标
-};
-
 export default function JobTable({
   jobs,
   loading,
@@ -90,6 +85,8 @@ export default function JobTable({
 }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后列头与菜单不重渲染。
   useLocale();
+  // 「复制」的 Toast：工厂用同一个 message key 覆盖，连点不会堆成一列。
+  const toast = useToast();
   const [graphJob, setGraphJob] = useState<JobList | null>(null);
   const columns: TableColumnsType<JobList> = [
     {
@@ -191,14 +188,13 @@ export default function JobTable({
       dataIndex: "status",
       width: 90,
       render: (value: string) => {
-        // 先归一再查表：`active` / `open` 是历史落库值（见上面的 STATUS_LABELS）。
+        // 先归一再查表：`active` / `open` 是历史落库值（见 jobStatusText.ts）。
         // 颜色仍来自 `types/job.ts` 的 JOB_STATUS_META（唯一来源），展示名来自语言包；
         // 两张表都没登记的取值按原逻辑回退，不丢信息。
-        const normalized = STATUS_LABELS[value] ?? value;
-        const labelKey = jobStatusLabelKey(normalized);
+        const normalized = normalizeJobStatus(value);
         return (
           <Tag color={JOB_STATUS_META[normalized]?.color ?? "default"}>
-            {labelKey ? t(labelKey) : value || "-"}
+            {jobStatusText(value) || "-"}
           </Tag>
         );
       },
@@ -270,7 +266,12 @@ export default function JobTable({
     { key: "generate", label: t("jobTable.action.generate"), onClick: () => onGenerate(job) },
   ];
 
-  /** 次级操作：行内「更多」下拉与整行右键菜单共用这一份（两处保证完全一致）。 */
+  /**
+   * 次级操作：行内「更多」下拉与整行右键菜单共用这一份（两处保证完全一致）。
+   *
+   * 「复制」子菜单放在「编辑」之前、删除之前：它是一次性取数动作（拿出去贴表单 /
+   * 发内推 / 粘进表格），既不是主操作也不该压住删除；两处入口都是这一份清单。
+   */
   const secondaryActions = (job: JobList): RowActionItem[] => [
     { key: "write", label: t("jobTable.action.write"), onClick: () => onWrite(job) },
     { key: "resumes", label: t("jobTable.action.resumes"), onClick: () => onViewResumes(job) },
@@ -280,6 +281,7 @@ export default function JobTable({
       icon: <ApartmentOutlined />,
       onClick: () => setGraphJob(job),
     },
+    jobCopyMenu(job, toast),
     { key: "edit", label: t("jobTable.action.edit"), onClick: () => onEdit(job) },
     {
       key: "delete",

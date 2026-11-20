@@ -112,14 +112,18 @@ describe("初始态样式的比例与回落规则", () => {
   // 注释里会提到 `@media`（解释为什么不用它），判定前先去掉注释，只看真规则。
   const rules = css.replace(/\/\*[\s\S]*?\*\//g, "");
 
-  it("两栏 1.6 : 1 且不拉伸右栏", () => {
-    expect(rules).toMatch(/\.webform-onboarding-columns \{[\s\S]*1\.6fr[\s\S]*align-items: start/);
+  it("2026-11-19 起是上下结构：单列，右卡不被拉伸", () => {
+    // 用户要求「怎么填」与「最近填写」上下排列，不再有 1.6 : 1 的两栏。
+    expect(rules).toMatch(
+      /\.webform-onboarding-columns \{[\s\S]*grid-template-columns: minmax\(0, 1fr\)[\s\S]*align-items: start/,
+    );
+    expect(rules).not.toContain("1.6fr");
     // 右卡不再 height:100%（那会把空态撑出一大片空白）。
     expect(rules).not.toMatch(/\.webform-recent \{[\s\S]*height: 100%/);
   });
 
-  it("窄容器塌单列，且轨道退回一行文字", () => {
-    expect(rules).toMatch(/@container \(max-width: 720px\) \{[\s\S]*webform-onboarding-columns/);
+  it("窄容器：记录行退回两行式，轨道退回一行文字", () => {
+    expect(rules).toMatch(/@container \(max-width: 720px\) \{[\s\S]*webform-recent-row/);
     expect(rules).toMatch(
       /@container \(max-width: 1080px\) \{[\s\S]*webform-flow-nodes \{[\s\S]*display: none/,
     );

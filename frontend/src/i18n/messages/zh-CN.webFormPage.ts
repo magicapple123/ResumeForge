@@ -26,6 +26,8 @@ const webFormPage = {
      空态要说清"现在没有 / 之后会出现什么 / 还能去哪儿"。 */
   "webFormPage.recent.title": "最近填写",
   "webFormPage.recent.viewAll": "查看全部",
+  "webFormPage.recent.collapse": "收起",
+  "webFormPage.recent.truncated": "仅显示最近 {count} 条",
   "webFormPage.recent.emptyWhat": "会发生什么",
   "webFormPage.recent.emptyBody": "填完一次后，这里会按时间列出页面和填了几项，方便回头核对。",
   "webFormPage.recent.urls": "看看打开过的网址",
@@ -187,6 +189,9 @@ const webFormPage = {
   "webFormPage.error.memoryTargetsFailed": "加载完整资料目录失败",
   "webFormPage.toast.restored": "已恢复上次读取的表单；勾选已重置为默认，请核对后再填充",
   "webFormPage.error.restoreFailed": "上次读取的表单已失效，请重新读取",
+  // 体验示例数据集：与后端 409 的 detail 逐字一致（见 services/webform/dataset_guard.py）。
+  "webFormPage.sampleLocked.hint":
+    "当前是体验示例数据集，示例数据不参与真实填表；请切换到自己的数据集",
 } as const;
 
 export default webFormPage;

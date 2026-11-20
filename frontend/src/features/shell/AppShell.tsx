@@ -13,6 +13,7 @@ import AnnouncementBar from "../../components/common/AnnouncementBar";
 import BackgroundTaskBar from "./BackgroundTaskBar";
 import BulkAiFloatingBar from "./BulkAiFloatingBar";
 import { useUpdateAnnouncement } from "../announcements/useUpdateAnnouncement";
+import StartupUpdatePrompt from "../updates/StartupUpdatePrompt";
 import StarPromptModal from "./StarPromptModal";
 import PageSkeleton from "../../components/common/PageSkeleton";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -71,11 +72,9 @@ import {
 } from "../../pages/registry";
 import { UserGuideModal } from "../../pages/modals";
 import { consumeFirstVisitGuide, setUserGuideVisible } from "../../utils/userGuide";
-// 侧栏品牌图标。走 import 而不是写死 "/resumeforge-icon.png"——Vite 会按 `base`
-// 重写成正确前缀（在线体验产物部署在 Pages 子路径下，写死绝对路径会 404）。
-// 特意用 src/assets/ 的副本而不是 public/ 下的同名文件：引用 public/ 里的资源不会
-// 经过 Vite 的 base 重写，等于没修。
-import brandIcon from "../../assets/resumeforge-icon.png";
+// 侧栏品牌图（WF-10）：内联 SVG 组件，浅色画星、深色画月。不能用 `<img>`——
+// `<img>` 里的图层 CSS 碰不到，换 `src` 又会白闪（详见 `features/theme/ThemeLogo.tsx`）。
+import ThemeLogo from "../theme/ThemeLogo";
 // 投投宣传图（透明底抠图）：GitHub Star 提示弹窗用。
 
 /** 首屏预热：起始延迟、每批 chunk 数与空闲调度参数。 */
@@ -338,10 +337,9 @@ export default function AppShell() {
                 onClick={brandMark.onClick}
                 aria-label={t("navigation.shell.scrollTop")}
               >
-                {/* 用 import 拿到带 base 前缀的 URL，不要写死 "/resumeforge-icon.png"：
-                在线体验构建把产物部署在 GitHub Pages 的**子路径**（base: "./"）下，
-                写死的绝对路径会指到域名根目录、图标 404。import 由 Vite 按 base 重写。 */}
-                <img className="app-brand-image" src={brandIcon} alt="" />
+                {/* 内联 SVG：星/月与光晕各自成层，切主题时原地交替（WF-10）。
+                    它仍包在三联手势按钮里，单击行为不变。 */}
+                <ThemeLogo />
               </button>
               <span className="app-brand-copy">
                 <span className="app-brand-name">
@@ -472,6 +470,8 @@ export default function AppShell() {
           </Suspense>
         )}
         <StarPromptModal open={starModalOpen} onClose={() => setStarModalOpen(false)} />
+        {/* 启动更新弹窗（UP-01）：自己判断延迟、稍后/跳过与首访指南排队，外壳只挂一次。 */}
+        <StartupUpdatePrompt />
       </>
     </TouTouProvider>
   );

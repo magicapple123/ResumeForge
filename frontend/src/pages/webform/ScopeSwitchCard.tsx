@@ -44,7 +44,11 @@ export function ScopeSwitchCard({
         />
         {/* 55 字的范围解释常驻会把行高从 40 拉到 76；它只在第一次切换前值得读一遍，
             所以收进 ⓘ，标签与控件留在同一行。 */}
-        <HintDetail detail={t("webFormPage.scope.hint")} label={t("webFormPage.scope.hintAria")} />
+        <HintDetail
+          className="webform-mode-info"
+          detail={t("webFormPage.scope.hint")}
+          label={t("webFormPage.scope.hintAria")}
+        />
       </div>
     </div>
   );

@@ -50,6 +50,8 @@ import UpdateCard from "./UpdateCard";
 import AnnouncementSettingsCard from "./AnnouncementSettingsCard";
 import HelpDiagnosticsCard from "./HelpDiagnosticsCard";
 import ReminderPopupCard from "./ReminderPopupCard";
+import DesktopLaunchAtLoginCard from "./DesktopLaunchAtLoginCard";
+import DesktopTrayCard from "./DesktopTrayCard";
 import ConnectionsCard from "./ConnectionsCard";
 import SystemSourcesCard from "./SystemSourcesCard";
 import NetworkProxyCard from "./NetworkProxyCard";
@@ -179,6 +181,10 @@ export function AppearancePanel() {
       <ResumeFontCard />
       <NavigationSettingsCard />
       <AssistantOrbCard />
+      {/* 桌面版托盘图标（WF-20）：浏览器与旧壳里这张卡自己不渲染。 */}
+      <DesktopTrayCard />
+      {/* 开机自启（WF-08）：值与安装器写的同一条注册表项，读不到时渲染成 disabled。 */}
+      <DesktopLaunchAtLoginCard />
     </>
   );
 }

@@ -36,7 +36,7 @@ import {
   Tooltip,
 } from "antd";
 import type { MenuProps } from "antd";
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { t, type MessageKey } from "../../../i18n";
 import {
   applyStyleMark,
@@ -58,6 +58,10 @@ import {
 } from "../editor/inlineMarkWrite";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { InlineMarkField } from "../editor/lastFocusedTextarea";
+import {
+  isInlineFormatPreviewEnabled,
+  subscribeInlineFormatPreview,
+} from "../editor/inlineFormatPreviewStore";
 import PaletteGlyph from "./PaletteGlyph";
 
 export interface InlineMarkCommit {
@@ -154,6 +158,24 @@ export default function InlineMarkButtons({
   const hint = (kind: keyof typeof HINT_KEYS) => message.info(t(HINT_KEYS[kind]));
 
   /**
+   * T01：开关打开时，编辑态是纯文本——点完「加粗 / 字号 / 颜色」当场什么都看不到。
+   * 这里给一条轻提示（同 key 覆盖，连续调字号不会叠成一列）。开关关着就不提示：
+   * 那条路径本来就不预览格式，没有"等待"可讲，也不该给默认路径加噪音。
+   */
+  const previewEnabled = useSyncExternalStore(
+    subscribeInlineFormatPreview,
+    isInlineFormatPreviewEnabled,
+    isInlineFormatPreviewEnabled,
+  );
+  const announce = (what: string) => {
+    if (!previewEnabled) return;
+    message.info({
+      content: t("document.inlineFormat.appliedHint", { what }),
+      key: "inline-format-applied",
+    });
+  };
+
+  /**
    * 读这次点击要编辑哪一段：实时选区 → 记忆选区 → 光标。没有目标输入框才提示。
    *
    * 只有"连目标都没有"算硬失败：`typography.inline.noTarget`。空选区不算失败——链接
@@ -192,33 +214,53 @@ export default function InlineMarkButtons({
     return picked;
   };
 
-  /** 规则层返回"未改动"（如斜体按钮贴着已成对的加粗标记）时不制造空历史点。 */
-  const commitIfChanged = (picked: { text: string }, edit: InlineEdit) => {
-    if (edit.text === picked.text) return;
+  /**
+   * 规则层返回"未改动"（如按钮贴着已成对的标记）时不制造空历史点。
+   * 返回是否真的改了（T01 用它决定要不要弹"已加粗 · 离开输入框后可看到效果"）。
+   */
+  const commitIfChanged = (picked: { text: string }, edit: InlineEdit): boolean => {
+    if (edit.text === picked.text) return false;
     onCommit(toCommit(edit));
+    return true;
   };
 
   const applyStyle = (patch: InlineStylePatch) => {
     const picked = requireSelection();
     if (!picked) return;
     // I-13：结构化字段先走 runs（落盘写 `rich.runs`）；没登记才退回标记串（兼容路径）。
-    if (typeof patch.size === "number" && richToggleSize(picked.range, patch.size)) return;
-    if (typeof patch.color === "string" && richToggleColor(picked.range, patch.color)) return;
+    if (typeof patch.size === "number" && richToggleSize(picked.range, patch.size)) {
+      announce(t("typography.inline.size"));
+      return;
+    }
+    if (typeof patch.color === "string" && richToggleColor(picked.range, patch.color)) {
+      announce(t("typography.inline.color"));
+      return;
+    }
     if (patch.size === null || patch.color === null) {
       const cleared = richClearAttribute(picked.range, {
         size: patch.size === null ? null : undefined,
         color: patch.color === null ? null : undefined,
       });
-      if (cleared) return;
+      if (cleared) {
+        announce(t("document.inlineFormat.clearedHint"));
+        return;
+      }
     }
-    commitIfChanged(picked, applyStyleMark(picked.text, picked.range, patch));
+    if (commitIfChanged(picked, applyStyleMark(picked.text, picked.range, patch))) {
+      announce(patch.color ? t("typography.inline.color") : t("typography.inline.size"));
+    }
   };
 
   const applyBold = () => {
     const picked = requireSelection();
     if (!picked) return;
-    if (richToggleBold(picked.range)) return;
-    commitIfChanged(picked, toggleBoldMark(picked.text, picked.range));
+    if (richToggleBold(picked.range)) {
+      announce(t("typography.inline.bold"));
+      return;
+    }
+    if (commitIfChanged(picked, toggleBoldMark(picked.text, picked.range))) {
+      announce(t("typography.inline.bold"));
+    }
   };
 
   const applyColor = (color: { toHexString(): string }) => {
@@ -243,8 +285,12 @@ export default function InlineMarkButtons({
     }
     setLinkSnapshot(null);
     // I-13：结构化字段写成 `link` run（URL 不需要合法之外的任何加工）。
-    if (richSetLink(linkSnapshot.range, url.trim())) return;
+    if (richSetLink(linkSnapshot.range, url.trim())) {
+      announce(t("typography.inline.link"));
+      return;
+    }
     onCommit(toCommit(edit));
+    announce(t("typography.inline.link"));
   };
 
   /**

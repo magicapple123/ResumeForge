@@ -9,7 +9,7 @@
  *    这些简历不会跟着变。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../../../test/resumeFixtures";
@@ -307,5 +307,47 @@ describe("ResumeMeasureControls · 四向页边距", () => {
       accent: "#123456",
       photo_scale: 1.02,
     });
+  });
+});
+
+/**
+ * WF-13：「照片」与「照片框」合并成一格。
+ *
+ * 守两件会悄悄退回去的事：标签只剩一个（以前是「照片」+「照片框」两个标签、两格），
+ * 以及「边框与位置」按钮仍开原来那个 Popover——合并只挪了入口，没有复制一份面板。
+ */
+describe("ResumeMeasureControls · 照片格合并（WF-13）", () => {
+  it("左栏只有一个「照片」标签，边框按钮在同一格里", async () => {
+    renderGroup({ hasPhoto: true });
+
+    const grid = document.querySelector(".resume-measure-grid");
+    expect(grid).not.toBeNull();
+    const merged = grid!.lastElementChild as HTMLElement;
+    expect(merged.className).toContain("resume-measure-photo");
+    expect(within(merged).getByText(t("resume.photo.scale.label"))).toBeInTheDocument();
+    // 旧标签「照片框」不再出现在左栏（它仍是弹层的 aria-label）。
+    expect(within(merged).queryByText(t("resume.photo.frame.label"))).toBeNull();
+    expect(
+      within(merged).getByRole("button", { name: t("resume.photo.frame.entry") }),
+    ).toBeInTheDocument();
+  });
+
+  it("点「边框与位置」仍开同一个弹层，四项滑杆齐全", async () => {
+    renderGroup({ hasPhoto: true });
+
+    fireEvent.click(screen.getByRole("button", { name: t("resume.photo.frame.entry") }));
+
+    // Popover 是普通浮层（不是 Modal），用面板里的字段确认它确实开了。
+    expect(
+      await screen.findByRole("spinbutton", { name: t("resume.photo.frame.width") }),
+    ).toBeInTheDocument();
+    for (const key of [
+      "resume.photo.frame.width",
+      "resume.photo.frame.radius",
+      "resume.photo.frame.offsetX",
+      "resume.photo.frame.offsetY",
+    ] as const) {
+      expect(await screen.findByRole("slider", { name: t(key) })).toBeInTheDocument();
+    }
   });
 });

@@ -99,6 +99,20 @@
   font-size: 12px;
 }
 
+/* 已填满的候选：右侧状态标签，与板块名同一排的小字。
+   它**不参与省略**（窄到 360 时省的是主文案），否则用户看到的就只剩半截标题。 */
+.rf-profile-fill-option-state {
+  flex: none;
+  white-space: nowrap;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* 置灰项整体降不透明度：状态标签与主文案一起变淡，观感上才是一整条不可点。 */
+.rf-profile-fill-menu .ant-dropdown-menu-item-disabled .rf-profile-fill-option {
+  opacity: 0.55;
+}
+
 /* 问题 5：搜索框与计数行已移出菜单项（见 `ProfileFillMenu` 的 `popupRender`），
    原 `.rf-profile-fill-search` / `.rf-profile-fill-count` 的 sticky 规则一并删除——
    它们正是「硬编码 top 叠三层 sticky」那个 bug 的现场。 */

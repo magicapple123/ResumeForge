@@ -129,6 +129,13 @@ const document = {
   "document.field.value": "内容",
   "document.field.valuePlaceholder": "输入内容",
   "document.inlineFormat": "行内格式",
+  "document.inlineFormat.preview": "预览行内格式",
+  "document.inlineFormat.previewHint":
+    "未编辑时按真实样式显示（含字号/字重/颜色）；编辑时保持纯文本，否则光标会错位。",
+  "document.inlinePreview.enterHint": "回车或点击进入编辑",
+  "document.inlineFormat.appliedHint": "已{what} · 离开输入框后可看到效果",
+  "document.inlineFormat.clearedHint": "已清除格式 · 离开输入框后可看到效果",
+  "document.inlineFormat.previewSaveFailed": "开关没存上，已恢复原来的设置",
   "document.field.label": "标签",
   "document.field.labelPlaceholder": "字段标签",
   /** DF-10：自定义字段允许留空名；所有显示位置都用这一句兜底，绝不显示 `custom:` 内部键。 */

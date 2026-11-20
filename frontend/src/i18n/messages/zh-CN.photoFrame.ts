@@ -2,7 +2,9 @@
 /** 照片边框与位置（R-07 / R-10）。 */
 const photoFrame = {
   "resume.photo.frame.label": "照片框",
+  "resume.photo.tab": "照片",
   "resume.photo.frame.open": "边框与位置",
+  "resume.photo.frame.entry": "边框与位置",
   "resume.photo.frame.openCustom": "已调整",
   "resume.photo.frame.width": "边框粗细",
   "resume.photo.frame.color": "边框颜色",

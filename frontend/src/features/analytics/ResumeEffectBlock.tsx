@@ -4,13 +4,14 @@
  * 关联入口在录入界面已有（RF-17），但真实库覆盖率极低——所以**每组都显示样本量与
  * 小样本徽标**，并明确写"不做因果归因"：好岗位才认真配简历，关联本身有选择偏差。
  */
-import { Col, Empty, Row, Tag, Typography } from "antd";
+import { Col, Row, Tag, Typography } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { AnalyticsDashboard } from "../../types";
 import { formatRate } from "../../utils/format";
 import SectionCard from "./SectionCard";
 import StatCard from "./StatCard";
+import EmptyState from "../../components/common/EmptyState";
 
 export default function ResumeEffectBlock({ data }: { data: AnalyticsDashboard }) {
   useLocale();
@@ -20,7 +21,7 @@ export default function ResumeEffectBlock({ data }: { data: AnalyticsDashboard }
       description={t("analyticsPage.resumeEffect.description")}
     >
       {data.resume_effects.length === 0 ? (
-        <Empty description={t("analyticsPage.resumeEffect.empty")} />
+        <EmptyState description={t("analyticsPage.resumeEffect.empty")} />
       ) : (
         <Row gutter={[16, 16]}>
           {data.resume_effects.map((item) => (

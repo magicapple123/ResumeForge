@@ -64,6 +64,21 @@ const WORKING: ResumeDocument = makeResumeDocument({
   ],
 });
 
+/** 只有一条 education 条目的文档；`items` 决定那条候选还剩几个空字段。 */
+function educationDocument(items: ResumeItem[]): ResumeDocument {
+  return makeResumeDocument({
+    sections: [
+      {
+        key: "education",
+        title: "",
+        kind: "entries",
+        layout: {} as never,
+        entries: [makeEntry(items, { id: "ob_edu000001" })],
+      },
+    ],
+  });
+}
+
 function projection(): PaperProjectionOut {
   return {
     scope: {
@@ -109,8 +124,24 @@ function projection(): PaperProjectionOut {
   } as unknown as PaperProjectionOut;
 }
 
-function setup(document: ResumeDocument = WORKING, selectedPath: string | null = null) {
-  api.getCurrentProjection.mockResolvedValue(projection());
+/** 断言只用 ASCII 夹具：新用例的中文断言会顶高 cjkRatchet 的基线。 */
+function asciiProjection(): PaperProjectionOut {
+  const base = projection();
+  return {
+    ...base,
+    candidates: [
+      { ...base.candidates[0], title: "Alpha School", subtitle: "Beta Major" },
+      { ...base.candidates[1], title: "Gamma Project", subtitle: "" },
+    ],
+  } as PaperProjectionOut;
+}
+
+function setup(
+  document: ResumeDocument = WORKING,
+  selectedPath: string | null = null,
+  proj: PaperProjectionOut = projection(),
+) {
+  api.getCurrentProjection.mockResolvedValue(proj);
   const onChange = vi.fn();
   render(
     <AntdApp>
@@ -242,6 +273,50 @@ describe("ProfileFillMenu", () => {
     const shell = document.querySelector(".rf-profile-fill-shell");
     const children = Array.from(shell?.children ?? []);
     expect(children.indexOf(head as Element)).toBeLessThan(children.indexOf(list as Element));
+  });
+
+  it("已填满的候选仍留在列表：标「已填」、aria-disabled，点击不写文档也不弹旧文案", async () => {
+    const proj = asciiProjection();
+    const onlyEdu = { ...proj, candidates: [proj.candidates[0]] } as PaperProjectionOut;
+    const { onChange } = setup(educationDocument([SCHOOL, MAJOR]), null, onlyEdu);
+
+    const label = await screen.findByText("Alpha School · Beta Major");
+    expect(screen.getByText(t("editor.profileFill.state.filled"))).toBeInTheDocument();
+    expect(label.closest("li")?.getAttribute("aria-disabled")).toBe("true");
+
+    fireEvent.click(label);
+    // 给 message/Dropdown 的异步回调一个落点，确认确实没有回流文档。
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.queryByText(t("editor.profileFill.empty"))).toBeNull();
+  });
+
+  it("计数行按「可填字段数」算：1 候选 0 可填 → 0 项可填 · 1 项已填", async () => {
+    const proj = asciiProjection();
+    const onlyEdu = { ...proj, candidates: [proj.candidates[0]] } as PaperProjectionOut;
+    setup(educationDocument([SCHOOL, MAJOR]), null, onlyEdu);
+    const expected =
+      t("editor.profileFill.countFillable", { count: 0 }) +
+      " · " +
+      t("editor.profileFill.countFilled", { count: 1 });
+    expect(await screen.findByText(expected)).toBeInTheDocument();
+  });
+
+  it("只差一个空字段：计数 1 项可填、可点、合并后只多一条 item", async () => {
+    const proj = asciiProjection();
+    const onlyEdu = { ...proj, candidates: [proj.candidates[0]] } as PaperProjectionOut;
+    const { onChange } = setup(educationDocument([SCHOOL]), null, onlyEdu);
+
+    expect(
+      await screen.findByText(t("editor.profileFill.countFillable", { count: 1 })),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(t("editor.profileFill.state.filled"))).toBeNull();
+
+    fireEvent.click(screen.getByText("Alpha School · Beta Major"));
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    const items = (onChange.mock.calls[0][0] as ResumeDocument).sections[0].entries[0].items;
+    expect(items).toHaveLength(2);
+    expect(items.some((item) => item.kind === "field" && item.key === "major")).toBe(true);
   });
 
   it("问题 5：列表自己的滚动容器 + 分组标题 top 不再硬编码", () => {

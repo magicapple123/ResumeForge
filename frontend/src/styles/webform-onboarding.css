@@ -61,7 +61,7 @@
   min-height: 56px;
   align-items: center;
   gap: 16px;
-  padding: 10px 16px;
+  padding: 14px 20px;
   border: 1px solid var(--rf-border-subtle);
   border-radius: var(--rf-radius-control);
   background: var(--rf-surface);
@@ -93,6 +93,13 @@
   min-width: 0;
   align-items: center;
   gap: 8px;
+}
+
+/* 2026-11-19（用户）：轨道"太短"。连接线虽然写了 `flex: 1 1 24px`，但它长在 `<li>` 里，
+   而 `<li>` 只有内容宽度——多余的 400+px 全落在 `<ol>` 末尾的空白里。
+   让前三个节点吃掉剩余宽度，连接线才真正铺满整行；最后一步保持内容宽度，紧贴主按钮。 */
+.webform-flow-node:not(:last-child) {
+  flex: 1 1 auto;
 }
 
 .webform-flow-node-num {
@@ -159,13 +166,14 @@
   gap: 8px;
 }
 
-/* ===== 两栏「填写方式 / 最近填写」 =====
-   宽度 1.6 : 1（左 62% / 右 38%）：左侧四行设置、右侧三条记录，等分必然一边空。
-   `align-items: start`：右栏不再被拉到与左栏等高（那会把空态撑出一大片空白）。 */
+/* ===== 「填写方式 / 最近填写」上下排列 =====
+   2026-11-19（用户）：左右两栏在整页宽下左卡被拉得很宽、右卡只剩三条窄记录，
+   读起来像两张不相干的卡。改成上下结构：宽卡在上、记录整行在下。
+   `align-items: start` 保留——记录卡不跟上面的卡等高。 */
 
 .webform-onboarding-columns {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 12px;
 }
@@ -180,7 +188,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 18px 20px 8px;
   border: 1px solid var(--rf-border-subtle);
   border-radius: var(--rf-radius-control);
   background: var(--rf-surface);
@@ -204,13 +212,45 @@
   list-style: none;
 }
 
+/* 整行宽之后改成四列（时间 / 记录 / 结果 / ⋯）：行**不再是固定高度**——
+   T03 起这一行可以就地展开明细，`height` + `overflow: hidden` 会把明细裁掉
+   （这正是上一轮"展开后看不见内容"的根因）。改成 `min-height` 并去掉 overflow。
+   窄容器（< 720）退回两行式，见文件末尾的容器查询。 */
 .webform-recent-row {
-  display: flex;
-  height: 44px;
-  align-items: center;
-  gap: 8px;
   border-top: 1px solid var(--rf-border-subtle);
+}
+
+.webform-recent-line {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) auto auto;
+  min-height: 44px;
+  align-items: center;
+  gap: 16px;
+}
+
+/* 记录标题是展开开关（按钮而不是文本：键盘可达，且 `aria-expanded` 能被读屏读到）。 */
+.webform-recent-page {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.webform-recent-detail {
+  padding: 8px 0 12px;
+}
+
+.webform-recent-more {
+  padding: 8px 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
 }
 
 .webform-recent-row:first-child {
@@ -275,10 +315,30 @@
   line-height: 18px;
 }
 
-/* 两栏在窄容器塌单列（1080 及以下会塌，避免右栏被压到读不出记录标题）。 */
+/* 窄容器：记录行回到两行式（时间 + 结果一行、标题一行）。三列在 720 以下会把标题压成
+   几个字，还不如让标题独占一行。 */
 @container (max-width: 720px) {
-  .webform-onboarding-columns {
-    grid-template-columns: minmax(0, 1fr);
+  .webform-recent-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "time tags"
+      "page page";
+    height: auto;
+    padding: 10px 0;
+    row-gap: 2px;
+  }
+
+  .webform-recent-time {
+    grid-area: time;
+  }
+
+  .webform-recent-page {
+    grid-area: page;
+  }
+
+  .webform-recent-tags {
+    grid-area: tags;
+    justify-self: end;
   }
 }
 

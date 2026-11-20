@@ -5,6 +5,21 @@ export interface ReminderPopupSetting {
   enabled: boolean;
 }
 
+/** 制作台：未编辑时按真实行内样式预览（含字号）。默认关。 */
+export interface InlineFormatPreviewSetting {
+  enabled: boolean;
+}
+
+/**
+ * 桌面版：托盘图标是否跟随系统主题（WF-20 兜底开关）。默认关。
+ *
+ * 关着的时候托盘跟**应用内主题**；打开后忽略应用内主题、只跟系统深浅色。
+ * 为「浅色任务栏 + 应用内暗色」这种对比度组合准备。
+ */
+export interface TrayIconFollowSystemSetting {
+  enabled: boolean;
+}
+
 /**
  * 网申填表「放宽模式」（默认关）。
  *

@@ -178,6 +178,24 @@ export function colorProbeCss(key: string, value: string): string {
 }
 
 /**
+ * 条目标题颜色探针：`[data-role="entry_title"] { color: …; }`。
+ *
+ * 为什么不复用 `colorProbeCss`：它只会写 `:root` 的四个变量，而「条目标题」存的是
+ * **角色级覆盖**（`format_config.roles.entry_title.color`），后端 `resume_style._role_rules`
+ * 为它产出的是 `  [data-role="entry_title"] { color: …; }`——没有对应的 CSS 变量。
+ *
+ * 为什么逐字照抄后端（含两空格缩进、**不带 `!important`**）：
+ * 单条覆盖 `[data-object-id] [data-role="entry_title"]` 比这条更具体，后端正是靠
+ * specificity 让"单条设过的颜色"赢。探针一旦加 `!important` 就会在拖动时盖过单条、
+ * 松手后又被后端规则让回去——那就是"拖的时候变了、松手弹回来"。
+ */
+export function entryTitleColorProbeCss(color: string): string {
+  const text = color.trim();
+  if (!/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(text)) return "";
+  return `  [data-role="entry_title"] { color: ${text}; }`;
+}
+
+/**
  * 区块间距探针：`.section { margin-bottom: calc(var(--fs) * 1.3) !important; }`。
  *
  * 与后端 `FORMAT_FIELDS` 的 `section_gap.css_rule` 逐字一致

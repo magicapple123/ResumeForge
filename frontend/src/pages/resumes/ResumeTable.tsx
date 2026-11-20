@@ -5,7 +5,7 @@
  * 传入（navigate 留页面）；行操作清单（primary/secondary/context）随表格一起下沉。
  */
 import { StarFilled, StarOutlined } from "@ant-design/icons";
-import { App, Button, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { Button, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import type { SortOrder } from "antd/es/table/interface";
 import { memo, useEffect, useMemo, useRef } from "react";
@@ -13,6 +13,7 @@ import type { HTMLAttributes } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
+import { useToast } from "../../hooks/useToast";
 import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescriptionKey } from "../../config";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -55,9 +56,11 @@ const ContextMenuRow = memo(function ContextMenuRow({
   ...rest
 }: ContextMenuRowProps) {
   // 必须在提前 return 之前调用（Hook 顺序），`record` 为空时用不上也无妨。
-  const { message } = App.useApp();
+  const toast = useToast();
   useLocale();
   if (!record) return <tr {...rest} />;
+  // 「复制」子菜单：右键与行内「⋯」共用同一个 builder，字段与提示完全一致。
+  const copyMenu = copyMenuFor(record, toast);
   return (
     <RowContextMenu
       items={
@@ -66,9 +69,8 @@ const ContextMenuRow = memo(function ContextMenuRow({
           : [
               batchSelectAction(enterSelecting),
               ...primaryActionsFor(record, deps),
-              // 「复制」子菜单：把标题 / 目标岗位 / 公司 / 备注 / 整行拿出去（贴招聘表单、
-              // 发内推、粘进表格）。它是一次性的取数动作，不该占列表宽度，所以只在右键里。
-              copyMenuFor(record, message),
+              // 把标题 / 目标岗位 / 公司 / 备注 / 整行拿出去（贴招聘表单、发内推、粘进表格）。
+              copyMenu,
               ...secondaryActionsFor(record, deps),
             ]
       }
@@ -132,6 +134,8 @@ export default function ResumeTable({
   batchActions,
 }: Props) {
   useLocale(); // 本组件用模块级 t()，必须订阅语言变化，否则切语言后列头与菜单不重渲染
+  // 行内「⋯」里的「复制」也要弹 Toast：与右键共用同一个 notifier（同 key 覆盖）。
+  const toast = useToast();
   const tableWrapRef = useRef<HTMLDivElement>(null);
 
   // 列宽加起来会超过容器（标题固定 220 + 最近修改列），antd 因此把表格放进一个
@@ -150,7 +154,8 @@ export default function ResumeTable({
   /**
    * 主操作（预览 / 导出）平铺在行上；其余操作（重命名 / 备注 / 对比 / 收藏 / 删除）既进
    * 行内「更多」下拉，也进整行右键菜单——两处共用 `secondaryActionsFor` 这一份清单，
-   * 菜单里都不重复「预览 / 导出」，也不含右键独有的「复制」子菜单（那是取数动作）。
+   * 菜单里都不重复「预览 / 导出」。「复制」子菜单是另一份 builder（`copyMenuFor`），
+   * 同样两处都挂：只在右键里的话，不知道能右键的人永远找不到。
    * 动作定义在模块级 builder 里（ContextMenuRow 复用同一份），这里只做绑定。
    */
   const actionDeps = useMemo<RowActionDeps>(
@@ -395,6 +400,8 @@ export default function ResumeTable({
           primary={primaryActions(record)}
           more={[
             batchSelectAction(batch.enterSelecting),
+            // 行内「⋯」也要能复制：只在右键里的话，不知道能右键的人永远找不到。
+            copyMenuFor(record, toast),
             ...secondaryActionsFor(record, actionDeps),
           ]}
           disabled={batch.selecting}

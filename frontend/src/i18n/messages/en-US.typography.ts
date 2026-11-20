@@ -321,8 +321,8 @@ const typography = {
   "typography.photoFrameEmpty":
     "Select the photo to see its frame ratio and the suggested crop ratio.",
   "typography.photoGuide.text":
-    "Photo size, border, radius and offsets are adjusted in the Photo frame control on the left",
-  "typography.photoGuide.action": "Go to Photo frame",
+    "Photo size, border, radius and offsets are adjusted under Photo → Border & position in the left column",
+  "typography.photoGuide.action": "Go to Photo",
   "typography.objectGroup.text": "Text and color",
   "typography.objectGroup.spacing": "Spacing and indent",
   "typography.objectGroup.list": "List and align",

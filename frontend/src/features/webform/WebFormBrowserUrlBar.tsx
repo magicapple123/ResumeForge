@@ -13,6 +13,14 @@
  * 有网址时这颗附着按钮是 primary（「打开目标页」）；没网址时它是 default 且禁用，
  * 主按钮让给工具条的「开启专用浏览器」。两者不并存（见 `Workbar`）。
  *
+ * ## 不渲染 vs 隐藏
+ *
+ * `Input.Search` 在 antd v6 里**无条件**渲染 enterButton（`es/input/Search.js`），
+ * `enterButton={undefined}` 会落回默认的放大镜按钮：图标语义是"搜索"、行为却是"打开
+ * 目标页"，且没有 aria-label。所以 `showOpenButton=false` 时这里换成裸 `Input`
+ * 自己接 `onPressEnter`，**彻底不渲染**那颗按钮；用 CSS 藏只会把它留在焦点序与
+ * 无障碍树里。
+ *
  * ## 历史菜单的限高
  *
  * 自绘容器仍是**唯一**滚动层（内层菜单 `overflow: visible` 的兜底在 `modules-webform.css`）。
@@ -23,6 +31,7 @@ import { App } from "antd";
 import { ClockCircleOutlined, DeleteOutlined, LinkOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Input, Tooltip, Typography, theme } from "antd";
 import type { MenuProps } from "antd";
+import type { ChangeEvent } from "react";
 import type { WebFormUrlHistory } from "../../types";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -96,62 +105,74 @@ export default function WebFormBrowserUrlBar({
     ),
   }));
 
+  const historySuffix = (
+    <Dropdown
+      trigger={["click"]}
+      disabled={busy || history.length === 0}
+      menu={{ items, disabled: busy || history.length === 0 }}
+      // 历史可能攒几十条：菜单自绘成限高滚动容器（外观取 token，限高在页面样式里）。
+      // 1. 自定义容器会取代默认浮层的外观——背景/圆角/边框/阴影必须自己补齐，
+      //    否则白底直接贴在页面上没有浮层感；
+      // 2. 滚动只留外层这一条（内层菜单的 overflow 兜底在 modules-webform.css），
+      //    内层再滚会出现双滚动条（2026 用户反馈）。
+      popupRender={(menuNode) => (
+        <div
+          className="webform-history-popup"
+          style={{
+            background: token.colorBgElevated,
+            borderRadius: token.borderRadiusLG,
+            border: `1px solid ${token.colorBorderSecondary}`,
+            boxShadow: token.boxShadowSecondary,
+          }}
+        >
+          {menuNode}
+        </div>
+      )}
+    >
+      <Tooltip title={t("webFormPage.urlBar.history")}>
+        {/* 时钟图标只是历史入口：点它不提交，输入框的 Enter / 附着按钮才是提交。 */}
+        <Button
+          type="text"
+          size="small"
+          icon={<ClockCircleOutlined />}
+          aria-label={t("webFormPage.urlBar.history")}
+          disabled={busy || history.length === 0}
+        />
+      </Tooltip>
+    </Dropdown>
+  );
+  const sharedProps = {
+    className: "webform-url-input",
+    value,
+    prefix: <LinkOutlined />,
+    suffix: historySuffix,
+    placeholder: t("webFormPage.urlBar.placeholder"),
+    onChange: (event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value),
+    "aria-label": t("webFormPage.urlBar.inputAria"),
+  };
+
+  // `showOpenButton=false` 时必须**换控件**而不是把 `enterButton` 传空：
+  // antd v6 的 `Input.Search` 无条件渲染 enterButton（`es/input/Search.js`），
+  // 传 `undefined` 仍会落回默认的放大镜 `<Button icon={<SearchOutlined/>}/>`——
+  // 图标语义是"搜索"、行为却是"打开目标页"，还没有 aria-label。用 CSS 藏也不行：
+  // 按钮仍在焦点序与无障碍树里。所以这一态直接用裸 `Input`，回车照样提交。
+  if (!showOpenButton) {
+    return <Input {...sharedProps} onPressEnter={() => onOpen()} />;
+  }
+
   return (
     <Input.Search
-      className="webform-url-input"
-      value={value}
-      prefix={<LinkOutlined />}
-      suffix={
-        <Dropdown
-          trigger={["click"]}
-          disabled={busy || history.length === 0}
-          menu={{ items, disabled: busy || history.length === 0 }}
-          // 历史可能攒几十条：菜单自绘成限高滚动容器（外观取 token，限高在页面样式里）。
-          // 1. 自定义容器会取代默认浮层的外观——背景/圆角/边框/阴影必须自己补齐，
-          //    否则白底直接贴在页面上没有浮层感；
-          // 2. 滚动只留外层这一条（内层菜单的 overflow 兜底在 modules-webform.css），
-          //    内层再滚会出现双滚动条（2026 用户反馈）。
-          popupRender={(menuNode) => (
-            <div
-              className="webform-history-popup"
-              style={{
-                background: token.colorBgElevated,
-                borderRadius: token.borderRadiusLG,
-                border: `1px solid ${token.colorBorderSecondary}`,
-                boxShadow: token.boxShadowSecondary,
-              }}
-            >
-              {menuNode}
-            </div>
-          )}
-        >
-          <Tooltip title={t("webFormPage.urlBar.history")}>
-            {/* 时钟图标只是历史入口：点它不提交，输入框的 Enter / 附着按钮才是提交。 */}
-            <Button
-              type="text"
-              size="small"
-              icon={<ClockCircleOutlined />}
-              aria-label={t("webFormPage.urlBar.history")}
-              disabled={busy || history.length === 0}
-            />
-          </Tooltip>
-        </Dropdown>
-      }
-      placeholder={t("webFormPage.urlBar.placeholder")}
-      onChange={(event) => onChange(event.target.value)}
+      {...sharedProps}
       onSearch={() => onOpen()}
       enterButton={
-        showOpenButton ? (
-          <Button
-            type={hasUrl || running ? "primary" : "default"}
-            loading={busy}
-            disabled={busy || !hasUrl}
-          >
-            {t("webFormPage.urlBar.open")}
-          </Button>
-        ) : undefined
+        <Button
+          type={hasUrl || running ? "primary" : "default"}
+          loading={busy}
+          disabled={busy || !hasUrl}
+        >
+          {t("webFormPage.urlBar.open")}
+        </Button>
       }
-      aria-label={t("webFormPage.urlBar.inputAria")}
     />
   );
 }

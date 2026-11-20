@@ -90,6 +90,44 @@ html:has(.app-titlebar[data-hidden="true"]) .app-sider {
   height: 100vh !important;
 }
 
+/*
+ * 模态/抽屉层整体让开标题栏那一条（2026-11-20 真机，两轮迭代后的结论）。
+ *
+ * 第一轮试过"把标题栏抬到 z-index 3300"——它确实不再被压暗，但**盖住了本来从 y=0 起的
+ * 固定层**（右侧预览面板、sticky 工具条），用户立刻看到"红框里的内容被挡了"。
+ * 第二轮试过"只让遮罩让位"——视觉对了，但 `.ant-modal-wrap` 仍从 y=0 起，
+ * 于是制作台里点"文件/编辑/视图"**点不动**（点击被 wrap 吃掉）。
+ *
+ * 最终口径：**这一层整体下移**，标题栏永远在最上面且可点，层级关系一律不动：
+ *  - wrap：点击层 + 滚动容器，与 mask 一起下移；
+ *  - drawer：内容与遮罩一起下移，高度同步减一条；
+ *  - 全屏（`data-hidden="true"`）时全部还原——否则顶上会留一条亮缝。
+ * 整屏弹窗（制作台）的 inline `top:0/height:100dvh` 由下面的规则改成填满 wrap。
+ */
+html:has(.app-titlebar:not([data-hidden="true"])) .ant-modal-wrap,
+html:has(.app-titlebar:not([data-hidden="true"])) .ant-modal-mask,
+html:has(.app-titlebar:not([data-hidden="true"])) .ant-drawer-mask,
+html:has(.app-titlebar:not([data-hidden="true"])) .ant-drawer-content-wrapper {
+  top: var(--rf-titlebar-height);
+}
+
+html:has(.app-titlebar:not([data-hidden="true"])) .ant-drawer-content-wrapper {
+  height: calc(100% - var(--rf-titlebar-height));
+}
+
+/* 制作台：wrap 上挂的是**行内** `inset:0`（`WorkbenchModalFrame` 的 styles.wrapper），
+   普通规则压不过，必须 `!important`。wrap 让位后，里面那个 `top:0/height:100dvh` 的
+   modal 改成填满 wrap，否则底部会多出 32px 滚动。 */
+html:has(.app-titlebar:not([data-hidden="true"])) .resume-zoom-workbench-wrap {
+  top: var(--rf-titlebar-height) !important;
+  height: calc(100% - var(--rf-titlebar-height)) !important;
+}
+
+html:has(.app-titlebar:not([data-hidden="true"])) .resume-zoom-workbench-wrap .ant-modal {
+  top: 0 !important;
+  height: 100% !important;
+}
+
 .app-titlebar {
   position: relative;
   display: flex;

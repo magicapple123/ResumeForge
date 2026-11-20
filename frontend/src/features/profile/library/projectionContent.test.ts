@@ -19,6 +19,7 @@ import {
   itemSourceKey,
   mergeProjectionCandidate,
   projectionDocument,
+  projectionFillCount,
   resolvableProjectionCandidates,
   resolveProjectionCandidate,
 } from "./projectionContent";
@@ -357,6 +358,31 @@ describe("合并（只做加法 + source 去重 + 仅素材）", () => {
       (item) => item.kind === "field" && item.placement === "hidden",
     );
     expect(hidden).toHaveLength(1);
+  });
+
+  it("等价性守卫：projectionFillCount 恒等于 mergeProjectionCandidate().filled", () => {
+    const source = projection();
+    // 三种形态：空文档（整条追加）、满文档（已填 0）、只差一个字段（部分可填）。
+    const partial: ResumeDocument = emptyDocument();
+    partial.sections.push({
+      key: "education",
+      title: "",
+      kind: "entries",
+      layout: defaultSectionLayout(),
+      entries: [
+        entry("ob_target000001", [
+          field("ob_mine00000001", "school", "My school", "title"),
+          field("ob_blank0000001", "degree", "", "meta"),
+        ]),
+      ],
+    });
+    for (const document of [emptyDocument(), makeDocument(), partial]) {
+      for (const resolved of resolvableProjectionCandidates(source)) {
+        expect(projectionFillCount(document, resolved)).toBe(
+          mergeProjectionCandidate(document, resolved).filled,
+        );
+      }
+    }
   });
 
   it("applyProjectionCandidate 一步到位；解析不到返回 null", () => {

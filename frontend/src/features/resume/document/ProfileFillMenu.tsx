@@ -17,11 +17,12 @@
  */
 import { ImportOutlined } from "@ant-design/icons";
 import { App, Button, Dropdown, Input, Tooltip } from "antd";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocale } from "../../../i18n/i18nContext";
 import { getCurrentProjection } from "../../profile/library/api";
 import {
   mergeProjectionCandidate,
+  projectionFillCount,
   resolvableProjectionCandidates,
 } from "../../profile/library/projectionContent";
 import type { ResolvedProjectionCandidate } from "../../profile/library/projectionContent";
@@ -121,7 +122,22 @@ export default function ProfileFillMenu({ document, onChange, selectedPath = nul
     }
   };
 
-  const candidates = resolvableProjectionCandidates(projection);
+  const candidates = useMemo(() => resolvableProjectionCandidates(projection), [projection]);
+  /**
+   * 每个候选在当前文档里还能填几个字段。判据只有 `projectionFillCount`（= 合并用的
+   * `projectionFillPlan`），菜单不另写"来源已存在/字段非空"。
+   *
+   * 只在 `document` 或候选变化时重算：搜索输入的每次按键都不该重跑（候选条数是数百级）。
+   */
+  const fillableByKey = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const resolved of candidates) {
+      map.set(candidateKey(resolved.candidate), projectionFillCount(document, resolved));
+    }
+    return map;
+  }, [document, candidates]);
+  const fillableOf = (resolved: ResolvedProjectionCandidate): number =>
+    fillableByKey.get(candidateKey(resolved.candidate)) ?? 0;
   const matchesTarget = (resolved: ResolvedProjectionCandidate): boolean => {
     if (!target) return true;
     return resolved.sectionKey === target.section && resolved.entry.id === target.entryId;
@@ -156,16 +172,30 @@ export default function ProfileFillMenu({ document, onChange, selectedPath = nul
 
   // #22：层级——条目缩进一级，右侧固定灰色板块名（不靠悬停也能看出属于哪个板块）。
   // 主文案仍单行省略 + title 兜底（R-33 R3）；右侧板块名是稳定小字长，不参与省略。
+  // 已填满的候选**留在列表里**并标「已填」：从菜单里凭空消失才是"资料丢了"的错觉来源。
   const option = (resolved: ResolvedProjectionCandidate) => {
     const label = optionLabel(resolved.candidate);
     const section = resolved.candidate.section_name;
+    const filled = fillableOf(resolved) <= 0;
     return (
       <span className="rf-profile-fill-option" title={label}>
         <span className="rf-profile-fill-option-label">{label}</span>
         {section ? <span className="rf-profile-fill-option-section">{section}</span> : null}
+        {filled ? (
+          <span className="rf-profile-fill-option-state">
+            {t("editor.profileFill.state.filled")}
+          </span>
+        ) : null}
       </span>
     );
   };
+
+  /** 候选 → 菜单项：没有可填空字段的一律 disabled（点击不会走 `applyCandidate`）。 */
+  const candidateItem = (resolved: ResolvedProjectionCandidate) => ({
+    key: candidateKey(resolved.candidate),
+    label: option(resolved),
+    disabled: fillableOf(resolved) <= 0,
+  });
 
   const emptyItem = {
     key: "__empty",
@@ -181,10 +211,7 @@ export default function ProfileFillMenu({ document, onChange, selectedPath = nul
     visible.length === 0
       ? [emptyItem]
       : target
-        ? visible.map((resolved) => ({
-            key: candidateKey(resolved.candidate),
-            label: option(resolved),
-          }))
+        ? visible.map(candidateItem)
         : Object.entries(
             visible.reduce<Record<string, ResolvedProjectionCandidate[]>>((groups, resolved) => {
               (groups[resolved.candidate.section_name] ??= []).push(resolved);
@@ -193,11 +220,15 @@ export default function ProfileFillMenu({ document, onChange, selectedPath = nul
           ).map(([label, group]) => ({
             type: "group" as const,
             label,
-            children: group.map((resolved) => ({
-              key: candidateKey(resolved.candidate),
-              label: option(resolved),
-            })),
+            children: group.map(candidateItem),
           }));
+
+  // 计数行数**可填字段的候选**，不是候选条数：一条候选把所有字段都填过了，就不算"可填"。
+  const fillableCount = visible.filter((resolved) => fillableOf(resolved) > 0).length;
+  const filledCount = visible.length - fillableCount;
+  const countText =
+    t("editor.profileFill.countFillable", { count: fillableCount }) +
+    (filledCount > 0 ? " · " + t("editor.profileFill.countFilled", { count: filledCount }) : "");
 
   // 问题 5：搜索框与计数行**不再是菜单项**，改由 `popupRender` 渲染在固定头部
   // （`.rf-profile-fill-head`）里；`items` 只剩候选（或空态说明）。
@@ -324,9 +355,7 @@ export default function ProfileFillMenu({ document, onChange, selectedPath = nul
               onClick={(event) => event.stopPropagation()}
               onChange={(event) => setQuery(event.target.value)}
             />
-            <span className="rf-profile-fill-count-text">
-              {t("editor.profileFill.count", { count: visible.length })}
-            </span>
+            <span className="rf-profile-fill-count-text">{countText}</span>
           </div>
           <div className="rf-profile-fill-list">{menu}</div>
         </div>

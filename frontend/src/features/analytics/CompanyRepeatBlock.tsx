@@ -6,12 +6,13 @@
  * 数据为空时给可读空态——真实库 12 条记录分属 12 家公司，"同公司多投"当前确实为 0，
  * 这不是缺数据，而是这批数据的事实。
  */
-import { Empty, Typography } from "antd";
+import { Typography } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { CompanyRepeat } from "../../types";
 import HorizontalBarChart from "./HorizontalBarChart";
 import SectionCard from "./SectionCard";
+import EmptyState from "../../components/common/EmptyState";
 
 function repeatHint(item: CompanyRepeat): string {
   return t("analyticsPage.companyRepeats.itemHint", {
@@ -35,7 +36,7 @@ export default function CompanyRepeatBlock({
       description={t("analyticsPage.companyRepeats.description")}
     >
       {repeats.length === 0 ? (
-        <Empty description={t("analyticsPage.companyRepeats.empty")} />
+        <EmptyState description={t("analyticsPage.companyRepeats.empty")} />
       ) : (
         <>
           <HorizontalBarChart

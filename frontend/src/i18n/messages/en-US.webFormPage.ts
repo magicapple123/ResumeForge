@@ -27,6 +27,8 @@ const webFormPage = {
   "webFormPage.onboarding.title": "Fill-in flow",
   "webFormPage.recent.title": "Recent fills",
   "webFormPage.recent.viewAll": "View all",
+  "webFormPage.recent.collapse": "Collapse",
+  "webFormPage.recent.truncated": "Showing the latest {count} only",
   "webFormPage.recent.emptyWhat": "What happens here",
   "webFormPage.recent.emptyBody":
     "After your first fill, this lists the page and how many fields were filled, newest first.",
@@ -206,6 +208,8 @@ const webFormPage = {
   "webFormPage.toast.restored":
     "Restored the form read last time; the selection is back to default, review before filling",
   "webFormPage.error.restoreFailed": "The form read last time is no longer valid, read it again",
+  "webFormPage.sampleLocked.hint":
+    "This is the sample dataset: demo data is never filled into real application forms. Switch to your own dataset to use this feature.",
 } as const;
 
 export default webFormPage;

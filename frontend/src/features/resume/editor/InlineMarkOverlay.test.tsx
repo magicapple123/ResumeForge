@@ -10,7 +10,8 @@
  *    光标就会落在两个字的缝隙里，而任何文本断言都看不出来；
  * 3. 文本域的 value **一个字都不改**（受控值仍是含标记的源串）：行内格式的写回链路按
  *    源串偏移工作，这里若换成可见文本，那条链路会在错误坐标系里加标记；
- * 4. 输入法组合期给容器加 `is-composing`（预编辑串只画在文本域上，必须显形）。
+ * 4. 输入法组合期给容器加 `is-composing`（预编辑串只画在文本域上，必须显形）；
+ * 5. **只画四样**：文字 / 隐藏段 / 选区 / 链接下划线（T01：字号、字重、颜色一律不画）。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -85,25 +86,37 @@ describe("InlineMarkOverlay", () => {
     }
   });
 
-  it("样式区间按实际样式渲染：字号走百分比、颜色原样", () => {
-    // 区间是 `{@…}y{@}`：`y` 在区间内（带样式），`x` 在区间外。
+  /**
+   * T01 改写：遮罩层**永不**画字号 / 颜色 / 字重。
+   *
+   * 旧实现如实画（font-size: 150% + color + 描边加粗），代价是"编辑时字突然变大变色"，
+   * 而且 `font-size` 改前进宽度 → 与文本域逐字错位。真实样式的预览改由
+   * `InlineMarkStatic`（开关打开 + 失焦 + 有格式）承担，两种渲染永不同框。
+   */
+  it("遮罩层不画字号/颜色/字重：带样式的区间与普通区间渲染完全一致", () => {
     const overlay = renderOverlay("x{@size=1.5,color=#2f6fd0}y{@}");
-    const styled = Array.from(overlay.querySelectorAll(".rf-inline-mark-segment")).find(
-      (node) => node.textContent === "y",
-    ) as HTMLElement | undefined;
+    const segments = Array.from(
+      overlay.querySelectorAll(".rf-inline-mark-segment"),
+    ) as HTMLElement[];
+    const styled = segments.find((node) => node.textContent === "y");
+    const plain = segments.find((node) => node.textContent === "x");
     expect(styled).toBeTruthy();
-    expect(styled?.style.fontSize).toBe("150%");
-    expect(styled?.style.color).toBe("rgb(47, 111, 208)");
-    const plain = Array.from(overlay.querySelectorAll(".rf-inline-mark-segment")).find(
-      (node) => node.textContent === "x",
-    ) as HTMLElement | undefined;
+    expect(plain).toBeTruthy();
+    expect(styled?.style.fontSize).toBe("");
+    expect(styled?.style.color).toBe("");
     expect(plain?.style.fontSize).toBe("");
     expect(plain?.style.color).toBe("");
+    // 整层都不许出现改变字宽的类。
+    expect(overlay.querySelector(".rf-inline-mark-bold")).toBeNull();
   });
 
-  it("加粗走类（描边模拟，不改字宽）；链接有下划线类", () => {
+  it("加粗不再走类；链接下划线保留（不改字宽，且是唯一的链接提示）", () => {
     const overlay = renderOverlay("**bold** [label](https://example.com)");
-    expect(overlay.querySelector(".rf-inline-mark-bold")?.textContent).toBe("bold");
+    expect(overlay.querySelector(".rf-inline-mark-bold")).toBeNull();
+    const boldSegment = Array.from(overlay.querySelectorAll(".rf-inline-mark-segment")).find(
+      (node) => node.textContent === "bold",
+    ) as HTMLElement | undefined;
+    expect(boldSegment?.style.fontWeight).toBe("");
     expect(overlay.querySelector(".rf-inline-mark-link")?.textContent).toBe("label");
   });
 

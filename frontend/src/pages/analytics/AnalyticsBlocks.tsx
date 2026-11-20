@@ -4,7 +4,7 @@
  * 拆分理由：AnalyticsPage 迁入 i18n 后超过 500 行预算，而这两个区块是**独立的数据展示**
  * （投递最多的公司 / 真实时间线），只依赖 analytics 后端类型与通用图表组件，不碰页面状态。
  */
-import { Col, Empty, Row, Tag, Typography } from "antd";
+import { Col, Row, Tag, Typography } from "antd";
 import { Link } from "react-router-dom";
 import DataGapNotice from "../../features/analytics/DataGapNotice";
 import HorizontalBarChart from "../../features/analytics/HorizontalBarChart";
@@ -14,6 +14,7 @@ import { useLocale } from "../../i18n/i18nContext";
 import type { AnalyticsDashboard, TrackCohort } from "../../types";
 import { UNKNOWN_COMPANY_LABEL, trackStatusLabel } from "./analyticsLabels";
 import { formatRate } from "../../utils/format";
+import EmptyState from "../../components/common/EmptyState";
 
 /** 「投递最多的公司」：展示清洗后的真实公司前 5 名。
  *
@@ -32,7 +33,7 @@ export function TopCompaniesBlock({ data }: { data: AnalyticsDashboard }) {
     .reduce((sum, item) => sum + item.count, 0);
 
   if (data.total_applications === 0) {
-    return <Empty description={t("analyticsPage.empty.noApplications")} />;
+    return <EmptyState description={t("analyticsPage.empty.noApplications")} />;
   }
   if (realGroups.length === 0) {
     // 有记录但全都没填公司名：诚实说明缺口，而不是画一张空榜或展示垃圾。
@@ -81,7 +82,7 @@ export function CohortBlock({ cohort }: { cohort: TrackCohort }) {
   useLocale();
   if (cohort.event_track_count === 0) {
     return (
-      <Empty
+      <EmptyState
         description={
           cohort.historical_track_count > 0
             ? t("analyticsPage.cohort.emptyHistorical", {

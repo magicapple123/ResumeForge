@@ -123,6 +123,13 @@ const document = {
   "document.field.value": "Value",
   "document.field.valuePlaceholder": "Enter a value",
   "document.inlineFormat": "Inline format",
+  "document.inlineFormat.preview": "Preview inline formatting",
+  "document.inlineFormat.previewHint":
+    "Shows real styling when not editing; the box stays plain text while typing, or the caret drifts.",
+  "document.inlinePreview.enterHint": "Press Enter or click to edit",
+  "document.inlineFormat.appliedHint": "Applied {what} · leave the field to see it",
+  "document.inlineFormat.clearedHint": "Formatting cleared · leave the field to see it",
+  "document.inlineFormat.previewSaveFailed": "Could not save the switch; reverted",
   "document.field.label": "Label",
   "document.field.labelPlaceholder": "Field label",
   "document.field.unnamed": "Unnamed field",

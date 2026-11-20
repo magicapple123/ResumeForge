@@ -172,3 +172,30 @@
 .document-editor :not([draggable="true"]) {
   -webkit-user-drag: none;
 }
+
+/* T01：行内格式一行末尾的「预览行内格式」开关。
+   贴在工具条右侧、不占满整行；`margin-inline-start: auto` 让它靠右，工具条宽度变化时
+   不会把开关挤到第二行（窄栏下允许换行，`flex-wrap` 由宿主 `.document-field-row` 决定）。 */
+.document-inline-preview-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: auto;
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+  white-space: nowrap;
+}
+
+/* 标签单独成类是为了让它成为唯一可被省略的那一段：窄栏里先压标签、不压开关。 */
+.document-inline-preview-switch__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.document-inline-preview-switch__hint {
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+  color: var(--rf-text-tertiary, var(--rf-text-secondary));
+}

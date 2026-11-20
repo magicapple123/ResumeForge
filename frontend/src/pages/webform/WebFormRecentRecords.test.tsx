@@ -41,19 +41,13 @@ function record(id: number, overrides: Record<string, unknown> = {}) {
 }
 
 function renderCard(overrides: Partial<Parameters<typeof WebFormRecentRecords>[0]> = {}) {
-  const onViewAll = vi.fn();
   const onUseUrl = vi.fn();
   render(
     <AntdApp>
-      <WebFormRecentRecords
-        urlHistory={[]}
-        onViewAll={onViewAll}
-        onUseUrl={onUseUrl}
-        {...overrides}
-      />
+      <WebFormRecentRecords urlHistory={[]} onUseUrl={onUseUrl} {...overrides} />
     </AntdApp>,
   );
-  return { onViewAll, onUseUrl };
+  return { onUseUrl };
 }
 
 beforeEach(() => {
@@ -78,30 +72,39 @@ describe("WebFormRecentRecords", () => {
     expect(viewAll).toBeDisabled();
   });
 
-  it("renders at most three rows with time, page and filled count", async () => {
+  it("T03：默认铺 10 条（不再是 3 条），并带时间 / 页面 / 已填数", async () => {
     apiMocks.listWebFormRecordsPage.mockResolvedValue({
-      items: [record(1), record(2), record(3), record(4), record(5)],
-      total: 5,
+      items: Array.from({ length: 12 }, (_, index) => record(index + 1)),
+      total: 12,
     });
     renderCard();
 
     expect(await screen.findByText("record-1")).toBeInTheDocument();
-    expect(screen.getAllByRole("listitem")).toHaveLength(3);
-    expect(screen.queryByText("record-4")).toBeNull();
+    expect(screen.getAllByRole("listitem")).toHaveLength(10);
+    expect(screen.queryByText("record-11")).toBeNull();
     expect(
       screen.getByText(recordsZh["webFormRecords.tag.filled"].replace("{count}", "1")),
     ).toBeInTheDocument();
   });
 
-  it("View all is clickable only with records and hands off to the page", async () => {
-    apiMocks.listWebFormRecordsPage.mockResolvedValue({ items: [record(1)], total: 1 });
-    const { onViewAll } = renderCard();
+  it("T03：「查看全部」就地展开到接口上限，按钮变「收起」，不再开抽屉", async () => {
+    apiMocks.listWebFormRecordsPage.mockResolvedValue({
+      items: Array.from({ length: 12 }, (_, index) => record(index + 1)),
+      total: 12,
+    });
+    renderCard();
 
     const viewAll = await screen.findByRole("button", { name: zh["webFormPage.recent.viewAll"] });
     await waitFor(() => expect(viewAll).toBeEnabled());
     fireEvent.click(viewAll);
 
-    expect(onViewAll).toHaveBeenCalledTimes(1);
+    // 第二次请求取满 100 条（接口 page_size 上限）。
+    await waitFor(() => expect(apiMocks.listWebFormRecordsPage).toHaveBeenCalledWith(1, 100));
+    // 列表当场变长，按钮同时变「收起」。
+    expect(
+      await screen.findByRole("button", { name: zh["webFormPage.recent.collapse"] }),
+    ).toBeTruthy();
+    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(12));
   });
 
   it("the empty state reuses the URL history and fills the address back", async () => {

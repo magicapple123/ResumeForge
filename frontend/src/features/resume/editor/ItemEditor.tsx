@@ -25,6 +25,7 @@ import {
 } from "../document";
 import InlineMarkButtons from "../layout/InlineMarkButtons";
 import InlineMarkContextMenu from "../layout/InlineMarkContextMenu";
+import InlineFormatPreviewSwitch from "./InlineFormatPreviewSwitch";
 import InlineMarkTextArea from "./InlineMarkTextArea";
 import { AuthorsValuesEditor, FieldValueEditor, ListValuesEditor } from "./itemValueEditors";
 import { applyInlineEdit, getFocusedField } from "./lastFocusedTextarea";
@@ -152,6 +153,8 @@ export default function ItemEditor({
               getRememberedRange={getRange}
               onCommit={inlineCommit}
             />
+            {/* T01：未编辑时的真实样式预览（全局设置，行末开关）。 */}
+            <InlineFormatPreviewSwitch />
           </div>
         )}
         {/* F22：字段名对所有非正文 item 开放（以前只有自定义字段有输入框）。

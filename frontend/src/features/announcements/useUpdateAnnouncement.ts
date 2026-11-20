@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 公告条的第一个真实来源：更新可用 / 更新包已下载。
+ * 公告条的第一个真实来源：更新包已下载。
+ *
+ * `update.ready`（有新版本）已交给启动更新弹窗（UP-01）：弹窗有版本号、发布说明和
+ * 下载/安装，公告条再报一次会变成"弹窗 + 顶部黄条"同屏说同一件事。这里只保留
+ * `update.downloaded`（下载完待安装）——弹窗被「隐藏」或用户关了之后，它仍是入口。
  *
  * 刻意只接这一类。另外三个 code（`backend.degraded` / `dataset.error`）**留接口不接实现**：
  * 每接一类都要先定义"什么时候清"，没有真实触发点就写死逻辑，只会留下一条永远不消失的公告。
@@ -22,14 +26,9 @@ export function useUpdateAnnouncement(enabled = true): void {
       .then((result) => {
         if (cancelled) return;
         if (result.update_available) {
-          postAnnouncement({
-            code: "update.ready",
-            severity: "warning",
-            message: t("announcement.update.ready"),
-            action: { label: t("announcement.update.action"), to: "/settings" },
-            generation: result.latest_version || result.current_version,
-            hideOnPaths: ["/settings"],
-          });
+          // UP-01：启动弹窗负责"有新版本"这件事；这里只清旧公告，防止历史会话留下的
+          // 黄条与弹窗同屏。注意不要在这里 return 前忘记清——公告存在存储里。
+          clearAnnouncement("update.ready");
           return;
         }
         clearAnnouncement("update.ready");

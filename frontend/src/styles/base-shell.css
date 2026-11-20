@@ -163,13 +163,6 @@ body {
   content: none;
 }
 
-.app-brand-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
 .app-brand-copy {
   display: flex;
   min-width: 0;

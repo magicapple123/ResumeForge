@@ -258,22 +258,28 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
    * DF-3 落点：下方优先；放不下翻到光标上方（菜单底边贴光标，留 `MENU_GAP`）。
    * 尺寸测到之前不定位也不显示（`visibility: hidden`），避免闪跳。
    */
-  const placement =
-    anchor && menuSize
-      ? anchoredPlacement(
-          {
-            top: anchor.y,
-            left: anchor.x,
-            right: anchor.x,
-            bottom: anchor.y,
-            width: 0,
-            height: 0,
-          },
-          viewport,
-          menuSize,
-          { gap: MENU_GAP, alignX: "start" },
-        )
-      : null;
+  /**
+   * 落点**永远**用真实尺寸或兜底尺寸算：`placement === null` 时 `targetOffset` 会退化成
+   * `[0, 0]`，而 `[0, 0]` 的语义是"贴宿主左上角"——这正是首帧闪在宿主左上角的原因。
+   * 能不能显示是另一件事，由下面的 `placed` 单独控制。
+   */
+  const placement = anchor
+    ? anchoredPlacement(
+        {
+          top: anchor.y,
+          left: anchor.x,
+          right: anchor.x,
+          bottom: anchor.y,
+          width: 0,
+          height: 0,
+        },
+        viewport,
+        menuSize ?? FALLBACK_MENU_SIZE,
+        { gap: MENU_GAP, alignX: "start" },
+      )
+    : null;
+  /** 可见性：**测得真实尺寸之后**才显示（位置在测量期间已经按兜底尺寸算好了）。 */
+  const placed = anchor !== null && placement !== null && menuSize !== null;
 
   // 两种方向的落点都已换算成"菜单左上角"（`placement.top` 在上方时是翻转后的顶边），
   // 所以 `points` 恒为 `["tl", "tl"]`：目标点是 Dropdown 的子元素（整张宿主卡片），
@@ -423,10 +429,12 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
         open={open}
         trigger={[]}
         // I-25：宽度由样式表收口（此前长标签把菜单撑到半屏）。
-        overlayClassName="rf-inline-mark-menu"
+        // antd v6 起 `overlayClassName` 已 deprecated，改用 `classNames.root`
+        // （两者同时给会让类挂到不同层，宽度收口失效）。
+        classNames={{ root: "rf-inline-mark-menu" }}
         // I-11：首帧落点还没算出来时，**连 antd 的外壳一起隐藏**。
         // 之前只隐藏内层 `.rf-inline-mark-popup`，白底圆角的外壳仍在宿主左上角闪一帧。
-        styles={{ root: menuRootStyle(placement !== null) }}
+        styles={{ root: menuRootStyle(placed) }}
         menu={{ items, onClick }}
         align={{
           // 两个方向都用「菜单左上角贴目标左上角」，目标点由 `targetOffset` 换算到 `placement`。
@@ -451,7 +459,7 @@ export default function InlineMarkContextMenu({ onCommit, disabled = false, chil
             data-placement={placement?.side ?? "below"}
             // 双保险：真正让首帧不可见的是上方的 `styles.root`（外层），这里保留内层隐藏，
             // 免得 antd 某次升级把 `styles.root` 合并进 class 之后又闪回来。
-            style={placement ? undefined : { visibility: "hidden" }}
+            style={placed ? undefined : { visibility: "hidden" }}
           >
             {/* I-25：菜单项 mousedown 会夺走输入框焦点、选区随之消失（点完「加粗」没反应）。
                 在菜单容器上拦住默认行为；链接输入框在容器外，不受影响。 */}

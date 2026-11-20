@@ -169,7 +169,7 @@ const userGuide = {
     "Jobs with “insufficient evidence / needs confirmation” need your confirmation item by item before they can join the queue; a Job with a “real gap” shows as “Do not apply” with the reason.",
   "userGuide.workflow.step1.point18.lead": "Dedicated browser",
   "userGuide.workflow.step1.point18.text":
-    "Start it on the Apply desk before applying — it is a separate window that opens the job site's home page, and you sign in once by scanning a code (sign-in is yours; the app stores neither password nor cookie). The page reads the browser state on first paint and polls it live; closing the window directly flips it back to not started, and “Refresh status” checks immediately; “Close browser” only closes the window this app started.",
+    "Start it on the Apply desk before applying — it is a separate window that opens the job site's home page, and you sign in once by scanning a code (sign-in is yours; the app stores neither password nor cookie). The page reads the browser state on first paint and polls it live; closing the window directly flips it back to not started, and “Refresh status” checks immediately; the circle-with-a-slash icon shown while the browser runs (hover for “Close browser”) only closes the window this app started.",
   "userGuide.workflow.step1.point19.lead": "Which browser",
   "userGuide.workflow.step1.point19.text":
     "“Apply settings → Browser used by the Apply desk” offers prefer Chrome automatically / Chrome only / Edge only / custom path; when you name one it looks for that one only and says so plainly if it is not installed.",
@@ -190,7 +190,7 @@ const userGuide = {
     "A single Apply record can be deleted, and the group header also has “Delete this batch”. Deleted records go to Trash and can be restored; **a deleted record no longer counts in the stats or the daily limit** — nothing in Trash appears in any statistic.",
   "userGuide.workflow.step1.point25.lead": "Web form filling",
   "userGuide.workflow.step1.point25.text":
-    "Filling a company's web form goes “open browser → open the form page → read the form → check → fill”; with a target URL it opens directly, without loading a blank page or opening duplicate dialogs.",
+    "Filling a company's web form goes “open browser → open the form page → read the form → check → fill”; with a target URL it opens directly, without loading a blank page or opening duplicate dialogs. The address bar no longer has a magnifier button — press Enter to open what you typed; while the browser runs, “Close browser” in the toolbar is a circle-with-a-slash icon that shows its name on hover.",
   "userGuide.workflow.step1.point26.lead": "Floating ball",
   "userGuide.workflow.step1.point26.text":
     "“Lili” in the dedicated browser supports click to toggle, double-click for the menu and press-and-drag. Turning live filling off grays the ball out and focusing an input no longer pops a card; “Auto-fill this page” in the menu is the shortcut for the main fill flow — it reuses the same date conversion, conflict protection and field matching, shows the result and success rate, and can also “Ask Lili” directly.",

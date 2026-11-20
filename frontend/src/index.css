@@ -43,3 +43,5 @@
 @import "./styles/bilingual.css";
 @import "./styles/provenance.css";
 @import "./theme/dark-tokens.css";
+/* WF-09 主题切换的圆形扩散：View Transitions 伪元素样式（与 dark-tokens 同批，放最后）。 */
+@import "./styles/theme-transition.css";

@@ -4,13 +4,15 @@
    纯搬迁 + 改两处宽度——选择器、类名与层叠顺序不变，由 resume-panels.css 顶部的
    @import 引入，对外入口仍是 `resume.css` 里那一条，没有第二套入口。 */
 
-/* 五行「标签 + 滑杆 + 数字」，面板定宽不跳。
-   300 = 标签 84 + 滑杆 + 数字 68 + 两处间距 16 + 余量，刚好放得下「−20.0mm」。 */
+/* 五行「标签 + 滑杆 + 数字」。
+   **宽度由宿主决定**（T02）：左栏页签里铺满整列；右键卡与 Popover 各自给 300。
+   写死 300 曾在 300 宽的右键卡里横向溢出（卡有 10+12 内边距，内容 300 装不下）——
+   右侧被裁、单位看不见、底部冒出横向滚动条，正是这条造成的。 */
 .resume-photo-frame-panel {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 300px;
+  width: 100%;
 }
 
 .resume-photo-frame-row {
@@ -48,4 +50,42 @@
 
 .resume-photo-frame-hint {
   font-size: 12px;
+}
+
+/* 左栏「照片」页签（T02）：预览+操作 → 位置 → 大小 → 边框，自上而下一条竖列。
+   页签自身不设宽度（继承面板 100%），所以从 360 到 640 都不会横向溢出。 */
+.resume-photo-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.resume-photo-tab__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.resume-photo-tab__label {
+  flex: 0 0 84px;
+  font-size: 12px;
+  color: var(--rf-text-body);
+}
+
+.resume-photo-tab__block {
+  padding-top: 2px;
+}
+
+/* 页签里的照片编辑器（`full`）：缩略图占一列、按钮在下方自动换行。 */
+.document-photo-editor.is-full {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.document-photo-editor.is-full .document-photo-frame {
+  width: 100%;
+  max-width: 220px;
 }

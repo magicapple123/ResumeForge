@@ -7,13 +7,14 @@
  *    两者只能二选一相加——所以这张卡顶部必须写清来源；
  * 3. 12 条样本下每个渠道都亮"样本少于 5 条"徽标，不把百分比当稳定结论。
  */
-import { Col, Empty, Row, Tag, Typography } from "antd";
+import { Col, Row, Tag, Typography } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { AnalyticsDashboard } from "../../types";
 import { formatRate } from "../../utils/format";
 import SectionCard from "./SectionCard";
 import StatCard from "./StatCard";
+import EmptyState from "../../components/common/EmptyState";
 
 export default function ChannelConversionBlock({ data }: { data: AnalyticsDashboard }) {
   useLocale();
@@ -24,7 +25,7 @@ export default function ChannelConversionBlock({ data }: { data: AnalyticsDashbo
       description={t("analyticsPage.channelConversion.description")}
     >
       {rows.length === 0 ? (
-        <Empty description={t("analyticsPage.channelConversion.empty")} />
+        <EmptyState description={t("analyticsPage.channelConversion.empty")} />
       ) : (
         <Row gutter={[16, 16]}>
           {rows.map((item) => (

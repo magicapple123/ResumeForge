@@ -301,9 +301,10 @@ describe("ResumeTable 行内三点（条目 01）", () => {
     expect(await screen.findByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /批量选择/ })).toBeInTheDocument();
-    // 「预览 / 导出」已平铺在行上；「复制」子菜单是右键独有的一次性取数动作，都不进三点。
+    // 「预览 / 导出」已平铺在行上，不重复进三点。
     expect(screen.queryByRole("menuitem", { name: /预览/ })).toBeNull();
-    expect(screen.queryByRole("menuitem", { name: /复制/ })).toBeNull();
+    // 「复制」子菜单两处都挂（右键 + 三点）：只在右键里的话，不知道能右键的人找不到。
+    expect(screen.getByRole("menuitem", { name: /复制/ })).toBeInTheDocument();
   });
 
   it("选择模式下三点与行内主操作一并禁用", async () => {

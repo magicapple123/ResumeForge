@@ -13,7 +13,7 @@ import {
   SafetyCertificateOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { App, Button, Empty, Input, Pagination, Select, Space, Statistic, Typography } from "antd";
+import { App, Button, Input, Pagination, Select, Space, Statistic, Typography } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
 import ErrorState from "../components/common/ErrorState";
 import { useMemo, useState } from "react";
@@ -42,6 +42,7 @@ import { t } from "../i18n";
 import { CLAIM_CATEGORY_LABEL_KEYS, VERIFICATION_STATUS_LABEL_KEYS } from "../i18n/enum/claims";
 import { StartPanel } from "./drill/StartPanel";
 import { useLocale } from "../i18n/i18nContext";
+import EmptyState from "../components/common/EmptyState";
 
 /** 列表一页 20 条，与后端 /claims/page 的默认口径一致。 */
 const CLAIMS_PAGE_SIZE = 20;
@@ -279,7 +280,7 @@ export default function ClaimsPage() {
       {loading && <PageSkeleton rows={6} />}
       {error && <ErrorState description={error} onRetry={() => void reload()} />}
       {!loading && !error && items.length === 0 && (
-        <Empty
+        <EmptyState
           description={
             keyword || category || status
               ? t("claimsPage.empty.filtered")
@@ -289,7 +290,7 @@ export default function ClaimsPage() {
           <Button type="primary" onClick={() => setDraftOpen(true)}>
             {t("claimsPage.action.fromProfile")}
           </Button>
-        </Empty>
+        </EmptyState>
       )}
 
       <div className="claims-list">

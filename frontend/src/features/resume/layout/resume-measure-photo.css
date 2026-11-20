@@ -1,0 +1,93 @@
+/* SPDX-License-Identifier: Apache-2.0
+ *
+ * WF-13：「照片」与「照片框」合并成一格。
+ *
+ * 这一格同时要在三种宿主里站住：
+ *   1. 制作台参数栏（`.resume-wb-col-params`，单列栅格 + 每行自己三列）；
+ *   2. 弹窗（`.resume-measure-grid.is-stacked`，两列栅格）；
+ *   3. 紧凑工具栏（`.is-compact`，多列自适应；当前没有照片控件宿主，规则先留全）；
+ *
+ * 合并格里标签 / 控件组 / 尾部是**直接子级**，就是为了复用第 1 种宿主的
+ * 「直接子级三段 = 三列 grid」口径（styles/resume-workbench-controls.css）。
+ */
+
+/* 基础形态 = 与 `.resume-measure-cell` 同一套 flex 行语言。
+   `grid-column: 1 / -1` 是这张卡的核心：两列布局里照片格只占左半列时，
+   右半列会空出半行，下一组控件被推下去。 */
+.resume-measure-photo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+/* 控件组吃掉剩余宽度（紧凑模式需要）；弹窗里由 `.is-stacked` 的定宽 200px
+   滑杆决定实际宽度，这两条只负责"可收缩"。 */
+.resume-measure-photo > .ant-space {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.resume-measure-photo .ant-space-item:has(.ant-slider) {
+  flex: 1 1 auto;
+  min-width: 48px;
+}
+
+.resume-measure-photo .ant-slider {
+  min-width: 0;
+}
+
+/* 尾部跟着控件，但不被压扁（与 `.is-stacked .ant-space-item:has(> .resume-measure-tail)`
+   原来的 `flex: 1 0 auto` 同义）。 */
+.resume-measure-photo > .resume-measure-tail {
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
+/* 第二行：「边框与位置」按钮。左内边距 40px = 标签 34px + gap 6px（任务卡口径，
+   对应紧凑态的 `.resume-measure-label`）。弹窗/制作台的标签列更宽，见下面两条覆盖。 */
+.resume-measure-photo-slot {
+  flex: 1 0 100%;
+  min-width: 0;
+  padding-left: 40px;
+}
+
+/* 弹窗里 `.is-stacked .resume-measure-label` 是 44px 定宽 → 起点在 44 + 6 = 50。
+   40 在这里会差 10px，滑杆与按钮各画一条竖线。 */
+.resume-measure-grid.is-stacked .resume-measure-photo-slot {
+  padding-left: 50px;
+}
+
+/* ===== 制作台参数栏：沿用「标签 72 / 控件 128–152 / 尾部 1fr」三列 =====
+   参数栏的外层栅格是单列，这一格必须自己再分三列，滑杆才会与行距 / 页边距
+   落在同一条竖线上（styles/resume-workbench-controls.css 对旧的 `.ant-space`
+   行就是这么做的）。 */
+.resume-wb-col-params .resume-measure-grid.is-stacked > .resume-measure-photo {
+  display: grid;
+  grid-template-columns:
+    var(--resume-wb-label-w)
+    minmax(var(--resume-wb-controls-min-w), var(--resume-wb-controls-w))
+    minmax(min-content, 1fr);
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 6px;
+}
+
+.resume-wb-col-params
+  .resume-measure-grid.is-stacked
+  > .resume-measure-photo
+  > .resume-measure-tail {
+  justify-self: stretch;
+}
+
+/* 制作台里槽位跨满三列，起点对齐控件列（72 + 6）。40px 只在标签 34 的宿主成立；
+   这里不改 40 是因为它同时服务于弹窗，宿主差异用这一条盖住。 */
+.resume-wb-col-params
+  .resume-measure-grid.is-stacked
+  > .resume-measure-photo
+  > .resume-measure-photo-slot {
+  grid-column: 1 / -1;
+  padding-left: calc(var(--resume-wb-label-w) + 6px);
+}

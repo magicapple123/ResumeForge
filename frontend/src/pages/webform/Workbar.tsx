@@ -51,6 +51,7 @@ export const Workbar = memo(function Workbar({
   onExportDiagnostics,
   onEndSession,
   onboarding = false,
+  sampleLocked = false,
 }: {
   targetUrl: string;
   onChangeTargetUrl: (url: string) => void;
@@ -75,6 +76,11 @@ export const Workbar = memo(function Workbar({
    * 这样「开启专用浏览器」在全页只出现一次。
    */
   onboarding?: boolean;
+  /**
+   * 当前数据集是「体验示例」：示例数据不参与真实填表，起浏览器的入口在这里灰掉。
+   * 文案与后端 409 共用同一条（`webFormPage.sampleLocked.hint`）。
+   */
+  sampleLocked?: boolean;
 }) {
   // 本组件用模块级 t()：订阅语言变化，否则切语言后这些按钮与提示不重渲染。
   useLocale();
@@ -115,6 +121,16 @@ export const Workbar = memo(function Workbar({
           <Typography.Text type="secondary" className="webform-workbar-hint">
             {t("webFormPage.browserCard.isolatedHint")}
           </Typography.Text>
+          {/* 示例数据提示与上面那句不同性质（一句讲机制、一句讲"现在不能真填"），
+              并排会被挤成两行只剩 1–2 个字的孤行，所以它整行独占（见 CSS）。 */}
+          {sampleLocked ? (
+            <Typography.Text
+              type="warning"
+              className="webform-workbar-hint webform-workbar-sample-hint"
+            >
+              {t("webFormPage.sampleLocked.hint")}
+            </Typography.Text>
+          ) : null}
         </div>
         <div className="webform-workbar-actions">
           {/* 按钮职责**互不重合**，各管一件事：
@@ -124,14 +140,16 @@ export const Workbar = memo(function Workbar({
               没网址时才是这里这颗「开启专用浏览器」，两者不会同时在 DOM 里。 */}
           {running ? (
             <Tooltip title={t("webFormPage.browserCard.stopTooltip")}>
+              {/* 只留图标：带文字的「关闭浏览器」宽 124，运行态会把状态区从 1036 挤到 904，
+                  提示文案跟着重新折行——同一个工具条在启停前后跳一下。图标 40 宽，
+                  Tooltip 给完整说明、aria-label 保住可读名称（读屏与既有用例都靠它）。 */}
               <Button
                 icon={<StopOutlined />}
+                aria-label={t("webFormPage.browserCard.stop")}
                 loading={busy === "stop"}
                 disabled={anyBusy}
                 onClick={onStop}
-              >
-                {t("webFormPage.browserCard.stop")}
-              </Button>
+              />
             </Tooltip>
           ) : onboarding ? null : !hasUrl ? (
             <Button
@@ -139,7 +157,7 @@ export const Workbar = memo(function Workbar({
               icon={<ChromeOutlined />}
               aria-label={t("webFormPage.browserCard.startAria")}
               loading={busy === "start"}
-              disabled={anyBusy}
+              disabled={anyBusy || sampleLocked}
               onClick={onStart}
             >
               {t("webFormPage.browserCard.start")}

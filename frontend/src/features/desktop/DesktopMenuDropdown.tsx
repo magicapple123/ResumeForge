@@ -93,10 +93,11 @@ function MenuItemButton({
       onClick={() => onRun(item)}
     >
       <span className="app-titlebar-menu-label">
-        {item.checkbox ? (
-          // 复选框语义由 role + aria-checked 承载；这里只画一个固定宽度的对勾。
+        {/* 勾选符号只在**勾选时**占位（2026-11-20 用户反馈）：未勾选时也留 14px 会让
+            "窗口置顶"看起来像和别的项没对齐，左侧空出一块。取消勾选就是没有这一格。 */}
+        {item.checkbox && checked ? (
           <span className="app-titlebar-menu-check" aria-hidden="true">
-            {checked ? "✓" : ""}
+            ✓
           </span>
         ) : null}
         {label}

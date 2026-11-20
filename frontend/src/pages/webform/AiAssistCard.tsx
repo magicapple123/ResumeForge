@@ -45,7 +45,11 @@ export const AiAssistCard = memo(function AiAssistCard({
           aria-label={t("webFormPage.aiAssist.toggleAria")}
         />
         {aiAvailable === true ? (
-          <HintDetail detail={detail} label={t("webFormPage.aiAssist.hintAria")} />
+          <HintDetail
+            className="webform-mode-info"
+            detail={detail}
+            label={t("webFormPage.aiAssist.hintAria")}
+          />
         ) : null}
       </div>
       {aiAvailable === true ? (

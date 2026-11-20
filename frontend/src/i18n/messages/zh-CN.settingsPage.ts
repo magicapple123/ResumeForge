@@ -102,6 +102,7 @@ const settingsPage = {
   "settings.reset.key.agent_task_events_enabled": "提醒到期自动建卡",
   "settings.reset.key.webform_relaxed_mode": "网申放宽模式",
   "settings.reset.key.reminder_popup_on_start": "启动时弹出提醒",
+  "settings.reset.key.editor_inline_format_preview": "预览行内格式",
   "settings.reset.key.assistant_orb_enabled": "投投悬浮球",
   "settings.reset.key.navigation_visibility": "导航显示",
   "settings.reset.key.apply_blocklist": "投递屏蔽清单",

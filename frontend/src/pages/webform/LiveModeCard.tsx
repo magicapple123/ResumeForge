@@ -80,6 +80,7 @@ export const LiveModeCard = memo(function LiveModeCard({
         {/* 120 字的用法说明收进 ⓘ：这一段只在第一次开之前值得读，开着的时候
             用户要看的是"现在认到哪个框"，那部分仍然常驻在下面。 */}
         <HintDetail
+          className="webform-mode-info"
           detail={
             t("liveModeCard.intro.lead") +
             t("liveModeCard.intro.focusHint") +

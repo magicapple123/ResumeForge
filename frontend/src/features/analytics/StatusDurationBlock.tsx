@@ -5,12 +5,13 @@
  * "投递到现在这个状态一共花了多久"，但给不出相邻阶段之间的耗时（那要事件）。
  * 样本数（有可用日期对的条数 vs 该状态总条数）必须一起展示。
  */
-import { Col, Empty, Row, Tag, Typography } from "antd";
+import { Col, Row, Tag, Typography } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { AnalyticsDashboard, StatusDuration } from "../../types";
 import SectionCard from "./SectionCard";
 import StatCard from "./StatCard";
+import EmptyState from "../../components/common/EmptyState";
 
 function durationValue(item: StatusDuration): string {
   return item.median_days === null
@@ -28,7 +29,7 @@ export default function StatusDurationBlock({ data }: { data: AnalyticsDashboard
       description={t("analyticsPage.statusDuration.description")}
     >
       {rows.length === 0 ? (
-        <Empty description={t("analyticsPage.statusDuration.empty")} />
+        <EmptyState description={t("analyticsPage.statusDuration.empty")} />
       ) : (
         <Row gutter={[16, 16]}>
           {rows.map((item) => (

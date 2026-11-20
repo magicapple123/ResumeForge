@@ -11,7 +11,7 @@
  * 这里只做"把一条记录画成一张卡"。
  */
 import { MoreOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
-import { Button, Checkbox, Dropdown, Empty, Pagination, Select, Space } from "antd";
+import { Button, Checkbox, Dropdown, Pagination, Select, Space } from "antd";
 import type { Dispatch, SetStateAction } from "react";
 import { useMemo } from "react";
 import LoadingBlock from "../../components/common/LoadingBlock";
@@ -26,6 +26,7 @@ import type { DiffViewData } from "../../types/resumeFieldDiff";
 import { formatDateTime } from "../../utils/format";
 import type { ResumeSortField, ResumeSortState } from "../../utils/resumeSort";
 import { batchSelectAction, secondaryActionsFor, type RowActionDeps } from "./resumeTableActions";
+import EmptyState from "../../components/common/EmptyState";
 
 interface Props {
   data: Page<ResumeBrief> | undefined;
@@ -181,7 +182,7 @@ export default function ResumeCardList({
       {/* 用仓库统一的 LoadingBlock 而不是裸 `<Spin spinning>`：`spinOutletGuard` 要求所有加载出口收口到它（一致的遮罩与最小高度）。 */}
       <LoadingBlock spinning={loading}>
         {items.length === 0 && !loading ? (
-          <Empty description={t("responsive.resumes.empty")} />
+          <EmptyState description={t("responsive.resumes.empty")} />
         ) : (
           <ul className="resume-card-grid">
             {items.map((record) => {

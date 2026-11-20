@@ -68,6 +68,28 @@ export function resolveTheme(mode: ThemeMode = getThemeMode()): ResolvedTheme {
   return mode;
 }
 
+/**
+ * favicon 跟随主题（WF-11）。
+ *
+ * 浏览器标签页图标只能靠改 `<link rel="icon">` 的 href 来换；href 相同的时候浏览器
+ * 不会重新取图，所以暗色版必须是**另一组文件名**（`-dark-`），不能原地覆盖。
+ * `rel="apple-touch-icon"` 不匹配这个选择器，保持浅色不动——iOS 桌面图标是静态的。
+ *
+ * 没有 `sizes` 的兜底 link（`/resumeforge-icon.png`）统一指向 256 暗色图，
+ * 老书签/缓存请求的默认路径也能拿到深色版。
+ */
+export function syncFavicon(
+  resolved: ResolvedTheme,
+  doc: Document | null = typeof document === "undefined" ? null : document,
+): void {
+  if (!doc) return;
+  const prefix = resolved === "dark" ? "/resumeforge-icon-dark" : "/resumeforge-icon";
+  for (const link of Array.from(doc.querySelectorAll<HTMLLinkElement>('link[rel="icon"]'))) {
+    const size = link.getAttribute("sizes")?.split("x")[0] ?? "256";
+    link.setAttribute("href", `${prefix}-${size}.png`);
+  }
+}
+
 /** 把当前主题写到 `<html data-theme>`：CSS 与 `color-scheme` 都从这里取。 */
 export function applyTheme(mode: ThemeMode = getThemeMode()): void {
   if (typeof document === "undefined") return;
@@ -76,6 +98,8 @@ export function applyTheme(mode: ThemeMode = getThemeMode()): void {
   // 让原生控件（滚动条、日期选择器、输入框自动填充）跟着变，不然深色页面上会
   // 冒出一条白色滚动条。
   document.documentElement.style.colorScheme = resolved;
+  // 标签页图标与主题同步；首屏那一次由 index.html 的内联脚本提前做，避免闪浅色。
+  syncFavicon(resolved);
 }
 
 /** 只改本地状态（localStorage + data-theme + 通知订阅者），不写服务端。 */

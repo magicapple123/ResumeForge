@@ -19,7 +19,6 @@ import {
   App,
   Button,
   Dropdown,
-  Empty,
   Input,
   Modal,
   Pagination,
@@ -29,6 +28,7 @@ import {
   Typography,
 } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
+import EmptyState from "../components/common/EmptyState";
 import TrackerSummary from "../features/tracker/TrackerSummary";
 import ErrorState from "../components/common/ErrorState";
 import type { MenuProps } from "antd";
@@ -314,7 +314,7 @@ export default function TrackerPage() {
       {loading && <PageSkeleton rows={6} />}
       {error && <ErrorState description={error} onRetry={() => void reload()} />}
       {!loading && !error && items.length === 0 && (
-        <Empty
+        <EmptyState
           description={
             keyword || status ? t("trackerPage.empty.filtered") : t("trackerPage.empty.initial")
           }

@@ -178,71 +178,162 @@ export interface MergeProjectionCandidateResult {
   materialOnly: boolean;
 }
 
+/** 「仅素材」字段：hidden + 带 source（合并后不上纸面）。 */
+function isMaterialOnlyItem(item: ResumeItem): boolean {
+  return item.kind === "field" && item.placement === "hidden" && item.source !== null;
+}
+
 /**
- * 把一条已解析候选合并进当前文档（**只做加法**）：
+ * 一条候选的**可填计划**：只计算（pending / targetEntry / 可填数），
+ * **不克隆、不改文档**。
+ *
+ * 菜单的「已填」标记与 `mergeProjectionCandidate` 都从这里取判据——两份规则一定会漂移，
+ * 所以只允许存在这一份。`projectionFillCount` 就是它的计数视图。
+ */
+export interface ProjectionFillPlan {
+  /** 入参文档（原引用；`applyProjectionFill` 里才补板块骨架）。 */
+  document: ResumeDocument;
+  /** 候选落到的 v2 板块 key。 */
+  sectionKey: string;
+  /** 来源板块（目标板块缺失时用它补骨架）。 */
+  sourceSection: ResumeSection;
+  /** 来源条目（目标条目不存在时整条克隆追加）。 */
+  sourceEntry: ResumeEntry;
+  /** 合并目标条目；null = 目标板块里还没有条目，整条追加。 */
+  targetEntry: ResumeEntry | null;
+  /** 按 source 去重后要参与合并的非 text items（原引用）。 */
+  pending: ResumeItem[];
+  /** 目标条目还没有 text 时才追加的来源 text items（原引用）。 */
+  texts: ResumeItem[];
+  /** 可填 item 数，恒等于 `applyProjectionFill` 返回的 `filled`。 */
+  fillable: number;
+  /** 是否补入「仅素材」字段。 */
+  materialOnly: boolean;
+}
+
+/**
+ * 计算一条已解析候选会往当前文档写什么（**纯计算**）。
  *
  * - 目标板块不存在 → 用源板块骨架补板块，并把整条来源条目作为新条目追加；
  * - 目标板块存在但该条没有条目 → 追加克隆条目；
  * - 否则填充**同一位置的条目**（源条目在来源板块里的下标；越界退回第一条）：
  *   - field/list/authors：同 key 且当前为空 → 用来源值补齐；缺失的 item 按 source 去重后追加；
- *   - text：目标条目还没有文本块时才追加（避免覆盖用户手写正文）；
- * - 全部 item 深拷贝并换新 id，不改来源投影、也不改入参文档。
+ *   - text：目标条目还没有文本块时才追加（避免覆盖用户手写正文）。
+ *
+ * 可填数直接复用 `mergeProfileItems` 的返回值衡量（不另写一份"空不空"的判断）。
  */
-export function mergeProjectionCandidate(
+export function projectionFillPlan(
   document: ResumeDocument,
   resolved: ResolvedProjectionCandidate,
-): MergeProjectionCandidateResult {
+): ProjectionFillPlan {
   const withSection = ensureSection(document, resolved.section);
   const targetSection = withSection.sections.find((section) => section.key === resolved.sectionKey);
-  if (!targetSection) return { document, filled: 0, materialOnly: false };
+  const base = {
+    document,
+    sectionKey: resolved.sectionKey,
+    sourceSection: resolved.section,
+    sourceEntry: resolved.entry,
+  };
+  if (!targetSection) {
+    return { ...base, targetEntry: null, pending: [], texts: [], fillable: 0, materialOnly: false };
+  }
 
-  const incoming = cloneItemsWithNewIds(resolved.items);
-  const nonText = incoming.filter((item) => item.kind !== "text");
-  const texts = incoming.filter((item) => item.kind === "text");
   const sourceIndex = resolved.section.entries.findIndex((entry) => entry.id === resolved.entry.id);
-  const targetEntry = targetSection.entries[Math.max(0, sourceIndex)] ?? targetSection.entries[0];
-
+  const targetEntry =
+    targetSection.entries[Math.max(0, sourceIndex)] ?? targetSection.entries[0] ?? null;
   if (!targetEntry) {
-    const entry = cloneEntryWithNewIds(resolved.entry);
-    const sections = withSection.sections.map((section) =>
-      section.key === resolved.sectionKey
-        ? { ...section, entries: [...section.entries, entry] }
-        : section,
-    );
     return {
-      document: { ...withSection, sections },
-      filled: entry.items.length,
-      materialOnly: entry.items.some(
-        (item) => item.kind === "field" && item.placement === "hidden" && item.source !== null,
-      ),
+      ...base,
+      targetEntry: null,
+      pending: [],
+      texts: [],
+      fillable: resolved.items.length,
+      materialOnly: resolved.items.some(isMaterialOnlyItem),
     };
   }
 
   const existingSources = new Set(
     targetEntry.items.map(itemSourceKey).filter((key): key is string => key !== null),
   );
-  const pending = nonText.filter((item) => {
+  const pending = resolved.items.filter((item) => {
+    if (item.kind === "text") return false;
     const key = itemSourceKey(item);
     return key === null || !existingSources.has(key);
   });
-  const merged = mergeProfileItems(targetEntry.items, pending);
+  const texts = resolved.items.filter((item) => item.kind === "text");
+  // 复用合并实现量可填数：`filled` 的语义（追加新 key / 补空已有 key）只有它说了算。
+  const preview = mergeProfileItems(targetEntry.items, pending);
+  const hasText = targetEntry.items.some((item) => item.kind === "text");
+  return {
+    ...base,
+    targetEntry,
+    pending,
+    texts,
+    fillable: preview.filled + (hasText ? 0 : texts.length),
+    materialOnly: pending.some(isMaterialOnlyItem),
+  };
+}
+
+/** 一条候选在当前文档里还能填几个 item（0 = 已填满，菜单据此置灰并标「已填」）。 */
+export function projectionFillCount(
+  document: ResumeDocument,
+  resolved: ResolvedProjectionCandidate,
+): number {
+  return projectionFillPlan(document, resolved).fillable;
+}
+
+/** 执行计划：克隆来源 items（换新 id）、补板块/条目，返回新文档。 */
+export function applyProjectionFill(plan: ProjectionFillPlan): MergeProjectionCandidateResult {
+  const withSection = ensureSection(plan.document, plan.sourceSection);
+  const targetSection = withSection.sections.find((section) => section.key === plan.sectionKey);
+  if (!targetSection) return { document: plan.document, filled: 0, materialOnly: false };
+
+  if (!plan.targetEntry) {
+    const entry = cloneEntryWithNewIds(plan.sourceEntry);
+    const sections = withSection.sections.map((section) =>
+      section.key === plan.sectionKey
+        ? { ...section, entries: [...section.entries, entry] }
+        : section,
+    );
+    return {
+      document: { ...withSection, sections },
+      filled: entry.items.length,
+      materialOnly: plan.materialOnly,
+    };
+  }
+
+  const pending = cloneItemsWithNewIds(plan.pending);
+  const texts = cloneItemsWithNewIds(plan.texts);
+  const merged = mergeProfileItems(plan.targetEntry.items, pending);
   const hasText = merged.items.some((item) => item.kind === "text");
   const items = hasText ? merged.items : [...merged.items, ...texts];
-  const filled = merged.filled + (hasText ? 0 : texts.length);
   const sections = withSection.sections.map((section) =>
-    section.key !== resolved.sectionKey
+    section.key !== plan.sectionKey
       ? section
       : {
           ...section,
           entries: section.entries.map((entry) =>
-            entry.id === targetEntry.id ? { ...entry, items } : entry,
+            entry.id === plan.targetEntry?.id ? { ...entry, items } : entry,
           ),
         },
   );
-  const materialOnly = pending.some(
-    (item) => item.kind === "field" && item.placement === "hidden" && item.source !== null,
-  );
-  return { document: { ...withSection, sections }, filled, materialOnly };
+  return {
+    document: { ...withSection, sections },
+    filled: merged.filled + (hasText ? 0 : texts.length),
+    materialOnly: plan.materialOnly,
+  };
+}
+
+/**
+ * 把一条已解析候选合并进当前文档（**只做加法**）：`projectionFillPlan` + `applyProjectionFill`。
+ *
+ * 全部 item 深拷贝并换新 id，不改来源投影、也不改入参文档。
+ */
+export function mergeProjectionCandidate(
+  document: ResumeDocument,
+  resolved: ResolvedProjectionCandidate,
+): MergeProjectionCandidateResult {
+  return applyProjectionFill(projectionFillPlan(document, resolved));
 }
 
 /** 一步到位：解析 + 合并；候选解析不到返回 null。 */

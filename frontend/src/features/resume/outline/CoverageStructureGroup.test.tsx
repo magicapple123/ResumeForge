@@ -44,6 +44,9 @@ function detail(notes: ResumeCoverageNote[], revision: number): ResumeDetail {
 const COUNT = (count: number) => t("resume.coverage.summary", { count });
 const APPEND = t("resume.coverage.append");
 
+/** WF-14：标题行本身是折叠触发器（原生 button，Tab / Enter 天然可用）。 */
+const toggle = () => screen.getByRole("button", { name: new RegExp(t("resume.coverage.title")) });
+
 function renderGroup(props: Partial<React.ComponentProps<typeof CoverageStructureGroup>> = {}) {
   const onNotify = vi.fn();
   const view = render(
@@ -101,6 +104,7 @@ describe("CoverageStructureGroup", () => {
     );
     const { onNotify } = renderGroup();
     await screen.findByText(COUNT(2));
+    fireEvent.click(toggle());
 
     fireEvent.click(screen.getByRole("button", { name: APPEND }));
 
@@ -114,5 +118,60 @@ describe("CoverageStructureGroup", () => {
     });
     expect(await screen.findByText(COUNT(1))).toBeInTheDocument();
     expect(onNotify).toHaveBeenCalledWith(t("resume.coverage.appended", { count: 2 }));
+  });
+});
+
+/**
+ * WF-14：默认折叠。
+ *
+ * 守三件事：折叠时**标题与条数仍在**（否则用户不知道值不值得点开）、展开面板与说明
+ * 一起出现 / 消失、以及折叠状态**不跨挂载保留**（"默认折叠"不能被记忆功能推翻）。
+ * 键盘可达性靠原生 `<button>`：Tab 聚焦、Enter / Space 激活，不需要自定义 keydown。
+ */
+describe("CoverageStructureGroup · default collapsed (WF-14)", () => {
+  it("starts collapsed and keeps the title together with the count", async () => {
+    mocks.getResume.mockResolvedValue(detail([NOTE], 3));
+    const { container } = renderGroup();
+
+    expect(await screen.findByText(COUNT(2))).toBeInTheDocument();
+    const head = toggle();
+    expect(head.tagName).toBe("BUTTON");
+    expect(head).toHaveAttribute("aria-expanded", "false");
+
+    // 说明与分组卡都不在 DOM 里（不是只藏起来）。
+    expect(screen.queryByText(t("workbench.coverage.savedHint"))).toBeNull();
+    expect(screen.queryByRole("button", { name: APPEND })).toBeNull();
+    expect(container.querySelector(".resume-wb-coverage-body")).toBeNull();
+  });
+
+  it("toggles the panel with click and wires aria-expanded / aria-controls", async () => {
+    mocks.getResume.mockResolvedValue(detail([NOTE], 3));
+    renderGroup();
+    await screen.findByText(COUNT(2));
+
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(t("workbench.coverage.savedHint"))).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: APPEND })).toBeInTheDocument();
+    const bodyId = toggle().getAttribute("aria-controls");
+    expect(bodyId).toBeTruthy();
+    expect(document.getElementById(bodyId!)).not.toBeNull();
+
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: APPEND })).toBeNull();
+  });
+
+  it("does not persist the expanded state across mounts", async () => {
+    mocks.getResume.mockResolvedValue(detail([NOTE], 3));
+    const first = renderGroup();
+    await screen.findByText(COUNT(2));
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    first.unmount();
+
+    renderGroup();
+    expect(await screen.findByText(COUNT(2))).toBeInTheDocument();
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
   });
 });

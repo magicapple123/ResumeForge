@@ -440,7 +440,9 @@ export default function ResumeMeasureControls({
       </div>
       {/* 照片大小（系数，不是绝对尺寸）：乘在模板自己的宽高上，宽高比不变。
           排在「字体」之后，与上面三行共用同一套"标签 + ± + 滑杆 + 读数"的视觉语言。
-          主预览不渲染它（`showPhotoScale={false}`）：那一栏只留高频项，照片大小去制作台调。 */}
+          主预览不渲染它（`showPhotoScale={false}`）：那一栏只留高频项，照片大小去制作台调。
+          WF-13：照片框按钮作为 `frameSlot` 并进同一格——左栏只出现一个「照片」标签，
+          合并格用 `grid-column: 1 / -1` 占满整行（见 resume-measure-photo.css）。 */}
       {showPhotoScale && !fontOnly ? (
         <PhotoScaleControl
           defaultHint={
@@ -453,17 +455,17 @@ export default function ResumeMeasureControls({
           hasPhoto={hasPhoto}
           onProbe={applyProbe}
           onChange={applyPhotoScale}
-        />
-      ) : null}
-      {/* R-07 / R-10：照片边框与位置。折进弹层，不占左栏纵向空间。
-          与「照片大小」同一处宿主条件（showPhotoScale），主预览栏不受影响。 */}
-      {showPhotoScale && !fontOnly ? (
-        <PhotoFrameControl
-          formatConfig={layout.format_config}
-          disabled={disabled}
-          hasPhoto={hasPhoto}
-          onProbe={applyProbe}
-          onChange={(format_config) => onChange({ ...layout, format_config })}
+          frameSlot={
+            // R-07 / R-10：照片边框与位置折进弹层，不占左栏纵向空间。
+            <PhotoFrameControl
+              inline
+              formatConfig={layout.format_config}
+              disabled={disabled}
+              hasPhoto={hasPhoto}
+              onProbe={applyProbe}
+              onChange={(format_config) => onChange({ ...layout, format_config })}
+            />
+          }
         />
       ) : null}
     </div>

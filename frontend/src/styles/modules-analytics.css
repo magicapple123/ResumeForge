@@ -54,8 +54,12 @@
   margin-top: 20px !important;
 }
 
+/* 头部不加横向渐变（T13）：卡宽 1164 时 #f6f8fb → #fff 在中途就淡完，
+   左灰右白、右端没有边界，看起来像底色没铺匀。头部与卡身同为 --rf-surface。
+   border-bottom 必须留着：antd 默认取 colorBorderSecondary（#e7ebf0），
+   与本页其它分隔线用的 --rf-border-subtle（#e5e7eb）差 2 个色阶，这条是本页
+   唯一钉住该值的地方。 */
 .analytics-page .analytics-section .ant-card-head {
-  background: linear-gradient(90deg, var(--rf-surface-alt), var(--rf-surface));
   border-bottom: 1px solid var(--rf-border-subtle);
 }
 
@@ -270,10 +274,16 @@
   min-height: 0;
 }
 /* 看板分段导航（T13）：sticky 在内容区顶部，滚到哪一段就高亮哪一段。
-   高亮只用"字重 + 12×2px 品牌短横线"——和设置页导航同一套语言，避免两页各发明一种。 */
+   高亮只用"字重 + 12×2px 品牌短横线"——和设置页导航同一套语言，避免两页各发明一种。
+
+   `top` 为什么是负值：sticky 的偏移基准是滚动容器（`.app-content`）的内容盒，
+   而它还有一层 `padding: var(--rf-content-pad)` 的内边距；`top: 0` 只把栏贴到内容盒
+   顶边，上面那条内边距没人盖，滚动内容就从缝里穿过去（实测 leak 恒等于 padding：
+   24 / 16 / 16）。向上吃掉这一段，栏才真正贴住滚动区顶边（leak=0）。
+   必须用 token：≤1092 档是 16px、A 档是 32px，写死只在一档正确。 */
 .analytics-nav {
   position: sticky;
-  top: 0;
+  top: calc(-1 * var(--rf-content-pad));
   z-index: 2;
   display: flex;
   flex-wrap: wrap;

@@ -21,6 +21,61 @@
   min-width: 0;
 }
 
+/* 2026-11-19（用户）：地址栏的高度此前有三种值并存——输入框 36、时钟 30、右侧按钮 40
+   （全局 `controlHeight: 40`）。三者顶边对齐、底边悬空，看着像三个不同层级的控件。
+   这里把地址条收成一个变量 `--wf-url-control-h`，值就是全局 `controlHeight`：
+   改尺寸只改这一处，不会再出现"一个跟着 token、一个跟着内容"。
+   不要换成 flex + stretch：实测会把输入框压到 22px、按钮压到 16px（antd v6 的
+   `Space.Compact` 内部有自己的行高传递，拉伸反而更糟）。 */
+.webform-url-input {
+  /* 40 = `theme/appTheme.ts` 的 `controlHeight`（右侧「刷新 / 更多」与下方分段控件同值）。
+     此前是 36，注释写"与右侧按钮一致"但右侧实际是 40——注释与实现对不上。 */
+  --wf-url-control-h: 40px;
+}
+
+/* 画边框的是 affix wrapper，高度必须打在这一层。
+   上一轮打在 `.ant-input` 上，于是外框仍是 48、里面那个 input 是 30——
+   量内层 input 会得到"已对齐"的假绿，量外框才看得见 18px 的空隙。
+
+   两种形态都要覆盖：`Input.Search` 把 className 放在包裹它的 `Space.Compact` 上
+   （走后一支）；onboarding 态没有附着按钮、换成裸 `Input`，此时 className 直接落在
+   affix wrapper 自己身上（与 `.ant-input-affix-wrapper` 同元素）。 */
+.webform-url-input.ant-input-affix-wrapper,
+.webform-url-input .ant-input-affix-wrapper {
+  height: var(--wf-url-control-h);
+  padding-block: 0;
+}
+
+.webform-url-input.ant-input-affix-wrapper .ant-input,
+.webform-url-input .ant-input-affix-wrapper .ant-input {
+  height: 100%;
+}
+
+/* 按钮与输入框同高，左缘贴住，左侧圆角归零。
+   左缘的 -1px **由 antd `Space.Compact` 自己给**（`.ant-space-compact-item:not(:first-child)`），
+   这里再叠一条会变成 -2px（实测 1353 − 1355）；所以按钮自身归零，最终差值正好 -1px。 */
+.webform-url-input .ant-btn {
+  height: var(--wf-url-control-h);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  margin-inline-start: 0;
+}
+
+/* suffix 里的时钟只是图标入口：比外框矮 6px。必须显式写回 margin / radius——
+   上面那条 `.ant-btn` 会顺带命中它，不写回来时钟会被拉到左边并失去圆角。 */
+.webform-url-input .ant-input-suffix .ant-btn {
+  width: calc(var(--wf-url-control-h) - 6px);
+  height: calc(var(--wf-url-control-h) - 6px);
+  margin-inline-start: 0;
+  border-radius: var(--rf-radius-control);
+}
+
+/* 输入框内的时钟（历史入口）垂直居中：它是 suffix 里的一个按钮，高度已由上面统一。 */
+.webform-url-input .ant-input-suffix {
+  display: flex;
+  align-items: center;
+}
+
 .webform-url-actions {
   justify-content: flex-end;
 }

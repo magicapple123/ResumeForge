@@ -83,6 +83,33 @@ const update = {
   "update.action.recheckIn": "重新检查（{seconds} 秒）",
   /** 桌面壳里「检查更新」走 IPC：结果由主进程用系统弹窗给出，页面里没有进度可看。 */
   "update.toast.desktopStarted": "已在桌面应用中检查，结果会弹窗告知",
+
+  // ── 启动更新弹窗（UP-01） ────────────────────────────────────
+  /** 弹窗标题；`{version}` 是远端最新版本号。 */
+  "update.startup.title": "发现新版本 {version}",
+  "update.startup.current": "当前版本",
+  "update.startup.latest": "最新版本",
+  "update.startup.size": "安装包大小",
+  /** 发布说明区的标题。 */
+  "update.startup.notes": "更新内容",
+  "update.startup.expand": "展开全部",
+  "update.startup.collapse": "收起",
+  "update.startup.noNotes": "这个版本没有提供发布说明。",
+  "update.startup.updateNow": "立即更新",
+  "update.startup.later": "稍后",
+  /** 「稍后」按钮的悬浮说明：让 24 小时这个承诺可见。 */
+  "update.startup.laterHint": "24 小时内不再提醒",
+  "update.startup.skip": "跳过此版本",
+  "update.startup.skipHint": "这个版本以后不再提醒",
+  /** 下载中唯一的出口：只关窗，后台继续下载。 */
+  "update.startup.hide": "隐藏",
+  "update.startup.ready": "更新包已下载，SHA-256 校验通过",
+  "update.startup.readyHint": "重启后只替换程序文件，data/ 中的岗位、简历、对话和设置不会改动。",
+  "update.startup.install": "重启并安装",
+  "update.startup.downloadPackage": "下载安装包",
+  "update.startup.release": "去发布页",
+  /** 非 Windows：没有应用内安装通道，只能手动装。 */
+  "update.startup.unsupported": "当前平台不支持应用内安装，请下载安装包后手动更新。",
 } as const;
 
 export default update;

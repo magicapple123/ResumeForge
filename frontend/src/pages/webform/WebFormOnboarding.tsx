@@ -14,7 +14,7 @@
  *
  * 纯 props：所有 handler 由页面侧 useCallback 稳定。
  */
-import { Button, Tooltip } from "antd";
+import { Button, Tooltip, Typography } from "antd";
 import { ChromeOutlined, FileSearchOutlined, GlobalOutlined } from "@ant-design/icons";
 import type { ReactNode } from "react";
 import { t } from "../../i18n";
@@ -32,6 +32,7 @@ export function WebFormOnboarding({
   onRead,
   fillPanel,
   recentPanel,
+  sampleLocked = false,
 }: {
   /** 专用浏览器是否在运行（第 1 步完成）。 */
   running: boolean;
@@ -47,6 +48,8 @@ export function WebFormOnboarding({
   fillPanel: ReactNode;
   /** 右栏「最近填写」：`WebFormRecentRecords`。 */
   recentPanel: ReactNode;
+  /** 当前数据集是「体验示例」：轨道上的主 CTA（起浏览器 / 读表单）一并灰掉。 */
+  sampleLocked?: boolean;
 }) {
   // 本组件用模块级 t()：订阅语言变化，否则切语言后引导文案不重渲染。
   useLocale();
@@ -95,17 +98,30 @@ export function WebFormOnboarding({
         </Button>
       ) : null}
       {/* 起浏览器之前读不到表单，按钮灰着并把原因写在旁边——只灰不解释等于功能坏了。 */}
-      <Tooltip title={running ? "" : t("webFormPage.flow.reason.browserOff")}>
+      <Tooltip
+        title={
+          sampleLocked
+            ? t("webFormPage.sampleLocked.hint")
+            : running
+              ? ""
+              : t("webFormPage.flow.reason.browserOff")
+        }
+      >
         <Button
           type="primary"
           icon={primary.icon}
           loading={primary.loading}
-          disabled={disabled}
+          disabled={disabled || sampleLocked}
           onClick={primary.onClick}
         >
           {primary.label}
         </Button>
       </Tooltip>
+      {sampleLocked ? (
+        <Typography.Text type="warning" className="webform-flow-reason">
+          {t("webFormPage.sampleLocked.hint")}
+        </Typography.Text>
+      ) : null}
     </>
   );
 

@@ -5,7 +5,8 @@
  * 500 行预算。这里只做**纯展示搬迁**（逻辑与标记与拆分前逐字一致），页面状态仍在
  * AnalyticsPage（趋势区间选择器的值由它持有并下发）。
  */
-import { Col, Empty, Row, Segmented, Typography } from "antd";
+import { Col, Row, Segmented, Typography } from "antd";
+import EmptyState from "../../components/common/EmptyState";
 import { Link } from "react-router-dom";
 import { t } from "../../i18n";
 import type { MessageKey } from "../../i18n";
@@ -213,7 +214,7 @@ export function TrendSection({
                 ariaLabel={t("analyticsPage.trend.appliedTrend")}
               />
             ) : (
-              <Empty description={t("analyticsPage.trend.emptyNoDates")} />
+              <EmptyState description={t("analyticsPage.trend.emptyNoDates")} />
             )}
           </ChartBlock>
         </Col>
@@ -232,7 +233,7 @@ export function TrendSection({
                 ariaLabel={t("analyticsPage.trend.weekdayTitle")}
               />
             ) : (
-              <Empty description={t("analyticsPage.trend.emptyNoDates")} />
+              <EmptyState description={t("analyticsPage.trend.emptyNoDates")} />
             )}
           </ChartBlock>
         </Col>
@@ -322,7 +323,7 @@ export function ChannelsSection({ data }: { data: AnalyticsDashboard }) {
                 }))}
               />
             ) : (
-              <Empty description={t("analyticsPage.channels.emptyReferrals")} />
+              <EmptyState description={t("analyticsPage.channels.emptyReferrals")} />
             )}
           </ChartBlock>
         </Col>

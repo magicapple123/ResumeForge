@@ -10,20 +10,7 @@
  *
  * 列表默认只取最近 20 条——记录是"最近填了什么"的地方，不是归档区。
  */
-import {
-  App,
-  Button,
-  Checkbox,
-  Collapse,
-  Descriptions,
-  Pagination,
-  Space,
-  Spin,
-  Table,
-  Tag,
-  Typography,
-} from "antd";
-import type { TableColumnsType } from "antd";
+import { App, Button, Checkbox, Collapse, Pagination, Space, Tag, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { CheckSquareOutlined } from "@ant-design/icons";
 import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
@@ -33,28 +20,14 @@ import { deleteWebFormRecord, getWebFormRecord, listWebFormRecordsPage } from ".
 import BatchActionBar from "../../components/common/BatchActionBar";
 import { useApi } from "../../hooks/useApi";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
-import type { WebFormFillRecord, WebFormRecordItem, WebFormRecordSummary } from "../../types";
+import type { WebFormFillRecord, WebFormRecordSummary } from "../../types";
 import { t } from "../../i18n";
-import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { formatServerTime } from "../../utils/serverTime";
+import WebFormRecordDetail from "./WebFormRecordDetail";
 
 /** 每页条数：与迁移前「最近 20 条」的口径一致（迁移后翻页可达全部历史记录）。 */
 const RECORD_PAGE_SIZE = 20;
-
-/**
- * 记录里那条明细的状态 → 显示名（labelKey）与颜色（与填充结果用的是同一套取值）。
- *
- * 状态键是协议值（与填充结果同源），只有显示名走 `labelKey`：模块作用域不能调 `t()`，
- * 否则切语言不重渲染。
- */
-const ITEM_STATUS_META: Record<string, { color: string; labelKey: MessageKey }> = {
-  filled: { color: "success", labelKey: "webFormRecords.status.filled" },
-  unverified: { color: "warning", labelKey: "webFormRecords.status.unverified" },
-  failed: { color: "error", labelKey: "webFormRecords.status.failed" },
-  skipped: { color: "default", labelKey: "webFormRecords.status.skipped" },
-  conflict: { color: "error", labelKey: "webFormRecords.status.conflict" },
-};
 
 function shortTime(value: string): string {
   return value ? formatServerTime(value) : "";
@@ -63,28 +36,6 @@ function shortTime(value: string): string {
 interface Props {
   /** 外部触发刷新（填充完成后调用，让新记录立刻出现）。 */
   refreshKey?: number;
-}
-
-/** #36: masked ID number display; click reveal to show (no copy shortcut). */
-function MaskedValue({ value }: { value: string }) {
-  const [revealed, setRevealed] = useState(false);
-  const masked =
-    value.length <= 7
-      ? "*".repeat(value.length)
-      : `${value.slice(0, 3)}${"*".repeat(Math.max(1, value.length - 7))}${value.slice(-4)}`;
-  return (
-    <Space size={6}>
-      <span>{revealed ? value : masked}</span>
-      <Button
-        type="link"
-        size="small"
-        style={{ padding: 0 }}
-        onClick={() => setRevealed((current) => !current)}
-      >
-        {revealed ? t("webFormRecords.hide") : t("webFormRecords.reveal")}
-      </Button>
-    </Space>
-  );
 }
 
 export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
@@ -196,45 +147,6 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
     );
   }
 
-  // 列定义放在组件内：列名要按当前语言取，模块作用域调 t() 切语言不会重渲染。
-  // #36: ID number is the most sensitive field in fill records; mask by default.
-  const isIdNumber = (item: WebFormRecordItem) => item.field === "id_number";
-
-  const itemColumns: TableColumnsType<WebFormRecordItem> = [
-    {
-      title: t("webFormRecords.column.field"),
-      key: "field",
-      width: 150,
-      render: (_, item) => item.field_label || item.control_label || "—",
-    },
-    {
-      title: t("webFormRecords.column.value"),
-      dataIndex: "value",
-      key: "value",
-      ellipsis: true,
-      render: (_, item) => (isIdNumber(item) ? <MaskedValue value={item.value} /> : item.value),
-    },
-    {
-      title: t("webFormRecords.column.status"),
-      key: "status",
-      width: 200,
-      render: (_, item) => {
-        const meta = ITEM_STATUS_META[item.status];
-        return (
-          <Space orientation="vertical" size={0}>
-            {/* 状态值不在词表里时如实显示协议值，不吞掉。 */}
-            <Tag color={meta?.color ?? "default"}>{meta ? t(meta.labelKey) : item.status}</Tag>
-            {item.detail ? (
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {item.detail}
-              </Typography.Text>
-            ) : null}
-          </Space>
-        );
-      },
-    },
-  ];
-
   // 翻页即清空展开条与选择集：上一页的展开/勾选对新页没有意义。
   const changePage = (next: number) => {
     setSelected(null);
@@ -337,42 +249,15 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
               />
             </span>
           ),
+          // T03：明细抽成 `WebFormRecordDetail`，与「最近填写」的就地展开共用一份
+          // 列定义（证件号掩码、状态标签只写一次）。
           children: (
-            <Space orientation="vertical" size={12} style={{ width: "100%" }}>
-              <Descriptions size="small" column={1}>
-                <Descriptions.Item label={t("webFormRecords.field.page")}>
-                  {record.page_title || t("webFormRecords.untitled")}
-                  {record.url ? (
-                    <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
-                      {record.url}
-                    </Typography.Text>
-                  ) : null}
-                </Descriptions.Item>
-              </Descriptions>
-              {detailLoading ? (
-                <div style={{ textAlign: "center", padding: 16 }}>
-                  <Spin />
-                </div>
-              ) : (
-                <>
-                  <Table
-                    rowKey="index"
-                    size="small"
-                    pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
-                    columns={itemColumns}
-                    dataSource={detail?.items ?? []}
-                    locale={{ emptyText: t("webFormRecords.table.empty") }}
-                  />
-                  {(detail?.page_snapshot.length ?? 0) > 0 ? (
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {t("webFormRecords.snapshot.summary", {
-                        filled: detail?.page_snapshot.filter((row) => row.filled).length ?? 0,
-                      })}
-                    </Typography.Text>
-                  ) : null}
-                </>
-              )}
-            </Space>
+            <WebFormRecordDetail
+              pageTitle={record.page_title}
+              url={record.url}
+              detail={detail?.id === record.id ? detail : null}
+              loading={detailLoading}
+            />
           ),
         }))}
       />

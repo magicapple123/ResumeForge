@@ -17,18 +17,16 @@
  * 这也是本组件必须把 `hidden` 标记段也渲染出来的原因——`{@size=1.1}` 在文本域里
  * 占着 12 个字符的宽度，下层若把这些宽度抹掉，后面的字就全部左移，光标落在两个字的缝隙里。
  *
- * ## 加粗为什么用描边模拟
+ * ## 本层**只画四样**：文字 + 隐藏段 + 选区 + 链接下划线
  *
- * `font-weight: 700` 会把字形**变宽**，于是下层比上层多占几个像素，越往行尾错得越多。
- * `-webkit-text-stroke` 用细描边把笔画加厚而**不改变前进宽度**，两层仍然逐像素对齐。
+ * T01 之后字号 / 字重 / 颜色**不在这一层画**：
+ * - `font-size` 必然改变前进宽度 → 与文本域逐字错位（旧实现的已知漂移，已删除）；
+ * - `font-weight: 700` 同样改字宽；
+ * - `color` 虽不改宽度，但"编辑时突然变色"正是这条待办要消除的干扰（用户原话：
+ *   调完颜色中栏输入框里的字跟着变色，影响输入）。
  *
- * ## 字号是唯一的例外（已知取舍）
- *
- * `font-size` 必然改变前进宽度，所以带 `{@size=…}` 的区间会让下层从那里开始横向漂移
- * （粗估为"该段宽度的 10%"量级）。要彻底消除漂移，只能让文本域里**只装可见文本**，
- * 那样所有写操作都要改走"渲染态下标 ↔ 源串下标"的换算（清单 I-26 的阶段 3）——
- * 它要改 `inlineMarks` / `useInlineMarkRange` / `lastFocusedTextarea` 的坐标系，
- * 不在本次文件范围内。这里选择"字号如实渲染 + 已知少量漂移"，并把这件事写在交付说明里。
+ * 所以需要看真实样式的场景改由 `InlineMarkStatic` 承担（开关打开 + 失焦 + 有格式），
+ * **两种渲染永不同框**。链接下划线保留：它不改字形宽度，且是唯一的链接提示。
  *
  * ## 输入法组合期为什么要把字显形
  *
@@ -44,7 +42,7 @@
 import { useMemo } from "react";
 import type { CSSProperties } from "react";
 
-import { inlineMarkSegmentStyle, parseInlineMarkSegments } from "./inlineMarkRuns";
+import { parseInlineMarkSegments } from "./inlineMarkRuns";
 import type { InlineMarkSegment } from "./inlineMarkRuns";
 import "../../../styles/inline-mark-overlay.css";
 
@@ -66,11 +64,12 @@ interface Props {
   selection?: { start: number; end: number } | null;
 }
 
-/** 分段 → 类名：样式全部靠类（颜色/字号走内联样式，见 `inlineMarkSegmentStyle`）。 */
-function segmentClassName(segment: { hidden?: boolean; bold?: boolean; href?: string }): string {
+/**
+ * 分段 → 类名。**只有 hidden / link 两种**：加粗与字号颜色都由静态块负责（见文件头）。
+ */
+function segmentClassName(segment: { hidden?: boolean; href?: string }): string {
   const names = ["rf-inline-mark-segment"];
   if (segment.hidden) names.push("rf-inline-mark-hidden");
-  if (segment.bold) names.push("rf-inline-mark-bold");
   if (segment.href) names.push("rf-inline-mark-link");
   return names.join(" ");
 }
@@ -119,10 +118,9 @@ export default function InlineMarkOverlay({
       <div className="rf-inline-mark-mirror rf-inline-mark-layer" style={mirrorStyle}>
         {placed.map(({ segment, start, end }, index) => {
           const className = segmentClassName(segment);
-          const style = inlineMarkSegmentStyle(segment);
           if (segment.hidden) {
             return (
-              <span key={index} className={className} style={style}>
+              <span key={index} className={className}>
                 {segment.text}
               </span>
             );
@@ -130,7 +128,7 @@ export default function InlineMarkOverlay({
           const overlaps = selection !== null && selection.end > start && selection.start < end;
           if (!overlaps) {
             return (
-              <span key={index} className={className} style={style}>
+              <span key={index} className={className}>
                 {segment.text}
               </span>
             );
@@ -138,7 +136,7 @@ export default function InlineMarkOverlay({
           const from = Math.max(0, selection.start - start);
           const to = Math.min(segment.text.length, selection.end - start);
           return (
-            <span key={index} className={className} style={style}>
+            <span key={index} className={className}>
               {segment.text.slice(0, from)}
               <span className="rf-inline-mark-selection">{segment.text.slice(from, to)}</span>
               {segment.text.slice(to)}

@@ -149,3 +149,29 @@ describe("WebFormBrowserUrlBar 一体式地址条", () => {
     expect(openButton.className).not.toContain("ant-btn-primary");
   });
 });
+
+/**
+ * WF-01 回归：`showOpenButton=false` 时曾经残留一颗 antd 默认的放大镜按钮。
+ * 根因是 antd v6 的 `Input.Search` **无条件**渲染 enterButton（传 `undefined` 会落回默认
+ * `<Button icon={<SearchOutlined/>}/>`），图标语义是"搜索"、行为却是"打开目标页"，
+ * 且没有 aria-label。修法是换控件（裸 `Input`），所以这里钉的是"按钮数量与 icon"——
+ * CSS 隐藏能让截图变干净，但按钮仍在焦点序与无障碍树里，只有数 DOM 才分得清。
+ */
+describe("WebFormBrowserUrlBar 不残留放大镜按钮", () => {
+  it("showOpenButton=false：地址条里只有历史入口一颗按钮，且没有 search 图标", () => {
+    renderBar({ showOpenButton: false, value: "https://example.com/apply" });
+
+    const buttons = Array.from(document.querySelectorAll(".webform-url-input button"));
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].getAttribute("aria-label")).toBe("历史网址");
+    expect(document.querySelector('[data-icon="search"]')).toBeNull();
+  });
+
+  it("showOpenButton=false：回车仍然提交（换控件不换行为）", () => {
+    const { onOpen } = renderBar({ showOpenButton: false, value: "https://example.com/apply" });
+
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", keyCode: 13 });
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+});
