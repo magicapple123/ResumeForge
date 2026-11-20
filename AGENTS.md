@@ -540,7 +540,16 @@ README 是这个仓库的门面，也是对用户可见功能的**权威清单**
 - **安装包 sidecar 必须是两空格格式**（`<hex>`＋两个空格＋文件名，ASCII、无 `*` 前缀）：
   桌面更新器把 sidecar 里的文件名与发布资产名逐字比较，coreutils 的 `hash *file` 形式会被
   判为非法格式而拒绝更新。`scripts/Build-Desktop.ps1 -Target win` 现在会自动写出与 CI 同格式的
-  sidecar；手工发版时两个文件一起挂。
+  sidecar；手工发版时两个文件一起挂。**写入时机在签名之后**——签名会改写 exe 字节，先写就会
+  留下描述旧文件的摘要，更新器会拒收（2026-11-21 修）。
+- **发布物一律从仓库同级的 `rf-dist` 取，不要直接发 `desktop\out` 里的原件。** 本仓库根目录可能带
+  「低完整性」标签（`icacls <仓库根>` 显示 `Mandatory Label\Low Mandatory Level`，由工作区/沙箱策略设置），
+  子目录与构建产物全都会继承它。低完整性进程受 **no-write-up** 限制：写不进 `Program Files`、`D:\`、
+  `%APPDATA%`，连 `%TEMP%` 都被重定向到 `%TEMP%\Low`——用户双击这种安装包会直接看到「没有可写目录」，
+  而安装器本身没有任何问题（它会如实写日志）。`Build-Desktop.ps1 -Target win` 打完包会把安装包与 sidecar
+  复制到 `-PublishDirectory`（默认仓库同级的 `rf-dist`）；复制到无标签目录会自动洗成中等，脚本还会读副本的
+  `Mandatory Label`，仍带 `Low` 就 `throw`。守卫：`scripts/tests/Test-DesktopArtifactPublish.ps1`（CI 里跟
+  `Test-PythonRuntimeGuard.ps1` 同一个 Windows 作业跑）。
 - 桌面离线门禁在 `desktop/` 下跑：`node --test "scripts/test-*.js"`（CI 的 desktop-shell 作业
   紧接着真的打一次 NSIS 包，语法错误会在那里暴露）。
 

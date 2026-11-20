@@ -11,6 +11,11 @@
 #   powershell -File scripts\Build-Desktop.ps1 -Target dir  # dir only
 #   powershell -File scripts\Build-Desktop.ps1 -Target mac  # mac: dmg + dir (run on macOS)
 #
+# The win target also publishes the installer (+ its .sha256 sidecar) to
+# -PublishDirectory (default: the "rf-dist" directory next to the repository)
+# and verifies the copy carries no low-integrity label. Ship the installer from
+# that directory, never straight out of desktop\out - see Publish-InstallerArtifact.
+#
 # Prereqs: frontend/dist exists (run `pnpm run build` in frontend/ first);
 # desktop/node_modules exists (pnpm install in desktop/).
 
@@ -21,13 +26,33 @@ param(
     # default (Test-PythonRuntimeGuard.ps1 pins the two together): the reuse guard
     # compares the version stamped into python-runtime.zip against this value, so
     # a bump here without the other would make every cached zip look stale.
-    [string]$PythonVersion = "3.12.10"
+    [string]$PythonVersion = "3.12.10",
+    # Where the finished installer and its .sha256 sidecar are published.
+    # Deliberately OUTSIDE the repository (default: the "rf-dist" directory next
+    # to it): when the checkout lives on a low-integrity (Low) path, every file
+    # produced here inherits that label, and a low-integrity process cannot write
+    # up -- it may write its own Temp\Low, but not Program Files, %APPDATA% or a
+    # drive root. Users double-clicking such an installer get "the default
+    # location is not writable either; setup cannot continue" from NSIS, because
+    # it is refused while preparing the target directory. Copying the artifact out
+    # of the repository re-labels it according to the destination (usually
+    # Medium), which is what makes it installable.
+    # Empty means "derive it from $projectRoot below": a param default cannot see
+    # the parent of the file's own directory.
+    [string]$PublishDirectory = ""
 )
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $desktopDir = Join-Path $projectRoot "desktop"
 $payloadDir = Join-Path $desktopDir "payload"
+
+# Default publish directory: "rf-dist" next to the repository. Resolved here
+# rather than in the param default because $projectRoot (derived from
+# $PSScriptRoot) does not exist yet when the param block is evaluated.
+if ([string]::IsNullOrWhiteSpace($PublishDirectory)) {
+    $PublishDirectory = Join-Path (Split-Path -Parent $projectRoot) "rf-dist"
+}
 
 if (-not (Test-Path (Join-Path $projectRoot "frontend\dist\index.html"))) {
     throw "frontend/dist/index.html missing - build the frontend first (pnpm run build)."
@@ -167,6 +192,176 @@ try {
 
 Write-Host "Desktop packaging done -> $(Join-Path $desktopDir 'out')"
 
+# ---------------------------------------------------------------------------
+# Publishing: move the finished installer out of the repository and prove the
+# copy can be installed by a user.
+#
+# Why (real incident, 2026-11): the checkout's directory carried a low-integrity
+# (Low) mandatory label, so every file under desktop\out inherited
+# `Mandatory Label\Low Mandatory Level`. A low-integrity process is bound by
+# **no-write-up**: it can write its own Temp\Low, but not Program Files,
+# %APPDATA% or a drive root, and %TEMP% is redirected to Temp\Low. The installer
+# itself is fine in that case -- NSIS is refused while preparing the target
+# directory and reports it truthfully ("the default location is not writable
+# either"), with the log landing in Temp\Low. Leaving the artifact inside the
+# repository IS the defect, so the build has to move it out and then *verify*
+# that the new file no longer carries the Low label.
+#
+# Two rules follow from that:
+#   1. Ship from -PublishDirectory (default: "rf-dist" next to the repository),
+#      never straight out of desktop\out;
+#   2. A failed check must throw, not warn: an artifact that looks like a
+#      successful build but cannot be installed is only discovered by the user.
+#
+# The functions below take everything through parameters (no script-scope
+# reads), so the publish step can be exercised without re-running packaging.
+# Keep them ASCII: Test-PythonRuntimeGuard.ps1 pins this file as pure ASCII.
+# ---------------------------------------------------------------------------
+
+function Get-IntegrityLabel {
+    <#
+    .SYNOPSIS
+      Reads the mandatory integrity label of a path ("Low"/"Medium"/"High" ...); returns $null when it has no explicit label.
+    .DESCRIPTION
+      icacls prints a `Mandatory Label\<level> Mandatory Level:` line only for
+      objects carrying an explicit label; no such line means the object inherits
+      from its parent directory (normally Medium), which is shippable. Two
+      independent signals are used: the English keyword line (observed on a
+      Chinese-locale Windows as well) and the well-known Low integrity SID
+      S-1-16-4096, which survives localized output.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    # A native command writing to stderr becomes a terminating error under
+    # $ErrorActionPreference = "Stop"; this is only a probe, so drop to Continue
+    # and read $LASTEXITCODE instead.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $raw = (& (Join-Path $env:SystemRoot "System32\icacls.exe") $Path 2>&1 | Out-String)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    if ($exitCode -ne 0) {
+        throw "icacls could not read the integrity label of $Path (exit $exitCode): $($raw.Trim())"
+    }
+
+    foreach ($line in ($raw -split "`r?`n")) {
+        $labelMatch = [regex]::Match($line, 'Mandatory\s+Label\\(?<level>[^:\\]+?)\s+Mandatory\s+Level')
+        if ($labelMatch.Success) { return $labelMatch.Groups["level"].Value.Trim() }
+    }
+
+    # Fallback signal: the fixed SID of the Low integrity level. The wording above
+    # can be localized away, the SID cannot change.
+    if ($raw -match 'S-1-16-4096') { return "Low" }
+
+    return $null
+}
+
+function Test-IsLowIntegrityLabel {
+    <#
+    .SYNOPSIS
+      Tells whether a Get-IntegrityLabel result is the Low integrity level.
+    #>
+    param(
+        [AllowNull()][AllowEmptyString()][string]$Label
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Label)) { return $false }
+    return ($Label.Trim() -ieq "Low")
+}
+
+function Publish-InstallerArtifact {
+    <#
+    .SYNOPSIS
+      Publishes an installer plus its .sha256 sidecar outside the repository and verifies the copy.
+    .DESCRIPTION
+      Transport and verification only, no packaging, so an already built
+      installer can be checked on its own. Every failed check throws, including a
+      copy that still carries the Low label: such an artifact can never be
+      installed (see the no-write-up note at the top of this section).
+    .OUTPUTS
+      PSCustomObject: InstallerPath / SidecarPath / Sha256 / IntegrityLabel.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$SourcePath,
+        [Parameter(Mandatory = $true)][string]$PublishDirectory
+    )
+
+    if (-not (Test-Path -LiteralPath $SourcePath -PathType Leaf)) {
+        throw "Installer to publish not found: $SourcePath"
+    }
+    # The desktop updater verifies downloads against this sidecar (it compares the
+    # file name verbatim, then the digest), so publishing without it ships a
+    # release that cannot be updated.
+    $sidecarSource = "$SourcePath.sha256"
+    if (-not (Test-Path -LiteralPath $sidecarSource -PathType Leaf)) {
+        throw "Missing sha256 sidecar: $sidecarSource (the desktop updater verifies downloads against it, so an installer without one must not be published)."
+    }
+
+    New-Item -ItemType Directory -Force $PublishDirectory | Out-Null
+    $artifactName = Split-Path -Leaf $SourcePath
+    $publishedInstaller = Join-Path $PublishDirectory $artifactName
+    $publishedSidecar = "$publishedInstaller.sha256"
+    Copy-Item -LiteralPath $SourcePath -Destination $publishedInstaller -Force
+    Copy-Item -LiteralPath $sidecarSource -Destination $publishedSidecar -Force
+
+    # Re-hash after copying: this catches a truncated copy, the wrong file, or a
+    # stale artifact of the same name already sitting in the destination. A
+    # mismatch means what would ship is not what was just built.
+    $sourceHash = (Get-FileHash -LiteralPath $SourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $publishedHash = (Get-FileHash -LiteralPath $publishedInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($sourceHash -ne $publishedHash) {
+        throw "Published copy has a different sha256 than the source (source $sourceHash / copy $publishedHash): $publishedInstaller"
+    }
+
+    # Defensive cross-check. The build is supposed to guarantee this pair by
+    # construction (the sidecar is written after signing, from a single hash of
+    # the final file), so a mismatch here means something upstream did not hold:
+    # a hand-made artifact, a source that was published from an older build, or
+    # a sidecar left over from before that ordering was fixed. Keep the published
+    # pair self-consistent instead of shipping a release the updater would reject
+    # (format unchanged: `<hex>  <name>`, ASCII, LF); desktop\out is left alone.
+    $recordedHash = ((Get-Content -LiteralPath $publishedSidecar -Raw) -split '\s+')[0]
+    if ($recordedHash -ne $publishedHash) {
+        Write-Warning "Sidecar digest does not match the installer ($recordedHash -> $publishedHash); upstream should have written it after signing. Rewriting the published copy's sidecar with the actual digest."
+        [System.IO.File]::WriteAllText(
+            $publishedSidecar,
+            "$publishedHash  $artifactName`n",
+            [System.Text.Encoding]::ASCII
+        )
+    }
+
+    # Last gate: the copy must no longer carry the Low integrity label. The label
+    # is inherited from the directory, so this fires when PublishDirectory itself
+    # sits on a low-integrity path (inside the repository, for example).
+    $integrityLabel = Get-IntegrityLabel -Path $publishedInstaller
+    if (Test-IsLowIntegrityLabel -Label $integrityLabel) {
+        throw ("Published copy still inherits the low-integrity label ($integrityLabel); users could not install it. " +
+            "A low-integrity process is bound by no-write-up and cannot write to Program Files / %APPDATA%. " +
+            "Check whether -PublishDirectory is also on a low-integrity path (current: $PublishDirectory); " +
+            "published artifacts must live outside the repository, on a Medium-labelled directory.")
+    }
+
+    $labelText = if ([string]::IsNullOrWhiteSpace($integrityLabel)) {
+        "no low-integrity label"
+    } else {
+        "integrity label: $integrityLabel"
+    }
+    Write-Host "published installer -> $publishedInstaller"
+    Write-Host "published sha256 ($artifactName): $publishedHash ($labelText)"
+
+    return [pscustomobject]@{
+        InstallerPath  = $publishedInstaller
+        SidecarPath    = $publishedSidecar
+        Sha256         = $publishedHash
+        IntegrityLabel = $integrityLabel
+    }
+}
+
 # Checksum sidecar for the installer, in the exact format CI's "Verify packaging
 # outputs" step writes and the desktop updater accepts: "<hex>  <name>", two
 # spaces, ASCII, no "*" prefix (the updater compares the sidecar's file name to
@@ -179,16 +374,6 @@ if ($Target -eq "win") {
     # from earlier versions, and a stale pick would checksum the wrong file.
     $version = (Get-Content (Join-Path $desktopDir "package.json") -Raw | ConvertFrom-Json).version
     $setupPath = Join-Path $desktopDir "out\ResumeForge-Setup-$version.exe"
-    if (Test-Path $setupPath) {
-        $sha = (Get-FileHash $setupPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        # LF (not Set-Content's CRLF): the sidecar must stay `sha256sum -c`
-        # friendly on macOS/Linux, where the trailing "\r" would break the
-        # file name match.
-        [System.IO.File]::WriteAllText("$setupPath.sha256", "$sha  $(Split-Path -Leaf $setupPath)`n", [System.Text.Encoding]::ASCII)
-        Write-Host "installer sha256 ($(Split-Path -Leaf $setupPath)): $sha"
-    } else {
-        Write-Warning "installer artifact not found for checksum sidecar: $setupPath"
-    }
 
     # Report task 13: signing is an optional scaffold (scripts/Sign-Windows.ps1).
     # The build must still *succeed* without a certificate -- neither this machine
@@ -208,5 +393,29 @@ if ($Target -eq "win") {
         } elseif (-not $certConfigured) {
             Write-Host "No Windows code-signing certificate configured (RF_WIN_CERT_BASE64 / RF_WIN_CERT_PATH); shipping the installer unsigned."
         }
+    }
+
+    # Sidecar, written AFTER signing and hashed exactly once. Signing rewrites the
+    # executable, so a digest taken before it would describe the pre-signing file
+    # and the desktop updater would reject the download as a checksum mismatch --
+    # that was a real defect here (the sidecar was written above the signing
+    # step). Order is now: package -> sign -> hash -> sidecar.
+    if (Test-Path $setupPath) {
+        $sha = (Get-FileHash $setupPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        # LF (not Set-Content's CRLF): the sidecar must stay `sha256sum -c`
+        # friendly on macOS/Linux, where the trailing "\r" would break the
+        # file name match.
+        [System.IO.File]::WriteAllText("$setupPath.sha256", "$sha  $(Split-Path -Leaf $setupPath)`n", [System.Text.Encoding]::ASCII)
+        Write-Host "installer sha256 ($(Split-Path -Leaf $setupPath)): $sha"
+    } else {
+        Write-Warning "installer artifact not found for checksum sidecar: $setupPath"
+    }
+
+    # Publish + integrity verification. The position matters too: the digest and
+    # the label read here describe the final (post-signing, post-sidecar) file.
+    # A failure throws (non-zero exit): an installer nobody can install must
+    # never look like a successful build.
+    if (Test-Path -LiteralPath $setupPath) {
+        Publish-InstallerArtifact -SourcePath $setupPath -PublishDirectory $PublishDirectory | Out-Null
     }
 }
