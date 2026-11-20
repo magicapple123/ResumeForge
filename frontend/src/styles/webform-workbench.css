@@ -147,6 +147,14 @@
   gap: 8px 12px;
 }
 
+/* antd 的 `type="warning"` 用的是**填充色** #faad14（白底 1.9:1），当正文色必然过不了
+   AA —— /webform 在 CI 的 axe 里就是这两处（.webform-workbar-sample-hint /
+   .webform-flow-reason）。网申页统一改用文字色 token：浅色 #875300、深色 #f2c66d。 */
+.webform-workbench .ant-typography-warning,
+.webform-onboarding .ant-typography-warning {
+  color: var(--rf-warning-text);
+}
+
 /* 禁用原因与按钮同排：只把按钮灰掉、不写原因，用户只会以为功能坏了。 */
 .webform-flow-reason {
   flex: 1 1 220px;
@@ -392,7 +400,10 @@
 
   /* 窄容器里两段提示按可用宽度换行：`white-space: nowrap` 会顶穿卡片。
      这一档是兜底，不是主路径——1440 / 1024 两档必须保持单行。 */
+  /* 只放开换行还不够：`flex: 0 0 auto` 会把基准尺寸钉在 max-content（实测 392px），
+     溢出照旧。窄档必须同时允许收缩并独占一行。 */
   .webform-workbar-hint {
+    flex: 1 1 100%;
     white-space: normal;
   }
 }

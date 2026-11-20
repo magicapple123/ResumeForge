@@ -318,13 +318,43 @@
 /* 窄容器：记录行回到两行式（时间 + 结果一行、标题一行）。三列在 720 以下会把标题压成
    几个字，还不如让标题独占一行。 */
 @container (max-width: 720px) {
+  /* 375px 真机（2026-11-20 CI）：步骤条整行 `nowrap` + 右端槽位 `flex: 0 0 auto`，
+     于是「按钮 152 + 禁用原因 396」把内容顶出视口 234px。窄档一律允许换行：
+     槽位独占一整行，原因再独占一整行；步骤名本身仍是 `nowrap`（不折断词语）。 */
+  .webform-flow-bar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .webform-flow-slot {
+    flex: 1 1 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .webform-flow-reason {
+    flex: 1 1 100%;
+  }
+
+  /* 时间列原本 `nowrap` + 内容宽度（实测 169px），窄档会顶出 51px。 */
+  .webform-recent-time {
+    white-space: normal;
+  }
+
+  /* 真正的栅格在 `li` 里的 `.webform-recent-line` 上，不在 `li` 本身——原来把窄档
+     栅格写在行上，行变成了两列、里面的行内栅格仍是 `140px | 1fr | auto | auto`，
+     375px 下右侧顶出 51px（CI 2026-11-20）。 */
   .webform-recent-row {
+    height: auto;
+    padding: 10px 0;
+  }
+
+  .webform-recent-line {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "time tags"
       "page page";
-    height: auto;
-    padding: 10px 0;
+    min-height: 0;
     row-gap: 2px;
   }
 
