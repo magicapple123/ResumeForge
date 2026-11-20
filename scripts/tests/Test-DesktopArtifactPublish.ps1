@@ -101,7 +101,8 @@ Assert-GuardTest ($publishIndex -gt $sidecarIndex) "Publishing must run after th
 # 洞的成因。`.sha256` 的写入只看这个锚点所属的那一处，发布函数里的 Get-FileHash 用的是
 # -LiteralPath $SourcePath / $publishedInstaller，不匹配。
 $hashHits = [regex]::Matches($content, 'Get-FileHash \$setupPath')
-Assert-GuardTest ($hashHits.Count -eq 1) "The 'Get-FileHash `$setupPath' anchor must match exactly once (found $($hashHits.Count)); an ambiguous anchor silently points at the wrong site."
+Assert-GuardTest ($hashHits.Count -ge 1) "The sidecar hash computation ('Get-FileHash `$setupPath') is gone; the ordering assertion has no anchor."
+Assert-GuardTest ($hashHits.Count -eq 1) "The 'Get-FileHash `$setupPath' anchor is ambiguous (found $($hashHits.Count)); IndexOf-style lookups silently take the first hit, which is how the anchor ended up on a comment before."
 $hashIndex = $hashHits[0].Index
 Assert-GuardTest ($hashIndex -gt $signIndex) "The sidecar digest must be computed from the post-signing file: a hash hoisted above signing records the pre-signing bytes."
 Assert-GuardTest ($sidecarIndex -gt $hashIndex) "The sidecar must be written after the digest is computed."
