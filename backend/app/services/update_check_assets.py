@@ -105,7 +105,10 @@ def select_asset(data: dict, platform: str | None, prefer: str = "zip") -> _Asse
     wanted_kind = "installer" if prefer == "installer" else "zip"
     assets = data.get("assets")
 
-    best_rank = (0, 0)
+    # 显式标成 tuple[int, int]：不标注的话 pyright 会把 (0, 0) 推成
+    # tuple[Literal[0], Literal[0]]，而 `rank` 是 tuple[Literal[2, 1], Literal[2]]，
+    # 两个 Literal 元组的 `>` 会被判成"不支持该运算符"（Python 运行时其实合法）。
+    best_rank: tuple[int, int] = (0, 0)
     best_name = ""
     best_item: dict | None = None
     foreign: set[str] = set()
@@ -126,7 +129,7 @@ def select_asset(data: dict, platform: str | None, prefer: str = "zip") -> _Asse
             kind_rank = 2 if kind == wanted_kind else 1
             asset_platform = _asset_platform(name)
             if asset_platform is not None and asset_platform in wanted:
-                rank = (kind_rank, 2)
+                rank: tuple[int, int] = (kind_rank, 2)
             elif asset_platform is None and name.lower().startswith("resumeforge"):
                 # 不带平台词的通用包（以后若只挂一个包，走这条）。
                 rank = (kind_rank, 1)
@@ -134,7 +137,13 @@ def select_asset(data: dict, platform: str | None, prefer: str = "zip") -> _Asse
                 if asset_platform is not None:
                     foreign.add(asset_platform)
                 continue
-            if rank > best_rank or (rank == best_rank and name < best_name):
+            # 逐元素比，不整元组比：pyright 用流敏感窄化类型检查运算符，
+            # tuple[Literal[2, 1], Literal[2]] > tuple[Literal[0], Literal[0]]
+            # 会被判成 reportOperatorIssue（Python 运行时其实合法）。
+            rank_beats = rank[0] > best_rank[0] or (
+                rank[0] == best_rank[0] and rank[1] > best_rank[1]
+            )
+            if rank_beats or (rank == best_rank and name < best_name):
                 best_rank, best_item, best_name = rank, item, name
 
     if best_item is not None:
