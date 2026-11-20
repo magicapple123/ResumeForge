@@ -6,6 +6,7 @@ import { useResolvedTheme } from "../../theme/themeStore";
 import { A4_HEIGHT_PX, A4_WIDTH_PX, OVERFLOW_PAGE_LABEL_KEY, PAGE_STACK_GAP_PX } from "./config";
 import { UNLIMITED_PAGE_LIMIT } from "../../../types";
 import { paintLoadedPaperFrames, paintPaperTheme } from "./paperTheme";
+import { paintLoadedPhotoLiveFrames, paintPhotoLiveStyle } from "./photoLiveCss";
 
 interface Props {
   isPanning: boolean;
@@ -35,6 +36,12 @@ interface Props {
    * 见 `./clickToEdit.ts`）；这里这个 class 是给宿主与测试用的外层标记。
    */
   clickToEdit?: boolean;
+  /**
+   * 5.4：草稿模式下的照片样式（由宿主按**未保存**的 `format_config` 现算）。
+   * 注入 iframe 内部的 `<style id="rf-photo-live">`，与 600ms 服务端重排并存：
+   * 它只是"松手前的过渡"，服务端 HTML 回来后必须再写一遍（见 `onLoad`）。
+   */
+  photoLiveCss?: string;
 }
 
 /**
@@ -65,6 +72,7 @@ export default function ResumePreviewCanvas({
   iframeRef,
   onIframeLoad,
   clickToEdit = false,
+  photoLiveCss = "",
 }: Props) {
   useLocale();
   /**
@@ -79,6 +87,11 @@ export default function ResumePreviewCanvas({
   useEffect(() => {
     paintLoadedPaperFrames(containerRef.current, darkPaper);
   }, [containerRef, darkPaper]);
+  // 5.4：照片参数变化时只改写注入的样式，不重载 iframe（拖动中零延迟）。
+  // 与主题染色同样"从容器现场找 iframe"——`srcDoc` 重载会换掉文档引用。
+  useEffect(() => {
+    paintLoadedPhotoLiveFrames(containerRef.current, photoLiveCss);
+  }, [containerRef, photoLiveCss]);
   // 「不限篇幅」（`pageLimit === 0`）没有上限，因此**没有任何一页是"超额页"**：
   // 画上红实线 + 「超出上限，不计入导出」是假话——那时导出一个字节都不裁。
   const unlimited = pageLimit === UNLIMITED_PAGE_LIMIT;
@@ -130,6 +143,9 @@ export default function ResumePreviewCanvas({
                     onLoad={(event) => {
                       // 先染色再交给宿主排版 / 测量：这里的 class 只改渲染，不影响任何盒子尺寸。
                       paintPaperTheme(event.currentTarget.contentDocument, darkPaper);
+                      // 5.4：服务端 HTML 回来了，注入过的照片样式随旧文档一起丢了，必须重写。
+                      // 必须在 `onIframeLoad` 的测量之前写：让测量看到的是最终几何。
+                      paintPhotoLiveStyle(event.currentTarget.contentDocument, photoLiveCss);
                       onIframeLoad(event, index);
                     }}
                   />

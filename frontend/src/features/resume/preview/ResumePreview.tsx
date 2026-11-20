@@ -101,6 +101,11 @@ interface Props {
    */
   onPickField?: (path: string) => void;
   richEdit?: RichTextEditAdapter; // 右键加粗的最小契约；不传 = 整条链路不渲染
+  /**
+   * 5.4：草稿模式的照片样式（宿主按未保存的 `format_config` 现算），原样透传给画布
+   * 注入 iframe。不传 = 不注入（预览弹窗 / 导出等只读宿主一行都不用改）。
+   */
+  photoLiveCss?: string;
 }
 
 /**
@@ -129,6 +134,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     onPreviewModeChange,
     onPickField,
     richEdit,
+    photoLiveCss,
   },
   ref,
 ) {
@@ -460,6 +466,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
               iframeRef={iframeRef}
               onIframeLoad={handleFrameLoad}
               clickToEdit={active}
+              photoLiveCss={photoLiveCss}
             />
           </div>
         ) : null}

@@ -39,7 +39,9 @@ const CHANNELS = {
   setLaunchAtLogin: "desktop:set-launch-at-login",
 };
 
-/** 窗口是否置顶（#34A）：拿不到窗口 / API 缺失一律按 false，绝不让快照抛错。 */
+/**
+ * 窗口是否置顶（#34A）：拿不到窗口 / API 缺失一律按 false，绝不让快照抛错。
+ */
 function readAlwaysOnTop(getWindow) {
   const win = getWindow();
   if (!win) return false;
@@ -49,6 +51,28 @@ function readAlwaysOnTop(getWindow) {
   } catch {
     return false;
   }
+}
+
+/**
+ * 主题上报载荷的**形态收敛**（2026-11-20 第 3 条）。
+ *
+ * 两种形态都要认：旧渲染层只发主题名（字符串），新渲染层发
+ * `{ theme, color, symbolColor }`——颜色取自页面 CSS 的计算值，那是唯一真源。
+ *
+ * 这里只收敛形状（只保留三个已知字段、只接受字符串），**颜色格式不在这里判**：
+ * 不透明 `#rrggbb` 的校验与"回落默认值 + 日志"在 lib/titlebar.js 的 applyTheme 里，
+ * 免得同一个规则有两份实现。未知形态返回 null（调用方直接忽略）。
+ *
+ * @param {unknown} value
+ * @returns {string | {theme: string, color?: string, symbolColor?: string} | null}
+ */
+function normalizeOverlayPayload(value) {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const payload = { theme: typeof value.theme === "string" ? value.theme : "" };
+  if (typeof value.color === "string") payload.color = value.color;
+  if (typeof value.symbolColor === "string") payload.symbolColor = value.symbolColor;
+  return payload;
 }
 
 /** 只信主窗口：sender 缺失 / 窗口已销毁 / 非主窗口一律拒绝。 */
@@ -156,9 +180,15 @@ function registerDesktopShellIpc(deps) {
     return { ok: true };
   });
 
-  ipcMain.on(CHANNELS.setTheme, (event, theme) => {
+  // 主题上报（2026-11-20 第 3 条）：载荷从"主题名"扩展成"主题名 + 覆盖层底色 + 图标色"。
+  // 页面 CSS 是颜色的唯一真源，主进程不再按主题名猜色；这里不放宽任何校验——
+  // 仍只信主窗口发来的消息，仍只接受字符串字段。
+  ipcMain.on(CHANNELS.setTheme, (event, value) => {
     if (!trusted(event)) return;
-    titleBar.applyTheme(theme);
+    const payload = normalizeOverlayPayload(value);
+    if (!payload) return;
+    titleBar.applyTheme(payload);
+    const theme = typeof payload === "string" ? payload : payload.theme;
     // 同一个上报还有第二个消费者：壳层主题快照（lib/shell-theme.js）。2026-11-20 起
     // 托盘图标固定一枚浅色图，不再跟着换图；这里只更新快照（splash / 后续消费者）。
     const shellTheme = typeof getShellTheme === "function" ? getShellTheme() : null;
@@ -211,4 +241,9 @@ function registerDesktopShellIpc(deps) {
   return { menu, channels: CHANNELS };
 }
 
-module.exports = { CHANNELS, isMainWindowSender, registerDesktopShellIpc };
+module.exports = {
+  CHANNELS,
+  isMainWindowSender,
+  normalizeOverlayPayload,
+  registerDesktopShellIpc,
+};

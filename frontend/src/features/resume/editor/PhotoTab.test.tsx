@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 左栏「照片」页签（T02）。
+ * 左栏「照片」分组（T02；5.1 从独立页签并入「排版参数」）。
  *
  * 三条只有这一层才会错的契约：
  * 1. **可用性看当前文档**，不看宿主传下来的"已保存详情"——否则上传后缩略图已经出来、
@@ -119,8 +119,8 @@ describe("PhotoTab", () => {
     );
   });
 
-  it("位置下拉列出页眉的合法位置（照片不是死字段）", () => {
+  it("不再提供「位置」下拉（5.3：照片位置固定为 photo）", () => {
     renderTab(docWithPhoto(PHOTO));
-    expect(screen.getByRole("combobox")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).toBeNull();
   });
 });

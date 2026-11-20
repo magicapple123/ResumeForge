@@ -89,6 +89,8 @@ const update = {
   "update.startup.readyHint":
     "Restarting replaces program files only. Jobs, resumes, chats and settings in data/ are kept.",
   "update.startup.install": "Restart and install",
+  "update.startup.openUpdater": "Update in app",
+  "update.startup.scrollHint": "More below — scroll to see the rest",
   "update.startup.downloadPackage": "Download installer",
   "update.startup.release": "Open release page",
   "update.startup.unsupported":

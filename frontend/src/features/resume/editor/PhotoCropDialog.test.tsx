@@ -124,11 +124,11 @@ describe("PhotoCropDialog · 四边可拖的裁剪框（#18）", () => {
     expect(params.aspect).toBe("free");
   });
 
-  // ── I-37：画框比例 → 默认预设 + 一句提示 ────────────────────────────────
-  it("画框 6.3:8：默认选中 4:5，提示同时出现", () => {
+  // ── I-37 / 5.5：画框比例只用于提示，默认档是「自由」 ─────────────────────
+  it("画框 6.3:8：默认仍是「自由」，提示同时出现并指向 4:5", () => {
     mockFrameAspect = 0.7875376565720628;
     renderDialog();
-    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.landscape") })).toBeChecked();
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.free") })).toBeChecked();
     expect(
       screen.getByText(
         t("proview.photo.frameHint", {
@@ -139,23 +139,24 @@ describe("PhotoCropDialog · 四边可拖的裁剪框（#18）", () => {
     ).toBeInTheDocument();
   });
 
-  it("默认比例跟画框走：1:1 画框选 1:1（不写死 4:5）", () => {
+  it("默认比例不跟画框走：1:1 画框也保持「自由」（5.5）", () => {
     mockFrameAspect = 1;
     renderDialog();
-    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.square") })).toBeChecked();
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.free") })).toBeChecked();
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.square") })).not.toBeChecked();
   });
 
   it("已有保存的裁剪（free）时不强制改比例，只显示提示", () => {
     mockFrameAspect = 0.7875;
     const saved = createRectCropParams(SOURCE, { x: 0.2, y: 0.1, w: 0.5, h: 0.4 }, "free");
     renderDialog({ initialCrop: saved });
-    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.original") })).toBeChecked();
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.free") })).toBeChecked();
     expect(screen.getByText(/6\.3:8/)).toBeInTheDocument();
   });
 
-  it("量不到画框时保持「原图」，不出现提示", () => {
+  it("量不到画框时默认「自由」，不出现提示", () => {
     renderDialog();
-    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.original") })).toBeChecked();
+    expect(screen.getByRole("radio", { name: t("proview.photo.aspect.free") })).toBeChecked();
     expect(screen.queryByTestId("photo-frame-hint")).not.toBeInTheDocument();
   });
 });

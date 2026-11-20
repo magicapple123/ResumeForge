@@ -18,8 +18,14 @@
 //   5. Without an installAndQuit dependency the updater only requests quit --
 //      spawning the installer is main.js's job, after the backend stopped.
 //   6. The update dialog restores/shows/focuses a hidden (tray) window first.
-//   7. installerWaitCommand(): the detached wait-for-pid powershell command
-//      that keeps the NSIS /S run from racing the live shell.
+//
+// 2026-11-20 第二轮（第 9 条）之后，本文件只管"下载 → 校验 → 安装"这条链：
+//   * 安装器命令（9.1 的 `--force-run`）→ scripts/test-installer-command.js；
+//   * 对话框文案（9.3）/ 任务栏进度（9.4）/ 启动对账（9.2）→ scripts/test-update-feedback.js；
+//   * 标记的纯逻辑（9.2）→ scripts/test-update-attempt.js。
+// 那三个文件都不需要 electron 桩或 VM，本文件因此留在 500 行预算内（493 行）。
+// 这里保留的 9.x 断言：拉起安装器**之前**已写标记（且没有 installAndQuit 时不写）、
+// 只带 -windows.zip 的发布必须什么都不做（第 8.3 条，桌面只认 Setup.exe）。
 
 const assert = require("assert");
 const crypto = require("crypto");
@@ -42,7 +48,9 @@ function sha256Hex(content) {
 }
 
 function loadUpdater({ fetchImpl, appOverrides = {}, dialogResponses = [0, 0], platform = "win32" } = {}) {
-  const events = { dialogCalls: [], quitCalls: [], fetchInits: [] };
+  // 只声明**真的会被 push** 的观测面：曾经有过 fetchInits / log 两个"声明后从不 push"的
+  // 字段，谁拿它们断言 length===0 都会恒真通过（假绿）。
+  const events = { dialogCalls: [], quitCalls: [], externalCalls: [], openPathCalls: [] };
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "rf-updater-vm-"));
 
   const appStub = {
@@ -50,6 +58,7 @@ function loadUpdater({ fetchImpl, appOverrides = {}, dialogResponses = [0, 0], p
     getVersion: () => "0.18.0",
     quit: () => events.quitCalls.push("quit"),
     getPath: (name) => tmpRoot,
+    getLocale: () => "zh-CN",
     ...appOverrides,
   };
   let dialogCallIndex = 0;
@@ -59,6 +68,17 @@ function loadUpdater({ fetchImpl, appOverrides = {}, dialogResponses = [0, 0], p
       const response = dialogResponses[dialogCallIndex] ?? 1;
       dialogCallIndex += 1;
       return { response };
+    },
+  };
+  // 第 9.2 条的「手动下载 / 打开日志」出口；runManualUpdateCheck 的 macOS 分支也用它。
+  const shellStub = {
+    openExternal: (url) => {
+      events.externalCalls.push(url);
+      return Promise.resolve();
+    },
+    openPath: (target) => {
+      events.openPathCalls.push(target);
+      return Promise.resolve("");
     },
   };
 
@@ -84,8 +104,10 @@ function loadUpdater({ fetchImpl, appOverrides = {}, dialogResponses = [0, 0], p
     fetch: fetchImpl,
     require(spec) {
       if (spec === "electron") {
-        return { app: appStub, dialog: dialogStub };
+        return { app: appStub, dialog: dialogStub, shell: shellStub };
       }
+      // 相对 require 要按 desktop/ 解析（沙箱的 require 是这份 harness 自己的）。
+      if (spec.startsWith(".")) return require(path.join(REPO_DESKTOP, spec));
       return require(spec);
     },
     module: { exports: {} },
@@ -167,11 +189,10 @@ test("update metadata requires an exact stable tag and release-asset source", as
       }),
     });
     try {
+      // 资产不全（例如只带 -windows.zip，桌面必须什么都不做）的用例在
+      // scripts/test-updater-manual.js —— 那边不受本文件行数预算限制。
       if (item.error) {
         await assert.rejects(() => loaded.exports.checkAndOfferUpdate(null), item.error);
-      } else {
-        await loaded.exports.checkAndOfferUpdate(null);
-        assert.strictEqual(loaded.events.dialogCalls.length, 0, "incomplete release must be skipped");
       }
     } finally {
       fs.rmSync(loaded.tmpRoot, { recursive: true, force: true });
@@ -349,6 +370,11 @@ test("checksum match: verified payload is published and installAndQuit gets its 
     // 电脑的用户永远卡在下载完成之后。现在校验通过即安装，全程只有一个对话框。
     assert.strictEqual(loaded.events.dialogCalls.length, 1,
       "checksum verification must go straight to install without a second dialog");
+    // 第 9.2 条：**拉起安装器之前**必须已写好标记（标记落在 userData 根目录）。
+    const marker = JSON.parse(fs.readFileSync(path.join(loaded.tmpRoot, "update-attempt.json"), "utf-8"));
+    assert.strictEqual(marker.from, "0.18.0", "标记要记下'从哪个版本开始装'");
+    assert.strictEqual(marker.to, "0.19.0");
+    assert.strictEqual(marker.installer, installerPath, "标记要记下是哪个安装器");
   } finally {
     fs.rmSync(loaded.tmpRoot, { recursive: true, force: true });
   }
@@ -382,6 +408,10 @@ test("no installAndQuit dependency: the updater only requests quit (spawn is mai
     // 没有 parent 窗口时退化为无 parent 弹窗（单参数调用）——对话框仍会显示。
     assert.strictEqual(loaded.events.dialogCalls[0].length, 1,
       "a null parent window must fall back to the parent-less dialog form");
+    // 第 9.2 条：没有 installAndQuit ＝ 不会真的拉起安装器，这时**不能**写标记，
+    // 否则下次启动会误报"更新没有装成"。
+    assert.strictEqual(fs.existsSync(path.join(loaded.tmpRoot, "update-attempt.json")), false,
+      "no installer spawn means no update-attempt marker");
   } finally {
     fs.rmSync(loaded.tmpRoot, { recursive: true, force: true });
   }
@@ -448,36 +478,6 @@ test("a destroyed parent window degrades to the parent-less dialog without crash
     // point of the probe: revealWindow() on a destroyed window must not throw.
     await loaded.exports.checkAndOfferUpdate(destroyedWindow, {});
     assert.strictEqual(loaded.events.dialogCalls.length, 0);
-  } finally {
-    fs.rmSync(loaded.tmpRoot, { recursive: true, force: true });
-  }
-});
-
-test("installerWaitCommand: a detached wait-for-pid powershell runs the NSIS /S install", () => {
-  const loaded = loadUpdater({ fetchImpl: async () => assert.fail("no network for this probe") });
-  try {
-    const { file, args } = loaded.exports.installerWaitCommand(
-      "C:/Users/me/AppData/Local/Temp/ResumeForge-Setup-0.19.0.exe",
-      4242,
-    );
-    assert.strictEqual(file, "powershell");
-    // args comes from the VM realm; compare element-wise (prototype differs).
-    assert.strictEqual(args.length, 5);
-    assert.strictEqual(args[0], "-NoProfile");
-    assert.strictEqual(args[1], "-WindowStyle");
-    assert.strictEqual(args[2], "Hidden");
-    assert.strictEqual(args[3], "-Command");
-    const script = args[4];
-    assert.match(script, /Wait-Process -Id 4242/,
-      "the helper must wait for the (recorded) main-process pid");
-    assert.match(script, /-ErrorAction SilentlyContinue/,
-      "a pid that already exited must not fail the wait");
-    assert.match(script, /Start-Process -FilePath 'C:\/Users\/me\/AppData\/Local\/Temp\/ResumeForge-Setup-0\.19\.0\.exe'/,
-      "the verified installer path must be launched verbatim");
-    assert.match(script, /-ArgumentList '\/S'/, "the NSIS install must stay silent");
-    // 路径里的单引号必须转义，否则嵌入 PowerShell 单引号字符串会截断命令。
-    const escaped = loaded.exports.installerWaitCommand("C:/it's/setup.exe", 1);
-    assert.match(escaped.args[4], /it''s/, "embedded single quotes must be doubled");
   } finally {
     fs.rmSync(loaded.tmpRoot, { recursive: true, force: true });
   }

@@ -150,6 +150,42 @@ const messages = Object.freeze({
     "migration.failed.body":
       "数据迁移失败，本次仍按旧的数据位置启动，旧数据完好无损，可下次启动时重试。\n\n" +
       "原因：{reason}",
+
+    // 应用内更新（第 9.3 条）：updater.js 的三个对话框此前是硬编码中文，英文界面
+    // 会看到中文。文案里必须留下"数据不会被覆盖"这句——用户明确要求告知，而它是
+    // 有事实依据的（数据在用户目录，安装器只写安装目录）。
+    "update.available.message": "发现新版本 {version}",
+    "update.available.body":
+      "将下载并安装更新，安装完成后会自动重新打开。\n\n" +
+      "你的简历、岗位与资料都保存在用户目录，更新不会覆盖或删除它们。",
+    "update.incomplete.message": "这个版本的安装包还没传全",
+    "update.incomplete.body":
+      "最新版本是 {version}，但发布页上缺少 {missing}，所以这次没有自动更新。\n\n" +
+      "可以稍后再检查一次，或到发布页手动下载安装。",
+    "update.upToDate.message": "已是最新版本",
+    "update.upToDate.body": "当前版本 {version}，没有可用的更新。",
+    "update.failed.message": "更新没有装成",
+    "update.failed.body":
+      "上一次更新（{from} → {to}）没有安装成功，当前仍是 {from}。\n\n" +
+      "你的简历、岗位与资料都保存在用户目录，没有受到任何影响；" +
+      "可以手动下载安装包再试一次。\n\n更新日志：{logDir}",
+    "update.failed.bodyNoLog":
+      "上一次更新（{from} → {to}）没有安装成功，当前仍是 {from}。\n\n" +
+      "你的简历、岗位与资料都保存在用户目录，没有受到任何影响；" +
+      "可以手动下载安装包再试一次。",
+    "update.manual.message": "当前平台的更新需要手动下载",
+    "update.manual.body":
+      "macOS 版请在发布页下载最新的 .dmg 安装包；打开后把应用拖进「应用程序」即可。",
+    "update.error.title": "检查更新失败",
+    "update.error.body": "请检查网络后重试。\n\n{reason}",
+    "update.button.install": "立即更新",
+    "update.button.later": "暂不",
+    "update.button.ok": "好",
+    "update.button.openReleases": "打开发布页",
+    "update.button.close": "关闭",
+    "update.failed.button.download": "手动下载",
+    "update.failed.button.openLogDir": "打开日志",
+    "update.failed.button.ack": "知道了",
   }),
   en: Object.freeze({
     "app.name": "ResumeForge",
@@ -231,6 +267,44 @@ const messages = Object.freeze({
     "migration.failed.body":
       "Data migration failed. This run keeps using the old data location; the old data is intact " +
       "and you can retry on the next launch.\n\nReason: {reason}",
+
+    // In-app update (item 9.3): these three dialogs used to be hard-coded Chinese, so an
+    // English UI showed Chinese. The data-safety sentence is mandatory -- the user asked
+    // to be told, and it is factually safe (data lives in the user folder; the installer
+    // only writes the install folder).
+    "update.available.message": "Update available: {version}",
+    "update.available.body":
+      "The app will download and install the update, then reopen automatically.\n\n" +
+      "Your resumes and data live in your user folder and will not be overwritten or deleted.",
+    "update.incomplete.message": "This release's installer is not fully uploaded",
+    "update.incomplete.body":
+      "The latest version is {version}, but {missing} is missing from the release page, " +
+      "so nothing was updated automatically this time.\n\n" +
+      "Check again later, or download the installer manually from the release page.",
+    "update.upToDate.message": "You are up to date",
+    "update.upToDate.body": "Current version {version}; no update is available.",
+    "update.failed.message": "The update did not install",
+    "update.failed.body":
+      "The last update ({from} → {to}) did not install successfully; you are still on {from}.\n\n" +
+      "Your resumes and data live in your user folder and were not affected. " +
+      "You can download the installer manually and try again.\n\nUpdate log: {logDir}",
+    "update.failed.bodyNoLog":
+      "The last update ({from} → {to}) did not install successfully; you are still on {from}.\n\n" +
+      "Your resumes and data live in your user folder and were not affected. " +
+      "You can download the installer manually and try again.",
+    "update.manual.message": "This platform needs a manual download to update",
+    "update.manual.body":
+      "On macOS, download the latest .dmg from the release page and drag the app into Applications.",
+    "update.error.title": "Update check failed",
+    "update.error.body": "Check your network connection and try again.\n\n{reason}",
+    "update.button.install": "Update now",
+    "update.button.later": "Not now",
+    "update.button.ok": "OK",
+    "update.button.openReleases": "Open release page",
+    "update.button.close": "Close",
+    "update.failed.button.download": "Download manually",
+    "update.failed.button.openLogDir": "Open log",
+    "update.failed.button.ack": "Got it",
   }),
 });
 

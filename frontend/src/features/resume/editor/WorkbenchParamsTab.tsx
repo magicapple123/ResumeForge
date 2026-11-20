@@ -29,6 +29,7 @@ import SectionPaginationPanel from "../pagination/SectionPaginationPanel";
 import PageThumbnailStrip from "../pagination/PageThumbnailStrip";
 import WorkbenchLayoutStatusBar from "./WorkbenchLayoutStatusBar";
 import WorkbenchRationaleEntry from "./WorkbenchRationaleEntry";
+import PhotoTab from "./PhotoTab";
 import { pageLimitOptions } from "../research/documentMode";
 
 /**
@@ -318,6 +319,20 @@ export default function WorkbenchParamsTab({
           visibleRoles={["field_label"]}
           compact
           onChange={onChange}
+        />
+      </ResumeParamGroup>
+      {/* 5.1：照片（原独立页签）并入这里，作为**第四个**分组。
+              放在最后的理由：前三组是「模板 → 版面 → 样式（字号/间距/外观）」的阅读顺序，
+              照片是页眉里的一块独立几何，插在中间会打断这条线。
+              仍然**常驻**：没有照片的人正是要进来上传的那一类。 */}
+      <ResumeParamGroup title={t("workbench.group.photo")} storageKey="photo">
+        <PhotoTab
+          document={document}
+          layout={layout}
+          disabled={relayouting || !editorEnabled}
+          onDocumentChange={onDocumentChange}
+          onLayoutChange={onChange}
+          onNotice={onNotify}
         />
       </ResumeParamGroup>
       {tier !== "three" && editorEnabled ? (

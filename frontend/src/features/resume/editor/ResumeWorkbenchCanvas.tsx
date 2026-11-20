@@ -79,6 +79,8 @@ interface Props {
   scrollRef?: RefObject<HTMLDivElement | null>;
   /** 画布条尾部的一小块状态（实时预览的「更新中…」/「上一次成功预览 + 重试」）。 */
   status?: ReactNode;
+  /** 5.4：草稿照片实时样式，原样透传给预览注入 iframe（宿主按未保存的版式算出）。 */
+  photoLiveCss?: string;
 }
 
 /**
@@ -106,6 +108,7 @@ export default function ResumeWorkbenchCanvas({
   onPickField,
   scrollRef: externalScrollRef,
   status,
+  photoLiveCss,
 }: Props) {
   useLocale();
   const internalScrollRef = useRef<HTMLDivElement>(null);
@@ -198,6 +201,7 @@ export default function ResumeWorkbenchCanvas({
           // 右栏窄而高：按宽度适应（纸宽 = 相框宽），高度交给纵向滚动（Q21）。
           fitMode="width"
           onPickField={onPickField}
+          photoLiveCss={photoLiveCss}
           // 说明并进纸面下方那行缩放条（分页口径 + 缩放怎么用，用「 · 」连成一句）。
           zoomHint={`${t("workbench.note.canvas", { pages })} · ${t("workbench.note.zoomInline")}`}
         />

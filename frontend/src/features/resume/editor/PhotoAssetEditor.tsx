@@ -4,7 +4,7 @@
  *
  * 两个宿主共用它：
  * - 中栏页眉字段编辑器（`HeaderItemEditor`）→ `variant="compact"`：缩略图靠左、按钮跟在后面；
- * - 左栏「照片」页签（`PhotoTab`）→ `variant="full"`：缩略图铺满一列，按钮在下方。
+ * - 左栏「排版参数」→「照片」分组（`PhotoTab`）→ `variant="full"`：缩略图铺满一列，按钮在下方。
  *
  * ## 为什么必须共用
  *
@@ -77,7 +77,9 @@ export default function PhotoAssetEditor({
 
   return (
     <div className={`document-photo-editor is-${variant}`}>
-      <div className="document-photo-frame">
+      {/* 5.2：`is-full` 下框按图片比例定形（`height: auto`），空态没有图片撑高，
+          会塌成一条贴左上的细线——`is-empty` 让样式表把它恢复成居中的 72×90。 */}
+      <div className={`document-photo-frame${photo ? "" : " is-empty"}`}>
         {photo ? (
           <CroppedPhotoThumb
             photo={photo}

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 左栏「照片」页签（T02）：上传与取景的唯一完整入口。
+ * 左栏「排版参数」里的「照片」分组（T02；5.1 从独立页签并入）。
  *
- * ## 为什么是**常驻**页签
+ * ## 为什么是**常驻**分组
  *
- * 不按"有没有照片"出现——没有照片的人正是要进来上传的那一类。所以页签一直在，
+ * 不按"有没有照片"出现——没有照片的人正是要进来上传的那一类。所以分组一直在，
  * 里面没图时给一句空态 + 上传按钮。
  *
  * ## 为什么 `hasPhoto` 自己算
@@ -15,20 +15,19 @@
  *
  * ## 顺序
  *
- * 预览与操作 → 位置 → 大小 → 边框（`PhotoFrameFields` **直接铺开**，不再套按钮 + 弹层：
- * 页签本身就是低频面板，多一层点击只是让人找不到）。
+ * 预览与操作 → 大小 → 边框（`PhotoFrameFields` **直接铺开**，不再套按钮 + 弹层：
+ * 分组本身就是低频面板，多一层点击只是让人找不到）。
+ *
+ * ## 位置固定为 `photo`
+ *
+ * 5.3：照片不再提供「位置」下拉（换位 / 隐藏）。存量 `placement !== "photo"` 的归一
+ * 由后端在文档读取入口完成；本组件只写 `value` / `format_config`，从不写 `placement`。
  */
-import { Select } from "antd";
-
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { ResumeLayout } from "../../../types";
-import type { HeaderPlacement, ResumeDocument } from "../../../types/resumeDocument";
-import {
-  HEADER_PLACEMENT_LABEL_KEYS,
-  HEADER_PLACEMENT_ORDER,
-  isPhotoDataUrl,
-} from "../document/headerOrder";
+import type { ResumeDocument } from "../../../types/resumeDocument";
+import { isPhotoDataUrl } from "../document/headerOrder";
 import { headerPath } from "../document/paths";
 import { updateHeaderItem } from "../document/mutations";
 import { documentHasPhoto } from "../document/view";
@@ -84,11 +83,6 @@ export default function PhotoTab({
     onDocumentChange(updateHeaderItem(document, located.path, { value }));
   };
 
-  const patchPlacement = (placement: HeaderPlacement) => {
-    if (!located) return;
-    onDocumentChange(updateHeaderItem(document, located.path, { placement }));
-  };
-
   /** 换图 / 移图：`photo_crop` 的 sha 指向旧图，必须同批清掉。 */
   const changePhoto = (dataUrl: string) => {
     patchItem(dataUrl);
@@ -111,24 +105,6 @@ export default function PhotoTab({
         }
         onNotice={notify}
       />
-
-      {located ? (
-        <label className="resume-photo-tab__row">
-          <span className="resume-photo-tab__label">{t("document.placement.short")}</span>
-          <Select
-            size="small"
-            aria-label={t("document.placement.aria")}
-            value={document.header.items[located.index].placement}
-            disabled={disabled}
-            style={{ width: 160 }}
-            onChange={patchPlacement}
-            options={HEADER_PLACEMENT_ORDER.map((placement) => ({
-              value: placement,
-              label: t(HEADER_PLACEMENT_LABEL_KEYS[placement]),
-            }))}
-          />
-        </label>
-      ) : null}
 
       <div className="resume-photo-tab__block">
         <PhotoScaleControl

@@ -2,7 +2,6 @@
 /** Photo border & position (R-07 / R-10). */
 const photoFrame = {
   "resume.photo.frame.label": "Photo frame",
-  "resume.photo.tab": "Photo",
   "resume.photo.frame.open": "Border & position",
   "resume.photo.frame.entry": "Border & position",
   "resume.photo.frame.openCustom": "Adjusted",
@@ -19,7 +18,7 @@ const photoFrame = {
   "resume.photo.frame.menu": "Photo frame…",
   "resume.photo.frame.back": "Back to field formatting",
   "resume.photo.frame.panelHint":
-    "The photo is scaled to fit. Crop, framing and replacing live under “Photo” in the left column.",
+    "The photo is scaled to fit. Crop, framing and replacing live under “Typography settings → Photo” in the left column.",
 };
 
 export default photoFrame;

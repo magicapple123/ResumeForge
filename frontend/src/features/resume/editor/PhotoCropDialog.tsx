@@ -22,6 +22,13 @@
  *
  * `source.sha256` 是原图 data URL 的哈希。弹窗里比对 `initialCrop.source.sha256` 与
  * **当前照片**的哈希：不一致就当作"没有裁剪"，避免"新照片套旧取景"。
+ *
+ * ## 5.5：默认「自由」，不再自动套预设档
+ *
+ * 2026-11-20 用户确认：打开就选「自由」（`free` = 不锁比例，`fitCropRectToAspect` 原样
+ * 返回矩形）。旧实现会把 `free` 自动换成"最接近画框的预设档"，而这一档的文案又叫
+ * 「原图」，用户根本找不到"不按比例"这个能力。现在底部那句画框提示（`photo-frame-hint`）
+ * 才是唯一的选档指引，`presetAspect` 只用于那一句提示。
  */
 import Button from "antd/es/button";
 import Modal from "antd/es/modal";
@@ -52,7 +59,7 @@ import { usePhotoDimensions } from "../preview/usePhotoDimensions";
 import PhotoCropBox from "../preview/PhotoCropBox";
 
 const ASPECT_KEYS: Record<PhotoAspect, MessageKey> = {
-  free: "proview.photo.aspect.original",
+  free: "proview.photo.aspect.free",
   "1:1": "proview.photo.aspect.square",
   "3:4": "proview.photo.aspect.portrait",
   "4:5": "proview.photo.aspect.landscape",
@@ -83,8 +90,8 @@ export default function PhotoCropDialog({
 }: Props) {
   const { t } = useI18n();
   const dimensions = usePhotoDimensions(open ? photo : null);
-  // I-37：画框比例从同页的纸面 iframe 实测（制作台里预览与编辑器同文档）；
-  // 量不到时保持「原图」，不替用户瞎猜比例。
+  // I-37：画框比例从同页的纸面 iframe 实测（制作台里预览与编辑器同文档）。
+  // 5.5：它现在**只**用于底部那句「画框约 6.3:8，4:5 最接近」的提示，不再替用户选档。
   const frameAspect = usePhotoFrameAspect(open);
   const presetAspect = nearestCropAspect(frameAspect);
   const frameLabel = frameRatioLabel(frameAspect);
@@ -95,37 +102,29 @@ export default function PhotoCropDialog({
   );
   const activeCrop = cropInvalidated ? null : initialCrop;
 
-  const [aspectTouched, setAspectTouched] = useState(false);
-  const [aspect, setAspect] = useState<PhotoAspect>(activeCrop?.aspect ?? presetAspect ?? "free");
+  // 5.5：默认「自由」（5.5 之前是"自动选最接近预设档"）。有已保存的裁剪时才回到它。
+  const [aspect, setAspect] = useState<PhotoAspect>(activeCrop?.aspect ?? "free");
   const [rect, setRect] = useState<CropRect>(
     activeCrop ? clampCropRect(activeCrop.rect) : FULL_FRAME,
   );
 
-  // 打开时按"已保存参数"还原；没有就从当前比例的默认矩形开始。
+  // 打开时按"已保存参数"还原；没有就从「自由」+ 整幅开始。
   const [wasOpen, setWasOpen] = useState(open);
   if (wasOpen !== open) {
     setWasOpen(open);
     if (open) {
-      setAspectTouched(false);
-      const nextAspect: PhotoAspect = activeCrop?.aspect ?? presetAspect ?? "free";
+      const nextAspect: PhotoAspect = activeCrop?.aspect ?? "free";
       setAspect(nextAspect);
       setRect(activeCrop ? clampCropRect(activeCrop.rect) : FULL_FRAME);
     }
   }
 
-  // I-37：画框比例打开后才实测到。没有已保存裁剪、用户也没手动改过比例时，套最近的预设。
-  useEffect(() => {
-    if (!open || activeCrop || aspectTouched || !presetAspect) return;
-    setAspect((current) => (current === "free" ? presetAspect : current));
-  }, [open, activeCrop, aspectTouched, presetAspect]);
-
   // 换照片后旧裁剪失效：把框与比例一起复位，避免"新照片套旧取景"。
   useEffect(() => {
     if (!cropInvalidated) return;
-    setAspectTouched(false);
-    setAspect(presetAspect ?? "free");
+    setAspect("free");
     setRect(FULL_FRAME);
-  }, [cropInvalidated, presetAspect]);
+  }, [cropInvalidated]);
 
   const sourceWidth = dimensions?.width ?? 0;
   const sourceHeight = dimensions?.height ?? 0;
@@ -146,7 +145,6 @@ export default function PhotoCropDialog({
   const clarity = source ? estimateRectClarity(source, safeRect, DEFAULT_PRINTED_WIDTH_MM) : null;
 
   const selectAspect = (next: PhotoAspect) => {
-    setAspectTouched(true);
     setAspect(next);
     setRect((current) => fitCropRectToAspect(current, next, source));
   };

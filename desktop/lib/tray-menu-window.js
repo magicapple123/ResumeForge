@@ -7,6 +7,12 @@
 // 不暴露。菜单里只要有一项 `type:"checkbox"`，整张菜单就会为勾选符号预留一条左列，
 // 所有文字被推得很远、卡片过宽。自绘之后宽度按内容收缩，未勾选时自然更窄。
 //
+// 第 1 条（2026-11-20 二轮）之后多了三件结构性的事，都在这里定尺寸：
+//   * 每行 32px 高、前置 16px 图标位（`ITEM_HEIGHT`）；
+//   * 卡片靠 `box-shadow` 浮起 —— 阴影画在卡片之外，所以窗口比卡片大两圈 18px
+//     （`MENU_SHADOW_BLEED`），否则阴影会被窗口裁掉；
+//   * 定位按**卡片**尺寸算，`setBounds` 时再换算成窗口 bounds（`toWindowBounds`）。
+//
 // 交互契约（与 `desktop/tray-menu.html` 对半分）：
 //   * 打开：主进程发模型 → 渲染层量出真实尺寸 → 按 `computePlacement` 定位 → show() 取焦点
 //     （Esc 需要焦点才能收到）；
@@ -14,20 +20,40 @@
 //     否则动作里的 `win.focus()` 会被这块置顶窗口挡住；
 //   * 尺寸由渲染层量：纯主进程估算会把"未勾选更窄"这条做废。
 //
-// `computePlacement` 是纯函数（贴边翻转 + clamp），离线用例直接断言 —— 这是本模块里
-// 唯一不依赖 Electron 的部分。
+// 三个纯函数（`computePlacement` / `estimateMenuContentSize` / `toWindowBounds`）不依赖
+// Electron，离线用例直接断言；其余部分（窗口、IPC、定位调用）只能在真机验收。
 //
 // 多屏 DPI：workArea 取自 `screen.getDisplayMatching(trayBounds)`，不能用
 // `getPrimaryDisplay()`（副屏 / 125% 缩放下会定位到另一块屏）。
 
 const path = require("node:path");
 
-/** 行高 / 分隔线 / 内外边距（与 tray-menu.html 的 CSS 逐值一致）。 */
-const ITEM_HEIGHT = 30;
-const SEPARATOR_HEIGHT = 9; // 1px 线 + 上下各 4px
+/** 行高 / 分隔线 / 卡片内边距（与 tray-menu.html 的 CSS 逐值一致）。 */
+const ITEM_HEIGHT = 32;
+const SEPARATOR_HEIGHT = 11; // 1px 线 + 上下各 5px
+/** 卡片 padding（`#menu { padding: 6px }`）。 */
 const MENU_PADDING_Y = 6;
-/** 宽度区间：`max-content` 落在这里面（窄到 168 仍能放下中文文案，宽到 280 截断）。 */
-const MENU_MIN_WIDTH = 108;
+/**
+ * 卡片边框（`1px solid var(--line)`）。
+ *
+ * 全局 `box-sizing: border-box` 下它算在卡片高度里（实测卡片 = 行高合计 + 12 + 2），
+ * 所以兜底估算也要算上，否则首次弹出会矮 2px、定位再被拉回来时闪一下。
+ */
+const MENU_BORDER_WIDTH = 1;
+/**
+ * 投影出血（2026-11-20 第 1 条）：卡片靠 `box-shadow` 浮起，而阴影画在元素盒**之外**
+ * ——窗口尺寸若等于卡片尺寸，阴影会被窗口直接裁掉（Windows 上 transparent + frameless
+ * 本来就不给原生阴影）。所以 HTML 里多包一层 `#surface { padding: 18px }`，窗口比卡片
+ * 大两圈 18px，阴影落在窗口内。
+ *
+ * 三个联动点（少改一处就会错位，见下方 computePlacement / toWindowBounds）：
+ *   * 量尺寸量的是 `#surface`（= 卡片 + 36）；
+ *   * **定位仍按卡片尺寸算**，否则菜单会被这 18px 顶离屏幕边；
+ *   * setBounds 时 x/y 各减 18、宽高各加 36。
+ */
+const MENU_SHADOW_BLEED = 18;
+/** 宽度区间（**卡片**宽度）：加上图标位后 108 会挤成一团，所以下限抬到 168。 */
+const MENU_MIN_WIDTH = 168;
 const MENU_MAX_WIDTH = 280;
 const FALLBACK_WIDTH = 200;
 /** 菜单与托盘图标的间距。 */
@@ -80,13 +106,57 @@ function computePlacement({ trayBounds, workArea, menuSize, gap = MENU_GAP }) {
   return { x: Math.round(x), y: Math.round(y) };
 }
 
-/** 拿不到渲染层实测尺寸时的兜底（仅防御用：正常路径总是量一次）。 */
-function estimateMenuSize(model) {
+/**
+ * 未渲染前的**内容**尺寸估算（卡片本身，不含投影出血）。
+ *
+ * 只用于兜底（正常路径总是量一次）：拿不到渲染层尺寸时，首帧也不能闪一下高度。
+ *
+ * @param {Array} model 菜单模型
+ * @returns {{width: number, height: number}}
+ */
+function estimateMenuContentSize(model) {
   const rows = Array.isArray(model) ? model : [];
   const height =
     MENU_PADDING_Y * 2 +
+    MENU_BORDER_WIDTH * 2 +
     rows.reduce((sum, item) => sum + (item && item.type === "separator" ? SEPARATOR_HEIGHT : ITEM_HEIGHT), 0);
   return { width: FALLBACK_WIDTH, height: Math.max(height, ITEM_HEIGHT + MENU_PADDING_Y * 2) };
+}
+
+/**
+ * 未渲染前的**窗口**尺寸估算 = 内容 + 两侧出血。
+ *
+ * `MENU_PADDING_Y` 只加卡片自己的 6px；阴影的 18 必须另加，否则首次弹出会闪一下高度。
+ *
+ * @param {Array} model 菜单模型
+ * @returns {{width: number, height: number}}
+ */
+function estimateMenuSize(model) {
+  const content = estimateMenuContentSize(model);
+  return {
+    width: content.width + MENU_SHADOW_BLEED * 2,
+    height: content.height + MENU_SHADOW_BLEED * 2,
+  };
+}
+
+/**
+ * 卡片坐标 + 卡片尺寸 -> 窗口 bounds（纯函数）。
+ *
+ * `computePlacement` 返回的是**卡片**左上角（它要贴着屏幕边，不能被阴影边距顶开），
+ * 而 `setBounds` 设的是**窗口**（卡片 + 两侧 18px 出血）。这一步就是两者之间的换算：
+ * x/y 各减 18，宽高各加 36。少改这一处，菜单会整体向右下偏 18px。
+ *
+ * @param {{x: number, y: number}} placement 卡片坐标（computePlacement 的结果）
+ * @param {{width: number, height: number}} contentSize 卡片尺寸
+ * @returns {{x: number, y: number, width: number, height: number}} 窗口 bounds
+ */
+function toWindowBounds(placement, contentSize) {
+  return {
+    x: Math.round(placement.x) - MENU_SHADOW_BLEED,
+    y: Math.round(placement.y) - MENU_SHADOW_BLEED,
+    width: Math.ceil(contentSize.width) + MENU_SHADOW_BLEED * 2,
+    height: Math.ceil(contentSize.height) + MENU_SHADOW_BLEED * 2,
+  };
 }
 
 /**
@@ -98,7 +168,10 @@ function estimateMenuSize(model) {
  * `backgroundThrottling: false` 让 setTimeout 在后台也照常触发。
  *
  * 判据用 `data-token`（每次打开都变）而不是"项数一致"：项数是常数，而勾选态会改变
- * 宽度（✓ 前缀），用项数判会把上一版的尺寸当成这一版的。
+ * 宽度（勾选框有/无填充），用项数判会把上一版的尺寸当成这一版的。
+ *
+ * **量的是 `#surface`（卡片 + 两侧 18px 出血）**，因为窗口尺寸必须是它；主进程再减去
+ * `MENU_SHADOW_BLEED * 2` 还原成卡片尺寸去定位（见 toWindowBounds 的注释）。
  *
  * @param {string} token 本次模型的一次性标记
  */
@@ -106,8 +179,10 @@ function measureScript(token) {
   return `new Promise((resolve) => {
   const started = Date.now();
   const menu = document.getElementById("menu");
+  const surface = document.getElementById("surface");
   const read = () => {
-    const rect = menu ? menu.getBoundingClientRect() : document.body.getBoundingClientRect();
+    const node = surface || menu || document.body;
+    const rect = node.getBoundingClientRect();
     resolve({ width: Math.ceil(rect.width), height: Math.ceil(rect.height) });
   };
   const tick = () => {
@@ -163,11 +238,17 @@ function createTrayMenuWindow(deps) {
     const existing = liveWindow();
     if (existing) return existing;
     win = new BrowserWindow({
-      width: FALLBACK_WIDTH,
-      height: ITEM_HEIGHT * 5,
+      // 初始尺寸只活到第一次 show() 之前；含阴影出血（卡片 + 2×18），
+      // 否则首帧会看到卡片被窗口裁掉一圈。
+      width: FALLBACK_WIDTH + MENU_SHADOW_BLEED * 2,
+      height: ITEM_HEIGHT * 5 + MENU_SHADOW_BLEED * 2,
       show: false,
       frame: false,
       transparent: true,
+      // CSS 的 box-shadow 就是本菜单唯一的"浮起"手段（transparent + frameless 在
+      // Windows 上拿不到原生阴影）。开启 hasShadow 会让系统再画一圈，与 CSS 那份叠在
+      // 一起变脏，所以显式关掉。
+      hasShadow: false,
       resizable: false,
       movable: false,
       minimizable: false,
@@ -232,17 +313,25 @@ function createTrayMenuWindow(deps) {
     return screen.getPrimaryDisplay().workArea;
   }
 
+  /**
+   * 量出**卡片**尺寸（减去投影出血）。
+   *
+   * 渲染层量到的是 `#surface`（卡片 + 36），这里还原成卡片尺寸再做宽度收敛：
+   * `MENU_MIN_WIDTH` / `MENU_MAX_WIDTH` 是**卡片**的宽度区间。
+   */
   function measure(target, model, token) {
-    const fallback = estimateMenuSize(model);
+    const fallback = estimateMenuContentSize(model);
     if (!target.webContents || typeof target.webContents.executeJavaScript !== "function") {
       return Promise.resolve(fallback);
     }
     return Promise.resolve(target.webContents.executeJavaScript(measureScript(token), true))
       .then((size) => {
         if (!size || !Number.isFinite(size.width) || !Number.isFinite(size.height)) return fallback;
+        const width = Math.ceil(size.width) - MENU_SHADOW_BLEED * 2;
+        const height = Math.ceil(size.height) - MENU_SHADOW_BLEED * 2;
         return {
-          width: Math.min(Math.max(Math.ceil(size.width), MENU_MIN_WIDTH), MENU_MAX_WIDTH),
-          height: Math.max(Math.ceil(size.height), ITEM_HEIGHT),
+          width: Math.min(Math.max(width, MENU_MIN_WIDTH), MENU_MAX_WIDTH),
+          height: Math.max(height, ITEM_HEIGHT),
         };
       })
       .catch((err) => {
@@ -272,7 +361,7 @@ function createTrayMenuWindow(deps) {
       }
       const token = String((sequence += 1));
       target.webContents.send(CHANNELS.model, { model, token });
-      const menuSize = await measure(target, model, token);
+      const contentSize = await measure(target, model, token);
       const workArea = workAreaFor(anchor);
       const bounds = anchor || {
         x: workArea.x + workArea.width - 1,
@@ -280,8 +369,9 @@ function createTrayMenuWindow(deps) {
         width: 1,
         height: 1,
       };
-      const { x, y } = computePlacement({ trayBounds: bounds, workArea, menuSize });
-      target.setBounds({ x, y, width: menuSize.width, height: menuSize.height });
+      // 先用**卡片**尺寸定位（贴屏幕边不会被 18px 出血顶开），再换算成窗口 bounds。
+      const placement = computePlacement({ trayBounds: bounds, workArea, menuSize: contentSize });
+      target.setBounds(toWindowBounds(placement, contentSize));
       target.show();
       target.focus();
       return true;
@@ -308,11 +398,16 @@ function createTrayMenuWindow(deps) {
 module.exports = {
   CHANNELS,
   ITEM_HEIGHT,
+  MENU_BORDER_WIDTH,
   MENU_GAP,
   MENU_MAX_WIDTH,
   MENU_MIN_WIDTH,
+  MENU_PADDING_Y,
+  MENU_SHADOW_BLEED,
   SEPARATOR_HEIGHT,
   computePlacement,
   createTrayMenuWindow,
+  estimateMenuContentSize,
   estimateMenuSize,
+  toWindowBounds,
 };

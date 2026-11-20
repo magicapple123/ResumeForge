@@ -17,6 +17,12 @@
   z-index: 1;
 }
 
+/* ⚠️ 这条缓动曲线有**三个**忠实复刻，改一处必须三处一起改：
+ *   1. 本文件的 `cubic-bezier(0.22, 0.61, 0.36, 1)`（真正在跑的动画）；
+ *   2. `features/theme/titlebarOverlay.ts` 的 `REVEAL_BEZIER`——它用同一个函数反解
+ *      "圆边缘什么时候扫到右上角三颗按钮"，据此决定覆盖层在哪几帧换色；
+ *   3. `features/theme/themeTransition.ts` 的注释（写入时长 / 半径）。
+ * 只改这里会让按钮区的换色时机悄悄错开：看起来"差不多"，但就是不同步。 */
 ::view-transition-new(root) {
   z-index: 2;
   animation: rf-theme-reveal var(--rf-theme-duration, 560ms) cubic-bezier(0.22, 0.61, 0.36, 1) both;

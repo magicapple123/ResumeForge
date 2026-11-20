@@ -19,10 +19,16 @@
 //     the installer only after the stop completes. The installer itself runs
 //     from a detached wait-for-pid PowerShell helper (installerWaitCommand)
 //     so the NSIS /S run never races the live shell's file handles.
-//   - One confirmation up front ("将下载并安装更新，期间应用会自动重启") authorizes
-//     the whole download->verify->install->restart flow; a second blocking
-//     dialog after the checksum used to strand the install when the user was
-//     away or the window sat in the tray.
+//   - One confirmation up front authorizes the whole download->verify->install->restart
+//     flow; a second blocking dialog after the checksum used to strand the install when
+//     the user was away or the window sat in the tray. Its body also states that the
+//     update never touches user data (keys "update.*" in lib/shell-locale.js).
+//
+// 2026-11-20 第二轮（第 9 条）之后，本文件只剩"流程"，三件与流程无关的事各自下沉：
+//   * 对话框 / 任务栏进度条 / 启动对账 -> lib/update-feedback.js（9.2 9.3 9.4）；
+//   * 安装器命令构造 -> lib/installer-command.js（9.1，含 `--force-run` 的依据）；
+//   * 更新尝试标记的读写 -> lib/update-attempt.js（9.2）。
+// 理由：`desktop/**/*.js` 同样受 500 行预算（test_file_size_budget.py，零豁免）。
 
 const { app, dialog, shell } = require("electron");
 const crypto = require("crypto");
@@ -30,6 +36,12 @@ const fs = require("fs");
 const path = require("path");
 const { Readable, Transform } = require("stream");
 const { pipeline } = require("stream/promises");
+// 用户可见的对话框 / 进度条 / 启动对账（第 9.2 9.3 9.4 条）。
+const { createUpdateFeedback } = require("./lib/update-feedback");
+// 安装器命令（第 9.1 条）：本文件 re-export，main.js 与 quit-lifecycle 的入口不变。
+const { installerWaitCommand } = require("./lib/installer-command");
+// 更新尝试标记（第 9.2 条）：纯文件读写，不 require("electron")，可离线断言。
+const { recordUpdateAttempt } = require("./lib/update-attempt");
 
 const RELEASES_API = "https://api.github.com/repos/magicapple123/ResumeForge/releases/latest";
 // Every host we are willing to touch, including redirect hops.
@@ -152,7 +164,12 @@ async function sha256File(filePath) {
 // caller is responsible for verifying the checksum before renaming it over
 // `dest`. Any failure (HTTP error, size cap, stream error) removes the
 // staging file and leaves `dest` untouched.
-async function downloadToFile(url, destPath, { maxBytes = MAX_DOWNLOAD_BYTES } = {}) {
+//
+// `onProgress(received, total)`（第 9.4 条）：188 MB 的安装包在慢网下要几分钟，
+// 全程没有任何反馈时用户以为卡死了。回调按**百分比变化**节流（每 1% 一次），
+// 不是每个 64KB 块一次——任务栏进度条不需要更细的粒度。`total` 为 0（服务端没给
+// Content-Length）时不回调：那时算不出比例，宁可不动，也不要拿"0%"骗人。
+async function downloadToFile(url, destPath, { maxBytes = MAX_DOWNLOAD_BYTES, onProgress } = {}) {
   const response = await fetchAllowed(url, { signal: timeoutSignal(DOWNLOAD_TIMEOUT_MS) });
   if (!response.ok) throw new Error(`download returned ${response.status}`);
 
@@ -174,15 +191,28 @@ async function downloadToFile(url, destPath, { maxBytes = MAX_DOWNLOAD_BYTES } =
       ? Readable.fromWeb(response.body)
       : response.body;
 
-  let total = 0;
+  const report = typeof onProgress === "function" ? onProgress : null;
+  let received = 0;
+  let lastPercent = -1;
   const limiter = new Transform({
     transform(chunk, _encoding, callback) {
-      total += chunk.length;
-      if (total > maxBytes) {
-        callback(new Error(`download exceeded size limit: ${total} bytes streamed, cap is ${maxBytes}`));
-      } else {
-        callback(null, chunk);
+      received += chunk.length;
+      if (received > maxBytes) {
+        callback(new Error(`download exceeded size limit: ${received} bytes streamed, cap is ${maxBytes}`));
+        return;
       }
+      if (report && declared > 0) {
+        const percent = Math.min(Math.floor((received / declared) * 100), 100);
+        if (percent !== lastPercent) {
+          lastPercent = percent;
+          try {
+            report(received, declared);
+          } catch {
+            // 进度上报失败（窗口已销毁等）绝不能打断下载本身。
+          }
+        }
+      }
+      callback(null, chunk);
     },
   });
   let created = false;
@@ -198,62 +228,31 @@ async function downloadToFile(url, destPath, { maxBytes = MAX_DOWNLOAD_BYTES } =
     }
     throw err;
   }
-  return { partPath, size: total };
+  return { partPath, size: received };
 }
 
 function findAsset(release, predicate) {
   return (release.assets || []).find(predicate);
 }
 
-// 窗口可能正藏在托盘里：所有更新对话框弹出前先把窗口带回来并抢焦点，
-// 否则对话框跟着一个看不见的窗口，用户"永远看不到更新提示"（实测缺陷②）。
-// 窗口为 null / 已销毁时返回 null，调用方退化为无 parent 的弹窗——对话框
-// 仍然会显示。
-function revealWindow(parentWindow) {
-  if (!parentWindow || typeof parentWindow.isDestroyed !== "function") return null;
+// 对话框、进度条、启动对账、locale 裁决都在 lib/update-feedback.js
+// （`createUpdateFeedback`）：本文件只留"什么时候该弹 / 该报进度"。
+
+/** 标记文件必须落在用户目录（安装目录是只读契约）。 */
+function userDataRoot() {
   try {
-    if (parentWindow.isDestroyed()) return null;
-    if (typeof parentWindow.isMinimized === "function" && parentWindow.isMinimized()) {
-      parentWindow.restore();
-    }
-    parentWindow.show();
-    parentWindow.focus();
-    return parentWindow;
+    return app.getPath("userData");
   } catch {
-    // 任何窗口操作失败都不该拦住对话框本身。
     return null;
   }
-}
-
-async function showUpdateDialog(parentWindow, options) {
-  const target = revealWindow(parentWindow);
-  return target ? dialog.showMessageBox(target, options) : dialog.showMessageBox(options);
-}
-
-/**
- * 「等待主进程退出，再静默运行安装器」的命令构造（纯函数，便于离线单测）。
- *
- * NSIS 静默安装（`/S`）会覆盖 shell 的程序文件——如果它在 Electron 进程还活着、
- * exe 句柄未释放时启动，安装会撞锁静默失败（实测缺陷③）。所以安装器不再由
- * main.js 在退出前直接 spawn，而是交给一个脱离的 PowerShell 等待进程：
- * 先等主进程 pid 退出，再启动安装器。`-ErrorAction SilentlyContinue` 兜住
- * "进程恰好已经退出"的竞态（Wait-Process 找不到 pid 不算错误）。
- */
-function installerWaitCommand(installerPath, mainPid) {
-  const escaped = String(installerPath).replace(/'/g, "''");
-  const script =
-    `Wait-Process -Id ${Number(mainPid)} -ErrorAction SilentlyContinue; ` +
-    `Start-Process -FilePath '${escaped}' -ArgumentList '/S'`;
-  return {
-    file: "powershell",
-    args: ["-NoProfile", "-WindowStyle", "Hidden", "-Command", script],
-  };
 }
 
 async function checkAndOfferUpdate(parentWindow, deps = {}) {
   if (!app.isPackaged) return;
   // This installer protocol is NSIS/Windows only. Other platforms retain their supported manual update path.
   if (process.platform !== "win32") return;
+  // 用户可见的一切（对话框文案 / 语言 / 进度条）都从这里出（第 9.3 9.4 条）。
+  const feedback = createUpdateFeedback({ app, dialog, shell }, deps);
   const release = await fetchLatestRelease();
   const latest = normalizedReleaseVersion(release.tag_name);
   const current = normalizedReleaseVersion(app.getVersion());
@@ -288,33 +287,26 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
       deps.logLine(`update assets incomplete for ${latest}: missing ${missing}`);
     }
     if (deps.manual) {
-      await showUpdateDialog(parentWindow, {
-        type: "warning",
-        message: "这个版本的安装包还没传全",
-        detail:
-          `最新版本是 ${latest}，但发布页上缺少 ${missing}，所以这次没有自动更新。\n\n` +
-          `可以稍后再检查一次，或到发布页手动下载安装。`,
-        buttons: ["好"],
-      }).catch(() => undefined);
+      await feedback.incomplete(parentWindow, latest, missing);
     }
     return;
   }
 
-  const choice = await showUpdateDialog(parentWindow, {
-    type: "info",
-    message: `发现新版本 ${latest}`,
-    detail: "将下载并安装更新，期间应用会自动重启。",
-    buttons: ["立即更新", "暂不"],
-    defaultId: 0,
-    cancelId: 1,
-  });
+  // 这句话必须同时说清两件事：装完会自动重开（9.1 的 `--force-run` 才让它成立），
+  // 以及**数据不会被覆盖**（用户在 2026-11-20 明确要求告知）。文案在
+  // lib/shell-locale.js 的 "update.available.body"。
+  const choice = await feedback.confirm(parentWindow, latest);
   if (choice.response !== 0) return;
 
   const tempDir = fs.mkdtempSync(path.join(app.getPath("temp"), "resumeforge-update-"));
   const installerPath = path.join(tempDir, assetName);
   const checksumPath = path.join(tempDir, `${assetName}.sha256`);
 
-  const { partPath } = await downloadToFile(installer.browser_download_url, installerPath);
+  // 188 MB 在慢网下要几分钟，全程无反馈时用户以为卡死（第 9.4 条）：下载期间把进度
+  // 推到任务栏图标上，结束（成功或失败）一律清除。
+  const { partPath } = await downloadToFile(installer.browser_download_url, installerPath, {
+    onProgress: (received, total) => feedback.progress(parentWindow, received, total),
+  }).finally(() => feedback.clearProgress(parentWindow));
   let checksumPartPath;
   try {
     checksumPartPath = (await downloadToFile(checksum.browser_download_url, checksumPath, { maxBytes: 4096 })).partPath;
@@ -349,14 +341,27 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
   // candidate installer.
   fs.renameSync(partPath, installerPath);
 
-  // 用户在第一次确认（"将下载并安装更新，期间应用会自动重启"）时已经授权了
-  // 整个"下载 → 校验 → 安装 → 重启"流程；校验通过后**直接安装**，不再弹第二个
-  // 阻塞确认——用户离开电脑或窗口在托盘里看不见时，那个确认框会让安装永远
-  // 不发生（实测缺陷①）。这里只留一条日志记录自动安装的决定。
+  // 用户在第一次确认时已经授权了"下载 → 校验 → 安装 → 重启"全程；校验通过后
+  // **直接安装**，不再弹第二个阻塞确认——用户离开电脑或窗口在托盘里看不见时，那个
+  // 确认框会让安装永远不发生（实测缺陷①）。这里只留一条日志记录自动安装的决定。
   if (typeof deps.onAutoInstall === "function") {
     deps.onAutoInstall(installerPath);
   }
   if (typeof deps.installAndQuit === "function") {
+    // 第 9.2 条：**拉起安装器之前**先写下"更新尝试"标记。安装进程是脱离的
+    // PowerShell（stdio:"ignore"），主进程读不到它的退出码，唯一能判断"装成了没有"
+    // 的办法就是下次启动时对账（reconcileUpdateAttempt）。
+    // 只在真的会去 spawn 安装器时写：没有 installAndQuit 的调用方只会 app.quit()，
+    // 那时写标记会让下次启动误报"更新没有装成"。
+    const userDataDir = userDataRoot();
+    const recorded = recordUpdateAttempt(userDataDir, {
+      from: current,
+      to: latest,
+      installer: installerPath,
+    });
+    if (!recorded && typeof deps.logLine === "function") {
+      deps.logLine(`update attempt marker not written (userData=${userDataDir || "unknown"})`);
+    }
     // main.js owns the install sequencing: quit -> before-quit stops the
     // backend -> installer spawns after the stop completes.
     deps.installAndQuit(installerPath);
@@ -367,8 +372,6 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
     app.quit();
   }
 }
-
-const RELEASES_PAGE = "https://github.com/magicapple123/ResumeForge/releases/latest";
 
 // 安装目录里的双击更新入口（Windows update.cmd / macOS update.command）带这个参数启动。
 const CHECK_UPDATE_FLAG = "--check-update";
@@ -388,20 +391,9 @@ function wantsManualUpdateCheck(argv = process.argv) {
  * 不假装能静默升级。
  */
 function runManualUpdateCheck(parentWindow, logLine, deps = {}) {
+  const feedback = createUpdateFeedback({ app, dialog, shell }, { ...deps, logLine });
   if (process.platform !== "win32") {
-    dialog
-      .showMessageBox({
-        type: "info",
-        message: "当前平台的更新需要手动下载",
-        detail: "macOS 版请在发布页下载最新的 .dmg 安装包；打开后把应用拖进「应用程序」即可。",
-        buttons: ["打开发布页", "关闭"],
-        defaultId: 0,
-        cancelId: 1,
-      })
-      .then((result) => {
-        if (result.response === 0) shell.openExternal(RELEASES_PAGE);
-      })
-      .catch(() => {});
+    feedback.manualMac();
     return;
   }
   checkAndOfferUpdate(parentWindow, {
@@ -410,29 +402,23 @@ function runManualUpdateCheck(parentWindow, logLine, deps = {}) {
     // logLine：无论手动还是自动，缺附件都必须在 desktop-main.log 留一条 warning。
     manual: true,
     logLine,
-    onUpToDate: () =>
-      dialog.showMessageBox(parentWindow, {
-        type: "info",
-        message: "已是最新版本",
-        detail: `当前版本 ${app.getVersion()}，没有可用的更新。`,
-        buttons: ["好"],
-      }),
+    onUpToDate: () => feedback.upToDate(parentWindow, app.getVersion()),
   }).catch((err) => {
     if (logLine) logLine(`manual update check failed: ${err}`);
-    try {
-      dialog.showErrorBox(
-        "检查更新失败",
-        `请检查网络后重试。
-
-${err && err.message ? err.message : err}`,
-      );
-    } catch {}
+    feedback.errorBox(err && err.message ? err.message : String(err));
   });
 }
 
 function scheduleUpdateCheck(parentWindow, logLine, deps = {}) {
   if (!app.isPackaged) return;
   if (process.platform !== "win32") return;
+  const feedback = createUpdateFeedback({ app, dialog, shell }, { ...deps, logLine });
+  // 启动对账（第 9.2 条）：上一次更新"下载校验都过了但没装成"的话，这一次启动要告诉
+  // 用户。放在这里而不是 main.js——本函数就是"这次启动的更新入口"，main.js 因此一行
+  // 都不用加（它贴着 500 行预算）。失败也不弹错误：对账失败不该污染启动流程。
+  void feedback.reconcile(parentWindow).catch((err) => {
+    if (logLine) logLine(`update attempt reconcile failed: ${err}`);
+  });
   // 校验通过即自动安装是这次的新行为：记一条日志，方便从 desktop-main.log
   // 回答"到底有没有尝试安装"。
   const wiredDeps = {
@@ -469,6 +455,8 @@ module.exports = {
   versionCompare,
   timeoutSignal,
   downloadToFile,
+  // 第 9.1 条起命令构造在 lib/installer-command.js；这里 re-export，
+  // main.js 与 quit-lifecycle 的注入点因此一行都不用改。
   installerWaitCommand,
   MAX_DOWNLOAD_BYTES,
   isReleaseAssetUrl,

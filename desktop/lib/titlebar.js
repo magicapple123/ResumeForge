@@ -2,16 +2,18 @@
 "use strict";
 
 // 自绘标题栏的**窗口壳层**（问题清单 §19）：electron-builder 窗口选项、标题栏覆盖层
-// 配色与窗口状态通知。React 渲染层在 frontend/src/components/desktop/，本模块只负责
+// 配色与窗口状态通知。React 渲染层在 frontend/src/features/desktop/，本模块只负责
 // 主进程那一半，方便离线断言（颜色 / 高度 / 平台分支 / 无窗口时的静默）。
 //
-// 三条硬约束：
+// 四条硬约束：
 //   1. 三颗窗口按钮由系统绘制（titleBarStyle: "hidden" + titleBarOverlay），不自己画；
-//      覆盖层**不画底色**（透明），标题栏背景由页面 CSS 负责 —— 否则覆盖层会盖掉
-//      页面标题栏的下边框，并在遮罩下露出一块不变暗的亮板；
 //   2. macOS 的红绿灯在左上角：只给 trafficLightPosition，不给 overlay（overlay 仅
 //      win32/linux 支持），React 侧给菜单区加左内边距；
-//   3. 主题切换时主进程要同步 setTitleBarOverlay，否则深色界面顶着浅色按钮图标。
+//   3. **颜色由渲染层决定**（2026-11-20 第 3 条）：页面 CSS 是 `--rf-titlebar-bg` /
+//      `--rf-titlebar-symbol` 的唯一真源，渲染层读计算值随主题一起上报，本模块只管
+//      校验 + 落到 setTitleBarOverlay。`TITLEBAR_THEME` 从"真源"降级为"默认值"
+//      （窗口创建时与非法上报的兜底），不要再把它当第二份配置去同步；
+//   4. 主题切换时主进程要跟着 `setTitleBarOverlay`，否则深色界面顶着浅色按钮图标。
 
 /** 自绘标题栏高度（与 React 侧 CSS / WCO overlay 高度必须同值）。 */
 const TITLEBAR_HEIGHT = 32;
@@ -36,29 +38,73 @@ function titleBarFallbackCss(height = TITLEBAR_HEIGHT) {
 }
 
 /**
- * 标题栏覆盖层配色：**不画底色**（`color` 透明，2026-11-20 决定）。
+ * 标题栏覆盖层配色的**默认值**（2026-11-20 第 3 条之后不再是真源）。
  *
- * 曾经要求"覆盖层 `color` 与 CSS `--rf-titlebar-bg` 逐值一致"，但 Windows 的
- * titleBarOverlay 是画在页面**之上**的一块不透明矩形：它会盖掉 `.app-titlebar` 自己的
- * 1px 下边框，页面被遮罩/抽屉投影压暗时那块也不跟着暗，三颗按钮看起来像浮在亮板上。
- * 透明之后底色完全由页面标题栏负责（那条逐值一致的约束随之作废，不要再加回来）。
+ * 真源是页面 CSS：`frontend/src/styles/desktop-titlebar.css` 的 `--rf-titlebar-bg` 与
+ * `--rf-titlebar-symbol`。渲染层在主题变化时把**计算值**经 `desktop:set-theme` 报上来，
+ * 本模块校验后直接落到 `setTitleBarOverlay`。这里的常量只剩两个用途：
+ *   1. 窗口创建时（渲染层还没上报）先给一个不闪的值；
+ *   2. 上报值缺失 / 非法时的兜底。
  *
- * `symbolColor` 保留：图标/悬停态由系统画，必须自己保证在任意底色上可读。
+ * 所以：**改色值改 CSS，不要改这里**。要让默认值也跟着变，改这两个常量即可，但两者
+ * 不同步不会再造成色块——这正是这条改造要消灭的问题。
+ *
+ * `symbolColor` 是系统绘制的图标/悬停色，必须自己在任意底色上可读。
  */
 const TITLEBAR_THEME = {
   light: { color: "#f5f7fa", symbolColor: "#3d4a5c" },
   dark: { color: "#151b23", symbolColor: "#c9d4e0" },
 };
 
+/**
+ * 只接受**不透明**的 `#rrggbb`。
+ *
+ * alpha < 255 会让三颗按钮**连同字形一起消失**：Electron 在
+ * `WinCaptionButtonContainer::UpdateBackground()` 里对 alpha < 255 调
+ * `SetFillsBoundsOpaquely(false)`，整个按钮容器变成非不透明层（有项目正是靠这一点
+ * 隐藏原生按钮）。2026-11-20 真机实测过 `color: "#00000000"`——按钮区一个深色像素都没有，
+ * 窗口无法最小化/关闭。所以渲染层上报什么都要过这一关。
+ */
+const OPAQUE_COLOR = /^#[0-9a-f]{6}$/i;
+
+/** @param {unknown} value @returns {boolean} 是否是不透明 `#rrggbb` */
+function isOpaqueColor(value) {
+  return typeof value === "string" && OPAQUE_COLOR.test(value.trim());
+}
+
 /** "system" 之类无法判定的值一律按浅色（应用初始主题也是浅色，避免启动闪深）。 */
 function normalizeTheme(theme) {
   return theme === "dark" ? "dark" : "light";
 }
 
-/** 覆盖层选项：color 恒为全透明（底色由页面标题栏负责），只有 symbolColor 随主题。 */
-function titleBarOverlayFor(theme) {
-  const colors = TITLEBAR_THEME[normalizeTheme(theme)];
-  return { color: colors.color, symbolColor: colors.symbolColor, height: TITLEBAR_HEIGHT };
+/**
+ * 把渲染层上报的载荷归一成形（形状校验，颜色格式由 `titleBarOverlayFor` 判）。
+ *
+ * 兼容两种形态：**字符串**（旧渲染层只报主题名）与 `{ theme, color, symbolColor }`
+ * （2026-11-20 第 3 条之后的形态）。不是字符串也不是对象时按"未上报"处理。
+ *
+ * @param {unknown} input
+ * @returns {{theme: "light" | "dark", color?: string, symbolColor?: string}}
+ */
+function normalizeThemePayload(input) {
+  if (typeof input === "string") return { theme: normalizeTheme(input) };
+  const source = input && typeof input === "object" ? input : {};
+  const payload = { theme: normalizeTheme(source.theme) };
+  if (typeof source.color === "string") payload.color = source.color;
+  if (typeof source.symbolColor === "string") payload.symbolColor = source.symbolColor;
+  return payload;
+}
+
+/**
+ * 覆盖层选项：`height` 恒由 TITLEBAR_HEIGHT 给出；颜色取渲染层上报值，非法则回落默认值。
+ *
+ * @param {string} theme "light" / "dark" / "system"（后者按浅色）
+ * @param {{color?: string, symbolColor?: string}} [colors] 渲染层上报的颜色（可只给一半）
+ */
+function titleBarOverlayFor(theme, colors) {
+  const base = TITLEBAR_THEME[normalizeTheme(theme)];
+  const pick = (key) => (isOpaqueColor(colors && colors[key]) ? colors[key].trim() : base[key]);
+  return { color: pick("color"), symbolColor: pick("symbolColor"), height: TITLEBAR_HEIGHT };
 }
 
 /** titleBarOverlay 只有 Windows / Linux 支持；macOS 走红绿灯位置。 */
@@ -102,13 +148,34 @@ function createTitleBarController(deps) {
     }
   }
 
-  /** 主题切换（渲染进程经 IPC 上报）：非 win32/linux 或 API 缺失时静默跳过。 */
-  function applyTheme(theme) {
+  /**
+   * 主题上报（渲染进程经 IPC `desktop:set-theme`）：同步覆盖层配色。
+   *
+   * 载荷有两种形态（见 `normalizeThemePayload`）：旧渲染层的主题名字符串，或
+   * `{ theme, color, symbolColor }`（2026-11-20 第 3 条起）。颜色必须是**不透明**
+   * `#rrggbb`，否则回落默认值并留一条日志——静默回落会让"按钮消失"无从追查。
+   *
+   * 非 win32/linux 或 API 缺失时静默跳过（macOS 没有覆盖层）。
+   *
+   * @param {unknown} input 主题名字符串或 `{ theme, color, symbolColor }`
+   * @returns {boolean} 是否真的写进了窗口
+   */
+  function applyTheme(input) {
     if (!supportsOverlay(platform)) return false;
     const win = liveWindow();
     if (!win || typeof win.setTitleBarOverlay !== "function") return false;
+    const payload = normalizeThemePayload(input);
+    const overlay = titleBarOverlayFor(payload.theme, payload);
+    for (const key of ["color", "symbolColor"]) {
+      if (payload[key] !== undefined && payload[key].trim() !== overlay[key]) {
+        logLine(
+          `titlebar: ignoring invalid ${key} ${JSON.stringify(payload[key])}; ` +
+            `falling back to ${overlay[key]} (theme ${payload.theme})`,
+        );
+      }
+    }
     try {
-      win.setTitleBarOverlay(titleBarOverlayFor(theme));
+      win.setTitleBarOverlay(overlay);
       return true;
     } catch (err) {
       logLine(`titlebar: setTitleBarOverlay failed: ${err}`);
@@ -209,7 +276,9 @@ function installTitleBarFallbackOnLoad(deps) {
 module.exports = {
   TITLEBAR_HEIGHT,
   TITLEBAR_THEME,
+  isOpaqueColor,
   normalizeTheme,
+  normalizeThemePayload,
   titleBarOverlayFor,
   titleBarFallbackCss,
   supportsOverlay,

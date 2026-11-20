@@ -106,6 +106,10 @@ const update = {
   "update.startup.ready": "更新包已下载，SHA-256 校验通过",
   "update.startup.readyHint": "重启后只替换程序文件，data/ 中的岗位、简历、对话和设置不会改动。",
   "update.startup.install": "重启并安装",
+  /** 桌面安装壳：主按钮接壳的原生更新流程（检查 → 确认 → 下载 → 安装）。 */
+  "update.startup.openUpdater": "去更新",
+  /** 展开态内容区还有内容在视口外时的静态提示（不做成交互）。 */
+  "update.startup.scrollHint": "下面还有内容，向下滚动查看",
   "update.startup.downloadPackage": "下载安装包",
   "update.startup.release": "去发布页",
   /** 非 Windows：没有应用内安装通道，只能手动装。 */

@@ -59,6 +59,12 @@ __all__ = [
     "ensure_document_version_with_report",
 ]
 
+#: 照片页眉字段的固定位置（5.3：前端已删掉照片的「位置」下拉，语义恒为 photo）。
+_PHOTO_HEADER_KEY = "photo"
+#: 「位置下拉」留下、但任何渲染方都不认照片的四种死值。**不含 contact**——那个是
+#: I-02 的重复照片守卫刻意保留的状态，见 `_normalize_photo_placement` 的说明。
+_PHOTO_STALE_PLACEMENTS = frozenset({"hidden", "name", "name_meta", "subtitle"})
+
 #: v2 分区 key -> v1 ResumeContent 的列表属性名。
 _V1_LIST_ATTRS: dict[str, str] = {
     "education": "education",
@@ -75,6 +81,45 @@ _V1_LIST_ATTRS: dict[str, str] = {
 }
 
 
+def _normalize_photo_placement(document: dict) -> dict:
+    """把照片页眉字段的位置收敛为常量 ``"photo"``（5.3；幂等）。
+
+    **为什么放在这里**：``ensure_document_version_with_report`` 是读与写共同的唯一上游——
+    读侧 ``document_io.document_for_record``（详情/render/export/AI/双语/历史）与
+    ``document_io.document_or_422``（预览/导出/预检）都经过它，写侧
+    ``prepare_document_for_save*`` 也经过它。只改写入库、不改读侧，会让"还没保存的文档"
+    与库里产物的形状不一致；放在别处则要维护第二份调用点。
+
+    **为什么必须归一，而不是让渲染层忽略**：后端有二十多处 ``placement == "hidden"``
+    的消费方（document_html / document_plan_rows / document_analysis / document_view /
+    bilingual_variants …），导出是服务端从库里的文档重渲。前端"假装它是 photo"只会得到
+    "预览有照片、导出没有"。
+
+    **为什么排除 ``contact``**：I-02 那条缺陷（页眉 hide→show 把位置写死成 contact）走的是
+    另一套机制——读侧 planner 只看 data URI 前缀就当照片、写侧
+    ``_heal_header_photo_placements`` 在 `header.photo` 空着时才认领，且"已有照片时不抢占"
+    正靠这条 contact 状态。把它们一起扫成 photo 会让两张照片同时 placement=photo，
+    后者按"最后一个赢"覆盖前者。``hidden`` / ``name`` / ``name_meta`` / ``subtitle``
+    这四种才是"位置下拉"留下的、任何渲染方都不认照片的死值。
+
+    只动 ``key == "photo"`` 的字段：姓名、姓名旁小字、求职意向、联系方式的 placement
+    各有语义，不能一起扫平。已经是 ``photo`` 的原样返回，不加任何键——幂等，且旧文档
+    的字节不变。
+    """
+    header = document.get("header")
+    if not isinstance(header, dict):
+        return document
+    items = header.get("items")
+    if not isinstance(items, list):
+        return document
+    for item in items:
+        if not isinstance(item, dict) or item.get("key") != _PHOTO_HEADER_KEY:
+            continue
+        if item.get("placement") in _PHOTO_STALE_PLACEMENTS:
+            item["placement"] = "photo"
+    return document
+
+
 def ensure_document_version_with_report(
     content: Any,
     *,
@@ -85,20 +130,21 @@ def ensure_document_version_with_report(
     """把任意版本的 content 收口成 v2 dict；返回 (document dict, 转换报告或 None)。
 
     报告为 None 表示本来就是 v2（没有发生转换）——API 用它决定要不要提示"已升级"。
+    三个出口都过 ``_normalize_photo_placement``：照片的位置只可能是 ``"photo"``（5.3）。
     """
     if isinstance(content, ResumeDocument):
-        return document_to_json(normalize_document(content)), None
+        return _normalize_photo_placement(document_to_json(normalize_document(content))), None
     if not isinstance(content, dict):
         raise ConversionError("简历内容必须是对象")
     if content.get("version") == 2:
-        return document_to_json(parse_document(content)), None
+        return _normalize_photo_placement(document_to_json(parse_document(content))), None
     document, report = convert_content(
         content,
         language=language or "zh-CN",
         format_config=format_config,
         custom_fields=custom_fields,
     )
-    return document_to_json(document), report
+    return _normalize_photo_placement(document_to_json(document)), report
 
 
 def ensure_document_version(

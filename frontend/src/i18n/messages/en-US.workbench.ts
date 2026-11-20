@@ -14,6 +14,7 @@ const workbench = {
   "workbench.group.template": "Template",
   "workbench.group.page": "Page setup",
   "workbench.group.style": "Styles",
+  "workbench.group.photo": "Photo",
   "workbench.group.layout": "Templates and layout presets",
   "workbench.group.measure": "Typography settings",
   "workbench.group.spacing": "Hierarchy and spacing",

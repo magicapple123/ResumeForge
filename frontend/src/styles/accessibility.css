@@ -120,6 +120,15 @@
   outline-color: var(--rf-focus-visible);
 }
 
+/* 弹窗/抽屉内的焦点环收一档到 2px：antd 自身是 3px，画在 40×40 的关闭按钮上比标题
+   还抢眼。仓库里 `.detail-trigger` 那条、`apply.css`、`assistant-content.css` 的先例
+   都是 2px，3px 反而是例外。`.app-shell` 主体不动（保持上一条只改颜色）。 */
+.ant-modal :where(button, a, input, textarea, select, [tabindex]):focus-visible,
+.ant-drawer :where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline-width: 2px;
+  outline-offset: 2px;
+}
+
 /* 文本输入框的聚焦环：**1px 描边 + 一圈很淡的光晕**。
    2026-10-20 曾用 `outline: 2px solid` + `outline-offset: 1px` 取代 antd 的半透明光晕
    （后者在圆角处会透出底色，像一圈毛边）。但实色 2px 叠在 1px 边框上，肉眼看到的是

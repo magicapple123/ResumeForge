@@ -54,6 +54,8 @@ const workbench = {
   "workbench.group.template": "模板",
   "workbench.group.page": "版面",
   "workbench.group.style": "样式",
+  /** 5.1：照片（原独立页签）并入排版参数，作为第四组。 */
+  "workbench.group.photo": "照片",
   /** 第一组：模板与版式（L1 / L2，既有控件）。 */
   "workbench.group.layout": "模板与版式",
   /** 第二组：排版参数（L3，既有 `ResumeMeasureControls`）。 */

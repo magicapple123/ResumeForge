@@ -11,6 +11,12 @@ import {
   startThemeTransition,
   themeSwitchOrigin,
 } from "./themeTransition";
+import {
+  beginTitlebarOverlayFlip,
+  publishTitlebarOverlay,
+  resetTitlebarOverlayState,
+  setTitlebarOverlaySink,
+} from "./titlebarOverlay";
 
 const originalMatchMedia = window.matchMedia;
 
@@ -35,6 +41,7 @@ afterEach(() => {
   for (const name of ["--rf-theme-x", "--rf-theme-y", "--rf-theme-r", "--rf-theme-duration"]) {
     document.documentElement.style.removeProperty(name);
   }
+  resetTitlebarOverlayState();
   vi.unstubAllGlobals();
 });
 
@@ -125,5 +132,52 @@ describe("startThemeTransition", () => {
     expect(REVEAL_DURATION_MS).toEqual({ light: 560, dark: 460 });
 
     delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
+  });
+
+  it("过渡期间覆盖层交给插值器（普通上报被丢弃），结束后交还（第 4 条）", async () => {
+    stubReducedMotion(false);
+    const sent: unknown[] = [];
+    setTitlebarOverlaySink((payload) => sent.push(payload));
+    let finished: () => void = () => undefined;
+    (document as unknown as { startViewTransition?: unknown }).startViewTransition = vi.fn(() => ({
+      finished: new Promise<void>((resolve) => {
+        finished = resolve;
+      }),
+    }));
+
+    startThemeTransition("dark", { x: 10, y: 10 }, () => undefined);
+
+    // 过渡已经开始（begin 已占位）：这时 DesktopTitleBar 的 useEffect 会想直接上报，
+    // 必须被丢弃——否则就是"第 0 帧突变"。
+    expect(publishTitlebarOverlay({ theme: "dark", color: "#151b23" })).toBe(false);
+    expect(sent).toHaveLength(0);
+
+    finished();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // 收尾之后普通上报恢复（cancel 会先把当前 CSS 值落一次）。
+    expect(publishTitlebarOverlay({ theme: "dark", color: "#151b23" })).toBe(true);
+    delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
+  });
+
+  it("退化为直接切换（无 View Transitions / reduced-motion）时不占用覆盖层", () => {
+    stubReducedMotion(true);
+    setTitlebarOverlaySink(() => undefined);
+    const apply = vi.fn();
+    startThemeTransition("dark", { x: 10, y: 10 }, apply);
+    expect(apply).toHaveBeenCalledTimes(1);
+    // 没有过渡就没有插值器掌权：普通上报照旧可用。
+    expect(publishTitlebarOverlay({ theme: "dark" })).toBe(true);
+    // begin 只在真正开过渡时才调用（这里调一次做参照，确认它确实会占位）。
+    const handle = beginTitlebarOverlayFlip({
+      next: "dark",
+      origin: { x: 0, y: 0 },
+      durationMs: 460,
+      radius: 100,
+    });
+    expect(handle.active).toBe(true);
+    handle.cancel();
   });
 });

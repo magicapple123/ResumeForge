@@ -29,14 +29,34 @@ const { t } = require("./shell-locale");
  * 所以先 `showWindow()` 把主窗口唤到前台再走既有流程，否则用户点了像没反应。
  *
  * `id` 直接用动作 id：模型、HTML 回执、`choose()` 三处的键因此不可能漂移。
+ * `icon` 是**前置图标位的键**（2026-11-20 第 1 条）：QQ 式菜单每行都必须有一个
+ * 16px 图标位，文字列才会永远对齐。键的取值必须能在 `desktop/tray-menu.html` 的
+ * `ICONS` 表里找到（除了 `box`，它按勾选态映射到 `boxOn` / `boxOff`）。
  */
 const TRAY_ACTION_ITEMS = [
-  { id: "file.openDataDir", labelKey: "tray.openDataDir" },
-  { id: "help.openLogDir", labelKey: "tray.openLogDir" },
-  { id: "help.getDiagnostics", labelKey: "tray.diagnostics" },
+  { id: "file.openDataDir", labelKey: "tray.openDataDir", icon: "folder" },
+  { id: "help.openLogDir", labelKey: "tray.openLogDir", icon: "file" },
+  { id: "help.getDiagnostics", labelKey: "tray.diagnostics", icon: "copy" },
   // `focusWindow: true` 的项＝结果要在界面上看，必须先唤起窗口。
-  { id: "help.checkUpdate", labelKey: "tray.checkUpdate", focusWindow: true },
+  { id: "help.checkUpdate", labelKey: "tray.checkUpdate", icon: "refresh", focusWindow: true },
 ];
+
+/**
+ * 固定 id → 前置图标键。
+ *
+ * 单独一张表（而不是散在 buildMenuModel 的字面量里）是为了让用例能一次性断言
+ * "每个菜单项都有图标"：漏一个就等于那一行文字又被推歪了。
+ */
+const MENU_ICONS = Object.freeze({
+  open: "win",
+  openDataDir: "folder",
+  openLogDir: "file",
+  diagnostics: "copy",
+  checkUpdate: "refresh",
+  // 开关行用勾选框**当作**它的图标位（见 tray-menu.html 的 boxOn / boxOff）。
+  askOnClose: "box",
+  quit: "power",
+});
 
 /** 模型里的固定 id（HTML 与用例都按它认项，改名字要一起改）。 */
 const MENU_IDS = {
@@ -100,7 +120,7 @@ function resolveTrayIconPath(deps) {
  * @param {function(): ("zh" | "en")} [deps.getLocale] 当前壳层语言
  * @param {function(string): void} [deps.runMenuAction] 动作分发器是否存在
  *   （缺失时四项标 `disabled`，而不是从模型里消失——菜单高度不会跳）
- * @returns {Array<{id: string, type: "item" | "separator", label?: string,
+ * @returns {Array<{id: string, type: "item" | "separator", label?: string, icon?: string,
  *   checked?: boolean, danger?: boolean, disabled?: boolean}>}
  */
 function buildMenuModel(deps = {}) {
@@ -110,18 +130,25 @@ function buildMenuModel(deps = {}) {
   const ask = typeof deps.getAsk === "function" ? deps.getAsk() : true;
 
   return [
-    { id: MENU_IDS.open, type: "item", label: labels.open },
+    { id: MENU_IDS.open, type: "item", label: labels.open, icon: MENU_ICONS.open },
     { id: MENU_IDS.actionsSeparator, type: "separator" },
     ...TRAY_ACTION_ITEMS.map((item) => ({
       id: item.id,
       type: "item",
       label: t(locale, item.labelKey),
+      icon: item.icon,
       disabled: !actionsAvailable,
     })),
     { id: MENU_IDS.askSeparator, type: "separator" },
-    { id: MENU_IDS.askOnClose, type: "item", label: labels.askOnClose, checked: Boolean(ask) },
+    {
+      id: MENU_IDS.askOnClose,
+      type: "item",
+      label: labels.askOnClose,
+      icon: MENU_ICONS.askOnClose,
+      checked: Boolean(ask),
+    },
     { id: MENU_IDS.quitSeparator, type: "separator" },
-    { id: MENU_IDS.quit, type: "item", label: labels.quit, danger: true },
+    { id: MENU_IDS.quit, type: "item", label: labels.quit, icon: MENU_ICONS.quit, danger: true },
   ];
 }
 
@@ -268,6 +295,7 @@ function createTrayManager(deps) {
 }
 
 module.exports = {
+  MENU_ICONS,
   MENU_IDS,
   TRAY_ACTION_ITEMS,
   buildMenuModel,

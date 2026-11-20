@@ -14,11 +14,12 @@
  * 就是为了看结构），把一块"还有东西没进来"的清单压在最上会挡住主线；它在树下面紧邻
  * 「条目字段排版」，正好接着"补进来的条目现在长什么样"这条阅读顺序。
  */
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
 import { Typography } from "antd";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
+import type { ResumeLayout } from "../../../types";
 import type { DocumentFieldCatalog, ResumeDocument } from "../../../types/resumeDocument";
 import StructurePanel from "./StructurePanel";
 import CoverageStructureGroup from "./CoverageStructureGroup";
@@ -27,6 +28,11 @@ import { usePanelScrollAnchor } from "../layout/usePanelScrollAnchor";
 
 export interface StructureTabProps {
   document: ResumeDocument;
+  /**
+   * 版式（6）：锚点依赖要同时看 `layout`——改列数 / 对齐 / 列宽动的是 `layout`，
+   * `document` 引用不变，只看 `document` 的锚点一次都不会跑（滚动位置被上方插入的行挤走）。
+   */
+  layout?: ResumeLayout;
   onChange: (next: ResumeDocument) => void;
   selectedPath?: string | null;
   onSelectPath?: (path: string | null) => void;
@@ -54,6 +60,7 @@ export interface StructureTabProps {
 
 export default function StructureTab({
   document,
+  layout,
   onChange,
   selectedPath,
   onSelectPath,
@@ -74,8 +81,16 @@ export default function StructureTab({
 }: StructureTabProps) {
   // 用了模块级 `t()` 就必须订阅语言变化（`localeSubscription` 守卫）。
   useLocale();
-  /** R-10：改动后重排时把 scrollTop 写回去，内容不上下跳。 */
-  const scrollRef = usePanelScrollAnchor<HTMLDivElement>(document);
+  /**
+   * R-10：改动后重排时把 scrollTop 写回去，内容不上下跳。
+   *
+   * 6（2026-11-20）：依赖从 `document` 扩到 `[document, layout]`。显式选列数会在
+   * 「列间距」之前**插入两行**（列宽 % / 分布），`scrollTop` 不变而上方长高 269px，
+   * 用户眼里就是"跳到上面去了"。`useMemo` 保证数组身份只在两者之一变化时才变，
+   * 不会每次渲染都触发校正；锚点算法本身（找同一节点、量新偏移、补差值）一行没动。
+   */
+  const anchorDep = useMemo(() => [document, layout], [document, layout]);
+  const scrollRef = usePanelScrollAnchor<HTMLDivElement>(anchorDep);
   /**
    * Q20：字段没有值时结构树显示字段目录里的中文标签（目录缺失时恒为 false）。
    *

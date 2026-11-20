@@ -261,13 +261,18 @@ describe("DesktopTitleBar", () => {
   it("主题切换把实际生效的深浅色同步给主进程（覆盖层按钮颜色）", async () => {
     installBridge();
     renderTitleBar();
-    await waitFor(() => expect(bridge.setTheme).toHaveBeenCalledWith("light"));
+    // 第 3 条起上报的是 `{ theme, color, symbolColor }`：颜色取自页面 CSS 的计算值。
+    // jsdom 里 CSS 变量读不到，所以这里只断言 theme 字段（颜色链路由
+    // features/theme/titlebarOverlay.test.ts 覆盖）。
+    await waitFor(() =>
+      expect(bridge.setTheme).toHaveBeenCalledWith(expect.objectContaining({ theme: "light" })),
+    );
 
     const { setThemeMode } = await import("../theme/themeStore");
     await act(async () => {
       setThemeMode("dark");
     });
-    expect(bridge.setTheme).toHaveBeenCalledWith("dark");
+    expect(bridge.setTheme).toHaveBeenCalledWith(expect.objectContaining({ theme: "dark" }));
   });
 
   it("「帮助 → 使用指南」派发窗口事件（AppShell 监听并打开引导弹窗）", async () => {

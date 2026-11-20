@@ -7,14 +7,14 @@ import {
   ThunderboltOutlined,
 } from "@ant-design/icons";
 import { Alert, Button, Card, Space, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { listUpcomingReminders } from "../api/reminders";
 import { getProfile } from "../api/profile";
 import { getStats } from "../api/search";
 import { getReminderPopupSetting } from "../api/settings";
 import { useApi } from "../hooks/useApi";
-import { onceUserGuideClosed } from "../utils/userGuide";
+import { acquireStartupSlot, releaseStartupSlot } from "../utils/userGuide";
 import { FirstDeliveryPanel } from "../features/activation/FirstDeliveryPanel";
 import { useActivationProgress } from "../features/activation/useActivationProgress";
 import { LatestCards } from "./home/LatestCards";
@@ -51,18 +51,47 @@ export default function HomePage() {
   );
   const { data: popupSetting } = useApi(getReminderPopupSetting, []);
   const [popupVisible, setPopupVisible] = useState(false);
+  // 启动路径拿到的槽位（手动点开的不算），关闭时据此释放队列。
+  const reminderSlotHeld = useRef(false);
+  // 一次会话只申请一次：deps 里的接口数据每次刷新都是新引用，重复申请会互相踩掉。
+  const reminderRequested = useRef(false);
+  const pageMounted = useRef(true);
+
+  useEffect(() => {
+    pageMounted.current = true;
+    return () => {
+      pageMounted.current = false;
+      reminderSlotHeld.current = false;
+      // 幂等：既撤销还在排队的申请，也释放已经拿到的槽位。
+      releaseStartupSlot("reminder");
+    };
+  }, []);
 
   // 打开应用时：设置开启且有未完成提醒 → 弹出近期提醒（本 SPA 会话仅弹一次）。
-  // 欢迎引导还开着时排在它后面（关闭后再弹）：两个启动弹窗叠在一起，提醒会被盖住。
+  // 三件启动弹窗共用一条有序队列（欢迎 → 提醒 → 更新），轮到「提醒」才弹。
   useEffect(() => {
-    if (reminderPopupShownThisSession) return;
+    if (reminderRequested.current || reminderPopupShownThisSession) return;
     if (!popupSetting?.enabled) return;
     if ((upcomingReminders?.length ?? 0) === 0) return;
-    return onceUserGuideClosed(() => {
+    reminderRequested.current = true;
+    void acquireStartupSlot("reminder").then(() => {
+      if (!pageMounted.current) {
+        releaseStartupSlot("reminder");
+        return;
+      }
+      reminderSlotHeld.current = true;
       setPopupVisible(true);
       reminderPopupShownThisSession = true;
     });
   }, [popupSetting, upcomingReminders]);
+
+  const closePopup = () => {
+    setPopupVisible(false);
+    if (reminderSlotHeld.current) {
+      reminderSlotHeld.current = false;
+      releaseStartupSlot("reminder");
+    }
+  };
 
   // "接下来做什么"只列**待办**，不列"你已经做了多少"——概览页上能推动人的只有前者。
   // 每一条都带数字与去处，点进去就是那件事本身。
@@ -172,11 +201,7 @@ export default function HomePage() {
 
       <LatestCards stats={stats} />
 
-      <ReminderPopup
-        open={popupVisible}
-        reminders={upcomingReminders}
-        onClose={() => setPopupVisible(false)}
-      />
+      <ReminderPopup open={popupVisible} reminders={upcomingReminders} onClose={closePopup} />
     </div>
   );
 }

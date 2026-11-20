@@ -52,8 +52,8 @@
   font-size: 12px;
 }
 
-/* 左栏「照片」页签（T02）：预览+操作 → 位置 → 大小 → 边框，自上而下一条竖列。
-   页签自身不设宽度（继承面板 100%），所以从 360 到 640 都不会横向溢出。 */
+/* 左栏「照片」分组（T02 / 5.1）：预览+操作 → 大小 → 边框，自上而下一条竖列。
+   分组自身不设宽度（继承面板 100%），所以从 360 到 640 都不会横向溢出。 */
 .resume-photo-tab {
   display: flex;
   flex-direction: column;
@@ -61,23 +61,13 @@
   width: 100%;
 }
 
-.resume-photo-tab__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.resume-photo-tab__label {
-  flex: 0 0 84px;
-  font-size: 12px;
-  color: var(--rf-text-body);
-}
+/* 5.3 删掉了「位置」下拉，`__row` / `__label` 两条规则随之删除（它们只服务那一行）。 */
 
 .resume-photo-tab__block {
   padding-top: 2px;
 }
 
-/* 页签里的照片编辑器（`full`）：缩略图占一列、按钮在下方自动换行。 */
+/* 排版参数里「照片」分组（`full`）：缩略图占一列、按钮在下方自动换行。 */
 .document-photo-editor.is-full {
   display: flex;
   flex-direction: column;
@@ -85,7 +75,46 @@
   align-items: flex-start;
 }
 
+/* 5.2：`is-full` 下让框按**图片自身比例**定形，不再裁切。
+   旧写法只覆盖了 `width`（`max-width: 220px`），`height` 仍是 `document-header.css` 的
+   90px，于是 220×90 的横带把竖图用 `object-fit: cover` 裁成"一条被压扁的脸"。
+   现在宽高都 auto、给 `max-height`，竖图 3:4 落在约 135×180、方图 180×180。
+   **compact（72×90）不动**：那是中栏页眉字段编辑器的紧凑形态，本来就该是定尺寸小方块。 */
 .document-photo-editor.is-full .document-photo-frame {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 180px;
+  display: block;
+}
+
+/* 只命中**直接子级**的 `<img>`（= 没裁剪时的原图）。裁过的照片是
+   `.rf-crop-thumb > img`，它靠内联百分比放大，这里的 `max-width/height` 会把放大
+   截回去（取景就错了）——所以选择器必须是 `>`，不能写成后代选择器。 */
+.document-photo-editor.is-full .document-photo-frame > img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+}
+
+/* 裁剪态：`span` 靠 `CroppedPhotoThumb` 的内联 `aspect-ratio` 定形，必须给固定高，
+   否则块级 `width: auto` 会把它拉回框宽（那正是"压扁"的另一条路径）。 */
+.document-photo-editor.is-full .document-photo-frame .rf-crop-thumb {
+  display: inline-block;
+  height: 180px;
+  width: auto;
+  max-width: 100%;
+}
+
+/* 空态：父级改成 `display: block` 后，"还没有照片"会贴到左上角。
+   单独给它一条规则把框恢复成 72×90 的居中位（与 compact 同尺寸，视觉不跳）。 */
+.document-photo-editor.is-full .document-photo-frame.is-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   max-width: 220px;
+  height: 90px;
 }

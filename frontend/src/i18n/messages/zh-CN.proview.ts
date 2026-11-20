@@ -182,8 +182,9 @@ const proview = {
   "proview.photo.button": "照片裁剪",
   /** 弹窗标题（5 字）。 */
   "proview.photo.title": "照片裁剪",
-  /** 非破坏承诺。 */
-  "proview.photo.hint": "原始照片不会被覆盖，随时可以恢复",
+  /** 非破坏承诺 + 「自由」档的操作说明（5.5）。 */
+  "proview.photo.hint":
+    "原始照片不会被覆盖，随时可以恢复。选「自由」后可任意拖动四边/四角，按住 Ctrl 才等比。",
   /** I-37：画框比例提示（当前画框比例 + 最接近的预设比例）。 */
   "proview.photo.frameHint":
     "画框比例约 {frame}；{aspect} 最接近。照片本身带白底时，把取景放大到主体边缘即可贴边。",
@@ -197,9 +198,9 @@ const proview = {
   "proview.photo.aspect.portrait": "3:4",
   /** 4:3。 */
   "proview.photo.aspect.landscape": "4:5",
-  /** 自由比例。 */
+  /** 自由比例（不锁比例）。5.5：第一档的文案，与「恢复原图」按钮区分开。 */
   /** 后端 aspect 只认 free / 1:1 / 3:4 / 4:5；"自由"即 free。 */
-  "proview.photo.aspect.custom": "自由",
+  "proview.photo.aspect.free": "自由",
   /** 取景大小滑杆（缩放裁剪框）。 */
   "proview.photo.zoom": "取景大小",
   /** 取景大小滑杆的无障碍名。 */

@@ -15,7 +15,15 @@
  * 2. **半径要盖住最远的角**，否则动画结束时四个角还剩一块旧主题（`hypot(max(x, vw-x), …)`）；
  * 3. **连续快速切换时上一段过渡会被浏览器跳过**，它的 `finished` 会 reject。清理
  *    CSS 变量必须按"代"判断，否则会把正在跑的那一段的变量删掉、动画当场断掉。
+ *
+ * **标题栏覆盖层不在揭示里**（2026-11-20 第 4 条）：它是 Windows 画的独立不透明层，
+ * 既不参与 `clip-path` 也不可动画。这里在 `apply()` 前后各读一次它的底色，把换色交给
+ * `titlebarOverlay.ts` 的插值器——窗口对齐到"圆边缘扫过按钮区"的那 20 来毫秒。
+ * 缓动曲线是**三处共用**的事实：本文件写 `--rf-theme-duration`、
+ * `styles/theme-transition.css` 的 `rf-theme-reveal` 用 `cubic-bezier(0.22, 0.61, 0.36, 1)`，
+ * `titlebarOverlay.ts` 的 `REVEAL_BEZIER` 复刻同一份——改一处必须改三处。
  */
+import { beginTitlebarOverlayFlip } from "./titlebarOverlay";
 import type { ResolvedTheme } from "./themeStore";
 
 export interface ThemeTransitionOrigin {
@@ -83,10 +91,12 @@ export function startThemeTransition(
 
   const root = document.documentElement;
   const current = ++generation;
-  const radius = revealRadius(origin.x, origin.y, window.innerWidth, window.innerHeight);
+  // 取整只在这里做一次：写进 `--rf-theme-r` 的值与交给覆盖层插值器的半径必须同一份，
+  // 否则"圆边缘在哪一刻扫过按钮区"会差一点点。
+  const radius = Math.ceil(revealRadius(origin.x, origin.y, window.innerWidth, window.innerHeight));
   root.style.setProperty("--rf-theme-x", `${Math.round(origin.x)}px`);
   root.style.setProperty("--rf-theme-y", `${Math.round(origin.y)}px`);
-  root.style.setProperty("--rf-theme-r", `${Math.ceil(radius)}px`);
+  root.style.setProperty("--rf-theme-r", `${radius}px`);
   root.style.setProperty("--rf-theme-duration", `${REVEAL_DURATION_MS[next]}ms`);
 
   const clearVars = () => {
@@ -95,18 +105,31 @@ export function startThemeTransition(
     for (const name of CSS_VARS) root.style.removeProperty(name);
   };
 
+  // 覆盖层换色（第 4 条）：**在 apply() 之前**开始——此刻读到的 CSS 值还是旧色。
+  // 没有桌面标题栏（浏览器版）时它自己退化为 no-op。
+  const overlay = beginTitlebarOverlayFlip({
+    next,
+    origin: { x: origin.x, y: origin.y },
+    durationMs: REVEAL_DURATION_MS[next],
+    radius,
+  });
+
   let transition: ViewTransitionLike;
   try {
     transition = doc.startViewTransition(async () => {
       apply();
       // 只让出一个微任务：等 rAF 会在"回调 pending 期间不产生渲染帧"的规则下死锁。
       await Promise.resolve();
+      // 新主题已落地（data-theme 与 CSS 变量都是新值）：起插值循环。
+      overlay.start();
     });
   } catch {
     // 浏览器拒绝开新过渡（例如文档不可见）：退回直接切换，不要留下半截状态。
     clearVars();
+    overlay.cancel();
     apply();
     return;
   }
-  void transition.finished.then(clearVars, clearVars);
+  // 过渡被跳过（连续快速切换）时也要收尾：把覆盖层落到当前 CSS 值，并停掉帧循环。
+  void transition.finished.then(clearVars, clearVars).then(() => overlay.cancel());
 }

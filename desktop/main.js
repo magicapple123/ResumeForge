@@ -112,6 +112,9 @@ const shellLocaleRuntime = createShellLocaleRuntime({
   logLine,
 });
 
+// 壳层当前语言（应用内语言）。更新器的原生对话框也走它（9.3）：updater.js 只能被注入。
+const getShellLocale = () => shellLocaleRuntime.getLocale();
+
 // 原生对话框的文案装配（数据迁移确认 / 迁移不一致恢复 / 崩溃预算耗尽）。
 // 文案表在 lib/shell-locale.js；这里只注入 dialog 与"当前语言"。
 const shellDialogs = createShellDialogs({
@@ -397,6 +400,9 @@ const quitLifecycle = createQuitLifecycle({
   clearTimeout,
 });
 
+// 更新器依赖包（三处调用共用）：退出安装入口 / 对话框语言（9.3）/ 日志目录（9.2 的「打开日志」）。
+const updateDeps = { installAndQuit: quitLifecycle.requestInstallAndQuit, getLocale: getShellLocale, getLogDir: startupLogDir };
+
 // Single instance: a second launch focuses the existing window instead of
 // spawning a competing backend on another port.
 if (!app.requestSingleInstanceLock()) {
@@ -414,7 +420,7 @@ if (!app.requestSingleInstanceLock()) {
       mainWindow.focus();
     }
     // 应用已经在运行时双击更新入口：不启动第二个实例，直接走一次手动检查。
-    if (wantsManualUpdateCheck(argv)) runManualUpdateCheck(mainWindow, logLine, { installAndQuit: quitLifecycle.requestInstallAndQuit });
+    if (wantsManualUpdateCheck(argv)) runManualUpdateCheck(mainWindow, logLine, updateDeps);
   });
 
   app.whenReady().then(async () => {
@@ -435,8 +441,8 @@ if (!app.requestSingleInstanceLock()) {
         getLocale: () => shellLocaleRuntime.getLocale(),
       });
       await startBackendAndSwap();
-      scheduleUpdateCheck(mainWindow, logLine, { installAndQuit: quitLifecycle.requestInstallAndQuit });
-      if (wantsManualUpdateCheck()) runManualUpdateCheck(mainWindow, logLine, { installAndQuit: quitLifecycle.requestInstallAndQuit });
+      scheduleUpdateCheck(mainWindow, logLine, updateDeps);
+      if (wantsManualUpdateCheck()) runManualUpdateCheck(mainWindow, logLine, updateDeps);
     } catch (err) {
       // 一条可操作的出口：打开日志目录 / 退出（见 reportStartupFailure）。
       // 这里不再用 showErrorBox —— 它没有按钮，用户只能看着启动图。
@@ -477,10 +483,7 @@ desktopShellIpc = registerDesktopShellIpc({
   shell,
   getDataDir: effectiveDataDir,
   getLogDir: startupLogDir,
-  runUpdateCheck: () =>
-    runManualUpdateCheck(mainWindow, logLine, {
-      installAndQuit: quitLifecycle.requestInstallAndQuit,
-    }),
+  runUpdateCheck: () => runManualUpdateCheck(mainWindow, logLine, updateDeps),
   titleBar,
   getShellLocale: () => shellLocaleRuntime.getLocale(),
   // 语言切换后的重建入口：托盘菜单 + tooltip + 窗口标题兜底（见 lib/shell-locale-runtime.js）。

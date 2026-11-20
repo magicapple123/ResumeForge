@@ -18,7 +18,7 @@ from pathlib import Path
 
 import httpx
 
-from ..config import get_settings
+from ..config import get_settings, is_desktop_shell
 from ..schemas.update import UpdateStatus
 from .update_check import check_for_update
 from .update_download_config import (
@@ -219,6 +219,12 @@ async def _run_download(
 async def start_download(*, background: bool = False) -> UpdateStatus:
     """启动一次下载；重复点击不会创建第二个下载任务。"""
     global _download_task, _archive_path
+    if is_desktop_shell():
+        # 双保险（2026-11-20）：界面已经按 `installable=false` 收起这个按钮，但那是一个
+        # 前端布尔量，而这里动手的是会覆盖安装目录的路径。桌面形态的正确链路在
+        # `desktop/updater.js`（Setup.exe + sha256 + 静默安装），页内这条路只会把
+        # `resources/payload` 换成新代码、`app.asar` 留在旧版——半新半旧比不更新更难查。
+        raise RuntimeError("桌面版请使用应用内更新器")
     if _status.state in {"downloading", "installing"}:
         return _snapshot()
     result = await check_for_update()
@@ -384,6 +390,9 @@ def clear_install_result() -> None:
 def schedule_install(*, restart: bool = True) -> UpdateStatus:
     """启动独立更新器；更新器会等当前服务退出后覆盖文件。"""
     global _status
+    if is_desktop_shell():
+        # 同 start_download：桌面形态的安装由壳自己完成（停后端 → 退出 → NSIS /S）。
+        raise RuntimeError("桌面版请使用应用内更新器")
     # 陈旧页面直接点安装的兜底：进程内存里可能是 idle（后端刚重启），但磁盘上包还在。
     _restore_ready_from_disk()
     if _status.state != "ready":

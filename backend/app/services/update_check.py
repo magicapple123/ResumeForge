@@ -29,7 +29,7 @@ from urllib.parse import unquote
 
 import httpx
 
-from ..config import get_settings
+from ..config import get_settings, is_desktop_shell
 from ..schemas.update import UpdateCheckResult
 from .update_check_assets import _AssetChoice, select_asset
 from .update_check_degrade import build_api_error, degraded_available_message
@@ -131,8 +131,15 @@ def _install_supported() -> bool:
 
 
 def _select_asset(data: dict) -> _AssetChoice:
-    """挑出**适用于当前平台**的安装包（实现与平台词表在 ``update_check_assets``）。"""
-    return select_asset(data, _platform_tag())
+    """挑出**适用于当前平台与形态**的安装包（实现与平台词表在 ``update_check_assets``）。
+
+    形态决定扩展名：桌面壳要的是 `ResumeForge-Setup-<版本>.exe`（下载、校验、静默安装
+    都在壳里），控制台与便携版要的是 `-windows.zip`（`update_download` 覆盖安装读的就是
+    压缩包）。这个错配的代价不对称——桌面拿到 zip 只会覆盖 `resources/payload`，
+    `app.asar` 一个字节都不动，装完半新半旧（2026-11-20 实机确认）。
+    """
+    prefer = "installer" if is_desktop_shell() else "zip"
+    return select_asset(data, _platform_tag(), prefer)
 
 
 def _github_error_message(status_code: int, repo: str) -> str:
@@ -309,11 +316,20 @@ async def check_for_update(*, refresh: bool = False) -> UpdateCheckResult:
         available = _is_newer(tag or latest, current)
         notes = str(data.get("body") or "").strip()
         choice = _select_asset(data)
-        installable = choice.installable and available and _install_supported()
+        desktop = is_desktop_shell()
+        # 桌面形态恒不可安装（2026-11-20）：壳有一套完整链路（updater.js 下载 Setup.exe +
+        # sha256 + 静默安装），页内那套只会覆盖 `resources/payload`。之前这里只看系统不看
+        # 形态，Windows 桌面上 `installable` 恒为 true，界面弹窗于是把用户引到半更新那条路。
+        installable = choice.installable and available and _install_supported() and not desktop
         if not available:
             message = f"已是最新版本（{current}）"
         elif not choice.installable:
             message = f"有新版本 {latest}，但{choice.reason}；请到发布页手动下载"
+        elif desktop:
+            # 前端凭 `installable=false` 把主按钮换成「去更新」（走壳）。这里说清原因，
+            # 免得用户以为是按钮坏了；形态退让（只有便携包）也一并带出去。
+            extra = f"；{choice.reason}" if choice.reason else ""
+            message = f"有新版本 {latest} 可用；桌面版请使用应用内更新器{extra}"
         elif not _install_supported():
             # 挑得到包、但这台机器不走应用内安装（目前只有 Windows 那条链路）。按钮会
             # 隐藏，所以得在这里说清"更新是有的，只是要换种方式"，否则界面看起来像没反应。

@@ -10,6 +10,7 @@
  * 本文件不引入任何运行时 i18n / 业务模块：它只描述桥的形状与调用方式，测试里直接
  * stub 一个同形状对象即可。
  */
+import type { TitlebarOverlayPayload } from "../theme/titlebarOverlay";
 
 /** 主进程推送 / 快照的窗口状态：菜单文案、全屏隐藏、置顶勾选与撤销置灰都读它。 */
 export interface DesktopWindowState {
@@ -46,7 +47,14 @@ export interface DesktopShellBridge {
   menuAction?: (action: string) => Promise<DesktopMenuActionReply | undefined>;
   getWindowState?: () => Promise<DesktopWindowState | undefined>;
   onWindowState?: (callback: (state: DesktopWindowState) => void) => void;
-  setTheme?: (theme: "light" | "dark") => void;
+  /**
+   * 把标题栏覆盖层的配色报给主进程（2026-11-20 第 3 条）。
+   *
+   * 载荷有两种形态：`{ theme, color, symbolColor }`（新渲染层，颜色取自页面 CSS 的
+   * 计算值——CSS 是唯一真源），或裸主题名（旧壳/旧渲染层）。主进程两种都认，
+   * 见 desktop/lib/desktop-shell-ipc.js 的 normalizeOverlayPayload。
+   */
+  setTheme?: (payload: "light" | "dark" | TitlebarOverlayPayload) => void;
   /**
    * 托盘图标是否跟随系统主题（WF-20 的兜底开关，设置项 `tray_icon_follow_system`）。
    * 只发布尔；旧壳没有这个入口时安静降级（设置卡也会因为探测不到而隐藏）。

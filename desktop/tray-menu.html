@@ -2,11 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!-- 自绘托盘右键菜单（2026-11-20）：原生 Menu 的内边距 / 勾选列 / 行高不可调，
-         一项 checkbox 就会把整张菜单的文字推远。这里按内容收缩宽度：未勾选时没有
-         ✓ 前缀，卡片自然更窄。
-         文案不在这里：模型由主进程按壳层语言算好，经 preload 推过来（tray-menu:model）。
-         本页面只负责渲染 + 键盘导航，不做任何决策。 -->
+    <!-- 自绘托盘右键菜单（2026-11-20 第 1 条：QQ 式图标行 + 投影）。
+         三项结构性改动（与配色无关，缺一项就会退回"设置列表"的观感）：
+           1. 每行固定一个 16px 前置图标位（开关行的图标位就是它的勾选框），
+              文字列因此永远对齐——勾选/取消勾选不会把那一行的文字推歪；
+           2. 高亮收成**内缩圆角条**（卡片 padding 6px 提供左右留白，不再通栏）；
+           3. 卡片靠 box-shadow 浮起，不再靠 1px 描边与背景分离。
+        投影必须出血：阴影画在卡片矩形**之外**，窗口尺寸若等于卡片尺寸就会被裁掉，
+        所以多包一层 #surface（padding: 18px）——主进程量的是它，定位仍按卡片尺寸算
+        （见 lib/tray-menu-window.js 的 MENU_SHADOW_BLEED / toWindowBounds）。
+        文案不在这里：模型由主进程按壳层语言算好，经 preload 推过来（tray-menu:model）。
+        本页面只负责渲染 + 键盘导航，不做任何决策。 -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
     <title>ResumeForge</title>
     <style>
@@ -14,21 +20,28 @@
         color-scheme: light dark;
         --bg: #ffffff;
         --fg: #1f2328;
-        --muted: #5c6672;
-        --border: #e3e6ea;
+        --line: rgba(15, 23, 42, 0.06);
+        --hover: #f1f3f7;
+        --sep: #eceef2;
+        --ic: #5b6470;
         --primary: #1668dc;
-        --hover: #f0f4fa;
-        --danger: #d4380d;
+        --danger: #cf3a34;
+        --dangerbg: #fdf1f0;
+        --shadow: 0 10px 28px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.1);
       }
+      /* 深色底从 #1c1f24 提到 #22262c：原来的值贴在深色壁纸上会糊成一块 */
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #1c1f24;
-          --fg: #e6e8eb;
-          --muted: #9aa4b2;
-          --border: #2f343c;
-          --primary: #3c89f0;
-          --hover: #262b33;
-          --danger: #ff7a45;
+          --bg: #22262c;
+          --fg: #e8eaee;
+          --line: rgba(255, 255, 255, 0.07);
+          --hover: #2e343d;
+          --sep: #343a44;
+          --ic: #98a2b3;
+          --primary: #4c9aff;
+          --danger: #ff7a6b;
+          --dangerbg: #3b2a2a;
+          --shadow: 0 12px 30px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.35);
         }
       }
       * { box-sizing: border-box; }
@@ -40,59 +53,94 @@
       }
       body {
         font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
-        font-size: 12.5px;
+        font-size: 13px;
         color: var(--fg);
         user-select: none;
         -webkit-user-select: none;
       }
+      /* 18px 出血：窗口尺寸 = 卡片 + 2×18，阴影才有地方落（见文件头注释） */
+      #surface {
+        width: max-content;
+        padding: 18px;
+      }
       #menu {
         width: max-content;
-        min-width: 108px;
+        min-width: 168px;
         max-width: 280px;
-        padding: 6px 0;
-        border: 1px solid var(--border);
-        border-radius: 8px;
+        padding: 6px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
         background: var(--bg);
+        box-shadow: var(--shadow);
         outline: none;
       }
       .item {
         display: flex;
         align-items: center;
-        height: 30px;
-        padding: 0 10px;
-        line-height: 30px;
+        gap: 9px;
+        height: 32px;
+        padding: 0 8px;
+        border-radius: 6px;
+        line-height: 1;
         white-space: nowrap;
         cursor: default;
       }
-      .item .check {
+      /* 图标位：固定 16px，**取不到图标也留空占位**（那一行文字才不会歪） */
+      .item .ic {
         flex: none;
-        width: 14px;
-        color: var(--primary);
-        font-size: 12px;
+        display: grid;
+        place-items: center;
+        width: 16px;
+        height: 16px;
+        color: var(--ic);
       }
+      .item .ic svg { display: block; width: 16px; height: 16px; }
+      /* 勾选中的勾选框用主色，其余图标保持中性灰——否则"已勾选"读起来像禁用 */
+      .item .ic.on { color: var(--primary); }
       .item .label {
         flex: 1 1 auto;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      /* 高亮只有一个来源：主进程侧渲染的 .active（mousemove / 方向键都写它）。
+         不要再加 :hover——键盘把高亮停在第 3 行、鼠标停在第 5 行时会出现两条高亮条。 */
       .item.active { background: var(--hover); }
       .item.danger { color: var(--danger); }
+      .item.danger .ic { color: var(--danger); }
+      .item.danger.active { background: var(--dangerbg); }
       .item.disabled { opacity: 0.45; }
       .sep {
         height: 1px;
-        margin: 4px 0;
-        background: var(--border);
+        margin: 5px 8px;
+        background: var(--sep);
       }
     </style>
   </head>
   <body>
-    <div id="menu" role="menu" aria-orientation="vertical" tabindex="-1"></div>
+    <div id="surface">
+      <div id="menu" role="menu" aria-orientation="vertical" tabindex="-1"></div>
+    </div>
     <script>
+      // 图标全部内联（24 viewBox、1.6 描边、currentColor），不引外部资源。
+      // 键必须与 lib/tray-menu.js 的 MENU_ICONS 取值一致：`box` 按勾选态映射到
+      // boxOn / boxOff（开关行的图标位就是勾选框本身）。
+      var ICONS = {
+        win: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.2"/><path d="M3 9.2h18"/></svg>',
+        folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 7.4A2.2 2.2 0 0 1 5.4 5.2h3.5l2.1 2.2h7.6a2.2 2.2 0 0 1 2.2 2.2v7a2.2 2.2 0 0 1-2.2 2.2H5.4a2.2 2.2 0 0 1-2.2-2.2z"/></svg>',
+        file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.2H7.4a2.2 2.2 0 0 0-2.2 2.2v13.2a2.2 2.2 0 0 0 2.2 2.2h9.2a2.2 2.2 0 0 0 2.2-2.2V8z"/><path d="M14 3.2V8h4.8"/><path d="M8.8 13h6.4M8.8 16.6h4.2"/></svg>',
+        copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11.5" height="11.5" rx="2.2"/><path d="M15 5.6A2.2 2.2 0 0 0 12.8 3.4H5.6A2.2 2.2 0 0 0 3.4 5.6v7.2A2.2 2.2 0 0 0 5.6 15"/></svg>',
+        refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.4 12a8.4 8.4 0 1 1-2.5-6"/><path d="M20.4 3.6v5.2h-5.2"/></svg>',
+        power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4v8.2"/><path d="M6.6 6.9a8 8 0 1 0 10.8 0"/></svg>',
+        boxOn: '<svg viewBox="0 0 24 24" fill="none"><rect x="2.2" y="2.2" width="19.6" height="19.6" rx="5" fill="currentColor"/><path d="M6.9 12.3l3.4 3.4 6.8-6.9" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        boxOff: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4.4" stroke="currentColor" stroke-width="1.7" opacity=".55"/></svg>'
+      };
+
       var api = window.trayMenu;
       var menu = document.getElementById("menu");
       // 模型里的项（分隔线不在键盘导航里）与当前高亮的下标。
       var items = [];
+      // -1 = 打开时**没有**任何高亮：原生菜单那种"首项自带灰底"看起来像已经选中了它。
       var activeIndex = -1;
 
       function clearChildren() {
@@ -112,7 +160,9 @@
 
       function move(step) {
         if (items.length === 0) return;
-        var index = activeIndex;
+        // 起点 -1（无高亮）时的取模：向下要落到第 0 项，向上要落到最后一项。
+        // 直接拿 -1 代入 `-1 + step` 会让 ↑ 落到倒数第二项，所以先归零再走一步。
+        var index = activeIndex < 0 ? (step > 0 ? -1 : 0) : activeIndex;
         for (var guard = 0; guard < items.length; guard += 1) {
           index = (index + step + items.length) % items.length;
           if (!items[index].disabled) {
@@ -128,6 +178,15 @@
         if (item.disabled) return;
         // 主进程先 hide() 再执行动作（见 lib/tray-menu-window.js）。
         api.choose(item.id);
+      }
+
+      // 图标位：**永远**建出来（取不到图标就留空），否则那一行文字会被 gap 推歪。
+      function iconNode(name, on) {
+        var span = document.createElement("span");
+        span.className = "ic" + (on ? " on" : "");
+        var svg = ICONS[name];
+        if (svg) span.innerHTML = svg;
+        return span;
       }
 
       function render(payload) {
@@ -147,20 +206,21 @@
             continue;
           }
           var node = document.createElement("div");
+          var isToggle = typeof entry.checked === "boolean";
           node.id = "tray-item-" + entry.id;
           node.className = "item" + (entry.danger ? " danger" : "") + (entry.disabled ? " disabled" : "");
           node.setAttribute("role", "menuitem");
           node.setAttribute("tabindex", "-1");
           // aria-checked 只在可勾选项上出现：读屏据此报"已勾选/未勾选"。
-          if (typeof entry.checked === "boolean") {
+          if (isToggle) {
             node.setAttribute("aria-checked", entry.checked ? "true" : "false");
           }
           if (entry.disabled) node.setAttribute("aria-disabled", "true");
-          if (entry.checked) {
-            var check = document.createElement("span");
-            check.className = "check";
-            check.textContent = "✓";
-            node.appendChild(check);
+          // 开关行的图标位就是勾选框（box → boxOn / boxOff），勾选态用主色填充。
+          if (isToggle) {
+            node.appendChild(iconNode(entry.checked ? "boxOn" : "boxOff", entry.checked));
+          } else {
+            node.appendChild(iconNode(entry.icon, false));
           }
           var label = document.createElement("span");
           label.className = "label";
@@ -169,17 +229,26 @@
           menu.appendChild(node);
           items.push({ id: entry.id, node: node, disabled: Boolean(entry.disabled) });
         }
-        // 首项默认高亮（原生菜单同款），键盘可直接上下移动。
-        if (items.length > 0) setActive(0);
+        // 首项**不再**预高亮：鼠标移入或按方向键才出现高亮条。
+      }
+
+      // 从事件目标往上找菜单项。
+      // ⚠️ 必须用 classList 而不是 `target.className.indexOf("item")`：行里现在有图标，
+      // 点在图标上时 target 是 SVG 元素或 <path>，它们的 `className` 是
+      // SVGAnimatedString（没有 indexOf），旧写法会直接抛 TypeError，点击静默失效。
+      function itemNodeFrom(event) {
+        var target = event.target;
+        while (target && target !== menu) {
+          if (target.classList && target.classList.contains("item")) return target;
+          target = target.parentNode;
+        }
+        return null;
       }
 
       // hover 跟随高亮：鼠标移到哪一项，高亮就跟到哪一项。
       menu.addEventListener("mousemove", function (event) {
-        var target = event.target;
-        while (target && target !== menu && target.className.indexOf("item") < 0) {
-          target = target.parentNode;
-        }
-        if (!target || target === menu) return;
+        var target = itemNodeFrom(event);
+        if (!target) return;
         for (var i = 0; i < items.length; i += 1) {
           if (items[i].node === target) {
             if (!items[i].disabled) setActive(i);
@@ -189,11 +258,8 @@
       });
 
       menu.addEventListener("click", function (event) {
-        var target = event.target;
-        while (target && target !== menu && target.className.indexOf("item") < 0) {
-          target = target.parentNode;
-        }
-        if (!target || target === menu) return;
+        var target = itemNodeFrom(event);
+        if (!target) return;
         for (var i = 0; i < items.length; i += 1) {
           if (items[i].node === target) {
             activate(i);
@@ -210,7 +276,8 @@
         }
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          activate(activeIndex);
+          // 还没有高亮时回车 = 什么都不做（不猜用户要点哪一项）。
+          if (activeIndex >= 0) activate(activeIndex);
           return;
         }
         if (event.key === "ArrowDown") {
@@ -227,6 +294,14 @@
       // 失焦即关（点外部 / 切到别的应用）；主进程侧还有一道 blur 兜底。
       window.addEventListener("blur", function () {
         api.close();
+      });
+
+      // 点卡片之外的那一圈 18px 出血区也算"点外面"。
+      // 为什么需要它：窗口尺寸 = 卡片 + 2×18（给投影留位置），所以那圈现在落在**窗口内**，
+      // 点它不会触发 blur —— 旧实现里窗口就等于卡片，点到外面天然失焦。不补这条，
+      // 菜单会在"看起来点在菜单外面"之后继续留在屏幕上。
+      document.getElementById("surface").addEventListener("mousedown", function (event) {
+        if (event.target === event.currentTarget) api.close();
       });
 
       api.onModel(function (payload) {

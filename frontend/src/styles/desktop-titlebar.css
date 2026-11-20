@@ -4,13 +4,16 @@
  *
  * 三个必须一起改的值：
  *  - 高度 32px：主进程 titleBarOverlay 的高度与这里必须同值（desktop/lib/titlebar.js）；
- *  - 底色：主进程覆盖层颜色与这里的 --rf-titlebar-bg 逐值一致，否则系统按钮下方
- *    会出现一条色块（深色主题尤其明显）；
  *  - 拖拽区：只有 .app-titlebar-drag 可拖；菜单容器 / 下拉 / 提示必须 no-drag，
  *    漏一个整条标题栏点不动，且极难排查。
  *
- * 颜色只走本文件内定义的 --rf-* 变量（colorGuard 允许 token 定义行）；深浅两套值
- * 与主进程 TITLEBAR_THEME 对应（浅 #f5f7fa / #e8edf4 / #e6eaf0；深 #151b23 / #232b36）。
+ * **本文件的 --rf-titlebar-bg / --rf-titlebar-symbol 是覆盖层颜色的唯一真源**
+ * （2026-11-20 第 3 条）。渲染层读它们的计算值随主题一起推给主进程
+ * （features/theme/titlebarOverlay.ts → desktop:set-theme），主进程不再按主题名猜色；
+ * `desktop/lib/titlebar.js` 的 TITLEBAR_THEME 只剩"渲染层上报之前"的默认值。
+ * 改这里的色值不再需要同步改主进程——这正是这条改造要消灭的双真源。
+ *
+ * 颜色只走本文件内定义的 --rf-* 变量（colorGuard 允许 token 定义行）。
  */
 
 :root {
@@ -19,6 +22,9 @@
   --rf-titlebar-border: #e6eaf0;
   --rf-titlebar-hover: #e8edf4;
   --rf-titlebar-text: #3d4a5c;
+  /* 系统绘制的三颗按钮的图标/悬停色（titleBarOverlay.symbolColor）。浅色主题原来只在
+     主进程常量里，这里补上之后 CSS 才是唯一真源；取值沿用原常量，观感不变。 */
+  --rf-titlebar-symbol: #3d4a5c;
 }
 
 [data-theme="dark"] {
@@ -26,6 +32,7 @@
   --rf-titlebar-border: #232b36;
   --rf-titlebar-hover: #232b36;
   --rf-titlebar-text: #cfd8e3;
+  --rf-titlebar-symbol: #c9d4e0;
 }
 
 /*
@@ -128,11 +135,28 @@ html:has(.app-titlebar:not([data-hidden="true"])) .ant-drawer-content-wrapper {
  * 必须用 `border-top` 而不是 `inset box-shadow`：内阴影绘制在内容之下，
  * `.ant-drawer-header` 的白底会把它盖掉。也必须显式 `border-box`：
  * 上面那条 `height: calc(100% - ...)` 是 content-box，加边框会多出 1px 溢出。
+ *
+ * **2026-11-20（第 2 条）同块补 `box-shadow: none`**：遮罩被整体下移之后，标题栏本身
+ * 不再被压暗，但抽屉的投影画在元素盒之外、不受 `top` 约束（antd `boxShadowDrawerRight`
+ * 最外一层 `-9px 0 28px 8px`，向上溢出 22px，正好落进 32px 高的标题栏）。于是同一块
+ * 标题栏被切成两半：投影能压暗左边，压不到 Windows 画的按钮区，相差 5% 就是一道硬边。
+ *
+ * ⚠️ **前提：所有 Drawer 都带遮罩**（全仓库无 `mask={false}`）。无遮罩抽屉原本靠投影
+ * 与内容分开，去掉之后边缘会失去分界；将来真出现无遮罩抽屉，要么给它加回 border，
+ * 要么在这条规则里排除它。
+ *
+ * 不用 `overflow: hidden` / `clip-path` 裁投影：`.ant-drawer` 是 `position: fixed;
+ * inset: 0`，加裁剪会建立新的包含块，可能连带改变 fixed 子元素的定位基准。
+ * 四个方向（左/右/上/下）都由这一条覆盖——antd 的投影按 placement 分别命名，
+ * 但都落在 `.ant-drawer-content-wrapper` 上。
  */
 html:has(.app-titlebar:not([data-hidden="true"])) .ant-drawer-content-wrapper,
 html:has(.app-titlebar:not([data-hidden="true"])) .resume-zoom-workbench-wrap {
   box-sizing: border-box;
   border-top: 1px solid var(--rf-titlebar-border);
+  /* 制作台整屏弹窗本来就无投影（workbench-shell.css:16 给 .ant-modal-container 设了 none），
+     这条对它没有可见影响；写在一起是为了不再新起一条同选择器的规则。 */
+  box-shadow: none;
 }
 
 /* 制作台：wrap 上挂的是**行内** `inset:0`（`WorkbenchModalFrame` 的 styles.wrapper），

@@ -120,6 +120,8 @@ vi.mock("../../utils/taskNotify", () => ({ registerTaskNavigate: vi.fn() }));
 vi.mock("../../utils/userGuide", () => ({
   consumeFirstVisitGuide: () => false,
   setUserGuideVisible: vi.fn(),
+  acquireStartupSlot: () => Promise.resolve(),
+  releaseStartupSlot: vi.fn(),
 }));
 
 /** jsdom 没有 requestIdleCallback 时 AppShell 走 200ms 的 setTimeout 回退；显式钉死这条路径。 */

@@ -24,14 +24,13 @@ import HistoryPanel from "../versions/HistoryPanel";
 import StructureTab from "../outline/StructureTab";
 import ChipStylePopover, { type ChipStylePopoverState } from "./ChipStylePopover";
 import WorkbenchParamsTab from "./WorkbenchParamsTab";
-import PhotoTab from "./PhotoTab";
 import { usePaginationReport } from "../pagination/usePaginationReport";
 import { usePaginationReportMarkers } from "../pagination/paginationPageMarkers";
 import { setPaginationReportRefresh } from "../pagination/paginationRefreshStore";
 import type { WorkbenchHistoryTab } from "./useWorkbenchV2History";
 import "./workbench-v2.css";
 
-type LeftTab = "params" | "structure" | "photo" | "bilingual" | "assets" | "sources" | "history";
+type LeftTab = "params" | "structure" | "bilingual" | "assets" | "sources" | "history";
 
 /** I-16: allowed causes for switching the left tab; `params-commit` is a dev-only sentinel. */
 export type TabChangeSource = "tab-strip" | "pagination-chip" | "params-commit";
@@ -200,8 +199,7 @@ export default function WorkbenchParamsColumnV2({
     if (assetsPanel) items.push({ value: "assets", label: t("assets.panel.title") });
     if (sourcesPanel) items.push({ value: "sources", label: t("provenance.panel.title") });
     if (history) items.push({ value: "history", label: t("workbench.history.title") });
-    // T02：照片页签**常驻**（不按"有没有照片"出现——没照片的人正是要进来上传的）。
-    items.push({ value: "photo", label: t("resume.photo.tab") });
+    // 5.1：照片页签并入「排版参数」的第四个分组（`workbench.group.photo`），不再单列页签。
     return items;
   }, [assetsPanel, bilingualPanel, history, sourcesPanel]);
   return (
@@ -262,6 +260,8 @@ export default function WorkbenchParamsColumnV2({
       ) : tab === "structure" ? (
         <StructureTab
           document={document}
+          // 6：锚点依赖同时看 layout（列数/对齐等改的是 layout，document 引用不变）。
+          layout={layout}
           onChange={onDocumentChange}
           selectedPath={selectedPath}
           onSelectPath={onSelectPath}
@@ -282,18 +282,6 @@ export default function WorkbenchParamsColumnV2({
           resumeId={resumeId}
           revision={revision}
         />
-      ) : tab === "photo" ? (
-        <div className="resume-wb-v2-panel">
-          {/* 照片页签自己算 `documentHasPhoto(document)`，不用宿主传的"已保存详情"口径。 */}
-          <PhotoTab
-            document={document}
-            layout={layout}
-            disabled={!editorEnabled}
-            onDocumentChange={onDocumentChange}
-            onLayoutChange={onChange}
-            onNotice={onNotify}
-          />
-        </div>
       ) : tab === "bilingual" && bilingualPanel ? (
         <div className="resume-wb-v2-panel">{bilingualPanel}</div>
       ) : tab === "assets" && assetsPanel ? (

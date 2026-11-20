@@ -47,6 +47,11 @@ import { useDesktopMenuExport } from "./useDesktopMenuExport";
 import { useDesktopMenuShortcuts } from "./useDesktopMenuShortcuts";
 import { useDesktopWindowState } from "./useDesktopWindowState";
 import { useResolvedTheme } from "../theme/themeStore";
+import {
+  publishTitlebarOverlay,
+  readTitlebarOverlayColors,
+  setTitlebarOverlaySink,
+} from "../theme/titlebarOverlay";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import "../../styles/desktop-titlebar.css";
@@ -116,10 +121,19 @@ function DesktopTitleBarInner({ bridge }: { bridge: DesktopShellBridge }) {
     ? (DESKTOP_MENUS.find((menu) => menu.id === openMenuId) ?? null)
     : null;
 
-  // 主题同步：标题栏覆盖层由主进程绘制，深浅色切换必须显式告诉它。
+  // 主题同步（2026-11-20 第 3 条）：覆盖层是 Windows 画在页面之上的独立层，颜色必须
+  // 由渲染层按**页面 CSS 的计算值**报给主进程——CSS 是唯一真源，主进程不再按主题名猜色。
+  // 上报出口在这里注册（浏览器版没有桥，整条链路自动退化为 no-op）。
   useEffect(() => {
-    bridge.setTheme?.(resolvedTheme);
-  }, [bridge, resolvedTheme]);
+    setTitlebarOverlaySink((payload) => bridge.setTheme?.(payload));
+    return () => setTitlebarOverlaySink(null);
+  }, [bridge]);
+
+  // 每次主题变化推一次实色。过渡进行中（圆形揭示）这条会被插值器接管并丢弃——
+  // 否则就会在第 0 帧把覆盖层切成新色，正是第 4 条要修的那个"闪"。
+  useEffect(() => {
+    publishTitlebarOverlay({ theme: resolvedTheme, ...readTitlebarOverlayColors() });
+  }, [resolvedTheme]);
 
   // #34A / #34F：**菜单打开前**重新读一次窗口实态。勾选态与置灰态必须来自窗口，
   // 不能沿用上一次打开菜单时的记忆（上一次动作失败或窗口被系统改过时会反过来）。

@@ -15,6 +15,7 @@ import { useLocale } from "../../../i18n/i18nContext";
 import type { ResumeLayout } from "../../../types";
 import type { ResumeDocument } from "../../../types/resumeDocument";
 import { useResumeLivePreview } from "../useResumeLivePreview";
+import { buildPhotoLiveCss } from "../preview/photoLiveCss";
 import type { ExactPreviewOptions, ResumePreviewHandle } from "../preview/ResumePreview";
 import type { PreviewMode } from "../preview/config";
 import ResumeWorkbenchCanvas from "./ResumeWorkbenchCanvas";
@@ -79,6 +80,18 @@ export default function ResumeWorkbenchV2Canvas({
 }: ResumeWorkbenchV2CanvasProps) {
   useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
+  /**
+   * 5.4：照片五项参数的实时 CSS（由**未保存**的 `history.layout` 现算）。
+   *
+   * 左栏与右栏没有共同 props 链（见 `ResumeWorkbenchCanvas` 头注释与 `workbenchLayoutStore`
+   * 的注释），所以这条通道在画布宿主这一层生成：`layout` 本来就是"当前这一版版式"，
+   * 滑块一动它就变。透传到 `ResumePreviewCanvas` 后注入 iframe，**不等** 600ms 重排。
+   * 空串 = 没有照片参数，注入层不写一个字符。
+   */
+  const photoLiveCss = useMemo(
+    () => buildPhotoLiveCss(layout?.format_config),
+    [layout?.format_config],
+  );
   // 容器节点交给宿主（结构面板高亮注入要它）；未挂载时回调 null，避免持有旧 DOM。
   useEffect(() => {
     onContainerReady?.(scrollRef.current);
@@ -185,6 +198,7 @@ export default function ResumeWorkbenchV2Canvas({
       onPickField={onPickField}
       scrollRef={scrollRef}
       status={status}
+      photoLiveCss={photoLiveCss}
     />
   );
 }

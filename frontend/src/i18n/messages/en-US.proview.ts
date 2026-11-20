@@ -82,7 +82,8 @@ const proview = {
   "proview.workspace.persistHint": "Your choice will be remembered next time",
   "proview.photo.button": "Crop photo",
   "proview.photo.title": "Crop photo",
-  "proview.photo.hint": "The original photo is preserved and can be restored at any time",
+  "proview.photo.hint":
+    "The original photo is preserved and can be restored at any time. With “Free”, drag any edge or corner; hold Ctrl to keep the ratio.",
   "proview.photo.frameHint":
     "The frame is about {frame}; {aspect} is the closest fit. If the photo has its own white border, zoom the crop out to the subject's edge.",
   "proview.photo.aspect": "Aspect ratio lock",
@@ -90,7 +91,7 @@ const proview = {
   "proview.photo.aspect.square": "1:1",
   "proview.photo.aspect.portrait": "3:4",
   "proview.photo.aspect.landscape": "4:5",
-  "proview.photo.aspect.custom": "Free",
+  "proview.photo.aspect.free": "Free",
   "proview.photo.zoom": "Crop size",
   "proview.photo.zoomAria": "Crop size, drag to adjust the visible area",
   "proview.photo.offsetX": "Horizontal position",

@@ -29,9 +29,14 @@ const HTML = "<!doctype html><html><body><p>hi</p></body></html>";
 interface CanvasOverrides {
   totalVisualPages?: number;
   pageLimit?: number;
+  photoLiveCss?: string;
 }
 
-function canvasElement({ totalVisualPages = 1, pageLimit = 1 }: CanvasOverrides = {}) {
+function canvasElement({
+  totalVisualPages = 1,
+  pageLimit = 1,
+  photoLiveCss,
+}: CanvasOverrides = {}) {
   return (
     <ResumePreviewCanvas
       isPanning={false}
@@ -45,6 +50,7 @@ function canvasElement({ totalVisualPages = 1, pageLimit = 1 }: CanvasOverrides 
       containerRef={createRef<HTMLDivElement>()}
       iframeRef={createRef<HTMLIFrameElement>()}
       onIframeLoad={vi.fn()}
+      photoLiveCss={photoLiveCss}
     />
   );
 }
@@ -103,6 +109,34 @@ describe("草稿纸跟随主题（问题 19）", () => {
     expect(frame.classList.contains("is-dark-paper")).toBe(false);
     expect(frame.contentDocument?.documentElement.classList.contains("rf-paper-dark")).toBe(false);
     expect(frame.contentDocument?.querySelectorAll("#rf-paper-dark-style")).toHaveLength(1);
+  });
+});
+
+/**
+ * 5.4：照片参数不等 600ms 重排，注入 iframe 内部的 `<style id="rf-photo-live">`。
+ * 服务端 HTML 回来（onLoad）时必须再写一遍，否则会闪回旧值。
+ */
+describe("草稿照片实时样式（5.4）", () => {
+  it("onLoad 后写入 rf-photo-live；换 CSS 只改文本、不重载 iframe", () => {
+    const view = render(canvasElement({ photoLiveCss: ".profile-photo { border: 0 }" }));
+    const frame = firstFrame(view.container);
+    fireEvent.load(frame);
+    expect(frame.contentDocument?.getElementById("rf-photo-live")?.textContent).toBe(
+      ".profile-photo { border: 0 }",
+    );
+
+    const next = ":root { --photo-scale: 1.14; }";
+    view.rerender(canvasElement({ photoLiveCss: next }));
+    expect(firstFrame(view.container)).toBe(frame);
+    expect(frame.contentDocument?.getElementById("rf-photo-live")?.textContent).toBe(next);
+    expect(frame.contentDocument?.querySelectorAll("#rf-photo-live")).toHaveLength(1);
+  });
+
+  it("没有照片参数时不注入节点", () => {
+    const view = render(canvasElement());
+    const frame = firstFrame(view.container);
+    fireEvent.load(frame);
+    expect(frame.contentDocument?.getElementById("rf-photo-live")).toBeNull();
   });
 });
 
