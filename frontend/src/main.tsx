@@ -35,8 +35,16 @@ async function start() {
   // **必须是 data router**：资料页的未保存离开守卫用 `useBlocker`，声明式
   // `<BrowserRouter>` 下会抛 "useBlocker must be used within a data router" 并落到
   // 错误页。根路由表来自 appRoutes.tsx，与测试里的 `<Routes>` 共用同一份。
+  //
+  // `basename` 只在「子路径部署」时才有值：官网的在线体验站嵌在
+  // `/ResumeForge-official/demo-app/`（镜像站是 `/resumeforge/demo-app/`）下，入口页
+  // 会在解析阶段把本站目录写进 `window.__RF_BASE__`。不给 basename 的话，router 首次
+  // 规范化会把地址改写成 `/`——地址栏变成站点根、刷新直接离开演示站，favicon 之类的
+  // 绝对路径也会跟着指到域根。桌面端没有这个全局，行为与以前完全一致。
+  const runtimeBase = (window as Window & { __RF_BASE__?: string }).__RF_BASE__;
   const router = createBrowserRouter(
     createRoutesFromElements(<Route element={<RootLayout />}>{APP_ROOT_ROUTE}</Route>),
+    runtimeBase ? { basename: runtimeBase } : undefined,
   );
 
   ReactDOM.createRoot(document.getElementById("root")!).render(
