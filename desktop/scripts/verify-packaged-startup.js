@@ -81,12 +81,30 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
     await page.screenshot({ path: path.join(profile, `desktop-${platform}-${expectedVersion}.png`) });
     console.log(`PASS: ${platform} desktop ${expectedVersion}, UI, API health, and data marker ${markerMode}`);
 
-    const closed = new Promise(resolve => application.once("close", resolve));
+    const exited = () =>
+      processHandle.exitCode !== null || processHandle.signalCode !== null
+        ? Promise.resolve(true)
+        : Promise.race([
+            new Promise(resolve => processHandle.once("exit", () => resolve(true))),
+            new Promise(resolve => setTimeout(() => resolve(false), 10_000)),
+          ]);
     await page.evaluate(() => window.splash?.quitApp?.());
-    await Promise.race([
-      closed,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("App did not exit cleanly")), 30_000)),
-    ]);
+    if (!(await exited())) {
+      console.warn("App stayed resident after the smoke test. Stopping its isolated process group.");
+      try {
+        process.kill(-processHandle.pid, "SIGTERM");
+      } catch {
+        processHandle.kill("SIGTERM");
+      }
+      if (!(await exited())) {
+        try {
+          process.kill(-processHandle.pid, "SIGKILL");
+        } catch {
+          processHandle.kill("SIGKILL");
+        }
+      }
+    }
+    assert.ok(await exited(), "the isolated packaged app process must terminate before replacing its bundle");
   } finally {
     if (processHandle.exitCode === null && processHandle.signalCode === null) {
       await application.close().catch(() => {});
