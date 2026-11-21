@@ -102,7 +102,7 @@ const LINK_STYLE: CSSProperties = { wordBreak: "break-word" };
    这样 `[x](javascript:alert(1))` 能被完整识别出来、交给白名单判掉，而不是靠
    "正则没匹配上"侥幸不变链接。 */
 const INLINE_PATTERN =
-  /(\*\*[\s\S]+?\*\*)|(`[^`]+`)|\[([^[\]]*)\]\(([^()\s]*(?:\([^()\s]*\)[^()\s]*)*)\)/g;
+  /(\*\*(?:`[^`]*`|[^`]|`(?=[^`]*$))+?\*\*)|(`[^`]+`)|\[([^[\]]*)\]\(([^()\s]*(?:\([^()\s]*\)[^()\s]*)*)\)/g;
 
 /** 协议白名单：只有绝对 http/https 地址才变成链接。 */
 const SAFE_HREF = /^https?:\/\//i;
@@ -138,11 +138,11 @@ function renderLink(label: string, url: string, key: number): ReactNode {
   // 「完整步骤见 docs/upgrading.md。」——用户不会再看到裸露的方括号与圆括号，
   // 而 `javascript:` 这类地址连字符串都不会出现在页面上。
   if (!SAFE_HREF.test(target) || /\s/.test(target)) {
-    return label;
+    return renderInline(label);
   }
   return (
     <a key={key} href={target} target="_blank" rel="noopener noreferrer" style={LINK_STYLE}>
-      {label}
+      {renderInline(label)}
     </a>
   );
 }
@@ -150,16 +150,13 @@ function renderLink(label: string, url: string, key: number): ReactNode {
 /** 把一段文字里的 `**强调**` / `` `代码` `` / `[文字](地址)` 渲染成对应元素。 */
 function renderInline(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  // 模块级正则带 `g`，靠 lastIndex 迭代；每次进来先归零，否则第二次调用会从中间开始。
-  INLINE_PATTERN.lastIndex = 0;
+  // matchAll gives each nested label or strong span an independent cursor.
   let cursor = 0;
   let index = 0;
-  let match = INLINE_PATTERN.exec(text);
-  while (match !== null) {
+  for (const match of text.matchAll(INLINE_PATTERN)) {
     if (match.index > cursor) nodes.push(text.slice(cursor, match.index));
     if (match[1] !== undefined) {
-      // 第 1 组是 `**…**`：去壳后当 strong 的文本。
-      nodes.push(<strong key={index}>{match[1].slice(2, -2)}</strong>);
+      nodes.push(<strong key={index}>{renderInline(match[1].slice(2, -2))}</strong>);
     } else if (match[2] !== undefined) {
       nodes.push(
         <code key={index} style={CODE_STYLE}>
@@ -171,7 +168,6 @@ function renderInline(text: string): ReactNode[] {
     }
     cursor = match.index + match[0].length;
     index += 1;
-    match = INLINE_PATTERN.exec(text);
   }
   if (cursor < text.length) nodes.push(text.slice(cursor));
   return nodes;

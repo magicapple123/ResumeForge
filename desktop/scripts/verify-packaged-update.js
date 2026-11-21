@@ -90,6 +90,14 @@ async function drive(executablePath, candidate, work, notesFile) {
       if (locale.startsWith("zh")) assert.match(text, /\p{Script=Han}/u);
       else assert.match(text, /[A-Za-z]{3}/);
       await offer.screenshot({path: path.join(work, "notice-" + locale + ".png")});
+      const unrendered = await notes.locator("strong").evaluateAll(bold => bold.some(element =>
+        Array.from(element.childNodes).some(node => node.nodeType === Node.TEXT_NODE && /`[^`]+`/.test(node.textContent))));
+      assert.equal(unrendered, false, "nested inline code in the release must be rendered");
+      const nested = notes.locator("strong code").first();
+      if (await nested.count()) {
+        await nested.scrollIntoViewIfNeeded();
+        await offer.screenshot({path: path.join(work, "nested-" + locale + ".png")});
+      }
       return {locale, text};
     };
     const first = await readNotes();

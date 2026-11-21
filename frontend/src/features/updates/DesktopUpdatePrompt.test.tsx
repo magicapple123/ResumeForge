@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { selectReleaseNotes } from "../settings/updateCardHelpers";
+import { renderReleaseNotes } from "../settings/updateNotesRenderer";
 import UpdateCard from "../settings/UpdateCard";
 import StartupUpdatePrompt from "./StartupUpdatePrompt";
 import { selectLocale } from "../../i18n/localeStore";
@@ -15,6 +16,26 @@ const chinese = "## 修复\n\n- 改进了 **Windows** 更新";
 const body = english + "\n\n<details>\n<summary>中文版</summary>\n\n" + chinese + "\n</details>";
 
 describe("published bilingual Markdown", () => {
+  it("renders inline code and links inside bold release text without consuming the next token", () => {
+    const markdown =
+      "**`update_check` / `update_download` 作为进程第一个 import 时失败（2.2.2 引入）。** " +
+      "**Read the [`guide`](https://example.org/guide) and `x**y`**. " +
+      "[**`appendix`**](https://example.org/appendix) [`plain`](data:text/plain,hidden) `**literal**`";
+    const { container } = render(<>{renderReleaseNotes(markdown)}</>);
+    const bold = container.querySelectorAll("strong");
+    expect(Array.from(bold[0].querySelectorAll("code"), (node) => node.textContent)).toEqual([
+      "update_check",
+      "update_download",
+    ]);
+    expect(bold[1].querySelector("a > code")?.textContent).toBe("guide");
+    expect(bold[1].textContent).toContain("x**y");
+    expect(container.querySelector("a > strong > code")?.textContent).toBe("appendix");
+    expect(container.querySelectorAll("a")).toHaveLength(2);
+    expect(container).not.toHaveTextContent("data:text");
+    expect(Array.from(container.querySelectorAll("code"), (node) => node.textContent)).toContain(
+      "**literal**",
+    );
+  });
   it("selects the interface language before rendering headings and lists", () => {
     expect(selectReleaseNotes(body, "zh-CN")).toBe(chinese);
     expect(selectReleaseNotes(body, "en-US")).toBe(english);
