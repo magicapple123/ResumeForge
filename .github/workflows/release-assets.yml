@@ -391,13 +391,16 @@ jobs:
       contents: read
     uses: ./.github/workflows/windows-upgrade.yml
     with:
+      # A dry run against an already-published tag cannot update from itself.
+      # Exercise the same installer handoff with a disposable next-patch package.
+      mode: ${{ inputs.dry_run && 'rehearsal' || 'candidate' }}
       candidate_tag: ${{ needs.windows-installer.outputs.candidate_tag }}
       include_release_notes: ${{ !inputs.dry_run }}
 
   windows-publish:
     name: Attach verified Windows installer
     if: ${{ !inputs.dry_run }}
-    needs: windows-upgrade
+    needs: [windows-upgrade, macos-package-upgrade, linux-package-upgrade]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -423,6 +426,8 @@ jobs:
     needs: target
     runs-on: macos-latest
     timeout-minutes: 60
+    outputs:
+      candidate_tag: ${{ steps.candidate.outputs.tag }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -481,6 +486,21 @@ jobs:
         # 必须写清右键→打开 / xattr -dr com.apple.quarantine（docs/mac-build-handoff.md）。
         run: bash scripts/build-desktop-mac.sh --arch both
 
+      - name: Verify installer tag and export package version
+        id: candidate
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./desktop/package.json').version")"
+          candidate_tag="v$version"
+          if [ "$DRY_RUN" != "true" ] && [ "$candidate_tag" != "$RELEASE_TAG" ]; then
+            echo "::error::Built macOS package $candidate_tag differs from release $RELEASE_TAG."
+            exit 1
+          fi
+          echo "tag=$candidate_tag" >> "$GITHUB_OUTPUT"
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -491,16 +511,37 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-      - name: Attach dmgs to the release
-        if: ${{ !inputs.dry_run }}
+  macos-package-upgrade:
+    needs: macos-installer
+    permissions:
+      contents: read
+    uses: ./.github/workflows/desktop-package-upgrade.yml
+    with:
+      mode: candidate
+      platform: macos
+      candidate_tag: ${{ needs.macos-installer.outputs.candidate_tag }}
+
+  macos-publish:
+    name: Attach verified macOS dmgs
+    if: ${{ !inputs.dry_run }}
+    needs: [macos-installer, windows-upgrade, macos-package-upgrade, linux-package-upgrade]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: macos-installers
+          path: macos-installers
+      - name: Attach verified dmgs to the release
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           gh release upload "$TAG" \
-            desktop/out/ResumeForge-*.dmg \
-            desktop/out/ResumeForge-*.dmg.sha256 \
+            macos-installers/ResumeForge-*.dmg \
+            macos-installers/ResumeForge-*.dmg.sha256 \
             --repo "$GITHUB_REPOSITORY" --clobber
 
   linux-appimage:
@@ -508,6 +549,8 @@ jobs:
     needs: target
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      candidate_tag: ${{ steps.candidate.outputs.tag }}
     # 与 Windows 作业的分工差异：Linux 产物**不签名**（AppImage 没有 Authenticode
     # 那一套，Linux 侧的信任链是发行方给的 sha256 + 包管理器），所以这里不需要
     # SignPath 那几步，也就不需要额外的 actions: read 权限——顶层 contents: write 够用。
@@ -634,6 +677,10 @@ jobs:
           done
 
       - name: Write checksum sidecars
+        id: candidate
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
         # 与 Windows/macOS 作业同款写法：`cd` 到产物目录后 sha256sum 只写文件名，
         # 这样用户在任何目录下 `sha256sum -c <file>.sha256` 都能验（写进相对路径
         # 就会因为路径前缀不同而失败）。sha256sum 的输出本来就是 LF。
@@ -647,6 +694,12 @@ jobs:
             sha256sum "$f" >"$f.sha256"
             cat "$f.sha256"
           done
+          candidate_tag="v$version"
+          if [ "$DRY_RUN" != "true" ] && [ "$candidate_tag" != "$RELEASE_TAG" ]; then
+            echo "::error::Built Linux package $candidate_tag differs from release $RELEASE_TAG."
+            exit 1
+          fi
+          echo "tag=$candidate_tag" >> "$GITHUB_OUTPUT"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -658,17 +711,36 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-      - name: Attach AppImages to the release
-        if: ${{ !inputs.dry_run }}
+
+  linux-package-upgrade:
+    needs: linux-appimage
+    permissions:
+      contents: read
+    uses: ./.github/workflows/desktop-package-upgrade.yml
+    with:
+      mode: candidate
+      platform: linux
+      candidate_tag: ${{ needs.linux-appimage.outputs.candidate_tag }}
+
+  linux-publish:
+    name: Attach verified Linux AppImages
+    if: ${{ !inputs.dry_run }}
+    needs: [linux-appimage, windows-upgrade, linux-package-upgrade, macos-package-upgrade]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-appimages
+          path: linux-appimages
+      - name: Attach verified AppImages to the release
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          gh release upload "$TAG" \
-            desktop/out/ResumeForge-*-*.AppImage \
-            desktop/out/ResumeForge-*-*.AppImage.sha256 \
-            --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber linux-appimages/ResumeForge-*-*.AppImage linux-appimages/ResumeForge-*-*.AppImage.sha256
 
   source-zips:
     name: Source zips (all / windows / macos / linux)
@@ -720,7 +792,6 @@ jobs:
           done
 
       - name: Upload archives as workflow artifacts
-        if: ${{ inputs.dry_run }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: source-zips
@@ -730,14 +801,22 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-      - name: Attach archives to the release
-        if: ${{ !inputs.dry_run }}
+  source-publish:
+    name: Attach source archives after platform package tests
+    if: ${{ !inputs.dry_run }}
+    needs: [source-zips, windows-upgrade, macos-package-upgrade, linux-package-upgrade]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: source-zips
+          path: source-zips
+      - name: Attach verified source archives
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          gh release upload "$TAG" \
-            dist/ResumeForge-*.zip \
-            dist/ResumeForge-*.zip.sha256 \
-            --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber source-zips/ResumeForge-*.zip source-zips/ResumeForge-*.zip.sha256

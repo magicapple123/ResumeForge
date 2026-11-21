@@ -26,6 +26,15 @@ gh workflow run release-assets.yml -f tag=v1.0.2 -f dry_run=false  # 正式挂�
 gh run watch
 ```
 
+跨平台安装升级演练建议使用当前正式版作为源、main 作为脚本版本：
+
+```bash
+gh workflow run release-assets.yml -f tag=v2.3.0 -f source_ref=main -f dry_run=true
+gh run watch
+```
+
+此演练的 Windows 分支会安装官方 v2.3.0，再构建临时 v2.3.1 候选包；macOS/Linux 会分别用官方 v2.2.3 升级到 v2.3.0。演练只生成 Actions artifact，不会修改公开 Release 或 Latest。
+
 ### Windows 应用内升级验证
 
 - **发版前**，正式签名并生成 SHA-256 后，GitHub Actions 分别从官方 `v2.3.0` 和最近的较早正式版实装升级。若两者相同，只跑一次。两个不同的旧版在独立的 Windows runner 上测试。只有检查全部通过，工作流才会把 Windows 安装包和校验文件挂到 Release。
@@ -36,6 +45,19 @@ gh run watch
 gh workflow run windows-upgrade.yml -f mode=rehearsal
 gh workflow run windows-upgrade.yml -f mode=public
 ```
+
+### macOS 与 Linux 安装包升级验证
+
+- 发版前，Release 资产工作流会把刚构建的 dmg / AppImage 暂存为 Actions artifact，并下载官方 v2.2.3 和最近正式版作为升级基线。macOS 在 Intel 与 Apple Silicon runner 上分别测试，Linux 在 x64 与 ARM64 runner 上分别测试。
+- 每台 runner 都挂载/启动旧安装包，通过桌面 UI 检查版本、后端健康、首页和「软件更新」设置页，写入用户数据标记，再按用户实际的安装方式替换成候选包并重新启动。检查新版本号、前端入口、后端健康和标记保留。任一平台或架构失败，Mac/Linux 安装包和 Windows 安装包都不会被挂到 Release。
+- Release 发布后，`desktop-package-upgrade` 会从公开 Releases API 与下载地址再走一遍。这样同时检查附件是否公开、名称和 SHA-256 是否正确、签名或打包文件是否能在原生 runner 上启动。若发布动作由 `GITHUB_TOKEN` 触发而没有启动 `release.published` 工作流，可手动执行：
+
+```bash
+gh workflow run desktop-package-upgrade.yml -f mode=public -f platform=all
+```
+
+- macOS 的更新是用新 dmg 替换「应用程序」中的旧 App。Linux 的更新是用新 AppImage 替换旧文件。两者当前都不提供应用内下载并安装，CI 验证的是各自现有的手动替换流程。
+- AppImage 的 ARM64 文件现在在原生 ARM64 runner 上启动。仅做交叉构建或 ELF 架构检查不算运行验证。
 
 **虚拟机仍然有用的两个场景**：① 真机启动验收（本文第四节）；② 补建早于 mac 构建脚本的历史版本（≤ v1.0.1 的 tag）。新版本优先走 CI。
 
