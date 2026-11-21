@@ -31,6 +31,7 @@ import httpx
 
 from ..config import get_settings, is_desktop_shell
 from ..schemas.update import UpdateCheckResult
+from .net_client import build_async_client
 from .update_check_assets import _AssetChoice, select_asset
 from .update_check_degrade import build_api_error, degraded_available_message
 
@@ -166,9 +167,13 @@ async def _fetch_latest_release(repo: str) -> dict:
         "Accept": "application/vnd.github+json",
         "User-Agent": _USER_AGENT,
     }
+    url = RELEASES_API.format(repo=repo)
+    # 走 net_client 的工厂，不自己建客户端：代理只由它决定（设置里的 proxy_mode → 环境
+    # 变量 → 系统代理）。此前直接 `httpx.AsyncClient(trust_env)` 只认环境变量，用户开着
+    # 系统代理、或在设置页选了代理，这条"检查更新"照样裸奔直连。
     async with (
-        httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False) as client,
-        client.stream("GET", RELEASES_API.format(repo=repo), headers=headers) as response,
+        build_async_client(url=url, timeout=_TIMEOUT, follow_redirects=False) as client,
+        client.stream("GET", url, headers=headers) as response,
     ):
         if response.status_code == 404:
             raise LookupError("仓库还没有发布任何 Release")
@@ -192,7 +197,9 @@ async def _fetch_latest_tag_via_redirect(repo: str) -> str:
     返回形如 ``v0.12.0``；拿不到就抛错，由调用方决定怎么措辞。
     """
     url = RELEASES_REDIRECT.format(repo=repo)
-    async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False) as client:
+    # 同 `_fetch_latest_release`：备用探测也要走同一条出网口径，否则「API 被拦、改走
+    # github.com」这条出路在代理环境里同样是直连。
+    async with build_async_client(url=url, timeout=_TIMEOUT, follow_redirects=False) as client:
         response = await client.get(url, headers={"User-Agent": _USER_AGENT})
     if response.status_code == 404:
         raise LookupError("仓库还没有发布任何 Release")

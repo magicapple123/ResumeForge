@@ -31,7 +31,7 @@ import os
 import threading
 import urllib.request
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
@@ -307,9 +307,16 @@ def _with_scheme(value: str) -> str:
 def _system_proxies_default() -> dict[str, str]:
     """系统代理（Windows 走注册表、macOS 走系统设置，Linux 通常为空）。"""
     try:
-        proxies = urllib.request.getproxies()
+        proxies = dict(urllib.request.getproxies())
     except Exception:  # noqa: BLE001 - 读注册表失败不该让整个请求失败
         return {}
+    # Windows 上 ``getproxies()`` = ``getproxies_environment() or getproxies_registry()``：设过
+    # ``NO_PROXY`` 的人（配过 CLI 代理的常见）会让环境那半返回非空 ``{'no': ...}``，``or``
+    # 短路、注册表永远读不到——明明开着系统代理也被判成直连。故一个可用 scheme 键都没有时
+    # 补读注册表（非 Windows 没有这个函数，默认 reader 是 dict，调用得空表）。
+    if not any(proxies.get(key) for key in ("https", "http", "all", "socks")):
+        with suppress(Exception):  # 第二来源失败就沿用上面的结果
+            proxies.update(dict(getattr(urllib.request, "getproxies_registry", dict)()))
     return {str(key): str(value) for key, value in dict(proxies).items() if value}
 
 

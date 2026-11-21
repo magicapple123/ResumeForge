@@ -11,10 +11,20 @@
 
 from __future__ import annotations
 
+import urllib.request
+
 import httpx
 import pytest
 from app.services import net_client, net_proxy
-from app.services.net_proxy import ProxyInfo, SocksProxyUnsupported
+
+# 导入时就绑定原函数：conftest 的 autouse fixture 会把**模块属性**
+# ``net_proxy._system_proxies_default`` 换成 ``lambda: {}``（模拟"这台机器没有代理"），
+# 而下面要验的正是那个函数本身。
+from app.services.net_proxy import (
+    ProxyInfo,
+    SocksProxyUnsupported,
+    _system_proxies_default,
+)
 
 # 测试全程没有真实网络：这里只解析"该走哪条路"，不建连接。
 
@@ -55,6 +65,80 @@ def test_no_proxy_hit_goes_direct():
     assert direct.source == net_proxy.SOURCE_ENV
     proxied = net_proxy.resolve_proxy(target_url="https://api.deepseek.com/v1", env=env)
     assert proxied.host_port == "127.0.0.1:6005"
+
+
+# ===== 1b. 设过 NO_PROXY 的机器仍要能读到系统/注册表代理 =====
+#
+# 用户实测（2026-11-21）：机器 ProxyEnable=1 / ProxyServer=127.0.0.1:7897，但只要环境里
+# 还有 NO_PROXY（配过 CLI 代理的人常见），后端就把这条明明开着的系统代理判成直连——
+# LLM / 搜索 / 检查更新一起裸奔。
+
+
+def test_no_proxy_does_not_hide_the_registry_proxy(monkeypatch):
+    """``getproxies()`` 只回 ``{'no': ...}`` 时，必须补读注册表。
+
+    CPython 在 Windows 上把它实现成 ``getproxies_environment() or getproxies_registry()``；
+    ``NO_PROXY`` 会被解析成非空的 ``{'no': ...}``，``or`` 于是短路，注册表那半永远不被
+    调用。这里直接钉 ``_system_proxies_default`` 本身（conftest 的 autouse fixture 把这个
+    模块属性换成了 ``lambda: {}``，所以下面用的是**导入时绑下的原函数对象**）。
+    """
+    monkeypatch.setattr(urllib.request, "getproxies", lambda: {"no": "localhost,127.*"})
+    monkeypatch.setattr(
+        urllib.request,
+        "getproxies_registry",
+        lambda: {"http": "127.0.0.1:7897", "https": "127.0.0.1:7897"},
+        raising=False,  # 非 Windows 没有这个函数，这里补一个
+    )
+
+    proxies = _system_proxies_default()
+
+    assert proxies.get("https") == "127.0.0.1:7897"
+    # `no` 键原样留着无妨：`_proxy_from_system` 只认 https/http/all/socks。
+    assert proxies.get("http") == "127.0.0.1:7897"
+
+
+def test_resolve_proxy_falls_back_to_registry_when_no_proxy_is_set(monkeypatch):
+    monkeypatch.setattr(urllib.request, "getproxies", lambda: {"no": "localhost"})
+    monkeypatch.setattr(
+        urllib.request,
+        "getproxies_registry",
+        lambda: {"https": "127.0.0.1:7897"},
+        raising=False,
+    )
+
+    proxy = net_proxy.resolve_proxy(
+        target_url="https://api.github.com/",
+        env=_env(NO_PROXY="localhost,127.*,192.168.*"),
+        system_proxies=_system_proxies_default,
+    )
+
+    assert proxy.url == "http://127.0.0.1:7897", "注册表代理必须补上（含 scheme 补全）"
+    assert not proxy.is_direct
+    # 来源随平台：Windows 是 registry，其余平台是 system。
+    assert proxy.source in (net_proxy.SOURCE_REGISTRY, net_proxy.SOURCE_SYSTEM)
+    assert proxy.var != "no_proxy_configured", "不能退化成「找不到代理」"
+
+
+def test_env_proxy_still_wins_over_the_registry_fallback(monkeypatch):
+    """补读注册表只在"一个可用 scheme 键都没有"时发生，不能抢环境变量的优先级。"""
+    monkeypatch.setattr(urllib.request, "getproxies", lambda: {"http": "10.0.0.9:3128"})
+    monkeypatch.setattr(
+        urllib.request,
+        "getproxies_registry",
+        lambda: {"https": "127.0.0.1:7897"},
+        raising=False,
+    )
+
+    proxies = _system_proxies_default()
+    proxy = net_proxy.resolve_proxy(
+        target_url="https://api.github.com/",
+        env=_env(HTTPS_PROXY="http://127.0.0.1:6007"),
+        system_proxies=lambda: proxies,
+    )
+
+    assert proxies.get("http") == "10.0.0.9:3128"
+    assert "127.0.0.1:7897" not in str(proxies), "已有可用 scheme 时不该再问注册表"
+    assert proxy.var == "HTTPS_PROXY", "环境变量仍然优先于系统代理"
 
 
 def test_settings_direct_overrides_env(monkeypatch):
