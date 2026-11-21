@@ -361,6 +361,52 @@ jobs:
           Write-Host "installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB, 1)) MB)"
           Write-Host "sha256: $sha"
 
+      - name: Verify Windows in-app upgrade with the final installer
+        shell: pwsh
+        working-directory: desktop
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPDATE_TAG: ${{ inputs.tag }}
+          UPDATE_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          $baselineDir = Join-Path $env:RUNNER_TEMP 'rf-update-baseline'
+          $candidate = @(Get-ChildItem -LiteralPath out -Filter 'ResumeForge-Setup-*.exe')
+          if ($candidate.Count -ne 1) { throw 'Expected exactly one release candidate' }
+          $targetVersion = [version](Get-Content -Raw package.json | ConvertFrom-Json).version
+          $releases = gh release list --limit 100 --json tagName,isDraft,isPrerelease
+          if ($LASTEXITCODE) { throw 'Cannot determine the previous stable release' }
+          $previous = $releases | ConvertFrom-Json | ForEach-Object { $_ } |
+            Where-Object { !$_.isDraft -and !$_.isPrerelease -and $_.tagName -match '^v?\d+\.\d+\.\d+$' -and [version]($_.tagName.TrimStart('v')) -lt $targetVersion } |
+            Sort-Object { [version]($_.tagName.TrimStart('v')) } -Descending | Select-Object -First 1
+          $baseline = $null
+          if ($previous) {
+            $tag = $previous.tagName
+            $preload = gh api -H 'Accept: application/vnd.github.raw+json' "repos/$env:GITHUB_REPOSITORY/contents/desktop/preload.js?ref=$tag"
+            if ($LASTEXITCODE) { throw "Cannot inspect the updater shipped in $tag" }
+            if ($preload -match 'desktop:get-update-state') {
+              $name = "ResumeForge-Setup-$($tag.TrimStart('v')).exe"
+              gh release download $tag --pattern $name --pattern "$name.sha256" --dir $baselineDir
+              if ($LASTEXITCODE) { throw "Missing Windows baseline for $tag" }
+              $baseline = Join-Path $baselineDir $name
+              $digest = (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ([IO.File]::ReadAllText("$baseline.sha256").TrimEnd() -cne "$digest  $name") { throw 'Previous installer checksum mismatch' }
+            }
+          }
+          $notes = $null
+          if ($env:UPDATE_DRY_RUN -ne 'true') {
+            $notes = Join-Path $env:RUNNER_TEMP 'rf-release-notes.md'
+            gh release view $env:UPDATE_TAG --json body --jq .body | Set-Content -LiteralPath $notes -Encoding utf8NoBOM
+            if ($LASTEXITCODE) { throw 'Cannot verify the release notes that users will see' }
+          }
+          $env:GH_TOKEN = $null
+          if (!$baseline) {
+            # Bootstrap the first release carrying the new updater.
+            pnpm exec electron-builder --win nsis --config electron-builder.yml "-c.directories.output=$baselineDir" "-c.extraMetadata.version=0.0.1"
+            if ($LASTEXITCODE) { throw 'Could not build the isolated baseline' }
+            $baseline = Join-Path $baselineDir 'ResumeForge-Setup-0.0.1.exe'
+          }
+          & ../scripts/tests/Test-DesktopUpdateHandoff.ps1 -BaselineInstaller $baseline -CandidateInstaller $candidate[0].FullName -ReleaseNotesFile $notes
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
