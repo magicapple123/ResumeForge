@@ -192,6 +192,14 @@ const messages = Object.freeze({
       "AppImage 运行时挂在只读的 squashfs 上，程序没法就地改自己，所以这一步只能手动做。",
     "update.error.title": "检查更新失败",
     "update.error.body": "请检查网络后重试。\n\n{reason}",
+    // 停滞（下载 45 秒零字节）单独一套文案：真实成因通常是代理只通了一半——连得上
+    // GitHub、响应头也回来了，正文一个字节都不来。让用户去"检查网络"是查不出问题的，
+    // 必须点名代理与手动下载两条出路。
+    "update.error.stalled.title": "下载没有进展",
+    "update.error.stalled.body":
+      "更新包下载了 45 秒仍然没有收到任何数据，已中止。\n\n" +
+      "如果必须通过代理访问 GitHub，请确认代理已开启并允许该应用直连；" +
+      "也可以到发布页手动下载安装包。",
     "update.button.install": "立即更新",
     "update.button.later": "暂不",
     "update.button.ok": "好",
@@ -325,6 +333,14 @@ const messages = Object.freeze({
       "place; that replacement has to be done by hand.",
     "update.error.title": "Update check failed",
     "update.error.body": "Check your network connection and try again.\n\n{reason}",
+    // Same split as the zh table: a stalled download is usually a half-working proxy
+    // (GitHub reachable, headers arrive, the body never does), so "check your network"
+    // would send the user in the wrong direction.
+    "update.error.stalled.title": "Update download stalled",
+    "update.error.stalled.body":
+      "The update download received no data for 45 seconds and was aborted.\n\n" +
+      "If GitHub is only reachable through a proxy, check that the proxy is running and " +
+      "allowed for this app; you can also download the installer manually from the release page.",
     "update.button.install": "Update now",
     "update.button.later": "Not now",
     "update.button.ok": "OK",

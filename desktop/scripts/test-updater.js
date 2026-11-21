@@ -33,10 +33,9 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { Readable } = require("stream");
-const vm = require("vm");
 const { test } = require("node:test");
-
-const REPO_DESKTOP = path.join(__dirname, "..");
+// 本文件自己那个 harness 也叫 loadUpdater（构造沙箱），这里只要"在沙箱里求值"那一步。
+const { REPO_DESKTOP, loadUpdater: runUpdaterModule } = require("./updater-sandbox");
 const RELEASES_API = "https://api.github.com/repos/magicapple123/ResumeForge/releases/latest";
 
 function flush() {
@@ -102,22 +101,20 @@ function loadUpdater({ fetchImpl, appOverrides = {}, dialogResponses = [0, 0], p
     URL,
     AbortController,
     fetch: fetchImpl,
-    require(spec) {
-      if (spec === "electron") {
-        return { app: appStub, dialog: dialogStub, shell: shellStub };
-      }
-      // 相对 require 要按 desktop/ 解析（沙箱的 require 是这份 harness 自己的）。
-      if (spec.startsWith(".")) return require(path.join(REPO_DESKTOP, spec));
-      return require(spec);
-    },
+    // require 由 scripts/updater-sandbox.js 装进来：updater.js 现在 require 了
+    // lib/update-net.js，而后者自己也 require("electron")——相对 require 交给宿主的
+    // require 会真去加载 electron 包，net/fetch 的桩就失效了（用例会去打真网络）。
     module: { exports: {} },
     __filename: path.join(REPO_DESKTOP, "updater.js"),
     __dirname: REPO_DESKTOP,
   };
 
-  const source = fs.readFileSync(path.join(REPO_DESKTOP, "updater.js"), "utf-8");
-  vm.runInNewContext(source, sandbox, { filename: "desktop/updater.js" });
-  return { exports: sandbox.module.exports, events, tmpRoot, appStub };
+  const exports = runUpdaterModule(sandbox, {
+    app: appStub,
+    dialog: dialogStub,
+    shell: shellStub,
+  });
+  return { exports, events, tmpRoot, appStub };
 }
 
 function releasePayload(tag) {

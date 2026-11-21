@@ -295,6 +295,24 @@ function createUpdateFeedback(electron, deps = {}) {
         // 对话框弹不出来也不能影响退出/重试。
       }
     },
+    /**
+     * 下载停滞（走了 45 秒一个字节都没进来）。
+     *
+     * 为什么不复用 errorBox：那句是"请检查网络后重试 + 原始错误"，而停滞的真正原因
+     * 通常是**代理只通了一半**（连得上 GitHub、拿得到响应头、正文一个字节都不来），
+     * 用户照着"检查网络"去修是修不好的——必须让他去确认代理允许这个应用直连，
+     * 或者干脆手动下载。文案见 shell-locale.js 的 update.error.stalled.*。
+     */
+    stallBox: () => {
+      try {
+        dialog.showErrorBox(
+          t(locale(), "update.error.stalled.title"),
+          t(locale(), "update.error.stalled.body"),
+        );
+      } catch {
+        // 同 errorBox：对话框失败不该冒泡到启动流程。
+      }
+    },
     // ---- 非对话框反馈 ---------------------------------------------------------
     progress,
     clearProgress: (parentWindow) => setProgress(parentWindow, -1),
