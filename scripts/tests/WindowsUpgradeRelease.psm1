@@ -1,29 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 Set-StrictMode -Version Latest
+Import-Module (Join-Path $PSScriptRoot 'DesktopPackageUpgrade.psm1') -ErrorAction Stop
 $script:FirstSupportedTag = 'v2.3.0'
 
 function Get-WindowsReleaseVersion([string]$Tag) {
-    if ($Tag -cnotmatch '^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') {
-        throw "Expected a stable version tag (vMAJOR.MINOR.PATCH), got '$Tag'"
-    }
-    return [version]$Tag.Substring(1)
+    return ConvertTo-DesktopReleaseVersion $Tag
 }
 
 function Get-WindowsUpgradeBaselines([string]$TargetTag, [string[]]$PublishedTags, [switch]$Rehearsal) {
-    $target = Get-WindowsReleaseVersion $TargetTag
-    $first = Get-WindowsReleaseVersion $script:FirstSupportedTag
-    if ($script:FirstSupportedTag -cnotin $PublishedTags) {
-        throw "Missing published upgrade baseline $script:FirstSupportedTag"
-    }
-    if ($Rehearsal) { return $script:FirstSupportedTag }
-    if ($target -le $first) { throw "Upgrade target $TargetTag must be newer than $script:FirstSupportedTag" }
-    $previous = $PublishedTags |
-        Where-Object { $_ -cmatch '^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$' } |
-        ForEach-Object { Get-WindowsReleaseVersion $_ } |
-        Where-Object { $_ -ge $first -and $_ -lt $target } |
-        Sort-Object -Descending |
-        Select-Object -First 1
-    return @($script:FirstSupportedTag, "v$previous") | Select-Object -Unique
+    return Get-DesktopUpgradeBaselines -TargetTag $TargetTag -PublishedTags $PublishedTags -FirstSupportedTag $script:FirstSupportedTag -Rehearsal:$Rehearsal
 }
 
 function Get-WindowsInstallerName([string]$Tag) {
@@ -65,8 +50,5 @@ function Get-PublicWindowsLatestRelease([string]$Repository, [string]$TargetTag)
 }
 
 function Assert-WindowsInstallerChecksum([string]$Path) {
-    $installer = Get-Item -LiteralPath $Path -ErrorAction Stop
-    $sidecar = [IO.File]::ReadAllText("$($installer.FullName).sha256").TrimEnd()
-    $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($sidecar -cne "$hash  $($installer.Name)") { throw "SHA-256 mismatch: $($installer.Name)" }
+    Assert-DesktopPackageChecksum $Path
 }

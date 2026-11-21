@@ -245,6 +245,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Syntax-check macOS and Linux package upgrade tests
+        run: bash -n scripts/tests/Test-MacOSPackageUpgrade.sh scripts/tests/Test-LinuxPackageUpgrade.sh
       # runners preinstall Node, so no setup-node is needed here -- but pnpm is
       # NOT preinstalled, and without it every step below dies on "command not found".
       - name: Set up pnpm
@@ -756,6 +758,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Syntax-check macOS and Linux package upgrade tests
+        run: bash -n scripts/tests/Test-MacOSPackageUpgrade.sh scripts/tests/Test-LinuxPackageUpgrade.sh
       - name: Set up pnpm
         # MUST run before setup-node: setup-node resolves the pnpm store by running
         # `pnpm store path`, and skips the cache silently when pnpm is absent.
@@ -1228,6 +1232,16 @@ jobs:
         # Glob form (not a bare directory): on Windows a directory argument
         # is treated as a module and fails to load.
         run: node --test "scripts/test-*.js"
+
+      - name: Verify desktop package release matrix
+        shell: pwsh
+        run: |
+          ./scripts/tests/Test-DesktopPackageUpgrade.ps1
+          if ($LASTEXITCODE) { throw 'Desktop package release contract tests failed' }
+          ./scripts/tests/Test-WindowsUpgradeRelease.ps1
+          if ($LASTEXITCODE) { throw 'Windows package release contract tests failed' }
+          node --check desktop/scripts/verify-packaged-startup.js
+          if ($LASTEXITCODE) { throw 'Packaged desktop startup verifier has invalid syntax' }
 
       - name: Print bridge electron smoke (A08 real IPC + Chromium PDF)
         working-directory: desktop
