@@ -10,6 +10,21 @@
 
 ### Changed
 
+## 2.2.3 - 2026-11-21
+
+### Added
+
+### Fixed
+
+- **浏览器/便携版的更新下载不走代理。** `update_sources.download_client` 直接构造 `httpx.AsyncClient`，只吃环境变量——设置页选了代理、或机器开着注册表代理时，这条更新下载路径照样裸奔直连（与 2.2.2 修掉的「检查更新」同源）。现在改走 `build_async_client`，签名加 `url` 让工厂据此解析代理并把回环目标强制直连；重定向的后续跳不重建客户端，每一跳仍由 `require_publish_source` 单独校验。
+- **后台检查在飞时点「立即更新」会静默无反应。** 2.2.2 引入的单飞锁不区分调用来源：后台定时检查（`manual: false`，启动 30 秒后首次、之后每 6 小时）在飞时用户点「立即更新」（`manual: true`），会并入后台那次；若结论是「已是最新」，后台按设计一声不响（`onUpToDate` 只有手动那次才给），用户看到的就是「点了没反应」——正是 2.2.2 要消灭的症状。现在手动调用遇到在飞的后台检查会等它收场再自己走一遍；其余组合照旧复用（连点两次仍不并发，后台不插队手动）。
+- **`update_check` / `update_download` 作为进程第一个 app import 时崩溃（2.2.2 引入）。** 两处写成 `from .net_client import build_async_client`，而 `net_client` 顶层就 `import net_proxy`——它在自己还没走完时被要求提供自己的符号，于是 `import app.services.update_check` 直接 `ImportError`。改为从 `net_proxy` 的 re-export 取（同一个对象）。这条在 pytest 里永远看不见（进入顺序总有别的东西先 import 过 `net_proxy`），只有把模块当进程第一个 app import 才暴露；2.2.1 的 `update_check` 不 import `net_client`，所以是改走工厂时带进来的。
+
+### Changed
+
+- **两处贴 500 行预算的文件拆开。** `desktop/updater.js` 497 → 340：下载执行层（`timeoutSignal` / `sha256File` / `makeStallError` / `downloadToFile` 与三个预算常量）搬到 `desktop/lib/update-download.js`，`updater.js` 仍从那里 re-export，调用方与两份用例入口零改动；新模块不 `require` `updater.js`（无环），出网只经 `lib/update-net` 的 `fetchAllowed`。`backend/app/services/net_proxy.py` 498 → 411：代理描述的类型层（`ProxyInfo` / `_safe_split` / `SOURCE_*` / `SOURCE_LABELS` / `NET_PATH_DIRECT`）搬到 `net_proxy_types.py`，`net_proxy` 顶部 import 并 re-export，`__all__` 的 54 个名字一个不变。同批补两条契约用例：`__all__` 每个名字必须可达、搬走的 12 个名字必须与 `net_proxy_types` 是同一个对象（不能是副本）——反证时复制一份行为等价的 `ProxyInfo`，96 条用例全绿，只有 identity 断言拦得住。
+- **`net_client` 的 transport 分支不再丢 `timeout`。** 此前注入传输层时连 `timeout` 一起丢掉，谁想「走工厂 + 自定超时」就只能回到直接构造。现在同步/异步共用 `_injected_transport_kwargs`，`timeout` 与 `headers` 一律「仅在非 `None` 时透传」——`httpx.AsyncClient(timeout=None)` 是「永不超时」，与「不传」语义完全不同。
+
 ## 2.2.2 - 2026-11-21
 
 ### Added
