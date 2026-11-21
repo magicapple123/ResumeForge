@@ -86,7 +86,14 @@ test("stopBackend reports an unknown probe as ok with a warning, not as a blocke
   assert.match(outcome.warning, /未能确认/);
 });
 
-test("stopBackend still fails closed when any retry sees an open port", async () => {
+test("stopBackend waits for a listener that drains just after its root exits", async () => {
+  const states = ["open", "closed", "closed"];
+  const outcome = await stopBackend(quietManager({ portProbeFn: (_, index) => states[index] }));
+  assert.equal(outcome.verified, true, "two refused connections after the final open confirm shutdown");
+  assert.equal(outcome.ok, true);
+});
+
+test("stopBackend still fails closed when the listener stays open", async () => {
   const outcome = await stopBackend(quietManager({ portProbeFn: () => "open" }));
   assert.equal(outcome.ok, false);
   assert.equal(outcome.verified, false);

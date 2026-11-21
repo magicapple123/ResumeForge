@@ -37,6 +37,7 @@ const PORT_STATE_UNKNOWN = "unknown";
 // ~0/250/750ms: a backend that is really gone refuses the very first connect;
 // the retries exist for a socket that is still unwinding after the kill.
 const PORT_PROBE_DELAYS_MS = [0, 250, 750];
+const LISTENER_DRAIN_DELAYS_MS = [500, 1000, 1500, 1500];
 const PORT_PROBE_TIMEOUT_MS = 1000;
 
 // Exit-confirmation cadence on the quit path (R3-B). taskkill has already been
@@ -44,18 +45,6 @@ const PORT_PROBE_TIMEOUT_MS = 1000;
 // 300ms poll made every quit wait for a tick that had nothing left to observe.
 // The first four polls run at 50ms, the long tail falls back to 300ms.
 const EXIT_CONFIRM_POLL = { intervalMs: 300, fastIntervalMs: 50, fastAttempts: 4 };
-
-// errno values that mean "nothing is listening (any more)" rather than
-// "we cannot tell". Kept as a Set so probePortOnce stays a pure lookup.
-const PORT_CLOSED_ERROR_CODES = new Set([
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "EPIPE",
-  "ETIMEDOUT",
-  "EHOSTUNREACH",
-  "ENETUNREACH",
-  "EADDRNOTAVAIL",
-]);
 
 function sleep(ms) {
   return new Promise((resolve) => {
@@ -102,7 +91,7 @@ function probePortOnce(rawUrl) {
     socket.once("error", (error) => {
       const code = error && error.code;
       finish(
-        PORT_CLOSED_ERROR_CODES.has(code) ? PORT_STATE_CLOSED : PORT_STATE_UNKNOWN,
+        code === "ECONNREFUSED" ? PORT_STATE_CLOSED : PORT_STATE_UNKNOWN,
         `error ${code || (error && error.message) || "unknown"}`,
       );
     });
@@ -131,25 +120,28 @@ async function probeBackendPort(manager, attemptFn) {
     const open = await manager.portOpenFn(manager.url);
     return { state: open ? PORT_STATE_OPEN : PORT_STATE_CLOSED, detail: "测试注入 portOpenFn" };
   }
-  let sawUnknown = false;
-  let lastDetail = "";
-  for (let attempt = 0; attempt < PORT_PROBE_DELAYS_MS.length; attempt += 1) {
-    const delay = PORT_PROBE_DELAYS_MS[attempt];
+  const delays = [...PORT_PROBE_DELAYS_MS];
+  let refused = 0;
+  let last = { state: PORT_STATE_UNKNOWN, detail: "" };
+  for (const [attempt, delay] of delays.entries()) {
     if (delay > 0) await sleep(delay);
     const attemptResult = attemptFn
       ? normalizeProbeResult(await attemptFn(manager, attempt))
       : await probePortOnce(manager.url);
-    lastDetail = `第 ${attempt + 1} 次探测 "${attemptResult.state}"${
+    const detail = `第 ${attempt + 1} 次探测 "${attemptResult.state}"${
       attemptResult.detail ? `（${attemptResult.detail}）` : ""
     }`;
-    if (attemptResult.state === PORT_STATE_OPEN) {
-      return { state: PORT_STATE_OPEN, detail: lastDetail };
+    last = { state: attemptResult.state, detail };
+    refused = last.state === PORT_STATE_CLOSED ? refused + 1 : 0;
+    // Windows can accept one more connection just after taskkill reports the
+    // root gone. Give the listener time to drain, then require two refusals.
+    if (attempt < PORT_PROBE_DELAYS_MS.length - 1 && last.state === PORT_STATE_OPEN &&
+        delays.length === PORT_PROBE_DELAYS_MS.length) {
+      delays.push(...LISTENER_DRAIN_DELAYS_MS);
     }
-    if (attemptResult.state !== PORT_STATE_CLOSED) sawUnknown = true;
+    if (attempt >= PORT_PROBE_DELAYS_MS.length - 1 && refused >= 2) return last;
   }
-  // Every attempt refused the connection -> closed. Any attempt we could not
-  // judge -> unknown (the caller warns instead of failing the quit).
-  return { state: sawUnknown ? PORT_STATE_UNKNOWN : PORT_STATE_CLOSED, detail: lastDetail };
+  return last.state === PORT_STATE_OPEN ? last : { ...last, state: PORT_STATE_UNKNOWN };
 }
 
 // What the backend's own command line looks like, mirrored from the launchers
