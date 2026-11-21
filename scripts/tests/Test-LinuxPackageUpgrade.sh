@@ -31,7 +31,9 @@ verify_checksum() {
 
 version_from_name() {
   name="$(basename "$1")"
-  if [[ "$name" =~ ^ResumeForge-([0-9]+\.[0-9]+\.[0-9]+)-$ARCH\.AppImage$ ]]; then
+  package_arch="$ARCH"
+  [ "$ARCH" = x64 ] && package_arch=x86_64
+  if [[ "$name" =~ ^ResumeForge-([0-9]+\.[0-9]+\.[0-9]+)-$package_arch\.AppImage$ ]]; then
     printf '%s' "${BASH_REMATCH[1]}"
   else
     echo "unexpected Linux package name: $name" >&2

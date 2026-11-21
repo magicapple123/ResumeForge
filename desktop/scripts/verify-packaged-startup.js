@@ -25,6 +25,7 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
     timeout: 120_000,
     env: environment,
   });
+  const processHandle = application.process();
 
   try {
     const identity = await application.evaluate(({ app }) => ({
@@ -86,7 +87,7 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
       new Promise((_, reject) => setTimeout(() => reject(new Error("App did not exit cleanly")), 30_000)),
     ]);
   } finally {
-    if (application.process().exitCode === null && application.process().signalCode === null) {
+    if (processHandle.exitCode === null && processHandle.signalCode === null) {
       await application.close().catch(() => {});
     }
   }
