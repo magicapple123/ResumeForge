@@ -7,7 +7,7 @@
 
 发布资产已可由 GitHub Actions 构建（公开仓库的 macOS runner 免费），**日常发版不再需要进入虚拟机**：
 
-1. 按常规流程 bump 版本、push、打 tag、创建 Release（`gh release create <tag> --notes-file ...`）；
+1. 按常规流程 bump 版本、push、打 tag，创建 Release 草稿（`gh release create <tag> --draft --notes-file ...`）。
 2. 在 GitHub Actions 页面手动运行 **`Release assets (desktop installers)`**：
    - `tag`：目标版本（如 `v1.0.2`，**Release 必须已存在**）；
    - `source_ref`：留空（构建源=该 tag，保证产物与发行严格对应）；
@@ -24,6 +24,17 @@
 gh workflow run release-assets.yml -f tag=v1.0.2 -f dry_run=true   # 演练
 gh workflow run release-assets.yml -f tag=v1.0.2 -f dry_run=false  # 正式挂资产
 gh run watch
+```
+
+### Windows 应用内升级验证
+
+- **发版前**，正式签名并生成 SHA-256 后，GitHub Actions 分别从官方 `v2.3.0` 和最近的较早正式版实装升级。若两者相同，只跑一次。两个不同的旧版在独立的 Windows runner 上测试。只有检查全部通过，工作流才会把 Windows 安装包和校验文件挂到 Release。
+- **发布后**，附件齐全后公开草稿并将其设为 Latest。`Windows desktop upgrade` 会通过公开的 GitHub Releases 实际下载并安装，验证原路径重启、后端版本和测试数据保留。可以在 Actions 查看失败步骤和截图。通过工作流的 `GITHUB_TOKEN` 发布时，GitHub 会抑制后续事件触发。此时用下方 `mode=public` 手动启动检查。
+- **随时演练**，`mode=rehearsal` 在独立的 GitHub runner 构建临时高版本，用官方 2.3.0 执行同一套实装验证。产物留在测试运行中。
+
+```bash
+gh workflow run windows-upgrade.yml -f mode=rehearsal
+gh workflow run windows-upgrade.yml -f mode=public
 ```
 
 **虚拟机仍然有用的两个场景**：① 真机启动验收（本文第四节）；② 补建早于 mac 构建脚本的历史版本（≤ v1.0.1 的 tag）。新版本优先走 CI。

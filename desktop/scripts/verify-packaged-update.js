@@ -2,38 +2,18 @@
 "use strict";
 
 // Run by Test-DesktopUpdateHandoff.ps1 against its freshly installed baseline.
-// Only release transport is substituted. All UI, IPC, hashing, shutdown, NSIS
-// installation and relaunch run as shipped. No test hook lives in the product.
+// Before publication the release transport serves the actual candidate bytes
+// from disk. With no candidate path the installed app uses its public feed.
 const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
 const { randomUUID } = require("node:crypto");
 const playwright = require(require.resolve("@playwright/test", { paths: [path.resolve(__dirname, "../../frontend")] }));
 
-async function drive(executablePath, candidate, work, notesFile) {
+async function serveCandidate(app, version, candidate, notesFile) {
   const name = path.basename(candidate);
-  const [, version] = /^ResumeForge-Setup-(\d+\.\d+\.\d+)\.exe$/.exec(name);
   const body = notesFile ? fs.readFileSync(notesFile, "utf8").trim() :
     "## Windows release test\n\n- Verified in app\n\n<details>\n<summary>中文版</summary>\n\n## Windows 更新验证\n\n- 应用内校验\n</details>";
-  const app = await playwright._electron.launch({ executablePath, timeout: 90000 });
-  const child = app.process();
-  try {
-    const baseline = await app.evaluate(({ app }) => ({ version: app.getVersion(), data: app.getPath("userData") }));
-    assert.notEqual(baseline.version, version, "two distinct packaged versions are required");
-    console.log(`Launched baseline ${baseline.version}; expecting ${version}`);
-    const page = await app.firstWindow();
-    await page.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\//, { timeout: 180000 });
-    await page.evaluate(() => localStorage.setItem("resumeforge.user-guide.seen", "1"));
-    await page.goto(new URL("/settings?tab=about", page.url()).href);
-    const check = page.getByRole("button", { name: /检查更新|Check for updates/i });
-    await check.waitFor({ timeout: 90000 });
-    const marker = path.join(baseline.data, "data", `handoff-${randomUUID()}.txt`);
-    const value = randomUUID();
-    fs.writeFileSync(marker, value, { flag: "wx" });
-    fs.writeFileSync(path.join(work, "baseline.json"), JSON.stringify({
-      marker, value, pid: child.pid, version,
-    }), { flag: "wx" });
-
     await app.evaluate(({ net }, fixture) => {
       const files = process.getBuiltinModule("node:fs");
       const { Readable } = process.getBuiltinModule("node:stream");
@@ -65,6 +45,28 @@ async function drive(executablePath, candidate, work, notesFile) {
         });
       };
     }, { version, candidate, name, body });
+}
+
+async function drive(executablePath, baselineVersion, version, work, candidate, notesFile) {
+  const app = await playwright._electron.launch({ executablePath, timeout: 90000 });
+  const child = app.process();
+  try {
+    const baseline = await app.evaluate(({ app }) => ({ version: app.getVersion(), data: app.getPath("userData") }));
+    assert.equal(baseline.version, baselineVersion, "unexpected installed upgrade baseline");
+    console.log(`Launched baseline ${baseline.version}; expecting ${version} via ${candidate ? "candidate fixture" : "public GitHub Releases"}`);
+    if (candidate) await serveCandidate(app, version, candidate, notesFile);
+    const page = await app.firstWindow();
+    await page.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\//, { timeout: 180000 });
+    await page.evaluate(() => localStorage.setItem("resumeforge.user-guide.seen", "1"));
+    await page.goto(new URL("/settings?tab=about", page.url()).href);
+    const check = page.getByRole("button", { name: /检查更新|Check for updates/i });
+    await check.waitFor({ timeout: 90000 });
+    const marker = path.join(baseline.data, "data", `handoff-${randomUUID()}.txt`);
+    const value = randomUUID();
+    fs.writeFileSync(marker, value, { flag: "wx" });
+    fs.writeFileSync(path.join(work, "baseline.json"), JSON.stringify({
+      marker, value, pid: child.pid,
+    }), { flag: "wx" });
 
     // A previous interrupted rehearsal or first-run guide can be visible on
     // startup. Dismiss it before exercising the Settings button.
@@ -79,7 +81,8 @@ async function drive(executablePath, candidate, work, notesFile) {
       await page.removeLocatorHandler(startupDialog);
     };
     await openFromSettings();
-    const offer = page.getByRole("dialog").filter({ hasText: version });
+    const targetName = new RegExp(`(?:^|[^\\d.])${version.replaceAll(".", "\\.")}(?![\\d.])`);
+    const offer = page.getByRole("dialog", { name: targetName });
     const readNotes = async () => {
       const notes = offer.locator("section[aria-label]");
       await notes.getByRole("heading").first().waitFor();
@@ -114,11 +117,19 @@ async function drive(executablePath, candidate, work, notesFile) {
     const second = await readNotes();
     assert.notEqual(second.locale, first.locale);
     assert.notEqual(second.text, first.text, "both interface languages must have their own release notes");
-    await offer.getByRole("button", {name: /立即更新|Update now/i}).click();
-    await offer.getByRole("progressbar").waitFor({timeout: 30000});
-    await offer.screenshot({path: path.join(work, "download-progress.png")});
-    console.log("Observed Chinese and English Markdown and download progress in the application");
-    await app.waitForEvent("close", {timeout:120000});
+    await Promise.all([
+      app.waitForEvent("close", { timeout: candidate ? 120000 : 300000 }),
+      (async () => {
+        await offer.getByRole("button", { name: /立即更新|Update now/i }).click();
+        // Public transfer speed and Content-Length vary. The controlled fixture
+        // makes the intermediate progress state observable.
+        if (candidate) {
+          await offer.getByRole("progressbar").waitFor({ timeout: 30000 });
+          await offer.screenshot({ path: path.join(work, "download-progress.png") });
+        }
+      })(),
+    ]);
+    console.log("Observed Chinese and English release notes and the updater handed off to the installer");
   } finally {
     if (child.exitCode === null && child.signalCode === null) await app.close().catch(() => {});
   }

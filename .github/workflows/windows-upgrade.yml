@@ -1,0 +1,182 @@
+name: Windows desktop upgrade
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        default: candidate
+      candidate_tag:
+        type: string
+        required: true
+      include_release_notes:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Build a test candidate or recheck the current public Latest."
+        type: choice
+        options: [rehearsal, public]
+        default: rehearsal
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    if: ${{ github.event_name != 'release' || (!github.event.release.prerelease && startsWith(github.event.release.tag_name, 'v')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      baselines: ${{ steps.versions.outputs.baselines }}
+      mode: ${{ steps.versions.outputs.mode }}
+      target: ${{ steps.versions.outputs.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve official Windows upgrade sources
+        id: versions
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          PUBLISHED_TAG: ${{ github.event.release.tag_name }}
+          REQUESTED_MODE: ${{ inputs.mode }}
+        run: |
+          ./scripts/tests/Test-WindowsUpgradeRelease.ps1
+          Import-Module ./scripts/tests/WindowsUpgradeRelease.psm1
+          $repo = $env:GITHUB_REPOSITORY
+          if ($env:REQUESTED_MODE -eq 'candidate') {
+            $mode = 'candidate'
+            $target = $env:CANDIDATE_TAG
+            if (!$target) { throw 'The verified release candidate tag is required' }
+          } elseif ($env:REQUESTED_MODE -eq 'rehearsal') {
+            $mode = 'rehearsal'
+          } else {
+            $mode = 'public'
+            $target = $env:PUBLISHED_TAG
+          }
+          if (!$target) {
+            $target = gh api "repos/$repo/releases/latest" --jq .tag_name
+            if ($LASTEXITCODE) { throw 'Could not determine the current Latest release' }
+          }
+          $published = @(gh api --paginate "repos/$repo/releases?per_page=100" --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name')
+          if ($LASTEXITCODE) { throw 'Could not list official releases' }
+          $baselines = @(Get-WindowsUpgradeBaselines -TargetTag $target -PublishedTags $published -Rehearsal:($mode -eq 'rehearsal'))
+          "mode=$mode" >> $env:GITHUB_OUTPUT
+          "target=$target" >> $env:GITHUB_OUTPUT
+          "baselines=$(ConvertTo-Json -Compress -InputObject $baselines)" >> $env:GITHUB_OUTPUT
+
+  upgrade:
+    name: Upgrade from ${{ matrix.baseline }} (${{ needs.plan.outputs.mode }})
+    needs: plan
+    runs-on: windows-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        baseline: ${{ fromJSON(needs.plan.outputs.baselines) }}
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      BASELINE_TAG: ${{ matrix.baseline }}
+      TARGET_TAG: ${{ needs.plan.outputs.target }}
+      UPGRADE_MODE: ${{ needs.plan.outputs.mode }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set the upgrade work directory
+        run: '"WINDOWS_UPGRADE_DIR=$env:RUNNER_TEMP/windows-upgrade" >> $env:GITHUB_ENV'
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 12.21.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: |
+            frontend/pnpm-lock.yaml
+            desktop/pnpm-lock.yaml
+
+      - name: Prepare a disposable rehearsal version
+        if: needs.plan.outputs.mode == 'rehearsal'
+        run: |
+          $version = python scripts/tests/prepare_windows_upgrade_rehearsal.py $env:TARGET_TAG
+          if ($LASTEXITCODE -or $version -cnotmatch '^\d+\.\d+\.\d+$') { throw 'Could not prepare rehearsal version' }
+          # Build-Desktop reads the backend payload from git archive HEAD.
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'test: prepare disposable upgrade candidate' -- backend/app/config.py frontend/package.json desktop/package.json README.md README.zh-CN.md CHANGELOG.md
+          if ($LASTEXITCODE) { throw 'Could not prepare the commit for git archive' }
+          "TARGET_TAG=v$version" >> $env:GITHUB_ENV
+
+      - name: Install the frontend test driver
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile --registry=https://registry.npmjs.org
+
+      - name: Build a Windows rehearsal installer
+        if: needs.plan.outputs.mode == 'rehearsal'
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+        run: |
+          pnpm --dir frontend run build
+          if ($LASTEXITCODE) { throw 'Frontend build failed' }
+          pnpm --dir desktop install --frozen-lockfile --registry=https://registry.npmjs.org
+          if ($LASTEXITCODE) { throw 'Desktop dependencies failed to install' }
+          ./scripts/Build-Desktop.ps1 -Target win -PublishDirectory (Join-Path $env:WINDOWS_UPGRADE_DIR 'candidate')
+
+      - name: Download the final release candidate
+        if: needs.plan.outputs.mode == 'candidate'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-installer
+          path: ${{ env.WINDOWS_UPGRADE_DIR }}/candidate
+
+      - name: Exercise the installed app's update flow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INCLUDE_RELEASE_NOTES: ${{ inputs.include_release_notes }}
+        run: |
+          Import-Module ./scripts/tests/WindowsUpgradeRelease.psm1
+          $repo = $env:GITHUB_REPOSITORY
+          $name = Get-WindowsInstallerName $env:BASELINE_TAG
+          $folder = Join-Path $env:WINDOWS_UPGRADE_DIR 'baseline'
+          gh release download $env:BASELINE_TAG --repo $repo --pattern $name --pattern "$name.sha256" --dir $folder
+          if ($LASTEXITCODE) { throw "Could not download the official Windows installer and checksum for $env:BASELINE_TAG" }
+          $options = @{
+            BaselineInstaller = Join-Path $folder $name
+            WorkRoot = Join-Path $env:WINDOWS_UPGRADE_DIR 'handoff'
+          }
+          if ($env:UPGRADE_MODE -eq 'public') {
+            $null = Get-PublicWindowsLatestRelease $repo $env:TARGET_TAG
+            $options.PublicTargetTag = $env:TARGET_TAG
+          } else {
+            $options.CandidateInstaller = Join-Path $env:WINDOWS_UPGRADE_DIR ('candidate/' + (Get-WindowsInstallerName $env:TARGET_TAG))
+            if ($env:INCLUDE_RELEASE_NOTES -eq 'true') {
+              $notes = Join-Path $env:WINDOWS_UPGRADE_DIR 'release-notes.md'
+              gh release view $env:TARGET_TAG --repo $repo --json body --jq .body | Set-Content -LiteralPath $notes -Encoding utf8NoBOM
+              if ($LASTEXITCODE) { throw 'Could not read the release notes' }
+              $options.ReleaseNotesFile = $notes
+            }
+          }
+          $env:GH_TOKEN = $null
+          ./scripts/tests/Test-DesktopUpdateHandoff.ps1 @options
+
+      - name: Upload upgrade screenshots and diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-upgrade-${{ matrix.baseline }}-${{ needs.plan.outputs.mode }}
+          path: |
+            ${{ env.WINDOWS_UPGRADE_DIR }}/handoff/*.png
+            ${{ env.WINDOWS_UPGRADE_DIR }}/handoff/local/ResumeForge/runtime/logs/desktop-*.log
+          if-no-files-found: ignore
+          retention-days: 7

@@ -87,6 +87,8 @@ jobs:
     permissions:
       contents: write
       actions: read
+    outputs:
+      candidate_tag: ${{ steps.checksum.outputs.tag }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -344,7 +346,11 @@ jobs:
       # 逐字沿用接入签名前的写法（含 LF 的 WriteAllText）：.sha256 与安装包同处
       # desktop/out，`sha256sum -c` 依赖那一个换行。
       - name: Write checksum sidecar
+        id: checksum
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           $ErrorActionPreference = "Stop"
           # 必须恰好一个：回签文件名若与未签名不同，顶层会并存两个 exe，「取第一个」
@@ -354,58 +360,20 @@ jobs:
             throw "desktop\out 顶层应恰好有 1 个安装包，实际 $($setups.Count) 个：$($setups.Name -join ', ')。可能存在回签文件名不一致，请人工确认后再发布。"
           }
           $setup = $setups[0]
+          if ($setup.Name -cnotmatch '^ResumeForge-Setup-(\d+\.\d+\.\d+)\.exe$') {
+            throw "Unexpected Windows installer name: $($setup.Name)"
+          }
+          $tag = "v$($Matches[1])"
+          if ($env:DRY_RUN -eq 'false' -and $tag -cne $env:RELEASE_TAG) {
+            throw "Installer version $tag differs from release $env:RELEASE_TAG"
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
           $sha = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           # LF line ending so `sha256sum -c` works on macOS/Linux (Set-Content
           # would append CRLF and break the cross-platform check).
           [System.IO.File]::WriteAllText("$($setup.FullName).sha256", "$sha  $($setup.Name)`n", [System.Text.Encoding]::ASCII)
           Write-Host "installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB, 1)) MB)"
           Write-Host "sha256: $sha"
-
-      - name: Verify Windows in-app upgrade with the final installer
-        shell: pwsh
-        working-directory: desktop
-        env:
-          GH_TOKEN: ${{ github.token }}
-          UPDATE_TAG: ${{ inputs.tag }}
-          UPDATE_DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          $baselineDir = Join-Path $env:RUNNER_TEMP 'rf-update-baseline'
-          $candidate = @(Get-ChildItem -LiteralPath out -Filter 'ResumeForge-Setup-*.exe')
-          if ($candidate.Count -ne 1) { throw 'Expected exactly one release candidate' }
-          $targetVersion = [version](Get-Content -Raw package.json | ConvertFrom-Json).version
-          $releases = gh release list --limit 100 --json tagName,isDraft,isPrerelease
-          if ($LASTEXITCODE) { throw 'Cannot determine the previous stable release' }
-          $previous = $releases | ConvertFrom-Json | ForEach-Object { $_ } |
-            Where-Object { !$_.isDraft -and !$_.isPrerelease -and $_.tagName -match '^v?\d+\.\d+\.\d+$' -and [version]($_.tagName.TrimStart('v')) -lt $targetVersion } |
-            Sort-Object { [version]($_.tagName.TrimStart('v')) } -Descending | Select-Object -First 1
-          $baseline = $null
-          if ($previous) {
-            $tag = $previous.tagName
-            $preload = gh api -H 'Accept: application/vnd.github.raw+json' "repos/$env:GITHUB_REPOSITORY/contents/desktop/preload.js?ref=$tag"
-            if ($LASTEXITCODE) { throw "Cannot inspect the updater shipped in $tag" }
-            if ($preload -match 'desktop:get-update-state') {
-              $name = "ResumeForge-Setup-$($tag.TrimStart('v')).exe"
-              gh release download $tag --pattern $name --pattern "$name.sha256" --dir $baselineDir
-              if ($LASTEXITCODE) { throw "Missing Windows baseline for $tag" }
-              $baseline = Join-Path $baselineDir $name
-              $digest = (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant()
-              if ([IO.File]::ReadAllText("$baseline.sha256").TrimEnd() -cne "$digest  $name") { throw 'Previous installer checksum mismatch' }
-            }
-          }
-          $notes = $null
-          if ($env:UPDATE_DRY_RUN -ne 'true') {
-            $notes = Join-Path $env:RUNNER_TEMP 'rf-release-notes.md'
-            gh release view $env:UPDATE_TAG --json body --jq .body | Set-Content -LiteralPath $notes -Encoding utf8NoBOM
-            if ($LASTEXITCODE) { throw 'Cannot verify the release notes that users will see' }
-          }
-          $env:GH_TOKEN = $null
-          if (!$baseline) {
-            # Bootstrap the first release carrying the new updater.
-            pnpm exec electron-builder --win nsis --config electron-builder.yml "-c.directories.output=$baselineDir" "-c.extraMetadata.version=0.0.1"
-            if ($LASTEXITCODE) { throw 'Could not build the isolated baseline' }
-            $baseline = Join-Path $baselineDir 'ResumeForge-Setup-0.0.1.exe'
-          }
-          & ../scripts/tests/Test-DesktopUpdateHandoff.ps1 -BaselineInstaller $baseline -CandidateInstaller $candidate[0].FullName -ReleaseNotesFile $notes
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -417,8 +385,28 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  windows-upgrade:
+    needs: windows-installer
+    permissions:
+      contents: read
+    uses: ./.github/workflows/windows-upgrade.yml
+    with:
+      candidate_tag: ${{ needs.windows-installer.outputs.candidate_tag }}
+      include_release_notes: ${{ !inputs.dry_run }}
+
+  windows-publish:
+    name: Attach verified Windows installer
+    if: ${{ !inputs.dry_run }}
+    needs: windows-upgrade
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-installer
+          path: windows-installer
+
       - name: Attach installer to the release
-        if: ${{ !inputs.dry_run }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -426,8 +414,8 @@ jobs:
         run: |
           set -euo pipefail
           gh release upload "$TAG" \
-            desktop/out/ResumeForge-Setup-*.exe \
-            desktop/out/ResumeForge-Setup-*.exe.sha256 \
+            windows-installer/ResumeForge-Setup-*.exe \
+            windows-installer/ResumeForge-Setup-*.exe.sha256 \
             --repo "$GITHUB_REPOSITORY" --clobber
 
   macos-installer:

@@ -1,23 +1,35 @@
 # SPDX-License-Identifier: Apache-2.0
+[CmdletBinding(DefaultParameterSetName = 'Candidate')]
 param(
     [Parameter(Mandatory)][string]$BaselineInstaller,
-    [Parameter(Mandatory)][string]$CandidateInstaller,
-    [string]$ReleaseNotesFile,
+    [Parameter(Mandatory, ParameterSetName = 'Candidate')][string]$CandidateInstaller,
+    [Parameter(ParameterSetName = 'Candidate')][string]$ReleaseNotesFile,
+    [Parameter(Mandatory, ParameterSetName = 'Public')][string]$PublicTargetTag,
     [string]$ProductName = 'ResumeForge',
     [string]$WorkRoot = (Join-Path ([IO.Path]::GetTempPath()) ("rf-update-e2e-" + [guid]::NewGuid()))
 )
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'WindowsUpgradeRelease.psm1')
 $baseline = Get-Item -LiteralPath $BaselineInstaller
-$candidate = Get-Item -LiteralPath $CandidateInstaller
 if ($ProductName -notmatch '^ResumeForge(?:UpdateQA[0-9]+)?$') { throw 'Unexpected test product' }
 if ($ProductName -eq 'ResumeForge' -and $env:RUNNER_ENVIRONMENT -ne 'github-hosted') {
     throw 'Use a uniquely branded QA installer on a workstation. The release installer uses the real uninstall registration.'
 }
-$target = [regex]::Match($candidate.Name, '^ResumeForge-Setup-(\d+\.\d+\.\d+)\.exe$')
-if (-not $target.Success) { throw "Unexpected installer name: $($candidate.Name)" }
-$sidecar = [IO.File]::ReadAllText("$($candidate.FullName).sha256").TrimEnd()
-$hash = (Get-FileHash -LiteralPath $candidate.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($sidecar -cne "$hash  $($candidate.Name)") { throw 'Release checksum differs from the final installer' }
+$namePattern = '^ResumeForge-Setup-(\d+\.\d+\.\d+)\.exe$'
+$source = [regex]::Match($baseline.Name, $namePattern)
+if (!$source.Success) { throw "Unexpected baseline installer name: $($baseline.Name)" }
+$baselineVersion = [version]$source.Groups[1].Value
+if ($PublicTargetTag) {
+    $targetVersion = Get-WindowsReleaseVersion $PublicTargetTag
+} else {
+    $candidate = Get-Item -LiteralPath $CandidateInstaller
+    $target = [regex]::Match($candidate.Name, $namePattern)
+    if (!$target.Success) { throw "Unexpected candidate installer name: $($candidate.Name)" }
+    $targetVersion = [version]$target.Groups[1].Value
+    Assert-WindowsInstallerChecksum $candidate.FullName
+}
+if ($baselineVersion -ge $targetVersion) { throw "Expected an upgrade from $baselineVersion to $targetVersion" }
+Assert-WindowsInstallerChecksum $baseline.FullName
 if (Test-Path -LiteralPath $WorkRoot) { throw "Test directory already exists: $WorkRoot" }
 [void][IO.Directory]::CreateDirectory($WorkRoot)
 $installDir = Join-Path $WorkRoot 'app'
@@ -32,8 +44,11 @@ try {
     if (-not $setup.WaitForExit(180000) -or $setup.ExitCode -ne 0) { throw 'Baseline installation failed' }
     if (-not (Test-Path -LiteralPath $exe)) { throw "Missing baseline executable: $exe" }
     $driver = Join-Path $PSScriptRoot '../../desktop/scripts/verify-packaged-update.js'
-    $driverArgs = @($driver, $exe, $candidate.FullName, $WorkRoot)
-    if ($ReleaseNotesFile) { $driverArgs += (Get-Item -LiteralPath $ReleaseNotesFile).FullName }
+    $driverArgs = @($driver, $exe, "$baselineVersion", "$targetVersion", $WorkRoot)
+    if (!$PublicTargetTag) {
+        $driverArgs += $candidate.FullName
+        if ($ReleaseNotesFile) { $driverArgs += (Get-Item -LiteralPath $ReleaseNotesFile).FullName }
+    }
     node @driverArgs
     if ($LASTEXITCODE) { throw "Update UI or shutdown failed. Diagnostics: $WorkRoot" }
     $proof = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $WorkRoot 'baseline.json') | ConvertFrom-Json
@@ -63,11 +78,15 @@ try {
     }
     if (-not $running -or -not $health -or $health.StatusCode -ne 200) { throw "No healthy restarted installation. Diagnostics: $WorkRoot" }
     $installed = (Get-Item -LiteralPath $exe).VersionInfo.ProductVersion
-    if ([version]$installed -ne [version]($proof.version + '.0') -and $installed -ne $proof.version) {
-        throw "Expected $($proof.version), got $installed"
+    if ($installed -notin @("$targetVersion", "$targetVersion.0")) {
+        throw "Expected $targetVersion, got $installed"
+    }
+    $backendHealth = $health.Content | ConvertFrom-Json
+    if ($backendHealth.status -cne 'ok' -or $backendHealth.version -cne "$targetVersion") {
+        throw "Expected healthy backend $targetVersion, got $($backendHealth.version)"
     }
     if ([IO.File]::ReadAllText($proof.marker) -cne $proof.value) { throw 'User-data marker changed during upgrade' }
-    Write-Output "PASS: in-app upgrade to $installed, new shell PID $($running.ProcessId), healthy backend, user data preserved"
+    Write-Output "PASS: in-app upgrade $baselineVersion -> $installed, new shell PID $($running.ProcessId), healthy backend, user data preserved"
     # The update has finished. Close only this rehearsal's process tree after
     # rechecking the exact executable and its own backend process.
     $owned = Get-CimInstance Win32_Process -Filter "ProcessId = $($running.ProcessId)"
