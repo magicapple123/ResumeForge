@@ -477,7 +477,7 @@ test("第 3 条：覆盖层颜色以 CSS 为唯一真源（浅深两套都有 --
   const css = readStyle("desktop-titlebar.css");
   const body = stripCssComments(css);
   for (const token of ["--rf-titlebar-bg", "--rf-titlebar-symbol"]) {
-    const count = (body.match(new RegExp(`${token}\s*:`, "g")) ?? []).length;
+    const count = (body.match(new RegExp(`${token}\\s*:`, "g")) ?? []).length;
     assert.ok(count >= 2, `${token} 必须在 :root 与 [data-theme="dark"] 各定义一次（当前 ${count}）`);
   }
   // tag 与主进程常量必须同值：默认值仍要对得上（否则首帧会闪一下不同的颜色）。
