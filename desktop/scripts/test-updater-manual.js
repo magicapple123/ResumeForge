@@ -459,3 +459,38 @@ test("手动检查遇到 STALL：弹「下载没有进展」，不是笼统的�
     fs.rmSync(loaded.tmpRoot, { recursive: true, force: true });
   }
 });
+
+test("后台检查在飞时点「立即更新」：手动那次必须自己走一遍，不能被「已是最新」静默吞掉", async () => {
+  // 后台定时检查（manual:false，启动 30 秒后首次、之后每 6 小时）在飞时用户点了
+  // 「立即更新」。两次若复用同一个 Promise，用户拿到的是后台那条**没有 onUpToDate**
+  // 的执行流：结论若是「已是最新」，它按设计一声不响，用户看到的就是"点了没反应"——
+  // 2.2.2 刚修掉的症状会从这里复发。第一次请求挂在可控的 deferred 上，好在窗口里操作。
+  let openGate;
+  const gate = new Promise((resolve) => { openGate = resolve; });
+  let metadataFetches = 0;
+  const loaded = loadUpdater({
+    fetchImpl: async () => {
+      metadataFetches += 1;
+      if (metadataFetches === 1) await gate;
+      const json = async () => UP_TO_DATE_RELEASE;
+      return { ok: true, status: 200, headers: { get: () => null }, json, body: null };
+    },
+  });
+  const upToDate = [];
+  try {
+    const background = loaded.exports.checkAndOfferUpdate(null, { manual: false });
+    const manual = loaded.exports.checkAndOfferUpdate(null, {
+      manual: true,
+      onUpToDate: (current, latest) => upToDate.push([current, latest]),
+    });
+    assert.notStrictEqual(manual, background, "手动那次不得并进后台的执行流");
+    assert.equal(metadataFetches, 1, "手动那次要等后台收场，不能与它并发发请求");
+    openGate();
+    await background;
+    await manual;
+    assert.equal(metadataFetches, 2, "后台收场后手动那次必须自己再查一次");
+    assert.equal(upToDate.length, 1, "手动那次要拿到自己应有的结果（「已是最新」回调）");
+  } finally {
+    fs.rmSync(loaded.tmpRoot, { recursive: true, force: true });
+  }
+});

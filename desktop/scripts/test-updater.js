@@ -23,7 +23,7 @@
 //   * 安装器命令（9.1 的 `--force-run`）→ scripts/test-installer-command.js；
 //   * 对话框文案（9.3）/ 任务栏进度（9.4）/ 启动对账（9.2）→ scripts/test-update-feedback.js；
 //   * 标记的纯逻辑（9.2）→ scripts/test-update-attempt.js。
-// 那三个文件都不需要 electron 桩或 VM，本文件因此留在 500 行预算内（493 行）。
+// 那三个文件都不需要 electron 桩或 VM，本文件因此留在 500 行预算内（481 行）。
 // 这里保留的 9.x 断言：拉起安装器**之前**已写标记（且没有 installAndQuit 时不写）、
 // 只带 -windows.zip 的发布必须什么都不做（第 8.3 条，桌面只认 Setup.exe）。
 

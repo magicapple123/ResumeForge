@@ -85,6 +85,9 @@ files:
   # 更新器的出网层（白名单 fetch / net.fetch 系统代理 / 重定向模式）：同一天从
   # updater.js 搬出，同样是顶层 require，漏打包 = 安装版启动即崩。
   - lib/update-net.js
+  # 下载执行层（AbortSignal / 停滞看门狗 / 流式落盘 / SHA-256）：2026-11-21 从 updater.js
+  # 搬出（500 行预算），也是顶层 require，漏打包 = 安装版一启动就 MODULE_NOT_FOUND。
+  - lib/update-download.js
   # 更新原子化的文件系统底座（任务 11，本次不接线）：独立库，随包发行以便下一步
   # 把 NSIS 覆盖安装换成 versions/ + current 指针。
   - lib/update-apply.js
