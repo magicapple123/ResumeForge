@@ -10,6 +10,20 @@
 
 ### Changed
 
+## 2.2.2 - 2026-11-21
+
+### Added
+
+### Fixed
+
+- **桌面更新器在代理环境下「点了没反应」（2.2.2）。** 更新请求用的是 Node 的 `fetch`（undici），它既不读系统代理也不读 `HTTP(S)_PROXY`：代理环境里照样连得上 GitHub、拿得到响应头，正文一个字节都不来——实测 `HTTP 206` + 20 秒 0 字节，`%TEMP%` 里留下两个 0 字节的 `.part`，界面上唯一的反馈是停在 0% 的任务栏进度条。现在改走 Electron `net.fetch`（Chromium 网络栈，系统代理 / PAC / WPAD / 认证代理都由它接管）。「只信本仓库本 Release 的确切文件名」这条没有放松：元数据仍逐跳校验白名单；资产下载改成让 Chromium 跟随 GitHub 自己的 302——Electron 的 `net.fetch` 在 `redirect: "manual"` 下会直接抛 `Redirect was cancelled`（electron#43715，未确认修复即按 stale 关闭），而 `github.com → release-assets.githubusercontent.com` 这一跳必然发生；载荷仍要过 `.sha256` 校验，侧车同样来自钉死的 Release URL。同批修三处：整程上限 10 分钟 → 60 分钟（190MB 在 320KB/s 以下本来就要跑更久，慢链路会被误判成失败）、新增两段 45 秒停滞看门狗（拿响应头 45 秒、正文连续 45 秒无字节，任一段都中止，并单独提示「下载没有进展」而不是笼统的「检查更新失败」）、同一时刻只允许一次更新流程（连点两次不再并发两个下载）。
+- **后端「检查更新」绕过自己的代理工厂（2.2.2）。** `services/update_check.py` 直接构造 `httpx.AsyncClient`，只认环境变量，不认设置里的「网络与代理」（`proxy_mode`）与 Windows 注册表代理；而 `net_client.py` 的模块约定写明它是**唯一**允许构造 httpx 客户端的地方。现在 API 主路径与 `github.com` 重定向备用路径都走 `build_async_client(url=…)`，与模型、搜索、抓取同一条出网口径。
+- **`NO_PROXY` 会把系统代理判成直连（2.2.2）。** `net_proxy._system_proxies_default` 调 `urllib.request.getproxies()`；在 Windows 上它是 `getproxies_environment() or getproxies_registry()`，而 `NO_PROXY` 会被解析成 `{'no': '<值>'}` —— 字典非空，注册表永远读不到。于是机器上设过 `NO_PROXY`（配过 CLI 代理的人常见）而系统代理开着时，后端全部出站请求（模型、搜索、检查更新）都会裸奔直连。现在若结果里没有任何可用 scheme 键，会显式回落到 `getproxies_registry()`。
+
+### Changed
+
+- **桌面更新器拆出两个模块。** `updater.js` 贴着 500 行预算，本轮要加系统代理与停滞看门狗：发布元数据的纯函数搬到 `desktop/lib/update-release.js`（`versionCompare` / `normalizedReleaseVersion` / `isReleaseAssetUrl` / `findAsset`），出网层（`ALLOWED_HOSTS` / `networkFetch` / `fetchAllowed`，含新的 `redirectMode`）搬到 `desktop/lib/update-net.js`。`updater.js` 仍 re-export，外部契约不变；两个新模块都补进了 `desktop/electron-builder.yml` 的打包清单——它们是顶层 `require`，漏打包等于安装版一启动就崩。
+
 ## 2.2.1 - 2026-11-21
 
 ### Added
