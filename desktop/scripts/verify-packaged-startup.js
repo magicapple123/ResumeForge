@@ -88,7 +88,9 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
             new Promise(resolve => processHandle.once("exit", () => resolve(true))),
             new Promise(resolve => setTimeout(() => resolve(false), 10_000)),
           ]);
-    await page.evaluate(() => window.splash?.quitApp?.());
+    // The quit request can close this renderer while the CDP evaluation reply
+    // is in flight. Schedule it from the page and let the protocol reply first.
+    await page.evaluate(() => window.setTimeout(() => window.splash?.quitApp?.(), 100));
     if (!(await exited())) {
       console.warn("App stayed resident after the smoke test. Stopping its isolated process group.");
       try {
