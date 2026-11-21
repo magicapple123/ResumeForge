@@ -29,6 +29,13 @@ import httpx
 
 from ..config import get_settings
 from .net_policy import ADDRESS_INVALID, non_public_address_reason
+
+# 走 net_proxy 的 re-export，**不要**改成 `from .net_client import build_async_client`：
+# net_client 与 net_proxy 互相 import（net_proxy 末尾 re-export 工厂），只有从 net_proxy
+# 侧进入才保证 net_client 已经完整执行。本模块可能是进程里的第一个 app import，直取那
+# 个名字会让 `import app.services.update_sources` 当场 ImportError（`update_check` 就
+# 是这个毛病，见 net_client 的模块头）。
+from .net_proxy import build_async_client
 from .search.page_reader import _sync_resolve as _resolve_host
 from .update_check import _is_newer, _version_tuple
 
@@ -96,17 +103,32 @@ async def require_publish_source(url: str) -> None:
         raise RuntimeError(f"更新下载地址未通过发布源校验（{reason}），已停止下载")
 
 
-def download_client(transport: httpx.AsyncBaseTransport | None) -> httpx.AsyncClient:
+# 下载包的传输预算：连接 10s，读写各 30s。它比普通 API 请求宽——安装包是几十 MB 的
+# 连续传输，按 API 的 5s 读超时会在正常网速下就断。
+_DOWNLOAD_CLIENT_TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=30.0, pool=10.0)
+
+
+def download_client(
+    url: str, transport: httpx.AsyncBaseTransport | None = None
+) -> httpx.AsyncClient:
     """构造手动跟随重定向的下载客户端（``follow_redirects=False``）。
 
-    ``transport=None`` 时**不要**把该键传进去：既有测试通过替换
-    ``httpx.AsyncClient`` 注入 MockTransport（闭包里固定 ``transport=``），显式传
-    ``transport=None`` 会与其形成重复关键字参数。
+    走 :func:`app.services.net_client.build_async_client` 而不是直接 ``httpx.AsyncClient``：
+    ``net_client`` 的模块约定是"代理只由那里决定"，此前这里漏网，只吃环境变量——设置页
+    选了代理、或机器开着注册表代理时，更新下载照样裸奔直连（与 2.2.2 修掉的「检查更新」
+    是同一个缺陷）。
+
+    Args:
+        url: 本次下载要访问的地址。工厂靠它解析代理，并据此把**回环目标强制直连**。
+            重定向的后续跳不重新建客户端（保持连接与 Cookie 语义），每一跳仍由
+            :func:`require_publish_source` 单独校验。
+        transport: 测试注入的传输层；生产调用方不传。``None`` 时工厂不会把该键传进
+            ``httpx.AsyncClient``——注入 transport 的用例在闭包里固定了 ``transport=``，
+            显式传 ``None`` 会与其形成重复关键字参数。
     """
-    client_kwargs: dict = {"timeout": httpx.Timeout(connect=10.0, read=30.0, write=30.0, pool=10.0)}
-    if transport is not None:
-        client_kwargs["transport"] = transport
-    return httpx.AsyncClient(**client_kwargs)
+    return build_async_client(
+        url=url, transport=transport, timeout=_DOWNLOAD_CLIENT_TIMEOUT, follow_redirects=False
+    )
 
 
 def validate_archive(path: Path) -> None:
@@ -201,7 +223,7 @@ async def fetch_expected_checksum(
     ``transport`` 仅供测试注入 MockTransport，生产调用方不传。
     """
     headers = {"Accept": "text/plain", "User-Agent": "ResumeForge-updater"}
-    async with download_client(transport) as client:
+    async with download_client(url, transport) as client:
         current = url
         for _hop in range(MAX_REDIRECT_HOPS + 1):
             await require_publish_source(current)

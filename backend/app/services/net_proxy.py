@@ -33,34 +33,32 @@ import urllib.request
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, suppress
 from contextvars import ContextVar
-from dataclasses import dataclass
-from typing import Any
 from urllib.parse import urlsplit
 
 from . import net_settings
+from .net_proxy_types import (
+    NET_PATH_DIRECT,
+    SOURCE_CUSTOM,
+    SOURCE_DIRECT,
+    SOURCE_ENV,
+    SOURCE_LABELS,
+    SOURCE_LOOPBACK,
+    SOURCE_OVERRIDE,
+    SOURCE_REGISTRY,
+    SOURCE_SYSTEM,
+    ProxyConfigurationError,
+    ProxyInfo,
+    SocksProxyUnsupported,
+)
 
 logger = logging.getLogger(__name__)
 
-# ===== 来源标识 =====
-
-SOURCE_ENV = "env"
-SOURCE_REGISTRY = "registry"
-SOURCE_SYSTEM = "system"
-SOURCE_CUSTOM = "custom"
-SOURCE_DIRECT = "direct"
-SOURCE_LOOPBACK = "loopback"
-SOURCE_OVERRIDE = "override"
-
-#: 来源的中文名。``env`` 的完整文案是"环境变量 + 变量名"，见 :meth:`ProxyInfo.source_label`。
-SOURCE_LABELS: dict[str, str] = {
-    SOURCE_ENV: "环境变量",
-    SOURCE_REGISTRY: "注册表",
-    SOURCE_SYSTEM: "系统设置",
-    SOURCE_CUSTOM: "设置里的自定义代理",
-    SOURCE_DIRECT: "直连",
-    SOURCE_LOOPBACK: "回环地址强制直连",
-    SOURCE_OVERRIDE: "本次请求选择了直连",
-}
+# ===== 来源标识 / 代理描述 =====
+#
+# 类型层已拆到 :mod:`app.services.net_proxy_types`（2026-11-21，本文件 498 行贴住 500 行
+# 预算、零豁免）：上面逐个 import 回来，`__all__` 照旧列出，因此既有调用点
+# （12+ 处 `from . import net_proxy` 后取 `net_proxy.ProxyInfo` / `net_proxy.SOURCE_*`）
+# 一行都不用改。解析与出网决策（判定顺序、环境变量、注册表、直连覆盖）仍在下面。
 
 # 环境变量的解析顺序（与 httpx 的 per-scheme 优先级对齐：HTTPS 请求先看 https_proxy）。
 # 每个变量大小写都认；同名时大写优先（多数工具写大写，读写顺序固定便于断言）。
@@ -80,8 +78,11 @@ DIRECT_OVERRIDE: ContextVar[bool] = ContextVar("rf_net_direct_override", default
 """请求级直连开关。由中间件按请求头写入，工厂读取——不写进任何全局状态。"""
 
 # ===== 错误分类（与 ``LLMError.net_path`` 同一套字面量）=====
+#
+# ``NET_PATH_DIRECT`` 的值在 net_proxy_types（它是 ``ProxyInfo.fingerprint`` 的直连返回值，
+# 与描述类型放在一起才不会被改单边），顶部已 import 回来；其余几条与 net_tls 的错误分类
+# 绑定，留在这里。
 
-NET_PATH_DIRECT = "direct"
 NET_PATH_PROXY_REFUSED = "proxy_refused"
 NET_PATH_PROXY_SOCKS = "proxy_socks_unsupported"
 NET_PATH_TLS = "tls_untrusted"
@@ -103,102 +104,14 @@ NET_PATH_LABELS: dict[str, str] = {
     NET_PATH_TIMEOUT: "超时",
 }
 
-_SOCKS_SCHEME_PREFIX = "socks"
 _SOCKS_IMPORT_MARKER = "socksio"
 
 
-class ProxyConfigurationError(RuntimeError):
-    """代理配置在**发起请求之前**就已注定失败（目前只有 socks 缺依赖这一种）。"""
-
-
-class SocksProxyUnsupported(ProxyConfigurationError):
-    """代理是 socks 协议。本项目不装 ``httpx[socks]``，所以只能明确报错。"""
-
-    def __init__(self, proxy: ProxyInfo) -> None:
-        self.proxy = proxy
-        super().__init__(socks_unsupported_message(proxy))
-
-
-@dataclass(frozen=True)
-class ProxyInfo:
-    """一条**可对外**的代理描述：``url=None`` 表示直连。"""
-
-    url: str | None = None
-    source: str = SOURCE_DIRECT
-    var: str = ""
-
-    @property
-    def is_direct(self) -> bool:
-        return not self.url
-
-    @property
-    def scheme(self) -> str:
-        return _safe_split(self.url).scheme.lower() if self.url else ""
-
-    @property
-    def host_port(self) -> str:
-        """``host:port``（IPv6 带方括号）；直连时为空串。**不含账号口令**。"""
-        if not self.url:
-            return ""
-        parts = _safe_split(self.url)
-        host = parts.hostname or ""
-        if ":" in host:
-            host = f"[{host}]"
-        try:
-            port = parts.port
-        except ValueError:
-            port = None
-        return f"{host}:{port}" if port is not None else host
-
-    @property
-    def has_auth(self) -> bool:
-        if not self.url:
-            return False
-        parts = _safe_split(self.url)
-        return bool(parts.username or parts.password)
-
-    @property
-    def is_socks(self) -> bool:
-        return self.scheme.startswith(_SOCKS_SCHEME_PREFIX)
-
-    def source_label(self) -> str:
-        """来源的中文说明；环境变量带上具体变量名（``环境变量 HTTP_PROXY``）。"""
-        base = SOURCE_LABELS.get(self.source, self.source)
-        if self.source == SOURCE_ENV and self.var:
-            return f"{base} {self.var}"
-        return base
-
-    def redacted(self) -> dict[str, Any]:
-        """脱敏形态：只给来源 + ``host:port`` + 有没有凭据。诊断包与接口都用它。"""
-        return {
-            "source": self.source,
-            "source_label": self.source_label(),
-            "var": self.var,
-            "scheme": self.scheme,
-            "host_port": self.host_port,
-            "has_auth": self.has_auth,
-            "is_direct": self.is_direct,
-        }
-
-    def fingerprint(self) -> str:
-        """连接池分键用：同一条出网路径 → 同一个键。**绝不含凭据**。"""
-        if not self.url:
-            return NET_PATH_DIRECT
-        return f"{self.source}:{self.var}:{self.scheme}://{self.host_port}"
-
-    def describe(self) -> str:
-        """一句话中文描述（日志与诊断包用）。"""
-        if not self.url:
-            return f"直连（{self.source_label()}）"
-        auth = "，需要认证" if self.has_auth else ""
-        return f"{self.scheme}://{self.host_port}（来源：{self.source_label()}{auth}）"
-
-
-def _safe_split(url: str):
-    try:
-        return urlsplit(url)
-    except ValueError:  # 非法端口等：退化成空结构，绝不让"读描述"抛异常
-        return urlsplit("")
+# ===== 描述类型 =====
+#
+# ``ProxyConfigurationError`` / ``SocksProxyUnsupported`` / ``ProxyInfo`` 与 ``_safe_split``
+# 都在 net_proxy_types（顶部 import 回来）。这里留空是因为下一段就是解析逻辑——不要再在
+# 本文件重新定义一份，那会让 `except net_proxy.SocksProxyUnsupported` 抓不到工厂抛的那一个。
 
 
 # ===== 回环判定 =====

@@ -31,7 +31,13 @@ import httpx
 
 from ..config import get_settings, is_desktop_shell
 from ..schemas.update import UpdateCheckResult
-from .net_client import build_async_client
+
+# 从 net_proxy 的 re-export 取工厂，**不要**写成 `from .net_client import build_async_client`：
+# `net_client` 顶层就 `from . import net_proxy`，而 `net_proxy` 末尾又 re-export 工厂——两者
+# 互相 import。只有从 `net_proxy` 侧进入（net_proxy 先跑完、末尾再去 import net_client）
+# 才保证 net_client 已经完整执行；直取那个名字会让 `import app.services.update_check` 当场
+# ImportError（2.2.2 改走工厂时引入，`update_sources` 同批同款）。
+from .net_proxy import build_async_client
 from .update_check_assets import _AssetChoice, select_asset
 from .update_check_degrade import build_api_error, degraded_available_message
 

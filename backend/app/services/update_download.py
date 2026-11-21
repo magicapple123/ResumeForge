@@ -146,7 +146,7 @@ async def _download_archive(
     partial = target.with_suffix(".part")
     headers = {"Accept": "application/octet-stream", "User-Agent": "ResumeForge-updater"}
     try:
-        async with download_client(transport) as client:
+        async with download_client(url, transport) as client:
             current = url
             for _hop in range(MAX_REDIRECT_HOPS + 1):
                 await require_publish_source(current)

@@ -344,3 +344,49 @@ def test_disk_restore_refuses_a_swapped_package(downloads):
     status = update_download.download_status()
 
     assert status.state == "idle"
+
+
+# ===== 出网口径：下载客户端必须经过 net_client 工厂 =====
+
+
+@pytest.mark.asyncio
+async def test_both_download_paths_build_their_client_through_the_shared_factory(
+    downloads, monkeypatch
+):
+    """两条下载路径的客户端都必须由 ``net_client.build_async_client`` 构造。
+
+    为什么值得一条守卫：``net_client`` 的模块约定写着"这里是**唯一**允许直接构造 httpx
+    客户端的地方，代理只由本模块决定"。``update_sources.download_client`` 曾经漏网，直接
+    调用 ``httpx.AsyncClient``——只认环境变量，设置页选的代理与注册表代理对它无效
+    （与 2.2.2 修掉的「检查更新」同一个缺陷）。
+
+    手法同 ``test_update_check.test_both_fetch_paths_go_through_the_shared_proxy_factory``：
+    把工厂换成"记参数 + 抛哨兵"的桩。守卫两件事——改回直接构造（哨兵不再抛出）、以及
+    忘了把本次下载地址交给工厂（``url`` 是解析代理与"回环强制直连"的输入）。
+    """
+    calls: list[dict] = []
+    sentinel = RuntimeError("net_client factory sentinel")
+
+    def fake_build(**kwargs):
+        calls.append(kwargs)
+        raise sentinel
+
+    monkeypatch.setattr(update_sources, "build_async_client", fake_build)
+
+    # ① 完整下载路径（`_download_archive` → `download_client`）
+    with pytest.raises(RuntimeError, match="factory sentinel"):
+        await update_download._download_archive(ZIP_URL, None, downloads.target, SHA_URL)
+    assert calls[-1]["url"] == ZIP_URL
+    # ② 校验文件路径（`fetch_expected_checksum` → `download_client`）
+    with pytest.raises(RuntimeError, match="factory sentinel"):
+        await update_sources.fetch_expected_checksum(SHA_URL)
+    assert calls[-1]["url"] == SHA_URL
+    assert len(calls) == 2, "两条路径各构造一次客户端"
+
+    for recorded in calls:
+        # 重定向逐跳手动处理：让 httpx 自动跟随就等于跳过"每一跳先过白名单"。
+        assert recorded["follow_redirects"] is False
+        # 超时不能因为走了工厂就丢：安装包是几十 MB 的连续传输，按 API 的 5s 读超时会在
+        # 正常网速下就断。
+        assert recorded["timeout"].connect == 10.0
+        assert recorded["timeout"].read == 30.0

@@ -88,6 +88,33 @@ def transport_kwargs(
     return kwargs
 
 
+def _injected_transport_kwargs(
+    transport: httpx.AsyncBaseTransport | httpx.BaseTransport,
+    *,
+    follow_redirects: bool,
+    timeout: httpx.Timeout | float | None,
+    headers: dict[str, str] | None,
+) -> dict[str, Any]:
+    """注入传输层时的构造参数（同步/异步共用一个实现，避免两边再次漂移）。
+
+    **不设代理**：测试要的是确定性，而不是"这台机器有没有代理"。但 ``timeout`` 与
+    ``headers`` 仍然透传——不然调用方想"走工厂 + 自己定超时"就只能回到直接构造
+    （``update_sources.download_client`` 曾经就是这么漏出去的）。
+
+    ``timeout is None`` 时**不传键**：httpx 的 ``timeout=None`` 是"永不超时"，与"用默认
+    值"完全是两件事——``client_pool`` 这类不传超时的调用方会被静默改成无限等待。
+    """
+    injected: dict[str, Any] = {
+        "transport": transport,
+        "follow_redirects": follow_redirects,
+    }
+    if timeout is not None:
+        injected["timeout"] = timeout
+    if headers is not None:
+        injected["headers"] = headers
+    return injected
+
+
 def build_async_client(
     *,
     url: str | None = None,
@@ -102,13 +129,15 @@ def build_async_client(
     Args:
         url: 本次要访问的地址；回环地址会被强制直连（见 :func:`_np.resolve_proxy`）。
         transport: 测试注入的传输层。**注入时不再设代理**——测试要的是确定性，
-            而不是"这台机器有没有代理"。
+            而不是"这台机器有没有代理"；``timeout`` / ``headers`` 仍然透传。
         proxy: 显式指定解析结果（跳过 :func:`_np.resolve_proxy`）。
     """
     resolved = proxy if proxy is not None else _np.resolve_proxy(target_url=url)
     if transport is not None:
         return httpx.AsyncClient(
-            transport=transport, follow_redirects=follow_redirects, headers=headers
+            **_injected_transport_kwargs(
+                transport, follow_redirects=follow_redirects, timeout=timeout, headers=headers
+            ),
         )
     kwargs: dict[str, Any] = {"follow_redirects": follow_redirects, **transport_kwargs(resolved)}
     if timeout is not None:
@@ -127,10 +156,18 @@ def build_client(
     proxy: _np.ProxyInfo | None = None,
     headers: dict[str, str] | None = None,
 ) -> httpx.Client:
-    """同步版客户端工厂（字号/OCR/浏览器探测等同步链路用）。"""
+    """同步版客户端工厂（字号/OCR/浏览器探测等同步链路用）。
+
+    与异步版同一口径：注入 transport 时不设代理、但仍透传 ``timeout`` / ``headers``
+    （2026-11-21 之前这里连 ``timeout`` 一起丢了，与异步版不对称）。
+    """
     resolved = proxy if proxy is not None else _np.resolve_proxy(target_url=url)
     if transport is not None:
-        return httpx.Client(transport=transport, follow_redirects=follow_redirects, headers=headers)
+        return httpx.Client(
+            **_injected_transport_kwargs(
+                transport, follow_redirects=follow_redirects, timeout=timeout, headers=headers
+            ),
+        )
     kwargs: dict[str, Any] = {"follow_redirects": follow_redirects, **transport_kwargs(resolved)}
     if timeout is not None:
         kwargs["timeout"] = timeout

@@ -385,3 +385,48 @@ def test_tls_failure_is_remembered_for_diagnostics_without_paths():
     assert "verify_message" in record
     # 诊断包只留 host 与原因：路径里的用户名会跟着包发出去。
     assert "\\" not in record["host"] and "/" not in record["host"]
+
+
+# ===== 5. 拆分后的 re-export 契约（2026-11-21）=====
+#
+# `net_proxy` 被拆过两次（net_tls / net_client / net_proxy_types），每次都是"搬运 + 在
+# 末尾或顶部 re-export"，靠 `__all__` 维持"既有调用点零改动"。可是 **re-export-only 的
+# 名字没有任何正常用例会碰到**：它们只出现在 import 行与 `__all__` 的字符串里，body 从
+# 不求值。QA 复核时把 `SOURCE_LABELS` 从 import 行删掉，93 条 net/update 用例全绿，而
+# `net_proxy.SOURCE_LABELS` 已经 AttributeError——`SOURCE_OVERRIDE` 恰好变红是因为 body
+# 里还引用它（靠运气）。所以下面两条必须直接盯 `__all__` 本身：
+#   1. 名单里的每个名字都取得到（一次报全，不只报第一个）；
+#   2. 搬走的名字是**同一个对象**，不是复制出来的第二份实现——复制会让
+#      `except net_proxy.SocksProxyUnsupported` 抓不到工厂抛的那一个，且不会有用例变红。
+
+#: 2026-11-21 拆到 :mod:`app.services.net_proxy_types` 的名字。
+_MOVED_TO_TYPES = (
+    "ProxyInfo",
+    "ProxyConfigurationError",
+    "SocksProxyUnsupported",
+    "SOURCE_ENV",
+    "SOURCE_REGISTRY",
+    "SOURCE_SYSTEM",
+    "SOURCE_CUSTOM",
+    "SOURCE_DIRECT",
+    "SOURCE_LOOPBACK",
+    "SOURCE_OVERRIDE",
+    "SOURCE_LABELS",
+    "NET_PATH_DIRECT",
+)
+
+
+def test_every_name_in_all_is_reachable():
+    missing = [name for name in net_proxy.__all__ if not hasattr(net_proxy, name)]
+    assert missing == [], f"net_proxy.__all__ 里有取不到的名字：{missing}"
+
+
+@pytest.mark.parametrize("name", _MOVED_TO_TYPES)
+def test_moved_names_are_the_same_objects_as_the_types_module(name):
+    from app.services import net_proxy_types
+
+    assert getattr(net_proxy, name) is getattr(net_proxy_types, name), (
+        f"{name} 在 net_proxy 里不是 net_proxy_types 的同一个对象——"
+        "拆文件时可能复制了一份实现，而不是 re-export"
+    )
+
