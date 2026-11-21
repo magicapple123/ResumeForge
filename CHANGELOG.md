@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- **Linux 版启动失败：托盘图标缺失时不再阻断启动（2.2.1）。** `new Tray()` 找不到 `resources/tray.ico` 会抛错，被 `app.whenReady()` 的 catch 接住后整个应用停在「Startup failed」页面——AppImage 目录检测正是因此失败（PR AppImage/appimage.github.io#11983）。现在图标缺失时先退回同目录 `icon.png`，两者都不在则跳过托盘并记一行日志，窗口与后端照常启动。
+
 ### Changed
 
 ## 2.2.0 - 2026-11-21

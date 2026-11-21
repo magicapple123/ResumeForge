@@ -31,6 +31,10 @@ on:
         description: "Build and keep artifacts as workflow artifacts; do not touch the release."
         type: boolean
         default: true
+      allow_unsigned:
+        description: "Attach even when the installer carries a test-signing certificate (production certificate not issued yet). Default false keeps the release-grade check."
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -258,6 +262,11 @@ jobs:
           # 直接写 if ($x) 会因为非空字符串恒为真而永远走进「放行」分支。必须显式
           # 和 'true' 比较一次，再把结论当布尔用。
           $isDryRun = ('${{ inputs.dry_run }}' -eq 'true')
+          # 生产证书尚未下发时的显式口子：只放行「链不受信任的测试证书」，
+          # 不放行 NotSigned / HashMismatch——那两条判定排在前面，任何模式都硬失败。
+          # 默认 false，常态仍要求 Valid + SignPath Foundation 主体。
+          $allowUnsigned = ('${{ inputs.allow_unsigned }}' -eq 'true')
+          $lenient = $isDryRun -or $allowUnsigned
           $signed = Get-ChildItem "desktop/out/signed" -Recurse -Filter "ResumeForge-Setup-*.exe" |
             Select-Object -First 1
           if (-not $signed) { throw "签名没回传安装包：desktop\out\signed 下递归找不到 ResumeForge-Setup-*.exe" }
@@ -302,30 +311,32 @@ jobs:
           Write-Host "signer subject  : $subject"
           $isProdSubject = $subject -like '*SignPath Foundation*'
           $isTestSubject = $subject -like '*Test certificate for*'
-          if (-not ($isProdSubject -or ($isDryRun -and $isTestSubject))) {
+          if (-not ($isProdSubject -or ($lenient -and $isTestSubject))) {
             throw "签的不是预期主体：$($signed.Name) 的签名主体为 '$subject'。期望包含 'SignPath Foundation'（生产证书）；演练模式（dry_run=true）下也接受 'Test certificate for ...'（test-signing 测试证书）。"
           }
           # ④ Valid：干净通过。这也是真发版唯一接受的状态。
           if ($sig.Status -eq 'Valid') {
             Write-Host "signature verified: Valid"
           }
-          elseif ($isDryRun) {
-            # ⑤ 其他状态（UnknownError / NotTrusted / Incompatible …）且是演练：
+          elseif ($lenient) {
+            # ⑤ 其他状态（UnknownError / NotTrusted / Incompatible …）且是演练或
+            #    显式接受未签名：
             #    test-signing 的测试证书根不在 runner 的信任列表里，本机必然报
             #    UnknownError，属预期行为，放行。但必须留下醒目痕迹——只在日志里
             #    滚过去的话，下次真发版忘了把 dry_run 关掉，就会把演练口径当成发版口径。
-            Write-Warning "演练模式放行：$($signed.Name) 的 Authenticode 状态为 $($sig.Status)（$($sig.StatusMessage)）。test-signing 的测试证书根不在本机信任列表，属预期行为；正式发版要求 Valid。"
+            $modeLabel = if ($isDryRun) { "演练模式" } else { "allow_unsigned 模式" }
+            Write-Warning "${modeLabel}放行：$($signed.Name) 的 Authenticode 状态为 $($sig.Status)（$($sig.StatusMessage)）。test-signing 的测试证书根不在本机信任列表，属预期行为；正式发版要求 Valid。"
             if ($env:GITHUB_STEP_SUMMARY) {
               # 用 AppendAllText + 无 BOM 的 UTF8，而不是 Add-Content：这份 summary
               # 由多个 step 依次追加，中途插入 BOM 会让后面的中文渲染成乱码。
-              $line = "- 演练模式：签名链不受信任（test-signing 测试证书，预期行为），正式发版要求 Valid。状态：$($sig.Status)；StatusMessage：$($sig.StatusMessage)"
+              $line = "- ${modeLabel}：签名链不受信任（test-signing 测试证书，预期行为），正式发版要求 Valid。状态：$($sig.Status)；StatusMessage：$($sig.StatusMessage)"
               [System.IO.File]::AppendAllText($env:GITHUB_STEP_SUMMARY, "$line`n", [System.Text.UTF8Encoding]::new($false))
             }
           }
           else {
             # ⑥ 其他状态且不是演练：真发版只接受 Valid。消息里必须带上当前状态与
             #    StatusMessage，否则维护者只能回 SignPath 后台翻才知道为什么被拦。
-            throw "签名不可信，拒绝发版：$($signed.Name) 的 Authenticode 状态为 $($sig.Status)（$($sig.StatusMessage)）。dry_run=false 时只接受 Valid；若这是 test-signing 的测试证书，请改用 dry_run=true 演练。"
+            throw "签名不可信，拒绝发版：$($signed.Name) 的 Authenticode 状态为 $($sig.Status)（$($sig.StatusMessage)）。dry_run=false 时只接受 Valid；若这是 test-signing 的测试证书，请改用 dry_run=true 演练，或显式传 allow_unsigned=true 接受未签名发版。"
           }
           Copy-Item -LiteralPath $signed.FullName -Destination "desktop\out\$($signed.Name)" -Force
           Write-Host "signed installer applied: $($signed.Name)"

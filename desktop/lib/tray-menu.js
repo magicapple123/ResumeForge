@@ -18,6 +18,7 @@
 //
 // 本模块不 require("electron")，用例可以直接构造假 Tray。
 
+const fs = require("node:fs");
 const path = require("node:path");
 const { t } = require("./shell-locale");
 
@@ -107,9 +108,20 @@ function currentLocale(deps) {
  */
 function resolveTrayIconPath(deps) {
   const { app, dirname, resourcesPath = () => process.resourcesPath } = deps;
-  return app && app.isPackaged
-    ? path.join(resourcesPath(), "tray.ico")
-    : path.join(dirname, "tray.ico");
+  const base = app && app.isPackaged ? resourcesPath() : dirname;
+  // 首选 tray.ico；打包漏了它时退回同目录的 icon.png（PNG 同样能当托盘图标）。
+  // 两个都不在就返回首选路径，交给 create() 的 try/catch 兜底——托盘是附带功能，
+  // 不该让它把整个应用按在启动失败页。2.2.0 的 Linux AppImage 就栽在这里：
+  // `Failed to load image from path '.../resources/tray.ico'`。
+  const candidates = [path.join(base, "tray.ico"), path.join(base, "icon.png")];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      // 读不到就试下一个
+    }
+  }
+  return candidates[0];
 }
 
 /**
@@ -266,7 +278,15 @@ function createTrayManager(deps) {
   }
 
   function create() {
-    tray = new Tray(iconPath);
+    try {
+      tray = new Tray(iconPath);
+    } catch (err) {
+      // 图标缺失或格式不受支持时不要让启动失败：记一行日志，托盘缺席，
+      // 窗口、后端与其余功能照常（其余调用点都已判 null）。
+      tray = null;
+      logLine(`tray unavailable (${iconPath}): ${err && err.message ? err.message : err}`);
+      return;
+    }
     refresh();
     // 左键唤起窗口（Windows 惯例），右键出自绘菜单。
     tray.on("click", showWindow);
