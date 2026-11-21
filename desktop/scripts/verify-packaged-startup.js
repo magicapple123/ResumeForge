@@ -24,6 +24,7 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
     executablePath,
     timeout: 120_000,
     env: environment,
+    args: platform === "linux" ? ["--no-sandbox"] : [],
   });
   const processHandle = application.process();
 
