@@ -140,6 +140,20 @@ function registerDesktopShellIpc(deps) {
 
   const trusted = (event) => isMainWindowSender(event, getWindow);
 
+  // The main window also hosts the splash. Only the locally served app's
+  // top-level frame may approve the specific offer held by the main process.
+  if (deps.updateSession) {
+    const appFrame = (event) => {
+      if (!trusted(event) || !event.senderFrame || event.senderFrame !== event.sender.mainFrame) return false;
+      try { return new URL(event.senderFrame.url).origin === new URL(deps.getBackendUrl()).origin; }
+      catch { return false; }
+    };
+    ipcMain.handle("desktop:get-update-state", event =>
+      appFrame(event) ? deps.updateSession.snapshot() : null);
+    ipcMain.handle("desktop:start-update", (event, version) =>
+      appFrame(event) && deps.updateSession.start(version));
+  }
+
   ipcMain.handle(CHANNELS.menuAction, (event, payload) => {
     if (!trusted(event)) return { ok: false, error: "untrusted sender" };
     const action = payload && typeof payload.action === "string" ? payload.action : "";
@@ -164,8 +178,8 @@ function registerDesktopShellIpc(deps) {
 
   // P2-2 B：设置页那个「检查更新」按钮。复用同一套发送方校验（只有主窗口能触发），
   // 也不接受任何参数——渲染层无法借它指定 URL / 版本 / 安装包，能做的只有"检查一次"。
-  // 结果由 runManualUpdateCheck 用系统弹窗给出：有新版弹「立即更新/暂不」，已是最新弹
-  // 「已是最新版本」。这里永远返回 { ok: true }，异常由 updater 自己记日志并弹错误框。
+  // Windows publishes the result through desktop:update-state. This reply
+  // acknowledges the request while the check continues in the main process.
   ipcMain.handle(CHANNELS.checkUpdate, (event) => {
     if (!trusted(event)) return { ok: false, error: "untrusted sender" };
     if (typeof runUpdateCheck !== "function") return { ok: false, error: "update check unavailable" };

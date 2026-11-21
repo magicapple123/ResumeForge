@@ -16,6 +16,9 @@ class UpdateCheckResult(BaseModel):
     release_url: str = Field(default="", max_length=512)
     published_at: str = Field(default="", max_length=64)
     notes: str = Field(default="", max_length=4000)
+    # Older clients consume the short preview. New clients select their locale
+    # from the original Markdown before rendering the release.
+    release_body: str = Field(default="", max_length=131072)
     message: str = Field(default="", max_length=1000)
     checked_at: datetime | None = None
     download_url: str = Field(default="", max_length=1024)

@@ -15,13 +15,7 @@
  * 校验由后端在下载完成时做（`update_download.py` 里对比 `.sha256`），所以 `ready`
  * 只代表"已下载且校验通过"，前端不再自己算摘要。
  *
- * 桌面安装壳（`getAppForm().desktop`）：弹窗保留（30 秒内关应用的用户也要能看到），
- * 但主按钮换成「去更新」，点击走壳的原生检查/下载/安装（`window.rfDesktop`），页面上
- * 不再调用 `/api/update/download` 与 `/api/update/install`——那条路在桌面形态下会用
- * 便携包覆盖 resources/payload，装成半新半旧。形态探测失败静默按非桌面处理。
- *
- * 聚焦：打开时焦点放主按钮而不是右上角 ×；状态切换后重新聚焦，否则旧按钮卸载后焦点
- * 掉回 ×，回车等于「稍后 24 小时」。折叠：按块切片而不是裁 CSS，切口永远落在块边界。
+ * Windows 安装版使用 DesktopUpdatePrompt 与壳层共享状态。旧壳继续使用原更新入口。
  */
 import { Alert, Button, Modal, Progress, Space, Typography } from "antd";
 import type { ComponentRef } from "react";
@@ -36,7 +30,14 @@ import { useUpdateDownloadStatus } from "../../hooks/useUpdateDownloadStatus";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { UpdateCheckResult } from "../../types";
-import { formatBytes, getDesktopUpdateBridge, releasePageUrl } from "../settings/updateCardHelpers";
+import {
+  formatBytes,
+  getDesktopUpdateBridge,
+  releasePageUrl,
+  selectReleaseNotes,
+} from "../settings/updateCardHelpers";
+import { getInAppUpdateBridge } from "./desktopUpdateBridge";
+import DesktopUpdatePrompt from "./DesktopUpdatePrompt";
 import { renderReleaseNotes } from "../settings/updateNotesRenderer";
 import { acquireStartupSlot, releaseStartupSlot } from "../../utils/userGuide";
 import { shouldPrompt, skipVersion, snoozeVersion } from "./updatePreferences";
@@ -119,6 +120,12 @@ export function useStartupUpdatePrompt(enabled = true): PromptState {
 }
 
 export default function StartupUpdatePrompt({ enabled = true }: { enabled?: boolean }) {
+  const bridge = getInAppUpdateBridge();
+  if (bridge) return enabled ? <DesktopUpdatePrompt bridge={bridge} /> : null;
+  return <PortableUpdatePrompt enabled={enabled} />;
+}
+
+function PortableUpdatePrompt({ enabled }: { enabled: boolean }) {
   const prompt = useStartupUpdatePrompt(enabled);
   // 形态在弹窗之前问好（否则先画「立即更新」再跳「去更新」）；探测失败静默按非桌面处理。
   const [desktop, setDesktop] = useState(false);
@@ -154,7 +161,7 @@ interface DialogProps {
 }
 
 function StartupUpdateDialog({ result, desktop, onSnooze, onSkip, onHide }: DialogProps) {
-  useLocale();
+  const locale = useLocale();
   const { status, setStatus } = useUpdateDownloadStatus();
   const [notesOpen, setNotesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -331,8 +338,8 @@ function StartupUpdateDialog({ result, desktop, onSnooze, onSkip, onHide }: Dial
   const handleCancel = () => onHide();
 
   const noteBlocks = useMemo(
-    () => (result.notes ? renderReleaseNotes(result.notes) : []),
-    [result.notes],
+    () => renderReleaseNotes(selectReleaseNotes(result.release_body || result.notes, locale)),
+    [result.release_body, result.notes, locale],
   );
   const canExpandNotes = noteBlocks.length > NOTES_COLLAPSED_BLOCKS;
   const visibleNotes =

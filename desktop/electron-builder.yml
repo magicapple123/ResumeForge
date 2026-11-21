@@ -61,6 +61,7 @@ files:
   - lib/media-permissions.js
   # 标题栏 IPC 注册与发送方校验（§19）：main.js 顶层 require。
   - lib/desktop-shell-ipc.js
+  - lib/desktop-update-session.js
   # 启动失败的可操作对话框（从 main.js 下沉）：main.js 顶层 require。
   - lib/startup-failure.js
   # 壳层文案双语（批 2 A）：应用内语言 -> 托盘/菜单/对话框/关闭卡片。

@@ -69,22 +69,19 @@ contextBridge.exposeInMainWorld("resumeForge", {
 });
 
 /**
- * 桌面版的手动更新入口（P2-2 的 B 方案）。
- *
- * 设置页那张「软件更新」卡片在桌面形态下没有"下载/安装"按钮（更新包补不齐 payload），
- * 真正能升级的是壳里的 updater。此前用户只能靠菜单或 update.cmd，卡片上的「检查更新」
- * 点了只会在页面里问后端、给一份和实际升级无关的结果。现在这个桥把它接回主进程：
- *
- *   checkUpdate() → ipcMain 「desktop:check-update」→ runManualUpdateCheck(mainWindow, ...)
- *   → 系统弹窗给出结论（有新版就弹「立即更新/暂不」，已是最新就弹「已是最新版本」）。
- *
- * **能力探测只能看这个对象在不在**，不要看平台/UA：2.1 及更早的壳没有这条通道，
- * 前端探测不到就回退到设置页的三段式文字说明（A 方案）。也就是说 B 从 2.1 → 2.2 才生效，
- * 2.0 旧壳的用户仍然只能靠文字说明 + 手动 Setup.exe。
- *
- * 与其它桥同一纪律：只暴露一个**固定**通道名，不接收渲染层传来的任意通道 / 任意参数，
- * 发送方在主进程侧（desktop/lib/desktop-shell-ipc.js）校验必须是主窗口。
+ * The packaged Windows window subscribes before reading its snapshot. The
+ * renderer can approve only a version, never an installer path or a URL.
+ * checkUpdate stays available to clients that only understand the older bridge.
  */
 contextBridge.exposeInMainWorld("rfDesktop", {
   checkUpdate: () => ipcRenderer.invoke("desktop:check-update"),
+  ...(process.argv?.includes("--rf-in-app-update") && {
+    getUpdateState: () => ipcRenderer.invoke("desktop:get-update-state"),
+    startUpdate: (version) => ipcRenderer.invoke("desktop:start-update", version),
+    onUpdateState: (listener) => {
+      const receive = (_event, state) => listener(state);
+      ipcRenderer.on("desktop:update-state", receive);
+      return () => ipcRenderer.removeListener("desktop:update-state", receive);
+    },
+  }),
 });

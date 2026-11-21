@@ -22,6 +22,8 @@ import { useUpdateDownloadStatus } from "../../hooks/useUpdateDownloadStatus";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import UpdateReleaseNotes from "./UpdateReleaseNotes";
+import { getInAppUpdateBridge } from "../updates/desktopUpdateBridge";
+import DesktopUpdateCard from "../updates/DesktopUpdateCard";
 import {
   formatBytes,
   getDesktopUpdateBridge,
@@ -42,7 +44,12 @@ const UPDATE_COMPLETED_KEY = "resumeforge.update.completed";
  */
 const RECHECK_COOLDOWN_SECONDS = 60;
 
-export default function UpdateCard() {
+export default function SoftwareUpdateCard() {
+  const bridge = getInAppUpdateBridge();
+  return bridge ? <DesktopUpdateCard bridge={bridge} /> : <UpdateCard />;
+}
+
+function UpdateCard() {
   useLocale();
   const { modal, message } = App.useApp();
   const [result, setResult] = useState<UpdateCheckResult | null>(null);
@@ -423,7 +430,7 @@ export default function UpdateCard() {
           }
         />
       )}
-      {result?.notes ? <UpdateReleaseNotes notes={result.notes} /> : null}
+      {result?.notes ? <UpdateReleaseNotes notes={result.release_body || result.notes} /> : null}
     </Card>
   );
 }

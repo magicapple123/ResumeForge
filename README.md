@@ -290,6 +290,8 @@ If you believe you have found a security problem, please follow [SECURITY.md](SE
 
 ## 🔄 Updating without losing data
 
+In the Windows desktop app, open **Settings → Updates & help → Check for updates**. The release notes follow the app language. Select **Update now** to download, verify and install the update. The app restarts in place and keeps your resumes and settings. If you hide the download, select **View update progress** in Settings to reopen it.
+
 Jobs, Profile, Resumes, assistant history and model configuration are stored in `backend/data/resume_forge.db`; server environment variables are stored in `backend/.env`. Both are ignored by Git, so `git pull` never overwrites them.
 
 - **Backup**: **Settings → “Data & storage” → Datasets → Export current dataset**. The package holds a full database snapshot of that dataset, its attachments, fonts and the global model configuration (**the model API key is included by default and you can untick it**) but no login state; on a new computer, “Import backup as new dataset” restores it — details in [docs/upgrading.md](docs/upgrading.md).

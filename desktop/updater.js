@@ -41,9 +41,10 @@ const { MAX_DOWNLOAD_BYTES, downloadToFile, sha256File, timeoutSignal } = requir
 // 用户可见的对话框 / 进度条 / 启动对账（第 9.2 9.3 9.4 条）。
 const { createUpdateFeedback } = require("./lib/update-feedback");
 // 安装器命令（第 9.1 条）：本文件 re-export，main.js 与 quit-lifecycle 的入口不变。
-const { installerWaitCommand } = require("./lib/installer-command");
+const { installerWaitCommand: powershellWaitCommand } = require("./lib/installer-command");
 // 更新尝试标记（第 9.2 条）：纯文件读写，不 require("electron")，可离线断言。
-const { recordUpdateAttempt } = require("./lib/update-attempt");
+const { clearUpdateAttempt, reconcileUpdateAttempt, recordUpdateAttempt } = require("./lib/update-attempt");
+const { createDesktopUpdateSession } = require("./lib/desktop-update-session");
 // 发布元数据的纯函数（版本比较 / 资产 URL 归属 / 挑资产）。2026-11-21 搬出本文件，
 // 腾出 500 行预算给"系统代理"与"下载停滞"两处修复；名字仍从这里 re-export。
 const {
@@ -62,6 +63,38 @@ const CHECK_DELAY_MS = 30_000;
 // 启动后的一次检查可能赶上机器离线（Wi-Fi 未连、VPN 未拨）：之后每 6 小时补查
 // 一次，失败静默记日志。unref 保证定时器不会阻止应用退出。
 const RECHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+// Windows PowerShell 5.1 can exit 0 without executing any script when it is
+// itself started with DETACHED_PROCESS. cmd.exe survives detachment and starts
+// PowerShell as a regular child. Only fixed switches and a UTF-16LE argument
+// pass through cmd, so installer paths (including %, &, spaces and Unicode)
+// never become command-interpreter syntax. /d ignores command-processor AutoRun.
+function installerWaitCommand(installerPath, mainPid) {
+  const { args } = powershellWaitCommand(installerPath, mainPid);
+  // NSIS asks Explorer to open its Start-menu shortcut. A stale shortcut can
+  // open a different installation. Wait for the actual setup exit, then use
+  // the original executable only if the expected version is on disk and that
+  // exact installation hasn't already restarted.
+  const version = /^ResumeForge-Setup-(\d+\.\d+\.\d+)\.exe$/i.exec(path.win32.basename(installerPath))?.[1];
+  const executable = process.execPath.replace(/'/g, "''");
+  const confirmRelaunch = version ? [
+    `$exe='${executable}'`,
+    `$installed=(Get-Item -LiteralPath $exe -ErrorAction Stop).VersionInfo.ProductVersion`,
+    `if ($installed -notin @('${version}','${version}.0')) { exit 1 }`,
+    "$name=[IO.Path]::GetFileNameWithoutExtension($exe)",
+    "for ($i=0; $i -lt 10; $i++) { if (Get-Process -Name $name -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }) { exit 0 }; Start-Sleep -Milliseconds 300 }",
+    "Start-Process -FilePath $exe",
+  ] : [];
+  const script = [args.at(-1) + " -PassThru | ForEach-Object { $_.WaitForExit(); if ($_.ExitCode -ne 0) { exit $_.ExitCode } }",
+    ...confirmRelaunch].join("; ");
+  const command = Buffer.from(script, "utf16le").toString("base64");
+  const system32 = path.win32.join(process.env.SystemRoot || "C:\\Windows", "System32");
+  return {
+    file: path.win32.join(system32, "cmd.exe"),
+    args: ["/d", "/v:off", "/c", "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "-NoLogo", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", command],
+  };
+}
 
 async function fetchLatestRelease() {
   const response = await fetchAllowed(RELEASES_API, {
@@ -120,15 +153,28 @@ async function runUpdateFlow(parentWindow, deps = {}) {
   if (process.platform !== "win32") return;
   // 用户可见的一切（对话框文案 / 语言 / 进度条）都从这里出（第 9.3 9.4 条）。
   const feedback = createUpdateFeedback({ app, dialog, shell }, deps);
+  const offer = await inspectRelease();
+  const { current, latest, missing } = offer;
+  if (offer.upToDate) {
+    if (deps.onUpToDate) await deps.onUpToDate(current, latest);
+    return;
+  }
+  if (missing) {
+    if (deps.logLine) deps.logLine(`update assets incomplete for ${latest}: missing ${missing}`);
+    if (deps.manual) await feedback.incomplete(parentWindow, latest, missing);
+    return;
+  }
+  const choice = await feedback.confirm(parentWindow, latest);
+  if (choice.response === 0) await installOffer(offer, parentWindow, deps);
+}
+
+async function inspectRelease() {
   const release = await fetchLatestRelease();
   const latest = normalizedReleaseVersion(release.tag_name);
   const current = normalizedReleaseVersion(app.getVersion());
   if (!latest || !current) throw new Error("release version is not an exact stable semver");
   if (versionCompare(latest, current) <= 0) {
-    // 手动检查（安装目录里的双击更新入口）需要一句"已是最新"；后台定时检查则保持安静，
-    // 否则每 6 小时都会弹一次"没有新版本"。
-    if (deps.onUpToDate) await deps.onUpToDate(current, latest);
-    return;
+    return { current, latest, upToDate: true, published: String(release.published_at || "").slice(0, 64) };
   }
 
   const assetName = `ResumeForge-Setup-${latest}.exe`;
@@ -141,30 +187,15 @@ async function runUpdateFlow(parentWindow, deps = {}) {
     release,
     (a) => a.name === checksumName && isReleaseAssetUrl(a.browser_download_url, checksumName, release.tag_name),
   );
-  if (!installer || !checksum) {
-    // Release exists but assets incomplete: skip rather than half-update.
-    //
-    // 这里原先是直接 `return`：后台检查静默跳过可以理解，但**手动**检查（菜单「帮助 →
-    // 检查更新」/ 安装目录的 update.cmd / 设置页的「检查更新」）也一声不响，用户看到的是
-    // "点了没反应"，与"网络坏了"、"已经是最新"完全分不开。所以：
-    //   - 一律留一条 warning 日志（写清缺的是哪个文件），
-    //   - 手动检查时弹一句话说明这次没装成的原因。
-    const missing = !installer ? assetName : checksumName;
-    if (typeof deps.logLine === "function") {
-      deps.logLine(`update assets incomplete for ${latest}: missing ${missing}`);
-    }
-    if (deps.manual) {
-      await feedback.incomplete(parentWindow, latest, missing);
-    }
-    return;
-  }
+  return { current, latest, assetName, installer, checksum,
+    missing: !installer ? assetName : !checksum ? checksumName : "",
+    size: Number.isSafeInteger(installer?.size) && installer.size > 0 ? installer.size : null,
+    published: String(release.published_at || "").slice(0, 64), notes: String(release.body || "").slice(0, 131072) };
+}
 
-  // 这句话必须同时说清两件事：装完会自动重开（9.1 的 `--force-run` 才让它成立），
-  // 以及**数据不会被覆盖**（用户在 2026-11-20 明确要求告知）。文案在
-  // lib/shell-locale.js 的 "update.available.body"。
-  const choice = await feedback.confirm(parentWindow, latest);
-  if (choice.response !== 0) return;
-
+async function installOffer(offer, parentWindow, deps, report = () => {}) {
+  const { assetName, installer, checksum, current, latest } = offer;
+  const feedback = createUpdateFeedback({ app, dialog, shell }, deps);
   const tempDir = fs.mkdtempSync(path.join(app.getPath("temp"), "resumeforge-update-"));
   const installerPath = path.join(tempDir, assetName);
   const checksumPath = path.join(tempDir, `${assetName}.sha256`);
@@ -172,8 +203,12 @@ async function runUpdateFlow(parentWindow, deps = {}) {
   // 188 MB 在慢网下要几分钟，全程无反馈时用户以为卡死（第 9.4 条）：下载期间把进度
   // 推到任务栏图标上，结束（成功或失败）一律清除。
   const { partPath } = await downloadToFile(installer.browser_download_url, installerPath, {
-    onProgress: (received, total) => feedback.progress(parentWindow, received, total),
+    onProgress: (received, total) => {
+      feedback.progress(parentWindow, received, total);
+      report({ phase: "downloading", received, total });
+    },
   }).finally(() => feedback.clearProgress(parentWindow));
+  report({ phase: "verifying" });
   let checksumPartPath;
   try {
     checksumPartPath = (await downloadToFile(checksum.browser_download_url, checksumPath, { maxBytes: 4096 })).partPath;
@@ -231,6 +266,7 @@ async function runUpdateFlow(parentWindow, deps = {}) {
     }
     // main.js owns the install sequencing: quit -> before-quit stops the
     // backend -> installer spawns after the stop completes.
+    report({ phase: "installing" });
     deps.installAndQuit(installerPath);
   } else {
     // Fallback (direct entry/tests): request the quit and let main's
@@ -242,6 +278,18 @@ async function runUpdateFlow(parentWindow, deps = {}) {
 
 // 安装目录里的双击更新入口（Windows update.cmd / macOS update.command）带这个参数启动。
 const CHECK_UPDATE_FLAG = "--check-update";
+
+function buildInAppUpdater(getWindow, deps, log) {
+  if (!app.isPackaged || process.platform !== "win32") return null;
+  return createDesktopUpdateSession({
+    current: app.getVersion(), inspect: inspectRelease, log,
+    install: (offer, report) => installOffer(offer, getWindow(), { ...deps, logLine: log }, report),
+    publish: state => {
+      const win = getWindow();
+      if (win && !win.isDestroyed()) win.webContents.send("desktop:update-state", state);
+    },
+  });
+}
 
 /** 这次启动（或第二个实例的 argv）是不是"双击更新入口"发起的。 */
 function wantsManualUpdateCheck(argv = process.argv) {
@@ -260,6 +308,7 @@ function wantsManualUpdateCheck(argv = process.argv) {
  * 读平台，所以这条出口既能服务两个平台，也能被用例覆盖。
  */
 function runManualUpdateCheck(parentWindow, logLine, deps = {}) {
+  if (deps.inApp) return deps.inApp.check(true);
   const feedback = createUpdateFeedback({ app, dialog, shell }, { ...deps, logLine });
   if (process.platform !== "win32") {
     feedback.manualPlatform();
@@ -284,6 +333,20 @@ function runManualUpdateCheck(parentWindow, logLine, deps = {}) {
 function scheduleUpdateCheck(parentWindow, logLine, deps = {}) {
   if (!app.isPackaged) return;
   if (process.platform !== "win32") return;
+  if (deps.inApp) {
+    const dir = userDataRoot();
+    const previous = reconcileUpdateAttempt(dir, app.getVersion());
+    if (previous.status === "failed") {
+      deps.inApp.interrupted(previous.attempt.to);
+      clearUpdateAttempt(dir);
+    } else {
+      setTimeout(() => {
+        if (deps.inApp.snapshot().phase === "idle") void deps.inApp.check(false);
+      }, CHECK_DELAY_MS).unref();
+    }
+    setInterval(() => void deps.inApp.check(false), RECHECK_INTERVAL_MS).unref();
+    return;
+  }
   const feedback = createUpdateFeedback({ app, dialog, shell }, { ...deps, logLine });
   // 启动对账（第 9.2 条）：上一次更新"下载校验都过了但没装成"的话，这一次启动要告诉
   // 用户。放在这里而不是 main.js——本函数就是"这次启动的更新入口"，main.js 因此一行
@@ -319,6 +382,7 @@ function scheduleUpdateCheck(parentWindow, logLine, deps = {}) {
 }
 
 module.exports = {
+  buildInAppUpdater,
   CHECK_UPDATE_FLAG,
   wantsManualUpdateCheck,
   runManualUpdateCheck,

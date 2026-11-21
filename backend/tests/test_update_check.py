@@ -112,6 +112,19 @@ def test_check_update_returns_truncated_notes_that_still_fit_the_schema(client, 
 # ── P2-1：降级文案的结论前置 ────────────────────────────────────────────────
 
 
+def test_check_preserves_bilingual_release_before_legacy_preview_is_truncated(client, monkeypatch):
+    clear_cache()
+    body = "## Fixed\n" + "One change\n" * 420 + "<details>\n<summary>中文版</summary>\n\n## 修复\n中文变更\n</details>"
+
+    async def release(_repo):
+        return {"tag_name": "v99.0.0", "body": body, "assets": []}
+
+    monkeypatch.setattr("app.services.update_check._fetch_latest_release", release)
+    result = client.get("/api/update/check?refresh=true").json()
+    assert len(result["notes"]) <= NOTES_BUDGET
+    assert result.get("release_body") == body
+
+
 class _FakeResponse:
     """只带 `build_api_error` 需要的两个属性（状态码 + 响应头）。"""
 

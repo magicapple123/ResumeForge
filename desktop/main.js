@@ -39,7 +39,7 @@ const { registerDesktopShellIpc } = require("./lib/desktop-shell-ipc");
 const { createShellDialogs } = require("./lib/shell-dialogs");
 const { createShellLocaleRuntime } = require("./lib/shell-locale-runtime");
 const { createStartupFailureReporter } = require("./lib/startup-failure");
-const { installerWaitCommand, runManualUpdateCheck, scheduleUpdateCheck, wantsManualUpdateCheck } = require("./updater");
+const { buildInAppUpdater, installerWaitCommand, runManualUpdateCheck, scheduleUpdateCheck, wantsManualUpdateCheck } = require("./updater");
 
 // Lifecycle diagnostics use the controlled runtime log; module imports must not write user profiles.
 
@@ -212,6 +212,7 @@ function createWindow() {
     title: "ResumeForge",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
+      additionalArguments: updateDeps.inApp ? ["--rf-in-app-update"] : [],
       contextIsolation: true,
       nodeIntegration: false,
       plugins: true, // 精确预览：内置 PDFium 渲染 blob PDF；默认 false 会让预览区空白
@@ -401,16 +402,12 @@ const quitLifecycle = createQuitLifecycle({
   clearTimeout,
 });
 
-// 更新器依赖包（三处调用共用）：退出安装入口 / 对话框语言（9.3）/ 日志目录（9.2 的「打开日志」）。
 const updateDeps = { installAndQuit: quitLifecycle.requestInstallAndQuit, getLocale: getShellLocale, getLogDir: startupLogDir };
+if (app.isPackaged && process.platform === "win32") updateDeps.inApp = buildInAppUpdater(() => mainWindow, updateDeps, logLine);
 
 // Single instance: a second launch focuses the existing window instead of
 // spawning a competing backend on another port.
 if (!app.requestSingleInstanceLock()) {
-  // 这里原本自己拼一条 <LOCALAPPDATA>\ResumeForge\startup-probe.log 并追加一行：
-  // 那是第二套路径逻辑，而且桌面测试套件加载 main.js 时会把它写进真实用户目录。
-  // 诊断信息改走壳的唯一日志出口 desktop-main.log（位置仍由 lib/shell-paths.js
-  // 裁决，写不进去也只是丢一行诊断，绝不阻断退出）。
   logLine("single-instance lock denied; another ResumeForge instance owns the shell");
   app.quit();
 } else {
@@ -485,6 +482,8 @@ desktopShellIpc = registerDesktopShellIpc({
   getDataDir: effectiveDataDir,
   getLogDir: startupLogDir,
   runUpdateCheck: () => runManualUpdateCheck(mainWindow, logLine, updateDeps),
+  updateSession: updateDeps.inApp,
+  getBackendUrl: () => backend?.url,
   titleBar,
   getShellLocale: () => shellLocaleRuntime.getLocale(),
   // 语言切换后的重建入口：托盘菜单 + tooltip + 窗口标题兜底（见 lib/shell-locale-runtime.js）。

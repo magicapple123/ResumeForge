@@ -16,10 +16,16 @@ import { useEffect } from "react";
 import { checkForUpdate } from "../../api/settings";
 import { t } from "../../i18n";
 import { clearAnnouncement, postAnnouncement } from "./announcementStore";
+import { getInAppUpdateBridge } from "../updates/desktopUpdateBridge";
 
 export function useUpdateAnnouncement(enabled = true): void {
   useEffect(() => {
     if (!enabled) return undefined;
+    if (getInAppUpdateBridge()) {
+      clearAnnouncement("update.ready");
+      clearAnnouncement("update.downloaded");
+      return undefined;
+    }
     let cancelled = false;
 
     void checkForUpdate(false)

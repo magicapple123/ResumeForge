@@ -11,6 +11,7 @@ import type { DesktopAboutInfo, DesktopShellBridge } from "./desktopShellBridge"
 import { APP_VERSION } from "../../config";
 import { t, type MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { getInAppUpdateBridge } from "../updates/desktopUpdateBridge";
 
 interface Props {
   open: boolean;
@@ -50,9 +51,9 @@ export default function AboutDesktopDialog({ open, bridge, onClose }: Props) {
     if (pending) void pending.catch(() => undefined);
   };
 
-  // #34H：「检查更新」只留在「关于」里（帮助菜单里那一份已移除）。点击后由主进程
-  // 的系统弹窗给出结论，这里不需要结果状态。
+  // Release the About modal before the shared Windows update dialog opens.
   const checkUpdate = () => {
+    if (getInAppUpdateBridge()) onClose();
     const pending = bridge.menuAction?.("help.checkUpdate");
     if (pending) void pending.catch(() => undefined);
   };

@@ -359,6 +359,7 @@ async def check_for_update(*, refresh: bool = False) -> UpdateCheckResult:
             release_url=str(data.get("html_url") or RELEASES_PAGE.format(repo=repo))[:512],
             published_at=str(data.get("published_at") or "")[:64],
             notes=_truncate_notes(notes),
+            release_body=notes[:131072] if len(notes) > NOTES_BUDGET else "",
             download_url=choice.url[:1024],
             download_size=choice.size,
             asset_name=choice.name,

@@ -8,7 +8,7 @@
  */
 
 import { GITHUB_REPO } from "../../config";
-import { t, type MessageKey } from "../../i18n";
+import { t, type Locale, type MessageKey } from "../../i18n";
 import type { UpdateCheckResult } from "../../types";
 
 /**
@@ -36,6 +36,40 @@ export function getDesktopUpdateBridge(): DesktopUpdateBridge | null {
 /** 发布页兜底地址：检查结果里带了就用它，没检查过（或走了桌面桥）就用仓库地址拼。 */
 export function releasePageUrl(result: UpdateCheckResult | null): string {
   return result?.release_url || `${GITHUB_REPO}/releases`;
+}
+
+// GitHub releases place one language in the main body and the translation
+// inside a details block. Strip disclosure markup before the Markdown renderer.
+export function selectReleaseNotes(body: string, locale: Locale, localizedOnly = false): string {
+  const sections = new Map<Locale, string>();
+  const main = body
+    .replace(
+      /<details\b[^>]*>\s*<summary\b[^>]*>([\s\S]*?)<\/summary>([\s\S]*?)(?:<\/details>|$)/gi,
+      (_block, label: string, content: string) => {
+        const summary = label.replace(/<[^>]*>/g, "").trim();
+        // i18n-ok: language markers from published GitHub notes
+        const language = /中文|简体|繁體|Chinese|zh[-_]/i.test(summary)
+          ? "zh-CN"
+          : /English|en[-_]US/i.test(summary)
+            ? "en-US"
+            : null;
+        if (!language) return "\n" + summary + "\n\n" + content.trim() + "\n";
+        sections.set(language, content.trim());
+        return "\n";
+      },
+    )
+    .trim();
+  const translation = sections.get(locale);
+  if (translation !== undefined) return translation;
+  if (localizedOnly && !sections.size && main) {
+    // Older releases sometimes have just one language. Ignore code and links
+    // when deciding whether any explanatory text is available in this locale.
+    const prose = main.replace(/`[^`]*`|https?:\/\/\S+/g, "");
+    const han = (prose.match(/\p{Script=Han}/gu) ?? []).length;
+    const words = (prose.match(/[A-Za-z]{2,}/g) ?? []).length;
+    if (locale === "zh-CN" ? !han : han > words * 2) return "";
+  }
+  return main;
 }
 
 /**

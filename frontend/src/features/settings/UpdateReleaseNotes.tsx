@@ -20,6 +20,7 @@ import { useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { renderReleaseNotes } from "./updateNotesRenderer";
+import { selectReleaseNotes } from "./updateCardHelpers";
 
 export interface UpdateReleaseNotesProps {
   /** GitHub Release 正文（markdown 子集，交给 updateNotesRenderer 解析）。 */
@@ -31,7 +32,7 @@ const NOTES_BODY_ID = "update-notes-body";
 
 export default function UpdateReleaseNotes({ notes }: UpdateReleaseNotesProps) {
   // 切语言要重译「展开 / 收起」，所以订阅当前语言（文案在渲染期取，不进 state）。
-  useLocale();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   return (
     <section className="update-notes">
@@ -53,7 +54,7 @@ export default function UpdateReleaseNotes({ notes }: UpdateReleaseNotesProps) {
       {/* 收起时用 hidden 而不是 maxHeight: 0：内容仍可被读屏/查找命中，布局上是真的
           不存在，不会留下一条空的可滚区域。 */}
       <div className="update-notes-body" id={NOTES_BODY_ID} hidden={!open}>
-        {renderReleaseNotes(notes)}
+        {renderReleaseNotes(selectReleaseNotes(notes, locale))}
       </div>
     </section>
   );

@@ -25,6 +25,7 @@ export interface UpdateCheckResult {
   release_url: string;
   published_at: string;
   notes: string;
+  release_body?: string;
   message: string;
   checked_at: string | null;
   download_url: string;
