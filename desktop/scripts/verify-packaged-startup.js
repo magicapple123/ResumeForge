@@ -13,6 +13,15 @@
 // 「退出应用」的同一条路。判定逻辑与诊断文案在 lib/packaged-quit-gate.js，
 // 七条离线用例在 scripts/test-packaged-quit-gate.js——这里只负责把它接到真包上。
 //
+// 收尾（2026-11-22，run 45014630409）：Linux 四个矩阵在 10:57:57 就打出了判据错误
+// （「后端端口在进程退出后仍被占用」），然后 **28 分钟没有任何输出**，直到作业被取消。
+// 判据早就有结论了，挂着的是这个 Node 进程本身——而判据失败恰恰就是"应用没退干净"
+// 的情形：Playwright 的连接与 driver 这时可能永远不 settle，旧代码却只设
+// `process.exitCode = 1`，退不退出全看事件循环能不能自己空掉。于是：
+//   ① finally 里 application.close() 改成有界等待（到点只记一行，不改判据）；
+//   ② verify() 一有结论就显式 process.exit()（先 flush，别把日志丢在管道里）。
+// 退出码语义一个字没变：判绿 0、抛错 1。理由与反证见下面两处注释。
+//
 // Usage (与 scripts/tests/Test-*PackageUpgrade.* 的调用保持一致):
 //   node scripts/verify-packaged-startup.js \
 //     <executable> <win32|darwin|linux> <version> <profile-dir> <write|verify> <marker-value>
@@ -25,6 +34,109 @@ const { EXPLICIT_QUIT_BUDGET_MS, verifyExplicitQuit } = require("../lib/packaged
 const playwright = require(require.resolve("@playwright/test", {
   paths: [path.resolve(__dirname, "../../frontend")],
 }));
+
+// `application.close()` 的等待上限。健康路径上它几十毫秒就完成；上限存在的唯一理由
+// 是判据失败那条路：壳进程可能刚被杀掉，而 Playwright 的 close 等的是子进程的
+// `close` 事件（不是 `exit`），只要还有子孙进程捏着继承来的管道，那个事件就可能
+// 永远不来。没有上限 = 收尾可以无限长 = xvfb-run 跟着无限等。
+const CLOSE_BUDGET_MS = 8_000;
+
+// 退出前把 stdout/stderr 交出去的兜底上限。管道读端已经没了时（CI 取消作业很常见），
+// write 的回调可能永远不来——那样"确定性退出"就变成一个新的挂死点。
+const EXIT_FLUSH_BUDGET_MS = 2_000;
+
+/**
+ * 清掉壳进程留下的标准流，让事件循环有机会变空。
+ *
+ * 为什么需要：electron 的 stdout/stderr 是 Playwright 用 `stdio: "pipe"` 建的管道，
+ * 读端在本进程里；后端（uvicorn）是壳的**孙**进程，继承了那两个写端。判据失败时
+ * 壳退了、后端还在（那正是断言②在报的事），写端就永远不关，我们的读端也永远等不到
+ * EOF。destroy 是纯清理：判定已经落地，这里不改任何结论，只是别把句柄留给退出流程。
+ *
+ * @param {object} processHandle Playwright 给出的壳进程句柄（真 ChildProcess）。
+ */
+function releaseProcessPipes(processHandle) {
+  for (const stream of [processHandle && processHandle.stdout, processHandle && processHandle.stderr]) {
+    if (stream && typeof stream.destroy === "function" && !stream.destroyed) {
+      try {
+        stream.destroy();
+      } catch {
+        // 已经关掉的流再 destroy 会抛；收尾阶段没有"再失败一次"的必要。
+      }
+    }
+  }
+}
+
+/**
+ * 有界等待 `application.close()`：到点只记一行，绝不抛、绝不无限等。
+ *
+ * 不 await 的旧写法（`void application.close().catch(() => {})`）在健康路径上没问题，
+ * 但在**最需要收场的那条路**（判据失败、壳进程状态可疑）上，它把"等多久"交给了
+ * Playwright 内部。这里显式给它一个上限，让收尾时间是常数。
+ *
+ * @param {object} application Playwright 的 ElectronApplication。
+ * @param {function(string): void} stage 阶段日志（与 verify 内部同一个 sink）。
+ * @param {number} [budgetMs] 等待上限，默认 CLOSE_BUDGET_MS。
+ * @returns {Promise<"closed"|"timeout"|string>} 实际结局，只用于日志。
+ */
+async function closeApplicationBounded(application, stage, budgetMs = CLOSE_BUDGET_MS) {
+  let timer = null;
+  // 计时器故意不 unref：它只活到 finish 为止（下面 finally 一定 clearTimeout），
+  // 而它的职责就是"在预算用完时给出结论"。
+  const budget = new Promise(resolve => {
+    timer = setTimeout(() => resolve("timeout"), budgetMs);
+  });
+  const closed = Promise.resolve()
+    .then(() => application.close())
+    .then(
+      () => "closed",
+      error => `failed: ${String((error && error.message) || error)}`,
+    );
+  try {
+    const outcome = await Promise.race([closed, budget]);
+    if (outcome === "timeout") stage(`application-close-timeout ${budgetMs}ms`);
+    else if (outcome !== "closed") stage(`application-close-${outcome}`);
+    return outcome;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * 用给定退出码结束进程，先把 stdout/stderr 交出去。
+ *
+ * 为什么必须显式退出：判据失败时进程里可能还挂着永远关不掉的句柄（见文件头那段
+ * 2026-11-22 的记录）。`process.exitCode = 1` 只是"给结论"，兑现与否取决于事件循环
+ * 能不能空——空不了就是作业挂到 timeout-minutes。`process.exit()` 是唯一不依赖
+ * "所有句柄都已关闭"的收场方式。
+ *
+ * 为什么要 flush 而不是直接 exit：stdout 对管道是**异步写**，`process.exit()` 会立刻
+ * 终止进程，把还没排出去的日志丢掉——CI 里就只剩半行错误信息，那比挂死更难查。
+ * 空字符串写的回调排在此前所有输出之后（等于"已交给内核"），用它做栅栏。
+ * 兜底定时器不可省：读端没了时那个回调可能永远不来。
+ *
+ * @param {number} code 退出码（0 = 判绿，1 = 判据失败）。
+ */
+function exitWithFlush(code) {
+  let exited = false;
+  const exitNow = () => {
+    if (exited) return;
+    exited = true;
+    process.exit(code);
+  };
+  setTimeout(exitNow, EXIT_FLUSH_BUDGET_MS);
+  try {
+    process.stdout.write("", () => {
+      try {
+        process.stderr.write("", exitNow);
+      } catch {
+        exitNow();
+      }
+    });
+  } catch {
+    exitNow();
+  }
+}
 
 async function verify(executablePath, platform, expectedVersion, profile, markerMode, markerValue) {
   const stage = name => console.log(`[${platform} ${expectedVersion}] ${name} ${new Date().toISOString()}`);
@@ -135,11 +247,20 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
       }
       await Promise.race([processExited, new Promise(resolve => setTimeout(resolve, 10_000))]);
     }
-    void application.close().catch(() => {});
+    // 先关连接、再拆管道：反过来的话 Playwright 的 close 会读到半关的流，把一次
+    // 正常收尾变成一个假错误。两步都不影响已经落地的判据（这一步在 finally 里，
+    // 抛错了反而会盖掉真正的失败原因，所以 close 的异常在内部就被吞掉了）。
+    await closeApplicationBounded(application, stage);
+    releaseProcessPipes(processHandle);
   }
 }
 
-verify(...process.argv.slice(2)).catch(error => {
-  console.error(error);
-  process.exitCode = 1;
-});
+// 顶层：verify() 有结论之后**显式退出**，不再指望事件循环自己空掉（理由见 exitWithFlush
+// 与文件头 2026-11-22 那段）。退出码语义与改动前一致：判绿 0、抛错 1。
+verify(...process.argv.slice(2)).then(
+  () => exitWithFlush(0),
+  error => {
+    console.error(error);
+    exitWithFlush(1);
+  },
+);
