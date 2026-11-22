@@ -170,21 +170,39 @@ jobs:
           fi
           baseline="ResumeForge-$(printf '%s' "$BASELINE_TAG" | sed 's/^v//')-${asset_arch}.${extension}"
           target="ResumeForge-$(printf '%s' "$TARGET_TAG" | sed 's/^v//')-${asset_arch}.${extension}"
-          mkdir -p "$UPGRADE_ROOT/baseline" "$UPGRADE_ROOT/public"
+          mkdir -p "$UPGRADE_ROOT/baseline" "$UPGRADE_ROOT/public" "$UPGRADE_ROOT/download-logs"
           fetch_public() {
             url="https://github.com/$REPOSITORY/releases/download/$1/$2"
-            curl --fail --silent --show-error --location --retry 5 --connect-timeout 30 --max-time 1800 \
+            echo "::group::Download $2"
+            date --utc '+download started %Y-%m-%dT%H:%M:%SZ'
+            curl --fail --show-error --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 --speed-time 90 --speed-limit 16384 \
+              --progress-bar \
               "$url" --output "$UPGRADE_ROOT/public/$2"
+            date --utc '+download finished %Y-%m-%dT%H:%M:%SZ'
+            echo "::endgroup::"
           }
-          fetch_public "$BASELINE_TAG" "$baseline"
-          fetch_public "$BASELINE_TAG" "$baseline.sha256"
+          fetch_public "$BASELINE_TAG" "$baseline" > "$UPGRADE_ROOT/download-logs/baseline-package.log" 2>&1 &
+          baseline_pid=$!
+          fetch_public "$BASELINE_TAG" "$baseline.sha256" > "$UPGRADE_ROOT/download-logs/baseline-checksum.log" 2>&1 &
+          baseline_checksum_pid=$!
           if [ "$UPGRADE_MODE" = candidate ]; then
             cp "$UPGRADE_ROOT/candidate/$target" "$UPGRADE_ROOT/public/$target"
             cp "$UPGRADE_ROOT/candidate/$target.sha256" "$UPGRADE_ROOT/public/$target.sha256"
           else
-            fetch_public "$TARGET_TAG" "$target"
-            fetch_public "$TARGET_TAG" "$target.sha256"
+            fetch_public "$TARGET_TAG" "$target" > "$UPGRADE_ROOT/download-logs/target-package.log" 2>&1 &
+            target_pid=$!
+            fetch_public "$TARGET_TAG" "$target.sha256" > "$UPGRADE_ROOT/download-logs/target-checksum.log" 2>&1 &
+            target_checksum_pid=$!
           fi
+          result=0
+          wait "$baseline_pid" || result=1
+          wait "$baseline_checksum_pid" || result=1
+          if [ "$UPGRADE_MODE" = public ]; then
+            wait "$target_pid" || result=1
+            wait "$target_checksum_pid" || result=1
+          fi
+          cat "$UPGRADE_ROOT"/download-logs/*.log
+          [ "$result" -eq 0 ] || exit "$result"
           if [ "$PLATFORM" = macos ]; then
             bash scripts/tests/Test-MacOSPackageUpgrade.sh "$ARCHITECTURE" "$UPGRADE_ROOT/public/$baseline" "$UPGRADE_ROOT/public/$target" "$UPGRADE_ROOT/work" desktop/scripts/verify-packaged-startup.js
           else
@@ -195,6 +213,8 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-package-upgrade-${{ matrix.platform }}-${{ matrix.architecture }}-${{ matrix.baseline }}-${{ needs.plan.outputs.mode }}
-          path: ${{ runner.temp }}/desktop-package-upgrade/work/**/profile/*.png
+          path: |
+            ${{ runner.temp }}/desktop-package-upgrade/**/*.png
+            ${{ runner.temp }}/desktop-package-upgrade/**/*.log
           if-no-files-found: ignore
           retention-days: 7
