@@ -21,6 +21,8 @@
 <a href="https://magicapple123.github.io/ResumeForge-official/docs.html">User guide</a>
  · 
 <a href="https://magicapple123.github.io/ResumeForge-official/">Website</a>
+ · 
+<a href="https://magicapple123.github.io/ResumeForge-official/en/faq.html">FAQ (online, searchable)</a>
 </h3>
 
 <p align="center"><a href="README.zh-CN.md">简体中文</a> · <b>English</b></p>
