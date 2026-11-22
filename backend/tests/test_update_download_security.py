@@ -360,7 +360,7 @@ async def test_both_download_paths_build_their_client_through_the_shared_factory
     调用 ``httpx.AsyncClient``——只认环境变量，设置页选的代理与注册表代理对它无效
     （与 2.2.2 修掉的「检查更新」同一个缺陷）。
 
-    手法同 ``test_update_check.test_both_fetch_paths_go_through_the_shared_proxy_factory``：
+    手法同 ``test_update_check_outbound.test_both_fetch_paths_go_through_the_shared_proxy_factory``：
     把工厂换成"记参数 + 抛哨兵"的桩。守卫两件事——改回直接构造（哨兵不再抛出）、以及
     忘了把本次下载地址交给工厂（``url`` 是解析代理与"回环强制直连"的输入）。
     """
