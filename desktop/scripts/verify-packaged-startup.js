@@ -9,6 +9,7 @@ const playwright = require(require.resolve("@playwright/test", {
 }));
 
 async function verify(executablePath, platform, expectedVersion, profile, markerMode, markerValue) {
+  const stage = name => console.log(`[${platform} ${expectedVersion}] ${name} ${new Date().toISOString()}`);
   const environment = {
     ...process.env,
     HOME: profile,
@@ -27,16 +28,19 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
     args: platform === "linux" ? ["--no-sandbox"] : [],
   });
   const processHandle = application.process();
+  const processExited = new Promise(resolve => processHandle.once("exit", resolve));
 
   try {
+    stage("electron-launched");
     const identity = await application.evaluate(({ app }) => ({
       version: app.getVersion(),
       userData: app.getPath("userData"),
     }));
     assert.equal(identity.version, expectedVersion, "installed app version");
 
-    const page = await application.firstWindow();
+    const page = await application.firstWindow({ timeout: 180_000 });
     await page.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\//, { timeout: 180_000 });
+    stage("desktop-window-ready");
     await page.evaluate(() => localStorage.setItem("resumeforge.user-guide.seen", "1"));
     await page.waitForTimeout(2_000);
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -55,6 +59,7 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
     assert.equal(healthResponse.status(), 200, "packaged backend health");
     const health = await healthResponse.json();
     assert.equal(health.version, expectedVersion, "backend and desktop versions match");
+    stage("backend-healthy");
 
     const indexResponse = await page.request.get(new URL("/", page.url()).href, {
       headers: { Accept: "text/html" },
@@ -79,13 +84,14 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
       throw new Error(`Unknown data marker mode: ${markerMode}`);
     }
     await page.screenshot({ path: path.join(profile, `desktop-${platform}-${expectedVersion}.png`) });
+    stage("desktop-smoke-passed");
     console.log(`PASS: ${platform} desktop ${expectedVersion}, UI, API health, and data marker ${markerMode}`);
 
     const exited = () =>
       processHandle.exitCode !== null || processHandle.signalCode !== null
         ? Promise.resolve(true)
         : Promise.race([
-            new Promise(resolve => processHandle.once("exit", () => resolve(true))),
+            processExited.then(() => true),
             new Promise(resolve => setTimeout(() => resolve(false), 10_000)),
           ]);
     // The quit request can close this renderer while the CDP evaluation reply
@@ -109,8 +115,15 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
     assert.ok(await exited(), "the isolated packaged app process must terminate before replacing its bundle");
   } finally {
     if (processHandle.exitCode === null && processHandle.signalCode === null) {
-      await application.close().catch(() => {});
+      stage("stopping-isolated-process-group");
+      try {
+        process.kill(-processHandle.pid, "SIGKILL");
+      } catch {
+        processHandle.kill("SIGKILL");
+      }
+      await Promise.race([processExited, new Promise(resolve => setTimeout(resolve, 10_000))]);
     }
+    void application.close().catch(() => {});
   }
 }
 
