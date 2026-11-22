@@ -174,11 +174,11 @@ jobs:
           fetch_public() {
             url="https://github.com/$REPOSITORY/releases/download/$1/$2"
             echo "::group::Download $2"
-            date --utc '+download started %Y-%m-%dT%H:%M:%SZ'
+            date -u '+download started %Y-%m-%dT%H:%M:%SZ'
             curl --fail --show-error --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 --speed-time 90 --speed-limit 16384 \
               --progress-bar \
               "$url" --output "$UPGRADE_ROOT/public/$2"
-            date --utc '+download finished %Y-%m-%dT%H:%M:%SZ'
+            date -u '+download finished %Y-%m-%dT%H:%M:%SZ'
             echo "::endgroup::"
           }
           fetch_public "$BASELINE_TAG" "$baseline" > "$UPGRADE_ROOT/download-logs/baseline-package.log" 2>&1 &
