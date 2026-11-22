@@ -71,10 +71,32 @@ jobs:
           "mode=$mode" >> $env:GITHUB_OUTPUT
           "target=$target" >> $env:GITHUB_OUTPUT
           "baselines=$(ConvertTo-Json -Compress -InputObject $baselines)" >> $env:GITHUB_OUTPUT
+          if ($baselines.Count -eq 0) {
+            # `public` rechecks the current public Latest. When Latest is itself
+            # the first release that supports in-app upgrade there is no older
+            # upgradeable release to start from, so the matrix is legitimately
+            # empty. Say so where a human will see it - a bare skipped job looks
+            # identical to a job that broke.
+            $notice = "当前 Latest $target 就是首个支持应用内升级的版本，没有更早的可升级基线，因此 $mode 模式本次跳过实装升级验证（upgrade 作业 skipped，不是失败）。"
+            Write-Warning $notice
+            if ($env:GITHUB_STEP_SUMMARY) {
+              # AppendAllText + 无 BOM 的 UTF8，而不是 Add-Content：这份 summary
+              # 由多个 step 依次追加，中途插入 BOM 会让后面的中文渲染成乱码
+              # （同 release-assets.yml 的处理）。
+              [System.IO.File]::AppendAllText($env:GITHUB_STEP_SUMMARY, "### 本次跳过实装升级验证`n`n$notice`n", [System.Text.UTF8Encoding]::new($false))
+            }
+          }
 
   upgrade:
     name: Upgrade from ${{ matrix.baseline }} (${{ needs.plan.outputs.mode }})
     needs: plan
+    # A job matrix with no vector is not a silent skip on GitHub Actions: the job
+    # fails with "Matrix vector 'baseline' does not contain any values". `public`
+    # mode legitimately yields no baseline (see the plan step), so the skip has to
+    # be decided here. `always()` plus the explicit plan-result check keeps the
+    # previous behaviour (a skipped plan skips this job, e.g. a prerelease
+    # `release` event) while never evaluating fromJSON('').
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.baselines != '[]' }}
     runs-on: windows-latest
     timeout-minutes: 35
     strategy:

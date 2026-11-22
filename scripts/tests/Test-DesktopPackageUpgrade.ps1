@@ -20,7 +20,12 @@ if ((Get-DesktopUpgradeBaselines -TargetTag v2.3.0 -PublishedTags $published -Fi
     throw 'A rehearsal of Latest must start from the official first supported baseline'
 }
 Assert-Rejected { Get-DesktopUpgradeBaselines -TargetTag v2.3.11 -PublishedTags @('v2.3.10') -FirstSupportedTag v2.2.3 } 'Missing published upgrade baseline v2.2.3'
-Assert-Rejected { Get-DesktopUpgradeBaselines -TargetTag v2.2.3 -PublishedTags $published -FirstSupportedTag v2.2.3 } 'must be newer'
+# `public` mode rechecks the current Latest; when that Latest *is* the first
+# supported release there is no older upgradeable baseline, so the matrix is
+# empty instead of an exception (the callers skip the upgrade job on []).
+$baselines = @(Get-DesktopUpgradeBaselines -TargetTag v2.3.0 -PublishedTags $published -FirstSupportedTag v2.3.0)
+if ($baselines.Count -ne 0) { throw "First supported release must have no earlier baseline: $baselines" }
+Assert-Rejected { Get-DesktopUpgradeBaselines -TargetTag v2.2.3 -PublishedTags $published -FirstSupportedTag v2.3.0 } 'must be newer'
 
 $expectedNames = @{
     'macos/x64' = 'ResumeForge-2.3.11-x64.dmg'

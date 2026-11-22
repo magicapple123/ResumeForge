@@ -22,7 +22,31 @@ if ((Get-WindowsUpgradeBaselines -TargetTag 'v2.3.0' -PublishedTags $published -
     throw 'A rehearsal of Latest must start from the official v2.3.0 installation'
 }
 Assert-Rejected { Get-WindowsUpgradeBaselines -TargetTag 'v2.4.0' -PublishedTags @('v2.3.1') } 'Missing published upgrade baseline v2.3.0'
-Assert-Rejected { Get-WindowsUpgradeBaselines -TargetTag 'v2.3.0' -PublishedTags $published } 'must be newer than v2.3.0'
+
+# The "public" mode rechecks whatever the public Latest currently is, and that
+# Latest may still be the first release that supports in-app upgrade. There is
+# then no older upgradeable baseline, and demanding one turned the plan job red
+# (run 44997249814: "Upgrade target v2.3.0 must be newer than v2.3.0"). An empty
+# baseline set is the correct answer, and the workflow skips the upgrade job.
+# Get-WindowsUpgradeBaselines takes only TargetTag/PublishedTags/Rehearsal and
+# pins v2.3.0 itself. Do not pass -FirstSupportedTag here: it is a simple
+# (non-advanced) function, so an unknown named argument lands in $args and is
+# silently ignored instead of throwing - the case would look like it controls
+# the pin while actually being a no-op.
+$selected = @(Get-WindowsUpgradeBaselines -TargetTag 'v2.3.0' -PublishedTags @('v2.2.3', 'v2.3.0'))
+if ($selected.Count -ne 0) { throw "Latest must have no earlier upgradeable baseline: $selected" }
+# A target older than the first supported release is still a caller mistake: the
+# baseline would be newer than the build under test.
+Assert-Rejected { Get-WindowsUpgradeBaselines -TargetTag 'v2.2.3' -PublishedTags @('v2.2.3', 'v2.3.0') } 'must be newer than v2.3.0'
+# The ordinary path is untouched: newer target keeps upgrading from the first
+# supported release.
+$selected = @(Get-WindowsUpgradeBaselines -TargetTag 'v2.3.1' -PublishedTags @('v2.2.3', 'v2.3.0'))
+if (($selected -join ',') -cne 'v2.3.0') { throw "Newer target must upgrade from v2.3.0: $selected" }
+# Regression guard for rehearsal: it always starts from FirstSupportedTag, even
+# when the target is newer (the already-verified path must not change).
+if ((Get-WindowsUpgradeBaselines -TargetTag 'v2.3.1' -PublishedTags @('v2.2.3', 'v2.3.0', 'v2.3.1') -Rehearsal) -cne 'v2.3.0') {
+    throw 'A rehearsal must start from the official first supported baseline'
+}
 
 $repo = 'example/ResumeForge'
 $tag = 'v2.3.11'

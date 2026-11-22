@@ -19,8 +19,22 @@ function Get-DesktopUpgradeBaselines(
     if ($FirstSupportedTag -cnotin $PublishedTags) {
         throw "Missing published upgrade baseline $FirstSupportedTag"
     }
+    # A rehearsal builds its own newer candidate, so its target is always newer
+    # than the first supported tag and the baseline is deliberately pinned to
+    # that tag. Keep the early return: this path is the one that has actually
+    # been verified end to end.
     if ($Rehearsal) { return $FirstSupportedTag }
-    if ($target -le $first) { throw "Upgrade target $TargetTag must be newer than $FirstSupportedTag" }
+    # Target older than the first upgradeable release means the caller mixed up
+    # its inputs (the baseline would be newer than the build under test), so
+    # this stays a hard failure.
+    if ($target -lt $first) { throw "Upgrade target $TargetTag must be newer than $FirstSupportedTag" }
+    # Target equal to the first upgradeable release ("public" rechecks whatever
+    # the public Latest currently is, and Latest may still be that very
+    # release): there is no older published release that supports in-app
+    # upgrade, so the baseline set is genuinely empty. Returning nothing lets
+    # the caller skip the upgrade job; throwing here would make the whole
+    # "recheck public Latest" mode fail with no verification path left.
+    if ($target -eq $first) { return @() }
     $previous = $PublishedTags |
         Where-Object { $_ -cmatch '^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$' } |
         ForEach-Object { ConvertTo-DesktopReleaseVersion $_ } |

@@ -98,21 +98,49 @@ jobs:
               }
             }
           }
-          $matrix = foreach ($platform in $platforms) {
+          $matrix = @(foreach ($platform in $platforms) {
             foreach ($architecture in @('x64', 'arm64')) {
               $runner = Get-DesktopPackageRunnerLabel $platform $architecture
               foreach ($baseline in $baselines) {
                 [pscustomobject]@{ platform = $platform; architecture = $architecture; runner = $runner; baseline = $baseline }
               }
             }
-          }
-          "matrix=$($matrix | ConvertTo-Json -Compress -AsArray)" >> $env:GITHUB_OUTPUT
+          })
+          # -InputObject (not a pipeline) so an empty matrix serializes as `[]`.
+          # `-AsArray` must NOT be added: combined with -InputObject it wraps the
+          # whole collection one level deeper, so an empty matrix becomes `[[]]`
+          # (the `matrix != '[]'` skip guard below then never matches, and the job
+          # runs with an empty runs-on) and a one-entry matrix becomes `[[{...}]]`
+          # (`matrix.runner` resolves to nothing). Piping an empty array emits
+          # nothing at all, which is not valid JSON either.
+          "matrix=$(ConvertTo-Json -Compress -InputObject $matrix)" >> $env:GITHUB_OUTPUT
           "mode=$mode" >> $env:GITHUB_OUTPUT
           "target=$target" >> $env:GITHUB_OUTPUT
+          if ($matrix.Count -eq 0) {
+            # `public` rechecks the current public Latest. When Latest is itself
+            # the first release that supports in-app upgrade there is no older
+            # upgradeable release to start from, so an empty matrix is correct
+            # here - and the upgrade job must skip instead of erroring out.
+            $notice = "当前 Latest $target 就是首个支持应用内升级的版本，没有更早的可升级基线，因此 $mode 模式本次跳过 macOS/Linux 实装升级验证（upgrade 作业 skipped，不是失败）。"
+            Write-Warning $notice
+            if ($env:GITHUB_STEP_SUMMARY) {
+              # AppendAllText + 无 BOM 的 UTF8，而不是 Add-Content：这份 summary
+              # 由多个 step 依次追加，中途插入 BOM 会让后面的中文渲染成乱码
+              # （同 release-assets.yml 的处理）。
+              [System.IO.File]::AppendAllText($env:GITHUB_STEP_SUMMARY, "### 本次跳过 macOS/Linux 实装升级验证`n`n$notice`n", [System.Text.UTF8Encoding]::new($false))
+            }
+          }
 
   upgrade:
     name: ${{ matrix.platform }} ${{ matrix.architecture }} upgrade from ${{ matrix.baseline }} (${{ needs.plan.outputs.mode }})
     needs: plan
+    # An empty matrix is not a silent skip on GitHub Actions: `include: []` fails
+    # the job with "Matrix must define at least one vector". `public` mode yields
+    # no baseline when the public Latest is still the first release supporting
+    # in-app upgrade (see the plan step), so decide the skip here. `always()` plus
+    # the explicit plan-result check preserves "skipped plan skips this job"
+    # (prerelease `release` events) while never evaluating fromJSON('').
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.matrix != '[]' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
