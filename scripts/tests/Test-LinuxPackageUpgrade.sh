@@ -52,7 +52,9 @@ INSTALL="$WORK/Applications/ResumeForge.AppImage"
 mkdir -p "$WORK/Applications"
 cp "$BASELINE_APPIMAGE" "$INSTALL"
 chmod +x "$INSTALL"
-export APPIMAGE_EXTRACT_AND_RUN=1
+# Run through AppImage's normal FUSE mount, as an installed desktop user does.
+# The shared XDG profile then keeps the first-run Python runtime/venv across the
+# old-package and candidate-package launches. CI provisions libfuse2 and xvfb.
 node "$DRIVER" "$INSTALL" linux "$BASELINE_VERSION" "$PROFILE" write linux-package-upgrade
 
 mv "$INSTALL" "$WORK/Applications/ResumeForge.previous.AppImage"
