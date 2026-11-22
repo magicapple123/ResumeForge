@@ -51,13 +51,24 @@ jobs:
     outputs:
       ref: ${{ steps.resolve.outputs.ref }}
     steps:
-      - name: Resolve ref / verify release exists
+      # 这一个 `gh release view` 同时承担两件事：确认 Release 存在、导出它的正文。
+      # 分成两次调用会让「Release 是否存在」有两份判据，迟早漂移；合成一次以后
+      # 「能读到正文」就是「Release 存在」的唯一证据。
+      #
+      # 为什么正文要在这里导出：草稿（draft）Release 只有具备 push 权限的 token 才
+      # 看得见，这个作业是顶层 `contents: write`，看得见；跑安装器的 windows-upgrade
+      # 作业只有 `contents: read`（它要执行下载下来的安装包，写权限 token 不该进那个
+      # 环境），在那里 `gh release view` 拿到的是 404 "release not found"——2.3.1 发版
+      # run 45010882683 的 Windows 升级门禁就是这么挂的。所以正文在这里落盘、以
+      # artifact 交给升级作业，而不是让它自己去读 Release。
+      - name: Resolve ref / verify release exists / export the release notes
         id: resolve
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag }}
           SOURCE_REF: ${{ inputs.source_ref }}
           DRY_RUN: ${{ inputs.dry_run }}
+          NOTES_FILE: release-notes/release-notes.md
         run: |
           set -euo pipefail
           if [ -n "$SOURCE_REF" ]; then
@@ -67,10 +78,30 @@ jobs:
             REF="$TAG"
           fi
           if [ "$DRY_RUN" != "true" ]; then
-            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null ||
+            mkdir -p "$(dirname "$NOTES_FILE")"
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body >"$NOTES_FILE" ||
               { echo "::error::Release '$TAG' does not exist; create it first."; exit 1; }
+            # 空正文必须当场失败：下游会把这份正文当成更新对话框里的发布说明，
+            # 空文件在那里表现成「等不到说明标题」的 180 秒超时，错误信息完全不指向
+            # 真正的原因（空说明）。宁可在这里红在正确的位置上。
+            if [ ! -s "$NOTES_FILE" ]; then
+              echo "::error::Release '$TAG' 的说明为空。升级门禁会用这份正文校验更新对话框，空说明无法通过；请先补上发布说明再重跑。"
+              exit 1
+            fi
+            echo "Exported $(wc -c <"$NOTES_FILE") bytes of release notes for '$TAG'."
           fi
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
+      # 只在真发版时上传：dry_run 走 rehearsal 模式，include_release_notes 为 false，
+      # 没有任何作业会下载它。
+      - name: Upload the release notes for the upgrade gate
+        if: ${{ !inputs.dry_run }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: release-notes/release-notes.md
+          retention-days: 7
+          if-no-files-found: error
 
   windows-installer:
     name: Windows installer (Setup.exe)

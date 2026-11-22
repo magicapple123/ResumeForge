@@ -162,10 +162,39 @@ jobs:
           name: windows-installer
           path: ${{ env.WINDOWS_UPGRADE_DIR }}/candidate
 
+      # 发布说明由 release-assets.yml 的 target 作业（`contents: write`）导出，
+      # 这个作业只把它取下来用，不自己去读 Release。
+      #
+      # 为什么不能在这里 `gh release view`：草稿 Release 只有具备 push 权限的 token
+      # 才可见，本作业的顶层权限是 `contents: read`（跑安装器的环境不该拿写权限），
+      # 于是拿到 404 "release not found" —— 2.3.1 发版 run 45010882683 的 Windows
+      # 升级门禁正是这样挂的。
+      #
+      # 这个 artifact 只存在于一条来路：release-assets.yml 的 candidate 模式
+      # （它传的是 `include_release_notes: !inputs.dry_run`）。另外两条独立触发路径
+      # ——workflow_dispatch 与 release: published——不经过 release-assets，压根不会
+      # 有这么个 artifact，而它们的 `include_release_notes` 恒为 false
+      # （workflow_dispatch 没有这个输入、release 事件没有 inputs），所以本步骤不会
+      # 触发。**不要**把 include_release_notes 的默认值改成 true：那会让这两条路径
+      # 去找一个不存在的 artifact，把它们全部弄红。
+      - name: Download the release notes for this candidate
+        if: ${{ inputs.include_release_notes }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes
+
       - name: Exercise the installed app's update flow
         env:
+          # 仍然需要：下面 `gh release download $env:BASELINE_TAG` 取的是**已发布**
+          # 的官方基线安装包，gh 在没有 token 时直接拒绝运行。所以这里不能因为
+          # 「不再用 gh 读发布说明」就把它删掉。
           GH_TOKEN: ${{ github.token }}
           INCLUDE_RELEASE_NOTES: ${{ inputs.include_release_notes }}
+          # 上一节 download-artifact 落盘的目录。只传目录、不传文件名，脚本里自己
+          # Join-Path + Get-Item——文件缺失时 Get-Item 直接抛错，所以「拿不到说明」
+          # 一定是失败，不会退化成「跳过说明检查」。
+          RELEASE_NOTES_DIR: ${{ runner.temp }}/release-notes
         run: |
           Import-Module ./scripts/tests/WindowsUpgradeRelease.psm1
           $repo = $env:GITHUB_REPOSITORY
@@ -183,10 +212,11 @@ jobs:
           } else {
             $options.CandidateInstaller = Join-Path $env:WINDOWS_UPGRADE_DIR ('candidate/' + (Get-WindowsInstallerName $env:TARGET_TAG))
             if ($env:INCLUDE_RELEASE_NOTES -eq 'true') {
-              $notes = Join-Path $env:WINDOWS_UPGRADE_DIR 'release-notes.md'
-              gh release view $env:TARGET_TAG --repo $repo --json body --jq .body | Set-Content -LiteralPath $notes -Encoding utf8NoBOM
-              if ($LASTEXITCODE) { throw 'Could not read the release notes' }
-              $options.ReleaseNotesFile = $notes
+              # 直接使用上一节下载下来的文件。这里**不再**调 gh：草稿 Release 对
+              # 本作业的只读 token 不可见（见上面的步骤注释）。
+              $notes = Get-Item -LiteralPath (Join-Path $env:RELEASE_NOTES_DIR 'release-notes.md')
+              if ($notes.Length -le 0) { throw "The release notes artifact is empty: $($notes.FullName)" }
+              $options.ReleaseNotesFile = $notes.FullName
             }
           }
           $env:GH_TOKEN = $null
