@@ -8,6 +8,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
 const { randomUUID } = require("node:crypto");
+// 版本号来自命令行参数，造正则这件事收在 lib/update-version-match.js 里
+// （CodeQL #137 js/regex-injection：只转 "." 不够，整串转义）。
+const { versionDialogMatcher } = require("../lib/update-version-match");
 const playwright = require(require.resolve("@playwright/test", { paths: [path.resolve(__dirname, "../../frontend")] }));
 
 async function serveCandidate(app, version, candidate, notesFile) {
@@ -81,7 +84,7 @@ async function drive(executablePath, baselineVersion, version, work, candidate, 
       await page.removeLocatorHandler(startupDialog);
     };
     await openFromSettings();
-    const targetName = new RegExp(`(?:^|[^\\d.])${version.replaceAll(".", "\\.")}(?![\\d.])`);
+    const targetName = versionDialogMatcher(version);
     const offer = page.getByRole("dialog", { name: targetName });
     const readNotes = async () => {
       const notes = offer.locator("section[aria-label]");

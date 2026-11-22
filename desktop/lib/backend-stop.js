@@ -19,8 +19,13 @@
 // Everything it needs from the manager (spawnFn / execFileFn / verifyProcessFn /
 // exitConfirmTimeoutMs / the adopted record) is read off `manager`, so the
 // manager keeps owning the lifecycle while this module owns the decisions.
+//
+// A1（2026-11-21）：探测到端口仍 OPEN 时不再只是"再等一会儿"——先反查监听进程
+// （lib/port-listener.js），身份校验通过就补杀一次，然后再探测。判定与副作用在
+// lib/backend-listener-rescue.js，这里只把探测/终止/时间线注入进去。
 
 const processIdentity = require("./process-identity");
+const { rescueOrphanListener, urlPort } = require("./backend-listener-rescue");
 const net = require("net");
 
 // Three-state port probe (R3). A single `connect` attempt used to answer a
@@ -33,6 +38,8 @@ const net = require("net");
 const PORT_STATE_OPEN = "open";
 const PORT_STATE_CLOSED = "closed";
 const PORT_STATE_UNKNOWN = "unknown";
+// 同一组状态交给 lib/backend-listener-rescue.js：状态名只在这里定义一次。
+const PORT_STATES = { OPEN: PORT_STATE_OPEN, CLOSED: PORT_STATE_CLOSED, UNKNOWN: PORT_STATE_UNKNOWN };
 
 // ~0/250/750ms: a backend that is really gone refuses the very first connect;
 // the retries exist for a socket that is still unwinding after the kill.
@@ -50,6 +57,13 @@ function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+// 等待的注入点（默认真等）。连续 OPEN 时那条探测序列要真等 5.5 秒，而"仍然 blocked"
+// 的用例关心的只是判定，不该为此变慢；生产里没有这一项，行为与之前逐字一致。
+function pause(manager, ms) {
+  const sleepFn = manager && manager.sleepFn;
+  return typeof sleepFn === "function" ? sleepFn(ms) : sleep(ms);
 }
 
 // Quit timing (R3 acceptance evidence): lib/quit-lifecycle hands a recorder down
@@ -124,7 +138,7 @@ async function probeBackendPort(manager, attemptFn) {
   let refused = 0;
   let last = { state: PORT_STATE_UNKNOWN, detail: "" };
   for (const [attempt, delay] of delays.entries()) {
-    if (delay > 0) await sleep(delay);
+    if (delay > 0) await pause(manager, delay);
     const attemptResult = attemptFn
       ? normalizeProbeResult(await attemptFn(manager, attempt))
       : await probePortOnce(manager.url);
@@ -149,6 +163,9 @@ async function probeBackendPort(manager, attemptFn) {
 // RF_BACKEND_COMMAND_PATTERN in scripts/macos/start.sh). A recorded pid whose
 // command line does not match this is never treated as ours.
 const BACKEND_COMMAND_PATTERNS = ["uvicorn\\s+app\\.main:app"];
+
+// 探测到 OPEN 之后的补救步骤（A1）住在 lib/backend-listener-rescue.js：这里只把它
+// 需要的判定器注入进去，两个模块因此不互相 require。
 
 // A pid we spawned is ours by construction (the child handle pins it), but it
 // is still re-checked against the identity snapshot taken at spawn before the
@@ -216,14 +233,50 @@ async function stopBackend(manager) {
     const probe = await probeBackendPort(manager, manager.portProbeFn);
     markQuitTimeline(manager, "port probe");
     if (probe.state === PORT_STATE_OPEN) {
-      // Still reachable: fail closed, exactly as before (an update must not be
-      // installed over a backend that is demonstrably alive).
-      outcome = {
-        ok: false,
-        reason: "根进程已退出，但后端端口仍可连接，无法确认后代进程已停止",
-        verified: false,
-        detail: probe.detail,
-      };
+      // A1：端口还通不再等于"到此为止"。先问 OS 是谁在听：确认是我们的后端就补杀
+      // 一次，再探测；查不到、不是我们的、补杀后还通，一律保持 blocked（fail-closed）。
+      const rescue = await rescueOrphanListener(manager, urlPort(manager.url), probe.detail, {
+        portStates: PORT_STATES,
+        commandPatterns: BACKEND_COMMAND_PATTERNS,
+        confirmTermination,
+        probeBackendPort,
+        markQuitTimeline,
+      });
+      if (rescue.state === PORT_STATE_CLOSED) {
+        // 补杀成功：这一次的停止是有证据的（进程身份校验过 + 端口已关闭）。
+        outcome = {
+          ok: true,
+          reason: "",
+          verified: true,
+          rescued: true,
+          detail: rescue.detail,
+          // 那一行证据由壳写进 desktop-main.log（quit-lifecycle 的 logLine）；
+          // backend-manager.js / main.js 都贴着 500 行预算，不再加注入点。
+          rescueLog: rescue.log,
+        };
+      } else if (rescue.state === PORT_STATE_UNKNOWN) {
+        // 补杀后探测读不出结论：与普通 unknown 同一口径 —— 退出不为此卡住，
+        // 但这次停止**不算已核验**，安装更新仍会被拦住。
+        outcome = {
+          ok: true,
+          reason: "",
+          verified: false,
+          rescued: true,
+          warning: "补杀后端口探测未能确认后端已停止",
+          detail: rescue.detail,
+          rescueLog: rescue.log,
+        };
+      } else {
+        outcome = {
+          ok: false,
+          reason: `根进程已退出，但后端端口仍可连接，无法确认后代进程已停止${
+            rescue.reason ? `（${rescue.reason}）` : ""
+          }`,
+          verified: false,
+          detail: rescue.detail || probe.detail,
+          rescueLog: rescue.log,
+        };
+      }
     } else if (probe.state === PORT_STATE_UNKNOWN) {
       // Cannot tell (timeout / unexpected errno). A quit must not be held
       // hostage by an unreadable socket, but the stop is NOT verified -- the
@@ -378,6 +431,7 @@ module.exports = {
   BACKEND_COMMAND_PATTERNS,
   confirmTermination,
   probeBackendPort,
+  rescueOrphanListener,
   stopAdoptedBackend,
   stopBackend,
   verifySpawnedChild,

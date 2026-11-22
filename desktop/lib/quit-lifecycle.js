@@ -291,6 +291,10 @@ function createQuitLifecycle(deps) {
       const backend = getBackend();
       const backendUrl = (backend && backend.url) || "（未知）";
       const probeDetail = (outcome && outcome.detail) || "（无）";
+      // A1：端口还通时补杀监听进程的那一行证据（端口 → pid → 命令行 → 结果）。
+      // 它由 backend-stop / backend-listener-rescue 产出，写在这里是因为 desktop-main.log
+      // 的出口只有这一个（那两个文件也都贴着 500 行预算）。
+      if (outcome && outcome.rescueLog) logLine(outcome.rescueLog);
       if (stopOk && (!installPending || stopVerified)) {
         spawnPendingInstaller();
       } else if (installPending) {

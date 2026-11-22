@@ -44,12 +44,14 @@ const PROBE_UNREADABLE = Symbol("process-probe-unreadable");
 
 const QUERY_TIMEOUT_MS = 10_000;
 
-function defaultExecFile(file, args) {
+// `timeoutMs` 可覆盖：端口反查（lib/port-listener.js）自己要更紧的预算（5s），
+// 而身份校验沿用 10s。默认值不变，既有调用点（含注入的 execFileFn）行为完全一致。
+function defaultExecFile(file, args, { timeoutMs = QUERY_TIMEOUT_MS } = {}) {
   return new Promise((resolve) => {
     execFile(
       file,
       args,
-      { windowsHide: true, timeout: QUERY_TIMEOUT_MS, maxBuffer: 1 << 20 },
+      { windowsHide: true, timeout: timeoutMs, maxBuffer: 1 << 20 },
       (error, stdout, stderr) => {
         resolve({
           code: error && typeof error.code === "number" ? error.code : error ? 1 : 0,
@@ -290,6 +292,7 @@ module.exports = {
   STATUS_UNVERIFIABLE,
   STATUS_VERIFIED,
   commandMatches,
+  defaultExecFile,
   parseProcessRecord,
   readProcessInfo,
   verifyProcessRecord,

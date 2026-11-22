@@ -116,6 +116,10 @@ files:
   - lib/backend-logs.js
   # Stop/kill decisions (identity re-verification) used by backend-manager.js.
   - lib/backend-stop.js
+  # A1（2026-11-22）：端口还通时的反查与补杀。backend-stop.js 顶层 require 这两个文件，
+  # 漏打包 = 安装版一停止后端就 MODULE_NOT_FOUND（scripts/check-asar-deps.js 会拦）。
+  - lib/port-listener.js
+  - lib/backend-listener-rescue.js
   - lib/backend-startup.js
   # 后端进程 env 构造（RF_DATA_DIR / RF_DESKTOP_LOG_DIR）与桌面日志目录裁决——
   # backend-manager.js 顶层 require 它，漏打包即崩（行数预算的下沉，同 backend-logs.js）。

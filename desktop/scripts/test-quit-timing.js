@@ -203,3 +203,20 @@ test("install path still hides first and spawns only after the stop completes", 
   assert.ok(order.indexOf("installer-spawn") > order.indexOf("stop"),
     `installer must spawn after the stop (order: ${order.join(" -> ")})`);
 });
+
+test("A1：补杀监听进程的那一行证据确实进了 desktop-main.log", async () => {
+  // backend-stop / backend-listener-rescue 只**产出**那一行（outcome.rescueLog），真正写盘
+  // 是在这里。少了这一步，日志里就查不到"端口 → pid → 命令行 → 结果"，下次再出现
+  // 「端口仍可连接」时又只能靠猜（2026-11-21 那次就是这样）。
+  const rescueLog =
+    'backend stop rescued listener (port=51152; pid=2222; command="python -m uvicorn app.main:app"; result=已补杀，端口已关闭)';
+  const backend = {
+    url: "http://127.0.0.1:51152",
+    stop: () => Promise.resolve({ ok: true, reason: "", verified: true, rescued: true, rescueLog }),
+  };
+  const { lifecycle, logs, app } = makeHarness({ backend });
+  quit(lifecycle);
+  await flush();
+  assert.ok(logs.includes(rescueLog), `补杀证据必须原样落进日志（实际：${JSON.stringify(logs)}）`);
+  assert.strictEqual(app.quitCalls, 1, "记这一行不影响退出本身");
+});

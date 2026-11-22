@@ -1,9 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
 "use strict";
 
+// 打包冒烟：起得来 + 页面可用 + 后端健康 + 用户数据还在 + **退得干净**（A3）。
+//
+// 最后一段以前是 `process.kill(-pid, "SIGKILL")`：它只证明了「我们能杀掉它」，
+// 从没证明过「应用自己退得干净」。2.2.3 的两次应用内更新（12:34 / 12:37，都被
+// 「根进程已退出，但后端端口仍可连接」挡住）就是从这个缺口漏过去的——壳退了，
+// uvicorn 还占着端口，而冒烟是绿的。
+//
+// 判据改成走**显式退出**：window.splash.quitApp() → ipcMain "app:quit-request" →
+// app.quit() → before-quit（lib/quit-lifecycle.js 的唯一停止点），也就是用户点
+// 「退出应用」的同一条路。判定逻辑与诊断文案在 lib/packaged-quit-gate.js，
+// 七条离线用例在 scripts/test-packaged-quit-gate.js——这里只负责把它接到真包上。
+//
+// Usage (与 scripts/tests/Test-*PackageUpgrade.* 的调用保持一致):
+//   node scripts/verify-packaged-startup.js \
+//     <executable> <win32|darwin|linux> <version> <profile-dir> <write|verify> <marker-value>
+
 const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
+// 退出判据：显式退出（45s 预算，理由见该文件的头注释）+ 后端端口释放。
+const { EXPLICIT_QUIT_BUDGET_MS, verifyExplicitQuit } = require("../lib/packaged-quit-gate");
 const playwright = require(require.resolve("@playwright/test", {
   paths: [path.resolve(__dirname, "../../frontend")],
 }));
@@ -87,25 +105,27 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
     stage("desktop-smoke-passed");
     console.log(`PASS: ${platform} desktop ${expectedVersion}, UI, API health, and data marker ${markerMode}`);
 
-    stage("terminating-isolated-process-group");
-    // Linux AppImages can leave a tray process alive after window close. This
-    // helper only runs on the disposable CI profile, so terminate the isolated
-    // package process group directly before replacing the candidate file.
-    try {
-      process.kill(-processHandle.pid, "SIGKILL");
-    } catch {
-      try {
-        processHandle.kill("SIGKILL");
-      } catch {
-        if (processHandle.exitCode === null && processHandle.signalCode === null) throw new Error("Could not stop isolated smoke app");
-      }
-    }
-    await Promise.race([
-      processExited,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Isolated smoke app did not exit")), 10_000)),
-    ]);
-    stage("package-process-exited");
+    // 端口与健康地址在**退出前**取：退出之后页面就没了，URL 也会失效。
+    const backendUrl = page.url();
+    const backendPort = Number(new URL(backendUrl).port);
+    const quit = await verifyExplicitQuit({
+      page,
+      processHandle,
+      platform,
+      port: backendPort,
+      healthUrl: new URL("/api/health", backendUrl).href,
+      budgetMs: EXPLICIT_QUIT_BUDGET_MS,
+      stage,
+    });
+    stage("explicit-quit-verified");
+    console.log(
+      `PASS: ${platform} desktop ${expectedVersion} exited via splash.quitApp() in ${quit.elapsedMs}ms ` +
+        `and released backend port ${backendPort}`,
+    );
   } finally {
+    // 判据失败时进程可能还活着（那正是要报的事），这里只做清理、不做判定：
+    // Linux AppImage 的托盘进程会自己挂着，而冒烟跑在一次性 CI profile 上，
+    // 不清理就会把候选文件锁住、让下一条用例报一个假错。
     if (processHandle.exitCode === null && processHandle.signalCode === null) {
       stage("stopping-isolated-process-group");
       try {
