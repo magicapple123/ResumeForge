@@ -87,32 +87,24 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
     stage("desktop-smoke-passed");
     console.log(`PASS: ${platform} desktop ${expectedVersion}, UI, API health, and data marker ${markerMode}`);
 
-    const exited = () =>
-      processHandle.exitCode !== null || processHandle.signalCode !== null
-        ? Promise.resolve(true)
-        : Promise.race([
-            processExited.then(() => true),
-            new Promise(resolve => setTimeout(() => resolve(false), 10_000)),
-          ]);
-    // The quit request can close this renderer while the CDP evaluation reply
-    // is in flight. Schedule it from the page and let the protocol reply first.
-    await page.evaluate(() => window.setTimeout(() => window.splash?.quitApp?.(), 100));
-    if (!(await exited())) {
-      console.warn("App stayed resident after the smoke test. Stopping its isolated process group.");
+    stage("terminating-isolated-process-group");
+    // Linux AppImages can leave a tray process alive after window close. This
+    // helper only runs on the disposable CI profile, so terminate the isolated
+    // package process group directly before replacing the candidate file.
+    try {
+      process.kill(-processHandle.pid, "SIGKILL");
+    } catch {
       try {
-        process.kill(-processHandle.pid, "SIGTERM");
+        processHandle.kill("SIGKILL");
       } catch {
-        processHandle.kill("SIGTERM");
-      }
-      if (!(await exited())) {
-        try {
-          process.kill(-processHandle.pid, "SIGKILL");
-        } catch {
-          processHandle.kill("SIGKILL");
-        }
+        if (processHandle.exitCode === null && processHandle.signalCode === null) throw new Error("Could not stop isolated smoke app");
       }
     }
-    assert.ok(await exited(), "the isolated packaged app process must terminate before replacing its bundle");
+    await Promise.race([
+      processExited,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Isolated smoke app did not exit")), 10_000)),
+    ]);
+    stage("package-process-exited");
   } finally {
     if (processHandle.exitCode === null && processHandle.signalCode === null) {
       stage("stopping-isolated-process-group");
