@@ -16,11 +16,12 @@
 // 收尾（2026-11-22，run 45014630409）：Linux 四个矩阵在 10:57:57 就打出了判据错误
 // （「后端端口在进程退出后仍被占用」），然后 **28 分钟没有任何输出**，直到作业被取消。
 // 判据早就有结论了，挂着的是这个 Node 进程本身——而判据失败恰恰就是"应用没退干净"
-// 的情形：Playwright 的连接与 driver 这时可能永远不 settle，旧代码却只设
-// `process.exitCode = 1`，退不退出全看事件循环能不能自己空掉。于是：
+// 的情形：Playwright 的连接与壳进程句柄这时**可能**永远不 settle（未实测到确定的那一个
+// 句柄，见 releaseProcessPipes 的限制说明），旧代码却只设 `process.exitCode = 1`，
+// 退不退出全看事件循环能不能自己空掉。于是：
 //   ① finally 里 application.close() 改成有界等待（到点只记一行，不改判据）；
 //   ② verify() 一有结论就显式 process.exit()（先 flush，别把日志丢在管道里）。
-// 退出码语义一个字没变：判绿 0、抛错 1。理由与反证见下面两处注释。
+// 退出码语义一个字没变：判绿 0、抛错 1。理由与反证见下面几处注释。
 //
 // Usage (与 scripts/tests/Test-*PackageUpgrade.* 的调用保持一致):
 //   node scripts/verify-packaged-startup.js \
@@ -36,9 +37,10 @@ const playwright = require(require.resolve("@playwright/test", {
 }));
 
 // `application.close()` 的等待上限。健康路径上它几十毫秒就完成；上限存在的唯一理由
-// 是判据失败那条路：壳进程可能刚被杀掉，而 Playwright 的 close 等的是子进程的
-// `close` 事件（不是 `exit`），只要还有子孙进程捏着继承来的管道，那个事件就可能
-// 永远不来。没有上限 = 收尾可以无限长 = xvfb-run 跟着无限等。
+// 是判据失败那条路：壳进程可能刚被杀掉，而 Playwright 的 close 要等子进程的收尾
+// （它等的是 `close` 事件而非 `exit`），只要还有什么东西捏着壳的继承管道，那个事件
+// 就可能永远不来。没有上限 = 收尾可以无限长 = xvfb-run 跟着无限等 = 作业挂到
+// timeout-minutes（这正是 2026-11-22 那 28 分钟的形态）。
 const CLOSE_BUDGET_MS = 8_000;
 
 // 退出前把 stdout/stderr 交出去的兜底上限。管道读端已经没了时（CI 取消作业很常见），
@@ -50,8 +52,13 @@ const EXIT_FLUSH_BUDGET_MS = 2_000;
  *
  * 为什么需要：electron 的 stdout/stderr 是 Playwright 用 `stdio: "pipe"` 建的管道，
  * 读端在本进程里；后端（uvicorn）是壳的**孙**进程，继承了那两个写端。判据失败时
- * 壳退了、后端还在（那正是断言②在报的事），写端就永远不关，我们的读端也永远等不到
- * EOF。destroy 是纯清理：判定已经落地，这里不改任何结论，只是别把句柄留给退出流程。
+ * 壳退了、后端还在（那正是断言②在报的事），写端就一直不关，我们的读端也永远等不到
+ * EOF —— 而"永远不来的 EOF"正是"事件循环永不空"的经典来源之一。
+ *
+ * 限制（不要把它当成已验证的根因）：本地 Windows 复现不出"孙进程持有写端导致父进程
+ * 不退出"（Node 对子进程 stdio 的 socket 会 unref，见 2026-11-22 的对照实验），
+ * Linux 上是否同样 unref 未实测。所以这是一条**廉价的防御性清理**：判定已经落地，
+ * 它不改任何结论，最坏情况只是没效果。真正保证退出的是上面的 exitWithFlush。
  *
  * @param {object} processHandle Playwright 给出的壳进程句柄（真 ChildProcess）。
  */
@@ -243,7 +250,12 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
       try {
         process.kill(-processHandle.pid, "SIGKILL");
       } catch {
-        processHandle.kill("SIGKILL");
+        try {
+          processHandle.kill("SIGKILL");
+        } catch {
+          // 清理失败不改判据：上面那条断言已经把"应用没退"说清楚了，
+          // 而这里抛出去会把真正的失败原因盖掉。
+        }
       }
       await Promise.race([processExited, new Promise(resolve => setTimeout(resolve, 10_000))]);
     }
