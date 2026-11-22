@@ -57,6 +57,8 @@ function loadMain(options = {}) {
     // Q11：自绘关闭卡片被弹出了几次（取代 messageBoxPrompts，作为弹没弹的观测面）。
     closeDialogPrompts: [],
     ipcHandlers: {},
+    // app.on 注册的**全部**处理器（按事件名分组）：只记 before-quit 会让 will-quit 兜底消失。
+    handlers: {},
     themeCalls: [],
     // 壳层语言（T5）：托盘 tooltip、窗口标题、关闭卡片的 loadURL（含 ?locale=）。
     trayToolTips: [],
@@ -90,6 +92,7 @@ function loadMain(options = {}) {
       return Promise.resolve();
     },
     on(name, handler) {
+      (events.handlers[name] = events.handlers[name] || []).push(handler);
       if (name === "before-quit") events.beforeQuitHandler = handler;
     },
     getPath(name) {

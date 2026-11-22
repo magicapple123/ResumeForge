@@ -129,7 +129,15 @@ function normalizeProbeResult(result) {
 // `manager.portOpenFn` keeps its original boolean contract and is deliberately
 // NOT retried: existing tests assert one probe per stop.
 async function probeBackendPort(manager, attemptFn) {
-  if (!manager.url) return { state: PORT_STATE_CLOSED, detail: "后端地址未知（尚未启动）" };
+  if (!manager.url) {
+    // Fail-closed（2026-11-23）：没有地址 = **不知道**后端在哪，不是"已经没了"。
+    // 这里以前返回 CLOSED，等于把"我不知道"读成"它停了"：stopBackend 的 `if (outcome.ok)`
+    // 一拿到 CLOSED 就整条链路"确认已停"，before-quit 随即放行，壳 177ms 退出，而真
+    // uvicorn 还活着（2.3.1 门禁 run 45017991307，Linux 四个矩阵全红）。
+    // 三态里 UNKNOWN 早就存在，stopBackend 对它的处理也早就存在：退出不因此卡住，
+    // 但这次停止**不算已核验**（安装更新会被拦住），并留下一行证据。
+    return { state: PORT_STATE_UNKNOWN, detail: "后端地址未知（尚未启动或交接未记录），无法探测" };
+  }
   if (!attemptFn && manager.portOpenFn) {
     const open = await manager.portOpenFn(manager.url);
     return { state: open ? PORT_STATE_OPEN : PORT_STATE_CLOSED, detail: "测试注入 portOpenFn" };

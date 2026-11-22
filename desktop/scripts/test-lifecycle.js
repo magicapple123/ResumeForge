@@ -424,3 +424,33 @@ test("restart budget: >3 crashes within 5 minutes give up with an error dialog",
     loaded.cleanup();
   }
 });
+
+// --- 接线：main.js 必须把 app 递进 quit-lifecycle，will-quit 兜底才挂得上 --------
+//
+// 这条兜底是「壳要走了，后端跟着走」的唯一同步手段：lib/quit-lifecycle.js 在构造时
+// 自己 `app.on("will-quit", handleWillQuit)`，判据是 `typeof app.on === "function"`。
+// 它写在 lib 里（而不是 main.js 里）是为了 main.js 的 500 行预算，代价是**注册点与
+// 装配点分居两个文件**：main.js 的 createQuitLifecycle deps 一旦漏掉 `app`，注册会被
+// 那行类型判断安静跳过，兜底消失而其余用例全绿。本用例读的是**经过 main.js 装配后**
+// 的 app 替身，是这条接线唯一的覆盖点——所以替身必须记录全部事件（lifecycle-harness）。
+
+test("main.js 装配后 will-quit 上有兜底监听器（deps 漏传 app 就静默消失）", () => {
+  const loaded = loadMain();
+  try {
+    const willQuitHandlers = loaded.events.handlers["will-quit"] || [];
+    assert.strictEqual(
+      willQuitHandlers.length,
+      1,
+      "will-quit 上必须恰好一个监听器：零个 = 兜底没接上（main.js 的 " +
+        "createQuitLifecycle deps 漏了 app，退出只剩 before-quit 的异步结论，" +
+        "判错就留下占着端口的孤儿后端）；多于一个 = 重复注册，会发两次 SIGTERM",
+    );
+    assert.strictEqual(
+      typeof willQuitHandlers[0],
+      "function",
+      "will-quit 的监听器必须是函数（兜底没接上）",
+    );
+  } finally {
+    loaded.cleanup();
+  }
+});

@@ -11,6 +11,8 @@
 // main.js keeps the registration point (`app.on("before-quit", ...)`) and the
 // `quitting` flag: the window close handler and the crash supervisor read that
 // flag directly, so it stays a local there and is flipped through `setQuitting`.
+// The `will-quit` fallback is the one exception -- it registers itself below,
+// because it only reads state owned by this closure (see handleWillQuit).
 //
 // Three things are injected rather than required, on purpose:
 //   * `app` / `dialog` -- this module must NOT `require("electron")`. The lifecycle
@@ -28,6 +30,7 @@
 // 用户可见的两条错误框文案跟随应用内语言（lib/shell-locale.js）；日志行保持原样。
 
 const { t } = require("./shell-locale");
+const { terminateRecordedBackend } = require("./backend-emergency-stop");
 
 // Hard cap on how long before-quit waits for the backend to stop. A normal
 // quit is a user waiting in front of the tray menu, so the cap is short: a
@@ -100,8 +103,10 @@ function createQuitTimeline(startedAt, emit) {
  * @param {function(any): void} deps.clearTimeout Timer venue of the caller.
  * @param {function(): ("zh" | "en")} [deps.getLocale] Current shell locale for the two dialogs.
  * @returns {{requestInstallAndQuit: function(string): void, handleBeforeQuit: function(object): void,
+ *   handleWillQuit: function(): void,
  *   getPendingInstallerPath: function(): (string|null), setPendingInstallerPath: function((string|null)): void}}
- *   The lifecycle surface; `handleBeforeQuit` is what `app.on("before-quit")` registers.
+ *   The lifecycle surface; `handleBeforeQuit` is what `app.on("before-quit")` registers,
+ *   `handleWillQuit` (registered internally) is the synchronous last-resort SIGTERM.
  */
 function createQuitLifecycle(deps) {
   const {
@@ -132,6 +137,9 @@ function createQuitLifecycle(deps) {
   // resumed exactly once.
   let stopInFlight = false;
   let shutdownComplete = false;
+  // 上一次异步停止的结论 { ok, reason, verified }：will-quit 的兜底靠它判断
+  // "异步那条路确认成功了吗"。null = 还没跑过（等于"没确认"）。
+  let lastStopOutcome = null;
 
   /** @returns {(string|null)} The verified installer awaiting a spawn, if any. */
   function getPendingInstallerPath() {
@@ -228,6 +236,27 @@ function createQuitLifecycle(deps) {
     }
   }
 
+  // will-quit 兜底：**同步**给记录中的后端补一刀 SIGTERM（lib/backend-emergency-stop.js）。
+  //
+  // 为什么要有这一层（2026-11-23，2.3.1 门禁 run 45017991307）：Linux 的四个矩阵里
+  // 显式退出之后壳 177ms 就退了，uvicorn 还在端口上 accept。before-quit 的停止是异步
+  // 的，它的结论依赖 manager 里的状态；只要那条路判错（或压根没拿到 pid），壳照样
+  // 退出，后端就成了孤儿。这里不参与判断，只保证"壳要走了，后端跟着走"。
+  //
+  // 三个约束：同步（不等 Promise）、只打 manager 自己的记录（不按端口反查）、幂等
+  // （异步停止已确认就一个信号都不发）。任何异常都只记一行——兜底失败不能盖掉
+  // 真正的失败原因，更不能挡住 quit。
+  function handleWillQuit() {
+    try {
+      const outcome = lastStopOutcome;
+      const stopConfirmed = Boolean(outcome && outcome.ok === true && outcome.verified === true);
+      const report = terminateRecordedBackend(getBackend(), { stopConfirmed });
+      for (const line of report.log) logLine(line);
+    } catch (err) {
+      logLine(`quit fallback failed: ${err}`);
+    }
+  }
+
   // The body of main.js' former `app.on("before-quit", (event) => { ... })`.
   function handleBeforeQuit(event) {
     // Second pass after the stop completed (and the installer, if any, was
@@ -284,6 +313,8 @@ function createQuitLifecycle(deps) {
     stopCapped.then((outcome) => {
       stopInFlight = false;
       shutdownComplete = true;
+      // will-quit 的兜底读它："异步停止确认成功了吗"只有这一个判据。
+      lastStopOutcome = outcome;
       const stopOk = Boolean(outcome && outcome.ok);
       const stopVerified = !outcome || outcome.verified !== false;
       const locale = getLocale();
@@ -325,9 +356,16 @@ function createQuitLifecycle(deps) {
     });
   }
 
+  // 兜底钩子的注册点放在**本模块**，不放在 main.js：before-quit 由 main.js 注册是
+  // 因为 `quitting` 是那里的局部变量，而这条兜底只读本闭包里的状态
+  // （lastStopOutcome / getBackend），main.js 的 500 行预算因此一行都不用动。
+  // `app.on` 不存在时（离线用例的极简替身）只是不注册，其余行为不变。
+  if (app && typeof app.on === "function") app.on("will-quit", handleWillQuit);
+
   return {
     requestInstallAndQuit,
     handleBeforeQuit,
+    handleWillQuit,
     getPendingInstallerPath,
     setPendingInstallerPath,
   };

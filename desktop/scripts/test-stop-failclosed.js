@@ -141,9 +141,25 @@ test("all three attempts refusing the connection is a clean, verified stop", asy
   assert.equal(outcome.warning, undefined);
 });
 
-test("a backend that never started has nothing to probe", async () => {
+test("an unknown backend URL is 'unknown', never 'definitely gone' (fail-closed)", async () => {
+  // 2026-11-23（2.3.1 门禁 run 45017991307）：这里以前返回 "closed"，于是
+  // stopBackend 的 `if (outcome.ok)` 一拿到 CLOSED 就整条链路"确认已停"——
+  // 壳 177ms 退出，而 uvicorn 还在 127.0.0.1:38223 上 accept。
+  // "没有地址"是**不知道**，不是"已停止"：三态里 UNKNOWN 就是为这件事存在的。
   const probe = await probeBackendPort({ url: null });
-  assert.equal(probe.state, "closed");
+  assert.equal(probe.state, "unknown", "缺少地址只能得出「无法探测」");
+  assert.match(probe.detail, /地址未知/, "日志里要能看出是哪一种无法确认");
+});
+
+test("stopBackend with an unknown URL does not report a confirmed stop", async () => {
+  // 同一个洞在 stopBackend 层的形状：进程树那边"没有任何可杀的东西"，端口那边
+  // "不知道在哪" —— 结论必须是 ok:true（普通退出不该被卡住）+ verified:false
+  // （这次停止没有证据，安装更新会被拦住）。
+  const manager = quietManager({ url: null, portProbeFn: () => assert.fail("没有地址就不该去探测") });
+  const outcome = await stopBackend(manager);
+  assert.equal(outcome.ok, true, "普通退出不因为「不知道」卡住");
+  assert.equal(outcome.verified, false, "但绝不能报成「已确认停止」");
+  assert.ok(outcome.warning, "要留一行可写进 desktop-main.log 的证据");
 });
 
 // --- A1：永远不排空的监听者（2026-11-21） -------------------------------------

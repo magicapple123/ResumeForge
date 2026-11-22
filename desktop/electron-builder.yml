@@ -71,6 +71,9 @@ files:
   # Quit lifecycle (before-quit / stop / installer spawn) lifted out of main.js
   # for the 500-line budget; main.js requires it at top level.
   - lib/quit-lifecycle.js
+  # will-quit 的同步兜底（quit-lifecycle.js 顶层 require 它）：壳退出前给记录中的
+  # 后端补一刀 SIGTERM。漏打包 = 那条 require 直接抛，安装版启动即崩。
+  - lib/backend-emergency-stop.js
   # 「更新尝试」标记 + 下次启动对账（第 9.2 条）：updater.js 顶层 require 它，
   # 漏打包 = 安装版启动即崩，而更新器正是唯一能救回这种包的东西，
   # 所以必须列进来（scripts/check-asar-deps.js 会拦）。

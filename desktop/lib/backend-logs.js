@@ -19,9 +19,18 @@ const { rotateLogFile } = require("./backend-runtime");
 const BACKEND_LOG_NAME = "desktop-backend.log";
 // 兜底启动器（Start-ResumeForge.ps1 / start.sh）在退出前记下真后端进程：
 // Windows 写 JSON（backend.json），macOS 写扁平 key=value（backend.macos.pid），
-// 同一份信息两种形状（scripts/macos/lib/common.sh），所以两种都要读（RR-02）。
+// Linux 也写扁平 key=value，但**文件名不同**（backend.linux.pid）——同一份信息
+// 三种文件（scripts/macos/lib/common.sh、scripts/linux/lib/common.sh:473），
+// 所以三种都要读（RR-02）。
+//
+// Linux 这一种曾经漏读：壳只找 backend.json / backend.macos.pid，于是 Linux 打包态
+// （payload 按设计不带 python-runtime.zip，永远走兜底启动器）交接完成后
+// `adoptRecordedBackend()` 什么也没读到，退出时 stopBackend 落进
+// "launcherHandoffUnverified" 分支——一个字都没杀，壳 177ms 就退了，而 uvicorn
+// 还在 127.0.0.1:38223 上 accept（2.3.1 门禁 run 45017991307 的四个 Linux 矩阵）。
 const PID_RECORD_NAME = "backend.json";
 const PID_RECORD_MACOS_NAME = "backend.macos.pid";
+const PID_RECORD_LINUX_NAME = "backend.linux.pid";
 
 // 日志的**首选**路径：永远在用户目录的 runtimeDir 下，绝不指向安装 payload。
 function backendLogFile(runtimeDir) {
@@ -107,11 +116,18 @@ function pidRecordPaths({
     platform === "darwin"
       ? [PID_RECORD_MACOS_NAME, PID_RECORD_NAME]
       : [PID_RECORD_NAME, PID_RECORD_MACOS_NAME];
+  // Linux 的启动器只写 backend.linux.pid（key=value，键名与 macOS 那份相同：
+  // process_id / started_at / start_signature，parseProcessRecord 已经能读这种形状，
+  // 缺的只是"去哪找"）。排在第一位：本平台的记录优先于别的平台留下的历史文件。
+  const orderedNames =
+    platform === "linux"
+      ? [PID_RECORD_LINUX_NAME, ...names]
+      : names;
   const paths = [];
   const seen = new Set();
   for (const dir of dirs) {
     if (!dir) continue;
-    for (const name of names) {
+    for (const name of orderedNames) {
       const candidate = path.join(dir, name);
       if (seen.has(candidate)) continue;
       seen.add(candidate);
@@ -208,6 +224,7 @@ function logDegradedNotice({ path: logPath = null, degraded = false, reason = ""
 
 module.exports = {
   BACKEND_LOG_NAME,
+  PID_RECORD_LINUX_NAME,
   PID_RECORD_MACOS_NAME,
   PID_RECORD_NAME,
   adoptRecordedBackend,

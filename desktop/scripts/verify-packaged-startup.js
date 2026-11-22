@@ -32,6 +32,8 @@ const path = require("node:path");
 const assert = require("node:assert/strict");
 // 退出判据：显式退出（45s 预算，理由见该文件的头注释）+ 后端端口释放。
 const { EXPLICIT_QUIT_BUDGET_MS, verifyExplicitQuit } = require("../lib/packaged-quit-gate");
+// 判据失败时把应用自己的日志尾部打进 job 日志（路径规则见该文件头注释）。
+const { candidateLogDirs, formatLogTailReport, readLogTail } = require("../lib/log-tail");
 const playwright = require(require.resolve("@playwright/test", {
   paths: [path.resolve(__dirname, "../../frontend")],
 }));
@@ -267,12 +269,38 @@ async function verify(executablePath, platform, expectedVersion, profile, marker
   }
 }
 
+/**
+ * 判据失败时把壳的运行日志尾部打出来（本次现场：诊断包里只有截图，没有日志）。
+ *
+ * 只服务诊断：不返回任何东西、绝不抛、不改判据（判据在上面已经落地了）。
+ * 打 stdout 与 stderr 都行，这里统一走 stderr：它与 `console.error(error)` 同一条流，
+ * 顺序天然挨在真正的失败原因后面。
+ *
+ * @param {string} platform "win32" | "darwin" | "linux"。
+ * @param {string} profile 冒烟用的隔离 profile 目录（日志在那里面的 runtime/logs 下）。
+ */
+function dumpApplicationLogs(platform, profile) {
+  try {
+    const report = readLogTail({ dirs: candidateLogDirs({ platform, profile }) });
+    for (const line of formatLogTailReport(report)) console.error(line);
+  } catch (err) {
+    // 诊断失败不能盖掉真正的失败原因。
+    console.error(`[log-tail] 读取应用日志失败：${err}`);
+  }
+}
+
 // 顶层：verify() 有结论之后**显式退出**，不再指望事件循环自己空掉（理由见 exitWithFlush
 // 与文件头 2026-11-22 那段）。退出码语义与改动前一致：判绿 0、抛错 1。
-verify(...process.argv.slice(2)).then(
+const [executablePath, platform, expectedVersion, profile, markerMode, markerValue] =
+  process.argv.slice(2);
+
+verify(executablePath, platform, expectedVersion, profile, markerMode, markerValue).then(
   () => exitWithFlush(0),
   error => {
     console.error(error);
+    // 日志尾部落在这里：executable/platform/version/profile 都是 verify 的入参，
+    // 而 profile 是 `verify()` 里唯一知道日志在哪的那个（env 的 HOME/XDG_* 都指向它）。
+    dumpApplicationLogs(platform, profile);
     exitWithFlush(1);
   },
 );
