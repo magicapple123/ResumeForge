@@ -298,6 +298,11 @@ async def check_for_update(*, refresh: bool = False) -> UpdateCheckResult:
                         f"（{fallback_exc}），稍后再点一次通常就好了；"
                         f"也可以到 {RELEASES_PAGE.format(repo=repo)} 手动查看"
                     )[:1000],
+                    # 这一条必须标出来：它和"上游确实没给版本号"在 `latest_version`
+                    # 上长得一样（都是空串），但界面该说的话完全不同——"本次没能确认"
+                    # 而不是「未提供」。桌面壳可能同时刻查到新版并弹窗，不能让设置页
+                    # 用一句「未提供」去和它唱反调。
+                    degraded=True,
                 ),
             )
         latest = tag.lstrip("vV") or current
@@ -359,7 +364,14 @@ async def check_for_update(*, refresh: bool = False) -> UpdateCheckResult:
             release_url=str(data.get("html_url") or RELEASES_PAGE.format(repo=repo))[:512],
             published_at=str(data.get("published_at") or "")[:64],
             notes=_truncate_notes(notes),
-            release_body=notes[:131072] if len(notes) > NOTES_BUDGET else "",
+            # `release_body` 承载**完整原文**，前端靠它挑语言段（`selectReleaseNotes`）。
+            # 以前只在 `len(notes) > NOTES_BUDGET` 时才填，理由是"没截断就不用第二份"——
+            # 但那让"挑语言"这件事取决于一张与语言无关的截断开关：任何一次调整
+            # `NOTES_BUDGET`（或放开 `_truncate_notes` 的行数策略）都会让中文段落在截断点
+            # 之后，`notes` 里没有、`release_body` 又是空的，中文模式静默退回英文。
+            # 现在无条件填：131072 远大于任何正常公告，`notes` 的 4000 截断照旧留给
+            # 老客户端与数据库字段。
+            release_body=notes[:131072],
             download_url=choice.url[:1024],
             download_size=choice.size,
             asset_name=choice.name,
@@ -381,6 +393,9 @@ def _unreachable_result(current: str, repo: str) -> UpdateCheckResult:
     return UpdateCheckResult(
         current_version=current,
         message="无法连接 GitHub 检查更新，请确认网络后重试",
+        # 连不上同样"没得出有没有新版本的结论"，与上面备用探测失败同属一类：
+        # 界面要说的是"本次没能确认"，不是「未提供」。
+        degraded=True,
     )
 
 

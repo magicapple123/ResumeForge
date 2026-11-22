@@ -18,6 +18,7 @@ import logging
 import time
 
 import app.services.update_check as update_check
+import httpx
 import pytest
 from app.services import net_proxy
 from app.services.update_check import (
@@ -113,6 +114,11 @@ def test_check_update_returns_truncated_notes_that_still_fit_the_schema(client, 
 
 
 def test_check_preserves_bilingual_release_before_legacy_preview_is_truncated(client, monkeypatch):
+    """中文段落在 4000 之后时，`release_body` 必须仍是完整原文。
+
+    前端挑语言段靠 `selectReleaseNotes(release_body || notes)`；被截掉的那半截一旦
+    拿不到，中文模式就静默退回英文。
+    """
     clear_cache()
     body = "## Fixed\n" + "One change\n" * 420 + "<details>\n<summary>中文版</summary>\n\n## 修复\n中文变更\n</details>"
 
@@ -123,6 +129,32 @@ def test_check_preserves_bilingual_release_before_legacy_preview_is_truncated(cl
     result = client.get("/api/update/check?refresh=true").json()
     assert len(result["notes"]) <= NOTES_BUDGET
     assert result.get("release_body") == body
+    # 中文段落在截断点之后：短预览里没有，完整原文里必须有。
+    assert "<summary>中文版</summary>" in result["release_body"]
+    assert "中文变更" in result["release_body"]
+    assert "中文变更" not in result["notes"]
+
+
+def test_short_release_also_fills_release_body(client, monkeypatch):
+    """没超预算的公告也要填 `release_body`。
+
+    以前它只在 `len(notes) > NOTES_BUDGET` 时才有值，于是"挑语言基于完整原文"被一张
+    与语言无关的截断开关间接控制（口径一变，中文段就可能只剩 `notes` 里那半截）。
+    """
+    clear_cache()
+    body = "## 修复\n- 设置页不再与弹窗结论冲突\n\n<details>\n<summary>English</summary>\n\n## Fixed\n- aligned\n</details>"
+    assert len(body) < NOTES_BUDGET
+
+    async def release(_repo):
+        return {"tag_name": "v99.0.0", "body": body, "assets": []}
+
+    monkeypatch.setattr("app.services.update_check._fetch_latest_release", release)
+    result = client.get("/api/update/check?refresh=true").json()
+
+    assert result["release_body"] == body
+    # 没超预算时 `notes` 原样返回，两个字段此时内容一致——这不是冗余，是让前端只有
+    # 一条读取路径可走。
+    assert result["notes"] == body
 
 
 class _FakeResponse:
@@ -243,9 +275,81 @@ def test_degraded_path_logs_a_warning_with_status_and_rate_limit(client, monkeyp
     assert "rate_limited=True" in text
 
 
+# ── 降级标记：`degraded` 区分"上游没给"与"这次没问到" ──────────────────────
+
+
+def test_both_paths_failing_marks_the_result_as_degraded(client, monkeypatch):
+    """403 + 备用探测也失败 → `degraded=True`，文案是可解释的降级而不是「未提供」。
+
+    `latest_version` 为空原本一律渲染成「未提供」，而桌面壳有自己的出网链路、同一时刻
+    可能已经查到 2.3.0 并弹窗——标记出来之后，界面才知道该说"本次没能确认"。
+    """
+    clear_cache()
+    _block_api(
+        monkeypatch,
+        status_code=403,
+        headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": str(int(time.time()) + 60)},
+    )
+
+    async def broken_tag(_repo: str) -> str:
+        raise httpx.ConnectError("备用探测也断了")
+
+    monkeypatch.setattr("app.services.update_check._fetch_latest_tag_via_redirect", broken_tag)
+
+    body = client.get("/api/update/check?refresh=true").json()
+
+    assert body["degraded"] is True
+    # 没拿到版本号是事实——不许凭空编一个。
+    assert body["latest_version"] == ""
+    assert body["update_available"] is False
+    # 降级文案必须说清"为什么没问到 + 怎么办"，而不是留给界面瞎猜。
+    assert "HTTP 403" in body["message"]
+    assert "备用方式这次也没成功" in body["message"]
+    assert "稍后再点一次" in body["message"]
+
+
+def test_unreachable_network_is_also_degraded(client, monkeypatch):
+    """连不上 GitHub 是同一类"没问到"，不能只标 403 那一条。"""
+    clear_cache()
+
+    async def offline(_repo: str) -> dict:
+        raise httpx.ConnectTimeout("connect timeout")
+
+    monkeypatch.setattr("app.services.update_check._fetch_latest_release", offline)
+
+    body = client.get("/api/update/check?refresh=true").json()
+
+    assert body["degraded"] is True
+    assert body["latest_version"] == ""
+    assert "无法连接" in body["message"]
+
+
+def test_a_confirmed_answer_is_not_marked_degraded(client, monkeypatch):
+    """正常拿到 tag 的结果（含只走通备用探测的那条）不许被标成降级：
+    标错一次就等于把"确实没有新版"说成"不知道"。
+    """
+    clear_cache()
+
+    async def release(_repo: str) -> dict:
+        return {"tag_name": "v99.0.0", "name": "测试更新", "body": "x", "assets": []}
+
+    monkeypatch.setattr("app.services.update_check._fetch_latest_release", release)
+    assert client.get("/api/update/check?refresh=true").json()["degraded"] is False
+
+    # 主路径 403、备用探测拿到 tag：结论是有的（99.0.0），不算降级。
+    clear_cache()
+    _block_api(
+        monkeypatch,
+        status_code=403,
+        headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": str(int(time.time()) + 60)},
+    )
+    _serve_tag(monkeypatch, "v99.0.0")
+    body = client.get("/api/update/check?refresh=true").json()
+    assert body["latest_version"] == "99.0.0"
+    assert body["degraded"] is False
+
+
 # ── P2-1：两层节流 ──────────────────────────────────────────────────────────
-
-
 def _counting_release(monkeypatch, calls: list[int]):
     async def fake_release(_repo: str) -> dict:
         calls.append(1)

@@ -27,6 +27,7 @@ import DesktopUpdateCard from "../updates/DesktopUpdateCard";
 import {
   formatBytes,
   getDesktopUpdateBridge,
+  isUnconfirmed,
   releasePageUrl,
   resultConclusion,
   type CardError,
@@ -234,6 +235,12 @@ function UpdateCard() {
   const activeStatus = status?.state === "downloading" || status?.state === "installing";
   // 桌面形态一律不给页面内下载：那条路装不上依赖（见 getAppForm 的说明）。
   const canDownload = Boolean(result?.update_available && result.installable) && !desktop;
+  // 这次检查没得出"有没有新版本"（403 降级且备用探测也失败、连不上……）。
+  // 结论未确认时**不许**渲染「未提供」：桌面壳有自己的出网链路，同一时刻可能已经
+  // 查到新版并弹窗，那句「未提供」会和它互相打脸。改成可解释的降级文案。
+  const unconfirmed = isUnconfirmed(result);
+  // 版本号列/发布时间列在"未确认"与"上游没给"之间的措辞分叉，只在这一处决定。
+  const unavailableText = t(unconfirmed ? "update.value.unconfirmed" : "update.value.noDate");
 
   return (
     <Card title={t("update.card.title")} className="settings-card">
@@ -322,7 +329,9 @@ function UpdateCard() {
         <div className="update-meta-item">
           <span className="update-meta-label">{t("update.field.latest")}</span>
           <Typography.Text strong>
-            {result?.latest_version || status?.target_version || t("update.value.checkFirst")}
+            {result?.latest_version ||
+              status?.target_version ||
+              (unconfirmed ? unavailableText : t("update.value.checkFirst"))}
           </Typography.Text>
         </div>
         <div className="update-meta-item">
@@ -330,7 +339,7 @@ function UpdateCard() {
               与通道/当前/最新并列才读得通（#11 第 2 条，四列等宽）。 */}
           <span className="update-meta-label">{t("update.field.published")}</span>
           <Typography.Text strong>
-            {result?.published_at ? result.published_at.slice(0, 10) : t("update.value.noDate")}
+            {result?.published_at ? result.published_at.slice(0, 10) : unavailableText}
           </Typography.Text>
         </div>
       </div>
@@ -413,13 +422,26 @@ function UpdateCard() {
       )}
       {result && (
         /* 结果只做一件事：给出结论 + 主操作。版本号在 .update-meta 里已有专列，
-           发布说明在下面的独立块里——Alert 不再承载正文（原来它一个就占了卡片六成高）。 */
+           发布说明在下面的独立块里——Alert 不再承载正文（原来它一个就占了卡片六成高）。
+           结论未确认时换成 warning + 后端那句原因（`message`）：「没有新版」和
+           「这次没问到」是两种处境，只差一个图标就分不出来了。 */
         <Alert
           className="update-status-bar"
           style={{ marginTop: 16 }}
-          type={result.update_available ? "success" : "info"}
+          type={unconfirmed ? "warning" : result.update_available ? "success" : "info"}
           showIcon
-          title={resultConclusion(result)}
+          title={unconfirmed ? t("update.result.unconfirmed") : resultConclusion(result)}
+          description={
+            unconfirmed ? (
+              <Space orientation="vertical" size={4}>
+                <span>{result.message}</span>
+                {/* 桌面壳的检查不在页面里（Chromium 栈、走系统代理），页面无权替它
+                    宣布结论——只能说"以壳为准"。这一句是 B1 的落点：不再出现
+                    「未提供」与壳层弹窗的「发现新版本」同屏互斥。 */}
+                {desktop && <span>{t("update.desktop.preferShell")}</span>}
+              </Space>
+            ) : undefined
+          }
           action={
             /* 桌面形态下「打开发布页面」已经在上面的指引框里出现，这里不再重复。 */
             !desktop && result.release_url ? (

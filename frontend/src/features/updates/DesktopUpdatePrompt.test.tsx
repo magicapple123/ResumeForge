@@ -46,6 +46,35 @@ describe("published bilingual Markdown", () => {
     expect(selectReleaseNotes(english, "zh-CN", true)).toBe("");
     expect(selectReleaseNotes(chinese, "en-US", true)).toBe("");
   });
+  it("never leaves a tag fragment in the output when the summary is malformed", () => {
+    // CodeQL #136 `js/incomplete-multi-character-sanitization`：以前这里先把 summary
+    // 用一次 `/<[^>]*>/g` 剥标签，而 `<<script` 这种没有 `>` 收尾的残片一个字符都不
+    // 匹配，剥完仍是 `<<script`——输出里照样留着 `<script`。现在语言判断直接对原始
+    // label 做，拼回正文时改用单字符 `/[<>]/g`（只能删，不可能拼出新的尖括号）。
+    const notes = "<details><summary><<script</summary>\n\n正文段落\n</details>";
+
+    const out = selectReleaseNotes(notes, "zh-CN");
+
+    expect(out).not.toContain("<script");
+    expect(out).toContain("正文段落");
+  });
+  it("still detects the language when the summary carries inline markup", () => {
+    // 语义不许因为"不再剥标签"而变：`<summary>` 里的 `<code>` 之类行内标记不该
+    // 影响语言判断（旧实现是先剥再判，剥完是 `中文版`，同样判成 zh-CN）。
+    const withCode =
+      english +
+      "\n<details>\n<summary><code>中文版</code></summary>\n\n" +
+      chinese +
+      "\n</details>";
+
+    expect(selectReleaseNotes(withCode, "zh-CN")).toBe(chinese);
+    const reverse =
+      chinese +
+      "\n<details>\n<summary><code>English</code></summary>\n\n" +
+      english +
+      "\n</details>";
+    expect(selectReleaseNotes(reverse, "en-US")).toBe(english);
+  });
 });
 
 const idle: DesktopUpdateState = {

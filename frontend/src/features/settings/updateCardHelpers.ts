@@ -46,14 +46,28 @@ export function selectReleaseNotes(body: string, locale: Locale, localizedOnly =
     .replace(
       /<details\b[^>]*>\s*<summary\b[^>]*>([\s\S]*?)<\/summary>([\s\S]*?)(?:<\/details>|$)/gi,
       (_block, label: string, content: string) => {
-        const summary = label.replace(/<[^>]*>/g, "").trim();
+        // 语言判断**直接对原始 label 做**，不再先剥标签。
+        //
+        // 以前这里是 `label.replace(/<[^>]*>/g, "")`——一次式的多字符替换，属于不完整的
+        // sanitization（CodeQL #136 `js/incomplete-multi-character-sanitization`）：
+        // 输入 `<<script` 这种没有 `>` 收尾的残片时正则一个字符都不匹配，输出的
+        // `summary` 里照样留着 `<script`。判断语言本来也不需要干净的纯文本——`<code>`
+        // 之类的行内标记夹在中间，`/中文|简体/` 一样命中，所以干脆不剥。
         // i18n-ok: language markers from published GitHub notes
-        const language = /中文|简体|繁體|Chinese|zh[-_]/i.test(summary)
+        const language = /中文|简体|繁體|Chinese|zh[-_]/i.test(label)
           ? "zh-CN"
-          : /English|en[-_]US/i.test(summary)
+          : /English|en[-_]US/i.test(label)
             ? "en-US"
             : null;
-        if (!language) return "\n" + summary + "\n\n" + content.trim() + "\n";
+        if (!language) {
+          // 没有语言标记时要把 label 当纯文本拼回正文，所以这里仍需去掉尖括号——但用
+          // **单字符**替换：每步只删掉一个 `<` 或 `>`，不可能拼出新的尖括号，因此
+          // 不存在"剥一次还剩半截"的残留。代价是 label 里若真有行内标签，标签名会留在
+          // 文字里（如 `<code>x</code>` → `codex/code`）；无语言标记的 summary 在实践
+          // 中是纯文本（`中文版` / `English` 那类都能命中语言），这个代价可以接受，
+          // 换掉的是一条 security 告警和一类静默残留。
+          return "\n" + label.replace(/[<>]/g, "").trim() + "\n\n" + content.trim() + "\n";
+        }
         sections.set(language, content.trim());
         return "\n";
       },
@@ -98,4 +112,23 @@ export function resultConclusion(result: UpdateCheckResult): string {
   if (!result.update_available) return t("update.result.uptodate");
   const version = result.latest_version || result.current_version;
   return version ? t("update.result.available", { version }) : t("update.result.title");
+}
+
+/**
+ * 这次检查**有没有**得出「有没有新版本」的结论。
+ *
+ * 判成"没结论"之后，界面把「未提供」换成可解释的降级文案——两者读起来像同义词，
+ * 对用户却是相反的处境：前者是"上游没给这个信息"，后者是"我们没问到"。桌面壳有
+ * 自己的出网链路（Chromium 栈、走系统代理），同一时刻可能已经查到 2.3.0 并弹窗；
+ * 设置页此时还写「未提供」，就是同一件事给出两个结论。
+ *
+ * 两个条件都认：
+ * - `degraded`：新后端明确说了"没问到"；
+ * - `checked_at` 有值而 `latest_version` 为空：老后端没有那个字段，但"查过了却没有
+ *   版本号"本身就说明没有结论，界面不该因此退回「未提供」。
+ */
+export function isUnconfirmed(result: UpdateCheckResult | null): boolean {
+  if (!result) return false;
+  if (result.degraded === true) return true;
+  return Boolean(result.checked_at) && !result.latest_version;
 }

@@ -12,6 +12,7 @@ import { App as AntdApp } from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
+import type { UpdateCheckResult } from "../../types";
 import UpdateCard from "./UpdateCard";
 
 const apiMocks = vi.hoisted(() => ({
@@ -257,5 +258,106 @@ describe("UpdateCard（形态与降级）", () => {
     // 回退路径照常给结论，且没有错误 Alert（桌面形态的蓝框本身也是 role=alert，
     // 所以这里按样式判定"没有红色错误框"，而不是按 role 数元素）。
     expect(document.querySelector(".ant-alert-error")).toBeNull();
+  });
+});
+
+/**
+ * B1：后端 403 降级时，设置页不许说「未提供」。
+ *
+ * 「未提供」（`update.value.noDate`）的意思是"上游没给这个信息"；而 403 降级是
+ * "我们这次没问到"。两者在 `latest_version` 上都是空串，界面原本不分，于是出现
+ * 设置页写「未提供」、桌面壳弹窗写「发现新版本 2.3.0」的同屏矛盾。
+ */
+describe("UpdateCard（403 降级不再冒充「未提供」）", () => {
+  // 后端在"主路径 403 + 备用探测也失败"时返回的那一份：没有版本号，只有原因。
+  const degraded: UpdateCheckResult = {
+    current_version: "2.3.0",
+    latest_version: "",
+    update_available: false,
+    release_name: "",
+    release_url: "https://example.com/releases",
+    published_at: "",
+    notes: "",
+    release_body: "",
+    // 后端原文：先说什么失败、备用方式为什么也没成，再给出路。
+    message:
+      "检查更新失败：GitHub 拒绝了这次匿名请求（HTTP 403）：常见原因是同一网络下匿名调用次数用完，或网络内有人拦了 api.github.com。备用方式这次也没成功（ConnectError），稍后再点一次通常就好了；也可以到 https://example.com/releases 手动查看",
+    checked_at: "2026-11-21T10:23:19Z",
+    download_url: "",
+    download_size: null,
+    asset_name: "",
+    checksum_url: "",
+    installable: false,
+    degraded: true,
+  };
+
+  it("桌面形态降级：说「本次未能确认」并把结论归属指向壳层", async () => {
+    apiMocks.getAppForm.mockResolvedValue({
+      desktop: true,
+      platform: "win32",
+      app_version: "2.3.0",
+    });
+    apiMocks.checkForUpdate.mockResolvedValue(degraded);
+
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    expect(await screen.findByText(t("update.result.unconfirmed"))).toBeInTheDocument();
+    // 版本号列与发布时间列都换成同一句可解释的降级文案。
+    expect(screen.getAllByText(t("update.value.unconfirmed"))).toHaveLength(2);
+    expect(screen.queryByText(t("update.value.noDate"))).toBeNull();
+    // 后端那句原因原样透传：说清"为什么没问到 + 怎么办"。
+    expect(screen.getByText(degraded.message)).toBeInTheDocument();
+    // 桌面形态必须有这一句：壳层有自己的出网链路，页面无权替它宣布结论。
+    expect(screen.getByText(t("update.desktop.preferShell"))).toBeInTheDocument();
+    // 没结论就不许显示「已是最新版本」——那是另一个断言。
+    expect(screen.queryByText(t("update.result.uptodate"))).toBeNull();
+  });
+
+  it("浏览器形态降级：给出原因与发布页出口，同样不说「未提供」", async () => {
+    apiMocks.checkForUpdate.mockResolvedValue(degraded);
+
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    expect(await screen.findByText(t("update.result.unconfirmed"))).toBeInTheDocument();
+    expect(screen.queryByText(t("update.value.noDate"))).toBeNull();
+    expect(screen.getByText(degraded.message)).toBeInTheDocument();
+    // 浏览器形态没有"以壳为准"这回事，那句话不许出现。
+    expect(screen.queryByText(t("update.desktop.preferShell"))).toBeNull();
+    // 出路仍然是发布页。
+    expect(screen.getByRole("link", { name: t("update.action.release") })).toHaveAttribute(
+      "href",
+      degraded.release_url,
+    );
+  });
+
+  it("老后端没有 degraded 字段：查过却没版本号同样按降级渲染", async () => {
+    // 2.2 及更早的后端不带 `degraded`。此时只能靠"checked_at 有值 + 版本号为空"判断，
+    // 否则升级前端不升级后端的那一半用户仍旧看到「未提供」。
+    const legacy = { ...degraded };
+    delete legacy.degraded;
+    apiMocks.checkForUpdate.mockResolvedValue(legacy);
+
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    expect(await screen.findByText(t("update.result.unconfirmed"))).toBeInTheDocument();
+    expect(screen.queryByText(t("update.value.noDate"))).toBeNull();
+  });
+
+  it("确凿结论（已是最新）仍然照旧，不因为这次改动把话说软", async () => {
+    apiMocks.checkForUpdate.mockResolvedValue({
+      ...latest,
+      update_available: false,
+      latest_version: "0.11.0",
+      degraded: false,
+    });
+
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    expect(await screen.findByText(t("update.result.uptodate"))).toBeInTheDocument();
+    expect(screen.queryByText(t("update.result.unconfirmed"))).toBeNull();
   });
 });

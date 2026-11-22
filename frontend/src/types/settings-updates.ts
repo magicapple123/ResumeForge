@@ -34,6 +34,16 @@ export interface UpdateCheckResult {
   /** 发布时旁边的 `.sha256` 附件地址；下载完用它核对。 */
   checksum_url: string;
   installable: boolean;
+  /**
+   * 这次检查**没有得出「有没有新版本」的结论**（上游限流/被拦、备用探测也失败，或
+   * 连接不上）。后端从 2.3 起会带上它；老后端没有这个字段，界面另有一条
+   * "检查过却没有版本号"的兜底判定（见 `updateCardHelpers.isUnconfirmed`）。
+   *
+   * 与 `latest_version === ""` 不是同一件事：空串也可能是"上游确实没给版本号"。
+   * 桌面壳有自己的出网链路，同一时刻可能已经查到新版本并弹窗，所以设置页必须把
+   * "这次没问到"说成「本次未能确认」，不能冒充「未提供」。
+   */
+  degraded?: boolean;
 }
 
 export type UpdateInstallState = "success" | "failed" | "interrupted" | "installing";

@@ -8,6 +8,7 @@
 
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { selectReleaseNotes } from "./updateCardHelpers";
 import { renderReleaseNotes } from "./updateNotesRenderer";
 
 /** 渲染一段说明并返回容器；断言只看结构与 textContent，不依赖样式。 */
@@ -154,5 +155,56 @@ describe("renderReleaseNotes：原有语法回归", () => {
     expect(container.textContent).toContain("修复问题");
     expect(container.textContent ?? "").not.toContain("##");
     expect(container.textContent ?? "").not.toContain("**");
+  });
+});
+
+const ENGLISH_NOTES = "## Fixes\n\n- Changed **Windows** updates.";
+const CHINESE_NOTES = "## 修复\n\n- 改进了 **Windows** 更新";
+
+describe("selectReleaseNotes：`<summary>` 的尖括号净化", () => {
+  it("没有语言标记的 summary 带半截标签时，输出里一个尖括号都不剩", () => {
+    // CodeQL #136 `js/incomplete-multi-character-sanitization` 的判定形态：一次式的
+    // `/<[^>]*>/g` 会先吃掉 `<<script>` 与 `</script>`，而末尾那个没有 `>` 收尾的
+    // `<script` 一个字符都匹配不上，原样落进正文——正是「剥一次还剩半截」。
+    const notes =
+      "<details><summary><<script>alert(1)</script><script</summary>\n\n正文段落\n</details>";
+
+    const out = selectReleaseNotes(notes, "zh-CN");
+
+    expect(out).not.toContain("<script");
+    // 更强的性质：单字符替换只删不改，尖括号一个都不该活到输出里。
+    expect(out).not.toContain("<");
+    expect(out).not.toContain(">");
+    expect(out).toContain("正文段落");
+    // 净化后的文字随后要交给渲染器：不该变成任何可执行的元素。
+    expect(renderNotes(out).querySelector("script")).toBeNull();
+  });
+
+  it("告警样本的完整标签形态同样被清干净", () => {
+    // `<<script>alert(1)</script>` 这种每段都有 `>` 的写法上旧实现也能删完，留在这里
+    // 是为了钉住"两种形态都不许把尖括号带出去"，避免日后改回多字符替换时空出一个口子。
+    const notes = "<details><summary><<script>alert(1)</script></summary>\n\n正文段落\n</details>";
+
+    const out = selectReleaseNotes(notes, "zh-CN");
+
+    expect(out).not.toContain("<");
+    expect(out).not.toContain(">");
+    expect(out).toContain("正文段落");
+  });
+
+  it("带语言标记的 summary 照旧按界面语言挑段（回归）", () => {
+    const notes = `${ENGLISH_NOTES}\n\n<details>\n<summary>中文版</summary>\n\n${CHINESE_NOTES}\n</details>`;
+
+    expect(selectReleaseNotes(notes, "zh-CN")).toBe(CHINESE_NOTES);
+    expect(selectReleaseNotes(notes, "en-US")).toBe(ENGLISH_NOTES);
+  });
+
+  it("语言判断不受 summary 里的行内标签影响", () => {
+    // 语言判断直接对原始 label 做（不再先剥标签），`<code>` 夹在中间也一样命中。
+    const chineseTagged = `${ENGLISH_NOTES}\n\n<details>\n<summary><code>中文版</code></summary>\n\n${CHINESE_NOTES}\n</details>`;
+    const englishTagged = `${CHINESE_NOTES}\n\n<details>\n<summary><code>English</code></summary>\n\n${ENGLISH_NOTES}\n</details>`;
+
+    expect(selectReleaseNotes(chineseTagged, "zh-CN")).toBe(CHINESE_NOTES);
+    expect(selectReleaseNotes(englishTagged, "en-US")).toBe(ENGLISH_NOTES);
   });
 });

@@ -138,6 +138,29 @@ describe("install button", () => {
   });
 });
 
+describe("degraded check", () => {
+  it("stays quiet when the check could not confirm a version", async () => {
+    // 后端 403 降级（`degraded=true`、没有版本号）：启动弹窗必须一句话都不说。
+    // 它一旦弹出来，就会和设置页的降级文案、以及桌面壳自己的检查变成三处说法；
+    // 而这时它手里连版本号都没有，标题只会写成「发现新版本 」，比不弹更糟。
+    apiMocks.checkForUpdate.mockResolvedValue({
+      ...RESULT,
+      latest_version: "",
+      update_available: false,
+      degraded: true,
+    });
+
+    render(<StartupUpdatePrompt />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PROMPT_DELAY_MS + 50);
+    });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // 仍然问过一次（不能因为"可能降级"就干脆不检查）。
+    expect(apiMocks.checkForUpdate).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("desktop shell", () => {
   it("replaces the primary action with the in-app updater bridge", async () => {
     const checkUpdate = vi.fn().mockResolvedValue(undefined);

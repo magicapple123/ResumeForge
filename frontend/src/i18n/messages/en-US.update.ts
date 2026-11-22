@@ -56,6 +56,15 @@ const update = {
   "update.result.uptodate": "You are on the latest version",
   "update.field.published": "Published",
   "update.value.noDate": "Not provided",
+  // Deliberately distinct from "Not provided": that means upstream omitted the
+  // field, this means the check itself did not reach an answer. A desktop shell
+  // checks over its own network stack and may already have shown 2.3.0, so the
+  // settings card must not claim the information simply does not exist.
+  "update.value.unconfirmed": "Not confirmed this time",
+  "update.result.unconfirmed": "This check could not confirm the version",
+  "update.desktop.preferShell":
+    "The desktop app runs its own update check; trust the dialog it shows.",
+  "update.desktop.checkFailed": "The desktop app could not confirm whether a new version exists.",
   "update.notes.title": "What's new",
   "update.notes.expand": "Show",
   "update.notes.collapse": "Hide",
