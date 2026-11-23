@@ -243,12 +243,26 @@ describe("JobDetailDrawer 就地加入求职进度", () => {
     expect(form).toHaveTextContent('"job_id":1');
     expect(form).toHaveTextContent('"status":"applied"');
     expect(form).toHaveTextContent('"channel":"unknown"');
+    // 关联链接（T2）：岗位的投递链接就是这条新记录的入口，新建时直接带进表单。
+    expect(form).toHaveTextContent('"link":"https://www.zhipin.com/job/1"');
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "岗位详情" })).not.toBeInTheDocument(),
     );
     fireEvent.click(screen.getByRole("button", { name: "back" }));
     expect(await screen.findByRole("dialog", { name: "岗位详情" })).toBeInTheDocument();
     expect(trackerMocks.listTracksPage).toHaveBeenCalledWith({ jobId: 1 }, 1, 1);
+  });
+
+  it("岗位没有投递链接时，预填的关联链接是空串而不是 undefined", async () => {
+    trackerMocks.listTracksPage.mockResolvedValue({ items: [], total: 0 });
+    renderDrawer({ ...BASE_JOB, source_url: "" });
+    const add = await screen.findByRole("button", { name: /加入求职进度/ });
+    await waitFor(() => expect(add).not.toHaveClass("ant-btn-loading"));
+    fireEvent.click(add);
+
+    const form = await screen.findByRole("dialog", { name: "track-form" });
+    // 空串 = "没填"，字段是受控的；漏出 undefined 会让它在受控/非受控之间切换。
+    expect(form).toHaveTextContent('"link":""');
   });
 
   it("加载失败可重试，不把未知状态当作未加入", async () => {

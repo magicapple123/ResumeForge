@@ -24,6 +24,7 @@ const trackerForm = {
   "trackerForm.field.nextActionDate": "Due date",
   "trackerForm.field.channel": "Channel",
   "trackerForm.field.job": "Linked job",
+  "trackerForm.field.link": "Link",
   "trackerForm.field.resume": "Resume used",
   "trackerForm.field.note": "Note",
   "trackerForm.required.company": "Enter the company name",
@@ -32,6 +33,7 @@ const trackerForm = {
   "trackerForm.placeholder.title": "e.g. Backend development intern",
   "trackerForm.placeholder.nextAction": "e.g. Confirm the interview time",
   "trackerForm.placeholder.job": "Pick the job to link (type keywords to search)",
+  "trackerForm.placeholder.link": "e.g. https://jobs.example.com/apply",
   "trackerForm.placeholder.resume":
     "Pick the resume version used for this application (type to search)",
   "trackerForm.hint.stageNote": 'Which round and in what form, e.g. "second round", "HR round"',
@@ -43,6 +45,8 @@ const trackerForm = {
   "trackerForm.hint.channel":
     "Optional. This is where you applied from, not how the record got into the app; keep Unknown if unsure",
   "trackerForm.hint.job": "Optional. Once linked, this progress shows on the job details page",
+  "trackerForm.hint.link":
+    "Optional. Job page, application form or meeting link; picking a linked job fills this in while it is still empty",
   "trackerForm.hint.resume":
     "Optional. Linking keeps a snapshot of the application on the resume details page; editing the resume afterwards does not change the saved record",
   "trackerForm.status.applied": "Applied",
@@ -61,6 +65,9 @@ const trackerForm = {
   "trackerForm.toast.saved": "Saved",
   "trackerForm.toast.added": "Added",
   "trackerForm.error.saveFailed": "Could not save",
+  "trackerForm.error.linkInvalid": "Enter a complete URL, e.g. https://example.com/apply",
+  "trackerForm.error.linkProtocol": "Only links starting with http:// or https:// are allowed",
+  "trackerForm.error.linkTooLong": "A link can be at most {max} characters",
   "trackerForm.toast.existing": "Opened the existing tracking record",
 } as const;
 

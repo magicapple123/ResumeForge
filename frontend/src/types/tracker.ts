@@ -101,6 +101,8 @@ export interface Track extends TrackRecord {
   resume_title: string;
   /** 投递渠道（RF-18）：用户自选，默认「未知」。 */
   channel: TrackChannel;
+  /** 关联链接（替代已删除的「状态回读」）：空串 = 没填。 */
+  link: string;
 }
 
 export type TrackPayload = Omit<
@@ -168,6 +170,7 @@ export function emptyTrack(): TrackPayload {
     job_id: null,
     resume_id: null,
     channel: "unknown",
+    link: "",
   };
 }
 
@@ -192,6 +195,7 @@ export function trackPayload(track: Track, patch: Partial<TrackPayload> = {}): T
     job_id: track.job_id,
     resume_id: track.resume_id,
     channel: track.channel,
+    link: track.link,
     ...patch,
   };
 }

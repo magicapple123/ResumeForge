@@ -17,6 +17,8 @@ const COMPANY = "示例科技";
 const JOB_TITLE = "后端开发";
 const RESUME_TITLE = "后端岗位简历";
 const FULL_NOTE = "完整备注全文";
+/** 用户手填的关联链接（带一串 UTM：真实内推链接常见这样）。 */
+const LINK_URL = "https://jobs.example.com/apply?utm_source=referral";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TrackFormModal from "./TrackFormModal";
 import { createTrack, getTrack, updateTrack } from "../../api/tracker";
@@ -92,6 +94,7 @@ const LISTED_ROW: Track = {
   resume_id: null,
   channel: "unknown",
   resume_title: "",
+  link: "",
   source: "manual",
   created_at: "2026-09-18T08:00:00",
   updated_at: "2026-09-18T08:00:00",
@@ -278,4 +281,67 @@ describe("TrackFormModal 的简历选择器", () => {
     // 按 id 回查的简历以标题显示在选择器里（选中项的展示文本）。
     await waitFor(() => expect(screen.getByText(RESUME_TITLE)).toBeInTheDocument());
   });
+});
+
+/**
+ * 关联链接（取代已删除的「状态回读」）：字段、回填、提交形态。
+ *
+ * 后端 `TrackCreate.link` 是必填字段（可空串），前端漏一处就会出现
+ * 「保存后链接变空」这种静默丢数据——所以这里既验字段，也验真正交给接口的 payload。
+ */
+describe("TrackFormModal 的关联链接", () => {
+  it("字段存在且写明选填，提交时按 trim 后的值交给接口", async () => {
+    vi.mocked(createTrack).mockResolvedValue({ ...LISTED_ROW, created: true });
+    renderModal();
+
+    const link = await screen.findByLabelText(t("trackerForm.field.link"));
+    expect(screen.getByText(t("trackerForm.hint.link"), { exact: false })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(t("trackerForm.field.company")), {
+      target: { value: COMPANY },
+    });
+    fireEvent.change(screen.getByLabelText(t("trackerForm.field.title")), {
+      target: { value: JOB_TITLE },
+    });
+    // 粘贴来的地址常带首尾空格：原样提交会让 href 把空格当成相对路径的一部分。
+    fireEvent.change(link, { target: { value: `  ${LINK_URL}  ` } });
+
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(t("trackerForm.action.save")) }));
+
+    await waitFor(() =>
+      expect(createTrack).toHaveBeenCalledWith(expect.objectContaining({ link: LINK_URL })),
+    );
+  });
+
+  it("编辑时从详情接口回填已有链接", async () => {
+    vi.mocked(getTrack).mockResolvedValue({ ...LISTED_ROW, link: LINK_URL });
+    render(
+      <AntdApp>
+        <TrackFormModal open track={LISTED_ROW} onClose={() => {}} onSaved={() => {}} />
+      </AntdApp>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(t("trackerForm.field.link"))).toHaveValue(LINK_URL),
+    );
+  });
+
+  it("非法链接在提交前就被挡住，文案来自语言包而不是后端 422", async () => {
+    renderModal();
+
+    fireEvent.change(await screen.findByLabelText(t("trackerForm.field.company")), {
+      target: { value: COMPANY },
+    });
+    fireEvent.change(screen.getByLabelText(t("trackerForm.field.title")), {
+      target: { value: JOB_TITLE },
+    });
+    fireEvent.change(screen.getByLabelText(t("trackerForm.field.link")), {
+      target: { value: "javascript:alert(1)" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(t("trackerForm.action.save")) }));
+
+    expect(await screen.findByText(t("trackerForm.error.linkProtocol"))).toBeInTheDocument();
+    expect(createTrack).not.toHaveBeenCalled();
+  });
+
+  // 逐条比对校验口径的用例在 `linkValidation.test.ts`：那里是纯函数，读起来更直接。
 });

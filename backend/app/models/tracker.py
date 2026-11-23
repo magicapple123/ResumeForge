@@ -304,6 +304,10 @@ class ApplicationTrack(Base):
     # 投递渠道（RF-18）：用户自选的"这份工作从哪来的"。默认未知——历史行一律未知，
     # 不从任何现有字段推断。与 ``source``（记录来源）是两个维度。
     channel: Mapped[str] = mapped_column(String(24), default=CHANNEL_UNKNOWN)
+    # 关联链接：这一条对应的入口地址（招聘页 / 网申页 / 会议链接…），由用户自己填。
+    # 它是「状态回读」的替代品——不再由程序去门户页猜进度，而是把用户需要的那个链接
+    # 留在记录上，点一下就跳过去。空串 = 没填。**不建索引**：只跟随行读取，从不按它查。
+    link: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
     source: Mapped[str] = mapped_column(String(16), default=SOURCE_MANUAL)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

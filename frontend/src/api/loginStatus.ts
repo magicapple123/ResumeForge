@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 「登录状态」面板的前端契约（Q12 / F07）：来源读取、单项检测、重登、Cookie 写入、网申站点。 */
+/** 「登录状态」面板的前端契约（Q12 / F07）：来源读取、单项检测、重登、网申站点。 */
 import { request } from "./client";
 
 export type LoginStatusValue = "ok" | "logged-out" | "expired" | "unknown" | "unchecked";
@@ -17,7 +17,7 @@ export interface LoginStatusSite {
 export interface LoginStatusRow {
   id: string;
   label: string;
-  /** 浏览器类会真的拉起窗口；Cookie 类不会。 */
+  /** 浏览器类会真的拉起窗口（门户 Cookie 那一行随「状态回读」一并移除）。 */
   browser: boolean;
   probe_url: string;
   status: LoginStatusValue;
@@ -43,17 +43,9 @@ export function checkLoginStatus(id: string): Promise<LoginStatusRow> {
   return request(`/login-status/${id}/check`, { method: "POST" });
 }
 
-/** 重新登录：浏览器类返回 `opened`，Cookie 类返回 `needs_paste`。 */
+/** 重新登录：打开该来源的登录页，返回 `opened`。 */
 export function relogin(id: string): Promise<{ id: string; action: string; url: string }> {
   return request(`/login-status/${id}/relogin`, { method: "POST" });
-}
-
-/** 写入/清除门户 Cookie（空串 = 清除），随后后端自动复检一次。 */
-export function saveTrackCookie(cookie: string): Promise<LoginStatusRow> {
-  return request("/login-status/track_cookie", {
-    method: "PUT",
-    body: JSON.stringify({ cookie }),
-  });
 }
 
 /** 网申站点清单（只读缓存）：`total` / `truncated` 用来提示"还有几个没列出来"。 */

@@ -177,8 +177,6 @@ const copyBudgetBaseline: Record<string, string> = {
   "storageStats.summary": "2026-12-31",
   "templatesUi.styleControls.hint": "2026-12-31",
   "touTou.orb.help": "2026-12-31",
-  "trackProbe.cookieHint": "2026-12-31",
-  "trackProbe.pageUrlHint": "2026-12-31",
   "trackerImport.dialog.intro": "2026-12-31",
   "trackerPage.subtitle": "2026-12-31",
   "trash.page.subtitle": "2026-12-31",

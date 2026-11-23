@@ -124,6 +124,9 @@ export default function JobDetailDrawer({
             status: "applied" as const,
             applied_at: todayIsoDate(),
             channel: "unknown" as const,
+            // 关联链接（T2）：从岗位详情新建进度时，岗位的投递链接就是这条记录的入口。
+            // 空/空白一律给空串——`undefined` 漏进表单会变成受控/非受控切换。
+            link: (job.source_url ?? "").trim(),
           }
         : undefined,
     [job],

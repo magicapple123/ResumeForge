@@ -39,7 +39,6 @@ from app.services.assistant_permission import (
 )
 from app.services.batch_operation import read_batch_operation_config
 from app.services.llm_settings import get_dataset_llm_config
-from app.services.track_probe_settings import read_settings as read_probe_settings
 from sqlalchemy.orm import Session
 
 _LLM_FIELDS = tuple(settings_defaults.SETTINGS_REGISTRY["llm_config"].resolved_default())
@@ -106,8 +105,6 @@ _READERS: dict[str, Callable[[Session], Any]] = {
     "apply_blocklist": settings_service.get_apply_blocklist,
     "apply_greeting_templates": settings_service.get_apply_greeting_templates,
     "analytics_weekly_goal": _read_weekly_goal,
-    "tracker.probe.enabled": lambda db: read_probe_settings(db).enabled,
-    "tracker.probe.page_url": lambda db: read_probe_settings(db).page_url,
     "export_save_location": settings_service.get_export_save_location,
     "auto_backup_interval_days": settings_service.get_auto_backup_interval_days,
     "batch_operation_config": _read_batch_config,
@@ -135,11 +132,25 @@ def test_secret_keys_are_never_resettable():
     """密钥键一律不可重置：这是"点一下丢 Key"事故的唯一结构性防线。"""
     secrets_in_registry = [e.key for e in settings_defaults.SETTINGS_REGISTRY.values() if e.secret]
     assert "asr_api_key" in secrets_in_registry
-    assert "tracker.probe.cookie" in secrets_in_registry
     assert "search_deepseek_api_key" in secrets_in_registry
     for entry in settings_defaults.SETTINGS_REGISTRY.values():
         if settings_defaults.is_secret_key(entry.key):
             assert entry.resettable is False, f"{entry.key} 是密钥类，必须 resettable=False"
+
+
+def test_the_status_readback_settings_are_gone_from_the_registry():
+    """「申请状态回读」整条移除后，三个 ``tracker.probe.*`` 键不该再出现在注册表里。
+
+    注册表归 T1 独占（它要在同一文件里新增 ``browser.keep_session_cookies`` 等键），
+    本卡只删服务与接口，键名交给 T1 在同一批里代删。这条守卫就是"代删有没有真的做到"
+    的落点：只要注册表还留着 ``tracker.probe.*``，它就会红。
+    """
+    leftover = sorted(
+        entry.key
+        for entry in settings_defaults.SETTINGS_REGISTRY.values()
+        if entry.key.startswith("tracker.probe.")
+    )
+    assert leftover == [], f"tracker.probe.* 应从设置注册表移除，实际还在：{leftover}"
 
 
 def test_import_time_guard_rejects_resettable_secret():
@@ -290,7 +301,9 @@ def test_snapshot_never_contains_secrets(db_session: Session, monkeypatch):
                 value=json.dumps({"api_key": "sk-live-SECRET-VALUE", "temperature": 1.2}),
             ),
             AppSetting(key="asr_api_key", value="sk-asr-SECRET-VALUE"),
-            AppSetting(key="tracker.probe.cookie", value="sessionid=SECRET-COOKIE"),
+            # 曾经的 tracker.probe.cookie 已随回读功能删除，改用仍在注册表里的密钥键：
+            # 这条用例要守的是"快照过滤器覆盖所有 secret 键"，不是某一个具体键。
+            AppSetting(key="search_deepseek_api_key", value="sk-search-SECRET-COOKIE"),
         ]
     )
     db_session.commit()

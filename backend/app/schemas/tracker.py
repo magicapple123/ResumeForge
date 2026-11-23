@@ -32,6 +32,9 @@ MAX_TRACK_NOTE_CHARS = 4_000
 MAX_TRACK_EVIDENCE_CHARS = 500
 MAX_TRACK_NEXT_ACTION_CHARS = 255
 MAX_TRACK_DATE_CHARS = 16
+# 关联链接上限：与 ``application_track.link`` 的列宽逐字一致（String(2048)）。
+# 长于一行的真实链接很少见，但带一串 UTM 参数的内推链接能轻松到 400+，512 会误伤。
+MAX_TRACK_LINK_CHARS = 2048
 # 列表响应的 note / evidence 是**预览**而非全文：超出截断加省略号，全文走详情
 # 接口 GET /api/tracker/{id}（前端编辑表单打开时预取）。列表一次拖几十条，
 # note 上限 4000 字，不截断的话求职看板的主读路径要白拖几百 KB。
@@ -147,6 +150,10 @@ class TrackCreate(TrackRecordIn):
     # 投递渠道（RF-18）：用户自选"这份工作从哪来的"，默认未知。
     # 与 source（记录来源）是两个维度；未知是合法取值，不替用户编一个渠道。
     channel: str = Field(default="unknown", max_length=24)
+    # 关联链接（替代已删除的「状态回读」）：用户在这一条上自己填的入口地址，
+    # 例如招聘页 / 网申页 / 面试通知里的会议链接。空串 = 没填。
+    # 校验与岗位的「投递链接」同一份实现（``schemas.common.validate_http_url``）。
+    link: str = Field(default="", max_length=MAX_TRACK_LINK_CHARS)
 
     @field_validator("channel")
     @classmethod
@@ -157,6 +164,18 @@ class TrackCreate(TrackRecordIn):
         if cleaned not in CHANNELS:
             raise ValueError(f"未知的投递渠道「{cleaned}」")
         return cleaned
+
+    @field_validator("link")
+    @classmethod
+    def link_must_be_http(cls, value: str) -> str:
+        """只放行 http/https 且有 host 的地址；`javascript:` / `file:` 一律拒。
+
+        这条校验是**安全边界**而不是格式洁癖：``link`` 会被渲染成
+        ``<a href target="_blank">``，放行 ``javascript:`` 等于把用户输入变成可执行脚本。
+        """
+        from .common import validate_http_url
+
+        return validate_http_url(value, "关联链接")
 
 
 class TrackUpdate(TrackCreate):
@@ -283,64 +302,10 @@ class TrackApplyOut(BaseModel):
     unchanged: int
 
 
-# ===== 申请状态回读（R-15 C）=====
-
-
-class TrackProbeItem(BaseModel):
-    """一条记录的回读结果。`outcome` 四值：changed / unchanged / skipped / failed。"""
-
-    track_id: int
-    company: str
-    title: str
-    url: str = ""
-    platform: str = ""
-    outcome: str
-    before: str
-    before_label: str
-    after: str
-    after_label: str
-    note: str = ""
-
-
-class TrackProbeOut(BaseModel):
-    items: list[TrackProbeItem]
-    changed: int = 0
-    unchanged: int = 0
-    skipped: int = 0
-    failed: int = 0
-    #: 本次是否真的执行了（`/probe/daily` 在未到期时返回 `skipped=False`+`due=False`）。
-    ran: bool = True
-    due: bool = True
-
-
-class TrackProbeSettingsOut(BaseModel):
-    enabled: bool = False
-    has_cookie: bool = False
-    last_run: str = ""
-    due: bool = False
-    interval_hours: int
-    #: 常用的投递记录页（空串 = 没配）。
-    page_url: str = ""
-
-
-class TrackProbeSettingsIn(BaseModel):
-    """只改传了的字段：省略 = 不动；`cookie` / `page_url` 传空串 = 清除。"""
-
-    enabled: bool | None = None
-    cookie: str | None = Field(default=None, max_length=8192)
-    page_url: str | None = Field(default=None, max_length=2048)
-
-
-class TrackProbeRequest(BaseModel):
-    track_ids: list[int] = Field(default_factory=list)
-    limit: int = Field(default=8, ge=1, le=50)
-
-
-class TrackProbePageRequest(BaseModel):
-    """一次读整个投递记录页。`url` 必填——它就是用户提供的那个状态页。"""
-
-    url: str = Field(min_length=8, max_length=2048)
-    track_ids: list[int] = Field(default_factory=list)
+# ===== 申请状态回读（R-15 C）已整条移除 =====
+# 原先这里有 5 个 probe schema（条目 / 结果 / 设置 in&out / 两种请求）。回读功能连同
+# ``tracker.probe.*`` 设置与门户 Cookie 一起删除，改为记录自带「关联链接」（见下方
+# ``TrackCreate.link``）。要恢复请参考 git 历史，不要在这里留半套 schema。
 
 
 __all__ = [
@@ -354,12 +319,6 @@ __all__ = [
     "TrackMergePreview",
     "TrackOut",
     "TrackParseOut",
-    "TrackProbeItem",
-    "TrackProbeOut",
-    "TrackProbeRequest",
-    "TrackProbeSettingsIn",
-    "TrackProbePageRequest",
-    "TrackProbeSettingsOut",
     "TrackParseRequest",
     "TrackRecordIn",
     "TrackStatsOut",

@@ -18,8 +18,6 @@ const EXEMPT_FIXTURES = {
   "research.publications.volumePagesPlaceholder": "Vol 12, 1-15",
   "typography.inline.linkPlaceholder": "https://example.com",
   "structure.layout.gapMillimeters": "{value} mm",
-  "trackProbe.pageUrlExample": "https://acme.jobs.feishu.cn/.../applications",
-  "trackProbe.cookieExample": "session=...; other=...",
   "versions.variants.exportOption": "{name}{job}{layout}",
   "versions.variants.exportOption.job": " · {job}",
   "provenance.usage.tokens": "token",

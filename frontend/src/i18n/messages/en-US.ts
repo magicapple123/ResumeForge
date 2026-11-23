@@ -146,7 +146,6 @@ import assistantLimits from "./en-US.assistantLimits";
 import contactSeparator from "./en-US.contactSeparator";
 import skillColumns from "./en-US.skillColumns";
 import photoFrame from "./en-US.photoFrame";
-import trackProbe from "./en-US.trackProbe";
 import assistantUi from "./en-US.assistantUi";
 import componentsMisc from "./en-US.componentsMisc";
 import componentsMisc2 from "./en-US.componentsMisc2";
@@ -345,7 +344,6 @@ const enUS = {
   ...contactSeparator,
   ...skillColumns,
   ...photoFrame,
-  ...trackProbe,
   ...assistantUi,
   ...componentsMisc,
   ...componentsMisc2,

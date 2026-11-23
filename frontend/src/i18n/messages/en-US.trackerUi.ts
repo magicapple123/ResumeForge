@@ -45,6 +45,7 @@ const trackerUi = {
   "trackerUi.card.action.edit": "Edit",
   "trackerUi.card.action.delete": "Delete",
   "trackerUi.card.aria.more": "More actions for {name}",
+  "trackerUi.card.aria.link": "Open the link for {name} (new window)",
   "trackerUi.card.fallbackName": "this entry",
   "trackerUi.card.appliedAt": "Applied {date}",
   "trackerUi.card.statusDate": "Updated {date}",

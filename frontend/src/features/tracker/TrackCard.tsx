@@ -16,7 +16,7 @@
  * - 逾期从句尾「· 已过期」改成红色短标记「逾期 N 天」，日期单独成 chip；
  * - 左侧竖条给**所有**行：进行中用阶段色、已结束/待确认用中性描边色。
  */
-import { MoreOutlined } from "@ant-design/icons";
+import { LinkOutlined, MoreOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Typography } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -24,6 +24,7 @@ import { TRACK_SOURCE_LABEL_KEYS, TRACK_STATUS_LABEL_KEYS } from "../../i18n/enu
 import type { Track } from "../../types";
 import { FUNNEL_STATUSES, isActiveStatus } from "../../types";
 import { useRowActionMenu } from "../../components/common/rowActionMenu";
+import { safeExternalUrl } from "../../utils/externalUrl";
 import { daysOverdue } from "./trackDates";
 
 interface Props {
@@ -39,6 +40,19 @@ function shortDate(dateText: string): string {
   return /^\d{4}-\d{2}-\d{2}/.test(dateText) ? dateText.slice(5) : dateText;
 }
 
+/**
+ * 简历名（RF-17）：`resume_title` 优先，只剩快照/没有标题时退回 `#id`，
+ * 简历被删（`resume_id` 为 null）再加「历史关联」标注——不臆造还关联着。
+ *
+ * **这里不做任何截断**：可见文本与 `title` 用同一份完整字符串，放不下由 CSS 让位
+ * （`.track-card-resume` 的 flex 与 `:last-child` 规则）。在 JS 里 `slice` 掉的字符
+ * 用户永远看不到，也没法在 tooltip 里找回来。
+ */
+function resumeLabel(track: Track): string {
+  const title = track.resume_title || `#${track.resume_id ?? ""}`;
+  return track.resume_id ? title : `${title}${t("trackerUi.card.resumeHistorical")}`;
+}
+
 export default function TrackCard({ track, onEdit, onDelete, groupStart = false }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后行内容停在旧文案。
   useLocale();
@@ -47,6 +61,12 @@ export default function TrackCard({ track, onEdit, onDelete, groupStart = false 
   const overdueDays = daysOverdue(track.next_action_date);
   const overdue = overdueDays > 0;
   const evidence = track.evidence ? t("trackerUi.card.evidence", { evidence: track.evidence }) : "";
+  // 关联链接（取代已删除的「状态回读」）：只有真填了、且能安全解析成 http/https 才画图标。
+  // 安全判定与助手的 Markdown 外链同一份（`utils/externalUrl`），不为了一个图标再写一套。
+  const link = track.link ? safeExternalUrl(track.link) : null;
+  const displayName = track.company || track.title || t("trackerUi.card.fallbackName");
+  const hasResume = Boolean(track.resume_id || track.resume_title);
+  const resume = hasResume ? resumeLabel(track) : "";
   const className = [
     "track-card",
     isActiveStatus(track.status) ? "is-active" : "",
@@ -68,6 +88,20 @@ export default function TrackCard({ track, onEdit, onDelete, groupStart = false 
             {track.title || t("trackerUi.card.emptyTitle")}
           </Typography.Text>
           {track.stage_note && <span className="track-stage-note">{track.stage_note}</span>}
+          {/* 关联链接：`target="_blank"` 必须配 `rel="noopener noreferrer"`，
+              否则新页面能通过 `window.opener` 反向操纵本页。 */}
+          {link && (
+            <a
+              className="track-card-link"
+              href={link}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={link}
+              aria-label={t("trackerUi.card.aria.link", { name: displayName })}
+            >
+              <LinkOutlined aria-hidden="true" />
+            </a>
+          )}
         </div>
         <div className="track-card-aside">
           <span className={`track-status${track.status === "unknown" ? " is-unknown" : ""}`}>
@@ -99,7 +133,7 @@ export default function TrackCard({ track, onEdit, onDelete, groupStart = false 
               className="track-card-more"
               icon={<MoreOutlined />}
               aria-label={t("trackerUi.card.aria.more", {
-                name: track.company || track.title || t("trackerUi.card.fallbackName"),
+                name: displayName,
               })}
             />
           </Dropdown>
@@ -114,13 +148,11 @@ export default function TrackCard({ track, onEdit, onDelete, groupStart = false 
           <span>{t("trackerUi.card.statusDate", { date: shortDate(track.status_date) })}</span>
         )}
         {/* 使用的简历版本（RF-17）：有活关联显示名字；只剩标题快照（简历已删、
-            resume_id 被 SET NULL）时如实标注"历史关联"，不臆造还关联着。 */}
-        {(track.resume_id || track.resume_title) && (
-          <span className="track-card-resume">
-            {t("trackerUi.card.resume", {
-              title: track.resume_title || `#${track.resume_id}`,
-            })}
-            {!track.resume_id && t("trackerUi.card.resumeHistorical")}
+            resume_id 被 SET NULL）时如实标注"历史关联"，不臆造还关联着。
+            可见文本与 `title` 同一份完整字符串——长标题不在这里截断。 */}
+        {resume && (
+          <span className="track-card-resume" title={resume}>
+            {t("trackerUi.card.resume", { title: resume })}
           </span>
         )}
         {/* 依据：低频信息，并入元信息行尾部；`title` 保住被省略的全文。 */}

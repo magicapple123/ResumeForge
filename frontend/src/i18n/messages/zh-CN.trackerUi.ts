@@ -42,6 +42,7 @@ const trackerUi = {
   "trackerUi.card.action.edit": "编辑",
   "trackerUi.card.action.delete": "删除",
   "trackerUi.card.aria.more": "更多操作 {name}",
+  "trackerUi.card.aria.link": "打开 {name} 的关联链接（新窗口）",
   "trackerUi.card.fallbackName": "进度",
   "trackerUi.card.appliedAt": "{date} 投递",
   "trackerUi.card.statusDate": "{date} 更新",

@@ -217,11 +217,42 @@
   margin-inline: 6px;
 }
 
-/* 简历标题先让位（长标题最占宽），依据拿剩下的空间再省略。 */
+/* 简历标题：**不截字符串**，宽度靠 flex 让位。`flex: 0 1 auto` + `min-width: 0` 才允许
+   它在同一行里被压缩（默认 `min-width: auto` 会把长标题顶成整行溢出）；
+   有「依据」在后面时它先让位（260px 上限），只有它自己时才放开（见下一条）。 */
 .track-card-resume {
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 元信息行的最后一项（这条记录没有「依据」）：没有别人要抢宽度，就不该再按 260px
+   切掉——长标题完整显示，真的超出容器时仍由 overflow 兜底出省略号。
+   2026-11-23：此前一律 260px 硬切，"XX 公司-后端开发-2026 秋招定制版"这类名字被砍掉一半。 */
+.track-card-resume:last-child {
+  max-width: none;
+}
+
+/* 关联链接图标（取代已删除的「状态回读」）：行内小图标，默认与次要文字同色，
+   hover / 键盘聚焦才变信息蓝——不与状态圆点抢注意力。24px 命中区满足最小点按尺寸。 */
+.track-card-link {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.track-card-link:hover,
+.track-card-link:focus-visible {
+  color: var(--rf-info);
 }
 
 .track-card-evidence {

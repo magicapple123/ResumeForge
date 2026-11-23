@@ -434,3 +434,29 @@ def test_csv_export_streams_a_large_list(client, db_session):
     # 排序与列表一致（阶段序 → updated_at/id 倒序）：最后写入的（公司599）在最前。
     assert lines[-1] == "公司000,批量岗,已投递,,2026-09-18,,,,备注 0"
     assert lines[1] == "公司599,批量岗,已投递,,2026-09-18,,,,备注 599"
+
+
+# ===== 申请状态回读已整条移除（原条目 4）=====
+
+
+def test_the_probe_endpoints_are_gone(client):
+    """四个回读端点全部消失：路由不存在 → 404/405，而不是 422（那是参数错，说明还在）。
+
+    保留一个"能调用但永远失败"的端点比删掉更糟：用户会以为只是网络问题而反复重试。
+    """
+    for call in (
+        lambda: client.get("/api/tracker/probe/settings"),
+        lambda: client.put("/api/tracker/probe/settings", json={}),
+        lambda: client.post("/api/tracker/probe", json={}),
+        lambda: client.post("/api/tracker/probe/page", json={}),
+        lambda: client.post("/api/tracker/probe/daily"),
+    ):
+        assert call().status_code in (404, 405), "回读端点仍然存在"
+
+
+def test_the_probe_schemas_are_gone_from_the_module():
+    """schema 也要跟着删干净：留着半套 schema 会让下一个人以为回读只是"暂时关了"。"""
+    from app.schemas import tracker as tracker_schemas
+
+    assert not [name for name in dir(tracker_schemas) if name.startswith("TrackProbe")]
+    assert not [name for name in dir(tracker_schemas) if "Probe" in name]

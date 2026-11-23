@@ -15,9 +15,6 @@ export const EQUALITY_EXEMPT_KEYS = {
   "typography.inline.linkPlaceholder": "Example URL",
   // The column-gap suffix is a unit ("mm"), not a sentence: both languages keep it.
   "structure.layout.gapMillimeters": "Unit suffix mm, identical in both languages",
-  // These are technical examples (a URL and a Cookie header), not prose.
-  "trackProbe.pageUrlExample": "Example URL, must remain a valid URL in both languages",
-  "trackProbe.cookieExample": "Example Cookie header syntax, identical in both languages",
   // These placeholders concatenate labels that have already been translated.
   "versions.variants.exportOption": "Translated variant label interpolation format",
   // The middle dot is a separator before a user-provided job title.

@@ -108,8 +108,6 @@ const settingsPage = {
   "settings.reset.key.apply_blocklist": "投递屏蔽清单",
   "settings.reset.key.apply_greeting_templates": "招呼话术库",
   "settings.reset.key.analytics_weekly_goal": "每周投递目标",
-  "settings.reset.key.tracker_probe_enabled": "自动回读申请状态",
-  "settings.reset.key.tracker_probe_page_url": "投递记录页地址",
   "settings.reset.key.export_save_location": "生成内容保存位置",
   "settings.reset.key.auto_backup_interval_days": "自动备份间隔",
   "settings.reset.key.batch_operation_config": "批量操作参数",

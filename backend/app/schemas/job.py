@@ -3,7 +3,6 @@
 
 from datetime import datetime
 from typing import Annotated, Literal
-from urllib.parse import urlsplit
 
 from pydantic import (
     BaseModel,
@@ -15,6 +14,7 @@ from pydantic import (
 )
 
 from ..vocabulary.job import JOB_STATUSES
+from .common import validate_http_url
 from .extraction import (
     MAX_EXTRACTION_DOCUMENT_COUNT,
     MAX_EXTRACTION_IMAGE_COUNT,
@@ -86,16 +86,12 @@ def _validate_status(value: str) -> str:
 
 
 def _validate_source_url(value: str) -> str:
-    value = value.strip()
-    if not value:
-        return ""
-    try:
-        parsed = urlsplit(value)
-    except ValueError as exc:
-        raise ValueError("投递链接必须是有效的 HTTP 或 HTTPS 地址") from exc
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
-        raise ValueError("投递链接只支持 HTTP 或 HTTPS 地址")
-    return value
+    """岗位的「投递链接」校验（实现见 ``schemas/common.validate_http_url``）。
+
+    只保留这个薄包装：校验规则与求职进度的「关联链接」是同一份，
+    两处各写一遍必然漂移（一份放行 `file:`、另一份不放行）。
+    """
+    return validate_http_url(value, "投递链接")
 
 
 class SkillTag(BaseModel):

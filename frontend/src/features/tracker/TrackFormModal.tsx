@@ -4,6 +4,11 @@
  *
  * 日期字段用 AntD ``DatePicker``（E12）：值在表单里是 Dayjs，提交时再转回 ``YYYY-MM-DD``。
  * 公司和岗位是必填：进度要按这两项合并，缺一个就无从判断该并到哪一条上。
+ *
+ * 关联链接（``link``）取代了已删除的「申请状态回读」：用户在这一条上自己填入口地址
+ * （招聘页 / 网申页 / 会议链接），列表行上给一个可点的图标。校验与岗位「投递链接」
+ * 同一口径（见 ``./linkValidation.ts``）。选择关联岗位时，**链接还空着且是用户自己改的岗位**，
+ * 自动带上该岗位的 ``source_url``——打开旧记录编辑不补，避免把历史记录写脏。
  */
 import { SaveOutlined } from "@ant-design/icons";
 import { App, Button, DatePicker, Form, Input, Select } from "antd";
@@ -15,12 +20,14 @@ import { useLocale } from "../../i18n/i18nContext";
 import { TRACK_CHANNEL_LABEL_KEYS, TRACK_STATUS_LABEL_KEYS } from "../../i18n/enum/tracker";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { getJob } from "../../api/jobs";
 import { createTrack, getTrack, updateTrack } from "../../api/tracker";
 import { useJobSearchSelect, useResumeSearchSelect } from "../../hooks/remoteSearchOptions";
 import type { Track, TrackChannel, TrackPayload, TrackStatus } from "../../types";
 import { TRACK_CHANNELS, TRACK_STATUSES, emptyTrack } from "../../types";
 import { HintedTextArea } from "../../components/common/MaxLengthHint";
+import { MAX_TRACK_LINK_CHARS, trackLinkError } from "./linkValidation";
 
 const STATUS_OPTIONS = TRACK_STATUSES.map((value) => ({
   value,
@@ -31,6 +38,11 @@ const CHANNEL_OPTIONS = TRACK_CHANNELS.map((value) => ({
   value,
   labelKey: TRACK_CHANNEL_LABEL_KEYS[value],
 }));
+
+/**
+ * 关联链接的长度上限（与后端列宽一致，见 `linkValidation.ts`）。
+ */
+const MAX_LINK_CHARS = MAX_TRACK_LINK_CHARS;
 
 interface FormValues {
   company: string;
@@ -45,6 +57,7 @@ interface FormValues {
   job_id: number | null;
   resume_id: number | null;
   channel: TrackChannel;
+  link: string;
 }
 
 const EMPTY: FormValues = {
@@ -60,7 +73,19 @@ const EMPTY: FormValues = {
   job_id: null,
   resume_id: null,
   channel: "unknown",
+  link: "",
 };
+
+/**
+ * 关联链接的字段校验（口径实现见 `linkValidation.ts`，与后端同一份规则）。
+ *
+ * 抽成一层是为了让 antd 的 `rules` 只表达"怎么显示"：校验本身返回一句文案，
+ * 这里用 reject 把它交给字段下方显示。
+ */
+function linkFieldValidator(_rule: unknown, value: string | undefined): Promise<void> {
+  const error = trackLinkError(value);
+  return error ? Promise.reject(new Error(error)) : Promise.resolve();
+}
 
 function toValues(track: TrackPayload): FormValues {
   return {
@@ -76,6 +101,8 @@ function toValues(track: TrackPayload): FormValues {
     job_id: track.job_id,
     resume_id: track.resume_id,
     channel: track.channel,
+    // 旧记录 / 旧草稿里可能没有这个字段：空串是它的合法默认值。
+    link: track.link ?? "",
   };
 }
 
@@ -96,6 +123,8 @@ function toPayload(values: FormValues, track: Track | null): TrackPayload {
     job_id: values.job_id ?? null,
     resume_id: values.resume_id ?? null,
     channel: values.channel,
+    // 提交前 trim：`<a href=" https://…">` 里那个空格会被浏览器当成相对路径的一部分。
+    link: (values.link ?? "").trim(),
   };
 }
 
@@ -128,6 +157,35 @@ export default function TrackFormModal({ open, track, initial, onClose, onSaved 
     open,
     isEmpty: (values) => !values.company && !values.title,
   });
+  // —— 关联链接的自动带出 ——
+  // 只在「用户自己改了岗位」且「链接仍为空」时补一次。打开编辑旧记录走的是
+  // `setFieldsValue`（不触发 Select 的 onChange），所以历史记录不会被补写。
+  const linkSeqRef = useRef(0);
+
+  const handleJobChange = (value: number | null | undefined) => {
+    const jobId = value ?? null;
+    // 每次改动都递增序号：在途请求回来时序号已过期，结果直接丢弃（防乱序）。
+    const seq = ++linkSeqRef.current;
+    // 清空岗位**不动**链接：用户填过的地址不该被"取消关联"这个动作带走。
+    if (jobId == null) return;
+    // 链接里已经有内容 = 用户自己的东西，不覆盖。
+    if (String(form.getFieldValue("link") ?? "").trim()) return;
+    void getJob(jobId)
+      .then((job) => {
+        // 双复核：① 期间没有更晚的岗位改动；② 表单里的岗位仍是这次请求的那个。
+        if (seq !== linkSeqRef.current) return;
+        if ((form.getFieldValue("job_id") ?? null) !== jobId) return;
+        // 请求在途时用户自己填了链接：以用户为准。
+        if (String(form.getFieldValue("link") ?? "").trim()) return;
+        const url = (job?.source_url ?? "").trim();
+        // 岗位自己没填投递链接：留空，不替用户猜一个地址。
+        if (!url) return;
+        form.setFieldValue("link", url);
+      })
+      .catch(() => {
+        // 回查失败就保持空：链接是选填，不为了自动带出拦住保存。
+      });
+  };
 
   useEffect(() => {
     if (!open) {
@@ -348,7 +406,8 @@ export default function TrackFormModal({ open, track, initial, onClose, onSaved 
         </Form.Item>
 
         {/* 岗位关联（RF-18）：选填。把这条进度挂到资料库里的一个岗位，
-            岗位详情页的「该岗位的投递进度」会把它收进来。 */}
+            岗位详情页的「该岗位的投递进度」会把它收进来。
+            onChange 兼做「关联链接自动带出」的触发点（见 handleJobChange）。 */}
         <Form.Item
           name="job_id"
           label={t("trackerForm.field.job")}
@@ -358,7 +417,19 @@ export default function TrackFormModal({ open, track, initial, onClose, onSaved 
             allowClear
             placeholder={t("trackerForm.placeholder.job")}
             {...jobSelect.selectProps}
+            onChange={(value: number | null | undefined) => handleJobChange(value)}
           />
+        </Form.Item>
+
+        {/* 关联链接（取代已删除的「状态回读」）：选填。填了之后列表行给出一个
+            新窗口打开的图标；地址只放行 http / https（校验见 linkError）。 */}
+        <Form.Item
+          name="link"
+          label={t("trackerForm.field.link")}
+          extra={t("trackerForm.hint.link")}
+          rules={[{ validator: linkFieldValidator }]}
+        >
+          <Input placeholder={t("trackerForm.placeholder.link")} maxLength={MAX_LINK_CHARS} />
         </Form.Item>
 
         {/* 简历选择器（RF-17）：选填。显式关联后后端冻结一份投递快照，

@@ -5,6 +5,7 @@ import { createElement } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { AssistantAttachmentInput, AssistantSourceNumber } from "../../types";
 import { t } from "../../i18n";
+import { safeExternalUrl } from "../../utils/externalUrl";
 
 // 附件限值、类型判定与读取和岗位/资料识别共用，实现在 utils 里；这里保留
 // 原有导入路径，助手侧调用方不必跟着改。
@@ -21,6 +22,10 @@ export {
   readAsDataUrl,
   type AttachmentClassification,
 } from "../../utils/attachments";
+
+// 外链安全实现同样提到 `utils/externalUrl`（求职进度卡片的「关联链接」也要用同一份）。
+// 这里 re-export 保住既有 import 路径，tracker 侧不必反过来依赖 assistant 域。
+export { safeExternalUrl };
 
 export interface PendingAttachment extends AssistantAttachmentInput {
   id: number;
@@ -40,15 +45,6 @@ export function summarizeSkillNames(skills: { name: string }[]): string {
     names: names.slice(0, MAX_LISTED_SKILL_NAMES).join(separator),
     count: names.length,
   });
-}
-
-export function safeExternalUrl(value: string): string | null {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
-  } catch {
-    return null;
-  }
 }
 
 /**

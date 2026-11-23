@@ -2,8 +2,8 @@
 /**
  * 「登录状态」抽屉（Q12 / F07）：来源一行一个，网申浏览器下再按站点逐项展开。
  *
- * 为什么入口在投递台而不是设置页：三处登录态服务的是投递/网申链路，用户是在这里撞到
- * 登录墙的（回读 0 条、投递失败）；放设置页要多跳一层。
+ * 为什么入口在投递台而不是设置页：两处登录态服务的是投递/网申链路，用户是在这里撞到
+ * 登录墙的（投递失败）；放设置页要多跳一层。
  *
  * 五条硬约束（都是"体验会被做坏"的地方）：
  * 1. **打开面板只读缓存**，不发任何检测请求——浏览器类检测会真的弹窗并抢焦点；
@@ -12,7 +12,7 @@
  * 4. 重新登录后**自动复检一次**，否则用户登完了面板还显示旧状态；
  * 5. 网申是按 **host 逐站点**检测的（F07）：一个站点掉线不能让整行笼统报"正常"。
  */
-import { App, Button, Drawer, Input, Space, Tag, Typography } from "antd";
+import { App, Button, Drawer, Space, Tag, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
   checkLoginStatus,
@@ -21,7 +21,6 @@ import {
   listWebformSites,
   relogin,
   reloginWebformSite,
-  saveTrackCookie,
   type LoginStatusRow,
   type LoginStatusSite,
   type LoginStatusValue,
@@ -55,7 +54,6 @@ function statusLabel(status: LoginStatusValue): string {
 /** 探测地址为空时按来源给"先去哪儿"的提示（F12）：检测/重登都无从下手，不能只置灰。 */
 function noProbeHint(id: string): string {
   if (id === "webform_browser") return t("applyUi.loginStatus.noProbe.webform");
-  if (id === "track_cookie") return t("applyUi.loginStatus.noProbe.track");
   return t("applyUi.loginStatus.noProbe.apply");
 }
 
@@ -77,8 +75,6 @@ export default function LoginStatusDrawer({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [checkingAll, setCheckingAll] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [cookie, setCookie] = useState("");
-  const [cookieOpen, setCookieOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -137,10 +133,6 @@ export default function LoginStatusDrawer({
   };
 
   const runRelogin = async (row: LoginStatusRow) => {
-    if (row.id === "track_cookie") {
-      setCookieOpen(true);
-      return;
-    }
     setBusyKey(row.id);
     try {
       const result = await relogin(row.id);
@@ -174,12 +166,12 @@ export default function LoginStatusDrawer({
   /**
    * 全部检测：**串行**跑（不是 Promise.all）。
    *
-   * 顺序是「投递浏览器 → 各站点 → 门户 Cookie」：浏览器类先跑完，用户能看着它逐个出结果；
+   * 顺序是「投递浏览器 → 各站点 → 网申父行」：浏览器类先跑完，用户能看着它逐个出结果；
    * 有站点清单时**跳过网申父行**（它只汇总，探测交给站点，F07）。
    */
   const checkAll = async () => {
     const hasSites = sites.items.length > 0;
-    // 先排投递浏览器，再排各站点，最后才是 Cookie 与其它来源：一条平铺的任务队列，
+    // 先排投递浏览器，再排各站点，最后才是其它来源：一条平铺的任务队列，
     // 顺序就是用户看到的执行顺序。
     const sources = rows.filter((row) => row.id !== "webform_browser" || !hasSites);
     const ordered: Array<
@@ -213,20 +205,6 @@ export default function LoginStatusDrawer({
     } finally {
       setCheckingAll(false);
       setProgress(null);
-    }
-  };
-
-  const submitCookie = async () => {
-    setBusyKey("track_cookie");
-    try {
-      replaceRow(await saveTrackCookie(cookie));
-      message.success(t("applyUi.loginStatus.cookieSaved"));
-      setCookieOpen(false);
-      setCookie("");
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyKey(null);
     }
   };
 
@@ -348,25 +326,6 @@ export default function LoginStatusDrawer({
                     {t("applyUi.loginStatus.siteTruncated", { count: sites.truncated })}
                   </Typography.Text>
                 ) : null}
-              </div>
-            ) : null}
-            {row.id === "track_cookie" && cookieOpen ? (
-              <div style={{ marginTop: 10 }}>
-                <Input.TextArea
-                  value={cookie}
-                  autoSize={{ minRows: 2, maxRows: 5 }}
-                  placeholder={t("applyUi.loginStatus.cookiePlaceholder")}
-                  onChange={(event) => setCookie(event.target.value)}
-                />
-                <Button
-                  type="primary"
-                  size="small"
-                  style={{ marginTop: 8 }}
-                  loading={busyKey === "track_cookie"}
-                  onClick={() => void submitCookie()}
-                >
-                  {t("applyUi.loginStatus.cookieSave")}
-                </Button>
               </div>
             ) : null}
           </div>

@@ -58,6 +58,10 @@ def _apply_payload(record: ApplicationTrack, payload: TrackCreate | TrackUpdate)
     record.resume_id = payload.resume_id
     # 渠道（RF-18）只在 TrackCreate/TrackUpdate 上：识别合并的中间类型没有它。
     record.channel = payload.channel
+    # 关联链接同理：只在手工新增/编辑（`TrackCreate`/`TrackUpdate`）上有。
+    # 识别合并的中间类型 ``TrackRecordIn`` 没有这个字段，所以导入通知**不会**把用户
+    # 手填的链接抹掉（合并走 ``_merge_into``，只改它自己带来的字段）。
+    record.link = payload.link
 
 
 def _find_by_key(db: Session, record: TrackRecordIn) -> ApplicationTrack | None:

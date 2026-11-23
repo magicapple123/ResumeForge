@@ -154,7 +154,6 @@ import assistantLimits from "./zh-CN.assistantLimits";
 import contactSeparator from "./zh-CN.contactSeparator";
 import skillColumns from "./zh-CN.skillColumns";
 import photoFrame from "./zh-CN.photoFrame";
-import trackProbe from "./zh-CN.trackProbe";
 import assistantUi from "./zh-CN.assistantUi";
 import componentsMisc from "./zh-CN.componentsMisc";
 import componentsMisc2 from "./zh-CN.componentsMisc2";
@@ -419,7 +418,6 @@ const namespaces = {
   ...contactSeparator,
   ...skillColumns,
   ...photoFrame,
-  ...trackProbe,
   ...assistantUi,
   ...componentsMisc,
   ...componentsMisc2,

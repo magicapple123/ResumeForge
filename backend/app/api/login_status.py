@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """「登录状态」面板的接口层（Q12）。
 
-四个端点，语义严格分开：
+三个端点，语义严格分开：
 - ``GET  /api/login-status``                 只读缓存，**绝不触发检测**
 - ``POST /api/login-status/{id}/check``      用户点了才跑一次（60 秒限流）
-- ``POST /api/login-status/{id}/relogin``    浏览器类去开登录页；Cookie 类返回"要粘贴"
-- ``PUT  /api/login-status/track_cookie``    写入 Cookie 后自动复检
+- ``POST /api/login-status/{id}/relogin``    浏览器类去开登录页
+
+（原先的 ``PUT /api/login-status/track_cookie`` 随「申请状态回读」整条移除：那一行既没有
+配置入口，也就不该有写入路径。已存的 Cookie 由迁移 ``remove_tracker_probe_settings`` 清除。）
 
 路由注册在 ``application_routers.py``（由集成者统一加，本文件只提供 router）。
 """
@@ -63,21 +65,14 @@ class SiteIn(BaseModel):
 
 class ReloginOut(BaseModel):
     id: str
-    #: Chrome 式"开一个登录页"的浏览器类返回 ``opened``；Cookie 类返回 ``needs_paste``。
+    #: 浏览器类返回 ``opened``：Chrome 式"开一个登录页"。
     action: str
     url: str
 
 
-class TrackCookieIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    # 空串 = 清除（与设置页那条同源，不建第二份写入路径）。
-    cookie: str = Field(default="", max_length=20_000)
-
-
 @router.get("", response_model=list[LoginStatusOut])
 def read_login_statuses(db: Session = Depends(get_db)) -> list[LoginStatusOut]:
-    """三个来源的当前状态。**只读缓存**：浏览器类检测会弹窗，绝不能自动跑。"""
+    """两个来源的当前状态。**只读缓存**：浏览器类检测会弹窗，绝不能自动跑。"""
     return [LoginStatusOut(**item) for item in login_status.list_statuses(db)]
 
 
@@ -135,9 +130,6 @@ def check_login_status(source: str, db: Session = Depends(get_db)) -> LoginStatu
 def relogin(source: str, db: Session = Depends(get_db)) -> ReloginOut:
     if source not in login_status.source_ids():
         raise HTTPException(status_code=404, detail="未知的登录来源")
-    if source == "track_cookie":
-        # Cookie 类没有"浏览器窗口"可开：让前端给粘贴框。
-        return ReloginOut(id=source, action="needs_paste", url=login_status.relogin_url(db, source))
     url = login_status.relogin_url(db, source)
     if not url:
         raise HTTPException(status_code=409, detail="没有可用的探测地址")
@@ -154,10 +146,3 @@ def relogin(source: str, db: Session = Depends(get_db)) -> ReloginOut:
             status_code=503, detail=f"浏览器没能打开登录页（{type(error).__name__}）"
         ) from error
     return ReloginOut(id=source, action="opened", url=url)
-
-
-@router.put("/track_cookie", response_model=LoginStatusOut)
-def save_track_cookie(payload: TrackCookieIn, db: Session = Depends(get_db)) -> LoginStatusOut:
-    login_status.save_track_cookie(db, payload.cookie)
-    item = next(row for row in login_status.list_statuses(db) if row["id"] == "track_cookie")
-    return LoginStatusOut(**item)

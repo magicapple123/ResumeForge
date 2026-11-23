@@ -34,15 +34,16 @@ def test_status_roundtrip_and_listing(db_session):
     assert row["status"] == "expired"
     assert row["detail"] == "停在登录页"
     items = {item["id"]: item for item in login_status.list_statuses(db_session)}
-    assert set(items) == {"apply_browser", "webform_browser", "track_cookie"}
+    # 门户 Cookie 那一行随「申请状态回读」整条移除：只剩两个浏览器 profile。
+    assert set(items) == {"apply_browser", "webform_browser"}
     assert items["apply_browser"]["status"] == "expired"
     assert items["webform_browser"]["status"] == "unchecked"
 
 
 def test_unknown_is_preserved_not_downgraded_to_expired(db_session):
     """`unknown` 必须原样保留：它是"判断不了"，不是"已失效"。"""
-    login_status._save_status(db_session, "track_cookie", "unknown", "网络不通")
-    assert login_status.read_status(db_session, "track_cookie")["status"] == "unknown"
+    login_status._save_status(db_session, "apply_browser", "unknown", "网络不通")
+    assert login_status.read_status(db_session, "apply_browser")["status"] == "unknown"
 
 
 def test_logged_out_survives_the_roundtrip(db_session):
@@ -67,34 +68,16 @@ def test_legacy_expired_is_still_read_as_expired(db_session):
 
 def test_broken_json_falls_back_to_unchecked(db_session):
     """历史数据被手改坏时回落 unchecked，不让整页 500。"""
-    login_status._write_setting(db_session, login_status._status_key("track_cookie"), "{not json")
+    login_status._write_setting(db_session, login_status._status_key("apply_browser"), "{not json")
     db_session.commit()
-    assert login_status.read_status(db_session, "track_cookie")["status"] == "unchecked"
+    assert login_status.read_status(db_session, "apply_browser")["status"] == "unchecked"
 
 
-def test_cookie_check_without_cookie_is_unchecked(db_session):
-    """没配 Cookie 是「未检测」而不是「已失效」——两件事不能混。"""
-    result = login_status.check(db_session, "track_cookie")
-    assert result["status"] == "unchecked"
-    assert "Cookie" in result["detail"]
-
-
-def test_cookie_check_without_probe_url_is_unknown(db_session, monkeypatch):
-    """有 Cookie 但没有探测地址：判断不了，落 unknown。"""
-    monkeypatch.setattr(login_status, "probe_url", lambda db, source: "")
-    from app.services.track_probe_settings import write_settings
-
-    write_settings(db_session, cookie="a=1")
-    login_status.reset_cooldowns()
-    result = login_status.check(db_session, "track_cookie")
-    assert result["status"] == "unknown"
-    assert "探测地址" in result["detail"]
-
-
-def test_second_check_within_cooldown_is_rejected(db_session):
-    login_status.check(db_session, "track_cookie")
+def test_second_check_within_cooldown_is_rejected(db_session, monkeypatch):
+    monkeypatch.setattr(login_status, "_probe_browser", lambda *args, **kwargs: ("ok", ""))
+    login_status.check(db_session, "apply_browser")
     with pytest.raises(login_status.LoginStatusBusy) as info:
-        login_status.check(db_session, "track_cookie")
+        login_status.check(db_session, "apply_browser")
     assert info.value.remaining > 0
 
 
@@ -429,39 +412,56 @@ def test_webform_default_probe_url_falls_back_to_the_only_side(db_session):
     assert login_status.probe_url(db_session, "webform_browser") == ""
 
 
-def test_track_cookie_default_probe_url_uses_the_configured_page(db_session):
-    from app.services.track_probe_settings import write_settings
-
-    write_settings(db_session, page_url="https://portal.example.com/my/records")
-
-    assert (
-        login_status.probe_url(db_session, "track_cookie")
-        == "https://portal.example.com/my/records"
-    )
-
-
 def test_source_status_is_invalidated_when_the_probe_url_changes(db_session):
-    login_status.set_probe_url(db_session, "track_cookie", "https://old.example.com/a")
+    login_status.set_probe_url(db_session, "webform_browser", "https://old.example.com/a")
     login_status._save_status(
-        db_session, "track_cookie", "ok", "", probe="https://old.example.com/a"
+        db_session, "webform_browser", "ok", "", probe="https://old.example.com/a"
     )
 
-    login_status.set_probe_url(db_session, "track_cookie", "https://new.example.com/b")
-    row = login_status.read_status(db_session, "track_cookie")
+    login_status.set_probe_url(db_session, "webform_browser", "https://new.example.com/b")
+    row = login_status.read_status(db_session, "webform_browser")
 
     assert row["status"] == "unchecked"
     assert "探测地址" in row["detail"]
 
 
 def test_legacy_status_without_probe_url_resets_only_the_affected_sources(db_session):
-    """老 JSON 没有 probe_url：网申 / Cookie 重置，投递浏览器不动（它的默认地址没变过）。"""
+    """老 JSON 没有 probe_url：网申重置，投递浏览器不动（它的默认地址没变过）。"""
     import json
 
     legacy = json.dumps({"status": "ok", "checked_at": "2026-11-01T10:00:00", "detail": ""})
-    for source in ("apply_browser", "webform_browser", "track_cookie"):
+    for source in ("apply_browser", "webform_browser"):
         login_status._write_setting(db_session, login_status._status_key(source), legacy)
     db_session.commit()
 
     assert login_status.read_status(db_session, "apply_browser")["status"] == "ok"
     assert login_status.read_status(db_session, "webform_browser")["status"] == "unchecked"
-    assert login_status.read_status(db_session, "track_cookie")["status"] == "unchecked"
+
+
+# ===== 门户 Cookie 来源已整条移除（原条目 4）=====
+
+
+def test_the_cookie_source_is_gone_from_the_panel_and_the_api(db_session, client):
+    """回读没了，门户 Cookie 也就没有配置入口：来源清单与写接口都必须消失。
+
+    留着来源会让面板永远多一行无法消除的「未检测」；留着 ``PUT /track_cookie``
+    则是一条写不进任何读者的死接口（凭据只增不减，是纯粹的隐私负担）。
+    """
+    assert "track_cookie" not in login_status.source_ids()
+    assert "track_cookie" not in {row["id"] for row in login_status.list_statuses(db_session)}
+
+    response = client.put("/api/login-status/track_cookie", json={"cookie": "a=1"})
+    assert response.status_code in (404, 405), "写 Cookie 的接口必须已移除"
+
+
+def test_browser_source_still_recognises_a_login_page():
+    """搬家后的活口：``looks_like_login_page`` 从 ``track_portal`` 搬到 ``login_page``。
+
+    这条断言的是**浏览器来源**的判定（``_judge`` 直接被 ``_probe_browser`` 与
+    ``login_status_sites`` 复用），不是回读。只删不搬会让投递浏览器 / 网申浏览器的
+    「停在登录页」静默退化成「无法判断」——这正是本轮删除最容易误伤的一处。
+    """
+    assert login_status._judge("手机号码登录 获取验证码")[0] == "logged-out"
+    # 长页不算登录页：状态页至少一张卡片，页面很长时那几个词可能只是页脚链接。
+    long_page = "手机号码登录 获取验证码" + "岗位列表 " * 300
+    assert login_status._judge(long_page)[0] != "logged-out"

@@ -105,8 +105,6 @@ const settingsPage = {
   "settings.reset.key.apply_blocklist": "Application blocklist",
   "settings.reset.key.apply_greeting_templates": "Greeting templates",
   "settings.reset.key.analytics_weekly_goal": "Weekly application goal",
-  "settings.reset.key.tracker_probe_enabled": "Automatic status read-back",
-  "settings.reset.key.tracker_probe_page_url": "Application records page",
   "settings.reset.key.export_save_location": "Export save location",
   "settings.reset.key.auto_backup_interval_days": "Automatic backup interval",
   "settings.reset.key.batch_operation_config": "Batch operation parameters",
