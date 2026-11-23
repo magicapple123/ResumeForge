@@ -1,14 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 投投浮窗助手：只负责卡片外壳（含可拖动把手），内部直接复用侧栏助手页面能力。 */
+/**
+ * 投投浮窗助手：只负责卡片外壳（含可拖动把手），内部直接复用侧栏助手页面能力。
+ *
+ * 焦点相关的两件事不在这里做，但必须知道它们存在：
+ * - **不让弹窗的焦点陷阱把焦点抢走**：由 `touTouCardGuards.ts` 在 document 冒泡阶段
+ *   拦截（`AppShell` 启动时装一次）。本组件只负责"焦点真的进来之后"的行为。
+ * - **打开即聚焦输入框**：卡片不自己聚焦。`AssistantPage` 收 `autoFocusComposer`
+ *   后交给 `AssistantComposer`，由它在 textarea 真正挂载时聚焦 —— 这里 `children`
+ *   是 `Suspense` 包着的懒加载页面，卡片先渲染、textarea 后挂载，裸 `autoFocus`
+ *   会落空。
+ *
+ * 本卡的 Esc 分两层：document 那层（守卫）负责"别顺带关掉下层弹窗"，卡片根节点这
+ * 一层负责"关掉卡片自己"。
+ */
 
-import type { ReactNode } from "react";
-import { useEffect } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import { useEffect, useRef } from "react";
 import { ConfigProvider } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { layer } from "../../theme/tokens";
 import { useTouTou } from "./touTouContext";
 import { useTouTouCardDrag } from "./useTouTouCardDrag";
+import { shouldTouTouCardCloseOnKeyDown } from "./touTouCardGuards";
 import "./tou-tou-assistant.css";
 
 interface Props {
@@ -20,6 +34,8 @@ interface Props {
 export default function TouTouAssistantCard({ children, onClose, open }: Props) {
   useLocale();
   const { edge } = useTouTou();
+  // 豁免判定的基准节点（"卡片内有没有开着的弹层"要问它）。
+  const cardRef = useRef<HTMLElement | null>(null);
   // 拖拽 hook 必须在 `open` 早退之前调用：条件调用会打乱 React hooks 的调用序约束。
   const { cardStyle, dragging, gripRef, handleKeyDown, handlePointerDown, placeNextToOrb } =
     useTouTouCardDrag();
@@ -27,15 +43,26 @@ export default function TouTouAssistantCard({ children, onClose, open }: Props) 
   useEffect(() => {
     if (open) placeNextToOrb();
   }, [open, placeNextToOrb]);
+  // Esc 关卡片：`shouldTouTouCardCloseOnKeyDown` 里已经排除输入法组合、被内层
+  // preventDefault、以及 `+` 面板正开着这三种情况（详见该函数注释）。
+  // 内层用 React `stopPropagation()` 消费掉的 Esc 根本到不了这里。
+  // 传 `nativeEvent`：`isComposing` 只在原生事件上（React 合成事件没有这个字段）。
+  const handleCardKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (shouldTouTouCardCloseOnKeyDown(event.nativeEvent, cardRef.current)) onClose();
+  };
   if (!open) return null;
 
   return (
+    // 类名是守卫的豁免判据（`TOU_TOU_FOCUS_EXEMPT_SELECTOR`）：改名要两边一起改，
+    // `touTouCardGuards.test.ts` 有一条用例把这两个字面量钉在一起。
     <section
+      ref={cardRef}
       className={`tt-assistant-card is-edge-${edge}${dragging ? " is-dragging" : ""}`}
       role="dialog"
       aria-label={t("touTou.assistant.ariaLabel")}
       aria-describedby="tt-assistant-card-description"
       style={cardStyle}
+      onKeyDown={handleCardKeyDown}
     >
       <p id="tt-assistant-card-description" className="tt-assistant-card-sr-only">
         {t("touTou.assistant.description")}

@@ -8,6 +8,8 @@ import {
   FileWordOutlined,
 } from "@ant-design/icons";
 import { Alert, App, Button, Image, Input, Tag, Tooltip } from "antd";
+import type { GetRef } from "antd";
+import { useEffect, useRef } from "react";
 import {
   ASSISTANT_ACCEPT,
   MAX_ATTACHMENT_COUNT,
@@ -46,6 +48,9 @@ function attachmentIcon(attachment: PendingAttachment) {
     <FileWordOutlined />
   );
 }
+
+/** 输入框的 ref 类型从 antd 自己的组件上取，不深路径 import（见 AGENTS「Ant Design 使用规范」第 9 条）。 */
+type ComposerTextAreaRef = GetRef<typeof Input.TextArea>;
 
 interface Props {
   compact?: boolean;
@@ -87,6 +92,14 @@ interface Props {
   onContextChanged?: () => void;
   onSend: (refs?: AssistantMessageReferences) => void;
   onStop: () => void;
+  /**
+   * 挂载后把焦点送进输入框（投投浮窗打开时用）。
+   *
+   * 为什么是「挂载后聚焦」而不是 `autoFocus`：浮窗里的 `AssistantPage` 走
+   * `Suspense` + 懒加载，会话历史也可能还在取，textarea 会晚于卡片挂载；裸
+   * `autoFocus` 只在元素首次插入时生效一次，晚挂载就完全落空。
+   */
+  autoFocusOnMount?: boolean;
 }
 
 export default function AssistantComposer({
@@ -121,6 +134,7 @@ export default function AssistantComposer({
   onContextChanged,
   onSend,
   onStop,
+  autoFocusOnMount = false,
 }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后输入区不重渲染。
   useLocale();
@@ -130,6 +144,23 @@ export default function AssistantComposer({
   // 岗位/简历的展示口径与「本轮引用」快照（F36 一处实现）：发送时随消息带上，
   // 发送后页面清空选择，乐观气泡仍能显示这段引用。
   const { jobLabel, resumeLabel, refs: contextRefs } = useContextLabels(jobId, resumeId);
+  const textAreaRef = useRef<ComposerTextAreaRef | null>(null);
+  // 一次打开只聚焦一次：`sending` 变化会让下面的 effect 重跑，不能变成"每轮回复结束
+  // 都把焦点从用户手里抢回输入框"。
+  const autoFocusDoneRef = useRef(false);
+  useEffect(() => {
+    if (!autoFocusOnMount || autoFocusDoneRef.current) return;
+    // 无论最终聚没聚上，这次请求都算处理完：发送中不抢焦点，也不排队等发送结束。
+    autoFocusDoneRef.current = true;
+    if (sending) return;
+    const node = textAreaRef.current;
+    if (node === null) return;
+    try {
+      node.focus();
+    } catch {
+      // 聚焦失败静默：打开浮窗不能因为聚焦不了而报错（例如元素已在卸载途中）。
+    }
+  }, [autoFocusOnMount, sending]);
 
   /**
    * 直接往输入框里粘贴截图。
@@ -238,6 +269,7 @@ export default function AssistantComposer({
         {/* #12：常驻琥珀横幅已删除，档位可见性由输入区那颗 chip 承担；
             高风险档位改为选中时弹一次性确认卡（挂在组件尾部）。 */}
         <Input.TextArea
+          ref={textAreaRef}
           value={content}
           autoSize={{ minRows: compact ? 2 : 3, maxRows: 8 }}
           disabled={sending}

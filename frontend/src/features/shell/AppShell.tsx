@@ -45,6 +45,7 @@ import TouTouAssistantCard from "../tou-tou/TouTouAssistantCard";
 import TouTouClipboardCard from "../tou-tou/TouTouClipboardCard";
 import TouTouOrb from "../tou-tou/TouTouOrb";
 import { TouTouProvider } from "../tou-tou/TouTouProvider";
+import { installTouTouCardGuards } from "../tou-tou/touTouCardGuards";
 import { useNavigationVisibility } from "../../hooks/useNavigationVisibility";
 import { useSiderCollapse } from "../../hooks/useSiderCollapse";
 import { useResponsiveShell } from "../../hooks/useResponsiveShell";
@@ -113,6 +114,13 @@ export default function AppShell() {
   const [clipboardOpen, setClipboardOpen] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const closeMobileNavigation = useCallback(() => setMobileNavigationOpen(false), []);
+  // 投投卡片的焦点豁免守卫：**必须在应用启动时装**（不能等卡片打开 —— React 子组件的
+  // effect 先于父组件执行，晚装会让自动聚焦先被 antd 的焦点陷阱抢走）。函数幂等
+  // （模块级标志），StrictMode 双挂载与 HMR 都不会重复注册，所以这里不需要清理函数。
+  // 细节与失效条件见 `tou-tou/touTouCardGuards.ts` 文件头。
+  useEffect(() => {
+    installTouTouCardGuards();
+  }, []);
   // 品牌图标三联手势（1=回顶部 / 2=刷新当前页 / 3=回首页）+ Alt+R、Alt+Home 键盘兜底。
   // 逻辑在 `features/shell/useBrandMarkGesture.ts`：本文件贴着 500 行硬预算。
   const brandMark = useBrandMarkGesture();
@@ -312,7 +320,9 @@ export default function AppShell() {
           onClose={() => setFloatingAssistantOpen(false)}
         >
           <Suspense fallback={<PageSkeleton rows={8} />}>
-            <AssistantPage compact surface="floating" />
+            {/* 卡片打开时把焦点直接送进输入框（键盘用户开完就能打字）。
+                卡片本身关闭时 children 会卸载，所以这个布尔量就够用，不需要计数器。 */}
+            <AssistantPage compact surface="floating" autoFocusComposer={floatingAssistantOpen} />
           </Suspense>
         </TouTouAssistantCard>
         <TouTouClipboardCard open={clipboardOpen} onClose={() => setClipboardOpen(false)} />

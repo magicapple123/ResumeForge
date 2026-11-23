@@ -90,4 +90,64 @@ describe("TouTouAssistantCard", () => {
     expect(card.style.left).toBe("186px");
     expect(card.style.top).toBe("86px");
   });
+
+  it("卡片内按 Esc 关闭卡片；输入法组合中的 Esc 不关", () => {
+    const onClose = vi.fn();
+    render(
+      <TouTouAssistantCard open onClose={onClose}>
+        <textarea aria-label="提问" />
+      </TouTouAssistantCard>,
+    );
+    const input = screen.getByRole("textbox", { name: "提问" });
+
+    // 输入法组合中（中文候选取消）不算"关卡片"。
+    fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+    expect(onClose).not.toHaveBeenCalled();
+
+    // 其他按键也不关。
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("内层用 stopPropagation 消费掉的 Esc 不关卡片", () => {
+    const onClose = vi.fn();
+    render(
+      <TouTouAssistantCard open onClose={onClose}>
+        <button type="button" onKeyDown={(event) => event.stopPropagation()}>
+          二级菜单项
+        </button>
+      </TouTouAssistantCard>,
+    );
+    fireEvent.keyDown(screen.getByRole("button", { name: "二级菜单项" }), { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("`+` 面板展开时按 Esc 只收面板，不收卡片", () => {
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <TouTouAssistantCard open onClose={onClose}>
+        <textarea aria-label="提问" />
+      </TouTouAssistantCard>,
+    );
+    const input = screen.getByRole("textbox", { name: "提问" });
+    const card = screen.getByRole("dialog", { name: "投投求职助手" });
+
+    // `+` 面板是 antd Dropdown：开着时触发器带这个类与 aria-expanded。
+    const trigger = document.createElement("button");
+    trigger.className = "ant-dropdown-trigger";
+    trigger.setAttribute("aria-expanded", "true");
+    card.appendChild(trigger);
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+
+    // 面板收起后再按 Esc：这次归卡片（判据只看 aria-expanded，与节点顺序无关）。
+    trigger.setAttribute("aria-expanded", "false");
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+    unmount();
+  });
 });

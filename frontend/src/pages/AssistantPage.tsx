@@ -45,6 +45,7 @@ export {
 } from "../features/assistant/components/AssistantMessageContent";
 
 export default function AssistantPage({
+  autoFocusComposer = false,
   compact = false,
   surface: surfaceProp,
 }: AssistantPageProps = {}) {
@@ -394,6 +395,8 @@ export default function AssistantPage({
         />
         <AssistantComposer
           compact={compact}
+          // 投投浮窗打开时把焦点送进输入框（守卫先保证焦点不被弹窗陷阱抢走）。
+          autoFocusOnMount={autoFocusComposer}
           conversationId={activeId}
           content={content}
           attachments={attachments}

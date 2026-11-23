@@ -366,3 +366,25 @@ describe("AssistantComposer 对话技能 chip", () => {
     ).toBeInTheDocument();
   });
 });
+
+/** 投投浮窗打开即聚焦：`autoFocusOnMount` 契约只有"把焦点送进 textarea"这一件事。 */
+describe("AssistantComposer 打开即聚焦", () => {
+  const textarea = () =>
+    document.querySelector<HTMLTextAreaElement>(".assistant-composer textarea");
+
+  it("autoFocusOnMount 时输入框拿到焦点", () => {
+    renderComposer({ autoFocusOnMount: true });
+    expect(textarea()).not.toBeNull();
+    expect(document.activeElement).toBe(textarea());
+  });
+
+  it("不传 autoFocusOnMount 时不抢焦点（页面里正常打开的输入区不抢）", () => {
+    renderComposer();
+    expect(document.activeElement).not.toBe(textarea());
+  });
+
+  it("发送中不抢焦点", () => {
+    renderComposer({ autoFocusOnMount: true, sending: true });
+    expect(document.activeElement).not.toBe(textarea());
+  });
+});
