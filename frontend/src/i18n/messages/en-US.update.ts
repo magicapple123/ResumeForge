@@ -16,6 +16,33 @@ const update = {
   "update.error.check": "Could not check for updates",
   "update.error.download": "Could not download the update",
   "update.error.install": "Could not start the installer",
+  // Why the check failed: one extra line under the fixed headline. The classification
+  // mirrors the backend's `update_check_degrade.describe_failure` so the settings card
+  // and the desktop dialog never describe the same failure two different ways. Only the
+  // raw message decides (see `updateErrorText.ts`); an unrecognised message is shown
+  // verbatim instead of being dressed up as a network problem.
+  "update.error.why.quota":
+    "GitHub's anonymous quota is used up (60 requests an hour shared per network). Wait for the reset, or switch networks",
+  "update.error.why.rate":
+    "GitHub says the request is too frequent (HTTP 429). Try again in a few minutes",
+  "update.error.why.blocked":
+    "GitHub rejected this anonymous request (HTTP 403). Something on the network may be blocking api.github.com; another network usually works",
+  "update.error.why.notFound":
+    "The release repository or release does not exist (HTTP 404). Check the release page address, or try again later",
+  "update.error.why.timeout": "The request timed out. Check the proxy or network and try again",
+  "update.error.why.dns":
+    "The host name could not be resolved. Usually the network is down or DNS is blocked",
+  "update.error.why.refused":
+    "The connection was refused or dropped. A proxy or firewall may be blocking the request",
+  "update.error.why.cert":
+    "The HTTPS certificate could not be verified. A proxy may be intercepting; check the proxy settings",
+  "update.error.why.json":
+    "The response was not valid JSON. A gateway's block page may have replaced it",
+  "update.error.why.semver":
+    "The upstream version is not a standard version number, so it cannot be compared",
+  // Parenthetical with the untouched technical message: users forward that line when
+  // they report a problem, so it must stay on screen.
+  "update.error.why.detail": "(original: {detail})",
   "update.confirm.title": "Restart and install the update?",
   "update.confirm.body":
     "The app quits first, replaces the program files and restarts automatically. Jobs, Resumes, conversations and settings live in data/ and are never overwritten by the update package.",

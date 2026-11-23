@@ -15,6 +15,30 @@ const update = {
   "update.error.check": "检查更新失败",
   "update.error.download": "下载更新失败",
   "update.error.install": "启动安装失败",
+  /**
+   * 检查失败的归因（第 11 条）：弹窗在固定的「检查更新失败」下面再显示一行，说清"这是
+   * 什么情况 + 怎么办"。
+   *
+   * 口径与后端 `services/update_check_degrade.describe_failure` /
+   * `update_check._github_error_message` 逐条对齐——同一件事在设置页卡片（后端口径）与
+   * 桌面弹窗里不能有两种说法。判定只看主进程带来的原文（`updateErrorText.ts`）：
+   * 403 按 `x-ratelimit-remaining: 0` 区分"额度用完"（等一会儿）与"有人拦了"（换网络），
+   * 归类不出来时**只显示原文**，不补「网络异常」。
+   */
+  "update.error.why.quota":
+    "GitHub 匿名额度已用完（同一网络共用每小时 60 次）：等额度重置后再试，或换个网络",
+  "update.error.why.rate": "GitHub 提示请求过于频繁（HTTP 429）：等几分钟再试",
+  "update.error.why.blocked":
+    "GitHub 拒绝了这次匿名请求（HTTP 403）：网络里可能有人拦了 api.github.com，换个网络通常能恢复",
+  "update.error.why.notFound": "发布仓库或 Release 不存在（HTTP 404）：确认发布页地址，或稍后再试",
+  "update.error.why.timeout": "请求超时：检查代理或网络后再试",
+  "update.error.why.dns": "域名解析失败：多半是断网，或 DNS 被拦",
+  "update.error.why.refused": "连接被拒绝或中断：代理、防火墙可能挡了请求",
+  "update.error.why.cert": "HTTPS 证书校验失败：代理可能在做中间人，检查代理设置",
+  "update.error.why.json": "响应不是合法 JSON：可能被网关的拦截页替换了",
+  "update.error.why.semver": "上游版本号不是标准格式，无法比较大小",
+  /** 归因后面的原文括注。原文必须留在界面上（用户反馈时要能直接贴出来）。 */
+  "update.error.why.detail": "（原文：{detail}）",
   "update.confirm.title": "重启并安装更新？",
   "update.confirm.body":
     "应用会先退出，覆盖程序文件后自动重启。岗位、简历、对话和设置保存在 data/ 中，不会被更新包覆盖。",

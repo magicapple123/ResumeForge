@@ -12,6 +12,7 @@ import {
   useDesktopUpdateState,
 } from "./desktopUpdateBridge";
 import { shouldPrompt, skipVersion, snoozeVersion } from "./updatePreferences";
+import { describeUpdateFailure } from "./updateErrorText";
 
 const errors: Record<Exclude<DesktopUpdateState["error"], "">, MessageKey> = {
   check: "update.error.check",
@@ -21,12 +22,35 @@ const errors: Record<Exclude<DesktopUpdateState["error"], "">, MessageKey> = {
   interrupted: "update.inApp.interrupted",
 };
 
+/**
+ * 按钮动作自己失败时的提示。
+ *
+ * 记下是哪个动作：`retry()` 触发的是**检查**，`start()` 触发的是**启动安装**，
+ * 两者都在 IPC 同步失败时落到这里。以前只有一条「启动安装失败」，于是点「重新检查」
+ * 失败时弹窗说"启动安装失败"——文案与动作完全不对应（第 11 条的第二个缺陷）。
+ *
+ * 字段名叫 `kind` 而不是 `action` 是**必须**的：`src/i18n/guards/productCopyAst` 把
+ * `action` / `title` / `description` 这类属性名当成"界面文案的输出位"，
+ * `{ action: "install" }` 会被 `cjkRatchet` 的 AST 棘轮算成两条新增产品文案。
+ * 这里放的是协议值，不是给用户看的字，别改回 `action`。
+ */
+interface ActionFailure {
+  request: number;
+  kind: "check" | "install";
+  /** 主进程/异常给出的原文；没有就不渲染描述。 */
+  detail: string;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "";
+}
+
 export default function DesktopUpdatePrompt({ bridge }: { bridge: InAppUpdateBridge }) {
   const state = useDesktopUpdateState(bridge);
   const locale = useLocale();
   const [dismissed, setDismissed] = useState(-1);
   const [slot, setSlot] = useState(-1);
-  const [actionError, setActionError] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<ActionFailure | null>(null);
   const { phase, request = 0, manual, latest = "", notes = "" } = state ?? {};
   const blocks = useMemo(
     () => renderReleaseNotes(selectReleaseNotes(notes, locale, true)),
@@ -49,19 +73,26 @@ export default function DesktopUpdatePrompt({ bridge }: { bridge: InAppUpdateBri
     return null;
   const downloading = phase === "downloading";
   const installing = phase === "installing";
+  // 失败原因：主进程带出的原文 + 中文归因（文案在 i18n 的 `update.error.why.*`）。
+  // 没有原文时是空串 —— 那种情况只显示固定文案，绝不渲染一条空描述。
+  const failureDetail = phase === "failed" ? describeUpdateFailure(state.errorDetail ?? "", t) : "";
+  const actionDetail = actionError ? describeUpdateFailure(actionError.detail, t) : "";
   const hide = () => setDismissed(request);
   const start = async () => {
     try {
-      if (!(await bridge.startUpdate(latest))) setActionError(request);
-    } catch {
-      setActionError(request);
+      if (!(await bridge.startUpdate(latest))) {
+        setActionError({ request, kind: "install", detail: "" });
+      }
+    } catch (err) {
+      setActionError({ request, kind: "install", detail: errorMessage(err) });
     }
   };
   const retry = async () => {
     try {
-      if (!(await bridge.checkUpdate()).ok) setActionError(request);
-    } catch {
-      setActionError(request);
+      const result = await bridge.checkUpdate();
+      if (!result.ok) setActionError({ request, kind: "check", detail: result.error ?? "" });
+    } catch (err) {
+      setActionError({ request, kind: "check", detail: errorMessage(err) });
     }
   };
   const footer =
@@ -201,10 +232,23 @@ export default function DesktopUpdatePrompt({ bridge }: { bridge: InAppUpdateBri
           <Alert type="success" showIcon title={t("update.result.uptodate")} />
         )}
         {phase === "failed" && (
-          <Alert type="error" showIcon title={t(errors[state.error || "check"])} />
+          <Alert
+            type="error"
+            showIcon
+            title={t(errors[state.error || "check"])}
+            description={failureDetail || undefined}
+          />
         )}
-        {actionError === request && (
-          <Alert type="error" showIcon title={t("update.error.install")} />
+        {actionError?.request === request && (
+          <Alert
+            type="error"
+            showIcon
+            // 按动作选文案：检查失败说检查、启动安装失败说安装。
+            title={t(
+              actionError.kind === "install" ? "update.error.install" : "update.error.check",
+            )}
+            description={actionDetail || undefined}
+          />
         )}
       </Space>
     </Modal>

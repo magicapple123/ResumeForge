@@ -90,6 +90,7 @@ const idle: DesktopUpdateState = {
   request: 0,
   sequence: 0,
   error: "",
+  errorDetail: "",
 };
 function mount(initial = idle) {
   let state = initial;
@@ -172,4 +173,56 @@ it("respects a skipped automatic offer and lets a manual check open it", async (
   expect(await screen.findByRole("dialog")).toHaveTextContent("2.2.3");
   act(() => send({ phase: "failed", error: "incomplete" }));
   expect(screen.getByText(t("update.inApp.incomplete"))).toBeInTheDocument();
+});
+
+// ── 失败原因（第 11 条）───────────────────────────────────────────────
+// 以前主进程把 `err.message` 丢了，弹窗里只剩固定文案；这三条钉住三件事：
+// 有原因要显示（并保留原文）、没原因不许留空描述、按钮失败要按动作说。
+
+it("shows the attributed reason and keeps the original message on screen", async () => {
+  const { send } = mount();
+  const detail = "releases/latest returned 403 (x-ratelimit-remaining: 0)";
+  act(() =>
+    send({ phase: "failed", error: "check", errorDetail: detail, manual: true, request: 1 }),
+  );
+  const dialog = await screen.findByRole("dialog");
+  const alert = within(dialog).getByRole("alert");
+  expect(alert.textContent).toContain(t("update.error.check"));
+  // 归因（额度用完）与原文括注都在：原文是用户反馈问题时要贴出来的证据。
+  expect(alert.textContent).toContain(t("update.error.why.quota"));
+  expect(alert.textContent).toContain(detail);
+});
+
+it("renders only the fixed line when the main process had no reason", async () => {
+  const { send } = mount();
+  act(() => send({ phase: "failed", error: "check", errorDetail: "", manual: true, request: 1 }));
+  const dialog = await screen.findByRole("dialog");
+  // 空描述会在 Alert 里留下一条空白行：这里用"整段文本恰好等于标题"钉住它不许出现。
+  expect(within(dialog).getByRole("alert").textContent).toBe(t("update.error.check"));
+});
+
+it("names the action that failed: a failed recheck never says install", async () => {
+  const { bridge, send } = mount();
+  bridge.checkUpdate = vi.fn(async () => ({ ok: false, error: "untrusted sender" }));
+  // 用 download 阶段码做底色，标题于是是「下载更新失败」，与「检查更新失败」不会混淆。
+  act(() => send({ phase: "failed", error: "download", manual: true, request: 1 }));
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: t("update.action.recheck") }));
+  await waitFor(() =>
+    expect(within(dialog).getByText(t("update.error.check"))).toBeInTheDocument(),
+  );
+  expect(within(dialog).queryByText(t("update.error.install"))).toBeNull();
+  expect(dialog).toHaveTextContent("untrusted sender");
+});
+
+it("names the action that failed: a failed install says install", async () => {
+  const { bridge, send } = mount();
+  bridge.startUpdate = vi.fn(async () => false);
+  act(() => send({ phase: "available", latest: "2.2.3", notes: body, manual: true, request: 1 }));
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: t("update.startup.updateNow") }));
+  await waitFor(() =>
+    expect(within(dialog).getByText(t("update.error.install"))).toBeInTheDocument(),
+  );
+  expect(within(dialog).queryByText(t("update.error.check"))).toBeNull();
 });

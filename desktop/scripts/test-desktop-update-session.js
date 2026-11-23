@@ -63,14 +63,43 @@ test("manual checks recover from missing assets and network errors without insta
   await session.check(false);
   assert.equal(session.snapshot().error, "check");
   assert.equal(session.snapshot().manual, false);
+  // 阶段码是兼容契约（渲染层按它选固定文案），原因必须单独带出去：只有 `error:"check"`
+  // 时弹窗里只剩「检查更新失败」五个字（第 11 条）。
+  assert.match(session.snapshot().errorDetail, /offline/, "failed() 要把 err.message 带出来");
   await session.check(true);
   assert.equal(session.snapshot().error, "incomplete");
+  // 清空：否则上一次的原因会粘在这次的结果上（用户会在「发布包尚未齐备」下面看到 offline）。
+  assert.equal(session.snapshot().errorDetail, "", "下一次检查开始时必须清空上一次的原文");
   assert.equal(session.start("2.2.3"), false);
   await session.check(true);
   assert.equal(session.snapshot().phase, "current");
+  assert.equal(session.snapshot().errorDetail, "");
   session.interrupted("2.2.3");
   assert.equal(session.snapshot().error, "interrupted");
+  assert.equal(session.snapshot().errorDetail, "", "interrupted 没有可展示的原文，也要清空");
   assert.equal(session.start("2.2.3"), false);
+});
+
+test("a failed download carries its own reason without inventing a new error code", async () => {
+  const session = createSession({
+    current: "2.2.2", publish() {},
+    inspect: async () => ({ latest: "2.2.3", notes: "", size: 100, installer: {}, checksum: {} }),
+    install: async () => {
+      throw new Error("getaddrinfo ENOTFOUND release-assets.githubusercontent.com");
+    },
+  });
+  await session.check(true);
+  assert.equal(session.snapshot().phase, "available");
+  assert.equal(session.snapshot().errorDetail, "", "成功的检查不该带原因");
+  assert.equal(session.start("2.2.3"), true);
+  // failed() 在 install 的 .catch 里跑，需要让微任务队列转几圈。
+  for (let i = 0; i < 20 && session.snapshot().phase !== "failed"; i += 1) {
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  const state = session.snapshot();
+  assert.equal(state.phase, "failed");
+  assert.equal(state.error, "download", "下载阶段仍用既有的 download 码");
+  assert.match(state.errorDetail, /ENOTFOUND release-assets\.githubusercontent\.com/);
 });
 
 test("only the app's top-level frame can authorize the displayed release", () => {

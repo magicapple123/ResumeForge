@@ -31,6 +31,7 @@ function snapshot(overrides: Partial<DesktopUpdateState> = {}): DesktopUpdateSta
     request: 0,
     sequence: 1,
     error: "",
+    errorDetail: "",
     ...overrides,
   };
 }

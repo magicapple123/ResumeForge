@@ -56,8 +56,25 @@ const {
 // 出网层（白名单 fetch / 系统代理 / 重定向模式）。见该文件头：manual 逐跳校验给元数据，
 // follow 给资产下载（net.fetch 在 manual 下遇 302 会抛 Redirect was cancelled）。
 const { fetchAllowed } = require("./lib/update-net");
+// 失败归因口径（与后端 update_check_degrade.describe_failure 同口径）。纯函数：状态码 +
+// 限额头 → 原始文本 + 一句中文结论，见该文件头的两条边界。
+const {
+  combinedFailureText,
+  describeFailure,
+  failureFacts,
+  rawFailureText,
+} = require("./lib/update-failure-text");
+// 额度用尽时的备用探测（第 12 条）：读 github.com 的 302 取最新 tag，不碰 api.github.com。
+// 那一跳的跟法与地址校验在 lib/update-release-fallback.js（同样为 500 行预算）。
+const { fetchLatestTagViaRedirect, releasesRedirectUrl } = require("./lib/update-release-fallback");
 
-const RELEASES_API = "https://api.github.com/repos/magicapple123/ResumeForge/releases/latest";
+const REPO = "magicapple123/ResumeForge";
+const RELEASES_API = `https://api.github.com/repos/${REPO}/releases/latest`;
+// 备用探测入口：`github.com/<repo>/releases/latest` 会 302 到 `/releases/tag/<tag>`。
+// 它**不经过 api.github.com**，所以匿名额度用完、或者网络里只拦了 API 域名时照样能用——
+// 2026-11-23 实测：桌面直接报失败，后端同一秒因为走了这条备用路径返回「已是最新」。
+// 代价是只拿得到版本号，拿不到更新说明与附件。
+const RELEASES_REDIRECT = releasesRedirectUrl(REPO);
 const METADATA_TIMEOUT_MS = 15_000;
 const CHECK_DELAY_MS = 30_000;
 // 启动后的一次检查可能赶上机器离线（Wi-Fi 未连、VPN 未拨）：之后每 6 小时补查
@@ -96,12 +113,42 @@ function installerWaitCommand(installerPath, mainPid) {
   };
 }
 
+/**
+ * "只有版本号"的 release：`assets` 为空 → 走既有的 `missing` 分支
+ * （`error: "incomplete"`），**绝不假装可安装**；`body` / `published_at` 留空
+ * （拿不到更新说明与发布时间）。`failureDetail` 是这次降级的原因原文，由会话在
+ * `error:"incomplete"` 时一并带出去，免得用户以为真的是"发布包还没传全"。
+ */
+function degradedRelease(tag, facts) {
+  return {
+    tag_name: tag,
+    assets: [],
+    body: "",
+    published_at: "",
+    failureDetail: rawFailureText(facts),
+  };
+}
+
 async function fetchLatestRelease() {
   const response = await fetchAllowed(RELEASES_API, {
     signal: timeoutSignal(METADATA_TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error(`releases/latest returned ${response.status}`);
-  return response.json();
+  if (response.ok) return response.json();
+  // 主路径失败**不立刻抛**（第 12 条）：先记下状态码与限额头，再用不消耗 API 额度的
+  // 备用方式问一次"到底有没有新版本"。用户点「检查更新」想知道的就是这一件事，
+  // "接口不可用"不该等于"回答不了"——与后端 update_check.py 的分支顺序一致。
+  const facts = failureFacts(response.status, response.headers);
+  let tag;
+  try {
+    tag = await fetchLatestTagViaRedirect({ repo: REPO, timeoutMs: METADATA_TIMEOUT_MS });
+  } catch (err) {
+    const failure = new Error(combinedFailureText(facts, err));
+    // 中文结论只进日志（见 lib/update-failure-text.js 的边界 2）：`errorDetail` 与
+    // 壳层对话框都是双语的，中文归因在渲染层走 i18n。
+    failure.reason = describeFailure(facts);
+    throw failure;
+  }
+  return degradedRelease(tag, facts);
 }
 
 // 对话框、进度条、启动对账、locale 裁决都在 lib/update-feedback.js
@@ -190,7 +237,10 @@ async function inspectRelease() {
   return { current, latest, assetName, installer, checksum,
     missing: !installer ? assetName : !checksum ? checksumName : "",
     size: Number.isSafeInteger(installer?.size) && installer.size > 0 ? installer.size : null,
-    published: String(release.published_at || "").slice(0, 64), notes: String(release.body || "").slice(0, 131072) };
+    published: String(release.published_at || "").slice(0, 64), notes: String(release.body || "").slice(0, 131072),
+    // 只有降级来的 release 才有这个字段（见 degradedRelease）：附件缺失时把它交给会话，
+    // 「发布包尚未齐备」下面就能看到真正的原因是额度用完 / 被拦 / 仓库不存在。
+    failureDetail: String(release.failureDetail || "") };
 }
 
 async function installOffer(offer, parentWindow, deps, report = () => {}) {
@@ -388,6 +438,10 @@ module.exports = {
   runManualUpdateCheck,
   scheduleUpdateCheck,
   checkAndOfferUpdate,
+  // 发布元数据 → offer（版本比较 / 挑资产 / `missing` / 备用探测的降级）。导出是为了让
+  // scripts/test-updater-fallback.js 直接断言 offer 本身（`latest` / `missing` / `size` /
+  // `upToDate`），而不必透过对话框去猜结论。
+  inspectRelease,
   versionCompare,
   // 下载执行层（lib/update-download.js）的出口在这里 re-export：调用方（含用例）
   // 仍从 updater 取，main.js 与 scripts/test-updater*.js 的入口因此一行都不用改。
