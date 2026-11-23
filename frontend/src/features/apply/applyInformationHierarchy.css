@@ -215,6 +215,34 @@
 .apply-page .apply-queue-panel .ant-table-tbody .ant-typography {
   line-height: 16px;
 }
+/* ===== P3：把滚动容器的底部内边距挪到内容容器（2026-11-23，台账第 9 条）=====
+ * 症状：滚到列表中段时，吸底条**下方**露出一条被截断的表格行 / 分页器。
+ *
+ * `position: sticky; bottom: 0` 的约束矩形是**滚动容器的 padding box 内侧**，而滚动内容
+ * 仍会绘制到 padding 区。本页的滚动容器是 `.app-content`（base-tasks.css P1-2），它带
+ * `padding: var(--rf-content-pad)`（默认 24 / ≤1092 档 16 / ≥1920 档 32），于是吸底条
+ * 只能贴到「视口底 − pad」，条下那条缝的宽度**逐个等于**该档内边距——不是巧合，就是 padding。
+ *
+ * 治法：把内边距从滚动容器挪到**内容容器**上，缝的根因（容器底部内边距）随之消失，
+ * 吸底条就能贴到真正的底边。同一机制的先例在 `styles/base-guide.css`（2026-10 弹窗左栏）。
+ * 净高度不变（容器 −pad、页面 +pad），`scrollHeight` 零变化，0/1/3 条短内容都不会凭空
+ * 多出滚动条。
+ *
+ * 为什么用 `:has()` 收窄：`.app-content` 是全站共享的滚动容器（21 个页面在读它），
+ * 不能全局改。`:has()` 在本仓已有先例（accessibility.css / assistant-layout.css /
+ * base-shell.css / desktop-titlebar.css）。
+ *
+ * 不要改用伪元素遮盖（P1，已否决）：那只把缝遮成同色，缝本身还在，且给条加高一层。
+ * 也不要动 `.apply-settings-actions`（弹窗里的同类吸底条，容器上下内边距为 0，实测无此问题）。
+ */
+.app-content:has(> .apply-page) {
+  padding-bottom: 0;
+}
+
+.apply-page {
+  padding-bottom: var(--rf-content-pad);
+}
+
 /* 吸底操作条：从「浮动卡片」改成**表格页脚**（2026-11-13 用户反馈「单独一个卡片有点奇怪」）。
    原来它有 8px 圆角 + 四周描边 + 向上投影 + 10px 外边距，而队列表格本身是**无边框**的裸表——
    于是这条在白色内容区里显得像一张贴着的独立卡片。现在只留一条上边线贴住最后一行，

@@ -103,8 +103,17 @@
     overflow-wrap: anywhere;
   }
 
+  /* M1（2026-11-23，台账第 9 条）：这里原来有一条"100dvh 减页头高度变量"的 min-height
+     （`calc()` 读 `--rf-header-height`，原文见 `.workbuddy/memory/issue-ledger-2026-11-23.md`
+     第 9 条的 M1 小节）。375 宽下那个变量是 120，但 `.app-header` 会换行到 **217.4px**（三行按钮组），
+     于是 `min-height: 600` 被塞进只剩 502.6px 的空间：`.app-content` 底边到 **817.4**，
+     超出 720 视口 97.4px，再被 `.app-main` 的 `overflow: hidden` 裁掉——投递台的
+     `sticky; bottom: 0` 吸底条因此永远贴到被裁掉的 817，主 CTA 按不到。
+     `.app-content` 本来就是 `flex: 1 1 auto`（base-tasks.css），会自己撑满剩余高度，
+     这条 `min-height` 从头到尾没有用（桌面档从来没有它）。改成 0 之后
+     `contentBottom = 720`、`overflowPastViewport = 0`。 */
   .app-content {
-    min-height: calc(100dvh - var(--rf-header-height));
+    min-height: 0;
     /* 内边距统一由 --rf-content-pad 给（≤1092 档为 16px），这里不再重复写死。 */
   }
 
