@@ -29,7 +29,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -107,7 +107,9 @@ def cookie_transfer_params(
     if expires is None:
         original = cookie.get("expires")
         try:
-            original_value = int(float(original))
+            # `expires` 缺省时是 None：先挡掉再转 float，否则 pyright 会把
+            # 「Any | None 传给 ConvertibleToFloat」判成类型错误（值本身也是脏数据）。
+            original_value = -1 if original is None else int(float(original))
         except (TypeError, ValueError):
             original_value = -1
         # -1 / 0 都表示"会话 Cookie"；CDP 里 -1 就是不要 expires 的写法。
@@ -146,7 +148,7 @@ def export_all_cookies(client: Any) -> list[dict[str, Any]]:
     return [dict(item) for item in cookies if isinstance(item, Mapping)]
 
 
-def inject_cookies(client: Any, cookies: list[Mapping[str, Any]]) -> InjectionReport:
+def inject_cookies(client: Any, cookies: Sequence[Mapping[str, Any]]) -> InjectionReport:
     """把导出的 Cookie 逐条写进新浏览器。单条失败只记日志并继续。"""
     report = InjectionReport(total=len(cookies))
     for cookie in cookies:
@@ -219,7 +221,7 @@ def _export_from(manager: Any) -> list[dict[str, Any]]:
             client.close()
 
 
-def _inject_into(manager: Any, cookies: list[Mapping[str, Any]]) -> InjectionReport:
+def _inject_into(manager: Any, cookies: Sequence[Mapping[str, Any]]) -> InjectionReport:
     client = manager.client()
     try:
         return inject_cookies(client, cookies)

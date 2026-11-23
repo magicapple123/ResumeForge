@@ -251,6 +251,9 @@ def visit_once(manager: Any, *, timeout_seconds: float = READY_TIMEOUT_SECONDS) 
     client: Any | None = None
     try:
         client = manager.client()
+        if client is None:
+            # 管理器可能还没连上（窗口刚关/正在重启）：当成一次失败的访问，不抛。
+            return RESULT_ERROR
         created = client.send("Target.createTarget", {"url": boss_entry_url(), "background": True})
         target_id = str((created or {}).get("targetId") or "")
         if not target_id:

@@ -410,6 +410,10 @@ class SessionCookieKeepalive:
         except Exception as exc:  # noqa: BLE001 - 浏览器没跑 / 连接失败都只是本轮跳过
             self._record(f"no-client:{type(exc).__name__}")
             return SessionCookiePromotion(error=type(exc).__name__)
+        if client is None:
+            # 与异常同一种处理：这一轮跳过，别让线程带着 AttributeError 死掉。
+            self._record("no-client:none")
+            return SessionCookiePromotion(error="no-client")
         try:
             report = promote_session_cookies(
                 client, policy.normalized_days(), now=self._clock(), seen=self._seen
