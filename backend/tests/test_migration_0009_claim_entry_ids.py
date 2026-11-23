@@ -18,6 +18,7 @@ import importlib.util
 from pathlib import Path
 
 from alembic import command
+from alembic.script import ScriptDirectory
 from app.database import build_engine
 from app.database_migrations import build_alembic_config
 from sqlalchemy import inspect
@@ -42,12 +43,18 @@ def _new_engine(tmp_path, name: str):
 
 
 def _downgrade_until_removed(engine, config, column: str) -> int:
-    """从 head 连续退到该列消失为止；返回步数（防止迁移链有环时死循环）。"""
+    """从 head 连续退到该列消失为止；返回步数（防止迁移链有环时死循环）。
+
+    上限**按迁移链的真实长度算**，不写死数字：本用例的意图是"没有环"，而链每加一个
+    迁移就会多一步（0023/0024 落地后这里从 14 变成 16，写死会让一条无关的新迁移
+    把守环语义的断言顶红——那不是链有问题，是常量过期）。
+    """
     steps = 0
+    limit = sum(1 for _ in ScriptDirectory.from_config(config).walk_revisions())
     while column in _column_names(engine, CLAIM_TABLE):
         command.downgrade(config, "-1")
         steps += 1
-        assert steps <= 14, "连续降级没有移除目标列，迁移链可能有环"
+        assert steps <= limit, "连续降级没有移除目标列，迁移链可能有环"
     return steps
 
 

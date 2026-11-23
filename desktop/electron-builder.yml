@@ -92,6 +92,11 @@ files:
   # 下载执行层（AbortSignal / 停滞看门狗 / 流式落盘 / SHA-256）：2026-11-21 从 updater.js
   # 搬出（500 行预算），也是顶层 require，漏打包 = 安装版一启动就 MODULE_NOT_FOUND。
   - lib/update-download.js
+  # 失败原因的人读描述层（2026-11-23）：主进程把「为什么失败」翻成一句话，再由 IPC 带
+  # errorDetail 给渲染层；updater.js 顶层 require，漏打包 = 安装版检查更新即崩。
+  - lib/update-failure-text.js
+  # GitHub API 被限流时的 302 备用探测（2026-11-23）：同样由 updater.js 顶层 require。
+  - lib/update-release-fallback.js
   # 更新原子化的文件系统底座（任务 11，本次不接线）：独立库，随包发行以便下一步
   # 把 NSIS 覆盖安装换成 versions/ + current 指针。
   - lib/update-apply.js
