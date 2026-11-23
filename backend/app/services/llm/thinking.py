@@ -68,6 +68,18 @@ _EFFORTS_BY_STYLE: dict[str, tuple[str, ...]] = {
     STYLE_ENABLE_THINKING: (),
 }
 
+# 「thinking 对象」形态里**同时**支持强度分档的服务商 → 官方默认档位。
+#
+# 这是 DeepSeek 官方 thinking_mode 文档的原文事实（2026-11-23 复核）：
+# https://api-docs.deepseek.com/zh-cn/guides/thinking_mode
+# - 开关：Chat Completions 用 ``{"thinking": {"type": "enabled/disabled"}}``；
+# - 强度：同一份请求里另有顶层 ``{"reasoning_effort": "low/high/max"}``；
+# - 默认：「思考模式默认打开，且 effort 默认为 high」。
+# 所以它的形态仍是 thinking_object（关闭写法是 thinking 对象，不是 effort:none），
+# 只是**额外**要在开启时把档位发出去。表里没登记默认值的厂商不猜——省略参数让服务商
+# 自己用它的默认值，比我们编一个更安全。
+THINKING_OBJECT_DEFAULT_EFFORT: dict[str, str] = {"api.deepseek.com": "high"}
+
 _UNLISTED_NOTE = (
     "内置表没有收录这个服务商，下面是按通用写法给的选项；点「检测思考支持」确认它是否真的生效。"
 )
@@ -241,6 +253,31 @@ def can_disable_thinking(config: LLMConfig, protocol: str = PROTOCOL_CHAT) -> bo
     return bool(disable_thinking_payload(config, protocol))
 
 
+def thinking_object_effort(config: LLMConfig) -> str:
+    """thinking 对象形态下要**额外**发出的 ``reasoning_effort``；空串 = 不发。
+
+    只有「表里声明了档位」的厂商才发（目前是 DeepSeek 的 low/high/max）：其余 thinking
+    对象厂商（智谱、豆包、MiniMax、Moonshot）的官方字段表里没有 effort，多发一个它不认识
+    的参数只会换来一次 400。
+
+    取值口径：
+    - 用户选了档位 → 原样发送（``normalize_effort`` 不做白名单过滤，自定义词由上游裁决）；
+    - ``none`` / ``disabled`` 视为"不发"——它们在 Chat Completions 上不是档位而是关闭意图，
+      已由 ``thinking: {type: disabled}`` 表达；
+    - 没选档位 → 用该厂商的官方默认档（DeepSeek = ``high``，官方文档原文），显式发出去
+      比省略更好核对：请求体里能直接看到本次用了哪一档。
+    """
+    rule = match_rule(config)
+    if rule is None or not rule.efforts:
+        return ""
+    effort = normalize_effort(config)
+    if effort in ("none", "disabled"):
+        return ""
+    if effort:
+        return effort
+    return THINKING_OBJECT_DEFAULT_EFFORT.get(rule.host, "")
+
+
 def thinking_payload(config: LLMConfig) -> dict:
     """OpenAI 兼容请求体里的思考参数片段。
 
@@ -248,7 +285,8 @@ def thinking_payload(config: LLMConfig) -> dict:
       例外是表里标了 ``default_on`` 的模型（DeepSeek V4、通义 Qwen3.5+）：它们不指定就
       思考，"省略"等于"开着"，所以必须显式发一次关闭参数，否则界面写着"关闭"、实际在思考。
       命中不可关闭型号时同样一个字都不发（发了会 400）。
-    - **开着**：按形态生成。
+    - **开着**：按形态生成。thinking 对象形态里还有一层"该厂商是否也收强度"——DeepSeek
+      两个字段同时发（T9-b：只把选项放出来却不发参数，比不显示档位更糟）。
     """
     style = resolve_style(config)
     if style == THINKING_STYLE_UNMANAGED:
@@ -259,7 +297,11 @@ def thinking_payload(config: LLMConfig) -> dict:
     if style == STYLE_REASONING_EFFORT:
         return {"reasoning_effort": normalize_effort(config) or DEFAULT_EFFORT}
     if style == STYLE_THINKING_OBJECT:
-        return {"thinking": {"type": "enabled"}}
+        payload: dict = {"thinking": {"type": "enabled"}}
+        effort = thinking_object_effort(config)
+        if effort:
+            payload["reasoning_effort"] = effort
+        return payload
     if style == STYLE_ENABLE_THINKING:
         return {"enable_thinking": True}
     if style == STYLE_BUDGET:
@@ -355,6 +397,7 @@ __all__ = [
     "STYLE_ENABLE_THINKING",
     "STYLE_REASONING_EFFORT",
     "STYLE_THINKING_OBJECT",
+    "THINKING_OBJECT_DEFAULT_EFFORT",
     "ThinkingProbe",
     "ThinkingSupport",
     "can_disable_thinking",
@@ -366,6 +409,7 @@ __all__ = [
     "resolve_style",
     "responses_off_effort",
     "thinking_budget",
+    "thinking_object_effort",
     "thinking_payload",
     "thinking_support",
     "wants_thinking",

@@ -329,6 +329,51 @@ describe("JobFormModal 图片识别", () => {
   });
 });
 
+/** T9-a/D：两条 toast 不许同时出现——只有真的回填了字段才说"已填入表单"。 */
+describe("JobFormModal 识别结果提示（回填与否）", () => {
+  const SUCCESS_RULE = "已使用本地规则识别并填入表单，请核对后再保存";
+  const NO_FIELDS = "没有识别到内容，表单未改动";
+
+  const EMPTY_DRAFT = {
+    ...DRAFT,
+    title: "",
+    company: "",
+    location: "",
+    description: "",
+    requirements: "",
+    additional_info: "",
+    source_url: "",
+    posted_at: "",
+    parse_engine: "local" as const,
+    recognized_text: "",
+  };
+
+  it("只弹「表单未改动」，不弹「已填入表单」", async () => {
+    apiMocks.parseJobsMultiple.mockResolvedValue({ items: [EMPTY_DRAFT] });
+    renderModal();
+
+    // 纯截图 + 文本模型 + OCR 全失败：后端现在短路返回一份空草稿
+    pasteScreenshot(screen.getByLabelText("完整招聘信息"));
+    await waitFor(() => expect(screen.getByAltText("shot.png")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /识别并填充/ }));
+
+    expect(await screen.findByText(NO_FIELDS)).toBeInTheDocument();
+    // 关键断言：另一条（假的成功提示）必须不出现
+    expect(screen.queryByText(SUCCESS_RULE)).not.toBeInTheDocument();
+  });
+
+  it("回填了字段时仍然弹「已填入表单」，且不弹「表单未改动」", async () => {
+    apiMocks.parseJobsMultiple.mockResolvedValue({ items: [{ ...DRAFT, parse_engine: "local" }] });
+    renderModal();
+
+    fireEvent.change(screen.getByLabelText("完整招聘信息"), { target: { value: "门店店长" } });
+    fireEvent.click(screen.getByRole("button", { name: /识别并填充/ }));
+
+    expect(await screen.findByText(SUCCESS_RULE)).toBeInTheDocument();
+    expect(screen.queryByText(NO_FIELDS)).not.toBeInTheDocument();
+  });
+});
+
 /** I-35：识别结果逐字段落位。用假定时器推进，断言"顺序"而不是"多久"。 */
 describe("JobFormModal 逐字段落位", () => {
   const TEXTAREA = "完整招聘信息";

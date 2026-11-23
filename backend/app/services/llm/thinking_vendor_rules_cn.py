@@ -66,11 +66,16 @@ DOMESTIC_RULES: tuple[VendorRule, ...] = (
         "api.deepseek.com",
         None,
         STYLE_THINKING_OBJECT,
-        (),
+        # 强度三档（A：官方 thinking_mode 文档「思考强度控制」一栏原文
+        # ``{"reasoning_effort": "low/high/max"}``，并注明「思考模式默认打开，且 effort
+        # 默认为 high」）。DeepSeek 是**同时**收 thinking 对象与顶层 reasoning_effort 的
+        # 厂商，所以形态仍是 thinking_object，档位由 `thinking_payload` 合并发出。
+        ("low", "high", "max"),
         True,
-        "DeepSeek（deepseek-flash / deepseek-v4-pro）用 thinking 开关控制思考，且**默认开着**"
-        "（A：Chat Completions 用 thinking:{type:disabled}，Responses 用 reasoning.effort=none，"
-        "后者实测 reasoning_tokens=0）。",
+        "DeepSeek（deepseek-flash / deepseek-v4-pro）用 thinking 开关控制思考，且**默认开着**；"
+        "强度分 low/high/max 三档、默认 high（A：官方 thinking_mode 文档：Chat Completions 用 "
+        "thinking:{type:enabled/disabled} + 顶层 reasoning_effort，Responses 用 "
+        "reasoning.effort=none/low/high/max，后者实测 reasoning_tokens=0）。",
         default_on=True,
         # Responses 上唯一**实测有效**的关闭写法（清单 §10.3 C 行）。
         disable_responses={"reasoning": {"effort": "none"}},

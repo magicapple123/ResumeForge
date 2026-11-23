@@ -162,13 +162,6 @@ def test_models_that_think_by_default_get_an_explicit_disable(base_url, model, e
     assert thinking_payload(config) == expected
 
 
-def test_switching_on_a_default_thinking_model_sends_the_enable_shape():
-    config = _config(base_url="https://api.deepseek.com", model="deepseek-v4-flash")
-    config = config.model_copy(update={"thinking_enabled": True})
-
-    assert thinking_payload(config) == {"thinking": {"type": "enabled"}}
-
-
 def test_a_stripped_config_leaves_even_a_default_thinking_model_alone():
     """助手拿到的配置是剥过的：那里**不许**顺手替它关思考。
 

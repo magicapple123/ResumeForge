@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 from app.schemas.ocr import OcrConfig
 from app.services.ocr.client import OcrError, OcrPage, OcrResult
@@ -216,3 +218,109 @@ def test_page_still_empty_after_retry_is_named_in_the_warning(monkeypatch):
     )
     assert outcome is not None
     assert any("2" in warning and "没返回文字" in warning for warning in outcome.warnings)
+
+
+# ===== 图片逐张 OCR 的诊断（T9-a/C） =====
+
+
+def _images(count: int) -> list[dict[str, str]]:
+    from app.services.ocr.scan import image_data_url_of
+
+    raw = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+    return [
+        {"data_url": image_data_url_of(raw, "image/png"), "name": f"page-{index}.png"}
+        for index in range(1, count + 1)
+    ]
+
+
+def test_a_failed_image_is_named_by_its_real_position_and_reason(monkeypatch):
+    """第 1 张成功、第 2 张失败 → 文案必须是「第 2 张」并带上真实原因。
+
+    旧实现用 ``len(remaining)`` 当序号，会把失败的那张写成「第 1 张」——指错了好的那张。
+    """
+    from app.services.ocr import scan as scan_module
+    from app.services.ocr.policy import OCR_IMAGE_FAILED_WARNING
+
+    def _fake(_raw, name, _key, *, purpose, content_type):
+        if name == "page-2.png":
+            raise OcrError("unauthorized", detail="Authentication Fails")
+        return _result(["第一张的文字"])
+
+    monkeypatch.setattr(scan_module, "recognize_document", _fake)
+    outcome = scan_module.prepare_extraction_images(_images(2), build_ocr_context("auto", "sk-x"))
+
+    assert outcome.ok is True
+    assert outcome.text == "第一张的文字"
+    # 失败的那张仍留在 remaining 里走视觉模型
+    assert len(outcome.remaining) == 1
+    assert OCR_IMAGE_FAILED_WARNING.format(index=2, reason="DeepSeek API Key 无效（401）") in (
+        outcome.warnings
+    )
+    assert not any("第 1 张图片的 OCR 识别失败" in warning for warning in outcome.warnings)
+    # 诊断通道里保留纯原因，便于调用方与测试直接断言
+    assert outcome.errors == ("DeepSeek API Key 无效（401）",)
+
+
+def test_the_failure_warning_no_longer_claims_a_vision_fallback(monkeypatch):
+    """中性文案：文本模型 + OCR 路线并不会"改走视觉模型"，旧说法是假的。"""
+    from app.services.ocr import scan as scan_module
+
+    def _fake(*_args, **_kwargs):
+        raise OcrError("insufficient_balance")
+
+    monkeypatch.setattr(scan_module, "recognize_document", _fake)
+    outcome = scan_module.prepare_extraction_images(_images(1), build_ocr_context("auto", "sk-x"))
+
+    joined = "\n".join(outcome.warnings)
+    assert "已改走视觉模型" not in joined
+    assert "第 1 张图片的 OCR 识别失败：DeepSeek 账户余额不足（402）" in joined
+    assert outcome.errors == ("DeepSeek 账户余额不足（402）",)
+
+
+def test_a_local_decoding_failure_is_not_blamed_on_the_ocr_service(monkeypatch):
+    """本地解不开的图片不是 OCR 侧的问题：原因要指向图片本身，而不是 Key/余额。"""
+    from app.services.ocr import scan as scan_module
+
+    broken = [{"data_url": "data:image/png;base64,not-base64!!", "name": "broken.png"}]
+    outcome = scan_module.prepare_extraction_images(broken, build_ocr_context("auto", "sk-x"))
+
+    assert outcome.errors and outcome.errors[0].startswith("图片无法解码")
+    assert "API Key" not in outcome.errors[0]
+
+
+def test_the_failure_log_names_the_reason_code_and_never_the_key(monkeypatch, caplog):
+    """日志写 ``exc.code`` + ``exc.detail``，**不含 Key**（T9-a/C）。
+
+    旧实现只写 ``type(exc).__name__``：401 与 402 在日志里长得一模一样（都是
+    ``OcrError``），用户报"识别失败"时排查只能靠猜；而把 Key 写进日志更是不允许的。
+    """
+    from app.services.ocr import scan as scan_module
+
+    def _fake(*_args, **_kwargs):
+        raise OcrError("unauthorized", detail="Authentication Fails")
+
+    monkeypatch.setattr(scan_module, "recognize_document", _fake)
+    with caplog.at_level(logging.WARNING, logger=scan_module.__name__):
+        scan_module.prepare_extraction_images(
+            _images(1), build_ocr_context("auto", "sk-secret-key")
+        )
+
+    text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "code=unauthorized" in text, text
+    assert "detail=Authentication Fails" in text, text
+    # 异常类名不再是主要信息（401 与 402 都是 OcrError）。
+    assert "OcrError" not in text, text
+    assert "sk-secret-key" not in text, "日志绝不能出现 API Key"
+
+
+def test_images_that_all_succeed_report_no_errors(monkeypatch):
+    """成功路径不该留下半句错误（``errors`` 只在真失败时非空）。"""
+    from app.services.ocr import scan as scan_module
+
+    monkeypatch.setattr(
+        scan_module, "recognize_document", lambda *_a, **_k: _result(["识别到的文字"])
+    )
+    outcome = scan_module.prepare_extraction_images(_images(2), build_ocr_context("auto", "sk-x"))
+
+    assert outcome.errors == ()
+    assert outcome.ok is True

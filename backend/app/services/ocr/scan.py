@@ -324,13 +324,19 @@ def recognize_single_image(
 
 @dataclass
 class ImageOcrOutcome:
-    """图片附件的 OCR 结果：``remaining`` 是仍需交给视觉模型的 data URL。"""
+    """图片附件的 OCR 结果：``remaining`` 是仍需交给视觉模型的 data URL。
+
+    ``errors`` 是逐张失败原因的**诊断通道**（T9-a/C）：``warnings`` 里那条是给用户看的
+    完整句子，这里保留一份纯原因，便于调用方与测试直接断言"到底为什么没读出来"
+    （401 / 402 / 超时 / 网络 / 格式）而不用去解析中文句子。
+    """
 
     text: str = ""
     remaining: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     pages_recognized: int = 0
     ok: bool = False
+    errors: tuple[str, ...] = ()
 
 
 def _image_mime(data_url: str) -> str:
@@ -351,7 +357,10 @@ def prepare_extraction_images(
     警告里说明——不能因为一张坏图把整次识别判失败。
     """
     outcome = ImageOcrOutcome()
-    for image in images:
+    errors: list[str] = []
+    # 序号用**真实张次**（T9-a/C）：旧实现用 ``len(outcome.remaining)``，第 1 张成功、
+    # 第 2 张失败时会写成「第 1 张」——恰好指错了那张好的图。
+    for index, image in enumerate(images, start=1):
         data_url = str(image.get("data_url") or "")
         if not data_url:
             continue
@@ -374,9 +383,16 @@ def prepare_extraction_images(
                 if isinstance(exc, OcrError):
                     raise
                 raise OcrError("bad_image", detail=str(exc)) from exc
-            logger.warning("图片 OCR 失败，回落视觉模型：%s", type(exc).__name__)
+            reason = _failure_reason(exc)
+            # 日志只写原因码与 detail：**绝不**把 Key 或整段上游响应体带进日志。
+            logger.warning(
+                "图片 OCR 失败（第 %s 张），回落视觉模型：%s",
+                index,
+                f"code={exc.code} detail={exc.detail}" if isinstance(exc, OcrError) else reason,
+            )
+            errors.append(reason)
             outcome.remaining.append(data_url)
-            outcome.warnings.append(OCR_IMAGE_FAILED_WARNING.format(index=len(outcome.remaining)))
+            outcome.warnings.append(OCR_IMAGE_FAILED_WARNING.format(index=index, reason=reason))
             continue
         text = result.text.strip()
         if not text:
@@ -390,7 +406,20 @@ def prepare_extraction_images(
 
     if outcome.pages_recognized:
         outcome.warnings.insert(0, OCR_IMAGES_USED_WARNING.format(count=outcome.pages_recognized))
+    outcome.errors = tuple(errors)
     return outcome
+
+
+def _failure_reason(exc: OcrError | ValueError) -> str:
+    """把一张图片的失败翻成**一句给用户看的原因**（不含 Key、不含上游响应体）。
+
+    ``user_message_for`` 已经覆盖 401/402/超时/网络/格式；本地解码失败（``ValueError``）
+    不是 OCR 侧的问题，单独说清"图片无法解码"，否则会归因到 Key 上。
+    """
+    if isinstance(exc, OcrError):
+        return user_message_for(exc)
+    detail = str(exc).strip()
+    return f"图片无法解码（{detail}）" if detail else "图片无法解码"
 
 
 def image_data_url_bytes(data_url: str) -> bytes:

@@ -251,6 +251,19 @@ _AI_FAILED_TEXT = "AI 识别暂不可用，已使用本地规则识别，请核�
 _AI_FAILED_IMAGE_NOTE = "图片识别失败，可能是当前模型不支持图片输入（需要多模态模型）；"
 _AI_FAILED_DOCUMENT_NOTE = "文档文字已在本机提取；"
 
+# 识别材料为空的短路提示（T9-a/A）。素材里一个字的正文都没有时**不调用模型**：模型只会
+# 回一句"没有招聘信息"，再被上层当成"AI 识别失败"归因，用户看到的就是自相矛盾的一串
+# 提示。两条出路必须都写出来：粘文本（立刻可用）与修 OCR（照片确实没法粘贴时）。
+_EMPTY_MATERIAL_TEXT = (
+    "没有从这些材料里读出任何文字，本次没有继续识别。"
+    "请直接粘贴招聘信息文本，或到「外部连接 → 识别引擎」检查 OCR 配置后重新识别。"
+)
+
+
+def empty_material_warning() -> str:
+    """材料里既没有文字、也没有可下发的图片：短路时唯一的说明。"""
+    return _EMPTY_MATERIAL_TEXT
+
 
 def no_model_warning(has_images: bool, has_documents: bool = False) -> str:
     """未配置模型时的降级提示：按是否含图片/文档分别说明本地规则能做什么。"""
@@ -264,24 +277,41 @@ def no_model_warning(has_images: bool, has_documents: bool = False) -> str:
     return f"未配置大模型，{notes}已使用本地规则识别，请核对后保存。"
 
 
-def ai_failed_warning(has_images: bool, detail: str = "", has_documents: bool = False) -> str:
-    """模型失败时的降级提示：按是否含图片/文档说明原因，可附原始错误。"""
+def ai_failed_warning(
+    has_images: bool,
+    detail: str = "",
+    has_documents: bool = False,
+    *,
+    images_sent: bool | None = None,
+) -> str:
+    """模型失败时的降级提示：按是否含图片/文档说明原因，可附原始错误。
+
+    ``images_sent`` 是**这次请求到底有没有真的发出 image 块**（T9-a/B）。"有图片"不等于
+    "发了图"：纯文本模型走 OCR 路线时原图一律不下发，此时说"可能是当前模型不支持图片
+    输入"是把失败原因挂在了根本没发生的动作上。传 ``None`` 表示沿用旧行为（等价于
+    ``has_images``），供尚未区分这一步的调用方兼容。
+    """
+    sent = has_images if images_sent is None else images_sent
     notes = ""
-    if has_images:
+    if sent:
         notes += _AI_FAILED_IMAGE_NOTE
     if has_documents:
         notes += _AI_FAILED_DOCUMENT_NOTE
-    if not notes:
-        return _AI_FAILED_TEXT
-    message = f"{notes}已使用本地规则识别，请核对后保存。"
-    if detail:
-        message = f"{message}（{detail}）"
-    return message
+    # 没有图片/文档说明时也不能把原因丢掉：文本路线（或 OCR 路线）失败时，「（HTTP 500）」
+    # 是用户判断"是自己配错了还是服务商抖动"的唯一线索。
+    body = f"{notes}已使用本地规则识别，请核对后保存。" if notes else _AI_FAILED_TEXT
+    return f"{body}（{detail}）" if detail else body
 
 
-def attach_image_review_warning(result: Any, has_images: bool) -> Any:
-    """图片识别的结果多带一条核对提示。"""
-    if not has_images:
+def attach_image_review_warning(
+    result: Any, has_images: bool, *, contributed: bool | None = None
+) -> Any:
+    """图片识别的结果多带一条核对提示。
+
+    ``contributed=False`` 表示这些图片**没有为结果贡献任何内容**（OCR 没读出字、模型也
+    没抄录），此时"请对照截图核对"只是噪音——用户没有可核对的东西。``None`` 沿用旧行为。
+    """
+    if not has_images or contributed is False:
         return result
     warnings = list(
         dict.fromkeys(
@@ -301,11 +331,21 @@ def attach_warnings(result: Any, extra: Sequence[str]) -> Any:
 
 
 def finalize_recognition_result(
-    result: Any, *, has_images: bool, document_warnings: Sequence[str] = ()
+    result: Any,
+    *,
+    has_images: bool,
+    document_warnings: Sequence[str] = (),
+    images_contributed: bool | None = None,
 ) -> Any:
     """识别结果收尾：截图核对提示 + 文档提取过程中的说明。
 
     两个识别入口（岗位与个人资料）的每条返回路径都要走这里，否则"文档内容被截断"
     这类说明只在模型成功时出现，用户看不出区别。
+
+    ``images_contributed=False`` 时**不加**截图核对提示：一个字段都没识别出来时那句
+    提示是纯噪音（T9-a/B）。
     """
-    return attach_warnings(attach_image_review_warning(result, has_images), document_warnings)
+    return attach_warnings(
+        attach_image_review_warning(result, has_images, contributed=images_contributed),
+        document_warnings,
+    )

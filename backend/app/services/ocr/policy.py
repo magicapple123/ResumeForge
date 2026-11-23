@@ -53,7 +53,9 @@ OCR_FAILED_FALLBACK_WARNING = (
     "OCR 识别失败，已改用视觉模型识别扫描页（原件会发给你配置的模型服务商）。"
 )
 OCR_IMAGES_USED_WARNING = "已用 DeepSeek OCR 识别 {count} 张图片中的文字（按页计费）。"
-OCR_IMAGE_FAILED_WARNING = "第 {index} 张图片的 OCR 识别失败，已改走视觉模型。"
+# 中性表述（T9-a）：旧文案「已改走视觉模型」在文本模型 + OCR 路线上是假的——那条路
+# **不会**把原图发给视觉模型，只会被丢掉。序号用真实张次，原因取自 `user_message_for`。
+OCR_IMAGE_FAILED_WARNING = "第 {index} 张图片的 OCR 识别失败：{reason}"
 # 服务端偶发返回整页空文本（实测 9 页里有 1–2 页，重试即恢复）。这页钱照扣、字却没拿到，
 # 所以必须**显式告诉用户哪几页缺**，而不是悄悄少一段——少的那段可能正是工作经历。
 OCR_EMPTY_PAGES_WARNING = "OCR 的 {pages} 页没返回文字（已重试一次），建议对照原件核对该页。"

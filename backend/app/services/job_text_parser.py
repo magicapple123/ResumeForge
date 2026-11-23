@@ -201,9 +201,13 @@ def parse_job_text(text: str) -> JobTextParseResult:
         section_description if saw_description_heading else description.strip()
     )
     warnings: list[str] = []
-    if not title:
+    # 空输入不是"规则没认出来"（T9-a/B）：`parse_job_text("")` 的调用方本来就知道没材料
+    # （纯截图 + OCR 失败的兜底草稿就是这样），再追加两条字段级警告只会让用户看到
+    # "未识别到岗位名称"这种既没错也没用的提示。只有**确实有材料**时才提示缺哪一项。
+    has_material = bool(text and text.strip())
+    if has_material and not title:
         warnings.append("未识别到岗位名称，请手动填写。")
-    if not substantive_description:
+    if has_material and not substantive_description:
         warnings.append("未识别到岗位描述，请核对原始文本并手动填写。")
 
     source_url = _find_url(values.get("source_url", ""))

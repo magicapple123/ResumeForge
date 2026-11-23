@@ -3,25 +3,15 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
-from starlette.responses import Response
 
 from ..database import get_db
-from ..models.job import JOB_STATUSES, Job
+from ..models.job import Job
 from ..runtime.blocking import run_sync
 from ..schemas.extraction import MAX_RECOGNIZED_TEXT_CHARS
 from ..schemas.job import (
-    JobBatchDeleteResult,
-    JobBatchRequest,
-    JobBatchStatusRequest,
-    JobBatchStatusResult,
-    JobCreate,
-    JobImportPreview,
-    JobImportRequest,
-    JobImportResult,
-    JobImportRow,
     JobMultiTextParseResult,
     JobTextParseRequest,
     JobTextParseResult,
@@ -37,17 +27,8 @@ from ..services.attachments import (
     total_attachment_bytes,
 )
 from ..services.document_text import extract_documents_text
-from ..services.job.job_csv import (
-    MAX_IMPORT_FILE_CHARS,
-    decode_csv_bytes,
-    jobs_to_csv_text,
-    parse_job_csv,
-    row_to_payload,
-)
 from ..services.job.job_multi_parser import extract_multiple_jobs, local_multi_drafts
 from ..services.job.job_queries import filtered_query as _filtered_query
-from ..services.job.job_queries import jobs_by_ids
-from ..services.job.job_service import create_job_record, find_job_by_identity
 from ..services.job.job_sorting import JobSort, JobSortOrder, job_order_by
 from ..services.job_text_parser import parse_job_text
 from ..services.llm import create_provider
@@ -69,31 +50,38 @@ from ..services.settings_service import get_llm_config
 from ..services.text_extraction import (
     ai_failed_warning,
     attach_warnings,
+    empty_material_warning,
     extract_job_text,
     finalize_recognition_result,
     llm_is_configured,
     mark_local_fallback,
     no_model_warning,
 )
+from .jobs_bulk import register_jobs_bulk_routes
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 logger = logging.getLogger(__name__)
 
 
-def _get_jobs_or_404(db: Session, job_ids: list[int]) -> list[Job]:
-    jobs, missing_ids = jobs_by_ids(db, job_ids)
-    if missing_ids:
-        missing = "、".join(str(job_id) for job_id in missing_ids)
-        raise HTTPException(status_code=404, detail=f"以下岗位不存在或已被删除：{missing}")
-    return jobs
+def _image_content_contributed(result, *, images_sent: bool, ocr_text: str) -> bool:
+    """这些图片**是否真的为本次识别贡献了内容**（T9-a/B）。
 
+    判据只看结果与过程，不看"用户传了几张图"：
 
-def _commit_batch(db: Session) -> None:
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    - 既没发图、OCR 也没读出字 → 没贡献；
+    - OCR 读出了字（进了 source_text、字段由它锚定）→ 算贡献；
+    - 发了图且模型抄录回内容 / 回填了内容字段 → 算贡献。
+
+    决定的是那句「请对照截图核对」要不要出现：一个字段都没识别出来时，让用户去对照
+    截图核对一堆空白是纯噪音。
+    """
+    if not images_sent and not ocr_text.strip():
+        return False
+    if ocr_text.strip():
+        return True
+    return bool(getattr(result, "recognized_text", "")) or filled_field_count(
+        result, JOB_CONTENT_FIELDS
+    ) > 0
 
 
 add_action_route(router, job_actions()["list_jobs"])
@@ -167,6 +155,10 @@ async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depen
     # 文档文字与粘贴文本合并成同一份 source_text：本地规则与模型看到的材料一致，
     # 字段锚定也仍然对着原文，比图片那条"让模型自己抄录再核对"的路子强。
     source_text = "\n\n".join(part for part in (payload.text, documents.text) if part.strip())
+    if not source_text.strip() and not image_urls:
+        # 与多份入口同一口径（T9-a）：文档也可能一个字都提不出来（空白扫描页、只有版式的
+        # 文档），这种请求根本没有可识别的材料，不该白跑一次模型。
+        raise HTTPException(status_code=422, detail="缺少招聘信息或截图、文档")
     local_draft = parse_job_text(source_text)
     setup = await run_sync(_prepare_parse_llm, db)
     provider = setup.provider
@@ -175,6 +167,8 @@ async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depen
             mark_local_fallback(local_draft, no_model_warning(has_images, has_documents)),
             has_images=has_images,
             document_warnings=documents.warnings,
+            # 没有模型就没有"图片贡献了内容"这回事：别让用户去核对一张没被读过的截图。
+            images_contributed=False,
         )
     # I-34：先看能力表再决定发什么。文本模型收到 image_url 只会 400，等失败再猜原因
     # 是在替用户读报错；这里直接按"有图 / 能看图 / 能用 OCR"四条出口走。
@@ -195,6 +189,7 @@ async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depen
             ),
             has_images=has_images,
             document_warnings=documents.warnings,
+            images_contributed=False,
         )
     if route == "ocr":
         prep = await ocr_to_text(
@@ -209,17 +204,35 @@ async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depen
         source_text, local_draft, ocr_text = prep.source_text, prep.local_draft, prep.ocr_text
         # OCR 文本与原图**不同时发**：双倍计费，且锚定会同时对着两套文字。
         image_urls = []
+        if not source_text.strip():
+            # 空材料短路（T9-a）：OCR 一个字都没读出来，又没有原图可发。这一单没有任何
+            # 可识别的内容，**一个请求都不发**——否则模型只会回一句"没有招聘信息"，
+            # 再被当成"AI 识别失败"归因，用户看到的就是自相矛盾的一串提示。
+            return attach_warnings(
+                finalize_recognition_result(
+                    mark_local_fallback(local_draft, empty_material_warning()),
+                    has_images=has_images,
+                    document_warnings=documents.warnings,
+                    images_contributed=False,
+                ),
+                extra_warnings,
+            )
+    images_sent = bool(image_urls)
     try:
         result = await extract_job_text(provider, source_text, local_draft, image_urls)
     except LLMError as exc:
         logger.warning("岗位文本 AI 识别失败，已回退本地解析：%s", exc)
         result = mark_local_fallback(
-            local_draft, ai_failed_warning(has_images, str(exc), has_documents)
+            local_draft,
+            ai_failed_warning(has_images, str(exc), has_documents, images_sent=images_sent),
         )
     except Exception:  # noqa: BLE001 - 外部模型异常不能阻断草稿解析
         logger.exception("岗位文本 AI 识别发生内部错误，已回退本地解析")
         result = mark_local_fallback(
-            local_draft, ai_failed_warning(has_images, has_documents=has_documents)
+            local_draft,
+            ai_failed_warning(
+                has_images, has_documents=has_documents, images_sent=images_sent
+            ),
         )
     if route == "vision" and setup.ocr_available and not filled_field_count(
         result, JOB_CONTENT_FIELDS
@@ -245,7 +258,12 @@ async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depen
         result = trim_recognized_text(result, ocr_text, MAX_RECOGNIZED_TEXT_CHARS)
     return attach_warnings(
         finalize_recognition_result(
-            result, has_images=has_images, document_warnings=documents.warnings
+            result,
+            has_images=has_images,
+            document_warnings=documents.warnings,
+            images_contributed=_image_content_contributed(
+                result, images_sent=images_sent, ocr_text=ocr_text
+            ),
         ),
         extra_warnings,
     )
@@ -297,7 +315,10 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
         return JobMultiTextParseResult(
             items=[
                 finalize_recognition_result(
-                    item, has_images=has_images, document_warnings=documents.warnings
+                    item,
+                    has_images=has_images,
+                    document_warnings=documents.warnings,
+                    images_contributed=False,
                 )
                 for item in items
             ],
@@ -316,12 +337,16 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
         return JobMultiTextParseResult(
             items=[
                 finalize_recognition_result(
-                    item, has_images=has_images, document_warnings=documents.warnings
+                    item,
+                    has_images=has_images,
+                    document_warnings=documents.warnings,
+                    images_contributed=False,
                 )
                 for item in items
             ],
             parse_engine="local",
         )
+    ocr_text = ""
     if route == "ocr":
         prep = await ocr_to_text(
             source_text=source_text,
@@ -333,23 +358,53 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
         if prep.dropped_images:
             extra_warnings.append(dropped_images_warning(prep.dropped_images))
         source_text, image_urls = prep.source_text, []
+        ocr_text = prep.ocr_text
+        if not source_text.strip():
+            # 空材料短路（T9-a）：与单份同一判据，**一个请求都不发**；但 items 仍至少
+            # 一条空草稿，响应契约与前端解构方式都不变。
+            return JobMultiTextParseResult(
+                items=[
+                    attach_warnings(
+                        finalize_recognition_result(
+                            item,
+                            has_images=has_images,
+                            document_warnings=documents.warnings,
+                            images_contributed=False,
+                        ),
+                        extra_warnings,
+                    )
+                    for item in _local_items(empty_material_warning())
+                ],
+                parse_engine="local",
+            )
 
+    images_sent = bool(image_urls)
     try:
         results = await extract_multiple_jobs(provider, source_text, image_urls)
         engine = "ai"
+        images_contributed = bool(ocr_text) or images_sent
     except LLMError as exc:
         logger.warning("多份岗位 AI 识别失败，已回退本地切分：%s", exc)
-        results = _local_items(ai_failed_warning(has_images, str(exc), has_documents))
+        results = _local_items(
+            ai_failed_warning(has_images, str(exc), has_documents, images_sent=images_sent)
+        )
         engine = "local"
+        images_contributed = bool(ocr_text)
     except Exception:  # noqa: BLE001 - 外部模型异常不能阻断草稿解析
         logger.exception("多份岗位 AI 识别发生内部错误，已回退本地切分")
-        results = _local_items(ai_failed_warning(has_images, "", has_documents))
+        results = _local_items(
+            ai_failed_warning(has_images, "", has_documents, images_sent=images_sent)
+        )
         engine = "local"
+        images_contributed = bool(ocr_text)
 
     items = [
         attach_warnings(
             finalize_recognition_result(
-                item, has_images=has_images, document_warnings=documents.warnings
+                item,
+                has_images=has_images,
+                document_warnings=documents.warnings,
+                images_contributed=images_contributed,
             ),
             extra_warnings,
         )
@@ -358,85 +413,11 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
     return JobMultiTextParseResult(items=items, parse_engine=engine)
 
 
-@router.post("/batch-status", response_model=JobBatchStatusResult)
-def batch_update_job_status(payload: JobBatchStatusRequest, db: Session = Depends(get_db)):
-    if payload.status not in JOB_STATUSES:
-        allowed = "、".join(JOB_STATUSES)
-        raise HTTPException(status_code=400, detail=f"无效的岗位状态，可选值：{allowed}")
-
-    jobs = _get_jobs_or_404(db, payload.job_ids)
-    for job in jobs:
-        job.status = payload.status
-    _commit_batch(db)
-    return JobBatchStatusResult(updated=len(jobs))
-
-
-@router.post("/batch-delete", response_model=JobBatchDeleteResult)
-def batch_delete_jobs(payload: JobBatchRequest, db: Session = Depends(get_db)):
-    """批量移入回收站（软删除），与单条删除及其余各域的批量删除同一口径。
-
-    岗位是采集/粘贴攒起来的，一次误点不该让它彻底消失；软删除后可在「回收站」恢复，
-    彻底删除在「回收站」里单独提供（不可恢复，需二次确认）。
-    """
-    jobs = _get_jobs_or_404(db, payload.job_ids)
-    for job in jobs:
-        trash.soft_delete(db, "job", job)
-    _commit_batch(db)
-    return JobBatchDeleteResult(deleted=len(jobs))
-
-
-@router.post("/export")
-def export_jobs_csv(payload: JobBatchRequest, db: Session = Depends(get_db)):
-    """把勾选的岗位导出成 CSV（与导入共用同一列集，导出的文件可以直接改完再导回）。"""
-    jobs = _get_jobs_or_404(db, payload.job_ids)
-    # 按用户选择的顺序导出，而不是数据库顺序：导出文件里行的次序与界面勾选一致。
-    by_id = {job.id: job for job in jobs}
-    ordered = [by_id[job_id] for job_id in payload.job_ids if job_id in by_id]
-    text = jobs_to_csv_text(ordered)
-    return Response(
-        content=text,
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": 'attachment; filename="jobs.csv"'},
-    )
-
-
-@router.post("/import/preview", response_model=JobImportPreview)
-async def preview_job_import(file: UploadFile = File(...)):
-    """解析上传的 CSV，返回可导入行与逐行错误（不落库，等用户确认）。"""
-    raw = await file.read()
-    if len(raw) > MAX_IMPORT_FILE_CHARS:
-        raise HTTPException(status_code=413, detail="CSV 文件过大（上限 2MB）")
-    try:
-        text = decode_csv_bytes(raw)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    rows, errors = parse_job_csv(text)
-    return JobImportPreview(
-        rows=[JobImportRow(line=line, data=data) for line, data in rows],
-        errors=errors,
-    )
-
-
-@router.post("/import", response_model=JobImportResult)
-def import_jobs_csv(payload: JobImportRequest, db: Session = Depends(get_db)):
-    """提交导入：逐行建岗、逐行容错；与岗位广场已有岗位重复的行跳过并说明。"""
-    imported = 0
-    failed: list[dict[str, object]] = []
-    for item in payload.rows:
-        try:
-            clean = row_to_payload(item.data)
-            title = str(clean.get("title") or "")
-            company = str(clean.get("company") or "")
-            source_url = str(clean.get("source_url") or "")
-            if find_job_by_identity(db, title=title, company=company, source_url=source_url):
-                failed.append({"line": item.line, "message": "岗位广场已有这个岗位，已跳过"})
-                continue
-            create_job_record(db, JobCreate(**clean))
-            imported += 1
-        except Exception as exc:  # noqa: BLE001 - 单行失败不拖垮整批，逐行给原因
-            db.rollback()
-            failed.append({"line": item.line, "message": str(exc) or "这一行导入失败"})
-    return JobImportResult(imported=imported, failed=failed)
+# 批量状态/回收站与 CSV 导入导出的实现都在 ``jobs_bulk.py``：本文件的行数预算已满，
+# T9 一改动就顶穿 500 行硬闸门。注册位置保持原样，路由顺序与拆分前逐条一致。
+# 用 ``register_jobs_bulk_routes`` 而不是直接拿 ``bulk_router``：导入方向守卫只把
+# 「router / register_*_routes」认作子路由装配（``api/apply_extra.py`` 同款先例）。
+register_jobs_bulk_routes(router)
 
 
 # T28 首批：GET /api/jobs/{job_id} 由契约层生成（ActionSpec 是参数/权限唯一真源）。

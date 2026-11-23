@@ -211,16 +211,18 @@ export default function JobFormModal({
       // 逐字段落位（只写有值的那些，空字段不闪一下再变空）。
       if (RECOGNIZED_CONTENT_FIELDS.some((field) => draft[field].trim())) {
         fill(draft);
+        // 只有**真的回填了字段**才说"已填入表单"（T9-a/D）。以前这句是无条件发的，
+        // 于是"没有识别到内容，表单未改动"与"已填入表单"会同时出现，互相打脸。
+        // 提示条几秒后就没了，但"是 AI 还是本地规则"要一直留在表单上。
+        message.success(
+          t(recognitionSource === "ai" ? "jobForm.parse.filledByAi" : "jobForm.parse.filledByRule"),
+        );
       } else {
         message.warning(t("jobForm.parse.noFields"));
       }
       setParseWarnings(warnings);
       setRecognizedText(recognized ?? "");
-      // 提示条几秒后就没了，但"是 AI 还是本地规则"要一直留在表单上。
       setRecognitionSource(recognitionSource);
-      message.success(
-        t(recognitionSource === "ai" ? "jobForm.parse.filledByAi" : "jobForm.parse.filledByRule"),
-      );
     } catch (err) {
       if (requestId !== parseRequestId.current) return;
       setParseWarnings([]);
