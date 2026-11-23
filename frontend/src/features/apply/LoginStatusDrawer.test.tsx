@@ -151,7 +151,8 @@ describe("F07 登录状态：网申逐站点", () => {
     // i18n-ok: 断言后端下发的 source_label
     await screen.findByText("网申浏览器");
     expect(screen.getByText(t("applyUi.loginStatus.noProbe.webform"))).toBeTruthy();
-    expect(screen.getByText(t("applyUi.loginStatus.noProbe.track"))).toBeTruthy();
+    // 「门户 Cookie」那一行随「申请状态回读」整条移除（T2）：面板现在只有投递与网申两行，
+    // 因此不再断言 noProbe.track —— 那条提示已无对应 UI。
     // i18n-ok: 断言后端下发的 source_label
     const card = screen.getByText("网申浏览器").closest("div")?.parentElement as HTMLElement;
     for (const button of within(card).getAllByRole("button")) {

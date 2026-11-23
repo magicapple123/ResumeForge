@@ -6,8 +6,18 @@
 
 ### Added
 
+- **求职进度记录可以自己填「关联链接」。** 每条进度可填一个 http/https 链接（招聘页、申请详情页、内推链接都行），列表行右侧出现跳转图标，点一下在新窗口打开原页面（`noopener noreferrer`）。它取代了原先「去门户页猜进度」的自动回读——状态由你自己判断，应用不替你猜。选择关联岗位时，若链接还空着且岗位带来源地址会自动带出；改回自己的链接不会被覆盖，编辑旧记录也不会替你补。
+- **投递与网申浏览器现在能保持登录。** 会话级 Cookie 每 60 秒扫描一次并续成最多 90 天持久（同一条只写一次）；每个浏览器一份独立 profile，切换默认浏览器后自动迁移 Cookie；投递浏览器每天后台访问一次 BOSS 首页维持登录态，且只在浏览器已运行时动作、不单独拉窗口。对应设置键 `browser.keep_session_cookies` / `browser.session_cookie_days` / `apply.boss_keepalive`（暂未在设置界面提供开关，需通过设置项修改）。
+- **DeepSeek 思考强度可选 low / high / max。** 依据官方 thinking_mode 文档：Chat Completions 同时接受 `thinking` 对象与顶层 `reasoning_effort`（默认 high），Responses 用 `reasoning.effort`。设置页按厂商规则表显示档位，选 max 时请求体真的带 `reasoning_effort=max`。
+
 ### Fixed
 
+- **弹窗开着时投投卡片一个字也打不进去。** antd Modal 默认开焦点陷阱（`@rc-component/util` 的 `Dom/focus.js` 在 window 冒泡阶段把焦点拉回弹窗），而投投卡片是常驻面板、不在 `.ant-modal` 子树内，点卡片输入框焦点就被抢到右上角关闭按钮。现在只对卡片子树做**局部豁免**（不全局关陷阱），卡片打开后自动聚焦输入框（发送中不抢），卡片内按 Esc 只关卡片、下层弹窗保留，`+` 面板展开时 Esc 归面板。
+- **投递台吸底操作条下方会露出被截断的表格行与分页器。** `position: sticky; bottom: 0` 贴的是滚动容器的 padding box，而内容仍绘制到内边距区；把底部内边距从滚动容器挪到内容容器（与 `base-guide.css` 2026-10 的先例同一机制），缝随之消失。
+- **手机端投递台吸底条溢出视口、主按钮按不到。** `.app-content` 的 `min-height: calc(100dvh - var(--rf-header-height))` 在 375 宽下比真实可用空间大 97px（页头按钮组换行到 217px，变量却是 120），容器底边被 `.app-main` 裁掉，吸底条永远贴在看不见的位置。该 `min-height` 本身没有作用（`.app-content` 是 `flex: 1 1 auto`），改为 `min-height: 0`。
+- **检查更新失败只说「检查更新失败」。** 主进程现在把失败原因随状态一起发布（`errorDetail`，截断 300 字符），前端按证书、超时、连不上、被限流、404、无附件、磁盘等归因，并保留英文原文；无法归类时原样显示，不再编一个「网络异常」。同批修了安装/下载阶段复用「启动安装失败」那一句的文案错配。
+- **GitHub API 被限流时检查更新直接失败。** 主路径 `!ok` 时改用 `github.com` 的 302 取最新 tag 作备用：只有版本号时发布说明为空、大小未知，版本不更新仍判「已是最新」，有更新但找不到附件走既有的「安装包不完整」判定，绝不假装可安装。主路径成功时完全不触碰备用分支。
+- **识别岗位时图片没读出字，还会再空跑一次模型并报「模型不支持图片」。** 附件里没有可用文字时直接短路（模型调用 0 次）；失败归因按「图片是否真的为这次识别贡献了内容」算，没贡献就不提示核对；OCR 失败带上真实序号与错误码，日志里不含 Key。
 - **能力表的视觉声明补到当前在售型号。** GPT-6 代（`gpt-6.2-astra` / `gpt-6.2-sol` / `gpt-6-luna`）官方模型表写明支持文本 + 图像输入，但正则只写到 `gpt-5`，预设旗舰被判成「不能看图」，截图导入又被绕去 OCR。同批按官方文档补上 Gemini 4 全系、Qwen Plus/Max/Flash、Kimi K3.1 Pro、MiniMax M3、豆包 Seed 2.x、混元 Hy4、Step 5 Preview、Mistral Large 4、grok-4.7、ERNIE 5.x 以及本机 Qwen3.5 的图像输入声明；纯文本型号（GLM-5.3、Kimi K3、DeepSeek V4 Pro、Mistral Small 4 等）保持不支持，避免把图发给会 400 的端点。
 - **按 2026-11-23 官方模型表审计并更正各服务商预设的默认模型名。** `gpt-6-astra` 在 OpenAI 官方模型表中已不存在，改为当前旗舰 `gpt-6.2-astra`；Gemini 3.8 已降为「上一代 Flash」，改用 `gemini-4-hydrogen`；Kimi 改用当前旗舰 `kimi-k3.1-pro`；混元从 `hy3`（256k）改用 `hy4`（1M、支持图片理解）；千帆从 `ernie-4.5-turbo-128k` 改用旗舰 `ernie-5.1`；OpenRouter 的示例模型 `openai/gpt-4o-mini` 早已退场，换成 `openai/gpt-6-luna`；LM Studio 的 `qwen2.5-7b-instruct` 换成 `qwen/qwen3.5-9b`；Ollama 从纯文本的 `gpt-oss:20b` 换成带视觉的 `qwen3.5:9b`。同步补全「模型窗口参考」表（GPT-6.2 / Claude 5.x / 豆包 2.1 两个批次 / 混元 Hy3-Hy4 / ERNIE 5.1 / 星火 X2.6 / Step 5 Preview / Mistral Large 4 / gpt-oss / sonar）并修正 GPT-6 正则漏掉 `6.2` 的问题；强制思考名单也按新 ID 更新（GPT-6.2 Astra / Sol、Kimi K3 / K3.1 Pro）。已保存的自定义配置不受影响，改动只作用于预设表单的默认值。
 - **协议支持矩阵把豆包写成「不支持 Anthropic Messages」已过时。** 火山方舟官方已于 2026-11-19 提供 `POST /api/compatible/v1/messages`（与 Chat/Responses 的 `/api/v3` 不同址）；矩阵、预设与测试同步改为支持，切协议会自动把地址改写到 `/api/compatible/v1`。同批按官方文档更新 Together 的 Messages/Responses 覆盖范围（serverless GLM-5.2/5.3 + dedicated GLM-5.3-Flash/5.2）与 Perplexity Orchestrator 入口说明，核对日期刷新到 2026-11-23。
@@ -18,6 +28,15 @@
 ### Changed
 
 - `backend/tests/test_update_check.py` 按被守的行为拆成四个文件（缓存与节流 / 限流降级 / 出网工厂 / 其余），用例数与断言不变，单文件不再贴 500 行上限。
+- **「申请状态回读」整条移除。** 4 个 `/api/tracker/probe*` 端点、门户 Cookie 登录来源、`ProbeButton` 与对应语言包全部删除；迁移 `0024` 清除库里已存的 Cookie 与三个 `tracker.probe.*` 设置键——**这是本批次唯一的数据删除，且不可恢复**（降级为 no-op：凭据已删，回读功能也已不存在）。登录页判定搬到 `services/login_page.py`，登录状态面板「停在登录墙 / 内容太少」两条判定保持不变。
+- 投递台吸底条整体下移 16 / 24 / 32px（按内边距档位），这是「条真的贴到窗口底」的必然结果；滚到底时条底与窗口底之间仍会留同宽空白（`sticky` 的固有行为，修复前也有）。
+- `api/jobs.py` 的批量端点拆到 `jobs_bulk.py`（原文件已贴 500 行上限），按 `apply_extra.py` 先例用 `register_jobs_bulk_routes(router)` 装配。
+
+### 已知限制
+
+- **切换默认浏览器时，网申类浏览器不做 Cookie 迁移。** 该路径的管理者在「读登录状态」时也会重建，若在那里触发迁移，会为了读状态而拉起旧浏览器。影响面：切换后网申站点需重登一次，投递浏览器无缝。
+- **BOSS 保活能否真的让后台标签刷新 `bst`，需要真机跨天观察。** 单测只能证明调用顺序与判定，证明不了站点行为。
+- DeepSeek 的思考强度只验证了「参数已发送」，**没有观测线上是否真的按档位升降思考量**（需要 A/B 与 token 统计）。
 
 ## 2.3.1 - 2026-11-22
 
