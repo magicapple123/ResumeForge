@@ -4,7 +4,7 @@
  * 「各服务商协议支持」静态矩阵。
  *
  * 矩阵是**静态核对表**，不做实时探测：每次进设置页都发请求既慢又会让服务商限流。
- * 核对日期写在表尾与列里（2026-11-09），模型名与端点可能随厂商迭代变化。
+ * 核对日期写在表尾与列里（2026-11-23），模型名与端点可能随厂商迭代变化。
  *
  * 协议下拉的说明**不再枚举"谁不支持"**：那种枚举总是漏（2026-11-07 那版把 DeepSeek、
  * MiniMax、千帆、星火全写错了），一律指向上面的矩阵。
@@ -51,10 +51,10 @@ const llmProtocol = {
   "llmProtocol.matrix.partial": "部分支持",
   /** 表尾：核对日期、免责说明，以及「思考开关」指向（第 11 条）。 */
   "llmProtocol.matrix.footnote":
-    "核对日期 2026-11-09，以各厂商官方文档为准；「不支持」指官方文档未提供该协议入口。模型名与端点可能变化。思考开关另见：部分型号强制思考（GPT-6 Astra / GPT-6.1 Sol / GLM-5.3 / Kimi K3 / MiniMax M3.1-Flash），本应用不会给它们发送关闭参数，设置页会把「思考模式」置灰并说明原因。",
-  /** 豆包 Anthropic 单元格的说明：官方没有 Messages 入口（清单 §11.4 第 7 类缺陷）。 */
+    "核对日期 2026-11-23，逐家以各厂商官方文档为准；「不支持」指官方文档未提供该协议入口。模型名与端点可能变化。思考开关另见：部分型号强制思考（GPT-6.2 Astra / GPT-6.2 Sol / GLM-5.3 / Kimi K3 / K3.1 Pro / MiniMax M3.1-Flash），本应用不会给它们发送关闭参数，设置页会把「思考模式」置灰并说明原因。",
+  /** 豆包 Anthropic 单元格的说明：入口与 Chat/Responses 不同址。 */
   "llmProtocol.matrix.doubaoAnthropicNote":
-    "官方文档没有 Anthropic Messages 入口（兼容层只覆盖 OpenAI 兼容协议）；请改用对话补全或 Responses。",
+    "官方 Messages API 入口：https://ark.cn-beijing.volces.com/api/compatible/v1/messages（与 Chat/Responses 的 /api/v3 不同址）；预设切协议会自动改写地址。",
   /** MiniMax 单元格的说明：官方文档域名与国内平台域名（Key 与域名绑定）。 */
   "llmProtocol.matrix.minimaxNote":
     "官方文档（platform.minimax.io）的入口是 api.minimax.io，预设已对齐该域名；国内平台是 api.minimaxi.com，Key 与域名绑定，国内账号需手动改回。",
@@ -64,9 +64,9 @@ const llmProtocol = {
   /** Claude 对话补全单元格的说明。 */
   "llmProtocol.matrix.claudeChatNote":
     "OpenAI SDK 兼容层，官方明确仅供测试/对比、非生产就绪；完整能力请用原生协议。",
-  /** 通义千问 Responses 单元格的说明：qwen-plus 只算基础兼容。 */
+  /** 通义千问 Responses 单元格的说明：入口在 MaaS 工作区域名，qwen-plus 只算基础兼容。 */
   "llmProtocol.matrix.qwenResponsesNote":
-    "官方 Responses 支持列表未含 qwen-plus：仅基础兼容、内置工具受限；完整能力请改用 qwen3.7-plus / qwen3.8-max。",
+    "官方 Responses 入口在 MaaS 工作区域名（{WorkspaceId}.{region}.maas.aliyuncs.com/compatible-mode/v1）；qwen-plus 仅基础兼容，完整能力请改用 qwen3.7-plus / qwen3.8-max。",
   /** 硅基流动 Responses 单元格的说明：官方无该端点。 */
   "llmProtocol.matrix.siliconflowResponsesNote":
     "官方文档未提供 Responses 端点，实测 /v1/responses 返回 404。",
@@ -93,10 +93,10 @@ const llmProtocol = {
     "官方已废弃 Anthropic 兼容入口；请迁移到 Responses 协议（4.3 以后只能降 effort、不能关闭思考）。",
   /** Together AI Anthropic 单元格的补充说明。 */
   "llmProtocol.matrix.togetherAnthropicNote":
-    "Messages 仅覆盖 GLM-5.2 / GLM-5.3 等部分 serverless 模型，其他模型可能返回畸形输出。",
-  /** Together AI Responses 单元格的补充说明：无状态。 */
+    "Messages 覆盖 serverless 的 GLM-5.2 / 5.3 与 dedicated 的 GLM-5.3-Flash / 5.2；其他模型可能返回畸形输出。",
+  /** Together AI Responses 单元格的补充说明：无状态、仅部分 GLM 型号。 */
   "llmProtocol.matrix.togetherResponsesNote":
-    "仅 serverless 模型；不支持 store / previous_response_id（无状态）。",
+    "覆盖 serverless 的 GLM-5.2 / 5.3 与 dedicated 的 GLM-5.3-Flash / 5.2；不支持 store / previous_response_id（无状态）。",
   /** Ollama Responses 单元格的版本前置条件。 */
   "llmProtocol.matrix.ollamaNote": "需 Ollama 0.13.3 及以上。",
   /** Ollama Anthropic 单元格的版本前置条件。 */
@@ -108,9 +108,9 @@ const llmProtocol = {
   /** Perplexity 对话补全单元格的说明。 */
   "llmProtocol.matrix.perplexityNote":
     "Sonar Chat Completions 已于 2026-09-27 停止；OpenAI 兼容的对话补全走 Agent API（/v1/sonar），本应用请改用 Responses（/v1/responses）。",
-  /** Perplexity Anthropic 单元格的说明：Orchestrator 私有预览。 */
+  /** Perplexity Anthropic 单元格的说明：入口在 Orchestrator 的独立前缀下。 */
   "llmProtocol.matrix.perplexityAnthropicNote":
-    "Orchestrator API（原 Router）私有预览，需申请；入口在 /orchestrator/v1，不在 /v1 下。",
+    "官方 Orchestrator API 支持 Anthropic Messages，但入口在 /orchestrator/v1（SDK 自动拼 /v1/messages），不在预设的 /v1 下；本应用不自动改写协议地址，故标部分支持。",
   /** Azure OpenAI 一行：Responses 可用，但鉴权方式不同、本批不内置。 */
   "llmProtocol.matrix.azure": "Azure OpenAI（v1 接口，暂不内置）",
   /** Azure OpenAI Anthropic 单元格的说明：资源本身无 Messages 入口。 */

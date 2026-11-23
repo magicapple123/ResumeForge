@@ -5,7 +5,7 @@
  *
  * The matrix is a static, manually verified table -- it never probes providers at runtime,
  * because doing so on every settings visit would be slow and would trip rate limits. The
- * verification date (2026-11-09) is shown both in the header and in the footnote; model
+ * verification date (2026-11-23) is shown both in the header and in the footnote; model
  * names and endpoints may change.
  *
  * The protocol hint no longer enumerates who does NOT support what: that enumeration always
@@ -54,10 +54,10 @@ const llmProtocol = {
   "llmProtocol.matrix.partial": "Partial",
   /** Table footnote: verification date, disclaimer, and the pointer to thinking controls. */
   "llmProtocol.matrix.footnote":
-    'Verified on 2026-11-09 against each provider\'s official docs; "Not supported" means the provider does not document such an endpoint. Model names and endpoints may change. Thinking controls: some models always think (GPT-6 Astra / GPT-6.1 Sol / GLM-5.3 / Kimi K3 / MiniMax M3.1-Flash); the app never sends them a disable parameter and greys out the Thinking switch with the reason.',
-  /** Note on Doubao's Anthropic cell: no official Messages endpoint (issue §11.4 defect 7). */
+    'Verified on 2026-11-23 against each provider\'s official docs; "Not supported" means the provider does not document such an endpoint. Model names and endpoints may change. Thinking controls: some models always think (GPT-6.2 Astra / GPT-6.2 Sol / GLM-5.3 / Kimi K3 / K3.1 Pro / MiniMax M3.1-Flash); the app never sends them a disable parameter and greys out the Thinking switch with the reason.',
+  /** Note on Doubao's Anthropic cell: the Messages entry lives on a different path. */
   "llmProtocol.matrix.doubaoAnthropicNote":
-    "The official docs list no Anthropic Messages endpoint (the compatibility layer covers only the OpenAI-compatible protocol); use Chat Completions or Responses instead.",
+    "Official Messages API: https://ark.cn-beijing.volces.com/api/compatible/v1/messages (different from /api/v3 used by Chat/Responses); switching protocol through the preset rewrites the address automatically.",
   /** Note on the MiniMax row: the documented host vs the mainland platform host. */
   "llmProtocol.matrix.minimaxNote":
     "The documented entry is api.minimax.io and the preset now uses it; the mainland platform is api.minimaxi.com. Keys are bound to their host, so mainland accounts should switch it back.",
@@ -69,7 +69,7 @@ const llmProtocol = {
     "OpenAI SDK compatibility layer, documented for testing/comparison only and not production-ready; use the native protocol for full capability.",
   /** Note on Qwen's Responses cell: qwen-plus is basic compatibility only. */
   "llmProtocol.matrix.qwenResponsesNote":
-    "The official Responses support list excludes qwen-plus: basic compatibility only, with built-in tools limited. Use qwen3.7-plus / qwen3.8-max for full capability.",
+    "Official Responses uses the MaaS workspace host ({WorkspaceId}.{region}.maas.aliyuncs.com/compatible-mode/v1); qwen-plus is basic compatibility only. Use qwen3.7-plus / qwen3.8-max for full capability.",
   /** Note on SiliconFlow's Responses cell: no such endpoint. */
   "llmProtocol.matrix.siliconflowResponsesNote":
     "No Responses endpoint is documented; /v1/responses returns 404 in practice.",
@@ -98,10 +98,10 @@ const llmProtocol = {
     "The official Anthropic compatibility entry is deprecated; migrate to the Responses protocol (4.5 and later can only lower effort, not disable thinking).",
   /** Note on Together AI's Anthropic cell. */
   "llmProtocol.matrix.togetherAnthropicNote":
-    "Messages covers only some serverless models such as GLM-5.2 / GLM-5.3; other models may return malformed output.",
-  /** Note on Together AI's Responses cell: stateless. */
+    "Messages covers serverless GLM-5.2 / 5.3 and dedicated GLM-5.3-Flash / 5.2; other models may return malformed output.",
+  /** Note on Together AI's Responses cell: stateless, limited GLM models. */
   "llmProtocol.matrix.togetherResponsesNote":
-    "Serverless models only; store / previous_response_id are not supported (stateless).",
+    "Covers serverless GLM-5.2 / 5.3 and dedicated GLM-5.3-Flash / 5.2; store / previous_response_id are not supported (stateless).",
   /** Version prerequisite on Ollama's Responses cell. */
   "llmProtocol.matrix.ollamaNote": "Requires Ollama 0.13.3 or later.",
   /** Version prerequisite on Ollama's Anthropic cell. */
@@ -115,7 +115,7 @@ const llmProtocol = {
     "Sonar Chat Completions ended on 2026-09-27; OpenAI-compatible chat now goes through the Agent API (/v1/sonar). Use Responses (/v1/responses) in this app.",
   /** Note on Perplexity's Anthropic cell: Orchestrator is a private preview. */
   "llmProtocol.matrix.perplexityAnthropicNote":
-    "Orchestrator API (formerly Router) is in private preview and requires approval; the entry is /orchestrator/v1, not under /v1.",
+    "The official Orchestrator API supports Anthropic Messages, but its base is /orchestrator/v1 (the SDK appends /v1/messages), not the preset's /v1. The app does not rewrite the protocol address automatically, hence Partial.",
   /** Azure OpenAI row: Responses works, but the auth header differs, so it is not built in. */
   "llmProtocol.matrix.azure": "Azure OpenAI (v1 API; not built in)",
   /** Note on Azure OpenAI's Anthropic cell: the resource itself has no Messages endpoint. */

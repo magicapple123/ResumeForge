@@ -19,19 +19,20 @@ GLOBAL_RULES: tuple[VendorRule, ...] = (
     # ---------- OpenAI 系 ----------
     VendorRule(
         "api.openai.com",
-        # 预设自 2026-11-08 起用 gpt-6-astra，所以这条要同时覆盖 5.2+ 与 6 代：
+        # 预设自 2026-11-23 起用 gpt-6.2-astra，所以这条要同时覆盖 5.2+ 与 6 代：
         # 只写 ^gpt-5 会让预设模型掉进「未收录」，设置页给不出一句可用的档位说明。
         re.compile(r"^gpt-6|^gpt-5\.[2-9]|^gpt-5\.\d\d"),
         STYLE_REASONING_EFFORT,
         ("none", "low", "medium", "high", "xhigh"),
         True,
         "GPT-5.2 及以后（含 GPT-6 代）用 reasoning_effort 分档（含 none 与 xhigh），且**省略"
-        "即 medium**（A：官方指南）。注意 GPT-6 Astra 与 GPT-6.1 Sol 不支持 none。",
+        "即 medium**（A：官方指南）。注意 GPT-6.x Astra 与 Sol 不支持 none。",
         default_on=True,
         disable_chat={"reasoning_effort": "none"},
         disable_responses={"reasoning": {"effort": "none"}},
         # A：官方原文 —— Astra 发 none 返 400；Sol 连 minimal 都不支持。
-        cannot_disable=(re.compile(r"^gpt-6-astra"), re.compile(r"^gpt-6\.1-sol")),
+        # 正则同时覆盖旧的 gpt-6-astra / gpt-6.1-sol（老配置仍需正确处理）。
+        cannot_disable=(re.compile(r"^gpt-6(?:[.]\d+)?-astra"), re.compile(r"^gpt-6(?:[.]\d+)?-sol")),
     ),
     VendorRule(
         "api.openai.com",

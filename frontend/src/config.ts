@@ -98,13 +98,14 @@ export interface LLMPreset {
  * 模型名只作为起点：各家迭代很快，旧名称可能下线，也可能作为兼容别名继续映射。
  * 界面上因此提供了「获取可用模型」按钮，按当前账号实际可用的模型覆盖这里的预填值。
  *
- * **最后一次核对：2026-11-09**（逐家对官方文档/控制台示例核对，产品同学复核）。
- * 本次改动：豆包模型 ID 改成文档里的连字符写法、通义保持 qwen-plus 档位别名、OpenAI 升到
- * gpt-6-astra、Mistral 升到 mistral-large-4、硅基流动升到 DeepSeek-V4-Pro-0813、混元改用
- * TokenHub 可用的 hy3、星火整体迁到新 MaaS 平台（旧 spark-api-open 是上一代）、
- * MiniMax / 千帆 / 星火 / 阶跃补齐 Responses 支持，并给 13 家补上 Anthropic 入口声明。
- * 2026-11-09 复核：修正 Qwen/StepFun 的 Responses、xAI 的 Anthropic 判定，重排为热门优先，
- * Groq/Perplexity 换模型。
+ * **最后一次核对：2026-11-23**（按各家官方模型表逐家复核**默认模型名**；协议矩阵另见
+ * features/settings/LLMProtocolSupportMatrix.tsx）。
+ * 本次改动：OpenAI 的 `gpt-6-astra` 官方列表中已不存在，改为 `gpt-6.2-astra`；Gemini 3.8
+ * 已降为上一代，改用 Gemini 4 Hydrogen；Kimi 改用当前旗舰 `kimi-k3.1-pro`；混元改用
+ * TokenHub 的 `hy4`；千帆改用文心 `ernie-5.1`；OpenRouter 与 LM Studio 的示例模型分别是
+ * 早已退场的 gpt-4o-mini 与 qwen2.5，换成当前在售型号；Ollama 从纯文本的 gpt-oss:20b
+ * 换成带视觉的 qwen3.5:9b（截图导入需要读图）。
+ * 历史：2026-11-09 逐家核对协议入口；2026-11-23 修正豆包 Anthropic 入口。
  *
  * **改这里的模型名时，记得同步两处**：
  * 1. 设置页的「各服务商协议支持」矩阵（features/settings/LLMProtocolSupportMatrix.tsx）；
@@ -112,8 +113,9 @@ export interface LLMPreset {
  */
 export const LLM_PRESETS: LLMPreset[] = [
   {
-    // 最后核对：2026-11-09。官方文档：Chat Completions 在 api.deepseek.com；Responses 同址
+    // 最后核对：2026-11-23。官方文档：Chat Completions 在 api.deepseek.com；Responses 同址
     // 打 /responses；Anthropic 兼容入口在独立前缀下，真实端点是 /anthropic/v1/messages。
+    // deepseek-flash = DeepSeek-V4.1-Flash，原生支持图像理解；deepseek-v4-pro 仅文本。
     labelKey: "appConfig.preset.deepseek",
     provider: "deepseek",
     base_url: "https://api.deepseek.com",
@@ -123,8 +125,9 @@ export const LLM_PRESETS: LLMPreset[] = [
     anthropic_base_url: "https://api.deepseek.com/anthropic/v1",
   },
   {
-    // 最后核对：2026-11-09。qwen-plus 是官方长期保留的档位别名（指向当前中端模型），
-    // 比钉死某个版本稳。Anthropic 兼容入口在 /apps/anthropic 下。
+    // 最后核对：2026-11-23。qwen-plus 仍是官方保留的档位别名（1M 上下文、默认思考），
+    // 比钉死某个版本稳；官方「均衡之选」现在写的是 qwen3.7-plus，效果优先是 qwen4-max，
+    // 成本优先是 qwen3.8-flash。Anthropic 兼容入口在 /apps/anthropic 下。
     labelKey: "appConfig.preset.qwen",
     provider: "qwen",
     base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -134,15 +137,18 @@ export const LLM_PRESETS: LLMPreset[] = [
     anthropic_base_url: "https://dashscope.aliyuncs.com/apps/anthropic/v1",
   },
   {
-    // 最后核对：2026-11-09。官方文档的模型 ID 是连字符 + 日期写法
+    // 最后核对：2026-11-23。官方文档的模型 ID 是连字符 + 日期写法
     // （doubao-seed-2-1-pro-260915），点号写法只是别名，以文档写法为准。
-    // **官方没有 Anthropic Messages 入口**（清单 §11.4 缺陷 7）：不声明 supports_anthropic，
-    // 否则切协议时会把地址改写成 /api/compatible/v1，用户拿到的必然 404。
+    // 2026-11-23 复核：官方已提供 Anthropic Messages 入口，完整端点是
+    // /api/compatible/v1/messages（与 Chat/Responses 的 /api/v3 不同址），
+    // 所以必须显式给 anthropic_base_url；provider 会再拼 /messages。
     labelKey: "appConfig.preset.doubao",
     provider: "doubao",
     base_url: "https://ark.cn-beijing.volces.com/api/v3",
     model: "doubao-seed-2-1-pro-260915",
     supports_responses: true,
+    supports_anthropic: true,
+    anthropic_base_url: "https://ark.cn-beijing.volces.com/api/compatible/v1",
   },
   {
     // 最后核对：2026-11-09。智谱两条专用地址都与 chat 不同：Responses 换到 /api/v1；
@@ -166,35 +172,37 @@ export const LLM_PRESETS: LLMPreset[] = [
     supports_anthropic: true,
   },
   {
-    // 最后核对：2026-11-09。kimi-k2 系列已于 2026-05-25 下线，moonshot-v1 与 kimi-k2.5
-    // 于 2026-08-31 下线；当前主推 kimi-k3（思考常开）。Anthropic 兼容入口在 /anthropic 下。
+    // 最后核对：2026-11-23。kimi-k2 系列已于 2026-05-25 下线，moonshot-v1 与 kimi-k2.5
+    // 于 2026-08-31 下线；K3 系列当前有 kimi-k3 与更新的 kimi-k3.1-pro（官方称迄今最强，
+    // 1M 上下文，思考常开、reasoning_effort 支持 low/high/max）。Anthropic 入口在 /anthropic 下。
     labelKey: "appConfig.preset.kimi",
     provider: "kimi",
     base_url: "https://api.moonshot.cn/v1",
-    model: "kimi-k3",
+    model: "kimi-k3.1-pro",
     supports_responses: true,
     supports_anthropic: true,
     anthropic_base_url: "https://api.moonshot.cn/anthropic/v1",
   },
   {
-    // 最后核对：2026-11-09。TokenHub 当前可用的是 hy3 / hy4（turbos-latest 在 TokenHub
-    // 不可用）；base 自带 /v1，所以 Responses 与 Anthropic 都与 chat 同址。
+    // 最后核对：2026-11-23。TokenHub 当前主推 hy4 / hy4-flash（1M、支持图片理解），
+    // hy3 仍在售但只有 256k。base 自带 /v1，所以 Responses 与 Anthropic 都与 chat 同址。
     // 境外入口：https://tokenhub-intl.tencentmaas.com/v1。
     labelKey: "llmProtocol.preset.hunyuan",
     provider: "hunyuan",
     base_url: "https://tokenhub.tencentmaas.com/v1",
-    model: "hy3",
+    model: "hy4",
     supports_responses: true,
     supports_anthropic: true,
   },
   {
-    // 最后核对：2026-11-09。gpt-4o 这代已陆续下线，当前旗舰是 gpt-6-astra；推理模型用
-    // reasoning_effort 分档（各代档位不同，详见后端 services/llm/thinking.py 的能力表）。
+    // 最后核对：2026-11-23。gpt-4o 这代已陆续下线；当前旗舰是 gpt-6.2-astra（官方模型表
+    // 中不存在 gpt-6-astra 这个 ID），性价比主力是 gpt-6.2-sol，轻量是 gpt-6-luna。推理模型用
+    // reasoning_effort 分档（low/medium/high/xhigh/max，Astra / Sol 没有 none 档）。
     // OpenAI 没有 Anthropic 入口。
     labelKey: "appConfig.preset.openai",
     provider: "openai",
     base_url: "https://api.openai.com/v1",
-    model: "gpt-6-astra",
+    model: "gpt-6.2-astra",
     supports_responses: true,
   },
   {
@@ -209,21 +217,22 @@ export const LLM_PRESETS: LLMPreset[] = [
     supports_anthropic: true,
   },
   {
-    // 最后核对：2026-11-09。gemini-2.5 系列已于 2026-06-17 停机，当前 Flash 是 3.8。
+    // 最后核对：2026-11-23。gemini-2.5 系列已于 2026-06-17 停机，3.8 现为「上一代 Flash」；
+    // 当前主推 Gemini 4（carbon 最强 / argon 均衡 / hydrogen 高性价比），预设用 hydrogen。
     // OpenAI 兼容层仍为 beta，且不止 chat（embeddings / images / batches 等也走同一层）；
     // 没有 Responses 入口（走原生 SDK 才有）。
     labelKey: "appConfig.preset.gemini",
     provider: "gemini",
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
-    model: "gemini-3.8-flash",
+    model: "gemini-4-hydrogen",
   },
   {
-    // 最后核对：2026-11-09。百度千帆（文心）chat 走 /v2；Responses 与 Anthropic 入口
-    // 官方都已提供，Anthropic 在 /anthropic 下（拼 /v1/messages）。
+    // 最后核对：2026-11-23。百度千帆（文心）chat 走 /v2；ERNIE 5.1 是当前旗舰（128k），
+    // 4.5 Turbo 已退居旧版。Responses 与 Anthropic 入口官方都已提供，Anthropic 在 /anthropic 下。
     labelKey: "llmProtocol.preset.qianfan",
     provider: "qianfan",
     base_url: "https://qianfan.baidubce.com/v2",
-    model: "ernie-4.5-turbo-128k",
+    model: "ernie-5.1",
     supports_responses: true,
     supports_anthropic: true,
     anthropic_base_url: "https://qianfan.baidubce.com/anthropic/v1",
@@ -255,12 +264,13 @@ export const LLM_PRESETS: LLMPreset[] = [
     anthropic_base_url: "https://api.minimax.io/anthropic/v1",
   },
   {
-    // 最后核对：2026-11-09。聚合网关：Responses 在现有地址后追加 /responses；
-    // Anthropic 入口与 chat 同址（/v1/messages）。
+    // 最后核对：2026-11-23。聚合网关：Responses 在现有地址后追加 /responses；
+    // Anthropic 入口与 chat 同址（/v1/messages）。默认模型用 OpenAI 的轻量档
+    // openai/gpt-6-luna（旧示例 gpt-4o-mini 这代已下线），可按需改成任意在售型号。
     labelKey: "appConfig.preset.openrouter",
     provider: "openrouter",
     base_url: "https://openrouter.ai/api/v1",
-    model: "openai/gpt-4o-mini",
+    model: "openai/gpt-6-luna",
     supports_responses: true,
     supports_anthropic: true,
   },
@@ -275,12 +285,13 @@ export const LLM_PRESETS: LLMPreset[] = [
     supports_anthropic: true,
   },
   {
-    // 最后核对：2026-11-09。本机端点；Responses 需 Ollama 0.13.3+，Anthropic 入口需
-    // 0.14.0+，两者都与 chat 同址（/v1/messages）。
+    // 最后核对：2026-11-23。本机端点；Responses 需 Ollama 0.13.3+，Anthropic 入口需
+    // 0.14.0+，两者都与 chat 同址（/v1/messages）。默认模型用 qwen3.5:9b（官方库 16GB
+    // 档的常用选择，256k、支持视觉与工具调用）；旧默认 gpt-oss:20b 不支持图片，截图导入会退化。
     labelKey: "appConfig.preset.ollama",
     provider: "ollama",
     base_url: "http://localhost:11434/v1",
-    model: "gpt-oss:20b",
+    model: "qwen3.5:9b",
     supports_responses: true,
     supports_anthropic: true,
   },
@@ -304,12 +315,13 @@ export const LLM_PRESETS: LLMPreset[] = [
     supports_responses: true,
   },
   {
-    // 最后核对：2026-11-09。本机端点；Responses 需 LM Studio 0.3.29+，Anthropic 入口需
-    // 0.4.1+，两者都与 chat 同址（/v1/messages）。
+    // 最后核对：2026-11-23。本机端点；Responses 需 LM Studio 0.3.29+，Anthropic 入口需
+    // 0.4.1+，两者都与 chat 同址（/v1/messages）。默认模型用 LM Studio Hub 上的
+    // qwen/qwen3.5-9b（262k、视觉 + 工具调用）；qwen2.5-7b-instruct 已是 2024 年的型号。
     labelKey: "appConfig.preset.lmstudio",
     provider: "lmstudio",
     base_url: "http://localhost:1234/v1",
-    model: "qwen2.5-7b-instruct",
+    model: "qwen/qwen3.5-9b",
     supports_responses: true,
     supports_anthropic: true,
   },

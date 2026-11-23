@@ -196,9 +196,9 @@ EXPECTED_DISABLE: dict[str, dict[str, dict]] = {
     },
     "zhipu": {"chat": {}, "responses": {}},  # 预设是 glm-5.3：强制思考
     "siliconflow": {"chat": {"enable_thinking": False}, "responses": {}},  # 无 Responses 入口
-    "kimi": {"chat": {}, "responses": {}},  # 预设是 kimi-k3：常开
+    "kimi": {"chat": {}, "responses": {}},  # 预设是 kimi-k3.1-pro：常开
     "hunyuan": {"chat": {}, "responses": {}},  # TokenHub 关闭行为未实测 → 保守不发
-    "openai": {"chat": {}, "responses": {}},  # 预设是 gpt-6-astra：不支持 none
+    "openai": {"chat": {}, "responses": {}},  # 预设是 gpt-6.2-astra：不支持 none
     "anthropic": {"chat": {}, "responses": {}},  # 原生 Messages 不进这张表
     "gemini": {"chat": {}, "responses": {}},  # 没有 none 档
     "qianfan": {"chat": {}, "responses": {}},  # 默认不思考

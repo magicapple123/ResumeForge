@@ -107,10 +107,14 @@ class VendorRule:
 # （守卫：backend/tests/test_llm_thinking_disable.py 会读前端语言包比对），新增一个强制
 # 思考型号必须同时改这里、对应主机规则与矩阵文案三处。example_* 让守卫能构造真实配置对拍。
 FORCED_THINKING_MODELS: tuple[tuple[str, str, str], ...] = (
-    ("GPT-6 Astra", "https://api.openai.com/v1", "gpt-6-astra"),
-    ("GPT-6.1 Sol", "https://api.openai.com/v1", "gpt-6.1-sol"),
+    # 2026-11-23 按官方模型表校正：旧 ID gpt-6-astra / gpt-6.1-sol 已不在 OpenAI 列表里，
+    # 当前 Astra / Sol 是 gpt-6.2-*，两者的 effort 档位都没有 none（官方只给
+    # low/medium/high/xhigh/max），所以仍属强制思考。
+    ("GPT-6.2 Astra", "https://api.openai.com/v1", "gpt-6.2-astra"),
+    ("GPT-6.2 Sol", "https://api.openai.com/v1", "gpt-6.2-sol"),
     ("GLM-5.3", "https://open.bigmodel.cn/api/paas/v4", "glm-5.3"),
-    ("Kimi K3", "https://api.moonshot.cn/v1", "kimi-k3"),
+    # K3 与 K3.1 Pro 都始终开启思考（官方 FAQ：目前关不了，只能降 reasoning_effort）。
+    ("Kimi K3 / K3.1 Pro", "https://api.moonshot.cn/v1", "kimi-k3.1-pro"),
     ("MiniMax M3.1-Flash", "https://api.minimaxi.com/v1", "MiniMax-M3.1-Flash"),
 )
 

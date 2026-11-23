@@ -153,17 +153,17 @@ def blocked_image_warning(model: str, *, ocr_engine: str = "auto") -> str:
         return (
             "识别引擎当前是「只用 OCR」，但还没有配置 OCR Key。"
             "请到「外部连接 → 识别引擎」填写 Key，"
-            "或把引擎切回「自动」并改用支持视觉的模型（qwen-vl / gpt-4o / glm-4v）。"
+            "或把引擎切回「自动」并改用支持视觉的模型（qwen-vl-max / gemini-4-hydrogen / gpt-6.2-astra / deepseek-flash）。"
         )
     if ocr_engine == "vision":
         return (
             f"当前模型 {name} 不支持图片输入，而识别引擎当前是「只用视觉」。"
-            "请改用支持视觉的模型（qwen-vl / gpt-4o / glm-4v），"
+            "请改用支持视觉的模型（qwen-vl-max / gemini-4-hydrogen / gpt-6.2-astra / deepseek-flash），"
             "或把「外部连接 → 识别引擎」切回「自动」并配置 OCR。"
         )
     return (
         f"当前模型 {name} 不支持图片输入。"
-        "改用支持视觉的模型（qwen-vl / gpt-4o / glm-4v），"
+        "改用支持视觉的模型（qwen-vl-max / gemini-4-hydrogen / gpt-6.2-astra / deepseek-flash），"
         "或在「外部连接 → 识别引擎」配置 OCR。"
     )
 

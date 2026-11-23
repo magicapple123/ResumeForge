@@ -60,21 +60,65 @@ class _CapabilityRule:
 # 覆盖；vision 只对确实支持图像输入的型号声明 True——这些**具体规则必须排在同 host 的
 # 通用规则之前**，``_match_rule`` 是先匹配先赢。
 _TABLE: tuple[_CapabilityRule, ...] = (
-    _CapabilityRule("api.openai.com", re.compile(r"gpt-4o|gpt-4\.1|gpt-5|o3|o4"), vision=True),
+    # GPT-6 代（6.2 Astra / Sol / Luna）官方模型表写的是文本 + 图像输入；此前正则只到
+    # gpt-5，导致预设的 gpt-6.2-astra 被判成"不能看图"，截图又被绕去 OCR。
+    _CapabilityRule("api.openai.com", re.compile(r"gpt-4o|gpt-4\.1|gpt-5|gpt-6|o3|o4"), vision=True),
     # OpenRouter 是聚合网关：具体型号千差万别，但走这条端点的用户本来就是挑过模型的。
     _CapabilityRule("openrouter.ai", None, vision=True),
     _CapabilityRule("dashscope.aliyuncs.com", re.compile(r"qwen.*vl|qvq"), vision=True),
+    # 官方《文本生成与视觉理解》：Plus / Max / Flash 均可用同一模型接收文本、图像与视频。
+    # 只列这三档，避免把纯文本的 qwen3-coder / qwen-long 一起带成 vision。
+    _CapabilityRule(
+        "dashscope.aliyuncs.com",
+        re.compile(r"qwen-(?:plus|max|flash)|qwen[34](?:[.]\d+)?-(?:plus|max|flash)"),
+        vision=True,
+    ),
     _CapabilityRule("open.bigmodel.cn", re.compile(r"glm-4\.?\d*v|glm-4v"), vision=True),
-    _CapabilityRule("api.moonshot", re.compile(r"vision|kimi-latest"), vision=True),
+    # Kimi K3.1 Pro 的视觉输入是官方能力（base64 或 ms:// 文件）；K3 是纯文本，
+    # 所以只认 3.1，不能按 ^kimi-k3 一刀切。
+    _CapabilityRule("api.moonshot", re.compile(r"vision|kimi-latest|kimi-k3[.]1"), vision=True),
+    # DeepSeek 2026-11-23 官方模型表：deepseek-flash（DeepSeek-V4.1-Flash）支持图像理解；
+    # deepseek-v4-pro 仅文本。旧名 deepseek-v4-flash / deepseek-v4-flash-vision-exp 已下线，
+    # 但请求仍由 V4.1-Flash 承接，因此按支持图像处理。
+    # https://api-docs.deepseek.com/quick_start/pricing/
+    # https://api-docs.deepseek.com/zh-cn/guides/vision
+    _CapabilityRule(
+        "api.deepseek.com",
+        # 只认官方当前名与两个确切旧名；`deepseek-v4-flash-0731` 这类带版本后缀的旧型号
+        # 仍按文本模型处理（旧版 V4-Flash 不支持图像）。
+        re.compile(r"deepseek-(?:flash|v4-flash-vision-exp|v4-flash)(?![a-z0-9-])"),
+        vision=True,
+    ),
+    # 显式钉住纯文本型号：以后加宽泛规则时不要把 v4-pro 一起带成 vision。
+    _CapabilityRule("api.deepseek.com", re.compile(r"deepseek-v4-pro(?![a-z0-9])")),
     _CapabilityRule("api.deepseek.com", None),
+    # Gemini：官方模型表的 Gemini 4 / 3.8 全系模态都含 Image（还有 Audio / Video / PDF）。
+    _CapabilityRule("generativelanguage.googleapis.com", None, vision=True),
+    # MiniMax M3 / M3.1 官方都标 Multimodal。
+    _CapabilityRule("api.minimax", re.compile(r"m3(?![0-9])"), vision=True),
+    # 豆包 Seed 2.x 在方舟模型表里标「多模态理解」。
+    _CapabilityRule("ark.cn-beijing.volces.com", re.compile(r"doubao-seed-2"), vision=True),
+    # TokenHub：Hy4 / Hy4 flash 标「图片理解」，Hy3 没有这一项。
+    _CapabilityRule("tencentmaas.com", re.compile(r"hy4(?![0-9])"), vision=True),
+    # Step 5 Preview 原生支持文本、图片与视频输入。
+    _CapabilityRule("api.stepfun.com", re.compile(r"step-5"), vision=True),
+    # Mistral Large 4 官方技术文档：输入模态 Text + Image。
+    _CapabilityRule("api.mistral.ai", re.compile(r"mistral-large-4"), vision=True),
+    # grok-4.7 官方模型卡：Modalities = Text and image input; text output。
+    _CapabilityRule("api.x.ai", re.compile(r"grok-4[.]7"), vision=True),
+    # 文心 5.x 是原生全模态统一建模（5.0 起支持文本、图像、音频、视频理解）。
+    _CapabilityRule("qianfan.baidubce.com", re.compile(r"ernie-5"), vision=True),
     _CapabilityRule("api.moonshot", None),
     _CapabilityRule("open.bigmodel.cn", None),
     _CapabilityRule("dashscope.aliyuncs.com", None),
     _CapabilityRule("api.openai.com", None),
     _CapabilityRule("openrouter.ai", None),
     # 本机端点（Ollama / vLLM / LM Studio 等）：多数模型支持 tools，个别不支持时
-    # 由既有 400 降级兜底。
+    # 由既有 400 降级兜底。Qwen3.5 开源权重带视觉（预设默认就是它）；其余型号按文本处理，
+    # 避免把图发给用户随手 `ollama pull` 的纯文本模型。
+    _CapabilityRule("localhost", re.compile(r"qwen3[.]5"), vision=True),
     _CapabilityRule("localhost", None),
+    _CapabilityRule("127.0.0.1", re.compile(r"qwen3[.]5"), vision=True),
     _CapabilityRule("127.0.0.1", None),
 )
 

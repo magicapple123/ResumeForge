@@ -333,6 +333,47 @@ def test_vision_model_never_touches_ocr(client, monkeypatch, path):
     assert isinstance(provider.messages[1]["content"], list)
 
 
+@pytest.mark.parametrize("path", [JOB_PATH, PROFILE_PATH])
+def test_deepseek_flash_uses_native_vision_not_ocr(client, monkeypatch, path):
+    """deepseek-flash（DeepSeek-V4.1-Flash）原生支持图像理解：图片直接走视觉，不触发 OCR。
+
+    能力表守卫：旧表把整个 api.deepseek.com 判成无 vision，截图会被绕去 OCR；OCR 失败
+    时再空调用一次文本模型，用户看到「模型不支持图片输入」。这条用例在旧表下会因
+    ``prepare_extraction_images`` 被调用而变红。
+    """
+    response = client.put(
+        "/api/settings/llm",
+        json=LLMConfig(
+            base_url="https://api.deepseek.com",
+            api_key="test-key",
+            model="deepseek-flash",
+        ).model_dump(),
+    )
+    assert response.status_code == 200
+
+    provider = RecordingProvider(_response_for(path))
+    monkeypatch.setattr(_factory_path(path), lambda _config: provider)
+    # OCR 明明可用（Key 有值），但这一单不该用它。
+    monkeypatch.setattr(
+        f"{_module_of(path)}.load_ocr_context", lambda _db: _ocr_ctx("auto")
+    )
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("deepseek-flash 能看图时不应调用 OCR")
+
+    monkeypatch.setattr("app.services.recognition_route.prepare_extraction_images", boom)
+
+    result = client.post(path, json={"text": "", "images": [_image()]})
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["parse_engine"] == "ai"
+    assert not any("OCR" in warning for warning in body["warnings"])
+    parts = provider.messages[1]["content"]
+    assert isinstance(parts, list)
+    assert [part["type"] for part in parts[1:]] == ["image_url"]
+
+
 def test_empty_vision_result_is_rescued_by_ocr_once(client, monkeypatch):
     """验收 4：视觉两次都一个字段没回填 → 补一次 OCR 抽取，最终有字段。
 

@@ -28,15 +28,40 @@ def _config(base_url: str, model: str) -> LLMConfig:
 @pytest.mark.parametrize(
     ("base_url", "model", "vision"),
     [
-        ("https://api.deepseek.com/v1", "deepseek-flash", False),
+        # DeepSeek 2026-11-23 官方模型表：Flash（V4.1-Flash）支持图像理解，V4 Pro 仅文本；
+        # 旧名 v4-flash / v4-flash-vision-exp 由 Flash 承接，同样按支持图像处理。
+        ("https://api.deepseek.com/v1", "deepseek-flash", True),
+        ("https://api.deepseek.com/v1", "deepseek-v4-flash", True),
+        ("https://api.deepseek.com/v1", "deepseek-v4-flash-vision-exp", True),
+        ("https://api.deepseek.com/v1", "deepseek-v4-pro", False),
+        ("https://api.deepseek.com/v1", "deepseek-chat", False),
         ("https://api.moonshot.cn/v1", "kimi-k3", False),
+        ("https://api.moonshot.cn/v1", "kimi-k3.1-pro", True),
         ("https://open.bigmodel.cn/api/paas/v4", "glm-5", False),
-        ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", False),
+        # 官方《文本生成与视觉理解》：Plus / Max / Flash 同一个模型即可接收文本、图像与视频。
+        ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", True),
         # F18 起 vision 按 host + 型号声明：支持图像输入的型号为 True。
         ("https://api.openai.com/v1", "gpt-5.2", True),
+        ("https://api.openai.com/v1", "gpt-6.2-astra", True),
         ("https://openrouter.ai/api/v1", "some/model", True),
         ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-vl-max", True),
+        # 2026-11-23 补齐的当前预设型号：官方模型表/模型卡都标了图像输入。
+        ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-4-hydrogen", True),
+        ("https://api.minimax.io/v1", "MiniMax-M3.1-Flash", True),
+        ("https://ark.cn-beijing.volces.com/api/v3", "doubao-seed-2-1-pro-260915", True),
+        ("https://tokenhub.tencentmaas.com/v1", "hy4", True),
+        ("https://tokenhub.tencentmaas.com/v1", "hy3", False),
+        ("https://api.stepfun.com/v1", "step-5-preview", True),
+        ("https://api.mistral.ai/v1", "mistral-large-4", True),
+        ("https://api.x.ai/v1", "grok-4.7", True),
+        ("https://qianfan.baidubce.com/v2", "ernie-5.1", True),
+        # 混合推理的文本模型不能被上面几条顺手带成 vision。
+        ("https://api.mistral.ai/v1", "mistral-small-4", False),
+        ("https://api.x.ai/v1", "grok-4.3", False),
         ("http://localhost:11434/v1", "llama3", False),
+        # 预设默认的本地模型：Qwen3.5 开源权重带视觉，其余本机型号仍按文本处理。
+        ("http://localhost:11434/v1", "qwen3.5:9b", True),
+        ("http://localhost:1234/v1", "qwen/qwen3.5-9b", True),
         ("https://unknown.gateway.example/v1", "whatever", False),
     ],
 )

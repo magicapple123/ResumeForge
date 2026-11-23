@@ -8,6 +8,10 @@
 
 ### Fixed
 
+- **能力表的视觉声明补到当前在售型号。** GPT-6 代（`gpt-6.2-astra` / `gpt-6.2-sol` / `gpt-6-luna`）官方模型表写明支持文本 + 图像输入，但正则只写到 `gpt-5`，预设旗舰被判成「不能看图」，截图导入又被绕去 OCR。同批按官方文档补上 Gemini 4 全系、Qwen Plus/Max/Flash、Kimi K3.1 Pro、MiniMax M3、豆包 Seed 2.x、混元 Hy4、Step 5 Preview、Mistral Large 4、grok-4.7、ERNIE 5.x 以及本机 Qwen3.5 的图像输入声明；纯文本型号（GLM-5.3、Kimi K3、DeepSeek V4 Pro、Mistral Small 4 等）保持不支持，避免把图发给会 400 的端点。
+- **按 2026-11-23 官方模型表审计并更正各服务商预设的默认模型名。** `gpt-6-astra` 在 OpenAI 官方模型表中已不存在，改为当前旗舰 `gpt-6.2-astra`；Gemini 3.8 已降为「上一代 Flash」，改用 `gemini-4-hydrogen`；Kimi 改用当前旗舰 `kimi-k3.1-pro`；混元从 `hy3`（256k）改用 `hy4`（1M、支持图片理解）；千帆从 `ernie-4.5-turbo-128k` 改用旗舰 `ernie-5.1`；OpenRouter 的示例模型 `openai/gpt-4o-mini` 早已退场，换成 `openai/gpt-6-luna`；LM Studio 的 `qwen2.5-7b-instruct` 换成 `qwen/qwen3.5-9b`；Ollama 从纯文本的 `gpt-oss:20b` 换成带视觉的 `qwen3.5:9b`。同步补全「模型窗口参考」表（GPT-6.2 / Claude 5.x / 豆包 2.1 两个批次 / 混元 Hy3-Hy4 / ERNIE 5.1 / 星火 X2.6 / Step 5 Preview / Mistral Large 4 / gpt-oss / sonar）并修正 GPT-6 正则漏掉 `6.2` 的问题；强制思考名单也按新 ID 更新（GPT-6.2 Astra / Sol、Kimi K3 / K3.1 Pro）。已保存的自定义配置不受影响，改动只作用于预设表单的默认值。
+- **协议支持矩阵把豆包写成「不支持 Anthropic Messages」已过时。** 火山方舟官方已于 2026-11-19 提供 `POST /api/compatible/v1/messages`（与 Chat/Responses 的 `/api/v3` 不同址）；矩阵、预设与测试同步改为支持，切协议会自动把地址改写到 `/api/compatible/v1`。同批按官方文档更新 Together 的 Messages/Responses 覆盖范围（serverless GLM-5.2/5.3 + dedicated GLM-5.3-Flash/5.2）与 Perplexity Orchestrator 入口说明，核对日期刷新到 2026-11-23。
+- **DeepSeek `deepseek-flash` 的图像理解能力被误判为不支持。** 能力表把整个 `api.deepseek.com` 声明成无视觉，导致截图导入岗位/资料时绕过模型直接去走 OCR；OCR 没读出字时还会再空调用一次文本模型，并给出「模型不支持图片输入」的错误提示。按 2026-11-23 官方模型表修正：`deepseek-flash`（DeepSeek-V4.1-Flash）支持图像理解，`deepseek-v4-pro` 仅文本；旧名 `deepseek-v4-flash` / `deepseek-v4-flash-vision-exp` 由 Flash 承接，同样按支持图像处理。视觉模型候选提示里也补上了 `deepseek-flash`。上下文窗口按官方 `/models` 的 1,048,576 校正。
 - Linux 打包版退出应用后，后端进程仍在运行并占着端口。壳只找 `backend.json` 与 `backend.macos.pid`，从不读 Linux 启动器写的 `backend.linux.pid`，于是交接过来的后端从未被接管；退出时「没有可核验的记录」又被当成「不用做什么」，壳 177 毫秒就退了。现在按平台读那份记录，并在 `will-quit` 加一道同步兜底：异步停止未确认成功时，对记录里的 pid 发一次 SIGTERM（Linux 上先用 `/proc/<pid>/cmdline` 复核身份，pid 已被回收就跳过）。
 - 停止后端时的端口探测把「后端地址未知」当成「已经停了」，属于 fail-open。现在归入「无法确认」：退出不会被它卡住，但这次停止不再算已核验，更新安装也会因此被拦住。
 

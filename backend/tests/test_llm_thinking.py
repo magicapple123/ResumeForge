@@ -81,6 +81,8 @@ def test_an_unknown_style_is_rejected_at_the_schema():
         # 所以 supported=False（设置页据此置灰「思考模式」并说明原因，清单 §11.5-D）。
         ("https://api.openai.com/v1", "gpt-5.1", "reasoning_effort", False),
         ("https://api.openai.com/v1", "gpt-5.2", "reasoning_effort", True),
+        # 2026-11-23 起预设是 gpt-6.2-astra：官方档位没有 none → 不可关闭。
+        ("https://api.openai.com/v1", "gpt-6.2-astra", "reasoning_effort", False),
         ("https://api.openai.com/v1", "o3-mini", "reasoning_effort", False),
         ("https://api.openai.com/v1", "gpt-4o-mini", "reasoning_effort", False),
         ("https://open.bigmodel.cn/api/paas/v4", "glm-4.6", "thinking_object", True),
@@ -96,16 +98,21 @@ def test_an_unknown_style_is_rejected_at_the_schema():
         ("https://api.minimax.chat/v1", "MiniMax-M3", "thinking_object", True),
         ("https://api.minimaxi.com/v1", "MiniMax-M3.1-Flash", "thinking_object", False),
         ("https://api.moonshot.cn/v1", "kimi-k3", "thinking_object", False),
+        ("https://api.moonshot.cn/v1", "kimi-k3.1-pro", "thinking_object", False),
         ("https://api.moonshot.cn/v1", "kimi-k2.6", "thinking_object", True),
         ("https://openrouter.ai/api/v1", "openai/gpt-5", "reasoning_effort", True),
         # 2026-11-09 补进来的主机：以前这些预设全部落进兜底 reasoning_effort，形态发错。
         ("https://ark.cn-beijing.volces.com/api/v3", "doubao-seed-2-1-pro-260915", "thinking_object", True),
         ("https://api.siliconflow.cn/v1", "deepseek-ai/DeepSeek-V4-Pro-0813", "enable_thinking", True),
         ("https://qianfan.baidubce.com/v2", "ernie-4.5-turbo-128k", "enable_thinking", True),
+        ("https://qianfan.baidubce.com/v2", "ernie-5.1", "enable_thinking", True),
         ("https://maas-api.cn-huabei-1.xf-yun.com/v2", "spark-x2.6", "thinking_object", True),
+        # 2026-11-23：TokenHub 预设从 hy3 换成 hy4，规则按主机覆盖，形态不变。
+        ("https://tokenhub.tencentmaas.com/v1", "hy4", "reasoning_effort", False),
         ("https://api.x.ai/v1", "grok-4.7", "reasoning_effort", False),
         ("https://api.stepfun.com/v1", "step-5-preview", "reasoning_effort", False),
         ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-3.8-flash", "reasoning_effort", False),
+        ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-4-hydrogen", "reasoning_effort", False),
     ],
 )
 def test_the_vendor_table_picks_the_right_style(base_url, model, style, supported):

@@ -287,7 +287,9 @@ def test_capabilities_embeddings_declaration_keeps_existing_behavior():
     config = LLMConfig(base_url="https://api.deepseek.com/v1", api_key="k", model="deepseek-flash")
     capabilities = resolve_capabilities(config)
     assert (capabilities.embeddings, capabilities.tools, capabilities.stream) == (False, True, True)
-    assert (capabilities.structured_output, capabilities.vision) == (False, False)
+    # deepseek-flash（V4.1-Flash）自 2026-11-23 起按官方模型表声明支持图像理解；
+    # 这条测试关心的是 embeddings/structured_output 的默认值，vision 跟着事实走。
+    assert (capabilities.structured_output, capabilities.vision) == (False, True)
     # 老调用方按关键字构造不传新字段也能工作（默认 False），既有行为不变。
     legacy = ProviderCapabilities(
         tools=True, structured_output=False, stream=True, vision=False, reasoning=False

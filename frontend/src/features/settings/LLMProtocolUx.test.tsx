@@ -77,8 +77,8 @@ describe("T09.1 厂商预设增补", () => {
     // 是 Key 绑定的另一域名，见 config.ts 注释）+ 新旗舰模型。
     expect(presetOf("minimax").base_url).toBe("https://api.minimax.io/v1");
     expect(presetOf("minimax").model).toBe("MiniMax-M3.1-Flash");
-    // Gemini / xAI：模型代际更新。
-    expect(presetOf("gemini").model).toBe("gemini-3.8-flash");
+    // Gemini / xAI：模型代际更新（3.8 已降为上一代 Flash，当前是 Gemini 4 系列）。
+    expect(presetOf("gemini").model).toBe("gemini-4-hydrogen");
     expect(presetOf("xai").model).toBe("grok-4.7");
     // 豆包：官方文档写法是连字符 + 日期（点号只是别名），已按文档改正。
     expect(presetOf("doubao").model).toBe("doubao-seed-2-1-pro-260915");
@@ -138,9 +138,14 @@ describe("T09.1 厂商预设增补", () => {
     expect(presetAnthropicBaseUrl(presetOf("hunyuan"))).toBe(
       "https://tokenhub.tencentmaas.com/v1/messages",
     );
+    // 豆包：2026-11-23 官方已提供 Messages 入口，且与 Chat/Responses 的 /api/v3 不同址。
+    expect(presetOf("doubao").supports_anthropic).toBe(true);
+    expect(presetAnthropicBaseUrl(presetOf("doubao"))).toBe(
+      "https://ark.cn-beijing.volces.com/api/compatible/v1",
+    );
     // 没有 Anthropic 入口的一律返回 null（切协议时地址一个字都不动）。
-    // 豆包：官方无 Messages 入口；xAI：官方已废弃该入口（矩阵同步标「不支持」）。
-    for (const provider of ["openai", "gemini", "groq", "mistral", "perplexity", "doubao", "xai"]) {
+    // xAI：官方已废弃该入口（矩阵同步标「不支持」）。
+    for (const provider of ["openai", "gemini", "groq", "mistral", "perplexity", "xai"]) {
       expect(presetOf(provider).supports_anthropic).toBeUndefined();
       expect(presetAnthropicBaseUrl(presetOf(provider))).toBeNull();
     }
@@ -196,7 +201,7 @@ describe("T09.1 各服务商协议支持矩阵", () => {
       expect(screen.getByText(t(key))).toBeInTheDocument();
     }
     // 表尾与列里都有核对日期。
-    expect(screen.getAllByText(/2026-11-09/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/2026-11-23/).length).toBeGreaterThan(0);
     expect(screen.getByText(t("llmProtocol.matrix.footnote"))).toBeInTheDocument();
   });
 
@@ -214,9 +219,9 @@ describe("T09.1 各服务商协议支持矩阵", () => {
 
     fireEvent.click(screen.getByText(t("llmProtocol.matrix.toggle")));
 
-    // 豆包：官方没有 Anthropic Messages 入口；xAI：官方已废弃该入口（清单 §11.5-E 的
-    // 前两条修正）。这两格写「支持/部分支持」等于让用户选到一个必然失败的协议。
-    expect(rowTextCells(t("appConfig.preset.doubao"))[3]).toBe(t("llmProtocol.matrix.no"));
+    // 2026-11-23 复核：豆包官方已提供 Anthropic Messages 入口，标「支持」；
+    // xAI 官方已废弃该入口，标「不支持」。这两格写反等于让用户选到一个必然失败的协议。
+    expect(rowTextCells(t("appConfig.preset.doubao"))[3]).toBe(t("llmProtocol.matrix.yes"));
     expect(rowTextCells(t("appConfig.preset.xai"))[3]).toBe(t("llmProtocol.matrix.no"));
     // 修正不能把真正有入口的厂商一起改掉。
     for (const key of [
@@ -238,7 +243,13 @@ describe("T09.1 各服务商协议支持矩阵", () => {
     expect(screen.getByText(footnote)).toBeInTheDocument();
     // 名单的**唯一事实**在后端 FORCED_THINKING_MODELS；型号是否真的被拦由
     // backend/tests/test_llm_thinking_disable.py 的跨文件守卫逐条比对。
-    for (const name of ["GPT-6 Astra", "GPT-6.1 Sol", "GLM-5.3", "Kimi K3", "MiniMax M3.1-Flash"]) {
+    for (const name of [
+      "GPT-6.2 Astra",
+      "GPT-6.2 Sol",
+      "GLM-5.3",
+      "Kimi K3 / K3.1 Pro",
+      "MiniMax M3.1-Flash",
+    ]) {
       expect(footnote).toContain(name);
     }
   });

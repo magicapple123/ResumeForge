@@ -2,7 +2,7 @@
 /** 各服务商对三种接口协议的支持情况（设置页「模型配置」区的可展开说明）。
  *
  * 数据是**前端静态核对表**，不做实时探测：每次进设置页都发请求既慢又会被服务商限流。
- * 核对日期：2026-11-09（与 config.ts 的预设注释、i18n 表尾同一口径）；表尾与"核对日期"
+ * 核对日期：2026-11-23（与 config.ts 的预设注释、i18n 表尾同一口径）；表尾与"核对日期"
  * 列都写明，避免用户把这张表当成永久承诺。
  *
  * 行序按热门度排列（热门服务商在前），不是按字母序：这张表是"我该选谁"的查阅入口，
@@ -14,9 +14,12 @@
  * **这张表是"用户该选哪个协议"的唯一出处**：协议下拉的说明不再枚举"谁不支持"，
  * 因为那种枚举总是漏（2026-11-07 那版就把 DeepSeek / MiniMax / 千帆 / 星火 全写错了）。
  *
- * **2026-11-09 修订**（清单 §11.4 第 7 类缺陷）：豆包 Anthropic 写「支持」但官方无入口、
- * xAI Anthropic 官方已废弃、讯飞入口在新 MaaS 域名、MiniMax 域名与官方文档不一致——四处
- * 一并改。表尾同时指向「思考开关」：哪些型号强制思考、本应用不会给它们发关闭参数。
+ * **2026-11-23 复核**：火山方舟已提供 Anthropic Messages 入口
+ * （`https://ark.cn-beijing.volces.com/api/compatible/v1/messages`），矩阵与预设同步改为
+ * 「支持」；Together 的 Messages / Responses 覆盖范围按官方 2026-11-03 更新；Perplexity
+ * 的 Anthropic 入口在 Orchestrator 的 `/orchestrator/v1` 下，不在预设的 `/v1` 下，仍标
+ * 「部分支持」。其余厂商逐家对照官方文档，状态未变。
+ *
  * 强制思考型号清单的唯一事实在 ``backend/app/services/llm/thinking_vendors.py``
  * 的 ``FORCED_THINKING_MODELS``，后端守卫会读本目录的语言包比对（两边必须逐字一致）。
  */
@@ -41,7 +44,7 @@ interface MatrixRow {
 }
 
 /** 核对日期：改表时同步改这里与 i18n 表尾。 */
-const VERIFIED_AT = "2026-11-09";
+const VERIFIED_AT = "2026-11-23";
 
 /** 23 行，按热门度排序：22 个内置预设 + Azure OpenAI（单列、暂不内置）。 */
 const ROWS: MatrixRow[] = [
@@ -63,9 +66,9 @@ const ROWS: MatrixRow[] = [
     labelKey: "appConfig.preset.doubao",
     chat: "yes",
     responses: "yes",
-    // 官方文档没有 Anthropic Messages 入口（§11.4 缺陷 7）：「支持」会让用户选到一个
-    // 必然 404 的协议。
-    anthropic: "no",
+    // 2026-11-23 复核：火山方舟已提供 Anthropic Messages 入口
+    // （POST /api/compatible/v1/messages），与 Chat/Responses 的 /api/v3 不同址。
+    anthropic: "yes",
     anthropicNoteKey: "llmProtocol.matrix.doubaoAnthropicNote",
   },
   { labelKey: "appConfig.preset.zhipu", chat: "yes", responses: "yes", anthropic: "yes" },

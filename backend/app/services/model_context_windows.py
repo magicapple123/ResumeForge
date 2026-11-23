@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""模型上下文窗口表（2026-11-13 核对）与解析规则。
+"""模型上下文窗口表（2026-11-23 核对）与解析规则。
 
 为什么需要它：同一个 prompt 在不同模型上的安全预算差十倍。窗口填大了会 400（还白烧一次
 调用），填小了会提前压缩、丢掉本来装得下的上下文。表里每条都带官方文档链接，核对时
@@ -47,8 +47,10 @@ MODEL_WINDOWS: tuple[WindowRule, ...] = (
         "https://developers.openai.com/api/docs/models/gpt-4o",
     ),
     WindowRule(
-        "GPT-6 Astra / Sol",
-        r"gpt-6-(?:astra|sol)(?![a-z0-9])",
+        "GPT-6.x Astra / Sol / Luna",
+        # 官方 2026-11 的旗舰是 gpt-6.2-astra / gpt-6.2-sol / gpt-6-luna（旧写法
+        # gpt-6-astra 已不在模型表里，但仍保留匹配，避免老配置掉进 fallback）。
+        r"gpt-6(?:[.]\d+)?-(?:astra|sol|luna)(?![a-z0-9])",
         1_050_000,
         "https://developers.openai.com/api/docs/models",
     ),
@@ -61,6 +63,14 @@ MODEL_WINDOWS: tuple[WindowRule, ...] = (
     WindowRule(
         "Claude Opus 4.6–4.8 / Sonnet 4.6",
         r"claude-(?:opus-4[.-][678]|sonnet-4[.-]6)(?![0-9])",
+        1_000_000,
+        "https://platform.claude.com/docs/en/models/overview",
+    ),
+    WindowRule(
+        "Claude Fable / Mythos / Opus / Sonnet / Haiku 5.x",
+        # 5 代（Fable 5.2、Opus 5.5、Sonnet 5.5、Haiku 5.5）统一 1M；
+        # 4.5 代仍是 200K，已被上面更具体的规则接走。
+        r"claude-(?:fable|mythos|opus|sonnet|haiku)-5(?:[.-]\d+)?(?![0-9])",
         1_000_000,
         "https://platform.claude.com/docs/en/models/overview",
     ),
@@ -79,7 +89,8 @@ MODEL_WINDOWS: tuple[WindowRule, ...] = (
     WindowRule(
         "DeepSeek Flash / V4 Pro",
         r"deepseek-(?:flash|v4-pro(?:-0813)?)(?![a-z0-9])",
-        1_000_000,
+        # 官方 /models 的 context_window = 1,048,576；Flash 与 V4 Pro 同值。
+        1_048_576,
         "https://api-docs.deepseek.com/quick_start/pricing/",
     ),
     WindowRule(
@@ -95,6 +106,20 @@ MODEL_WINDOWS: tuple[WindowRule, ...] = (
         "https://help.aliyun.com/zh/model-studio/text-generation-model",
     ),
     WindowRule(
+        "Qwen Plus（档位别名）",
+        # 官方保留的别名，1M 上下文；预设用的就是它，钉版本号反而会漏。
+        r"^qwen-plus(?![a-z0-9-])",
+        1_000_000,
+        "https://help.aliyun.com/zh/model-studio/text-generation-model",
+    ),
+    WindowRule(
+        "Qwen3.5 本地小尺寸（2B–27B / 35B-A3B）",
+        # 与云端 Qwen3.5 Plus / Flash（1M）区分：本地开源权重是 256K。
+        r"qwen3[.]5[:\-/](?:2b|4b|9b|27b|35b-a3b)(?![a-z0-9])",
+        262_144,
+        "https://lm-studio.cn/models/qwen/qwen3.5-9b",
+    ),
+    WindowRule(
         "GLM-5.3",
         r"glm-5[.]3(?![0-9])",
         1_000_000,
@@ -105,6 +130,67 @@ MODEL_WINDOWS: tuple[WindowRule, ...] = (
         r"kimi-k3(?:[.]1-pro)?(?![a-z0-9.])",
         1_000_000,
         "https://platform.kimi.ai/docs/models",
+    ),
+    WindowRule(
+        "Doubao Seed 2.1（260915 批次）",
+        # 同一家族的不同快照窗口不同：260915 是 1024k，260628 是 256k，必须按批次区分。
+        r"doubao-seed-2[.-]1-(?:pro|lite)-260915(?![a-z0-9])",
+        1_024_000,
+        "https://www.volcengine.com/docs/82379/1820188",
+    ),
+    WindowRule(
+        "Doubao Seed 2.1（260628 批次）",
+        r"doubao-seed-2[.-]1-(?:pro|turbo)-260628(?![a-z0-9])",
+        256_000,
+        "https://www.volcengine.com/docs/82379/1820188",
+    ),
+    WindowRule(
+        "腾讯混元 Hy4 / Hy4 flash",
+        r"hy4(?:-flash)?(?![a-z0-9])",
+        1_000_000,
+        "https://cloud.tencent.com/document/product/1222/130051",
+    ),
+    WindowRule(
+        "腾讯混元 Hy3",
+        r"hy3(?![a-z0-9])",
+        256_000,
+        "https://cloud.tencent.com/document/product/1222/130051",
+    ),
+    WindowRule(
+        "文心 ERNIE 5.1 / 4.5 Turbo 128K",
+        r"ernie-(?:5[.]\d+|4[.]5-turbo-128k)(?![a-z0-9])",
+        128_000,
+        "https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j",
+    ),
+    WindowRule(
+        "讯飞星火 X2.6",
+        r"spark-x2[.]6(?![a-z0-9])",
+        1_000_000,
+        "https://xinghuo.xfyun.cn/sparkapi",
+    ),
+    WindowRule(
+        "阶跃 Step 5 Preview",
+        r"step-5-preview(?![a-z0-9])",
+        1_000_000,
+        "https://platform.stepfun.com/docs/zh/guides/models",
+    ),
+    WindowRule(
+        "Mistral Large 4",
+        r"mistral-large-4(?![a-z0-9])",
+        1_000_000,
+        "https://docs.mistral.ai/models/mistral-large-4-0",
+    ),
+    WindowRule(
+        "GPT-OSS 20B / 120B",
+        r"gpt-oss(?![a-z0-9])",
+        131_072,
+        "https://console.groq.com/docs/models",
+    ),
+    WindowRule(
+        "Perplexity Sonar",
+        r"(?:^|/)sonar(?![a-z0-9-])",
+        128_000,
+        "https://docs.perplexity.ai/docs/agent-api/models",
     ),
     WindowRule(
         "MiniMax M3",
