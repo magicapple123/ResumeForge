@@ -4,6 +4,12 @@
 from __future__ import annotations
 
 from ..config import get_settings
+from .browser.boss_keepalive import KEY_BOSS_KEEPALIVE
+from .browser.session_cookie_keepalive import (
+    DEFAULT_SESSION_COOKIE_DAYS,
+    KEY_KEEP_SESSION_COOKIES,
+    KEY_SESSION_COOKIE_DAYS,
+)
 from .settings_default_types import SettingDefault
 
 REGISTRY_ENTRIES: tuple[SettingDefault, ...] = (
@@ -162,6 +168,32 @@ REGISTRY_ENTRIES: tuple[SettingDefault, ...] = (
         note="空清单 = 不屏蔽任何公司/关键词",
     ),
     SettingDefault(key="apply_greeting_templates", scope="apply", default=[]),
+    # —— 卡：专用浏览器登录保持（T1：L1 会话续期 + K2 BOSS 保活）——
+    # 三个键刻意 resettable=False：``browser.keep_session_cookies`` 的键名里带 "cookie"，
+    # 会被 SECRET_KEY_MARKERS 判成密钥类（导入期硬校验要求这类键不可重置）；另外两个
+    # 与它同一张卡、同一口径，一起排除在「恢复默认」之外——它们不是"改错了要回去"的
+    # 参数，而是用户主动表达"我就要长期登录 / 我就要它别再访问 BOSS"的意愿。
+    SettingDefault(
+        key=KEY_KEEP_SESSION_COOKIES,
+        scope="browser",
+        default=True,
+        resettable=False,
+        note="L1 会话 Cookie 续期总开关；默认开＝用户要的行为",
+    ),
+    SettingDefault(
+        key=KEY_SESSION_COOKIE_DAYS,
+        scope="browser",
+        default=DEFAULT_SESSION_COOKIE_DAYS,
+        resettable=False,
+        note="续期天数只接受 30/90/365；读端越界一律落回 90",
+    ),
+    SettingDefault(
+        key=KEY_BOSS_KEEPALIVE,
+        scope="apply",
+        default=True,
+        resettable=False,
+        note="K2：每天后台访问一次 BOSS 首页保活；关闭后零 CDP 调用",
+    ),
     # —— 卡：投递跟踪（scope=tracking）——
     SettingDefault(
         key="analytics_weekly_goal",
@@ -170,16 +202,8 @@ REGISTRY_ENTRIES: tuple[SettingDefault, ...] = (
         default={"target": 0},
         note="0 = 没设目标（不显示进度压力）",
     ),
-    SettingDefault(key="tracker.probe.enabled", scope="tracking", default=False),
-    SettingDefault(key="tracker.probe.page_url", scope="tracking", storage="text", default=""),
-    SettingDefault(
-        key="tracker.probe.cookie",
-        scope="tracking",
-        storage="text",
-        default="",
-        resettable=False,
-        note="登录凭据：永不出现在接口响应里，也不随快照导出",
-    ),
+    # （T2 已删「申请状态回读」整条链路：tracker.probe.enabled / page_url / cookie 三个
+    #  键由 T1 在同一批里代删，守卫见 test_settings_defaults 的 registry 断言。）
     # —— 卡：备份与导出（scope=backup）——
     SettingDefault(
         key="export_save_location",

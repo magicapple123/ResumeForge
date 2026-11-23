@@ -23,6 +23,7 @@ from ..apply._config import get_apply_config
 from ..browser.browser_inputs import validated_browser_url
 from ..browser.browser_manager import BrowserError, BrowserManager, BrowserStatus
 from ..browser.cdp_client import CdpError
+from ..browser.session_cookie_keepalive import SessionCookieKeepalive
 
 WEBFORM_PROFILE_DIR_NAME = "webform-browser-profile"
 
@@ -32,12 +33,15 @@ _manager: BrowserManager | None = None
 _manager_key: tuple[Any, ...] | None = None
 
 
-def default_profile_dir():
+def default_profile_dir(browser_id: str | None = None):
     """网申浏览器独立的登录态与窗口配置目录（落在数据目录下，随 RF_DATA_DIR 走）。
 
     与投递浏览器同理：不能写进安装目录，否则升级安装会清掉登录态（ADR-0004）。
+    不传 ``browser_id`` 时返回共享根目录（B2 之前的形态，升级时会被一次性归属到
+    ``<根目录>/<browser-id>``，见 ``services/browser/profile_identity.py``）。
     """
-    return DATA_DIR / WEBFORM_PROFILE_DIR_NAME
+    root = DATA_DIR / WEBFORM_PROFILE_DIR_NAME
+    return root if not browser_id else root / browser_id
 
 
 def _cache_key(config: Any) -> tuple[str, str]:
@@ -54,11 +58,16 @@ def get_browser_manager(db: Session) -> BrowserManager:
             if _manager is not None:
                 _manager.stop()
             _manager = BrowserManager(
-                profile_dir=default_profile_dir(),
+                profile_root=default_profile_dir(),
                 port=DEFAULT_WEBFORM_BROWSER_PORT,
                 browser_choice=config.browser_choice,
                 browser_path=config.browser_path.strip() or None,
             )
+            # L1 会话续期对网申同样适用（Moka / 字节用会话 Cookie 才更要它）。
+            # K2 保活只属于投递台，这里不挂。
+            set_hooks = getattr(_manager, "set_hooks", None)
+            if callable(set_hooks):
+                set_hooks((SessionCookieKeepalive(),))
             _manager_key = key
         return _manager
 

@@ -23,6 +23,7 @@ from ...schemas.apply import (
     SiteListOut,
     SiteOptionOut,
 )
+from ..browser.boss_keepalive import BossKeepalive
 from ..browser.browser_manager import (
     BROWSER_STATE_RUNNING,
     BrowserError,
@@ -31,6 +32,8 @@ from ..browser.browser_manager import (
     login_hint,
 )
 from ..browser.cdp_client import CdpError
+from ..browser.cookie_migration import migrate_and_record
+from ..browser.session_cookie_keepalive import SessionCookieKeepalive
 from ..sites.base import SOURCE_SESSION, SiteAdapter
 from ..sites.registry import get_registry
 from ..ui_locale import get_ui_locale
@@ -200,6 +203,24 @@ def _browser_cache_key(config: ApplyConfigIn) -> tuple[Any, ...]:
     )
 
 
+def _build_browser_manager(config: ApplyConfigIn, port: int) -> BrowserManager:
+    """构造投递浏览器管理器，并挂上 L1 会话续期与 K2 BOSS 保活。
+
+    挂钩只挂在**投递**这一侧：K2 保活是"投递台要长期保持 BOSS 登录"，网申浏览器
+    只挂 L1（见 ``webform/browser.py``）。用 ``getattr`` 探测 ``set_hooks``：本模块的
+    ``BrowserManager`` 符号会被用例换成三参替身，替身没有这个方法就不挂（它只验重建）。
+    """
+    manager = BrowserManager(
+        port=port,
+        browser_choice=config.browser_choice,
+        browser_path=config.browser_path.strip() or None,
+    )
+    set_hooks = getattr(manager, "set_hooks", None)
+    if callable(set_hooks):
+        set_hooks((SessionCookieKeepalive(), BossKeepalive()))
+    return manager
+
+
 def get_browser_manager(db: Session) -> BrowserManager:
     """按当前配置返回浏览器管理器单例；配置（端口 / 选择 / 路径）变更时先关旧实例再重建。"""
     global _browser_manager, _browser_manager_key
@@ -208,14 +229,14 @@ def get_browser_manager(db: Session) -> BrowserManager:
     port = key[0]
     with _browser_lock:
         if _browser_manager is None or _browser_manager_key != key:
-            if _browser_manager is not None:
-                _browser_manager.stop()
-            _browser_manager = BrowserManager(
-                port=port,
-                browser_choice=config.browser_choice,
-                browser_path=config.browser_path.strip() or None,
-            )
+            previous = _browser_manager
+            _browser_manager = _build_browser_manager(config, port)
             _browser_manager_key = key
+            if previous is not None:
+                # 切换浏览器（身份变了）才迁移 Cookie；同一身份只停旧实例。
+                # 失败提示由 migrate_and_record 写进 AppSetting 供面板展示，这里不抛异常
+                # ——本函数在状态轮询路径上跑。
+                migrate_and_record(previous, _browser_manager, db)
         return _browser_manager
 
 

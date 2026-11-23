@@ -24,7 +24,7 @@ import logging
 import os
 import subprocess
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -33,12 +33,19 @@ import httpx
 
 from ...config import DATA_DIR, DEFAULT_BROWSER_PORT
 from ...schemas.apply.base import BrowserState
-from .browser_discovery import _CHROME_RELATIVE, _EDGE_RELATIVE, browser_display_name
+from .browser_discovery import (
+    _CHROME_RELATIVE,
+    _EDGE_RELATIVE,
+    browser_display_name,
+    find_browser,
+)
+from .browser_hooks import BrowserLifecycleHook, notify_running, notify_stopping
 from .browser_inputs import BrowserError, validated_browser_url
 from .browser_manager_i18n import LOGIN_HINT as _LOGIN_HINT
 from .browser_manager_i18n import login_hint
 from .browser_shutdown import request_browser_close, shutdown_browser
 from .cdp_client import DEFAULT_HOST, WebsocketCdpClient
+from .profile_identity import prepare_profile_dir, profile_dir_or_root
 
 logger = logging.getLogger(__name__)
 
@@ -87,15 +94,21 @@ class BrowserStatus:
     owned: bool = False
 
 
-def default_profile_dir() -> Path:
-    """投递专用浏览器的 ``user-data-dir``（落在数据目录下）。
+def default_profile_dir(browser_id: str | None = None) -> Path:
+    """（投递专用浏览器的）profile 根目录，或某个浏览器身份的子目录。
 
     必须用 ``config.DATA_DIR``（跟随 ``RF_DATA_DIR``），不能用 ``BACKEND_DIR/"data"``：
     打包形态下 BACKEND_DIR 在安装目录（``resources/payload/backend``）内，登录态会被
     下一次 NSIS 升级连同安装目录一起删掉（ADR-0004 的核心不变量：用户数据不落 payload）。
     控制台/开发形态没有 RF_DATA_DIR，DATA_DIR 仍是 ``backend/data``，行为不变。
+
+    不传 ``browser_id`` 时返回的是**共享根目录**——B2 之前所有浏览器都用它，升级时这一段
+    内容会被 :func:`profile_identity.adopt_legacy_profile` 一次性搬到
+    ``<根目录>/<browser-id>``。保留无参调用是因为 ``sample_recorder`` / 数据统计等
+    只关心"profile 放在随数据目录走的哪个位置"。
     """
-    return DATA_DIR / PROFILE_DIR_NAME
+    root = DATA_DIR / PROFILE_DIR_NAME
+    return root if not browser_id else root / browser_id
 
 
 class BrowserManager:
@@ -105,6 +118,7 @@ class BrowserManager:
         self,
         *,
         profile_dir: Path | None = None,
+        profile_root: Path | None = None,
         port: int = DEFAULT_PORT,
         browser_path: str | Path | None = None,
         browser_choice: str = BROWSER_CHOICE_AUTO,
@@ -116,7 +130,12 @@ class BrowserManager:
         ready_timeout: float = READY_TIMEOUT_SECONDS,
         ready_poll_interval: float = READY_POLL_INTERVAL,
     ) -> None:
-        self._profile_dir = Path(profile_dir) if profile_dir else default_profile_dir()
+        # ``profile_dir`` = 调用方显式指定的目录（离线测试/特殊调试），不按身份分；
+        # ``profile_root`` = 按浏览器身份分子目录的**根**（生产路径）。
+        self._profile_dir = Path(profile_dir) if profile_dir else None
+        self._profile_root = Path(profile_root) if profile_root else default_profile_dir()
+        self._resolved_profile_dir: Path | None = None
+        self._hooks: tuple[BrowserLifecycleHook, ...] = ()
         self._port = port
         self._browser_path = Path(browser_path) if browser_path else None
         self._browser_choice = (
@@ -135,41 +154,30 @@ class BrowserManager:
 
     # ===== 浏览器可执行文件定位 =====
 
+    def set_hooks(self, hooks: Sequence[BrowserLifecycleHook]) -> None:
+        """挂上生命周期挂钩（L1 会话续期 / K2 保活），以最后一次调用为准。
+
+        单独一个方法而不是构造参数：投递台挂两个、网申只挂 L1，由调用方决定；这样
+        ``BrowserManager(...)`` 的签名对既有调用点也不变。
+        """
+        self._hooks = tuple(hooks)
+
     @property
     def profile_dir(self) -> Path:
-        return self._profile_dir
+        """当前 profile 目录（按浏览器身份分；``auto`` 未解析前退回共享根目录）。"""
+        if self._profile_dir is not None:
+            return self._profile_dir
+        if self._resolved_profile_dir is not None:
+            return self._resolved_profile_dir
+        return profile_dir_or_root(
+            self._profile_root,
+            choice=self._browser_choice,
+            browser_path=self._browser_path,
+        )
 
     @property
     def port(self) -> int:
         return self._port
-
-    def _existing_env_paths(self, candidates: tuple[tuple[str, str], ...]) -> list[Path]:
-        found: list[Path] = []
-        for env_name, relative in candidates:
-            base = self._env.get(env_name)
-            if not base:
-                continue
-            # `relative` 用 Windows 反斜杠写（如 r"Google\Chrome\Application\chrome.exe"），
-            # 而 Linux/macOS 上反斜杠只是普通字符、不是路径分隔符——直接 `Path(base) / relative`
-            # 会得到一个带反斜杠的单段文件名，永远找不到。所以按 `\\` 拆开再逐段拼接。
-            candidate = Path(base).joinpath(*relative.split("\\"))
-            if candidate.is_file():
-                found.append(candidate)
-        return found
-
-    def _find_one(
-        self, candidates: tuple[tuple[str, str], ...], names: tuple[str, ...]
-    ) -> Path | None:
-        """在给定安装位置与 PATH 里找一个浏览器；找不到返回 ``None``。"""
-        import shutil
-
-        for path in self._existing_env_paths(candidates):
-            return path
-        for name in names:
-            located = shutil.which(name)
-            if located:
-                return Path(located)
-        return None
 
     def _locate_browser(self) -> Path:
         """按用户的选择定位浏览器可执行文件。
@@ -189,7 +197,7 @@ class BrowserManager:
             return path
 
         if self._browser_choice == BROWSER_CHOICE_CHROME:
-            located = self._find_one(_CHROME_RELATIVE, ("chrome", "google-chrome"))
+            located = find_browser(self._env, _CHROME_RELATIVE, ("chrome", "google-chrome"))
             if located is None:
                 raise BrowserError(
                     "没有找到 Google Chrome：请先安装 Chrome，或在投递设置里改用「自动」"
@@ -198,7 +206,7 @@ class BrowserManager:
             return located
 
         if self._browser_choice == BROWSER_CHOICE_EDGE:
-            located = self._find_one(_EDGE_RELATIVE, ("msedge",))
+            located = find_browser(self._env, _EDGE_RELATIVE, ("msedge",))
             if located is None:
                 raise BrowserError(
                     "没有找到 Microsoft Edge：请先安装 Edge，或在投递设置里改用「自动」或"
@@ -206,9 +214,9 @@ class BrowserManager:
                 )
             return located
 
-        located = self._find_one(_CHROME_RELATIVE, ("chrome", "google-chrome"))
+        located = find_browser(self._env, _CHROME_RELATIVE, ("chrome", "google-chrome"))
         if located is None:
-            located = self._find_one(_EDGE_RELATIVE, ("msedge",))
+            located = find_browser(self._env, _EDGE_RELATIVE, ("msedge",))
         if located is None:
             raise BrowserError(
                 "未找到可用的浏览器，请先安装 Google Chrome 或 Microsoft Edge 后重试"
@@ -286,7 +294,7 @@ class BrowserManager:
         return BrowserStatus(
             state,
             self._port,
-            str(self._profile_dir),
+            str(self.profile_dir),
             browser_path,
             browser_name,
             owned=owned,
@@ -309,15 +317,28 @@ class BrowserManager:
         target_url = validated_browser_url(url)
         # 已经是"有浏览器"（端口在答，或本进程刚拉起还在启动）就不再拉第二个。
         if self.is_active():
+            # 已经在跑（含上次运行遗留的窗口）也要挂上挂钩：否则续期/保活要等到下一次
+            # "启动浏览器"才生效，而用户重启应用后往往不会再点一次。还在启动中则等下面
+            # 真正起来之后再挂。
+            if self.is_running():
+                notify_running(self._hooks, self)
             return self.status()
         browser = self._locate_browser()
-        self._profile_dir.mkdir(parents=True, exist_ok=True)
+        # profile 按浏览器身份分目录，并把旧的共享目录一次性归属过来（B2）。
+        prepared = prepare_profile_dir(
+            self._profile_root,
+            explicit=self._profile_dir,
+            choice=self._browser_choice,
+            browser_path=self._browser_path,
+            resolved_path=browser,
+        )
+        self._resolved_profile_dir = prepared.path
         # 参数用列表传递、shell=False：不经过 shell，路径含空格也不会被拆开。
         args = [
             str(browser),
             f"--remote-debugging-port={self._port}",
             "--remote-debugging-address=127.0.0.1",
-            f"--user-data-dir={self._profile_dir}",
+            f"--user-data-dir={self._resolved_profile_dir}",
             "--no-first-run",
             "--no-default-browser-check",
             "--new-window",
@@ -337,6 +358,9 @@ class BrowserManager:
         if not self._wait_until_ready():
             self.stop()
             raise BrowserError("浏览器已启动但调试端口未就绪，请确认没有被安全软件拦截后重试")
+        # 挂钩在"端口已就绪"之后、入口导航之前挂上：入口页打不开时浏览器仍然可用，
+        # 登录态续期不该因为一次导航失败就整段不生效。
+        notify_running(self._hooks, self)
         if target_url != "about:blank":
             try:
                 # A URL is CDP data, never a browser executable/option argument.
@@ -369,10 +393,13 @@ class BrowserManager:
 
         没有句柄时静默返回是**故意的**：后端重启后句柄就没了，而绝不按 PID 猜进程——那会
         误杀用户自己的浏览器；调用方要靠 :attr:`BrowserStatus.owned` 让用户自己关窗口。
-        顺序是「CDP Browser.close → 等 → terminate/kill」：Windows 上 terminate() 是
-        TerminateProcess，浏览器没机会 flush Cookie，"登录后立刻关闭"就会偶发丢登录态。
-        原因与 5 秒预算见 :mod:`browser_shutdown`。
+        顺序是「挂钩收尾（停续期线程 → 最后一次续期）→ CDP Browser.close → 等 →
+        terminate/kill」：续期必须排在 Browser.close **之前**，那时调试端口还能用；
+        Windows 上 terminate() 是 TerminateProcess，浏览器没机会 flush Cookie，
+        "登录后立刻关闭"就会偶发丢登录态。原因与 5 秒预算见 :mod:`browser_shutdown`。
         """
+        # 挂钩放在最早：它要在 CDP Browser.close 之前把最后一次续期发出去。
+        notify_stopping(self._hooks, self)
         if (process := self._process) is None:
             return
         try:

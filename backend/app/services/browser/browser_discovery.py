@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 
 # 常见安装位置（按"优先 Chrome、其次 Edge"的顺序排列）。用环境变量拼，避免把某个
@@ -42,3 +43,40 @@ def browser_display_name(path: str | Path | None) -> str:
     if "chrome" in name:
         return _CHROME_NAME
     return _CUSTOM_NAME
+
+
+def existing_env_paths(
+    env: Mapping[str, str], candidates: tuple[tuple[str, str], ...]
+) -> list[Path]:
+    """按"环境变量 + 相对安装路径"找已存在的可执行文件（不存在的不返回）。"""
+    found: list[Path] = []
+    for env_name, relative in candidates:
+        base = env.get(env_name)
+        if not base:
+            continue
+        # `relative` 用 Windows 反斜杠写（如 r"Google\Chrome\Application\chrome.exe"），
+        # 而 Linux/macOS 上反斜杠只是普通字符、不是路径分隔符——直接 `Path(base) / relative`
+        # 会得到一个带反斜杠的单段文件名，永远找不到。所以按 `\\` 拆开再逐段拼接。
+        candidate = Path(base).joinpath(*relative.split("\\"))
+        if candidate.is_file():
+            found.append(candidate)
+    return found
+
+
+def find_browser(
+    env: Mapping[str, str], candidates: tuple[tuple[str, str], ...], names: tuple[str, ...]
+) -> Path | None:
+    """在给定安装位置与 PATH 里找一个浏览器；找不到返回 ``None``。
+
+    ``shutil`` 在函数内导入：测试用 ``monkeypatch.setattr("shutil.which", ...)``
+    换掉 PATH 查找，patch 的是模块属性，函数内导入同样生效。
+    """
+    import shutil
+
+    for path in existing_env_paths(env, candidates):
+        return path
+    for name in names:
+        located = shutil.which(name)
+        if located:
+            return Path(located)
+    return None
