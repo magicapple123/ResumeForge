@@ -32,6 +32,13 @@ const trackerForm = {
   "trackerForm.placeholder.job": "选择要关联的岗位（输入关键词搜索）",
   "trackerForm.placeholder.link": "例如 https://jobs.example.com/apply",
   "trackerForm.placeholder.resume": "选择这次投递使用的简历版本（输入关键词搜索）",
+  /** 简历下拉的两组（T6）：内部简历走制作台，外部简历是别处生成的原件。 */
+  "trackerForm.resume.group.internal": "内部简历",
+  "trackerForm.resume.group.external": "外部简历",
+  /** 换岗位后已选值保留、但不再属于「本岗位 + 通用」时的标注。 */
+  "trackerForm.resume.notInJob": "（不属于当前岗位）",
+  /** 回查 404（简历已删）时接在标题快照后面的标注。 */
+  "trackerForm.resume.deleted": "（已删除）",
   "trackerForm.hint.stageNote": "第几轮、什么形式，例如「二面」「HR 面」",
   "trackerForm.hint.appliedAt": "留空表示日期不详——该记录不计入投递趋势与周内分布。",
   "trackerForm.action.fillToday": "填今天",
@@ -42,7 +49,7 @@ const trackerForm = {
   "trackerForm.hint.link":
     "选填。招聘页 / 网申页 / 面试会议链接；选择关联岗位后，这里还是空的时候会自动带上岗位的投递链接",
   "trackerForm.hint.resume":
-    "选填。关联后会在简历详情里留一份投递记录（内容快照），投递后修改简历不影响已留的记录",
+    "选填。选了内部简历会在简历详情里留一份投递记录（内容快照）；选了外部简历只记关联与文件名——原件就是你投出去的那一份，不再另存快照。投递后再改简历不影响已留的记录",
   "trackerForm.status.applied": "已投递",
   "trackerForm.status.screening": "筛选中",
   "trackerForm.status.assessment": "测评/笔试",

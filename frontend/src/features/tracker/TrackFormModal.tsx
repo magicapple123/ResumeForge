@@ -23,11 +23,16 @@ import type { Dayjs } from "dayjs";
 import { useEffect, useRef, useState } from "react";
 import { getJob } from "../../api/jobs";
 import { createTrack, getTrack, updateTrack } from "../../api/tracker";
-import { useJobSearchSelect, useResumeSearchSelect } from "../../hooks/remoteSearchOptions";
+import { useJobSearchSelect } from "../../hooks/remoteSearchOptions";
 import type { Track, TrackChannel, TrackPayload, TrackStatus } from "../../types";
 import { TRACK_CHANNELS, TRACK_STATUSES, emptyTrack } from "../../types";
 import { HintedTextArea } from "../../components/common/MaxLengthHint";
 import { MAX_TRACK_LINK_CHARS, trackLinkError } from "./linkValidation";
+import {
+  parseResumeRef,
+  trackResumeRef,
+  useTrackResumeSelect,
+} from "./useTrackResumeSelect";
 
 const STATUS_OPTIONS = TRACK_STATUSES.map((value) => ({
   value,
@@ -55,7 +60,12 @@ interface FormValues {
   next_action_date: Dayjs | null;
   note: string;
   job_id: number | null;
-  resume_id: number | null;
+  /**
+   * 「使用的简历」的复合值（T6）：`internal:<id>` / `external:<id>` / `null`。
+   * 表单里只存这一个值，提交时才拆回两个字段（见 `toPayload`）——两张表 id 会撞号，
+   * 用裸数字当表单值会在保存时拆错字段。
+   */
+  resume_ref: string | null;
   channel: TrackChannel;
   link: string;
 }
@@ -71,7 +81,7 @@ const EMPTY: FormValues = {
   next_action_date: null,
   note: "",
   job_id: null,
-  resume_id: null,
+  resume_ref: null,
   channel: "unknown",
   link: "",
 };
@@ -99,7 +109,8 @@ function toValues(track: TrackPayload): FormValues {
     next_action_date: track.next_action_date ? dayjs(track.next_action_date) : null,
     note: track.note,
     job_id: track.job_id,
-    resume_id: track.resume_id,
+    // 两种来源在这里合成一个复合值；两个关联字段都为空 → null（合法状态）。
+    resume_ref: trackResumeRef(track),
     channel: track.channel,
     // 旧记录 / 旧草稿里可能没有这个字段：空串是它的合法默认值。
     link: track.link ?? "",
@@ -107,6 +118,8 @@ function toValues(track: TrackPayload): FormValues {
 }
 
 function toPayload(values: FormValues, track: Track | null): TrackPayload {
+  // 解析失败按 null（**不抛**）：两个关联都是选填，表单里出现脏值的代价不该是保存不了。
+  const resumeRef = parseResumeRef(values.resume_ref);
   return {
     ...emptyTrack(),
     company: values.company.trim(),
@@ -121,7 +134,10 @@ function toPayload(values: FormValues, track: Track | null): TrackPayload {
     // 证据是识别/投递台留下的痕迹，手编不碰；岗位与简历关联由本表单显式选择（选填）。
     evidence: track?.evidence ?? "",
     job_id: values.job_id ?? null,
-    resume_id: values.resume_id ?? null,
+    // 两个关联字段**互斥**（后端 422 守着）：清空下拉 = 两个都是 null，
+    // 标题快照由后端保留（"当时投的是哪一版"不该因为取消关联而消失）。
+    resume_id: resumeRef?.kind === "internal" ? resumeRef.id : null,
+    external_resume_id: resumeRef?.kind === "external" ? resumeRef.id : null,
     channel: values.channel,
     // 提交前 trim：`<a href=" https://…">` 里那个空格会被浏览器当成相对路径的一部分。
     link: (values.link ?? "").trim(),
@@ -143,7 +159,11 @@ export default function TrackFormModal({ open, track, initial, onClose, onSaved 
   // 岗位 / 简历下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量，
   // 第 101 条之后的历史记录也能通过关键词搜到。
   const jobSelect = useJobSearchSelect();
-  const resumeSelect = useResumeSearchSelect();
+  // 简历下拉（T6）：候选随岗位收窄成「本岗位 + 通用」，内部/外部两组。
+  // 岗位从表单里**实时**读（`Form.useWatch`），不从 props 猜——换岗位时必须立刻重拉，
+  // 否则用户看到的是上一个岗位的候选（选错版本就是这么来的）。
+  const watchedJobId = Form.useWatch<number | null>("job_id", form) ?? null;
+  const resumeSelect = useTrackResumeSelect(watchedJobId);
   const [full, setFull] = useState<Track | null>(null);
   const editing = (full ?? track) !== null;
   // 脏值决定"关闭时要不要问一句"；换一条记录 / 重开弹窗都从干净态开始。
@@ -194,11 +214,10 @@ export default function TrackFormModal({ open, track, initial, onClose, onSaved 
       setFull(null);
       return;
     }
-    // 已选值保显示（P0-1）：编辑时绑定的岗位/简历往往不在第一页选项里，按 id 回查。
+    // 已选值保显示（P0-1）：编辑时绑定的岗位往往不在第一页选项里，按 id 回查。
     void jobSelect.ensure(track?.job_id ?? initial?.job_id);
-    void resumeSelect.ensure(track?.resume_id ?? initial?.resume_id);
     void jobSelect.reload();
-    void resumeSelect.reload();
+    // 简历候选的重拉与"已选值保显示"在下一个 effect 里（它跟着岗位走）。
     // 先用列表行乐观预填（公司/岗位/日期/状态都是全的），note 与依据可能被后端
     // 截断过，等下面的详情请求回来再覆盖。
     form.setFieldsValue(track ? toValues(track) : toValues({ ...emptyTrack(), ...initial }));
@@ -212,6 +231,9 @@ export default function TrackFormModal({ open, track, initial, onClose, onSaved 
         if (cancelled) return;
         setFull(detail);
         form.setFieldsValue(toValues(detail));
+        // 详情里的关联比列表行更权威（brief 与 detail 共用同一份模型，但详情一定是全的）：
+        // 按它的复合值再 ensure 一次，保证下拉显示的是名字而不是 `external:3`。
+        void resumeSelect.ensure(trackResumeRef(detail), detail.resume_title);
       })
       .catch(() => {
         // 详情拿不到（后端短暂不可用）就退回预览预填：基本字段仍可编辑，
@@ -223,6 +245,25 @@ export default function TrackFormModal({ open, track, initial, onClose, onSaved 
     // hook 的回调引用稳定，只需跟随打开状态与编辑目标变化。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, track, initial, form]);
+
+  /**
+   * 岗位变化 → **重拉候选** + 对已选值重新 `ensure`（T6）。
+   *
+   * **不调用** `setFieldValue("resume_ref", null)`：换岗位只收窄候选，已选版本原样保留
+   * （静默清空等于让用户重选，静默改选会把错误版本写进投递记录）；不再属于
+   * 「本岗位 + 通用」的值由 hook 在 label 上追加「（不属于当前岗位）」。未选岗位 = 全库。
+   */
+  useEffect(() => {
+    if (!open) return;
+    void resumeSelect.reload();
+    const current = form.getFieldValue("resume_ref") as string | null;
+    if (current) {
+      // 标题快照来自列表行/详情：404 时用它降级，别让用户看到裸 id。
+      void resumeSelect.ensure(current, (full ?? track)?.resume_title ?? "");
+    }
+    // `resumeSelect` 的 reload/ensure 已按岗位变化重建，无需写进依赖。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, watchedJobId]);
 
   const submit = async () => {
     let values: FormValues;
@@ -432,10 +473,10 @@ export default function TrackFormModal({ open, track, initial, onClose, onSaved 
           <Input placeholder={t("trackerForm.placeholder.link")} maxLength={MAX_LINK_CHARS} />
         </Form.Item>
 
-        {/* 简历选择器（RF-17）：选填。显式关联后后端冻结一份投递快照，
-            回答"这一版投给了谁"；清掉关联不影响已有快照。 */}
+        {/* 简历选择器（RF-17 / T6）：选填。一个下拉两组（内部 / 外部），值是复合串
+            `internal:<id>` / `external:<id>`；候选随岗位收窄，换岗位不清空已选值。 */}
         <Form.Item
-          name="resume_id"
+          name="resume_ref"
           label={t("trackerForm.field.resume")}
           extra={t("trackerForm.hint.resume")}
         >

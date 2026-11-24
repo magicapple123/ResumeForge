@@ -22,6 +22,7 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
+from ..models.external_resume import ExternalResume
 from ..models.resume import ResumeRecord
 from ..models.tracker import SOURCE_APPLY, SOURCE_MANUAL, STATUS_APPLIED, ApplicationTrack
 from ..schemas.tracker import (
@@ -83,15 +84,36 @@ __all__ = [
 
 
 def _freeze_linked_resume(db: Session, record: ApplicationTrack, *, source: str) -> None:
-    """进度显式关联到一份简历时冻结投递快照（RF-17）。
+    """进度显式关联到一份简历时冻结投递快照（RF-17 / T6）。
 
     只在"这份快照还不存在"的意义上不做去重：表单每次把 ``resume_id`` **从无到有**地
     关联上来才算一次投递血缘，同一份记录反复保存（改备注、推进状态）不产生新快照。
-    简历已删除/不存在时静默跳过——进度记录本身照常保存。
+    "从无到有 / 换 id"的判定在调用方（:func:`create_track` / :func:`update_track`）：
+    它们在 ``_apply_payload`` 之前抓旧 id，id 变了才进来——所以清空关联不会走到这里，
+    ``resume_title`` 标题快照因此**不会被清空**（"当时投的是哪一版"是既成事实）。
+
+    两个分支的差别（T6）：
+
+    - **内部简历**（``resume_id``）：取 ``resume_record.title`` 冻结标题，并冻结一份
+      投递快照（``freeze_delivery``：正文内容 + 版式 + 目的地，回答"投出去那一刻长什么样"）；
+    - **外部简历**（``external_resume_id``）：只取 ``external_resume.name`` 冻结标题，
+      **不调用** ``freeze_delivery``。原因：外部简历没有结构化 ``content``，投递快照的
+      语义（"那一版正文 + 版式"）无处可存；而它的原件本身就登记在 ``user_file`` 里
+      （sha256 去重、进备份资产类别、软删与彻底删除都不删物理文件）——**原件即证据**。
+      再造一份"快照"只会复制同一个文件引用，却让人误以为正文也被冻结过。
+
+    简历已删除/不存在时静默跳过内部分支（进度记录本身照常保存）；外部分支同理。
 
     目的地快照（PR-09）：公司/岗位取**进度记录本身**（用户填写的实际投递目标），
     不从原简历反推——通用简历（无公司）投给 A 公司时，快照目的地就是 A 公司。
     """
+    if record.external_resume_id is not None:
+        external = db.get(ExternalResume, record.external_resume_id)
+        if external is None:
+            return
+        # 只冻结标题：原件即证据（见 docstring），这里刻意没有 freeze_delivery。
+        record.resume_title = external.name or ""
+        return
     if record.resume_id is None:
         return
     resume = db.get(ResumeRecord, record.resume_id)
@@ -136,7 +158,7 @@ def create_track(
             source=write_source(manual=source == SOURCE_MANUAL),
             user_confirmed=True,
         )
-        if payload.resume_id is not None:
+        if payload.resume_id is not None or payload.external_resume_id is not None:
             _freeze_linked_resume(db, record, source="track")
         db.commit()
     except Exception:
@@ -155,6 +177,7 @@ def update_track(db: Session, record: ApplicationTrack, payload: TrackUpdate) ->
     commit 一次性发布。对外 API 与返回值契约不变。
     """
     previous_resume_id = record.resume_id
+    previous_external_resume_id = record.external_resume_id
     previous_status = record.status
     _apply_payload(record, payload)
     try:
@@ -172,7 +195,14 @@ def update_track(db: Session, record: ApplicationTrack, payload: TrackUpdate) ->
                 source=write_source(manual=True),
                 user_confirmed=True,
             )
+        # 关联"从无到有 / 换 id"才冻结快照（内/外两个字段各自判，同一节奏）：
+        # 同一份记录反复保存（改备注、推进状态）不刷快照；清空关联不清标题快照。
         if payload.resume_id is not None and payload.resume_id != previous_resume_id:
+            _freeze_linked_resume(db, record, source="track")
+        if (
+            payload.external_resume_id is not None
+            and payload.external_resume_id != previous_external_resume_id
+        ):
             _freeze_linked_resume(db, record, source="track")
         db.commit()
     except Exception:

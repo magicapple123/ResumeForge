@@ -147,6 +147,11 @@ class TrackCreate(TrackRecordIn):
 
     job_id: int | None = Field(default=None, ge=1)
     resume_id: int | None = Field(default=None, ge=1)
+    # 外部简历（T6）：用户在别处生成的原件。与 ``resume_id`` 互斥——一份进度记录的
+    # "使用的简历"只能是一份，两个都非空说明调用方把两次选择叠在一起了。
+    # 两张表 id 会撞号（``resume_record`` 与 ``external_resume`` 各从 1 开始），
+    # 所以前端值域是复合串 ``internal:3`` / ``external:3``，落到这里才拆回两个字段。
+    external_resume_id: int | None = Field(default=None, ge=1)
     # 投递渠道（RF-18）：用户自选"这份工作从哪来的"，默认未知。
     # 与 source（记录来源）是两个维度；未知是合法取值，不替用户编一个渠道。
     channel: str = Field(default="unknown", max_length=24)
@@ -176,6 +181,22 @@ class TrackCreate(TrackRecordIn):
         from .common import validate_http_url
 
         return validate_http_url(value, "关联链接")
+
+    @model_validator(mode="after")
+    def resume_links_are_exclusive(self) -> TrackCreate:
+        """内部简历与外部简历**不能同时关联**（T6）。
+
+        为什么用 422 而不是"后一个覆盖前一个"：两个字段同时非空只可能来自调用方
+        把它们各自的两次选择叠在一个 payload 里（例如前端漏清另一侧）。静默挑一个
+        会让界面显示 A、库里存 B，而这条记录的用途正是"这一版投给了谁"——猜错的
+        代价比一次明确的报错大得多。
+
+        清空关联不算冲突：两个都为 ``None`` 合法（"没记"就是没记），此时后端**保留**
+        ``resume_title`` 标题快照（见 ``services/tracker._freeze_linked_resume``）。
+        """
+        if self.resume_id is not None and self.external_resume_id is not None:
+            raise ValueError("使用的简历只能关联一份：内部简历与外部简历不能同时选，请取消其中一个")
+        return self
 
 
 class TrackUpdate(TrackCreate):

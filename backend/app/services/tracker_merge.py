@@ -56,6 +56,11 @@ def _apply_payload(record: ApplicationTrack, payload: TrackCreate | TrackUpdate)
     record.evidence = payload.evidence
     record.job_id = payload.job_id
     record.resume_id = payload.resume_id
+    # 外部简历关联（T6）：与 ``resume_id`` 互斥，互斥判定在
+    # ``schemas/tracker.TrackCreate`` 的 model_validator 里（唯一一处），这里只负责落库。
+    # 识别合并的中间类型 ``TrackRecordIn`` 没有这个字段，``apply_merges`` 构造
+    # ``TrackCreate`` 时它就是默认的 ``None``——**导入通知不会把外部关联带进来**。
+    record.external_resume_id = payload.external_resume_id
     # 渠道（RF-18）只在 TrackCreate/TrackUpdate 上：识别合并的中间类型没有它。
     record.channel = payload.channel
     # 关联链接同理：只在手工新增/编辑（`TrackCreate`/`TrackUpdate`）上有。

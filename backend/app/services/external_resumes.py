@@ -176,16 +176,34 @@ def create_external_resume(
 
 
 def list_external_resumes(
-    db: Session, *, keyword: str = "", job_id: int | None = None, page: int = 1, page_size: int = 20
+    db: Session,
+    *,
+    keyword: str = "",
+    job_id: int | None = None,
+    include_general: bool = False,
+    page: int = 1,
+    page_size: int = 20,
 ) -> tuple[list[ExternalResume], int]:
-    """Filter before paging; deleted jobs never contribute searchable metadata."""
+    """Filter before paging; deleted jobs never contribute searchable metadata.
+
+    ``include_general``（T6）：与内部简历 ``GET /api/resumes?include_general=true`` 同
+    口径——``job_id == ? OR job_id IS NULL``。"通用"就是没挂任何岗位的那一份
+    （``job_id IS NULL``），求职进度选"使用的简历"时候选范围要包含它，否则专门写的
+    通用简历会从下拉里消失。岗位被彻底删除导致 ``job_id`` 被 SET NULL 的行会因此
+    被当成通用——这是既有口径已知的边界，两处（内部/外部）刻意保持一致。
+    """
     query = (
         db.query(ExternalResume)
         .outerjoin(Job, and_(ExternalResume.job_id == Job.id, trash.live_only(Job)))
         .filter(trash.live_only(ExternalResume))
     )
     if job_id is not None:
-        query = query.filter(ExternalResume.job_id == job_id)
+        if include_general:
+            query = query.filter(
+                or_(ExternalResume.job_id == job_id, ExternalResume.job_id.is_(None))
+            )
+        else:
+            query = query.filter(ExternalResume.job_id == job_id)
     cleaned = (keyword or "").strip()
     if cleaned:
         # Preserve existing LIKE semantics: percent and underscore remain wildcards.

@@ -64,6 +64,7 @@ const LISTED_ROW: Track = {
   evidence: "",
   job_id: null,
   resume_id: null,
+  external_resume_id: null,
   channel: "unknown",
   resume_title: "",
   link: "",

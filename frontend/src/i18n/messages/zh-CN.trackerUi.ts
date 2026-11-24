@@ -48,6 +48,8 @@ const trackerUi = {
   "trackerUi.card.statusDate": "{date} 更新",
   "trackerUi.card.resume": "简历：{title}",
   "trackerUi.card.resumeHistorical": "（历史关联）",
+  /** 外部简历标记（T6）：与内部简历同一下拉，行上要说清这一版是在别处做的原件。 */
+  "trackerUi.card.resumeExternal": "（外部）",
   "trackerUi.card.nextStep": "下一步",
   "trackerUi.card.emptyNextAction": "（未填写内容）",
   "trackerUi.card.overdue": "已过期",

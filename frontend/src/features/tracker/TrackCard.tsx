@@ -41,16 +41,26 @@ function shortDate(dateText: string): string {
 }
 
 /**
- * 简历名（RF-17）：`resume_title` 优先，只剩快照/没有标题时退回 `#id`，
- * 简历被删（`resume_id` 为 null）再加「历史关联」标注——不臆造还关联着。
+ * 简历名（RF-17 / T6）：`resume_title` 优先，只剩快照/没有标题时退回 `#id`。
+ *
+ * 三个标注的判据必须分清（判错就是把外部关联说成历史关联）：
+ *
+ * - **外部**：`external_resume_id != null` → 追加「（外部）」，这版是在别处做的原件；
+ * - **历史关联**：`!(resume_id || external_resume_id)` 且标题快照还在 → 关联已经没了
+ *   （简历被删、外键 SET NULL），只剩快照，如实标注、不臆造还关联着；
+ * - 两者都不成立 = 活关联，什么都不加。
  *
  * **这里不做任何截断**：可见文本与 `title` 用同一份完整字符串，放不下由 CSS 让位
  * （`.track-card-resume` 的 flex 与 `:last-child` 规则）。在 JS 里 `slice` 掉的字符
  * 用户永远看不到，也没法在 tooltip 里找回来。
  */
 function resumeLabel(track: Track): string {
-  const title = track.resume_title || `#${track.resume_id ?? ""}`;
-  return track.resume_id ? title : `${title}${t("trackerUi.card.resumeHistorical")}`;
+  const title = track.resume_title || `#${track.resume_id ?? track.external_resume_id ?? ""}`;
+  const kind = track.external_resume_id != null ? t("trackerUi.card.resumeExternal") : "";
+  // 判据是"两个关联都为空"：只看 `resume_id` 会把外部关联误标成「历史关联」。
+  const linked = Boolean(track.resume_id || track.external_resume_id);
+  const historical = linked ? "" : t("trackerUi.card.resumeHistorical");
+  return `${title}${kind}${historical}`;
 }
 
 export default function TrackCard({ track, onEdit, onDelete, groupStart = false }: Props) {
@@ -65,7 +75,8 @@ export default function TrackCard({ track, onEdit, onDelete, groupStart = false 
   // 安全判定与助手的 Markdown 外链同一份（`utils/externalUrl`），不为了一个图标再写一套。
   const link = track.link ? safeExternalUrl(track.link) : null;
   const displayName = track.company || track.title || t("trackerUi.card.fallbackName");
-  const hasResume = Boolean(track.resume_id || track.resume_title);
+  // 显示条件把外部关联也算进来：只看 resume_id 会让"外部简历"的行整段消失。
+  const hasResume = Boolean(track.resume_id || track.external_resume_id || track.resume_title);
   const resume = hasResume ? resumeLabel(track) : "";
   const className = [
     "track-card",
@@ -147,9 +158,9 @@ export default function TrackCard({ track, onEdit, onDelete, groupStart = false 
         {track.status_date && (
           <span>{t("trackerUi.card.statusDate", { date: shortDate(track.status_date) })}</span>
         )}
-        {/* 使用的简历版本（RF-17）：有活关联显示名字；只剩标题快照（简历已删、
-            resume_id 被 SET NULL）时如实标注"历史关联"，不臆造还关联着。
-            可见文本与 `title` 同一份完整字符串——长标题不在这里截断。 */}
+        {/* 使用的简历版本（RF-17 / T6）：有活关联（内部或外部）时显示名字；
+            只剩标题快照（简历被删、外键 SET NULL）时如实标注"历史关联"，
+            外部简历再标明"外部"。可见文本与 `title` 同一份字符串——长标题不在这里截断。 */}
         {resume && (
           <span className="track-card-resume" title={resume}>
             {t("trackerUi.card.resume", { title: resume })}

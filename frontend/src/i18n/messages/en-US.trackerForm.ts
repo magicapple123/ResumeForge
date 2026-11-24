@@ -36,6 +36,10 @@ const trackerForm = {
   "trackerForm.placeholder.link": "e.g. https://jobs.example.com/apply",
   "trackerForm.placeholder.resume":
     "Pick the resume version used for this application (type to search)",
+  "trackerForm.resume.group.internal": "My resumes",
+  "trackerForm.resume.group.external": "Uploaded resumes",
+  "trackerForm.resume.notInJob": " (not for this job)",
+  "trackerForm.resume.deleted": " (deleted)",
   "trackerForm.hint.stageNote": 'Which round and in what form, e.g. "second round", "HR round"',
   "trackerForm.hint.appliedAt":
     "Leave it empty if the date is unknown - the record then stays out of the application trend and weekday charts.",
@@ -48,7 +52,7 @@ const trackerForm = {
   "trackerForm.hint.link":
     "Optional. Job page, application form or meeting link; picking a linked job fills this in while it is still empty",
   "trackerForm.hint.resume":
-    "Optional. Linking keeps a snapshot of the application on the resume details page; editing the resume afterwards does not change the saved record",
+    "Optional. A linked internal resume keeps an application snapshot on the resume details page; an uploaded resume only records the link and its file name - the original file is the evidence, so no extra snapshot is stored. Editing the resume afterwards does not change the saved record",
   "trackerForm.status.applied": "Applied",
   "trackerForm.status.screening": "Screening",
   "trackerForm.status.assessment": "Assessment / test",

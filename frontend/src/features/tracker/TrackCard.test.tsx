@@ -19,6 +19,8 @@ const JOB_TITLE = "后端开发";
 /** 真实场景里会长到被 260px 砍断：这三段都得留在页面上。 */
 const LONG_RESUME_TITLE = "示例科技-后端开发-2026 秋招定制版（第三轮面试专用，含项目补丁）";
 const LINK_URL = "https://jobs.example.com/apply?utm_source=referral";
+/** 外部简历的标题快照：取的是 `external_resume.name`（通常是安全化后的原文件名）。 */
+const EXTERNAL_TITLE = "外部简历-后端-2026-秋招.pdf";
 
 const BASE: Track = {
   id: 1,
@@ -34,6 +36,7 @@ const BASE: Track = {
   evidence: "",
   job_id: null,
   resume_id: null,
+  external_resume_id: null,
   channel: "unknown",
   resume_title: "",
   link: "",
@@ -108,5 +111,41 @@ describe("TrackCard 的简历名", () => {
     const { container } = renderCard({ resume_id: null, resume_title: "" });
 
     expect(container.querySelector(".track-card-resume")).toBeNull();
+  });
+});
+
+/**
+ * 外部简历（T6）：进度可以关联"在别处做的原件"。两个判据必须分清——
+ * 显示条件要看**三个**字段，而「历史关联」的判据是**两个关联都为空**。
+ */
+describe("TrackCard 的外部简历关联", () => {
+  it("只填了外部关联时也显示简历名，并标明「外部」", () => {
+    const { container } = renderCard({ external_resume_id: 9, resume_title: EXTERNAL_TITLE });
+
+    const node = container.querySelector(".track-card-resume");
+    expect(node).not.toBeNull();
+    expect(node).toHaveTextContent(EXTERNAL_TITLE);
+    expect(node).toHaveTextContent(t("trackerUi.card.resumeExternal"));
+    // 活关联不该被标成「历史关联」——判据得是两个关联都为空。
+    expect(node).not.toHaveTextContent(t("trackerUi.card.resumeHistorical"));
+    // 可见文本与 title 仍是同一份完整字符串（带标注）。
+    expect(node).toHaveAttribute(
+      "title",
+      `${EXTERNAL_TITLE}${t("trackerUi.card.resumeExternal")}`,
+    );
+  });
+
+  it("外部关联消失（外键 SET NULL）后只剩快照：标历史关联，不再说「外部」", () => {
+    const { container } = renderCard({ external_resume_id: null, resume_title: EXTERNAL_TITLE });
+
+    const node = container.querySelector(".track-card-resume");
+    expect(node).toHaveTextContent(t("trackerUi.card.resumeHistorical"));
+    expect(node).not.toHaveTextContent(t("trackerUi.card.resumeExternal"));
+  });
+
+  it("只有标题快照、没有任何关联 id 时仍然显示（显示条件含 external_resume_id 与快照）", () => {
+    const { container } = renderCard({ resume_id: null, external_resume_id: null, resume_title: EXTERNAL_TITLE });
+
+    expect(container.querySelector(".track-card-resume")).toHaveTextContent(EXTERNAL_TITLE);
   });
 });

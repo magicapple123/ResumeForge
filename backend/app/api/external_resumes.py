@@ -136,13 +136,24 @@ async def upload_external_resume(
 def list_external_resumes(
     keyword: str = Query(default=""),
     job_id: int | None = Query(default=None, ge=1),
+    include_general: bool = Query(default=False),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=_MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
 ):
-    """List live snapshots by name, live job title/company, and optional job."""
+    """List live snapshots by name, live job title/company, and optional job.
+
+    ``include_general``（T6）：给了 ``job_id`` 时把它扩成 ``job_id == ? OR job_id IS
+    NULL``，与 ``GET /api/resumes`` 的内部简历口径逐字一致。求职进度选"使用的简历"
+    时要的就是这个范围（本岗位 + 通用），默认 ``false`` 保持既有调用方行为不变。
+    """
     rows, total = service.list_external_resumes(
-        db, keyword=keyword, job_id=job_id, page=page, page_size=page_size
+        db,
+        keyword=keyword,
+        job_id=job_id,
+        include_general=include_general,
+        page=page,
+        page_size=page_size,
     )
     titles = service.job_titles(db, [row.job_id for row in rows if row.job_id is not None])
     mimes = service.user_file_mimes(db, [row.file_id for row in rows])

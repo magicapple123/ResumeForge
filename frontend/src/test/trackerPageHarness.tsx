@@ -56,6 +56,7 @@ export function makeTrack(overrides: Partial<Track> = {}): Track {
     source: "apply",
     job_id: null,
     resume_id: null,
+    external_resume_id: null,
     resume_title: "",
     channel: "unknown",
     link: "",

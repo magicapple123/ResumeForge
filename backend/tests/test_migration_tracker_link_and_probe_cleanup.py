@@ -153,5 +153,10 @@ def test_downgrade_of_the_cleanup_is_a_no_op(database_url):
 
 
 def test_head_is_at_least_this_migration():
-    """链尾至少到本迁移（防"迁移没被 alembic 认到"这种静默失效）。"""
-    assert head_revision().endswith("_remove_tracker_probe_settings")
+    """链尾至少到本迁移（防"迁移没被 alembic 认到"这种静默失效）。
+
+    后续迁移接在它后面是正常的（T6 的 ``0025_track_external_resume`` 就排在它之后），
+    所以判据是"要么它就是 head，要么 head 的序号已经更大"——与
+    ``test_migration_0022_company_research_run`` 同一写法。
+    """
+    assert head_revision().endswith("_remove_tracker_probe_settings") or head_revision() > "0024"

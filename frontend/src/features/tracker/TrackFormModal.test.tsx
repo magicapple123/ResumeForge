@@ -41,18 +41,42 @@ const resumesMocks = vi.hoisted(() => ({
   listResumes: vi.fn(),
   getResume: vi.fn(),
 }));
+// 外部简历（T6）：同一份下拉的第二组，取数与回查各一个函数。
+const externalMocks = vi.hoisted(() => ({
+  listExternalResumes: vi.fn(),
+  getExternalResume: vi.fn(),
+}));
 
 vi.mock("../../api/jobs", () => jobsMocks);
 vi.mock("../../api/resumes", () => resumesMocks);
+vi.mock("../../api/externalResumes", () => externalMocks);
 
 const JOB_OPTIONS = [
   { id: 11, title: "后端开发", company: "示例科技" },
   { id: 12, title: "前端开发", company: "另一家" },
 ];
+/** 内部简历：每份都带 `job_id`——收窄与「不属于当前岗位」标注都靠它。 */
 const RESUME_OPTIONS = [
-  { id: 3, title: "后端岗位简历" },
-  { id: 4, title: "另一版简历" },
+  { id: 3, title: "后端岗位简历", job_id: 11 },
+  { id: 4, title: "另一版简历", job_id: 12 },
+  { id: 5, title: "通用简历", job_id: null },
 ];
+/** 外部简历：名字来自 `external_resume.name`（上传时的文件名或改过的名字）。 */
+const EXTERNAL_OPTIONS = [
+  { id: 3, name: "外部简历 A", job_id: 11 },
+  { id: 9, name: "外部通用简历", job_id: null },
+];
+
+/** `include_general` 的服务端口径：`job_id == ? OR job_id IS NULL`。 */
+function filterByJob<T extends { id: number; job_id: number | null }>(
+  items: T[],
+  params: { job_id?: number; include_general?: boolean },
+): T[] {
+  if (params.job_id == null) return items;
+  return items.filter(
+    (item) => item.job_id === params.job_id || (params.include_general && item.job_id === null),
+  );
+}
 
 beforeEach(() => {
   jobsMocks.listJobs.mockReset().mockResolvedValue({ items: JOB_OPTIONS, total: 2 });
@@ -61,12 +85,33 @@ beforeEach(() => {
     .mockImplementation((id: number) =>
       Promise.resolve(JOB_OPTIONS.find((job) => job.id === id) ?? null),
     );
-  resumesMocks.listResumes.mockReset().mockResolvedValue({ items: RESUME_OPTIONS, total: 2 });
+  resumesMocks.listResumes
+    .mockReset()
+    .mockImplementation((params: { job_id?: number; include_general?: boolean } = {}) =>
+      Promise.resolve({ items: filterByJob(RESUME_OPTIONS, params), total: RESUME_OPTIONS.length }),
+    );
   resumesMocks.getResume
     .mockReset()
-    .mockImplementation((id: number) =>
-      Promise.resolve(RESUME_OPTIONS.find((resume) => resume.id === id) ?? null),
+    .mockImplementation((id: number) => {
+      const found = RESUME_OPTIONS.find((resume) => resume.id === id);
+      return found ? Promise.resolve(found) : Promise.reject(new Error("404"));
+    });
+  externalMocks.listExternalResumes
+    .mockReset()
+    .mockImplementation((params: { job_id?: number; include_general?: boolean } = {}) =>
+      Promise.resolve({
+        items: filterByJob(EXTERNAL_OPTIONS, params),
+        total: EXTERNAL_OPTIONS.length,
+        page: 1,
+        page_size: 50,
+      }),
     );
+  externalMocks.getExternalResume
+    .mockReset()
+    .mockImplementation((id: number) => {
+      const found = EXTERNAL_OPTIONS.find((resume) => resume.id === id);
+      return found ? Promise.resolve(found) : Promise.reject(new Error("404"));
+    });
 });
 
 function renderModal() {
@@ -92,6 +137,7 @@ const LISTED_ROW: Track = {
   evidence: "",
   job_id: null,
   resume_id: null,
+  external_resume_id: null,
   channel: "unknown",
   resume_title: "",
   link: "",
@@ -345,3 +391,4 @@ describe("TrackFormModal 的关联链接", () => {
 
   // 逐条比对校验口径的用例在 `linkValidation.test.ts`：那里是纯函数，读起来更直接。
 });
+

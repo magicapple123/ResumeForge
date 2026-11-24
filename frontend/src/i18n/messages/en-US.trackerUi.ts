@@ -51,6 +51,7 @@ const trackerUi = {
   "trackerUi.card.statusDate": "Updated {date}",
   "trackerUi.card.resume": "Resume: {title}",
   "trackerUi.card.resumeHistorical": "(historical link)",
+  "trackerUi.card.resumeExternal": " (external)",
   "trackerUi.card.nextStep": "Next step",
   "trackerUi.card.emptyNextAction": "(Nothing entered)",
   "trackerUi.card.overdue": "Overdue",

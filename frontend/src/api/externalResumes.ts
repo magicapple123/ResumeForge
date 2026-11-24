@@ -74,7 +74,20 @@ export interface ExternalResumeAnalysis {
 }
 
 export function listExternalResumes(
-  params: { keyword?: string; job_id?: number; page?: number; page_size?: number } = {},
+  params: {
+    keyword?: string;
+    job_id?: number;
+    /**
+     * 与 `job_id` 组合时同时返回「本岗位的」与「通用的」（`job_id IS NULL`）外部简历。
+     *
+     * T6 起求职进度的「使用的简历」要这个范围：内部简历那一组走的是
+     * `GET /api/resumes?include_general=true`（同一口径），两组范围不一致的话，
+     * 同一个下拉里"为什么通用简历只出现在一组"就没法解释了。
+     */
+    include_general?: boolean;
+    page?: number;
+    page_size?: number;
+  } = {},
 ): Promise<ExternalResumeList> {
   return request(`/external-resumes${buildQuery(params)}`);
 }

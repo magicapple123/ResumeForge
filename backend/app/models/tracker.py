@@ -298,8 +298,25 @@ class ApplicationTrack(Base):
     resume_id: Mapped[int | None] = mapped_column(
         ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    # 所用简历的标题快照（RF-17）：简历被删（resume_id 置 NULL）后仍能回答
-    # "当时投的是哪一版"。旧行/未关联为空串，界面如实标注「历史关联未知」。
+    # 外部简历的关联（T6）：用户在别处生成的 PDF / docx 原件（``external_resume``）。
+    # 与 ``resume_id`` **互斥**（同一时刻只能说"用的哪一份"），互斥由
+    # ``schemas/tracker.py`` 的 ``TrackCreate`` 契约守着，服务层不重复判。
+    # 两张表的 id 空间独立、会撞号，所以界面上的值域是复合串 ``internal:3`` /
+    # ``external:3``（见前端 ``useTrackResumeSelect``），**不许用裸数字**。
+    # 删掉外部简历时 SET NULL：记录与标题快照都要留下，关联消失不等于
+    # "当时投的是哪一版"也无从回答。
+    external_resume_id: Mapped[int | None] = mapped_column(
+        ForeignKey("external_resume.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # 所用简历的标题快照（RF-17 / T6）：**两种来源共用这一列**——
+    #
+    # - 内部简历（``resume_id``）：取 ``resume_record.title``，随
+    #   :func:`app.services.tracker._freeze_linked_resume` 一起冻结；
+    # - 外部简历（``external_resume_id``）：取 ``external_resume.name``（用户可改名，
+    #   默认是安全化后的原文件名），同一处冻结。
+    #
+    # 简历/外部简历被删（外键置 NULL）后仍能回答"当时投的是哪一版"。旧行/未关联为
+    # 空串，界面如实标注「历史关联」而不是臆造还关联着。清空关联**不清空**这里。
     resume_title: Mapped[str] = mapped_column(String(256), default="")
     # 投递渠道（RF-18）：用户自选的"这份工作从哪来的"。默认未知——历史行一律未知，
     # 不从任何现有字段推断。与 ``source``（记录来源）是两个维度。

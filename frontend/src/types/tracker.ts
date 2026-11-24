@@ -97,7 +97,18 @@ export interface Track extends TrackRecord {
   updated_at: string;
   job_id: number | null;
   resume_id: number | null;
-  /** 所用简历的标题快照（RF-17）：简历被删后仍可读；空 = 历史关联未知。 */
+  /**
+   * 关联的外部简历（T6）：用户在别处生成的 PDF / docx 原件。
+   *
+   * 与 `resume_id` **互斥**（后端契约守着，同时非空 422）；两张表 id 空间独立、会撞号，
+   * 所以下拉的值域是复合串 `internal:3` / `external:3`，**不要在这里改成裸数字**。
+   */
+  external_resume_id: number | null;
+  /**
+   * 所用简历的标题快照（RF-17 / T6）：**两种来源共用这一列**——内部简历取
+   * `resume_record.title`，外部简历取 `external_resume.name`。简历/外部简历被删后仍可读；
+   * 空 = 历史关联未知（界面标「历史关联」）。清空关联不会清空这里。
+   */
   resume_title: string;
   /** 投递渠道（RF-18）：用户自选，默认「未知」。 */
   channel: TrackChannel;
@@ -105,6 +116,13 @@ export interface Track extends TrackRecord {
   link: string;
 }
 
+/**
+ * 提交时可写字段 = `Track` 去掉服务端生成的那些。
+ *
+ * `resume_id` / `external_resume_id` 是**可写**的关联（互斥，见 `Track.external_resume_id`），
+ * 必须留在这个类型里；`resume_title` 是只读快照，必须留在上面的 `Omit` 里。
+ * 判据：这个字段是「用户选的」还是「服务端算的」。
+ */
 export type TrackPayload = Omit<
   Track,
   "id" | "source" | "created_at" | "updated_at" | "resume_title"
@@ -169,6 +187,7 @@ export function emptyTrack(): TrackPayload {
     evidence: "",
     job_id: null,
     resume_id: null,
+    external_resume_id: null,
     channel: "unknown",
     link: "",
   };
@@ -194,6 +213,8 @@ export function trackPayload(track: Track, patch: Partial<TrackPayload> = {}): T
     evidence: track.evidence,
     job_id: track.job_id,
     resume_id: track.resume_id,
+    // 外部关联（T6）：漏这一行就是「保存后外部关联消失」——五处同批改的其中一处。
+    external_resume_id: track.external_resume_id,
     channel: track.channel,
     link: track.link,
     ...patch,
