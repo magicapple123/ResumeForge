@@ -10,6 +10,8 @@ import type {
   ApplyBlocklist,
   ApplyBlocklistInput,
   ApplyFunnelSummary,
+  ApplyGreetingImage,
+  ApplyGreetingImageInput,
   ApplyPreflightResult,
   ApplyStaleList,
   ApplyTrackResult,
@@ -97,4 +99,28 @@ export function getApplyBlocklist(): Promise<ApplyBlocklist> {
 
 export function saveApplyBlocklist(payload: ApplyBlocklistInput): Promise<ApplyBlocklist> {
   return request("/apply/blocklist", { method: "PUT", body: JSON.stringify(payload) });
+}
+
+// ===== T8 招呼语附带图片 =====
+
+/**
+ * 全局配图设置 + 可选图片清单（一次请求拿全，打开设置页只发这一个）。
+ *
+ * 清单只含 `user_file` 的元信息（id / 名字 / 体积），**不含图片字节**：设置弹窗要的是
+ * "选哪一张"，不是"看这张图"，按需读盘会让一次打开变成 N 次文件 IO。
+ */
+export function getApplyGreetingImage(): Promise<ApplyGreetingImage> {
+  return request("/apply/greeting-image");
+}
+
+/**
+ * 整对象覆盖保存（`enabled` + 默认图）。
+ *
+ * 指定了不存在的图片会返回 400：让失败发生在"存设置"这一刻，而不是投递那一刻
+ * （后者用户看到的是"投递成功但图片没送到"，原因在设置页完全看不出来）。
+ */
+export function saveApplyGreetingImage(
+  payload: ApplyGreetingImageInput,
+): Promise<ApplyGreetingImage> {
+  return request("/apply/greeting-image", { method: "PUT", body: JSON.stringify(payload) });
 }

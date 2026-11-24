@@ -44,6 +44,11 @@ def default_site_key() -> str:
 GREETING_RECORD_MAX_CHARS = 500
 GREETING_INPUT_MAX_CHARS = 1000
 
+# 招呼语配图的张数上限（T8）：与 ``attachments.MAX_ATTACHMENT_COUNT`` 是同一个约定
+# （单张 2 MB / 合计 5 MB / 最多 4 张），这里写死 4 是为了让请求体校验在读附件之前
+# 就挡住畸形输入；真正的权威判定仍在 ``services/attachments.py``，两处不一致时以那边为准。
+MAX_GREETING_IMAGES = 4
+
 MAX_QUEUE_BATCH = 200
 MAX_TASK_TARGETS = 500
 MAX_COLLECT_KEYWORDS = 10

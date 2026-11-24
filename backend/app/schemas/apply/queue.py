@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..job_match import AdmissionResult, HardGateResult
 from .base import (
     GREETING_INPUT_MAX_CHARS,
+    MAX_GREETING_IMAGES,
     MAX_QUEUE_BATCH,
     MAX_TASK_TARGETS,
     QueueStatus,
@@ -43,6 +44,10 @@ class ApplyQueueItemUpdate(BaseModel):
 
     greeting: str | None = Field(default=None, max_length=GREETING_INPUT_MAX_CHARS)
     resume_id: int | None = Field(default=None, ge=1)
+    # 行内覆盖招呼语配图（T8）：给空列表 = 明确"这条不发图"（不会退回全局默认），
+    # 给 None/不传 = 不改。与 ``greeting`` 的语义不同，这是刻意为之——「清空」是用户能
+    # 表达的一个具体意愿，而"没提交这个字段"只是没提到它。
+    image_ids: list[int] | None = Field(default=None, max_length=MAX_GREETING_IMAGES)
 
 
 class ApplyQueueReorderRequest(BaseModel):
@@ -63,6 +68,9 @@ class ApplyQueueItemOut(BaseModel):
     resume_id: int | None = None
     resume_title: str = ""
     greeting: str = ""
+    # 招呼语配图（T8）：``user_file.id`` 列表，**不含 data URL**（一张截图 base64 就是
+    # MB 级，队列页会被撑爆）。空列表 = 这条没单独选图，运行时退回全局默认。
+    image_ids: list[int] = Field(default_factory=list)
     sort_order: int = 0
     status: QueueStatus = "pending"
     # 最近一次匹配结论摘要：未分析时 admission / hard_gate 为 None。

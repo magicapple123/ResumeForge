@@ -184,6 +184,19 @@ STOP_REASON_DONE = "done"
 STOP_REASON_ERROR = "error"
 STOP_REASONS = (STOP_REASON_USER, STOP_REASON_BREAKER, STOP_REASON_DONE, STOP_REASON_ERROR)
 
+# ===== ⑩ 招呼语附带图片的执行结果（T8）=====
+# 图片是**文本确认送达之后**补发的一条独立消息（落点 B），所以它的结果与投递结果分开记：
+# 图片失败不改 item.status（文本已经发出去了），只在 ``image_status`` 里如实落一个结果码，
+# 队列行 / 记录行据此显示「已投递 · 图片未送达」。
+IMAGE_STATUS_SENT = "sent"
+IMAGE_STATUS_UPLOAD_FAILED = "upload_failed"
+IMAGE_STATUS_SKIPPED = "skipped"
+IMAGE_STATUSES = (IMAGE_STATUS_SENT, IMAGE_STATUS_UPLOAD_FAILED, IMAGE_STATUS_SKIPPED)
+# 图片失败挂在哪个"控件/环节"上：与 failure_taxonomy 的 target 同一套语义，值是稳定码。
+# 为什么不登记进 ``failure_taxonomy.FAILURE_TARGETS``：那张表是**投递失败**的词表，
+# 而图片失败永远不是投递失败；混进同一张表会让"按失败环节筛选"把成功的记录也筛出来。
+IMAGE_TARGET_GREETING_IMAGE = "greeting_image"
+
 
 class JobMatchAnalysis(Base):
     """岗位匹配度分析结果：一个岗位保留最近一次，供准入与展示。"""
@@ -228,6 +241,13 @@ class ApplyQueueItem(Base):
     )
     # 本岗位的招呼语（用户可编辑 / 按岗位生成后落此）；空 = 用默认招呼语。
     greeting: Mapped[str] = mapped_column(Text, default="")
+    # 招呼语附带图片（T8 迁移 0026）：**只存引用**，即 ``user_file.id`` 的列表，
+    # 绝不存 data URL —— 一张截图 base64 进来就是 MB 级，队列列表接口会被撑爆。
+    # 空列表 = 这条岗位没有单独指定图片（运行时退回全局 ``apply.greeting_image_id``）。
+    # 为什么用 ``user_file.id`` 而不是 ``Material.files`` 的名字引用：附件落盘时已经登记了
+    # 一份 user_file 副本，id 唯一且改名/换资料都不失效；按名字反查在用户改过文件名之后
+    # 会静默指向另一张图。
+    image_ids: Mapped[list[Any]] = mapped_column(JSON, default=list)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
     # pending(待投递) / skipped(用户移出前保留) / done(已投递)。
     status: Mapped[str] = mapped_column(String(16), default=QUEUE_STATUS_PENDING, index=True)
@@ -300,6 +320,27 @@ class ApplyTaskItem(Base):
     failure_reason: Mapped[str] = mapped_column(String(40), default="")
     attempt: Mapped[int] = mapped_column(Integer, default=0)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # ===== 招呼语附带图片的审计快照（T8 / 迁移 0026）=====
+    # 建批次时把**队列条目当时**选的图片抄一份进来（与 resume_title 同一套快照口径）：
+    # 投完之后用户改了队列里的选择，这条历史记录仍应显示"当时发的是哪几张"。
+    image_ids: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    # 这张记录来自哪条队列条目（手工指定岗位时为空）。审计三要素之一，不建外键——
+    # 队列条目可以被移出，历史记录不该因此丢字段（与 candidate_job.collect_task_id 同取舍）。
+    queue_item_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 发图结果：空串 = 这次没试过（没选图 / 站点不支持 / 图片格式在本地就被拒），
+    # sent / upload_failed / skipped 见 ``IMAGE_STATUSES``。
+    image_status: Mapped[str] = mapped_column(String(16), default="")
+    # 图片失败挂在哪个环节：恒为 ``IMAGE_TARGET_GREETING_IMAGE``（"招呼语配图"），
+    # 单独一列是为了让"图片没送到"与"投递失败在哪一步"在数据层就分得开——两者的 target
+    # 词表不是同一张，混用会让按环节筛选把成功记录也筛出来。
+    image_target: Mapped[str] = mapped_column(String(32), default="")
+    # 图片这一支的诊断（哪一步、哪张文件、为什么）。**与 failure_detail 分开**：
+    # 后者是"投递为什么失败"，混在一起会让一条成功的记录看起来像失败的。
+    image_detail: Mapped[str] = mapped_column(Text, default="")
+    # 真正交给站点的文件 id（成功时才有；失败时为尝试过的那几张，便于回看"发了什么"）。
+    image_file_ids: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    # 发图时刻（成功或失败的判定时刻）。审计四要素里的"时间"。
+    image_finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # 交付单验收时刻（迁移 0007）：用户在交付单上点"我看过了"才写，NULL = 未验收。

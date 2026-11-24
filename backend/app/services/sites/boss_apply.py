@@ -43,6 +43,7 @@ from ..browser.cdp_client import CdpClient, CdpError
 from ..browser.interaction import trusted_click
 from ..browser.page_ready import wait_for_page_state
 from .base import ApplyOutcome, SiteFailure
+from .boss_apply_image import BossGreetingImageMixin
 from .boss_apply_scripts import (
     _apply_entry_script as _apply_entry_script,
 )
@@ -108,8 +109,13 @@ if TYPE_CHECKING:
     from ..browser.page_ready import ReadyWait
 
 
-class BossApplyMixin:
-    """BOSS 自动沟通流程：可信点击沟通入口 → 跨页进入聊天页 → 填招呼语 → 可信点击发送。"""
+class BossApplyMixin(BossGreetingImageMixin):
+    """BOSS 自动沟通流程：可信点击沟通入口 → 跨页进入聊天页 → 填招呼语 → 可信点击发送。
+
+    ``BossGreetingImageMixin`` 是同一张卡的另一半（招呼语送达后再补发一条图片消息），
+    单独成模块只是因为本文件贴着 500 行预算；对外仍然只有 ``BossAdapter`` 一个入口，
+    发图走 ``adapter.upload_greeting_images(client, paths)``。
+    """
 
     # 宿主契约：`BossAdapter.__init__` 注入的页面就绪参数（见 boss.py）。
     # 只写在 `TYPE_CHECKING` 里——运行期不能替宿主声明一份空实现。

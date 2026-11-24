@@ -11,6 +11,17 @@ export interface ApplyQueueItem {
   resume_id: number | null;
   resume_title: string;
   greeting: string;
+  /**
+   * 招呼语附带图片（T8）：**只存引用**，即 `user_file.id` 列表，绝不是 data URL
+   * （一张截图 base64 进来就是 MB 级，队列列表会被撑爆）。
+   *
+   * 语义分两档，与 `greeting` 的「空 = 用默认」**故意不同**：
+   * - 空数组 = 这条岗位没单独指定图片 → 运行时退回全局 `apply.greeting_image_id`；
+   * - 保存时给空数组 = 用户显式清空（同样退回全局默认，因为"清空行内选择"就是这个意思）。
+   *
+   * **可选**：后端未升级时缺失，按空数组处理（判断写 `(item.image_ids ?? []).length`）。
+   */
+  image_ids?: number[];
   sort_order: number;
   status: QueueStatus;
   admission: AdmissionResult | null;
@@ -153,6 +164,19 @@ export interface ApplyRecord {
   failure_step?: string;
   failure_target?: string;
   failure_reason?: string;
+  /**
+   * 招呼语配图的结果（T8）：`sent` / `upload_failed` / `skipped`，空串 = 这次没试过
+   * （没选图 / 站点不支持 / 图片在本地就被拒）。
+   *
+   * **与上面三段码完全分开**：图片失败不是投递失败（文本已送达）。混进 `failure_*`
+   * 会让一条 `status=success` 的记录出现在"按失败筛选"里。
+   * **可选**：旧响应没有，缺失按空串处理。
+   */
+  image_status?: string;
+  /** 图片失败挂在哪个环节：恒为 `greeting_image`（招呼语配图）。 */
+  image_target?: string;
+  /** 图片这一支的诊断（哪一步、为什么）：给用户照着做，不参与任何筛选。 */
+  image_detail?: string;
   attempt: number;
   /**
    * #15B 你投的这个岗位在你投之后被改过（被动式：只在下一次采集时才发现）。

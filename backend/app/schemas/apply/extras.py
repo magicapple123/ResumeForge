@@ -182,6 +182,41 @@ class ApplyBlocklistIn(BaseModel):
     keywords: list[str] = Field(default_factory=list, max_length=MAX_BLOCKLIST_ITEMS)
 
 
+# ===== T8 招呼语配图（全局设置 + 可选图片清单）=====
+
+
+class ApplyGreetingImageOption(BaseModel):
+    """可选的一张图：只给元信息，**不含 data URL**（队列/设置页都不该背图片字节）。"""
+
+    id: int
+    name: str = ""
+    size_bytes: int = 0
+
+
+class ApplyGreetingImageOut(BaseModel):
+    """当前全局配图设置 + 可选项 + 上限（上限由服务端下发，前端不写第二份数字）。
+
+    上限直接取 ``services.attachments`` 的权威值，因此前端提示与后端拒绝用的是同一个
+    数字；两处各写一份迟早漂移，而漂移的表现是"前端说可以、后端拒了"。
+    """
+
+    enabled: bool = False
+    image_id: int | None = None
+    max_count: int = 4
+    max_image_bytes: int = 2 * 1024 * 1024
+    max_total_bytes: int = 5 * 1024 * 1024
+    options: list[ApplyGreetingImageOption] = Field(default_factory=list)
+
+
+class ApplyGreetingImageIn(BaseModel):
+    """整对象覆盖（PUT 语义）：``enabled`` + 默认图。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    image_id: int | None = Field(default=None, ge=1)
+
+
 __all__ = [
     "MAX_BLOCKLIST_ITEMS",
     "MAX_BLOCKLIST_ITEM_CHARS",
@@ -192,6 +227,9 @@ __all__ = [
     "MAX_TEMPLATE_TAG_CHARS",
     "ApplyBlocklistIn",
     "ApplyBlocklistOut",
+    "ApplyGreetingImageIn",
+    "ApplyGreetingImageOption",
+    "ApplyGreetingImageOut",
     "ApplyPreflightIn",
     "ApplyPreflightIssue",
     "ApplyPreflightItemOut",

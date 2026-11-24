@@ -38,6 +38,12 @@ from app.models.tracker import (
 )
 from app.services.apply.blocklist import load_blocklist
 from app.services.apply.greeting_templates import render_greeting_template
+from app.services.attachments import (
+    MAX_ATTACHMENT_BYTES,
+    MAX_ATTACHMENT_COUNT,
+    MAX_ATTACHMENTS_TOTAL_BYTES,
+)
+from greeting_image_support import png_bytes, store
 
 
 def _job(db_session, **overrides) -> Job:
@@ -394,3 +400,46 @@ def test_blocklist_empty_payload_is_a_noop(client, db_session, payload):
         "keywords": [],
         "inactive_keywords": [],
     }
+
+
+# ===== T8 招呼语附带图片（`GET/PUT /api/apply/greeting-image`）=====
+
+
+def test_greeting_image_defaults_to_off_and_reports_the_authoritative_limits(client):
+    """默认关是产品决定，额度必须由后端下发（前端不写第二份数字）。"""
+    body = client.get("/api/apply/greeting-image").json()
+
+    assert body["enabled"] is False
+    assert body["image_id"] is None
+    assert body["max_count"] == MAX_ATTACHMENT_COUNT
+    assert body["max_image_bytes"] == MAX_ATTACHMENT_BYTES
+    assert body["max_total_bytes"] == MAX_ATTACHMENTS_TOTAL_BYTES
+    assert body["options"] == []
+
+
+def test_greeting_image_roundtrip_lists_images_only(client, db_session):
+    """可选项只含图片副本：把文档也列进来会让用户选中一个必然失败的"图"。"""
+    image_id = store(db_session, png_bytes(), "cover.png", "image/png")
+    store(db_session, b"some notes\n", "notes.txt", "text/plain")
+
+    response = client.put(
+        "/api/apply/greeting-image", json={"enabled": True, "image_id": image_id}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enabled"] is True
+    assert body["image_id"] == image_id
+    assert [option["id"] for option in body["options"]] == [image_id]
+    assert client.get("/api/apply/greeting-image").json()["image_id"] == image_id
+
+
+def test_greeting_image_refuses_an_id_that_no_longer_exists(client):
+    """存一个不存在的图会让失败晚到投递那一刻 → 当场 400，且不改动已存的值。"""
+    response = client.put(
+        "/api/apply/greeting-image", json={"enabled": True, "image_id": 987654}
+    )
+
+    assert response.status_code == 400
+    assert "已不在文件副本库里" in response.json()["detail"]
+    assert client.get("/api/apply/greeting-image").json()["enabled"] is False

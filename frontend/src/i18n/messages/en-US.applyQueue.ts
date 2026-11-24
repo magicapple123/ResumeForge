@@ -246,6 +246,22 @@ const applyQueue = {
     "This record has no matching queue item, so there is no before/after to show.",
   "applyQueue.insights.jdChange.added": "Added",
   "applyQueue.insights.jdChange.removed": "Removed",
+
+  // ===== T8 greeting images =====
+  // Grouped by feature, not by page: "the image did not arrive" means the same thing in
+  // the queue, the records list and the settings tab, and two copies would drift apart.
+  "applyQueue.image.rowBadge": "{count} images",
+  "applyQueue.image.rowBadgeHint":
+    "This job sends these {count} images right after the greeting message.",
+  "applyQueue.image.rowAria": "{count} images attached",
+  "applyQueue.image.notDelivered": "Image not delivered",
+  "applyQueue.image.notDeliveredHint":
+    "The text greeting was delivered; the image was not sent. This does not change the application result.",
+  "applyQueue.image.editorLabel": "Images for this job",
+  "applyQueue.image.editorExtra":
+    "Leave empty to follow the default image in Apply settings. Pick images to send exactly these (up to {count}) instead of the default.",
+  "applyQueue.image.editorPlaceholder": "Follow the default image",
+  "applyQueue.image.editorOption": "{name} ({size})",
 } as const;
 
 export default applyQueue;

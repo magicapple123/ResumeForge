@@ -165,6 +165,15 @@ from .extras import (
     ApplyBlocklistOut as ApplyBlocklistOut,
 )
 from .extras import (
+    ApplyGreetingImageIn as ApplyGreetingImageIn,
+)
+from .extras import (
+    ApplyGreetingImageOption as ApplyGreetingImageOption,
+)
+from .extras import (
+    ApplyGreetingImageOut as ApplyGreetingImageOut,
+)
+from .extras import (
     ApplyPreflightIn as ApplyPreflightIn,
 )
 from .extras import (
@@ -303,6 +312,10 @@ __all__ = [
     "ApplyStoppingWeekOut",
     "ApplyBlocklistIn",
     "ApplyBlocklistOut",
+    # T8：招呼语配图（与上面的 ApplyBlocklist* 一样是"补充端点"用的出入参）。
+    "ApplyGreetingImageIn",
+    "ApplyGreetingImageOption",
+    "ApplyGreetingImageOut",
     "ApplyPreflightIn",
     "ApplyPreflightIssue",
     "ApplyPreflightItemOut",

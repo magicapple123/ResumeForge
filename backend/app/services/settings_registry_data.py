@@ -168,6 +168,26 @@ REGISTRY_ENTRIES: tuple[SettingDefault, ...] = (
         note="空清单 = 不屏蔽任何公司/关键词",
     ),
     SettingDefault(key="apply_greeting_templates", scope="apply", default=[]),
+    # —— T8 招呼语配图（scope=apply）——
+    # 两个键都 ``resettable=False``，理由与 T1 的登录保持三键同一口径：它们不是"改错了要
+    # 回去"的参数，而是用户对**外发内容**的明确意愿。发图不可撤回、且比文本更容易被站点
+    # 判成营销，一键「恢复默认」把它悄悄关掉（或悄悄改回某张图）都不该是默认动作。
+    # 注意：``resettable=True`` 还要求 ``tests/test_settings_defaults.py::_READERS`` 登记
+    # 真实读取口（那份守卫逐键遍历）；本卡不改那个文件，因此这里保持不可重置。
+    SettingDefault(
+        key="apply.greeting_image_enabled",
+        scope="apply",
+        default=False,
+        resettable=False,
+        note="T8 兜底总开关：默认关（发图是主动外发内容，必须用户显式打开）",
+    ),
+    SettingDefault(
+        key="apply.greeting_image_id",
+        scope="apply",
+        default=None,
+        resettable=False,
+        note="T8 全局默认图（user_file.id）；空 = 没有默认图。行内选择优先于它",
+    ),
     # —— 卡：专用浏览器登录保持（T1：L1 会话续期 + K2 BOSS 保活）——
     # 三个键刻意 resettable=False：``browser.keep_session_cookies`` 的键名里带 "cookie"，
     # 会被 SECRET_KEY_MARKERS 判成密钥类（导入期硬校验要求这类键不可重置）；另外两个

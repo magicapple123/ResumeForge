@@ -28,6 +28,7 @@ from ._base import ApplyConflict, ApplyNotFound, ApplyServiceError, _clip_greeti
 from ._config import get_apply_config
 from ._match import _admission_of_match, _blocking_gaps, _match_requires_confirm, latest_match
 from .blocklist import load_blocklist
+from .greeting_image import normalize_image_ids
 from .lifecycle import job_history
 from .signals import favorite_of, reference_score
 
@@ -146,6 +147,9 @@ def _queue_out(
         resume_id=item.resume_id,
         resume_title=resume_title,
         greeting=item.greeting,
+        # T8：配图只回引用 id（列表接口绝不下发 data URL）。脏值在这里收敛一次，
+        # 前端拿到的永远是"去重、正整数"的数组，不必各写一份判空逻辑。
+        image_ids=normalize_image_ids(item.image_ids),
         sort_order=item.sort_order,
         status=_as_queue_status(item.status),
         admission=admission,
@@ -327,7 +331,7 @@ def add_to_queue(db: Session, request: Any) -> list[ApplyQueueItemOut]:
 
 
 def update_queue_item(db: Session, item_id: int, payload: Any) -> ApplyQueueItemOut:
-    """更新队列条目的招呼语/简历，并回填准入结论与能否投递标记。"""
+    """更新队列条目的招呼语 / 简历 / 配图，并回填准入结论与能否投递标记。"""
     item = db.get(ApplyQueueItem, item_id)
     if item is None:
         raise ApplyNotFound("投递队列条目不存在或已被移除")
@@ -338,6 +342,11 @@ def update_queue_item(db: Session, item_id: int, payload: Any) -> ApplyQueueItem
         if resume is None:
             raise ApplyNotFound("指定的简历不存在")
         item.resume_id = resume.id
+    image_ids = getattr(payload, "image_ids", None)
+    if image_ids is not None:
+        # 行内覆盖（T8）：**空列表是"这条不发图"**，不是"没改"——两者必须区分开，
+        # 否则用户清空选择之后仍会退回全局默认图，等于没法关掉单条的配图。
+        item.image_ids = normalize_image_ids(image_ids)
     item.updated_at = utcnow()
     db.commit()
     db.refresh(item)

@@ -25,6 +25,7 @@ import { useApi } from "../../hooks/useApi";
 import { HintedTextArea } from "../../components/common/MaxLengthHint";
 import { type ApplyConfig, type ApplyConfigOut, type SiteList } from "../../types";
 import ApplyBlocklistSection from "./ApplyBlocklistSection";
+import ApplyGreetingImageSection from "./ApplyGreetingImageSection";
 import ApplyGreetingTemplatesSection from "./ApplyGreetingTemplatesSection";
 import BrowserChoiceFields from "./BrowserChoiceFields";
 import { t } from "../../i18n";
@@ -247,6 +248,7 @@ export default function ApplySettingsModal({ open, onClose, onSaved }: Props) {
         #14D/#14E 之后弹窗分三个页签：投递节奏（原来的表单）/ 话术库 / 屏蔽清单。
         后两个各有自己的保存按钮与端点（`/apply/greeting-templates`、`/apply/blocklist`），
         不与主表单的 `/apply/config` 混在一次提交里——否则「保存设置」会悄悄写三个接口。
+        T8 的「招呼语配图」按同一规则加第四个页签（端点 `/apply/greeting-image`）。
       */}
       {open && (
         <Tabs
@@ -260,6 +262,11 @@ export default function ApplySettingsModal({ open, onClose, onSaved }: Props) {
               key: "templates",
               label: t("applySettings.tab.templates"),
               children: <ApplyGreetingTemplatesSection />,
+            },
+            {
+              key: "image",
+              label: t("applySettings.tab.image"),
+              children: <ApplyGreetingImageSection />,
             },
             {
               key: "blocklist",

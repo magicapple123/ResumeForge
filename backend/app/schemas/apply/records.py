@@ -33,6 +33,13 @@ class ApplyRecordOut(BaseModel):
     failure_step: str = ""
     failure_target: str = ""
     failure_reason: str = ""
+    # T8 招呼语配图：空串 = 这次没试过（没选图 / 站点不支持 / 本地就拒了）。
+    # **与上面的失败三段码完全分开**：图片失败不是投递失败（文本已送达），
+    # 混进 failure_* 会让一条 status=success 的记录在"按失败筛选"里被筛出来。
+    # ``image_status``：sent / upload_failed / skipped；``image_target``：恒为 greeting_image。
+    image_status: str = ""
+    image_target: str = ""
+    image_detail: str = ""
     attempt: int = 0
     # 15B：这条记录对应的岗位，JD 在两次采集之间改过（**被动式**：下次采集时才更新）。
     # 记录行上的徽标只说"改过了"，before/after 由 ``GET /queue/{id}/jd-change`` 提供。

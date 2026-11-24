@@ -15,6 +15,9 @@ from ...models.apply import (
     FAILURE_SITE_UNSUPPORTED,
     FAILURE_UNCONFIRMED,
     FAILURE_UNKNOWN,
+    IMAGE_STATUS_SENT,
+    IMAGE_STATUS_SKIPPED,
+    IMAGE_STATUS_UPLOAD_FAILED,
     ITEM_STATUS_FAILED,
     ITEM_STATUS_RUNNING,
     ITEM_STATUS_SKIPPED,
@@ -24,6 +27,7 @@ from ...models.apply import (
     STEP_IDLE,
     STEP_OPENING,
     STEP_SUBMITTING,
+    STEP_UPLOADING,
     STEP_VERIFYING,
     STOP_REASON_DONE,
     STOP_REASON_ERROR,
@@ -42,6 +46,13 @@ from ..sites.base import SiteFailure
 from ..sites.registry import get_registry
 from .blocklist import skip_if_blocked
 from .failure_taxonomy import classify_failure
+from .greeting_image import (
+    GreetingImageError,
+    get_greeting_image_setting,
+    record_image_result,
+    resolve_image_ids,
+    stage_greeting_images,
+)
 from .greeting_templates import render_greeting_template
 from .pacing import interruptible_sleep as interruptible_sleep
 from .task_apply_helpers import (
@@ -347,6 +358,122 @@ def execute_item(
         raise SiteFailure(FAILURE_UNCONFIRMED, "未能确认投递成功，请在浏览器中核对")
     if outcome.greeting_sent:
         item.greeting = outcome.greeting_sent
+    # 文本确认送达之后才补发图片（落点 B：失败可隔离，重试不会重复发招呼语）。
+    _upload_greeting_images(session, task, item, client, adapter)
+
+
+def _upload_greeting_images(
+    session: Any, task: ApplyTask, item: ApplyTaskItem, client: CdpClient, adapter: Any
+) -> None:
+    """招呼语送达后补发图片：**任何失败都不改投递状态**。
+
+    为什么整个函数不抛异常：招呼语已经发出去了。把这条判失败会让用户重投一次——招聘方会
+    收到两条招呼语，而图片最多只是没发出去。所以每一步的失败都收成
+    ``image_status`` + 一句能照着做的诊断（``image_target`` 恒为招呼语配图）。
+
+    临时文件的清理放在 ``finally``：无论上传成功、站点报错还是内部异常，目录都必须消失
+    （里面是用户的截图，不该留在系统临时目录里）。
+    """
+    setting = get_greeting_image_setting(session)
+    image_ids = resolve_image_ids(item.image_ids, setting)
+    if not image_ids:
+        # 没选图 = 连这一步都不开：不做"空列表也去点一下上传按钮"这种多余动作
+        # （反证用例断言的正是 CDP 调用序列里不出现 setFileInputFiles）。
+        return
+
+    site_key = str(getattr(adapter, "key", ""))
+    adapter_version = str(getattr(adapter, "version", "") or "0")
+    step_started = time.monotonic()
+    task.current_step = STEP_UPLOADING
+    session.commit()
+    record_step(
+        task,
+        item,
+        STEP_UPLOADING,
+        site_key=site_key,
+        adapter_version=adapter_version,
+        since=step_started,
+    )
+
+    uploader = getattr(adapter, "upload_greeting_images", None)
+    if uploader is None:
+        record_image_result(
+            session,
+            item,
+            status=IMAGE_STATUS_SKIPPED,
+            detail=f"当前站点适配器（{site_key or '未知'}）不支持自动附带图片，本次只发了文本招呼语",
+            file_ids=image_ids,
+        )
+        return
+
+    try:
+        staging = stage_greeting_images(session, image_ids)
+    except GreetingImageError as exc:
+        # 本地校验不通过（图被删了 / 超过 2MB / 加起来超过 5MB / 不是图片）：
+        # 一张都没交给站点，如实记 skipped —— 用户改一次设置就能解决。
+        record_image_result(
+            session, item, status=IMAGE_STATUS_SKIPPED, detail=str(exc), file_ids=image_ids
+        )
+        return
+    except Exception:  # noqa: BLE001 - 准备图片失败同样不能打死这条已送达的投递
+        logger.exception("准备招呼语配图失败 task_id=%s item_id=%s", task.id, item.id)
+        record_image_result(
+            session,
+            item,
+            status=IMAGE_STATUS_SKIPPED,
+            detail="准备图片文件时发生内部错误，请查看后端日志；文本招呼语已送达",
+            file_ids=image_ids,
+        )
+        return
+
+    try:
+        uploader(client, staging.paths())
+    except SiteFailure as exc:
+        # 站点的图片上传失败（形态不符 / 找不到控件 / 气泡没出现）：分类是站点给的，
+        # 但**这条投递仍然算成功**——文本已经发出去了。
+        record_image_result(
+            session,
+            item,
+            status=IMAGE_STATUS_UPLOAD_FAILED,
+            detail=f"{exc.category}：{exc.detail}",
+            file_ids=staging.file_ids(),
+        )
+    except CdpError as exc:
+        record_image_result(
+            session,
+            item,
+            status=IMAGE_STATUS_UPLOAD_FAILED,
+            detail=f"发送图片时与浏览器通信失败：{exc}",
+            file_ids=staging.file_ids(),
+        )
+    except GreetingImageError as exc:
+        record_image_result(
+            session,
+            item,
+            status=IMAGE_STATUS_UPLOAD_FAILED,
+            detail=str(exc),
+            file_ids=staging.file_ids(),
+        )
+    except Exception:  # noqa: BLE001 - 见函数开头：图片这支的异常一律就地消化
+        logger.exception("发送招呼语配图失败 task_id=%s item_id=%s", task.id, item.id)
+        record_image_result(
+            session,
+            item,
+            status=IMAGE_STATUS_UPLOAD_FAILED,
+            detail="发送图片时发生内部错误，请查看后端日志；文本招呼语已送达",
+            file_ids=staging.file_ids(),
+        )
+    else:
+        record_image_result(
+            session,
+            item,
+            status=IMAGE_STATUS_SENT,
+            detail=f"已随招呼语发出 {len(staging.images)} 张图片",
+            file_ids=staging.file_ids(),
+        )
+    finally:
+        # 无论上面走哪条分支（含成功），临时文件都必须删掉：里面是用户的截图。
+        staging.cleanup()
 
 
 __all__ = [

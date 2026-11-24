@@ -141,7 +141,18 @@ export async function addToQueue(items: ApplyQueueAddItem[]): Promise<ApplyQueue
 
 export function updateQueueItem(
   itemId: number,
-  payload: { greeting?: string; resume_id?: number },
+  payload: {
+    greeting?: string;
+    resume_id?: number;
+    /**
+     * 行内覆盖招呼语配图（T8）：`user_file.id` 列表。
+     *
+     * **不传 = 不改；传空数组 = 这条不发图**（退回全局默认的语义是"没有任何选择"，
+     * 而清空行内选择本来就是"我想用默认的"）。两者必须区分开，否则用户清空之后
+     * 仍会被全局默认图覆盖。
+     */
+    image_ids?: number[];
+  },
 ): Promise<ApplyQueueItem> {
   return request(`/apply/queue/${itemId}`, { method: "PATCH", body: JSON.stringify(payload) });
 }

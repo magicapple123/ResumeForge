@@ -64,6 +64,8 @@ const applySettings = {
   // #14D/#14E：弹窗改成三个页签，新增「话术库」与「屏蔽清单」。
   "applySettings.tab.cadence": "投递节奏",
   "applySettings.tab.templates": "话术库",
+  // T8：配图自己一个页签（自己的保存按钮与端点，见 applySettings.image.* 的说明）。
+  "applySettings.tab.image": "招呼语配图",
   "applySettings.tab.blocklist": "屏蔽清单",
 
   "applySettings.blocklist.intro":
@@ -106,6 +108,26 @@ const applySettings = {
   "applySettings.templates.uses": "用过 {count} 次",
   "applySettings.templates.needName": "请先填写模板名",
   "applySettings.templates.needBody": "请先填写招呼语正文",
+
+  // ===== T8 招呼语附带图片（自己一个页签、自己一个端点）=====
+  // 为什么单独一个页签而不是塞进"投递节奏"表单：保存走的是 `PUT /apply/greeting-image`，
+  // 与主表单的 `PUT /apply/config` 是两件事。混在一次提交里，「保存设置」会悄悄写两个接口。
+  "applySettings.image.intro":
+    "打开后，招呼语发送成功时会再补发一条图片消息。图片发出去就收不回来，所以默认是关闭的。",
+  "applySettings.image.enabledLabel": "招呼语附带图片",
+  "applySettings.image.enabledExtra":
+    "默认关闭。图片单独发一条消息，招聘方会看到；发不出去不影响投递结果（照常记一条「已投递」）。",
+  "applySettings.image.pickLabel": "默认图片",
+  "applySettings.image.pickPlaceholder": "选择一张图片",
+  "applySettings.image.pickExtra":
+    "只对没有单独选图的岗位生效。队列里可以逐条覆盖，覆盖后这条就不再附带默认图。",
+  "applySettings.image.limits": "单张不超过 {single}，最多 {count} 张；超出的会在发图前被拒。",
+  "applySettings.image.empty": "「我的文件」里还没有图片：先在那里上传一张，再回来选。",
+  "applySettings.image.needImage": "开关已打开，但还没选默认图片——没选图的岗位仍然只发文本。",
+  "applySettings.image.loadFailed": "配图设置读取失败，请重试",
+  "applySettings.image.save": "保存配图设置",
+  "applySettings.image.saved": "配图设置已保存",
+  "applySettings.image.saveFailed": "保存配图设置失败",
 } as const;
 
 export default applySettings;

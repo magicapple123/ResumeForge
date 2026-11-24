@@ -252,6 +252,21 @@ const applyQueue = {
   "applyQueue.insights.jdChange.noId": "这条记录没有对应的队列条目，看不到前后对比。",
   "applyQueue.insights.jdChange.added": "新增",
   "applyQueue.insights.jdChange.removed": "删除",
+
+  // ===== T8 招呼语附带图片 =====
+  // 这一组集中在 applyQueue.image.*（含投递记录行用的那一个）：文案按"一件功能"归档，
+  // 而不是按页面切两半——「配图没送到」这句话在队列、记录、设置三处指的是同一件事，
+  // 拆到两个语言包迟早出现两种说法。
+  "applyQueue.image.rowBadge": "配图 {count}",
+  "applyQueue.image.rowBadgeHint": "投递时会在招呼语之后补发这 {count} 张图片",
+  "applyQueue.image.rowAria": "已选 {count} 张配图",
+  "applyQueue.image.notDelivered": "图片未送达",
+  "applyQueue.image.notDeliveredHint": "文本招呼语已送达；图片没有发出去，不影响这条投递的结果。",
+  "applyQueue.image.editorLabel": "附带图片（这一条）",
+  "applyQueue.image.editorExtra":
+    "不选 = 跟随「投递设置」里的默认图片；选了就只发这几张（最多 {count} 张），不会再叠加默认图。",
+  "applyQueue.image.editorPlaceholder": "跟随设置里的默认图片",
+  "applyQueue.image.editorOption": "{name}（{size}）",
 } as const;
 
 export default applyQueue;

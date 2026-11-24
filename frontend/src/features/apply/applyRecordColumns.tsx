@@ -4,8 +4,8 @@
  * 纯展示：列头文案、结果/失败分类的渲染与行内动作。数据加载、筛选、批次分组与
  * 删除/重投的行为留在面板本体。
  */
-import { EyeOutlined, RedoOutlined } from "@ant-design/icons";
-import { Button, Space, Tag, Typography } from "antd";
+import { EyeOutlined, PictureOutlined, RedoOutlined } from "@ant-design/icons";
+import { Button, Space, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import ApplyRecordTrackButton from "./ApplyRecordTrackButton";
 import JdChangeBadge from "./insights/JdChangeBadge";
@@ -57,10 +57,25 @@ export function buildApplyRecordColumns({
     {
       title: t("applyRecords.column.result"),
       dataIndex: "status",
-      width: 80,
-      render: (value: ApplyRecord["status"]) => {
+      // T8：成功行可能还要挂一枚「图片未送达」，80 放不下两枚标签（会挤成两行）。
+      width: 148,
+      render: (value: ApplyRecord["status"], record) => {
         const meta = TASK_ITEM_STATUS_META[value];
-        return <Tag color={meta.color}>{t(TASK_ITEM_STATUS_LABEL_KEYS[value])}</Tag>;
+        return (
+          <Space size={4} wrap>
+            <Tag color={meta.color}>{t(TASK_ITEM_STATUS_LABEL_KEYS[value])}</Tag>
+            {/* T8：图片没送到**不改**投递结果，所以它是一枚附在结果旁边的说明标签，
+                而不是另一种结果。文案与说明统一取 `applyQueue.image.*`
+                （同一件事在队列、记录、设置三处必须是同一句话）。 */}
+            {record.image_status === "upload_failed" && (
+              <Tooltip title={record.image_detail || t("applyQueue.image.notDeliveredHint")}>
+                <Tag color="orange" icon={<PictureOutlined />}>
+                  {t("applyQueue.image.notDelivered")}
+                </Tag>
+              </Tooltip>
+            )}
+          </Space>
+        );
       },
     },
     {

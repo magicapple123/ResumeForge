@@ -35,6 +35,7 @@ from ._config import get_apply_config, get_collect_config
 from ._match import _admission_of_match, _blocking_gaps, latest_match
 from ._queue import job_apply_site, resolve_resume
 from ._records import daily_success_count
+from .greeting_image import normalize_image_ids
 
 logger = logging.getLogger(__name__)
 
@@ -279,6 +280,13 @@ def create_apply_task(db: Session, payload: ApplyTaskCreate) -> ApplyTask:
                 resume_id=resume.id if resume is not None else None,
                 resume_title=resume.title if resume is not None else "",
                 greeting=_clip_greeting(queue_item.greeting) if queue_item is not None else "",
+                # T8：配图在这里**快照**一份（与 resume_title 同一套口径）。投完之后用户
+                # 改了队列里的选择，这条历史记录仍要显示"当时发的是哪几张"；而下一次投递
+                # 读的是队列上的新值。queue_item_id 一并落库，审计才能从记录追回那条队列。
+                image_ids=normalize_image_ids(queue_item.image_ids)
+                if queue_item is not None
+                else [],
+                queue_item_id=queue_item.id if queue_item is not None else None,
                 sort_order=index,
             )
         )

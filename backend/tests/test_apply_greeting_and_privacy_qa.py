@@ -208,6 +208,15 @@ def test_apply_tables_match_the_design_contract():
         "failure_reason",
         "attempt",
         "sort_order",
+        # 0026（T8）：招呼语配图的审计快照（7 列）。图片失败**不是**投递失败，所以这些
+        # 与上面的 failure_* 完全分开——混用会让 status=success 的记录出现在失败筛选里。
+        "image_ids",
+        "queue_item_id",
+        "image_status",
+        "image_target",
+        "image_detail",
+        "image_file_ids",
+        "image_finished_at",
         "started_at",
         "finished_at",
         # 0007：交付单验收时刻（用户点「我看过了」才写；不碰 status）。

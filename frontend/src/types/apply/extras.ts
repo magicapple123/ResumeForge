@@ -126,3 +126,36 @@ export interface ApplyBlocklist {
 
 /** 写回时只发用户能编辑的两列；`inactive_keywords` 是后端算出来的派生视图。 */
 export type ApplyBlocklistInput = Pick<ApplyBlocklist, "companies" | "keywords">;
+
+// ===== T8 招呼语附带图片 =====
+
+/**
+ * 可选的一张图：只有元信息，**没有 data URL**（设置页不该背图片字节）。
+ *
+ * `id` 是 `user_file.id`，也就是队列行 `image_ids` 里存的同一个引用。
+ */
+export interface ApplyGreetingImageOption {
+  id: number;
+  name: string;
+  size_bytes: number;
+}
+
+/**
+ * 全局配图设置 + 可选清单 + 额度。
+ *
+ * 三个额度由**后端下发**（权威值在 `services/attachments.py`），前端不写第二份数字：
+ * 两处各写一份迟早漂移，而漂移的表现是"界面说可以、后端拒了"。
+ */
+export interface ApplyGreetingImage {
+  /** 兜底总开关：默认 `false`（发图是主动外发内容，不可撤回，必须用户显式打开）。 */
+  enabled: boolean;
+  /** 全局默认图片的 `user_file.id`；`null` = 没有默认图（只发文本）。 */
+  image_id: number | null;
+  max_count: number;
+  max_image_bytes: number;
+  max_total_bytes: number;
+  options: ApplyGreetingImageOption[];
+}
+
+/** 写回时只发用户能编辑的两项；`options` 与三个额度是派生视图。 */
+export type ApplyGreetingImageInput = Pick<ApplyGreetingImage, "enabled" | "image_id">;

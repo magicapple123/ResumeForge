@@ -76,6 +76,33 @@ SELECTOR_MY_MESSAGE = (
 CHAT_PAGE_PATH = "/web/geek/chat"
 SELECTOR_SUBMIT_BUTTON = ".btn-submit, .btn-sure"
 SELECTOR_FILE_INPUT = "input[type=file]"
+# ===== 招呼语附带图片（T8）：新增选择器，既有选择器一个字符都不改 =====
+#
+# **真站 DOM 未实测**（2026-11-23 本机没有可用的 BOSS 登录态，且投递消息会真的发给招聘方、
+# 不可撤回，所以不允许为"验证"去操作真站）。台账里唯一的实测证据是用户截图：聊天页底部
+# 工具栏有「发送图片」入口，与「发简历 / 换电话 / 换微信」同一排。
+# 因此这里按"控件文本 + 类名片段"多重兜住，并且上传流程对**三种形态**分别给诊断：
+#   ① 页面上本来就有内嵌 input[type=file]（直接塞）；
+#   ② 点「发送图片」之后才创建 input（拦截文件选择器 + 再找一次）；
+#   ③ 两者都没有（如实失败并提示把诊断反馈给维护者）。
+SELECTOR_IMAGE_SEND_BUTTON = (
+    "[class*='send-image'], [class*='sendImage'], [class*='upload-image'], "
+    "[class*='toolbar'] [class*='image'], [data-testid*='image'], "
+    "button[aria-label*='图片'], [title*='图片'], [aria-label*='图片']"
+)
+# 选完图后**可能**要再点一次「发送」才真正发出（预览态）。真站是否需要二次确认未实测，
+# 所以流程只在真的看到这个按钮时才点，绝不假定它一定存在、也不假定它一定不存在。
+SELECTOR_IMAGE_CONFIRM_BUTTON = (
+    ".dialog-container .send-message, .chat-container .btn-sure, "
+    ".btn-sure-v2, button[aria-label*='发送']"
+)
+# 图片气泡：本人消息气泡里出现 <img>。判定"发出去了"用的就是它，而不是"点击成功"——
+# 点击成功只证明点到了，不证明消息到了会话里。
+# **必须逐个选择器后缀 ` img`**：``SELECTOR_MY_MESSAGE`` 是逗号分隔的组，直接拼 " img"
+# 会变成"...item-myself, ...[data-from=self] img"——前几个分支在没有图的时候也会算命中。
+SELECTOR_IMAGE_BUBBLE = ", ".join(
+    f"{part.strip()} img" for part in SELECTOR_MY_MESSAGE.split(",") if part.strip()
+)
 SELECTOR_CAPTCHA = ".geetest_panel, .geetest_box, #nc_1_wrapper, .verify-wrap"
 SELECTOR_LOGIN = ".login-dialog, .sign-form, .login-panel"
 SELECTOR_SEARCH_EMPTY = (
@@ -108,6 +135,15 @@ _SELECTORS = {
     "login": SELECTOR_LOGIN,
     "search_empty": SELECTOR_SEARCH_EMPTY,
     "detail_ready": SELECTOR_DETAIL_READY,
+}
+
+# 图片这一支的字典单独放：``_SELECTORS`` 是"页面识别用"的既有清单（有守卫遍历它），
+# 新增一类控件塞进去会让那份清单的含义变模糊。
+_IMAGE_SELECTORS = {
+    "image_send_button": SELECTOR_IMAGE_SEND_BUTTON,
+    "image_confirm_button": SELECTOR_IMAGE_CONFIRM_BUTTON,
+    "image_bubble": SELECTOR_IMAGE_BUBBLE,
+    "file_input": SELECTOR_FILE_INPUT,
 }
 
 
@@ -379,8 +415,12 @@ __all__ = [
     "CHAT_PAGE_PATH",
     "BossPageMixin",
     "SELECTOR_GREETING_SEND",
+    "SELECTOR_IMAGE_BUBBLE",
+    "SELECTOR_IMAGE_CONFIRM_BUTTON",
+    "SELECTOR_IMAGE_SEND_BUTTON",
     "SELECTOR_MY_MESSAGE",
     "SELECTOR_SEARCH_READY",
+    "_IMAGE_SELECTORS",
     "_SELECTORS",
     "_as_payload",
     "_current_url",

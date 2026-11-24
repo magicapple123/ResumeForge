@@ -54,6 +54,8 @@ const applySettings = {
 
   "applySettings.tab.cadence": "Pacing",
   "applySettings.tab.templates": "Greeting library",
+  // T8: images get their own tab (own save button and endpoint, see applySettings.image.*).
+  "applySettings.tab.image": "Greeting image",
   "applySettings.tab.blocklist": "Block list",
 
   "applySettings.blocklist.intro":
@@ -97,6 +99,30 @@ const applySettings = {
   "applySettings.templates.uses": "Used {count} times",
   "applySettings.templates.needName": "Give the template a name first",
   "applySettings.templates.needBody": "Write the greeting body first",
+
+  // ===== T8 greeting images (own tab, own endpoint) =====
+  // A separate tab rather than another field in the cadence form: this block saves through
+  // `PUT /apply/greeting-image`, while the main form posts to `PUT /apply/config`. Merging
+  // them would make one Save button silently write two endpoints.
+  "applySettings.image.intro":
+    "When enabled, a separate image message is sent after the greeting goes through. Images cannot be unsent, so this stays off by default.",
+  "applySettings.image.enabledLabel": "Attach an image to the greeting",
+  "applySettings.image.enabledExtra":
+    "Off by default. The image is a separate message the recruiter will see; if it fails, the application still counts as delivered.",
+  "applySettings.image.pickLabel": "Default image",
+  "applySettings.image.pickPlaceholder": "Pick an image",
+  "applySettings.image.pickExtra":
+    "Applies only to jobs without their own images. Any job can override it in the queue, and then the default is not attached.",
+  "applySettings.image.limits":
+    "Each image must be under {single}, up to {count} images; anything larger is rejected before sending.",
+  "applySettings.image.empty":
+    "No images in My files yet - upload one there first, then come back.",
+  "applySettings.image.needImage":
+    "The switch is on but no default image is picked - jobs without their own image still send text only.",
+  "applySettings.image.loadFailed": "Could not load the image settings, try again",
+  "applySettings.image.save": "Save image settings",
+  "applySettings.image.saved": "Image settings saved",
+  "applySettings.image.saveFailed": "Could not save the image settings",
 } as const;
 
 export default applySettings;

@@ -19,7 +19,7 @@
  * 这里不写第二份判断；它只是「岗位」列的第二个标签，**没有**新增列，列宽与 `scroll.x`
  * 仍是 900（220+96+140+96+240+108）。
  */
-import { FileSearchOutlined, MoreOutlined, StarFilled } from "@ant-design/icons";
+import { FileSearchOutlined, MoreOutlined, PictureOutlined, StarFilled } from "@ant-design/icons";
 import { Badge, Button, Dropdown, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { BadgeProps, TableColumnsType } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
@@ -233,6 +233,9 @@ export function QueueTable({
       width: 300,
       render: (_, item) => {
         const greeting = item.greeting || t("applyQueue.detail.defaultGreeting");
+        // T8：这一条单独选了配图才出角标（空数组 = 跟随设置里的默认图，不在这里显示，
+        // 否则"默认图"会被误读成"这条特意选了图"）。
+        const imageCount = (item.image_ids ?? []).length;
         return (
           // 一行：简历名收成中性小标签，招呼语跟在后面单行省略。
           // 原先上下两行、简历名还是蓝色实底，整列视觉重量比岗位列还高。
@@ -240,6 +243,20 @@ export function QueueTable({
             <Tag className="apply-queue-resume-tag">
               {item.resume_title || t("applyQueue.detail.defaultResume")}
             </Tag>
+            {imageCount > 0 && (
+              // 配图角标：只报张数，不带文件名（一列里塞文件名会把招呼语挤成省略号）。
+              // 悬停给出后果（"会补发这几张"），读屏走 aria-label——Tag 里的数字单独读
+              // 没有意义。
+              <Tooltip title={t("applyQueue.image.rowBadgeHint", { count: imageCount })}>
+                <Tag
+                  className="apply-queue-image-tag"
+                  aria-label={t("applyQueue.image.rowAria", { count: imageCount })}
+                  icon={<PictureOutlined />}
+                >
+                  {t("applyQueue.image.rowBadge", { count: imageCount })}
+                </Tag>
+              </Tooltip>
+            )}
             {/* 招呼语只放首行：全文在 Tooltip 里（表格是扫视用的，不是阅读区）。 */}
             <Tooltip title={greeting}>
               <Typography.Text type="secondary" ellipsis className="apply-queue-greeting">

@@ -30,6 +30,9 @@ from ..database import get_db
 from ..schemas.apply import (
     ApplyBlocklistIn,
     ApplyBlocklistOut,
+    ApplyGreetingImageIn,
+    ApplyGreetingImageOption,
+    ApplyGreetingImageOut,
     ApplyPreflightIn,
     ApplyPreflightOut,
     ApplyStaleListOut,
@@ -43,6 +46,17 @@ from ..schemas.apply import (
 from ..services.apply import funnel, greeting_templates, preflight
 from ..services.apply._base import ApplyServiceError
 from ..services.apply.blocklist import inactive_keywords
+from ..services.apply.greeting_image import (
+    GreetingImageError,
+    get_greeting_image_setting,
+    image_options,
+    save_greeting_image_setting,
+)
+from ..services.attachments import (
+    MAX_ATTACHMENT_BYTES,
+    MAX_ATTACHMENT_COUNT,
+    MAX_ATTACHMENTS_TOTAL_BYTES,
+)
 from ..services.settings_service import get_apply_blocklist, save_apply_blocklist
 from .apply_insights import register_apply_insight_routes
 
@@ -177,8 +191,48 @@ def save_blocklist(payload: ApplyBlocklistIn, db: Session = Depends(get_db)):
     )
 
 
+# ===== T8 招呼语配图 =====
+
+
+def _greeting_image_out(db: Session) -> ApplyGreetingImageOut:
+    """设置 + 可选项 + 上限一起下发（前端打开这一块只发一次请求）。
+
+    上限来自 ``services.attachments`` 的权威常量，不在前端另写一份：两处各写一份迟早
+    漂移，而漂移的表现是"界面说可以、后端拒了"。
+    """
+    setting = get_greeting_image_setting(db)
+    return ApplyGreetingImageOut(
+        enabled=setting.enabled,
+        image_id=setting.image_id,
+        max_count=MAX_ATTACHMENT_COUNT,
+        max_image_bytes=MAX_ATTACHMENT_BYTES,
+        max_total_bytes=MAX_ATTACHMENTS_TOTAL_BYTES,
+        options=[ApplyGreetingImageOption(**item) for item in image_options(db)],
+    )
+
+
+@extra_router.get("/greeting-image", response_model=ApplyGreetingImageOut)
+def get_greeting_image(db: Session = Depends(get_db)):
+    """全局配图设置 + 可选图片清单（最新在前，只给元信息）。"""
+    return _greeting_image_out(db)
+
+
+@extra_router.put("/greeting-image", response_model=ApplyGreetingImageOut)
+def save_greeting_image(payload: ApplyGreetingImageIn, db: Session = Depends(get_db)):
+    """整对象覆盖全局配图设置。
+
+    指定了不存在的图片返回 400 而不是静默存下：存下去之后失败会晚到投递那一刻，用户看到
+    的是"投递成功但图片没送到"，而真正的原因（那张图已被清理）在设置页完全看不出来。
+    """
+    try:
+        save_greeting_image_setting(db, enabled=payload.enabled, image_id=payload.image_id)
+    except GreetingImageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _greeting_image_out(db)
+
+
 def register_apply_extra_routes(router: APIRouter) -> None:
-    """把本模块的 8 个端点挂到调用方的路由树（``/api/apply`` 前缀由调用方提供）。
+    """把本模块的端点挂到调用方的路由树（``/api/apply`` 前缀由调用方提供）。
 
     #15 的三个只读端点（15C/15D/15E）同批挂进来，实现与路由都在 ``apply_insights.py``：
     本文件只多一行调用，``api/apply.py`` 一行不动（它的行数预算只剩 4 行）。

@@ -126,6 +126,11 @@ def _record_out(
         failure_step=item.failure_step or "",
         failure_target=item.failure_target or "",
         failure_reason=item.failure_reason or "",
+        # T8：配图结果原样下发（空串 = 没试过）。图片失败与投递失败分开呈现，
+        # 界面据此在成功行上写「已投递 · 图片未送达」。
+        image_status=item.image_status or "",
+        image_target=item.image_target or "",
+        image_detail=item.image_detail or "",
         attempt=item.attempt,
         jd_changed=jd_changed,
         queue_id=queue_id,
