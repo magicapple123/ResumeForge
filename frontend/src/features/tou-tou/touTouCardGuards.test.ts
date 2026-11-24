@@ -14,13 +14,17 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  TOU_TOU_CARD_SELECTOR,
   TOU_TOU_FOCUS_EXEMPT_SELECTOR,
   TOU_TOU_GUARD_KILL_SWITCH_KEY,
   TOU_TOU_NESTED_POPUP_TRIGGER_SELECTOR,
+  TOU_TOU_POPUP_EXEMPT_CLASS,
+  TOU_TOU_POPUP_EXEMPT_SELECTOR,
   areTouTouCardGuardsInstalled,
   hasOpenTouTouNestedPopup,
   installTouTouCardGuards,
   isInTouTouExemptZone,
+  isInTouTouPopupExemptHost,
   shouldTouTouCardCloseOnKeyDown,
   uninstallTouTouCardGuards,
 } from "./touTouCardGuards";
@@ -291,7 +295,11 @@ describe("安装幂等与反证开关", () => {
   });
 
   it("常量就是契约本身：改动必须同步 T11 与真实浏览器用例", () => {
-    expect(TOU_TOU_FOCUS_EXEMPT_SELECTOR).toBe(".tt-assistant-card");
+    // 两个成员：卡片本体 + 卡片挂标记的浮层（`+` 面板 / 它的下拉，portal 到 body）。
+    expect(TOU_TOU_POPUP_EXEMPT_CLASS).toBe("tt-popup-exempt");
+    expect(TOU_TOU_POPUP_EXEMPT_SELECTOR).toBe(".tt-popup-exempt");
+    expect(TOU_TOU_CARD_SELECTOR).toBe(".tt-assistant-card");
+    expect(TOU_TOU_FOCUS_EXEMPT_SELECTOR).toBe(".tt-assistant-card, .tt-popup-exempt");
     expect(TOU_TOU_NESTED_POPUP_TRIGGER_SELECTOR).toBe(
       ".ant-dropdown-trigger[aria-expanded='true']",
     );
@@ -300,5 +308,71 @@ describe("安装幂等与反证开关", () => {
     section.className = "tt-assistant-card";
     document.body.appendChild(section);
     expect(isInTouTouExemptZone(section)).toBe(true);
+  });
+});
+
+describe("T11：卡片浮层的豁免标记", () => {
+  /** 造一棵「面板 portal 到 body」的现场：标记 / 不标记各一份。 */
+  function mountPopupScene() {
+    document.body.innerHTML = `
+      <div class="ant-modal" role="dialog"><input id="modal-input" /></div>
+      <section class="tt-assistant-card" role="dialog">
+        <button class="ant-dropdown-trigger" aria-expanded="true">+</button>
+      </section>
+      <div class="ant-dropdown">
+        <div class="composer-add-panel tt-popup-exempt">
+          <input id="exempt-search" class="ant-select-input" />
+        </div>
+      </div>
+      <div class="ant-dropdown">
+        <div class="composer-add-panel">
+          <input id="page-search" class="ant-select-input" />
+        </div>
+      </div>
+    `;
+    const exemptInput = document.getElementById("exempt-search");
+    const pageInput = document.getElementById("page-search");
+    if (!exemptInput || !pageInput) throw new Error("场景搭建失败");
+    return { exemptInput, pageInput };
+  }
+
+  it("带标记的浮层进豁免区，未标记的同款控件不进（豁免面没被放大）", () => {
+    const { exemptInput, pageInput } = mountPopupScene();
+    expect(isInTouTouExemptZone(exemptInput)).toBe(true);
+    expect(isInTouTouPopupExemptHost(exemptInput)).toBe(true);
+    // 页面里的同款远程搜索：不带标记 → 照旧归弹窗的焦点陷阱。
+    expect(isInTouTouExemptZone(pageInput)).toBe(false);
+    expect(isInTouTouPopupExemptHost(pageInput)).toBe(false);
+  });
+
+  it("带标记浮层里的 focusin 到不了 window（这一条就是能打进字的前提）", () => {
+    const { exemptInput } = mountPopupScene();
+    const onWindowFocusIn = vi.fn();
+    window.addEventListener("focusin", onWindowFocusIn);
+    installTouTouCardGuards();
+
+    fireFocusIn(exemptInput);
+    expect(onWindowFocusIn).not.toHaveBeenCalled();
+
+    window.removeEventListener("focusin", onWindowFocusIn);
+  });
+
+  it("带标记浮层里的 Esc 归浮层自己（放行 document 监听，仍挡住 window）", () => {
+    const { exemptInput } = mountPopupScene();
+    installTouTouCardGuards();
+    // `AddMenu` 的 Esc 收起面板就挂在 document 冒泡上，守卫安装晚于它。
+    const addMenuHandler = vi.fn();
+    const onWindowKeyDown = vi.fn();
+    document.addEventListener("keydown", addMenuHandler);
+    window.addEventListener("keydown", onWindowKeyDown);
+
+    const event = fireKeyDown(exemptInput);
+    expect(addMenuHandler).toHaveBeenCalledTimes(1);
+    expect(onWindowKeyDown).not.toHaveBeenCalled();
+    // 同样要 preventDefault：否则 `useDiscardGuard` 顺手把下层弹窗关掉。
+    expect(event.defaultPrevented).toBe(true);
+
+    document.removeEventListener("keydown", addMenuHandler);
+    window.removeEventListener("keydown", onWindowKeyDown);
   });
 });

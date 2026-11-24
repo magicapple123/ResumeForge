@@ -40,9 +40,15 @@
  * 所以守卫在冒泡段先 `preventDefault()`：既让它放手，也保留 `AddMenu` 在 document 上
  * 收起 `+` 面板的能力（那一步不能被 `stopImmediatePropagation` 掐掉）。
  *
- * 豁免面只到「卡片子树」为止。卡片 `+` 面板里的岗位/简历是 `showSearch` 远程搜索，
- * 它们的下拉 portal 到 body、不在卡片子树内 → 本拦截器**不覆盖**它们（T11 会把
- * 豁免面扩到带标记的 popup host：届时只改 `TOU_TOU_FOCUS_EXEMPT_SELECTOR` 一处）。
+ * 豁免面 = 「卡片子树」+「卡片挂了豁免标记的浮层」（`TOU_TOU_FOCUS_EXEMPT_SELECTOR`）。
+ * 为什么要第二段（T11）：卡片 `+` 面板是一个 antd `Dropdown`，面板本体 portal 到 body，
+ * **不在**卡片子树内；面板里的岗位 / 简历是 `showSearch` 远程搜索，输入框在面板里、
+ * 下拉列表又是一层 body 上的 `.ant-select-dropdown`。只豁免卡片子树的话，点搜索框的
+ * 一瞬间焦点就被陷阱抢回右上角关闭按钮，一个字都打不进（实测
+ * `activeElement=BUTTON.ant-modal-close`）。
+ *
+ * 标记只由卡片自己挂（`TouTouPopupExemptionProvider` → `AddMenu` 的 `exemptPopups`），
+ * 页面内的同款控件不带标记、照样被陷阱接管 —— 这是"局部豁免"的边界，别扩大。
  *
  * ## 安装时机
  *
@@ -59,10 +65,30 @@
  */
 
 /**
- * 豁免区选择器：**全局只写这一处**（守卫、卡片、测试都从这里取）。
- * T11 扩面时把它改成 `".tt-assistant-card, .tt-popup-exempt"` 即可，不要再另抄一份。
+ * 卡片本体的类名选择器。**全局只写这一处**（组件 `className` 与测试都从这里取）。
+ *
+ * 与豁免区分开是因为两件事的语义不同：豁免区要认「卡片 + 卡片挂标记的浮层」，
+ * 而"卡片内有没有开着的弹层"只该问卡片本体（触发器在卡片里，浮层在 body 上）。
  */
-export const TOU_TOU_FOCUS_EXEMPT_SELECTOR = ".tt-assistant-card";
+export const TOU_TOU_CARD_SELECTOR = ".tt-assistant-card";
+
+/**
+ * 卡片挂给**自己那些 portal 到 body 的浮层**的标记类。
+ *
+ * 用它的地方只有三处：本文件的选择器、投投浮窗的 `AddMenu`（`exemptPopups`）、
+ * 以及 `touTouCardGuards.test.ts` 的钉子用例。不要在别处另抄一份字面量。
+ */
+export const TOU_TOU_POPUP_EXEMPT_CLASS = "tt-popup-exempt";
+
+/** 豁免标记的选择器形式（由类名派生，不另写字符串）。 */
+export const TOU_TOU_POPUP_EXEMPT_SELECTOR = `.${TOU_TOU_POPUP_EXEMPT_CLASS}`;
+
+/**
+ * 豁免区选择器：**全局只写这一处**（守卫、卡片、测试都从这里取）。
+ *
+ * 两个成员：卡片本体 + 卡片挂标记的浮层（`AddMenu` 的 `+` 面板与其下拉）。
+ */
+export const TOU_TOU_FOCUS_EXEMPT_SELECTOR = `${TOU_TOU_CARD_SELECTOR}, ${TOU_TOU_POPUP_EXEMPT_SELECTOR}`;
 
 /**
  * 卡片内「已经接管 Esc 的弹层」的触发器选择器。
@@ -99,12 +125,25 @@ function isKillSwitchOn(): boolean {
   return flag === true;
 }
 
-/** 事件目标是否落在豁免区（卡片）内。非元素目标（极少见）一律当作不在。 */
+/** 事件目标是否落在豁免区（卡片子树 / 卡片挂标记的浮层）内。非元素目标一律当作不在。 */
 export function isInTouTouExemptZone(target: EventTarget | null): boolean {
   if (target === null) return false;
   const element = target as Element;
   if (typeof element.closest !== "function") return false;
   return element.closest(TOU_TOU_FOCUS_EXEMPT_SELECTOR) !== null;
+}
+
+/**
+ * 事件目标是否落在「卡片挂标记的浮层」里（`+` 面板 / 它的下拉，portal 到 body）。
+ *
+ * 单独问这一个是因为 Esc 的归属不同：从浮层里按 Esc 的语义是「收浮层」（浮层自己
+ * 在 document 上有监听），从卡片本体按 Esc 才是「收卡片」。
+ */
+export function isInTouTouPopupExemptHost(target: EventTarget | null): boolean {
+  if (target === null) return false;
+  const element = target as Element;
+  if (typeof element.closest !== "function") return false;
+  return element.closest(TOU_TOU_POPUP_EXEMPT_SELECTOR) !== null;
 }
 
 /** 卡片内是否有「已接管 Esc 的弹层」正开着（见 `TOU_TOU_NESTED_POPUP_TRIGGER_SELECTOR`）。 */
@@ -175,8 +214,15 @@ function captureFocusIn(event: FocusEvent): void {
 /**
  * `keydown` 的 capture 段：只记录、不拦截。
  *
- * 记两件事：这次 Esc 来自卡片、以及**当时**卡片内是否已有弹层开着（冒泡段 DOM 可能
- * 已经变了，那时再问就晚了一个 tick）。
+ * 记两件事：这次 Esc 属于卡片这一族、以及**当时**是不是该由内层弹层接管
+ * （冒泡段 DOM 可能已经变了，那时再问就晚了一个 tick）。
+ *
+ * "属于卡片这一族"有两种来路，判据不同：
+ * - 来自卡片本体：问卡片本体里有没有开着的 Dropdown 触发器（`+` 面板）；
+ * - 来自卡片挂标记的浮层（`+` 面板本身）：浮层自己就在接管 Esc，直接算接管。
+ *   注意这里必须用 `TOU_TOU_CARD_SELECTOR` 找卡片：浮层的 `closest` 会命中浮层自己，
+ *   而触发器在卡片里、不在浮层里，用浮层去问"有没有开着的弹层"永远得到 false，
+ *   结果会把浮层自己的 Esc 处理器一起挡掉（面板再也收不起来）。
  */
 function captureKeyDown(event: KeyboardEvent): void {
   if (isKillSwitchOn()) return;
@@ -184,7 +230,10 @@ function captureKeyDown(event: KeyboardEvent): void {
   const target = event.target as Element | null;
   if (target === null || !isInTouTouExemptZone(target)) return;
   escapeFromCard.add(event);
-  if (hasOpenTouTouNestedPopup(target.closest(TOU_TOU_FOCUS_EXEMPT_SELECTOR))) {
+  if (
+    isInTouTouPopupExemptHost(target) ||
+    hasOpenTouTouNestedPopup(target.closest(TOU_TOU_CARD_SELECTOR))
+  ) {
     escapeWithNestedPopup.add(event);
   }
 }

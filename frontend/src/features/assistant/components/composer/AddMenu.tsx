@@ -21,6 +21,12 @@
  *
  * 第六点（#32）：**技能二级改成"悬停浮出"**——一级留在原地，鼠标在「技能」行停留 150ms 后
  * 从右侧浮出二级、移出 300ms 收起（`compact` 没有横向余量，保持点击整块替换；点击与键盘都保留）。
+ *
+ * 第七点（T11）：面板是 `Dropdown` 的浮层、portal 到 body，**不在**投投卡片的子树里。
+ * 卡片弹窗开着时，antd 的焦点陷阱会把面板里刚聚焦的搜索框抢回右上角关闭按钮 ——
+ * 岗位 / 简历这两个远程搜索因此一个字都打不进。修法是给浮窗路径挂 `tt-popup-exempt`：
+ * 信号由 `TouTouAssistantCard` 的 Provider 给出（显式 `exemptPopups` 可覆盖），
+ * 只标面板与这两个下拉；页面内的同款控件不标，照旧被陷阱接管。
  */
 
 import { useEffect, useState } from "react";
@@ -38,6 +44,8 @@ import { layer } from "../../../../theme/tokens";
 import { t } from "../../../../i18n";
 import { useLocale } from "../../../../i18n/i18nContext";
 import { useJobSearchSelect, useResumeSearchSelect } from "../../../../hooks/remoteSearchOptions";
+import { TOU_TOU_POPUP_EXEMPT_CLASS } from "../../../tou-tou/touTouCardGuards";
+import { useTouTouPopupExemption } from "../../../tou-tou/touTouPopupExemption";
 import { SkillPicker } from "./SkillChips";
 import AssistantToolsEntryRow from "../../tools/AssistantToolsEntryRow";
 import AssistantToolsDrawer from "../../tools/AssistantToolsDrawer";
@@ -62,6 +70,21 @@ export {
 export interface AddMenuProps {
   /** 浮窗形态：弹层要抬到卡片之上，否则被卡片盖住。 */
   compact: boolean;
+  /**
+   * T11：面板与面板里的下拉要不要挂「焦点豁免」标记（`tt-popup-exempt`）。
+   *
+   * 省略（`undefined`）时跟随渲染树：投投浮窗里由 `TouTouAssistantCard` 挂的
+   * `TouTouPopupExemptionProvider` 给出 `true`；页面形态没有 Provider，默认 `false`。
+   * 显式传值只给测试与将来"两种形态同树"的场景用（覆盖 Provider）。
+   *
+   * 判据**不能**用 `compact`：窄屏的页面形态也传 `compact`，那样会把页面内的
+   * composer 一起豁免掉。
+   *
+   * 为什么需要它：面板是 antd `Dropdown` 的浮层、portal 到 body，不在
+   * `.tt-assistant-card` 子树里；弹窗开着时 antd 的焦点陷阱会把面板里刚聚焦的
+   * 搜索框抢回右上角关闭按钮（一个字打不进）。
+   */
+  exemptPopups?: boolean;
   /** 生成中：整块入口不可点（不能边发边改上下文）。 */
   sending: boolean;
   /** 正在读取的附件数（>0 时不能再加，也不该继续发）。 */
@@ -84,6 +107,7 @@ export interface AddMenuProps {
 
 export default function AddMenu({
   compact,
+  exemptPopups,
   sending,
   attachmentReads,
   attachmentsCount,
@@ -102,6 +126,9 @@ export default function AddMenu({
 }: AddMenuProps) {
   // 本组件用模块级 t()：必须订阅语言变化。
   useLocale();
+  // T11：浮窗形态由渲染树告知。Hook 必须无条件调用（不能写进 `??` 右边）。
+  const providerPopupExempt = useTouTouPopupExemption();
+  const popupExempt = exemptPopups ?? providerPopupExempt;
   const jobSelect = useJobSearchSelect();
   const resumeSelect = useResumeSearchSelect();
   const [open, setOpen] = useState(false);
@@ -221,10 +248,23 @@ export default function AddMenu({
   const emptyClass = skillsOpen && noSkillMatch ? " is-empty" : "";
   /** 浮出层是「技能」行的子元素，一级面板的 overflow-y 会把它裁没；浮出期间让出裁切。 */
   const flyoutOpenClass = !stacked && skillsOpen ? " is-flyout-open" : "";
-  const panelClass = `composer-add-panel${stacked ? emptyClass : ""}${flyoutOpenClass}`;
+  /**
+   * T11：面板（以及它的技能浮出层，后者是面板的子元素）在浮窗形态下挂豁免标记。
+   *
+   * 标记必须落在**面板根节点**上，不能只挂到两个 `Select` 的下拉：远程搜索的输入框
+   * 是 `Select` 自己的 input，位置在面板里（`.composer-add-panel .ant-select-input`），
+   * 不在 `.ant-select-dropdown` 里 —— 只标下拉的话，输入框照样被焦点陷阱抢走
+   * （真机反证：只去掉下拉标记，输入框仍能打进去；去掉面板标记才会红）。
+   */
+  const popupExemptClass = popupExempt ? ` ${TOU_TOU_POPUP_EXEMPT_CLASS}` : "";
+  /** 两个 `Select` 的下拉也标一份：面板标的是输入框，下拉是另一棵 body 浮层。 */
+  const popupExemptClassNames = popupExempt
+    ? { popup: { root: TOU_TOU_POPUP_EXEMPT_CLASS } }
+    : undefined;
+  const panelClass = `composer-add-panel${stacked ? emptyClass : ""}${flyoutOpenClass}${popupExemptClass}`;
   const flyoutClass = `composer-add-panel composer-add-flyout${emptyClass}${
     placement?.flipLeft ? " is-left" : ""
-  }`;
+  }${popupExemptClass}`;
 
   const rootPanel = (
     <>
@@ -239,6 +279,8 @@ export default function AddMenu({
           value={jobId}
           onChange={onJobChange}
           {...jobSelect.selectProps}
+          // T11：放在 spread 之后，避免将来 selectProps 长出自己的 classNames 时把它盖掉。
+          classNames={popupExemptClassNames}
         />
       </div>
       <div className="composer-add-row">
@@ -252,6 +294,8 @@ export default function AddMenu({
           value={resumeId}
           onChange={onResumeChange}
           {...resumeSelect.selectProps}
+          // T11：同上（简历下拉）。
+          classNames={popupExemptClassNames}
         />
       </div>
       {/* 附件：数量与体积限制、toast 全部照旧——这里只是把同一颗按钮挪进面板。

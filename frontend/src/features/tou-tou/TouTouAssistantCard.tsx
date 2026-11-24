@@ -23,6 +23,7 @@ import { layer } from "../../theme/tokens";
 import { useTouTou } from "./touTouContext";
 import { useTouTouCardDrag } from "./useTouTouCardDrag";
 import { shouldTouTouCardCloseOnKeyDown } from "./touTouCardGuards";
+import { TouTouPopupExemptionProvider } from "./TouTouPopupExemptionProvider";
 import "./tou-tou-assistant.css";
 
 interface Props {
@@ -53,7 +54,8 @@ export default function TouTouAssistantCard({ children, onClose, open }: Props) 
   if (!open) return null;
 
   return (
-    // 类名是守卫的豁免判据（`TOU_TOU_FOCUS_EXEMPT_SELECTOR`）：改名要两边一起改，
+    // 类名是守卫的豁免判据（`TOU_TOU_CARD_SELECTOR` 是
+    // `TOU_TOU_FOCUS_EXEMPT_SELECTOR` 的第一个成员）：改名要两边一起改，
     // `touTouCardGuards.test.ts` 有一条用例把这两个字面量钉在一起。
     <section
       ref={cardRef}
@@ -97,7 +99,13 @@ export default function TouTouAssistantCard({ children, onClose, open }: Props) 
         之下，球随时可以点。其余 token 全部继承全局主题。
       */}
       <ConfigProvider theme={{ token: { zIndexPopupBase: layer.cardPopup } }}>
-        {children}
+        {/*
+          T11：把"这是浮窗树"这件事告诉输入区。`+` 面板与它的岗位 / 简历远程搜索
+          下拉都 portal 到 body，不在这棵子树里；`AddMenu` 收到信号后只给自己那两个
+          浮层挂 `tt-popup-exempt`（守卫的豁免区选择器里认这个类）。页面内的同款
+          控件不经过这里，照旧被弹窗的焦点陷阱接管。
+        */}
+        <TouTouPopupExemptionProvider>{children}</TouTouPopupExemptionProvider>
       </ConfigProvider>
     </section>
   );

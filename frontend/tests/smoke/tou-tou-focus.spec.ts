@@ -17,6 +17,8 @@ import { expect, test, type Page, type TestInfo } from "@playwright/test";
  * 2. 卡片开着时在弹窗里按 Tab，焦点仍在 `.ant-modal` 内（证明没有"全局关陷阱"）；
  * 3. 卡片内 Esc 只收卡片、不关弹窗；再按 Esc 才关弹窗；
  * 4. 卡片 `+` 面板展开时 Esc 只收面板，卡片与弹窗都还在。
+ * 5. T11：卡片 `+` 面板里的岗位远程搜索框能拿住焦点并打进字；
+ * 6. T11：卡片外的同款可搜索下拉仍被陷阱接管（豁免面只在卡片自己的浮层上）。
  *
  * ## 反证（改坏实验）
  *
@@ -134,6 +136,20 @@ async function openAssistantCard(page: Page): Promise<void> {
   await expect(page.locator(".tt-assistant-card textarea").first()).toBeVisible();
 }
 
+/**
+ * 打开卡片里的 `+` 面板，返回面板根节点。
+ *
+ * 面板是 antd `Dropdown` 的浮层、**portal 到 body**，所以必须用 page 级选择器
+ * （`card.locator(".composer-add-panel")` 永远命中 0 个；不要为此改
+ * `getPopupContainer`，那会把浮层塞回卡片里、改变裁切表现）。
+ */
+async function openAddMenuPanel(page: Page) {
+  await page.locator(".tt-assistant-card .composer-add-button").first().click();
+  const panel = page.locator(".composer-add-panel").first();
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
 test.describe("投投卡片焦点豁免（弹窗开着时）", () => {
   test.beforeEach(async ({ page }) => {
     // 关掉首启动引导，免得它盖住弹窗；顺手把"已看过"写进存储，减少竞态。
@@ -249,6 +265,118 @@ test.describe("投投卡片焦点豁免（弹窗开着时）", () => {
       scenario: "add-menu-esc",
       snapshot,
       cardStillOpen: (await card.count()) === 1,
+    });
+  });
+});
+
+/**
+ * T11：卡片 `+` 面板里的远程搜索（岗位 / 简历）。
+ *
+ * 面板是 antd `Dropdown` 的浮层、portal 到 body，**不在** `.tt-assistant-card` 子树
+ * 里；弹窗开着时焦点陷阱会把面板里刚聚焦的搜索框抢回右上角关闭按钮 —— 用户看到的是
+ * "点搜索框，一个字也打不进"。修法是给浮窗路径挂 `tt-popup-exempt`（守卫的豁免区
+ * 选择器第二个成员），只标卡片自己的浮层。
+ *
+ * 两条用例互为反面：
+ * 1. 面板里的搜索框能拿住焦点（豁免生效）；
+ * 2. 卡片外的同款可搜索下拉**仍被陷阱接管**（豁免面没被放大）。
+ *
+ * ## 反证（改坏实验）
+ *
+ * - 去掉 `+` 面板的 `tt-popup-exempt`（`AddMenu` 里 `popupExempt` 恒 false）→ 第 1 条
+ *   精确变红，诊断行 `activeElement=<BUTTON> class="ant-modal-close …"`；
+ * - 把 `TOU_TOU_FOCUS_EXEMPT_SELECTOR` 改成无条件豁免（`body`）→ 第 2 条变红
+ *   （窗口再也收不到来自页面搜索框的 `focusin`）；
+ * - 也可以直接用全局反证开关跑第 1 条：`RF_T3_DISABLE_GUARD=1`（守卫整体放行）。
+ */
+test.describe("投投卡片 `+` 面板的远程搜索（T11）", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("resumeforge.user-guide.seen", "1");
+    });
+    if (GUARD_DISABLED) {
+      await page.addInitScript((key: string) => {
+        (window as unknown as Record<string, unknown>)[key] = true;
+      }, GUARD_KILL_SWITCH_KEY);
+    }
+  });
+
+  test("弹窗开着时面板里的岗位搜索框能拿住焦点并打进字", async ({ page }, testInfo) => {
+    await openTrackerModal(page);
+    await openAssistantCard(page);
+    const panel = await openAddMenuPanel(page);
+
+    // 豁免标记必须先落地：没有它，下面的断言会以"焦点被抢回弹窗"的形式红。
+    await expect(panel).toHaveClass(/tt-popup-exempt/);
+
+    const jobInput = panel.locator(".ant-select").first().locator("input").first();
+    await jobInput.click();
+    const afterClick = await readActiveElement(page);
+    expect(afterClick.tag, `点搜索框后焦点被抢走：${describeActive(afterClick)}`).toBe("INPUT");
+
+    await page.keyboard.type("abc", { delay: 60 });
+    const afterType = await readActiveElement(page);
+    // 这两条就是本卡的反证判据：豁免被去掉时焦点停在 `.ant-modal-close`、value 为空。
+    expect(afterType.tag, `打字后焦点不在搜索框：${describeActive(afterType)}`).toBe("INPUT");
+    expect(afterType.value, `输入没进到搜索框里：${describeActive(afterType)}`).toContain("abc");
+    await expect(jobInput).toHaveValue("abc");
+
+    // 下拉是另一棵 body 浮层，也要带标记（antd 6 走 `classNames.popup.root`）。
+    await expect(page.locator(".ant-select-dropdown").first()).toHaveClass(/tt-popup-exempt/);
+
+    await saveArtifacts(page, testInfo, "plus-menu-search", {
+      scenario: "t11-plus-menu-search",
+      afterClick,
+      afterType,
+      panelInCard: await panel.evaluate((el) => Boolean(el.closest(".tt-assistant-card"))),
+      guardDisabled: GUARD_DISABLED,
+    });
+  });
+
+  test("卡片外的可搜索下拉仍被焦点陷阱接管（豁免面没被放大）", async ({ page }, testInfo) => {
+    await openTrackerModal(page);
+
+    // 弹窗遮罩（`.ant-modal-wrap`）盖住整页，指针点不到页面控件（真实用户也点不到），
+    // 所以这里用 `focus()` 直接给焦点 —— 守卫拦的正是 `focusin`，判据等价。
+    //
+    // 窗口冒泡阶段的监听排在守卫（document 冒泡）之后：**收到**这次 focusin
+    // 就说明守卫放行了它，即该元素不在豁免区、照旧归焦点陷阱管。
+    await page.evaluate(() => {
+      const win = window as unknown as Record<string, unknown>;
+      win.__t11FocusIn = [];
+      window.addEventListener("focusin", (event) => {
+        const target = event.target as HTMLElement | null;
+        (win.__t11FocusIn as string[]).push(String(target?.className ?? ""));
+      });
+    });
+
+    const pageSearch = page.locator(".ant-select-show-search").first().locator("input").first();
+    await pageSearch.evaluate((el) => el.focus());
+    await page.waitForTimeout(200);
+    await page.keyboard.type("abc", { delay: 60 });
+    const afterType = await readActiveElement(page);
+
+    const seenByWindow = await page.evaluate(() =>
+      ((window as unknown as Record<string, unknown>).__t11FocusIn as string[] | undefined)?.some(
+        (cls) => cls.includes("ant-select"),
+      ),
+    );
+    expect(
+      seenByWindow,
+      `页面搜索框的 focusin 被守卫吞掉了（豁免面被放大）：${describeActive(afterType)}`,
+    ).toBe(true);
+    // 焦点被拉回弹窗内的关闭按钮（antd 6.6.8 的落点），没有留在页面搜索框里。
+    expect(afterType.inModal, `焦点留在了卡片外：${describeActive(afterType)}`).toBe(true);
+    expect(afterType.cls, `焦点没有被陷阱接管：${describeActive(afterType)}`).toContain(
+      "ant-modal-close",
+    );
+    await expect(pageSearch).toHaveValue("");
+
+    await saveArtifacts(page, testInfo, "outside-search-still-trapped", {
+      scenario: "t11-outside-search",
+      afterType,
+      seenByWindow,
+      exemptPopupHosts: await page.locator(".tt-popup-exempt").count(),
     });
   });
 });
