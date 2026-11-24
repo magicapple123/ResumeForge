@@ -31,6 +31,13 @@ test("1366×768：投递队列首屏至少放得下 7 行，且工具栏/浏览�
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto("/apply");
   await page.waitForLoadState("networkidle");
+  // 量高度前等一次字体就绪：文本驱动的重排（字体回退替换）会让同一份代码量出不同行高，
+  // 等字体是测量布局的常规做法。
+  // 但要如实说明：2026-11-24 的 smoke 出现过一次 68.78（阈值 68）、单跑又过，**这条等待
+  // 并没有被证明就是那次的原因**——连量 4 次「就绪前 / 就绪后」都是同一个 65.58，没有差值。
+  // 所以：阈值一个字没动，这次只是把"测量前应有的等待"补齐；若再复现，要先抓当时的
+  // 行数/滚动条状态，不要靠调阈值糊过去。
+  await page.evaluate(() => document.fonts.ready);
   await page.keyboard.press("Escape").catch(() => {});
 
   // 三块"吃掉首屏"的元凶各自的高度上限。浏览器卡自 2026-11-13 起是**两行结构**
