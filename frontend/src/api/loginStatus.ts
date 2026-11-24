@@ -12,6 +12,8 @@ export interface LoginStatusSite {
   status: LoginStatusValue;
   checked_at: string;
   detail: string;
+  /** 账号备注（原条目 8 A1）：用户自己填的一行文字，空串 = 未填写。 */
+  account: string;
 }
 
 export interface LoginStatusRow {
@@ -23,8 +25,18 @@ export interface LoginStatusRow {
   status: LoginStatusValue;
   checked_at: string;
   detail: string;
+  /** 这一行的 host；汇总行（网申有站点时）为空串，备注按站点各自带着。 */
+  host: string;
+  /** 该 host 的账号备注（空串 = 未填写）。 */
+  account: string;
   /** 仅「网申浏览器」：逐站点状态（空数组 = 没有历史，走单行口径）。 */
   sites: LoginStatusSite[];
+}
+
+/** 一个 host 的账号备注（原条目 8 A1）。`note` 是**落库后**的值，已按 64 字符截断。 */
+export interface AccountNote {
+  host: string;
+  note: string;
 }
 
 export interface WebFormSiteList {
@@ -68,5 +80,22 @@ export function reloginWebformSite(
   return request("/login-status/webform-sites/relogin", {
     method: "POST",
     body: JSON.stringify({ host }),
+  });
+}
+
+/**
+ * 读一个 host 的账号备注（原条目 8 A1）。只读 KV，不触发检测。
+ *
+ * 面板加载时备注已随行下发（`account`），这个 GET 用于单独刷新一行。
+ */
+export function getAccountNote(host: string): Promise<AccountNote> {
+  return request(`/login-status/accounts/${encodeURIComponent(host)}`);
+}
+
+/** 写 / 清除账号备注：`note` 空串 = 清除，超长由服务端截到 64 字符，返回落库后的值。 */
+export function saveAccountNote(host: string, note: string): Promise<AccountNote> {
+  return request(`/login-status/accounts/${encodeURIComponent(host)}`, {
+    method: "PUT",
+    body: JSON.stringify({ note }),
   });
 }

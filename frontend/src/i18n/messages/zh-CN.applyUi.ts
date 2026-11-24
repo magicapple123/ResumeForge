@@ -150,7 +150,7 @@ const applyUi = {
   "applyUi.loginStatus.button": "登录状态",
   "applyUi.loginStatus.title": "登录状态",
   "applyUi.loginStatus.intro":
-    "投递浏览器、网申浏览器与门户 Cookie 是三处彼此独立的登录态，任何一处掉线都只影响它自己。",
+    "投递浏览器与网申浏览器是两处彼此独立的登录态，任何一处掉线都只影响它自己。",
   "applyUi.loginStatus.probeHint":
     "检测会真的拉起对应浏览器并访问一次站点，所以只在你点的时候才跑。",
   "applyUi.loginStatus.status.ok": "正常",
@@ -169,7 +169,16 @@ const applyUi = {
   "applyUi.loginStatus.cookieSaved": "Cookie 已保存并复检",
   "applyUi.loginStatus.opened": "已在浏览器里打开登录页，登录完关掉窗口再点一次检测",
   "applyUi.loginStatus.rateLimited": "刚检测过，{seconds} 秒后可以再检测",
-  "applyUi.loginStatus.unknownHint": "拿不到登录特征时显示「无法判断」，不会误报成「已失效」。",
+  "applyUi.loginStatus.unknownHint":
+    "「无法判断」的意思是：要么页面上找不到账号标记（很多站点登录后只显示头像），要么该站点没有「登录后才可见」的页面，仅凭公开页无法证明登录态——它不会误报成「已失效」。想确认的话，点「重新登录」在这个专用浏览器里登一次，再点「检测」。",
+  "applyUi.loginStatus.localOnlyHint": "登录状态只保存在本机；换电脑或重装后需要重新登录。",
+  // ===== 账号备注（原条目 8 A1）=====
+  "applyUi.loginStatus.accountLabel": "账号备注",
+  "applyUi.loginStatus.accountLabel.empty": "未填写",
+  "applyUi.loginStatus.accountLabel.edit": "编辑账号备注",
+  "applyUi.loginStatus.accountLabel.save": "保存",
+  "applyUi.loginStatus.accountLabel.saved": "已保存账号备注",
+  "applyUi.loginStatus.accountLabel.hint": "你自己填的备注，不会自动跟随账号变化",
   "applyUi.loginStatus.checkAllHint": "全部检测是**串行**的：同时拉起两个浏览器会互相抢焦点。",
   "applyUi.loginStatus.progress": "正在检测 {done}/{total}",
   "applyUi.loginStatus.siteHint": "网申浏览器按站点逐项检测：一个站点掉线不影响其它站点。",

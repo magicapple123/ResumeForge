@@ -27,12 +27,14 @@ from sqlalchemy.orm import Session
 from .browser.page_ready import ReadyWait, wait_for_page_state
 from .login_status import (
     LoginStatusValue,
+    _host_of,
     _judge,
     _now,
     _parse_status_record,
     _read_setting,
     _take_cooldown,
     _write_setting,
+    read_account_note,
 )
 
 #: 清单上限：超出按最近使用截断，界面提示"还有 N 个没列出来"。
@@ -60,13 +62,6 @@ _PROBE_SCRIPT = (
     " text: ((document.body && document.body.innerText) || '').slice(0, 6000),"
     " hasPassword: !!document.querySelector('input[type=\"password\"]') }))()"
 )
-
-
-def _host_of(url: str) -> str:
-    try:
-        return (urlsplit(str(url or "")).hostname or "").lower()
-    except ValueError:
-        return ""
 
 
 def _site_label(title: str, host: str) -> str:
@@ -121,6 +116,8 @@ def webform_sites(db: Session) -> list[dict[str, Any]]:
                 "host": host,
                 "label": _site_label(item["title"], host),
                 "probe_url": item["probe_url"],
+                # 账号备注（原条目 8 A1）：按 host 存的用户手写文本，空串 = 未填写。
+                "account": read_account_note(db, host),
                 **_read_site_status(db, host, item["probe_url"]),
             }
         )

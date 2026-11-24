@@ -32,6 +32,21 @@
 发现"未登录"。现在的判据只有三态来源：登录页特征 / 独立「登录」CTA → `logged-out`；
 账号标记（退出登录 / 个人中心…）→ `ok`；其余 → `unknown`。**公开页的内容本身永远不给 `ok`。**
 `expired` 只保留读取（老数据仍显示「已失效」），探测器不再新写。
+
+## unknown 必须带原因（原条目 7 A1）
+
+`unknown` 的 `detail` 早先是空串，界面就只剩一句「无法判断」：用户既不知道**为什么**判不出来，
+也不知道下一步能做什么（他会反复重登、反复检测）。所以兜底分支必须给一句人话。
+文案要**中立到 Cookie 场景也成立**——``_judge`` 被 Cookie / 投递浏览器 / 网申站点三处复用，
+写成「公开岗位页…」在投递入口页与 Cookie 探针上都会讲不通，所以只说「页面没有账号标记」。
+
+## 账号备注（原条目 8 A1）
+
+每个 host 一行 `AppSetting` KV（`login_account.<host>`），**不建表、不迁移**；上限
+:data:`MAX_ACCOUNT_NOTE` 字符，空串 = 清除（删行，不存空值）。它是**用户手写的备注**，
+不是实时账号，文案一律叫「账号备注」；可能含邮箱 / 手机号，**不进日志**。
+存取实现连同 KV 原语一起在 :mod:`app.services.login_status_store`（行数预算），本模块
+只负责把它挂到"行"上——站点行各自带一条，「投递浏览器」行用它入口地址的 host。
 """
 
 from __future__ import annotations
@@ -47,8 +62,20 @@ from urllib.parse import urlsplit
 
 from sqlalchemy.orm import Session
 
-from ..models.setting import AppSetting
 from .login_page import looks_like_login_page
+
+# KV 原语与账号备注的存取都在 `login_status_store`（拆开的理由是行数预算）。
+# 名字保留 `_read_setting` / `_write_setting` / `_now`：`login_status_sites` 与既有测试
+# 都按这些名字引用，别名会把一次纯搬迁变成跨文件改写。
+from .login_status_store import (
+    MAX_ACCOUNT_NOTE,
+    _now,
+    _read_setting,
+    _write_setting,
+    normalize_account_note,
+    read_account_note,
+    write_account_note,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +130,10 @@ _LOGIN_CTA_TOKENS = frozenset(
     }
 )
 
+#: 兜底分支的 detail（原条目 7 A1）：`unknown` 必须解释"为什么"，不能只回一个空串。
+#: 措辞**中立**——Cookie / 投递入口页 / 岗位页共用这一句，不假定页面是"公开岗位页"。
+UNKNOWN_NO_MARKER_DETAIL = "页面没有账号标记（公开页无法证明登录态）"
+
 #: 两个来源。`id` 同时也是 KV 后缀与前端行标识；`browser=True` 的会真的拉起浏览器。
 SOURCES: tuple[dict[str, Any], ...] = (
     {"id": "apply_browser", "browser": True, "label": "投递浏览器"},
@@ -127,21 +158,16 @@ class LoginStatusBusy(RuntimeError):
         self.remaining = remaining
 
 
-def _read_setting(db: Session, key: str) -> str:
-    row = db.get(AppSetting, key)
-    return row.value if row is not None else ""
+def _host_of(url: str) -> str:
+    """URL → 小写 host。**唯一实现**：站点清单、受限页校验、账号备注的键都用它。
 
-
-def _write_setting(db: Session, key: str, value: str) -> None:
-    row = db.get(AppSetting, key)
-    if row is None:
-        db.add(AppSetting(key=key, value=value))
-    else:
-        row.value = value
-
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    放在这一层而不是 `login_status_sites`：后者已经 import 了本模块，
+    反向再来一次就是循环依赖。
+    """
+    try:
+        return (urlsplit(str(url or "")).hostname or "").lower()
+    except ValueError:
+        return ""
 
 
 def _status_key(source: str) -> str:
@@ -317,6 +343,15 @@ def list_statuses(db: Session) -> list[dict[str, Any]]:
             row.update(_aggregate_sites(sites))
             row["sites"] = sites
             row["probe_url"] = site_probe_url(db)
+            # 汇总行没有"自己的"账号：备注是按 host 的，逐站点各自带着（见 `sites`）。
+            # 在这里挂一条会让人以为整行共用一个账号。
+            row["host"] = ""
+            row["account"] = ""
+        else:
+            # 投递浏览器行只知道一个入口 host（如 app.mokahr.com / www.zhipin.com）；
+            # 拿到了就用同一条备注（原条目 8 A1 第 2 条）。
+            row["host"] = _host_of(row["probe_url"])
+            row["account"] = read_account_note(db, row["host"])
         items.append(row)
     return items
 
@@ -359,6 +394,10 @@ def _judge(
 
     顺序固定，`ok` 只能来自账号标记（受限页可访问由 `login_status_sites` 另行给出）：
     公开页即使正文完整、看起来一切正常，也只能是 `unknown`——"没看到登录墙"对公开页恒真。
+
+    兜底（"其余"）**必须带原因**：空 detail 会让界面只剩「无法判断」，用户既不知道为什么
+    也做不了下一步。文案刻意不说"公开岗位页"——同一个函数也在 Cookie 探针上跑，
+    那里只有"页面"这个概念。
     """
     body = str(text or "")
     path = urlsplit(href).path if href else ""
@@ -376,7 +415,7 @@ def _judge(
         return "logged-out", "页面显示登录入口"
     if len(body.strip()) < 20:
         return "unknown", "页面内容过少，无法判断"
-    return "unknown", ""
+    return "unknown", UNKNOWN_NO_MARKER_DETAIL
 
 
 def _probe_browser(db: Session, source: str, url: str) -> tuple[LoginStatusValue, str]:
@@ -427,15 +466,20 @@ def relogin_url(db: Session, source: str) -> str:
 
 __all__ = [
     "COOLDOWN_SECONDS",
+    "MAX_ACCOUNT_NOTE",
     "SOURCE_IDS",
     "SOURCES",
+    "UNKNOWN_NO_MARKER_DETAIL",
     "LoginStatusBusy",
     "check",
     "list_statuses",
+    "normalize_account_note",
     "probe_url",
+    "read_account_note",
     "read_status",
     "relogin_url",
     "reset_cooldowns",
     "set_probe_url",
     "source_ids",
+    "write_account_note",
 ]

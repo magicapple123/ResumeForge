@@ -162,7 +162,7 @@ const applyUi = {
   "applyUi.loginStatus.button": "Login status",
   "applyUi.loginStatus.title": "Login status",
   "applyUi.loginStatus.intro":
-    "The apply browser, the web-form browser and the portal cookie are three independent logins; one can expire without touching the others.",
+    "The apply browser and the web-form browser are two independent logins; one can expire without touching the other.",
   "applyUi.loginStatus.probeHint":
     "A check really opens that browser and visits the site, so it only runs when you click.",
   "applyUi.loginStatus.status.ok": "OK",
@@ -182,7 +182,17 @@ const applyUi = {
   "applyUi.loginStatus.opened": "The login page is open in the browser; close it and check again",
   "applyUi.loginStatus.rateLimited": "Checked just now - try again in {seconds}s",
   "applyUi.loginStatus.unknownHint":
-    "When no login signal can be read it reports Unknown instead of a false Expired.",
+    "Unknown means either no account marker was found on the page (many sites only show an avatar once signed in), or this site has no page that is visible only after signing in - a public page alone cannot prove a login. It never turns into a false Expired. To confirm, click Log in again in this dedicated browser, then check once more.",
+  "applyUi.loginStatus.localOnlyHint":
+    "Login state is stored on this computer only; you need to sign in again on another computer or after reinstalling.",
+  // ===== Account note (issue 8, A1) =====
+  "applyUi.loginStatus.accountLabel": "Account note",
+  "applyUi.loginStatus.accountLabel.empty": "Not set",
+  "applyUi.loginStatus.accountLabel.edit": "Edit account note",
+  "applyUi.loginStatus.accountLabel.save": "Save",
+  "applyUi.loginStatus.accountLabel.saved": "Account note saved",
+  "applyUi.loginStatus.accountLabel.hint":
+    "Your own note; it does not follow account changes automatically.",
   "applyUi.loginStatus.checkAllHint":
     "Check all runs in series: two browsers at once steal focus from each other.",
   "applyUi.loginStatus.progress": "Checking {done}/{total}",

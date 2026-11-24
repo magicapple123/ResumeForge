@@ -11,6 +11,12 @@
  * 3. 「全部检测」**串行**：同时拉起两个浏览器会互相抢焦点，也更容易触发站点风控；
  * 4. 重新登录后**自动复检一次**，否则用户登完了面板还显示旧状态；
  * 5. 网申是按 **host 逐站点**检测的（F07）：一个站点掉线不能让整行笼统报"正常"。
+ *
+ * 另外两件事（原条目 7 A1 / 8 A1）：
+ * - `unknown` 一定要带**原因**：后端在 `detail` 里给一句人话，界面照原样显示；
+ *   面板上还有一条固定的 `unknownHint` 说明"为什么可能判不出来 + 能怎么做"。
+ * - 每个 host 可以有一行**账号备注**（`AccountNote`）：它是用户手写的文字，
+ *   不是实时账号，所以文案叫「账号备注」。见 `AccountNote.tsx` 的说明。
  */
 import { App, Button, Drawer, Space, Tag, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
@@ -28,6 +34,7 @@ import {
 } from "../../api/loginStatus";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import AccountNote from "./AccountNote";
 
 const STATUS_COLOR: Record<LoginStatusValue, string> = {
   ok: "success",
@@ -108,6 +115,22 @@ export default function LoginStatusDrawer({
     void listLoginStatuses()
       .then(setRows)
       .catch(() => undefined);
+  };
+
+  /**
+   * 备注存好后就地更新显示（不再重取整份清单）。
+   *
+   * 站点行与来源行都按 host 命中：同一条备注可能同时出现在两处（如投递浏览器入口的 host
+   * 恰好也在网申站点清单里），两处一起刷新才不会出现"一行新、一行旧"。
+   */
+  const applyAccount = (host: string, note: string) => {
+    setSites((current) => ({
+      ...current,
+      items: current.items.map((site) => (site.host === host ? { ...site, account: note } : site)),
+    }));
+    setRows((current) =>
+      current.map((row) => (row.host === host ? { ...row, account: note } : row)),
+    );
   };
 
   const runCheck = async (id: string) => {
@@ -215,6 +238,8 @@ export default function LoginStatusDrawer({
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {site.host}
         </Typography.Text>
+        {/* 账号备注紧跟在 host 右侧（原条目 8 A1）：先说"哪个站"，再说"哪个号"。 */}
+        <AccountNote host={site.host} note={site.account} onSaved={applyAccount} />
         <Tag color={STATUS_COLOR[site.status]}>{statusLabel(site.status)}</Tag>
         <span style={{ marginLeft: "auto" }} />
         <Button
@@ -256,6 +281,11 @@ export default function LoginStatusDrawer({
       <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
         {t("applyUi.loginStatus.probeHint")}
       </Typography.Paragraph>
+      {/* 承诺边界（T1 的 L1 方案）：固定位置、与检测结果无关。不要挪到某一行里面——
+          换机丢登录态是全局事实，不是某一处站点的问题。 */}
+      <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 16 }}>
+        {t("applyUi.loginStatus.localOnlyHint")}
+      </Typography.Paragraph>
 
       <Space orientation="vertical" size={12} style={{ width: "100%" }}>
         {(loading && rows.length === 0 ? [] : rows).map((row) => (
@@ -271,6 +301,9 @@ export default function LoginStatusDrawer({
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Typography.Text strong>{row.label}</Typography.Text>
               <Tag color={STATUS_COLOR[row.status]}>{statusLabel(row.status)}</Tag>
+              {/* 投递浏览器行只知道一个入口 host：拿到了就用同一条备注（原条目 8 A1）。
+                  汇总行（网申有站点时）没有自己的 host，这里自然不渲染。 */}
+              <AccountNote host={row.host} note={row.account} onSaved={applyAccount} />
               <span style={{ marginLeft: "auto" }} />
               {row.id === "webform_browser" && sites.items.length > 0 ? null : (
                 <>

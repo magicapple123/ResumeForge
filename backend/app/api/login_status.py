@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """「登录状态」面板的接口层（Q12）。
 
-三个端点，语义严格分开：
+四个端点，语义严格分开：
 - ``GET  /api/login-status``                 只读缓存，**绝不触发检测**
 - ``POST /api/login-status/{id}/check``      用户点了才跑一次（60 秒限流）
 - ``POST /api/login-status/{id}/relogin``    浏览器类去开登录页
+- ``GET/PUT /api/login-status/accounts/{host}``  账号备注的读取 / 写入（原条目 8 A1）
+
+账号备注**按 host** 存 `AppSetting` KV（``login_account.<host>``），不建表、不迁移：
+它是用户自己填的一行文字，没有任何关联查询，"为它开一张表"只会多一份要维护的结构。
 
 （原先的 ``PUT /api/login-status/track_cookie`` 随「申请状态回读」整条移除：那一行既没有
 配置入口，也就不该有写入路径。已存的 Cookie 由迁移 ``remove_tracker_probe_settings`` 清除。）
@@ -13,6 +17,8 @@
 """
 
 from __future__ import annotations
+
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,6 +30,12 @@ from ..services.webform import browser as webform_browser
 
 router = APIRouter(prefix="/api/login-status", tags=["login-status"])
 
+#: host 只接受 DNS 形态（字母数字 + `-` + `.`）：它会拼进 KV 的键名，
+#: 放任换行 / 斜杠 / 百分号就是一条能写到任意键上的注入口子。
+_HOST_PATTERN = re.compile(
+    r"^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+)
+
 
 class WebFormSiteOut(BaseModel):
     """网申站点的一行（F07）：host 是唯一标识，其余都可展示/可检测。"""
@@ -34,6 +46,8 @@ class WebFormSiteOut(BaseModel):
     status: str
     checked_at: str
     detail: str
+    #: 用户手写的账号备注（原条目 8 A1）：空串 = 未填写，**不是**实时账号。
+    account: str = ""
 
 
 class WebFormSiteListOut(BaseModel):
@@ -51,6 +65,10 @@ class LoginStatusOut(BaseModel):
     status: str
     checked_at: str
     detail: str
+    #: 该行的 host（投递浏览器用来显示同一条账号备注；汇总行为空串）。
+    host: str = ""
+    #: 该 host 的账号备注（空串 = 未填写）。
+    account: str = ""
     #: 仅 `webform_browser` 会带：逐站点的登录状态（空列表 = 没有历史，走旧单行口径）。
     sites: list[WebFormSiteOut] = Field(default_factory=list)
 
@@ -63,11 +81,33 @@ class SiteIn(BaseModel):
     host: str = Field(min_length=1, max_length=255)
 
 
+class AccountNoteIn(BaseModel):
+    """账号备注的写入体。超长不报错：服务层按 64 字符截断（见 `MAX_ACCOUNT_NOTE`）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    note: str = ""
+
+
+class AccountNoteOut(BaseModel):
+    host: str
+    #: 落库后的值（已去首尾空白、已截断）；空串 = 已清除。
+    note: str
+
+
 class ReloginOut(BaseModel):
     id: str
     #: 浏览器类返回 ``opened``：Chrome 式"开一个登录页"。
     action: str
     url: str
+
+
+def _clean_host(raw: str) -> str:
+    """校验并规范化 host；不合法直接 400，不做"尽力而为"的清洗。"""
+    host = str(raw or "").strip().lower()
+    if not _HOST_PATTERN.match(host):
+        raise HTTPException(status_code=400, detail="host 不合法")
+    return host
 
 
 @router.get("", response_model=list[LoginStatusOut])
@@ -110,6 +150,26 @@ def relogin_webform_site(payload: SiteIn, db: Session = Depends(get_db)) -> Relo
             status_code=503, detail=f"浏览器没能打开登录页（{type(error).__name__}）"
         ) from error
     return ReloginOut(id=f"webform_site:{site['host']}", action="opened", url=url)
+
+
+@router.get("/accounts/{host}", response_model=AccountNoteOut)
+def read_account_note(host: str, db: Session = Depends(get_db)) -> AccountNoteOut:
+    """读一个 host 的账号备注（只读 KV，不触发任何检测）。"""
+    cleaned = _clean_host(host)
+    return AccountNoteOut(host=cleaned, note=login_status.read_account_note(db, cleaned))
+
+
+@router.put("/accounts/{host}", response_model=AccountNoteOut)
+def write_account_note(
+    host: str, payload: AccountNoteIn, db: Session = Depends(get_db)
+) -> AccountNoteOut:
+    """写 / 清除一个 host 的账号备注（空串 = 清除，超长按 64 字符截断）。
+
+    返回值是**落库后**的值，前端直接用它刷新显示，不要自己再截一次。
+    """
+    cleaned = _clean_host(host)
+    saved = login_status.write_account_note(db, cleaned, payload.note)
+    return AccountNoteOut(host=cleaned, note=saved)
 
 
 @router.post("/{source}/check", response_model=LoginStatusOut)
