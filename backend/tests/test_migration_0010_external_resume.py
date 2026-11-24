@@ -104,7 +104,9 @@ def test_downgrade_drops_the_table_and_upgrade_brings_it_back(tmp_path):
 
         # 退到本迁移之前：按 revision 名定位 0010 的父版本，表必须真的消失。
         # （不数步数：链尾每加一条迁移，步数都会过期。）
-        command.downgrade(config, prior_revision("_external_resume"))
+        # 这里必须给**精确**的定位串：T6 的 ``0025_track_external_resume`` 也以
+        # ``_external_resume`` 结尾，只写后缀会命中两条（prior_revision 会大声失败）。
+        command.downgrade(config, prior_revision("0010_external_resume"))
         assert alembic_version_of(engine) != head
         assert _TABLE not in _table_names(engine)
 
