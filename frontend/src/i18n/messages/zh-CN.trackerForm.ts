@@ -49,7 +49,7 @@ const trackerForm = {
   "trackerForm.hint.link":
     "选填。招聘页 / 网申页 / 面试会议链接；选择关联岗位后，这里还是空的时候会自动带上岗位的投递链接",
   "trackerForm.hint.resume":
-    "选填。选了内部简历会在简历详情里留一份投递记录（内容快照）；选了外部简历只记关联与文件名——原件就是你投出去的那一份，不再另存快照。投递后再改简历不影响已留的记录",
+    "选填。内部简历会留一份投递快照；外部简历只记关联与文件名（原件即证据，不再另存）。改简历不影响已留记录",
   "trackerForm.status.applied": "已投递",
   "trackerForm.status.screening": "筛选中",
   "trackerForm.status.assessment": "测评/笔试",

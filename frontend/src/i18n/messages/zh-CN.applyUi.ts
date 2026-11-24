@@ -170,7 +170,7 @@ const applyUi = {
   "applyUi.loginStatus.opened": "已在浏览器里打开登录页，登录完关掉窗口再点一次检测",
   "applyUi.loginStatus.rateLimited": "刚检测过，{seconds} 秒后可以再检测",
   "applyUi.loginStatus.unknownHint":
-    "「无法判断」的意思是：要么页面上找不到账号标记（很多站点登录后只显示头像），要么该站点没有「登录后才可见」的页面，仅凭公开页无法证明登录态——它不会误报成「已失效」。想确认的话，点「重新登录」在这个专用浏览器里登一次，再点「检测」。",
+    "「无法判断」= 页面上没有账号标记，或该站点没有「登录后才可见」的页面。想确认就点「重新登录」登一次再检测。",
   "applyUi.loginStatus.localOnlyHint": "登录状态只保存在本机；换电脑或重装后需要重新登录。",
   // ===== 账号备注（原条目 8 A1）=====
   "applyUi.loginStatus.accountLabel": "账号备注",

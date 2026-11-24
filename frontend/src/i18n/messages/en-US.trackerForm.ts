@@ -52,7 +52,7 @@ const trackerForm = {
   "trackerForm.hint.link":
     "Optional. Job page, application form or meeting link; picking a linked job fills this in while it is still empty",
   "trackerForm.hint.resume":
-    "Optional. A linked internal resume keeps an application snapshot on the resume details page; an uploaded resume only records the link and its file name - the original file is the evidence, so no extra snapshot is stored. Editing the resume afterwards does not change the saved record",
+    "Optional. An internal resume keeps an application snapshot; an uploaded one records only the link and file name (the original is the evidence).",
   "trackerForm.status.applied": "Applied",
   "trackerForm.status.screening": "Screening",
   "trackerForm.status.assessment": "Assessment / test",

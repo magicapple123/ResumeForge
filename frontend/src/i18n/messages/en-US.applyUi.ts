@@ -182,7 +182,7 @@ const applyUi = {
   "applyUi.loginStatus.opened": "The login page is open in the browser; close it and check again",
   "applyUi.loginStatus.rateLimited": "Checked just now - try again in {seconds}s",
   "applyUi.loginStatus.unknownHint":
-    "Unknown means either no account marker was found on the page (many sites only show an avatar once signed in), or this site has no page that is visible only after signing in - a public page alone cannot prove a login. It never turns into a false Expired. To confirm, click Log in again in this dedicated browser, then check once more.",
+    "Unknown means the page shows no account marker, or the site has no page that requires signing in. To confirm, click Log in again, then check once more.",
   "applyUi.loginStatus.localOnlyHint":
     "Login state is stored on this computer only; you need to sign in again on another computer or after reinstalling.",
   // ===== Account note (issue 8, A1) =====
