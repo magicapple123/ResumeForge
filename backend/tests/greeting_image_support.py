@@ -89,24 +89,36 @@ class ImageCdp(CdpClient):
     def sent_methods(self) -> list[str]:
         return [method for kind, method in self.events if kind == "send"]
 
+    def navigated_urls(self) -> list[str]:
+        """按顺序记下的导航目标（"没图时不该为发图去导航"这条断言要用）。"""
+        return [target for kind, target in self.events if kind == "navigate"]
+
 
 class ImageAdapter(FakeAdapter):
     """在 ``FakeAdapter`` 之上只加发图能力：像真适配器那样**通过 CDP 塞文件**。
 
     刻意不在假件里"假装成功"：真适配器最终就是 ``client.set_file_input(...)``（内部
     ``DOM.setFileInputFiles``），假件少这一步，"序列里有没有它"的断言就全是空转。
+
+    ``target`` 模仿真适配器的 ``greeting_image_target``（发图时核对通过的会话标题）：
+    ``task_apply`` 用它把"到底发给了谁"写进 ``image_detail``。
     """
 
-    def __init__(self, *, fail_upload: str | None = None) -> None:
+    def __init__(self, *, fail_upload: str | None = None, target: str = "") -> None:
         super().__init__()
         self.upload_calls: list[list[str]] = []
+        self.upload_companies: list[str] = []
         self.uploaded_bytes: list[bytes] = []
         self.existed_during_upload: list[bool] = []
         self._fail_upload = fail_upload
+        self.greeting_image_target = target
 
-    def upload_greeting_images(self, client, paths):
+    def upload_greeting_images(self, client, paths, *, company: str = ""):
+        # 与真适配器同签名：company 是"回聊天页后按公司名定位会话"的输入（见
+        # services/sites/boss_apply_image.py）。假件把它记下来，方便断言它真的被传到了。
         files = [str(path) for path in paths]
         self.upload_calls.append(files)
+        self.upload_companies.append(company)
         for path in paths:
             self.existed_during_upload.append(Path(path).exists())
             self.uploaded_bytes.append(Path(path).read_bytes())

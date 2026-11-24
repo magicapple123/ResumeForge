@@ -78,30 +78,57 @@ SELECTOR_SUBMIT_BUTTON = ".btn-submit, .btn-sure"
 SELECTOR_FILE_INPUT = "input[type=file]"
 # ===== 招呼语附带图片（T8）：新增选择器，既有选择器一个字符都不改 =====
 #
-# **真站 DOM 未实测**（2026-11-23 本机没有可用的 BOSS 登录态，且投递消息会真的发给招聘方、
-# 不可撤回，所以不允许为"验证"去操作真站）。台账里唯一的实测证据是用户截图：聊天页底部
-# 工具栏有「发送图片」入口，与「发简历 / 换电话 / 换微信」同一排。
-# 因此这里按"控件文本 + 类名片段"多重兜住，并且上传流程对**三种形态**分别给诊断：
-#   ① 页面上本来就有内嵌 input[type=file]（直接塞）；
-#   ② 点「发送图片」之后才创建 input（拦截文件选择器 + 再找一次）；
-#   ③ 两者都没有（如实失败并提示把诊断反馈给维护者）。
+# 2026-11-24 真站实测（队列 #18 中科曙光，专用浏览器会话）之后，这一支的形态**部分**已知：
+#   - 发图控件是 ``<input type="file" accept="image/gif,image/jpeg,image/jpg">``，父节点
+#     class 含 ``btn-sendimg`` → 精确选择器 ``.btn-sendimg input[type=file]``；
+#   - 另有两个 ``input[type=file]`` 是**简历附件上传**（``ka="user-resume-upload-file"``、
+#     父节点 ``.btn-file``）——所以宽泛的 ``SELECTOR_FILE_INPUT`` 在这一支会误命中，发图
+#     路径一律只用 :data:`SELECTOR_CHAT_IMAGE_INPUT`；
+#   - 更关键的根因不在选择器：文本招呼语送达后弹层关闭、页面停在**岗位详情页**，那里根本
+#     没有上传控件（实测："匹配到的 input 数：0"）。所以流程要先回聊天页并选中会话
+#     （见 ``boss_chat_image.py``）。
+# 仍未实测的两项（不要当成已知事实）：是否需要预览态二次确认、图片消息气泡的真实 class。
 SELECTOR_IMAGE_SEND_BUTTON = (
     "[class*='send-image'], [class*='sendImage'], [class*='upload-image'], "
     "[class*='toolbar'] [class*='image'], [data-testid*='image'], "
     "button[aria-label*='图片'], [title*='图片'], [aria-label*='图片']"
 )
+# 上面这条是**未实测期**的宽口径兜底。真站实测后点击改用精确的
+# :data:`SELECTOR_CHAT_IMAGE_BUTTON`（``.btn-sendimg``）：宽口径会命中同一排工具栏里的
+# 其它图标（「发简历」等），点错会弹出简历上传、把一次真实投递搞脏。这条常量保留只为兼容
+# ``_IMAGE_SELECTORS`` 清单与既有引用，**不再参与点击**。
+SELECTOR_CHAT_IMAGE_BUTTON = ".btn-sendimg"
+SELECTOR_CHAT_IMAGE_INPUT = ".btn-sendimg input[type=file]"
+# 聊天页（/web/geek/chat）结构，2026-11-24 真站实测：
+#   DIV.chat-input（contenteditable=true，**不是** textarea）
+#     < DIV.editor-container < DIV.chat-im.chat-editor < DIV.message-controls
+# 会话列表：``.chat-content > .user-list > .user-list-content > 条目``。条目**没有** a/href、
+# 没有 data-id（实测），只能按文本找；顶部 ``UL.label-list``（全部/未读/新招呼/仅沟通/更多）
+# 是筛选、**不要点**——它不在 ``.user-list-content`` 下，所以"取列表容器的直接子节点"天然
+# 把它排除在外。
+SELECTOR_CHAT_SHELL = ".chat-im"
+SELECTOR_CHAT_INPUT_BOX = ".chat-input"
+SELECTOR_CHAT_USER_LIST = ".chat-content .user-list .user-list-content"
+CHAT_PAGE_URL = f"https://www.zhipin.com{CHAT_PAGE_PATH}"
 # 选完图后**可能**要再点一次「发送」才真正发出（预览态）。真站是否需要二次确认未实测，
 # 所以流程只在真的看到这个按钮时才点，绝不假定它一定存在、也不假定它一定不存在。
 SELECTOR_IMAGE_CONFIRM_BUTTON = (
     ".dialog-container .send-message, .chat-container .btn-sure, "
     ".btn-sure-v2, button[aria-label*='发送']"
 )
-# 图片气泡：本人消息气泡里出现 <img>。判定"发出去了"用的就是它，而不是"点击成功"——
-# 点击成功只证明点到了，不证明消息到了会话里。
+# 图片气泡：判定"发出去了"用的就是它，而不是"点击成功"——点击成功只证明点到了，不证明消息
+# 到了会话里。
 # **必须逐个选择器后缀 ` img`**：``SELECTOR_MY_MESSAGE`` 是逗号分隔的组，直接拼 " img"
 # 会变成"...item-myself, ...[data-from=self] img"——前几个分支在没有图的时候也会算命中。
-SELECTOR_IMAGE_BUBBLE = ", ".join(
-    f"{part.strip()} img" for part in SELECTOR_MY_MESSAGE.split(",") if part.strip()
+#
+# 2026-11-24 更新：真站这一轮只实测了 ``.chat-input`` / ``.btn-sendimg`` 这一段，消息气泡的
+# class（``.message-item.item-myself``）**仍是旧版推断、未在真机确认**。因此这里不把它当作
+# 唯一判据：再接一层"会话区里的大图"（``.chat-content`` / ``.chat-im`` 内的 img），由
+# ``boss_apply_image._bubble_script`` 用尺寸（≥56px）把头像 / 图标 / 表情挡掉。
+# 两层都只是"图片出现了"的近似判据，**最终仍以真机 smoke 为准**。
+SELECTOR_IMAGE_BUBBLE = (
+    ", ".join(f"{part.strip()} img" for part in SELECTOR_MY_MESSAGE.split(",") if part.strip())
+    + ", .chat-content img, .chat-im img"
 )
 SELECTOR_CAPTCHA = ".geetest_panel, .geetest_box, #nc_1_wrapper, .verify-wrap"
 SELECTOR_LOGIN = ".login-dialog, .sign-form, .login-panel"
@@ -141,6 +168,11 @@ _SELECTORS = {
 # 新增一类控件塞进去会让那份清单的含义变模糊。
 _IMAGE_SELECTORS = {
     "image_send_button": SELECTOR_IMAGE_SEND_BUTTON,
+    "chat_image_button": SELECTOR_CHAT_IMAGE_BUTTON,
+    "chat_image_input": SELECTOR_CHAT_IMAGE_INPUT,
+    "chat_shell": SELECTOR_CHAT_SHELL,
+    "chat_input_box": SELECTOR_CHAT_INPUT_BOX,
+    "chat_user_list": SELECTOR_CHAT_USER_LIST,
     "image_confirm_button": SELECTOR_IMAGE_CONFIRM_BUTTON,
     "image_bubble": SELECTOR_IMAGE_BUBBLE,
     "file_input": SELECTOR_FILE_INPUT,
@@ -413,7 +445,13 @@ __all__ = [
     "BOSS_HOSTS",
     "BOSS_KEY",
     "CHAT_PAGE_PATH",
+    "CHAT_PAGE_URL",
     "BossPageMixin",
+    "SELECTOR_CHAT_IMAGE_BUTTON",
+    "SELECTOR_CHAT_IMAGE_INPUT",
+    "SELECTOR_CHAT_INPUT_BOX",
+    "SELECTOR_CHAT_SHELL",
+    "SELECTOR_CHAT_USER_LIST",
     "SELECTOR_GREETING_SEND",
     "SELECTOR_IMAGE_BUBBLE",
     "SELECTOR_IMAGE_CONFIRM_BUTTON",
@@ -423,6 +461,7 @@ __all__ = [
     "_IMAGE_SELECTORS",
     "_SELECTORS",
     "_as_payload",
+    "_blocker_js",
     "_current_url",
     "_js",
     "blocker_failure",

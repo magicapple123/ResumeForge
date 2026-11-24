@@ -71,6 +71,8 @@ def test_no_image_means_no_upload_step_and_no_file_input_call(
 
     assert FILE_INPUT_METHOD not in client.sent_methods()
     assert client.file_inputs == []
+    # 没有图就连"回聊天页发图"这一步都不该发生（真站实测前，发图要走一次导航到 /web/geek/chat）。
+    assert client.navigated_urls() == []
     assert step_names(step_events) == ["opening", "filling", "submitting", "verifying"]
     assert item_of(db_session, task).image_status == "", "没选图 = 这一步根本没试过"
 
@@ -93,6 +95,9 @@ def test_the_global_default_is_staged_and_sent_after_the_text(
     assert adapter.upload_calls and len(adapter.upload_calls[0]) == 1
     assert adapter.existed_during_upload == [True], "交给站点的必须是**已落盘**的临时文件"
     assert adapter.uploaded_bytes == [content]
+    # 公司名要一路传到发图那一步：真站上要靠它在聊天页的会话列表里定位本次投递的招聘方
+    # （不发公司名就只能沿用"已经打开的那个会话"，那是猜）。
+    assert adapter.upload_companies == ["公司0"]
     assert client.sent_methods().count(FILE_INPUT_METHOD) == 1
     # uploading 排在 verifying 之后：文本先确认送达，图片是补发的一条。
     assert step_names(step_events)[-2:] == ["verifying", "uploading"]
@@ -120,6 +125,40 @@ def test_inline_images_override_the_global_default_in_the_real_chain(db_session)
     run_task(db_session, task, adapter)
 
     assert adapter.uploaded_bytes == [inline], "行内选择必须压过全局默认"
+
+
+def test_the_sent_detail_names_the_conversation_the_image_went_to(db_session) -> None:
+    """「发给了谁」要落库：真站出过"回报已发出、实际发到别人会话"的事故（队列 #17 万事云），
+
+    只写"已发出 N 张"事后无法核对。适配器核对通过的会话标题由它回报，记录里写成
+    「已向「某某」发出 1 张图片」。
+    """
+    file_id = store(db_session, png_bytes(18, 18), "图.png", "image/png")
+    task = _setup_task(db_session, 1)
+    item = item_of(db_session, task)
+    item.image_ids = [file_id]
+    db_session.commit()
+
+    run_task(db_session, task, ImageAdapter(target="杨女士 万事云 招聘人事"))
+
+    item = item_of(db_session, task)
+    assert item.image_status == IMAGE_STATUS_SENT
+    assert item.image_detail == "已向「杨女士 万事云 招聘人事」发出 1 张图片"
+
+
+def test_without_a_reported_target_the_detail_stays_the_neutral_wording(db_session) -> None:
+    """适配器没回报标题（旧适配器 / 别的站点）时不许编：沿用"已随招呼语发出 N 张图片"。"""
+    file_id = store(db_session, png_bytes(19, 19), "图.png", "image/png")
+    task = _setup_task(db_session, 1)
+    item = item_of(db_session, task)
+    item.image_ids = [file_id]
+    db_session.commit()
+
+    run_task(db_session, task, ImageAdapter())
+
+    item = item_of(db_session, task)
+    assert item.image_status == IMAGE_STATUS_SENT
+    assert item.image_detail == "已随招呼语发出 1 张图片"
 
 
 # ===== 3. 失败语义：图片失败，投递仍算成功 =====

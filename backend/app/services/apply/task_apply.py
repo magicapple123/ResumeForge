@@ -304,7 +304,9 @@ def execute_item(
     # 提前替换会让队列里的文案与用户看到的不一致；未知花括号原样保留（见渲染函数）。
     greeting = render_greeting_template(
         (item.greeting or "").strip() or config.default_greeting,
-        company=item.company, job_title=item.job_title, name=str(data.get("name", "")),
+        company=item.company,
+        job_title=item.job_title,
+        name=str(data.get("name", "")),
     )
 
     step_started = time.monotonic()
@@ -427,7 +429,10 @@ def _upload_greeting_images(
         return
 
     try:
-        uploader(client, staging.paths())
+        # company 是发图那一步的必需输入：招呼语送达后要回到聊天页，在会话列表里按公司名定位
+        # 本次投递的招聘方（包含匹配），匹配不到就不发（绝不盲点第一条——点错会话会把图片发给
+        # 另一个招聘方，消息不可撤回）。适配器的签名见 sites/boss_apply_image.py。
+        uploader(client, staging.paths(), company=str(item.company or ""))
     except SiteFailure as exc:
         # 站点的图片上传失败（形态不符 / 找不到控件 / 气泡没出现）：分类是站点给的，
         # 但**这条投递仍然算成功**——文本已经发出去了。
@@ -464,11 +469,16 @@ def _upload_greeting_images(
             file_ids=staging.file_ids(),
         )
     else:
+        # 「发给了谁」必须落库（2026-11-24 队列 #17 万事云：回报已发出、实际发到别人会话，
+        # 只写"已发出 N 张"事后无法核对）。标题由适配器发图成功时核对通过后回报。
+        target = str(getattr(adapter, "greeting_image_target", "") or "")
+        who = f"向「{target}」" if target else "随招呼语"
+        detail = f"已{who}发出 {len(staging.images)} 张图片"
         record_image_result(
             session,
             item,
             status=IMAGE_STATUS_SENT,
-            detail=f"已随招呼语发出 {len(staging.images)} 张图片",
+            detail=detail,
             file_ids=staging.file_ids(),
         )
     finally:
