@@ -18,15 +18,18 @@
  * - 每个 host 可以有一行**账号备注**（`AccountNote`）：它是用户手写的文字，
  *   不是实时账号，所以文案叫「账号备注」。见 `AccountNote.tsx` 的说明。
  */
-import { App, Button, Drawer, Space, Tag, Typography } from "antd";
+import { Alert, App, Button, Drawer, Space, Tag, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
+  ackKeepSessionNotice,
   checkLoginStatus,
   checkWebformSite,
+  getKeepSessionNotice,
   listLoginStatuses,
   listWebformSites,
   relogin,
   reloginWebformSite,
+  type KeepSessionNotice,
   type LoginStatusRow,
   type LoginStatusSite,
   type LoginStatusValue,
@@ -65,6 +68,8 @@ function noProbeHint(id: string): string {
 }
 
 const EMPTY_SITES: WebFormSiteList = { items: [], total: 0, truncated: 0 };
+/** 没有说明可展示时的取值：`days === 0` 是后端约定的"无可展示"。 */
+const EMPTY_NOTICE: KeepSessionNotice = { days: 0, first_effective_at: "", delivered: false };
 
 export default function LoginStatusDrawer({
   open,
@@ -82,6 +87,17 @@ export default function LoginStatusDrawer({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [checkingAll, setCheckingAll] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  /**
+   * 「保持登录」的一次性说明（T1）：数据 + 「本次打开里是否已被用户关掉」。
+   *
+   * 两件事放在同一个状态里，是为了让"关掉"这件事**只对本次拉取有效**：每次拉取都会
+   * 整对象替换一次（`dismissed: false`），是否"已展示过"永远只认后端的 `delivered`。
+   * 若 ack 那次请求失败了（静默处理），下次打开仍会按后端口径再显示一遍。
+   */
+  const [notice, setNotice] = useState<{ data: KeepSessionNotice; dismissed: boolean }>({
+    data: EMPTY_NOTICE,
+    dismissed: false,
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,6 +117,32 @@ export default function LoginStatusDrawer({
     if (!open) return;
     void load();
   }, [open, load]);
+
+  // 一次性说明：与状态清单分开拉（它失败不该影响面板主体，所以错误也吞掉）。
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void getKeepSessionNotice()
+      .then((data) => {
+        // 抽屉关得快时不要再往已卸载的组件里写状态。
+        if (!cancelled) setNotice({ data, dismissed: false });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  /**
+   * 关掉说明 → 告诉后端"已展示"。
+   *
+   * ack 失败**不提示**：这是一条次要信息，弹个错误比不显示更糟；没打上标记时
+   * 下次打开会照后端 `delivered=false` 再显示一遍，不会丢。
+   */
+  const dismissNotice = () => {
+    setNotice((current) => ({ ...current, dismissed: true }));
+    void ackKeepSessionNotice().catch(() => undefined);
+  };
 
   const replaceRow = (next: LoginStatusRow) => {
     setRows((current) => current.map((row) => (row.id === next.id ? next : row)));
@@ -263,6 +305,9 @@ export default function LoginStatusDrawer({
     </div>
   );
 
+  // 三条同时满足才显示：有天数（功能生效过）、后端说还没展示过、本次打开没被关掉。
+  const showNotice = notice.data.days > 0 && !notice.data.delivered && !notice.dismissed;
+
   return (
     <Drawer
       open={open}
@@ -277,6 +322,18 @@ export default function LoginStatusDrawer({
         </Button>
       }
     >
+      {/* 一次性说明（T1）：固定在最顶部，与检测结果无关。只在 `days > 0 && !delivered`
+          时出现——`days === 0` 表示功能还没真正生效过，那时候没有任何可说的。 */}
+      {showNotice ? (
+        <Alert
+          type="info"
+          showIcon
+          closable
+          style={{ marginBottom: 12 }}
+          title={t("applyUi.loginStatus.keepSessionNotice", { days: notice.data.days })}
+          onClose={dismissNotice}
+        />
+      ) : null}
       <Typography.Paragraph type="secondary">{t("applyUi.loginStatus.intro")}</Typography.Paragraph>
       <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
         {t("applyUi.loginStatus.probeHint")}

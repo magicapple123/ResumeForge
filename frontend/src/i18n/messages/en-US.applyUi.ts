@@ -185,6 +185,8 @@ const applyUi = {
     "Unknown means the page shows no account marker, or the site has no page that requires signing in. To confirm, click Log in again, then check once more.",
   "applyUi.loginStatus.localOnlyHint":
     "Login state is stored on this computer only; you need to sign in again on another computer or after reinstalling.",
+  "applyUi.loginStatus.keepSessionNotice":
+    "Keep signed in is on: session cookies last up to {days} days. Login state stays on this computer; another computer or a reinstall needs a sign-in.",
   // ===== Account note (issue 8, A1) =====
   "applyUi.loginStatus.accountLabel": "Account note",
   "applyUi.loginStatus.accountLabel.empty": "Not set",

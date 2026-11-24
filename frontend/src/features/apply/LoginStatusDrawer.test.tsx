@@ -29,6 +29,8 @@ const apiMocks = vi.hoisted(() => ({
   reloginWebformSite: vi.fn(),
   getAccountNote: vi.fn(),
   saveAccountNote: vi.fn(),
+  getKeepSessionNotice: vi.fn(),
+  ackKeepSessionNotice: vi.fn(),
 }));
 
 vi.mock("../../api/loginStatus", () => apiMocks);
@@ -104,6 +106,13 @@ beforeEach(() => {
   apiMocks.checkLoginStatus.mockImplementation((id: string) =>
     Promise.resolve(baseRows([]).find((row) => row.id === id)),
   );
+  // 默认没有说明可展示（`days === 0`）：其它用例不该被这条 Alert 干扰。
+  apiMocks.getKeepSessionNotice.mockResolvedValue({
+    days: 0,
+    first_effective_at: "",
+    delivered: false,
+  });
+  apiMocks.ackKeepSessionNotice.mockResolvedValue({ delivered: true });
 });
 
 afterEach(cleanup);
@@ -316,5 +325,80 @@ describe("原条目 8 A1：账号备注", () => {
         ),
       ).toBeTruthy(),
     );
+  });
+});
+
+/**
+ * T1「保持登录」的一次性说明：后端已有 `read_notice` / `mark_notice_delivered` /
+ * `notice_delivered`，但接口层此前没有任何调用方——这份用例钉住接上之后的行为。
+ *
+ * 正文只在 i18n 里（`applyUi.loginStatus.keepSessionNotice`），后端只给 `days`。
+ * 文案断言一律走 `t()`：面板显示的值由 i18n 出，测试里写字面中文会让 `cjkRatchet`
+ * 的 tests 口径多计一行（该守卫只降不升）。
+ */
+describe("T1 保持登录：一次性说明", () => {
+  const NOTICE_DAYS = 90;
+
+  it("有说明时显示，关掉后调用 ack", async () => {
+    apiMocks.getKeepSessionNotice.mockResolvedValue({
+      days: NOTICE_DAYS,
+      first_effective_at: "2026-11-13T09:41:07",
+      delivered: false,
+    });
+
+    renderDrawer();
+
+    const noticeText = t("applyUi.loginStatus.keepSessionNotice", { days: NOTICE_DAYS });
+    const node = await screen.findByText(noticeText);
+    expect(apiMocks.getKeepSessionNotice).toHaveBeenCalledTimes(1);
+    // 只是显示出来不算"已展示"：必须由用户关掉它才 ack。
+    expect(apiMocks.ackKeepSessionNotice).not.toHaveBeenCalled();
+
+    const alert = node.closest(".ant-alert") as HTMLElement;
+    fireEvent.click(alert.querySelector(".ant-alert-close-icon") as HTMLElement);
+
+    await waitFor(() => expect(apiMocks.ackKeepSessionNotice).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByText(noticeText)).toBeNull());
+  });
+
+  it("days=0（还没生效过 / 保持登录已关闭）时整条不显示", async () => {
+    // beforeEach 的默认桩就是 days=0：这里显式再写一次，读代码的人不必回头翻。
+    // 后端把"没生效过"与"开关已关"都归到 days=0（关掉了还说"已开始帮你保持"是假话），
+    // 所以前端只需要这一个判据，不必区分原因。
+    apiMocks.getKeepSessionNotice.mockResolvedValue({
+      days: 0,
+      first_effective_at: "",
+      delivered: false,
+    });
+
+    renderDrawer();
+
+    // i18n-ok: 断言后端下发的 source_label，不是前端文案
+    await screen.findByText("投递浏览器");
+    expect(document.querySelector(".ant-alert")).toBeNull();
+    expect(apiMocks.ackKeepSessionNotice).not.toHaveBeenCalled();
+  });
+
+  it("ack 失败不弹错误，也不把这条说明硬标成已读", async () => {
+    apiMocks.getKeepSessionNotice.mockResolvedValue({
+      days: NOTICE_DAYS,
+      first_effective_at: "2026-11-13T09:41:07",
+      delivered: false,
+    });
+    apiMocks.ackKeepSessionNotice.mockRejectedValue(new Error("ack failed"));
+
+    renderDrawer();
+
+    const noticeText = t("applyUi.loginStatus.keepSessionNotice", { days: NOTICE_DAYS });
+    const node = await screen.findByText(noticeText);
+    fireEvent.click(
+      (node.closest(".ant-alert") as HTMLElement).querySelector(
+        ".ant-alert-close-icon",
+      ) as HTMLElement,
+    );
+
+    await waitFor(() => expect(apiMocks.ackKeepSessionNotice).toHaveBeenCalledTimes(1));
+    // 次要信息：失败静默（面板里不会出现一条红条）。
+    await waitFor(() => expect(document.querySelector(".ant-message-error")).toBeNull());
   });
 });

@@ -7,6 +7,10 @@
 - ``POST /api/login-status/{id}/relogin``    浏览器类去开登录页
 - ``GET/PUT /api/login-status/accounts/{host}``  账号备注的读取 / 写入（原条目 8 A1）
 
+外加 T1「保持登录」的一次性说明（两个静态段路由，不建表、只读写 `AppSetting` KV）：
+- ``GET  /api/login-status/notice``          只读：天数 + 首次生效时刻 + 是否已展示
+- ``POST /api/login-status/notice/ack``      标记已展示（幂等）
+
 账号备注**按 host** 存 `AppSetting` KV（``login_account.<host>``），不建表、不迁移：
 它是用户自己填的一行文字，没有任何关联查询，"为它开一张表"只会多一份要维护的结构。
 
@@ -26,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..services import login_status, login_status_sites
+from ..services.browser import session_cookie_keepalive
 from ..services.webform import browser as webform_browser
 
 router = APIRouter(prefix="/api/login-status", tags=["login-status"])
@@ -102,6 +107,29 @@ class ReloginOut(BaseModel):
     url: str
 
 
+class KeepSessionNoticeOut(BaseModel):
+    """「保持登录」的一次性说明（T1）。
+
+    **只给天数，不给正文**：正文只有前端 i18n 一份（`applyUi.loginStatus.keepSessionNotice`）；
+    把中文模板从这里下发，英文界面就会漏中文。
+
+    ``days == 0`` 是"无可展示"的约定，两种原因都落到它：功能还没真正生效过、
+    或者用户已经把「保持登录」关掉了（后者再说"已开始帮你保持"就是假话）。
+    前端拿 ``days > 0 && !delivered`` 判渲染，不需要区分这两种原因——两种都该不显示。
+    """
+
+    days: int
+    #: 功能首次真正生效的时刻（ISO 串，原样下发，不做时区换算；开关关闭时仍如实下发）。
+    first_effective_at: str
+    #: 是否已经展示过（True 时前端不再渲染这条说明）。
+    delivered: bool
+
+
+class KeepSessionNoticeAckOut(BaseModel):
+    #: 固定 True：幂等接口，重复 ack 也返回成功（客户端只关心"这次之后算已展示"）。
+    delivered: bool
+
+
 def _clean_host(raw: str) -> str:
     """校验并规范化 host；不合法直接 400，不做"尽力而为"的清洗。"""
     host = str(raw or "").strip().lower()
@@ -114,6 +142,38 @@ def _clean_host(raw: str) -> str:
 def read_login_statuses(db: Session = Depends(get_db)) -> list[LoginStatusOut]:
     """两个来源的当前状态。**只读缓存**：浏览器类检测会弹窗，绝不能自动跑。"""
     return [LoginStatusOut(**item) for item in login_status.list_statuses(db)]
+
+
+@router.get("/notice", response_model=KeepSessionNoticeOut)
+def read_keep_session_notice(db: Session = Depends(get_db)) -> KeepSessionNoticeOut:
+    """「保持登录」的一次性说明（T1）：只读，**绝不触发检测、也不写任何键**。
+
+    ``days`` 取**当前策略**（`read_policy().normalized_days()`，与后台续期线程同一个
+    读取口，避免两处各算一份天数），但只在"确实在保"时给出，下列两种情况一律 ``0``
+    （前端据此整条不渲染）：
+
+    1. ``read_notice`` 为空——功能还没真正生效过；
+    2. 策略 ``enabled=false``——用户已经关掉开关，这时候说"我们已开始帮你保持登录"
+       是假话（历史生效记录仍然如实下发，不擦）。
+    """
+    first_effective_at = session_cookie_keepalive.read_notice(db)
+    delivered = session_cookie_keepalive.notice_delivered(db)
+    policy = session_cookie_keepalive.read_policy(db)
+    days = policy.normalized_days() if (first_effective_at and policy.enabled) else 0
+    return KeepSessionNoticeOut(
+        days=days, first_effective_at=first_effective_at, delivered=delivered
+    )
+
+
+@router.post("/notice/ack", response_model=KeepSessionNoticeAckOut)
+def ack_keep_session_notice(db: Session = Depends(get_db)) -> KeepSessionNoticeAckOut:
+    """标记一次性说明已展示（幂等）：重复调用不报错，一律回 200 + ``delivered=True``。
+
+    ``mark_notice_delivered`` 的返回值只表示"这次是否真的写了"，客户端不需要它，
+    所以这里不往下透传——透传会让前端误以为第二次 ack 失败了。
+    """
+    session_cookie_keepalive.mark_notice_delivered(db)
+    return KeepSessionNoticeAckOut(delivered=True)
 
 
 # 站点路由必须排在 `/{source}/...` 之前：`webform-sites` 也会匹配 `{source}`，

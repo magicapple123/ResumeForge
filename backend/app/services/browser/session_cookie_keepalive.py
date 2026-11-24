@@ -62,14 +62,10 @@ KEY_KEEP_SESSION_COOKIES = "browser.keep_session_cookies"
 KEY_SESSION_COOKIE_DAYS = "browser.session_cookie_days"
 #: 一次性说明：值 = 功能**首次真正生效**的时刻（ISO）。展示方读完调
 #: :func:`mark_notice_delivered` 写下面那个键，两个键都在 AppSetting 里，不建表。
+#: **正文不在这里**：展示文案只有前端 i18n 一份（`applyUi.loginStatus.keepSessionNotice`），
+#: 后端只给天数——在这里再放一份中文模板，英文界面就会漏中文，而且两份迟早不同步。
 KEY_NOTICE_FIRST_EFFECTIVE = "browser.keep_session_cookies.notice"
 KEY_NOTICE_DELIVERED = "browser.keep_session_cookies.notice_delivered"
-
-KEEP_SESSION_COOKIES_NOTICE = (
-    "已开启「保持登录」：应用会把你在这个专用浏览器里登录过的站点，从「关掉浏览器就失效」"
-    "续成最多 {days} 天的持久登录。登录状态只保存在本机，换电脑或重装后需要重新登录；"
-    "服务端会话到期或站点主动退出时仍要重登。"
-)
 
 
 @dataclass(frozen=True)
@@ -251,15 +247,19 @@ def write_policy(
     return read_policy(db)
 
 
-def notice_text(days: int = DEFAULT_SESSION_COOKIE_DAYS) -> str:
-    """一次性说明的正文（展示方直接用，别在别处再写一份）。"""
-    return KEEP_SESSION_COOKIES_NOTICE.format(days=days)
-
-
 def read_notice(db: Session) -> str:
     """一次性说明的"首次生效时刻"；空串表示还没生效过、无可展示。"""
     row = db.get(AppSetting, KEY_NOTICE_FIRST_EFFECTIVE)
     return row.value if row is not None else ""
+
+
+def notice_delivered(db: Session) -> bool:
+    """说明是否**已经**展示过（与 :func:`mark_notice_delivered` 成对，只读不写）。
+
+    展示方每次打开面板都要先问一次：说明是"一次性"的，但它是否已经给过用户
+    只由这个键决定——前端不缓存、也不自己记，否则换设备/清缓存后会再弹一遍。
+    """
+    return db.get(AppSetting, KEY_NOTICE_DELIVERED) is not None
 
 
 def mark_notice_delivered(db: Session) -> bool:
@@ -432,7 +432,6 @@ class SessionCookieKeepalive:
 __all__ = [
     "ALLOWED_SESSION_COOKIE_DAYS",
     "DEFAULT_SESSION_COOKIE_DAYS",
-    "KEEP_SESSION_COOKIES_NOTICE",
     "KEY_KEEP_SESSION_COOKIES",
     "KEY_NOTICE_DELIVERED",
     "KEY_NOTICE_FIRST_EFFECTIVE",
@@ -444,7 +443,7 @@ __all__ = [
     "cookie_key",
     "mark_notice_delivered",
     "needs_promotion",
-    "notice_text",
+    "notice_delivered",
     "promote_session_cookies",
     "read_notice",
     "read_policy",

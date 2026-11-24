@@ -45,6 +45,20 @@ export interface WebFormSiteList {
   truncated: number;
 }
 
+/**
+ * 「保持登录」的一次性说明（T1）。
+ *
+ * 后端**只给天数**，正文由前端 i18n 出（后端那份中文模板不下发，否则英文界面漏中文）。
+ * `days === 0` 是"无可展示"的约定：功能还没真正生效过，一条说明都没有。
+ */
+export interface KeepSessionNotice {
+  days: number;
+  /** 功能首次生效的时刻（ISO 串，原样显示，前端不做时区换算）。 */
+  first_effective_at: string;
+  /** 是否已经展示过；true 时不再渲染（后端口径，前端不自己记）。 */
+  delivered: boolean;
+}
+
 /** 只读缓存：**不会触发任何检测**（浏览器类检测会弹窗、耗时数秒）。 */
 export function listLoginStatuses(): Promise<LoginStatusRow[]> {
   return request("/login-status");
@@ -98,4 +112,21 @@ export function saveAccountNote(host: string, note: string): Promise<AccountNote
     method: "PUT",
     body: JSON.stringify({ note }),
   });
+}
+
+/**
+ * 读「保持登录」的一次性说明（T1）。只读，**不会触发检测**。
+ *
+ * `days > 0 && !delivered` 才值得渲染；`days === 0` 表示功能还没生效过。
+ */
+export function getKeepSessionNotice(): Promise<KeepSessionNotice> {
+  return request("/login-status/notice");
+}
+
+/**
+ * 标记这条说明已经展示过（幂等）。客户端只关心"打上了没有"，失败可以静默——
+ * 它是一条次要信息，不能让用户为它看到报错。
+ */
+export function ackKeepSessionNotice(): Promise<{ delivered: boolean }> {
+  return request("/login-status/notice/ack", { method: "POST" });
 }
