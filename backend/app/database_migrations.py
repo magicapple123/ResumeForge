@@ -160,8 +160,29 @@ def run_database_migrations(bind: Engine, *, backup: bool = True) -> Path | None
     )
     # Reuse the application's connection so sqlite:///:memory: is migrated in
     # place instead of creating and discarding a second in-memory database.
-    with bind.begin() as connection:
-        config.attributes["connection"] = connection
-        command.upgrade(config, "head")
+    #
+    # SQLite 用 AUTOCOMMIT + 临时关外键跑迁移（2026-11-24，T6 的 0025 暴露）。
+    #
+    # ``batch_alter_table`` 重建表是「建临时表 → INSERT … SELECT → **DROP 原表** → 改名」。
+    # 这条链在本应用的连接上有两个必死点，命令行 ``alembic upgrade`` 却没事——因为 env.py
+    # 自建的引擎**不装** ``_configure_sqlite_connection`` 那套 PRAGMA：
+    #   1. ``PRAGMA foreign_keys=ON``：SQLite 在开外键时不允许在同一事务里 DROP 一张仍被
+    #      语句引用的表，直接抛 ``database table is locked``。逐条二分过：foreign_keys 是
+    #      元凶，busy_timeout / journal_mode=WAL 单独跑都通过。
+    #   2. ``PRAGMA foreign_keys`` 在事务里是 **no-op**，所以必须先 AUTOCOMMIT 再关。
+    # 关外键不丢校验：SQLite 的 ``foreign_key_check`` 靠测试与迁移前的整库快照兜底，而
+    # 批量重建本来就要绕过逐行校验（重建期间中间态表不可能满足外键）。
+    # 还原放在 ``finally``：这条连接会回到池里被应用继续用，留着 OFF 会让级联删除静默失效。
+    is_sqlite = bind.dialect.name == "sqlite"
+    with bind.connect() as connection:
+        if is_sqlite:
+            connection = connection.execution_options(isolation_level="AUTOCOMMIT")
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        try:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+        finally:
+            if is_sqlite:
+                connection.exec_driver_sql("PRAGMA foreign_keys=ON")
     logger.info("数据库迁移完成 revision=%s", head_revision)
     return backup_path
