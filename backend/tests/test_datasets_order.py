@@ -25,13 +25,22 @@ def _create(client, name: str) -> dict:
     return response.json()
 
 
-def _stamp(dataset_id: str, *, days_ago: float) -> None:
-    """把元信息里的 created_at 改成指定的时间点（导入时间无法在测试里等待）。"""
+def _stamp(dataset_id: str, *, at: datetime) -> None:
+    """把元信息里的 created_at 改成**指定的时间点**（导入时间无法在测试里等待）。
+
+    传时间点而不是 ``days_ago``：早先每次调用都取 ``datetime.now()``，两次调用只要跨到
+    下一秒，``created_at`` 就不再相等——"同一时刻按名称兜底"那条用例会偶发翻车
+    （2026-11-24 串行覆盖率跑到 17:13:46 / 17:13:47 时正好撞上）。时间由调用方一次算好，
+    用例的时间关系才是确定的。
+    """
     metadata = read_metadata(dataset_id) or {}
-    metadata["created_at"] = (datetime.now().astimezone() - timedelta(days=days_ago)).isoformat(
-        timespec="seconds"
-    )
+    metadata["created_at"] = at.isoformat(timespec="seconds")
     write_metadata(dataset_id, metadata)
+
+
+def _now() -> datetime:
+    """用例内统一取一次"现在"（截到秒，与 ``_stamp`` 的落盘精度一致）。"""
+    return datetime.now().astimezone().replace(microsecond=0)
 
 
 def test_list_is_active_first_then_newest_first(client):
@@ -39,9 +48,10 @@ def test_list_is_active_first_then_newest_first(client):
     oldest = _create(client, "三天前导入")
     middle = _create(client, "昨天导入")
     newest = _create(client, "今天导入")
-    _stamp(oldest["id"], days_ago=3)
-    _stamp(middle["id"], days_ago=1)
-    _stamp(newest["id"], days_ago=0)
+    now = _now()
+    _stamp(oldest["id"], at=now - timedelta(days=3))
+    _stamp(middle["id"], at=now - timedelta(days=1))
+    _stamp(newest["id"], at=now)
     # 激活的是"昨天"那份：它必须排第一，哪怕它不是最新的。
     write_active_dataset_id(middle["id"])
 
@@ -53,7 +63,7 @@ def test_list_is_active_first_then_newest_first(client):
 def test_missing_created_at_sorts_last_and_never_crashes(client):
     """没有 created_at 的条目按"最旧"处理：排在所有有时间的数据集之后，且不抛 TypeError。"""
     stamped = _create(client, "有时间的数据集")
-    _stamp(stamped["id"], days_ago=2)
+    _stamp(stamped["id"], at=_now() - timedelta(days=2))
     undated = _create(client, "没有时间的数据集")
     # 元信息里**故意不写** created_at（历史数据集就可能长这样）。
     write_metadata(undated["id"], {"name": "没有时间的数据集", "source": "导入"})
@@ -68,8 +78,10 @@ def test_same_timestamp_falls_back_to_name(client):
     """同一时刻的并列用名称兜底：顺序稳定，不会两次请求给出不同结果。"""
     second = _create(client, "B 数据集")
     first = _create(client, "A 数据集")
+    # 关键：两次写入**必须**是同一个时间点（早先各自取 now()，跨秒就退化成按时间排）。
+    same_instant = _now() - timedelta(days=1)
     for item in (first, second):
-        _stamp(item["id"], days_ago=1)
+        _stamp(item["id"], at=same_instant)
 
     ids = [item["id"] for item in list_datasets()]
 
@@ -82,7 +94,7 @@ def test_unparsable_created_at_is_treated_as_unknown(client):
     broken = _create(client, "坏时间")
     write_metadata(broken["id"], {"name": "坏时间", "source": "导入", "created_at": "去年某天"})
     good = _create(client, "好时间")
-    _stamp(good["id"], days_ago=1)
+    _stamp(good["id"], at=_now() - timedelta(days=1))
 
     ids = [item["id"] for item in list_datasets()]
 
