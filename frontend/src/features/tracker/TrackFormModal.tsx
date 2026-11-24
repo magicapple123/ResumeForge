@@ -28,11 +28,7 @@ import type { Track, TrackChannel, TrackPayload, TrackStatus } from "../../types
 import { TRACK_CHANNELS, TRACK_STATUSES, emptyTrack } from "../../types";
 import { HintedTextArea } from "../../components/common/MaxLengthHint";
 import { MAX_TRACK_LINK_CHARS, trackLinkError } from "./linkValidation";
-import {
-  parseResumeRef,
-  trackResumeRef,
-  useTrackResumeSelect,
-} from "./useTrackResumeSelect";
+import { parseResumeRef, trackResumeRef, useTrackResumeSelect } from "./useTrackResumeSelect";
 
 const STATUS_OPTIONS = TRACK_STATUSES.map((value) => ({
   value,

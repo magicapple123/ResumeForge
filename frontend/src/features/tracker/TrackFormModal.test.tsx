@@ -90,12 +90,10 @@ beforeEach(() => {
     .mockImplementation((params: { job_id?: number; include_general?: boolean } = {}) =>
       Promise.resolve({ items: filterByJob(RESUME_OPTIONS, params), total: RESUME_OPTIONS.length }),
     );
-  resumesMocks.getResume
-    .mockReset()
-    .mockImplementation((id: number) => {
-      const found = RESUME_OPTIONS.find((resume) => resume.id === id);
-      return found ? Promise.resolve(found) : Promise.reject(new Error("404"));
-    });
+  resumesMocks.getResume.mockReset().mockImplementation((id: number) => {
+    const found = RESUME_OPTIONS.find((resume) => resume.id === id);
+    return found ? Promise.resolve(found) : Promise.reject(new Error("404"));
+  });
   externalMocks.listExternalResumes
     .mockReset()
     .mockImplementation((params: { job_id?: number; include_general?: boolean } = {}) =>
@@ -106,12 +104,10 @@ beforeEach(() => {
         page_size: 50,
       }),
     );
-  externalMocks.getExternalResume
-    .mockReset()
-    .mockImplementation((id: number) => {
-      const found = EXTERNAL_OPTIONS.find((resume) => resume.id === id);
-      return found ? Promise.resolve(found) : Promise.reject(new Error("404"));
-    });
+  externalMocks.getExternalResume.mockReset().mockImplementation((id: number) => {
+    const found = EXTERNAL_OPTIONS.find((resume) => resume.id === id);
+    return found ? Promise.resolve(found) : Promise.reject(new Error("404"));
+  });
 });
 
 function renderModal() {
@@ -391,4 +387,3 @@ describe("TrackFormModal 的关联链接", () => {
 
   // 逐条比对校验口径的用例在 `linkValidation.test.ts`：那里是纯函数，读起来更直接。
 });
-

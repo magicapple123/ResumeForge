@@ -129,10 +129,7 @@ describe("TrackCard 的外部简历关联", () => {
     // 活关联不该被标成「历史关联」——判据得是两个关联都为空。
     expect(node).not.toHaveTextContent(t("trackerUi.card.resumeHistorical"));
     // 可见文本与 title 仍是同一份完整字符串（带标注）。
-    expect(node).toHaveAttribute(
-      "title",
-      `${EXTERNAL_TITLE}${t("trackerUi.card.resumeExternal")}`,
-    );
+    expect(node).toHaveAttribute("title", `${EXTERNAL_TITLE}${t("trackerUi.card.resumeExternal")}`);
   });
 
   it("外部关联消失（外键 SET NULL）后只剩快照：标历史关联，不再说「外部」", () => {
@@ -144,7 +141,11 @@ describe("TrackCard 的外部简历关联", () => {
   });
 
   it("只有标题快照、没有任何关联 id 时仍然显示（显示条件含 external_resume_id 与快照）", () => {
-    const { container } = renderCard({ resume_id: null, external_resume_id: null, resume_title: EXTERNAL_TITLE });
+    const { container } = renderCard({
+      resume_id: null,
+      external_resume_id: null,
+      resume_title: EXTERNAL_TITLE,
+    });
 
     expect(container.querySelector(".track-card-resume")).toHaveTextContent(EXTERNAL_TITLE);
   });
