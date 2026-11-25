@@ -8,6 +8,7 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from app.models.agent_task import AgentTask
 from app.services.agent_task_events import (
     BACKFILL_WINDOW,
@@ -15,6 +16,23 @@ from app.services.agent_task_events import (
     scan_due_reminders,
 )
 from app.services.settings_service import get_agent_task_events_enabled
+
+
+@pytest.fixture(autouse=True)
+def _stop_reminder_scheduler():
+    """每个用例先停掉后台扫描线程。
+
+    CR-22 之后「提醒到点通知」默认开，应用启动就会拉起这条线程，它和用例里的
+    ``_scan(...)`` 抢同一条提醒：Linux CI 上时序一变就被线程先吃掉，用例看到
+    ``created == 0``（本机常常刚好快半拍，复现不到）。这里要测的是扫描函数本身，
+    后台线程必须在测量窗口之外。
+    """
+    from app.services import agent_task_events
+
+    agent_task_events.stop_scheduler()
+    yield
+    agent_task_events.stop_scheduler()
+
 
 # 注入时钟：所有扫描都用它，不写死 datetime.now()（手册 T26 风险项）。
 # 基准时刻取"真实的现在"，不写死日期：CR-28 之后"逾期 7 天"的体检是按**墙钟**跑的
