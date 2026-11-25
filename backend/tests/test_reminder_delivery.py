@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from app.models.agent_task import AgentTask
 from app.models.job import Job
 from app.models.notification import Notification
@@ -25,6 +26,21 @@ from app.models.reminder import ReminderOccurrence
 from app.models.setting import AppSetting
 from app.services.agent_task_events import scan_due_reminders
 from app.services.notifications import emit
+
+
+@pytest.fixture(autouse=True)
+def _stop_reminder_scheduler():
+    """停掉后台扫描线程：它和用例里的显式扫描抢同一条提醒。
+
+    「提醒到点通知」默认开，应用启动即拉起线程；不隔离的话，线程先处理掉，
+    用例里的 `_scan(...)` 就会看到 0（Linux CI 上撞到过，本机时序不同复现不到）。
+    """
+    from app.services import agent_task_events
+
+    agent_task_events.stop_scheduler()
+    yield
+    agent_task_events.stop_scheduler()
+
 
 NOW = datetime(2026, 11, 7, 12, 0, tzinfo=UTC)
 CARD_SETTING = "/api/settings/agent-task-events"
