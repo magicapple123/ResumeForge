@@ -198,7 +198,7 @@ def _delivery_counts(db: Session, records: list[ResumeRecord]) -> dict[int, int]
     job_ids = {record.job_id for record in records if record.job_id is not None}
     general_ids = [record.id for record in records if record.job_id is None]
 
-    job_counts: dict[int, int] = {}
+    job_counts: dict[int | None, int] = {}
     if job_ids:
         rows = (
             db.query(ApplicationTrack.job_id, func.count(ApplicationTrack.id))
@@ -211,7 +211,7 @@ def _delivery_counts(db: Session, records: list[ResumeRecord]) -> dict[int, int]
         )
         job_counts = {job_id: count for job_id, count in rows}
 
-    resume_counts: dict[int, int] = {}
+    resume_counts: dict[int | None, int] = {}
     if general_ids:
         rows = (
             db.query(ApplicationTrack.resume_id, func.count(ApplicationTrack.id))

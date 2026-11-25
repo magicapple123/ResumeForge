@@ -188,12 +188,18 @@ def _attach_step_job_ids(db: Session, payloads: Sequence[AgentTaskOut]) -> None:
         return
     job_by_track = job_ids_for_tracks(db, sorted(track_ids))
     for payload in payloads:
-        payload.steps = [
-            step.model_copy(
-                update={"job_id": job_by_track.get((step.output_ref or {}).get("track_id"))}
+        steps = []
+        for step in payload.steps:
+            raw_track = (step.output_ref or {}).get("track_id")
+            track_id = raw_track if isinstance(raw_track, int) else None
+            steps.append(
+                step.model_copy(
+                    update={
+                        "job_id": job_by_track.get(track_id) if track_id is not None else None
+                    }
+                )
             )
-            for step in payload.steps
-        ]
+        payload.steps = steps
 
 
 def _task_out(db: Session, task: AgentTask) -> AgentTaskOut:

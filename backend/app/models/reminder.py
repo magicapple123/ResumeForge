@@ -22,7 +22,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, event
+from sqlalchemy import DateTime, ForeignKey, String, Text, event, insert
 from sqlalchemy.orm import Mapped, Mapper, mapped_column
 
 from app.vocabulary.reminder import (
@@ -133,8 +133,10 @@ def _create_first_occurrence(
     后续查询立刻能看到这一行。
     """
     moment = target.created_at or utcnow()
+    # 用 ``insert(Model)`` 而不是 ``Model.__table__.insert()``：后者在 pyright 眼里
+    # 只是 ``FromClause``（没有 insert 属性），CI 的静态检查会红。
     connection.execute(
-        ReminderOccurrence.__table__.insert().values(
+        insert(ReminderOccurrence).values(
             reminder_id=target.id,
             due_at=target.remind_at,
             status=REMINDER_OCCURRENCE_STATUS_PENDING,

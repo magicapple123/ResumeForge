@@ -135,7 +135,8 @@ def _export_asr(block: dict[str, Any], include_api_keys: bool) -> dict[str, Any]
 def _export_embedding(block: dict[str, Any], include_api_keys: bool) -> dict[str, Any]:
     profiles: list[dict[str, Any]] = []
     for item in _profiles_of(block):
-        config = item.get("config") if isinstance(item.get("config"), dict) else {}
+        raw_config = item.get("config")
+        config: dict[str, Any] = raw_config if isinstance(raw_config, dict) else {}
         sanitized = {key: value for key, value in config.items() if key != "api_key"}
         sanitized["api_key"] = _secret(config.get("api_key"), include_api_keys)
         exported = {key: item.get(key) for key in _EMBEDDING_PROFILE_FIELDS if key in item}
@@ -244,7 +245,8 @@ def _keys_included(payload: dict[str, Any]) -> bool:
             if str(block.get(field) or ""):
                 return True
         for profile in _profiles_of(block):
-            config = profile.get("config") if isinstance(profile.get("config"), dict) else profile
+            raw_config = profile.get("config")
+            config: dict[str, Any] = raw_config if isinstance(raw_config, dict) else profile
             if str(config.get("api_key") or ""):
                 return True
     return False
@@ -266,11 +268,11 @@ def _merge_profiles(
     ``body_key`` 是 profile 的正文键名（语义检索是 ``config``）；语音配置的正文**内联**
     在 profile 自己的键上，此时传 ``None``，正文按 ``fields`` 白名单摘出来。
     """
-    block = state.get(block_key)
-    if not isinstance(block, dict):
-        block = {"profiles": []}
-        state[block_key] = block
-    local = block.get("profiles") if isinstance(block.get("profiles"), list) else []
+    raw_block = state.get(block_key)
+    block: dict[str, Any] = raw_block if isinstance(raw_block, dict) else {"profiles": []}
+    state[block_key] = block
+    raw_local = block.get("profiles")
+    local: list[dict[str, Any]] = raw_local if isinstance(raw_local, list) else []
     block["profiles"] = local
     by_name = {str(item.get("name") or ""): item for item in local if isinstance(item, dict)}
     imported = skipped = 0
