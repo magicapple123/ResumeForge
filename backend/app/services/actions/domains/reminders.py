@@ -30,7 +30,13 @@ if TYPE_CHECKING:
     from ...assistant_tools.authorization import WritePreview
 
 _DEFAULT_TOOL_LIST_LIMIT = 20
-_STATUS_LABELS = {"pending": "待办", "done": "已完成", "dismissed": "已忽略"}
+_STATUS_LABELS = {
+    "active": "待办",
+    "archived": "已归档",
+    "pending": "待办",
+    "done": "已完成",
+    "dismissed": "已忽略",
+}
 
 
 class ListRemindersInput(BaseModel):
@@ -41,8 +47,8 @@ class ListRemindersInput(BaseModel):
     kind: Literal["interview", "assessment_deadline", "hr_reply", "other", ""] = Field(
         default="", description="可选，提醒类型"
     )
-    status: Literal["pending", "done", "dismissed", ""] = Field(
-        default="", description="可选，提醒状态（pending 待办）"
+    status: Literal["active", "archived", "pending", "done", "dismissed", ""] = Field(
+        default="", description="可选，提醒状态（默认只看 active 待办）"
     )
     limit: int = Field(default=200, ge=1, le=500, description="可选，最多返回多少条，默认 20")
 
@@ -102,8 +108,10 @@ def _run_update_reminder(db: Session, payload: UpdateReminderInput) -> ActionOut
     update_payload = ReminderUpdate.model_validate(fields)
     updated = update_reminder(db, reminder, update_payload)
     if "status" in fields:
+        # 摘要说的是"用户做的那个动作"，不是回显里的计划状态：done/dismissed 只结束
+        # 这一次，计划本身可能因为重复规则还在（CR-28）。
         summary = (
-            f"把提醒「{updated.title}」标记为{_STATUS_LABELS.get(updated.status, updated.status)}"
+            f"把提醒「{updated.title}」标记为{_STATUS_LABELS.get(fields['status'], fields['status'])}"
         )
     else:
         summary = f"更新了提醒「{updated.title}」"
@@ -144,7 +152,8 @@ def reminder_actions() -> dict[str, ActionSpec]:
     update_reminder = ActionSpec(
         name="update_reminder",
         description=(
-            "把一条日历提醒标记为 done（已完成）或 dismissed（已忽略），也可改回 pending。"
+            "把一条日历提醒标记为 done（已完成）或 dismissed（已忽略）；重复提醒会保留计划并"
+            "生成下一次，单次提醒做完即归档。也可用 active 恢复、archived 停止这条计划。"
             "用户说「那个提醒我弄完了」「这条不用管了」时先用 list_reminders 找到 id 再调用。"
             "提醒时间、绑定与备注的修改请在「求职进度 → 提醒」页做。"
         ),

@@ -41,16 +41,21 @@ from ..models.agent_task import (
     AgentTaskStep,
 )
 from ..models.profile import utcnow
-from ..models.reminder import REMINDER_STATUS_PENDING, Reminder
+from ..models.reminder import (
+    REMINDER_OCCURRENCE_STATUS_PENDING,
+    REMINDER_STATUS_ACTIVE,
+    Reminder,
+    ReminderOccurrence,
+)
 from .followup_sweep import scan_stalled_tracks
-from .settings_service import get_agent_task_events_enabled
+from .reminder_delivery import BACKFILL_WINDOW, deliver_due_reminders
+from .reminder_occurrences import expire_stale_occurrences
+from .settings_service import get_agent_task_events_enabled, get_notify_reminder_due
 
 logger = logging.getLogger(__name__)
 
 #: 任务卡标题前缀：一眼看出这是"提醒到期自动生成"的准备任务。
 TASK_TITLE_PREFIX = "准备："
-#: 启动/周期补扫只回看这么多：更早的 occurrence 不生成（手册 T26 边界规则）。
-BACKFILL_WINDOW = timedelta(hours=24)
 #: 周期扫描间隔。低频即可：提醒精度到分钟，任务卡晚一分钟生成并无影响。
 DEFAULT_CHECK_SECONDS = 60.0
 #: 任务卡（含唯一一个确认步骤）的标题上限，与 AgentTask.title 列一致。
@@ -115,12 +120,43 @@ def scan_due_reminders(
     now: datetime | None = None,
     window: timedelta = BACKFILL_WINDOW,
     enabled: bool | None = None,
+    notify_enabled: bool | None = None,
+) -> dict[str, Any]:
+    """扫一次到期提醒：**投递通知** + **生成任务卡**，两段各自 gate（CR-22）。
+
+    ``enabled`` 对应「任务卡」开关（默认关）；``notify_enabled`` 对应「提醒到点通知」
+    开关（默认开）。两段互不依赖：关掉任务卡不影响提醒，关掉提醒也不影响建卡。
+
+    返回保持既有 key 不变（``enabled/created/skipped/created_task_ids``，语义仍是任务卡
+    段），新增 ``delivered`` / ``notification_ids`` 描述投递段。
+    """
+    # 先做过期体检（逾期 7 天 → skipped + 「已过期」通知），再投递/建卡：否则刚过期的
+    # 这一次会在同一轮被当成"到期"再提醒一次。
+    expired = expire_stale_occurrences(db, now=now)
+    delivery = deliver_due_reminders(db, now=now, window=window, enabled=notify_enabled)
+    cards = create_due_task_cards(db, now=now, window=window, enabled=enabled)
+    return {
+        "enabled": cards["enabled"],
+        "created": cards["created"],
+        "skipped": cards["skipped"],
+        "created_task_ids": cards["created_task_ids"],
+        "delivered": delivery["delivered"],
+        "notification_ids": delivery["notification_ids"],
+        "expired": expired["expired"],
+    }
+
+
+def create_due_task_cards(
+    db: Session,
+    *,
+    now: datetime | None = None,
+    window: timedelta = BACKFILL_WINDOW,
+    enabled: bool | None = None,
 ) -> dict[str, Any]:
     """扫一次当前数据集里到期的提醒，按 occurrence 生成任务卡（幂等）。
 
-    now 可注入（测试与"应用未启动 3 天"的补扫都用它判断 24h 窗口）；
-    enabled=None 时读设置，明确传 False 用于测试"关闭时零副作用"。
-    返回 {"enabled", "created", "skipped", "created_task_ids"}。
+    维持 T26 既有行为与返回值：``enabled`` 是「任务卡」开关（默认关），关闭时
+    返回原样的零值字典。``now`` 可注入（测试与"应用未启动 3 天"的补扫都用它判断 24h 窗口）。
     """
     if enabled is None:
         enabled = get_agent_task_events_enabled(db)
@@ -129,15 +165,19 @@ def scan_due_reminders(
 
     moment = _as_naive_utc(now or utcnow())
     cutoff = moment - window
-    reminders = db.scalars(
-        select(Reminder)
+    # 扫描对象是 occurrence（CR-28）：重复规则下每次到期都要各自建卡，而不是
+    # "每条提醒只建一张"；去重键仍是 (reminder_id, occurrence_due_at)。
+    due_rows = db.execute(
+        select(ReminderOccurrence, Reminder)
+        .join(Reminder, Reminder.id == ReminderOccurrence.reminder_id)
         .where(
-            Reminder.status == REMINDER_STATUS_PENDING,
+            ReminderOccurrence.status == REMINDER_OCCURRENCE_STATUS_PENDING,
+            Reminder.status == REMINDER_STATUS_ACTIVE,
             Reminder.deleted_at.is_(None),
-            Reminder.remind_at <= moment,
-            Reminder.remind_at >= cutoff,
+            ReminderOccurrence.due_at <= moment,
+            ReminderOccurrence.due_at >= cutoff,
         )
-        .order_by(Reminder.remind_at.asc(), Reminder.id.asc())
+        .order_by(ReminderOccurrence.due_at.asc(), Reminder.id.asc())
     ).all()
 
     from ..runtime import dataset_scope  # 函数级导入：避免模块加载期依赖 runtime 初始化
@@ -145,8 +185,8 @@ def scan_due_reminders(
     dataset_key = dataset_scope.current_dataset_id()
     created_ids: list[int] = []
     skipped = 0
-    for reminder in reminders:
-        due_at = _as_naive_utc(reminder.remind_at)
+    for occurrence, reminder in due_rows:
+        due_at = _as_naive_utc(occurrence.due_at)
         if _occurrence_exists(db, reminder.id, due_at):
             skipped += 1
             continue
@@ -168,7 +208,7 @@ def scan_due_reminders(
     db.commit()
     if created_ids:
         logger.info(
-            "提醒到期生成任务卡 %s 张（reminder 扫描 %s 条）", len(created_ids), len(reminders)
+            "提醒到期生成任务卡 %s 张（occurrence 扫描 %s 条）", len(created_ids), len(due_rows)
         )
     return {
         "enabled": True,
@@ -176,11 +216,6 @@ def scan_due_reminders(
         "skipped": skipped,
         "created_task_ids": created_ids,
     }
-
-
-# ---------------------------------------------------------------------------
-# 后台调度（与 data_backup/scheduler.py 同一套模式：守护线程 + 可唤醒 + 数据集租约）
-# ---------------------------------------------------------------------------
 
 
 def run_for_current_dataset(*, now: datetime | None = None) -> dict[str, Any] | None:
@@ -296,7 +331,8 @@ def start_scheduler_if_enabled() -> bool:
     from ..database import SessionLocal
 
     with SessionLocal() as db:
-        enabled = get_agent_task_events_enabled(db)
+        # 任一开关开着就需要这个线程：任务卡与到期通知是两条独立链路（CR-22）。
+        enabled = get_agent_task_events_enabled(db) or get_notify_reminder_due(db)
     if not enabled:
         return False
     start_scheduler()
@@ -316,6 +352,8 @@ __all__ = [
     "DEFAULT_CHECK_SECONDS",
     "ReminderTaskScheduler",
     "TASK_TITLE_PREFIX",
+    "create_due_task_cards",
+    "deliver_due_reminders",
     "get_scheduler",
     "on_enabled_setting_changed",
     "run_for_current_dataset",

@@ -6,6 +6,11 @@
 - 抓取由**服务端**完成，本地不需要为「不能被打成内网跳板」维护 SSRF 逐跳校验；
 - 支持 ``site:`` / ``after:`` 这类操作符，对「只在招聘站里找近期岗位」更精确。
 
+计费口径：本模块**直连** ``POST /v1/tools/search`` / ``/v1/tools/fetch``，仍按成功
+请求次数计费（约 ¥0.005/次）。2026-11-18 12:00 起免收的是**模型侧联网工具**
+（``deepseek_web_search`` / ``deepseek_read_url``）的工具调用费，那条路见
+``company_research_brief``；两者不要混着描述。
+
 失败语义（这决定聚合层怎么降级，改之前先读）：
 - :func:`search_deepseek` **永不抛异常**：返回 :class:`DeepSeekResults`（与
   ``list[dict[str, str]]`` 同构），失败时是空列表并把原因放进 ``.failure``；

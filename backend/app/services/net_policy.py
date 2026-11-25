@@ -32,69 +32,20 @@ from __future__ import annotations
 
 import ipaddress
 
-# ===== 原因键（公开契约）=====
-#: 字面量不是合法 IP（调用方通常在文案里带上 ``repr(address)``）。
-ADDRESS_INVALID = "invalid"
-ADDRESS_PRIVATE = "private"
-ADDRESS_LOOPBACK = "loopback"
-ADDRESS_LINK_LOCAL = "link-local"
-ADDRESS_RESERVED = "reserved"
-ADDRESS_MULTICAST = "multicast"
-#: 运营商级 NAT 共享地址段（IPv4 100.64.0.0/10）。
-ADDRESS_SHARED = "shared-address-space"
-
-#: 所有可能的原因键（公网放行时返回 ``None``，不在其中）。
-NON_PUBLIC_REASONS = frozenset(
-    {
-        ADDRESS_INVALID,
-        ADDRESS_PRIVATE,
-        ADDRESS_LOOPBACK,
-        ADDRESS_LINK_LOCAL,
-        ADDRESS_RESERVED,
-        ADDRESS_MULTICAST,
-        ADDRESS_SHARED,
-    }
+# 纯判定已下沉到 ``vocabulary.net_address``（契约层也要用它，见该模块 docstring）；
+# 这里只做再导出 + 出网侧的 ``endpoint_class``，服务侧调用点与测试的导入路径不变。
+from ..vocabulary.net_address import (
+    ADDRESS_INVALID,
+    ADDRESS_LINK_LOCAL,
+    ADDRESS_LOOPBACK,
+    ADDRESS_MULTICAST,
+    ADDRESS_PRIVATE,
+    ADDRESS_RESERVED,
+    ADDRESS_SHARED,
+    NON_PUBLIC_REASONS,
+    SHARED_IPV4_SPACE,
+    non_public_address_reason,
 )
-
-#: CGNAT 共享地址段。单独点名比换成 ``not is_global`` 更保守：只多拒这一段。
-SHARED_IPV4_SPACE = ipaddress.ip_network("100.64.0.0/10")
-
-
-def non_public_address_reason(address: str) -> str | None:
-    """地址是公网则返回 ``None``，否则返回一条原因键（见模块级常量）。
-
-    判定顺序按**属性精度**排列：``loopback`` → ``link-local`` → ``reserved`` →
-    ``multicast`` → ``private`` → ``shared-address-space``。只影响"命中哪个键"，不影响
-    "放不放行"（每个键在两个调用方都落到拒绝）。之所以不是 ``private`` 打头：Python
-    3.12 起 ``is_private`` 把回环与链路本地也算进去，``private`` 打头会让 ``loopback`` /
-    ``link-local`` / ``reserved`` 三个键永远命中不了——那等于给调用方一张假的契约表。
-
-    **解析失败不抛异常**——返回 :data:`ADDRESS_INVALID`，由调用方决定文案，这样"DNS 给了
-    脏数据"不会变成 500。
-    """
-    try:
-        parsed = ipaddress.ip_address(address)
-    except ValueError:
-        return ADDRESS_INVALID
-    if isinstance(parsed, ipaddress.IPv6Address) and parsed.ipv4_mapped is not None:
-        # 4-in-6 形态整类拒绝：不同 Python 小版本对映射地址的 is_loopback / is_reserved
-        # 判定并不一致——3.12.2 视作 reserved，3.12.10 却把 ::ffff:127.0.0.1 判成
-        # loopback、把 ::ffff:93.184.216.34 当公网放行（实测），而连接落到的就是那个
-        # IPv4。规则只收不放：整类拒绝，不随解释器版本漂移。
-        return ADDRESS_RESERVED
-    if parsed.is_loopback:
-        return ADDRESS_LOOPBACK
-    if parsed.is_link_local:
-        return ADDRESS_LINK_LOCAL
-    if parsed.is_reserved:
-        return ADDRESS_RESERVED
-    if parsed.is_multicast:
-        return ADDRESS_MULTICAST
-    if parsed.is_private:
-        return ADDRESS_PRIVATE
-    if isinstance(parsed, ipaddress.IPv4Address) and parsed in SHARED_IPV4_SPACE:
-        return ADDRESS_SHARED
-    return None
 
 
 def endpoint_class(host: str) -> str | None:

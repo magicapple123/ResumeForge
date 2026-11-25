@@ -35,7 +35,12 @@ class ConnectionItemOut(BaseModel):
     detail: str = ""
     # --- 密钥展示：语义检索只给布尔，不给掩码 ---
     masked: str = ""
+    # CR-07：只读展示提示（前 4 后 4，短于 16 位回退 ``********``）。它与 ``masked``
+    # 用途不同：掩码是写回协议，hint 只给人辨认，写路径一律不接受它。
+    hint: str = ""
     key_configured: bool = False
+    # CR-06：这条来源没有单独配置，实际生效的是「AI 模型」里的 DeepSeek Key。
+    borrowed_key: bool = False
     # --- 存储方式 ---
     protection: str
     protection_label: str
@@ -63,6 +68,27 @@ class ConnectionGroupOut(BaseModel):
     items: list[ConnectionItemOut] = Field(default_factory=list)
 
 
+class KeyMapRowOut(BaseModel):
+    """密钥地图的一行（CR-12）：来源 / 在哪配 / 谁在用 / 空串含义。
+
+    全部由后端从 ``credentials.registry`` 投影：前端只渲染，不再手写一份清单
+    （手写的那份一定会落后于新增的来源）。
+    """
+
+    id: str
+    label: str
+    group: str = ""
+    group_label: str = ""
+    #: 界面上去哪改（"设置 → 联网搜索 → DeepSeek"）。
+    configure_at: str = ""
+    #: 哪些功能在用这把 Key。
+    used_by: str = ""
+    #: 留空 / 清除时会发生什么（四套写语义本来就不同）。
+    empty_meaning: str = ""
+    #: 文件里存哪（排障用，与 ``configure_at`` 是两件事）。
+    where: str = ""
+
+
 class StorageSummaryOut(BaseModel):
     """整页共用的一句存储说明：这台机器上的密钥是加密还是明文。"""
 
@@ -75,6 +101,8 @@ class ConnectionsOut(BaseModel):
     """「外部连接」页的一次性快照：三组 + 全局存储说明。"""
 
     groups: list[ConnectionGroupOut] = Field(default_factory=list)
+    #: CR-12：由 registry 生成的地图，长度为凭据来源数。
+    key_map: list[KeyMapRowOut] = Field(default_factory=list)
     storage: StorageSummaryOut
     # 数据库会话缺失时如实说明（页面据此提示"状态不可判定"，而不是假装全部未配置）。
     retrieved: bool = True
@@ -91,6 +119,7 @@ __all__ = [
     "ConnectionItemOut",
     "ConnectionsOut",
     "GroupKind",
+    "KeyMapRowOut",
     "StorageSummaryOut",
     "SystemSourceWriteIn",
 ]

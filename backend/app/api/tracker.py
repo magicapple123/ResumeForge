@@ -53,6 +53,7 @@ from ..services.tracker import (
     delete_track,
     iter_csv_chunks,
     iter_tracks,
+    latest_contacted_at,
     list_tracks,
     list_tracks_page,
     preview_merges,
@@ -102,7 +103,11 @@ def read_tracks_page(
     records, total = list_tracks_page(
         db, status=status, keyword=keyword, page=page, page_size=page_size, job_id=job_id
     )
-    return Page(items=[_track_brief(item) for item in records], total=total)
+    # CR-19：一次批查询补「最近一次已联系」，进度行据此显示「已联系 · 11-25」。
+    contacted = latest_contacted_at(db, [int(item.id) for item in records])
+    return Page(
+        items=[_track_brief(item, contacted.get(item.id)) for item in records], total=total
+    )
 
 
 @router.get("/stats", response_model=TrackStatsOut)

@@ -52,6 +52,7 @@ from .api import (
     login_status,
     manual_backups,
     materials,
+    notifications,
     ocr,
     profile,
     profile_definitions,
@@ -69,6 +70,7 @@ from .api import (
     settings_llm_global,
     settings_locale,
     settings_network,
+    settings_search,
     share_packages,
     skills,
     stats,
@@ -166,6 +168,8 @@ ROUTERS = (
     interview.router,
     interview_experiences.router,
     reminders.router,
+    # CR-22 通知 inbox：独立前缀 /api/notifications，只读列表 + 已读标记。
+    notifications.router,
     referrals.router,
     analytics.router,
     apply.router,
@@ -185,6 +189,8 @@ ROUTERS = (
     settings_locale.router,
     # T02 网络代理设置（/api/settings/network）：读/写一条出网路径，改完不重启即生效。
     settings_network.router,
+    # CR-04 搜索 Key 校验（/api/settings/search/test）：只打 DeepSeek 固定 host。
+    settings_search.router,
     # 必须排在 fonts_api 之前：fonts_api 有 DELETE/PATCH /fonts/{name} 的参数段，
     # 先注册的话 `GET|DELETE /fonts/builtin` 会被它当成"操作一个叫 builtin 的字体"。
     font_builtin_api.router,

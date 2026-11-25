@@ -191,6 +191,9 @@ class ApplyGreetingImageOption(BaseModel):
     id: int
     name: str = ""
     size_bytes: int = 0
+    # CR-18：能不能删由后端判定（全局默认 / 队列行 / 投递审计任一引用即 false）。
+    # 前端不自己算引用关系：三处引用在后端各有一份权威查询，前端重算必然漂。
+    deletable: bool = True
 
 
 class ApplyGreetingImageOut(BaseModel):

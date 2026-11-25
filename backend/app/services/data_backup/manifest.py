@@ -15,9 +15,11 @@ from sqlalchemy import Engine, text
 
 from ...config import get_settings
 from ...database_migrations import _APPLICATION_TABLES, build_alembic_config
+from .global_services import GLOBAL_SERVICES_VERSION
 from .paths import (
     BACKUP_FORMAT_GLOBAL_ASSETS,
     BACKUP_FORMAT_GLOBAL_CONFIG,
+    BACKUP_FORMAT_GLOBAL_SERVICES,
     BACKUP_FORMAT_MULTI_DATASET,
     BACKUP_FORMAT_WITH_KEYS,
 )
@@ -90,6 +92,7 @@ def build_manifest(
     snapshot: Path | None = None,
     global_llm_profiles: int | None = None,
     global_assets_fonts: int | None = None,
+    global_services_sections: int | None = None,
     uncovered: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """生成包内清单。
@@ -110,7 +113,9 @@ def build_manifest(
     """
     settings = get_settings()
     extras = list(datasets)
-    if global_assets_fonts is not None:
+    if global_services_sections is not None:
+        format_version = BACKUP_FORMAT_GLOBAL_SERVICES
+    elif global_assets_fonts is not None:
         format_version = BACKUP_FORMAT_GLOBAL_ASSETS
     elif global_llm_profiles is not None:
         format_version = BACKUP_FORMAT_GLOBAL_CONFIG
@@ -152,6 +157,13 @@ def build_manifest(
         # 与 global_llm 同构：清单只放**摘要**（版本 + 字体数），细节在
         # ``global_assets.json`` 成员里。导入侧按这里的 version fail-closed。
         manifest["global_assets"] = {"version": 1, "fonts": int(global_assets_fonts)}
+    if global_services_sections is not None:
+        # CR-10：摘要只报"带了几段"，具体内容在 ``global_services.json`` 成员里。
+        # 导入侧按这里的 version fail-closed（见 ``_read_manifest``）。
+        manifest["global_services"] = {
+            "version": GLOBAL_SERVICES_VERSION,
+            "sections": int(global_services_sections),
+        }
     if uncovered is not None:
         # P3：数据目录里"既不在包内、也不在已知不覆盖名单"的顶层项。段只增不改，
         # 旧版本读到会忽略（它们照样能恢复数据库），所以资产清单版本号不动。

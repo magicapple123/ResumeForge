@@ -63,6 +63,7 @@ async def enrich_with_page_text(
     jina_api_key: str = "",
     page_fetcher: Callable[..., Awaitable[str]] | None = None,
     deepseek_fetcher: Callable[[str, str], Awaitable[str]] | None = None,
+    custom_fetcher: Callable[[str], Awaitable[str]] | None = None,
 ) -> list[str]:
     """为前 ``pages`` 条补正文并选段；返回给人看的说明（进 ``notes``）。
 
@@ -85,6 +86,17 @@ async def enrich_with_page_text(
         notes.append(f"{len(skipped)} 条结果来自需要登录的站点，只展示摘要")
 
     # 搜索阶段已经带回正文的条目直接沿用，不重复抓（那正是 need_content 的价值）。
+    # CR-09：先试用户自己的抓取端点，再轮到 DeepSeek（顺序见任务书 CR-09 第 3 条）。
+    if custom_fetcher is not None:
+        pending = [item for item in fetchable if not str(item.get("text") or "").strip()]
+        if pending:
+            fetched = await asyncio.gather(
+                *(custom_fetcher(str(item["url"])) for item in pending),
+                return_exceptions=True,
+            )
+            for item, text in zip(pending, fetched, strict=False):
+                if isinstance(text, str) and text:
+                    item["text"] = text
     if api_key:
         pending = [item for item in fetchable if not str(item.get("text") or "").strip()]
         if pending:

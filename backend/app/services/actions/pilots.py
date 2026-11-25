@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ...models.claim import CLAIM_CATEGORIES
-from ...models.reminder import REMINDER_KIND_OTHER, REMINDER_STATUS_PENDING
+from ...models.reminder import REMINDER_KIND_OTHER, REMINDER_STATUS_ACTIVE
 from ...schemas.claim import ClaimListOut
 from ...schemas.job import JobOut
 from ...schemas.reminder import (
@@ -94,10 +94,16 @@ class CreateReminderInput(ReminderCreate):
         max_length=MAX_REMINDER_TITLE_CHARS,
         description="提醒内容，必填",
     )
-    remind_at: datetime = Field(..., description="提醒时间，ISO 格式，如 2026-09-20T10:00:00，必填")
+    remind_at: datetime = Field(
+        ...,
+        description=(
+            "提醒时间，必填。填**用户本地时间**，ISO 格式，如 2026-09-20T10:00:00；"
+            "带时区（如 +08:00 或 Z）也可以，不带时区按本机时区解释。"
+        ),
+    )
     kind: ReminderKind = Field(default=REMINDER_KIND_OTHER, description="提醒类型，默认 other")
     status: ReminderStatus = Field(
-        default=REMINDER_STATUS_PENDING, description="提醒状态，默认 pending"
+        default=REMINDER_STATUS_ACTIVE, description="提醒状态，默认 active"
     )
     track_id: int | None = Field(default=None, ge=1, description="可选，关联求职进度记录 id")
     job_id: int | None = Field(default=None, ge=1, description="可选，关联岗位 id")
@@ -333,9 +339,7 @@ def pilot_actions() -> dict[str, ActionSpec]:
         run=_run_create_reminder,
         preview=_preview_create_reminder,
         service_entry="reminder_service.create_reminder",
-        http=HttpRoute(
-            "POST", "/api/reminders", ReminderOut, status_code=201, tags=("reminders",)
-        ),
+        http=HttpRoute("POST", "/api/reminders", ReminderOut, status_code=201, tags=("reminders",)),
     )
     update_skill = ActionSpec(
         name="update_skill",

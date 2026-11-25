@@ -32,12 +32,13 @@ from sqlalchemy.orm import Session
 
 from ..models.apply import ITEM_STATUS_SUCCESS, ApplyTaskItem
 from ..models.profile import utcnow
-from ..models.reminder import REMINDER_KIND_HR_REPLY, REMINDER_STATUS_PENDING, Reminder
+from ..models.reminder import REMINDER_KIND_HR_REPLY, REMINDER_STATUS_ACTIVE, Reminder
 from ..models.setting import AppSetting
 from ..models.tracker import ApplicationTrack
 from ..schemas.followup import SubmitConfirmationOut
 from ..schemas.tracker import TrackRecordIn
 from . import trash
+from .reminder_occurrences import open_due_subquery, open_occurrence
 from .settings_service import get_agent_task_events_enabled
 from .tracker import record_applied
 from .tracker_merge import _find_by_key
@@ -74,13 +75,19 @@ def _upsert_hr_reply_reminder(
     job_title: str,
     moment: datetime,
 ) -> tuple[Reminder, bool]:
-    """同 track 的 pending hr_reply 提醒存在就复用（不新增、不改时间），否则 +7 天新建。"""
+    """同 track 的待办 hr_reply 提醒存在就复用（不新增、不改时间），否则 +7 天新建。
+
+    CR-28：判据从 ``status == pending`` 换成"计划 active 且还有未处理那一次"——单次做完
+    的提醒虽然归档了，但它已经没有待办，再来一次"我已提交"应该新建而不是复用一条空的。
+    """
+    sub = open_due_subquery()
     existing = db.scalars(
         select(Reminder)
+        .join(sub, sub.c.reminder_id == Reminder.id)
         .where(
             Reminder.track_id == track.id,
             Reminder.kind == REMINDER_KIND_HR_REPLY,
-            Reminder.status == REMINDER_STATUS_PENDING,
+            Reminder.status == REMINDER_STATUS_ACTIVE,
             Reminder.deleted_at.is_(None),
         )
         .order_by(Reminder.id)
@@ -166,7 +173,8 @@ def mark_submitted(db: Session, record_id: int) -> SubmitConfirmationOut:
         show_hint = _claim_followup_hint(db)
         track_id = int(track.id)
         reminder_id = int(reminder.id)
-        due_at = reminder.remind_at
+        occurrence = open_occurrence(db, reminder.id)
+        due_at = occurrence.due_at if occurrence is not None else reminder.remind_at
         db.commit()
     except Exception:
         db.rollback()

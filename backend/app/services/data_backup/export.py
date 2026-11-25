@@ -32,6 +32,7 @@ from .asset_safety import safe_asset_path
 from .coverage import data_root, scan_uncovered
 from .global_assets import build_global_assets_payload, write_global_assets_members
 from .global_config import build_global_llm_payload, write_global_llm_member
+from .global_services import build_global_services_payload, write_global_services_member
 from .manifest import _snapshot_table_counts, build_manifest
 from .paths import (
     ARCHIVE_EXPORT_ARCHIVE_PREFIX,
@@ -134,6 +135,17 @@ def create_backup_archive(
             else None
         )
         global_count = len(global_payload["profiles"]) if global_payload is not None else None
+        # CR-10：四块服务配置（语音 / 语义检索 / 联网搜索 / 代理）与大模型配置共用
+        # ``include_global_llm`` 这个开关——界面上的勾选语义是"带上这台机器的全局配置"，
+        # 拆成两个开关只会让用户漏勾一半。密钥同样按 ``include_api_keys`` 剥离。
+        services_payload = (
+            build_global_services_payload(include_api_keys=include_api_keys)
+            if include_global_llm
+            else None
+        )
+        services_sections = (
+            len(services_payload["services"]) if services_payload is not None else None
+        )
         assets_payload = build_global_assets_payload() if include_global_assets else None
         assets_count = len(assets_payload["fonts"]) if assets_payload is not None else None
         # P3：包里没带的东西也要说出来。子包不扫（外层统一扫一次），否则同一份数据目录
@@ -147,6 +159,7 @@ def create_backup_archive(
             snapshot=snapshot,
             global_llm_profiles=global_count,
             global_assets_fonts=assets_count,
+            global_services_sections=services_sections,
             uncovered=coverage_report,
         )
         with zipfile.ZipFile(archive_path, "x", zipfile.ZIP_DEFLATED) as archive:
@@ -179,6 +192,9 @@ def create_backup_archive(
             written = write_global_llm_member(archive, global_payload)
             if written != (global_count or 0):  # pragma: no cover - 不可达的防御
                 raise BackupError("全局模型配置写入失败，已停止导出", status_code=500)
+            written_services = write_global_services_member(archive, services_payload)
+            if written_services != (services_sections or 0):  # pragma: no cover - 防御
+                raise BackupError("服务配置写入失败，已停止导出", status_code=500)
             written_assets = write_global_assets_members(archive, assets_payload)
             if written_assets != (assets_count or 0):  # pragma: no cover - 不可达的防御
                 raise BackupError("字体写入失败，已停止导出", status_code=500)

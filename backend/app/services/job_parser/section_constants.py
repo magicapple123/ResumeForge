@@ -24,7 +24,10 @@ _SECTION_HEADING_SUFFIX = r"(?:\s*+[】］\]])?"
 # 所以"符合以下条件：……"不会被切开（"条件"前面是"下"）。
 _DESCRIPTION_TAILS = r"(?:职责|内容|描述|说明|概述|范围)"
 _REQUIREMENTS_TAILS = r"(?:要求|资格|条件|标准|需求)"
-_DESCRIPTION_MORPHS = rf"(?:[一-龥]{{0,4}}{_DESCRIPTION_TAILS})"
+# 「投递说明」是补充信息，不该被「说明」语素抢成职责类（与 web_fetch.field_rules 的
+# 判定顺序「其他信息 → 职责 → 要求 → 语素」同一口径，CR-32）。
+_DESCRIPTION_MORPH_GUARD = r"(?!投递说明)"
+_DESCRIPTION_MORPHS = rf"{_DESCRIPTION_MORPH_GUARD}(?:[一-龥]{{0,4}}{_DESCRIPTION_TAILS})"
 _REQUIREMENTS_MORPHS = rf"(?:[一-龥]{{0,4}}{_REQUIREMENTS_TAILS})"
 
 _DESCRIPTION_HEADINGS = (
@@ -41,6 +44,8 @@ _REQUIREMENTS_HEADINGS = (
     r"(?:职位要求|岗位要求|任职要求|任职资格|岗位资格|职位资格|任职条件|岗位条件|招聘要求|能力要求|"
     r"职责要求|任职要求与条件|任职资格与要求|岗位要求与条件|应聘要求|资格要求|必备条件|"
     r"任职资格与条件|岗位要求与职责|"
+    # CR-32：优先条件/加分项归任职要求（与 web_fetch 的 JD 分段同一口径）。
+    r"条件优先|优先条件|加分项|"
     r"我们希望你|我们期待你|what\s+you(?:'|’)ll\s+bring|what\s+you\s+will\s+bring|"
     r"what\s+we(?:'|’)re\s+looking\s+for|what\s+we\s+are\s+looking\s+for|"
     r"job\s+requirements|job\s+qualifications|what\s+you\s+bring|"
@@ -63,9 +68,11 @@ _REQUIREMENTS_HEADING_RE = re.compile(
 _ADDITIONAL_HEADINGS = (
     r"(?:福利待遇|福利与待遇|薪资福利|员工福利|福利说明|公司介绍|企业介绍|公司简介|企业简介|"
     r"公司概况|关于我们|团队介绍|部门介绍|工作环境|联系方式|联系我们|投递方式|申请方式|"
-    r"招聘流程|面试流程|申请流程|如何申请|投递须知|招聘须知|其他信息|补充信息|岗位信息|"
+    r"招聘流程|面试流程|申请流程|如何申请|投递说明|投递须知|招聘须知|其他信息|补充信息|岗位信息|"
     r"工作安排|公司概览|company\s+overview|benefits?|perks?|about\s+(?:the\s+)?company|"
     r"about\s+us|team\s+introduction|contact\s+us|how\s+to\s+apply|application\s+process|"
+    # CR-32：岗位/职位/团队亮点归补充信息（与 web_fetch 的 JD 分段同一口径）。
+    r"岗位亮点|职位亮点|团队亮点|工作亮点|"
     r"interview\s+process|additional\s+information|other\s+information)"
 )
 _ADDITIONAL_HEADING_RE = re.compile(

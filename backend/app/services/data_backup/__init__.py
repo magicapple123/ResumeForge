@@ -90,6 +90,7 @@ from .export import (
     create_backup_archive as create_backup_archive,
 )
 from .global_config import GLOBAL_LLM_MEMBER as GLOBAL_LLM_MEMBER
+from .global_services import GLOBAL_SERVICES_MEMBER as GLOBAL_SERVICES_MEMBER
 from .import_archive import (
     _assert_member_is_a_dataset as _assert_member_is_a_dataset,
 )
@@ -188,6 +189,9 @@ from .paths import (
 )
 from .paths import (
     BACKUP_FORMAT_GLOBAL_CONFIG as BACKUP_FORMAT_GLOBAL_CONFIG,
+)
+from .paths import (
+    BACKUP_FORMAT_GLOBAL_SERVICES as BACKUP_FORMAT_GLOBAL_SERVICES,
 )
 from .paths import (
     BACKUP_FORMAT_MULTI_DATASET as BACKUP_FORMAT_MULTI_DATASET,

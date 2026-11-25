@@ -44,6 +44,10 @@ from ..services.data_backup.global_config import (
     read_global_llm_payload,
     restore_global_system_sources,
 )
+from ..services.data_backup.global_services import (
+    read_global_services_payload,
+    restore_global_services,
+)
 from ..services.data_backup.naming import default_backup_stem, safe_backup_filename
 from ..services.datasets import (
     activate_dataset,
@@ -191,6 +195,15 @@ async def import_archive(request: Request) -> dict:
             created["global_llm"] = {"error": "全局模型配置未能导入，详情见服务端日志"}
         # 字体（格式 6）同理：属于"数据集之外"的全局资产，恢复失败**不回滚**已经落盘
         # 的数据集，只把计数与原因如实附在返回里——用户至少能看出字体没完全回来。
+        try:
+            services_payload = read_global_services_payload(staging)
+            if services_payload is not None:
+                # CR-10：语音 / 语义检索 / 联网搜索 / 代理四块。密钥未随包时报告里会
+                # 带一句"需要重填"，界面据此提示，而不是安静地给一个空配置。
+                created["global_services"] = restore_global_services(services_payload)
+        except Exception as exc:  # noqa: BLE001 - 边上信息，不能扩大失败面
+            logger.warning("备份包里的服务配置未能导入：%s", exc)
+            created["global_services"] = {"error": "服务配置未能导入，详情见服务端日志"}
         try:
             assets_payload = read_global_assets_payload(staging)
             if assets_payload is not None:

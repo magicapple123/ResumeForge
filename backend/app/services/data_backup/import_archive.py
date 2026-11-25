@@ -23,6 +23,7 @@ from ..schema_epoch import read_epoch
 from .archive_guard import copy_archive_member, validate_archive, validate_manifest_assets
 from .asset_manifest import ASSET_MANIFEST_VERSION, verify_database_rows
 from .global_assets import GLOBAL_ASSETS_VERSION
+from .global_services import GLOBAL_SERVICES_VERSION
 from .manifest import _revision_chain, _table_counts
 from .paths import (
     ARCHIVE_DATASETS_DIRNAME,
@@ -240,6 +241,17 @@ def _read_manifest(archive: zipfile.ZipFile) -> dict[str, Any]:
     ):
         raise BackupError(
             "备份包的字体清单版本不受支持，可能来自其它版本的 ResumeForge；请先升级应用再导入"
+        )
+    # 服务配置（格式 7）fail-closed：段存在就必须是当前代码认识的版本。没有这一段的
+    # 1–6 包照常导入（它们本来就没带）；版本对不上说明来自更新/更老的版本，宁可拒收
+    # 也不按自己读不懂的形状去写用户的服务配置。
+    services_section = manifest.get("global_services")
+    if services_section is not None and (
+        not isinstance(services_section, dict)
+        or services_section.get("version") != GLOBAL_SERVICES_VERSION
+    ):
+        raise BackupError(
+            "备份包的服务配置清单版本不受支持，可能来自其它版本的 ResumeForge；请先升级应用再导入"
         )
     validate_manifest_assets(manifest)
     return manifest

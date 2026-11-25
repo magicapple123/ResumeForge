@@ -23,11 +23,19 @@ from app.models.apply import (
     ApplyTaskItem,
 )
 from app.models.job import Job
+from app.models.reminder import (
+    REMINDER_OCCURRENCE_STATUS_DONE,
+    REMINDER_OCCURRENCE_STATUS_SKIPPED,
+    REMINDER_STATUS_ACTIVE,
+    REMINDER_STATUS_ARCHIVED,
+    ReminderOccurrence,
+)
 from app.models.resume import ResumeRecord
 from app.models.resume_template import TEMPLATE_KIND_FORMAT
 from app.schemas.reminder import ReminderCreate
 from app.services.assistant_tools import _TOOLS, execute_tool, tool_names
 from app.services.feature_catalog import build_capability_map
+from app.services.reminder_occurrences import open_occurrence
 from app.services.reminder_service import create_reminder
 from app.services.resume.resume_template_store import create_user_template
 
@@ -193,8 +201,23 @@ def _reminder(db_session, title: str):
     )
 
 
-@pytest.mark.parametrize("status", ["done", "dismissed"])
-def test_update_reminder_marks_done_or_dismissed(db_session, status):
+@pytest.mark.parametrize(
+    ("status", "occurrence_status", "plan_status"),
+    [
+        ("done", REMINDER_OCCURRENCE_STATUS_DONE, REMINDER_STATUS_ARCHIVED),
+        # 跳过不结束计划（CR-28）：这一次置 skipped，但计划仍 active；单次规则下没有
+        # 下一次，所以它自然从列表/待办里消失，而不是被归档。
+        ("dismissed", REMINDER_OCCURRENCE_STATUS_SKIPPED, REMINDER_STATUS_ACTIVE),
+    ],
+)
+def test_update_reminder_marks_done_or_dismissed(
+    db_session, status, occurrence_status, plan_status
+):
+    """CR-28：旧二态动作落在「这一次」（occurrence）上，计划本身只有 active/archived。
+
+    单次提醒做完（done）且没有下一次 → 计划归档；跳过（dismissed）不判死计划，所以
+    计划仍 active，只是那一次已 skipped、没有待办留下。
+    """
     reminder = _reminder(db_session, f"参加二面-{status}")
 
     result = execute_tool(
@@ -202,7 +225,15 @@ def test_update_reminder_marks_done_or_dismissed(db_session, status):
     )
     assert result.changed is True
     db_session.refresh(reminder)
-    assert reminder.status == status
+    assert reminder.status == plan_status
+    occurrences = (
+        db_session.query(ReminderOccurrence)
+        .filter(ReminderOccurrence.reminder_id == reminder.id)
+        .all()
+    )
+    assert [row.status for row in occurrences] == [occurrence_status]
+    # 没有下一次：计划不再有未处理的"这一次"。
+    assert open_occurrence(db_session, reminder.id) is None
 
 
 def test_update_reminder_rejects_unknown_status(db_session):

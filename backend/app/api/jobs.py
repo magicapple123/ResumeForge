@@ -95,6 +95,7 @@ def list_job_ids(
     status: str = Query(default=""),
     favorite: bool | None = Query(default=None),
     source_kind: str = Query(default=""),
+    incomplete_only: bool = Query(default=False),
     sort: JobSort = Query(default="created_desc"),
     order: JobSortOrder | None = Query(default=None),
 ):
@@ -108,7 +109,9 @@ def list_job_ids(
     """
     return [
         job_id
-        for (job_id,) in _filtered_query(db, keyword, job_type, status, favorite, source_kind)
+        for (job_id,) in _filtered_query(
+            db, keyword, job_type, status, favorite, source_kind, incomplete_only
+        )
         .order_by(*job_order_by(sort, order))
         .with_entities(Job.id)
         .all()
@@ -200,7 +203,7 @@ async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depen
         )
         extra_warnings.extend(prep.warnings)
         if prep.dropped_images:
-            extra_warnings.append(dropped_images_warning(prep.dropped_images))
+            extra_warnings.append(dropped_images_warning(prep.dropped_images, setup.model))
         source_text, local_draft, ocr_text = prep.source_text, prep.local_draft, prep.ocr_text
         # OCR 文本与原图**不同时发**：双倍计费，且锚定会同时对着两套文字。
         image_urls = []
@@ -356,7 +359,7 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
         )
         extra_warnings.extend(prep.warnings)
         if prep.dropped_images:
-            extra_warnings.append(dropped_images_warning(prep.dropped_images))
+            extra_warnings.append(dropped_images_warning(prep.dropped_images, setup.model))
         source_text, image_urls = prep.source_text, []
         ocr_text = prep.ocr_text
         if not source_text.strip():

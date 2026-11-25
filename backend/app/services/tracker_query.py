@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Query, Session
 
+from ..models.followup import ApplicationFollowUp
 from ..models.tracker import (
     STATUS_OFFER,
     STATUS_REJECTED,
@@ -23,6 +24,7 @@ from ..models.tracker import (
     ApplicationTrack,
     is_active,
 )
+from ..vocabulary.followup import FOLLOWUP_DECISION_CONTACTED
 from . import trash
 
 MAX_LIST_LIMIT = 500
@@ -191,6 +193,42 @@ def summarize(
     }
 
 
+def job_ids_for_tracks(db: Session, track_ids: list[int]) -> dict[int, int | None]:
+    """这批进度各自挂的岗位 id（CR-19，一次批查询；没挂岗位的值为 None）。
+
+    任务步骤只记 ``track_id``，首页要把它变成 ``/tracker?job_id=`` 的链接参数。
+    查询属于求职进度域，放在查询层而不是路由层（``test_api_layer_rules`` 守着）。
+    """
+    if not track_ids:
+        return {}
+    rows = db.execute(
+        select(ApplicationTrack.id, ApplicationTrack.job_id).where(
+            ApplicationTrack.id.in_(track_ids)
+        )
+    ).all()
+    return {track_id: job_id for track_id, job_id in rows}
+
+
+def latest_contacted_at(db: Session, track_ids: list[int]) -> dict[int, Any]:
+    """这批进度里每条「最近一次已联系」的时刻（CR-19，一次批查询）。
+
+    口径刻意只认 ``contacted``：``replied`` 是"对方已回"、``stopped`` 是"不跟了"，
+    把它们显示成「已联系」等于替用户说没发生过的事。没有任何 contacted 决策的进度
+    不出现在结果里，调用方据此显示空（而不是一个编出来的时间）。
+    """
+    if not track_ids:
+        return {}
+    rows = db.execute(
+        select(ApplicationFollowUp.track_id, func.max(ApplicationFollowUp.decided_at))
+        .where(
+            ApplicationFollowUp.track_id.in_(track_ids),
+            ApplicationFollowUp.decision == FOLLOWUP_DECISION_CONTACTED,
+        )
+        .group_by(ApplicationFollowUp.track_id)
+    ).all()
+    return {track_id: decided_at for track_id, decided_at in rows}
+
+
 def iter_tracks(
     db: Session, *, status: str = "", keyword: str = "", job_id: int | None = None
 ) -> Iterator[ApplicationTrack]:
@@ -215,8 +253,10 @@ __all__ = [
     "count_tracks",
     "existing_track_ids",
     "iter_tracks",
+    "job_ids_for_tracks",
     "list_tracks",
     "list_tracks_page",
+    "latest_contacted_at",
     "summarize",
     "track_or_none",
 ]

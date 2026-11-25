@@ -248,7 +248,11 @@ def test_worst_case_prompt_estimate_stays_bounded(client, db_session):
     # 参数说明扩写）。45,000 是上一批的实测 + 余量，不是硬上限；按同一口径上调到 **47,000**
     # （实测 + 587 ≈ 1.3% 余量）。真正的成本闸门仍是 MAX_PROMPT_TOKENS_ESTIMATE：
     # 46.4k 字符约 12k token，距离 60k token 的上限还很远。
-    assert len(tools_text) <= 47_000
+    # 2026-11-25（本轮 CR-20/21/29/28）：提醒工具新增 recurrence / recurrence_until
+    # （重复规则与结束条件），通知与角标相关工具同步扩写；工具 schema 实测 47,390。
+    # 按同一口径（实测 + 余量，约 1.3%）上调到 **48,000**——它不是新的"正常水位"，
+    # 真正的成本闸门仍是 MAX_PROMPT_TOKENS_ESTIMATE（60,000 token，当前估算远低于它）。
+    assert len(tools_text) <= 48_000
     # 去重但**不丢功能覆盖**：每个功能域与每个界面功能名都还必须能在系统提示里找到。
     from app.services.feature_catalog import FEATURES, FUNCTIONAL_DOMAINS
 

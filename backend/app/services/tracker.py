@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
@@ -48,6 +48,8 @@ from .tracker_query import (
     MAX_LIST_LIMIT,
     count_tracks,
     iter_tracks,
+    job_ids_for_tracks,
+    latest_contacted_at,
     list_tracks,
     list_tracks_page,
     summarize,
@@ -63,6 +65,8 @@ __all__ = [
     "export_rows",
     "iter_csv_chunks",
     "iter_tracks",
+    "job_ids_for_tracks",
+    "latest_contacted_at",
     "list_track_deliveries",
     "list_tracks",
     "list_tracks_page",
@@ -336,15 +340,19 @@ def track_out(record: ApplicationTrack) -> TrackOut:
     return TrackOut.model_validate(record)
 
 
-def track_brief(record: ApplicationTrack) -> TrackOut:
+def track_brief(record: ApplicationTrack, latest_followup: datetime | None = None) -> TrackOut:
     """列表行只带 note / evidence 的**预览**：超长截断加省略号。
 
     求职看板的主读路径一次拖几十条，note 上限 4000 字（evidence 500），全文随列表
     下发等于白拖几百 KB。卡片上显示预览足够；编辑表单打开时前端会调
     ``GET /{track_id}`` 拿全文回填（TrackFormModal），PUT 的整体替换也是以全文为准，
     不会把截断文本写回库。导出与助手工具走服务层 ``list_tracks``，不经这里，全文不受影响。
+
+    ``latest_followup``（CR-19）：最近一次「已联系」跟进决策的时刻，由调用方**批查询**
+    后逐行传入（列表最多 100 行，不在这里逐行查库）；缺省 None = 没联系过/调用方不关心。
     """
     item = track_out(record)
+    item.latest_followup = latest_followup
     if len(item.note) > TRACK_NOTE_PREVIEW_CHARS:
         item.note = item.note[:TRACK_NOTE_PREVIEW_CHARS] + "…"
     if len(item.evidence) > TRACK_EVIDENCE_PREVIEW_CHARS:

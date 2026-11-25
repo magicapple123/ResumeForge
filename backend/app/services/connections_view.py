@@ -41,24 +41,31 @@ from .credentials.registry import (
     GROUP_ASR,
     GROUP_EMBEDDING,
     GROUP_LLM,
+    GROUP_NETWORK,
     GROUP_SESSION,
 )
+
+# CR-06：借用模型 Key 时 `detail` 用的固定前缀，界面要把这句话展示出来。
+from .credentials.state import MODEL_KEY_FALLBACK_DETAIL
 
 logger = logging.getLogger(__name__)
 
 GROUP_AI = "ai"
 GROUP_SEARCH = "search"
+GROUP_PROXY = "proxy"
 GROUP_SYSTEM = "system"
 
 GROUP_LABELS: dict[str, str] = {
     GROUP_AI: "AI 服务",
     GROUP_SEARCH: "搜索来源",
+    GROUP_PROXY: "网络代理",
     GROUP_SYSTEM: "系统来源与端口",
 }
 
 GROUP_HINTS: dict[str, str] = {
     GROUP_AI: "模型、语音转写与语义检索用的密钥；改完立刻生效，不必重启",
     GROUP_SEARCH: "助手联网搜索与网页正文抓取用的密钥；DeepSeek 的这把同时供 OCR 使用",
+    GROUP_PROXY: "代理的认证口令；代理模式与地址在「网络代理」卡片里改",
     GROUP_SYSTEM: "下载源与浏览器端口。不是密钥，会随备份带走；改完下一次调用即生效",
 }
 
@@ -82,6 +89,7 @@ WRITE_HINTS: dict[str, str] = {
     "llm.session": "只存在后端内存，程序重启即失效；清空后立刻回到已保存的那把 Key",
     "asr.default": "改的是当前这条语音配置的 Key；地址或协议一变就要重填",
     "embedding.default": "语义检索的 Key 在「AI 模型 → 语义检索」里配置；这里只显示有没有，不回掩码",
+    "network.proxy": "改的是代理的认证口令；代理模式与地址在「网络代理」卡片里改，清除后请求不再带认证",
 }
 # 需要在「别处先配好」才能在这里改的来源：原因写进 write_hint，界面照实说。
 _NEEDS_PROVIDER_HINT = "先在「AI 模型」里选好服务商与模型，再回来填 Key"
@@ -160,12 +168,16 @@ def _credential_item(source: CredentialSource, state: CredentialState) -> dict[s
         "status_label": state.status_label,
         "detail": state.detail,
         "masked": state.masked,
+        "hint": state.hint,
         "key_configured": state.key_configured,
         "protection": state.protection_value,
         "protection_label": _protection_label(state.protection_value),
         "protection_description": state.protection.description,
         "editable": editable,
         "write_hint": _write_hint(source, editable),
+        # CR-06：这一行**没有单独配置**，生效的是「AI 模型」里的 DeepSeek Key。
+        # 单独给布尔而不是让前端去匹配 detail 文案：前端有自己的译文，匹配中文一定会漂。
+        "borrowed_key": state.detail.startswith(MODEL_KEY_FALLBACK_DETAIL),
         "target_id": _target_id(source),
         "location": source.location,
     }
@@ -198,11 +210,30 @@ def _system_item(source: system_sources.SystemSource) -> dict[str, Any]:
     }
 
 
+def _key_map_row(source: CredentialSource) -> dict[str, Any]:
+    """密钥地图的一行：来源 / 在哪配 / 谁在用 / 空串含义（CR-12）。
+
+    四列全部取自 registry 的声明，**不在这里另写一份清单**：地图与凭据行必须永远同长，
+    否则"页面上有这一行、地图里没有"就会变成下一处隐性知识。
+    """
+    return {
+        "id": source.source_id,
+        "label": source.label,
+        "group": source.group,
+        "group_label": GROUP_LABELS.get(source.group, source.group),
+        "configure_at": source.configure_at,
+        "used_by": source.used_by,
+        "empty_meaning": source.empty_meaning,
+        "where": source.location,
+    }
+
+
 def build_connections(db: Session | None) -> dict[str, Any]:
     """一次性取齐三组；单条读失败不影响整页（registry 已经把这条兜住）。"""
     states = {state.source_id: state for state in credential_states(db=db)}
     ai_items: list[dict[str, Any]] = []
     search_items: list[dict[str, Any]] = []
+    proxy_items: list[dict[str, Any]] = []
     for source in CREDENTIAL_SOURCES:
         state = states.get(source.source_id)
         if state is None:  # pragma: no cover - registry 保证一一对应
@@ -210,33 +241,53 @@ def build_connections(db: Session | None) -> dict[str, Any]:
         item = _credential_item(source, state)
         if source.group in AI_REGISTRY_GROUPS:
             ai_items.append(item)
+        elif source.group == GROUP_NETWORK:
+            # CR-11：代理口令是独立的一组——它不属于搜索，也不是"这台机器怎么下载东西"。
+            proxy_items.append(item)
         else:
             search_items.append(item)
     disk = storage_protection(None)
+    groups = [
+        {
+            "id": GROUP_AI,
+            "label": GROUP_LABELS[GROUP_AI],
+            "kind": "credential",
+            "hint": GROUP_HINTS[GROUP_AI],
+            "items": ai_items,
+        },
+        {
+            "id": GROUP_SEARCH,
+            "label": GROUP_LABELS[GROUP_SEARCH],
+            "kind": "credential",
+            "hint": GROUP_HINTS[GROUP_SEARCH],
+            "items": search_items,
+        },
+    ]
+    if proxy_items:
+        # 没配代理时不摆一个空组（口令一行都没有可看的），页面更干净；
+        # 一旦有这一条来源就固定出现——用户要能知道"这里还藏着一份凭据"。
+        groups.append(
+            {
+                "id": GROUP_PROXY,
+                "label": GROUP_LABELS[GROUP_PROXY],
+                "kind": "credential",
+                "hint": GROUP_HINTS[GROUP_PROXY],
+                "items": proxy_items,
+            }
+        )
+    groups.append(
+        {
+            "id": GROUP_SYSTEM,
+            "label": GROUP_LABELS[GROUP_SYSTEM],
+            "kind": "system",
+            "hint": GROUP_HINTS[GROUP_SYSTEM],
+            "items": [_system_item(source) for source in system_sources.SYSTEM_SOURCES],
+        }
+    )
     return {
-        "groups": [
-            {
-                "id": GROUP_AI,
-                "label": GROUP_LABELS[GROUP_AI],
-                "kind": "credential",
-                "hint": GROUP_HINTS[GROUP_AI],
-                "items": ai_items,
-            },
-            {
-                "id": GROUP_SEARCH,
-                "label": GROUP_LABELS[GROUP_SEARCH],
-                "kind": "credential",
-                "hint": GROUP_HINTS[GROUP_SEARCH],
-                "items": search_items,
-            },
-            {
-                "id": GROUP_SYSTEM,
-                "label": GROUP_LABELS[GROUP_SYSTEM],
-                "kind": "system",
-                "hint": GROUP_HINTS[GROUP_SYSTEM],
-                "items": [_system_item(source) for source in system_sources.SYSTEM_SOURCES],
-            },
-        ],
+        "groups": groups,
+        # CR-12：整页顶部那张「密钥地图」——由 registry 逐条投影，行数天然等于凭据条数。
+        "key_map": [_key_map_row(source) for source in CREDENTIAL_SOURCES],
         "storage": {
             "kind": disk.value,
             "label": _protection_label(disk.value),
@@ -251,6 +302,7 @@ __all__ = [
     "GROUP_AI",
     "GROUP_HINTS",
     "GROUP_LABELS",
+    "GROUP_PROXY",
     "GROUP_SEARCH",
     "GROUP_SYSTEM",
     "PROTECTION_LABELS",

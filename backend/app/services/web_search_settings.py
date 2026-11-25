@@ -24,7 +24,8 @@
       "max_results": 8,
       "deepseek_api_key": "<encrypted>",
       "tavily_api_key": "<encrypted>",
-      "jina_api_key": "<encrypted>"
+      "jina_api_key": "<encrypted>",
+      "custom_api_key": "<encrypted>"
     }
 
 `fetch_pages` 不落盘（已被 `depth` 取代，读旧块时由 `SearchConfig` 的 before-validator 折算）。
@@ -48,6 +49,7 @@ from . import global_settings
 from .api_key_crypto import decrypt_key, encrypt_key
 from .credentials.semantics import apply_stored_key
 from .llm_key_refs import API_KEY_MASK
+from .settings_legacy import has_legacy_rows, note_legacy_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +58,14 @@ WEB_SEARCH_BLOCK = "web_search"
 # 迁移来源：旧版把这两项存在当前数据集的 AppSetting 里。
 _LEGACY_CONFIG_KEY = "search_config"
 _LEGACY_KEY_KEY = "search_deepseek_api_key"
-# 三个来源的密钥都只存密文，密钥列不参与 `SearchConfig` 的公开校验（见 `_config_from_block`）。
-_SECRET_FIELDS = ("deepseek_api_key", "tavily_api_key", "jina_api_key")
+# 各来源的密钥都只存密文，密钥列不参与 `SearchConfig` 的公开校验（见 `_config_from_block`）。
+# ``custom_api_key`` 是 CR-09 的自定义端点密钥：与其它三把同口径（掩码回显、加密落盘、
+# 备份按 include_api_keys 剥离——剥离白名单由 data_backup 维护）。
+_SECRET_FIELDS = ("deepseek_api_key", "tavily_api_key", "jina_api_key", "custom_api_key")
+# 合成密钥 = 一把 Key 供两处配置（CR-06 的回落判据）：只认 DeepSeek **官方**端点。
+# 中转站 / 自建网关即使兼容 OpenAI 协议，也不保证开放 /v1/tools/search 与 OCR；
+# 把它们的 Key 发给 DeepSeek 只会得到 401，等于把"配错了"伪装成"Key 无效"。
+DEEPSEEK_MODEL_HOST = "api.deepseek.com"
 # 落盘时**不写**的字段：`fetch_pages` 已被 `depth` 取代，双写会让"两套值各说一套"。
 _LEGACY_ONLY_FIELDS = frozenset({"fetch_pages"})
 
@@ -120,7 +128,11 @@ def migrate_legacy_search_once(db: Session) -> bool:
         return False
     legacy = _legacy_config(db)
     if legacy is None:
+        # 只有单独一行旧 Key、没有配置行：仍是旧数据，标记一下（但没有可迁移的配置）。
+        if has_legacy_rows(db, "web_search"):
+            note_legacy_fallback("web_search")
         return False
+    note_legacy_fallback("web_search")
     block = _stored_block(legacy)
     written = {"value": False}
 
@@ -148,8 +160,17 @@ def _ensure_block(db: Session) -> dict[str, Any] | None:
 
 
 def resolve_search_deepseek_key(db: Session) -> str:
-    """取真实密钥（仅供运行时调用，**不得**回传前端）。未配置返回空串。"""
-    return _key_of(_ensure_block(db))
+    """取真实密钥（仅供运行时调用，**不得**回传前端）。未配置返回空串。
+
+    CR-06：搜索 Key 没填、而当前模型正好指向 DeepSeek 官方端点时，借用模型那把。
+    两条使用路径（搜索 / 抓取 / OCR）都走这里，因此填一次就能同时生效。
+    """
+    return _own_deepseek_key(db) or _model_deepseek_key(db)
+
+
+def model_key_fallback_active(db: Session) -> bool:
+    """这一条搜索 Key **没有单独配置**、正在复用模型 Key（设置页据此标注）。"""
+    return not _own_deepseek_key(db) and bool(_model_deepseek_key(db))
 
 
 def get_search_config(db: Session) -> SearchConfig:
@@ -163,15 +184,45 @@ def get_search_config(db: Session) -> SearchConfig:
     return config
 
 
-def get_search_config_with_secrets(db: Session) -> SearchConfig:
-    """运行时读取：把真实密钥解出来，供 `aggregate_search` 调各来源用。"""
+def get_search_config_with_secrets(
+    db: Session, *, apply_model_fallback: bool = True
+) -> SearchConfig:
+    """运行时读取：把真实密钥解出来，供 `aggregate_search` 调各来源用。
+
+    ``apply_model_fallback=False`` 只解**这一条来源自己存的**值：「外部连接」页要据此
+    如实显示"未单独配置"，而不是把借来的模型 Key 显示成这条已保存（CR-06）。
+    """
     block = _ensure_block(db)
     config = _config_from_block(block) if block is not None else None
     if config is None:
-        return SearchConfig()
-    for field in _SECRET_FIELDS:
-        setattr(config, field, _key_of(block, field))
+        config = SearchConfig()
+    else:
+        for field in _SECRET_FIELDS:
+            setattr(config, field, _key_of(block, field))
+    if apply_model_fallback and not config.deepseek_api_key:
+        config.deepseek_api_key = _model_deepseek_key(db)
     return config
+
+
+def _own_deepseek_key(db: Session) -> str:
+    """搜索来源自己存的那把 DeepSeek Key（不含从模型配置借来的）。"""
+    return _key_of(_ensure_block(db))
+
+
+def _model_deepseek_key(db: Session) -> str:
+    """当前生效模型的 Key——只有模型指向 DeepSeek 官方端点时才算数。
+
+    为什么认 host 而不认 ``provider`` 字段：那个字段只是前端预设标识，用户可以选
+    "自定义"再填 DeepSeek 地址，也可以用中转站顶着 deepseek 的名字。能不能借取决于
+    "这把 Key 发给谁"，那由 base_url 决定。
+    """
+    from .llm.thinking import host_of
+    from .llm_settings import get_llm_config
+
+    config = get_llm_config(db)
+    if host_of(config.base_url) != DEEPSEEK_MODEL_HOST:
+        return ""
+    return str(config.api_key or "").strip()
 
 
 def save_search_config(db: Session, config: SearchConfig) -> SearchConfig:
@@ -208,10 +259,12 @@ def save_search_config(db: Session, config: SearchConfig) -> SearchConfig:
 
 
 __all__ = [
+    "DEEPSEEK_MODEL_HOST",
     "WEB_SEARCH_BLOCK",
     "get_search_config",
     "get_search_config_with_secrets",
     "migrate_legacy_search_once",
+    "model_key_fallback_active",
     "resolve_search_deepseek_key",
     "save_search_config",
 ]

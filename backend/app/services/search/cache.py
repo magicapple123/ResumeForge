@@ -20,6 +20,7 @@ DeepSeek 搜索按次计费，Bing/DDG 会被限流；而"同一句问话连问�
 from __future__ import annotations
 
 import copy
+import hashlib
 import threading
 import time
 from collections import OrderedDict
@@ -37,15 +38,30 @@ def normalize_query(query: str) -> str:
     return " ".join(str(query or "").split()).casefold()
 
 
-def cache_key(query: str, sources: Sequence[str], depth: str, limit: int | None = None) -> str:
-    """``normalized_query|sorted(sources)|depth|limit``。
+def cache_key(
+    query: str,
+    sources: Sequence[str],
+    depth: str,
+    limit: int | None = None,
+    *,
+    fingerprint: str = "",
+) -> str:
+    """``normalized_query|sorted(sources)|depth|limit``（+ 可选端点指纹）。
 
     ``limit`` 必须进键：模型调 ``web_search`` 时可以传更少的条数，``limit=3`` 与
     ``limit=8`` 的结果集不一样，共用一条缓存会让第二次调用拿到更长的列表
     （"设置上限 8 却返回 8 条"正是这样被踩到的）。
+
+    ``fingerprint`` 给**配置会改变结果**的来源用（CR-09 的自定义端点）：同一句查询换了
+    base_url 就是另一套结果，不换键会把上一个端点的结果当成新端点的答案。取哈希而不是
+    原文：键会长，而且 base_url 可能带对内网拓扑有信息的端口/路径。
     """
     ordered = ",".join(sorted({str(item) for item in sources if item}))
-    return f"{normalize_query(query)}|{ordered}|{depth}|{'' if limit is None else int(limit)}"
+    base = f"{normalize_query(query)}|{ordered}|{depth}|{'' if limit is None else int(limit)}"
+    if not fingerprint:
+        return base
+    digest = hashlib.sha1(str(fingerprint).encode("utf-8")).hexdigest()[:12]
+    return f"{base}|{digest}"
 
 
 class SearchCache:

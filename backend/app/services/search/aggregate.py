@@ -40,9 +40,11 @@ from ..assistant.assistant_web_search import (
 from ..assistant.assistant_web_search import (
     search_web as bing_search,
 )
+from ..assistant.search_errors import SEARCH_KEY_INVALID_MESSAGE, SEARCH_KEY_MISSING_MESSAGE
 from .cache import cache_key as build_cache_key
 from .cache import search_cache
 from .canonical import canonical_url, dedupe_by_url
+from .custom import custom_fetcher_for, custom_plan
 from .dates import is_recency_query, recency_bonus
 from .deepseek import fetch_deepseek_text, has_search_operators, search_deepseek
 from .duckduckgo import search_duckduckgo
@@ -54,6 +56,7 @@ from .providers.jina import search_jina
 from .providers.tavily import search_tavily
 from .searxng import search_searxng
 from .status import (
+    CONFIG,
     NETWORK,
     classify_exception,
     error_kind_for_failure,
@@ -158,7 +161,9 @@ async def _from_bing(query: str) -> Any:
         return await bing_search(query)
     except AssistantSearchError as exc:
         logger.info("Bing 来源无结果：%s", exc)
-        return _FailedResults(failure="bad_format" if str(exc) == BING_RSS_EMPTY_MESSAGE else "network")
+        return _FailedResults(
+            failure="bad_format" if str(exc) == BING_RSS_EMPTY_MESSAGE else "network"
+        )
     except Exception:  # noqa: BLE001 - 单来源异常不能拖垮整次搜索
         logger.exception("Bing 来源发生内部错误")
         return _FailedResults(failure="network")
@@ -332,13 +337,14 @@ async def _run_sources(
             )
         elif source == "jina":
             plans.append(("jina", _from_jina(search_query, config.jina_api_key, per_source_limit)))
+        elif source == "custom":
+            # CR-09：配置解析与调用都在 custom 模块里（aggregate 只剩接线）。
+            plans.append(("custom", custom_plan(search_query, config, per_source_limit)))
 
     if not plans:
         plans.append(("bing", _from_bing(query)))
 
-    tasks = {
-        asyncio.ensure_future(_collect(name, awaitable)): name for name, awaitable in plans
-    }
+    tasks = {asyncio.ensure_future(_collect(name, awaitable)): name for name, awaitable in plans}
     done, pending = await asyncio.wait(
         tasks.keys(), timeout=SEARCH_BUDGET_SECONDS, return_when=asyncio.ALL_COMPLETED
     )
@@ -403,7 +409,9 @@ async def aggregate_search(
         per_source_limit = max(per_source_limit, _DEEP_PER_SOURCE_LIMIT)
     pages, max_passages, total_chars = DEPTH_PROFILE[effective_depth]
 
-    key = build_cache_key(query, sources, effective_depth, cap)
+    # CR-09：自定义端点换了 base_url 就是另一套结果，缓存键必须跟着换。
+    fp = config.custom_base_url if "custom" in sources else ""
+    key = build_cache_key(query, sources, effective_depth, cap, fingerprint=fp)
     cached = search_cache.get(key)
     if cached:
         # 命中缓存 = 0 次网络请求（DeepSeek 按次计费，重复查询不该再花钱）。
@@ -424,6 +432,8 @@ async def aggregate_search(
         total_chars=total_chars,
         api_key=config.deepseek_api_key,
         jina_api_key=config.jina_api_key,
+        # CR-09：抓取顺序 = 响应内正文 → 自定义 fetch → DeepSeek fetch → 本机 + Jina。
+        custom_fetcher=custom_fetcher_for(config),
         # 传**本模块**的这两个名字：``conftest`` 的"禁真网"桩与各用例换掉的是
         # ``app.services.search.aggregate.fetch_page_text``，不传就会真的联网。
         page_fetcher=fetch_page_text,
@@ -450,6 +460,15 @@ async def aggregate_search(
         if any(group.source == "bing" and group.failure == "bad_format" for group in groups):
             # RSS 解析到 0 条**不是**"这次没搜到"：这是端点结构变了，得让用户知道去换来源。
             raise AssistantSearchError(BING_RSS_EMPTY_MESSAGE)
+        # CR-02：配置类失败（Key 缺失/无效/无权限）不能被说成「没找到公开来源」——
+        # 前者要做的是去设置页改 Key，后者要做的是换关键词。归因由 ``status.py`` 的
+        # ``error_kind`` 统一给出，这里只负责挑文案（两句都进了公开白名单）。
+        if any(group.error_kind == CONFIG for group in groups):
+            raise AssistantSearchError(
+                SEARCH_KEY_MISSING_MESSAGE
+                if "missing_key" in failures
+                else SEARCH_KEY_INVALID_MESSAGE
+            )
         raise AssistantSearchError(
             "没有找到与当前问题直接相关的公开来源。可以换成更具体的公司名、岗位名或技术方向再搜一次。"
         )

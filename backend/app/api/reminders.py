@@ -13,12 +13,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..schemas.reminder import ReminderUpcomingOut
+from ..schemas.reminder import ReminderOut, ReminderSnoozeIn, ReminderUpcomingOut
 from ..services.actions import add_action_route
 from ..services.actions.domains.reminders import reminder_actions
 from ..services.actions.pilots import pilot_actions
 from ..services.reminder_service import (
     delete_reminder,
+    reminder_or_none,
+    snooze_reminder,
     upcoming_reminders_out,
 )
 
@@ -45,6 +47,20 @@ add_action_route(router, pilot_actions()["create_reminder"])
 
 # T28 Batch B：PATCH /api/reminders/{reminder_id} 由契约层生成（可逆写，带 preview）。
 add_action_route(router, reminder_actions()["update_reminder"])
+
+
+@router.post("/{reminder_id}/snooze", response_model=ReminderOut)
+def snooze(reminder_id: int, payload: ReminderSnoozeIn, db: Session = Depends(get_db)):
+    """稍后提醒：1 小时 / 今晚 20:00 / 明早 9:00 / 自定义时刻（CR-28）。
+
+    只改"这一次"的到期时刻，不新建 occurrence；``snoozed_from`` 保留被推迟前的原始时刻。
+    """
+    reminder = reminder_or_none(db, reminder_id)
+    if reminder is None:
+        raise HTTPException(status_code=404, detail="提醒不存在或已被删除")
+    return snooze_reminder(
+        db, reminder, preset=payload.preset or "", until=payload.until
+    )
 
 
 @router.delete("/{reminder_id}", status_code=204)

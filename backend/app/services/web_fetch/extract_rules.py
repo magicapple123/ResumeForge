@@ -53,6 +53,29 @@ _JOB_TYPE_TEXT = ("校招", "校园招聘", "应届", "实习", "社招", "社�
 #: 列表容器里出现这些行时跳过（导航/页脚噪声）。
 _NOISE_RE = re.compile(r"^(首页|登录|注册|搜索|查看更多|更多|下一页|上一页|收藏|分享|举报)$")
 
+#: 站点配置对象（SEO / 主题 / 站点信息）常带的键。命中两个以上说明这是一份配置而不是
+#: 岗位——美团校招站的 ``{"name": "招聘官网", "url": ".../web/home", "imgUrl", "globalConfig"}``
+#: 曾被当成一条岗位导入（CR-30）。
+_SITE_CONFIG_KEYS = (
+    "globalConfig",
+    "sectionTypes",
+    "imgUrl",
+    "logoUrl",
+    "favicon",
+    "siteName",
+    "seoConfig",
+)
+
+#: 容器里那一行带的字段前缀（「工作地点：北京市」→「北京市」）。列表阶段按行取字段，
+#: 不剥前缀会让地点进库时带着标签。
+_LABEL_PREFIX_RE = re.compile(
+    r"^(?:工作地点|办公地点|职位地点|地点|工作城市|城市|公司名称|公司)\s*[:：]\s*"
+)
+
+
+def _strip_label(text: str) -> str:
+    return _LABEL_PREFIX_RE.sub("", (text or "").strip())
+
 
 def _first(item: dict[str, Any], keys: tuple[str, ...]) -> str:
     for key in keys:
@@ -94,7 +117,12 @@ def looks_like_job_href(href: str) -> bool:
 
 
 def _looks_like_job_item(item: dict[str, Any]) -> bool:
-    """对象是否像一条岗位：有职位名，且至少还有一个岗位特征字段。"""
+    """对象是否像一条岗位：有职位名，且至少还有一个岗位特征字段。
+
+    **先排除站点配置**：这类对象也有 ``name`` + ``url``，只看正向信号一定会误收。
+    """
+    if sum(1 for key in _SITE_CONFIG_KEYS if key in item) >= 2:
+        return False
     title = _first(item, _TITLE_KEYS)
     if not (2 <= len(title) <= 128) or _BAD_TITLE_RE.match(title):
         return False
@@ -103,6 +131,16 @@ def _looks_like_job_item(item: dict[str, Any]) -> bool:
     has_url = any(_first(item, (key,)) for key in _URL_KEYS)
     has_company = bool(_first(item, _COMPANY_KEYS))
     return has_salary or has_city or has_url or has_company
+
+
+def looks_like_nav_label(text: str) -> bool:
+    """导航/页脚文案（首页、登录、分享…）不能当岗位标题。
+
+    只用于**标题兜底与结构证据的候选过滤**：命中就跳过这一个候选，不影响整页结果；
+    真正的结构信号是 class/h1，这里只做最后一道排除。
+    """
+    cleaned = clean_text(text)
+    return not cleaned or bool(_BAD_TITLE_RE.match(cleaned))
 
 
 def _walk_json(payload: Any, out: list[dict[str, Any]], *, depth: int = 0) -> None:
@@ -346,8 +384,8 @@ def rows_from_html_containers(html: str, *, page_url: str, page_text: str) -> li
             {
                 "data": {
                     "title": title,
-                    "company": company,
-                    "location": location,
+                    "company": _strip_label(company),
+                    "location": _strip_label(location),
                     "salary": salary_match.group(0) if salary_match else "",
                     "posted_at": posted_at,
                     "job_type": job_type,
@@ -432,6 +470,7 @@ __all__ = [
     "extract_rules",
     "job_href",
     "looks_like_job_href",
+    "looks_like_nav_label",
     "rows_from_html_anchors",
     "rows_from_html_containers",
     "rows_from_json",

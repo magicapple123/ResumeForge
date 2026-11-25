@@ -34,12 +34,12 @@ class ResearchCompanyRequest(BaseModel):
     company: str = Field(min_length=1, max_length=MAX_COMPANY_CHARS)
     role: str = Field(default="", max_length=MAX_ROLE_CHARS)
     jd: str = Field(default="", max_length=MAX_JD_CHARS)
-    # 深度调研默认关闭：搜索按查询词条数计费，深度档最多约 20 次工具调用。
+    # 深度调研默认关闭：深度档最多约 20 次工具调用，上下文与 token 用量明显更大。
     deep: bool = False
     # I-21：从岗位详情发起调研时带上岗位 id，落库的知识条目就能挂到该公司岗位上，
     # 岗位详情的「相关知识」区块直接可见。
     job_id: int | None = Field(default=None, ge=1)
-    # I-23：只跑其中一条路。简报失败时没必要重跑已经搜过的卡片（搜索按次计费），
+    # I-23：只跑其中一条路。简报失败时没必要重跑已经搜过的卡片（卡片那一路仍按次计费），
     # 白名单由 Literal 兜住：未知值直接 422，不会走到计费。
     parts: list[Literal["cards", "brief"]] = Field(
         default_factory=lambda: ["cards", "brief"], min_length=1

@@ -135,6 +135,23 @@ class CredentialSource:
     按 LIKE 删整行会把非密钥字段一起删掉，那是另一条剥离路径的事。
     """
 
+    configure_at: str = ""
+    """**在哪配**（设置页里的路径，形如「设置 → 联网搜索 → DeepSeek」）。
+
+    CR-12 的密钥地图用：``location`` 说的是"文件里存哪"，这一项说的是"界面上去哪改"，
+    两者都要有——用户排障时问的正是这两句不同的话。
+    """
+
+    used_by: str = ""
+    """**谁在用**（哪些功能会拿这把 Key 去发请求）。地图的第三列。"""
+
+    empty_meaning: str = ""
+    """**空串含义**（清空/留空时会发生什么）。地图的第四列。
+
+    四套写语义本来就不同（搜索=移除、语音/语义检索=沿用本条、代理=保留、大模型=哨兵），
+    地图必须逐条写清，否则用户按"其它页面的习惯"操作会得到相反的结果。
+    """
+
     note: str = ""
     """补充说明（兼容路径、已知缺口），只给人看。"""
 
@@ -157,6 +174,12 @@ class CredentialState:
     key_configured: bool
     protection: StorageProtection
     detail: str = ""
+    hint: str = ""
+    """只读展示提示（前 4 后 4，见 ``semantics.key_hint``）；未配置时为空串。
+
+    与 ``masked`` 分开：掩码是**写回协议**的一部分（``********`` = 保持不变），
+    hint 只是给人辨认用，任何写路径都不接受它。
+    """
 
     @property
     def status_label(self) -> str:

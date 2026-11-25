@@ -30,8 +30,10 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..schemas.connections import ConnectionsOut, SystemSourceWriteIn
-from ..services import system_sources
+from ..services import clipboard, system_sources
 from ..services.connections_view import build_connections
+from ..services.credentials import get_source, has_source, read_credential
+from ..services.credentials.types import CredentialScope
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 logger = logging.getLogger(__name__)
@@ -88,6 +90,38 @@ def reset_system_source(item_id: str, db: Session = Depends(get_db)) -> Connecti
             status_code=503, detail="全局设置文件无法写入（数据目录只读或权限不足）"
         ) from exc
     return _out(db)
+
+
+@router.post("/{source_id}/clipboard")
+def copy_credential(
+    source_id: str,
+    profile_id: str = "",
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    """把这把密钥写进本机剪贴板（CR-07）。响应只有 ``{"ok": true}``。
+
+    为什么这里破例读真实值：设计上任何响应都不许出现明文，但"复制一把密钥"必须由持有
+    明文的进程来做。取舍是：明文**只进剪贴板、不进响应、不进日志**，函数体里也没有任何
+    ``logger`` 调用——日志里出现一次 Key 就等于泄漏。
+
+    ``profile_id`` 只对命名配置型来源生效（大模型 / 语音 / 语义检索）：复制"这一条"，
+    而不是"当前生效的那条"。
+    """
+    if not has_source(source_id):
+        raise HTTPException(status_code=404, detail=f"没有这一项外部连接：{source_id}")
+    source = get_source(source_id)
+    if source.scope is CredentialScope.MEMORY:
+        # 纯内存来源没有可复制的落盘值；它的 Key 本来就在用户手里刚填过。
+        raise HTTPException(status_code=400, detail="仅本次会话使用的 Key 不支持复制")
+    value = read_credential(source_id, db=db, profile_id=profile_id)
+    if not value:
+        raise HTTPException(status_code=409, detail="这条连接尚未配置密钥，没有可复制的内容")
+    try:
+        clipboard.write_text(value)
+    except clipboard.ClipboardError as exc:
+        # 消息里只有"哪一步失败 + 怎么办"，不含被复制的文本。
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"ok": True}
 
 
 __all__ = ["router"]

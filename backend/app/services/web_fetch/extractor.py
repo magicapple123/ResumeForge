@@ -20,14 +20,22 @@ from datetime import date
 from typing import Any
 
 from .errors import WebExtractError
-from .extract_rules import extract_rules, job_href, looks_like_job_href
+from .extract_rules import extract_rules, job_href, looks_like_job_href, looks_like_nav_label
 from .extractor_model import model_extract_detail, model_extract_list
 from .field_rules import (
     FILLED,
-    clip_field,
     heading_kind,
+    infer_job_type,
     infer_status,
-    split_jd_sections,
+)
+from .jd_sections import (  # DetailResult / trim_detail_text 为历史导入路径再导出
+    LABELED_RE,
+    DetailResult,
+    jd_total_len,
+    local_detail,
+    split_lines,
+    title_neighborhood,
+    trim_detail_text,
 )
 from .page_intent import classify_page_intent, navigation_only, page_heading
 from .platform_adapters import platform_detail_fields
@@ -36,35 +44,24 @@ from .row import ExtractedRow
 #: 列表页一次最多接受多少条（16E 硬上限 200）。
 MAX_ROWS = 200
 NAVIGATION_ONLY_WARNING = "页面仅识别到导航链接，未找到岗位信息；可按单条详情重新抓取"
+#: 只有一条「无详情链接 + 四个字段全空」的行：抓到的是站点配置/导航对象，不是岗位。
+#: 宁可报没识别到，也不能把假行塞进岗位库（CR-30）。
+DETAIL_ONLY_WARNING = "这一页像岗位详情，但没有识别到岗位信息；可点「按单条详情重新抓取」"
 #: 详情页正文短于此长度时，本地规则不敢当 JD，交给模型兜底（或如实留空）。
 MIN_DETAIL_CHARS = 200
-#: 详情页正文里的「正文结束」标记：命中后不再往下读（相关推荐/页脚噪声）。
-_DETAIL_STOP_MARKERS = (
-    "相似职位",
-    "相关推荐",
-    "推荐职位",
-    "热门职位",
-    "猜你喜欢",
-    "看过该职位的人还看了",
-    "投递该职位",
-    "立即投递",
-    "申请职位",
-    "分享到",
-    "举报该职位",
-    "公司信息",
-    "工商信息",
-    "注册协议",
-    "隐私协议",
-    "Copyright ©",
-    "ICP备",
+#: 结构证据：class 含 title / position_name 的元素文本（美团是 ``.postion_name .title``，
+#: 站点自己的拼写，别改）。
+_STRUCTURAL_TITLE_RE = re.compile(
+    r"""class=["'][^"']*(?:job[-_]?title|position[-_]?name|postion[-_]?name|job[-_]?name|title)"""
+    r"""[^"']*["'][^>]*>\s*([^<>]{2,128}?)\s*<""",
+    re.I,
 )
-_LABELED_FIELDS = {
-    "company": r"(?:公司名称|公司全称|企业名称|公司)\s*[:：]\s*([^\n]{1,64})",
-    "location": r"(?:工作地点|工作城市|办公地点|职位地点|地点)\s*[:：]\s*([^\n]{1,64})",
-    "salary": r"(?:薪资范围|薪酬范围|薪资|月薪|年薪)\s*[:：]\s*([^\n]{1,64})",
-    "posted_at": r"(?:发布时间|发布日期|更新时间|上线时间)\s*[:：]\s*([^\n]{1,64})",
-}
-_LABELED_RE = {field: re.compile(pattern) for field, pattern in _LABELED_FIELDS.items()}
+#: 详情页元信息标签：标题元素总在它们上面，用它们定位「标题区」的右边界。
+_META_LABEL_RE = re.compile(r"工作地点|更新时间|发布时间|职位描述|岗位职责|任职要求")
+#: 判断「假行」用的四个字段（有任何一个就说明确实读到了岗位信息）。
+_GATE_FIELDS = ("company", "location", "salary", "posted_at")
+#: 站点/频道名被当成岗位标题时的兜底（与岗位标题词表分开：真岗位不会叫「招聘官网」）。
+_SITE_LABEL_RE = re.compile(r"^(?:招聘官网|官网|人才招聘|校园招聘|社会招聘|职位列表|岗位列表)$")
 _DATE_SUFFIX_RE = re.compile(r"招聘|官网|校园|社会|职位|岗位|首页|网申|_+.*$")
 
 
@@ -134,22 +131,46 @@ def _build_row(raw: dict[str, Any], *, page: Any) -> ExtractedRow | None:
     return row
 
 
+def _structural_title(html: str) -> str:
+    """从详情页结构里取岗位名：只看「元信息标签之前」那一段里最近的标题元素。
+
+    只看元信息之前，是为了避开页脚/推荐位里的 ``class="title"``；从后往前取，是因为
+    离「工作地点：」最近的标题元素才是岗位名（更上面的通常是站点名/频道名）。
+    没有元信息标签时退回整页前 6000 字符——总比拿导航第一项当标题好。
+    """
+    text = str(html or "")
+    if not text:
+        return ""
+    marker = _META_LABEL_RE.search(text)
+    window = text[max(0, marker.start() - 6000) : marker.start()] if marker else text[:6000]
+    candidates = [match.group(1).strip() for match in _STRUCTURAL_TITLE_RE.finditer(window)]
+    for candidate in reversed(candidates):
+        if len(candidate) > 128 or looks_like_nav_label(candidate):
+            continue
+        return candidate
+    return ""
+
+
 def _title_from_page(page: Any, *, fallback: str = "") -> str:
-    """详情页兜底标题：优先页面第一行像岗位名的文本，其次 URL 末段。"""
+    """详情页兜底标题：h1 → 结构证据 → 标签文本 → URL 末段。"""
     heading = page_heading(page)
     if heading:
         return heading
+    structured = _structural_title(str(getattr(page, "html", "") or ""))
+    if structured:
+        return structured
     text = _page_text(page)
     lines = split_lines(text)
     for index, line in enumerate(lines[:40]):
         labeled = re.match(r"(?:职位名称|岗位名称)\s*[:：]\s*(.+)", line)
         if labeled:
             return labeled.group(1).strip()[:128]
-        if index and _LABELED_RE["location"].match(line):
+        if index and LABELED_RE["location"].match(line):
             candidate = lines[index - 1].strip()
             if (
                 2 <= len(candidate) <= 128
                 and not re.search(r"[:：]", candidate)
+                and not looks_like_nav_label(candidate)
                 and candidate not in {"职位列表", "岗位列表", "职位详情", "岗位详情"}
             ):
                 return candidate
@@ -157,15 +178,34 @@ def _title_from_page(page: Any, *, fallback: str = "") -> str:
         return fallback
     for line in lines[:8]:
         candidate = line.strip()
-        if 2 <= len(candidate) <= 128 and not re.search(r"[:：]$", candidate):
+        if (
+            2 <= len(candidate) <= 128
+            and not re.search(r"[:：]$", candidate)
+            and not looks_like_nav_label(candidate)
+        ):
             return candidate
     path = _page_url(page).rstrip("/").rsplit("/", 1)[-1]
     cleaned = _DATE_SUFFIX_RE.sub("", path).replace("-", " ").replace("_", " ").strip()
     return cleaned[:128]
 
 
-def split_lines(text: str) -> list[str]:
-    return [line for line in (text or "").splitlines() if line.strip()]
+def _title_neighborhood(page: Any, title: str) -> str:
+    """页面文本 → 标题邻域证据（纯文本实现见 ``jd_sections.title_neighborhood``）。"""
+    return title_neighborhood(_page_text(page), title)
+
+
+def _single_row_without_evidence(rows: list[ExtractedRow]) -> bool:
+    """只有一行、四个字段全空，且没有详情链接（或标题就是站点名）——不是岗位。
+
+    真实岗位至少会带一个（地点/公司/薪资/发布时间），或者带一条详情链接；
+    两者都没有的单行不可能是岗位，宁可判「没识别到」。
+    """
+    if len(rows) != 1:
+        return False
+    row = rows[0]
+    if any(str(row.data.get(key) or "").strip() for key in _GATE_FIELDS):
+        return False
+    return not row.detail_url or bool(_SITE_LABEL_RE.match(row.title))
 
 
 def extract_rules_result(page: Any, *, limit: int = MAX_ROWS) -> ExtractionResult:
@@ -189,7 +229,12 @@ def extract_rules_result(page: Any, *, limit: int = MAX_ROWS) -> ExtractionResul
             rows.append(row)
     if len(raw_rows) > capped_limit:
         result.warnings.append(f"这一页共 {len(raw_rows)} 条，本次最多导入 {capped_limit} 条")
-    if not rows:
+    gated = _single_row_without_evidence(rows)
+    if gated:
+        rows = []
+        result.method = "none"
+        result.warnings.append(DETAIL_ONLY_WARNING)
+    if not rows and not gated:
         result.warnings.append("没有从这一页识别出岗位列表")
         result.method = "none"
     result.rows = rows
@@ -229,7 +274,12 @@ async def extract_rows(
             rows.append(row)
     if len(raw_rows) > capped_limit:
         result.warnings.append(f"这一页共 {len(raw_rows)} 条，本次最多导入 {capped_limit} 条")
-    if not rows:
+    gated = _single_row_without_evidence(rows)
+    if gated:
+        rows = []
+        result.method = "none"
+        result.warnings.append(DETAIL_ONLY_WARNING)
+    if not rows and not gated:
         result.warnings.append(
             "没有从这一页识别出岗位列表；如果页面需要登录或由脚本渲染，可改用浏览器引擎再试"
         )
@@ -266,6 +316,15 @@ async def _extract_single_detail(
         result.method = result.method if raw_rows else "none"
     # A same-URL anchor can still be a navigation label; structural title evidence wins.
     base.data["title"] = _title_from_page(page, fallback=base.title)
+    # CR-39：岗位类型按「页面明确标签（标题附近行）> URL 频道 > 其他」推断。页面证据存在
+    # 时不算「推断」；列表页不经过这里，行为不变（回归见 test_web_import_detail_job_type）。
+    current_type = (base.data.get("job_type") or "").strip()
+    if not current_type or current_type == "其他" or base.job_type_inferred:
+        job_type, job_type_inferred = infer_job_type(
+            page_url=_page_url(page), text=_title_neighborhood(page, base.title)
+        )
+        base.data["job_type"] = job_type
+        base.job_type_inferred = job_type_inferred
     detail = await extract_detail(page, provider=provider)
     base.apply_detail(
         detail.fields,
@@ -284,70 +343,10 @@ async def _extract_single_detail(
     return result
 
 
-@dataclass
-class DetailResult:
-    fields: dict[str, str] = field(default_factory=dict)
-    evidence: dict[str, str] = field(default_factory=dict)
-    jd_split: bool = False
-    warnings: list[str] = field(default_factory=list)
-    #: 平台适配器认出来的 ATS 名（R-15 B：greenhouse / lever / workday）；空串 = 通用路径。
-    platform: str = ""
-
-
-def trim_detail_text(text: str) -> str:
-    """截出详情页的「正文部分」：从第一个 JD 小标题附近开始，遇到相关推荐/页脚截止。"""
-    lines = split_lines(text)
-    if not lines:
-        return ""
-    start = 0
-    for index, line in enumerate(lines):
-        if heading_kind(line):
-            start = max(0, index - 4)
-            break
-    end = len(lines)
-    for index in range(start, len(lines)):
-        if any(marker in lines[index] for marker in _DETAIL_STOP_MARKERS):
-            end = index
-            break
-    return "\n".join(lines[start:end]).strip()
-
-
-def _labeled_values(text: str) -> dict[str, str]:
-    values: dict[str, str] = {}
-    for name, pattern in _LABELED_RE.items():
-        match = pattern.search(text or "")
-        if match:
-            values[name] = clip_field(name, match.group(1).strip())
-    return values
-
-
-def _local_detail(text: str) -> tuple[DetailResult, bool]:
-    """本地规则抽详情：切分 JD + 标签字段 + 状态。返回 (结果, 是否找到小标题)。"""
-    content = trim_detail_text(text)
-    result = DetailResult()
-    if not content:
-        return result, False
-    split = split_jd_sections(content)
-    has_heading = bool(split["split"]) or any(heading_kind(line) for line in split_lines(content))
-    # 四个详情字段永远有键：空字符串 = 页面未提供（17B 的 not_on_page），
-    # 不用「键缺失」表达缺失，避免调用方把没抓到当没这个字段。
-    fields: dict[str, str] = {
-        "description": str(split["description"]).strip(),
-        "requirements": str(split["requirements"]).strip(),
-        "additional_info": str(split["additional_info"]).strip(),
-        "status": infer_status(text),
-    }
-    fields.update(_labeled_values(text))
-    result.fields = fields
-    result.jd_split = bool(split["split"])
-    result.evidence = {name: value[:160] for name, value in fields.items() if value}
-    return result, has_heading
-
-
 async def extract_detail(page: Any, *, provider: Any = None) -> DetailResult:
     """抽一条详情：本地规则优先；正文太短/没有小标题且配了模型时用模型兜底。"""
     text = _page_text(page)
-    local, has_heading = _local_detail(text)
+    local, has_heading = local_detail(text)
     # R-15 B：平台详情页优先用平台容器取正文（通用规则会把导航/相似岗位混进来）。
     platform, platform_fields = platform_detail_fields(
         getattr(page, "url", ""), getattr(page, "html", "")
@@ -359,7 +358,7 @@ async def extract_detail(page: Any, *, provider: Any = None) -> DetailResult:
         local.evidence["description"] = "平台适配器"
         return local
     needs_model = provider is not None and (
-        len(str(local.fields.get("description", ""))) < MIN_DETAIL_CHARS and not has_heading
+        jd_total_len(local.fields) < MIN_DETAIL_CHARS and not has_heading
     )
     if needs_model:
         try:
@@ -378,7 +377,7 @@ async def extract_detail(page: Any, *, provider: Any = None) -> DetailResult:
             local.jd_split or any(heading_kind(line) for line in split_lines(text))
         )
         return local
-    if len(str(local.fields.get("description", ""))) < MIN_DETAIL_CHARS and provider is None:
+    if jd_total_len(local.fields) < MIN_DETAIL_CHARS and provider is None:
         local.warnings.append("页面正文没有识别出完整的岗位描述，可改用模型抽取或手动补全")
     return local
 

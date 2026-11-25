@@ -44,7 +44,7 @@ from ..models.apply import (
 from ..models.claim import ClaimRecord
 from ..models.job import Job
 from ..models.profile import utcnow
-from ..models.reminder import REMINDER_KIND_HR_REPLY, REMINDER_STATUS_PENDING, Reminder
+from ..models.reminder import REMINDER_KIND_HR_REPLY, REMINDER_STATUS_ACTIVE, Reminder
 from ..models.resume import ResumeRecord
 from ..models.resume_delivery import DELIVERY_SOURCE_EXPORT, ResumeDeliveryRecord
 from ..models.web_form_record import WebFormFillRecord
@@ -67,6 +67,7 @@ from .apply.failure_taxonomy import (
     REASON_UPLOAD_FAILED,
     TARGET_RESUME_UPLOAD,
 )
+from .reminder_occurrences import open_due_subquery, open_occurrence
 from .resume.resume_delivery import canonical_content_sha256
 from .resume.resume_risk_rules import scan_local
 
@@ -371,20 +372,26 @@ def _followup_out(db: Session, delivery: ResumeDeliveryRecord | None) -> Receipt
     """跟进计划 = 该进度记录上最近一条待办 ``hr_reply`` 提醒（T05 挂的那条）。"""
     if delivery is None or delivery.track_id is None:
         return None
+    # CR-28：只有"还有未处理那一次"的 hr_reply 计划才算跟进计划；排序用那一次的时刻，
+    # 回显也用它的 due_at（提醒被推后 1 小时后交付单上的时间必须跟着变）。
+    sub = open_due_subquery()
     reminder = (
         db.query(Reminder)
+        .join(sub, sub.c.reminder_id == Reminder.id)
         .filter(
             Reminder.track_id == delivery.track_id,
             Reminder.kind == REMINDER_KIND_HR_REPLY,
-            Reminder.status == REMINDER_STATUS_PENDING,
+            Reminder.status == REMINDER_STATUS_ACTIVE,
             trash.live_only(Reminder),
         )
-        .order_by(Reminder.remind_at.asc(), Reminder.id.asc())
+        .order_by(sub.c.next_due_at.asc(), Reminder.id.asc())
         .first()
     )
     if reminder is None:
         return None
-    return ReceiptFollowupOut(reminder_id=reminder.id, due_at=reminder.remind_at)
+    occurrence = open_occurrence(db, reminder.id)
+    due_at = occurrence.due_at if occurrence is not None else reminder.remind_at
+    return ReceiptFollowupOut(reminder_id=reminder.id, due_at=due_at)
 
 
 def build_receipt(db: Session, record_id: int) -> DeliveryReceiptOut:

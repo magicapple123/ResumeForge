@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -20,9 +21,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.agent_task import AGENT_TASK_SOURCE_MANUAL
+from ..models.agent_task import AGENT_TASK_SOURCE_MANUAL, AgentTask
 from ..services import agent_task_service
 from ..services.agent_task_service import AgentTaskError, AgentTaskNotFound
+from ..services.reminder_task_context import reminder_card_contexts
+from ..services.tracker import job_ids_for_tracks
 
 router = APIRouter(prefix="/api/agent-tasks", tags=["agent-tasks"])
 
@@ -91,6 +94,27 @@ class AgentTaskStepOut(BaseModel):
     error: str
     started_at: datetime | None
     finished_at: datetime | None
+    # CR-19：只读派生字段——这一步指向的岗位（由 ``output_ref.track_id`` 批查询补）。
+    # 首页任务卡用它把步骤行链到 ``/tracker?job_id=``；补不出来就是 None，界面不渲染链接。
+    job_id: int | None = None
+
+
+class AgentTaskReminderOut(BaseModel):
+    """提醒来源的上下文（CR-20）：任务卡改成"提醒行"后要显示的那一行。
+
+    只在 ``source == "reminder"`` 时下发。``due_at`` 用任务自己的
+    ``occurrence_due_at``（这一张卡对应**那一次**到期），提醒后来改期不该改历史卡上的时间。
+    ``deleted`` 覆盖两种"提醒不在了"：进了回收站（``deleted_at`` 非空）与行已被彻底删除
+    （查不到）——两种情况卡上都不给跳转链接。
+    """
+
+    id: int
+    title: str = ""
+    kind: str = ""
+    due_at: datetime | None = None
+    company: str = ""
+    job_title: str = ""
+    deleted: bool = False
 
 
 class AgentTaskOut(BaseModel):
@@ -112,6 +136,114 @@ class AgentTaskOut(BaseModel):
     # #18A：执行参数可选下发（前端不展示原文；执行器与排障需要时读取）。
     params: dict[str, Any] | None = None
     steps: list[AgentTaskStepOut]
+    # CR-20：提醒卡的来源上下文（批查询补齐；其它来源为 None）。
+    reminder: AgentTaskReminderOut | None = None
+
+
+def _reminder_contexts(
+    db: Session, tasks: Sequence[AgentTask]
+) -> dict[int, AgentTaskReminderOut]:
+    """按任务批量补齐提醒上下文（取数在 service 层，api 层不构造查询）。
+
+    没有 ``reminder_id`` 的卡（手动、助手、巡检）不进结果，响应里就是 ``reminder=null``。
+    """
+    return {
+        task_id: AgentTaskReminderOut(
+            id=context.id,
+            title=context.title,
+            kind=context.kind,
+            due_at=context.due_at,
+            company=context.company,
+            job_title=context.job_title,
+            deleted=context.deleted,
+        )
+        for task_id, context in reminder_card_contexts(db, tasks).items()
+    }
+
+
+def _step_track_ids(payloads: Sequence[AgentTaskOut]) -> set[int]:
+    """响应里所有步骤引用的进度 id（``output_ref.track_id``）。
+
+    只认整数：``output_ref`` 是 JSON，历史数据里出现过字符串/布尔值，把它们当 id 去查
+    等于拿脏数据换一次无意义的全表扫描。
+    """
+    found: set[int] = set()
+    for payload in payloads:
+        for step in payload.steps:
+            value = (step.output_ref or {}).get("track_id")
+            if isinstance(value, int) and not isinstance(value, bool):
+                found.add(value)
+    return found
+
+
+def _attach_step_job_ids(db: Session, payloads: Sequence[AgentTaskOut]) -> None:
+    """把步骤的 ``job_id`` 补上（一次批查询，不逐步骤查库）。
+
+    ``job_id`` 落在 ``application_track`` 上；步骤只记 ``track_id``。旧卡（没有
+    ``output_ref``）、进度已删除、进度没挂岗位这三种情况都补不出来——留 None，
+    界面据此不渲染岗位链接，任务本身照常展示。
+    """
+    track_ids = _step_track_ids(payloads)
+    if not track_ids:
+        return
+    job_by_track = job_ids_for_tracks(db, sorted(track_ids))
+    for payload in payloads:
+        payload.steps = [
+            step.model_copy(
+                update={"job_id": job_by_track.get((step.output_ref or {}).get("track_id"))}
+            )
+            for step in payload.steps
+        ]
+
+
+def _task_out(db: Session, task: AgentTask) -> AgentTaskOut:
+    """单个任务 → 响应（附带提醒上下文与步骤岗位）。"""
+    payload = AgentTaskOut.model_validate(task)
+    context = _reminder_contexts(db, [task]).get(task.id)
+    if context is not None:
+        payload = payload.model_copy(update={"reminder": context})
+    _attach_step_job_ids(db, [payload])
+    return payload
+
+
+def _notify_waiting_approval(db: Session, task: AgentTask, step_index: int) -> None:
+    """「需要你确认」通知（CR-29）：任务卡在 waiting_approval 时写一条 inbox 行。
+
+    通道呈现（toast / 桌面通知）由前端按同一份开关决定；这里只负责**事件落库**，
+    这样"当时有没有提醒过"可回看。关掉开关时不写（决策类默认开）。
+    ``dedupe_key`` 带 step_index：同一步重复调用幂等，换一步再提醒一次。
+    """
+    from ..services.notification_settings import notify_allowed
+    from ..services.notifications import emit
+
+    if not notify_allowed(db, "task_waiting"):
+        return
+    title = task.title.strip() or "助手任务"
+    context = _reminder_contexts(db, [task]).get(task.id)
+    body = context.title if context is not None else "有一步需要你确认后才能继续"
+    emit(
+        db,
+        type="agent_task",
+        severity="warning",
+        title=f"「{title}」等你确认",
+        body=body,
+        deep_link="/",
+        dedupe_key=f"agent-task-waiting:{task.id}:{step_index}",
+    )
+    db.commit()
+
+
+def _task_out_many(db: Session, tasks: Sequence[AgentTask]) -> list[AgentTaskOut]:
+    """列表 → 响应；提醒上下文与步骤岗位各一次批查询补齐。"""
+    contexts = _reminder_contexts(db, tasks)
+    payloads = [
+        AgentTaskOut.model_validate(task).model_copy(update={"reminder": contexts.get(task.id)})
+        if task.id in contexts
+        else AgentTaskOut.model_validate(task)
+        for task in tasks
+    ]
+    _attach_step_job_ids(db, payloads)
+    return payloads
 
 
 # ===== 路由 =====
@@ -128,7 +260,7 @@ def list_agent_tasks(
         tasks = agent_task_service.list_tasks(db, conversation_id=conversation_id, status=status)
     except AgentTaskError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return [AgentTaskOut.model_validate(task) for task in tasks]
+    return _task_out_many(db, tasks)
 
 
 @router.post("", response_model=AgentTaskOut, status_code=201)
@@ -147,7 +279,7 @@ def create_agent_task(payload: AgentTaskCreateRequest, db: Session = Depends(get
         )
     except AgentTaskError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return AgentTaskOut.model_validate(task)
+    return _task_out(db, task)
 
 
 @router.post("/{task_id}/start", response_model=AgentTaskOut)
@@ -160,7 +292,7 @@ def start_agent_task(task_id: int, db: Session = Depends(get_db)):
     except AgentTaskError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     _kick_assistant_runner(task)
-    return AgentTaskOut.model_validate(task)
+    return _task_out(db, task)
 
 
 @router.get("/{task_id}", response_model=AgentTaskOut)
@@ -170,7 +302,7 @@ def get_agent_task(task_id: int, db: Session = Depends(get_db)):
         task = agent_task_service.get_task(db, task_id)
     except AgentTaskNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return AgentTaskOut.model_validate(task)
+    return _task_out(db, task)
 
 
 @router.post("/{task_id}/steps/{step_index}/complete", response_model=AgentTaskOut)
@@ -193,7 +325,7 @@ def complete_agent_task_step(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AgentTaskError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return AgentTaskOut.model_validate(task)
+    return _task_out(db, task)
 
 
 @router.post("/{task_id}/steps/{step_index}/wait-approval", response_model=AgentTaskOut)
@@ -212,7 +344,8 @@ def wait_approval_agent_task_step(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AgentTaskError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return AgentTaskOut.model_validate(task)
+    _notify_waiting_approval(db, task, step_index)
+    return _task_out(db, task)
 
 
 @router.post("/{task_id}/pause", response_model=AgentTaskOut)
@@ -224,7 +357,7 @@ def pause_agent_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AgentTaskError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return AgentTaskOut.model_validate(task)
+    return _task_out(db, task)
 
 
 @router.post("/{task_id}/resume", response_model=AgentTaskOut)
@@ -238,7 +371,7 @@ def resume_agent_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     # 用户点「继续」后同样从 resume_cursor 拉起执行器（助手任务才会）。
     _kick_assistant_runner(task)
-    return AgentTaskOut.model_validate(task)
+    return _task_out(db, task)
 
 
 @router.post("/{task_id}/cancel", response_model=AgentTaskOut)
@@ -250,7 +383,7 @@ def cancel_agent_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AgentTaskError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return AgentTaskOut.model_validate(task)
+    return _task_out(db, task)
 
 
 __all__ = ["router"]

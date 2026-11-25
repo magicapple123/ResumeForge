@@ -3,9 +3,13 @@
 
 重点验证：
 1. 增删改查完整可用，删除走软删除（列表不可见、行仍在）；
-2. ``upcoming`` 只返回 pending 且按 ``remind_at`` 升序；
+2. ``upcoming`` 只返回"还有未处理那一次"的 active 计划，按那一次的时刻升序；
 3. 关联求职进度/岗位/简历后，被绑对象删除不连坐（外键 SET NULL）。
+
+CR-28：``status`` 已收窄为 active/archived；``done``/``dismissed`` 仍是 PATCH 的动作
+（落在 occurrence 上），单次提醒做完 → 计划归档，列表默认只看 active。
 """
+
 from datetime import UTC, timedelta
 
 from app.models.job import Job
@@ -54,7 +58,7 @@ def test_create_list_patch_delete_round_trip(client):
     body = created.json()
     assert body["title"] == "参加某司面试"
     assert body["kind"] == "interview"
-    assert body["status"] == "pending"
+    assert body["status"] == "active"
 
     assert len(client.get("/api/reminders").json()) == 1
 
@@ -62,7 +66,8 @@ def test_create_list_patch_delete_round_trip(client):
         f"/api/reminders/{body['id']}", json={"status": "done", "note": "已面完"}
     )
     assert patched.status_code == 200, patched.text
-    assert patched.json()["status"] == "done"
+    # 单次提醒做完 → 这次结束了、计划也跟着归档（不再出现在待办里）。
+    assert patched.json()["status"] == "archived"
     assert patched.json()["note"] == "已面完"
 
     assert client.delete(f"/api/reminders/{body['id']}").status_code == 204
@@ -135,11 +140,19 @@ def test_delete_is_soft_and_hides_from_list(client, db_session):
 
 
 def test_validation_rejects_blank_title_and_bad_kind(client):
-    assert client.post("/api/reminders", json={"title": "  ", "remind_at": "2026-09-21T10:00:00"}).status_code == 422
-    assert client.post(
-        "/api/reminders",
-        json={"title": "x", "remind_at": "2026-09-21T10:00:00", "kind": "unknown_kind"},
-    ).status_code == 422
+    assert (
+        client.post(
+            "/api/reminders", json={"title": "  ", "remind_at": "2026-09-21T10:00:00"}
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/api/reminders",
+            json={"title": "x", "remind_at": "2026-09-21T10:00:00", "kind": "unknown_kind"},
+        ).status_code
+        == 422
+    )
 
 
 def test_reminder_urgency_mapping_and_labels():
@@ -170,13 +183,31 @@ def test_reminder_days_until_matches_label_semantics():
     assert reminder_days_until((now + timedelta(days=2)).replace(tzinfo=UTC), now) == 2
 
 
+def _utc_iso(value) -> str:
+    """把测试里的 naive UTC 时刻显式标成 UTC 再下发。
+
+    CR-27 起，**裸 datetime 按本机时区解释**（助手给的是本地时间）；这里的 ``utcnow()``
+    是 UTC 墙钟，不标时区会被当成"本地 12:00"而整体偏移一个时区，紧急度断言就会随
+    测试机时区漂移。
+    """
+    return value.replace(tzinfo=UTC).isoformat()
+
+
 def test_upcoming_enriches_urgency_and_sorts(client):
     now = utcnow()
 
-    client.post("/api/reminders", json={"title": "later", "remind_at": (now + timedelta(days=5)).isoformat()})
-    client.post("/api/reminders", json={"title": "soon", "remind_at": (now + timedelta(hours=3)).isoformat()})
-    client.post("/api/reminders", json={"title": "overdue", "remind_at": (now - timedelta(days=2)).isoformat()})
-    client.post("/api/reminders", json={"title": "upcoming", "remind_at": (now + timedelta(days=2)).isoformat()})
+    client.post(
+        "/api/reminders", json={"title": "later", "remind_at": _utc_iso(now + timedelta(days=5))}
+    )
+    client.post(
+        "/api/reminders", json={"title": "soon", "remind_at": _utc_iso(now + timedelta(hours=3))}
+    )
+    client.post(
+        "/api/reminders", json={"title": "overdue", "remind_at": _utc_iso(now - timedelta(days=2))}
+    )
+    client.post(
+        "/api/reminders", json={"title": "upcoming", "remind_at": _utc_iso(now + timedelta(days=2))}
+    )
 
     data = client.get("/api/reminders/upcoming").json()
     assert [item["title"] for item in data] == ["overdue", "soon", "upcoming", "later"]
@@ -211,15 +242,15 @@ def test_list_route_enriches_urgency_and_days_until(client):
     now = utcnow()
     just_overdue = client.post(
         "/api/reminders",
-        json={"title": "刚过两小时", "remind_at": (now - timedelta(hours=2)).isoformat()},
+        json={"title": "刚过两小时", "remind_at": _utc_iso(now - timedelta(hours=2))},
     ).json()
     future = client.post(
         "/api/reminders",
-        json={"title": "五天后", "remind_at": (now + timedelta(days=5)).isoformat()},
+        json={"title": "五天后", "remind_at": _utc_iso(now + timedelta(days=5))},
     ).json()
     done = client.post(
         "/api/reminders",
-        json={"title": "已完成", "remind_at": (now - timedelta(days=2)).isoformat()},
+        json={"title": "已完成", "remind_at": _utc_iso(now - timedelta(days=2))},
     ).json()
     client.patch(f"/api/reminders/{done['id']}", json={"status": "done"})
 
@@ -234,8 +265,9 @@ def test_list_route_enriches_urgency_and_days_until(client):
     # 边界：刚过 2 小时 → 逾期 1 天（不足 24 小时也按 1 天，与「已逾期 1 天」逐字一致）。
     assert by_id[just_overdue["id"]]["urgency"] == "overdue"
     assert by_id[just_overdue["id"]]["days_until"] == -1
-    # 已完成的历史提醒仍如实回显天数为负，但前端只在 pending 上标红（见 ReminderListItem）。
-    assert by_id[done["id"]]["days_until"] == -2
+    # 已完成的历史提醒在归档筛选里仍如实回显天数为负（前端只在待办上标红）。
+    archived = {item["id"]: item for item in client.get("/api/reminders?status=archived").json()}
+    assert archived[done["id"]]["days_until"] == -2
     assert by_id[future["id"]]["urgency"] in {"soon", "upcoming", "later"}
     assert by_id[future["id"]]["days_until"] == 5
 
@@ -265,9 +297,13 @@ def test_reminder_popup_setting_default_and_toggle(client):
     assert client.get("/api/settings/reminder-popup").json() == {"enabled": True}
 
     # 关闭后持久化。
-    assert client.put("/api/settings/reminder-popup", json={"enabled": False}).json() == {"enabled": False}
+    assert client.put("/api/settings/reminder-popup", json={"enabled": False}).json() == {
+        "enabled": False
+    }
     assert client.get("/api/settings/reminder-popup").json() == {"enabled": False}
 
     # 重新开启。
-    assert client.put("/api/settings/reminder-popup", json={"enabled": True}).json() == {"enabled": True}
+    assert client.put("/api/settings/reminder-popup", json={"enabled": True}).json() == {
+        "enabled": True
+    }
     assert client.get("/api/settings/reminder-popup").json() == {"enabled": True}

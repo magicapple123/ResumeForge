@@ -135,6 +135,7 @@ from .job_seen import JobSeen
 from .knowledge_entry import KnowledgeEntry
 from .llm_usage import LLMUsageRecord
 from .material import MATERIAL_CATEGORIES, CandidateJob, Material
+from .notification import Notification
 from .phrase import PHRASE_KINDS, PHRASE_LANGUAGES, ResumePhrase
 from .profile import (
     Award,
@@ -396,6 +397,7 @@ __all__ = [
     "SOURCE_LIVE",
     "WebFormUrlHistory",
     "UserFile",
+    "Notification",
     "LLMUsageRecord",
     "UsagePricingRecord",
     "ResumeSource",

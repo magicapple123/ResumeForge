@@ -109,7 +109,8 @@ def test_tool_parameters_are_generated_from_input_model(name):
     assert tool.parameters["required"] == expected_required, name
 
 
-EXPECTED_ENUM_FIELDS = {"list_claims": 1, "create_reminder": 2, "update_skill": 0}
+EXPECTED_ENUM_FIELDS = {"list_claims": 1, "create_reminder": 3, "update_skill": 0}
+# create_reminder 由 2 变 3（CR-28 新增 recurrence：none/daily/weekly/monthly）。
 
 
 @pytest.mark.parametrize("name", PILOT_NAMES)
@@ -348,6 +349,9 @@ def test_three_route_response_shapes_unchanged(client):
         "note",
         "created_at",
         "updated_at",
+        # CR-28：重复规则与结束条件随创建即回（none 也显式给出，前端不必猜）。
+        "recurrence",
+        "recurrence_until",
     }
 
     created = client.post(

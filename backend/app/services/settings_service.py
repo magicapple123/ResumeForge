@@ -111,6 +111,9 @@ _AUTO_BACKUP_INTERVAL_KEY = "auto_backup_interval_days"
 # T26 事件触发：提醒到期时自动生成"准备"任务卡。默认**关**——用户主动开启，
 # 避免"助手自作主张"的观感；关闭后不再生成，已生成的卡保留（不追删）。
 _AGENT_TASK_EVENTS_KEY = "agent_task_events_enabled"
+# CR-22：提醒到点通知。与任务卡开关**解耦**、默认开——"到点要响"是产品承诺，
+# 不能由一个默认关闭的实验性开关决定；关掉后扫描的投递段完全不写库。
+_NOTIFY_REMINDER_DUE_KEY = "notify_reminder_due"
 
 
 # ===== 提醒弹窗设置 =====
@@ -260,6 +263,24 @@ def save_agent_task_events_enabled(db: Session, enabled: bool) -> bool:
         row.value = serialized
     db.commit()
     return bool(enabled)
+
+
+def get_notify_reminder_due(db: Session) -> bool:
+    """读取「提醒到点通知」开关；缺失或脏数据退回注册表出厂值（默认**开**）。
+
+    与「提醒到期自动生成任务卡」是两个独立开关：提醒到点必须响，卡片是另一件事。
+    关掉它时扫描的投递段不写库、不发通知，但任务卡仍按自己的开关处理。
+    """
+    fallback = bool(default_for(_NOTIFY_REMINDER_DUE_KEY))
+    row = db.get(AppSetting, _NOTIFY_REMINDER_DUE_KEY)
+    if row is None:
+        return fallback
+    try:
+        value = json.loads(row.value)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("提醒到点通知开关数据损坏，已重置为默认开启")
+        return fallback
+    return value if isinstance(value, bool) else fallback
 
 
 # ===== 导出内容保存位置 =====

@@ -54,9 +54,9 @@ class SearchConfig(BaseModel):
     保存时只写 ``depth``（见 ``services.web_search_settings``），所以两套值不会各说一套。
     """
 
-    sources: list[Literal["bing", "duckduckgo", "searxng", "deepseek", "tavily", "jina"]] = Field(
-        default_factory=lambda: ["bing", "duckduckgo"], min_length=1, max_length=6
-    )
+    sources: list[
+        Literal["bing", "duckduckgo", "searxng", "deepseek", "tavily", "jina", "custom"]
+    ] = Field(default_factory=lambda: ["bing", "duckduckgo"], min_length=1, max_length=7)
     # 自建 SearXNG 实例根地址，例如 http://localhost:8080
     searxng_url: str = Field(default="", max_length=512)
     # 搜索深度。默认「标准」：只给摘要的搜索回答不了"这个岗位具体做什么"。
@@ -72,6 +72,22 @@ class SearchConfig(BaseModel):
     # Tavily / Jina 的密钥（同上：读取时只可能是掩码或空串）。
     tavily_api_key: str = Field(default="", max_length=200)
     jina_api_key: str = Field(default="", max_length=200)
+    # --- CR-09 自定义搜索来源（v1 只有一套）---
+    # 模板决定端点与字段映射的默认值；``custom_*`` 留空即用模板默认。
+    custom_template: Literal["moonshot", "generic"] = "moonshot"
+    #: 卡片上的显示名（空 = 用模板名）。
+    custom_name: str = Field(default="", max_length=40)
+    #: 根地址（http/https，公网域名或本机回环；不接受内网 IP 字面量）。
+    custom_base_url: str = Field(default="", max_length=512)
+    #: 端点**只能是相对路径**（SSRF 边界：路径不能改写目标主机）。
+    custom_search_path: str = Field(default="", max_length=200)
+    custom_fetch_path: str = Field(default="", max_length=200)
+    #: 响应里结果数组的位置（``a.b`` / ``a[0].b``）。
+    custom_results_field: str = Field(default="", max_length=120)
+    #: 搜索响应是否直接带回正文（默认开：省一次抓取）。
+    custom_include_content: bool = True
+    #: 自定义端点的密钥（与其它 Key 同口径：只回掩码、加密落盘、不进备份明文）。
+    custom_api_key: str = Field(default="", max_length=200)
 
     @model_validator(mode="before")
     @classmethod
@@ -106,11 +122,32 @@ class SearchConfig(BaseModel):
     def sources_must_be_unique(cls, value: list[str]) -> list[str]:
         return list(dict.fromkeys(value))
 
-    @field_validator("deepseek_api_key", "tavily_api_key", "jina_api_key")
+    @field_validator("deepseek_api_key", "tavily_api_key", "jina_api_key", "custom_api_key")
     @classmethod
     def api_key_must_be_stripped(cls, value: str) -> str:
         # 粘贴时带的首尾空白/换行不能进密文，否则鉴权必然失败。
         return value.strip()
+
+    @field_validator("custom_base_url")
+    @classmethod
+    def custom_base_url_must_be_public_http(cls, value: str) -> str:
+        from .search_custom import normalize_custom_base_url
+
+        return normalize_custom_base_url(value)
+
+    @field_validator("custom_search_path", "custom_fetch_path")
+    @classmethod
+    def custom_endpoint_must_be_relative(cls, value: str) -> str:
+        from .search_custom import validate_custom_path
+
+        return validate_custom_path(value)
+
+    @field_validator("custom_results_field")
+    @classmethod
+    def custom_field_must_be_simple(cls, value: str) -> str:
+        from .search_custom import validate_custom_field
+
+        return validate_custom_field(value)
 
     @field_validator("searxng_url")
     @classmethod
@@ -143,6 +180,12 @@ class SearchConfig(BaseModel):
                 continue
             if source == "jina" and not self.jina_api_key:
                 continue
+            if source == "custom":
+                # 自定义源至少要有一个能打到的根地址；generic 还要求搜索端点。
+                if not self.custom_base_url:
+                    continue
+                if self.custom_template == "generic" and not self.custom_search_path:
+                    continue
             available.append(source)
         return available
 

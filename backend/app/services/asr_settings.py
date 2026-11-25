@@ -51,6 +51,7 @@ from .asr_profiles import (
     save_asr_profile,
 )
 from .llm_key_refs import API_KEY_MASK
+from .settings_legacy import has_legacy_rows, note_legacy_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,12 @@ def legacy_asr_settings(db: Session) -> AsrSettings:
     return _load_stored_config(db).model_copy(update={"api_key": _legacy_api_key(db)})
 
 
+def _note_legacy_fallback(db: Session) -> None:
+    """旧行还在时才记日志：没有任何旧数据就不是"回落"，只是一份空默认值。"""
+    if has_legacy_rows(db, "asr"):
+        note_legacy_fallback("asr")
+
+
 # ===== 新解析顺序 =====
 
 
@@ -126,6 +133,7 @@ def resolve_asr_api_key(db: Session) -> str:
     if profiles_defined():
         active = active_profile_settings()
         return active.api_key if active is not None else ""
+    _note_legacy_fallback(db)
     return _legacy_api_key(db)
 
 
@@ -137,6 +145,7 @@ def get_asr_runtime_settings(db: Session) -> AsrSettings:
     """
     if profiles_defined():
         return active_profile_settings() or AsrSettings()
+    _note_legacy_fallback(db)
     return legacy_asr_settings(db)
 
 

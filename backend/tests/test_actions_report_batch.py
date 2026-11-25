@@ -319,21 +319,26 @@ def test_update_knowledge_empty_body_is_rejected_on_both_sides(client, db_sessio
 
 
 def test_update_reminder_route_and_tool_write_the_same_status(client, db_session):
+    """CR-28 之后「完成」落在**开放 occurrence** 上；单次提醒没有下一次，故整条转 archived。
+
+    两边（路由与工具）必须走同一个 occurrence 服务，所以断言两行的终态一致。
+    """
     route_row = _create_reminder(client, "路由提醒")
     tool_row = _create_reminder(client, "工具提醒")
     response = client.patch(f"/api/reminders/{route_row['id']}", json={"status": "done"})
     assert response.status_code == 200, response.text
     execute_tool(db_session, "update_reminder", {"reminder_id": tool_row["id"], "status": "done"})
     db_session.expire_all()
-    assert db_session.get(Reminder, route_row["id"]).status == "done"
-    assert db_session.get(Reminder, tool_row["id"]).status == "done"
+    assert db_session.get(Reminder, route_row["id"]).status == "archived"
+    assert db_session.get(Reminder, tool_row["id"]).status == "archived"
 
 
 def test_update_reminder_empty_body_is_a_noop_on_both_sides(client, db_session):
     created = _create_reminder(client, "空更新提醒")
     response = client.patch(f"/api/reminders/{created['id']}", json={})
     assert response.status_code == 200
-    assert response.json()["status"] == "pending"
+    # 空 body 不改状态：新建的提醒是 active（"待办/已完成"现在由 occurrence 表达）。
+    assert response.json()["status"] == "active"
     result = execute_tool(db_session, "update_reminder", {"reminder_id": created["id"]})
     assert result.changed is False
 

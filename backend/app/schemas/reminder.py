@@ -10,12 +10,15 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..vocabulary.reminder import (
     REMINDER_KIND_OTHER,
     REMINDER_KINDS,
-    REMINDER_STATUS_PENDING,
+    REMINDER_LEGACY_STATUSES,
+    REMINDER_RECURRENCE_NONE,
+    REMINDER_RECURRENCES,
+    REMINDER_STATUS_ACTIVE,
     REMINDER_STATUSES,
 )
 
@@ -23,7 +26,12 @@ MAX_REMINDER_TITLE_CHARS = 200
 MAX_REMINDER_NOTE_CHARS = 4000
 
 ReminderKind = Literal["interview", "assessment_deadline", "hr_reply", "other"]
-ReminderStatus = Literal["pending", "done", "dismissed"]
+#: 计划状态（DB 列 ``reminder.status``）：这条提醒还要不要继续。
+ReminderStatus = Literal["active", "archived"]
+#: 写入侧的状态动作：新取值 + 旧二态别名（done/dismissed 落到 open occurrence，见 CR-28）。
+ReminderStatusAction = Literal["active", "archived", "pending", "done", "dismissed"]
+ReminderRecurrence = Literal["none", "daily", "weekly", "monthly"]
+ReminderSnoozePreset = Literal["one_hour", "tonight", "tomorrow_morning"]
 ReminderUrgency = Literal["overdue", "soon", "upcoming", "later"]
 
 
@@ -41,6 +49,13 @@ def _validate_status(value: str) -> str:
     return cleaned
 
 
+def _validate_recurrence(value: str) -> str:
+    cleaned = (value or "").strip()
+    if cleaned not in REMINDER_RECURRENCES:
+        raise ValueError(f"无效的重复规则，可选值：{'、'.join(REMINDER_RECURRENCES)}")
+    return cleaned
+
+
 class ReminderCreate(BaseModel):
     """新增一条提醒。标题与提醒时间是必填，其余都有默认值。"""
 
@@ -49,7 +64,10 @@ class ReminderCreate(BaseModel):
     title: str = Field(min_length=1, max_length=MAX_REMINDER_TITLE_CHARS)
     remind_at: datetime
     kind: ReminderKind = REMINDER_KIND_OTHER
-    status: ReminderStatus = REMINDER_STATUS_PENDING
+    status: ReminderStatus = REMINDER_STATUS_ACTIVE
+    #: none|daily|weekly|monthly；until 为空表示一直重复。
+    recurrence: ReminderRecurrence = REMINDER_RECURRENCE_NONE
+    recurrence_until: datetime | None = None
     track_id: int | None = Field(default=None, ge=1)
     job_id: int | None = Field(default=None, ge=1)
     resume_id: int | None = Field(default=None, ge=1)
@@ -73,6 +91,11 @@ class ReminderCreate(BaseModel):
     def status_must_be_supported(cls, value: str) -> str:
         return _validate_status(value)
 
+    @field_validator("recurrence")
+    @classmethod
+    def recurrence_must_be_supported(cls, value: str) -> str:
+        return _validate_recurrence(value)
+
 
 class ReminderUpdate(BaseModel):
     """PATCH 语义：只更新显式给出的字段，未给出的保持不变。"""
@@ -82,7 +105,11 @@ class ReminderUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=MAX_REMINDER_TITLE_CHARS)
     remind_at: datetime | None = None
     kind: ReminderKind | None = None
-    status: ReminderStatus | None = None
+    #: 新取值（active/archived）改计划状态；旧二态（done/dismissed/pending）改"这一次"，
+    #: 落在 open occurrence 上。两者都保留是因为助手与旧前端仍在用二态说法（CR-28）。
+    status: ReminderStatusAction | None = None
+    recurrence: ReminderRecurrence | None = None
+    recurrence_until: datetime | None = None
     track_id: int | None = Field(default=None, ge=1)
     job_id: int | None = Field(default=None, ge=1)
     resume_id: int | None = Field(default=None, ge=1)
@@ -110,7 +137,39 @@ class ReminderUpdate(BaseModel):
     def status_must_be_supported(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        return _validate_status(value)
+        cleaned = value.strip()
+        # 旧二态别名是**输入动作**（见 vocabulary 注释），不写回 reminder.status。
+        if cleaned not in (*REMINDER_STATUSES, *REMINDER_LEGACY_STATUSES):
+            raise ValueError(
+                "无效的提醒状态，可选值："
+                + "、".join((*REMINDER_STATUSES, *REMINDER_LEGACY_STATUSES))
+            )
+        return cleaned
+
+    @field_validator("recurrence")
+    @classmethod
+    def recurrence_must_be_supported(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_recurrence(value)
+
+
+class ReminderSnoozeIn(BaseModel):
+    """稍后提醒：给预设或绝对时刻（二选一）。
+
+    预设按本机时区解析（今晚 20:00 / 明早 9:00）；``until`` 走与新建相同的归一口径。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    preset: ReminderSnoozePreset | None = None
+    until: datetime | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_target(self) -> "ReminderSnoozeIn":
+        if (self.preset is None) == (self.until is None):
+            raise ValueError("请给 preset（稍后预设）或 until（自定义时刻）之一")
+        return self
 
 
 class ReminderOut(ReminderCreate):
@@ -159,7 +218,10 @@ __all__ = [
     "ReminderKind",
     "ReminderListItemOut",
     "ReminderOut",
+    "ReminderSnoozeIn",
+    "ReminderSnoozePreset",
     "ReminderStatus",
+    "ReminderStatusAction",
     "ReminderUpcomingOut",
     "ReminderUpdate",
     "ReminderUrgency",

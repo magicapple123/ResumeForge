@@ -30,9 +30,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import Session
 
-from ...models.apply import IMAGE_TARGET_GREETING_IMAGE, ApplyTaskItem
+from ...models.apply import (
+    IMAGE_TARGET_GREETING_IMAGE,
+    ApplyQueueItem,
+    ApplyTaskItem,
+)
 from ...models.profile import utcnow
 from ...models.setting import AppSetting
 from ...models.user_file import UserFile
@@ -128,6 +133,35 @@ def _write_setting(db: Session, key: str, value: Any) -> None:
         db.add(AppSetting(key=key, value=serialized))
     else:
         row.value = serialized
+
+
+def collect_reference_candidates(
+    db: Session, global_image_id: int | None
+) -> list[tuple[object, str]]:
+    """扫出"可能引用了某张配图"的原始候选：``(值, 引用位置)``。
+
+    为什么放在服务层：``api/apply_extra.py`` 的 ``_greeting_reference_labels`` 原来自己
+    ``db.query(...)``，违反「服务层是唯一数据入口」，被 ``test_api_layer_rules`` 判红（CR-18 收口）。
+    这里只固定"要扫哪三处"；脏 JSON 的宽容（``int()`` 失败就跳过）仍留在调用方——那是
+    展示层的取舍，不是数据边界。
+
+    审计行可能很多：先用"JSON 不是空数组"粗筛，再逐行精确判定（LIKE 子串会误中 12/2）。
+    """
+    candidates: list[tuple[object, str]] = []
+    if global_image_id is not None:
+        candidates.append((global_image_id, "全局默认图片"))
+    for (image_ids,) in db.execute(select(ApplyQueueItem.image_ids)).all():
+        for value in image_ids or []:
+            candidates.append((value, "投递队列"))
+    audit_rows = db.execute(
+        select(ApplyTaskItem.image_file_ids).where(
+            func.length(cast(ApplyTaskItem.image_file_ids, String)) > 2
+        )
+    ).all()
+    for (image_ids,) in audit_rows:
+        for value in image_ids or []:
+            candidates.append((value, "投递记录"))
+    return candidates
 
 
 def get_greeting_image_setting(db: Session) -> GreetingImageSetting:

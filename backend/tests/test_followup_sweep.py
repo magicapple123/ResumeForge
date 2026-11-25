@@ -36,7 +36,7 @@ from app.models.followup import (
     ApplicationFollowUp,
 )
 from app.models.profile import utcnow
-from app.models.reminder import REMINDER_KIND_HR_REPLY, REMINDER_STATUS_PENDING, Reminder
+from app.models.reminder import REMINDER_KIND_HR_REPLY, REMINDER_STATUS_ACTIVE, Reminder
 from app.models.tracker import (
     STATUS_APPLIED,
     STATUS_INTERVIEW,
@@ -281,7 +281,7 @@ def _reminder_card_for(db, track: ApplicationTrack, *, created_days_ago: float) 
         title="跟进：甲公司 · 后端开发",
         remind_at=_ago(1),
         kind=REMINDER_KIND_HR_REPLY,
-        status=REMINDER_STATUS_PENDING,
+        status=REMINDER_STATUS_ACTIVE,
         track_id=track.id,
     )
     db.add(reminder)

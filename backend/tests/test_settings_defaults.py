@@ -39,6 +39,7 @@ from app.services.assistant_permission import (
 )
 from app.services.batch_operation import read_batch_operation_config
 from app.services.llm_settings import get_dataset_llm_config
+from app.services.notification_settings import read_notification_settings
 from sqlalchemy.orm import Session
 
 _LLM_FIELDS = tuple(settings_defaults.SETTINGS_REGISTRY["llm_config"].resolved_default())
@@ -96,6 +97,12 @@ _READERS: dict[str, Callable[[Session], Any]] = {
     "assistant_memory_auto_extract": auto_extract_enabled,
     "assistant_memory_inject": memory_injection_enabled,
     "agent_task_events_enabled": settings_service.get_agent_task_events_enabled,
+    "notify_reminder_due": settings_service.get_notify_reminder_due,
+    "notify_task_waiting": lambda db: read_notification_settings(db).task_waiting,
+    "notify_task_done": lambda db: read_notification_settings(db).task_done,
+    "notify_batch_done": lambda db: read_notification_settings(db).batch_done,
+    "notify_sound": lambda db: read_notification_settings(db).sound,
+    "notify_quiet_hours": lambda db: read_notification_settings(db).quiet_hours,
     "webform_relaxed_mode": settings_service.get_webform_relaxed_mode,
     "reminder_popup_on_start": settings_service.get_reminder_popup_on_start,
     "editor_inline_format_preview": settings_service.get_editor_inline_format_preview,
@@ -228,6 +235,7 @@ _FALSIFICATION: dict[str, Any] = {
     "reminder_popup_on_start": False,
     "webform_relaxed_mode": True,
     "agent_task_events_enabled": True,
+    "notify_reminder_due": False,
     "export_save_location": "/tmp/marker",
     "auto_backup_interval_days": 42,
     "apply_blocklist": {"companies": ["某公司"], "keywords": ["外包"]},

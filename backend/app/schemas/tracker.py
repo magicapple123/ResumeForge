@@ -213,6 +213,9 @@ class TrackOut(TrackCreate):
     resume_title: str = ""
     created_at: datetime
     updated_at: datetime
+    # CR-19：最近一次「已联系」跟进决策的时刻（naive UTC）；没联系过为 None。
+    # 只读派生字段：由接口层按 ``application_follow_up`` 批查询补齐，不在请求模型里。
+    latest_followup: datetime | None = None
 
 
 class TrackCreateOut(TrackOut):

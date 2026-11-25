@@ -250,6 +250,10 @@ class ResumeBrief(BaseModel):
     revision: int = 0
     # 文档模式（W14/0054）：普通简历 1–3 页 / 长 CV 1–10 页。旧行 server_default 读作 resume。
     document_mode: ResumeMode = "resume"
+    # 投递次数（CR-33）：**只读聚合**，不是新存储列。有岗位的简历按
+    # ``application_track.job_id`` 统计整个岗位的投递条数（同岗位各版本拿到同一个数），
+    # 通用简历按 ``resume_id`` 统计本人被投递的次数；没有投递记录时为 0。
+    delivery_count: int = 0
 
 
 class ResumeOut(ResumeBrief):

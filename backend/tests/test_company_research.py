@@ -259,7 +259,12 @@ def test_latest_reminder_matches_the_server_side_field_format():
 
 @pytest.mark.parametrize(
     ("status", "expected"),
-    [(401, "无效或已过期"), (402, "余额不足"), (403, "未开通联网工具"), (500, "暂时不可用")],
+    [
+        (401, "无效或已被删除"),
+        (402, "余额不足"),
+        (403, "未开通联网工具"),
+        (500, "暂时不可用"),
+    ],
 )
 def test_brief_maps_upstream_status_to_a_reason(monkeypatch, status, expected):
     async def fake_post(payload, api_key):  # noqa: ARG001
@@ -274,7 +279,11 @@ def test_brief_maps_upstream_status_to_a_reason(monkeypatch, status, expected):
 def test_brief_requires_a_key():
     with pytest.raises(brief_mod.CompanyResearchError) as excinfo:
         _run(brief_mod.build_company_brief("腾讯", "", "", deep=False, api_key=""))
-    assert "Key" in str(excinfo.value)
+    reason = str(excinfo.value)
+    assert "Key" in reason
+    # 没有 Key 就不存在尾号：文案说「未配置」，且整段不出现「尾号」。
+    assert "联网搜索的 DeepSeek Key 未配置" in reason
+    assert "尾号" not in reason
 
 
 def test_brief_reads_usage_from_server_tool_use(monkeypatch):
@@ -397,3 +406,62 @@ def test_orchestration_rejects_overlong_jd():
             )
         )
     assert "招聘描述" in str(excinfo.value)
+
+
+# ===== CR-03 / CR-05：401 要说清是哪把 Key，并把上游细节（脱敏）写进日志 =====
+
+_FULL_KEY = "sk-live-abcdefghijklmnop-bb44"
+_UPSTREAM_401 = {
+    "error": {
+        "type": "authentication_error",
+        "code": "invalid_api_key",
+        "message": f"Authentication Fails, your api key {_FULL_KEY} is invalid",
+    }
+}
+
+
+def test_brief_401_names_the_search_key_scope_and_its_tail(monkeypatch):
+    """用户刚配过「AI 模型」的 Key，文案必须指明生效的是「联网搜索」那把。"""
+
+    async def fake_post(payload, api_key):  # noqa: ARG001
+        return httpx.Response(401, json=_UPSTREAM_401)
+
+    monkeypatch.setattr(brief_mod, "_post", fake_post)
+    with pytest.raises(brief_mod.CompanyResearchError) as excinfo:
+        _run(brief_mod.build_company_brief("腾讯", "", "", deep=False, api_key=_FULL_KEY))
+
+    reason = str(excinfo.value)
+    assert "联网搜索" in reason
+    assert "尾号 bb44" in reason
+    assert "AI 模型" in reason
+    # 完整 Key 绝不能进用户可见的原因（它会被写进调研历史）。
+    assert _FULL_KEY not in reason
+
+
+def test_brief_401_without_a_tail_omits_the_tail_segment():
+    """取不到尾号（过短的 Key）时不硬编码一段「尾号」。"""
+    reason = brief_mod._failure_reason(401, key_tail="")
+    assert "联网搜索" in reason
+    assert "尾号" not in reason
+
+
+def test_brief_401_log_carries_upstream_type_code_and_key_tail(monkeypatch, caplog):
+    """排障要看上游的 error.type / error.code 与「哪把 Key」，但只许出现尾号。"""
+
+    async def fake_post(payload, api_key):  # noqa: ARG001
+        return httpx.Response(401, json=_UPSTREAM_401)
+
+    monkeypatch.setattr(brief_mod, "_post", fake_post)
+    with (
+        caplog.at_level("WARNING", logger=brief_mod.__name__),
+        pytest.raises(brief_mod.CompanyResearchError),
+    ):
+        _run(brief_mod.build_company_brief("腾讯", "", "", deep=False, api_key=_FULL_KEY))
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert "authentication_error" in logged
+    assert "invalid_api_key" in logged
+    assert "bb44" in logged
+    assert _FULL_KEY not in logged
+    # 上游 message 会回显 Key，所以整段 body 一律不落日志。
+    assert "is invalid" not in logged

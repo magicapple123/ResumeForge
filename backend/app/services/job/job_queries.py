@@ -7,12 +7,22 @@ import 路由模块。筛选口径是"看到的那批岗位"的唯一实现，�
 
 from __future__ import annotations
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ...models.job import Job
 from ...schemas.job import RECOGNITION_SOURCE_AUTO, RECOGNITION_SOURCE_OFFICIAL
 from .. import trash
+
+
+def _blank_text(column):
+    """文本列在去掉首尾空白后为空（NULL 也算空）。
+
+    用 SQL 侧 ``trim`` 而不是 Python 侧过滤：筛选必须发生在分页与 ``count`` 之前，
+    否则「列表说 20 条、实际筛出来 3 条」这种口径不一致会一路传到跨页全选。
+    字符集显式写出：SQLite 单参数 ``trim`` 只去空格，制表符/换行会漏（``"\\t"`` 被当成有内容）。
+    """
+    return or_(column.is_(None), func.trim(column, " \t\r\n") == "")
 
 
 def filtered_query(
@@ -22,10 +32,21 @@ def filtered_query(
     status: str,
     favorite: bool | None,
     source_kind: str,
+    incomplete_only: bool = False,
 ):
     """列表页的共用筛选器：``/jobs``（分页列表）与 ``/jobs/ids``（跨页全选）同吃这一份，
-    保证"看到的筛选结果"和"一键全选拿到的 id"永远是对同一批岗位的两种视图。"""
+    保证"看到的筛选结果"和"一键全选拿到的 id"永远是对同一批岗位的两种视图。
+
+    ``incomplete_only``（CR-36）：只要公司、薪资、来源链接三列 trim 后都为空的行——
+    采集失败留下的「首页」这类可疑条目。只做筛选，不判定真假、不自动删。
+    """
     query = db.query(Job).filter(trash.live_only(Job))
+    if incomplete_only:
+        query = query.filter(
+            _blank_text(Job.company),
+            _blank_text(Job.salary),
+            _blank_text(Job.source_url),
+        )
     if keyword:
         like = f"%{keyword}%"
         query = query.filter(

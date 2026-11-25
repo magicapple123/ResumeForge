@@ -84,7 +84,8 @@ def _save_search_key(db_session, value: str = SEARCH_KEY) -> None:
 
 def test_registry_declares_all_five_storages():
     groups = {source.group for source in CREDENTIAL_SOURCES}
-    assert groups == {"web_search", "llm", "asr", "embedding", "session"}
+    # CR-11：network 是代理口令自成一类（global_settings.json → network.proxy_password）。
+    assert groups == {"web_search", "llm", "asr", "embedding", "session", "network"}
 
     search_fields = {
         source.storage_field for source in CREDENTIAL_SOURCES if source.group == "web_search"

@@ -122,6 +122,46 @@ REGISTRY_ENTRIES: tuple[SettingDefault, ...] = (
         default=False,
         note="提醒到期自动建卡，默认关：只建卡、不执行写操作",
     ),
+    # CR-22：到期通知与「任务卡」开关**解耦**。提醒是产品承诺的功能，默认开——
+    # 关掉它才需要用户显式动作；任务卡是否生成是另一件事，仍由上一行决定。
+    SettingDefault(
+        key="notify_reminder_due",
+        scope="assistant",
+        default=True,
+        note="提醒到点通知（inbox + 通道），默认开；关闭后扫描不写任何通知",
+    ),
+    # CR-29：通知分组其余五个开关。口径是「要你做决定的默认打断，只告知结果的默认安静」：
+    # 等待确认会卡住任务推进 → 默认开；任务/批次完成只是结果 → 默认关，回来看铃铛即可。
+    SettingDefault(
+        key="notify_task_waiting",
+        scope="assistant",
+        default=True,
+        note="有任务等你确认时写一条通知（决策类，默认打断）",
+    ),
+    SettingDefault(
+        key="notify_task_done",
+        scope="assistant",
+        default=False,
+        note="任务完成提示（结果类，默认安静；inbox 仍由铃铛体现）",
+    ),
+    SettingDefault(
+        key="notify_batch_done",
+        scope="assistant",
+        default=False,
+        note="投递/采集批次完成提示（结果类，默认安静）",
+    ),
+    SettingDefault(
+        key="notify_sound",
+        scope="assistant",
+        default=True,
+        note="完成提示音；与通知通道分开，关掉通知不必连声音一起关",
+    ),
+    SettingDefault(
+        key="notify_quiet_hours",
+        scope="assistant",
+        default=False,
+        note="静默时段（22:00–08:00）：不弹窗、不出声，inbox 照常记录；默认关",
+    ),
     # —— 卡：网申填表（scope=webform）——
     SettingDefault(
         key="webform_relaxed_mode",

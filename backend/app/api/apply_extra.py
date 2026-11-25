@@ -17,16 +17,22 @@
 ``POST /greeting-templates/{id}/use``  套用次数 +N（增量）
 ``GET  /blocklist``           屏蔽清单（含不会生效的关键词）
 ``PUT  /blocklist``           整表覆盖屏蔽清单
+``POST /greeting-image/upload``  配图就地上传（CR-18，按 sha 去重）
+``DELETE /greeting-image/{id}``  删一张未被引用的配图（仍被引用 → 409）
 ============================  ==========================================
 
 路由顺序：``/records/stale``（字面量段）与 ``/queue/preflight``（字面量段）都在本模块内
 先于任何参数段注册；父子路由的相对顺序见 ``api/apply.py`` 的 include 顺序。
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..models.user_file import UserFile
+from ..runtime.blocking import run_sync
 from ..schemas.apply import (
     ApplyBlocklistIn,
     ApplyBlocklistOut,
@@ -48,6 +54,7 @@ from ..services.apply._base import ApplyServiceError
 from ..services.apply.blocklist import inactive_keywords
 from ..services.apply.greeting_image import (
     GreetingImageError,
+    collect_reference_candidates,
     get_greeting_image_setting,
     image_options,
     save_greeting_image_setting,
@@ -56,8 +63,11 @@ from ..services.attachments import (
     MAX_ATTACHMENT_BYTES,
     MAX_ATTACHMENT_COUNT,
     MAX_ATTACHMENTS_TOTAL_BYTES,
+    image_mime_of_content,
+    safe_attachment_name,
 )
 from ..services.settings_service import get_apply_blocklist, save_apply_blocklist
+from ..services.user_files import delete_user_file, save_from_bytes
 from .apply_insights import register_apply_insight_routes
 
 extra_router = APIRouter(tags=["apply"])
@@ -193,6 +203,131 @@ def save_blocklist(payload: ApplyBlocklistIn, db: Session = Depends(get_db)):
 
 # ===== T8 招呼语配图 =====
 
+# CR-18：配图只接受这四种（与 ``greeting_image._EXTENSION_BY_MIME`` 同一份白名单）。
+# 判两道：先看扩展名在不在白名单里，再按内容验魔数——后缀对、内容是别的格式的图，
+# 站点那边会静默失败，用户只会看到"投递成功但图片没送到"。
+_GREETING_UPLOAD_EXTENSIONS = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".jpe": "image/jpeg",
+    ".jfif": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
+
+
+def _greeting_reference_labels(db: Session) -> dict[int, list[str]]:
+    """一次扫完三处引用：全局默认、投递队列行、投递审计。
+
+    返回 ``{file_id: [引用位置, ...]}``。GET 用它给每个选项算 ``deletable``，DELETE 用它
+    解释 409 的原因——两处共用同一份判定，避免"界面说能删、接口 409"。
+    """
+    labels: dict[int, list[str]] = {}
+
+    def add(value: object, place: str) -> None:
+        try:
+            file_id = int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return  # 脏 JSON 不该让整块设置读不出来
+        labels.setdefault(file_id, []).append(place)
+
+    setting = get_greeting_image_setting(db)
+    for value, place in collect_reference_candidates(db, setting.image_id):
+        add(value, place)
+    return {file_id: sorted(set(places)) for file_id, places in labels.items()}
+
+
+def _store_greeting_upload(
+    db: Session, raw: bytes, name: str, mime: str
+) -> tuple[int | None, UserFile | None, dict[int, list[str]]]:
+    """落盘 + 取行 + 算引用：**同步工作单元**，由 async 端点经 ``run_sync`` 调用。
+
+    为什么整段打包：``save_from_bytes`` / ``db.get`` / ``_greeting_reference_labels``
+    都是同步 IO，逐个 ``run_sync`` 只会把同一段逻辑切碎；打包成一次线程池调用既满足
+    ``test_async_route_thread_boundary``，也避免"取完 id 再回事件循环"的中间态。
+    """
+    file_id = save_from_bytes(
+        db,
+        raw,
+        original_name=name,
+        mime=mime,
+        source_type="apply_greeting_image",
+        source_ref="upload",
+    )
+    if file_id is None:
+        return None, None, {}
+    return file_id, db.get(UserFile, file_id), _greeting_reference_labels(db)
+
+
+@extra_router.post(
+    "/greeting-image/upload",
+    response_model=ApplyGreetingImageOption,
+    status_code=201,
+)
+async def upload_greeting_image(
+    file: UploadFile = File(...), db: Session = Depends(get_db)
+) -> ApplyGreetingImageOption:
+    """就地上传一张配图（队列行与设置页共用）。
+
+    重复上传同一张图不会再建一条：``save_from_bytes`` 按 sha256 去重，回的是同一个 id。
+    """
+    # 多读 1 字节用来判"超限"：把整份超大文件读进内存再比，等于让上传变成内存攻击面。
+    raw = await file.read(MAX_ATTACHMENT_BYTES + 1)
+    if len(raw) > MAX_ATTACHMENT_BYTES:
+        limit_mb = MAX_ATTACHMENT_BYTES // (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"这张图片超过 {limit_mb} MB")
+    name = safe_attachment_name(file.filename or "") or "greeting-image"
+    expected = _GREETING_UPLOAD_EXTENSIONS.get(Path(name).suffix.lower())
+    if expected is None:
+        raise HTTPException(status_code=400, detail="只支持 png/jpg/webp/gif 图片")
+    actual = image_mime_of_content(raw)
+    if actual is None:
+        raise HTTPException(
+            status_code=400, detail="这个文件的内容不是图片（或格式不受支持）"
+        )
+    if actual != expected:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件内容与扩展名不一致：「{name}」其实是 {actual}",
+        )
+
+    # 落盘 + 取行 + 算引用整段在 worker 线程里做，别在事件循环上等 SQLite。
+    file_id, row, references = await run_sync(
+        _store_greeting_upload, db, raw, name, actual
+    )
+    if file_id is None:
+        raise HTTPException(status_code=400, detail="这个文件是空的")
+    return ApplyGreetingImageOption(
+        id=file_id,
+        name=(row.original_name or row.disk_name) if row else name,
+        size_bytes=int(row.size or len(raw)) if row else len(raw),
+        # 重复上传一张正在用的图时它仍然不可删——deletable 必须按"当前引用"算。
+        deletable=file_id not in references,
+    )
+
+
+@extra_router.delete("/greeting-image/{file_id}")
+def delete_greeting_image(file_id: int, db: Session = Depends(get_db)) -> dict[str, bool]:
+    """删掉一张**未被引用**的配图（行 + 磁盘副本）。
+
+    仍被引用时返回 409 并说清是哪一处：静默删掉会让投递时才发现图没了，而用户完全
+    看不出是自己刚删的。
+    """
+    row = db.get(UserFile, file_id)
+    if row is None:
+        raise HTTPException(
+            status_code=404, detail="这张图片已经不在了，刷新列表看看最新状态"
+        )
+    places = _greeting_reference_labels(db).get(int(file_id))
+    if places:
+        raise HTTPException(
+            status_code=409,
+            detail=f"这张图仍被{'、'.join(places)}引用",
+        )
+    delete_user_file(db, row)
+    return {"ok": True}
+
 
 def _greeting_image_out(db: Session) -> ApplyGreetingImageOut:
     """设置 + 可选项 + 上限一起下发（前端打开这一块只发一次请求）。
@@ -201,13 +336,17 @@ def _greeting_image_out(db: Session) -> ApplyGreetingImageOut:
     漂移，而漂移的表现是"界面说可以、后端拒了"。
     """
     setting = get_greeting_image_setting(db)
+    references = _greeting_reference_labels(db)
     return ApplyGreetingImageOut(
         enabled=setting.enabled,
         image_id=setting.image_id,
         max_count=MAX_ATTACHMENT_COUNT,
         max_image_bytes=MAX_ATTACHMENT_BYTES,
         max_total_bytes=MAX_ATTACHMENTS_TOTAL_BYTES,
-        options=[ApplyGreetingImageOption(**item) for item in image_options(db)],
+        options=[
+            ApplyGreetingImageOption(**item, deletable=int(item["id"]) not in references)
+            for item in image_options(db)
+        ],
     )
 
 

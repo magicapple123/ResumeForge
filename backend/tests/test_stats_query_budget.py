@@ -32,7 +32,11 @@ from sqlalchemy import event
 
 # 端点 SQL 语句数红线：合并后的实现是 4 条（1 条聚合计数 + 2 条最近列表 +
 # 1 条 UNION ALL）。历史对照：合并前 14 条（perf-evidence 实测）。
-MAX_STATS_STATEMENTS = 4
+# 2026-11-25（CR-28）：提醒的"逾期 / 今天"计数改读 reminder_occurrence（单次发生），
+# 多一条 `occurrence JOIN reminder` 的聚合 —— 这是**新增了一个业务域**，不是 N+1
+# （条数与数据量无关，空库与万级数据都是 5）。按"本批条目单独计量"的口径 +1 到 5；
+# 若将来还要接第二个域，请先合并这两条聚合，不要再往后加。
+MAX_STATS_STATEMENTS = 5
 
 # 响应的完整键集合（与 schemas/search.py 的 Stats 字段一一对应）。
 # 沿用 Stats 的字段定义顺序，任何键增删/改名都会让形状断言变红。

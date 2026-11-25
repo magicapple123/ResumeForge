@@ -37,6 +37,7 @@ SOURCE_LLM_DEFAULT = "llm.default"
 SOURCE_LLM_SESSION = "llm.session"
 SOURCE_ASR_DEFAULT = "asr.default"
 SOURCE_EMBEDDING_DEFAULT = "embedding.default"
+SOURCE_NETWORK_PROXY = "network.proxy"
 
 # ===== 分组标识 =====
 
@@ -45,6 +46,7 @@ GROUP_LLM = "llm"
 GROUP_ASR = "asr"
 GROUP_EMBEDDING = "embedding"
 GROUP_SESSION = "session"
+GROUP_NETWORK = "network"
 
 GROUP_LABELS: dict[str, str] = {
     GROUP_WEB_SEARCH: "联网搜索与抓取",
@@ -52,6 +54,7 @@ GROUP_LABELS: dict[str, str] = {
     GROUP_ASR: "语音转写",
     GROUP_EMBEDDING: "语义检索",
     GROUP_SESSION: "仅本次会话",
+    GROUP_NETWORK: "网络代理",
 }
 
 # 声明顺序 = 展示顺序 = 备份 LIKE 串的拼接顺序（确定性，便于断言）。
@@ -64,6 +67,9 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         location="global_settings.json → web_search.deepseek_api_key",
         storage_field="deepseek_api_key",
         app_setting_key_prefixes=("search_deepseek_api_key",),
+        configure_at="设置 → 联网搜索 → DeepSeek",
+        used_by="联网搜索、网页正文抓取、扫描件 OCR 共用这一把",
+        empty_meaning="留空并保存 = 移除这把 Key（三把搜索 Key 都是这个口径）",
         note=(
             "同一把 Key 供联网搜索、URL 抓取与 OCR 使用。升级前的旧形态是数据集 "
             "AppSetting 的 search_deepseek_api_key 行（仍会一次性迁移到全局），"
@@ -78,6 +84,9 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         location="global_settings.json → web_search.tavily_api_key",
         storage_field="tavily_api_key",
         app_setting_key_prefixes=("search_tavily_api_key",),
+        configure_at="设置 → 联网搜索 → Tavily",
+        used_by="联网搜索的 Tavily 来源（勾选后才参与）",
+        empty_meaning="留空并保存 = 移除这把 Key",
         note="数据集 AppSetting 的 search_tavily_api_key 行是升级前的旧形态，仍需剥离。",
     ),
     CredentialSource(
@@ -88,6 +97,9 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         location="global_settings.json → web_search.jina_api_key",
         storage_field="jina_api_key",
         app_setting_key_prefixes=("search_jina_api_key",),
+        configure_at="设置 → 联网搜索 → Jina",
+        used_by="网页正文抓取（勾选后才参与）",
+        empty_meaning="留空并保存 = 移除这把 Key",
         note="数据集 AppSetting 的 search_jina_api_key 行是升级前的旧形态，仍需剥离。",
     ),
     CredentialSource(
@@ -98,6 +110,9 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         location="global_settings.json → llm.profiles[].config.api_key，或 AppSetting llm_config",
         multi_profile=True,
         supports_clear_sentinel=True,
+        configure_at="设置 → AI 模型 → 模型配置（每条记录各有一把 Key）",
+        used_by="所有模型调用：简历生成、助手、调研、结构化抽取",
+        empty_meaning="留空 = 保留原 Key；要清除请点「清除」（发 __clear__ 哨兵）",
         # 密钥藏在 JSON 块 / 独立表里，**不能**用 LIKE 删整行（会把 base_url、
         # model 等非密钥字段一起删掉）。它由 api_keys.py 里既有的两条专门路径处理：
         # `llm_config` 的 JSON 剥 api_key 字段、`llm_config_record` 表整列置空。
@@ -113,6 +128,9 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         label="仅本次会话使用的大模型 Key",
         scope=CredentialScope.MEMORY,
         location="后端进程内存（api_key_session），不落盘、不进备份",
+        configure_at="设置 → AI 模型 → 仅本次会话使用",
+        used_by="临时覆盖已保存的大模型 Key，进程重启即失效",
+        empty_meaning="清空 = 立刻回到已保存的那把 Key",
         note=(
             "RF-24 的纯内存通道：进程重启即失效。它存在时生效值以它为准，"
             "保存链路会把落库值清成空串（_strip_session_key）。"
@@ -127,6 +145,9 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         multi_profile=True,
         supports_clear_sentinel=True,
         app_setting_key_prefixes=("asr_api_key",),
+        configure_at="设置 → 语音与面试 → 语音转写（每条配置各有一把 Key）",
+        used_by="语音转写（面试录音、语音输入）",
+        empty_meaning="留空 = 沿用这一条自己的旧 Key；地址或协议一变就清空",
         note=(
             "旧形态是数据集 AppSetting 的 asr_api_key 行（迁移前兼容路径仍会读它），"
             "前缀匹配同时覆盖未来的 asr_api_key:xxx 多条形态。"
@@ -142,9 +163,29 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         display=KeyDisplay.BOOLEAN,
         multi_profile=True,
         supports_clear_sentinel=True,
+        configure_at="设置 → AI 模型 → 语义检索（每条配置各有一把 Key）",
+        used_by="本地资料库的语义检索与召回",
+        empty_meaning="留空 = 沿用这一条自己的旧 Key；要清除请用配置卡上的「清除 Key」",
         note=(
             "配置卡只给 key_configured 布尔，连掩码都不回；本地模型配置没有 Key。"
             "密钥在 global_settings.json 里，不在数据库中，因此不进 LIKE 白名单。"
+        ),
+    ),
+    CredentialSource(
+        source_id=SOURCE_NETWORK_PROXY,
+        group=GROUP_NETWORK,
+        label="代理认证口令（当前网络设置）",
+        scope=CredentialScope.GLOBAL_FILE,
+        location="global_settings.json → network.proxy_password",
+        storage_field="proxy_password",
+        supports_clear_sentinel=True,
+        configure_at="设置 → 网络代理（模式与地址）＋ 外部连接（只改口令）",
+        used_by="所有出网请求：模型、搜索、抓取、更新检查",
+        empty_meaning="留空 = 保留原口令；要清除请点「清除」（发 __clear__ 哨兵）",
+        note=(
+            "写入口唯一：PUT /api/settings/network（本页只做就地改口令，模式与地址仍在"
+            "「网络代理」卡片里改）。口令只存密文；清除用 __clear__ 哨兵，空串=保留。"
+            "它随 global_services.json 进备份，include_api_keys=false 时被剥离。"
         ),
     ),
 )
@@ -198,12 +239,14 @@ __all__ = [
     "GROUP_EMBEDDING",
     "GROUP_LABELS",
     "GROUP_LLM",
+    "GROUP_NETWORK",
     "GROUP_SESSION",
     "GROUP_WEB_SEARCH",
     "SOURCE_ASR_DEFAULT",
     "SOURCE_EMBEDDING_DEFAULT",
     "SOURCE_LLM_DEFAULT",
     "SOURCE_LLM_SESSION",
+    "SOURCE_NETWORK_PROXY",
     "SOURCE_WEB_SEARCH_DEEPSEEK",
     "SOURCE_WEB_SEARCH_JINA",
     "SOURCE_WEB_SEARCH_TAVILY",

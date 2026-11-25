@@ -18,6 +18,7 @@ from sqlalchemy import String, cast, func, or_
 from sqlalchemy.orm import Query, Session
 
 from ...models.resume import ResumeRecord, saved_only
+from ...models.tracker import ApplicationTrack
 from ...schemas.common import Page
 from ...schemas.resume import ResumeBrief, ResumeOut
 from .. import trash
@@ -177,7 +178,60 @@ def list_resumes_page(
         .limit(page_size)
         .all()
     )
-    return Page(items=[ResumeBrief.model_validate(record) for record in records], total=total)
+    items = [ResumeBrief.model_validate(record) for record in records]
+    # CR-33：列表行要显示「投递过 N 次」。只读聚合，两次分组查询覆盖整页，
+    # 不逐条 count（≤100 条的页也一样是一次 SQL，不是 N 次）。
+    counts = _delivery_counts(db, records)
+    for item in items:
+        item.delivery_count = counts.get(item.id, 0)
+    return Page(items=items, total=total)
+
+
+def _delivery_counts(db: Session, records: list[ResumeRecord]) -> dict[int, int]:
+    """每份简历的「投递次数」（CR-33 版本堆叠行用）。
+
+    口径：有岗位的简历取**整个岗位**的投递条数（``application_track.job_id``）——
+    用户问的是"这个岗位投过几次"，而不是"这一版文件被用过几次"；同岗位的多个版本
+    因此拿到同一个数。通用简历（无 job_id）没有岗位可归，按 ``resume_id`` 统计本人。
+    回收站里的投递记录不计入（与列表本身同一套 ``live_only`` 口径）。
+    """
+    job_ids = {record.job_id for record in records if record.job_id is not None}
+    general_ids = [record.id for record in records if record.job_id is None]
+
+    job_counts: dict[int, int] = {}
+    if job_ids:
+        rows = (
+            db.query(ApplicationTrack.job_id, func.count(ApplicationTrack.id))
+            .filter(
+                ApplicationTrack.job_id.in_(job_ids),
+                trash.live_only(ApplicationTrack),
+            )
+            .group_by(ApplicationTrack.job_id)
+            .all()
+        )
+        job_counts = {job_id: count for job_id, count in rows}
+
+    resume_counts: dict[int, int] = {}
+    if general_ids:
+        rows = (
+            db.query(ApplicationTrack.resume_id, func.count(ApplicationTrack.id))
+            .filter(
+                ApplicationTrack.resume_id.in_(general_ids),
+                trash.live_only(ApplicationTrack),
+            )
+            .group_by(ApplicationTrack.resume_id)
+            .all()
+        )
+        resume_counts = {resume_id: count for resume_id, count in rows}
+
+    return {
+        record.id: (
+            job_counts.get(record.job_id, 0)
+            if record.job_id is not None
+            else resume_counts.get(record.id, 0)
+        )
+        for record in records
+    }
 
 
 def list_resume_ids(

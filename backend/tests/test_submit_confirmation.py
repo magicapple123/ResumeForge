@@ -27,7 +27,11 @@ from app.models.apply import (
     ApplyTaskItem,
 )
 from app.models.profile import utcnow
-from app.models.reminder import REMINDER_KIND_HR_REPLY, REMINDER_STATUS_PENDING, Reminder
+from app.models.reminder import (
+    REMINDER_KIND_HR_REPLY,
+    REMINDER_STATUS_ACTIVE,
+    Reminder,
+)
 from app.models.resume import ResumeRecord
 from app.models.resume_delivery import ResumeDeliveryRecord
 from app.models.setting import AppSetting
@@ -37,6 +41,7 @@ from app.models.tracker import (
     ApplicationTrackEvent,
     normalize_key,
 )
+from app.services.reminder_occurrences import ensure_open_occurrence
 from app.services.settings_service import save_agent_task_events_enabled
 from app.services.submit_confirmation import FOLLOWUP_HINT_SETTING_KEY, HR_REPLY_REMINDER_DAYS
 
@@ -132,7 +137,7 @@ def test_click_creates_track_reminder_and_delivery_snapshot(client, db_session):
     reminder = db_session.get(Reminder, body["reminder_id"])
     assert reminder is not None
     assert reminder.kind == REMINDER_KIND_HR_REPLY
-    assert reminder.status == REMINDER_STATUS_PENDING
+    assert reminder.status == REMINDER_STATUS_ACTIVE
     assert reminder.track_id == track_id
     assert reminder.title == "跟进：示例科技 · 后端开发"
     expected_due = utcnow() + timedelta(days=HR_REPLY_REMINDER_DAYS)
@@ -208,10 +213,12 @@ def test_pending_hr_reply_reminder_is_reused(client, db_session):
         title="用户自己设的跟进提醒",
         remind_at=utcnow() + timedelta(days=2),
         kind=REMINDER_KIND_HR_REPLY,
-        status=REMINDER_STATUS_PENDING,
+        status=REMINDER_STATUS_ACTIVE,
         track_id=track.id,
     )
     db_session.add(existing)
+    db_session.flush()
+    ensure_open_occurrence(db_session, existing, due_at=existing.remind_at)
     db_session.commit()
     original_due = existing.remind_at
     item = _item(db_session)

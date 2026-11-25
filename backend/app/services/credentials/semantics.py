@@ -153,11 +153,39 @@ def mask_value(real: str, *, reference: str | None = None) -> str:
     return masked_api_key(real, reference=reference)
 
 
+#: 密钥短于这个长度就不给前后缀（4 + 4 会暴露一半以上，等于把 Key 念出来）。
+HINT_MIN_LENGTH = 16
+
+
+def key_hint(real: str) -> str:
+    """真实密钥 → **只读**展示提示：前 4 位 + ``****`` + 后 4 位。
+
+    为什么需要它：``********`` 让七把 Key 长得一模一样，用户无法判断"这把是不是我要的
+    那一把"（Q19 的下一层）。前 4 后 4 只够辨认，不足以复用。
+
+    三条硬约束：
+
+    1. **不碰** ``mask_value`` 的 ``********`` —— 写回语义靠"值以掩码开头"判定，
+       改它会静默把"保持不变"变成"清空"；
+    2. 短于 :data:`HINT_MIN_LENGTH` 位时回退 ``********``：``sk-1`` 这种前缀+后缀
+       会把整把 Key 拼出来；
+    3. 只用于展示，**任何写路径都不接受它**（它不是掩码，被当成新值会污染存储）。
+    """
+    stored = str(real or "")
+    if not stored:
+        return ""
+    if len(stored) < HINT_MIN_LENGTH:
+        return API_KEY_MASK
+    return f"{stored[:4]}****{stored[-4:]}"
+
+
 __all__ = [
     "CLEAR_SENTINEL",
+    "HINT_MIN_LENGTH",
     "apply_stored_key",
     "is_clear_sentinel",
     "is_mask",
+    "key_hint",
     "mask_value",
     "resolve_stored_key",
 ]

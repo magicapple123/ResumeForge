@@ -231,10 +231,28 @@ def shutdown_application(request: Request):
     return {"status": "stopping", "message": "应用正在退出，可以关闭此页面"}
 
 
+def _legacy_config_snapshot() -> dict:
+    """CR-13：本机还躺着哪几组"旧配置路径"（只报键名与去向，不含值）。
+
+    会话由服务层自己开（``settings_legacy.legacy_config_snapshot``）——路由自建会话会被
+    ``test_import_direction`` 判红；/diagnostics、预览、导出三条路径共用这一份实现。
+    """
+    from ..services.settings_legacy import legacy_config_snapshot
+
+    return legacy_config_snapshot()
+
+
 @router.get("/diagnostics")
 def diagnostics():
-    """返回脱敏运行事件，方便用户连同截图提交排障。"""
-    return diagnostic_snapshot()
+    """返回脱敏运行事件，方便用户连同截图提交排障。
+
+    CR-13：附带 ``legacy_config``——本机还躺着哪几组"旧配置路径"（数据集 AppSetting
+    里的 search_config / asr_config 等）。只报键名与去向，**不含值**：那些旧行里
+    有加密后的 Key。
+    """
+    snapshot = diagnostic_snapshot()
+    snapshot["legacy_config"] = _legacy_config_snapshot()
+    return snapshot
 
 
 @router.get("/form")
@@ -379,6 +397,8 @@ def _system_snapshot() -> dict:
         "proxy": _proxy_snapshot(),
         "tls": _tls_snapshot(),
         "outbound_failures": _outbound_failures_snapshot(),
+        # CR-13：旧配置路径清单（键名与去向，无值），随 system.json 进诊断包。
+        "legacy_config": _legacy_config_snapshot(),
     }
 
 
@@ -431,6 +451,8 @@ def preview_diagnostics():
         "files": files,
         "contains_resume_content": False,
         "note": _DIAGNOSTICS_PREVIEW_NOTE,
+        # CR-13：旧配置路径清单是预览要说的"包里有什么"的一部分（在 system.json 里）。
+        "legacy_config": system.get("legacy_config") or {"count": 0, "items": []},
     }
 
 

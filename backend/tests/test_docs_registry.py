@@ -320,6 +320,9 @@ def test_drift_ignores_historical_docs(tmp_path, monkeypatch):
 def test_repository_registry_is_clean():
     """真仓库当前必须干净；过期时这条会红，并指名是哪一篇。"""
     data = guards.load_registry(guards.ROOT)
-    problems = guards.validate(guards.ROOT, data, TODAY)
-    problems += guards._check_index(guards.ROOT, data, TODAY)
+    # 真仓库用**当天**判定：TODAY 是上面那批合成用例的确定性夹具，钉死它会让"今天复核过"
+    # 的登记变成未来日期、也让复核日期一过就假红（2026-11-25 修）。
+    today = dt.date.today()
+    problems = guards.validate(guards.ROOT, data, today)
+    problems += guards._check_index(guards.ROOT, data, today)
     assert problems == [], _messages(problems)

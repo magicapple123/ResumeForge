@@ -88,6 +88,12 @@ _REQUIREMENTS_HEADINGS = (
     "任职条件",
     "职位需求",
     "岗位条件",
+    # CR-32：优先条件/加分项是任职条件的子集，用户看「要求」时不该漏。
+    "具备以下条件优先",
+    "以下条件优先",
+    "优先条件",
+    "加分项",
+    "加分条件",
 )
 _ADDITIONAL_HEADINGS = (
     "福利待遇",
@@ -100,10 +106,30 @@ _ADDITIONAL_HEADINGS = (
     "其他信息",
     "其他说明",
     "招聘说明",
+    # CR-32：部门/公司介绍与岗位亮点属于背景信息，归「其他信息」。
+    "部门介绍",
+    "团队介绍",
+    "公司介绍",
+    "企业介绍",
+    "公司简介",
+    "关于我们",
+    "岗位亮点",
+    "职位亮点",
+    "团队亮点",
+    "工作亮点",
 )
 _HEADING_RE = re.compile(
     r"^[\s【\[（(]*(?:[一二三四五六七八九十]+[、.．]|\d+[、.．)）]|\d+\.\d+)?[\s】\]）)]*"
 )
+#: 标题行的长度上限（去编号/标点后）。正文里的「岗位职责包括……」若只靠 startswith
+#: 会被整行吞掉，所以超长行一律当正文（CR-32）。
+_HEADING_MAX_CHARS = 16
+#: 以这些标点结尾的是句子而不是标题。
+_SENTENCE_TAIL = ("。", "；", "，", ",", ";", ".")
+#: 语素判据：中文职责/要求类章节名是**开放集合**，只枚举复合词永远会漏（CR-32 的
+#: 「岗位基本要求」就是枚举差一个字）。前缀限 6 字，防止整句被当成标题。
+_DESCRIPTION_MORPH_RE = re.compile(r"^[\u4e00-\u9fa5]{0,6}(?:职责|内容|描述|说明|概述|范围)$")
+_REQUIREMENTS_MORPH_RE = re.compile(r"^[\u4e00-\u9fa5]{0,6}(?:要求|资格|条件|标准|需求)$")
 
 
 def clean_text(value: str) -> str:
@@ -195,15 +221,23 @@ def infer_status(text: str) -> str:
 def _heading_of(line: str) -> str:
     """整行是段落标题时返回类别（description/requirements/additional），否则空串。"""
     bare = _HEADING_RE.sub("", clean_text(line)).strip().rstrip(":：")
+    if not bare or len(bare) > _HEADING_MAX_CHARS or bare.endswith(_SENTENCE_TAIL):
+        return ""
+    # 判定顺序：其他信息 → 职责 → 要求 → 语素。additional 先判，否则「投递说明/其他说明」
+    # 会被语素里的「说明」抢成职责类；语素放最后，兜住枚举没覆盖到的复合章节名。
+    for heading in _ADDITIONAL_HEADINGS:
+        if bare == heading or bare.startswith(heading):
+            return "additional"
     for heading in _DESCRIPTION_HEADINGS:
         if bare == heading or bare.startswith(heading):
             return "description"
     for heading in _REQUIREMENTS_HEADINGS:
         if bare == heading or bare.startswith(heading):
             return "requirements"
-    for heading in _ADDITIONAL_HEADINGS:
-        if bare == heading or bare.startswith(heading):
-            return "additional"
+    if _DESCRIPTION_MORPH_RE.match(bare):
+        return "description"
+    if _REQUIREMENTS_MORPH_RE.match(bare):
+        return "requirements"
     return ""
 
 

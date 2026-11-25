@@ -14,16 +14,20 @@ from sqlalchemy.orm import Session
 
 from ...models.reminder import REMINDER_STATUSES
 from ...schemas.reminder import ReminderUpdate
+from ...vocabulary.reminder import REMINDER_LEGACY_STATUSES
 from ..reminder_service import reminder_or_none
 from ..reminder_service import update_reminder as update_reminder_record
 from ._shared import int_argument
 from ._types import ToolResult
 
 _STATUS_LABELS = {
+    "active": "待办",
+    "archived": "已归档",
     "pending": "待办",
     "done": "已完成",
     "dismissed": "已忽略",
 }
+_ALLOWED_STATUSES = (*REMINDER_STATUSES, *REMINDER_LEGACY_STATUSES)
 
 
 def _tool_update_reminder(db: Session, arguments: dict) -> ToolResult:
@@ -34,15 +38,17 @@ def _tool_update_reminder(db: Session, arguments: dict) -> ToolResult:
     if reminder is None:
         raise ValueError(f"提醒 {reminder_id} 不存在")
     status = str(arguments.get("status") or "").strip()
-    if status not in REMINDER_STATUSES:
-        raise ValueError("status 只能是 pending（待办）/ done（已完成）/ dismissed（已忽略）")
+    if status not in _ALLOWED_STATUSES:
+        raise ValueError(
+            "status 只能是 done（已完成）/ dismissed（已忽略）/ active（恢复）/ archived（停止计划）"
+        )
     updated = update_reminder_record(db, reminder, ReminderUpdate(status=status))
     return ToolResult(
         text=json.dumps(
             {"id": updated.id, "title": updated.title, "status": updated.status},
             ensure_ascii=False,
         ),
-        summary=f"把提醒「{updated.title}」标记为{_STATUS_LABELS[updated.status]}",
+        summary=f"把提醒「{updated.title}」标记为{_STATUS_LABELS[status]}",
         link="/tracker",
         changed=True,
     )

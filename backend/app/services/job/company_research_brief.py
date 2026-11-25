@@ -16,9 +16,13 @@
 （官方明确说搜不搜由模型判断），因此"最多几次工具调用"只能通过提示词约束 +
 事后核对，见下面两个常量。
 
-计费口径：搜索按**查询词条数**计费（3 个词 = 3 次），抓取按成功网页数计费。
-一次深度调研可能发出十几次搜索，每条查询词都单独计费——这就是深度开关必须
-默认关闭、且必须有条数上限的全部理由。
+计费口径（2026-11-18 12:00 起）：本路走的是**模型侧联网工具**，工具调用本身不再
+按次计费；搜索结果拼进上下文后，按**模型 token** 结算。条数上限仍要保留——它限制
+的是上下文规模与响应时延，不再对应一笔搜索账单。
+
+**别把两条路的口径合并**：A 路（``company_research_cards``）直连
+``POST /v1/tools/search``，那一份**仍按成功请求次数收费**（约 ¥0.005/次）。
+"工具调用免费"不等于"搜索全免费"，改文案前先看清说的是哪条路。
 """
 
 from __future__ import annotations
@@ -48,11 +52,11 @@ WEB_TOOLS: tuple[dict[str, str], ...] = (
     {"type": "deepseek_read_url"},
 )
 
-# ---- 工具调用条数上限（直接决定花多少钱，改之前先看模块注释）----
-# 搜索按"查询词条数"计费，模型一次可以同时发好几个词。普通档只回答"这家公司大概
-# 什么情况"，2 次工具调用足够（实测一次搜索 + 偶尔读一个页面）；深度档要交叉验证
-# 多条来源，官方演示里出现过 26 个网页 + 7 个打开的规模，取 20 作为**我们愿意为
-# 一次点击付的上限**——超过就说明用户问了不该用调研页回答的问题。
+# ---- 工具调用条数上限（直接决定上下文规模与 token 花费，改之前先看模块注释）----
+# 一次调用里模型可以同时发好几个查询词，每个词都把一份搜索结果带进上下文。普通档
+# 只回答"这家公司大概什么情况"，2 次工具调用足够（实测一次搜索 + 偶尔读一个页面）；
+# 深度档要交叉验证多条来源，官方演示里出现过 26 个网页 + 7 个打开的规模，取 20 作为
+# **一次点击愿意换来的上下文上限**——超过就说明用户问了不该用调研页回答的问题。
 MAX_TOOL_CALLS_NORMAL = 2
 MAX_TOOL_CALLS_DEEP = 20
 # 事后核对的容差：模型不完全遵守条数约束，超一点点不算异常（只在日志里提示）。
@@ -172,10 +176,47 @@ def _headers(api_key: str) -> dict[str, str]:
     }
 
 
-def _failure_reason(status: int) -> str:
-    """把上游状态码翻成一句中文原因（不写"请"，引导语由前端补）。"""
+# 用户可见文案里只出现 Key 的末 4 位：``reason`` 会写进调研历史，完整 Key 绝不能出现。
+_KEY_TAIL_CHARS = 4
+# 上游 ``error.type`` / ``error.code`` 只是排障标签，日志里截断即可。
+_MAX_UPSTREAM_FIELD_CHARS = 120
+
+
+def _key_tail(api_key: str) -> str:
+    """Key 的末 4 位；不足 4 位返回空串（宁可没有，也不显示半截假尾号）。"""
+    key = str(api_key or "").strip()
+    return key[-_KEY_TAIL_CHARS:] if len(key) >= _KEY_TAIL_CHARS else ""
+
+
+def _upstream_error_fields(response: httpx.Response) -> tuple[str, str]:
+    """只取上游 ``error.type`` / ``error.code``（截断后写日志）。
+
+    **不读 ``error.message``**：上游会在 message 里回显 Key 片段，整段 body 一律不落日志。
+    """
+    try:
+        body = response.json()
+    except ValueError:
+        return "", ""
+    error = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(error, dict):
+        return "", ""
+    return (
+        " ".join(str(error.get("type") or "").split())[:_MAX_UPSTREAM_FIELD_CHARS],
+        " ".join(str(error.get("code") or "").split())[:_MAX_UPSTREAM_FIELD_CHARS],
+    )
+
+
+def _failure_reason(status: int, *, key_tail: str = "") -> str:
+    """把上游状态码翻成一句中文原因（不写"请"，引导语由前端补）。
+
+    401 要同时说清**作用域**与**哪一把 Key**（CR-03）：「联网搜索」那把和「AI 模型」
+    那把是分开配置的，只说「DeepSeek Key」会让刚配过模型 Key 的用户改错地方。
+    """
     if status == 401:
-        return "DeepSeek Key 无效或已过期"
+        tail = f"（尾号 {key_tail}）" if key_tail else ""
+        return (
+            f"联网搜索的 DeepSeek Key{tail}无效或已被删除；它和「AI 模型」里的 Key 是分开配置的。"
+        )
     if status == 402:
         return "DeepSeek 账户余额不足"
     if status == 403:
@@ -231,8 +272,8 @@ def parse_brief(body: Any, *, deep: bool) -> dict[str, Any]:
     markdown = _ensure_numbered(markdown, sources)
     tool_calls = len(calls)
     budget = max_tool_calls_for(deep)
-    # 核对的是**计费单位**（查询词条数）而不是调用次数：一次调用里塞 6 个词条，
-    # 调用次数还是 1，但账单是 6。两者取大，避免"调用 1 次所以没超"这种假通过。
+    # 核对的是**词条数**而不是调用次数：一次调用里塞 6 个词条，调用次数还是 1，
+    # 但上下文里会多出 6 份搜索结果。两者取大，避免"调用 1 次所以没超"这种假通过。
     spend_units = max(query_terms, tool_calls)
     exceeded = spend_units > budget + _TOOL_CALL_TOLERANCE
     if exceeded:
@@ -330,16 +371,30 @@ async def build_company_brief(
     """
     if not api_key:
         # 与 401 归同一类：两者的可行动作都是"去设置配置 Key"，界面不该给两个入口。
-        raise CompanyResearchError("未配置 DeepSeek Key，无法生成联网简报", code="unauthorized")
+        raise CompanyResearchError(
+            "联网搜索的 DeepSeek Key 未配置；它和「AI 模型」里的 Key 是分开配置的。",
+            code="unauthorized",
+        )
 
     started = time.perf_counter()
     payload = build_payload(company, role, jd, deep=deep)
     response = await _post(payload, api_key)
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     if response.status_code != 200:
-        logger.warning("调研简报失败 status=%s elapsed_ms=%s", response.status_code, elapsed_ms)
+        # CR-05：排障要能看到上游的 error.type / error.code 与「哪把 Key」（只留尾号）。
+        error_type, error_code = _upstream_error_fields(response)
+        tail = _key_tail(api_key)
+        logger.warning(
+            "调研简报失败 status=%s error.type=%s error.code=%s key_tail=%s elapsed_ms=%s",
+            response.status_code,
+            error_type or "-",
+            error_code or "-",
+            tail or "-",
+            elapsed_ms,
+        )
         raise CompanyResearchError(
-            _failure_reason(response.status_code), code=_failure_code(response.status_code)
+            _failure_reason(response.status_code, key_tail=tail),
+            code=_failure_code(response.status_code),
         )
     try:
         body = response.json()

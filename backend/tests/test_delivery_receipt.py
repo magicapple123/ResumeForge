@@ -13,8 +13,8 @@ from app.models.job import Job
 from app.models.profile import utcnow
 from app.models.reminder import (
     REMINDER_KIND_HR_REPLY,
-    REMINDER_STATUS_DISMISSED,
-    REMINDER_STATUS_PENDING,
+    REMINDER_OCCURRENCE_STATUS_SKIPPED,
+    REMINDER_STATUS_ACTIVE,
     Reminder,
 )
 from app.models.resume import ResumeRecord
@@ -38,6 +38,7 @@ from app.services.delivery_receipt import (
     ack_receipt,
     build_receipt,
 )
+from app.services.reminder_occurrences import ensure_open_occurrence, settle_occurrence
 from app.services.resume.resume_delivery import canonical_content_sha256
 from app.services.tracker import record_applied
 
@@ -325,16 +326,18 @@ def test_followup_reads_pending_hr_reply_reminder(db_session):
         title="跟进：示例科技 · 后端工程师",
         remind_at=due,
         kind=REMINDER_KIND_HR_REPLY,
-        status=REMINDER_STATUS_PENDING,
+        status=REMINDER_STATUS_ACTIVE,
         track_id=delivery.track_id,
     )
     db_session.add(reminder)
+    db_session.flush()
+    ensure_open_occurrence(db_session, reminder, due_at=due)
     db_session.commit()
     followup = build_receipt(db_session, item.id).followup
     assert followup is not None
     assert (followup.reminder_id, followup.due_at) == (reminder.id, due)
 
-    reminder.status = REMINDER_STATUS_DISMISSED
+    settle_occurrence(db_session, reminder, status=REMINDER_OCCURRENCE_STATUS_SKIPPED)
     db_session.commit()
     assert build_receipt(db_session, item.id).followup is None
 

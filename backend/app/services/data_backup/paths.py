@@ -29,10 +29,12 @@ from .asset_categories import ASSET_CATEGORIES
 #   6 = 包内带全局资产（``global_assets.json`` + ``fonts/``，P2）：自定义字体跨数据集
 #       共用，换机器后简历里的字体引用不断。老版本读到 6 必须明确拒收——安静地只恢复
 #       数据库会让用户以为字体也回来了。
+#   7 = 包内带服务配置（``global_services.json``：语音 / 语义检索 / 联网搜索 / 代理）。
+#       同一理由：这四块此前换机即丢，老版本若安静忽略，用户会以为配置跟着回来了。
 # 当前代码能读/写的**最高**格式，导入侧用它拒绝"来自更新版本"的包。写包时的 format
 # 由 ``build_manifest`` 按内容显式计算，**不能**直接套这个常量——否则"导出全部数据集
 # （不含密钥）"会被错误标成 3，老版本会拒收一份本可以安全读的包。
-BACKUP_FORMAT_VERSION = 6
+BACKUP_FORMAT_VERSION = 7
 BACKUP_FORMAT_MULTI_DATASET = 2
 BACKUP_FORMAT_WITH_KEYS = 3
 BACKUP_FORMAT_NESTED_COLLECTION = 4
@@ -42,6 +44,9 @@ BACKUP_FORMAT_GLOBAL_CONFIG = 5
 # 6（2026-10）：包内带全局资产（fonts/）。同一条理由：字体丢了不会报错，只会让导出
 # 出来的 PDF 换一款字——用户往往在下一次投递后才发现。
 BACKUP_FORMAT_GLOBAL_ASSETS = 6
+# 7（2026-11）：包内带服务配置（global_services.json）。语音、语义检索、三把搜索 Key
+# 与代理的描述都是"这台机器怎么工作"，换机后重配一遍的代价不比字体小。
+BACKUP_FORMAT_GLOBAL_SERVICES = 7
 DATABASE_MEMBER = "resume_forge.db"
 MANIFEST_MEMBER = "manifest.json"
 README_MEMBER = "README.txt"

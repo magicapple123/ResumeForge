@@ -283,6 +283,7 @@ def ai_failed_warning(
     has_documents: bool = False,
     *,
     images_sent: bool | None = None,
+    model: str = "",
 ) -> str:
     """模型失败时的降级提示：按是否含图片/文档说明原因，可附原始错误。
 
@@ -294,7 +295,13 @@ def ai_failed_warning(
     sent = has_images if images_sent is None else images_sent
     notes = ""
     if sent:
-        notes += _AI_FAILED_IMAGE_NOTE
+        # 知道模型名时点名它，并给出"配 OCR"这条可执行出路（I-34）；不知道就退回旧文案。
+        notes += (
+            f"图片识别失败：当前模型 {model.strip()} 读不了图片，"
+            "可到「外部连接 → 识别引擎」配置 OCR 后重新识别；"
+            if model.strip()
+            else _AI_FAILED_IMAGE_NOTE
+        )
     if has_documents:
         notes += _AI_FAILED_DOCUMENT_NOTE
     # 没有图片/文档说明时也不能把原因丢掉：文本路线（或 OCR 路线）失败时，「（HTTP 500）」

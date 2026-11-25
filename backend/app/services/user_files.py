@@ -142,6 +142,29 @@ def save_from_bytes(
     return int(row.id)
 
 
+def delete_user_file(db: Session, row: UserFile) -> None:
+    """删掉一份副本行；磁盘文件只有"同 sha 的行都删光了"才删。
+
+    按 sha256 去重意味着多行可能指向同一个 ``disk_name``：先删行再数同行，最后才动磁盘，
+    否则会把另一行还在用的文件提前删掉（预览 404、导出缺失）。
+
+    引用检查**不在本函数**：它属于业务（谁在引用这张图），由调用方先判定再调用这里。
+    """
+    disk_name = row.disk_name
+    sha = row.sha256
+    db.delete(row)
+    db.flush()
+    remaining = db.execute(select(UserFile.id).where(UserFile.sha256 == sha)).first()
+    if remaining is None:
+        path = user_files_dir(db.get_bind()) / disk_name
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            # 磁盘删不掉不该让接口失败：行已经没了，文件只是占空间，记一条 warning 即可。
+            logger.warning("删除用户文件副本的磁盘文件失败：%s", disk_name, exc_info=True)
+    db.commit()
+
+
 def _decode_data_url(data_url: str) -> tuple[bytes, str]:
     """把 data URL（或无 ``data:`` 前缀的裸 base64）解码成字节与声明的 MIME。"""
     value = (data_url or "").strip()

@@ -168,9 +168,17 @@ def blocked_image_warning(model: str, *, ocr_engine: str = "auto") -> str:
     )
 
 
-def dropped_images_warning(count: int) -> str:
-    """OCR 没读出字、模型又看不了图：这几张只能放弃，但要说明后果。"""
-    return f"有 {count} 张图片没有读出文字，已跳过（当前模型不支持图片输入），请对照原图手填。"
+def dropped_images_warning(count: int, model: str = "") -> str:
+    """OCR 没读出字、模型又看不了图：这几张只能放弃，但要**点名模型**并给出两条出路。
+
+    I-34 的口径：用户看到"不支持图片输入"时必须知道自己该改哪一侧——换支持视觉的
+    模型，或去配置 OCR——否则这句话只是通知失败，不是可执行的指引。
+    """
+    name = model.strip() or "当前模型"
+    return (
+        f"有 {count} 张图片没有读出文字，已跳过：当前模型 {name} 不支持图片输入。"
+        "可改用支持视觉的模型，或到「外部连接 → 识别引擎」配置 OCR 后重新识别。"
+    )
 
 
 def image_payloads(image_urls: Sequence[str]) -> list[dict[str, str]]:

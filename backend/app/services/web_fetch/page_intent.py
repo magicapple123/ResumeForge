@@ -27,6 +27,25 @@ _DETAIL_PATH = re.compile(
     r"(?:detail/)?(?:\d+|[a-f\d-]{8,})(?:/|$)",
     re.I,
 )
+#: 路径本身以 ``/detail`` 结尾的详情页（``/web/position/detail``、``/jobs/detail``）。
+#: 这类路径已经是「某一条」的语义，不再看同形态链接数量——列表页不会长这样。
+_DETAIL_SUFFIX = re.compile(r"/(?:positions?|jobs?)/detail/?$", re.I)
+#: 查询参数里承载岗位 id 的键（小写）。国内站点常用 ``jobUnionId`` / ``postId``；
+#: 只认 ``jobid`` 会把这些详情页判成列表页（CR-30，美团校招站实测）。
+_ID_QUERY_KEYS = frozenset(
+    {
+        "jobid",
+        "positionid",
+        "job_id",
+        "position_id",
+        "jobunionid",
+        "jobunion",
+        "postid",
+        "post_id",
+        "jobpostid",
+        "positionno",
+    }
+)
 _DETAIL_MARKERS = ("工作职责", "任职资格", "岗位职责", "职位描述", "Responsibilities")
 
 
@@ -43,20 +62,31 @@ def _detail_shape(url: str) -> str:
     match = _DETAIL_PATH.search(parts.path)
     if match:
         return parts.path[: match.end()].rstrip("/").rsplit("/", 1)[0].lower()
+    suffix = _DETAIL_SUFFIX.search(parts.path)
+    if suffix:
+        return parts.path[: suffix.start()].lower()
     query = parse_qs(parts.query)
     return (
         parts.path.lower()
         if any(
-            key.lower() in {"jobid", "positionid", "job_id", "position_id"} and values[0]
-            for key, values in query.items()
-            if values
+            key.lower() in _ID_QUERY_KEYS and values[0] for key, values in query.items() if values
         )
         else ""
     )
 
 
+def _explicit_detail_path(url: str) -> bool:
+    """路径以 ``/detail`` 结尾：不需要再靠「同形态链接数量」判断列表还是详情。"""
+    try:
+        return bool(_DETAIL_SUFFIX.search(urlsplit(url).path))
+    except ValueError:
+        return False
+
+
 def classify_page_intent(page: Any) -> str:
     url = str(getattr(page, "url", "") or "")
+    if _explicit_detail_path(url):
+        return "job_detail"
     shape = _detail_shape(url)
     # 形态都取不到（既不是详情路径也没有 jobId 查询）→ 只可能是列表。
     if not shape:

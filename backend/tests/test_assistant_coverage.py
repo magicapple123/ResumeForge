@@ -35,6 +35,9 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     # 助手读写只会破坏启动判定，没有任何信息增量。
     "app_schema_epoch": "不暴露：这是 2.0 库版本闸门使用的**单行内部状态**（当前 schema 代），"
     "不是用户资料；助手读写它会破坏启动时的库形态判定，没有任何信息增量。",
+    # 通知是"系统投递给用户"的回执：已读/未读本身就是用户状态，助手代读会把它改掉。
+    "notification": "不暴露：通知是系统投递给用户的回执，已读状态属于用户自己的"
+    "动作；助手代读会让未读角标失真，也因此不提供任何代写（生成通知的是各业务写点）。",
     # ===== 资料（个人档案与各分区）=====
     "user_profile": ("get_profile", "update_profile"),
     "education": ("get_profile", "update_profile", "add_profile_entry"),
@@ -160,6 +163,11 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "助手不应代写。",
     "referral": ("list_referrals", "create_referral"),
     "reminder": ("list_reminders", "create_reminder", "update_reminder"),
+    # occurrence 是提醒的**内部调度行**（一次到期 = 一行），用户语义由上面三个工具覆盖；
+    # 直接读写它会让"跳过/稍后/完成"绕过服务层的重复规则，助手不该有这条捷径。
+    "reminder_occurrence": "不暴露：它是提醒的内部调度行（一次到期一行），用户语义已由"
+    " list_reminders / create_reminder / update_reminder 覆盖；直接读写会绕过「稍后/跳过/完成」"
+    "的重复规则，让下一次到期算错。",
     # ===== 事实台账 =====
     "claim_record": ("list_claims", "get_claim", "create_claim", "update_claim"),
     # ===== 资料箱、知识库、技能、题库 =====

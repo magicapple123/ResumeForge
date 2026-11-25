@@ -11,6 +11,7 @@ schema 校验（那会在执行时发生）。守卫测试钉住"writes=True 必
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -326,7 +327,32 @@ def preview_create_reminder(db: Session, arguments: dict) -> WritePreview:
         "status": "状态",
         "note": "备注",
     }
-    return _create_preview("日历提醒新提醒", _create_changes(arguments, labels))
+    changes = _create_changes(arguments, labels)
+    # CR-27：模型给的是**本地时间**（裸串）或带时区的串，落库口径是 naive UTC。确认卡上
+    # 必须显示"真正会响的本机时刻"——直接把原始串当展示值，会让用户以为保存的是 10:00
+    # 而实际 18:00 才响。
+    raw = arguments.get("remind_at")
+    local = _remind_at_as_local(raw)
+    if local is not None:
+        changes = [
+            FieldChange(field=change.field, before=change.before, after=local)
+            if change.field == labels["remind_at"]
+            else change
+            for change in changes
+        ]
+    return _create_preview("日历提醒新提醒", changes)
+
+
+def _remind_at_as_local(value: Any) -> str | None:
+    """把提醒时间入参换算成「本机时间」展示串；解析不了就返回 None（保留原始展示）。"""
+    if value in (None, ""):
+        return None
+    try:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    # 裸值按本机时区解释（与 reminder_service.to_naive_utc 同一口径）；aware 先归一到本地。
+    return parsed.astimezone().strftime("%Y-%m-%d %H:%M（本机时间）")
 
 
 def preview_update_reminder(db: Session, arguments: dict) -> WritePreview:
@@ -334,7 +360,13 @@ def preview_update_reminder(db: Session, arguments: dict) -> WritePreview:
 
     record = reminder_or_none(db, int(arguments.get("reminder_id") or 0))
     status = str(arguments.get("status") or "")
-    labels = {"pending": "待办", "done": "已完成", "dismissed": "已忽略"}
+    labels = {
+        "active": "待办",
+        "archived": "已归档",
+        "pending": "待办",
+        "done": "已完成",
+        "dismissed": "已忽略",
+    }
     return WritePreview(
         target=f"提醒「{getattr(record, 'title', '') or arguments.get('reminder_id')}」",
         scope=f"状态改为「{labels.get(status, status or '未指定')}」（不改提醒时间/绑定/备注）",

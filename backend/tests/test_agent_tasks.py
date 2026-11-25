@@ -308,3 +308,97 @@ def test_wait_approval_endpoint_targets_current_step_and_is_idempotent(client, d
     assert completed.status_code == 200, completed.text
     assert completed.json()["status"] == "running"
     assert completed.json()["resume_cursor"] == 2
+
+
+# ===== CR-20：提醒卡来源上下文（批查询 / 软删） =====
+
+
+def _reminder_card(db_session, *, title: str, job_title: str = "后端工程师", company: str = "某司"):
+    """直接落一张「提醒到期生成的任务卡」：提醒 + 岗位 + 任务头，字段与扫描生成的一致。"""
+    from datetime import datetime
+
+    from app.models.job import Job
+    from app.models.reminder import Reminder
+
+    due_at = datetime(2026, 11, 26, 10, 0)
+    job = Job(title=job_title, company=company, description="")
+    db_session.add(job)
+    db_session.flush()
+    reminder = Reminder(title=title, remind_at=due_at, kind="interview", job_id=job.id)
+    db_session.add(reminder)
+    db_session.flush()
+    task = AgentTask(
+        title=f"提醒：{title}",
+        goal="只提醒你准备，不会自动执行任何写操作。",
+        status="draft",
+        source="reminder",
+        reminder_id=reminder.id,
+        occurrence_due_at=due_at,
+    )
+    db_session.add(task)
+    db_session.commit()
+    return reminder, task
+
+
+def test_reminder_card_carries_source_context(client, db_session):
+    """提醒卡下发来源上下文；手动卡没有（null），不硬塞一个空对象。"""
+    _, task = _reminder_card(db_session, title="参加某司二面")
+    manual = _create(client, ["第一步"])
+
+    listed = {item["id"]: item for item in client.get("/api/agent-tasks").json()}
+    context = listed[task.id]["reminder"]
+    assert context["title"] == "参加某司二面"
+    assert context["kind"] == "interview"
+    assert context["company"] == "某司"
+    assert context["job_title"] == "后端工程师"
+    assert context["deleted"] is False
+    # due_at 是这一张卡对应那次到期（occurrence_due_at），不是提醒的最新时间。
+    assert context["due_at"].startswith("2026-11-26T10:00:00")
+    assert listed[manual["id"]]["reminder"] is None
+    # 详情接口同样带上（不是只有列表有）。
+    assert _get(client, task.id)["reminder"]["id"] == context["id"]
+
+
+def test_soft_deleted_reminder_card_has_no_company_or_job(client, db_session):
+    """提醒被软删：仍然给标题与到期时间，但 deleted=True 且不带公司/岗位（前端据此不给链接）。"""
+    from datetime import datetime
+
+    reminder, task = _reminder_card(db_session, title="催 HR 回复")
+    reminder.deleted_at = datetime(2026, 11, 25, 9, 0)
+    db_session.commit()
+
+    listed = {item["id"]: item for item in client.get("/api/agent-tasks").json()}
+    context = listed[task.id]["reminder"]
+    assert context["deleted"] is True
+    assert context["company"] == ""
+    assert context["job_title"] == ""
+    # 时间还在：至少能看出这张卡是什么时候的事。
+    assert context["due_at"].startswith("2026-11-26T10:00:00")
+
+
+def test_reminder_context_is_batched_not_per_card(client, db_session):
+    """三张提醒卡 → reminder / job 各只查一次（逐卡查库会在列表变长时线性增长）。"""
+    from sqlalchemy import event
+
+    for index in range(3):
+        _reminder_card(db_session, title=f"提醒 {index}", job_title=f"岗位 {index}")
+    db_session.expire_all()
+
+    statements: list[str] = []
+    engine = db_session.get_bind()
+
+    def _capture(_conn, _cursor, statement, _params, _context, _executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _capture)
+    try:
+        response = client.get("/api/agent-tasks")
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture)
+    assert response.status_code == 200, response.text
+    assert len(response.json()) == 3
+
+    reminder_queries = [sql for sql in statements if "FROM reminder" in sql]
+    job_queries = [sql for sql in statements if "FROM job" in sql]
+    assert len(reminder_queries) == 1, reminder_queries
+    assert len(job_queries) == 1, job_queries

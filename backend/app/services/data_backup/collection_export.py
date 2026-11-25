@@ -39,10 +39,16 @@ from .coverage import data_root, scan_uncovered
 from .export import create_backup_archive
 from .global_assets import build_global_assets_payload, write_global_assets_members
 from .global_config import build_global_llm_payload, write_global_llm_member
+from .global_services import (
+    GLOBAL_SERVICES_VERSION,
+    build_global_services_payload,
+    write_global_services_member,
+)
 from .paths import (
     ARCHIVE_DATASETS_DIRNAME,
     BACKUP_FORMAT_GLOBAL_ASSETS,
     BACKUP_FORMAT_GLOBAL_CONFIG,
+    BACKUP_FORMAT_GLOBAL_SERVICES,
     BACKUP_FORMAT_NESTED_COLLECTION,
     MANIFEST_MEMBER,
     README_MEMBER,
@@ -108,15 +114,26 @@ def create_collection_archive(
         global_count = len(global_payload["profiles"]) if global_payload is not None else None
         assets_payload = build_global_assets_payload() if include_global_assets else None
         assets_count = len(assets_payload["fonts"]) if assets_payload is not None else None
+        # CR-10：服务配置与大模型配置同一个开关、同样只在外层带一次。
+        services_payload = (
+            build_global_services_payload(include_api_keys=include_api_keys)
+            if include_global_llm
+            else None
+        )
+        services_sections = (
+            len(services_payload["services"]) if services_payload is not None else None
+        )
         manifest = _collection_manifest(
             built,
             active_id,
             global_llm_profiles=global_count,
             global_assets_fonts=assets_count,
+            global_services_sections=services_sections,
             uncovered=scan_uncovered(data_root(bind)),
         )
         with zipfile.ZipFile(archive_path, "x", zipfile.ZIP_DEFLATED) as archive:
             write_global_llm_member(archive, global_payload)
+            write_global_services_member(archive, services_payload)
             write_global_assets_members(archive, assets_payload)
             archive.writestr(MANIFEST_MEMBER, json.dumps(manifest, ensure_ascii=False, indent=2))
             archive.writestr(README_MEMBER, _readme(manifest))
@@ -194,10 +211,13 @@ def _collection_manifest(
     *,
     global_llm_profiles: int | None = None,
     global_assets_fonts: int | None = None,
+    global_services_sections: int | None = None,
     uncovered: dict | None = None,
 ) -> dict:
     settings = get_settings()
-    if global_assets_fonts is not None:
+    if global_services_sections is not None:
+        format_version = BACKUP_FORMAT_GLOBAL_SERVICES
+    elif global_assets_fonts is not None:
         format_version = BACKUP_FORMAT_GLOBAL_ASSETS
     elif global_llm_profiles is not None:
         format_version = BACKUP_FORMAT_GLOBAL_CONFIG
@@ -218,6 +238,11 @@ def _collection_manifest(
         manifest["global_llm"] = {"profiles": global_llm_profiles}
     if global_assets_fonts is not None:
         manifest["global_assets"] = {"version": 1, "fonts": int(global_assets_fonts)}
+    if global_services_sections is not None:
+        manifest["global_services"] = {
+            "version": GLOBAL_SERVICES_VERSION,
+            "sections": int(global_services_sections),
+        }
     if uncovered is not None:
         manifest["uncovered"] = list(uncovered.get("items") or [])
         manifest["uncovered_count"] = int(uncovered.get("count") or 0)

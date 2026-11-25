@@ -31,13 +31,14 @@ from .registry import (
     SOURCE_EMBEDDING_DEFAULT,
     SOURCE_LLM_DEFAULT,
     SOURCE_LLM_SESSION,
+    SOURCE_NETWORK_PROXY,
     SOURCE_WEB_SEARCH_DEEPSEEK,
     SOURCE_WEB_SEARCH_JINA,
     SOURCE_WEB_SEARCH_TAVILY,
     CredentialSource,
     get_source,
 )
-from .semantics import mask_value
+from .semantics import key_hint, mask_value
 from .types import (
     CredentialScope,
     CredentialState,
@@ -104,11 +105,20 @@ def _require_db(db: Session | None, what: str) -> Session:
 
 
 def _search_key(db: Session | None, field: str) -> str:
-    """联网搜索三把 Key 之一（走既有的全局块 + 一次性迁移解析顺序）。"""
+    """联网搜索三把 Key 之一（走既有的全局块 + 一次性迁移解析顺序）。
+
+    **不应用 CR-06 的模型 Key 回落**：这一层回答的是"这条来源自己配置了没有"。
+    回落值只在运行时解析（``web_search_settings.resolve_search_deepseek_key``）里出现。
+    """
     db = _require_db(db, "联网搜索")
     from ..web_search_settings import get_search_config_with_secrets
 
-    return str(getattr(get_search_config_with_secrets(db), field) or "")
+    return str(
+        getattr(
+            get_search_config_with_secrets(db, apply_model_fallback=False), field
+        )
+        or ""
+    )
 
 
 def _llm_key(db: Session | None) -> str:
@@ -147,6 +157,17 @@ def _session_key(_db: Session | None) -> str:
     return str(get_session_key() or "")
 
 
+def _proxy_password(_db: Session | None) -> str:
+    """代理认证口令（``network.proxy_password`` 解出来的明文，只在内存里）。
+
+    走 ``net_settings.read()`` 而不是 ``current()``：后者是进程内快照，页面上"刚改完
+    再读一次"必须看到落盘值（``save`` 已经 invalidate，但这里不依赖调用顺序）。
+    """
+    from ..net_settings import read
+
+    return str(read().password or "")
+
+
 _READERS: dict[str, Callable[[Session | None], str]] = {
     SOURCE_WEB_SEARCH_DEEPSEEK: lambda db: _search_key(db, "deepseek_api_key"),
     SOURCE_WEB_SEARCH_TAVILY: lambda db: _search_key(db, "tavily_api_key"),
@@ -155,20 +176,50 @@ _READERS: dict[str, Callable[[Session | None], str]] = {
     SOURCE_LLM_SESSION: _session_key,
     SOURCE_ASR_DEFAULT: _asr_key,
     SOURCE_EMBEDDING_DEFAULT: _embedding_key,
+    SOURCE_NETWORK_PROXY: _proxy_password,
 }
 
 
-def read_credential(source_id: str, *, db: Session | None = None) -> str:
+def read_credential(
+    source_id: str, *, db: Session | None = None, profile_id: str = ""
+) -> str:
     """取**真实密钥**（未配置返回空串）。
 
     **仅供后端运行时使用**：日志、诊断、HTTP 响应、导出文件都不许出现这个返回值。
     对外展示一律走 :func:`credential_state`（掩码）或 :func:`mask_value`。
+
+    ``profile_id`` 只对命名配置型来源（大模型 / 语音 / 语义检索）有意义：传了就取那一条
+    的 Key，不传取"当前生效"的那一条。复制功能用它复制**指定记录**的 Key（CR-07）。
     """
     get_source(source_id)  # 未登记的 id 立刻抛错，而不是安静返回空串
+    if profile_id:
+        return _profile_key(source_id, profile_id)
     reader = _READERS.get(source_id)
     if reader is None:  # pragma: no cover - 新增来源忘了登记读取实现时才会走到
         raise KeyError(f"凭据来源缺少读取实现：{source_id}")
     return reader(db)
+
+
+def _profile_key(source_id: str, profile_id: str) -> str:
+    """某条命名配置自己的 Key；该来源不是命名配置、或这条已不存在时返回空串。"""
+    if source_id == SOURCE_ASR_DEFAULT:
+        from ..asr_profiles import profile_settings
+
+        settings = profile_settings(profile_id)
+        return str(settings.api_key or "") if settings is not None else ""
+    if source_id == SOURCE_EMBEDDING_DEFAULT:
+        from ..llm.embedding_profiles import ProfileNotFoundError, profile_key
+
+        try:
+            return str(profile_key(profile_id) or "")
+        except ProfileNotFoundError:
+            return ""
+    if source_id == SOURCE_LLM_DEFAULT:
+        from ..global_llm_profiles import read_profile_config
+
+        config = read_profile_config(profile_id)
+        return str(config.api_key or "") if config is not None else ""
+    return ""
 
 
 # ===== 对外状态快照 =====
@@ -195,6 +246,13 @@ def _status_of(source: CredentialSource, real: str) -> tuple[CredentialStatus, s
     return CredentialStatus.SAVED, "已保存到本机，重启后仍然可用"
 
 
+#: CR-06：搜索 Key 没单独配置、借用模型 Key 时的说明。它必须出现在状态旁边，
+#: 否则用户会以为"未配置 = 搜索不工作"，或者改模型 Key 时不知道会连带影响搜索。
+MODEL_KEY_FALLBACK_DETAIL = (
+    "未单独配置，正在复用「AI 模型」里的 DeepSeek Key；换 Key 请到「AI 模型」"
+)
+
+
 def credential_state(source_id: str, *, db: Session | None = None) -> CredentialState:
     """一份凭据的对外快照：状态、掩码、有没有 Key、存储保护方式、说明。
 
@@ -205,6 +263,16 @@ def credential_state(source_id: str, *, db: Session | None = None) -> Credential
     real = read_credential(source_id, db=db)
     status, detail = _status_of(source, real)
     configured = bool(real)
+    if (
+        not configured
+        and db is not None
+        and source.source_id == SOURCE_WEB_SEARCH_DEEPSEEK
+    ):
+        # CR-06：借用模型 Key 不是"已配置"，但也不该说成"相关功能不可用"。
+        from ..web_search_settings import model_key_fallback_active
+
+        if model_key_fallback_active(db):
+            detail = MODEL_KEY_FALLBACK_DETAIL
     masked = ""
     if configured and source.display is KeyDisplay.MASK:
         masked = mask_value(real)
@@ -215,6 +283,9 @@ def credential_state(source_id: str, *, db: Session | None = None) -> Credential
         key_configured=configured,
         protection=storage_protection(source),
         detail=detail,
+        # CR-07：提示与掩码是两个用途。语义检索的 masked 仍是空串（历史口径），
+        # 但它同样需要"前 4 后 4"让用户认得出是哪一把。
+        hint=key_hint(real),
     )
 
 
@@ -244,6 +315,7 @@ def credential_states(*, db: Session | None = None) -> tuple[CredentialState, ..
 
 __all__ = [
     "ENCRYPTING_PLATFORMS",
+    "MODEL_KEY_FALLBACK_DETAIL",
     "credential_state",
     "credential_states",
     "disk_protection",

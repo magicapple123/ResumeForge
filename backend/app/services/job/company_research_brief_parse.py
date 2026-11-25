@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""调研简报的**纯解析层**：注解 → 来源编号、用量 → 计费口径、Markdown → 正文 + 结论。
+"""调研简报的**纯解析层**：注解 → 来源编号、用量 → 词条/抓取计数、Markdown → 正文 + 结论。
 
 从 ``company_research_brief.py`` 拆出（T16 之后该文件 548 行，超 500 行预算）。这里只做
 字符串与字典的搬运，不发请求、不读配置——所以可以单独用样例输出做单测
@@ -73,7 +73,7 @@ def _tool_calls_of(message: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _count_queries(calls: list[dict[str, Any]]) -> int:
-    """查询词条数（= 计费次数）：``action.queries`` 是这一次调用实际发出的词列表。"""
+    """查询词条数（= 这次调用实际发出的词条数）：``action.queries`` 是这一次调用发出的词列表。"""
     total = 0
     for call in calls:
         action = call.get("action")

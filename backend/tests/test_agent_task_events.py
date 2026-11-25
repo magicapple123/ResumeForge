@@ -42,11 +42,31 @@ def _tasks(client) -> list[dict]:
     return response.json()
 
 
-def _scan(db_session, *, now: datetime = NOW, enabled: bool | None = None) -> dict:
+def _scan(
+    db_session,
+    *,
+    now: datetime = NOW,
+    enabled: bool | None = None,
+    notify: bool | None = None,
+) -> dict:
     db_session.expire_all()
-    result = scan_due_reminders(db_session, now=now, enabled=enabled)
+    result = scan_due_reminders(db_session, now=now, enabled=enabled, notify_enabled=notify)
     db_session.expire_all()
     return result
+
+
+def _set_notify(db_session, enabled: bool) -> None:
+    """直接写 AppSetting：CR-22 的通知开关本轮不接 HTTP 界面（W2-A 才做）。"""
+    import json
+
+    from app.models.setting import AppSetting
+
+    row = db_session.get(AppSetting, "notify_reminder_due")
+    if row is None:
+        db_session.add(AppSetting(key="notify_reminder_due", value=json.dumps(enabled)))
+    else:
+        row.value = json.dumps(enabled)
+    db_session.commit()
 
 
 def test_switch_defaults_off_and_off_creates_nothing(client, db_session):
@@ -57,9 +77,19 @@ def test_switch_defaults_off_and_off_creates_nothing(client, db_session):
     assert get_agent_task_events_enabled(db_session) is False
 
     _create_reminder(client, remind_at=NOW - timedelta(minutes=5))
-    result = _scan(db_session)
+    # 只验任务卡段：关掉通知段，避免默认开启的 CR-22 投递混进断言。
+    result = _scan(db_session, notify=False)
 
-    assert result == {"enabled": False, "created": 0, "skipped": 0, "created_task_ids": []}
+    assert result == {
+        "enabled": False,
+        "created": 0,
+        "skipped": 0,
+        "created_task_ids": [],
+        "delivered": 0,
+        "notification_ids": [],
+        # CR-28：过期体检（逾期 7 天自动 skipped）与投递/建卡同一轮扫描。
+        "expired": 0,
+    }
     assert _tasks(client) == []
     assert db_session.query(AgentTask).count() == 0
 
@@ -177,7 +207,7 @@ def test_reminder_list_and_upcoming_are_unchanged(client, db_session):
     for original in (past, future):
         current = by_id[original["id"]]
         assert current["title"] == original["title"]
-        assert current["status"] == "pending"
+        assert current["status"] == "active"
         assert current["remind_at"] == original["remind_at"]
 
     upcoming = client.get("/api/reminders/upcoming")
@@ -225,14 +255,27 @@ def test_event_task_is_visible_in_conversation_filtered_list(client, db_session)
     assert other.id not in api_ids
 
 
-def test_startup_scheduler_starts_only_when_enabled(client, db_session):
-    """启动钩子：默认关不建空线程；开启后启动线程并能立即唤醒；可干净停止。"""
+def test_startup_scheduler_starts_when_either_switch_is_on(client, db_session):
+    """启动钩子：两个开关都关才不建线程；任一开启即启动并能立即唤醒；可干净停止。
+
+    CR-22 起 "提醒到点通知" 默认开——线程存在是**正常**的（否则提醒永远不响）。
+    """
     from app.services import agent_task_events
 
     agent_task_events.stop_scheduler()
+    _set_notify(db_session, False)
+    assert _set_enabled(client, False) == {"enabled": False}
     assert agent_task_events.start_scheduler_if_enabled() is False
     assert agent_task_events.get_scheduler() is None
 
+    # 只开提醒通知（任务卡仍关）：线程必须起来。
+    _set_notify(db_session, True)
+    assert agent_task_events.start_scheduler_if_enabled() is True
+    assert agent_task_events.get_scheduler() is not None
+    agent_task_events.stop_scheduler()
+
+    # 只开任务卡（通知关）：同样要起来。
+    _set_notify(db_session, False)
     _set_enabled(client, True)
     assert agent_task_events.start_scheduler_if_enabled() is True
     scheduler = agent_task_events.get_scheduler()

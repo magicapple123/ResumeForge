@@ -54,6 +54,10 @@ class ListJobsInput(BaseModel):
     source_kind: str = Field(
         default="", description="可选，录入方式：collected=自动采集，manual=其余"
     )
+    incomplete_only: bool = Field(
+        default=False,
+        description="可选，只看缺公司、缺薪资且无来源链接的岗位（数据完整度筛选，只读）",
+    )
     sort: JobSort = Field(
         default="created_desc",
         description="排序键：created_desc/updated_desc/title_asc/company_asc/posted_desc",
@@ -109,6 +113,7 @@ def _run_list_jobs(db: Session, payload: ListJobsInput) -> ActionOutcome:
         payload.status,
         payload.favorite,
         payload.source_kind,
+        payload.incomplete_only,
     )
     total = query.count()
     jobs = (

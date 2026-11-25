@@ -20,9 +20,9 @@
    装了什么代理软件"耦合，CI 会随开发机的 Clash 开关变红。
 2. **口令只存密文**：走 `credentials.semantics` 的 DPAPI 语义（与其它凭据同一套
    ``apply_stored_key`` / ``encrypt_key``），明文只在内存里拼成运行时 URL。
-   与「外部连接」页的凭据清单**刻意分开登记**：那份清单是 A/B 两组的展示枚举，
-   多一条会让页面多出一行没有写入口的口令（写入口在本模块的 PUT），也会连锁改到
-   页面的既有断言。代理口令的写入口唯一：``PUT /api/settings/network``。
+   它**登记在**「外部连接」页的凭据清单里（``credentials.registry`` 的
+   ``network.proxy``，CR-11）：那一行只做"就地改口令 / 清除"，代理模式与地址仍在
+   本模块的 PUT 里改。写入口唯一仍是 ``PUT /api/settings/network``。
 3. **``proxy_url`` 不含凭据**：用户填 ``http://user:pass@host:port`` 时由
    :func:`split_credentials` 拆成 url + username + 密文口令，回给前端时只给
    ``has_password``。

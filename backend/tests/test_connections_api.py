@@ -73,10 +73,17 @@ def _system_item(payload: dict, item_id: str) -> dict:
 # ===== A/B 组：三态与存储方式 =====
 
 
-def test_get_connections_reports_three_groups_in_declared_order(connections_client, db_session):
+def test_get_connections_reports_groups_in_declared_order(connections_client, db_session):
     payload = connections_client.get("/api/connections").json()
-    assert [group["id"] for group in payload["groups"]] == ["ai", "search", "system"]
+    # CR-11：代理口令自成一组建在 system 之前（credential 型的三组在前）。
+    assert [group["id"] for group in payload["groups"]] == [
+        "ai",
+        "search",
+        "proxy",
+        "system",
+    ]
     assert [group["kind"] for group in payload["groups"]] == [
+        "credential",
         "credential",
         "credential",
         "system",
@@ -161,7 +168,7 @@ def test_system_items_expose_value_and_default(connections_client):
     # 这四项不是密钥：不借用 DPAPI 口径，也不出现在"三态"里。
     assert port["protection"] == "config_file"
     assert port["protection_label"] == "明文配置文件"
-    assert {item["id"] for item in payload["groups"][2]["items"]} == set(
+    assert {item["id"] for item in payload["groups"][3]["items"]} == set(
         system_sources.source_ids()
     )
 
@@ -304,3 +311,25 @@ def _apply_config():
     from app.schemas.apply import ApplyConfigIn
 
     return ApplyConfigIn()
+
+
+# ===== CR-12：密钥地图 =====
+
+
+def test_key_map_is_projected_from_the_registry(connections_client):
+    """地图行数必须等于 registry 条数：前端不许手写第二份清单。
+
+    每行四列都要有内容——空着的列等于"这一条没人知道怎么用/清空会发生什么"，
+    正是 CR-12 要消掉的那种隐性知识。
+    """
+    from app.services.credentials import CREDENTIAL_SOURCES
+
+    payload = connections_client.get("/api/connections").json()
+    rows = payload["key_map"]
+
+    assert [row["id"] for row in rows] == [source.source_id for source in CREDENTIAL_SOURCES]
+    for row in rows:
+        assert row["label"]
+        assert row["configure_at"], row["id"]
+        assert row["used_by"], row["id"]
+        assert row["empty_meaning"], row["id"]

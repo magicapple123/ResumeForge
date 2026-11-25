@@ -49,6 +49,9 @@ from .registry import (
     GROUP_LABELS as GROUP_LABELS,
 )
 from .registry import (
+    GROUP_NETWORK as GROUP_NETWORK,
+)
+from .registry import (
     SOURCE_ASR_DEFAULT as SOURCE_ASR_DEFAULT,
 )
 from .registry import (
@@ -59,6 +62,9 @@ from .registry import (
 )
 from .registry import (
     SOURCE_LLM_SESSION as SOURCE_LLM_SESSION,
+)
+from .registry import (
+    SOURCE_NETWORK_PROXY as SOURCE_NETWORK_PROXY,
 )
 from .registry import (
     SOURCE_WEB_SEARCH_DEEPSEEK as SOURCE_WEB_SEARCH_DEEPSEEK,
@@ -160,6 +166,7 @@ __all__ = [
     "SOURCE_EMBEDDING_DEFAULT",
     "SOURCE_LLM_DEFAULT",
     "SOURCE_LLM_SESSION",
+    "SOURCE_NETWORK_PROXY",
     "SOURCE_WEB_SEARCH_DEEPSEEK",
     "SOURCE_WEB_SEARCH_JINA",
     "SOURCE_WEB_SEARCH_TAVILY",

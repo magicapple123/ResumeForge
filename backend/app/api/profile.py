@@ -287,7 +287,7 @@ async def parse_profile_text_draft(
         )
         extra_warnings.extend(prep.warnings)
         if prep.dropped_images:
-            extra_warnings.append(dropped_images_warning(prep.dropped_images))
+            extra_warnings.append(dropped_images_warning(prep.dropped_images, setup.model))
         source_text, local_draft, ocr_text = prep.source_text, prep.local_draft, prep.ocr_text
         # 资料这条也遵守"OCR 文本与原图不同时发"。
         image_urls = []
@@ -301,12 +301,12 @@ async def parse_profile_text_draft(
     except LLMError as exc:
         logger.warning("个人资料 AI 识别失败，已回退本地解析：%s", exc)
         result = mark_local_fallback(
-            local_draft, ai_failed_warning(has_images, str(exc), has_documents)
+            local_draft, ai_failed_warning(has_images, str(exc), has_documents, model=setup.model)
         )
     except Exception:  # noqa: BLE001 - 外部模型异常不能阻断草稿解析
         logger.exception("个人资料 AI 识别发生内部错误，已回退本地解析")
         result = mark_local_fallback(
-            local_draft, ai_failed_warning(has_images, has_documents=has_documents)
+            local_draft, ai_failed_warning(has_images, has_documents=has_documents, model=setup.model)
         )
     if result is None:
         raise client_gone("个人资料识别")
