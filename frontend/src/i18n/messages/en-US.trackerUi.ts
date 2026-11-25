@@ -57,6 +57,8 @@ const trackerUi = {
   "trackerUi.card.overdue": "Overdue",
   "trackerUi.card.overdueDays": "Overdue by {days}d",
   "trackerUi.card.evidence": "Evidence: {evidence}",
+  /** CR-19: last "contacted" follow-up (month-day). */
+  "trackerUi.card.followup": "Contacted · {date}",
 
   "trackerUi.source.apply": "Auto-logged from the apply console",
   "trackerUi.source.manual": "Added manually",

@@ -54,6 +54,17 @@ const settingsDatasets = {
   "settingsDatasets.import.fontsRestored": "restored {count} custom fonts",
   "settingsDatasets.import.fontsSkipped":
     "kept the local version of {count} fonts with the same name",
+  "settingsDatasets.import.servicesRestored":
+    "restored {count} service settings (speech / embeddings / web search / proxy)",
+  "settingsDatasets.import.servicesFailed": "the service settings could not be imported ({error})",
+  "settingsDatasets.import.servicesKeyNotice":
+    "The backup contains no API keys: refill the speech, embeddings and web search keys in Settings",
+  "settingsDatasets.import.servicesKeyImported":
+    "The backup has API keys, but they may not decrypt on another machine: check the speech, embedding and web search keys in Settings and refill empty ones.",
+  "settingsDatasets.legacyConfig.notice":
+    "{count} legacy config group(s) still live in the dataset database ({sections}). They are read only when the global config is missing; re-save them to move them.",
+  "settingsDatasets.legacyConfig.section.web_search": "Web search",
+  "settingsDatasets.legacyConfig.section.asr": "Voice transcription",
   "settingsDatasets.import.summaryOk": "{parts}; nothing in your current data was affected",
   "settingsDatasets.import.summaryIncomplete":
     "{parts}; nothing in your current data was affected, but this backup is incomplete: {problems}",

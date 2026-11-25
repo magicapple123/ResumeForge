@@ -47,15 +47,7 @@ export default function ReminderDetailDrawer({
         detail && (
           <Space size={6} wrap>
             <Tag>{kindLabelKey ? t(kindLabelKey) : detail.kind}</Tag>
-            <Tag
-              color={
-                detail.status === "pending"
-                  ? "blue"
-                  : detail.status === "done"
-                    ? "green"
-                    : "default"
-              }
-            >
+            <Tag color={detail.status === "active" ? "blue" : "default"}>
               {statusLabelKey ? t(statusLabelKey) : detail.status}
             </Tag>
           </Space>
@@ -81,7 +73,7 @@ export default function ReminderDetailDrawer({
       actions={
         detail && (
           <Space>
-            {detail.status === "pending" && (
+            {detail.status === "active" && (
               <Button icon={<CheckOutlined />} onClick={onMarkDone}>
                 {t("reminder.action.markDone")}
               </Button>

@@ -128,6 +128,11 @@ export default function OcrEngineCard() {
               {t("ocrEngine.current", { label: currentLabel })}
             </Typography.Text>
 
+            {/* CR-12：Key 是同一把，写清去哪儿改（这一页没有输入框，不指路就只能猜）。 */}
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {t("ocrEngine.keyPointer")}
+            </Typography.Text>
+
             {/* 没 Key 时把"会怎样"写清楚，而不是等用户选完再看一次失败。 */}
             {settings.key_configured ? null : (
               <Alert

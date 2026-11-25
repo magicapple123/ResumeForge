@@ -19,7 +19,7 @@ import { t } from "../../i18n";
 import { downloadBlob } from "../../utils/download";
 import { formatBytes } from "../../utils/format";
 import { reloadPage } from "../../utils/navigation";
-import { describeImportIssues } from "./datasetImportFeedback";
+import { countRestoredServices, describeImportIssues } from "./datasetImportFeedback";
 
 /**
  * 未纳入备份的数据目录项（R17/H3）的提示文案；没有未覆盖项时返回 null。
@@ -231,6 +231,25 @@ export function useSettingsDatasets() {
       const skippedFonts = created.skipped_fonts ?? 0;
       if (skippedFonts > 0) {
         parts.push(t("settingsDatasets.import.fontsSkipped", { count: skippedFonts }));
+      }
+      // CR-10：四块服务配置（语音 / 语义检索 / 搜索 / 代理）与大模型配置分开报——
+      // 它们是同一个备份包里的另一段，用户需要知道"这几项也回来了"以及"Key 没回来"。
+      const services = created.global_services;
+      const servicesRestored = countRestoredServices(services);
+      if (services?.error) {
+        parts.push(t("settingsDatasets.import.servicesFailed", { error: services.error }));
+      } else if (servicesRestored > 0) {
+        parts.push(t("settingsDatasets.import.servicesRestored", { count: servicesRestored }));
+      }
+      if (services?.key_notice) {
+        // 带 Key 与不带 Key 是两种后果：前者"可能解不开"，后者"一定没有"。文案分开。
+        message.info(
+          t(
+            services.keys_included
+              ? "settingsDatasets.import.servicesKeyImported"
+              : "settingsDatasets.import.servicesKeyNotice",
+          ),
+        );
       }
       // RR-03：带着附件问题导入时不得呈现成"完整恢复"——问题逐条（最多 3 条）摆出来。
       const problems = [...(created.backup_asset_warnings ?? []), ...(created.asset_issues ?? [])];

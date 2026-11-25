@@ -138,6 +138,11 @@ export interface ApplyGreetingImageOption {
   id: number;
   name: string;
   size_bytes: number;
+  /**
+   * 能不能删由后端判定（CR-18）：仍被全局默认 / 队列行 / 投递审计引用时为 `false`。
+   * 前端不重算引用关系——三处引用在后端各有一份权威查询，另写一份必然漂。
+   */
+  deletable: boolean;
 }
 
 /**

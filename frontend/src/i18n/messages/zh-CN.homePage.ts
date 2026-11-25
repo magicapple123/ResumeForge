@@ -47,8 +47,18 @@ const homePage = {
   // ── 近期提醒卡与启动弹窗 ────────────────────────────────────
   /** 卡片标题与启动弹窗标题（同一处含义，共用一条）。 */
   "homePage.reminders.title": "近期提醒",
-  /** 启动弹窗底部的关闭按钮。 */
-  "homePage.reminders.gotIt": "知道了",
+  /** 启动弹窗底部的关闭按钮（CR-21：原来叫「知道了」，它关掉后提醒仍是待办）。 */
+  "homePage.reminders.close": "关闭",
+  /** 每行动作：标记这条提醒完成（PATCH status=done）。 */
+  "homePage.reminders.action.done": "完成",
+  /** 每行动作：忽略这条提醒（PATCH status=dismissed）。 */
+  "homePage.reminders.action.ignore": "忽略",
+  /** 标记完成后的 toast（带对象：只说「已标记完成」看不出是哪条）。 */
+  "homePage.reminders.toast.done": "已标记这条提醒完成",
+  /** 忽略后的 toast。 */
+  "homePage.reminders.toast.ignored": "已忽略这条提醒",
+  /** 行内更新失败的 toast：这一行会留在弹窗里，所以文案说清「没更新」而不是「失败了」。 */
+  "homePage.reminders.toast.updateFailed": "这条提醒没更新成功，请重试",
   /** 列表 / 月历切换控件的无障碍名。 */
   "homePage.reminders.viewSwitchAria": "近期提醒视图切换",
   /** 视图切换的选项：列表。 */

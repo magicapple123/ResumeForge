@@ -15,7 +15,6 @@ import type { ApplyQueueItem } from "../../types";
 import { ContextMenuHost } from "../context-menu/ContextMenuHost";
 import { t } from "../../i18n";
 import ApplyQueuePanel from "./ApplyQueuePanel";
-import { APPLY_GUIDE_SEEN_KEY } from "./queue/ApplyQueueGuide";
 
 // `@types/node` 没装（与 ApplySettingsModal.actions.test 同款）：只声明本文件用到的那一小块。
 declare const process: { cwd(): string };
@@ -96,7 +95,6 @@ beforeEach(() => {
     summary: { blocking: 0, warnings: 0 },
   });
   extrasMocks.getGreetingTemplates.mockResolvedValue({ templates: [] });
-  window.localStorage.setItem(APPLY_GUIDE_SEEN_KEY, "1");
 });
 
 afterEach(() => {

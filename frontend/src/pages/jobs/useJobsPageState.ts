@@ -24,6 +24,9 @@ export function useJobsPageState() {
   });
   const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
   const [pageSize, setPageSize] = useState(Number(searchParams.get("page_size")) || 10);
+  // 数据完整度筛选（CR-36）：缺公司 + 缺薪资 + 无来源链接。进 URL（?incomplete=1）所以
+  // 链接可分享、刷新不丢；判定口径只在后端 `filtered_query` 里，这里只持有一个布尔。
+  const [incomplete, setIncomplete] = useState(searchParams.get("incomplete") === "1");
   // 排序（E）：**只存在组件状态里**，不进 URL。离开岗位广场（组件卸载）即恢复默认，
   // 从简历中心回来不会停在上次的排序上；URL 里的 sort/order 也不再被读取。
   // 后端是分页排序的唯一权威——绝不能在前端对本页数据本地排序（分页会错）。
@@ -73,12 +76,13 @@ export function useJobsPageState() {
         job_type: jobType,
         status,
         source_kind: sourceKind || undefined,
+        incomplete_only: incomplete || undefined,
         sort: sortState.sort,
         order: sortState.order ?? undefined,
         page,
         page_size: pageSize,
       }),
-    [keyword, jobType, status, sourceKind, sortState, page, pageSize],
+    [keyword, jobType, status, sourceKind, incomplete, sortState, page, pageSize],
     // 回到前台静默重拉（问题 27a）：岗位列表是第二个开启的列表页。
     { refetchOnFocus: {} },
   );
@@ -95,6 +99,7 @@ export function useJobsPageState() {
           ["job_type", jobType],
           ["status", status],
           ["source_kind", sourceKind],
+          ["incomplete", incomplete ? "1" : ""],
           ["page", page > 1 ? String(page) : ""],
           ["page_size", pageSize !== 10 ? String(pageSize) : ""],
           // 排序不进 URL（E）：显式删除，清掉旧链接里残留的 sort/order。
@@ -109,7 +114,7 @@ export function useJobsPageState() {
       },
       { replace: true },
     );
-  }, [keyword, jobType, status, sourceKind, page, pageSize, setSearchParams]);
+  }, [keyword, jobType, status, sourceKind, incomplete, page, pageSize, setSearchParams]);
 
   // 详情与 ?job_id= 同步：打开详情只写 URL（可分享/刷新后恢复），岗位本体由下面的
   // effect 统一经 getJob 拉全量——列表项已瘦身（JobList），这里不再直接复用。
@@ -178,6 +183,8 @@ export function useJobsPageState() {
     setStatus,
     sourceKind,
     setSourceKind,
+    incomplete,
+    setIncomplete,
     sortState,
     applySort,
     page,

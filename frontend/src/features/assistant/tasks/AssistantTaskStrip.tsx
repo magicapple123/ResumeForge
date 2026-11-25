@@ -13,7 +13,7 @@ import { useState } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import AgentTaskPanel from "./AgentTaskPanel";
-import { bucketOf, visibleTasks } from "./agentTaskView";
+import { bucketOf, visibleCardTasks } from "./agentTaskView";
 import { useAgentTasks } from "./useAgentTasks";
 
 /** 与后端 task_tools.ASSISTANT_TASK_SOURCE 逐字一致。 */
@@ -23,7 +23,7 @@ export default function AssistantTaskStrip({ enabled = true }: { enabled?: boole
   useLocale();
   const [open, setOpen] = useState(true);
   const { tasks, error, start, resume, pause, cancel } = useAgentTasks({ enabled });
-  const assistantTasks = visibleTasks(tasks).filter(
+  const assistantTasks = visibleCardTasks(tasks).filter(
     (task) => task.source === ASSISTANT_TASK_SOURCE,
   );
   if (!enabled) return null;

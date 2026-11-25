@@ -45,6 +45,9 @@ export const EQUALITY_EXEMPT_KEYS = {
   // 复盘查看态的头部副信息：只有「时间 · 目标」两个已翻译的插值 + 一个分隔符，没有散文。
   "interviewReview.header.meta": "Separator between two already-translated values",
   // Search provider brand name, spelled the same in every locale.
+  // CR-09 把来源卡片拆成独立组件后，两个免密钥来源的显示名也走词表。
+  "searchCard.source.bing": "Provider brand name, identical in both languages",
+  "searchCard.source.duckduckgo": "Product brand name, identical in both languages",
   "searchCard.source.deepseek": "Provider brand name, identical in both languages",
   "searchCard.source.tavily": "Provider brand name, identical in both languages",
   "searchCard.source.jina": "Provider brand name, identical in both languages",

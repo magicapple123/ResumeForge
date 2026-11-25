@@ -10,6 +10,7 @@ import { resetWorkbenchLayout } from "../resume/editor/workbenchLayoutStore";
 import { setProfileEditControl, setProfileSaveControl } from "./profileSaveBridge";
 import { INTERVENTION_STORAGE_KEY } from "./touTouIntervention";
 import { ORB_HINT_SEEN_KEY } from "./TouTouOrbButton";
+import { USER_GUIDE_STORAGE_KEY, setUserGuideVisible } from "../../utils/userGuide";
 
 /**
  * TouTouOrb 测试文件共享的测试基建。
@@ -27,6 +28,8 @@ afterEach(() => {
   setProfileEditControl(null);
   window.localStorage.removeItem(INTERVENTION_STORAGE_KEY);
   window.localStorage.removeItem(ORB_HINT_SEEN_KEY);
+  // 启动弹窗槽位是模块级单例：用例里开过欢迎引导必须关掉，否则后续用例都被判"槽位占用"。
+  setUserGuideVisible(false);
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -45,6 +48,10 @@ export function renderOrb(ui: ReactElement, options: { firstRunHint?: boolean } 
   } else {
     window.localStorage.setItem(ORB_HINT_SEEN_KEY, "1");
   }
+  // 欢迎引导默认按"已看过"处理（CR-37）：没看过时 `isStartupPopupActive()` 会判
+  // "本次启动注定要弹欢迎引导"，球的首次说明被正确地压住——那会让这里所有球用例
+  // 都读不到说明。要测互斥的用例自己 `setUserGuideVisible(true)`。
+  window.localStorage.setItem(USER_GUIDE_STORAGE_KEY, "1");
   const wrap = (next: ReactElement) => (
     <MemoryRouter>
       <ShortcutProvider>{next}</ShortcutProvider>

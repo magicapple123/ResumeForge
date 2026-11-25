@@ -9,8 +9,10 @@ export type AgentTaskBucket = "active" | "waiting" | "finished";
 export const BUCKET_ORDER: readonly AgentTaskBucket[] = ["active", "waiting", "finished"];
 
 /**
- * 首页「任务」卡的组顺序（D2）：**待确认在前、进行中在后**、已结束最后。
- * 助手页时代是"进行中在前"，卡片化后要先把"等你动手"的推到最上面。
+ * 旧的「待确认在前、进行中在后」组顺序（D2）。
+ *
+ * CR-19 之后首页已拆成两张卡（各自只有一个分区），这个常量只保留给
+ * `AgentTaskPanel` 的用例做"多分区同卡片"的回归；首页不再使用。
  */
 export const HOME_BUCKET_ORDER: readonly AgentTaskBucket[] = ["waiting", "active", "finished"];
 
@@ -100,6 +102,49 @@ export function isHiddenEmptyTask(task: AgentTask): boolean {
 /** 列表/卡片可见任务：先做 D5 过滤，调用方再分组与计数（单一实现，别各写一遍）。 */
 export function visibleTasks(tasks: AgentTask[]): AgentTask[] {
   return tasks.filter((task) => !isHiddenEmptyTask(task));
+}
+
+/**
+ * 终态提醒卡（CR-20）：提醒到期生成、且已经结束（完成 / 失败 / 取消）。
+ *
+ * 它回答不了"接下来要做什么"——提醒本身还在求职进度里挂着，任务卡只是当时那一跳。
+ * 所以首页任务卡与助手任务条都**不展示**它们；要看历史去设置页的「查看历史」
+ * （`AgentTaskEventsCard`），那里按时间倒序翻。
+ */
+export function isFinishedReminderTask(task: AgentTask): boolean {
+  return (
+    (task.source || "").trim() === AGENT_TASK_SOURCE_REMINDER &&
+    bucketOf(task.status) === "finished"
+  );
+}
+
+/** 卡片/任务条该展示的任务：D5 空壳过滤 + 终态提醒卡隐藏（两处口径必须一致）。 */
+export function visibleCardTasks(tasks: AgentTask[]): AgentTask[] {
+  return visibleTasks(tasks).filter((task) => !isFinishedReminderTask(task));
+}
+
+/**
+ * 首页「待你确认」卡（CR-19）：只放 `waiting_approval`。
+ *
+ * 拆卡的理由是"这张卡上只有一种动作"——待确认不是进度，而是**等你做决定**；
+ * 和进行中的任务混在一张卡里，用户看到的是一份"任务清单"，而不是一个待办。
+ */
+export function waitingConfirmationTasks(tasks: AgentTask[]): AgentTask[] {
+  return visibleCardTasks(tasks).filter((task) => bucketOf(task.status) === "waiting");
+}
+
+/**
+ * 首页「任务」卡（CR-19）：进行中，且**不含跟进巡检卡**。
+ *
+ * 巡检卡自带一整套决策按钮（每个岗位三选一、整卡一次提交），塞进"助手创建的多步任务"
+ * 会让人以为它也是通用任务；它的去处是助手页/跟进入口，不是首页任务卡。
+ */
+export function runningTaskCards(tasks: AgentTask[]): AgentTask[] {
+  return visibleCardTasks(tasks).filter(
+    (task) =>
+      bucketOf(task.status) === "active" &&
+      (task.source || "").trim() !== AGENT_TASK_SOURCE_FOLLOWUP,
+  );
 }
 
 /**

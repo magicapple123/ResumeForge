@@ -268,6 +268,12 @@ export interface ResumeBrief {
    * 旧后端不返回时按 `resume` 处理。
    */
   document_mode?: "resume" | "long_cv";
+  /**
+   * 投递次数（CR-33）：**只读聚合**，不是新存储列。后端按
+   * `application_track.job_id` 统计本简历所属岗位的投递条数（通用简历按 `resume_id`），
+   * 同一岗位的多个版本拿到的是同一个数。旧后端不返回时按 0 处理。
+   */
+  delivery_count?: number;
 }
 
 /** 版本血缘（RF-17）：由哪份简历派生而来；null = 独立版本，不做推断。 */

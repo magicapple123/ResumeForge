@@ -8,7 +8,11 @@
 import { describe, expect, it } from "vitest";
 import type { Profile } from "../../types/profile";
 import type { Stats } from "../../types/search";
-import { computeActivationStages } from "./useActivationProgress";
+import {
+  computeActivationStages,
+  isDeliverDone,
+  shouldShowFirstDelivery,
+} from "./useActivationProgress";
 
 /** 空库基线：后端对每个计数都给明确零值，数组给空列表。 */
 function statsWith(overrides: Partial<Stats>): Stats {
@@ -166,7 +170,7 @@ describe("activation stage conditions", () => {
     expect(emptyLedger?.cta?.path).toBe("/claims");
   });
 
-  it("阶段 3：有简历且台账全部核实才完成；进度显示真实比例", () => {
+  it("阶段 3：有简历且台账全部核实，但仍未交付时不算完成；进度显示真实比例", () => {
     const partial = stageOf(
       statsWith({ resume_count: 1, claim_count: 5, pending_claim_count: 2 }),
       "deliver",
@@ -175,14 +179,15 @@ describe("activation stage conditions", () => {
     expect(partial?.progress).toBe("已核实 3/5 条主张");
     expect(partial?.cta?.label).toBe("核实 2 条待确认事实");
     expect(partial?.cta?.path).toBe("/claims");
-    expect(partial?.cta?.hint).toContain("不会进简历");
+    expect(partial?.cta?.hint).toContain("提示你核对");
 
-    // 全部核实且有简历：完成（投递队列为空不影响——交付动作不判定完成）。
+    // 全部核实、有简历，但没有任何投递记录：CR-34 起交付阶段仍未完成
+    // （完成看「已投递」，未核实主张只影响台账那条待办）。
     const allVerified = stageOf(
-      statsWith({ resume_count: 1, claim_count: 5, pending_claim_count: 0, apply_queue_count: 0 }),
+      statsWith({ resume_count: 1, claim_count: 5, pending_claim_count: 0 }),
       "deliver",
     );
-    expect(allVerified?.done).toBe(true);
+    expect(allVerified?.done).toBe(false);
     expect(allVerified?.progress).toBe("已核实 5/5 条主张");
   });
 
@@ -192,7 +197,8 @@ describe("activation stage conditions", () => {
     expect(stage?.cta?.path).toBe("/resumes");
   });
 
-  it("阶段 3 的完成不因『交付动作』改变：投递队列是否有货不影响条件（诚实口径）", () => {
+  it("阶段 3 的完成看「已投递」，不看投递队列是否有货（CR-34）", () => {
+    // 队列里排着 3 条但一条都没投出去：交付阶段仍未完成。
     expect(
       stageOf(
         statsWith({
@@ -203,18 +209,84 @@ describe("activation stage conditions", () => {
         }),
         "deliver",
       )?.done,
+    ).toBe(false);
+    // 有一条投递成功记录：完成，队列里还有多少都不影响。
+    expect(
+      stageOf(
+        statsWith({
+          resume_count: 1,
+          claim_count: 2,
+          pending_claim_count: 0,
+          apply_queue_count: 3,
+          latest_applications: [ONE_APPLICATION],
+        }),
+        "deliver",
+      )?.done,
     ).toBe(true);
   });
 
-  it("示例数据（各计数齐全、无待核实）：三阶段全部完成且无 CTA——面板因此不渲染", () => {
+  it("阶段 3：已投递即完成——未核实主张不再阻塞（CR-34）", () => {
+    // 有投递记录：交付这件事已经发生，不应因为台账里还有待核实主张就判未完成
+    // （待核实主张会作为「接下来做什么」里单独的一条继续提示）。
+    expect(
+      stageOf(
+        statsWith({
+          resume_count: 1,
+          claim_count: 5,
+          pending_claim_count: 5,
+          latest_applications: [ONE_APPLICATION],
+        }),
+        "deliver",
+      )?.done,
+    ).toBe(true);
+  });
+
+  it("示例数据（各计数齐全、无待核实、已投递）：三阶段全部完成且无 CTA——面板因此不渲染", () => {
     const sample = statsWith({
       job_count: 6,
       resume_count: 3,
       claim_count: 12,
       resume_with_job_count: 2,
+      latest_applications: [ONE_APPLICATION],
     });
     const stages = computeActivationStages(sample);
     expect(stages.every((stage) => stage.done)).toBe(true);
     expect(stages.every((stage) => stage.cta === undefined)).toBe(true);
+  });
+});
+
+describe("新手面板的显示条件（CR-34）", () => {
+  it("只在「简历数 = 0 且投递记录 = 0」时出现", () => {
+    // 全新数据集：出现。
+    expect(shouldShowFirstDelivery(statsWith({}))).toBe(true);
+    // 只录了资料/岗位/台账，还没简历与投递：仍算新手。
+    expect(shouldShowFirstDelivery(statsWith({ job_count: 5, claim_count: 3 }))).toBe(true);
+
+    // 有简历（真实数据集 22 份就是这一类）：不出现。
+    expect(shouldShowFirstDelivery(statsWith({ resume_count: 22 }))).toBe(false);
+    // 有投递成功记录：不出现。
+    expect(shouldShowFirstDelivery(statsWith({ latest_applications: [ONE_APPLICATION] }))).toBe(
+      false,
+    );
+    // 有一条在推进的求职进度：也算有投递记录。
+    expect(shouldShowFirstDelivery(statsWith({ stalled_application_count: 1 }))).toBe(false);
+  });
+
+  it("第三步以「已投递」为完成，未核实主张不再阻塞", () => {
+    // 台账里还有待核实主张、也还没投：未完成。
+    expect(
+      isDeliverDone(statsWith({ resume_count: 1, claim_count: 5, pending_claim_count: 5 })),
+    ).toBe(false);
+    // 已投递：完成——待核实主张是「接下来做什么」里的一条，不block交付阶段。
+    expect(
+      isDeliverDone(
+        statsWith({
+          resume_count: 1,
+          claim_count: 5,
+          pending_claim_count: 5,
+          latest_applications: [ONE_APPLICATION],
+        }),
+      ),
+    ).toBe(true);
   });
 });

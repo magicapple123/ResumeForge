@@ -4,13 +4,13 @@
  *
  * 不按会话过滤：任务卡是"助手正在推进的事"的全局视图，调用
  * `listAgentTasks(undefined)` 取当前数据集全部任务（含提醒到期生成的、没有会话归属的卡）。
- * 每 `AGENT_TASK_POLL_MS` 轮询一次，页面隐藏（`document.hidden`）时跳过本轮——
- * 后台标签页不必持续打接口，回到前台后的下一轮会自动追上。
+ * 每 `AGENT_TASK_POLL_MS` 轮询一次；窗口隐藏时**不跳过**，而是降频到 10s（CR-23），
+ * 恢复可见立即补一轮。
  *
  * 三个必须处理的并发窗口：
  * - **开关/会话变化**：旧请求的慢响应不得覆盖新列表（`requestSeq` 单调递增，过期即丢）；
  * - **总开关关闭**（`enabled=false`）：不请求、不轮询、清空列表；
- * - **页面卸载**：清理 interval，卸载后不再 setState。
+ * - **页面卸载**：清理轮询，卸载后不再 setState。
  */
 import { App } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -24,6 +24,7 @@ import {
 } from "../../../api/agentTasks";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
+import { HIDDEN_AI_POLL_MS, startVisibilityPolling } from "../../../utils/visibility";
 
 export const AGENT_TASK_POLL_MS = 5000;
 
@@ -81,14 +82,16 @@ export function useAgentTasks({
     }
     setLoading(true);
     void load(conversationId);
-    const timer = window.setInterval(() => {
-      // 页面隐藏时暂停本轮（省一次接口；可见性变化不影响状态正确性）。
-      if (!document.hidden) void load(conversationId);
-    }, AGENT_TASK_POLL_MS);
+    // CR-23：可见 5s、隐藏 10s；恢复可见立即补一轮。
+    const stopPolling = startVisibilityPolling({
+      visibleIntervalMs: AGENT_TASK_POLL_MS,
+      hiddenIntervalMs: HIDDEN_AI_POLL_MS,
+      onTick: () => load(conversationId),
+    });
     return () => {
       // 卸载/切换：在途请求作废，轮询停止。
       requestSeq.current += 1;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [enabled, conversationId, load]);
 

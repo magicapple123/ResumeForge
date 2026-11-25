@@ -83,6 +83,11 @@ const settingsUi = {
   "settingsUi.agentTaskEvents.confirmBody":
     "还有 {count} 个任务未完成，关闭后首页将不再显示它们。已生成的记录不会删除。",
   "settingsUi.agentTaskEvents.confirmOk": "仍要关闭",
+  /** CR-20：卡片右上角的「查看历史」（提醒卡终态后首页不再展示）。 */
+  "settingsUi.agentTaskEvents.history": "查看历史",
+  "settingsUi.agentTaskEvents.historyTitle": "提醒历史",
+  "settingsUi.agentTaskEvents.historyEmpty": "还没有提醒历史",
+  "settingsUi.agentTaskEvents.historyFailed": "历史加载失败，请重试",
 
   // ── 生成内容保存位置卡 ───────────────────────────────────────
   "settingsUi.exportSave.title": "生成内容保存位置",
@@ -257,6 +262,8 @@ const settingsUi = {
   "settingsUi.network.password": "代理口令",
   "settingsUi.network.passwordPlaceholder": "口令（可选）",
   "settingsUi.network.passwordKeep": "留空表示不改",
+  /** CR-12：口令留空的语义与三把搜索 Key 相反（这里=保留），必须就地写明。 */
+  "settingsUi.network.passwordRule": "留空表示保留已保存的口令；要移除口令请点「清除口令」。",
   "settingsUi.network.socksHint":
     "只支持 http:// 或 https:// 代理。代理软件通常同时提供一个 http 端口，用它即可。",
   "settingsUi.network.trust": "信任系统证书库",

@@ -10,11 +10,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import { REMINDER_KIND_LABEL_KEYS, REMINDER_STATUS_LABEL_KEYS } from "../../i18n/enum/reminder";
 import ReminderPanel from "./ReminderPanel";
+import { formatDateTime } from "../../utils/format";
 
 const apiMocks = vi.hoisted(() => ({
   listReminders: vi.fn(),
   createReminder: vi.fn(),
   updateReminder: vi.fn(),
+  snoozeReminder: vi.fn(),
   deleteReminder: vi.fn(),
 }));
 
@@ -62,7 +64,7 @@ function makeItem(overrides: Record<string, unknown> = {}) {
     title: "参加某司二面",
     remind_at: "2026-09-21T10:00:00",
     kind: "interview",
-    status: "pending",
+    status: "active",
     track_id: null,
     job_id: null,
     resume_id: null,
@@ -86,7 +88,11 @@ function renderPanel() {
 
 beforeEach(() => {
   apiMocks.listReminders.mockReset().mockResolvedValue(ITEMS);
-  apiMocks.updateReminder.mockReset().mockResolvedValue(undefined);
+  // PATCH 回显是 ReminderOut：服务层要用它的 status/remind_at 决定"已完成"还是"已排下一次"。
+  apiMocks.updateReminder.mockReset().mockResolvedValue(makeItem({ status: "archived" }));
+  apiMocks.snoozeReminder
+    .mockReset()
+    .mockResolvedValue(makeItem({ remind_at: "2026-09-21T11:00:00" }));
   apiMocks.deleteReminder.mockReset().mockResolvedValue(undefined);
   settingsMocks.getAgentTaskEvents.mockReset().mockResolvedValue({ enabled: true });
 });
@@ -102,7 +108,7 @@ describe("ReminderPanel", () => {
 
     expect(await screen.findByText(ITEM_TITLE)).toBeInTheDocument();
     expect(screen.getByText(t(REMINDER_KIND_LABEL_KEYS.interview))).toBeInTheDocument();
-    expect(screen.getByText(t(REMINDER_STATUS_LABEL_KEYS.pending))).toBeInTheDocument();
+    expect(screen.getByText(t(REMINDER_STATUS_LABEL_KEYS.active))).toBeInTheDocument();
     expect(apiMocks.listReminders).toHaveBeenCalled();
   });
 
@@ -253,13 +259,13 @@ describe("ReminderPanel", () => {
     expect(screen.queryByText(t("reminder.hint.taskCardOn"))).toBeNull();
   });
 
-  it("逾期 pending 显示「已逾期 N 天」红标，已完成的不显示（T06）", async () => {
+  it("逾期待办显示「已逾期 N 天」红标，已结束的不显示（T06）", async () => {
     apiMocks.listReminders.mockResolvedValue([
       makeItem({ id: 1, title: "逾期待办", days_until: -1, urgency: "overdue" }),
       makeItem({
         id: 2,
         title: "已完成的历史",
-        status: "done",
+        status: "archived",
         days_until: -2,
         urgency: "overdue",
       }),
@@ -289,5 +295,48 @@ describe("ReminderPanel", () => {
 
     await waitFor(() => expect(screen.getByText(OVERDUE_TITLE)).toBeInTheDocument());
     expect(screen.queryByText(`${FUTURE_TITLE_PREFIX} 10`)).toBeNull();
+  });
+  // ===== CR-28：重复规则与稍后提醒 =====
+
+  it("「稍后」菜单的三个预设都走同一个接口，1 小时发 preset=one_hour", async () => {
+    renderPanel();
+    await screen.findByText(ITEM_TITLE);
+
+    fireEvent.click(screen.getByRole("button", { name: t("reminder.snooze.action") }));
+    fireEvent.click(await screen.findByText(t("reminder.snooze.oneHour")));
+
+    await waitFor(() =>
+      expect(apiMocks.snoozeReminder).toHaveBeenCalledWith(1, { preset: "one_hour" }),
+    );
+  });
+
+  it("重复提醒标完成后提示下一次的时间（回显 status=active + 新 remind_at）", async () => {
+    apiMocks.updateReminder.mockResolvedValue(
+      makeItem({ status: "active", remind_at: "2026-09-28T10:00:00" }),
+    );
+    renderPanel();
+    await screen.findByText(ITEM_TITLE);
+
+    fireEvent.click(screen.getByRole("button", { name: /完成提醒 参加某司二面/ }));
+
+    expect(
+      await screen.findByText(
+        t("reminder.toast.doneNext", { time: formatDateTime("2026-09-28T10:00:00") }),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("新建时选「每周」才显示重复结束条件（不重复时那一行没有意义）", async () => {
+    renderPanel();
+    await screen.findByText(ITEM_TITLE);
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(t("reminder.action.create")) }));
+
+    expect(screen.queryByText(t("reminder.field.recurrenceUntil"))).toBeNull();
+
+    // antd Select 的输入框带着 Form.Item 的 label，点它展开选项。
+    fireEvent.mouseDown(screen.getByLabelText(t("reminder.field.recurrence")));
+    fireEvent.click(await screen.findByTitle(t("reminder.recurrence.weekly")));
+
+    expect(await screen.findByText(t("reminder.field.recurrenceUntil"))).toBeInTheDocument();
   });
 });

@@ -241,7 +241,7 @@ describe("SettingsPage datasets", () => {
     await renderPage();
 
     const checkbox = screen.getByRole("checkbox", {
-      name: /备份中包含全局模型配置与 API Key/,
+      name: /备份中包含全局模型与服务配置/,
     });
     expect(checkbox).toBeChecked();
     fireEvent.click(checkbox);

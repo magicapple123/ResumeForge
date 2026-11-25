@@ -12,16 +12,28 @@ const external = {
     "Every outside service and download source this machine depends on: whether it is configured, where it lives, and how to change it. Keys are shown masked; clearing one in place removes it.",
   "connections.group.ai": "AI services",
   "connections.group.search": "Search sources",
+  "connections.group.proxy": "Network proxy",
   "connections.group.system": "Sources and ports",
   "connections.group.aiHint":
     "Keys for models, speech transcription and semantic search. Changes apply immediately.",
   "connections.group.searchHint":
     "Keys for assistant web search and page fetching. The DeepSeek key also powers OCR for scans.",
+  "connections.group.proxyHint":
+    "The proxy's authentication password. Change the proxy mode and address in the network proxy card.",
   "connections.group.systemHint":
     "Download sources and the browser port. These are not secrets, they travel with backups, and changes apply on the next call.",
 
   // ── Storage summary ────────────────────────────────────────
   "connections.storage.title": "Key storage on this machine: {label}",
+
+  // ── Key map (CR-12) ────────────────────────────────────────
+  "connections.keyMap.title": "Key map",
+  "connections.keyMap.hint":
+    "{count} external credentials in total. Each row says where to change it, which features use it, and what an empty value does.",
+  "connections.keyMap.col.source": "Source",
+  "connections.keyMap.col.configureAt": "Where to change",
+  "connections.keyMap.col.usedBy": "Used by",
+  "connections.keyMap.col.empty": "Empty value means",
 
   // ── Status ─────────────────────────────────────────────────
   "connections.status.saved": "Saved",
@@ -45,6 +57,7 @@ const external = {
   "connections.action.primary.modify": "Edit",
   "connections.action.more": "More actions for {name}",
   "connections.action.copy": "Copy current value",
+  "connections.action.copySecret": "Copy the key",
   "connections.action.save": "Save",
   "connections.action.cancel": "Cancel",
   "connections.action.clear": "Clear",
@@ -61,6 +74,7 @@ const external = {
   "connections.input.label": "New key for {name}",
   "connections.input.placeholder": "Paste the new key",
   "connections.hint.aria": "Show details for {name}",
+  "connections.hint.borrowedModelKey": "Reusing the DeepSeek key from AI models.",
   "connections.hint.storage": "Storage: {label}",
   "connections.clear.title": "Clear this key",
   "connections.clear.body": "The related feature stops working until you enter a key again",
@@ -101,6 +115,10 @@ const external = {
   "connections.item.web_search.jina.label": "Jina (page fetch source)",
   "connections.item.web_search.jina.hint":
     "Clearing removes the Jina key; page fetching loses one source.",
+  "connections.item.network.proxy.label":
+    "Proxy authentication password (current network settings)",
+  "connections.item.network.proxy.hint":
+    "Changing it here changes the proxy password; the mode and address live in the network proxy card. Clearing removes authentication.",
   "connections.item.system.update_repo.label": "Update source (GitHub repository)",
   "connections.item.system.update_repo.hint":
     "Repository queried when checking for updates, as owner/repo. Change it to use a self-hosted release source.",
@@ -122,6 +140,8 @@ const external = {
   "ocrEngine.keyMissing.title": "No DeepSeek API key yet",
   "ocrEngine.keyMissing.body":
     "OCR reuses the DeepSeek key from web search (the search sources group on this page). Auto keeps using the vision model when no key is set; OCR only fails outright instead of silently switching providers or spending money.",
+  "ocrEngine.keyPointer":
+    "This key is the DeepSeek key from Web search: change it under Settings → Assistant behaviour → Web search → DeepSeek (also listed in the key map).",
   "ocrEngine.saveFailed": "Could not switch: {message}",
   "ocrEngine.saved": "Recognition engine switched",
   "ocrEngine.loadFailed": "Could not load the recognition engine setting",

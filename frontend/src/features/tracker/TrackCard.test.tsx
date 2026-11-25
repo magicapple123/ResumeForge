@@ -12,6 +12,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import type { Track } from "../../types";
+import { formatServerTime } from "../../utils/serverTime";
 import TrackCard from "./TrackCard";
 
 const COMPANY = "示例科技";
@@ -148,5 +149,30 @@ describe("TrackCard 的外部简历关联", () => {
     });
 
     expect(container.querySelector(".track-card-resume")).toHaveTextContent(EXTERNAL_TITLE);
+  });
+});
+
+/**
+ * CR-19：首页任务卡的步骤链到 `/tracker?job_id=` 之后，进度行要能看出跟进痕迹。
+ * 「已联系 · 11-25」只来自**最近一次 contacted**；其余决策与旧数据都不显示。
+ */
+describe("TrackCard 的最近跟进（CR-19）", () => {
+  const LAST_CONTACT = "2026-11-25T12:00:00";
+
+  it("有已联系记录时显示「已联系 · 月-日」，日期按设备时区", () => {
+    const { container } = renderCard({ latest_followup: LAST_CONTACT });
+
+    const node = container.querySelector(".track-card-followup");
+    expect(node).not.toBeNull();
+    const expectedDate = formatServerTime(LAST_CONTACT, { dateOnly: true }).slice(5);
+    expect(node).toHaveTextContent(t("trackerUi.card.followup", { date: expectedDate }));
+  });
+
+  it("没有已联系记录（null / 旧接口缺字段）时不显示这一段", () => {
+    const { container: withNull } = renderCard({ latest_followup: null });
+    expect(withNull.querySelector(".track-card-followup")).toBeNull();
+
+    const { container: withOldShape } = renderCard({});
+    expect(withOldShape.querySelector(".track-card-followup")).toBeNull();
   });
 });

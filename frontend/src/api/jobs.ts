@@ -41,6 +41,11 @@ export interface JobListParams {
   favorite?: boolean;
   /** 按录入方式粗筛：`collected`=投递台自动采集，`manual`=其余（手动填写/粘贴/截图/文档等）。 */
   source_kind?: "collected" | "manual";
+  /**
+   * 只看「数据完整度」可疑行（CR-36）：公司、薪资、来源链接三列都为空。
+   * 口径只在后端 `filtered_query` 里写一份——前端不自己判断字段，只传布尔。
+   */
+  incomplete_only?: boolean;
   /** 排序键（R14）；不传 = 后端默认 `created_desc`。 */
   sort?: JobSort;
   /** 方向覆盖；不传则用 sort 自带方向。 */

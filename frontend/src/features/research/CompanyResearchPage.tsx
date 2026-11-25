@@ -6,7 +6,7 @@
  * 所以页面必须能表达"卡片出来了但简报没出来"（`brief.status === "failed"`）这种半成功态
  * ——那正是无 Key / 余额不足时用户的真实遭遇，报整页错误会把已经搜到的资料一起藏掉。
  *
- * 深度开关默认关闭：搜索按查询词条数计费，深度档最多约 20 次工具调用。默认态在界面上
+ * 深度开关默认关闭：多轮工具调用会显著增加上下文与 token 用量，默认态在界面上
  * **写出来**（`deep.defaultOff`），不能只靠开关的视觉状态。
  */
 import { Alert, App, Button, Card, Input, Space, Switch, Typography } from "antd";

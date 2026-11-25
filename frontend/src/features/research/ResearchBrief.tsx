@@ -124,7 +124,9 @@ function failureAction(
   if (code === "unauthorized") {
     return {
       label: t("companyResearch.brief.action.openSettings"),
-      to: "/settings?tab=connections",
+      // 生效的是「联网搜索」那把 Key，它就在设置页的「助手行为」分组（CR-03 既定口径）。
+      // 落到「外部连接」会让用户在六七行凭据里自己找。
+      to: "/settings?tab=assistant-behavior",
     };
   }
   if (code === "insufficient_balance") {

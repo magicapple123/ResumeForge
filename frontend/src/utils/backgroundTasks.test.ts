@@ -5,7 +5,7 @@
  * 这一层是"完成提醒"能兑现的前提——它以前挂在生成弹窗里，弹窗一关轮询就停了。
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { ResumeGenerateTask } from "../types";
 import {
@@ -20,6 +20,16 @@ import {
   watchResumeTask,
 } from "./backgroundTasks";
 import { registerNotifyHost } from "./taskNotify";
+import { HIDDEN_AI_POLL_MS } from "./visibility";
+
+/** jsdom 没有改 visibilityState 的入口，直接覆写属性模拟；用例结束还原为可见。 */
+function setHidden(hidden: boolean): void {
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => (hidden ? "hidden" : "visible"),
+  });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
 
 /** 与 backgroundTasks.ts 内部约定一致：跨刷新持久化的键。 */
 const STORAGE_KEY = "rf.backgroundTasks.v1";
@@ -28,6 +38,10 @@ const apiMocks = vi.hoisted(() => ({
   getResumeGenerateTask: vi.fn(),
   cancelResumeGenerateTask: vi.fn(),
 }));
+
+/** 通知中心写入：本文件只关心"有没有补发提醒"，回看记录用空桩避免真实请求。 */
+const inboxMocks = vi.hoisted(() => ({ recordNotification: vi.fn() }));
+vi.mock("../api/notifications", () => inboxMocks);
 
 vi.mock("../api/resumes", () => ({
   getResumeGenerateTask: apiMocks.getResumeGenerateTask,
@@ -104,6 +118,8 @@ beforeEach(() => {
   aiMocks.listActiveAiTasks.mockReset();
   // 默认"后端没有在跑的通用任务"：恢复流程不该把别的用例的任务接进来。
   aiMocks.listActiveAiTasks.mockResolvedValue([]);
+  inboxMocks.recordNotification.mockReset();
+  inboxMocks.recordNotification.mockResolvedValue({ id: 1 });
   registerNotifyHost({
     notification: {
       // antd 6 起通知卡片的标题参数由 message 改名 title（见 utils/taskNotify.ts），
@@ -132,6 +148,10 @@ beforeEach(() => {
     },
   });
   vi.useFakeTimers();
+});
+
+afterEach(() => {
+  setHidden(false);
 });
 
 describe("后台任务登记表", () => {
@@ -343,6 +363,27 @@ describe("后台任务跨刷新恢复", () => {
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
+  it("刷新后恢复：多个终态任务只弹一条合并提醒（CR-25）", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([
+        { taskId: 21, label: "生成通用简历", registeredAt: "2026-10-05T00:00:00" },
+        { taskId: 22, label: "生成通用简历", registeredAt: "2026-10-05T00:00:00" },
+      ]),
+    );
+    apiMocks.getResumeGenerateTask.mockResolvedValue(
+      makeTask({ status: "completed", resume_id: 42 }),
+    );
+
+    await restoreBackgroundTasks();
+
+    const modals = notices.filter((item) => item.modal);
+    expect(modals).toHaveLength(1);
+    expect(modals[0].title).toContain("2");
+    // 合并的那条没有单一落点：不给深链（否则会把用户随机丢进其中一个结果）。
+    expect(modals[0].hasActions).not.toBe(true);
+  });
+
   it("刷新后恢复：仍在运行的任务重新拉起轮询，完成时照常提醒", async () => {
     window.localStorage.setItem(
       STORAGE_KEY,
@@ -395,5 +436,51 @@ describe("后台任务跨刷新恢复", () => {
       getItemSpy.mockRestore();
       setItemSpy.mockRestore();
     }
+  });
+});
+
+describe("窗口隐藏时仍轮询（CR-23）", () => {
+  it("隐藏不跳过：按 10s 降频继续 fetch，不再按可见时的 1.5s 打接口", async () => {
+    apiMocks.getResumeGenerateTask.mockResolvedValue(makeTask({ status: "running" }));
+    watchResumeTask(makeTask(), "生成通用简历");
+    // 登记时的立即拉取。
+    await vi.advanceTimersByTimeAsync(0);
+    const registered = apiMocks.getResumeGenerateTask.mock.calls.length;
+
+    // 切后台：当前 1.5s 的节拍必须立刻换成 10s（否则隐藏后的第一轮仍按前台频率打）。
+    setHidden(true);
+    await vi.advanceTimersByTimeAsync(HIDDEN_AI_POLL_MS - 1);
+    expect(apiMocks.getResumeGenerateTask).toHaveBeenCalledTimes(registered);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(apiMocks.getResumeGenerateTask).toHaveBeenCalledTimes(registered + 1);
+  });
+
+  it("隐藏窗口里仍会轮询并在跑完后提醒（不是等回到前台才补）", async () => {
+    setHidden(true);
+    apiMocks.getResumeGenerateTask.mockResolvedValue(makeTask({ status: "running" }));
+    watchResumeTask(makeTask(), "生成通用简历");
+    // 登记时的立即拉取（与可见性无关）。
+    await vi.advanceTimersByTimeAsync(0);
+
+    apiMocks.getResumeGenerateTask.mockResolvedValue(
+      makeTask({ status: "completed", resume_id: 42 }),
+    );
+    await vi.advanceTimersByTimeAsync(HIDDEN_AI_POLL_MS);
+
+    expect(notices.some((item) => item.title === "简历已生成")).toBe(true);
+  });
+
+  it("恢复可见立即补一轮，不必等下一个 10s", async () => {
+    apiMocks.getResumeGenerateTask.mockResolvedValue(makeTask({ status: "running" }));
+    watchResumeTask(makeTask(), "生成通用简历");
+    await vi.advanceTimersByTimeAsync(0);
+    setHidden(true);
+    await vi.advanceTimersByTimeAsync(HIDDEN_AI_POLL_MS);
+    const whileHidden = apiMocks.getResumeGenerateTask.mock.calls.length;
+
+    setHidden(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(apiMocks.getResumeGenerateTask).toHaveBeenCalledTimes(whileHidden + 1);
   });
 });

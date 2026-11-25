@@ -194,7 +194,7 @@ function activeCardTitles(): string[] {
 }
 
 describe("SettingsPage 分组导航", () => {
-  it("renders the ten sections under three nav groups", async () => {
+  it("renders the eleven sections under three nav groups", async () => {
     renderPage();
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
 
@@ -207,6 +207,8 @@ describe("SettingsPage 分组导航", () => {
       t("connections.tab"),
       t("settings.tab.appearance"),
       t("settings.tab.interaction"),
+      // CR-29：通知设置单独成组，排在「交互」之后、「数据」之前（界面类之后、数据类之前）。
+      t("notificationsSettings.nav"),
       t("settings.tab.data"),
       t("settings.tab.backup"),
       t("settings.tab.about"),

@@ -105,3 +105,28 @@ describe("AgentTaskRow 的跟进巡检分支", () => {
     expect(names).toContain(t("assistantUi.tasks.action.start").replace(/\s+/g, ""));
   });
 });
+
+/**
+ * CR-19：步骤指向的岗位给一个出口（`/tracker?job_id=`，新标签）。
+ *
+ * `job_id` 是后端从步骤的 `output_ref.track_id` 批查询补出的只读字段；补不出来
+ * （旧卡 / 进度没挂岗位）就只显示文字——不能给一个点了打不开的链接。
+ */
+describe("AgentTaskRow 的步骤岗位链接", () => {
+  it("步骤带 job_id 时渲染新窗口链接，rel 不交出 opener", () => {
+    const step = { ...makeStep(0, "custom"), job_id: 42 };
+    renderRow({ ...makeTask([step]), source: "manual" });
+
+    const link = screen.getByTestId("agent-task-step-job-31-0");
+    expect(link).toHaveAttribute("href", "/tracker?job_id=42");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("没有 job_id 时只显示文字，不渲染链接", () => {
+    renderRow({ ...makeTask([makeStep(0, "custom")]), source: "manual" });
+
+    expect(screen.queryByTestId("agent-task-step-job-31-0")).toBeNull();
+    expect(screen.getByText("Job 0")).toBeTruthy();
+  });
+});

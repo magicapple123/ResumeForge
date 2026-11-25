@@ -262,8 +262,10 @@ export function ExternalResumeDetailDrawer({
       return (
         <iframe
           title={record.name}
-          src={externalResumeFileUrl(record.id)}
-          style={{ width: "100%", height: 560, border: "none" }}
+          // CR-16：`#view=FitV` 让 Chromium 内置阅读器按整页宽度铺开（默认比例会缩在中间）。
+          src={`${externalResumeFileUrl(record.id)}#view=FitV`}
+          // 高度交给 flex 链（Drawer body → Tabs → 面板），原先写死 560px 时下面一大截空白。
+          style={{ width: "100%", height: "100%", border: "none", display: "block" }}
         />
       );
     }
@@ -296,8 +298,6 @@ export function ExternalResumeDetailDrawer({
           fontFamily: "inherit",
           fontSize: 13,
           lineHeight: 1.7,
-          maxHeight: "calc(100vh - 220px)",
-          overflow: "auto",
         }}
       >
         {record.text}
@@ -337,6 +337,11 @@ export function ExternalResumeDetailDrawer({
       open={open}
       onClose={onClose}
       size="large"
+      // CR-16：body 变纵向 flex，Tabs 才能吃掉剩余高度；原件 iframe 与文本 Tab 都在内部滚动，
+      // 整页不再跟着 PDF 一起滚。
+      styles={{
+        body: { display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" },
+      }}
       title={
         <Space size={8}>
           <Typography.Text strong>{t("resumesPage.external.detailTitle")}</Typography.Text>
@@ -351,6 +356,13 @@ export function ExternalResumeDetailDrawer({
       ) : (
         <Tabs
           activeKey={tab}
+          // 占满 Drawer body 的剩余高度；`minHeight: 0` 是 flex 子项能收缩、内部才能滚动的关键。
+          style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
+          styles={{
+            // `.ant-tabs-body` / `.ant-tabs-tabpane`：把高度链传到底，滚动发生在面板内部。
+            body: { height: "100%" },
+            content: { height: "100%", overflow: "auto" },
+          }}
           onChange={(key) => {
             if (resumeId === null) return;
             const nextTab = key as ExternalResumeDetailTab;

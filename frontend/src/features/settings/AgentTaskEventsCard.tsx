@@ -11,11 +11,14 @@
  * 先弹确认（按钮文案「仍要关闭」，不用「确定」）。modal 取自 `App.useApp()`，不读静态
  * `Modal.confirm`（深色主题下会退回浅色 token）。
  */
-import { App, Card, Flex, Space, Switch, Typography } from "antd";
+import { App, Button, Card, Flex, Modal, Space, Switch, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { listAgentTasks } from "../../api/agentTasks";
+import type { AgentTask } from "../../api/agentTasks";
 import { getAgentTaskEvents, setAgentTaskEvents } from "../../api/settings";
-import { visibleTasks } from "../assistant/tasks/agentTaskView";
+import { AGENT_TASK_SOURCE_REMINDER, visibleTasks } from "../assistant/tasks/agentTaskView";
+import ReminderTaskRow from "../assistant/tasks/ReminderTaskRow";
+import EmptyState from "../../components/common/EmptyState";
 import ErrorState from "../../components/common/ErrorState";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import SettingsResetButton from "./SettingsResetButton";
@@ -29,6 +32,14 @@ const UNFINISHED_STATUSES: readonly string[] = ["draft", "running", "paused", "w
 /** I-10：这张卡能恢复默认的键（总开关；默认关，不受其它 assistant 作用域设置影响）。 */
 const AGENT_TASK_RESET_KEYS = ["agent_task_events_enabled"];
 
+/**
+ * 「查看历史」弹窗首版取最近多少条（CR-20）。
+ *
+ * 这里只放提醒类任务卡：它们终态后首页就不再展示（首页只回答"接下来做什么"），
+ * 但用户仍要能回头确认"那条提醒我到底处理过没有"。
+ */
+const HISTORY_LIMIT = 20;
+
 export default function AgentTaskEventsCard() {
   useLocale();
   const { message, modal } = App.useApp();
@@ -38,6 +49,11 @@ export default function AgentTaskEventsCard() {
   // 关闭前统计未完成任务期间的 loading（与保存分开，避免确认弹窗里按钮一直转圈）。
   const [checking, setChecking] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  // 提醒历史弹窗（CR-20）：默认关闭，打开时才拉一次列表（不跟着首页 5s 轮询跑）。
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<AgentTask[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +67,30 @@ export default function AgentTaskEventsCard() {
       setLoading(false);
     }
   }, []);
+
+  /** 拉一次提醒卡历史：只要提醒来源、按最近更新倒序、取前 N 条。 */
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError(false);
+    try {
+      const tasks = await listAgentTasks();
+      const reminders = tasks
+        .filter((task) => (task.source || "").trim() === AGENT_TASK_SOURCE_REMINDER)
+        // `updated_at` 是后端 naive UTC 的 ISO 串：字符串倒序即时间倒序，不必解析时区。
+        .sort((left, right) => (right.updated_at > left.updated_at ? 1 : -1))
+        .slice(0, HISTORY_LIMIT);
+      setHistory(reminders);
+    } catch {
+      setHistoryError(true);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const openHistory = () => {
+    setHistoryOpen(true);
+    void loadHistory();
+  };
 
   // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
   useEffect(() => {
@@ -138,6 +178,11 @@ export default function AgentTaskEventsCard() {
           <SettingsResetButton keys={AGENT_TASK_RESET_KEYS} />
         </Flex>
       }
+      extra={
+        <Button type="link" size="small" onClick={openHistory}>
+          {t("settingsUi.agentTaskEvents.history")}
+        </Button>
+      }
       className="settings-card"
     >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
@@ -167,6 +212,41 @@ export default function AgentTaskEventsCard() {
           </Space>
         )}
       </LoadingBlock>
+      {/* 只读弹窗：footer={null}，关闭只走右上角 ×（与 antd 原生只读弹窗同口径）。 */}
+      <Modal
+        open={historyOpen}
+        title={t("settingsUi.agentTaskEvents.historyTitle")}
+        footer={null}
+        width={560}
+        onCancel={() => setHistoryOpen(false)}
+      >
+        <LoadingBlock spinning={historyLoading}>
+          {historyError ? (
+            <ErrorState
+              description={t("settingsUi.agentTaskEvents.historyFailed")}
+              onRetry={() => void loadHistory()}
+            />
+          ) : history.length === 0 ? (
+            <EmptyState inline description={t("settingsUi.agentTaskEvents.historyEmpty")} />
+          ) : (
+            <ul
+              style={{
+                listStyle: "none",
+                margin: 0,
+                padding: 0,
+                display: "grid",
+                gap: 10,
+                maxHeight: "60vh",
+                overflowY: "auto",
+              }}
+            >
+              {history.map((task) => (
+                <ReminderTaskRow key={task.id} task={task} readOnly />
+              ))}
+            </ul>
+          )}
+        </LoadingBlock>
+      </Modal>
     </Card>
   );
 }

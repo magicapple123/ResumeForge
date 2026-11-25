@@ -34,7 +34,7 @@ const companyResearch = {
   "companyResearch.brief.noSources": "这份简报没有可展示的来源",
   "companyResearch.brief.citationAria": "查看第 {number} 条引用来源",
   "companyResearch.brief.skipped": "这次只跑了简报，没有搜索资料卡片",
-  "companyResearch.brief.action.openSettings": "去设置配置 DeepSeek Key",
+  "companyResearch.brief.action.openSettings": "去设置换「联网搜索」的 Key",
   "companyResearch.brief.action.checkBalance": "查看余额与用量",
   "companyResearch.brief.action.retryLater": "重试简报",
   "companyResearch.latest.label": "最近一次调研：{when}",
@@ -44,10 +44,10 @@ const companyResearch = {
   "companyResearch.latest.daysAgo": "{days} 天前",
   "companyResearch.deep.label": "深度调研",
   "companyResearch.deep.hint":
-    "开启后做多轮深度搜索，最多约 20 次工具调用；搜索按查询词条数计费，费用比默认档高得多。",
+    "开启后做多轮深度搜索，最多约 20 次工具调用；结果都计入模型上下文，token 用量比默认档高得多。",
   "companyResearch.deep.defaultOff": "深度调研默认关闭，只做一次普通搜索",
   "companyResearch.usage.summary": "本次共 {count} 次搜索，耗时 {seconds} 秒",
-  "companyResearch.usage.billing": "搜索按查询词条数计费，深度调研会明显增加次数",
+  "companyResearch.usage.billing": "搜索按查询词条数计数，深度调研会明显增加调用次数",
   "companyResearch.notes.title": "这次调用的说明",
   /** 多条说明之间的分隔（中文用全角分号，英文用半角）。 */
   "companyResearch.notes.separator": "；",

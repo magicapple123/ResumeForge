@@ -30,10 +30,14 @@ const searchCard = {
   "searchCard.saved": "Web search settings saved",
   "searchCard.saveFailed": "Could not save the web search settings",
 
+  "searchCard.source.bing": "Bing",
+  "searchCard.source.duckduckgo": "DuckDuckGo",
   "searchCard.source.searxng": "SearXNG (self-hosted)",
   "searchCard.source.deepseek": "DeepSeek",
   "searchCard.source.tavily": "Tavily",
   "searchCard.source.jina": "Jina",
+  "searchCard.source.custom": "Custom",
+  "searchCard.source.note.custom": "Your own search endpoint, configured by template",
 
   "searchCard.sources.title": "Search sources",
   "searchCard.sources.hint":
@@ -49,8 +53,10 @@ const searchCard = {
     "It is called only when you save your own API key and select the DeepSeek source above. It does not follow the chat model configuration, so quota and billing are separate. Without a key this source does not join the search and is never shown as a successful search.",
   "searchCard.deepseek.keyAria": "DeepSeek search API key",
   "searchCard.deepseek.keyPlaceholder": "Paste your DeepSeek API key",
+  "searchCard.deepseek.keyRule":
+    "Clear the field and save to remove this key. Scanned OCR uses the same key (engine settings live under Settings → Connections).",
   "searchCard.deepseek.cost":
-    "Search and Fetch cost about ¥0.005 per successful request each, billed by DeepSeek; the app only counts calls and never converts them into money. A saved key is echoed as ********; clear the field to remove it.",
+    "This card configures the direct Search / Fetch APIs: about ¥0.005 per successful request each, billed by DeepSeek. The model-side web tools used by the research brief have not been charged per tool call since 2026-11-18. The app only counts calls and never converts them into money. A saved key is echoed as ********; clear the field to remove it.",
   "searchCard.deepseek.privacy":
     "With this source selected, page URLs are sent to DeepSeek so it can fetch the body; local reading is used only when that fails. Turn the source off if you do not want URLs sent.",
 
@@ -75,12 +81,42 @@ const searchCard = {
   "searchCard.source.note.jina": "Needs an API key; free tier available",
   "searchCard.tavily.keyAria": "Tavily API key",
   "searchCard.tavily.keyPlaceholder": "Paste a key starting with tvly-",
+  "searchCard.tavily.keyRule":
+    "Clear the field and save to remove the Tavily key; assistant search loses one source.",
   "searchCard.tavily.note":
     "One call returns both snippets and full page bodies, so the extra page-fetch round is unnecessary; the free tier allows 1000 credits per month (1 credit per basic search). Bodies still go through passage selection, so a whole page is never pasted into the context.",
   "searchCard.jina.keyAria": "Jina API key",
   "searchCard.jina.keyPlaceholder": "Paste a key starting with jina-",
+  "searchCard.jina.keyRule":
+    "Clear the field and save to remove the Jina key; page fetching loses one source.",
   "searchCard.jina.note":
     "Search returns the first 5 clean page bodies. Pages that cannot be read locally (JS-heavy) are read once more with it; anything readable locally is not requested twice.",
+
+  /** CR-04: DeepSeek key check (DeepSeek only; a failed check never blocks saving). */
+  "searchCard.deepseek.test": "Test key",
+  "searchCard.deepseek.testing": "Testing…",
+  "searchCard.deepseek.testOk": "Key works ({ms} ms)",
+
+  /** CR-09: custom search source (template + endpoint + field mapping). */
+  "searchCard.custom.template": "Protocol template",
+  "searchCard.custom.templateMoonshot": "Kimi (Moonshot)",
+  "searchCard.custom.templateGeneric": "Generic",
+  "searchCard.custom.baseUrlAria": "Custom search base URL",
+  "searchCard.custom.baseUrlPlaceholder": "Paste the base URL from your provider",
+  "searchCard.custom.baseUrlHint":
+    "Root address only; endpoints are relative paths. Private IP literals are rejected; loopback is allowed.",
+  "searchCard.custom.keyAria": "Custom search API key",
+  "searchCard.custom.keyPlaceholder": "Only if the endpoint needs auth (optional)",
+  "searchCard.custom.searchPathAria": "Custom search endpoint",
+  "searchCard.custom.searchPathPlaceholder": "Blank = template default (/v1/tools/search)",
+  "searchCard.custom.fetchPathAria": "Custom fetch endpoint",
+  "searchCard.custom.fetchPathPlaceholder": "Blank = template default (/v1/tools/fetch)",
+  "searchCard.custom.fieldAria": "Results field path",
+  "searchCard.custom.fieldPlaceholder": "e.g. data.items",
+  "searchCard.custom.includeContent": "Search responses include full page bodies",
+  "searchCard.custom.keyRule": "Clear the field and save to remove the custom key.",
+  "searchCard.custom.note":
+    "The custom source only affects result cards and assistant web search; the research brief still uses DeepSeek. Field paths support only a.b / a[0].b.",
 
   "searchCard.general.title": "Shared parameters",
   "searchCard.status.saved": "Auto-saved",

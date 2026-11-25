@@ -7,6 +7,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AiTaskSnapshot, ResumeGenerateTask } from "../../types";
 import BackgroundTasksIndicator from "./BackgroundTasksIndicator";
@@ -117,7 +118,9 @@ describe("BackgroundTasksIndicator", () => {
   it("没有任务时整个入口不渲染", () => {
     const { container } = render(
       <AntdApp>
-        <BackgroundTasksIndicator />
+        <MemoryRouter>
+          <BackgroundTasksIndicator />
+        </MemoryRouter>
       </AntdApp>,
     );
     expect(container.querySelector(".background-tasks-button")).toBeNull();
@@ -128,7 +131,9 @@ describe("BackgroundTasksIndicator", () => {
 
     render(
       <AntdApp>
-        <BackgroundTasksIndicator />
+        <MemoryRouter>
+          <BackgroundTasksIndicator />
+        </MemoryRouter>
       </AntdApp>,
     );
     await openPanel();
@@ -149,7 +154,9 @@ describe("BackgroundTasksIndicator", () => {
 
     render(
       <AntdApp>
-        <BackgroundTasksIndicator />
+        <MemoryRouter>
+          <BackgroundTasksIndicator />
+        </MemoryRouter>
       </AntdApp>,
     );
     await openPanel();
@@ -169,7 +176,9 @@ describe("BackgroundTasksIndicator", () => {
 
     render(
       <AntdApp>
-        <BackgroundTasksIndicator />
+        <MemoryRouter>
+          <BackgroundTasksIndicator />
+        </MemoryRouter>
       </AntdApp>,
     );
     await openPanel();
@@ -190,7 +199,9 @@ describe("BackgroundTasksIndicator", () => {
 
     render(
       <AntdApp>
-        <BackgroundTasksIndicator />
+        <MemoryRouter>
+          <BackgroundTasksIndicator />
+        </MemoryRouter>
       </AntdApp>,
     );
     await openPanel();

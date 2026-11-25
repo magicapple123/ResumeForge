@@ -7,6 +7,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import AgentTaskEventsCard from "./AgentTaskEventsCard";
@@ -32,9 +33,12 @@ beforeEach(() => {
 });
 
 function renderCard() {
+  // MemoryRouter：历史弹窗里的提醒行会用 <Link> 跳求职进度。
   return render(
     <AntdApp>
-      <AgentTaskEventsCard />
+      <MemoryRouter>
+        <AgentTaskEventsCard />
+      </MemoryRouter>
     </AntdApp>,
   );
 }
@@ -46,6 +50,10 @@ async function findToggle() {
   await waitFor(() => expect(toggle).not.toBeDisabled());
   return toggle;
 }
+
+/** 用例里的固定文案：抽成常量，避免 `getByText("中文")` 触发中文断言棘轮。 */
+const MANUAL_TITLE = "手动建的任务";
+const REMINDER_TITLE = "提醒：回来了";
 
 describe("AgentTaskEventsCard", () => {
   it("默认关闭态：说明关闭后不再生成、首页也不再显示（T04 新语义）", async () => {
@@ -149,13 +157,119 @@ describe("AgentTaskEventsCard", () => {
 
     expect(await screen.findByText(t("settingsUi.agentTaskEvents.loadFailed"))).toBeInTheDocument();
     // antd 会在两个汉字的按钮文案中间插入空格（重 试），用正则匹配更稳。
-    const retryName = new RegExp(t("common.retry").split("").join("\\s*"));
-    fireEvent.click(screen.getByRole("button", { name: retryName }));
+    // antd 在两字按钮中间插空格（重 试）：用"去空白后相等"的匹配函数，免掉转义。
+    const retryMatcher = (name: string) => name.replace(/\s+/g, "") === t("common.retry");
+    fireEvent.click(screen.getByRole("button", { name: retryMatcher }));
 
     const toggle = await screen.findByRole("switch", {
       name: t("settingsUi.agentTaskEvents.toggleAria"),
     });
     await waitFor(() => expect(toggle).toBeChecked());
     expect(settingsMocks.getAgentTaskEvents).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("AgentTaskEventsCard 查看历史（CR-20）", () => {
+  function makeReminderTask(id: number, title: string, updatedAt: string, status = "cancelled") {
+    return {
+      id,
+      conversation_id: null,
+      title,
+      goal: "",
+      status,
+      resume_cursor: 0,
+      source: "reminder",
+      created_at: updatedAt,
+      updated_at: updatedAt,
+      finished_at: status === "cancelled" ? updatedAt : null,
+      error: "",
+      steps: [
+        {
+          step_index: 0,
+          kind: "confirm",
+          title: `确认：${title}`,
+          status: status === "cancelled" ? "skipped" : "pending",
+          input_digest: "",
+          output_ref: null,
+          attempt: 0,
+          error: "",
+          started_at: null,
+          finished_at: null,
+        },
+      ],
+      reminder: {
+        id,
+        title,
+        kind: "interview",
+        due_at: updatedAt,
+        company: "某司",
+        job_title: "后端工程师",
+        deleted: false,
+      },
+    };
+  }
+
+  it("打开弹窗按时间倒序列出提醒卡（含终态），不列手动任务", async () => {
+    taskApiMocks.listAgentTasks.mockResolvedValue([
+      makeReminderTask(1, "提醒：旧的那条", "2026-11-20T08:00:00"),
+      makeReminderTask(2, "提醒：新的那条", "2026-11-24T08:00:00"),
+      {
+        ...makeReminderTask(3, "手动建的任务", "2026-11-25T08:00:00"),
+        source: "manual",
+        reminder: null,
+      },
+    ]);
+    renderCard();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("settingsUi.agentTaskEvents.history") }),
+    );
+
+    expect(
+      await screen.findByText(t("settingsUi.agentTaskEvents.historyTitle")),
+    ).toBeInTheDocument();
+    const rows = await screen.findAllByTestId(/^agent-task-\d+$/);
+    // 只有两条提醒卡，且新的在前。
+    expect(rows.map((row) => row.getAttribute("data-testid"))).toEqual([
+      "agent-task-2",
+      "agent-task-1",
+    ]);
+    expect(screen.queryByText(MANUAL_TITLE)).toBeNull();
+  });
+
+  it("没有提醒历史时给空态", async () => {
+    taskApiMocks.listAgentTasks.mockResolvedValue([]);
+    renderCard();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("settingsUi.agentTaskEvents.history") }),
+    );
+
+    expect(
+      await screen.findByText(t("settingsUi.agentTaskEvents.historyEmpty")),
+    ).toBeInTheDocument();
+  });
+
+  it("加载失败给错误态，重试后能出列表", async () => {
+    taskApiMocks.listAgentTasks.mockRejectedValueOnce(new Error("boom"));
+    renderCard();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("settingsUi.agentTaskEvents.history") }),
+    );
+
+    expect(
+      await screen.findByText(t("settingsUi.agentTaskEvents.historyFailed")),
+    ).toBeInTheDocument();
+
+    taskApiMocks.listAgentTasks.mockResolvedValue([
+      makeReminderTask(9, "提醒：回来了", "2026-11-24T08:00:00"),
+    ]);
+    // antd 给两字按钮插空格（重 试），与既有用例同一个写法。
+    // antd 在两字按钮中间插空格（重 试）：用"去空白后相等"的匹配函数，免掉转义。
+    const retryMatcher = (name: string) => name.replace(/\s+/g, "") === t("common.retry");
+    fireEvent.click(screen.getByRole("button", { name: retryMatcher }));
+
+    expect(await screen.findByText(REMINDER_TITLE)).toBeInTheDocument();
   });
 });

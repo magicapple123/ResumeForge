@@ -9,6 +9,58 @@
 const HIGHLIGHT_CLASS = "settings-card-target";
 const HIGHLIGHT_MS = 2000;
 
+/** 回顶时给内容区上沿留的余量，与 `.settings-body` 的 `scroll-margin-top` 同一个值。 */
+export const SETTINGS_SCROLL_MARGIN = 16;
+
+/**
+ * 切组时要不要把内容区滚回顶部。
+ *
+ * 只有"内容顶已经滚出视口"才需要：`bodyTop` 是内容区顶边在**滚动内容坐标系**里的位置，
+ * `margin` 是上沿余量。滚了不到一屏（0 / 50px）就回顶会让页面像被弹了一下——这正是
+ * CR-15 报的"切组跳动"，而 `scrollIntoView` 无条件调用是它的来源。
+ */
+export function shouldResetScroll(scrollTop: number, bodyTop: number, margin: number): boolean {
+  if (!Number.isFinite(scrollTop) || !Number.isFinite(bodyTop)) return false;
+  if (scrollTop <= 0) return false;
+  return scrollTop > Math.max(0, bodyTop - margin);
+}
+
+/** 找到真正滚动的祖先（`.app-content` 一类）；找不到时返回 null，交给调用方决定。 */
+function findScrollParent(node: HTMLElement): HTMLElement | null {
+  let parent = node.parentElement;
+  while (parent !== null && parent !== document.body) {
+    const overflowY = window.getComputedStyle(parent).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") return parent;
+    parent = parent.parentElement;
+  }
+  return null;
+}
+
+/**
+ * 内容区顶边相对滚动容器的偏移。用 rect 差 + 当前 scrollTop 算，
+ * 不依赖 `offsetTop`（它在有定位祖先时会算错，jsdom 里也恒为 0）。
+ */
+function offsetWithin(node: HTMLElement, scroller: HTMLElement): number {
+  const delta = node.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+  return delta + scroller.scrollTop;
+}
+
+/**
+ * 切组时把内容区滚回顶部——**只在需要时**。返回是否真的滚了，便于测试与兜底判断。
+ *
+ * 直接写 `scrollTop` 而不是 `scrollTo({behavior:"smooth"})`：切组本身是一次页面切换，
+ * 平滑滚动会让"新一组"从屏幕外滑进来，比跳一下更晃眼。
+ */
+export function scrollSettingsToTop(node: HTMLElement | null): boolean {
+  if (node === null) return false;
+  const scroller = findScrollParent(node);
+  if (scroller === null) return false;
+  const bodyTop = offsetWithin(node, scroller);
+  if (!shouldResetScroll(scroller.scrollTop, bodyTop, SETTINGS_SCROLL_MARGIN)) return false;
+  scroller.scrollTop = Math.max(0, bodyTop - SETTINGS_SCROLL_MARGIN);
+  return true;
+}
+
 /** 卡片的标题节点 → 整张卡；`Typography.Title` / 按钮这类非 Card 块退回自身。 */
 function findSettingsCard(title: string): HTMLElement | null {
   // 只搜当前可见的那一组：非活动组仍留在 DOM 里（保留各自的取数状态），

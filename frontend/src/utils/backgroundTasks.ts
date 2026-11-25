@@ -48,8 +48,10 @@ import {
   persistRemoveTask,
   readPersistedEntries,
 } from "./backgroundTasks.persist";
+import { notifyRestoredTerminals, type RestoredTerminal } from "./backgroundTaskRestoreNotice";
 import { notifyTaskDone } from "./taskNotify";
-import { isDocumentHidden, onVisibilityChange } from "./visibility";
+import { notifyBackgroundTaskDone } from "./taskNotification";
+import { HIDDEN_AI_POLL_MS, startVisibilityPolling } from "./visibility";
 
 export type {
   BackgroundTask,
@@ -67,7 +69,7 @@ const finishHandlers = new Map<string, (task: BackgroundTask) => void>();
 /** 哪些任务当前"有界面在看"，决定完成时是右上角卡片还是居中弹窗。 */
 const attached = new Set<string>();
 const listeners = new Set<BackgroundTaskListener>();
-let timer: number | null = null;
+let stopPolling: (() => void) | null = null;
 
 // 快照必须有稳定的引用：`useSyncExternalStore` 用 `Object.is` 比较前后值，
 // 每次返回新数组会被判成"一直在变"，于是组件无限重渲染（真实踩到过
@@ -90,26 +92,20 @@ function emit(): void {
 }
 
 function stopPollingIfIdle(): void {
-  if (tasks.size > 0 || timer === null) return;
-  window.clearInterval(timer);
-  timer = null;
+  if (tasks.size > 0 || stopPolling === null) return;
+  stopPolling();
+  stopPolling = null;
 }
 
 function ensurePolling(): void {
-  if (timer !== null || typeof window === "undefined") return;
-  timer = window.setInterval(() => {
-    // 页面在后台时跳过本轮：标签页不可见时秒级轮询纯属浪费；
-    // 回到前台由下面的 visibilitychange 订阅立即补一次。
-    if (isDocumentHidden()) return;
-    void tick();
-  }, POLL_INTERVAL_MS);
+  if (stopPolling !== null || typeof window === "undefined") return;
+  // CR-23：隐藏窗口不再跳过轮询，而是降频到 10s；恢复可见立即补一轮。
+  stopPolling = startVisibilityPolling({
+    visibleIntervalMs: POLL_INTERVAL_MS,
+    hiddenIntervalMs: HIDDEN_AI_POLL_MS,
+    onTick: tick,
+  });
 }
-
-// 回到前台立即补一轮：隐藏期间 interval 被跳过，进度不该等下一个 1.5s。
-// 模块级单例与页面同生命周期，无需退订。
-onVisibilityChange(() => {
-  if (!isDocumentHidden() && tasks.size > 0) void tick();
-});
 
 async function tick(): Promise<void> {
   if (tasks.size === 0) {
@@ -215,12 +211,27 @@ function finish(key: string, task: BackgroundTask): void {
       // 深链让"跑完了"这件事可点：直接落到这条记录上，而不是把用户丢到列表页再自己找。
       deepLink: task.deepLink,
       viewLabel: notices.viewLabel,
+      // CR-25：同时落通知中心（窗口不在也能补看）；任务 key 就是这件事的幂等键。
+      dedupeKey: `background:${task.key}`,
+    });
+    // CR-24：桌面壳里再走一条系统通知（主进程按"聚焦且可见"过滤，不会双响）。
+    notifyBackgroundTaskDone({
+      title: notices.doneTitle,
+      body: notices.doneDescription,
+      deepLink: task.deepLink,
+      dedupeKey: `background:${task.key}`,
     });
   } else if (task.status === "failed") {
     notifyTaskDone({
       kind: "error",
       title: notices.failedTitle,
       description: task.error || notices.failedDescription,
+      dedupeKey: `background:${task.key}:failed`,
+    });
+    notifyBackgroundTaskDone({
+      title: notices.failedTitle,
+      body: task.error || notices.failedDescription,
+      dedupeKey: `background:${task.key}:failed`,
     });
   } else {
     notifyTaskDone({ kind: "warning", title: notices.cancelledTitle });
@@ -375,8 +386,11 @@ export function resetBackgroundTasks(): void {
   emit();
 }
 
-/** 刷新后恢复单条持久化条目；返回是否需要继续（无返回值，失败静默）。 */
-async function restoreEntry(entry: PersistedTaskEntry): Promise<void> {
+/** 刷新后恢复单条持久化条目；终态只登记到 `terminals`，由调用方统一提醒（CR-25）。 */
+async function restoreEntry(
+  entry: PersistedTaskEntry,
+  terminals: RestoredTerminal[],
+): Promise<void> {
   // 旧条目没有 kind（本字段是随第二种任务一起引入的）：按简历生成处理。
   const kind = entry.kind ?? "resume_generate";
   const adapter: BackgroundTaskAdapter | null = getBackgroundTaskAdapter(kind);
@@ -389,12 +403,12 @@ async function restoreEntry(entry: PersistedTaskEntry): Promise<void> {
     if (latest.status === "completed") {
       persistRemoveTask(kind, entry.taskId);
       const notices = adapter.notices();
-      notifyTaskDone({
-        modal: true,
+      terminals.push({
+        taskKey: backgroundTaskKey(kind, entry.taskId),
+        status: "completed",
         title: notices.doneTitle,
         description: notices.restoredDescription ?? notices.doneDescription,
-        confirmLabel: t("backgroundTasks.confirm.gotIt"),
-        deepLink: latest.deepLink,
+        deepLink: latest.deepLink ?? null,
         viewLabel: notices.viewLabel,
       });
       return;
@@ -402,10 +416,13 @@ async function restoreEntry(entry: PersistedTaskEntry): Promise<void> {
     if (latest.status === "failed") {
       persistRemoveTask(kind, entry.taskId);
       const notices = adapter.notices();
-      notifyTaskDone({
-        kind: "error",
+      terminals.push({
+        taskKey: backgroundTaskKey(kind, entry.taskId),
+        status: "failed",
         title: notices.failedTitle,
         description: latest.error || notices.failedDescription,
+        deepLink: null,
+        viewLabel: notices.viewLabel,
       });
       return;
     }
@@ -455,8 +472,11 @@ async function restoreActiveAiTasks(): Promise<void> {
  */
 export async function restoreBackgroundTasks(): Promise<void> {
   const entries = readPersistedEntries();
+  const terminals: RestoredTerminal[] = [];
   if (entries.length > 0) {
-    await Promise.all(entries.map((entry) => restoreEntry(entry)));
+    await Promise.all(entries.map((entry) => restoreEntry(entry, terminals)));
   }
+  // 恢复是并发查的：先收齐再提醒，多条终态合并成一条（CR-25，见 notifyRestoredTerminals）。
+  notifyRestoredTerminals(terminals);
   await restoreActiveAiTasks();
 }

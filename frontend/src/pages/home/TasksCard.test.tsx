@@ -6,7 +6,7 @@
  * 关掉总开关时**不请求任务列表、也不渲染卡片**；空壳任务既不显示也不计入计数。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentTask, AgentTaskStatus, AgentTaskStepStatus } from "../../api/agentTasks";
 import { t } from "../../i18n";
@@ -143,9 +143,9 @@ describe("TasksCard", () => {
     expect(screen.queryByRole("button", { name: t("tasksCard.more", { count: 2 }) })).toBeNull();
   });
 
-  it("未结束任务合计最多 3 条，超出收成「还有 N 条」（D2）", async () => {
+  it("「任务」卡进行中最多 3 条，超出收成「还有 N 条」（D2）", async () => {
     taskApiMocks.listAgentTasks.mockResolvedValue([
-      makeTask(1, "waiting_approval"),
+      makeTask(1, "running"),
       makeTask(2, "running"),
       makeTask(3, "running"),
       makeTask(4, "running"),
@@ -161,15 +161,83 @@ describe("TasksCard", () => {
     expect(screen.getByTestId("agent-task-5")).toBeTruthy();
   });
 
-  it("已结束(N) 默认收起，展开能看到最近的（D3/D4 不记忆）", async () => {
+  it("已结束任务不上首页（CR-19：两张卡都只显示未结束）", async () => {
     taskApiMocks.listAgentTasks.mockResolvedValue([makeTask(1, "running"), makeTask(2, "done")]);
     renderCard();
 
     expect(await screen.findByTestId("agent-task-1")).toBeTruthy();
     expect(screen.queryByTestId("agent-task-2")).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: t("tasksCard.finishedCount", { count: 1 }) }),
-    );
-    expect(screen.getByTestId("agent-task-2")).toBeTruthy();
+    // 旧的「已结束(N)」折叠入口一并退场。
+    expect(
+      screen.queryByRole("button", { name: t("tasksCard.finishedCount", { count: 1 }) }),
+    ).toBeNull();
+  });
+});
+
+/**
+ * CR-19：待确认与任务**分家**。
+ *
+ * - 「待你确认」只放 waiting_approval，且不设上限（藏起来等于替用户漏掉决定）；
+ * - 「任务」只放进行中，副标题写清是「助手创建的多步任务」，并过滤跟进巡检卡。
+ */
+describe("TasksCard 拆成两张卡（CR-19）", () => {
+  function cardOf(title: string): HTMLElement {
+    const heading = screen.getByText(title);
+    const card = heading.closest(".ant-card");
+    expect(card).not.toBeNull();
+    return card as HTMLElement;
+  }
+
+  it("waiting_approval 进「待你确认」，进行中进「任务」", async () => {
+    taskApiMocks.listAgentTasks.mockResolvedValue([
+      makeTask(1, "waiting_approval"),
+      makeTask(2, "running"),
+    ]);
+    renderCard();
+
+    await screen.findByTestId("agent-task-1");
+    const confirm = cardOf(t("tasksCard.confirmTitle"));
+    const tasks = cardOf(t("tasksCard.title"));
+    expect(within(confirm).getByTestId("agent-task-1")).toBeTruthy();
+    expect(within(confirm).queryByTestId("agent-task-2")).toBeNull();
+    expect(within(tasks).getByTestId("agent-task-2")).toBeTruthy();
+    expect(within(tasks).queryByTestId("agent-task-1")).toBeNull();
+  });
+
+  it("「待你确认」不设条数上限：4 条待确认全部显示", async () => {
+    taskApiMocks.listAgentTasks.mockResolvedValue([
+      makeTask(1, "waiting_approval"),
+      makeTask(2, "waiting_approval"),
+      makeTask(3, "waiting_approval"),
+      makeTask(4, "waiting_approval"),
+    ]);
+    renderCard();
+
+    await screen.findByTestId("agent-task-1");
+    for (const id of [1, 2, 3, 4]) {
+      expect(screen.getByTestId(`agent-task-${id}`)).toBeTruthy();
+    }
+    expect(screen.queryByRole("button", { name: t("tasksCard.more", { count: 1 }) })).toBeNull();
+  });
+
+  it("跟进巡检卡不进「任务」卡（源 followup）", async () => {
+    // 带一个步骤：确保它不是被 D5「空壳任务」过滤掉的，而是被 CR-19 的来源过滤挡住。
+    const followup = { ...makeTask(7, "draft"), source: "followup" };
+    taskApiMocks.listAgentTasks.mockResolvedValue([makeTask(2, "running"), followup]);
+    renderCard();
+
+    await screen.findByTestId("agent-task-2");
+    expect(screen.queryByTestId("agent-task-7")).toBeNull();
+  });
+
+  it("只有跟进巡检卡时两张卡都不渲染（不进「待你确认」也不进「任务」）", async () => {
+    taskApiMocks.listAgentTasks.mockResolvedValue([
+      { ...makeTask(7, "draft"), source: "followup" },
+    ]);
+    renderCard();
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByText(t("tasksCard.title"))).toBeNull();
+    expect(screen.queryByText(t("tasksCard.confirmTitle"))).toBeNull();
   });
 });

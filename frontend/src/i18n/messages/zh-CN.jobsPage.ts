@@ -58,6 +58,13 @@ const jobsPage = {
   "jobsPage.filter.sourceCollected": "自动采集",
   "jobsPage.filter.sourceManual": "手动添加",
 
+  // ── 数据完整度筛选（CR-36）：缺公司 + 缺薪资 + 无来源链接 ──
+  "jobsPage.completeness.label": "只看缺公司/缺薪资/无链接",
+  "jobsPage.completeness.hint":
+    "公司、薪资、来源链接都为空的岗位（多为采集失败留下的空壳）。只筛出来给你看，不会自动删；勾选后走批量删除，删掉的可在回收站恢复。",
+  "jobsPage.completeness.count": "{count} 条可疑",
+  "jobsPage.completeness.counting": "统计中…",
+
   // ── 批量动作的提示（useJobBatchActions） ────────────────
   "jobsPage.batch.needSelection": "请先选择岗位",
   "jobsPage.batch.needStatus": "请选择要设置的状态",

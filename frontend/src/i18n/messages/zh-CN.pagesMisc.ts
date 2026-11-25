@@ -37,7 +37,7 @@ const pagesMisc = {
     "眼下没有待办。可以去「岗位广场」收几个岗位，或到「求职助手」聊聊下一步。",
   /** 待办一：未核实的主张条数。 */
   "pagesMisc.homePage.todo.claims.text": "有 {count} 条事实还没核实",
-  "pagesMisc.homePage.todo.claims.hint": "没核实的主张不能进正式简历，导出时会被拦下",
+  "pagesMisc.homePage.todo.claims.hint": "未核实的主张会在导出前提示你核对",
   /** 待办二：投递队列里的岗位条数。 */
   "pagesMisc.homePage.todo.queue.text": "投递队列里有 {count} 个岗位在等",
   "pagesMisc.homePage.todo.queue.hint": "排好队、启动浏览器就能投",

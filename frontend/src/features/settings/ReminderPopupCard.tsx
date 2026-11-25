@@ -10,7 +10,6 @@ import { App, Card, Flex, Space, Switch, Typography } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { useCallback, useEffect, useState } from "react";
 import { getReminderPopupSetting, saveReminderPopupSetting } from "../../api/settings";
-import { isSoundEnabled, playDoneSound, setSoundEnabled } from "../../utils/notifySound";
 import SettingsResetButton from "./SettingsResetButton";
 import { useSettingsResetListener } from "./useSettingsResetListener";
 import { t } from "../../i18n";
@@ -20,7 +19,7 @@ import { useLocale } from "../../i18n/i18nContext";
  * I-10：这张卡能恢复默认的键。
  *
  * `ui` 作用域还包含导航可见性与悬浮球（各自在别的卡上），所以按 keys 精确复位本卡这一个
- * 键。完成提示音存在浏览器本地（不是设置项），重置不碰它——那属于"这台机器响不响"。
+ * 键。完成提示音已并入「通知」分组（CR-29，落库为 notify_sound），不在本卡复位范围。
  */
 const REMINDER_RESET_KEYS = ["reminder_popup_on_start"];
 
@@ -30,9 +29,6 @@ export default function ReminderPopupCard() {
   const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  // 完成提示音：存在浏览器本地（它是一个"这台机器上要不要响"的偏好，不占用户的数据表）。
-  // Compiler 规范：本地偏好的初始读取用 useState 惰性初始化，替代挂载 effect。
-  const [sound, setSound] = useState(() => isSoundEnabled());
 
   // 纯取数（不含 loading 收尾）：挂载与「恢复默认」后共用，避免两处口径漂移。
   const load = useCallback(async () => {
@@ -80,13 +76,6 @@ export default function ReminderPopupCard() {
     }
   };
 
-  const toggleSound = (checked: boolean) => {
-    setSound(checked);
-    setSoundEnabled(checked);
-    // 打开时立刻响一声，用户能当场确认声音是什么样（也顺便解锁浏览器的音频权限）。
-    if (checked) playDoneSound();
-  };
-
   return (
     <Card
       title={
@@ -114,22 +103,6 @@ export default function ReminderPopupCard() {
           <Typography.Text type="secondary">{t("settingsUi.switch.defaultOnHint")}</Typography.Text>
         </Space>
       </LoadingBlock>
-
-      <Typography.Paragraph type="secondary" style={{ margin: "20px 0 12px" }}>
-        {t("settingsUi.reminderPopup.soundIntro")}
-      </Typography.Paragraph>
-      <Space orientation="vertical" size={4}>
-        <Switch
-          checked={sound}
-          checkedChildren={t("settingsUi.switch.on")}
-          unCheckedChildren={t("settingsUi.switch.off")}
-          aria-label={t("settingsUi.reminderPopup.soundAria")}
-          onChange={toggleSound}
-        />
-        <Typography.Text type="secondary">
-          {t("settingsUi.reminderPopup.soundHint")}
-        </Typography.Text>
-      </Space>
     </Card>
   );
 }

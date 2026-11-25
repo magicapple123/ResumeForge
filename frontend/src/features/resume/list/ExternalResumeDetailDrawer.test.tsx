@@ -73,13 +73,16 @@ afterEach(() => {
 });
 
 describe("ExternalResumeDetailDrawer", () => {
-  it("原件视图：PDF 直接嵌 iframe 预览", async () => {
+  it("原件视图：PDF 直接嵌 iframe，按整页宽度铺满可用高度", async () => {
     renderDrawer(7);
 
     await waitFor(() => {
       const frame = document.querySelector("iframe");
       expect(frame).not.toBeNull();
-      expect(frame?.getAttribute("src")).toBe("/api/external-resumes/7/file");
+      // CR-16：`#view=FitV` 让 Chromium 内置 PDF 阅读器按视口宽度铺满，而不是缩成默认比例。
+      expect(frame?.getAttribute("src")).toBe("/api/external-resumes/7/file#view=FitV");
+      // 高度交给 flex 链（Drawer body → Tabs → tabpane → iframe），固定 560px 会留白。
+      expect(frame?.style.height).toBe("100%");
     });
   });
 

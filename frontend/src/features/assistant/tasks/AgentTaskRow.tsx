@@ -23,7 +23,9 @@ import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import FollowupCard from "../../followup/FollowupCard";
 import { isFollowupTask } from "../../followup/followupDecisions";
+import ReminderTaskRow from "./ReminderTaskRow";
 import {
+  AGENT_TASK_SOURCE_REMINDER,
   STATUS_LABEL_KEYS,
   STATUS_TAG_COLORS,
   STEP_STATUS_LABEL_KEYS,
@@ -54,6 +56,11 @@ export default function AgentTaskRow({
   onPause,
 }: Props) {
   useLocale();
+  // 提醒到期卡（CR-20）：只有一个确认步骤，交给专门行——不显示进度与步骤折叠，
+  // 未结束时「知道了」= 取消这张卡（提醒本身不受影响）。
+  if ((task.source || "").trim() === AGENT_TASK_SOURCE_REMINDER) {
+    return <ReminderTaskRow task={task} onAcknowledge={onCancel} />;
+  }
   // 跟进巡检卡：整行交给 FollowupCard（决策按钮 + 整卡提交），不渲染通用任务动作。
   if (isFollowupTask(task)) {
     return (
@@ -176,7 +183,20 @@ export default function AgentTaskRow({
             return (
               <li key={step.step_index} data-current-step={isCurrent || undefined}>
                 <Typography.Text type="secondary">{step.step_index + 1}. </Typography.Text>
-                <Typography.Text strong={isCurrent}>{step.title}</Typography.Text>
+                {/* CR-19：步骤指向的岗位给一个出口，新标签打开以免打断当前任务。
+                    链接参数是 `job_id`（后端从 `track_id` 批查询补出），补不出来就只显示文字。 */}
+                {step.job_id ? (
+                  <a
+                    href={`/tracker?job_id=${step.job_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid={`agent-task-step-job-${task.id}-${step.step_index}`}
+                  >
+                    <Typography.Text strong={isCurrent}>{step.title}</Typography.Text>
+                  </a>
+                ) : (
+                  <Typography.Text strong={isCurrent}>{step.title}</Typography.Text>
+                )}
                 {isCurrent ? (
                   <Tag
                     color="processing"

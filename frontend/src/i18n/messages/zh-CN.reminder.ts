@@ -76,6 +76,33 @@ const reminder = {
   "reminder.detail.updatedAt": "更新时间",
   "reminder.action.markDone": "标记完成",
   "reminder.action.edit": "编辑",
+
+  /** 计划状态（CR-28）：`status` 收窄为 active/archived 后列表与月历的短名。 */
+  "reminder.status.active": "待办",
+  "reminder.status.archived": "已结束",
+
+  /** 重复规则（CR-28）：none=单次；until 为空表示一直重复。 */
+  "reminder.field.recurrence": "重复",
+  "reminder.recurrence.none": "不重复",
+  "reminder.recurrence.daily": "每天",
+  "reminder.recurrence.weekly": "每周",
+  "reminder.recurrence.monthly": "每月",
+  "reminder.field.recurrenceUntil": "重复结束时间（选填）",
+  "reminder.hint.recurrenceUntil": "不填就会一直重复；到这天之后不再生成下一次",
+  "reminder.required.recurrenceUntil": "结束时间需要晚于这次提醒的时间",
+
+  /** 稍后提醒（CR-28）：预设按本机时区在后端解析，前端只发预设名。 */
+  "reminder.snooze.action": "稍后",
+  "reminder.snooze.oneHour": "1 小时后",
+  "reminder.snooze.tonight": "今晚 20:00",
+  "reminder.snooze.tomorrowMorning": "明早 9:00",
+  "reminder.snooze.custom": "自定义时间…",
+  "reminder.snooze.customTitle": "稍后提醒到",
+  "reminder.snooze.toast": "已推迟到 {time}",
+  "reminder.snooze.failed": "推迟失败",
+
+  /** 标完成后的结果提示：单次提醒结束、重复提醒已排下一次。 */
+  "reminder.toast.doneNext": "已完成，下一次是 {time}",
 } as const;
 
 export default reminder;

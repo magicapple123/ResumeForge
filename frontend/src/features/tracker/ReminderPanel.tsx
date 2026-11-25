@@ -18,7 +18,13 @@ import LoadingBlock from "../../components/common/LoadingBlock";
 import { useClientPagination } from "../../hooks/useClientPagination";
 import dayjs from "dayjs";
 import { useCallback, useEffect, useState } from "react";
-import { createReminder, deleteReminder, listReminders, updateReminder } from "../../api/reminders";
+import {
+  createReminder,
+  deleteReminder,
+  listReminders,
+  snoozeReminder,
+  updateReminder,
+} from "../../api/reminders";
 import { getAgentTaskEvents } from "../../api/settings";
 import {
   useJobSearchSelect,
@@ -26,7 +32,7 @@ import {
   useTrackSearchSelect,
 } from "../../hooks/remoteSearchOptions";
 import { REMINDER_KINDS } from "../../types";
-import type { Reminder, ReminderKind } from "../../types";
+import type { Reminder, ReminderKind, ReminderSnoozePayload } from "../../types";
 import { LISTY_ITEM_PADDING_DEFAULT } from "../../components/common/listyPadding";
 import type { RowActionItem } from "../../components/common/RowActions";
 import BatchActionBar from "../../components/common/BatchActionBar";
@@ -45,6 +51,7 @@ import type { ReminderTimeRange } from "./reminderTimeRange";
 import { t } from "../../i18n";
 import { REMINDER_KIND_LABEL_KEYS } from "../../i18n/enum/reminder";
 import { useLocale } from "../../i18n/i18nContext";
+import { formatDateTime } from "../../utils/format";
 
 export default function ReminderPanel() {
   useLocale();
@@ -132,7 +139,7 @@ export default function ReminderPanel() {
     setEditing(null);
     form.resetFields();
     // 每次打开都重置到"未来 1 小时后"（T05：默认值本身必须合法，不能是此刻）。
-    form.setFieldsValue({ kind: "other", remind_at: defaultRemindAt() });
+    form.setFieldsValue({ kind: "other", remind_at: defaultRemindAt(), recurrence: "none" });
     // 每次打开都重置一次候选列表（P0-1）：远程搜索结果随上次输入残留。
     void trackSelect.reload();
     void jobSelect.reload();
@@ -146,6 +153,8 @@ export default function ReminderPanel() {
       title: item.title,
       remind_at: dayjs(item.remind_at),
       kind: item.kind as ReminderKind,
+      recurrence: item.recurrence ?? "none",
+      recurrence_until: item.recurrence_until ? dayjs(item.recurrence_until) : null,
       note: item.note,
       track_id: item.track_id ?? undefined,
       job_id: item.job_id ?? undefined,
@@ -177,6 +186,8 @@ export default function ReminderPanel() {
       title: values.title,
       remind_at: values.remind_at.toISOString(),
       kind: values.kind,
+      recurrence: values.recurrence ?? "none",
+      recurrence_until: values.recurrence_until ? values.recurrence_until.toISOString() : null,
       note: values.note ?? "",
       track_id: values.track_id ?? null,
       job_id: values.job_id ?? null,
@@ -197,11 +208,29 @@ export default function ReminderPanel() {
 
   const setStatus = async (item: Reminder, status: "done" | "dismissed") => {
     try {
-      await updateReminder(item.id, { status });
-      message.success(status === "done" ? t("reminder.toast.done") : t("reminder.toast.ignored"));
+      const saved = await updateReminder(item.id, { status });
+      if (status !== "done") {
+        message.success(t("reminder.toast.ignored"));
+      } else if (saved.status === "active") {
+        // 重复提醒：这一次完成、下一次已排好，直接告诉用户下一次是什么时候。
+        message.success(t("reminder.toast.doneNext", { time: formatDateTime(saved.remind_at) }));
+      } else {
+        message.success(t("reminder.toast.done"));
+      }
       await loadList();
     } catch (error) {
       message.error(error instanceof Error ? error.message : t("reminder.toast.updateFailed"));
+    }
+  };
+
+  /** 稍后（CR-28）：只推后"这一次"的到期时刻，成功后刷新列表时间列。 */
+  const snooze = async (item: Reminder, payload: ReminderSnoozePayload) => {
+    try {
+      const saved = await snoozeReminder(item.id, payload);
+      message.success(t("reminder.snooze.toast", { time: formatDateTime(saved.remind_at) }));
+      await loadList();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t("reminder.snooze.failed"));
     }
   };
 
@@ -362,6 +391,7 @@ export default function ReminderPanel() {
                 onEdit={openEdit}
                 onRemove={(target) => void remove(target)}
                 onStatus={(target, status) => void setStatus(target, status)}
+                onSnooze={(target, payload) => snooze(target, payload)}
                 contextActions={contextActions}
               />
             )}

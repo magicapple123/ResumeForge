@@ -78,7 +78,9 @@ describe("ResumesPage 批量选择", () => {
 
   it("行右键菜单进入多选 → 勾 2 项 → 批量删除 → 确认 → 一次批量删除请求带全部 id（P2-2）", async () => {
     apiMocks.listResumes.mockResolvedValue({
-      items: [RESUME, { ...RESUME, id: 9, title: "另一份简历" }],
+      // 两份**不同岗位**的简历（其中一份是通用简历）：折叠视图只在同岗位多版本时出现，
+      // 这样本用例仍在平铺表格里验证行勾选与批量删除。
+      items: [RESUME, { ...RESUME, id: 9, title: "另一份简历", job_id: null, job_title: "" }],
       total: 2,
     });
     renderResumesPage();

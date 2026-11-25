@@ -19,6 +19,7 @@ import CandidateJobsDrawer from "../features/jobs/CandidateJobsDrawer";
 import { candidateToJobPayload } from "../features/jobs/candidate/candidatePayload";
 import { JobImportModal } from "../features/jobs/JobImportModal";
 import { ImportFromUrlLauncher } from "../features/jobs/ImportFromUrlLauncher";
+import JobCompletenessFilter from "../features/jobs/JobCompletenessFilter";
 import JobTable from "../features/jobs/JobTable";
 import ErrorState from "../components/common/ErrorState";
 import type { CandidateJobDetail, Job, JobList } from "../types";
@@ -56,6 +57,9 @@ export default function JobsPage() {
     setStatus,
     sourceKind,
     setSourceKind,
+    // 「数据完整度」筛选（CR-36）：只筛出来给人看，删除仍走既有勾选 + 批量软删（可撤销）。
+    incomplete,
+    setIncomplete,
     sortState,
     applySort,
     page,
@@ -230,6 +234,7 @@ export default function JobsPage() {
     jobType,
     status,
     sourceKind,
+    incompleteOnly: incomplete,
     sortState,
     setSelectedJobIds,
   });
@@ -292,6 +297,13 @@ export default function JobsPage() {
     getCheckboxProps: () => ({ disabled: batchAction !== null }),
   };
 
+  /** 「数据完整度」切换：换口径回第 1 页，并清掉跨口径的勾选（旧勾选可能不在新结果里）。 */
+  const toggleIncomplete = (next: boolean) => {
+    setIncomplete(next);
+    setPage(1);
+    setSelectedJobIds([]);
+  };
+
   return (
     <div>
       <JobFilterBar
@@ -320,6 +332,13 @@ export default function JobsPage() {
           changed: !isDefaultJobSort(sortState),
           onReset: () => applySort(DEFAULT_JOB_SORT_STATE),
         }}
+      />
+
+      <JobCompletenessFilter
+        checked={incomplete}
+        onChange={toggleIncomplete}
+        total={jobs?.total ?? 0}
+        loading={loading}
       />
 
       <BatchToolbar

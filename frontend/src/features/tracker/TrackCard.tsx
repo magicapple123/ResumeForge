@@ -25,6 +25,7 @@ import type { Track } from "../../types";
 import { FUNNEL_STATUSES, isActiveStatus } from "../../types";
 import { useRowActionMenu } from "../../components/common/rowActionMenu";
 import { safeExternalUrl } from "../../utils/externalUrl";
+import { formatServerTime } from "../../utils/serverTime";
 import { daysOverdue } from "./trackDates";
 
 interface Props {
@@ -78,6 +79,10 @@ export default function TrackCard({ track, onEdit, onDelete, groupStart = false 
   // 显示条件把外部关联也算进来：只看 resume_id 会让"外部简历"的行整段消失。
   const hasResume = Boolean(track.resume_id || track.external_resume_id || track.resume_title);
   const resume = hasResume ? resumeLabel(track) : "";
+  // CR-19：最近一次「已联系」的月-日（设备时区）。取不到/旧接口没这个字段时不显示。
+  const followUpDate = track.latest_followup
+    ? shortDate(formatServerTime(track.latest_followup, { dateOnly: true }))
+    : "";
   const className = [
     "track-card",
     isActiveStatus(track.status) ? "is-active" : "",
@@ -164,6 +169,13 @@ export default function TrackCard({ track, onEdit, onDelete, groupStart = false 
         {resume && (
           <span className="track-card-resume" title={resume}>
             {t("trackerUi.card.resume", { title: resume })}
+          </span>
+        )}
+        {/* CR-19：最近一次「已联系」跟进——从首页任务卡跳到 /tracker?job_id= 后，
+            用户要能一眼看到跟进痕迹。日期按设备时区显示（后端是 naive UTC）。 */}
+        {followUpDate && (
+          <span className="track-card-followup">
+            {t("trackerUi.card.followup", { date: followUpDate })}
           </span>
         )}
         {/* 依据：低频信息，并入元信息行尾部；`title` 保住被省略的全文。 */}

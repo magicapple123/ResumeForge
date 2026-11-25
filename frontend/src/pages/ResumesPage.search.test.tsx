@@ -71,6 +71,13 @@ const RESUME: ResumeBrief = {
   created_at: "2026-08-20T10:00:00",
 };
 
+const RESUME_TITLE_PREFIX = "简历";
+
+/** 造一批可区分的中文标题时只在这里写一次，断言侧不重复写中文字面量。 */
+function resumeTitle(index: number): string {
+  return [RESUME_TITLE_PREFIX, index].join(" ");
+}
+
 function renderPage(initialEntries: string[] = ["/resumes"]) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
@@ -163,20 +170,30 @@ describe("ResumesPage 关键词搜索防抖", () => {
   });
 
   it("防抖应用搜索时回到第 1 页（不留在旧的页码上）", async () => {
+    // 40 份**通用简历**（各自成组、不成栈）→ 平铺视图按 10 条/页分 4 页，
+    // 这样分页 current 才有第 2 页可失去。CR-33 之后列表先整批拉取再本地分页，
+    // 所以断言落在分页控件的当前页而不是请求参数上。
+    const items = Array.from({ length: 40 }, (_, index) => ({
+      ...RESUME,
+      id: index + 1,
+      title: resumeTitle(index + 1),
+      job_id: null,
+      job_title: "",
+    }));
+    apiMocks.listResumes.mockResolvedValue({ items, total: items.length });
+
     renderPage(["/resumes?page=2"]);
+    // 第 2 页显示第 11-20 条：先确认真的停在第 2 页。
+    await screen.findByText(resumeTitle(11));
     await waitFor(
-      () =>
-        expect(apiMocks.listResumes).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 })),
+      () => expect(document.querySelector(".ant-pagination-item-active")?.textContent).toBe("2"),
       { timeout: 3000 },
     );
 
     fireEvent.change(searchInput(), { target: { value: "制造" } });
 
     await waitFor(
-      () =>
-        expect(apiMocks.listResumes).toHaveBeenLastCalledWith(
-          expect.objectContaining({ keyword: "制造", page: 1 }),
-        ),
+      () => expect(document.querySelector(".ant-pagination-item-active")?.textContent).toBe("1"),
       { timeout: 3000 },
     );
   });

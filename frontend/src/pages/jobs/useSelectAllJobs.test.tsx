@@ -14,9 +14,11 @@ vi.mock("../../api/jobs", () => apiMocks);
 
 function Harness({
   keyword,
+  incompleteOnly = false,
   sortState = DEFAULT_JOB_SORT_STATE,
 }: {
   keyword: string;
+  incompleteOnly?: boolean;
   sortState?: JobSortState;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
@@ -25,6 +27,7 @@ function Harness({
     jobType: "",
     status: "",
     sourceKind: "",
+    incompleteOnly,
     sortState,
     setSelectedJobIds: (updater) => setSelected((prev) => updater(prev)),
   });
@@ -60,10 +63,29 @@ describe("useSelectAllJobs 代次守卫", () => {
         job_type: "",
         status: "",
         source_kind: undefined,
+        incomplete_only: undefined,
         sort: "title_asc",
         order: "desc",
       }),
     );
+  });
+
+  it("数据完整度筛选态下，全选只用筛选口径（CR-36）", async () => {
+    apiMocks.listJobIds.mockResolvedValue([36]);
+    render(
+      <AntdApp>
+        <Harness keyword="" incompleteOnly />
+      </AntdApp>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "全选全部" }));
+
+    await waitFor(() =>
+      expect(apiMocks.listJobIds).toHaveBeenCalledWith(
+        expect.objectContaining({ incomplete_only: true }),
+      ),
+    );
+    expect(screen.getByTestId("selected")).toHaveTextContent("36");
   });
 
   it("筛选未变时正常全选：ids 整体写入选择", async () => {

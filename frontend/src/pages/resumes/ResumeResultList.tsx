@@ -1,23 +1,53 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历中心的**结果列表**：宽档用表格，窄档（<1092）用卡片。
+ * 简历中心的**结果列表**：有分组数据时用「按岗位折叠」的表格（CR-33），否则退回
+ * 原来的宽档表格 / 窄档卡片。
  *
- * 为什么在这里切而不是在页面里：`ResumesPage` 已经 482 行、离 500 行预算只剩十几行，
- * 而"这一屏该用哪种形态"是一个纯粹的呈现判断。做成一层薄壳之后，页面只换一个组件名，
- * 两份实现共用同一组受控 props（分页/排序/批量选择/各入口都在页面里）。
- *
- * 阈值来自 `BREAKPOINTS.narrow`（1092）：在那之下表格要横滚 660px，读一条记录等于做一次
- * 定位；卡片是一行字 + 一组动作，触控目标也更大。
+ * 折叠视图刻意不分宽窄：它只有 4 列（岗位 / 最近更新 / 投递次数 / 操作），窄屏不需要
+ * 横滚 1494px。原来的两份视图保留，页面现在始终传 `groups`。
  */
 import type { ComponentProps } from "react";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { mqMax } from "../../theme/breakpoints";
+import type { ResumeGroup } from "../../features/resume/list/resumeGroups";
 import ResumeCardList from "./ResumeCardList";
+import ResumeGroupedTable from "./ResumeGroupedTable";
 import ResumeTable from "./ResumeTable";
 
-type Props = ComponentProps<typeof ResumeTable>;
+type BaseProps = ComponentProps<typeof ResumeTable>;
 
-export default function ResumeResultList(props: Props) {
+type Props = BaseProps & {
+  /** 折叠后的组（当前页）。传了就走折叠视图。 */
+  groups?: ResumeGroup[];
+  /** 折叠后的组总数（分页 total）。 */
+  totalGroups?: number;
+  expandedKeys?: string[];
+  setExpandedKeys?: (keys: string[]) => void;
+};
+
+export default function ResumeResultList({
+  groups,
+  totalGroups,
+  expandedKeys = [],
+  setExpandedKeys,
+  ...rest
+}: Props) {
   const narrow = useMediaQuery(mqMax("narrow"));
-  return narrow ? <ResumeCardList {...props} /> : <ResumeTable {...props} />;
+
+  // 只有真的出现「同一岗位多版本」时才折叠。没有可折叠的重复时，平铺表格信息更全
+  // （来源/模型/备注/美化拓展等列），也避免把单版本工作区换成一张更瘦的表。
+  const hasStackedGroup = (groups ?? []).some((group) => group.versionCount > 1);
+  if (groups && setExpandedKeys && hasStackedGroup) {
+    return (
+      <ResumeGroupedTable
+        {...rest}
+        groups={groups}
+        totalGroups={totalGroups ?? groups.length}
+        expandedKeys={expandedKeys}
+        setExpandedKeys={setExpandedKeys}
+      />
+    );
+  }
+
+  return narrow ? <ResumeCardList {...rest} /> : <ResumeTable {...rest} />;
 }

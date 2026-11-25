@@ -166,6 +166,26 @@ describe("HomePage", () => {
     expect(screen.queryByText("从零到第一份可交付简历")).toBeNull();
   });
 
+  it("真实数据集（22 份简历）下面板不出现；未核实主张降级为「接下来做什么」的一条（CR-34）", async () => {
+    apiMocks.getStats.mockResolvedValue({
+      ...EMPTY_STATS,
+      job_count: 18,
+      resume_count: 22,
+      claim_count: 40,
+      pending_claim_count: 3,
+      resume_with_job_count: 9,
+    });
+    renderPage();
+
+    // 面板退场：已经有简历的人不该再看到"从零到第一份交付"。
+    await screen.findByText(t("navigation.item.jobs"));
+    expect(screen.queryByText(t("activationUi.panel.title"))).toBeNull();
+    // 未核实事实仍在「接下来做什么」里单独提示（没有因为面板退场而被吞掉）。
+    expect(
+      screen.getByText(t("pagesMisc.homePage.todo.claims.text", { count: 3 })),
+    ).toBeInTheDocument();
+  });
+
   it("关键字段补全后资料步骤显示已完成（基于 /api/profile 真实字段，非接口外数据）", async () => {
     apiMocks.getStats.mockResolvedValue(EMPTY_STATS);
     profileApiMocks.getProfile.mockResolvedValue({
@@ -285,9 +305,9 @@ describe("HomePage", () => {
     expect(colors).toContain("var(--rf-danger)"); // overdue
     expect(new Set(colors).size).toBe(2);
 
-    // 点击提醒条目打开既有的提醒弹窗（只有弹窗才有「知道了」按钮）。
+    // 点击提醒条目打开既有的提醒弹窗（只有弹窗才有底部「关闭」按钮）。
     fireEvent.click(screen.getByLabelText("查看提醒：参加某司二面"));
-    expect(await screen.findByRole("button", { name: /知道了/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /关\s*闭/ })).toBeInTheDocument();
 
     // 弹窗每一行最左边的倒计时胶囊：文案由 `days_until` 按当前界面语言组合，
     // 不再直接渲染后端的中文 `due_label`。这里取语言包里的 today/tomorrow 对照，
@@ -388,8 +408,8 @@ describe("HomePage", () => {
     renderPage();
 
     expect(await screen.findByText("参加某司二面")).toBeInTheDocument();
-    // 弹窗出现：只有启动弹窗才有「知道了」按钮（卡片里没有）。
-    expect(await screen.findByRole("button", { name: /知道了/ })).toBeInTheDocument();
+    // 弹窗出现：只有启动弹窗才有底部「关闭」按钮（卡片里没有）。
+    expect(await screen.findByRole("button", { name: /关\s*闭/ })).toBeInTheDocument();
   });
 
   it("本 SPA 会话内只弹一次：切走再回首页不再弹", async () => {
@@ -423,7 +443,7 @@ describe("HomePage", () => {
       </MemoryRouter>,
     );
     // 首次进入：弹窗出现。
-    expect(await screen.findByRole("button", { name: /知道了/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /关\s*闭/ })).toBeInTheDocument();
 
     // 切走（卸载）再回首页（重新挂载）。
     first.unmount();
@@ -436,7 +456,7 @@ describe("HomePage", () => {
 
     // 第二次挂载：启动弹窗不应再出现。
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /知道了/ })).not.toBeInTheDocument(),
+      expect(screen.queryByRole("button", { name: /关\s*闭/ })).not.toBeInTheDocument(),
     );
   });
 });

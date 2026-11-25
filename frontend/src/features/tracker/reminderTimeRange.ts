@@ -6,8 +6,8 @@
  * 「已逾期 N 天」的红标与首页「近期提醒」卡必须逐字一致，两处口径都只来自
  * `services/reminder_service.reminder_days_until`。
  *
- * 逾期/今天/以后只对 pending 有意义：已完成/已忽略的提醒没有"接下来要做什么"的语义，
- * 统一不进这三个范围（选「全部」时照常显示）。
+ * 逾期/今天/以后只对「还在计划里」的提醒有意义（CR-28 起 status=active）：已结束
+ * （archived）的计划没有"接下来要做什么"的语义，统一不进这三个范围（选「全部」时照常显示）。
  */
 import type { MessageKey } from "../../i18n";
 import type { Reminder } from "../../types";
@@ -32,7 +32,7 @@ export const REMINDER_TIME_RANGE_LABEL_KEYS: Record<ReminderTimeRange, MessageKe
 /** 单条提醒是否落在时间范围内。 */
 export function inTimeRange(item: Reminder, range: ReminderTimeRange): boolean {
   if (range === "all") return true;
-  if (item.status !== "pending") return false;
+  if (item.status !== "active") return false;
   const days = item.days_until;
   // 旧后端没有 days_until：不猜，按"不在范围内"处理（避免把未知当成逾期/今天）。
   if (typeof days !== "number" || !Number.isFinite(days)) return false;

@@ -30,7 +30,8 @@ const apiMocks = vi.hoisted(() => ({
 const COMPANY = "腾讯";
 const SITE_NAME = "腾讯官网";
 const OFFICIAL_TITLE = "腾讯控股有限公司 - 官方网站";
-const BRIEF_FAILURE = "未配置 DeepSeek Key，无法生成联网简报";
+const BRIEF_FAILURE =
+  "联网搜索的 DeepSeek Key（尾号 bb44）无效或已被删除；它和「AI 模型」里的 Key 是分开配置的。";
 const REQUEST_ERROR = "联网调研超时";
 const CARD_SEARCH_FAILURE = "联网搜索服务暂时不可用，请稍后重试";
 
@@ -199,7 +200,7 @@ describe("CompanyResearchPage 结果展示", () => {
     expect(screen.getByText(t("companyResearch.brief.sources"))).toBeTruthy();
   });
 
-  it("用量摘要显示搜索次数与耗时，并说明按词条计费", async () => {
+  it("用量摘要显示搜索次数与耗时，并说明按词条计数", async () => {
     apiMocks.researchCompany.mockResolvedValue(result());
     renderPage();
     await submitWith("腾讯");
@@ -232,6 +233,29 @@ describe("CompanyResearchPage 结果展示", () => {
     // A 路已经搜到的资料不能因为 B 路失败而消失。
     expect(screen.getByText(SITE_NAME)).toBeTruthy();
     expect(screen.getByText(t("companyResearch.notes.title"))).toBeTruthy();
+  });
+
+  it("401 失败给「换联网搜索 Key」按钮，落点在助手行为分组", async () => {
+    // CR-03：生效的是「联网搜索」那把 Key，按钮要直达设置里对应的一行，
+    // 不能把用户丢到有六七行凭据的「外部连接」页让他自己找。
+    apiMocks.researchCompany.mockResolvedValue(
+      result({
+        brief: brief({
+          status: "failed",
+          reason: BRIEF_FAILURE,
+          reason_code: "unauthorized",
+          markdown: "",
+          sources: [],
+        }),
+      }),
+    );
+    renderPage();
+    await submitWith("腾讯");
+
+    const link = await screen.findByRole("link", {
+      name: t("companyResearch.brief.action.openSettings"),
+    });
+    expect(link.getAttribute("href")).toBe("/settings?tab=assistant-behavior");
   });
 
   it("请求失败时给错误态与重试按钮", async () => {

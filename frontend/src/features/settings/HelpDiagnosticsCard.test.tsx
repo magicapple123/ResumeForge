@@ -103,6 +103,42 @@ describe("HelpDiagnosticsCard", () => {
     expect(screen.getByRole("button", { name: "导出诊断包" })).toBeTruthy();
   });
 
+  it("lists the legacy config paths the app is still falling back to", async () => {
+    // CR-13 ①：旧行还在时诊断要明说，并且指出这些行会被回落读取（不是已经失效）。
+    apiMocks.getDiagnosticsPreview.mockResolvedValue({
+      event_count: 12,
+      time_range: null,
+      categories: [],
+      files: [],
+      contains_resume_content: false,
+      note: "",
+      legacy_config: {
+        count: 2,
+        items: [
+          {
+            section: "web_search",
+            label: "联网搜索",
+            keys: ["search_config"],
+            replacement: "web_search",
+          },
+          { section: "asr", label: "语音转写", keys: ["asr_config"], replacement: "asr_profiles" },
+        ],
+      },
+    });
+    renderCard();
+
+    const notice = await screen.findByTestId("legacy-config-notice");
+    expect(notice.textContent).toContain("联网搜索");
+    expect(notice.textContent).toContain("语音转写");
+  });
+
+  it("does not show the legacy notice on a clean machine", async () => {
+    renderCard();
+
+    await waitFor(() => expect(apiMocks.getDiagnosticsPreview).toHaveBeenCalled());
+    expect(screen.queryByTestId("legacy-config-notice")).toBeNull();
+  });
+
   it("reloads the interface through reloadPage()", async () => {
     renderCard();
 

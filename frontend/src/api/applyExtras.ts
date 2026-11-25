@@ -12,6 +12,7 @@ import type {
   ApplyFunnelSummary,
   ApplyGreetingImage,
   ApplyGreetingImageInput,
+  ApplyGreetingImageOption,
   ApplyPreflightResult,
   ApplyStaleList,
   ApplyTrackResult,
@@ -123,4 +124,24 @@ export function saveApplyGreetingImage(
   payload: ApplyGreetingImageInput,
 ): Promise<ApplyGreetingImage> {
   return request("/apply/greeting-image", { method: "PUT", body: JSON.stringify(payload) });
+}
+
+/**
+ * 就地上传一张配图（CR-18）。重复上传同一张图后端按 sha256 去重，回同一个 id。
+ *
+ * 走 `upload` 预算：浏览器要先把字节传上去，默认 15s 对大图偏紧。
+ */
+export function uploadGreetingImage(file: File): Promise<ApplyGreetingImageOption> {
+  const form = new FormData();
+  form.append("file", file);
+  return request("/apply/greeting-image/upload", {
+    method: "POST",
+    body: form,
+    budget: "upload",
+  });
+}
+
+/** 删掉一张未被引用的配图；仍被引用时后端返回 409（错误文案由后端给）。 */
+export function deleteGreetingImage(fileId: number): Promise<{ ok: boolean }> {
+  return request(`/apply/greeting-image/${fileId}`, { method: "DELETE" });
 }

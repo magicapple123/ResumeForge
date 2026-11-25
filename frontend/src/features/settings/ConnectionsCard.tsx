@@ -17,6 +17,7 @@ import ErrorState from "../../components/common/ErrorState";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import ConnectionKeyMap from "./ConnectionKeyMap";
 import ConnectionListRow from "./ConnectionListRow";
 import {
   connectionGroupHint,
@@ -63,6 +64,9 @@ export default function ConnectionsCard() {
           />
         </div>
       ) : null}
+
+      {/* CR-12：整页最上面先给一张地图——"这机器上有哪几把 Key、各在哪改"比逐行读更快。 */}
+      <ConnectionKeyMap rows={data?.key_map ?? []} />
 
       <LoadingBlock spinning={loading}>
         {groups.map((group) => {

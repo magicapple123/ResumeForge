@@ -1,0 +1,81 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 页头通知中心（CR-25）：铃铛 + 下拉列表。与后台任务面板同一形态（320–360px 浮层），
+   所以排布逻辑放在这里而不是组件内联：浮层宽度、行高、分组标题都需要与页头其它入口一致。 */
+
+.notification-bell-button {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 8px;
+}
+
+.notification-panel {
+  width: 340px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.notification-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.notification-panel-state {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 0;
+}
+
+.notification-group-title {
+  padding: 8px 0 4px;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+}
+
+.notification-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 8px 4px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.notification-row:hover,
+.notification-row:focus-visible {
+  background: var(--rf-fill-tertiary);
+}
+
+.notification-row-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.notification-row-body {
+  font-size: 12px;
+}
+
+.notification-row-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-top: 7px;
+  background: var(--rf-brand);
+  border-radius: 50%;
+}

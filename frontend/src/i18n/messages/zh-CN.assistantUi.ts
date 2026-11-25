@@ -173,6 +173,11 @@ const assistantUi = {
   "assistantUi.tasks.current": "当前",
   "assistantUi.tasks.source.reminder": "来源：提醒",
   "assistantUi.tasks.source.other": "来源：{source}",
+  // CR-20 提醒任务卡的专门行：上下文一行 + 两个动作（「知道了」= 取消这张卡）。
+  "assistantUi.tasks.reminder.from": "来自提醒",
+  "assistantUi.tasks.reminder.dueAt": "到期 {time}",
+  "assistantUi.tasks.action.acknowledge": "知道了",
+  "assistantUi.tasks.action.goTracker": "去求职进度",
   // #13A 消息操作（F37 起只剩右键菜单与窄档「⋯」，两处共用同一份列表）。
   "assistantUi.messageActions.more": "更多操作",
   "assistantUi.messageActions.copy": "复制",

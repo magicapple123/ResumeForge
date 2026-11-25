@@ -267,6 +267,14 @@ const applyQueue = {
     "不选 = 跟随「投递设置」里的默认图片；选了就只发这几张（最多 {count} 张），不会再叠加默认图。",
   "applyQueue.image.editorPlaceholder": "跟随设置里的默认图片",
   "applyQueue.image.editorOption": "{name}（{size}）",
+  // CR-18：配图就地上传 / 删除（队列行与设置页共用同一个选择器）。
+  "applyQueue.image.upload": "上传图片",
+  "applyQueue.image.uploaded": "已上传这张图片",
+  "applyQueue.image.uploadFailed": "图片上传失败，换一张试试",
+  "applyQueue.image.deleteAria": "删除图片 {name}",
+  "applyQueue.image.deleted": "已删除这张图片",
+  "applyQueue.image.deleteFailed": "删除失败，请稍后重试",
+  "applyQueue.image.inUse": "使用中",
 } as const;
 
 export default applyQueue;

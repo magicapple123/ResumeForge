@@ -43,6 +43,23 @@ const resumes = {
   "resumes.list.enhancementOn": "Experience enhancement is on",
   "resumes.list.scrollRegion": "Resume list (scrolls horizontally)",
   "resumes.list.total": "Total {total} records",
+  "resumes.list.column.delivery": "Applications",
+  "resumes.list.column.lastUpdated": "Last updated",
+  "resumes.list.group.expand": "Show versions",
+  "resumes.list.group.collapse": "Hide versions",
+  "resumes.list.group.title": "{job} · {count} versions",
+  "resumes.list.group.titleFallback": "Untitled job · {count} versions",
+  "resumes.list.group.updated": "Updated {time}",
+  "resumes.list.group.delivery": "Applied {count} times",
+  "resumes.list.versionListRegion": "Versions of {job}",
+  "resumes.list.versionLabel": "Version {index}",
+  "resumes.list.latestVersion": "Latest",
+  "resumes.list.group.favoriteHint": "A version in this group is favorited",
+  "resumes.list.groupSelectDisabled": "Expand this job to act on one version at a time",
+  "resumes.list.selectAllFolded":
+    "Selecting all is off in folded view; expand a job or filter by job first",
+  "resumes.list.capped":
+    "Showing the first 2000 resumes; narrow the range with search or the job filter",
 } as const;
 
 export default resumes;

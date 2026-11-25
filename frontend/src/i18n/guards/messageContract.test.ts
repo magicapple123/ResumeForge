@@ -37,6 +37,8 @@ const EXEMPT_FIXTURES = {
   // 复盘查看态头部副信息：只有两个已翻译插值 + 分隔符（登记在 equalityExemptions）。
   "interviewReview.header.meta": "{time} · {target}",
   // 品牌名：两种语言写法相同（登记在 equalityExemptions）。
+  "searchCard.source.bing": "Bing",
+  "searchCard.source.duckduckgo": "DuckDuckGo",
   "searchCard.source.deepseek": "DeepSeek",
   "searchCard.source.tavily": "Tavily",
   "searchCard.source.jina": "Jina",

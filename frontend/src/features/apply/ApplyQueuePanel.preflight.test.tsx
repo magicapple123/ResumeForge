@@ -16,7 +16,6 @@ import type { ApplyQueueItem } from "../../types";
 import { ContextMenuHost } from "../context-menu/ContextMenuHost";
 import { t } from "../../i18n";
 import ApplyQueuePanel from "./ApplyQueuePanel";
-import { APPLY_GUIDE_SEEN_KEY } from "./queue/ApplyQueueGuide";
 
 const apiMocks = vi.hoisted(() => ({
   listQueue: vi.fn(),
@@ -124,7 +123,6 @@ beforeEach(() => {
   apiMocks.removeQueueItem.mockResolvedValue(undefined);
   extrasMocks.runQueuePreflight.mockResolvedValue(CLEAN);
   extrasMocks.getGreetingTemplates.mockResolvedValue({ templates: [] });
-  window.localStorage.setItem(APPLY_GUIDE_SEEN_KEY, "1");
 });
 
 afterEach(() => {

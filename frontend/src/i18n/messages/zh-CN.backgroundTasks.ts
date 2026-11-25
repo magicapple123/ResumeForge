@@ -20,6 +20,10 @@ const backgroundTasks = {
   "backgroundTasks.action.view": "去查看",
   /** 弹窗标题的空值兜底：调用方没给标题时不要让用户对着一个没有标题的窗。 */
   "backgroundTasks.notice.done.title": "任务已完成",
+  /** 刷新恢复：多条终态任务合并成一条提醒（CR-25，任务书要求"只弹 1 次"）。 */
+  "backgroundTasks.restore.mergedTitle": "你离开时有 {count} 个任务完成",
+  "backgroundTasks.restore.completed": "完成 {count} 个",
+  "backgroundTasks.restore.failed": "失败 {count} 个",
   "backgroundTasks.jobAnalysis.label": "岗位解读",
   "backgroundTasks.jobAnalysis.running": "正在生成岗位解读…",
   "backgroundTasks.toast.cancelled": "已取消「{name}」",

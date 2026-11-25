@@ -56,6 +56,8 @@ const trackerUi = {
   /** 逾期短标记（第 4 条）：`{days}` 是距截止日期过去的天数，当天不显示。 */
   "trackerUi.card.overdueDays": "逾期 {days} 天",
   "trackerUi.card.evidence": "依据：{evidence}",
+  /** CR-19：最近一次「已联系」跟进（`{date}` 是月-日）。 */
+  "trackerUi.card.followup": "已联系 · {date}",
 
   "trackerUi.source.apply": "投递台自动记录",
   "trackerUi.source.manual": "手动添加",

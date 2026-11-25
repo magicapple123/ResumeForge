@@ -16,7 +16,10 @@ import { getReminderPopupSetting } from "../api/settings";
 import { useApi } from "../hooks/useApi";
 import { acquireStartupSlot, releaseStartupSlot } from "../utils/userGuide";
 import { FirstDeliveryPanel } from "../features/activation/FirstDeliveryPanel";
-import { useActivationProgress } from "../features/activation/useActivationProgress";
+import {
+  shouldShowFirstDelivery,
+  useActivationProgress,
+} from "../features/activation/useActivationProgress";
 import { LatestCards } from "./home/LatestCards";
 import { ReminderPopup } from "./home/ReminderPopup";
 import { RemindersCard } from "./home/RemindersCard";
@@ -40,15 +43,13 @@ export default function HomePage() {
   // 「第一份交付」进度需要资料关键字段（姓名/联系方式）这个事实：复用 getProfile，
   // 不新增接口。profile 加载失败不阻断面板——阶段判定退回台账/简历计数。
   const { data: profile, error: profileError, reload: reloadProfile } = useApi(getProfile);
-  // 全部完成后面板消失。
-  const { stages: activationStages, allDone: activationAllDone } = useActivationProgress(
-    stats,
-    profile,
-  );
-  const { data: upcomingReminders, loading: remindersLoading } = useApi(
-    () => listUpcomingReminders(8),
-    [],
-  );
+  // 全部完成后面板消失（under 门控之下不再需要单独判 allDone：能全完成就必然已有简历或投递）。
+  const { stages: activationStages } = useActivationProgress(stats, profile);
+  const {
+    data: upcomingReminders,
+    loading: remindersLoading,
+    reload: reloadReminders,
+  } = useApi(() => listUpcomingReminders(8), []);
   const { data: popupSetting } = useApi(getReminderPopupSetting, []);
   const [popupVisible, setPopupVisible] = useState(false);
   // 启动路径拿到的槽位（手动点开的不算），关闭时据此释放队列。
@@ -150,7 +151,11 @@ export default function HomePage() {
         />
       )}
 
-      {stats && !activationAllDone && <FirstDeliveryPanel stages={activationStages} />}
+      {/*
+        CR-34：新手三步面板只在「简历数 = 0 且投递记录 = 0」时出现。已经有简历/投递的人
+        看到的应该是「接下来做什么」（未核实主张就在那一条里），而不是一块"你还没交付"。
+      */}
+      {stats && shouldShowFirstDelivery(stats) && <FirstDeliveryPanel stages={activationStages} />}
 
       <StatsCards stats={stats} loading={loading} />
 
@@ -201,7 +206,13 @@ export default function HomePage() {
 
       <LatestCards stats={stats} />
 
-      <ReminderPopup open={popupVisible} reminders={upcomingReminders} onClose={closePopup} />
+      <ReminderPopup
+        open={popupVisible}
+        reminders={upcomingReminders}
+        onClose={closePopup}
+        // CR-21：弹窗里处理掉一条 → 卡片与月历立刻按新数据重排，不必等下次挂载。
+        onChanged={() => void reloadReminders()}
+      />
     </div>
   );
 }

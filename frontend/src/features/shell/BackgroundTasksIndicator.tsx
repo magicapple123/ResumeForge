@@ -9,9 +9,17 @@
  * 数据来自 `utils/backgroundTasks`（模块级登记表，关掉弹窗也照跑），所以它天然对
  * "换个页面"免疫：任务由登记表追踪，不是由某个组件的生命周期持有。
  */
-import { CloseCircleOutlined, LoadingOutlined, QuestionCircleOutlined } from "@ant-design/icons";
+import {
+  CloseCircleOutlined,
+  ExclamationCircleOutlined,
+  LoadingOutlined,
+  QuestionCircleOutlined,
+} from "@ant-design/icons";
 import { App, Badge, Button, Popover, Space, Typography } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { reportBadgePart } from "../../utils/desktopBadge";
+import { useNavigate } from "react-router-dom";
+import { listAgentTasks } from "../../api/agentTasks";
 import { useBackgroundTasks } from "../../hooks/useBackgroundTasks";
 import { useJobMatchBackgroundTasks } from "../../hooks/useJobMatchBackgroundTasks";
 import {
@@ -28,8 +36,13 @@ import {
   cancelJobMatchBackgroundTask,
   type JobMatchBackgroundTaskView,
 } from "../../utils/jobMatchBackgroundTasks";
+import { startVisibilityPolling } from "../../utils/visibility";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+
+/** 助手任务的待确认/进行中轮询：与铃铛同一档（可见 30s / 隐藏 120s）。 */
+const AGENT_POLL_VISIBLE_MS = 30_000;
+const AGENT_POLL_HIDDEN_MS = 120_000;
 
 /** 一行任务：名称、进度、取消。状态未知时给出「移除」而不是「取消」——后端都不认识
  * 这个任务了，再发取消请求只会再吃一个 404。 */
@@ -172,13 +185,50 @@ export default function BackgroundTasksIndicator() {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这块文案不重渲染。
   useLocale();
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const tasks = useBackgroundTasks();
   const matchTasks = useJobMatchBackgroundTasks();
   // 第三源（T1）：岗位解读。此前它只活在弹窗里，关掉弹窗就彻底看不见了。
   const analyses = useRunningJobAnalyses();
   const [cancelling, setCancelling] = useState<number | string | null>(null);
+  // CR-29：这个按钮的角标 = 运行中 + 待确认。助手任务的状态在服务端，按可见性轮询。
+  const [agentRunning, setAgentRunning] = useState(0);
+  const [waitingApprovals, setWaitingApprovals] = useState(0);
 
-  if (tasks.length === 0 && matchTasks.length === 0 && analyses.length === 0) return null;
+  useEffect(() => {
+    let alive = true;
+    const refresh = async () => {
+      try {
+        const list = await listAgentTasks();
+        if (!alive) return;
+        setAgentRunning(list.filter((task) => task.status === "running").length);
+        setWaitingApprovals(list.filter((task) => task.status === "waiting_approval").length);
+      } catch {
+        /* 角标读不到就不亮：与铃铛同一口径，不能把页头拖成错误态。 */
+      }
+    };
+    void Promise.resolve().then(refresh);
+    const stop = startVisibilityPolling({
+      visibleIntervalMs: AGENT_POLL_VISIBLE_MS,
+      hiddenIntervalMs: AGENT_POLL_HIDDEN_MS,
+      onTick: refresh,
+    });
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, []);
+
+  const total =
+    tasks.length + matchTasks.length + analyses.length + agentRunning + waitingApprovals;
+
+  // 桌面壳角标只取"等你的"那一份：待确认任务数（运行中的不需要用户动手）。
+  // 必须放在下面的 `total === 0` 早退之前——hooks 不能有条件执行。
+  useEffect(() => {
+    reportBadgePart("pending", waitingApprovals);
+  }, [waitingApprovals]);
+
+  if (total === 0) return null;
 
   const cancel = async (task: BackgroundTask) => {
     if (cancelling !== null) return;
@@ -213,6 +263,20 @@ export default function BackgroundTasksIndicator() {
   // 没有任务时整个入口不渲染（上面已经 return null），所以这里不必再写空态分支。
   const content = (
     <div className="background-tasks-panel">
+      {/* CR-29：待确认不是"还在跑"，但用户需要从这里一步去到它；与铃铛的未读分成两个数。 */}
+      {waitingApprovals > 0 && (
+        <div className="background-task-row background-task-waiting">
+          <Space size={8} align="start">
+            <ExclamationCircleOutlined />
+            <Typography.Text strong>
+              {t("notificationsSettings.waiting.badge", { count: waitingApprovals })}
+            </Typography.Text>
+          </Space>
+          <Button size="small" type="link" onClick={() => navigate("/")}>
+            {t("notificationsSettings.waiting.action")}
+          </Button>
+        </div>
+      )}
       {tasks.map((task) => (
         <TaskRow
           key={task.key}
@@ -255,11 +319,7 @@ export default function BackgroundTasksIndicator() {
         type="text"
         aria-label={t("backgroundTasks.aria.viewTasks")}
       >
-        <Badge
-          count={tasks.length + matchTasks.length + analyses.length}
-          size="small"
-          offset={[2, -2]}
-        >
+        <Badge count={total} size="small" offset={[2, -2]}>
           <LoadingOutlined /> {t("backgroundTasks.label")}
         </Badge>
       </Button>

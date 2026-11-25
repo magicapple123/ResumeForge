@@ -42,9 +42,13 @@ vi.mock("../../api/aiTasks", () => ({
   listActiveAiTasks: aiMocks.listActiveAiTasks,
 }));
 
-vi.mock("../../utils/notifySound", () => ({
-  playDoneSound: vi.fn(),
-}));
+// 只替换发声，其余导出保留：`notificationPreferences` 会调 `isSoundEnabled`，
+// 用裸对象替身会让它在运行期拿到 undefined 并抛错（通知就再也发不出来）。
+vi.mock("../../utils/notifySound", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../utils/notifySound")>("../../utils/notifySound");
+  return { ...actual, playDoneSound: vi.fn() };
+});
 
 const notices: { title: string; kind?: string; description?: string; hasActions?: boolean }[] = [];
 

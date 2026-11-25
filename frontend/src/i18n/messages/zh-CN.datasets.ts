@@ -17,12 +17,12 @@ const datasets = {
   "datasets.action.delete": "删除",
   "datasets.intro":
     "数据集是一份完整的简历库（岗位、资料、简历、收藏与助手会话），可整份导出、导入或切换，互不影响。",
-  "datasets.hint.summary": "备份包默认包含全局模型配置、API Key 与自定义字体。",
+  "datasets.hint.summary": "备份包默认包含全局模型与服务配置、API Key 与自定义字体。",
   "datasets.export.contents.title": "导出包里包含什么",
   "datasets.export.contents.action": "查看说明",
-  "datasets.option.globalConfig": "备份中包含全局模型配置与 API Key（所有已保存记录）",
+  "datasets.option.globalConfig": "备份中包含全局模型与服务配置、API Key（所有已保存记录）",
   "datasets.hint.globalConfig":
-    "默认勾选。全局模型配置存在数据目录的「global_settings.json」，不在任何数据集的库里；勾选后会作为独立的一段随包导出，导入时合并回本机（同名且本地已有内容的记录保留本地）。",
+    "默认勾选。全局模型配置与服务配置（语音转写、语义检索、联网搜索、网络代理）都存在数据目录的「global_settings.json」，不在任何数据集的库里；勾选后会作为独立的一段随包导出，导入时合并回本机（同名且本地已有内容的记录保留本地）。",
   "datasets.hint.apiKey":
     "默认勾选。API Key 跟随这一项：勾选时按本机存储的形态一并写入（Windows 上为系统加密、绑定当前用户与这台电脑，换电脑恢复后可能需要重新填写；macOS/Linux 上密钥以明文随包），取消勾选则配置与密钥都不带。勾选后的备份包更敏感，请妥善保管，不要发给不信任的人。",
   "datasets.hint.fonts":
@@ -53,7 +53,7 @@ const datasets = {
   "datasets.create.placeholder": "数据集名称（例如：秋招专用）",
   "datasets.export.titleAll": "导出全部数据集",
   "datasets.export.titleOne": "导出数据集",
-  "datasets.export.includeConfig": "导出包中包含全局模型配置与 API Key（所有已保存记录）",
+  "datasets.export.includeConfig": "导出包中包含全局模型与服务配置、API Key（所有已保存记录）",
   "datasets.export.hint": "这个名字会作为下载文件名，可含中文；扩展名会自动补 .zip。",
   "datasets.export.placeholder": "例如：校招线-20261019-101500",
   "datasets.export.aria": "导出文件名",

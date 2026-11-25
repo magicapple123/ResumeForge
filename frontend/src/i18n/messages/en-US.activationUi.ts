@@ -36,7 +36,7 @@ const activationUi = {
     "Save each statement you want in a Resume as an entry before it can be confirmed",
   "activationUi.deliver.progressVerified": "Confirmed {verified}/{total} claims",
   "activationUi.deliver.cta.labelPending": "Confirm {count} pending claims",
-  "activationUi.deliver.cta.hintPending": "Unconfirmed claims never make it into a Resume",
+  "activationUi.deliver.cta.hintPending": "Unverified claims are flagged before export",
   "activationUi.deliver.cta.labelNoResume": "Create or link a Resume in Resume Center",
   "activationUi.deliver.cta.hintNoResume":
     "All facts are confirmed; you just need a Resume for the Job",

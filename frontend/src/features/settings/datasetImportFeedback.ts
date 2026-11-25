@@ -51,3 +51,30 @@ export function describeImportIssues(
   if (skipped?.length) parts.push(summarize("skipped", skipped));
   return parts.length > 0 ? parts.join(t("featuresMisc.datasetImport.separator")) : null;
 }
+
+/** 服务配置恢复报告里"回来了几项"（语音 / 语义检索 / 搜索 / 代理各算一项）。 */
+export interface ServiceRestoreReport {
+  asr_profiles?: { imported?: number; skipped?: number };
+  embedding_profiles?: { imported?: number; skipped?: number };
+  web_search?: boolean;
+  network?: boolean;
+  keys_included?: boolean;
+  key_notice?: string;
+  error?: string;
+}
+
+/**
+ * CR-10：四块服务配置的恢复条数。
+ *
+ * 只数"确实有内容回来"的块：包里带了一段空壳（例如只存过一条没填地址的语音配置）
+ * 不该被说成"恢复了服务配置"，否则用户会以为一切就绪、直到调用才发现是空的。
+ */
+export function countRestoredServices(services: ServiceRestoreReport | undefined): number {
+  if (!services) return 0;
+  return (
+    Number(Boolean(services.web_search)) +
+    Number(Boolean(services.network)) +
+    Number((services.asr_profiles?.imported ?? 0) > 0) +
+    Number((services.embedding_profiles?.imported ?? 0) > 0)
+  );
+}

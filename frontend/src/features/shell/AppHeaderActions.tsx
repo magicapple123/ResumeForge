@@ -17,6 +17,7 @@ import BackgroundTasksIndicator from "./BackgroundTasksIndicator";
 import ExitAppButton from "../../components/common/ExitAppButton";
 import ModelProfileSelect from "../settings/ModelProfileSelect";
 import MySpaceMenu from "./MySpaceMenu";
+import NotificationBell from "./NotificationBell";
 import ScenarioSelector from "../career-scenarios/ScenarioSelector";
 import ThemeSwitch from "../theme/ThemeSwitch";
 import { GITHUB_REPO } from "../../config";
@@ -44,6 +45,8 @@ export default function AppHeaderActions({ hiddenKeys, onStarClick }: Props) {
       {/* A2：职业场景是"本窗口的引导建议"，与数据集（在哪份数据里）语义分开、并排但成组。 */}
       <ScenarioSelector />
       <AppHeaderContext beforeAvatar={<MySpaceMenu hiddenKeys={hiddenKeys} />} />
+      {/* CR-25：通知中心入口。放在「后台任务」左边——先看"发生了什么"，再看"还在跑什么"。 */}
+      <NotificationBell />
       {/* 有任务在跑时才出现：平时页头不该多一个空按钮。 */}
       <BackgroundTasksIndicator />
       <span className="app-header-divider" aria-hidden="true" />

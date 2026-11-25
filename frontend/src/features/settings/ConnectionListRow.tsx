@@ -35,7 +35,7 @@
 import { MoreOutlined } from "@ant-design/icons";
 import { Alert, Button, Dropdown, Input } from "antd";
 import { useState } from "react";
-import { resetSystemSource, saveSystemSource } from "../../api/connections";
+import { copyConnectionSecret, resetSystemSource, saveSystemSource } from "../../api/connections";
 import { useRowActionMenu } from "../../components/common/rowActionMenu";
 import type { RowActionItem } from "../../components/common/rowActionMenu";
 import { useToast } from "../../hooks/useToast";
@@ -202,6 +202,19 @@ export function ConnectionListRow({ item, variant, onChanged, onApplied }: Conne
     }
   };
 
+  /**
+   * CR-07：复制密钥。值只在后端手里（任何响应都不含明文），所以这里调接口让它写剪贴板，
+   * 页面本身不碰密钥字符串。
+   */
+  const copySecret = async (): Promise<void> => {
+    try {
+      await copyConnectionSecret(item.id, item.target_id);
+      toast.success(t("connections.toast.copied", { name: label }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("connections.toast.copyFailed"));
+    }
+  };
+
   const moreItems: RowActionItem[] = [];
   if (variant === "value") {
     // 出厂值行没有"恢复默认"可点（它已经是默认值），但 `⋯` 不该因此变成死按钮。
@@ -219,6 +232,15 @@ export function ConnectionListRow({ item, variant, onChanged, onApplied }: Conne
       });
     }
   } else if (item.editable) {
+    if (item.key_configured) {
+      // 已配置的才有东西可复制；未配置时菜单里不摆一条必然失败的项。
+      moreItems.push({
+        key: "copy",
+        label: t("connections.action.copySecret"),
+        disabled: busy || undefined,
+        onClick: () => void copySecret(),
+      });
+    }
     moreItems.push({
       key: "clear",
       label: t("connections.action.clear"),

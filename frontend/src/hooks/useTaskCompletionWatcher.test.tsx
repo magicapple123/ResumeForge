@@ -3,6 +3,7 @@
 import { act, render, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useTaskCompletionWatcher, WATCH_INTERVAL_MS } from "./useTaskCompletionWatcher";
+import { HIDDEN_BATCH_POLL_MS } from "../utils/visibility";
 import type { ApplyTask, ApplyTaskDetail } from "../types";
 
 const apiMocks = vi.hoisted(() => ({
@@ -58,8 +59,18 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setHidden(false);
   vi.useRealTimers();
 });
+
+/** jsdom 没有改 visibilityState 的入口，直接覆写属性模拟；用例结束还原为可见。 */
+function setHidden(hidden: boolean): void {
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => (hidden ? "hidden" : "visible"),
+  });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
 
 /** 推进若干个轮询周期并冲刷微任务。 */
 async function advance(cycles: number) {
@@ -122,6 +133,31 @@ describe("useTaskCompletionWatcher", () => {
     renderHook(() => useTaskCompletionWatcher(onFinished));
     await advance(2);
     expect(onFinished).not.toHaveBeenCalled();
+  });
+
+  it("隐藏窗口时仍轮询（降频 15s），恢复可见立即补一轮（CR-23）", async () => {
+    queueResponses(null);
+    renderHook(() => useTaskCompletionWatcher(vi.fn()));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(apiMocks.getCurrentTask).toHaveBeenCalledTimes(1);
+
+    setHidden(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(HIDDEN_BATCH_POLL_MS - 1);
+    });
+    expect(apiMocks.getCurrentTask).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(apiMocks.getCurrentTask).toHaveBeenCalledTimes(2);
+
+    setHidden(false);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(apiMocks.getCurrentTask).toHaveBeenCalledTimes(3);
   });
 
   it("renders null as a component (mounted in the layout)", () => {

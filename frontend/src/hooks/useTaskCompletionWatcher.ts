@@ -13,6 +13,7 @@
 import { useEffect, useRef } from "react";
 import { getCurrentTask, getCollectTaskDetail, getTaskDetail } from "../api/apply";
 import type { ApplyTask, ApplyTaskDetail } from "../types";
+import { HIDDEN_BATCH_POLL_MS, startVisibilityPolling } from "../utils/visibility";
 
 export const WATCH_INTERVAL_MS = 3000;
 
@@ -70,10 +71,15 @@ export function useTaskCompletionWatcher(onTaskFinished: (event: FinishedTaskEve
     };
 
     void tick();
-    const timer = window.setInterval(() => void tick(), WATCH_INTERVAL_MS);
+    // CR-23：可见 3s；窗口隐藏时降频到 15s（批次是"其它任务"），恢复可见立即补一轮。
+    const stopPolling = startVisibilityPolling({
+      visibleIntervalMs: WATCH_INTERVAL_MS,
+      hiddenIntervalMs: HIDDEN_BATCH_POLL_MS,
+      onTick: tick,
+    });
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, []);
 }

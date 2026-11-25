@@ -21,6 +21,7 @@ const connMocks = vi.hoisted(() => ({
   resetSystemSource: vi.fn(),
   setLLMSessionKey: vi.fn(),
   clearLLMSessionKey: vi.fn(),
+  copyConnectionSecret: vi.fn(),
 }));
 const settingsMocks = vi.hoisted(() => ({
   getSearchConfig: vi.fn(),
@@ -51,6 +52,7 @@ function item(overrides: Partial<ConnectionsPayload["groups"][number]["items"][n
     status_label: "已保存",
     detail: "",
     masked: "********",
+    hint: "sk-a****bb44",
     key_configured: true,
     protection: "plaintext" as const,
     protection_label: "当前平台无系统加密",
@@ -107,14 +109,42 @@ function payload(): ConnectionsPayload {
       },
       { id: "system", label: "系统来源与端口", kind: "system", hint: "", items: [] },
     ],
+    key_map: [
+      {
+        id: "web_search.deepseek",
+        label: "DeepSeek（联网搜索 / 抓取 / OCR 共用）",
+        group: "web_search",
+        group_label: "联网搜索与抓取",
+        configure_at: "设置 → 联网搜索 → DeepSeek",
+        used_by: "联网搜索、网页正文抓取、扫描件 OCR 共用这一把",
+        empty_meaning: "留空并保存 = 移除这把 Key",
+        where: "global_settings.json → web_search.deepseek_api_key",
+      },
+      {
+        id: "llm.session",
+        label: "仅本次会话使用的大模型 Key",
+        group: "session",
+        group_label: "仅本次会话",
+        configure_at: "设置 → AI 模型 → 仅本次会话使用",
+        used_by: "临时覆盖已保存的大模型 Key",
+        empty_meaning: "清空 = 立刻回到已保存的那把 Key",
+        where: "后端进程内存",
+      },
+    ],
     storage: { kind: "plaintext", label: "当前平台无系统加密", description: "密钥以明文落盘" },
     retrieved: true,
   };
 }
 
-/** 按条目名定位那一行：同一页有 7 行，"第几个按钮"这种定位会随顺序变。 */
+/**
+ * 按条目名定位**凭据行**：同一页有 7 行，而且 CR-12 的密钥地图里也有同名文本，
+ * 所以取"最近祖先里有 .connection-row"的那一个。
+ */
 function rowOf(label: string): HTMLElement {
-  const row = screen.getByText(label).closest(".connection-row");
+  const row = screen
+    .getAllByText(label)
+    .map((element) => element.closest(".connection-row"))
+    .find((element) => element !== null);
   if (!row) throw new Error(`找不到 ${label} 所在的行`);
   return row as HTMLElement;
 }
@@ -135,6 +165,7 @@ beforeEach(() => {
   settingsMocks.saveSearchConfig.mockImplementation(async (config) => config);
   connMocks.setLLMSessionKey.mockResolvedValue({ configured: true });
   connMocks.clearLLMSessionKey.mockResolvedValue(undefined);
+  connMocks.copyConnectionSecret.mockResolvedValue({ ok: true });
 });
 
 afterEach(() => {
@@ -164,13 +195,27 @@ describe("ConnectionsCard", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders the key map with one row per credential", async () => {
+    const emptyHint = payload().key_map?.[0]?.empty_meaning ?? "";
+    renderCard();
+    await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
+
+    // CR-12：地图由后端投影，前端只渲染——行数必须等于后端给的条数（不在这里增删）。
+    const map = (await screen.findByText(t("connections.keyMap.title"))).closest(
+      ".connection-key-map",
+    ) as HTMLElement;
+    expect(within(map).getAllByRole("row")).toHaveLength(3); // 表头 + 2 条
+    expect(within(map).getByText(t("connections.keyMap.col.empty"))).toBeInTheDocument();
+    // 断言渲染的是后端给的「留空含义」，而不是前端另写一句（那句话会与 registry 漂移）。
+    expect(within(map).getByText(emptyHint)).toBeInTheDocument();
+  });
+
   it("writes a new search key through the search settings endpoint, keeping the other fields", async () => {
     renderCard();
     await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
 
-    const row = within(
-      (await screen.findByText(DEEPSEEK_LABEL)).closest(".connection-row") as HTMLElement,
-    );
+    await screen.findAllByText(DEEPSEEK_LABEL);
+    const row = within(rowOf(DEEPSEEK_LABEL));
     fireEvent.click(
       row.getByRole("button", { name: t("connections.action.editAria", { name: DEEPSEEK_LABEL }) }),
     );
@@ -195,12 +240,33 @@ describe("ConnectionsCard", () => {
     await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalledTimes(2));
   });
 
+  it("shows the first/last four hint and copies through the backend", async () => {
+    renderCard();
+    await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
+
+    // hint 取代 `********` 作为展示值（掩码字段本身仍是协议值，不参与渲染）。
+    await screen.findAllByText(DEEPSEEK_LABEL);
+    const row = within(rowOf(DEEPSEEK_LABEL));
+    expect(row.getByText("sk-a****bb44")).toBeInTheDocument();
+    fireEvent.click(
+      row.getByRole("button", { name: t("connections.action.more", { name: DEEPSEEK_LABEL }) }),
+    );
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: t("connections.action.copySecret") }),
+    );
+
+    // 明文只在后端手里：页面调接口让它写剪贴板，自己不碰密钥字符串。
+    await waitFor(() =>
+      expect(connMocks.copyConnectionSecret).toHaveBeenCalledWith("web_search.deepseek", ""),
+    );
+  });
+
   it("clears the session key with DELETE instead of writing an empty string", async () => {
     renderCard();
     await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
 
     const sessionLabel = t("connections.item.llm.session.label");
-    await screen.findByText(sessionLabel);
+    await screen.findAllByText(sessionLabel);
     const row = within(rowOf(sessionLabel));
     // 「清除」不可逆，所以它不在行内平铺（每行常驻操作只剩主按钮 + `⋯`），
     // 但收进菜单之后二次确认一步不少。
@@ -213,5 +279,30 @@ describe("ConnectionsCard", () => {
 
     await waitFor(() => expect(connMocks.clearLLMSessionKey).toHaveBeenCalledOnce());
     expect(settingsMocks.saveSearchConfig).not.toHaveBeenCalled();
+  });
+
+  it("marks a borrowed model key on the search row (CR-06)", async () => {
+    const base = payload();
+    const searchGroup = base.groups.find((group) => group.id === "search");
+    const borrowed = searchGroup?.items.find((entry) => entry.id === "web_search.deepseek");
+    if (!borrowed) throw new Error("fixture is missing the search row");
+    borrowed.key_configured = false;
+    borrowed.status = "not_configured";
+    borrowed.hint = "";
+    borrowed.masked = "";
+    borrowed.borrowed_key = true;
+    connMocks.getConnections.mockResolvedValue(base);
+
+    renderCard();
+    await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
+
+    await screen.findAllByText(DEEPSEEK_LABEL);
+    const row = within(rowOf(DEEPSEEK_LABEL));
+    fireEvent.click(
+      row.getByRole("button", { name: t("connections.hint.aria", { name: DEEPSEEK_LABEL }) }),
+    );
+    expect(
+      await screen.findByText(new RegExp(t("connections.hint.borrowedModelKey"))),
+    ).toBeInTheDocument();
   });
 });

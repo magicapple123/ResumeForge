@@ -185,6 +185,28 @@ export function releaseStartupSlot(name: StartupSlotName): void {
   pump();
 }
 
+/* ── 启动弹窗：只读查询 ─────────────────────────────────────
+ *
+ * 启动时的浮层（欢迎引导 / 近期提醒 / 新版本）共用上面的槽位队列；另一些"首次提示"
+ * （如投投球的第一次说明）不属于启动弹窗，但同样会浮在页面最上层。它们要在**决定弹之前**
+ * 问一句"现在/本次启动会不会已经有启动弹窗"，避免同一次打开叠两层。
+ *
+ * 这里只提供**只读**判断、不写任何状态：调用方没有自己的第二套 localStorage 判断，
+ * 槽位规则只有这一份。
+ */
+
+/**
+ * 此刻是否有启动弹窗占用槽位，或本次启动注定要弹（欢迎引导尚未看过）。
+ *
+ * - `activeSlot`：已经有一个弹窗在展示；
+ * - `waiting`：有弹窗已登记、正在排队；
+ * - `userGuideVisible`：欢迎引导开着（打开时若已有别的槽位，它不抢占，所以要单独看）；
+ * - `shouldShowUserGuide()`：还没看过欢迎引导——启动流程随后就会把它打开。
+ */
+export function isStartupPopupActive(): boolean {
+  return activeSlot !== null || waiting.size > 0 || userGuideVisible || shouldShowUserGuide();
+}
+
 /* ── 欢迎引导：既是启动弹窗的第一件，也承担"引导开着"这个状态 ── */
 
 let userGuideVisible = false;

@@ -25,26 +25,16 @@
  * 点保存"不再是一个会丢配置的步骤。
  */
 
-import {
-  Alert,
-  Card,
-  Checkbox,
-  Flex,
-  Input,
-  InputNumber,
-  Space,
-  Tag,
-  Typography,
-  theme,
-} from "antd";
+import { Alert, Card, Flex, InputNumber, Space, Tag, Typography } from "antd";
 import ErrorState from "../../components/common/ErrorState";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import SettingsField from "./SettingsField";
 import SearchDepthField from "./SearchDepthField";
+import SearchSourceTiles from "./SearchSourceTiles";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSearchConfig, saveSearchConfig } from "../../api/settings";
-import type { SearchConfig, SearchSource } from "../../types";
-import { t, type MessageKey } from "../../i18n";
+import type { SearchConfig } from "../../types";
+import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
 /** 与后端 `SearchConfig` 的默认值保持一致，用作取数失败时的兜底草稿。 */
@@ -57,6 +47,14 @@ const DEFAULT_CONFIG: SearchConfig = {
   deepseek_api_key: "",
   tavily_api_key: "",
   jina_api_key: "",
+  custom_template: "moonshot",
+  custom_name: "",
+  custom_base_url: "",
+  custom_search_path: "",
+  custom_fetch_path: "",
+  custom_results_field: "",
+  custom_include_content: true,
+  custom_api_key: "",
 };
 
 /** 「每次最多返回的结果条数」上限，与后端 `SearchConfig.max_results` 的 `le=50` 对齐。 */
@@ -67,57 +65,9 @@ function clampMaxResults(value: number | null): number {
   return Math.max(1, Math.min(MAX_RESULTS_LIMIT, value ?? DEFAULT_CONFIG.max_results));
 }
 
-/**
- * 一条搜索来源的显示名与卡片副标题。
- *
- * `label` 给品牌名用（`Bing` / `DuckDuckGo`：两种语言写法相同，进词表会被
- * `source-ascii-english` 判成"源文是英文"），`labelKey` 给需要随语言变化的显示名用。
- * `noteKey` 是卡片副标题（要不要钥匙），两者都只影响显示；`value` 是提交给后端的协议值。
- */
-interface SourceOption {
-  value: SearchSource;
-  label?: string;
-  labelKey?: MessageKey;
-  noteKey: MessageKey;
-}
-
-const SOURCE_OPTIONS: SourceOption[] = [
-  { value: "bing", label: "Bing", noteKey: "searchCard.source.note.bing" },
-  { value: "duckduckgo", label: "DuckDuckGo", noteKey: "searchCard.source.note.duckduckgo" },
-  {
-    value: "searxng",
-    labelKey: "searchCard.source.searxng",
-    noteKey: "searchCard.source.note.searxng",
-  },
-  // DeepSeek 也是品牌名：两种语言写法相同，走词表 + 等值豁免（与模型预设同一口径）。
-  {
-    value: "deepseek",
-    labelKey: "searchCard.source.deepseek",
-    noteKey: "searchCard.source.note.deepseek",
-  },
-  // P4-09 / P4-10：两个需要 Key 的第三方来源。
-  {
-    value: "tavily",
-    labelKey: "searchCard.source.tavily",
-    noteKey: "searchCard.source.note.tavily",
-  },
-  {
-    value: "jina",
-    labelKey: "searchCard.source.jina",
-    noteKey: "searchCard.source.note.jina",
-  },
-];
-
-/** 一条来源选项的显示名（品牌名直接用，其余走词表）。 */
-function sourceLabel(option: SourceOption): string {
-  if (option.labelKey) return t(option.labelKey);
-  return option.label ?? option.value;
-}
-
 export default function SearchCard() {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
   useLocale();
-  const { token } = theme.useToken();
   const [config, setConfig] = useState<SearchConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -183,6 +133,12 @@ export default function SearchCard() {
       deepseek_api_key: next.deepseek_api_key.trim(),
       tavily_api_key: next.tavily_api_key.trim(),
       jina_api_key: next.jina_api_key.trim(),
+      custom_name: next.custom_name.trim(),
+      custom_base_url: next.custom_base_url.trim(),
+      custom_search_path: next.custom_search_path.trim(),
+      custom_fetch_path: next.custom_fetch_path.trim(),
+      custom_results_field: next.custom_results_field.trim(),
+      custom_api_key: next.custom_api_key.trim(),
     };
     if (trimmed.sources.length === 0) {
       setSaveStatus("error");
@@ -190,6 +146,13 @@ export default function SearchCard() {
       return;
     }
     if (trimmed.searxng_url && !/^https?:\/\//i.test(trimmed.searxng_url)) {
+      setSaveStatus("error");
+      setSaveError(t("searchCard.badUrl"));
+      return;
+    }
+    // 自定义地址的完整规则在服务端（相对路径 / 公网地址 / 字段语法）；这里只拦最明显的
+    // "忘了写协议"，避免每敲一个字就发一次必然 422 的请求。
+    if (trimmed.custom_base_url && !/^https?:\/\//i.test(trimmed.custom_base_url)) {
       setSaveStatus("error");
       setSaveError(t("searchCard.badUrl"));
       return;
@@ -233,45 +196,11 @@ export default function SearchCard() {
     [],
   );
 
-  const usesSearxng = config.sources.includes("searxng");
+  // 全宽说明区按"当前勾了哪些来源"决定显示哪几条（卡片网格在 SearchSourceTiles 里）。
   const usesDeepseek = config.sources.includes("deepseek");
   const usesTavily = config.sources.includes("tavily");
   const usesJina = config.sources.includes("jina");
-
-  const toggleSource = (value: SearchSource, checked: boolean) => {
-    const sources = checked
-      ? [...config.sources.filter((item) => item !== value), value]
-      : config.sources.filter((item) => item !== value);
-    patch({ sources });
-  };
-
-  // Selected state: brand tint background + 1.5px brand border (same as the provider cards).
-  //
-  // The colours MUST come from the `--rf-*` CSS variables, not from `palette.*` and not from
-  // `token.colorPrimaryBg`:
-  //   - `token.colorPrimaryBg` is derived from the deep brand colour (#16365c) and lands on a
-  //     mid-grey (#92989c), so a selected tile read as "dark grey card";
-  //   - `palette.brandTint` is a *light-theme-only* literal: in dark mode the tile stayed
-  //     white while the label turned light, i.e. white-on-white text (W2 regression #3).
-  // `--rf-brand-tint` / `--rf-brand` / `--rf-border` are defined in design-tokens.css and
-  // overridden in dark-tokens.css, so the same inline style is correct in both themes.
-  //
-  // `borderWidth` must be set on its own: writing `${1.5}px` inside the `border` shorthand
-  // is normalised, so the 1.5px selection border may never render.
-  const tileStyle = (checked: boolean) => ({
-    padding: "10px 12px",
-    // 卡片按内容高度收缩：同一行里 SearXNG（标题+说明+地址框）比 DeepSeek 矮一截，
-    // 撑成等高会在输入框下方留出一大块空白（清单 §4）。
-    minWidth: 0,
-    borderRadius: token.borderRadiusLG,
-    backgroundColor: checked ? "var(--rf-brand-tint)" : "transparent",
-    borderStyle: "solid",
-    borderWidth: checked ? "1.5px" : "1px",
-    borderColor: checked ? "var(--rf-brand)" : "var(--rf-border)",
-    display: "flex" as const,
-    flexDirection: "column" as const,
-    gap: 8,
-  });
+  const usesCustom = config.sources.includes("custom");
 
   const saveStatusText =
     saveStatus === "saving"
@@ -327,88 +256,7 @@ export default function SearchCard() {
       <LoadingBlock spinning={loading}>
         <Flex vertical gap={16}>
           <SettingsField label={t("searchCard.sources.title")} hint={t("searchCard.sources.hint")}>
-            <div
-              role="group"
-              aria-label={t("searchCard.sources.title")}
-              style={{
-                display: "grid",
-                // auto-fit：宽屏保持两列（清单 §4 的「第二行两张卡」），容器窄于两列
-                // 最小宽度时自动降为单列，380px 不会挤成两列半；
-                // alignItems: start：卡片按自身内容高度排列，不再被最高的那张拉齐。
-                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
-                gap: 8,
-                alignItems: "start",
-              }}
-            >
-              {SOURCE_OPTIONS.map((option) => {
-                const checked = config.sources.includes(option.value);
-                return (
-                  <div key={option.value} style={tileStyle(checked)}>
-                    <Flex align="center" justify="space-between" gap={8}>
-                      <Typography.Text strong>{sourceLabel(option)}</Typography.Text>
-                      <Checkbox
-                        aria-label={sourceLabel(option)}
-                        checked={checked}
-                        onChange={(event) => toggleSource(option.value, event.target.checked)}
-                      />
-                    </Flex>
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {t(option.noteKey)}
-                    </Typography.Text>
-
-                    {option.value === "searxng" ? (
-                      <Input
-                        aria-label={t("searchCard.searxng.title")}
-                        value={config.searxng_url}
-                        onChange={(event) => patch({ searxng_url: event.target.value })}
-                        placeholder={t("searchCard.searxng.placeholder")}
-                        // 只有勾了 SearXNG 才需要填地址：未勾选时禁用以免误以为"必须先填"。
-                        disabled={!usesSearxng}
-                        allowClear
-                      />
-                    ) : null}
-
-                    {option.value === "deepseek" ? (
-                      <Input.Password
-                        aria-label={t("searchCard.deepseek.keyAria")}
-                        value={config.deepseek_api_key}
-                        onChange={(event) => patch({ deepseek_api_key: event.target.value })}
-                        placeholder={t("searchCard.deepseek.keyPlaceholder")}
-                        // 只有勾了 DeepSeek 才需要密钥：未勾选时禁用，避免误解。
-                        disabled={!usesDeepseek || undefined}
-                        allowClear
-                        autoComplete="off"
-                      />
-                    ) : null}
-
-                    {/* P4-09 / P4-10：两个新来源的 Key 同样就地放在自己的卡片里。 */}
-                    {option.value === "tavily" ? (
-                      <Input.Password
-                        aria-label={t("searchCard.tavily.keyAria")}
-                        value={config.tavily_api_key}
-                        onChange={(event) => patch({ tavily_api_key: event.target.value })}
-                        placeholder={t("searchCard.tavily.keyPlaceholder")}
-                        disabled={!usesTavily || undefined}
-                        allowClear
-                        autoComplete="off"
-                      />
-                    ) : null}
-
-                    {option.value === "jina" ? (
-                      <Input.Password
-                        aria-label={t("searchCard.jina.keyAria")}
-                        value={config.jina_api_key}
-                        onChange={(event) => patch({ jina_api_key: event.target.value })}
-                        placeholder={t("searchCard.jina.keyPlaceholder")}
-                        disabled={!usesJina || undefined}
-                        allowClear
-                        autoComplete="off"
-                      />
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
+            <SearchSourceTiles config={config} onChange={patch} />
           </SettingsField>
 
           {/* 长提示移出卡片、放到网格下方全宽显示：既让卡片按内容收缩（卡片内不再留白），
@@ -437,6 +285,14 @@ export default function SearchCard() {
               type="info"
               showIcon
               title={t("searchCard.jina.note")}
+              style={{ marginTop: 8 }}
+            />
+          ) : null}
+          {usesCustom ? (
+            <Alert
+              type="info"
+              showIcon
+              title={t("searchCard.custom.note")}
               style={{ marginTop: 8 }}
             />
           ) : null}

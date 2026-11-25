@@ -25,7 +25,7 @@ import SettingsNav from "../features/settings/SettingsNav";
 import SettingsSearch from "../features/settings/SettingsSearch";
 import { parseSettingsSection, settingsSection } from "../features/settings/settingsSections";
 import type { SettingsSectionKey } from "../features/settings/settingsSections";
-import { revealSettingsCard } from "../features/settings/settingsFocus";
+import { revealSettingsCard, scrollSettingsToTop } from "../features/settings/settingsFocus";
 import type { SettingsIndexEntry } from "../features/settings/settingsIndex";
 import {
   AboutPanel,
@@ -37,6 +37,7 @@ import {
   InteractionPanel,
   MemorySkillsPanel,
   ModelPanel,
+  NotificationsPanel,
   VoicePanel,
 } from "../features/settings/SettingsPanels";
 import { t } from "../i18n";
@@ -59,12 +60,19 @@ export default function SettingsPage() {
   const contentRef = useRef<HTMLDivElement>(null);
   /** 上一次已渲染的分组：用来区分"用户切了组"和"首次挂载"。 */
   const prevSectionRef = useRef<SettingsSectionKey | null>(null);
+  /** 带 #anchor 进来只定位一次：之后用户自己切组，不该被拉回那个锚点。 */
+  const hashHandledRef = useRef(false);
+  /** 这一次切组是搜索命中引起的：预滚动让给 revealSettingsCard，避免连跳两段。 */
+  const skipResetRef = useRef(false);
 
   // 本页用模块级 t() 取文案：必须订阅语言变化，否则切到英文后这一页仍是中文。
   useLocale();
 
   // 带锚点进来（例如批量操作未配置时从岗位广场跳来）要落到那张卡，而不是停在分组顶部。
+  // **只处理一次**：锚点描述的是"从别处点进来的落点"，用户随后切组是新的意图。
   useEffect(() => {
+    if (hashHandledRef.current) return;
+    hashHandledRef.current = true;
     const hash = window.location.hash;
     if (!hash) return;
     let target: Element | null;
@@ -74,7 +82,7 @@ export default function SettingsPage() {
       return;
     }
     target?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [activeSection]);
+  }, []);
 
   const {
     records,
@@ -252,9 +260,9 @@ export default function SettingsPage() {
     if (!visited.includes(next)) setVisited((prev) => [...prev, next]);
   };
 
-  // 只有真的换了分组才把内容区滚回顶部：首次挂载不滚（否则页头会被顶出视口）。
-  // 用"上一次分组"而不是 mounted 布尔量判断——StrictMode 下 effect 会跑两次，
-  // 布尔量在第二次已经把挂载期当成切换期，页面一进就上滚一屏。
+  // 只有真的换了分组才把内容区滚回顶部，而且**只在内容顶已经滚出视口时**才滚：
+  // 原来无条件 `scrollIntoView` 会把"只滚了半屏"也拉回顶部，用户看到的是切组时闪一下。
+  // 搜索命中后由 revealSettingsCard 负责一次滚动，这里不预滚（否则连跳两段）。
   useEffect(() => {
     if (prevSectionRef.current === null) {
       prevSectionRef.current = activeSection;
@@ -262,16 +270,23 @@ export default function SettingsPage() {
     }
     if (prevSectionRef.current === activeSection) return;
     prevSectionRef.current = activeSection;
-    contentRef.current?.scrollIntoView?.({ block: "start", behavior: "auto" });
-  }, [activeSection]);
+    if (skipResetRef.current) return;
+    scrollSettingsToTop(contentRef.current);
+  }, [activeSection, pendingJump]);
 
   // 搜索命中：先切分组，等这一帧把目标卡渲染出来后再滚动 + 高亮。
+  // 找不到目标卡（索引与 DOM 漂移）时兜底回到分组顶部，别让用户停在原地不知所措。
   useEffect(() => {
     if (pendingJump === null) return;
-    revealSettingsCard(pendingJump.title);
+    skipResetRef.current = false;
+    if (!revealSettingsCard(pendingJump.title)) {
+      scrollSettingsToTop(contentRef.current);
+    }
   }, [pendingJump]);
 
   const handleJump = (entry: SettingsIndexEntry) => {
+    // 先占位再切组：切组 effect 与命中 effect 在同一批更新里跑，顺序由声明位置决定。
+    skipResetRef.current = true;
     handleSectionChange(entry.section);
     setPendingJump({ title: t(entry.titleKey), nonce: Date.now() });
   };
@@ -297,6 +312,8 @@ export default function SettingsPage() {
         return <AppearancePanel />;
       case "interaction":
         return <InteractionPanel />;
+      case "notifications":
+        return <NotificationsPanel />;
       case "data":
         return <DataPanel datasetsCard={datasetsCard} />;
       case "backup":

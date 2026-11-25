@@ -89,7 +89,22 @@ describe("FirstDeliveryPanel", () => {
 
   it("全完成（示例数据口径）：没有 CTA，已完成标记出现", () => {
     renderPanel(
-      statsWith({ job_count: 6, resume_count: 3, claim_count: 12, resume_with_job_count: 2 }),
+      statsWith({
+        job_count: 6,
+        resume_count: 3,
+        claim_count: 12,
+        resume_with_job_count: 2,
+        // CR-34：交付阶段的完成看「已投递」。
+        latest_applications: [
+          {
+            id: 1,
+            job_title: "后端开发",
+            company: "示例公司",
+            status: "success",
+            updated_at: "2026-10-01T10:00:00",
+          },
+        ],
+      }),
     );
     expect(screen.getAllByText("已完成")).toHaveLength(3);
     expect(screen.queryByRole("link")).toBeNull();

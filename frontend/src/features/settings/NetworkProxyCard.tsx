@@ -317,6 +317,10 @@ export default function NetworkProxyCard() {
                 aria-label={t("settingsUi.network.password")}
               />
             </Flex>
+            {/* CR-12：口令的空串语义与三把搜索 Key 相反（这里留空=保留），写在输入框下方。 */}
+            <Typography.Text type="secondary" className="network-hint">
+              {t("settingsUi.network.passwordRule")}
+            </Typography.Text>
             <Typography.Text type="secondary" className="network-hint">
               {t("settingsUi.network.socksHint")}
             </Typography.Text>

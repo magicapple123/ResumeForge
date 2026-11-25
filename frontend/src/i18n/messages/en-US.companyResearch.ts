@@ -31,7 +31,7 @@ const companyResearch = {
   "companyResearch.brief.noSources": "This brief has no citations to show",
   "companyResearch.brief.citationAria": "Open citation {number}",
   "companyResearch.brief.skipped": "Only the brief ran this time; no source cards were searched",
-  "companyResearch.brief.action.openSettings": "Configure the DeepSeek key",
+  "companyResearch.brief.action.openSettings": "Change the web-search key",
   "companyResearch.brief.action.checkBalance": "Check balance and usage",
   "companyResearch.brief.action.retryLater": "Retry the brief",
   "companyResearch.latest.label": "Last researched: {when}",
@@ -41,10 +41,11 @@ const companyResearch = {
   "companyResearch.latest.daysAgo": "{days} days ago",
   "companyResearch.deep.label": "Deep research",
   "companyResearch.deep.hint":
-    "Runs several search rounds with up to about 20 tool calls. Searches are billed per query term, so it costs much more than the default mode.",
+    "Runs several search rounds with up to about 20 tool calls. Every result joins the model context, so token usage is much higher than the default mode.",
   "companyResearch.deep.defaultOff": "Deep research is off by default and uses a single search",
   "companyResearch.usage.summary": "{count} searches this run, {seconds}s elapsed",
-  "companyResearch.usage.billing": "Searches are billed per query term; deep research adds many",
+  "companyResearch.usage.billing":
+    "Searches are counted per query term; deep research adds many more",
   "companyResearch.notes.title": "Notes for this run",
   "companyResearch.notes.separator": "; ",
 

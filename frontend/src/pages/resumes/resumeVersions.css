@@ -1,0 +1,74 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「岗位 · N 个版本」展开后的版本清单（CR-33）。颜色只用 --rf-* 语义 token，
+   不覆写 antd 原生类名；折叠行的排版由表格自身负责。 */
+
+.resume-version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 4px 32px;
+}
+
+.resume-version-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.resume-version-index {
+  flex: 0 0 auto;
+  min-width: 52px;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+}
+
+.resume-version-title {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-version-time {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+.resume-version-note {
+  flex: 1 1 160px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.resume-version-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* 折叠行：岗位名 + 版本数不会换行，公司/投递次数跟在后面。 */
+.resume-group-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+}
+
+/* 分组版本表的容器：撑满可用宽度，且允许被 flex/grid 父级收缩（内部表格自带横向滚动）。 */
+.resume-group-table {
+  width: 100%;
+  min-width: 0;
+}
+
+.resume-group-meta {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.resume-group-capped {
+  margin-top: 8px;
+}

@@ -179,6 +179,11 @@ const assistantUi = {
   "assistantUi.tasks.current": "Current",
   "assistantUi.tasks.source.reminder": "From: reminder",
   "assistantUi.tasks.source.other": "From: {source}",
+  // CR-20 reminder task row: one context line plus two actions ("Got it" cancels the card).
+  "assistantUi.tasks.reminder.from": "From a reminder",
+  "assistantUi.tasks.reminder.dueAt": "Due {time}",
+  "assistantUi.tasks.action.acknowledge": "Got it",
+  "assistantUi.tasks.action.goTracker": "Open job tracker",
   // #13A message actions (F37: context menu + narrow "⋯" share one list).
   "assistantUi.messageActions.more": "More actions",
   "assistantUi.messageActions.copy": "Copy",

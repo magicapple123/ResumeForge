@@ -2,8 +2,8 @@
 /**
  * 真实月历（E11）：按 ``remind_at`` 把提醒归集到月格里，色块/状态区分。
  *
- * 自绘 grid，不引入第三方日历库（前端依赖受控）。数据源 v1 仅提醒（含 done/dismissed
- * 状态），聚合 next_action 留 P1。pending 蓝色、逾期红色、done 绿色、dismissed 灰色。
+ * 自绘 grid，不引入第三方日历库（前端依赖受控）。数据源 v1 仅提醒（active/archived
+ * 计划），聚合 next_action 留 P1。待办蓝色、逾期红色、已结束灰色。
  *
  * 组件默认自拉 ``listReminders``；传入 ``reminders`` 时用它覆盖（测试 / 父组件已取数时）。
  */
@@ -57,10 +57,10 @@ const KIND_LABEL_KEYS: Record<ReminderKind, MessageKey> = {
   other: "trackerUi.reminderKind.other",
 };
 
+/** CR-28：`status` 只剩 active/archived（"这一次"是否处理过由后端 occurrence 决定）。 */
 const STATUS_LABEL_KEYS: Record<ReminderStatus, MessageKey> = {
-  pending: "trackerUi.reminderStatus.pending",
-  done: "trackerUi.reminderStatus.done",
-  dismissed: "trackerUi.reminderStatus.dismissed",
+  active: "reminder.status.active",
+  archived: "reminder.status.archived",
 };
 
 /** 未知取值原样显示（与旧的 `?? item.kind` 同义）。 */
@@ -76,17 +76,15 @@ function statusLabel(status: string): string {
 
 /** 提醒在月历上的颜色：状态优先，逾期再单独标红。 */
 function reminderColor(reminder: Reminder, now: Dayjs): string {
-  if (reminder.status === "done") return "green";
-  if (reminder.status === "dismissed") return "default";
+  if (reminder.status === "archived") return "default";
   const remindAt = dayjs(reminder.remind_at);
   if (remindAt.isValid() && remindAt.isBefore(now, "day")) return "red";
   return "blue";
 }
 
-/** 把某一天的提醒按「逾期 → pending → done → dismissed」排序，紧凑模式只关心有没有。 */
+/** 把某一天的提醒按「待办 → 已结束」排序，紧凑模式只关心有没有。 */
 function sortForDay(items: Reminder[]): Reminder[] {
-  const rank = (status: string): number =>
-    status === "pending" ? 0 : status === "done" ? 2 : status === "dismissed" ? 3 : 1;
+  const rank = (status: string): number => (status === "active" ? 0 : 1);
   return [...items].sort((a, b) => rank(a.status) - rank(b.status));
 }
 

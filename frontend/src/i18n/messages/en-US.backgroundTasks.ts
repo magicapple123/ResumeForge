@@ -22,6 +22,9 @@ const backgroundTasks = {
   "backgroundTasks.action.view": "View",
   /** Fallback dialog title: never show a completion dialog without a title. */
   "backgroundTasks.notice.done.title": "Task finished",
+  "backgroundTasks.restore.mergedTitle": "{count} tasks finished while you were away",
+  "backgroundTasks.restore.completed": "{count} completed",
+  "backgroundTasks.restore.failed": "{count} failed",
   "backgroundTasks.jobAnalysis.label": "Job analysis",
   "backgroundTasks.jobAnalysis.running": "Generating the job analysis...",
   "backgroundTasks.toast.cancelled": 'Cancelled "{name}"',

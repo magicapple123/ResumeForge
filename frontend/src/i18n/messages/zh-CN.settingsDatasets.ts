@@ -95,6 +95,22 @@ const settingsDatasets = {
   "settingsDatasets.import.fontsRestored": "恢复了 {count} 个自定义字体",
   /** 同名字体保留本机版本的份数。 */
   "settingsDatasets.import.fontsSkipped": "{count} 个同名字体保留本机版本",
+  /** CR-10：语音 / 语义检索 / 搜索 / 代理四块服务配置恢复了其中几项。 */
+  "settingsDatasets.import.servicesRestored":
+    "恢复了 {count} 项服务配置（语音转写 / 语义检索 / 联网搜索 / 代理）",
+  /** 服务配置整段导入失败，附后端原因。 */
+  "settingsDatasets.import.servicesFailed": "服务配置未能导入（{error}）",
+  /** 备份里没有 Key：四块结构回来了，密钥必须在本机重填。 */
+  "settingsDatasets.import.servicesKeyNotice":
+    "备份未包含 API Key：请到设置页重填语音转写、语义检索与联网搜索的 Key",
+  /** 备份里带了 Key：Windows 密文绑定原电脑与原用户，换机后可能解不开。 */
+  "settingsDatasets.import.servicesKeyImported":
+    "备份包含 API Key，但换机后可能无法解密：请到设置页核对语音转写、语义检索与联网搜索的 Key，显示为空时重填",
+  /** CR-13：诊断里列出仍会被回落读取的旧配置行（只报哪几组，不含值）。 */
+  "settingsDatasets.legacyConfig.notice":
+    "检测到 {count} 组旧配置仍在数据集库里（{sections}）。新版本只在全局配置缺失时才会读它们，建议到对应设置卡重新保存一次，把值写入全局配置。",
+  "settingsDatasets.legacyConfig.section.web_search": "联网搜索",
+  "settingsDatasets.legacyConfig.section.asr": "语音转写",
   /** 导入成功且没有问题时的整句；`parts` 是上面各分句的连接结果。 */
   "settingsDatasets.import.summaryOk": "{parts}；当前数据未受影响",
   /** 带着附件问题导入时的整句：先回执，再说清这份备份不完整（问题清单最多 3 条）。 */

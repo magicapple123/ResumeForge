@@ -66,6 +66,19 @@ export interface DatasetImportResult extends DatasetInfo {
    */
   font_issues?: string[];
   /**
+   * CR-10：语音 / 语义检索 / 联网搜索 / 代理四块服务配置的恢复报告（只在包内带
+   * `global_services.json` 时出现）。`key_notice` 非空表示备份里没有 Key，需要重填。
+   */
+  global_services?: {
+    asr_profiles?: { imported?: number; skipped?: number };
+    embedding_profiles?: { imported?: number; skipped?: number };
+    web_search?: boolean;
+    network?: boolean;
+    keys_included?: boolean;
+    key_notice?: string;
+    error?: string;
+  };
+  /**
    * R16 嵌套整包：逐份的结果。整包不再"要么全成、要么不动"——一份子包坏了只跳过
    * 那一份，所以失败/跳过的每一份都要能点名给用户看。
    */

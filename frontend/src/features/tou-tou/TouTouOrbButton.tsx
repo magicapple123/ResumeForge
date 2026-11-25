@@ -16,6 +16,13 @@
  * 首次说明用 `Popover` 而不是更长的 Tooltip：它要常驻到用户读完（Tooltip 会随鼠标移开
  * 消失），并且带一个可聚焦的关闭按钮——与 `components/common/HintDetail.tsx` 同一套取舍
  * （长文本进 Popover，短提示才留在 Tooltip）。
+ *
+ * ## CR-37：不与启动弹窗叠
+ *
+ * 首次说明原本一挂载就展开，恰好盖在欢迎引导 / 近期提醒 / 新版本弹窗上——同一次打开
+ * 两层浮层，用户既读不完说明，也看不清弹窗。现在延迟 `ORB_HINT_DELAY_MS` 再问一句
+ * `isStartupPopupActive()`：槽位被占用就不弹、**不写已读标记**（下次启动再给一次机会）；
+ * 空闲才展开并当场记标记。
  */
 import { Button, Popover, Tooltip } from "antd";
 import { useEffect, useState } from "react";
@@ -23,6 +30,7 @@ import type { KeyboardEvent, PointerEvent, RefObject } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { layer } from "../../theme/tokens";
+import { isStartupPopupActive } from "../../utils/userGuide";
 import { formatShortcut } from "../shortcuts/matchShortcut";
 import { useShortcutSettings } from "../shortcuts/useShortcutKeymap";
 import { TOU_TOU_FACE_SOURCES, type TouTouFaceKey } from "./touTouFaces";
@@ -31,6 +39,14 @@ import { TOU_TOU_FACE_SOURCES, type TouTouFaceKey } from "./touTouFaces";
 export const ORB_HINT_SEEN_KEY = "resumeforge.orb.hint_seen";
 /** 首次说明的自动收起时间：够读完四条，又不至于一直挂在球旁边。 */
 const ORB_HINT_AUTO_HIDE_MS = 8000;
+/**
+ * 首次说明的出场延迟（CR-37）：等启动弹窗队列先落定。
+ *
+ * 启动弹窗（欢迎 / 近期提醒 / 新版本）是异步决定要不要弹的：提醒弹窗要等接口回来，
+ * 更新弹窗还要静默 1.5s 让提醒先登记。球这边若立刻展开，用户会同时看到两层浮层。
+ * 2s 覆盖这两段等待；到时若槽位仍被占用就不弹（也**不写**已读标记，下次启动再说）。
+ */
+export const ORB_HINT_DELAY_MS = 2000;
 
 function hasSeenOrbHint(): boolean {
   try {
@@ -87,8 +103,19 @@ export function TouTouOrbButton({
   const shortcut = (shortcuts.bindings.selectionPanel ?? [])
     .map((key) => formatShortcut(key))
     .join(" / ");
-  /** 首次进入的那一次完整说明：初值读标记，之后只由用户关闭或超时收起。 */
-  const [firstRunOpen, setFirstRunOpen] = useState(() => !hasSeenOrbHint());
+  /** 首次进入的那一次完整说明：延迟出场，先让启动弹窗队列落定。 */
+  const [firstRunOpen, setFirstRunOpen] = useState(false);
+
+  useEffect(() => {
+    if (hasSeenOrbHint()) return;
+    const timer = window.setTimeout(() => {
+      // 启动弹窗占用着槽位（或本次启动注定要弹欢迎引导）：本次不弹，也**不写**标记——
+      // 下次启动还有机会完整读一次，而不是被压在另一层浮层下面直接作废。
+      if (isStartupPopupActive()) return;
+      setFirstRunOpen(true);
+    }, ORB_HINT_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!firstRunOpen) return;

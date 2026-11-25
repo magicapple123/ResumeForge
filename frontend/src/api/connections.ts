@@ -39,6 +39,20 @@ export function resetSystemSource(itemId: string): Promise<ConnectionsPayload> {
   return request(`/connections/system/${encodeURIComponent(itemId)}`, { method: "DELETE" });
 }
 
+/**
+ * CR-07：让后端把这把密钥直接写进本机剪贴板。
+ *
+ * 为什么不在页面里 `navigator.clipboard.writeText`：任何响应都不许出现明文，所以前端
+ * **根本拿不到**密钥。响应只有 `{ok: true}`；`profile_id` 用于命名配置型来源（复制
+ * 指定的那一条，而不是当前生效的那一条）。
+ */
+export function copyConnectionSecret(itemId: string, profileId = ""): Promise<{ ok: boolean }> {
+  const suffix = profileId ? `?profile_id=${encodeURIComponent(profileId)}` : "";
+  return request(`/connections/${encodeURIComponent(itemId)}/clipboard${suffix}`, {
+    method: "POST",
+  });
+}
+
 /** 记录"仅本次会话"的大模型密钥（只进后端内存，不落盘、不进备份）。 */
 export function setLLMSessionKey(apiKey: string): Promise<{ configured: boolean }> {
   return request("/settings/llm/session-key", {

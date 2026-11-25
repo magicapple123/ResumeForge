@@ -2,7 +2,7 @@
 /**
  * 设置项的**搜索索引**：卡片标题 + 分组名 + 少量口头词别名。
  *
- * 为什么单独一张表：35 张卡分布在十组里，用户找"音色"时不会先记住它在「语音与面试」；
+ * 为什么单独一张表：36 张卡分布在十一组里，用户找"音色"时不会先记住它在「语音与面试」；
  * 索引是唯一能搜到它的地方。表是纯数据，匹配逻辑是纯函数，两者都不碰 DOM。
  *
  * 别名的口径：**只给标题里没有用户口头词的卡**（目前 10 张）。标题已经含"搜索""记忆"
@@ -122,6 +122,8 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
   { id: "announcement", section: "about", titleKey: "announcement.settings.title" },
   { id: "diagnostics", section: "about", titleKey: "settingsUi.help.title" },
   { id: "reminders", section: "about", titleKey: "settingsUi.reminderPopup.title" },
+  // 通知（CR-29）
+  { id: "notifications", section: "notifications", titleKey: "notificationsSettings.nav" },
 ];
 
 /** 一条索引项在一门语言下的全部可搜文字（卡片标题 + 分组名 + 别名）。 */

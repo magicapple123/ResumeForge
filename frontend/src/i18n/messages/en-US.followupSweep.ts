@@ -22,7 +22,7 @@ const followupSweep = {
   "followupSweep.state.done": "This card is done",
   "followupSweep.hint.incomplete": "{count} still need an outcome",
   "followupSweep.hint.partial": "{count} are still undecided; you can save the selected ones first",
-  "followupSweep.toast.submitted": "Recorded {count} follow-up outcomes",
+  "followupSweep.toast.submitted": "Recorded {count}; see them in Job tracker",
   "followupSweep.toast.idempotent": "These outcomes were already recorded",
   "followupSweep.error.submit": "The outcomes were not saved. Try again.",
 } as const;

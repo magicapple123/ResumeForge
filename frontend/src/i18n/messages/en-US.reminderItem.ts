@@ -8,6 +8,11 @@ const reminderItem = {
   "reminderItem.aria.ignore": "Ignore the reminder {title}",
   "reminderItem.action.ignore": "Ignore",
   "reminderItem.action.edit": "Edit",
+  /** CR-28: skip this occurrence (recurring reminders schedule the next one), not the whole plan. */
+  "reminderItem.action.skip": "Skip",
+  "reminderItem.aria.skip": "Skip this occurrence of the reminder {title}",
+  "reminderItem.action.snooze": "Snooze",
+  "reminderItem.aria.snooze": "Snooze the reminder {title}",
   "reminderItem.action.delete": "Delete",
   "reminderItem.confirm.delete": "Delete this reminder?",
   /** Overdue tag (T06): only when pending and days_until < 0; `{days}` is the overdue days. */

@@ -14,7 +14,6 @@ import type { ApplyQueueItem } from "../../types";
 import { ContextMenuHost } from "../context-menu/ContextMenuHost";
 import { t } from "../../i18n";
 import ApplyQueuePanel from "./ApplyQueuePanel";
-import { APPLY_GUIDE_SEEN_KEY } from "./queue/ApplyQueueGuide";
 
 const apiMocks = vi.hoisted(() => ({
   listQueue: vi.fn(),
@@ -119,9 +118,6 @@ beforeEach(() => {
     history: { applied: 0, succeeded: 0, failed: 0, no_reply: 0 },
   });
   insightsMocks.getResumeFit.mockResolvedValue({ items: [] });
-  // 默认认为"说明已看过"（折叠）：绝大多数用例只关心队列本身，弹层不该出现在断言范围里。
-  // 测 14G 的用例会显式清掉这个标记，验证"第一次进来会展开一次"。
-  window.localStorage.setItem(APPLY_GUIDE_SEEN_KEY, "1");
 });
 
 /** 统一的挂载方式：面板里的空态与体检抽屉都含 `<Link>`，必须有 Router 上下文。 */
@@ -272,7 +268,7 @@ describe("ApplyQueuePanel 使用指引与详情", () => {
 
     renderPanel();
 
-    // 默认收起：beforeEach 把 guide_seen 置为已看过，首屏那 96px 就是为了让表格多几行。
+    // 说明默认收起（CR-17 起不再自动展开）：首屏那 96px 就是为了让表格多几行。
     await screen.findByText("后端开发");
     expect(screen.queryByText(t("applyQueue.guide.title"))).not.toBeInTheDocument();
 

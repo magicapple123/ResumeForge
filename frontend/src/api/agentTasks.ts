@@ -30,6 +30,34 @@ export interface AgentTaskStep {
   error: string;
   started_at: string | null;
   finished_at: string | null;
+  /**
+   * 只读派生字段（CR-19）：这一步指向的岗位。后端按步骤的 `output_ref.track_id`
+   * 批查询补齐；旧卡/进度已删/进度没挂岗位时为 `null`（或缺省）。
+   * 界面据此把步骤标题链到 `/tracker?job_id=`，补不出来就只显示文字。
+   */
+  job_id?: number | null;
+}
+
+/**
+ * 提醒类任务卡的来源上下文（CR-20）。
+ *
+ * 提醒到期卡只有一个确认步骤，按通用任务行显示会变成「第 0/1 步」的任务，用户看不出
+ * 它其实是一条提醒。后端把这些字段**随任务一起**下发（批查询，不逐卡查库）：
+ *
+ * - `due_at` 是这一张卡对应的**那次到期**（`occurrence_due_at`），不是提醒的最新时间——
+ *   提醒改期后旧卡仍应显示它自己那次的时点；
+ * - `deleted` = 提醒已被软删。此时卡上不给任何跳转链接（点进去也找不到那条提醒），
+ *   只留标题与时间。
+ */
+export interface AgentTaskReminderContext {
+  id: number;
+  title: string;
+  kind: string;
+  /** 这一张卡对应那次到期的时刻；老数据可能没有（null）。 */
+  due_at: string | null;
+  company: string;
+  job_title: string;
+  deleted: boolean;
 }
 
 export interface AgentTask {
@@ -46,6 +74,8 @@ export interface AgentTask {
   finished_at: string | null;
   error: string;
   steps: AgentTaskStep[];
+  /** 仅 `source === "reminder"` 时下发；其它来源为 `null`（或旧后端缺省）。 */
+  reminder?: AgentTaskReminderContext | null;
 }
 
 export interface AgentTaskCreateRequest {

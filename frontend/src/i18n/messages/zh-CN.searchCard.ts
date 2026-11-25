@@ -54,12 +54,16 @@ const searchCard = {
   "searchCard.saved": "已保存联网搜索设置",
   "searchCard.saveFailed": "保存联网搜索设置失败",
 
+  "searchCard.source.bing": "Bing",
+  "searchCard.source.duckduckgo": "DuckDuckGo",
   "searchCard.source.searxng": "SearXNG（自建实例）",
   /** 品牌名：两种语言写法相同，登记在 equalityExemptions。 */
   "searchCard.source.deepseek": "DeepSeek",
   /** 品牌名，同上。 */
   "searchCard.source.tavily": "Tavily",
   "searchCard.source.jina": "Jina",
+  "searchCard.source.custom": "自定义",
+  "searchCard.source.note.custom": "自带的搜索接口，按模板配端点",
 
   "searchCard.sources.title": "搜索来源",
   "searchCard.sources.hint": "多个来源会并发查询后合并去重，至少选一个。",
@@ -75,8 +79,11 @@ const searchCard = {
   "searchCard.deepseek.keyAria": "DeepSeek 搜索 API Key",
   /** 占位符不能写成纯 ASCII（`sk-...` 会被判成"源文是英文"），所以给一句中文。 */
   "searchCard.deepseek.keyPlaceholder": "粘贴 DeepSeek API Key",
+  /** CR-12：空串规则与"同一把 Key 还供谁用"写在输入框旁。 */
+  "searchCard.deepseek.keyRule":
+    "留空并保存 = 移除这把 Key。扫描件 OCR 也用这一把（识别引擎在「设置 → 外部连接」）。",
   "searchCard.deepseek.cost":
-    "Search 与 Fetch 各约 ¥0.005 次成功请求，由 DeepSeek 计费；应用内只统计调用次数，不折算金额。已保存的 Key 回显为 ********，清空输入框即移除。",
+    "这里配的是直连 Search / Fetch API，各约 ¥0.005 / 次成功请求，由 DeepSeek 计费；公司调研简报走的模型侧联网工具自 2026-11-18 起不再单独收取工具费。应用内只统计调用次数，不折算金额。已保存的 Key 回显为 ********，清空输入框即移除。",
   "searchCard.deepseek.privacy":
     "勾选这个来源后，抓取正文时网页地址会发送给 DeepSeek 由它读取；只有它失败时才回落到本机读取。不想发送地址就关掉这个来源。",
 
@@ -107,14 +114,43 @@ const searchCard = {
   "searchCard.source.note.jina": "需要 API Key，有免费额度",
   "searchCard.tavily.keyAria": "Tavily 搜索 API Key",
   "searchCard.tavily.keyPlaceholder": "粘贴以 tvly- 开头的 Key",
+  "searchCard.tavily.keyRule": "留空并保存 = 移除 Tavily Key；助手搜索会少一条来源。",
   "searchCard.tavily.note":
     "一次调用就能带回摘要与整页正文，省掉逐条抓页面那一轮；免费额度每月 1000 次（basic 档每次 1 次额度）。正文同样会经过选段，不会把整页塞进上下文。",
   "searchCard.jina.keyAria": "Jina 搜索 API Key",
   "searchCard.jina.keyPlaceholder": "粘贴以 jina- 开头的 Key",
+  "searchCard.jina.keyRule": "留空并保存 = 移除 Jina Key；抓取网页正文时会少一条来源。",
   "searchCard.jina.note":
     "搜索只取前 5 条干净正文；本机抓不到正文的页面（JS 渲染）会自动用它再读一次，本机能读到就不会重复请求。",
 
   /** 卡片区下方的通用参数与卡头的自动保存状态。 */
+
+  /** CR-04：DeepSeek Key 的校验入口（只做 DeepSeek；失败不阻断保存）。 */
+  "searchCard.deepseek.test": "测试 Key",
+  "searchCard.deepseek.testing": "测试中…",
+  "searchCard.deepseek.testOk": "Key 可用（{ms} ms）",
+
+  /** CR-09：自定义搜索来源（模板 + 端点 + 字段映射）。 */
+  "searchCard.custom.template": "协议模板",
+  "searchCard.custom.templateMoonshot": "Kimi（Moonshot）",
+  "searchCard.custom.templateGeneric": "通用",
+  "searchCard.custom.baseUrlAria": "自定义搜索根地址",
+  "searchCard.custom.baseUrlPlaceholder": "粘贴服务商提供的根地址",
+  "searchCard.custom.baseUrlHint":
+    "只填根地址；端点用相对路径。内网 IP 字面量会被拒绝，本机回环地址可以用。",
+  "searchCard.custom.keyAria": "自定义搜索 API Key",
+  "searchCard.custom.keyPlaceholder": "端点需要鉴权时填写（可留空）",
+  "searchCard.custom.searchPathAria": "自定义搜索端点",
+  "searchCard.custom.searchPathPlaceholder": "留空用模板默认（/v1/tools/search）",
+  "searchCard.custom.fetchPathAria": "自定义抓取端点",
+  "searchCard.custom.fetchPathPlaceholder": "留空用模板默认（/v1/tools/fetch）",
+  "searchCard.custom.fieldAria": "结果字段路径",
+  "searchCard.custom.fieldPlaceholder": "例如 data.items",
+  "searchCard.custom.includeContent": "搜索结果直接带回正文",
+  "searchCard.custom.keyRule": "留空并保存 = 移除自定义 Key。",
+  "searchCard.custom.note":
+    "自定义来源只影响资料卡片与助手联网搜索；联网简报仍固定用 DeepSeek。字段路径只支持 a.b / a[0].b 这类写法。",
+
   "searchCard.general.title": "通用参数",
   "searchCard.status.saved": "已自动保存",
   "searchCard.status.saving": "保存中…",

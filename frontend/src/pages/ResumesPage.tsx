@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历中心：生成历史列表、收藏、预览与导出。 */
-import { App } from "antd";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, App } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   deleteResume,
   getResume,
-  listResumes,
   renameResume,
   updateResumeFavorite,
   updateResumeNote,
@@ -21,7 +20,6 @@ import { registerNewResumeHandler } from "../features/shortcuts/runtimeTargets";
 import { computeFieldDiff } from "../utils/resumeFieldDiff";
 import { useResumeListVersion } from "../features/resume/resumeListEvents";
 import type { DiffViewData } from "../types/resumeFieldDiff";
-import { useApi } from "../hooks/useApi";
 import type { ResumeBrief } from "../types";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
@@ -32,6 +30,11 @@ import {
   type ResumeSortState,
 } from "../utils/resumeSort";
 import ResumeResultList from "./resumes/ResumeResultList";
+import { useGroupedResumes } from "../features/resume/list/useGroupedResumes";
+import {
+  readExpandedGroupKeys,
+  writeExpandedGroupKeys,
+} from "../features/resume/list/expandedGroups";
 import DeliveryArchiveModal from "../features/resume/delivery/DeliveryArchiveModal";
 import ResumeRenameModal from "./resumes/ResumeRenameModal";
 import ResumeNoteModal from "./resumes/ResumeNoteModal";
@@ -137,22 +140,49 @@ export default function ResumesPage() {
     setPage(1);
   }, []);
 
-  // T12：手写简历保存成功后广播版本号，放进 useApi 依赖里让列表自动重取。
+  // T12：手写简历保存成功后广播版本号，放进依赖里让列表自动重取。
   const resumeListVersion = useResumeListVersion();
-  const { data, loading, reload, error } = useApi(
-    () =>
-      listResumes({
-        keyword,
-        page,
-        page_size: pageSize,
-        job_id: jobId,
-        has_job: hasJobFilter,
-        sort: toResumeSort(sortState),
-      }),
-    [keyword, page, pageSize, jobId, hasJobFilter, sortState, resumeListVersion],
-    // 回到前台静默重拉（问题 27a）：列表页最先开，避免"另一个窗口改完切回来还是旧的"。
-    { refetchOnFocus: {} },
+  // CR-33：折叠视图按「组」分页。后端只能按简历条分页，所以 useGroupedResumes 先按
+  // 100 条/页补齐（上限 2000 条）再本地分组；这里的 page/pageSize 都是**组页**。
+  const {
+    data: grouped,
+    loading,
+    reload,
+    error,
+  } = useGroupedResumes(
+    {
+      keyword,
+      jobId,
+      hasJobFilter,
+      sort: toResumeSort(sortState),
+    },
+    [keyword, jobId, hasJobFilter, sortState, resumeListVersion],
   );
+  const allGroups = useMemo(() => grouped?.groups ?? [], [grouped]);
+  const totalGroups = allGroups.length;
+  /** 有「同岗位多版本」才进入折叠视图（与 ResumeResultList 的判定同源）。 */
+  const folded = allGroups.some((group) => group.versionCount > 1);
+  /** 当前页的组：切片在页面做，翻页不重新请求。 */
+  const pageGroups = useMemo(
+    () => allGroups.slice((page - 1) * pageSize, page * pageSize),
+    [allGroups, page, pageSize],
+  );
+  /** 已加载的扁平记录（≤2000）：对比、交付归档等入口仍按 resume_id 工作。 */
+  const loadedItems = useMemo(() => grouped?.items ?? [], [grouped]);
+  /** 没有「同岗位多版本」时不折叠，平铺表格仍按当前页切片（与折叠视图同一份数据）。 */
+  const flatPageItems = useMemo(
+    () => loadedItems.slice((page - 1) * pageSize, page * pageSize),
+    [loadedItems, page, pageSize],
+  );
+  /**
+   * 展开的组持久化：沿用 `resumeforge.*.v1` 惯例，坏 JSON 由 expandedGroups 容错成
+   * 「全部折叠」，不会让列表打不开。
+   */
+  const [expandedKeys, setExpandedKeysState] = useState<string[]>(() => readExpandedGroupKeys());
+  const setExpandedKeys = useCallback((keys: string[]) => {
+    setExpandedKeysState(keys);
+    writeExpandedGroupKeys(keys);
+  }, []);
 
   useEffect(() => {
     if (error) message.error(error);
@@ -303,7 +333,7 @@ export default function ResumesPage() {
           resumeId={previewId}
           // 全局入口没有"当前简历"上下文：把当前页列表交给弹层，用户可在这里选任意
           // 一份简历查看/删除归档的原件（W19 真实入口，不再只靠测试传 resumeId）。
-          resumeOptions={(data?.items ?? []).map((item) => ({
+          resumeOptions={loadedItems.map((item) => ({
             value: item.id,
             label: item.title,
           }))}
@@ -343,10 +373,19 @@ export default function ResumesPage() {
       {batch.selecting && (
         <ResumeBatchToolbar
           count={batch.selectedCount}
-          total={data?.total ?? 0}
+          total={totalGroups}
           selectAllLoading={selectAllPagesLoading}
           exporting={batchActions.exporting}
-          onSelectAll={() => void selectAllPages()}
+          onSelectAll={() => {
+            // CR-33：折叠视图里的「全选所有简历」会选中看不见的版本，且它是唯一一个
+            // 可能被误解为"对整组操作"的入口——明确拒绝，并告诉用户怎么继续。
+            // 平铺视图（没有可折叠的多版本）保持原行为。
+            if (!folded) {
+              void selectAllPages();
+              return;
+            }
+            message.info(t("resumes.list.selectAllFolded"));
+          }}
           onAction={batchActions.handleBatchAction}
           onExit={batch.exitSelecting}
         />
@@ -357,7 +396,7 @@ export default function ResumesPage() {
         <ErrorState description={error} onRetry={() => void reload()} />
       ) : (
         <ResumeResultList
-          data={data}
+          data={{ items: flatPageItems, total: loadedItems.length }}
           loading={loading}
           batch={batch}
           favoriteResumeId={favoriteResumeId}
@@ -379,6 +418,18 @@ export default function ResumesPage() {
           onSortChange={applySort}
           navigate={navigate}
           batchActions={batchRowActions}
+          groups={pageGroups}
+          totalGroups={totalGroups}
+          expandedKeys={expandedKeys}
+          setExpandedKeys={setExpandedKeys}
+        />
+      )}
+      {grouped?.truncated && (
+        <Alert
+          className="resume-group-capped"
+          type="info"
+          showIcon
+          title={t("resumes.list.capped")}
         />
       )}
       <ResumeDetailModal
@@ -426,7 +477,7 @@ export default function ResumesPage() {
         diffAgainstId={diffAgainstId}
         diffResult={diffResult}
         diffLoading={diffLoading}
-        items={data?.items ?? []}
+        items={loadedItems}
         onSelect={(value) => void selectDiffAgainst(value)}
         onClose={() => {
           if (!diffLoading) setDiffBase(null);

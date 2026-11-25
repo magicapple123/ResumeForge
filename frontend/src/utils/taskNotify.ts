@@ -17,7 +17,9 @@
 import { Button, Space } from "antd";
 import { createElement } from "react";
 import type { ReactNode } from "react";
+import { recordNotification } from "../api/notifications";
 import { t } from "../i18n";
+import { failureInterruptAllowed, interruptAllowed, soundAllowed } from "./notificationPreferences";
 import { playDoneSound } from "./notifySound";
 
 export interface TaskDoneNotice {
@@ -40,6 +42,14 @@ export interface TaskDoneNotice {
   deepLink?: string | null;
   /** 「去查看」那颗按钮的文案（例如「查看简历」）；缺省用通用那句。 */
   viewLabel?: string;
+  /**
+   * 幂等键（CR-25）：给了就按它写进通知中心；不给则由标题 + 深链 + 分钟桶派生。
+   *
+   * 由调用方提供的是"这件事的唯一身份"（例如 `background:<任务key>`）；派生出来的只
+   * 用来挡住同一次事件的重复上报（StrictMode 双执行、重试），所以带分钟桶——同一分钟
+   * 内内容完全相同的两条合并，隔一分钟的另一件事仍各自成行。
+   */
+  dedupeKey?: string;
 }
 
 /** 右上角卡片（AntD `notification`）的字段名。antd 6 起标题参数叫 `title`。 */
@@ -177,17 +187,63 @@ function modalFooter(notice: TaskDoneNotice, close: () => void): ReactNode {
   );
 }
 
+/** 32 位 FNV-1a：只用来把长标题压成稳定的短键（不需要抗碰撞，撞了也只是少一行）。 */
+function shortHash(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+/**
+ * 完成提醒同时写进通知中心（CR-25）——窗口不在时也不会错过。
+ *
+ * 三条取舍：
+ * - **取消不进 inbox**：`kind: "warning"` 是用户在界面上刚点过的事（自己停的批次），
+ *   再堆一条"你取消了"只会把真正要回看的条目挤下去。
+ * - **正文只接受字符串**：`description` 常是 JSX（带动作按钮），序列化它没有意义；
+ *   通知中心存的是"事件快照"，标题 + 纯文本正文足够回看。
+ * - **fire-and-forget**：写失败最多丢一条回看记录，绝不能影响完成提示本身。
+ */
+function recordInboxNotification(notice: TaskDoneNotice, title: string): void {
+  if (notice.kind === "warning") return;
+  const body = typeof notice.description === "string" ? notice.description : "";
+  const deepLink = notice.deepLink ?? "";
+  const minuteBucket = new Date().toISOString().slice(0, 16);
+  const dedupeKey = notice.dedupeKey ?? `task:${shortHash(`${title}|${deepLink}`)}:${minuteBucket}`;
+  void Promise.resolve(
+    recordNotification({
+      type: "background_task",
+      severity: notice.kind === "error" ? "warning" : "info",
+      title,
+      body,
+      deep_link: deepLink,
+      dedupe_key: dedupeKey,
+    }),
+  ).catch(() => {
+    /* 回看记录写失败不影响完成提示：inbox 是"补看"，不是"必达"。 */
+  });
+}
+
 /**
  * 报告一件"完成了"的事：**一定**发声（除非用户关掉了），再按 `modal` 决定是否打断。
  *
  * 没有宿主时（单测、或 App 还没挂上）只发声不弹——静默跳过比抛异常好。
+ *
+ * CR-29：开关只控制**打断**（弹什么、响不响），不控制"记不记"——通知中心照常落一行，
+ * 所以用户关掉"任务完成"后回来看铃铛仍能看到结果。失败类（warning / error）需要用户
+ * 处理，按决策类放行，只受静默时段约束。
  */
 export function notifyTaskDone(notice: TaskDoneNotice): void {
-  playDoneSound();
-  if (!host) return;
-  const deepLink = notice.deepLink ?? null;
-  // 标题为空时兜一句：弹窗没有标题等于"不知道发生了什么"。
+  const kind = notice.kind ?? "success";
+  const allow = kind === "success" ? interruptAllowed("task") : failureInterruptAllowed();
+  if (allow && soundAllowed()) playDoneSound();
   const title = notice.title.trim() ? notice.title : t("backgroundTasks.notice.done.title");
+  recordInboxNotification(notice, title);
+  if (!allow || !host) return;
+  const deepLink = notice.deepLink ?? null;
   if (notice.modal) {
     // `modal.info` 的返回值要等调用之后才知道，所以先留一个可变的关闭句柄：
     // 用户真点到「去查看」时它已经被赋值了。
@@ -201,7 +257,6 @@ export function notifyTaskDone(notice: TaskDoneNotice): void {
     close = destroyOf(instance);
     return;
   }
-  const kind = notice.kind ?? "success";
   host.notification[kind]({
     // antd 6 起通知卡片的标题字段由 message 改名 title（渲染类同为
     // .ant-notification-notice-title，见 taskNotify.modal.test.tsx 的选择器）。

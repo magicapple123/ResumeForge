@@ -10,9 +10,15 @@ import { BellOutlined } from "@ant-design/icons";
 import { App } from "antd";
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { recordNotification } from "../../api/notifications";
 import { useTaskCompletionWatcher } from "../../hooks/useTaskCompletionWatcher";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import {
+  failureInterruptAllowed,
+  interruptAllowed,
+  soundAllowed,
+} from "../../utils/notificationPreferences";
 import { playDoneSound } from "../../utils/notifySound";
 import { buildTaskNotification, fireWebNotification } from "../../utils/taskNotification";
 
@@ -30,10 +36,30 @@ export default function TaskCompletionNotifier() {
     }) => {
       const payload = buildTaskNotification(detail);
       if (!payload) return;
-      fireWebNotification(payload.message, payload.description);
-      // 与 AI 生成完成用同一段提示音：用户的要求是"完成就要有声"，
-      // 所以不能只有 AI 那条链路响、批次这条不响。
-      playDoneSound();
+      // CR-29：「批次完成」是结果类，默认安静。关掉开关时只记 inbox，不弹、不响。
+      // 失败/停止不在"结果类"里——那需要用户处理，按决策类放行（静默时段仍然压住）。
+      const failed = detail.status !== "completed";
+      const allow = failed ? failureInterruptAllowed() : interruptAllowed("batch");
+      if (allow) {
+        fireWebNotification(payload.message, payload.description);
+      }
+      // CR-25：批次完成/失败同时落通知中心——错过的还能回看（与提醒、AI 任务同一张表）。
+      void recordNotification({
+        type: "background_task",
+        severity: detail.status === "failed" ? "warning" : "info",
+        title: payload.message,
+        body: payload.description,
+        deep_link: "/apply",
+        dedupe_key: `batch:${detail.kind}:${detail.id}:${detail.status}`,
+      }).catch(() => {
+        /* 回看记录写失败不影响即时提醒。 */
+      });
+      if (allow && soundAllowed()) {
+        // 与 AI 生成完成用同一段提示音：用户的要求是"完成就要有声"，
+        // 所以不能只有 AI 那条链路响、批次这条不响。没弹通知时也不该单独响一声。
+        playDoneSound();
+      }
+      if (!allow) return;
       notification[payload.type]({
         key: `task-finished-${detail.id}`,
         icon: <BellOutlined />,

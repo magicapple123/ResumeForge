@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import TouTouOrb from "./TouTouOrb";
 import { setProfileSaveControl } from "./profileSaveBridge";
 import { activeFaceSrc, renderOrb } from "./touTouTestUtils";
-import { ORB_HINT_SEEN_KEY } from "./TouTouOrbButton";
+import { ORB_HINT_DELAY_MS, ORB_HINT_SEEN_KEY } from "./TouTouOrbButton";
+import { setUserGuideVisible } from "../../utils/userGuide";
 import { t } from "../../i18n";
 import {
   getShortcutSettings,
@@ -49,6 +50,11 @@ describe("TouTouOrb", () => {
     vi.useFakeTimers();
     renderOrb(<TouTouOrb onOpen={vi.fn()} />, { firstRunHint: true });
 
+    // CR-37：说明延迟出场，先让启动弹窗队列落定——推进到延迟之后才展开。
+    act(() => {
+      vi.advanceTimersByTime(ORB_HINT_DELAY_MS);
+    });
+
     // 首次进入不必悬停就能读到完整说明，并且当场记下"已看过"。
     expect(screen.getByText(t("touTou.orb.helpTitle"))).toBeInTheDocument();
     expect(document.body).toHaveTextContent(t("touTou.orb.help", { shortcut: "Ctrl+K" }));
@@ -61,6 +67,21 @@ describe("TouTouOrb", () => {
       vi.advanceTimersByTime(9000);
     });
     expect(document.querySelector(".ant-popover:not(.ant-zoom-big-leave)")).toBeNull();
+  });
+
+  it("CR-37：启动弹窗占用槽位时本次不弹，也不写「已看过」", () => {
+    vi.useFakeTimers();
+    renderOrb(<TouTouOrb onOpen={vi.fn()} />, { firstRunHint: true });
+    // 欢迎引导 / 提醒弹窗占着槽位：同一次打开不该再叠一层球的说明。
+    act(() => setUserGuideVisible(true));
+
+    act(() => {
+      vi.advanceTimersByTime(ORB_HINT_DELAY_MS);
+    });
+
+    expect(screen.queryByText(t("touTou.orb.helpTitle"))).toBeNull();
+    // 关键：没写标记——下次启动（没有启动弹窗时）还能完整看到一次。
+    expect(window.localStorage.getItem(ORB_HINT_SEEN_KEY)).toBeNull();
   });
 
   it("does not repeat the first-entry explanation on the next visit", () => {

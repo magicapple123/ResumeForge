@@ -42,7 +42,7 @@ const pagesMisc = {
   /** To-do 1: claims that are not verified yet. */
   "pagesMisc.homePage.todo.claims.text": "{count} claims still need verifying",
   "pagesMisc.homePage.todo.claims.hint":
-    "Unverified claims cannot enter a final resume; export stops on them",
+    "Unverified claims are flagged before export so you can review them",
   /** To-do 2: jobs waiting in the apply queue. */
   "pagesMisc.homePage.todo.queue.text": "{count} jobs are waiting in the apply queue",
   "pagesMisc.homePage.todo.queue.hint": "Line them up, start the browser and they go out",

@@ -133,7 +133,26 @@ export interface LLMThinkingResult {
 }
 
 /** 联网搜索的来源。协议值，提交给后端，不翻译。 */
-export type SearchSource = "bing" | "duckduckgo" | "searxng" | "deepseek" | "tavily" | "jina";
+export type SearchSource =
+  "bing" | "duckduckgo" | "searxng" | "deepseek" | "tavily" | "jina" | "custom";
+
+/** 自定义搜索的两套协议模板（CR-09）：Kimi 预置端点，通用模板要自己填。 */
+export type CustomSearchTemplate = "moonshot" | "generic";
+
+/** 搜索 Key 校验结果（CR-04）。`reason` 是稳定协议值，`message` 是后端给的中文。 */
+export interface SearchKeyTestResult {
+  ok: boolean;
+  reason:
+    | ""
+    | "missing_key"
+    | "unauthorized"
+    | "insufficient_balance"
+    | "rate_limited"
+    | "network"
+    | "parse";
+  latency_ms?: number | null;
+  message: string;
+}
 
 /** 搜索深度三档（P4-08）：摘要 0 页 / 标准 2 页×2 段 / 深入 5 页×3 段。 */
 export type SearchDepth = "snippet" | "standard" | "deep";
@@ -170,4 +189,19 @@ export interface SearchConfig {
   tavily_api_key: string;
   /** Jina 的密钥（同上）。 */
   jina_api_key: string;
+  /** 自定义搜索来源（CR-09，v1 只有一套）：模板决定端点与字段映射的默认值。 */
+  custom_template: CustomSearchTemplate;
+  /** 卡片上的显示名（空 = 用模板名）。 */
+  custom_name: string;
+  /** 根地址：http(s)，公网域名或本机回环；不接受内网 IP 字面量。 */
+  custom_base_url: string;
+  /** 端点只填相对路径（留空 = 用模板默认）。 */
+  custom_search_path: string;
+  custom_fetch_path: string;
+  /** 结果数组位置，只支持 `a.b` / `a[0].b`。 */
+  custom_results_field: string;
+  /** 搜索响应是否直接带回正文（默认开）。 */
+  custom_include_content: boolean;
+  /** 自定义端点的密钥（只回显掩码或空串）。 */
+  custom_api_key: string;
 }

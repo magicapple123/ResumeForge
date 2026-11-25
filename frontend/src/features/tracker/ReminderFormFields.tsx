@@ -23,14 +23,26 @@ import type {
 import { t } from "../../i18n";
 import { REMINDER_KIND_LABEL_KEYS } from "../../i18n/enum/reminder";
 import { useLocale } from "../../i18n/i18nContext";
-import { REMINDER_KINDS } from "../../types";
-import type { Reminder, ReminderKind } from "../../types";
+import { REMINDER_KINDS, REMINDER_RECURRENCES } from "../../types";
+import type { Reminder, ReminderKind, ReminderRecurrence } from "../../types";
 import { defaultRemindAt } from "./reminderFormDefaults";
+
+/** 重复规则的显示名：键是协议值（与后端逐字对应）。 */
+const RECURRENCE_LABEL_KEYS: Record<ReminderRecurrence, Parameters<typeof t>[0]> = {
+  none: "reminder.recurrence.none",
+  daily: "reminder.recurrence.daily",
+  weekly: "reminder.recurrence.weekly",
+  monthly: "reminder.recurrence.monthly",
+};
 
 export interface ReminderForm {
   title: string;
   remind_at: Dayjs;
   kind: ReminderKind;
+  /** 重复规则（CR-28）：none = 单次。 */
+  recurrence?: ReminderRecurrence;
+  /** 重复结束条件：空 = 一直重复。 */
+  recurrence_until?: Dayjs | null;
   note?: string;
   track_id?: number;
   job_id?: number;
@@ -58,6 +70,8 @@ export default function ReminderFormFields({
 }: Props) {
   useLocale();
   const [linkOpen, setLinkOpen] = useState(false);
+  // 重复规则决定要不要显示"结束条件"：不重复时那一行没有意义。
+  const recurrence = Form.useWatch("recurrence", form);
   // 收起时标题旁的计数：直接读表单 store（打开编辑时 setFieldsValue 已写入；折叠后字段
   // 不在树上时 Form.useWatch 拿不到未注册字段，所以这里不能用 watch）。每次收起/展开
   // 都会重算一次，用户刚选的值在收起那一刻就能反映出来。
@@ -126,6 +140,39 @@ export default function ReminderFormFields({
           }))}
         />
       </Form.Item>
+      {/* 重复规则（CR-28）：不重复 = 单次；其余每次完成后按规则排下一次。 */}
+      <Form.Item label={t("reminder.field.recurrence")} name="recurrence">
+        <Select
+          options={REMINDER_RECURRENCES.map((value) => ({
+            value,
+            label: t(RECURRENCE_LABEL_KEYS[value]),
+          }))}
+        />
+      </Form.Item>
+      {recurrence && recurrence !== "none" ? (
+        <Form.Item
+          label={t("reminder.field.recurrenceUntil")}
+          name="recurrence_until"
+          extra={t("reminder.hint.recurrenceUntil")}
+          rules={[
+            {
+              validator: async (_rule, value: Dayjs | null | undefined) => {
+                if (!value) return; // 空 = 一直重复
+                const remindAt = form.getFieldValue("remind_at") as Dayjs | undefined;
+                if (remindAt && !value.isAfter(remindAt)) {
+                  throw new Error(t("reminder.required.recurrenceUntil"));
+                }
+              },
+            },
+          ]}
+        >
+          <DatePicker
+            showTime={{ format: "HH:mm" }}
+            format="YYYY-MM-DD HH:mm"
+            style={{ width: "100%" }}
+          />
+        </Form.Item>
+      ) : null}
       <Collapse
         activeKey={linkOpen ? ["link"] : []}
         onChange={(keys) => setLinkOpen(keys.length > 0)}

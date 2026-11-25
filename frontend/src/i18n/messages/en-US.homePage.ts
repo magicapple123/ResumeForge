@@ -46,7 +46,17 @@ const homePage = {
   /** Card title and startup dialog title. */
   "homePage.reminders.title": "Upcoming reminders",
   /** Dialog footer button that closes it. */
-  "homePage.reminders.gotIt": "Got it",
+  "homePage.reminders.close": "Close",
+  /** Per-row action: mark the reminder done (PATCH status=done). */
+  "homePage.reminders.action.done": "Done",
+  /** Per-row action: dismiss the reminder (PATCH status=dismissed). */
+  "homePage.reminders.action.ignore": "Ignore",
+  /** Toast after a reminder is marked done. */
+  "homePage.reminders.toast.done": "Marked this reminder done",
+  /** Toast after a reminder is dismissed. */
+  "homePage.reminders.toast.ignored": "Dismissed this reminder",
+  /** Toast when the per-row PATCH fails; the row stays on screen. */
+  "homePage.reminders.toast.updateFailed": "Could not update this reminder, try again",
   /** Accessible name of the list / month switcher. */
   "homePage.reminders.viewSwitchAria": "Switch reminder view",
   /** Switcher option: list view. */

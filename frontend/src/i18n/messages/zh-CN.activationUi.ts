@@ -54,7 +54,7 @@ const activationUi = {
   /** 有未核实主张时的 CTA 按钮。 */
   "activationUi.deliver.cta.labelPending": "核实 {count} 条待确认事实",
   /** 有未核实主张时的 CTA 提示。 */
-  "activationUi.deliver.cta.hintPending": "没核实的说法不会进简历",
+  "activationUi.deliver.cta.hintPending": "没核实的主张会在导出前提示你核对",
   /** 全部核实但还没有简历时的 CTA 按钮。 */
   "activationUi.deliver.cta.labelNoResume": "去简历中心生成或关联简历",
   /** 全部核实但还没有简历时的 CTA 提示。 */

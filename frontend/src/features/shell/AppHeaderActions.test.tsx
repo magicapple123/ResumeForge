@@ -16,6 +16,8 @@ vi.mock("./BackgroundTasksIndicator", () => ({ default: () => null }));
 vi.mock("./AppHeaderContext", () => ({ default: () => null }));
 vi.mock("./MySpaceMenu", () => ({ default: () => null }));
 vi.mock("../career-scenarios/ScenarioSelector", () => ({ default: () => null }));
+// 通知中心自己会拉未读数并跳路由：这里用空桩，它的行为由 NotificationBell.test.tsx 覆盖。
+vi.mock("./NotificationBell", () => ({ default: () => null }));
 
 type SplashWindow = Window & { splash?: { isDesktop?: boolean; quitApp?: () => void } };
 

@@ -20,11 +20,16 @@ export const REMINDER_KIND_LABEL_KEYS: Record<ReminderKind, MessageKey> = {
   other: "enumsReferral.reminderKind.other",
 };
 
-/** 提醒状态：列表 Tag 与详情抽屉共用这一张。 */
+/**
+ * 提醒状态：列表 Tag / 月历 / 详情抽屉共用这一张。
+ *
+ * CR-28 起 `status` 只回答"这个计划还继续吗"（active/archived）；"这一次处理了吗"
+ * 由后端 occurrence 表决定，不再是一个界面状态。旧的 pending/done/dismissed 标签键
+ * 因此不再被这里引用。
+ */
 export const REMINDER_STATUS_LABEL_KEYS: Record<ReminderStatus, MessageKey> = {
-  pending: "enumsReferral.reminderStatus.pending",
-  done: "enumsReferral.reminderStatus.done",
-  dismissed: "enumsReferral.reminderStatus.dismissed",
+  active: "reminder.status.active",
+  archived: "reminder.status.archived",
 };
 
 /** 首页紧急度四档（判定在后端 `reminder_urgency`，这里只是短名）。 */

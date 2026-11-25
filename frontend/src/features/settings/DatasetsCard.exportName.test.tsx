@@ -72,7 +72,7 @@ describe("DatasetsCard 导出选项", () => {
     renderCard({ onIncludeGlobalLLMChange });
 
     const checkbox = screen.getByRole("checkbox", {
-      name: /备份中包含全局模型配置/,
+      name: /备份中包含全局模型与服务配置/,
     });
     expect(checkbox).toBeChecked();
     fireEvent.click(checkbox);

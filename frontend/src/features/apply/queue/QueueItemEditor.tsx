@@ -15,7 +15,7 @@ import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import { HintedTextArea } from "../../../components/common/MaxLengthHint";
 import type { ApplyGreetingImage, ApplyQueueItem } from "../../../types";
-import { formatBytes } from "../../../utils/format";
+import GreetingImagePicker from "../GreetingImagePicker";
 import { GreetingTemplatePicker } from "./GreetingTemplatePicker";
 import ResumeFitHint from "../insights/ResumeFitHint";
 
@@ -44,13 +44,6 @@ export function QueueItemEditor({
   const resumeSelect = useResumeSearchSelectForJob(item.job_id);
   // T8：配图候选与上限来自接口（上限的权威值在后端 attachments，不在前端写死）。
   const { data: imageData } = useApi<ApplyGreetingImage>(getApplyGreetingImage, []);
-  const imageOptions = (imageData?.options ?? []).map((option) => ({
-    value: option.id,
-    label: t("applyQueue.image.editorOption", {
-      name: option.name,
-      size: formatBytes(option.size_bytes),
-    }),
-  }));
   // 招呼语是现场生成的一小段文案，但同样要等模型回包：等着的时候可以停。
   const greetingRequest = useAbortableRequest();
   const generating = greetingRequest.loading;
@@ -163,14 +156,12 @@ export function QueueItemEditor({
           label={t("applyQueue.image.editorLabel")}
           extra={t("applyQueue.image.editorExtra", { count: imageData?.max_count ?? 4 })}
         >
-          <Select<number[]>
+          <GreetingImagePicker
             mode="multiple"
-            allowClear
             maxCount={imageData?.max_count ?? 4}
-            options={imageOptions}
-            disabled={imageOptions.length === 0}
+            options={imageData?.options ?? []}
             placeholder={t("applyQueue.image.editorPlaceholder")}
-            aria-label={t("applyQueue.image.editorLabel")}
+            ariaLabel={t("applyQueue.image.editorLabel")}
           />
         </Form.Item>
       </Form>

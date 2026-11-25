@@ -262,6 +262,14 @@ const applyQueue = {
     "Leave empty to follow the default image in Apply settings. Pick images to send exactly these (up to {count}) instead of the default.",
   "applyQueue.image.editorPlaceholder": "Follow the default image",
   "applyQueue.image.editorOption": "{name} ({size})",
+  // CR-18: inline upload / delete for greeting images (shared by queue rows and settings).
+  "applyQueue.image.upload": "Upload image",
+  "applyQueue.image.uploaded": "Image uploaded",
+  "applyQueue.image.uploadFailed": "Upload failed, try another image",
+  "applyQueue.image.deleteAria": "Delete image {name}",
+  "applyQueue.image.deleted": "Image deleted",
+  "applyQueue.image.deleteFailed": "Could not delete image, try again",
+  "applyQueue.image.inUse": "In use",
 } as const;
 
 export default applyQueue;

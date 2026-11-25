@@ -96,6 +96,8 @@ import shortcutSettings from "./en-US.shortcutSettings";
 import settingsReset from "./en-US.settingsReset";
 import shortcutsCard from "./en-US.shortcutsCard";
 import backgroundTasks from "./en-US.backgroundTasks";
+import notifications from "./en-US.notifications";
+import notificationsSettings from "./en-US.notificationsSettings";
 import referenceFile from "./en-US.referenceFile";
 import knowledgeForm from "./en-US.knowledgeForm";
 import jobForm from "./en-US.jobForm";
@@ -294,6 +296,8 @@ const enUS = {
   ...settingsReset,
   ...shortcutsCard,
   ...backgroundTasks,
+  ...notifications,
+  ...notificationsSettings,
   ...referenceFile,
   ...knowledgeForm,
   ...jobForm,

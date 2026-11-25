@@ -21,15 +21,26 @@ const external = {
     "这里集中列出这台机器对外依赖的服务与下载源：各自有没有配、存在哪、怎么改。密钥只显示掩码，就地改成空值即清除。",
   "connections.group.ai": "AI 服务",
   "connections.group.search": "搜索来源",
+  "connections.group.proxy": "网络代理",
   "connections.group.system": "系统来源与端口",
   "connections.group.aiHint": "模型、语音转写、语义检索用的密钥。改完立刻生效，不用重启。",
   "connections.group.searchHint":
     "助手联网搜索与网页正文抓取用的密钥。DeepSeek 这把同时供扫描件 OCR 使用。",
+  "connections.group.proxyHint": "代理的认证口令。代理模式与地址在「网络代理」卡片里改。",
   "connections.group.systemHint":
     "下载源与浏览器端口。它们不是密钥，会随备份带走；改完下一次调用即生效。",
 
   // ── 存储方式说明 ───────────────────────────────────────────
   "connections.storage.title": "本机密钥存储方式：{label}",
+
+  // ── 密钥地图（CR-12）──────────────────────────────────────
+  "connections.keyMap.title": "密钥地图",
+  "connections.keyMap.hint":
+    "共 {count} 条外部凭据。表格说明每一把在哪个页面改、被哪些功能使用、留空会发生什么；具体状态见下方分组。",
+  "connections.keyMap.col.source": "来源",
+  "connections.keyMap.col.configureAt": "在哪配",
+  "connections.keyMap.col.usedBy": "谁在用",
+  "connections.keyMap.col.empty": "留空的含义",
 
   // ── 三态（协议值 → 显示名；后端同名字段兜底）────────────────
   "connections.status.saved": "已保存",
@@ -52,6 +63,7 @@ const external = {
   "connections.action.primary.modify": "修改",
   "connections.action.more": "{name} 的更多操作",
   "connections.action.copy": "复制当前值",
+  "connections.action.copySecret": "复制密钥",
   "connections.action.save": "保存",
   "connections.action.cancel": "取消",
   "connections.action.clear": "清除",
@@ -67,6 +79,7 @@ const external = {
   "connections.input.label": "{name} 的新 Key",
   "connections.input.placeholder": "粘贴新的 Key",
   "connections.hint.aria": "查看 {name} 的说明与存储方式",
+  "connections.hint.borrowedModelKey": "正在复用「AI 模型」里的 DeepSeek Key。",
   "connections.hint.storage": "存储方式：{label}",
   "connections.clear.title": "清除这把 Key",
   "connections.clear.body": "清除后相关能力立刻不可用，要重新填写",
@@ -103,6 +116,9 @@ const external = {
   "connections.item.web_search.tavily.hint": "清空即移除 Tavily Key，助手搜索会少一条来源。",
   "connections.item.web_search.jina.label": "Jina（网页正文抓取来源）",
   "connections.item.web_search.jina.hint": "清空即移除 Jina Key，抓取网页正文时会少一条来源。",
+  "connections.item.network.proxy.label": "代理认证口令（当前网络设置）",
+  "connections.item.network.proxy.hint":
+    "改的是代理的认证口令。代理模式与地址在「网络代理」卡片里改；清除后请求不再带认证。",
   "connections.item.system.update_repo.label": "更新源（GitHub 仓库）",
   "connections.item.system.update_repo.hint":
     "检查新版本时查询的仓库，形如 owner/repo。换自托管发行源时改这里。",
@@ -124,6 +140,9 @@ const external = {
   "ocrEngine.keyMissing.title": "还没有配置 DeepSeek API Key",
   "ocrEngine.keyMissing.body":
     "OCR 复用联网搜索里的 DeepSeek Key（本页「搜索来源」那一组）。选「自动」时没 Key 会继续用视觉模型；选「只用 OCR」会直接报错，不会偷偷换服务商，也不会替你花钱。",
+  // CR-12：OCR 与「联网搜索」互相指路——Key 是同一把，两页不要各说一套。
+  "ocrEngine.keyPointer":
+    "这把 Key 复用「联网搜索」里的 DeepSeek Key：去「设置 → 助手行为 → 联网搜索 → DeepSeek」更换，密钥地图里也列了这一条。",
   "ocrEngine.saveFailed": "没有切换成功：{message}",
   "ocrEngine.saved": "识别引擎已切换",
   "ocrEngine.loadFailed": "读取识别引擎设置失败",

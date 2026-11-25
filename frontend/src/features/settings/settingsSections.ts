@@ -20,6 +20,7 @@ export type SettingsSectionKey =
   | "connections"
   | "appearance"
   | "interaction"
+  | "notifications"
   | "data"
   | "backup"
   | "about";
@@ -91,6 +92,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     navGroup: "interface",
     titleKey: "settings.tab.interaction",
     introKey: "settings.interaction.intro",
+  },
+  {
+    // CR-29：通知偏好不是"外观"也不是"数据"，但它是"这台应用怎么打扰我"，
+    // 与操作习惯同属界面档；放最后，避免把最常改的几组挤下去。
+    key: "notifications",
+    navGroup: "interface",
+    titleKey: "notificationsSettings.nav",
+    introKey: "notificationsSettings.intro",
   },
   {
     key: "data",

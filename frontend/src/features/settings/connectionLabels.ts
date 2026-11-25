@@ -28,7 +28,9 @@ export function connectionItemLabel(item: ConnectionItem): string {
 /** 就地编辑说明（后端说"先去哪儿配"，前端说"在这里怎么改"）。 */
 export function connectionItemHint(item: ConnectionItem): string {
   const key = `connections.item.${item.id}.hint` as MessageKey;
-  return withFallback(key, item.write_hint || item.detail);
+  const base = withFallback(key, item.write_hint || item.detail);
+  // CR-06：借用模型 Key 时先说明"这不是这一条自己配的"，否则用户会以为已保存。
+  return item.borrowed_key ? `${t("connections.hint.borrowedModelKey")} ${base}` : base;
 }
 
 /** 状态的显示名：`saved` / `not_configured` / `session_only` / `modified` / `default`。 */
@@ -60,6 +62,9 @@ export function connectionGroupHint(group: ConnectionGroup): string {
 
 /** 掩码为空时的替身文案：已配但不回显（语义检索）与"没配"要分开说。 */
 export function connectionMaskedText(item: ConnectionItem): string {
+  // CR-07：`********` 让七把 Key 长得一样，认不出是哪一把；hint（前 4 后 4）优先。
+  // 它只是展示：服务端明确不接受它作为写入值。
+  if (item.hint) return item.hint;
   if (item.masked) return item.masked;
   return item.key_configured ? t("connections.status.saved") : t("connections.emptyMask");
 }

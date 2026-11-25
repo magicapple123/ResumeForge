@@ -7,7 +7,7 @@
  */
 
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Job, JobList } from "../types";
@@ -195,8 +195,9 @@ describe("JobsPage", () => {
     renderPage();
 
     await enterSelectionModeViaContextMenu();
-    // 第 0 个复选框是全选表头，第 1 个才是第一行；只勾第一行。
-    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    // 按行定位第一行的复选框：页面上还有「数据完整度」筛选（CR-36），不能用全局序号。
+    const firstRow = (await screen.findAllByRole("row"))[1]!;
+    fireEvent.click(within(firstRow).getByRole("checkbox"));
 
     fireEvent.click(screen.getByRole("button", { name: "补齐详情" }));
 

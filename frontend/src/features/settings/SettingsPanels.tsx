@@ -49,6 +49,7 @@ import PrivacyCard from "./PrivacyCard";
 import UpdateCard from "./UpdateCard";
 import AnnouncementSettingsCard from "./AnnouncementSettingsCard";
 import HelpDiagnosticsCard from "./HelpDiagnosticsCard";
+import NotificationsCard from "./NotificationsCard";
 import ReminderPopupCard from "./ReminderPopupCard";
 import DesktopLaunchAtLoginCard from "./DesktopLaunchAtLoginCard";
 import ConnectionsCard from "./ConnectionsCard";
@@ -196,6 +197,16 @@ export function InteractionPanel() {
       {/* 批量操作：岗位广场的批量生成与简历中心的批量导出共用这一套参数（未配置时两处会拦截）。 */}
       <SettingsGroupTitle text={t("batchOperation.title")} hint={t("batchOperation.group.hint")} />
       <BatchOperationCard />
+    </>
+  );
+}
+
+/** 通知（CR-29）：六个开关，决定什么该打断用户。 */
+export function NotificationsPanel() {
+  useLocale();
+  return (
+    <>
+      <NotificationsCard />
     </>
   );
 }

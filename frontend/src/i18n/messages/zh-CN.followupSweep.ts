@@ -36,8 +36,8 @@ const followupSweep = {
   "followupSweep.hint.incomplete": "还有 {count} 条没选处理方式",
   /** 已选了一部分、还可以下次再处理时的提示（后端允许部分提交）。 */
   "followupSweep.hint.partial": "还有 {count} 条没选，也可以先提交已选的",
-  /** 提交成功；{count} 是后端确认的处理条数。 */
-  "followupSweep.toast.submitted": "已记录 {count} 条跟进处理",
+  /** 提交成功；{count} 是后端确认的处理条数。CR-19：告诉用户结果去哪看。 */
+  "followupSweep.toast.submitted": "已记录 {count} 条，可在求职进度查看",
   /** 重复提交（后端 created_rows=0 / idempotent=true）时如实说明已记录过。 */
   "followupSweep.toast.idempotent": "这些处理已经记录过了",
   /** 提交失败：说清发生了什么，建议重试。 */

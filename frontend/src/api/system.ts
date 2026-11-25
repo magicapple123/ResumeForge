@@ -16,6 +16,21 @@ export interface DiagnosticsSnapshot {
     request_id: string;
     details: Record<string, unknown>;
   }>;
+  /** CR-13：本机还躺着哪几组旧配置路径（只报键名与去向，不含值）。 */
+  legacy_config?: LegacyConfigReport;
+}
+
+/** 一段旧配置：属于哪个新模块、哪些旧键、新位置在哪。 */
+export interface LegacyConfigItem {
+  section: string;
+  label: string;
+  keys: string[];
+  replacement: string;
+}
+
+export interface LegacyConfigReport {
+  count: number;
+  items: LegacyConfigItem[];
 }
 
 /**
@@ -40,6 +55,8 @@ export interface DiagnosticsPreview {
   files: Array<{ name: string; bytes: number }>;
   contains_resume_content: boolean;
   note: string;
+  /** CR-13：诊断包里 system.json 的旧配置路径清单（干净机器上是 count 0）。 */
+  legacy_config?: LegacyConfigReport;
 }
 
 export function getDiagnosticsPreview(): Promise<DiagnosticsPreview> {

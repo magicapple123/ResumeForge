@@ -52,6 +52,36 @@ const resumes = {
   "resumes.list.enhancementOn": "已开启经历美化拓展",
   "resumes.list.scrollRegion": "简历列表（可横向滚动）",
   "resumes.list.total": "共 {total} 条记录",
+
+  // ── 版本堆叠（CR-33）：同一岗位折成一行，展开后逐版操作 ──────────
+  /** 组行标题：`{job}` 是岗位名，`{count}` 是版本数。 */
+  "resumes.list.group.title": "{job} · {count} 个版本",
+  /** 折叠行的投递次数列头（值仍由 `group.delivery` 渲染）。 */
+  "resumes.list.column.delivery": "投递次数",
+  /** 折叠行的「最近更新」列头（平铺表格仍用 `column.updated`）。 */
+  "resumes.list.column.lastUpdated": "最近更新",
+  /** 多版本组行上的展开 / 收起动作。 */
+  "resumes.list.group.expand": "展开版本",
+  "resumes.list.group.collapse": "收起版本",
+  /** 组行没有岗位名时的兜底标题（岗位被删或历史数据缺标题）。 */
+  "resumes.list.group.titleFallback": "未命名岗位 · {count} 个版本",
+  /** 组行上的「最近更新」：`{time}` 是组内最新一版的更新时间。 */
+  "resumes.list.group.updated": "最近更新 {time}",
+  /** 组行上的投递次数：`{count}` 是整个岗位的投递记录条数。 */
+  "resumes.list.group.delivery": "投递过 {count} 次",
+  /** 展开区的无障碍名（`{job}` = 岗位名）。 */
+  "resumes.list.versionListRegion": "{job} 的版本列表",
+  /** 展开后每个版本的序号：`{index}` 从 1 开始、越大越新。 */
+  "resumes.list.versionLabel": "第 {index} 版",
+  "resumes.list.latestVersion": "最新",
+  /** 组行上只读的收藏星标：说明"组内至少一版收藏过"，本身不可点。 */
+  "resumes.list.group.favoriteHint": "组内有收藏的版本",
+  /** 折叠态禁止整组批量选择时的提示。 */
+  "resumes.list.groupSelectDisabled": "多版本岗位请展开后逐版操作",
+  /** 折叠视图下点「全选所有简历」时的轻提示：不替用户选看不见的版本。 */
+  "resumes.list.selectAllFolded": "折叠视图下不批量选择，请展开分组或先按岗位筛选",
+  /** 达到 2000 条抓取上限时列表底部的说明。 */
+  "resumes.list.capped": "已加载前 2000 份，可用搜索 / 岗位筛选缩小范围",
 } as const;
 
 export default resumes;

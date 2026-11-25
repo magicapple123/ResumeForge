@@ -104,6 +104,8 @@ import drillSession from "./zh-CN.drillSession";
 import shortcutSettings from "./zh-CN.shortcutSettings";
 import shortcutsCard from "./zh-CN.shortcutsCard";
 import backgroundTasks from "./zh-CN.backgroundTasks";
+import notifications from "./zh-CN.notifications";
+import notificationsSettings from "./zh-CN.notificationsSettings";
 import referenceFile from "./zh-CN.referenceFile";
 import knowledgeForm from "./zh-CN.knowledgeForm";
 import jobForm from "./zh-CN.jobForm";
@@ -358,6 +360,8 @@ const namespaces = {
   ...shortcutsCard,
   /** 页头后台任务指示器（2026-10-27）。 */
   ...backgroundTasks,
+  ...notifications,
+  ...notificationsSettings,
   /** 经历参考资料字段（2026-10-27）。 */
   ...referenceFile,
   /** 知识库条目编辑弹窗（2026-10-27）。 */

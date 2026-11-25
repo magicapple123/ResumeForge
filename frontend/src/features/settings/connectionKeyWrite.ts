@@ -13,6 +13,7 @@
 import { clearLLMSessionKey, setLLMSessionKey } from "../../api/connections";
 import { t } from "../../i18n";
 import { getLLMConfig, getSearchConfig, saveLLMConfig, saveSearchConfig } from "../../api/settings";
+import { getNetworkSettings, saveNetworkSettings } from "../../api/settingsNetwork";
 import type { ConnectionItem, LLMConfig, SearchConfig } from "../../types";
 import { clearAsrProfileKey, getAsrProfiles, saveAsrProfile } from "../interview-voice/asrApi";
 
@@ -34,7 +35,8 @@ export function supportsInlineWrite(itemId: string): boolean {
     WEB_SEARCH_IDS.includes(itemId) ||
     itemId === "llm.default" ||
     itemId === "llm.session" ||
-    itemId === "asr.default"
+    itemId === "asr.default" ||
+    itemId === "network.proxy"
   );
 }
 
@@ -80,6 +82,23 @@ async function clearAsrKey(): Promise<void> {
   await clearAsrProfileKey(active.id);
 }
 
+/**
+ * 代理认证口令：写入口唯一是 `PUT /api/settings/network`，它要求带上模式与地址。
+ *
+ * 所以先读当前设置再整份回写——只替换口令，模式/地址/证书开关原样带回。空串在这里
+ * 的语义与 `net_settings.save` 一致：**保留旧口令**；清除必须用 `__clear__` 哨兵。
+ */
+async function writeProxyPassword(value: string): Promise<void> {
+  const current = await getNetworkSettings();
+  await saveNetworkSettings({
+    proxy_mode: current.proxy_mode,
+    proxy_url: current.proxy_url,
+    proxy_username: current.proxy_username,
+    proxy_password: value,
+    trust_system_certs: current.trust_system_certs,
+  });
+}
+
 /** 写入一把新 Key。空串不是"清除"的统一写法：清除请走 {@link clearConnectionSecret}。 */
 export async function writeConnectionSecret(item: ConnectionItem, value: string): Promise<void> {
   const trimmed = value.trim();
@@ -102,6 +121,10 @@ export async function writeConnectionSecret(item: ConnectionItem, value: string)
     await writeAsrKey(trimmed);
     return;
   }
+  if (item.id === "network.proxy") {
+    await writeProxyPassword(trimmed);
+    return;
+  }
   throw new Error(t("connections.error.unsupported"));
 }
 
@@ -122,6 +145,11 @@ export async function clearConnectionSecret(item: ConnectionItem): Promise<void>
   }
   if (item.id === "asr.default") {
     await clearAsrKey();
+    return;
+  }
+  if (item.id === "network.proxy") {
+    // 空串在这里是"保留"，清除必须走哨兵（后端 net_settings 的既有语义）。
+    await writeProxyPassword(CLEAR_SENTINEL);
     return;
   }
   throw new Error(t("connections.error.unsupported"));

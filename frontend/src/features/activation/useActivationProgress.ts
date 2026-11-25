@@ -12,6 +12,12 @@
  *   联系方式电话/邮箱至少一项非空），不编造接口没有的数据；
  * - 「核实并交付」不再把"空台账"当"核实完成"：一条主张都没核实过（含台账为空）
  *   时该阶段不得显示完成，改以真实进度呈现（"台账为空"/"已核实 N/M 条主张"）。
+ *
+ * CR-34 再拆一次（2026-11-25）：
+ * - 面板只在 `shouldShowFirstDelivery`（简历数=0 且投递记录=0）时出现——有简历的人
+ *   不该再看到"从零到第一份交付"；
+ * - 第三阶段的完成改看**已投递**，未核实主张降级为「接下来做什么」里的一条，不再
+ *   用"你还没交付"冒充待办。
  */
 import { useMemo } from "react";
 import { t } from "../../i18n";
@@ -64,15 +70,35 @@ export function isTargetDone(stats: Stats): boolean {
   );
 }
 
-/** 阶段 3「核实并交付」：有简历、台账非空且没有未核实的事实。
+/** 阶段 3「交付」：只看"真的交出去过"——至少有一条投递成功记录（CR-34）。
  *
- * 诚实口径（2026-10-13 审计修正）：**空台账不等于完成事实核实**——一条主张都没
- * 核实过（claim_count === 0，含从没建过台账）时不能显示"已完成"，否则进度在替
- * 用户说谎。同样，**交付动作本身不判定完成**——导出、投递都不改这个条件，因为
- * "投没投出去"取决于对方，不该让进度卡在用户控制不了的事上。
+ * 旧口径要求"有简历 + 台账非空 + 没有未核实主张"，结果一份简历投出去十次，只要台账里
+ * 还挂着一条待确认事实，进度就一直说"没交付"。现在拆开：
+ *
+ * - **未核实主张不阻塞**：它降级成首页「接下来做什么」里单独的一条（`pending_claim_count`），
+ *   该核实的时候照样提醒，但不再冒充"你还没交付"；
+ * - **导出没有独立计数**（导出是本地文件，服务端看不到），投递成功记录是唯一可观测的
+ *   交付信号，所以以它为准。
  */
 export function isDeliverDone(stats: Stats): boolean {
-  return stats.resume_count > 0 && stats.claim_count > 0 && stats.pending_claim_count === 0;
+  return stats.latest_applications.length > 0;
+}
+
+/**
+ * 新手三步面板的显示条件（CR-34）：**简历数 = 0 且投递记录 = 0**。
+ *
+ * 面板回答的是"从零到第一份交付"，对已经有简历/投递的人没有任何信息量——真实数据集
+ * （22 份简历）里它长期挂在首页顶部，读起来像"你还没开始"，是在指责用户。
+ *
+ * 投递记录口径：投递成功的最近记录（`latest_applications`）或进行中的投递
+ * （`stalled_application_count > 0` 说明至少有一条求职进度）。两者任一存在就说明
+ * 用户已经跨过"从零到一"，面板退场；至于主张未核实，交给「接下来做什么」。
+ */
+export function shouldShowFirstDelivery(stats: Stats): boolean {
+  if (stats.resume_count > 0) return false;
+  if (stats.latest_applications.length > 0) return false;
+  if (stats.stalled_application_count > 0) return false;
+  return true;
 }
 
 /** 阶段 3 的真实进度文本与 CTA：区分"台账为空 / 有未核实 / 全核实但没简历"三态。 */

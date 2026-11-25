@@ -29,6 +29,7 @@ const PANEL_SECTIONS: Record<string, SettingsSectionKey> = {
   ConnectionsPanel: "connections",
   AppearancePanel: "appearance",
   InteractionPanel: "interaction",
+  NotificationsPanel: "notifications",
   DataPanel: "data",
   BackupPanel: "backup",
   AboutPanel: "about",
@@ -71,6 +72,7 @@ const CARD_IDS: Record<string, string> = {
   AnnouncementSettingsCard: "announcement",
   HelpDiagnosticsCard: "diagnostics",
   ReminderPopupCard: "reminders",
+  NotificationsCard: "notifications",
 };
 
 function panelsSource(): string {
@@ -97,7 +99,7 @@ function cardsOfPanel(source: string, panel: string): string[] {
 }
 
 describe("设置项索引", () => {
-  it("has a unique id per entry and covers all ten sections", () => {
+  it("has a unique id per entry and covers all eleven sections", () => {
     const ids = SETTINGS_INDEX.map((entry) => entry.id);
     expect(new Set(ids).size).toBe(ids.length);
 
@@ -105,7 +107,7 @@ describe("设置项索引", () => {
       const entries = SETTINGS_INDEX.filter((entry) => entry.section === section.key);
       expect(entries.length, `分组 ${section.key} 没有索引项`).toBeGreaterThan(0);
     }
-    expect(SETTINGS_SECTIONS).toHaveLength(10);
+    expect(SETTINGS_SECTIONS).toHaveLength(11);
     expect(SETTINGS_INDEX).toHaveLength(Object.keys(CARD_IDS).length);
   });
 

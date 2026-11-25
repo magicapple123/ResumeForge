@@ -8,6 +8,11 @@ const reminderItem = {
   "reminderItem.aria.ignore": "忽略提醒 {title}",
   "reminderItem.action.ignore": "忽略",
   "reminderItem.action.edit": "编辑",
+  /** CR-28：跳过"这一次"（重复提醒会排下一次），与"删除整条提醒"不同。 */
+  "reminderItem.action.skip": "跳过",
+  "reminderItem.aria.skip": "跳过这一次提醒 {title}",
+  "reminderItem.action.snooze": "稍后",
+  "reminderItem.aria.snooze": "稍后提醒 {title}",
   "reminderItem.action.delete": "删除",
   "reminderItem.confirm.delete": "删除这条提醒？",
   /** 逾期红标（T06）：只在 pending 且 days_until < 0 时出现；`{days}` 是逾期天数。 */

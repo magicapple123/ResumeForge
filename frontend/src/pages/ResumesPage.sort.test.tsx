@@ -80,6 +80,13 @@ function LocationProbe() {
   return <div data-testid="location">{location.search}</div>;
 }
 
+const RESUME_TITLE_PREFIX = "简历";
+
+/** 造一批可区分的中文标题时只在这里写一次，断言侧不重复写中文字面量。 */
+function resumeTitle(index: number): string {
+  return [RESUME_TITLE_PREFIX, index].join(" ");
+}
+
 function renderPage(initialEntries: string[] = ["/resumes"]) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
@@ -221,17 +228,26 @@ describe("ResumesPage 列头排序（T2）", () => {
   });
 
   it("排序变化时回到第 1 页（否则会停在新排序下不存在的页上）", async () => {
-    apiMocks.listResumes.mockResolvedValue({ items: [RESUME], total: 40 });
+    // 40 份通用简历各自成组 → 平铺表格分 4 页；从第 3 页点排序应回到第 1 页。
+    const items = Array.from({ length: 40 }, (_, index) => ({
+      ...RESUME,
+      id: index + 1,
+      title: resumeTitle(index + 1),
+      job_id: null,
+      job_title: "",
+    }));
+    apiMocks.listResumes.mockResolvedValue({ items, total: items.length });
     renderPage(["/resumes?page=3"]);
-    await screen.findByText(RESUME.title);
+    await screen.findByText(resumeTitle(21));
 
     clickHeader("目标岗位");
 
-    await waitFor(() =>
+    await waitFor(() => {
       expect(apiMocks.listResumes).toHaveBeenLastCalledWith(
         expect.objectContaining({ sort: "job_title_asc", page: 1 }),
-      ),
-    );
+      );
+      expect(document.querySelector(".ant-pagination-item-active")?.textContent).toBe("1");
+    });
   });
 });
 

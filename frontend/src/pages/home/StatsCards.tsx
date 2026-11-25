@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 首页统计卡：岗位总数 / 开放中岗位 / 已生成简历 / 近 7 天生成。
- * （自 HomePage 拆出，逐字搬运，行为等价。）
+ * 首页统计卡：岗位总数 / 开放中岗位 / 已生成简历（CR-37 去掉了「近 7 天生成」）。
+ *
+ * 「近 7 天生成」是个负向指标：新用户那格永远是 0，读起来像"你什么都没做"；它也不驱动
+ * 任何动作。任务书给的两条路里选了「直接去掉」——「本周投递」需要后端新增周维度计数，
+ * 为一个可有可无的数字加接口不划算。
  */
-import { FileTextOutlined, RocketOutlined, SearchOutlined, StarOutlined } from "@ant-design/icons";
+import { FileTextOutlined, RocketOutlined, SearchOutlined } from "@ant-design/icons";
 import { Card, Col, Row, Statistic } from "antd";
 import type { Stats } from "../../types";
 import { t } from "../../i18n";
@@ -14,7 +17,7 @@ export function StatsCards({ stats, loading }: { stats: Stats | undefined; loadi
   useLocale();
   return (
     <Row gutter={[16, 16]}>
-      <Col xs={24} sm={12} lg={6}>
+      <Col xs={24} sm={12} lg={8}>
         <Card loading={loading}>
           <Statistic
             title={t("homePage.stats.jobCount")}
@@ -23,7 +26,7 @@ export function StatsCards({ stats, loading }: { stats: Stats | undefined; loadi
           />
         </Card>
       </Col>
-      <Col xs={24} sm={12} lg={6}>
+      <Col xs={24} sm={12} lg={8}>
         <Card loading={loading}>
           <Statistic
             title={t("homePage.stats.openJobCount")}
@@ -32,21 +35,12 @@ export function StatsCards({ stats, loading }: { stats: Stats | undefined; loadi
           />
         </Card>
       </Col>
-      <Col xs={24} sm={12} lg={6}>
+      <Col xs={24} sm={12} lg={8}>
         <Card loading={loading}>
           <Statistic
             title={t("homePage.stats.resumeCount")}
             value={stats?.resume_count ?? 0}
             prefix={<FileTextOutlined />}
-          />
-        </Card>
-      </Col>
-      <Col xs={24} sm={12} lg={6}>
-        <Card loading={loading}>
-          <Statistic
-            title={t("homePage.stats.weekResumeCount")}
-            value={stats?.week_resume_count ?? 0}
-            prefix={<StarOutlined />}
           />
         </Card>
       </Col>

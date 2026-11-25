@@ -20,6 +20,7 @@ import type {
   NavigationVisibility,
   ReminderPopupSetting,
   SearchConfig,
+  SearchKeyTestResult,
   UpdateCheckResult,
   UpdateInstallResult,
   UpdateStatus,
@@ -172,6 +173,19 @@ export function getSearchConfig(): Promise<SearchConfig> {
 
 export function saveSearchConfig(config: SearchConfig): Promise<SearchConfig> {
   return request("/settings/search", { method: "PUT", body: JSON.stringify(config) });
+}
+
+/**
+ * 校验一把 DeepSeek 搜索 Key（CR-04，只做 DeepSeek；Tavily / Jina 后补）。
+ *
+ * 传空串表示"测已保存 / 正在复用的那把"。失败不会抛 HTTP 错误：`ok:false` + `reason`
+ * 是**正常结果**，调用方据此提示，保存流程不受影响。
+ */
+export function testSearchKey(apiKey: string): Promise<SearchKeyTestResult> {
+  return request("/settings/search/test", {
+    method: "POST",
+    body: JSON.stringify({ api_key: apiKey }),
+  });
 }
 
 export function getReminderPopupSetting(): Promise<ReminderPopupSetting> {

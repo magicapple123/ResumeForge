@@ -114,6 +114,13 @@ export interface Track extends TrackRecord {
   channel: TrackChannel;
   /** 关联链接（替代已删除的「状态回读」）：空串 = 没填。 */
   link: string;
+  /**
+   * 最近一次「已联系」跟进决策的时刻（CR-19，naive UTC）。
+   *
+   * 只读派生字段：`GET /tracker/page` 按 `application_follow_up` 批查询补齐；
+   * `null` = 没联系过（或走的是不带该字段的旧接口/旧数据）——界面此时不显示跟进标记。
+   */
+  latest_followup?: string | null;
 }
 
 /**

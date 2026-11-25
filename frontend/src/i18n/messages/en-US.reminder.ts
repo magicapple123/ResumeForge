@@ -74,6 +74,34 @@ const reminder = {
   "reminder.detail.updatedAt": "Updated",
   "reminder.action.markDone": "Mark as done",
   "reminder.action.edit": "Edit",
+
+  /** Plan status after CR-28 (`status` narrowed to active/archived). */
+  "reminder.status.active": "To do",
+  "reminder.status.archived": "Ended",
+
+  /** Recurrence: none = one-off; empty until means it repeats forever. */
+  "reminder.field.recurrence": "Repeat",
+  "reminder.recurrence.none": "Does not repeat",
+  "reminder.recurrence.daily": "Daily",
+  "reminder.recurrence.weekly": "Weekly",
+  "reminder.recurrence.monthly": "Monthly",
+  "reminder.field.recurrenceUntil": "Repeat until (optional)",
+  "reminder.hint.recurrenceUntil":
+    "Leave empty to repeat forever; no further occurrences after this date",
+  "reminder.required.recurrenceUntil": "The end date must be after this reminder time",
+
+  /** Snooze: presets are resolved in the user's local time zone by the backend. */
+  "reminder.snooze.action": "Snooze",
+  "reminder.snooze.oneHour": "In 1 hour",
+  "reminder.snooze.tonight": "Tonight at 20:00",
+  "reminder.snooze.tomorrowMorning": "Tomorrow at 9:00",
+  "reminder.snooze.custom": "Custom time…",
+  "reminder.snooze.customTitle": "Snooze until",
+  "reminder.snooze.toast": "Snoozed until {time}",
+  "reminder.snooze.failed": "Could not snooze",
+
+  /** Toast after marking done: one-off ends, recurring schedules the next one. */
+  "reminder.toast.doneNext": "Done. Next one: {time}",
 } as const;
 
 export default reminder;

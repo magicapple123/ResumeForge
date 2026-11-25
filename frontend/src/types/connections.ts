@@ -21,7 +21,14 @@ export interface ConnectionItem {
   status_label: string;
   detail: string;
   masked: string;
+  /** CR-07：只读展示提示（前 4 后 4，短于 16 位为 `********`）；未配置时为空串。 */
+  hint?: string;
   key_configured: boolean;
+  /**
+   * CR-06：这一条没有单独配置，实际生效的是「AI 模型」里的 DeepSeek Key。
+   * 用布尔而不是让前端匹配 `detail` 文案：前端有自己的译文，匹配中文迟早漂。
+   */
+  borrowed_key?: boolean;
   protection: ConnectionProtection;
   protection_label: string;
   protection_description: string;
@@ -38,16 +45,34 @@ export interface ConnectionItem {
 
 /** 一组外部依赖：A 组 AI 服务 / B 组搜索来源 / C 组系统来源。 */
 export interface ConnectionGroup {
-  id: "ai" | "search" | "system";
+  id: "ai" | "search" | "proxy" | "system";
   label: string;
   kind: "credential" | "system";
   hint: string;
   items: ConnectionItem[];
 }
 
+/** 密钥地图的一行（CR-12）：全部由后端从凭据清单投影，前端只渲染。 */
+export interface ConnectionKeyMapRow {
+  id: string;
+  label: string;
+  group: string;
+  group_label: string;
+  /** 界面上去哪改。 */
+  configure_at: string;
+  /** 哪些功能在用这把 Key。 */
+  used_by: string;
+  /** 留空 / 清除时会发生什么。 */
+  empty_meaning: string;
+  /** 文件里存哪（排障用）。 */
+  where: string;
+}
+
 /** 整页快照。 */
 export interface ConnectionsPayload {
   groups: ConnectionGroup[];
+  /** CR-12：行数等于凭据来源数（后端投影，前端不许手写第二份）。 */
+  key_map?: ConnectionKeyMapRow[];
   storage: { kind: ConnectionProtection; label: string; description: string };
   /** 后端是否真的读到了数据库会话（false 时状态不可判定）。 */
   retrieved: boolean;

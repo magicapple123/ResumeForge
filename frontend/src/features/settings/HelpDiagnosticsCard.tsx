@@ -12,9 +12,16 @@ import { useUnsavedDrafts } from "../../hooks/unsavedDrafts";
 import { downloadBlob } from "../../utils/download";
 import { reloadPage } from "../../utils/navigation";
 import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
 export const USER_GROUP_ID = "922830167";
+
+/** CR-13：旧配置段的用户可读名。后端只回 section id，文案留在语言包里。 */
+const LEGACY_SECTION_KEYS: Record<string, MessageKey> = {
+  web_search: "settingsDatasets.legacyConfig.section.web_search",
+  asr: "settingsDatasets.legacyConfig.section.asr",
+};
 
 /** 把字节量渲染成人类可读的大小（预览摘要用，KB 粒度足够）。 */
 function formatBytes(bytes: number): string {
@@ -94,6 +101,20 @@ export default function HelpDiagnosticsCard() {
                     })
                   : "",
               note: t("settingsUi.help.previewNote"),
+            })}
+          </Typography.Text>
+        )}
+        {/* CR-13 ①：旧配置行还在时明说——它们是"还会被回落读取"的活配置，不是垃圾。 */}
+        {preview?.legacy_config && preview.legacy_config.count > 0 && (
+          <Typography.Text type="warning" data-testid="legacy-config-notice">
+            {t("settingsDatasets.legacyConfig.notice", {
+              count: preview.legacy_config.count,
+              sections: preview.legacy_config.items
+                .map((item) => {
+                  const key = LEGACY_SECTION_KEYS[item.section];
+                  return key === undefined ? item.label : t(key);
+                })
+                .join(" / "),
             })}
           </Typography.Text>
         )}

@@ -54,6 +54,12 @@ const jobsPage = {
   "jobsPage.filter.sourceCollected": "Collected automatically",
   "jobsPage.filter.sourceManual": "Added manually",
 
+  "jobsPage.completeness.label": "Only missing company/pay/link",
+  "jobsPage.completeness.hint":
+    "Jobs with no company, salary or source link (usually empty shells from failed imports). Filtering only marks them for review — nothing is deleted automatically.",
+  "jobsPage.completeness.count": "{count} suspicious",
+  "jobsPage.completeness.counting": "Counting…",
+
   "jobsPage.batch.needSelection": "Select jobs first",
   "jobsPage.batch.needStatus": "Select a status to apply",
   "jobsPage.batch.statusUpdated": "Updated the status of {count} jobs",

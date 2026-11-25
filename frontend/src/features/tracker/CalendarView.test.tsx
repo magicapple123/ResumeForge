@@ -20,7 +20,7 @@ function reminderInCurrentMonth(title: string): Reminder {
     title,
     remind_at: dayjs().startOf("month").add(2, "day").hour(10).format("YYYY-MM-DDTHH:mm:ss"),
     kind: "interview",
-    status: "pending",
+    status: "active",
     track_id: null,
     job_id: null,
     resume_id: null,

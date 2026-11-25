@@ -19,7 +19,7 @@
  * 单张 / 张数上限都从接口读（权威值在 `services/attachments.py`）。前端另写一份迟早
  * 漂移，而漂移的表现是"界面说可以、后端拒了"。
  */
-import { Alert, App, Button, Select, Space, Switch, Typography } from "antd";
+import { Alert, App, Button, Space, Switch, Typography } from "antd";
 import { useState } from "react";
 import { getApplyGreetingImage, saveApplyGreetingImage } from "../../api/applyExtras";
 import LoadingBlock from "../../components/common/LoadingBlock";
@@ -28,6 +28,7 @@ import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { ApplyGreetingImage } from "../../types";
 import { formatBytes } from "../../utils/format";
+import GreetingImagePicker from "./GreetingImagePicker";
 import "./applySettingsSections.css";
 
 export default function ApplyGreetingImageSection() {
@@ -48,15 +49,8 @@ export default function ApplyGreetingImageSection() {
 
   if (loading && !data) return <LoadingBlock />;
 
-  const options = (data?.options ?? []).map((option) => ({
-    value: option.id,
-    label: t("applyQueue.image.editorOption", {
-      name: option.name,
-      size: formatBytes(option.size_bytes),
-    }),
-  }));
-  // 没有可选图片时不能假装"可以选"：下拉禁用，并给一句"先上传"的指引。
-  const noOptions = options.length === 0;
+  // 没有可选图片时不能假装"可以选"：给一句"先上传"的指引（上传入口在选择器里）。
+  const noOptions = (data?.options ?? []).length === 0;
   const limits = data
     ? t("applySettings.image.limits", {
         single: formatBytes(data.max_image_bytes),
@@ -103,14 +97,13 @@ export default function ApplyGreetingImageSection() {
       <div>
         <Typography.Text strong>{t("applySettings.image.pickLabel")}</Typography.Text>
         <div style={{ margin: "4px 0" }}>
-          <Select<number>
-            allowClear
-            value={imageId ?? undefined}
-            onChange={(value) => setImageId(value ?? null)}
-            options={options}
-            disabled={noOptions}
-            style={{ width: "100%" }}
-            aria-label={t("applySettings.image.pickLabel")}
+          {/* CR-18：与队列行共用同一个选择器（上传即选中、可删性听后端 deletable）。 */}
+          <GreetingImagePicker
+            mode="single"
+            value={imageId}
+            onChange={(next) => setImageId(typeof next === "number" ? next : null)}
+            options={data?.options ?? []}
+            ariaLabel={t("applySettings.image.pickLabel")}
             placeholder={t("applySettings.image.pickPlaceholder")}
           />
         </div>

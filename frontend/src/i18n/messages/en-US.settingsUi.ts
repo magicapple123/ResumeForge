@@ -70,6 +70,11 @@ const settingsUi = {
   "settingsUi.agentTaskEvents.confirmBody":
     "{count} tasks are still unfinished. Turning task cards off hides them from Home; existing records are not deleted.",
   "settingsUi.agentTaskEvents.confirmOk": "Turn off anyway",
+  /** CR-20: card-level link to the reminder-card history (finished cards leave Home). */
+  "settingsUi.agentTaskEvents.history": "View history",
+  "settingsUi.agentTaskEvents.historyTitle": "Reminder history",
+  "settingsUi.agentTaskEvents.historyEmpty": "No reminder history yet",
+  "settingsUi.agentTaskEvents.historyFailed": "Could not load the history, try again",
 
   // ── Export save location card ───────────────────────────────
   "settingsUi.exportSave.title": "Generated content save location",
@@ -220,6 +225,8 @@ const settingsUi = {
   "settingsUi.network.password": "Proxy password",
   "settingsUi.network.passwordPlaceholder": "Password (optional)",
   "settingsUi.network.passwordKeep": "Leave blank to keep",
+  "settingsUi.network.passwordRule":
+    "Leave it empty to keep the saved password; use Clear password to remove it.",
   "settingsUi.network.socksHint":
     "Only http:// or https:// proxies are supported. Proxy apps usually expose an http port as well; use that one.",
   "settingsUi.network.trust": "Trust the system certificate store",

@@ -13,13 +13,13 @@ const datasets = {
   "datasets.intro":
     "A dataset is a complete resume library (jobs, profile, resumes, favorites and assistant chats). Export, import or switch whole datasets without affecting each other.",
   "datasets.hint.summary":
-    "Backups include the global model configuration, API key and custom fonts by default.",
+    "Backups include the global model and service settings, API key and custom fonts by default.",
   "datasets.export.contents.title": "What is inside an export?",
   "datasets.export.contents.action": "See details",
   "datasets.option.globalConfig":
-    "Include the global model configuration and API keys (all saved records) in the backup",
+    "Include the global model and service settings and API keys (all saved records) in the backup",
   "datasets.hint.globalConfig":
-    "Ticked by default. The global model configuration lives in `global_settings.json` in the data directory, not inside any dataset's database; when ticked it is exported as a separate section and merged back into this machine on import (records with the same name and existing local content keep the local version).",
+    "Ticked by default. The global model configuration and service settings (speech, embeddings, web search, network proxy) live in `global_settings.json` in the data directory, not inside any dataset's database; when ticked they are exported as separate sections and merged back into this machine on import (records with the same name and existing local content keep the local version).",
   "datasets.hint.apiKey":
     "Ticked by default. API keys follow this option: when ticked they are written in the form this machine stores them (encrypted by the OS on Windows, bound to the current user and this computer — you may need to re-enter them after restoring elsewhere; plain text in the archive on macOS/Linux). When unticked, neither configuration nor keys are included. A backup with keys is more sensitive — keep it safe and do not send it to anyone you do not trust.",
   "datasets.hint.fonts":
@@ -51,7 +51,7 @@ const datasets = {
   "datasets.export.titleAll": "Export all datasets",
   "datasets.export.titleOne": "Export dataset",
   "datasets.export.includeConfig":
-    "The archive includes the global model configuration and API keys (all saved records)",
+    "The archive includes the global model and service settings and API keys (all saved records)",
   "datasets.export.hint":
     "This name becomes the download file name and may contain Chinese characters; .zip is appended automatically.",
   "datasets.export.placeholder": "e.g. campus-20261019-101500",

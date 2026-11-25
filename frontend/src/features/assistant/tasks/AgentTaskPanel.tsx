@@ -28,12 +28,17 @@ interface Props {
   onCancel: (taskId: number) => void;
   /** 可选：传了才给「进行中」的任务显示暂停（助手页任务条用）。 */
   onPause?: (taskId: number) => void;
-  /** 组顺序，默认 `BUCKET_ORDER`；首页传 `HOME_BUCKET_ORDER`。 */
+  /** 组顺序，默认 `BUCKET_ORDER`；首页拆卡后每张卡只传自己那一个分区（CR-19）。 */
   bucketOrder?: readonly AgentTaskBucket[];
   /** 未结束（待确认 + 进行中）合计最多展示几条；不传 = 不限制。 */
   activeLimit?: number;
   /** 已结束区展开后先显示最近几条（默认 5）；不传 = 展开即全部。 */
   finishedPreviewLimit?: number;
+  /**
+   * 是否渲染分区标题（默认 true）。首页拆成「待你确认」「任务」两张卡后（CR-19），
+   * 每张卡只有一个分区，卡标题已经说明了它是什么，再写一遍「等待确认」是重复。
+   */
+  showBucketLabels?: boolean;
 }
 
 export default function AgentTaskPanel({
@@ -46,6 +51,7 @@ export default function AgentTaskPanel({
   bucketOrder = BUCKET_ORDER,
   activeLimit,
   finishedPreviewLimit,
+  showBucketLabels = true,
 }: Props) {
   useLocale();
   // T03 手风琴：展开状态提到卡片层，保证同一时间只有一条任务展开（D12）。
@@ -107,9 +113,11 @@ export default function AgentTaskPanel({
       {activeSections.map(({ bucket, shown }) =>
         shown.length > 0 ? (
           <div key={bucket} style={{ display: "grid", gap: 6 }}>
-            <Typography.Text type="secondary" strong>
-              {t(BUCKET_LABEL_KEYS[bucket])}
-            </Typography.Text>
+            {showBucketLabels ? (
+              <Typography.Text type="secondary" strong>
+                {t(BUCKET_LABEL_KEYS[bucket])}
+              </Typography.Text>
+            ) : null}
             <ul
               aria-label={t(BUCKET_LABEL_KEYS[bucket])}
               style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 8 }}

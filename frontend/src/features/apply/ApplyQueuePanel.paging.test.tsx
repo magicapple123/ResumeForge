@@ -14,7 +14,6 @@ import type { ApplyQueueItem } from "../../types";
 import { ContextMenuHost } from "../context-menu/ContextMenuHost";
 import { t } from "../../i18n";
 import ApplyQueuePanel from "./ApplyQueuePanel";
-import { APPLY_GUIDE_SEEN_KEY } from "./queue/ApplyQueueGuide";
 
 const apiMocks = vi.hoisted(() => ({
   listQueue: vi.fn(),
@@ -93,8 +92,6 @@ beforeEach(() => {
     summary: { blocking: 0, warnings: 0 },
   });
   extrasMocks.getGreetingTemplates.mockResolvedValue({ templates: [] });
-  // #14G 的四步引导默认视为"已看过"：首次进入会展开一次 Popover，会盖住断言范围。
-  window.localStorage.setItem(APPLY_GUIDE_SEEN_KEY, "1");
 });
 
 /** 统一挂载方式：空态与体检抽屉都含 `<Link>`，必须有 Router 上下文。 */
