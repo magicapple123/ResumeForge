@@ -13,6 +13,7 @@
 const { createCloseBehavior } = require("./close-behavior");
 const { createTrayManager, resolveTrayIconPath } = require("./tray-menu");
 const { createTrayMenuWindow } = require("./tray-menu-window");
+const { createNotificationChannel } = require("./notification-channel");
 
 /**
  * @param {object} deps
@@ -32,12 +33,13 @@ const { createTrayMenuWindow } = require("./tray-menu-window");
  *   （里面有 `menu.run(id)`）。用函数而不是对象：IPC 在 main.js 更靠后才注册，
  *   构造窗口壳时它还不存在。
  * @param {function(): ("zh" | "en")} [deps.getLocale] 壳层当前语言（托盘文案用）
+ * @param {object} [deps.Notification] Electron Notification（系统通知通道用；CR-24）
  * @param {function(string): void} [deps.logLine]
  */
 function createWindowShell(deps) {
   const { app, Tray, BrowserWindow, ipcMain, screen, dirname } = deps;
   const { promptClose, getWindow, isQuitting, setQuitting } = deps;
-  const { store, getMenu, getLocale, logLine = () => {} } = deps;
+  const { store, getMenu, getLocale, Notification, logLine = () => {} } = deps;
 
   /**
    * 托盘要能触发菜单动作（打开数据目录 / 日志目录 / 复制诊断 / 检查更新）。
@@ -131,7 +133,19 @@ function createWindowShell(deps) {
     logLine,
   });
 
-  return { closeBehavior, trayManager, trayMenuWindow };
+  // 系统通知通道（CR-24）：主进程唯一出口。托盘 tooltip 的待办数由它推送
+  // （Windows 的 toast 与角标都由主进程负责，渲染层只发 notify:show）。
+  const notificationChannel = createNotificationChannel({
+    app,
+    Notification,
+    ipcMain,
+    getWindow,
+    getTrayManager: () => trayManager,
+    logLine,
+  });
+  notificationChannel.install();
+
+  return { closeBehavior, trayManager, trayMenuWindow, notificationChannel };
 }
 
 module.exports = { createWindowShell };

@@ -19,7 +19,7 @@
 // the window or sets quitting before app.quit(). Window chrome (self-drawn
 // 32px title bar + WCO buttons) lives in lib/titlebar.js + lib/tray-menu.js.
 
-const { app, BrowserWindow, Tray, clipboard, dialog, ipcMain, nativeTheme, screen, session, shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, Notification, Tray, clipboard, dialog, ipcMain, nativeTheme, screen, session, shell, systemPreferences } = require("electron");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
 const { createShellLogging, announceDegradedOnReady } = require("./lib/preflight");
@@ -170,7 +170,7 @@ const promptClose = createClosePrompt({
 });
 let desktopShellIpc = null;
 const { closeBehavior, trayManager } = createWindowShell({
-  app, Tray, BrowserWindow, ipcMain, screen, dirname: __dirname,
+  app, Tray, Notification, BrowserWindow, ipcMain, screen, dirname: __dirname,
   clipboard, promptClose,
   getWindow: () => mainWindow,
   isQuitting: () => quitting,
@@ -216,6 +216,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       plugins: true, // 精确预览：内置 PDFium 渲染 blob PDF；默认 false 会让预览区空白
+      backgroundThrottling: false, // CR-23：隐藏窗口的定时器默认被压到 1 分钟会让轮询失聪；本机单用户应用可接受
     },
   });
   mainWindow.setMenuBarVisibility(false);

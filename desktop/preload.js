@@ -63,9 +63,26 @@ contextBridge.exposeInMainWorld("desktopShell", {
  *
  * 只暴露一个固定通道，不接收任意通道名——contextIsolation 下暴露面越小越好。
  * 浏览器里 window.resumeForge 不存在，前端据此回落到后端 PDF 引擎。
+ *
+ * 系统通知桥（CR-24）也挂在这里：`notify` 交给主进程发（渲染层的 Web Notification
+ * 在桌面壳里拿不到权限）；`onNotifyClick` 收主进程的点击回执（deep_link，已恢复窗口）；
+ * `setBadge` 同步角标与托盘 tooltip 计数。字段在这里只挑固定几个，不透传任意对象。
  */
 contextBridge.exposeInMainWorld("resumeForge", {
   printPdf: (payload) => ipcRenderer.invoke("resume:print-pdf", payload),
+  notify: (payload) =>
+    ipcRenderer.invoke("notify:show", {
+      title: String(payload?.title ?? ""),
+      body: String(payload?.body ?? ""),
+      deepLink: typeof payload?.deepLink === "string" ? payload.deepLink : null,
+      dedupeKey: typeof payload?.dedupeKey === "string" ? payload.dedupeKey : null,
+    }),
+  onNotifyClick: (listener) => {
+    const receive = (_event, deepLink) => listener(deepLink);
+    ipcRenderer.on("notify:click", receive);
+    return () => ipcRenderer.removeListener("notify:click", receive);
+  },
+  setBadge: (count) => ipcRenderer.invoke("notify:set-badge", Number(count) || 0),
 });
 
 /**

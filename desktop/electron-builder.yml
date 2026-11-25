@@ -59,6 +59,9 @@ files:
   - tray-menu-preload.js
   # 媒体权限（麦克风）：语音输入在桌面壳里要用它，策略与理由见该文件；main.js 一行 require。
   - lib/media-permissions.js
+  # 系统通知通道（CR-24）：窗口壳 lib/window-shell.js 顶层 require，主进程负责
+  # 判断"该不该弹、弹什么"。漏打包 = 安装版里所有通知静默消失（dev 能跑）。
+  - lib/notification-channel.js
   # 标题栏 IPC 注册与发送方校验（§19）：main.js 顶层 require。
   - lib/desktop-shell-ipc.js
   - lib/desktop-update-session.js

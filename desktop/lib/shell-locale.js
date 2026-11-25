@@ -80,6 +80,7 @@ const messages = Object.freeze({
     "app.name": "简历通",
 
     "tray.tooltip": "简历通",
+    "tray.tooltipPending": "简历通 · {count} 条待办",
     "tray.open": "打开简历通",
     "tray.openDataDir": "打开数据目录",
     "tray.openLogDir": "打开日志目录",
@@ -213,6 +214,7 @@ const messages = Object.freeze({
     "app.name": "ResumeForge",
 
     "tray.tooltip": "ResumeForge",
+    "tray.tooltipPending": "ResumeForge · {count} to-dos",
     "tray.open": "Open ResumeForge",
     "tray.openDataDir": "Open data folder",
     "tray.openLogDir": "Open log folder",

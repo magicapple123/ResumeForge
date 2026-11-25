@@ -18,6 +18,7 @@ const vm = require("vm");
 const { EventEmitter } = require("node:events");
 
 const REPO_DESKTOP = path.join(__dirname, "..");
+const { createNotificationStub, installNotificationAppStubs, installNotificationWindowBehavior } = require("./notification-harness");
 
 // A deferred promise the tests resolve manually to control when "the backend
 // finished stopping" happens.
@@ -66,6 +67,7 @@ function loadMain(options = {}) {
     loadedURLs: [],
     // 媒体权限处理器（语音输入要麦克风）：main.js 在 createWindow 里装它。
     permissionHandler: null,
+    aumidCalls: [], badgeCalls: [], notifications: [],
   };
 
   const mainTmp = fs.mkdtempSync(path.join(os.tmpdir(), "rf-main-vm-"));
@@ -105,6 +107,8 @@ function loadMain(options = {}) {
       return appLocale;
     },
   };
+  // CR-24：AUMID / 角标两个方法（没有它们时通知通道会跳过，老版本 Electron 同样）。
+  installNotificationAppStubs(appStub, events);
 
   const browserWindowInstances = [];
   class BrowserWindowStub {
@@ -176,16 +180,8 @@ function loadMain(options = {}) {
     on(name, handler) {
       this.handlers[name] = handler;
     }
-    show() {}
-    hide() {
-      this.hidden = (this.hidden ?? 0) + 1;
-    }
-    focus() {}
     isDestroyed() {
       return this.destroyed;
-    }
-    isMinimized() {
-      return false;
     }
     isMaximized() {
       return this.maximized;
@@ -237,8 +233,9 @@ function loadMain(options = {}) {
     getNormalBounds() {
       return this.getBounds();
     }
-    restore() {}
   }
+  // CR-24：show/hide/focus/isVisible/isFocused/isMinimized/restore 的真实语义。
+  installNotificationWindowBehavior(BrowserWindowStub);
 
   // 托盘：右键菜单自绘后没有原生模板可读，菜单内容改由 trayManager.getMenuModel() 观测。
   class TrayStub {
@@ -272,7 +269,9 @@ function loadMain(options = {}) {
     closeDialogCheckbox: false,
     rememberQuitResponse: 1,
     messageBoxRejects: false,
+    notificationSupported: true,
   };
+  const NotificationStub = createNotificationStub({ events, state });
 
   const dialogStub = {
     showErrorBox: (title, message) => {
@@ -421,6 +420,7 @@ function loadMain(options = {}) {
         return {
           app: appStub,
           BrowserWindow: BrowserWindowStub,
+          Notification: NotificationStub,
           Tray: TrayStub,
           Menu: MenuStub,
           dialog: dialogStub,

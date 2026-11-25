@@ -87,6 +87,7 @@ function trayLabelsFor(locale) {
     askOnClose: t(locale, "tray.askOnClose"),
     quit: t(locale, "tray.quit"),
     tooltip: t(locale, "tray.tooltip"),
+    tooltipPending: t(locale, "tray.tooltipPending"),
   };
 }
 
@@ -194,6 +195,9 @@ function createTrayManager(deps) {
     logLine = () => {},
   } = deps;
   let tray = null;
+  // 待办数（未读 + 待确认）。由主进程通知通道推送（CR-24）；只影响 tooltip，
+  // 0 时恢复原文案。
+  let pendingCount = 0;
 
   function model() {
     return buildMenuModel({ getAsk, getLocale, runMenuAction });
@@ -207,11 +211,24 @@ function createTrayManager(deps) {
    */
   function refresh() {
     if (!tray) return;
+    const locale = currentLocale(deps);
+    const tooltip =
+      pendingCount > 0
+        ? t(locale, "tray.tooltipPending", { count: pendingCount })
+        : t(locale, "tray.tooltip");
     try {
-      tray.setToolTip(t(currentLocale(deps), "tray.tooltip"));
+      tray.setToolTip(tooltip);
     } catch {
       // 旧版本/无托盘环境没有 setToolTip：菜单仍然可用。
     }
+  }
+
+  /** 角标同步（CR-24）：`app.setBadgeCount` 之外，Windows 上真正看得见的是 tooltip。 */
+  function setPendingCount(count) {
+    const next = Number.isFinite(Number(count)) ? Math.max(0, Math.trunc(Number(count))) : 0;
+    if (next === pendingCount) return;
+    pendingCount = next;
+    refresh();
   }
 
   function showWindow() {
@@ -308,6 +325,7 @@ function createTrayManager(deps) {
     refresh,
     destroy,
     choose,
+    setPendingCount,
     getMenuModel: model,
     openContextMenu,
     getTray: () => tray,
