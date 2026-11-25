@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 
 import httpx
 import pytest
@@ -217,7 +218,12 @@ def test_custom_key_is_masked_and_encrypted_at_rest(db_session):
     shown = get_search_config(db_session)
     assert shown.custom_api_key == "********"
     block = global_settings.load_state()["web_search"]
-    assert block["custom_api_key"] != "sk-custom-0123456789"
+    # 落盘保护按平台分档（与 services.credentials.state 同一判据）：Windows 走 DPAPI，
+    # 其它平台按设计是明文随包（Q19）。断言必须跟着平台走，否则 Linux CI 必红。
+    if sys.platform == "win32":
+        assert block["custom_api_key"] != "sk-custom-0123456789"
+    else:
+        assert block["custom_api_key"] == "sk-custom-0123456789"
 
 
 def test_changing_base_url_busts_the_cache_key():

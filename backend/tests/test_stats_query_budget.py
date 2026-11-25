@@ -16,6 +16,7 @@ COUNT/SUM 各自打一次库。本批把 14 条合并为 4 条（各表计数并
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import timedelta
@@ -60,13 +61,21 @@ STATS_KEYS = (
 
 @contextmanager
 def _count_statements() -> Iterator[list[str]]:
-    """统计 with 块内测试库引擎上执行的 SQL 语句（before_cursor_execute 事件）。"""
+    """统计 with 块内**本线程**在测试库引擎上执行的 SQL（before_cursor_execute 事件）。
+
+    为什么必须按线程过滤：应用启动后会拉起提醒调度等后台线程，它们共用同一个引擎。
+    Linux CI 上调度线程恰好落进测量窗口，计数就多出几条，看起来像 /api/stats 自己
+    多打了几次库（本机时序不同，常常复现不到）。这条守卫要测的是"这个端点发了几条
+    SQL"，后台线程的读写不属于它。
+    """
     from app import database
 
     statements: list[str] = []
+    owner = threading.get_ident()
 
     def _before_cursor_execute(_conn, _cursor, statement, _params, _context, _executemany):
-        statements.append(statement)
+        if threading.get_ident() == owner:
+            statements.append(statement)
 
     event.listen(database.engine, "before_cursor_execute", _before_cursor_execute)
     try:
