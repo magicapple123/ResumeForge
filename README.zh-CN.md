@@ -82,7 +82,7 @@
 
 | 模块 | 说明 |
 | --- | --- |
-| [📋 岗位管理](https://magicapple123.github.io/ResumeForge-official/docs.html#jobs-manual) | 粘贴招聘信息自动解析成草稿；**一次粘贴多份会拆分并逐条确认**；技能标签与来源自动标注 |
+| [📋 岗位管理](https://magicapple123.github.io/ResumeForge-official/docs.html#jobs-manual) | 粘贴招聘信息自动解析成草稿；**一次粘贴多份会拆分并逐条确认**；技能标签与来源自动标注。筛选区还有「**只看缺公司/缺薪资/无链接**」，把抓坏的可疑行列出来并显示条数；勾选后走现有批量删除，误删可在回收站恢复 |
 | [🗂 备选岗位](https://magicapple123.github.io/ResumeForge-official/docs.html#jobs-pool) | 还没核对的招聘信息先存这里，之后一键导入正式岗位（助手也能代导） |
 | [📥 拖拽导入](https://magicapple123.github.io/ResumeForge-official/docs.html#jobs-drag) | 岗位识别、附件、照片、数据集备份等都能从资源管理器直接拖进来；拖到窗口任意位置时按扩展名分流：`.zip` 导入数据集、`.csv` 导入岗位表、`.json` 新建手写简历 |
 | [🖱 批量设置状态](https://magicapple123.github.io/ResumeForge-official/docs.html#jobs-batch) | 岗位广场条目上右键「批量选择」进入多选后，可用批量工具栏对勾选岗位**批量设置状态**或批量删除 |
@@ -142,10 +142,10 @@
 | [🧠 填表时学到的](https://magicapple123.github.io/ResumeForge-official/docs.html#webform-learned) | 填表时碰到**简历通里没有**的字段，**两个入口**都能记：批量模式填完弹一条汇总提示（**默认全勾、默认「通用」**，可取消其中几条）；「点哪个填哪个」模式里**每个框旁边**都有「记住这条」，**当场就能记**——**认得出但资料里没值的框也能记**（就地补上，不用跳去别的页面）。记住后下次遇到同一字段**自动预填**。每条可选档位：**通用**（换哪家公司都成立）/ **场景**（与投递渠道有关）/ **本次**（只记下来、下次不自动填，内推码这类一次性的值用它）。来源和档位在「网申资料」里随时可改可删——**AI 认出来的值单独标「AI 认的」**，因为它比规则更可能认错字段。**清单外的自定义字段**（如「导师姓名」「实验室」）也可参与网申填表：普通模式只接受唯一精确对应，开启放宽模式后可按标签/上下文匹配并标记低置信度；有歧义或安全否决时不猜，填后请核对。**落点只有「网申资料」**：简历资料字段永不会被学走（程序里没有能改简历资料的那段代码）；密码、验证码、他人信息走拦截，学不到。只存本机，**生成简历时不读** |
 | [🔓 登录状态](https://magicapple123.github.io/ResumeForge-official/docs.html#apply-login-status) | 投递浏览器、网申浏览器与门户 Cookie 是**三个独立登录**——一个过期不影响另两个，此前只有撞到登录墙才发现。每个来源一行，带**检查**、**重新登录**（真的打开那个浏览器的登录页；Cookie 行给一个粘贴框）与**全部检查**（串行——两个浏览器同时开抢焦点）。打开面板**只读缓存**：检查才会真的开浏览器，所以从不自动跑；读不到登录信号时写**未知**而不是误报“已过期”；同一来源 60 秒内不重复探测 |
 | [🎯 求职进度](https://magicapple123.github.io/ResumeForge-official/docs.html#tracker) | 一家公司一条记录走完「已投递 → 筛选中 → 测评 → 面试 → Offer」；粘邮件 / 截图识别进展，先预览再写入 |
-| [🗓 日历提醒](https://magicapple123.github.io/ResumeForge-official/docs.html#reminder) | 投递、面试、内推等日程可设提醒，按**紧急度分色**（已逾期 / 24 小时内 / 3 天内 / 更远），支持列表与月历 |
+| [🗓 日历提醒](https://magicapple123.github.io/ResumeForge-official/docs.html#reminder) | 投递、面试、内推等日程可设提醒，按**紧急度分色**（已逾期 / 24 小时内 / 3 天内 / 更远），支持列表与月历。**提醒到点会在页头铃铛（通知中心）留一条记录**，**不受「任务卡」开关影响**；未读最多保留 30 天，可逐条已读或全部已读 |
 | [🔔 跟进巡检](https://magicapple123.github.io/ResumeForge-official/docs.html#tracker) | 在 **设置 → 记忆与技能 → 「任务卡」** 打开总开关（默认关闭）后，后台会检查「进行中且超过 7 天没有任何更新」的投递：超过 7 天、不超过 21 天生成一张**跟进清单卡**，超过 21 天生成一张**确认状态卡**（两桶互斥）；每张卡最多 5 家、同一类型同一周只生成一张；卡面只陈述「投出 N 天，期间没有记录到任何状态变化」，不替你判断对方是否回复；可逐家点「已联系 / 对方已回 / 不跟了」，**只记录决策、不改进度状态** |
 | [🤝 内推管理](https://magicapple123.github.io/ResumeForge-official/docs.html#referral) | 记录内推人、内推码与备注图片，按状态跟进并统计**内推转化率** |
-| [🧭 公司调研](https://magicapple123.github.io/ResumeForge-official/docs.html#research) | 填公司名（岗位名、招聘描述可选）后一次调研出两块结果：上半屏是搜索来的**资料卡片**（官网 / 近期新闻 / 公司介绍，标注站点与权威度），下半屏是**带引用编号的联网简报**，逐条可展开对照原文；两路分开发请求，**简报失败不吞掉卡片**（只写原因）；「深度调研」默认关闭（多轮深度搜索，按查询词条数计费），页面如实显示本次搜索次数与耗时 |
+| [🧭 公司调研](https://magicapple123.github.io/ResumeForge-official/docs.html#research) | 填公司名（岗位名、招聘描述可选）后一次调研出两块结果：上半屏是搜索来的**资料卡片**（官网 / 近期新闻 / 公司介绍，标注站点与权威度），下半屏是**带引用编号的联网简报**，逐条可展开对照原文；两路分开发请求，**简报失败不吞掉卡片**（只写原因）；「深度调研」默认关闭（多轮深度搜索，结果计入模型上下文、按 token 计费），页面如实显示本次搜索次数与耗时 |
 | [📈 求职数据看板](https://magicapple123.github.io/ResumeForge-official/docs.html#analytics) | 四个主题：转化与卡点、时间与节奏、渠道与去向、简历与健康度；**每张图各自成块、各有标题与口径**；趋势可选近 1 / 3 / 6 月 |
 | [⭐ 收藏夹](https://magicapple123.github.io/ResumeForge-official/docs.html#jobs-favorites) | 分页集中查看收藏的岗位与简历，可跳详情或取消收藏 |
 | [🎤 模拟面试](https://magicapple123.github.io/ResumeForge-official/docs.html#interview) | 设定岗位、难度与面试官风格后逐轮作答，会点评追问；结束给维度评分与改进建议；**报告下方可继续追问或停止追问**（追问不占正式轮次）；材料可从记录选或导入文件（岗位侧吃 PDF / TXT，简历侧吃截图，解析失败给明确原因）；另有独立实时语音通话界面，支持语音作答、面试官语音朗读与可选本地摄像头预览 |
@@ -160,14 +160,14 @@
 | [🧩 技能](https://magicapple123.github.io/ResumeForge-official/docs.html#skills) | 新建、导入、编辑技能（提示词 + 知识文件），在对话里启用后约束该对话的作答风格 |
 | [🗒 会话管理](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant-sessions) | 会话可重命名 / 置顶 / 收藏 / 分组 / 归档，可导出 Markdown 或存进资料箱 |
 | [📌 投投剪贴板](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant-clipboard) | **双击投投悬浮球**打开：把要反复粘贴的资料存成片段，一键复制；只存本机浏览器，不上传（单击悬浮球仍是打开助手） |
-| [🏠 首页](https://magicapple123.github.io/ResumeForge-official/docs.html#home) | 快捷入口按使用顺序组织成 7 个去处；近期提醒卡片内嵌紧凑月历 |
+| [🏠 首页](https://magicapple123.github.io/ResumeForge-official/docs.html#home) | 快捷入口按使用顺序组织成 7 个去处；近期提醒卡片内嵌紧凑月历。任务卡拆成「**待你确认**」与「**任务**」（只放助手创建的多步任务），两张都只显示未结束的；页头**铃铛**收集未读通知（提醒到期 / 任务完成 / 批次完成），保留 30 天 |
 | [🖱 界面细节](https://magicapple123.github.io/ResumeForge-official/docs.html#shortcuts) | 行操作收进「更多操作」；列表与卡片**单击即可查看详情**（Enter 同样可开）；日期改为日历选择；**侧栏里用不到的模块可在 设置 → 「外观与语言」→「界面与导航」里关掉**（只收入口，不删数据；首页、设置等始终保留）。深浅色切换改成从按钮位置**圆形扩散**（深→浅约 380ms、浅→深约 280ms，系统开启「减少动态效果」时不做动画），左上角品牌图标星↔月交叉淡入，浏览器标签页图标跟着换；桌面版同一分组里还有**「桌面托盘图标」**（一颗开关，默认关：关时跟随应用内主题，开则跟随系统主题）与**「开机时自动启动」**（读系统启动项，读不到时置灰并提示去任务管理器调整） |
 | [🔍 全局搜索](https://magicapple123.github.io/ResumeForge-official/docs.html#search) | 一个框同时搜岗位、简历、内推、提醒、面经、台账、资料箱与技能 |
 | [📤 外发预览与用量](https://magicapple123.github.io/ResumeForge-official/docs.html#privacy-outbound) | 设置页：把资料发给模型或其它服务前，先看「这次要发什么」（目标服务、资料类别、附件、已排除字段、是否抓取正文以及正文本身）；「模型用量」按任务 / 模型列调用数与 token——**未知 token 不显示成 0**、未配置单价不估算费用。预览正文只存在内存、不落盘；用量可按任务 / 模型 / 数据集看**结束原因与重试**，费用只在配置单价时估算 |
 | [✅ 批量选择与批量删除](https://magicapple123.github.io/ResumeForge-official/docs.html#shortcuts-batch) | 简历中心、助手历史对话、历史面试、深挖历史、日历提醒、历史题库、网申填充记录等列表支持**批量选择**：「批量选择」→ 勾选 → 「删除所选」统一确认后删除（均进回收站可恢复） |
-| [🔄 检查与更新](https://magicapple123.github.io/ResumeForge-official/docs.html#upgrade-check) | 设置页可检查新版本、新建 / 导出 / 导入数据集；数据集备份**默认包含大模型 API Key**（可取消勾选；Windows 上以 DPAPI 加密形态随包）；**Windows 双击 `start.cmd` / `stop.cmd` / `update.cmd`，macOS 双击 `start.command` / `stop.command` / `update.command`，Linux 在项目根目录执行 `bash start.sh` / `stop.sh` / `update.sh`**，都是零依赖一键启动，`uninstall.cmd` 可清理本机环境。**启动时只在真有新版本时才弹更新框**（当前版本与最新版本、安装包大小、更新内容、下载进度与 SHA-256 校验），「稍后」24 小时内不再提醒、「跳过此版本」以后不再提这一版；没有新版本时启动不弹任何提示 |
+| [🔄 检查与更新](https://magicapple123.github.io/ResumeForge-official/docs.html#upgrade-check) | 设置页可检查新版本、新建 / 导出 / 导入数据集；数据集备份**默认包含大模型 API Key**（可取消勾选；Windows 上以 DPAPI 加密形态随包），**格式 7 起还带语音 / 语义检索 / 联网搜索 / 代理四块配置**（Key 跟随同一勾选，旧版本会拒收新包而不是静默丢配置）；**Windows 双击 `start.cmd` / `stop.cmd` / `update.cmd`，macOS 双击 `start.command` / `stop.command` / `update.command`，Linux 在项目根目录执行 `bash start.sh` / `stop.sh` / `update.sh`**，都是零依赖一键启动，`uninstall.cmd` 可清理本机环境。**启动时只在真有新版本时才弹更新框**（当前版本与最新版本、安装包大小、更新内容、下载进度与 SHA-256 校验），「稍后」24 小时内不再提醒、「跳过此版本」以后不再提这一版；没有新版本时启动不弹任何提示 |
 | [♻️ 回收站](https://magicapple123.github.io/ResumeForge-official/docs.html#trash) | 24 类内容删除后先进回收站，可批量恢复或彻底删除；只有二次确认才真正销毁。2026-10 起新增「方案 / 自建板块 / 自建字段 / 资料条目」四类，2026-11 起新增「求职偏好」 |
-| [🔑 你的 Key 你做主](https://magicapple123.github.io/ResumeForge-official/docs.html#model-presets) | 内置 22 个服务预设（DeepSeek / Claude / 豆包 / OpenAI / Ollama …），可取可用模型、调高级参数，并可切换接口协议 |
+| [🔑 你的 Key 你做主](https://magicapple123.github.io/ResumeForge-official/docs.html#model-presets) | 内置 22 个服务预设（DeepSeek / Claude / 豆包 / OpenAI / Ollama …），可取可用模型、调高级参数，并可切换接口协议。**设置 → 外部连接**顶部的「**密钥地图**」逐行写清每把 Key 在哪配、谁在用、留空会怎样；每把 Key 只露前后 4 位，并有「**复制密钥**」（由后端直接写剪贴板，明文不进响应与日志）。联网搜索的 DeepSeek Key 有「**测试 Key**」（零计费，失败不阻断保存），搜索来源可选「**自定义**」（Kimi 模板或自填端点），搜索 Key 留空时会在模型指向 `api.deepseek.com` 时**复用模型 Key** |
 
 </details>
 
@@ -297,7 +297,7 @@ Windows 安装版打开 **设置 → 更新与帮助 → 检查更新** 即可�
 岗位、资料、简历、助手历史与模型配置存放于 `backend/data/resume_forge.db`，服务端环境变量存放于 `backend/.env`；两者均被 Git 忽略，`git pull` 不会覆盖。
 
 - **备份**：**设置 → 「数据与存储」→ 数据集 → 导出当前数据集**。包里是该数据集的整库快照、附件、字体与全局模型配置（**默认包含大模型 API Key，可取消勾选**），不含登录态；换电脑时「导入备份为新数据集」还原即可，细则见 [docs/upgrading.md](docs/upgrading.md)。
-- **跨版本迁移请在同版本之间导**：格式 5 起带全局模型配置、格式 6 起再带字体；更早的版本（≤1.0.2）会拒收并提示升级。**反方向也有限制：2.0 不导入 1.x 的备份包**——包内库没有 `app_schema_epoch` 会被直接拒收并提示用 ResumeForge 1.0.2 打开；2.0 自己导出的包照常可导入。
+- **跨版本迁移请在同版本之间导**：格式 5 起带全局模型配置、格式 6 起再带字体、格式 7 起还带语音 / 语义检索 / 联网搜索 / 代理四块配置；更早的版本（≤1.0.2）会拒收并提示升级。**反方向也有限制：2.0 不导入 1.x 的备份包**——包内库没有 `app_schema_epoch` 会被直接拒收并提示用 ResumeForge 1.0.2 打开；2.0 自己导出的包照常可导入。
 - **交付存档**：原简历删除后仍可按标题、公司、岗位与来源找回历史交付；下载的是快照重放结果，不保证与原始文件字节一致。
 - **一键更新**：Windows 双击 `update.cmd`，macOS 双击 `update.command`，Linux 执行 `bash update.sh`；只替换程序文件，`data/`、`.env`、`runtime/` 不动。
 - **同 major 内更新不会动数据库**：迁移在下次启动时执行，迁移前自动备份到 `backend/data/backups/`。**1.x → 2.0 是例外**：旧库整包归档到 `legacy-archive/<时间戳>/` 后建空库，新库从空白开始（归档里保留全部旧数据、可用 1.0.2 打开；**不搬数据**）。应用内**设置 → 「更新与帮助」→ 软件更新**可检查、下载并看进度；更新包校验 `.sha256`，**是否成功以"实际运行的版本"为准**。
@@ -337,14 +337,14 @@ Windows 安装版打开 **设置 → 更新与帮助 → 检查更新** 即可�
 <details>
 <summary><b>多岗位、多简历如何管理？</b></summary>
 
-一个岗位可以关联多份简历，一份简历也能看到它的目标岗位；简历中心可按来源（AI 生成 / 用户编写）、关键词与「有无岗位」筛选，收藏夹集中放重点，回收站兜住误删。
+一个岗位可以关联多份简历，一份简历也能看到它的目标岗位；简历中心可按来源（AI 生成 / 用户编写）、关键词与「有无岗位」筛选，收藏夹集中放重点，回收站兜住误删。**同一岗位的多个版本默认折叠成一行**（「岗位 · N 个版本」，行上写最近更新与投递过几次），展开后逐版选择，收藏 / 预览 / 导出 / 删除都只作用于那一份；折叠视图下不参与批量选择。
 
 </details>
 
 <details>
 <summary><b>「任务」卡在哪里看？关掉会怎样？</b></summary>
 
-在**首页**（近期提醒卡下方、待办卡上方）：待确认在前、进行中在后，合计最多 3 条，「已结束」默认收起；点「查看步骤」就地展开，同一时间只展开一条，并标出「当前这步」。提醒到期自动生成的「准备：…」卡也在这里（带「来源：提醒」徽标）。没有可显示的任务时整张卡不出现。总开关在**设置 →「记忆与技能」→「任务卡」**：关闭后不再生成、首页也不再显示，已生成的记录会保留，重新打开即恢复。
+在**首页**，任务卡拆成「**待你确认**」（需要你拍板）与「**任务**」（只放助手创建的多步任务，巡检卡不再混入）两张：两张都只显示未结束的，待确认在前、进行中在后，合计最多 3 条；已结束的不再出现在首页，可去求职进度或助手侧回看。提醒到期生成的卡单独成行（「来自提醒 · 类型 · 到期 · 公司/岗位」），给「知道了」「去求职进度」，终态同样不占首页。总开关在**设置 →「记忆与技能」→「任务卡」**：关闭后不再生成、首页也不再显示，已生成的记录会保留，重新打开即恢复。**关掉任务卡不影响提醒到点**——那是「设置 → 通知」里单独的一组开关。
 
 </details>
 
