@@ -17,7 +17,10 @@ from app.services.agent_task_events import (
 from app.services.settings_service import get_agent_task_events_enabled
 
 # 注入时钟：所有扫描都用它，不写死 datetime.now()（手册 T26 风险项）。
-NOW = datetime(2026, 11, 7, 12, 0, tzinfo=UTC)
+# 基准时刻取"真实的现在"，不写死日期：CR-28 之后"逾期 7 天"的体检是按**墙钟**跑的
+# （扫描本身仍用注入的 now），写死一个过去的日期会让这些提醒在部分机器上先被体检标成
+# skipped，用例就永远等不到卡（Linux CI 上就撞到过，本机因为时钟与时序不同看不出来）。
+NOW = datetime.now(UTC).replace(microsecond=0)
 SETTING_URL = "/api/settings/agent-task-events"
 
 
