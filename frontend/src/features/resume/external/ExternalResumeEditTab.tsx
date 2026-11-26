@@ -44,7 +44,7 @@ export interface ExternalResumeEditTabProps {
   onRecordChange: (next: ExternalResumeDetail) => void;
 }
 
-/** 加载失败要区分两种"读不到"：不支持（422）、原件文件没了（404）、临时读不到（其它）。 */
+/** 加载失败要分三种：不支持（422）、原件文件没了（404）、临时读不到（其它状态 / 网络）。 */
 interface LoadFailure {
   message: string;
   status: number | undefined;
