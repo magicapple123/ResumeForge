@@ -8,6 +8,10 @@
  * 3. 溢出时不动任何东西，点「下移下方内容」才用 `shift_below` 再提交一次。
  *
  * 422（扫描件 / 转曲 / 加密）不走这页的逻辑，只给原因与下载引导 —— 这是"宁可拒绝"那条。
+ *
+ * 失败还要分「原件读不到」与「原件不存在」：404 说明文件已不在本机（副本库里 2 份
+ * 外部简历就是这样），此时不许说"原件不受影响"、也不给重试与下载（两个都不可能成功）；
+ * 非 404 的临时错误才保留"重试"与"原件不受影响"。两个分支各有用例钉住文案 key。
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -38,6 +42,14 @@ vi.mock("pdfjs-dist", () => ({
   }),
 }));
 vi.mock("pdfjs-dist/build/pdf.worker.min.mjs?url", () => ({ default: "pdf-worker-url" }));
+
+/**
+ * 后端给的失败句子（`ApiError.message`）。用 ASCII 常量而不是抄一份中文：这些句子
+ * 来自服务端、不是界面文案，测试要断言的是"原样展示"，与 i18n 无关。
+ */
+const UNSUPPORTED_MESSAGE = "pdf_no_text_layer: no text layer in this PDF";
+const MISSING_MESSAGE = "the file of this revision no longer exists";
+const TRANSIENT_MESSAGE = "502: upstream temporarily unavailable";
 
 const RECORD: ExternalResumeDetail = {
   id: 7,
@@ -188,19 +200,51 @@ describe("ExternalResumeEditTab", () => {
   });
 
   it("能力探测失败（422）：说清原因、给下载引导，不画编辑器", async () => {
-    apiMocks.getExternalResumeBlocks.mockRejectedValue(
-      new ApiError("这份 PDF 没有文字层（扫描件或纯图片）", 422),
-    );
+    apiMocks.getExternalResumeBlocks.mockRejectedValue(new ApiError(UNSUPPORTED_MESSAGE, 422));
 
     renderTab();
-    const alert = await screen.findByTestId("external-unsupported");
-    expect(alert).toHaveTextContent("这份 PDF 没有文字层（扫描件或纯图片）");
+    const alert = await screen.findByTestId("external-edit-failure-unsupported");
+    expect(alert).toHaveTextContent(UNSUPPORTED_MESSAGE);
     expect(alert).toHaveTextContent(t("externalEdit.unsupported.title"));
     expect(screen.getByRole("link", { name: new RegExp(t("externalEdit.download")) })).toHaveAttribute(
       "href",
       "/api/external-resumes/7/file?v=21",
     );
     expect(screen.queryByTestId("external-editor")).toBeNull();
+  });
+
+  it("原件文件已不在本机（404）：说要重新上传或从历史版本下载，绝不说「原件不受影响」", async () => {
+    apiMocks.getExternalResumeBlocks.mockRejectedValue(new ApiError(MISSING_MESSAGE, 404));
+
+    renderTab();
+    const alert = await screen.findByTestId("external-edit-failure-missing");
+    expect(alert).toHaveTextContent(t("externalEdit.blocksMissingTitle"));
+    expect(alert).toHaveTextContent(MISSING_MESSAGE);
+    // 正文说明必须换成"原件已不在本机"这一套，不能沿用"网络/服务暂时不可用"那句。
+    expect(screen.getByText(t("externalEdit.blocksMissingHint"))).toBeInTheDocument();
+    expect(screen.queryByText(t("externalEdit.blocksFailedHint"))).toBeNull();
+    // 文件没了，「重试」与「下载原件」都不会成功：两个按钮都不该出现。
+    expect(screen.queryByTestId("external-retry")).toBeNull();
+    expect(screen.queryByRole("link", { name: new RegExp(t("externalEdit.download")) })).toBeNull();
+  });
+
+  it("网络/服务临时出错（500）：保留「重试」与「原件不受影响」", async () => {
+    apiMocks.getExternalResumeBlocks
+      .mockRejectedValueOnce(new ApiError(TRANSIENT_MESSAGE, 500))
+      .mockResolvedValue(blocksWith("旧标题"));
+
+    renderTab();
+    const alert = await screen.findByTestId("external-edit-failure-transient");
+    expect(alert).toHaveTextContent(t("externalEdit.blocksFailed"));
+    expect(screen.getByText(t("externalEdit.blocksFailedHint"))).toBeInTheDocument();
+    // 临时错误不能误报成"原件没了"。
+    expect(screen.queryByText(t("externalEdit.blocksMissingHint"))).toBeNull();
+
+    fireEvent.click(screen.getByTestId("external-retry"));
+    await waitFor(() => {
+      expect(apiMocks.getExternalResumeBlocks).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByTestId("external-block-p1b0")).toBeInTheDocument();
   });
 
   it("没有可编辑的块时给一句说明，而不是一块空白", async () => {

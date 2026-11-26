@@ -44,10 +44,41 @@ export interface ExternalResumeEditTabProps {
   onRecordChange: (next: ExternalResumeDetail) => void;
 }
 
-/** 加载失败要区分"不支持"与"没取到"：前者给下载引导，后者给重试。 */
+/** 加载失败要区分两种"读不到"：不支持（422）、原件文件没了（404）、临时读不到（其它）。 */
 interface LoadFailure {
   message: string;
   status: number | undefined;
+}
+
+/**
+ * 失败的三种走法。**「原件读不到」≠「原件不存在」**：
+ *
+ * - `missing`（404）：原件文件真的不在了（盘点里 2 份外部简历就是这样）。此时说
+ *   "原件不受影响，可以重试"是自相矛盾——文件都没了，重试也不会回来，所以不给重试、
+ *   也不给「下载原件」（那个接口同样是 404），只引导重新上传或从历史版本下载。
+ * - `transient`（非 404/422）：网络或服务暂时不可用，原件在，重试有意义。
+ * - `unsupported`（422）：文件读到了、但不能在线改字，给原因 + 下载引导。
+ */
+type LoadFailureKind = "unsupported" | "missing" | "transient";
+
+function failureKindOf(status: number | undefined): LoadFailureKind {
+  if (status === 422) return "unsupported";
+  if (status === 404) return "missing";
+  return "transient";
+}
+
+/** 标题文案：三种失败各一句，不共用一句"没能读到"。 */
+function failureTitleKey(kind: LoadFailureKind): string {
+  if (kind === "unsupported") return "externalEdit.unsupported.title";
+  if (kind === "missing") return "externalEdit.blocksMissingTitle";
+  return "externalEdit.blocksFailed";
+}
+
+/** 下方说明：只有 `transient` 才允许说"原件不受影响"。 */
+function failureHintKey(kind: LoadFailureKind): string {
+  if (kind === "unsupported") return "externalEdit.unsupported.hint";
+  if (kind === "missing") return "externalEdit.blocksMissingHint";
+  return "externalEdit.blocksFailedHint";
 }
 
 /** 块的读法（与左侧热区的 aria-label 同一口径）。 */
@@ -127,35 +158,42 @@ export function ExternalResumeEditTab({ resumeId, record, onRecordChange }: Exte
   if (loading) return <LoadingBlock tip={t("externalEdit.blocksLoading")} />;
 
   if (failure !== null) {
-    const unsupported = failure.status === 422;
+    const kind = failureKindOf(failure.status);
     return (
       <Space orientation="vertical" size={12} style={{ width: "100%" }} data-testid="external-edit-failed">
         <Alert
-          data-testid="external-unsupported"
-          type={unsupported ? "warning" : "error"}
+          data-testid={`external-edit-failure-${kind}`}
+          type={kind === "unsupported" ? "warning" : "error"}
           showIcon
-          title={unsupported ? t("externalEdit.unsupported.title") : t("externalEdit.blocksFailed")}
+          title={t(failureTitleKey(kind))}
           description={failure.message}
           action={
-            <Button
-              size="small"
-              icon={<DownloadOutlined />}
-              href={fileUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("externalEdit.download")}
-            </Button>
+            // 原件已不在本机时，「下载原件」也会 404：不给一个必然失败的按钮。
+            kind === "missing" ? null : (
+              <Button
+                size="small"
+                icon={<DownloadOutlined />}
+                href={fileUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t("externalEdit.download")}
+              </Button>
+            )
           }
         />
         <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
-          {unsupported ? t("externalEdit.unsupported.hint") : t("externalEdit.blocksFailedHint")}
+          {t(failureHintKey(kind))}
         </Typography.Paragraph>
-        {unsupported ? null : (
-          <Button size="small" onClick={() => setRefreshToken((value) => value + 1)}>
+        {kind === "transient" ? (
+          <Button
+            size="small"
+            data-testid="external-retry"
+            onClick={() => setRefreshToken((value) => value + 1)}
+          >
             {t("common.retry")}
           </Button>
-        )}
+        ) : null}
       </Space>
     );
   }

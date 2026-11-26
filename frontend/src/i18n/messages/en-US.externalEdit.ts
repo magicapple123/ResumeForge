@@ -17,6 +17,11 @@ const externalEdit = {
   "externalEdit.blocksFailed": "Could not read the editable units of this file",
   "externalEdit.blocksFailedHint":
     "The network or the service may be temporarily unavailable. The original file is untouched, so you can retry.",
+  // 404 gets its own wording: the original file really is gone, and saying
+  // "the original file is untouched" there would contradict itself.
+  "externalEdit.blocksMissingTitle": "The original file is no longer on this machine",
+  "externalEdit.blocksMissingHint":
+    "The original file of this resume is gone from this machine (it may have been moved or deleted), so it cannot be edited here. Upload this resume again, or open Version history and download a version that still works.",
   "externalEdit.blocksEmpty": "No editable text was found in this file",
   "externalEdit.unsupported.title": "This file cannot be edited in the app",
   "externalEdit.unsupported.hint":

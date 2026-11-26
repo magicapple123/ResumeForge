@@ -28,6 +28,10 @@ const externalEdit = {
   "externalEdit.blocksLoading": "正在分析这份文件能改哪些地方…",
   "externalEdit.blocksFailed": "没能读到这份文件的编辑单元",
   "externalEdit.blocksFailedHint": "可能是网络或服务暂时不可用；原件不受影响，可以重试。",
+  // 404 单独一套话：原件文件真的不在了，这时再说"原件不受影响"是自相矛盾。
+  "externalEdit.blocksMissingTitle": "原件文件已不在本机",
+  "externalEdit.blocksMissingHint":
+    "这份简历的原件文件已经不在这台机器上（可能被移动或删除了），没法在线改字。请重新上传这一份，或到「历史版本」里下载还能用的那一版。",
   "externalEdit.blocksEmpty": "这份文件里没有找到可改的文字",
   "externalEdit.unsupported.title": "这份文件不支持在线编辑",
   "externalEdit.unsupported.hint":
