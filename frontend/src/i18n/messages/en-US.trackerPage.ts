@@ -39,6 +39,8 @@ const trackerPage = {
     "No tracker entries yet. Jobs sent from the apply console show up here automatically; you can also use Import from messages to bring in progress from your inbox.",
   "trackerPage.pagination.total": "{count} in total",
   "trackerPage.modal.reminderTitle": "Calendar reminders",
+  /** Deep link `?reminder=N` points at a reminder that is no longer in the list. */
+  "trackerPage.reminder.notFound": "That reminder is gone - it may be deleted",
 } as const;
 
 export default trackerPage;

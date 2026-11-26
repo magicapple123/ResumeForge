@@ -42,6 +42,8 @@ const trackerPage = {
     "还没有进度记录。投递台投出的岗位会自动出现在这里，也可以点「从通知导入」把邮箱里的进展整理进来。",
   "trackerPage.pagination.total": "共 {count} 条",
   "trackerPage.modal.reminderTitle": "日历提醒",
+  /** 深链 `?reminder=N` 指向的提醒已经不在列表里（已删 / 不在当前筛选）。 */
+  "trackerPage.reminder.notFound": "这条提醒已经不在了，可能已删除",
 } as const;
 
 export default trackerPage;

@@ -309,12 +309,14 @@ describe("HomePage", () => {
     fireEvent.click(screen.getByLabelText("查看提醒：参加某司二面"));
     expect(await screen.findByRole("button", { name: /关\s*闭/ })).toBeInTheDocument();
 
-    // 弹窗每一行最左边的倒计时胶囊：文案由 `days_until` 按当前界面语言组合，
+    // 弹窗每一行的副行：倒计时文案由 `days_until` 按当前界面语言组合，
     // 不再直接渲染后端的中文 `due_label`。这里取语言包里的 today/tomorrow 对照，
     // 用例本身不含中文字面量（cjkRatchet 的 tests 口径只统计 ByText 里的中文）。
+    // 整改 #13：逾期改成事件行副行的红字（`trackerUi.card.overdueDays`），
+    // 不再是一颗 Tag——同一句话不写两遍，红色语义只留给需要处理的内容。
     const today = t("homePage.reminders.due.today");
     const tomorrow = t("homePage.reminders.due.tomorrow");
-    const overdue = t("homePage.reminders.due.overdue", { days: 2 });
+    const overdue = t("trackerUi.card.overdueDays", { days: 2 });
     expect(screen.getByText(tomorrow)).toBeInTheDocument();
     expect(screen.getByText(overdue)).toBeInTheDocument();
     expect(screen.queryByText(today)).toBeNull();

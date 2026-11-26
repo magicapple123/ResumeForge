@@ -14,6 +14,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, render } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import type { Mock } from "vitest";
 import type { Track, TrackList } from "../types";
@@ -91,12 +92,18 @@ export function makePage(items: Track[], total = items.length): Page<Track> {
   return { items, total };
 }
 
-/** 渲染整页（与拆分前逐字节等价的挂载方式：MemoryRouter + AntdApp 包裹一并下沉）。 */
-export function renderPage(initialEntries: string[] = ["/tracker"]) {
+/**
+ * 渲染整页（与拆分前逐字节等价的挂载方式：MemoryRouter + AntdApp 包裹一并下沉）。
+ *
+ * `probe`（可选）：挂在同一棵树里的探针节点。深链用例用它读当前 URL
+ * （`useLocation` 必须在 Router 内部），避免为了一条断言再抄一份渲染代码。
+ */
+export function renderPage(initialEntries: string[] = ["/tracker"], probe?: ReactNode) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <AntdApp>
         <TrackerPage />
+        {probe}
       </AntdApp>
     </MemoryRouter>,
   );

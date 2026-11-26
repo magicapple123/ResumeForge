@@ -167,4 +167,41 @@ describe("NotificationBell", () => {
     });
     expect(await screen.findByText(t("notifications.empty"))).toBeInTheDocument();
   });
+
+  /**
+   * 整改 #13：条目行换成共用「事件行」——副行要有相对时间与正文，
+   * 且 `deep_link` 为空时**只标已读、不关面板**（旧写法先关面板再判空，
+   * 读起来就是"点了没反应"）。
+   */
+  it("副行显示「相对时间 · 正文」", async () => {
+    api.listNotifications.mockResolvedValue([
+      row({ id: 3, body: "Assessment deadline · today", created_at: new Date().toISOString() }),
+    ]);
+    renderBell();
+    fireEvent.click(await screen.findByRole("button", { name: t("notifications.bell.aria") }));
+
+    const title = await screen.findByText("Reminder: application deadline");
+    const rowNode = title.closest(".rf-event-row");
+    expect(rowNode).not.toBeNull();
+    expect(rowNode?.querySelector(".rf-event-meta")).toHaveTextContent(
+      "Assessment deadline · today",
+    );
+    // 相对时间在最前面（今天的事件写成「今天 HH:mm」）。
+    expect(rowNode?.querySelector(".rf-event-meta")?.textContent).toMatch(/\d{2}:\d{2}/);
+  });
+
+  it("deep_link 为空：只标已读，不跳转、面板不关", async () => {
+    api.listNotifications.mockResolvedValue([row({ id: 4, deep_link: "" })]);
+    renderBell();
+    fireEvent.click(await screen.findByRole("button", { name: t("notifications.bell.aria") }));
+
+    fireEvent.click(await screen.findByText("Reminder: application deadline"));
+
+    await waitFor(() => expect(api.markNotificationRead).toHaveBeenCalledWith(4));
+    expect(screen.getByTestId("location").textContent).toBe("/");
+    // 面板仍在：还能看到「全部已读」这个面板内动作。
+    expect(
+      screen.getByRole("button", { name: t("notifications.action.readAll") }),
+    ).toBeInTheDocument();
+  });
 });

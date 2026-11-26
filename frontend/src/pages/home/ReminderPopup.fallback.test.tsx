@@ -26,6 +26,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyServerLocale, selectLocale } from "../../i18n/localeStore";
+import { t } from "../../i18n";
 import type { ReminderUpcoming } from "../../types";
 import { ReminderPopup } from "./ReminderPopup";
 
@@ -116,15 +117,17 @@ describe("ReminderPopup 的倒计时胶囊", () => {
     expect(screen.queryByText("2d overdue")).toBeNull();
   });
 
-  it("有 days_until 时结构化字段优先：en-US 下显示 2d overdue，不回退成中文", async () => {
+  it("有 days_until 时结构化字段优先：en-US 下用统一的逾期红字，不回退成中文", async () => {
     applyServerLocale("en-US");
     renderPopup([STRUCTURED_REMINDER, LEGACY_REMINDER]);
 
-    // 结构化那一行按当前语言组合（en-US）→ 英文胶囊。
-    expect(await screen.findByText("2d overdue")).toBeInTheDocument();
+    // 结构化那一行按当前语言组合（en-US）。整改 #13 之后「逾期」不再是一颗 Tag，
+    // 而是事件行副行的红字（`trackerUi.card.overdueDays`，en 是 "Overdue by {days}d"），
+    // 所以这里断言的是那个文案——仍然是**按 days_until 算出来的**，没有回退。
+    const overdueText = t("trackerUi.card.overdueDays", { days: 2 });
+    expect(await screen.findByText(overdueText)).toBeInTheDocument();
 
     // 两条 fixture 的 due_label 逐字相同：只有**没有** days_until 的那条回退出中文。
-    // 若结构化字段没被优先使用，这里会是 2。
     expect(screen.getAllByText(LEGACY_DUE_LABEL)).toHaveLength(1);
 
     // 同一屏里没有任何一处退化文案。
@@ -133,15 +136,16 @@ describe("ReminderPopup 的倒计时胶囊", () => {
     expect(text).not.toContain("undefined");
   });
 
-  it("zh-CN 下两条路径文案一致：回退与本地组合不打架", async () => {
+  it("zh-CN 下两条路径各说各的：结构化走逾期红字，旧后端仍回退 due_label", async () => {
     applyServerLocale("zh-CN");
     renderPopup([STRUCTURED_REMINDER, LEGACY_REMINDER]);
 
-    // 先等条目渲染出来（标题是 Link 文本，与胶囊文案无关，用它做锚点）。
+    // 先等条目渲染出来（用标题做锚点，与倒计时文案无关）。
     expect(await screen.findByText(STRUCTURED_REMINDER.title)).toBeInTheDocument();
 
-    // 中文界面里"逾期 2 天"只有一种说法：结构化组合与后端历史 due_label 逐字相同，
-    // 于是两颗胶囊都是这句话。
-    expect(screen.getAllByText(LEGACY_DUE_LABEL)).toHaveLength(2);
+    // 结构化那一行：统一的逾期红字（「逾期 2 天」）；旧后端那一行：原样回退它的 due_label
+    // （「已逾期 2 天」）。两句话不同源，但都言之有物——空胶囊才是要防的那件事。
+    expect(screen.getByText(t("trackerUi.card.overdueDays", { days: 2 }))).toBeInTheDocument();
+    expect(screen.getAllByText(LEGACY_DUE_LABEL)).toHaveLength(1);
   });
 });

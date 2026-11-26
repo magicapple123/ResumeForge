@@ -1,0 +1,126 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「事件行」（整改 #13）：页头通知中心与启动提醒弹窗共用的一行。
+ *
+ * 2026-11-26 用户第二次拍板后是**纯文字行**：
+ * - 没有左缘色条（任何状态下都不出现）：这里没有 ::before / border-left / inset 阴影；
+ * - 没有图标槽：类型靠标题文字区分；
+ * - 状态只由字重（未读 600）、未读圆点与「逾期 N 天」红字表达。
+ * EventRow.test.tsx 会读这份文件，断言左侧装饰那三种写法一个都不存在。 */
+
+.rf-event-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 4px;
+  color: inherit;
+  border-bottom: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+  outline: none;
+}
+
+.rf-event-row:last-child {
+  border-bottom: 0;
+}
+
+/* hover 只换整行底色：不加左边框、不加阴影（否则又会读成"左侧色条"）。
+   #f7f9fc ≈ 白底上 3.5% 的信息蓝，与设计给的色值同色系；用 color-mix 是为了
+   深色模式自动跟着底色走，而不是把一块浅蓝固定在深底上。 */
+.rf-event-row.is-clickable {
+  cursor: pointer;
+}
+
+.rf-event-row.is-clickable:hover,
+.rf-event-row.is-clickable:focus-visible {
+  background: color-mix(in srgb, var(--rf-info) 3.5%, var(--rf-surface));
+}
+
+/* 键盘焦点环：可点的行不能只靠 hover 暗示（键盘用户看不到 hover）。 */
+.rf-event-row.is-clickable:focus-visible {
+  outline: 2px solid var(--rf-info);
+  outline-offset: 1px;
+}
+
+.rf-event-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* 标题行：未读圆点 + 单行省略。 */
+.rf-event-title {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  color: var(--rf-text-body);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.rf-event-row.is-unread .rf-event-title {
+  font-weight: 600;
+}
+
+.rf-event-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 未读标记：标题前 6px 品牌色圆点（已读时整段不渲染）。 */
+.rf-event-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  background: var(--rf-brand);
+  border-radius: 50%;
+}
+
+/* 副行：相对时间 / 说明在左，动作在右。12px 三级灰——「已自动跳过」是信息不是错误，
+   红色语义只留给「逾期 N 天」。 */
+.rf-event-subline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+}
+
+.rf-event-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-event-overdue {
+  flex: 0 0 auto;
+  color: var(--rf-danger);
+  font-variant-numeric: tabular-nums;
+}
+
+.rf-event-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+}
+
+/* 右缘箭头：低对比常驻，hover 变深——这是"能点"的唯一视觉承诺。
+   不用品牌色：这一页有六条一样的行，箭头亮起来会抢标题。 */
+.rf-event-arrow {
+  flex: 0 0 auto;
+  color: #ccd4df;
+  font-size: 16px;
+  line-height: 20px;
+  transition: color 0.15s ease;
+}
+
+.rf-event-row.is-clickable:hover .rf-event-arrow,
+.rf-event-row.is-clickable:focus-visible .rf-event-arrow {
+  color: #8a94a6;
+}

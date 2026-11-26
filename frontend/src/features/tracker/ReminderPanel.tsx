@@ -42,6 +42,7 @@ import ReminderDetailDrawer from "./ReminderDetailDrawer";
 import ReminderFormFields, { type ReminderForm } from "./ReminderFormFields";
 import { defaultRemindAt } from "./reminderFormDefaults";
 import ReminderListItem from "./ReminderListItem";
+import { useReminderDeepLink } from "./useReminderDeepLink";
 import {
   REMINDER_TIME_RANGES,
   REMINDER_TIME_RANGE_LABEL_KEYS,
@@ -53,7 +54,15 @@ import { REMINDER_KIND_LABEL_KEYS } from "../../i18n/enum/reminder";
 import { useLocale } from "../../i18n/i18nContext";
 import { formatDateTime } from "../../utils/format";
 
-export default function ReminderPanel() {
+export default function ReminderPanel({
+  initialReminderId = null,
+  onInitialReminderDone,
+}: {
+  /** 深链 `?reminder=N`（整改 #13）：列表加载完之后展开这一条；`null` = 没有深链。 */
+  initialReminderId?: number | null;
+  /** 深链那条处理完（抽屉关闭 / 查无此条）：宿主据此把 URL 参数清掉。 */
+  onInitialReminderDone?: () => void;
+} = {}) {
   useLocale();
   const { message, modal } = App.useApp();
   // 关联目标下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
@@ -247,6 +256,36 @@ export default function ReminderPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail]);
 
+  /**
+   * 深链 `?reminder=N`（整改 #13）：状态机在 `useReminderDeepLink`（等就绪 / 只消费一次 /
+   * 找不到就回报），这里只接两个回调。
+   */
+  const openDeepLinkReminder = useCallback((item: Reminder) => setDetail(item), []);
+  const reportDeepLinkMissing = useCallback(() => {
+    // 已软删 / 不在当前筛选：说清原因并留在列表，不开一个空抽屉。
+    message.warning(t("trackerPage.reminder.notFound"));
+    onInitialReminderDone?.();
+  }, [message, onInitialReminderDone]);
+  useReminderDeepLink({
+    initialReminderId,
+    loading,
+    items,
+    onOpen: openDeepLinkReminder,
+    onNotFound: reportDeepLinkMissing,
+  });
+
+  /**
+   * 关闭详情抽屉的统一出口：深链进来的那一条一旦关闭（关闭 / 完成 / 转编辑都算走过一遍），
+   * URL 里的 `reminder` 就该去掉——否则刷新会再展开一次、转发也会带着别人的提醒 id。
+   */
+  const closeDetail = useCallback(() => {
+    const closing = detail;
+    setDetail(null);
+    if (closing && initialReminderId !== null && closing.id === initialReminderId) {
+      onInitialReminderDone?.();
+    }
+  }, [detail, initialReminderId, onInitialReminderDone]);
+
   /** 批量删除：确认后逐条走同一个软删除接口，全部完成再刷新一次。 */
   const removeSelected = () => {
     const ids = [...batch.selectedIds];
@@ -437,14 +476,14 @@ export default function ReminderPanel() {
         onMarkDone={() => {
           if (!detail) return;
           void setStatus(detail, "done");
-          setDetail(null);
+          closeDetail();
         }}
         onEdit={() => {
           if (!detail) return;
           openEdit(detail);
-          setDetail(null);
+          closeDetail();
         }}
-        onClose={() => setDetail(null)}
+        onClose={closeDetail}
       />
     </Space>
   );

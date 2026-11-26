@@ -40,6 +40,7 @@ import ReminderPanel from "../features/tracker/ReminderPanel";
 import TrackCard from "../features/tracker/TrackCard";
 import TrackFormModal from "../features/tracker/TrackFormModal";
 import TrackImportModal from "../features/tracker/TrackImportModal";
+import { useTrackerDeepLink } from "../features/tracker/useTrackerDeepLink";
 import { useApi } from "../hooks/useApi";
 import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import { downloadBlob } from "../utils/download";
@@ -52,18 +53,15 @@ import { TRACK_STATUS_LABEL_KEYS } from "../i18n/enum/tracker";
 /** 每页条数：与后端分页端点默认值一致（page_size 1–100）。 */
 const TRACK_PAGE_SIZE = 20;
 
-/** 深链 ?job_id= 的解析：正整数才认，其余（缺省/非数字/≤0）一律按"没有筛选"处理。 */
-function parseLinkedJobId(raw: string | null): number | null {
-  const parsed = Number(raw);
-  return raw && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-}
-
 export default function TrackerPage() {
   // 本页用模块级 t()：必须订阅语言变化，否则切语言后整页文案不重渲染。
   useLocale();
   const { message } = App.useApp();
   // 状态筛选与关键词从 URL 读初值、改动后 replace 写回（模式同 WebFormPage / JobsPage）。
   const [searchParams, setSearchParams] = useSearchParams();
+  // 三个深链参数（job_id / reminder / track）由**同一份**解析与清理逻辑处理：
+  // 各写一份会在关闭抽屉时互相覆盖（例如关提醒把刚点的 track 一起删掉）。
+  const { links, clear: clearDeepLink } = useTrackerDeepLink();
   const [status, setStatus] = useState(searchParams.get("status") ?? "");
   const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
   // 搜索框受控镜像（同 JobFilterBar 的处理）：URL 恢复的关键词能回填输入框。
@@ -79,8 +77,22 @@ export default function TrackerPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
 
+  // 深链 `?reminder=N`（提醒通知的精确链）直接打开提醒弹窗，并由 ReminderPanel
+  // 展开那一条的详情。弹窗是否打开 = 手动打开 **或** URL 里带着 reminder——
+  // 这样"关闭抽屉后参数被 replace 掉"不会顺手把弹窗也关掉（那会像"点了被踢出来"）。
+  const reminderModalOpen = reminderOpen || links.reminderId !== null;
+  const closeReminders = useCallback(() => {
+    setReminderOpen(false);
+    clearDeepLink("reminder");
+  }, [clearDeepLink]);
+  /** 深链那条提醒处理完（详情关闭 / 找不到）：留在列表，但把参数清掉。 */
+  const handleInitialReminderDone = useCallback(() => {
+    setReminderOpen(true);
+    clearDeepLink("reminder");
+  }, [clearDeepLink]);
+
   // 岗位详情深链带来的过滤（RF-11）：只看这个岗位的进度。非法值在解析处就被忽略。
-  const jobId = parseLinkedJobId(searchParams.get("job_id"));
+  const jobId = links.jobId;
   // 筛选标签上的岗位名：单独取一次；岗位可能已被删除，失败时仍显示可清除的标签。
   const [linkedJobLabel, setLinkedJobLabel] = useState<string | null>(null);
 
@@ -166,15 +178,8 @@ export default function TrackerPage() {
 
   // 清除岗位筛选 = 从 URL 移除参数：jobId 随之变 null，列表自动重拉、回第 1 页。
   const clearJobFilter = useCallback(() => {
-    setSearchParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        next.delete("job_id");
-        return next;
-      },
-      { replace: true },
-    );
-  }, [setSearchParams]);
+    clearDeepLink("job_id");
+  }, [clearDeepLink]);
 
   const items = useMemo(() => data?.items ?? [], [data]);
   const totalCount = data?.total ?? 0;
@@ -364,13 +369,17 @@ export default function TrackerPage() {
 
       <Modal
         title={t("trackerPage.modal.reminderTitle")}
-        open={reminderOpen}
-        onCancel={() => setReminderOpen(false)}
+        open={reminderModalOpen}
+        onCancel={closeReminders}
         footer={null}
         width={720}
       >
-        {/* 绑定目标下拉由 ReminderPanel 内部远程搜索（P0-1），页面不再预拉选项。 */}
-        <ReminderPanel />
+        {/* 绑定目标下拉由 ReminderPanel 内部远程搜索（P0-1），页面不再预拉选项。
+            深链 `?reminder=N` 交给它展开详情：列表还没加载完时不能判断"这条在不在"。 */}
+        <ReminderPanel
+          initialReminderId={links.reminderId}
+          onInitialReminderDone={handleInitialReminderDone}
+        />
       </Modal>
     </div>
   );

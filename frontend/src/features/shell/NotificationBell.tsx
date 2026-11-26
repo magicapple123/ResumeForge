@@ -18,6 +18,7 @@ import { Badge, Button, Popover, Spin, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import EmptyState from "../../components/common/EmptyState";
+import EventRow from "../../components/common/EventRow";
 import {
   listNotifications,
   markAllNotificationsRead,
@@ -28,6 +29,7 @@ import {
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { reportBadgePart } from "../../utils/desktopBadge";
+import { relativeTimeLabel } from "../../utils/relativeTime";
 import { startVisibilityPolling } from "../../utils/visibility";
 
 /** 未读轮询：可见 30s；窗口隐藏时降到 120s（角标不需要秒级准确）。 */
@@ -66,25 +68,16 @@ function NotificationRow({
   onOpen: (item: AppNotification) => void;
 }) {
   const unread = item.read_at === null;
+  // 副行 = 相对时间 + 事件正文（`今天 14:12 · 提醒已自动跳过`）。「已自动跳过」保持
+  // 三级灰：它是信息不是错误，红色语义只留给"逾期 N 天"这类需要处理的内容。
+  const meta = [relativeTimeLabel(item.created_at), item.body].filter(Boolean).join(" · ");
   return (
-    <button
-      type="button"
-      className={`notification-row${unread ? " notification-row-unread" : ""}`}
-      onClick={() => onOpen(item)}
-      aria-label={unread ? `${item.title} - ${t("notifications.unread.mark")}` : item.title}
-    >
-      <span className="notification-row-main">
-        <Typography.Text strong={unread} ellipsis>
-          {item.title}
-        </Typography.Text>
-        {item.body && (
-          <Typography.Text type="secondary" className="notification-row-body" ellipsis>
-            {item.body}
-          </Typography.Text>
-        )}
-      </span>
-      {unread && <span className="notification-row-dot" aria-hidden="true" />}
-    </button>
+    <EventRow
+      title={item.title}
+      meta={meta}
+      unread={unread}
+      onOpen={() => onOpen(item)}
+    />
   );
 }
 
@@ -152,7 +145,6 @@ export default function NotificationBell() {
   };
 
   const handleOpen = async (item: AppNotification) => {
-    setOpen(false);
     if (item.read_at === null) {
       // 先标已读再跳：标记失败不该拦住用户去目标页面（角标下一轮轮询会纠正）。
       try {
@@ -167,7 +159,11 @@ export default function NotificationBell() {
         /* 见上：跳转优先。 */
       }
     }
-    if (item.deep_link) navigate(item.deep_link);
+    // 没有 deep_link（合并批量的到期通知、批量任务的结果汇总）：**只标已读、不关面板**。
+    // 旧写法先关面板再判空，读起来就是"点了没反应"，用户只能再点开确认一次。
+    if (!item.deep_link) return;
+    setOpen(false);
+    navigate(item.deep_link);
   };
 
   const handleReadAll = async () => {

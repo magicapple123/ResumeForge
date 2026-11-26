@@ -4,6 +4,11 @@
  */
 const notifications = {
   "notifications.bell.aria": "通知中心",
+  /** 事件行副行的相对时间（整改 #13）：`{time}` 是时刻。 */
+  "notifications.relative.today": "今天 {time}",
+  "notifications.relative.yesterday": "昨天 {time}",
+  /** 铃铛的无障碍名（整改 #14）：有未读时带条数，角标对读屏本来就是不可见的。 */
+  "notifications.bell.ariaUnread": "通知，{count} 条未读",
   "notifications.title": "通知",
   "notifications.group.today": "今天",
   "notifications.group.earlier": "更早",

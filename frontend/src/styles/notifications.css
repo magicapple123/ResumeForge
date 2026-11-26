@@ -38,44 +38,12 @@
   font-size: 12px;
 }
 
-.notification-row {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  width: 100%;
-  padding: 8px 4px;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  background: none;
-  border: 0;
-  border-bottom: 1px solid var(--rf-border-subtle);
-  border-radius: 6px;
-  cursor: pointer;
-}
+/* 条目行（整改 #13）：通知中心与启动提醒弹窗共用「事件行」
+   （components/common/EventRow + event-row.css）。原先这里那套 `.notification-row*`
+   （flex 行 + 未读圆点 + 灰副行）已经搬到共用组件，继续留一份会变成"第二处排版实现"。
+   本文件只保留浮层本身与分组标题。 */
 
-.notification-row:hover,
-.notification-row:focus-visible {
-  background: var(--rf-fill-tertiary);
-}
-
-.notification-row-main {
+.notification-panel-list {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.notification-row-body {
-  font-size: 12px;
-}
-
-.notification-row-dot {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  margin-top: 7px;
-  background: var(--rf-brand);
-  border-radius: 50%;
 }
