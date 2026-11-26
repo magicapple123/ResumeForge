@@ -30,7 +30,7 @@ import type {
 } from "../../../api/externalResumes";
 import ErrorState from "../../../components/common/ErrorState";
 import LoadingBlock from "../../../components/common/LoadingBlock";
-import { t } from "../../../i18n";
+import { t, type MessageKey } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import { ExternalResumeEditor } from "./ExternalResumeEditor";
 import { ExternalResumeEditorPanel } from "./ExternalResumeEditorPanel";
@@ -68,14 +68,14 @@ function failureKindOf(status: number | undefined): LoadFailureKind {
 }
 
 /** 标题文案：三种失败各一句，不共用一句"没能读到"。 */
-function failureTitleKey(kind: LoadFailureKind): string {
+function failureTitleKey(kind: LoadFailureKind): MessageKey {
   if (kind === "unsupported") return "externalEdit.unsupported.title";
   if (kind === "missing") return "externalEdit.blocksMissingTitle";
   return "externalEdit.blocksFailed";
 }
 
 /** 下方说明：只有 `transient` 才允许说"原件不受影响"。 */
-function failureHintKey(kind: LoadFailureKind): string {
+function failureHintKey(kind: LoadFailureKind): MessageKey {
   if (kind === "unsupported") return "externalEdit.unsupported.hint";
   if (kind === "missing") return "externalEdit.blocksMissingHint";
   return "externalEdit.blocksFailedHint";
