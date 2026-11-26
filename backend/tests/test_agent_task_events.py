@@ -66,11 +66,15 @@ def _tasks(client) -> list[dict]:
 def _scan(
     db_session,
     *,
-    now: datetime = NOW,
+    now: datetime | None = None,
     enabled: bool | None = None,
     notify: bool | None = None,
 ) -> dict:
     db_session.expire_all()
+    # 默认 `now=None` 交给服务层取**当前**时刻：`NOW` 是模块导入时抓的快照，用例跑得慢
+    # 一点（CI 的 3.13 作业）就会落后几秒，而建提醒时写进去的 `due_at` 是"真实的过去"，
+    # 于是 `due_at <= now` 判不过，扫描返回 created=0。窗口类断言靠的是 NOW 的相对偏移
+    # （-5min / -20h / -3d），换成当前时刻后相对关系不变。
     result = scan_due_reminders(db_session, now=now, enabled=enabled, notify_enabled=notify)
     db_session.expire_all()
     return result
@@ -148,13 +152,15 @@ def test_enabled_generates_prepare_task_card(client, db_session):
 def test_repeated_scans_do_not_duplicate(client, db_session):
     """c) 扫描 3 次只有一张卡：去重键是 (reminder_id, occurrence_due_at)。"""
     _set_enabled(client, True)
-    _create_reminder(client, remind_at=NOW - timedelta(minutes=10))
+    reminder = _create_reminder(client, remind_at=NOW - timedelta(minutes=10))
 
     first = _scan(db_session)
     second = _scan(db_session)
     third = _scan(db_session)
 
-    assert first["created"] == 1
+    assert first["created"] == 1, (
+        f"首次扫描没建卡：{first}；库里的卡={_tasks(client)}；提醒={reminder}"
+    )
     assert second["created"] == 0
     assert third["created"] == 0
     assert second["skipped"] == 1 and third["skipped"] == 1
