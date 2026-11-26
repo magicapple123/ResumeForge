@@ -14,10 +14,11 @@
  *
  * 为什么不用 `?job_id=` 顶替：`/tracker?job_id=N` 是"按岗位筛选"，指不到具体那一条。
  */
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
+import { TRACK_FOCUS_HIGHLIGHT_MS } from "../features/tracker/useTrackerTrackFocus";
 import {
   cleanupTrackerPage,
   makePage,
@@ -74,6 +75,21 @@ const TRACK = makeTrack({
   status: "applied",
 });
 
+/**
+ * 把异步链推到稳定：`getTrack` → `setTarget` → `focusJob` 写 URL → 列表重拉 → 行到位 → 高亮。
+ *
+ * 用 fake timers 推进而不是 `waitFor` 真等 2 秒：高亮寿命是
+ * `TRACK_FOCUS_HIGHLIGHT_MS`，真等会让每条用例多花 2 秒，还会让"到点摘掉"这件事
+ * 变成测网速。`advanceTimersByTimeAsync` 会顺带把微任务排干，所以能跨过 promise 链。
+ */
+async function settle(rounds = 6): Promise<void> {
+  for (let i = 0; i < rounds; i += 1) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  }
+}
+
 beforeEach(() => {
   resetTrackerApiMocks(apiMocks, jobApiMocks);
   apiMocks.listTracksPage.mockResolvedValue(makePage([TRACK]));
@@ -83,32 +99,54 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
-afterEach(cleanupTrackerPage);
+afterEach(() => {
+  vi.useRealTimers();
+  cleanupTrackerPage();
+});
 
 describe("TrackerPage 的 ?track= 深链（#18）", () => {
-  it("定位到那一行并高亮，2 秒后自动摘掉", async () => {
+  it("定位到那一行并高亮，到点自动摘掉", async () => {
+    vi.useFakeTimers();
     renderPage([`/tracker?track=${TRACK_ID}`], <LocationProbe />);
 
-    await screen.findByText(COMPANY);
-    // 拿到 job_id 就收窄筛选：不收窄的话这一行可能不在当前页里。
-    await waitFor(() =>
-      expect(apiMocks.listTracksPage).toHaveBeenCalledWith(
-        expect.objectContaining({ jobId: JOB_ID }),
-        1,
-        20,
-      ),
-    );
+    await settle();
 
-    await waitFor(() => expect(trackNode(TRACK_ID)?.className).toContain("is-highlighted"));
+    // 拿到 job_id 就收窄筛选：不收窄的话这一行可能不在当前页里。
+    expect(apiMocks.listTracksPage).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: JOB_ID }),
+      1,
+      20,
+    );
+    expect(trackNode(TRACK_ID)?.className).toContain("is-highlighted");
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
     // 高亮只是临时底色：不留常驻左色条（第 13 条已按用户意见砍掉）。
     expect(currentUrl()).toContain(`job_id=${JOB_ID}`);
 
-    // 2 秒后自动摘掉（真实计时器 + 3 秒超时：假时钟会跟 RTL 的 waitFor 打架）。
-    await waitFor(
-      () => expect(trackNode(TRACK_ID)?.className ?? "").not.toContain("is-highlighted"),
-      { timeout: 3000 },
-    );
+    // 到点自动摘掉（推进假时钟，不真等）。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TRACK_FOCUS_HIGHLIGHT_MS + 50);
+    });
+    await settle(3);
+    expect(trackNode(TRACK_ID)?.className ?? "").not.toContain("is-highlighted");
+  });
+
+  /**
+   * `<StrictMode>` 守卫（这条曾是真 bug，实机复现、单测看不出来）。
+   *
+   * dev 的 StrictMode 会"运行 effect → cleanup → 再运行 effect"。修复前第二次 effect
+   * 因为"这个 id 已经解析过"早退，而第一次的响应已被 `cancelled` 丢掉 —— 于是
+   * `?track=15` 躺在 URL 里什么都不发生：不回写 `job_id`、不高亮、也不提示。
+   * 这条用例在修复前**必须红**，否则下次还会退化。
+   */
+  it("StrictMode 双调用下依然解析、回写 job_id 并高亮", async () => {
+    vi.useFakeTimers();
+    renderPage([`/tracker?track=${TRACK_ID}`], <LocationProbe />, { strict: true });
+
+    await settle();
+
+    expect(apiMocks.getTrack).toHaveBeenCalled();
+    expect(currentUrl()).toContain(`job_id=${JOB_ID}`);
+    expect(trackNode(TRACK_ID)?.className).toContain("is-highlighted");
   });
 
   it("记录已删（404）：提示一句、去掉 track 参数，用户原视图保留", async () => {

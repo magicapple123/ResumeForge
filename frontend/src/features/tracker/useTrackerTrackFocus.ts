@@ -55,8 +55,25 @@ export function useTrackerTrackFocus({
   const toast = useToast();
   const [target, setTarget] = useState<{ id: number; jobId: number | null } | null>(null);
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
-  // 同一个 trackId 只解析一次：筛选变化会重渲染，但不必重复请求同一条。
+  /**
+   * 已经**解析成功**的 trackId（用于避免重复请求同一条）。
+   *
+   * 关键：只在成功之后才赋值。若在 effect 开头就占位，`<StrictMode>` 的
+   * "运行 effect → cleanup → 再运行 effect" 会让第二次直接早退，而第一次的响应已被
+   * `cancelled` 丢掉 —— 于是 `setTarget` 永远不执行：URL 里躺着 `?track=15`，却既不
+   * 回写 `job_id`、也不高亮、也不提示（实机表现就是这样，单测与 build 都看不出来）。
+   * 把标记挪到 then 里，第二次 effect 就会重新取一次。
+   */
   const resolvedFor = useRef<number | null>(null);
+  /**
+   * 已经点亮过的行 id。
+   *
+   * 不能用 `highlightedId` 自己当"点过没"的标记：到点把它清成 `null` 之后，下面的
+   * 阶段二 effect 会因为"还没高亮"而**立刻再点亮一次**——于是高亮永远摘不掉（用户看到
+   * 的是一块常驻底色，正是"不要左色条/常驻标记"那条要求要避免的）。用一个只进不退的
+   * ref 记住"这一条点过了"，清除 action 才不会被自己撤销。
+   */
+  const appliedFor = useRef<number | null>(null);
 
   // 阶段一：id → (行 id, 岗位 id)。
   //
@@ -66,16 +83,18 @@ export function useTrackerTrackFocus({
   useEffect(() => {
     if (trackId === null) {
       resolvedFor.current = null;
+      appliedFor.current = null;
       setTarget(null);
       setHighlightedId(null);
       return;
     }
     if (resolvedFor.current === trackId) return;
-    resolvedFor.current = trackId;
     let cancelled = false;
     void getTrack(trackId)
       .then((track) => {
         if (cancelled) return;
+        // 成功后才占位（见上面 resolvedFor 的注释）。
+        resolvedFor.current = trackId;
         setTarget({ id: track.id, jobId: track.job_id ?? null });
         // 先收窄到该岗位：同一岗位多条进度时列表仍能命中这一条。
         if (track.job_id != null) onFilterJob(track.job_id);
@@ -93,10 +112,12 @@ export function useTrackerTrackFocus({
   // 阶段二：等这一行真的在列表里，才把它点亮（"行到位"是外部数据的变化，不是渲染期
   // 能算出来的东西：列表是异步分页拉的）。
   useEffect(() => {
-    if (target === null || highlightedId === target.id) return;
+    if (target === null) return;
+    if (appliedFor.current === target.id) return;
     if (!loadedIds.includes(target.id)) return;
+    appliedFor.current = target.id;
     setHighlightedId(target.id);
-  }, [target, loadedIds, highlightedId]);
+  }, [target, loadedIds]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // 滚动 + 到点摘掉高亮。timer 在卸载时清理（不留一个 2 秒后才炸的 setState）。

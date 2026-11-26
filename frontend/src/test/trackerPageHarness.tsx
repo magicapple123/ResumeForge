@@ -14,6 +14,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, render } from "@testing-library/react";
+import { StrictMode } from "react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import type { Mock } from "vitest";
@@ -102,16 +103,25 @@ export function makePage(items: Track[], total = items.length): Page<Track> {
  *
  * `probe`（可选）：挂在同一棵树里的探针节点。深链用例用它读当前 URL
  * （`useLocation` 必须在 Router 内部），避免为了一条断言再抄一份渲染代码。
+ *
+ * `strict`（可选）：外面再套一层 `<StrictMode>`。dev 的 StrictMode 会
+ * "运行 effect → cleanup → 再运行 effect"，把"第一次响应被取消、第二次又早退"这类
+ * 只在开发态出现的时序 bug 暴露出来（生产构建是单次调用，看不出来）。
  */
-export function renderPage(initialEntries: string[] = ["/tracker"], probe?: ReactNode) {
-  return render(
+export function renderPage(
+  initialEntries: string[] = ["/tracker"],
+  probe?: ReactNode,
+  { strict = false }: { strict?: boolean } = {},
+) {
+  const tree = (
     <MemoryRouter initialEntries={initialEntries}>
       <AntdApp>
         <TrackerPage />
         {probe}
       </AntdApp>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  return render(strict ? <StrictMode>{tree}</StrictMode> : tree);
 }
 
 /**
