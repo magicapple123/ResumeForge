@@ -25,7 +25,11 @@ import SettingsNav from "../features/settings/SettingsNav";
 import SettingsSearch from "../features/settings/SettingsSearch";
 import { parseSettingsSection, settingsSection } from "../features/settings/settingsSections";
 import type { SettingsSectionKey } from "../features/settings/settingsSections";
-import { revealSettingsCard, scrollSettingsToTop } from "../features/settings/settingsFocus";
+import {
+  revealSettingsAnchor,
+  revealSettingsCard,
+  scrollSettingsToTop,
+} from "../features/settings/settingsFocus";
 import type { SettingsIndexEntry } from "../features/settings/settingsIndex";
 import {
   AboutPanel,
@@ -50,6 +54,16 @@ interface PendingJump {
   nonce: number;
 }
 
+/**
+ * 深链锚点的重试预算：50 × 40ms ≈ 2s。
+ *
+ * 为什么要重试：#9 的落点是凭据**行**，而它要等一次 `/api/connections` 才渲染出来；
+ * 一次性 `scrollIntoView` 会在数据到达前跑完，看起来就是"点了去配置、页面什么都没动"。
+ * 为什么有上限：轮询不能变成页面的常驻行为——超时就退回分组顶部，如实接受"这个锚点不存在"。
+ */
+const HASH_ANCHOR_RETRIES = 50;
+const HASH_ANCHOR_RETRY_MS = 40;
+
 export default function SettingsPage() {
   const [searchParams] = useSearchParams();
   const initialSection = parseSettingsSection(searchParams.get("tab"));
@@ -60,28 +74,41 @@ export default function SettingsPage() {
   const contentRef = useRef<HTMLDivElement>(null);
   /** 上一次已渲染的分组：用来区分"用户切了组"和"首次挂载"。 */
   const prevSectionRef = useRef<SettingsSectionKey | null>(null);
-  /** 带 #anchor 进来只定位一次：之后用户自己切组，不该被拉回那个锚点。 */
-  const hashHandledRef = useRef(false);
   /** 这一次切组是搜索命中引起的：预滚动让给 revealSettingsCard，避免连跳两段。 */
   const skipResetRef = useRef(false);
 
   // 本页用模块级 t() 取文案：必须订阅语言变化，否则切到英文后这一页仍是中文。
   useLocale();
 
-  // 带锚点进来（例如批量操作未配置时从岗位广场跳来）要落到那张卡，而不是停在分组顶部。
-  // **只处理一次**：锚点描述的是"从别处点进来的落点"，用户随后切组是新的意图。
+  // 带锚点进来（矩阵里点「去配置」= `/settings?tab=assistant-behavior#conn-search-deepseek`）
+  // 要落到**那一行**，而不是停在分组顶部。三件事决定了这里不能写成一次性 scrollIntoView：
+  //
+  // 1. 目标行是**异步渲染**的（凭据列表等一次 `/api/connections` 才出来），抢跑必然落空；
+  // 2. 目标所在分组可能还没切过去（`?tab=` 缺失的旧链接），此时元素在 `[hidden]` 里、
+  //    没有布局盒，滚也没用——`revealSettingsAnchor` 会直接拒绝，这里补一次回顶兜底；
+  // 3. 锚点只处理一次：用户随后自己切组是新的意图，不该被反复拉回。
+  //
+  // 于是用**有界重试**（≈2s）：命中即收手；超时则退回分组顶部，不把页面永远挂在轮询上。
   useEffect(() => {
-    if (hashHandledRef.current) return;
-    hashHandledRef.current = true;
     const hash = window.location.hash;
-    if (!hash) return;
-    let target: Element | null;
-    try {
-      target = document.querySelector(hash);
-    } catch {
-      return;
-    }
-    target?.scrollIntoView({ block: "start", behavior: "smooth" });
+    if (hash === "" || hash === "#") return undefined;
+    let timer: number | undefined;
+    let attempts = 0;
+    const attempt = (): void => {
+      if (revealSettingsAnchor(hash)) return;
+      attempts += 1;
+      if (attempts >= HASH_ANCHOR_RETRIES) {
+        // 兜底：至少停在所属分组顶部（文案 `settingsUi.connections.anchor.missing`
+        // 留给出提示的调用方，本页不弹 toast——它可能只是被条件隐藏了）。
+        scrollSettingsToTop(contentRef.current);
+        return;
+      }
+      timer = window.setTimeout(attempt, HASH_ANCHOR_RETRY_MS);
+    };
+    attempt();
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, []);
 
   const {

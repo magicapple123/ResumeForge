@@ -96,6 +96,31 @@ class KeyDisplay(StrEnum):
 
 
 @dataclass(frozen=True)
+class CredentialFeature:
+    """**一个会拿密钥去发请求的功能**（依赖矩阵的一行）。
+
+    为什么要有这一层（#9）：改造前 `CredentialSource.used_by` 是一整句中文
+    （「联网搜索、网页正文抓取、扫描件 OCR 共用这一把」），前端切不出格子，只能把整句
+    塞进表格第三列。矩阵需要键 → 功能的**成对关系**，于是把功能提成一等公民：
+
+    - `feature_id` 是稳定标识（`web_search` / `ocr` …），`used_by` 引用它，不是引用中文；
+    - `label` 是中文显示名（前端仍应经 i18n 包一层）；
+    - `group` 决定矩阵里的分组标题（内容生成 / 联网与抓取 / 输入与检索 / 系统）。
+
+    声明顺序 = 矩阵行顺序（不按字母排：每加一个功能就重排，用户记住的位置会变）。
+    """
+
+    feature_id: str
+    """稳定标识，形如 ``resume_generation``；``used_by`` 与本模块之外的测试都按它引用。"""
+
+    label: str
+    """中文显示名。"""
+
+    group: str
+    """功能域（``content`` / ``web`` / ``input`` / ``system``），矩阵用它分组。"""
+
+
+@dataclass(frozen=True)
 class CredentialSource:
     """一份外部凭据的**声明**：在哪、怎么显示、备份要不要剥。
 
@@ -142,14 +167,44 @@ class CredentialSource:
     两者都要有——用户排障时问的正是这两句不同的话。
     """
 
-    used_by: str = ""
-    """**谁在用**（哪些功能会拿这把 Key 去发请求）。地图的第三列。"""
+    used_by: tuple[str, ...] = ()
+    """**谁在用**（哪些功能会拿这把 Key 去发请求）——存 :class:`CredentialFeature` 的 id。
+
+    改造前这里是一整句中文（"联网搜索、网页正文抓取、扫描件 OCR 共用这一把"）。整句
+    切不出格子，依赖矩阵（#9）需要成对关系，所以改成 id 元组：**整句由列表拼回**
+    （`connections_view` 里 `"、".join(labels)`），前端只负责渲染。顺序 = 声明顺序。
+    """
 
     empty_meaning: str = ""
     """**空串含义**（清空/留空时会发生什么）。地图的第四列。
 
     四套写语义本来就不同（搜索=移除、语音/语义检索=沿用本条、代理=保留、大模型=哨兵），
     地图必须逐条写清，否则用户按"其它页面的习惯"操作会得到相反的结果。
+    """
+
+    section: str = ""
+    """「去配置」落点的**设置页分组**（`model` / `assistant-behavior` / `voice` /
+    `connections`）。与 :attr:`anchor` 一起构成 ``/settings?tab=<section>#<anchor>``。"""
+
+    anchor: str = ""
+    """「去配置」落点的**锚点 id**（`conn-llm-api-key` …）。
+
+    锚点元素由设置页自己渲染（`SettingsPanels.tsx`）；这里只声明"点下去该到哪"，
+    前端不维护任何 key → 页面的映射表（那份表一定会与新增来源漂移）。
+    """
+
+    edge_kind: str = "direct"
+    """依赖矩阵里这条边的语义：``direct``（直接依赖）或 ``override``（覆盖，例如仅本次
+    会话的 Key 优先于已保存的那把）。
+
+    **必须由后端算**：前端按 id 判断（`id === "session"`）在新增一把覆盖式 Key 时会画成
+    普通依赖，而那种错误在界面上看不出来。
+    """
+
+    is_gate: bool = False
+    """是否是一条**闸门**凭据（所有出网请求都过它，例如代理口令）。
+
+    闸门不在矩阵里占一列（它不属于某个功能），由前端画成矩阵上方的一条带子。
     """
 
     note: str = ""
@@ -194,6 +249,7 @@ class CredentialState:
 
 __all__ = [
     "STATUS_LABELS",
+    "CredentialFeature",
     "CredentialScope",
     "CredentialSource",
     "CredentialState",

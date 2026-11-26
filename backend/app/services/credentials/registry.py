@@ -26,7 +26,7 @@
 
 from __future__ import annotations
 
-from .types import CredentialScope, CredentialSource, KeyDisplay
+from .types import CredentialFeature, CredentialScope, CredentialSource, KeyDisplay
 
 # ===== 来源标识（稳定契约；前端与测试都按它引用）=====
 
@@ -57,6 +57,85 @@ GROUP_LABELS: dict[str, str] = {
     GROUP_NETWORK: "网络代理",
 }
 
+# ===== 功能域与功能（依赖矩阵的行，见 #9）=====
+
+FEATURE_GROUP_CONTENT = "content"
+FEATURE_GROUP_WEB = "web"
+FEATURE_GROUP_INPUT = "input"
+FEATURE_GROUP_SYSTEM = "system"
+
+FEATURE_GROUP_LABELS: dict[str, str] = {
+    FEATURE_GROUP_CONTENT: "内容生成",
+    FEATURE_GROUP_WEB: "联网与抓取",
+    FEATURE_GROUP_INPUT: "输入与检索",
+    FEATURE_GROUP_SYSTEM: "系统",
+}
+
+#: 会拿密钥去发请求的功能。**声明顺序 = 矩阵行顺序**（不按字母排：每加一个功能就重排，
+#: 用户记住的位置会变）。`used_by` 引用这里的 `feature_id`。
+FEATURES: tuple[CredentialFeature, ...] = (
+    CredentialFeature(
+        feature_id="resume_generation",
+        label="简历生成",
+        group=FEATURE_GROUP_CONTENT,
+    ),
+    CredentialFeature(
+        feature_id="assistant",
+        label="求职助手",
+        group=FEATURE_GROUP_CONTENT,
+    ),
+    CredentialFeature(
+        feature_id="company_research",
+        label="公司调研",
+        group=FEATURE_GROUP_CONTENT,
+    ),
+    CredentialFeature(
+        feature_id="structured_extraction",
+        label="结构化抽取",
+        group=FEATURE_GROUP_CONTENT,
+    ),
+    CredentialFeature(
+        feature_id="web_search",
+        label="联网搜索",
+        group=FEATURE_GROUP_WEB,
+    ),
+    CredentialFeature(
+        feature_id="web_fetch",
+        label="网页正文抓取",
+        group=FEATURE_GROUP_WEB,
+    ),
+    CredentialFeature(
+        feature_id="ocr",
+        label="扫描件 OCR",
+        group=FEATURE_GROUP_WEB,
+    ),
+    CredentialFeature(
+        feature_id="asr_transcribe",
+        label="语音转写",
+        group=FEATURE_GROUP_INPUT,
+    ),
+    CredentialFeature(
+        feature_id="semantic_search",
+        label="语义检索",
+        group=FEATURE_GROUP_INPUT,
+    ),
+    # 只经过代理口令、不依赖任何一把 Key：矩阵里不画行（不摆一排空格子），
+    # 由前端在闸门带下面合成一句说明。它仍然声明在这里，因为"更新检查"确实要出网。
+    CredentialFeature(
+        feature_id="update_check",
+        label="更新检查",
+        group=FEATURE_GROUP_SYSTEM,
+    ),
+)
+
+#: 大模型相关的四个功能（`llm.default` 与 `llm.session` 都服务这四个）。
+_LLM_FEATURES: tuple[str, ...] = (
+    "resume_generation",
+    "assistant",
+    "company_research",
+    "structured_extraction",
+)
+
 # 声明顺序 = 展示顺序 = 备份 LIKE 串的拼接顺序（确定性，便于断言）。
 CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
     CredentialSource(
@@ -68,7 +147,9 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         storage_field="deepseek_api_key",
         app_setting_key_prefixes=("search_deepseek_api_key",),
         configure_at="设置 → 联网搜索 → DeepSeek",
-        used_by="联网搜索、网页正文抓取、扫描件 OCR 共用这一把",
+        used_by=("web_search", "web_fetch", "ocr"),
+        section="assistant-behavior",
+        anchor="conn-search-deepseek",
         empty_meaning="留空并保存 = 移除这把 Key（三把搜索 Key 都是这个口径）",
         note=(
             "同一把 Key 供联网搜索、URL 抓取与 OCR 使用。升级前的旧形态是数据集 "
@@ -85,7 +166,9 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         storage_field="tavily_api_key",
         app_setting_key_prefixes=("search_tavily_api_key",),
         configure_at="设置 → 联网搜索 → Tavily",
-        used_by="联网搜索的 Tavily 来源（勾选后才参与）",
+        used_by=("web_search",),
+        section="assistant-behavior",
+        anchor="conn-search-tavily",
         empty_meaning="留空并保存 = 移除这把 Key",
         note="数据集 AppSetting 的 search_tavily_api_key 行是升级前的旧形态，仍需剥离。",
     ),
@@ -98,7 +181,9 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         storage_field="jina_api_key",
         app_setting_key_prefixes=("search_jina_api_key",),
         configure_at="设置 → 联网搜索 → Jina",
-        used_by="网页正文抓取（勾选后才参与）",
+        used_by=("web_fetch",),
+        section="assistant-behavior",
+        anchor="conn-search-jina",
         empty_meaning="留空并保存 = 移除这把 Key",
         note="数据集 AppSetting 的 search_jina_api_key 行是升级前的旧形态，仍需剥离。",
     ),
@@ -111,7 +196,9 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         multi_profile=True,
         supports_clear_sentinel=True,
         configure_at="设置 → AI 模型 → 模型配置（每条记录各有一把 Key）",
-        used_by="所有模型调用：简历生成、助手、调研、结构化抽取",
+        used_by=_LLM_FEATURES,
+        section="model",
+        anchor="conn-llm-api-key",
         empty_meaning="留空 = 保留原 Key；要清除请点「清除」（发 __clear__ 哨兵）",
         # 密钥藏在 JSON 块 / 独立表里，**不能**用 LIKE 删整行（会把 base_url、
         # model 等非密钥字段一起删掉）。它由 api_keys.py 里既有的两条专门路径处理：
@@ -129,7 +216,11 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         scope=CredentialScope.MEMORY,
         location="后端进程内存（api_key_session），不落盘、不进备份",
         configure_at="设置 → AI 模型 → 仅本次会话使用",
-        used_by="临时覆盖已保存的大模型 Key，进程重启即失效",
+        used_by=_LLM_FEATURES,
+        section="model",
+        anchor="conn-llm-session-key",
+        # 覆盖式：它优先于已保存的那把，所以矩阵里画空心环而不是实心点。
+        edge_kind="override",
         empty_meaning="清空 = 立刻回到已保存的那把 Key",
         note=(
             "RF-24 的纯内存通道：进程重启即失效。它存在时生效值以它为准，"
@@ -146,7 +237,9 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         supports_clear_sentinel=True,
         app_setting_key_prefixes=("asr_api_key",),
         configure_at="设置 → 语音与面试 → 语音转写（每条配置各有一把 Key）",
-        used_by="语音转写（面试录音、语音输入）",
+        used_by=("asr_transcribe",),
+        section="voice",
+        anchor="conn-asr-api-key",
         empty_meaning="留空 = 沿用这一条自己的旧 Key；地址或协议一变就清空",
         note=(
             "旧形态是数据集 AppSetting 的 asr_api_key 行（迁移前兼容路径仍会读它），"
@@ -164,7 +257,9 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         multi_profile=True,
         supports_clear_sentinel=True,
         configure_at="设置 → AI 模型 → 语义检索（每条配置各有一把 Key）",
-        used_by="本地资料库的语义检索与召回",
+        used_by=("semantic_search",),
+        section="model",
+        anchor="conn-embedding-api-key",
         empty_meaning="留空 = 沿用这一条自己的旧 Key；要清除请用配置卡上的「清除 Key」",
         note=(
             "配置卡只给 key_configured 布尔，连掩码都不回；本地模型配置没有 Key。"
@@ -180,7 +275,11 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         storage_field="proxy_password",
         supports_clear_sentinel=True,
         configure_at="设置 → 网络代理（模式与地址）＋ 外部连接（只改口令）",
-        used_by="所有出网请求：模型、搜索、抓取、更新检查",
+        # 闸门：所有出网请求都过它，它不属于某个功能，因此不在矩阵里占一列。
+        used_by=("resume_generation", "web_search", "web_fetch", "update_check"),
+        section="connections",
+        anchor="conn-network-proxy",
+        is_gate=True,
         empty_meaning="留空 = 保留原口令；要清除请点「清除」（发 __clear__ 哨兵）",
         note=(
             "写入口唯一：PUT /api/settings/network（本页只做就地改口令，模式与地址仍在"
@@ -233,8 +332,78 @@ def persistent_sources() -> tuple[CredentialSource, ...]:
     return tuple(source for source in CREDENTIAL_SOURCES if source.persistent)
 
 
+def feature_by_id(feature_id: str) -> CredentialFeature:
+    """按 id 取功能声明；未知 id 抛 :class:`KeyError`（与 :func:`get_source` 同一口径）。"""
+    for feature in FEATURES:
+        if feature.feature_id == feature_id:
+            return feature
+    known = "、".join(feature.feature_id for feature in FEATURES)
+    raise KeyError(f"未登记的功能：{feature_id}（已登记：{known}）")
+
+
+def validate_matrix_references(
+    sources: tuple[CredentialSource, ...] = CREDENTIAL_SOURCES,
+    features: tuple[CredentialFeature, ...] = FEATURES,
+) -> None:
+    """校验依赖矩阵的**引用完整性**，不通过就抛 :class:`RuntimeError`。
+
+    为什么要在启动时就报错（#9）：`used_by` 里写了一个不存在的 feature id 时，表格时代
+    只是少一格文字，没人注意；矩阵时代的表现是"某功能从矩阵里整行消失"——而用户看到的
+    只是"这里少了一行"，既不会报错也不会怀疑。所以宁可起不来。
+
+    校验项：``used_by`` 非空且都能解析、``used_by`` 不重复、``feature.group`` 是已知域、
+    ``feature_id`` 不重复、``section`` / ``anchor`` 都声明了、``edge_kind`` 只有两种取值、
+    闸门最多一条。**不校验** anchor 对应的 DOM 是否存在（那是前端的事，且锚点可能因
+    条件渲染而缺席——那种情况有"滚到分组顶部 + 一行提示"的兜底）。
+    """
+    problems: list[str] = []
+    known_groups = set(FEATURE_GROUP_LABELS)
+    known_features: set[str] = set()
+    for feature in features:
+        if not feature.feature_id:
+            problems.append("存在空的 feature_id")
+        if feature.feature_id in known_features:
+            problems.append(f"feature_id 重复：{feature.feature_id}")
+        known_features.add(feature.feature_id)
+        if feature.group not in known_groups:
+            problems.append(f"{feature.feature_id} 的分组未登记：{feature.group}")
+        if not feature.label:
+            problems.append(f"{feature.feature_id} 没有 label")
+
+    gates = 0
+    for source in sources:
+        if source.is_gate:
+            gates += 1
+        if not source.used_by:
+            problems.append(f"{source.source_id} 没有声明 used_by")
+        if len(set(source.used_by)) != len(source.used_by):
+            problems.append(f"{source.source_id} 的 used_by 有重复项")
+        for feature_id in source.used_by:
+            if feature_id not in known_features:
+                problems.append(f"{source.source_id}.used_by 引用了未登记的功能：{feature_id}")
+        if not source.section or not source.anchor:
+            problems.append(f"{source.source_id} 缺少「去配置」落点（section/anchor）")
+        if source.edge_kind not in ("direct", "override"):
+            problems.append(f"{source.source_id} 的 edge_kind 非法：{source.edge_kind}")
+    if gates > 1:
+        problems.append(f"闸门型凭据只能有一条，实际 {gates} 条")
+
+    if problems:
+        raise RuntimeError("凭据 registry 的依赖矩阵声明不一致：" + "；".join(problems))
+
+
+# 启动即校验（模块 import 时）：宁可起不来，也不要让"某功能从矩阵里静默消失"。
+validate_matrix_references()
+
+
 __all__ = [
     "CREDENTIAL_SOURCES",
+    "FEATURES",
+    "FEATURE_GROUP_CONTENT",
+    "FEATURE_GROUP_INPUT",
+    "FEATURE_GROUP_LABELS",
+    "FEATURE_GROUP_SYSTEM",
+    "FEATURE_GROUP_WEB",
     "GROUP_ASR",
     "GROUP_EMBEDDING",
     "GROUP_LABELS",
@@ -250,10 +419,12 @@ __all__ = [
     "SOURCE_WEB_SEARCH_DEEPSEEK",
     "SOURCE_WEB_SEARCH_JINA",
     "SOURCE_WEB_SEARCH_TAVILY",
+    "feature_by_id",
     "get_source",
     "groups",
     "has_source",
     "persistent_sources",
     "source_ids",
     "sources_of_group",
+    "validate_matrix_references",
 ]

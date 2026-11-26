@@ -52,6 +52,10 @@ class ConnectionItemOut(BaseModel):
     target_id: str = ""
     # 人类可读的存放位置（排障用：`global_settings.json → web_search.x`）。
     location: str = ""
+    # #9：「去配置」深链的落点锚点。前端把它写成这一行的 DOM `id`，于是
+    # `/settings?tab=…#anchor` 能真的滚到**这一行**并高亮它（不再是只切分组）。
+    # 系统来源（C 组）没有这项语义，为空串时前端不写 `id`。
+    anchor: str = ""
     # --- 系统来源（C 组）用 ---
     value: str = ""
     default_value: str = ""
@@ -81,12 +85,74 @@ class KeyMapRowOut(BaseModel):
     group_label: str = ""
     #: 界面上去哪改（"设置 → 联网搜索 → DeepSeek"）。
     configure_at: str = ""
-    #: 哪些功能在用这把 Key。
-    used_by: str = ""
+    #: 哪些功能在用这把 Key（`FEATURES` 的显示名，声明顺序）。
+    used_by: list[str] = Field(default_factory=list)
+    #: 同一批标签拼回的整句（详情卡与凭据行的「用于」直接显示这一句）。
+    used_by_text: str = ""
     #: 留空 / 清除时会发生什么（四套写语义本来就不同）。
     empty_meaning: str = ""
     #: 文件里存哪（排障用，与 ``configure_at`` 是两件事）。
     where: str = ""
+    #: 这条凭据现在的状态（`saved` / `not_configured` / `session_only`），与凭据行同源。
+    status: str = ""
+    #: 「去配置」落点：设置页分组（`?tab=`）与锚点（`#`）。
+    section: str = ""
+    anchor: str = ""
+
+
+class MatrixKeyOut(BaseModel):
+    """依赖矩阵的一列 = 一把密钥。"""
+
+    id: str
+    label: str
+    #: 所属分组（决定这一列的强调色，前端按 `data-group` 上色）。
+    group: str = ""
+    status: str = "not_configured"
+    #: 「去配置」落点。
+    section: str = ""
+    anchor: str = ""
+
+
+class MatrixFeatureOut(BaseModel):
+    """依赖矩阵的一行 = 一个会拿密钥去发请求的功能。"""
+
+    id: str
+    label: str
+    #: 功能域（内容生成 / 联网与抓取 / 输入与检索 / 系统），矩阵按它分组。
+    group: str = ""
+
+
+class MatrixEdgeOut(BaseModel):
+    """一条依赖：哪把 Key 被哪个功能用。
+
+    ``kind`` **由后端算**：``direct``（直接依赖）/ ``override``（覆盖，例如仅本次会话的
+    Key 优先于已保存的那把）。让前端按 id 判断在新增一把覆盖式 Key 时会画成普通依赖。
+    """
+
+    key: str
+    feature: str
+    kind: Literal["direct", "override"] = "direct"
+
+
+class MatrixGateOut(BaseModel):
+    """闸门凭据（代理口令）：所有出网请求都过它，因此不占矩阵列。"""
+
+    key: str
+    label: str
+
+
+class KeyMatrixOut(BaseModel):
+    """密钥依赖矩阵（#9）：行=功能、列=密钥、格子=依赖。
+
+    行列顺序 = registry 声明顺序（**不按字母排**：每加一把 Key 就重排，用户记住的位置
+    会变）。前端不维护任何清单，因此新增来源时矩阵自动多一列。
+    """
+
+    keys: list[MatrixKeyOut] = Field(default_factory=list)
+    features: list[MatrixFeatureOut] = Field(default_factory=list)
+    edges: list[MatrixEdgeOut] = Field(default_factory=list)
+    #: 没有闸门型凭据时为 null（页面据此不画那条带子）。
+    gate: MatrixGateOut | None = None
 
 
 class StorageSummaryOut(BaseModel):
@@ -103,6 +169,8 @@ class ConnectionsOut(BaseModel):
     groups: list[ConnectionGroupOut] = Field(default_factory=list)
     #: CR-12：由 registry 生成的地图，长度为凭据来源数。
     key_map: list[KeyMapRowOut] = Field(default_factory=list)
+    #: #9：依赖矩阵。老客户端不认识这个字段（多余字段不影响它们），新客户端不手写清单。
+    matrix: KeyMatrixOut | None = None
     storage: StorageSummaryOut
     # 数据库会话缺失时如实说明（页面据此提示"状态不可判定"，而不是假装全部未配置）。
     retrieved: bool = True
@@ -120,6 +188,11 @@ __all__ = [
     "ConnectionsOut",
     "GroupKind",
     "KeyMapRowOut",
+    "KeyMatrixOut",
+    "MatrixEdgeOut",
+    "MatrixFeatureOut",
+    "MatrixGateOut",
+    "MatrixKeyOut",
     "StorageSummaryOut",
     "SystemSourceWriteIn",
 ]

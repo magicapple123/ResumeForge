@@ -97,3 +97,35 @@ export function revealSettingsCard(title: string): boolean {
   window.setTimeout(() => target.classList.remove(HIGHLIGHT_CLASS), HIGHLIGHT_MS);
   return true;
 }
+
+/**
+ * 深链**锚点**的定位与高亮（`/settings?tab=assistant-behavior#conn-search-beta`）。
+ *
+ * 与 `revealSettingsCard` 有两处不同，都是 #9 的根因：
+ *
+ * 1. 目标行是**异步渲染**的（凭据列表要等一次 `/api/connections`），所以"现在找不到"
+ *    不等于"不存在"——本函数只回答"这一次能不能命中"，重试交给调用方；命中才写
+ *    `hashHandled` 那类状态，否则深链就会因为一次抢跑而永久失效；
+ * 2. 目标所在的分组如果还是 `[hidden]`，滚过去也看不见（`display:none` 的元素没有
+ *    布局盒）。这种情况**直接返回 false**：切分组是调用方的事（先切 tab 再滚动）。
+ *
+ * 合法锚点才会走到 `querySelector`：`#123` 这类会被当成 ID 选择器直接抛错，按"没命中"
+ * 处理，不把整页炸掉。
+ */
+export function revealSettingsAnchor(hash: string): boolean {
+  if (hash === "" || hash === "#") return false;
+  let target: HTMLElement | null;
+  try {
+    target = document.querySelector<HTMLElement>(hash);
+  } catch {
+    return false;
+  }
+  if (target === null) return false;
+  if (target.closest(".settings-section[hidden]") !== null) return false;
+  target.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  target.classList.remove(HIGHLIGHT_CLASS);
+  void target.offsetWidth;
+  target.classList.add(HIGHLIGHT_CLASS);
+  window.setTimeout(() => target.classList.remove(HIGHLIGHT_CLASS), HIGHLIGHT_MS);
+  return true;
+}

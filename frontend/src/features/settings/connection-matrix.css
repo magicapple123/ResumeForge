@@ -1,0 +1,430 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * 密钥依赖矩阵（#9）。与卡片同目录的局部样式（同 navigationSettings.css 的组织方式），
+ * 不挤进 `styles/settings-connections.css` 的 500 行预算。
+ *
+ * 三件事：
+ *
+ * 1. **窄窗只横向滚动**：`overflow-x:auto` + 首列 `sticky left:0` + 白底。不收列、不隐藏
+ *    列——"看不到"与"不存在"在排障时是两个完全不同的结论；
+ * 2. **列宽 66px 定宽**：百分比在 8 列时会挤成 40px，标签只能竖排；
+ * 3. **高亮语义**（用户指出的 bug）：`.is-focused` 下所有 pip 压暗，只有 `.is-focus`
+ *    保持不透明。**绝不给空位加亮度**——空位根本没有 pip 元素。
+ *
+ * 状态色 token（`--rf-success` / `--rf-warning`）定义在
+ * `styles/settings-connections.css` 顶部，与凭据行的状态条共用同一组，这里只引用。
+ */
+
+.connection-matrix {
+  margin-bottom: 12px;
+}
+
+.connection-matrix__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ── 汇总行：三档计数可点筛选 ─────────────────────────────── */
+.connection-matrix__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 用 button 而不是 chip 样式的 span：它可点、可 Tab、`aria-pressed` 有明确含义。 */
+.connection-matrix__summary-btn {
+  padding: 1px 8px;
+  border: 1px solid var(--rf-border);
+  border-radius: 10px;
+  background: var(--rf-surface);
+  color: var(--rf-text-secondary);
+  font-size: 11.5px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.connection-matrix__summary-btn:hover {
+  border-color: var(--rf-border-strong);
+}
+
+.connection-matrix__summary-btn.is-active {
+  border-color: var(--rf-brand);
+  background: var(--rf-surface-alt);
+  color: var(--rf-brand);
+  font-weight: 500;
+}
+
+/* 三档各自一个小色点语义，靠 `data-status` 取同一组 token。 */
+.connection-matrix__summary-btn[data-status="saved"] {
+  color: var(--rf-success);
+}
+
+.connection-matrix__summary-btn[data-status="session_only"] {
+  color: var(--rf-warning);
+}
+
+.connection-matrix__summary-btn.is-active[data-status="saved"],
+.connection-matrix__summary-btn.is-active[data-status="session_only"] {
+  color: inherit;
+}
+
+.connection-matrix__summary-clear {
+  padding: 1px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--rf-text-tertiary);
+  font-size: 11.5px;
+  line-height: 18px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.connection-matrix__hint {
+  margin: 2px 0 8px;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ── 表格：窄窗横向滚动，首列吸顶 ─────────────────────────── */
+.connection-matrix__scroll {
+  overflow-x: auto;
+  /* 横向滚动条出现时不留一条突兀的白边。 */
+  border-radius: var(--rf-radius-control);
+}
+
+.connection-matrix__table {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 100%;
+}
+
+/* 左上角与首列表头：`sticky` 需要一个不透明的底，否则横向滚动时下面的格子会透出来。 */
+.connection-matrix__corner,
+.connection-matrix__row-head {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--rf-surface);
+}
+
+.connection-matrix__corner {
+  width: 22%;
+  min-width: 132px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.connection-matrix__col {
+  width: 66px;
+  min-width: 66px;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+  vertical-align: bottom;
+  text-align: center;
+}
+
+/* 列头按钮：整格可点（聚焦这一列）。 */
+.connection-matrix__col-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  padding: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--rf-text-secondary);
+  font-size: 10.5px;
+  line-height: 1.25;
+  text-align: center;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.connection-matrix__col-btn:hover {
+  background: var(--rf-surface-alt);
+}
+
+.connection-matrix__col-btn:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 1px;
+}
+
+/* 列头的分组色点 = 这把 Key 所属分组色（与格子的 pip 同色，扫一眼能对上列）。 */
+.connection-matrix__col-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--rf-matrix-ink, var(--rf-text-tertiary));
+}
+
+/* 聚焦的列头只做定位（浅底），不代表依赖。 */
+.connection-matrix__col.is-focus {
+  background: var(--rf-surface-alt);
+}
+
+/* ── 分组标题行 ───────────────────────────────────────────── */
+.connection-matrix__group-row th {
+  padding: 6px 8px 3px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-tertiary);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-align: left;
+}
+
+/* ── 数据行 ───────────────────────────────────────────────── */
+.connection-matrix__row-head {
+  min-width: 132px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+  font-weight: 400;
+  text-align: left;
+}
+
+.connection-matrix__row-btn {
+  display: block;
+  width: 100%;
+  padding: 5px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--rf-text-body);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.connection-matrix__row-btn:hover {
+  background: var(--rf-surface-alt);
+}
+
+.connection-matrix__row-btn:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 1px;
+}
+
+.connection-matrix__row.is-focus .connection-matrix__row-head {
+  background: var(--rf-surface-alt);
+}
+
+.connection-matrix__row.is-focus .connection-matrix__row-btn {
+  color: var(--rf-brand);
+  font-weight: 500;
+}
+
+.connection-matrix__cell {
+  width: 66px;
+  height: 26px;
+  padding: 0;
+  border-bottom: 1px solid var(--rf-border-subtle);
+  text-align: center;
+}
+
+/* ── 格子：实心=真的依赖，空心环=覆盖 ─────────────────────── */
+.connection-matrix__pip {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.connection-matrix__pip.is-on {
+  background: var(--rf-matrix-ink, var(--rf-info));
+}
+
+.connection-matrix__pip.is-on.is-override {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--rf-matrix-ink, var(--rf-info));
+}
+
+/*
+ * 聚焦：只压暗**无关**的格子。`opacity` 而不是改颜色——颜色一改就与"实心=依赖"打架。
+ * 覆盖式压到 .22 而不是 .13：空心环本身已经很轻，压到 .13 就看不见了。
+ */
+.connection-matrix__table.is-focused .connection-matrix__pip {
+  opacity: 0.13;
+}
+
+.connection-matrix__table.is-focused .connection-matrix__pip.is-override {
+  opacity: 0.22;
+}
+
+.connection-matrix__table.is-focused .connection-matrix__pip.is-focus {
+  opacity: 1;
+}
+
+/* ── 分组色（`data-group` → 强调色）────────────────────────
+   颜色只表示"这是哪一组"，不表示状态：状态由实心/空心环与汇总行承担。 */
+.connection-matrix__col[data-group="llm"],
+.connection-matrix__pip[data-group="llm"] {
+  --rf-matrix-ink: var(--rf-brand);
+}
+
+.connection-matrix__col[data-group="web_search"],
+.connection-matrix__pip[data-group="web_search"] {
+  --rf-matrix-ink: var(--rf-accent-green);
+}
+
+.connection-matrix__col[data-group="asr"],
+.connection-matrix__pip[data-group="asr"] {
+  --rf-matrix-ink: var(--rf-accent-amber);
+}
+
+.connection-matrix__col[data-group="embedding"],
+.connection-matrix__pip[data-group="embedding"] {
+  --rf-matrix-ink: var(--rf-info);
+}
+
+.connection-matrix__col[data-group="session"],
+.connection-matrix__pip[data-group="session"] {
+  --rf-matrix-ink: var(--rf-text-secondary);
+}
+
+/* ── 闸门带（代理口令）：不占列 ───────────────────────────── */
+.connection-matrix__gate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 5px 10px;
+  border: 1px dashed var(--rf-border-strong);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface-alt);
+}
+
+.connection-matrix__gate-name {
+  color: var(--rf-text-body);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.connection-matrix__gate-hint,
+.connection-matrix__gate-note {
+  color: var(--rf-text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.connection-matrix__gate-note {
+  margin: 6px 0 0;
+}
+
+.connection-matrix__gate-action {
+  margin-left: auto;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--rf-brand);
+  font-size: 11.5px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ── 图例：把"不会点亮空位"写在界面上 ─────────────────────── */
+.connection-matrix__legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+}
+
+.connection-matrix__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── 详情卡：固定在矩阵下方 ───────────────────────────────── */
+.connection-matrix__detail {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface-alt);
+}
+
+.connection-matrix__detail-title {
+  margin-bottom: 6px;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+}
+
+.connection-matrix__detail-empty,
+.connection-matrix__detail-line {
+  margin: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.connection-matrix__detail-head {
+  margin-bottom: 6px;
+  color: var(--rf-text-body);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.connection-matrix__detail-fields {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 4px 10px;
+}
+
+.connection-matrix__field {
+  display: contents;
+}
+
+.connection-matrix__field-label {
+  color: var(--rf-text-tertiary);
+  font-size: 11.5px;
+  line-height: 18px;
+}
+
+.connection-matrix__field-value {
+  min-width: 0;
+  color: var(--rf-text-secondary);
+  font-size: 11.5px;
+  line-height: 18px;
+  /* 模型 id / 文件路径是整串无空格字符：不给断点就会顶出卡片（与 #10 同一个坑）。 */
+  overflow-wrap: anywhere;
+}
+
+.connection-matrix__detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* 窄窗只收窄首列与行名，**不隐藏任何列**（隐藏等于让用户以为那把 Key 不存在）。
+   断点用 1092（BREAKPOINTS.narrow）：设置页卡片两侧还有侧栏，视口 900 时内容区更窄。 */
+@media (max-width: 1092px) {
+  .connection-matrix__corner,
+  .connection-matrix__row-head {
+    width: 22%;
+    min-width: 108px;
+  }
+
+  .connection-matrix__row-btn {
+    font-size: 12px;
+    padding: 5px 0;
+  }
+}

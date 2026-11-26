@@ -38,11 +38,14 @@ from .credentials import (
     storage_protection,
 )
 from .credentials.registry import (
+    FEATURES,
     GROUP_ASR,
     GROUP_EMBEDDING,
     GROUP_LLM,
     GROUP_NETWORK,
     GROUP_SESSION,
+    feature_by_id,
+    validate_matrix_references,
 )
 
 # CR-06：借用模型 Key 时 `detail` 用的固定前缀，界面要把这句话展示出来。
@@ -180,6 +183,8 @@ def _credential_item(source: CredentialSource, state: CredentialState) -> dict[s
         "borrowed_key": state.detail.startswith(MODEL_KEY_FALLBACK_DETAIL),
         "target_id": _target_id(source),
         "location": source.location,
+        # #9：这一行的深链锚点（`/settings?tab=…#anchor` 的 `#` 部分）。
+        "anchor": source.anchor,
     }
 
 
@@ -210,22 +215,81 @@ def _system_item(source: system_sources.SystemSource) -> dict[str, Any]:
     }
 
 
-def _key_map_row(source: CredentialSource) -> dict[str, Any]:
+def _key_map_row(source: CredentialSource, state: CredentialState | None) -> dict[str, Any]:
     """密钥地图的一行：来源 / 在哪配 / 谁在用 / 空串含义（CR-12）。
 
     四列全部取自 registry 的声明，**不在这里另写一份清单**：地图与凭据行必须永远同长，
     否则"页面上有这一行、地图里没有"就会变成下一处隐性知识。
+
+    #9 的三处补充（都不需要新查询）：
+
+    - ``status``：沿用 `build_connections` 里**已经算过**的 `states`，矩阵的状态灯与
+      凭据行的状态 chip 因此不可能说两件事；
+    - ``section`` / ``anchor``：「去配置」的落点（`/settings?tab=…#anchor`）；
+    - ``used_by`` 变成**数组**（`used_by_text` 是拼回来的整句）：矩阵要切格子，
+      详情卡与凭据行的「用于」要整句——两处都用同一份数据，不各自去猜。
     """
+    used_by_features = [feature_by_id(feature_id) for feature_id in source.used_by]
+    used_by_labels = [feature.label for feature in used_by_features]
     return {
         "id": source.source_id,
         "label": source.label,
         "group": source.group,
         "group_label": GROUP_LABELS.get(source.group, source.group),
         "configure_at": source.configure_at,
-        "used_by": source.used_by,
+        # 数组给矩阵与「用于」逐项，`used_by_text` 是同一批标签拼回的整句（排障时直接读）。
+        "used_by": used_by_labels,
+        "used_by_text": "、".join(used_by_labels),
         "empty_meaning": source.empty_meaning,
         "where": source.location,
+        "status": str(state.status.value) if state is not None else "",
+        "section": source.section,
+        "anchor": source.anchor,
     }
+
+
+def build_matrix(states: dict[str, CredentialState]) -> dict[str, Any]:
+    """密钥依赖矩阵（#9）：行=功能、列=密钥、格子=依赖。
+
+    **前端零清单**：行列顺序、边的种类、闸门是谁，全部来自 registry 的声明顺序。
+
+    - `keys`：非闸门凭据，声明顺序。`status` 复用 `states`（不新查一次）；
+    - `features`：`FEATURES` 的声明顺序（不按字母排）；
+    - `edges`：由每条来源的 `used_by` 展开，`kind` 取自来源声明（`direct` / `override`）；
+    - `gate`：闸门型凭据（代理口令）。它不占矩阵列——所有出网请求都过它，它不属于
+      某个功能；前端把它画成矩阵上方的一条带子。
+
+    只在 `states` 里查状态，**不读任何密钥**（响应里不许出现明文，这条与整页一致）。
+    """
+    # 引用完整性再校验一次：`build_connections` 可能被测试用 monkeypatch 换掉 registry，
+    # 那时的错误必须当场炸出来，而不是让某个功能从矩阵里静默消失。
+    validate_matrix_references()
+
+    keys: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    gate: dict[str, Any] | None = None
+    for source in CREDENTIAL_SOURCES:
+        if source.is_gate:
+            gate = {"key": source.source_id, "label": source.label}
+            continue
+        state = states.get(source.source_id)
+        keys.append(
+            {
+                "id": source.source_id,
+                "label": source.label,
+                "group": source.group,
+                "status": str(state.status.value) if state is not None else "not_configured",
+                "section": source.section,
+                "anchor": source.anchor,
+            }
+        )
+        for feature_id in source.used_by:
+            edges.append({"key": source.source_id, "feature": feature_id, "kind": source.edge_kind})
+    features = [
+        {"id": feature.feature_id, "label": feature.label, "group": feature.group}
+        for feature in FEATURES
+    ]
+    return {"keys": keys, "features": features, "edges": edges, "gate": gate}
 
 
 def build_connections(db: Session | None) -> dict[str, Any]:
@@ -287,7 +351,13 @@ def build_connections(db: Session | None) -> dict[str, Any]:
     return {
         "groups": groups,
         # CR-12：整页顶部那张「密钥地图」——由 registry 逐条投影，行数天然等于凭据条数。
-        "key_map": [_key_map_row(source) for source in CREDENTIAL_SOURCES],
+        # #9：`used_by` 变数组（整句由 `used_by_text` 拼回），行里补 status/section/anchor。
+        "key_map": [
+            _key_map_row(source, states.get(source.source_id)) for source in CREDENTIAL_SOURCES
+        ],
+        # #9：依赖矩阵（行=功能 / 列=密钥 / 格子=依赖）。同一次请求内算完：不再多发一次
+        # 请求，也不会与上面的 key_map 出现两套状态。
+        "matrix": build_matrix(states),
         "storage": {
             "kind": disk.value,
             "label": _protection_label(disk.value),
@@ -299,6 +369,7 @@ def build_connections(db: Session | None) -> dict[str, Any]:
 
 __all__ = [
     "AI_REGISTRY_GROUPS",
+    "build_matrix",
     "GROUP_AI",
     "GROUP_HINTS",
     "GROUP_LABELS",
