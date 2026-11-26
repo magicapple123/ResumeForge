@@ -435,6 +435,14 @@ def client():
     app.dependency_overrides[get_db] = override_get_db
     # 生产版只监听本机；测试客户端也使用回环地址覆盖密钥查看边界。
     with TestClient(app, client=("127.0.0.1", 50000)) as test_client:
+        # 启动钩子会把「提醒到点通知 / 任务卡」的后台扫描线程拉起来（CR-22 起
+        # 通知默认开）。它按**墙钟**跑，并且会取数据集租约：用例若同时断言
+        # "扫描生成了几条""还有没有租约"，就会被它抢先一步（Linux CI 上稳定复现，
+        # 本机因为时序不同常常看不到）。用例要测的是函数本身，这里统一停掉；
+        # 专门测启动钩子的用例会自己 start 再 stop。
+        from app.services import agent_task_events
+
+        agent_task_events.stop_scheduler()
         yield test_client
     app.dependency_overrides.clear()
 
