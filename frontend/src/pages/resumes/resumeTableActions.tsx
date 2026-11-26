@@ -10,9 +10,11 @@
  */
 import { CheckSquareOutlined } from "@ant-design/icons";
 import type { RowActionItem } from "../../components/common/RowActions";
+import type { CopyNotifier } from "../../components/common/copyMenu";
 import { t } from "../../i18n";
 import type { ResumeBrief } from "../../types";
 import type { DiffViewData } from "../../types/resumeFieldDiff";
+import { copyMenuFor } from "./resumeRowCopyActions";
 
 /** 行操作动作的依赖集：全部是 setState 与 useCallback 回调，引用跨渲染稳定，
  * 行组件据此做 memo——页面其它 state 变化时已渲染的行不必重跑。 */
@@ -93,4 +95,27 @@ export function batchSelectAction(enterSelecting: () => void): RowActionItem {
     icon: <CheckSquareOutlined />,
     onClick: enterSelecting,
   };
+}
+
+/**
+ * 单条行（平铺表格的行 / 折叠表里的单版本组行 / 展开后的版本行）的**菜单项全集**：
+ * 主操作 + 「复制」子菜单 + 次级操作（含删除）。
+ *
+ * 三处共用这一份：折叠视图上线时的验收要求"单版本行的右键与平铺行同一份 builder"，
+ * 各写一份的话，`secondaryActionsFor` 加一项就会有地方漏掉。
+ *
+ * `enterSelecting` 为空表示**不给批量选择**（版本行：多版本组不可整组勾选，给了会引导
+ * 用户删整组）。
+ */
+export function resumeRowMenuItems(
+  record: ResumeBrief,
+  ctx: { deps: RowActionDeps; toast: CopyNotifier; enterSelecting?: () => void },
+): RowActionItem[] {
+  return [
+    ...(ctx.enterSelecting ? [batchSelectAction(ctx.enterSelecting)] : []),
+    ...primaryActionsFor(record, ctx.deps),
+    // 标题 / 目标岗位 / 公司 / 备注 / 整行（贴招聘表单、发内推、粘进表格）。
+    copyMenuFor(record, ctx.toast),
+    ...secondaryActionsFor(record, ctx.deps),
+  ];
 }

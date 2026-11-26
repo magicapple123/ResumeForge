@@ -30,6 +30,7 @@ import { copyMenuFor } from "./resumeRowCopyActions";
 import {
   batchSelectAction,
   primaryActionsFor,
+  resumeRowMenuItems,
   secondaryActionsFor,
   type RowActionDeps,
 } from "./resumeTableActions";
@@ -59,20 +60,15 @@ const ContextMenuRow = memo(function ContextMenuRow({
   const toast = useToast();
   useLocale();
   if (!record) return <tr {...rest} />;
-  // 「复制」子菜单：右键与行内「⋯」共用同一个 builder，字段与提示完全一致。
-  const copyMenu = copyMenuFor(record, toast);
   return (
     <RowContextMenu
       items={
+        // 选择模式：只给批量动作（对所选这批做什么）；否则给单条动作全集。
+        // 单条那一份与折叠视图的单版本组行、版本行共用 `resumeRowMenuItems`——
+        // 各写一份的话，`secondaryActionsFor` 加一项就会有地方漏掉。
         selecting
           ? batchActions
-          : [
-              batchSelectAction(enterSelecting),
-              ...primaryActionsFor(record, deps),
-              // 把标题 / 目标岗位 / 公司 / 备注 / 整行拿出去（贴招聘表单、发内推、粘进表格）。
-              copyMenu,
-              ...secondaryActionsFor(record, deps),
-            ]
+          : resumeRowMenuItems(record, { deps, toast, enterSelecting })
       }
     >
       <tr {...rest} />

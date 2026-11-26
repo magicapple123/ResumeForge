@@ -13,9 +13,10 @@
 import { StarFilled } from "@ant-design/icons";
 import { Button, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
-import { useMemo } from "react";
+import type { HTMLAttributes } from "react";
+import { useCallback, useMemo } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { RowActions } from "../../components/common/RowActions";
+import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import { useToast } from "../../hooks/useToast";
 import { t } from "../../i18n";
@@ -28,7 +29,19 @@ import type { ResumeGroup } from "../../features/resume/list/resumeGroups";
 import { isGroupBatchSelectable } from "../../features/resume/list/resumeGroups";
 import ResumeVersionList from "./ResumeVersionList";
 import { copyMenuFor } from "./resumeRowCopyActions";
-import { primaryActionsFor, secondaryActionsFor, type RowActionDeps } from "./resumeTableActions";
+import {
+  groupRowActions,
+  groupSecondaryActions,
+  groupToggleAction,
+  singleRowActions,
+  type GroupMenuContext,
+} from "./resumeGroupMenu";
+import {
+  batchSelectAction,
+  primaryActionsFor,
+  secondaryActionsFor,
+  type RowActionDeps,
+} from "./resumeTableActions";
 
 const SORT_OPTIONS: {
   value: ResumeSortField;
@@ -47,7 +60,8 @@ const SORT_OPTIONS: {
 interface Props {
   /** 平铺视图的入参，由 ResumeResultList 原样透传；折叠视图按组渲染，用不到。 */
   data?: unknown;
-  batchActions?: unknown;
+  /** 多选态右键菜单的批量动作（批量删除 / 批量导出），与平铺表同一份。 */
+  batchActions?: RowActionItem[];
   groups: ResumeGroup[];
   /** 组总数（折叠后的分页 total）。 */
   totalGroups: number;
@@ -81,6 +95,7 @@ export default function ResumeGroupedTable({
   totalGroups,
   loading,
   batch,
+  batchActions = [],
   favoriteResumeId,
   page,
   setPage,
@@ -146,13 +161,32 @@ export default function ResumeGroupedTable({
       : t("resumes.list.group.titleFallback", { count: group.versionCount });
   };
 
-  const toggleGroup = (key: string) => {
-    setExpandedKeys(
-      expandedKeys.includes(key)
-        ? expandedKeys.filter((item) => item !== key)
-        : [...expandedKeys, key],
-    );
-  };
+  const toggleGroup = useCallback(
+    (key: string) => {
+      setExpandedKeys(
+        expandedKeys.includes(key)
+          ? expandedKeys.filter((item) => item !== key)
+          : [...expandedKeys, key],
+      );
+    },
+    [expandedKeys, setExpandedKeys],
+  );
+
+  /**
+   * 行菜单上下文：组行 / 单版本行 / 版本行三处共用同一份（`resumeGroupMenu` 里按行类型
+   * 分派）。`navigate` 由页面传下来，岗位名与「在岗位广场打开」走同一条深链。
+   */
+  const menuCtx = useMemo<GroupMenuContext>(
+    () => ({
+      deps,
+      toast,
+      enterSelecting: batch.enterSelecting,
+      toggleGroup,
+      openJob: (jobId: number) => navigate(`/jobs?job_id=${jobId}`),
+      isExpanded: (key: string) => expandedKeys.includes(key),
+    }),
+    [deps, toast, batch.enterSelecting, toggleGroup, navigate, expandedKeys],
+  );
 
   const columns: TableColumnsType<ResumeGroup> = [
     {
@@ -234,16 +268,23 @@ export default function ResumeGroupedTable({
       width: 200,
       render: (_, group) =>
         group.versionCount > 1 ? (
-          <Button type="link" className="table-text-link" onClick={() => toggleGroup(group.key)}>
-            {expandedKeys.includes(group.key)
-              ? t("resumes.list.group.collapse")
-              : t("resumes.list.group.expand")}
-          </Button>
+          // 多版本组：主按钮是展开/收起，其余（去岗位广场 + 两个复制项）进「⋯」。
+          // 「⋯」与整行右键共用 `resumeGroupMenu` 的同一份构造——多版本组行以前连
+          // 「⋯」都没有，等于这一屏拿不到任何组级入口（问题 1）。
+          <RowActions
+            primary={[groupToggleAction(group, menuCtx)]}
+            more={groupSecondaryActions(group, menuCtx)}
+            disabled={batch.selecting}
+          />
         ) : (
-          // 单版本组：与原来的表格行一样，主操作平铺、其余进「更多」与整行右键。
+          // 单版本组：与平铺表格的行完全一致（主操作平铺，其余进「⋯」与整行右键）。
           <RowActions
             primary={primaryActionsFor(group.latest, deps)}
-            more={[copyMenuFor(group.latest, toast), ...secondaryActionsFor(group.latest, deps)]}
+            more={[
+              batchSelectAction(batch.enterSelecting),
+              copyMenuFor(group.latest, toast),
+              ...secondaryActionsFor(group.latest, deps),
+            ]}
             disabled={batch.selecting}
           />
         ),
@@ -291,6 +332,40 @@ export default function ResumeGroupedTable({
         loading={loading}
         columns={columns}
         dataSource={groups}
+        components={{
+          body: {
+            /**
+             * 整行右键（问题 1 的根因）：折叠表此前**没有**注入 `components.body.row`，
+             * 而平铺表是在这里挂的（`ResumeTable.tsx` 的 `ContextMenuRow`）。按行 key
+             * 分派：多版本组行给组级三项，单版本组行给与平铺行完全一致的一整份清单。
+             *
+             * 选择模式（`batch.selecting`）下与平铺表同口径：多版本组**不给**菜单
+             * （它本来就不能勾选，弹一份"批量"菜单会让人以为能对整组操作），
+             * 单版本行换成批量动作。
+             */
+            row: (props: HTMLAttributes<HTMLTableRowElement>) => {
+              const rowKey = String((props as { "data-row-key"?: string })["data-row-key"] ?? "");
+              const group = groupByKey.get(rowKey);
+              if (!group) return <tr {...props} />;
+              if (group.versionCount > 1) {
+                if (batch.selecting) return <tr {...props} />;
+                return (
+                  <RowContextMenu items={groupRowActions(group, menuCtx)}>
+                    <tr {...props} />
+                  </RowContextMenu>
+                );
+              }
+              const items = batch.selecting
+                ? (batchActions ?? [])
+                : singleRowActions(group.latest, menuCtx);
+              return (
+                <RowContextMenu items={items}>
+                  <tr {...props} />
+                </RowContextMenu>
+              );
+            },
+          },
+        }}
         expandable={{
           expandedRowKeys: expandedKeys,
           expandedRowRender: (group) => (
@@ -298,6 +373,8 @@ export default function ResumeGroupedTable({
               group={group}
               deps={deps}
               toast={toast}
+              menuCtx={menuCtx}
+              selecting={batch.selecting}
               favoriteResumeId={favoriteResumeId}
               toggleFavorite={toggleFavorite}
             />

@@ -25,6 +25,25 @@ const resumesPage = {
   // ── 排序复位 ────────────────────────────────────────────
   "resumesPage.sort.reset": "恢复默认排序",
 
+  // ── 折叠视图（按岗位分组，CR-33 / 2026-11-26）─────────────
+  // 列头「岗位 / 简历」：同一列在折叠视图里既放岗位名也放通用简历的标题。
+  "resumesPage.list.column.titleJob": "岗位 / 简历",
+  // 组行身份的第一行尾部 chip。
+  "resumesPage.list.group.versionCount": "{count} 个版本",
+  // 组行身份的第二行：公司 · 最新版本 {title}。
+  "resumesPage.list.group.latestVersion": "最新版本 {title}",
+  "resumesPage.list.group.deliveryCount": "{count} 次",
+  // 组行右键与「⋯」：只有"看"与"拿出去"两类动作（CR-33 禁止组级破坏性动作）。
+  "resumesPage.list.group.expandVersions": "展开 {count} 个版本",
+  "resumesPage.list.group.collapseVersions": "收起版本",
+  "resumesPage.list.group.openJob": "在岗位广场打开",
+  // 折叠视图分页文案：`total` 是组数，必须同时说清"多少个岗位、多少份简历"。
+  "resumesPage.list.totalGroups": "共 {groups} 个岗位 · {resumes} 份简历",
+  // 组级列头排序提示（三态机制由箭头自解释，这里只说这一列按什么排）。
+  "resumesPage.list.sort.identity": "按岗位名称排序（通用简历按标题）",
+  "resumesPage.list.sort.updated": "按组内最近更新的时间排序",
+  "resumesPage.list.sort.delivery": "按这个岗位被投递的次数排序",
+
   // ── 批量操作 ────────────────────────────────────────────
   "resumesPage.selectAll.tooltip": "按当前筛选，一键选中全部 {count} 份简历（跨页，不止当前页）",
   "resumesPage.selectAll.button": "全选全部简历（共 {count} 个）",

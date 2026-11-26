@@ -23,6 +23,19 @@ const resumesPage = {
 
   "resumesPage.sort.reset": "Restore default sort",
 
+  // Grouped view (by job, CR-33 / 2026-11-26).
+  "resumesPage.list.column.titleJob": "Job / Resume",
+  "resumesPage.list.group.versionCount": "{count} versions",
+  "resumesPage.list.group.latestVersion": "latest {title}",
+  "resumesPage.list.group.deliveryCount": "{count} times",
+  "resumesPage.list.group.expandVersions": "Expand {count} versions",
+  "resumesPage.list.group.collapseVersions": "Collapse versions",
+  "resumesPage.list.group.openJob": "Open in Job Board",
+  "resumesPage.list.totalGroups": "{groups} jobs · {resumes} resumes",
+  "resumesPage.list.sort.identity": "Sort by job title (general resumes by resume title)",
+  "resumesPage.list.sort.updated": "Sort by the latest update in each group",
+  "resumesPage.list.sort.delivery": "Sort by how many times this job was applied to",
+
   "resumesPage.selectAll.tooltip":
     "Select all {count} matching resumes in one click (across pages, not just this page)",
   "resumesPage.selectAll.button": "Select all resumes ({count} total)",
