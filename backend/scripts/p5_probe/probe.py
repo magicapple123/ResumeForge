@@ -25,12 +25,17 @@ from app.services.external_resume_pdf_blocks import (
     split_into_lines,
 )
 from app.services.external_resume_pdf_scan import (
+    CODE_PARSE_FAILED,
     CODE_UNSUPPORTED,
     PdfEditError,
     read_reader,
     scan_pdf,
     system_font_charset,
 )
+
+# "探针根本没把它读进来"的原因码。注意与**读进来了但不支持**分开：扫描件
+# （`pdf_no_text_layer`）是合法的真实样本结果，不能被算成"语料不可用"。
+_UNREADABLE_CODES = frozenset({CODE_PARSE_FAILED, CODE_UNSUPPORTED})
 
 
 @dataclass
@@ -51,6 +56,10 @@ class DocReport:
     verdict: str = "拒绝"
     reason: str = ""
     detail: str = ""
+    # 探针有没有把这份文件读进来。``False`` = 读取/解析失败，"这份语料不构成评测"；
+    # 扫描件这类"读进来了但判定不支持"必须保持 ``True``，否则 2 份拒绝样本就会
+    # 被误当成"真实语料全部不可读"。
+    readable: bool = True
 
 
 def probe_document(
@@ -58,7 +67,14 @@ def probe_document(
 ) -> DocReport:
     """跑一份文档，返回可直接进报告的结论。"""
     report = DocReport(name=display_name or path.name, origin=origin)
-    data = path.read_bytes()
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        # 权限 / 文件被别的进程占住：读不到就是读不到，别让它变成"0 个块的可编辑文档"。
+        report.readable = False
+        report.verdict, report.reason = "拒绝", CODE_PARSE_FAILED
+        report.detail = f"读取文件失败：{type(exc).__name__}"
+        return report
     reader = read_reader(data)
     if reader is not None:
         # 拒绝的文档也要报页数：扫描件"9 页全图"和"1 页空白"对判断支持范围不是一回事。
@@ -70,10 +86,12 @@ def probe_document(
         scan = scan_pdf(data)
     except PdfEditError as exc:
         report.verdict, report.reason, report.detail = "拒绝", exc.code, exc.detail or str(exc)
+        report.readable = exc.code not in _UNREADABLE_CODES
         return report
     except Exception as exc:  # noqa: BLE001 - 探针不因单份文件崩溃
         report.verdict, report.reason = "拒绝", CODE_UNSUPPORTED
         report.detail = f"{type(exc).__name__}: {exc}"[:160]
+        report.readable = False
         return report
 
     report.pages = scan.page_count
@@ -135,13 +153,17 @@ def collect_real(roots: list[Path]) -> list[Path]:
     return unique
 
 
-def run(roots: list[Path]) -> list[DocReport]:
-    """真实语料整批跑一遍。"""
+def run_paths(paths: list[Path]) -> list[DocReport]:
+    """把已收敛好的 PDF 列表当真实语料跑一遍（不再去重）。"""
     charset = system_font_charset()
     return [
-        probe_document(path, "real", charset, display_name=display_path(path))
-        for path in collect_real(roots)
+        probe_document(path, "real", charset, display_name=display_path(path)) for path in paths
     ]
+
+
+def run(roots: list[Path]) -> list[DocReport]:
+    """真实语料整批跑一遍。"""
+    return run_paths(collect_real(roots))
 
 
 def display_path(path: Path) -> str:
@@ -153,4 +175,11 @@ def display_path(path: Path) -> str:
         return path.name
 
 
-__all__ = ["DocReport", "collect_real", "display_path", "probe_document", "run"]
+__all__ = [
+    "DocReport",
+    "collect_real",
+    "display_path",
+    "probe_document",
+    "run",
+    "run_paths",
+]
