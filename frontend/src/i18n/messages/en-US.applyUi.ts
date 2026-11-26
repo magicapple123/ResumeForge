@@ -165,6 +165,12 @@ const applyUi = {
     "The apply browser and the web-form browser are two independent logins; one can expire without touching the other.",
   "applyUi.loginStatus.probeHint":
     "A check really opens that browser and visits the site, so it only runs when you click.",
+  "applyUi.loginStatus.probeAndSiteHint":
+    "A check really opens that browser and visits the site, so it only runs when you click. Web-form sites are checked one at a time, so one site dropping out does not affect the others.",
+  "applyUi.loginStatus.column.site": "Site",
+  "applyUi.loginStatus.column.status": "Status",
+  "applyUi.loginStatus.column.checked": "Last checked",
+  "applyUi.loginStatus.column.action": "Action",
   "applyUi.loginStatus.status.ok": "OK",
   "applyUi.loginStatus.status.expired": "Expired",
   "applyUi.loginStatus.status.unknown": "Unknown",
@@ -174,6 +180,7 @@ const applyUi = {
   "applyUi.loginStatus.never": "Never checked",
   "applyUi.loginStatus.action.check": "Check",
   "applyUi.loginStatus.action.relogin": "Log in again",
+  "applyUi.loginStatus.action.more": "More source actions",
   "applyUi.loginStatus.action.checkAll": "Check all",
   "applyUi.loginStatus.action.paste": "Paste cookie",
   "applyUi.loginStatus.cookiePlaceholder": "Paste the portal cookie (save empty to clear)",
@@ -191,6 +198,8 @@ const applyUi = {
   "applyUi.loginStatus.accountLabel": "Account note",
   "applyUi.loginStatus.accountLabel.empty": "Not set",
   "applyUi.loginStatus.accountLabel.edit": "Edit account note",
+  "applyUi.loginStatus.accountLabel.add": "Add note",
+  "applyUi.loginStatus.accountLabel.value": "Note: {note}",
   "applyUi.loginStatus.accountLabel.save": "Save",
   "applyUi.loginStatus.accountLabel.saved": "Account note saved",
   "applyUi.loginStatus.accountLabel.hint":
@@ -204,6 +213,7 @@ const applyUi = {
     "{count} more sites are not listed (the 12 most recent are shown).",
   "applyUi.loginStatus.site.check": "Check",
   "applyUi.loginStatus.site.relogin": "Log in again",
+  "applyUi.loginStatus.site.more": "More site actions",
   "applyUi.loginStatus.noProbe.apply": "Pick an apply site first, then check again.",
   "applyUi.loginStatus.noProbe.webform": "Open a URL in web-form filling first, then check again.",
   "applyUi.loginStatus.noProbe.track":

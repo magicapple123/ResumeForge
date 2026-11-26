@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * F07：网申登录态按站点逐项展示/检测。
+ * F07：网申登录态按站点逐项展示/检测；整改 #16 之后站点区是四列表格。
  *
- * 钉住四条会给用户造成误导的行为：
+ * 钉住这些会给用户造成误导的行为：
  * 1. 打开抽屉只读缓存，**不发任何检测**（浏览器类检测会弹窗）；
- * 2. 有站点时父行只汇总，不再有「检测 / 重新登录」两颗按钮（一个笼统的"正常"没有意义）；
+ * 2. 有站点时父行只汇总，站点行各自带 host 与状态；
  * 3. 站点行点「检测」只带 host，不带 URL（服务端清单之外的一律拒绝）；
  * 4. 「全部检测」按 投递浏览器 → 各站点串行；
- * 5. 超过上限时提示还有几个站点没列出来。
- *
- * 面板只有两个来源：第三行「门户 Cookie」已随「申请状态回读」整条移除（T2），
- * 后端不会再下发它，mock 里也就不该再造一条——否则"串行顺序"这条用例验的是一个
- * 生产上不存在的来源。
+ * 5. 超过上限时提示还有几个站点没列出来；
+ * 6. **每行只有一个带文字的按钮（检测）**，「重新登录」只在 `⋯` 菜单里；
+ * 7. `label === host` 时该域名只出现一次（整改前同一个地址写两遍、各占一行）；
+ * 8. **同一句话不说两遍**：`localOnlyHint` 与顶部 Alert 的 `keepSessionNotice` 是一回事，
+ *    前者不再渲染（键仍留在语言包里）；
+ * 9. 备注默认只是一个文字按钮，点击后才长出输入框。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -38,11 +39,12 @@ vi.mock("../../api/loginStatus", () => apiMocks);
 function site(host: string, status: LoginStatusSite["status"]): LoginStatusSite {
   return {
     host,
+    // 默认让 label 与 host 不同：域名去重那条用例自己覆写成相同值。
     label: host.split(".")[0],
     probe_url: `https://${host}/apply`,
     status,
     checked_at: "2026-11-13T10:00:00",
-    detail: status === "expired" ? "停在登录页" : "",
+    detail: status === "expired" ? "stopped at the sign-in page" : "",
     account: "",
   };
 }
@@ -98,6 +100,7 @@ function renderDrawer() {
 /** antd 会给"恰好两个汉字"的按钮自动插空格（检测 → 检 测、保存 → 保 存），按可访问名取要容忍这一层。 */
 const CHECK_NAME = /^检\s*测$/;
 const SAVE_NAME = /^保\s*存$/;
+const SITE_RELOGIN = t("applyUi.loginStatus.site.relogin");
 
 beforeEach(() => {
   for (const mock of Object.values(apiMocks)) mock.mockReset();
@@ -129,7 +132,7 @@ describe("F07 登录状态：网申逐站点", () => {
     expect(apiMocks.checkWebformSite).not.toHaveBeenCalled();
   });
 
-  it("有站点时父行只汇总，站点行各自带 host 与状态", async () => {
+  it("有站点时父行只汇总，站点区是四列表格", async () => {
     const sites = [site("moka.example.com", "ok"), site("beisen.example.com", "expired")];
     apiMocks.listLoginStatuses.mockResolvedValue(baseRows(sites));
     apiMocks.listWebformSites.mockResolvedValue(payload(sites, 4));
@@ -141,19 +144,62 @@ describe("F07 登录状态：网申逐站点", () => {
     // i18n-ok: 汇总串由后端按站点数拼好下发，前端不产出这段文案
     expect(screen.getAllByText(/2 个站点 · 1 正常/).length).toBeGreaterThan(0);
     expect(screen.getByText("beisen.example.com")).toBeTruthy();
-    // 站点行各自有一对「检测 / 重新登录」，父行不再提供这两颗（父行只汇总）。
-    const siteRows = document.querySelectorAll(".login-status-site");
-    expect(siteRows).toHaveLength(2);
-    for (const row of siteRows) {
-      expect(within(row as HTMLElement).getByRole("button", { name: CHECK_NAME })).toBeTruthy();
-      expect(
-        within(row as HTMLElement).getByRole("button", {
-          name: t("applyUi.loginStatus.site.relogin"),
-        }),
-      ).toBeTruthy();
-    }
+    expect(document.querySelectorAll(".login-status-site")).toHaveLength(2);
+
+    // 表头四列：站点 / 状态 / 上次检测 / 操作。
+    const headers = [...document.querySelectorAll(".login-status-site")[0].closest("table")!.querySelectorAll(
+      "thead th",
+    )].map((th) => (th.textContent ?? "").trim());
+    expect(headers).toEqual([
+      t("applyUi.loginStatus.column.site"),
+      t("applyUi.loginStatus.column.status"),
+      t("applyUi.loginStatus.column.checked"),
+      t("applyUi.loginStatus.column.action"),
+    ]);
     // 超出上限的提示：共 4 个站点，只列了 2 个。
     expect(screen.getByText(t("applyUi.loginStatus.siteTruncated", { count: 2 }))).toBeTruthy();
+  });
+
+  it("站点行只有一个带文字的按钮（检测），「重新登录」在 ⋯ 菜单里", async () => {
+    const sites = [site("moka.example.com", "ok")];
+    apiMocks.listLoginStatuses.mockResolvedValue(baseRows(sites));
+    apiMocks.listWebformSites.mockResolvedValue(payload(sites));
+    apiMocks.reloginWebformSite.mockResolvedValue({ id: "x", action: "opened", url: "" });
+
+    renderDrawer();
+    await screen.findByText("moka.example.com");
+    const row = document.querySelector(".login-status-site") as HTMLElement;
+    const actions = row.querySelector(".login-status-actions") as HTMLElement;
+
+    // 带文字的操作按钮只有「检测」一颗；「⋯」是无文字的图标入口。
+    const textButtons = within(actions)
+      .getAllByRole("button")
+      .filter((button) => (button.textContent ?? "").trim().length > 0);
+    expect(textButtons).toHaveLength(1);
+    expect(within(actions).getByRole("button", { name: CHECK_NAME })).toBe(textButtons[0]);
+
+    // 菜单没点开时「重新登录」根本不在 DOM 里（不是"藏着但可点"）。
+    expect(within(row).queryByRole("button", { name: SITE_RELOGIN })).toBeNull();
+
+    fireEvent.click(
+      within(actions).getByRole("button", { name: t("applyUi.loginStatus.site.more") }),
+    );
+    const reloginItem = await screen.findByText(SITE_RELOGIN);
+    fireEvent.click(reloginItem);
+    await waitFor(() =>
+      expect(apiMocks.reloginWebformSite).toHaveBeenCalledWith("moka.example.com"),
+    );
+  });
+
+  it("label 与 host 相同时域名只出现一次", async () => {
+    const only = { ...site("jobs.example.com", "ok"), label: "jobs.example.com" };
+    apiMocks.listLoginStatuses.mockResolvedValue(baseRows([only]));
+    apiMocks.listWebformSites.mockResolvedValue(payload([only]));
+
+    renderDrawer();
+
+    await screen.findByText("jobs.example.com");
+    expect(screen.getAllByText("jobs.example.com")).toHaveLength(1);
   });
 
   it("没有探测地址时检测/重登置灰，并按来源给提示（F12）", async () => {
@@ -214,7 +260,7 @@ describe("F07 登录状态：网申逐站点", () => {
 });
 
 describe("原条目 7 A1：「无法判断」必须可解释", () => {
-  it("行内显示具体原因，面板固定位置给「为什么 + 怎么做」与换机提示", async () => {
+  it("行内显示具体原因，面板固定位置给「为什么 + 怎么做」", async () => {
     const rows = baseRows([]);
     // detail 用 ASCII：这条验的是"后端下发的 detail 原样显示"，与那句话用什么语言写无关；
     // 中文断言会让 `cjkRatchet` 的 tests 口径多计一行（该守卫只降不升）。
@@ -234,20 +280,52 @@ describe("原条目 7 A1：「无法判断」必须可解释", () => {
     await waitFor(() => expect(screen.getAllByText(new RegExp(REASON)).length).toBeGreaterThan(0));
     // `unknown` 的两行各给一条说明（apply_browser 与无站点的网申父行），所以用 AllBy。
     expect(screen.getAllByText(t("applyUi.loginStatus.unknownHint")).length).toBeGreaterThan(0);
-    // 换机提示是固定文案：与检测结果无关，必须一直在。
-    expect(screen.getByText(t("applyUi.loginStatus.localOnlyHint"))).toBeTruthy();
+    // 措辞不许被改成「已失效」：`unknown` 的文案必须还是「无法判断」。
+    expect(screen.getAllByText(t("applyUi.loginStatus.status.unknown")).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(t("applyUi.loginStatus.status.expired"))).toHaveLength(0);
   });
 });
 
-describe("原条目 8 A1：账号备注", () => {
-  it("站点行显示「未填写」，编辑后调 saveAccountNote 并就地显示新值", async () => {
+describe("整改 #16：同一句话不说两遍", () => {
+  const NOTICE_DAYS = 90;
+
+  it("说明显示时「换电脑或重装」只在 Alert 里出现一次（localOnlyHint 不再渲染）", async () => {
+    apiMocks.getKeepSessionNotice.mockResolvedValue({
+      days: NOTICE_DAYS,
+      first_effective_at: "2026-11-13T09:41:07",
+      delivered: false,
+    });
+
+    renderDrawer();
+
+    const noticeText = t("applyUi.loginStatus.keepSessionNotice", { days: NOTICE_DAYS });
+    await screen.findByText(noticeText);
+    const text = () => document.body.textContent ?? "";
+    // 被删掉的那一段整句不许再出现（它与上面这条 Alert 是同一件事）。
+    expect(text()).not.toContain(t("applyUi.loginStatus.localOnlyHint"));
+    // 而这份说明本身只渲染一次（不是两处各说一遍）。
+    expect(text().split(noticeText)).toHaveLength(2);
+  });
+
+  it("说明不显示时也不出现那句换机提示（顶部 Alert 才是它的位置）", async () => {
+    renderDrawer();
+
+    // i18n-ok: 断言后端下发的 source_label，不是前端文案
+    await screen.findByText("投递浏览器");
+    expect(document.body.textContent ?? "").not.toContain(
+      t("applyUi.loginStatus.localOnlyHint"),
+    );
+  });
+});
+
+describe("原条目 8 A1 + 整改 #16：账号备注", () => {
+  it("默认只是「添加备注」按钮，点击后才出输入框；保存后就地显示新值", async () => {
     const sites = [site("moka.example.com", "ok")];
     apiMocks.listLoginStatuses.mockResolvedValue(baseRows(sites));
     apiMocks.listWebformSites.mockResolvedValue(payload(sites));
     // 备注值用 ASCII：这条验的是"保存后就地显示服务端返回的值"，与语言无关；
     // 中文值会让 `cjkRatchet` 的 tests 口径多计一行（该守卫只降不升）。
     const NOTE = "zhangsan@example.com (personal)";
-    // 备注与「账号备注」标签拼在同一节点里：断言用子串正则，不用整串相等。
     const NOTE_MATCH = /zhangsan@example\.com/;
     apiMocks.saveAccountNote.mockResolvedValue({
       host: "moka.example.com",
@@ -258,13 +336,14 @@ describe("原条目 8 A1：账号备注", () => {
     await screen.findByText("moka.example.com");
     const row = document.querySelector(".login-status-site") as HTMLElement;
 
-    // 空备注不能留一个空洞：占位文案要明确说「未填写」。
+    // 没填备注时是文字按钮，不是常驻输入框。
+    expect(within(row).queryByRole("textbox")).toBeNull();
     expect(
-      within(row).getByText(new RegExp(t("applyUi.loginStatus.accountLabel.empty"))),
+      within(row).getByRole("button", { name: t("applyUi.loginStatus.accountLabel.add") }),
     ).toBeTruthy();
 
     fireEvent.click(
-      within(row).getByRole("button", { name: t("applyUi.loginStatus.accountLabel.edit") }),
+      within(row).getByRole("button", { name: t("applyUi.loginStatus.accountLabel.add") }),
     );
     fireEvent.change(
       within(row).getByRole("textbox", { name: t("applyUi.loginStatus.accountLabel") }),
@@ -296,7 +375,7 @@ describe("原条目 8 A1：账号备注", () => {
     await waitFor(() => expect(screen.getAllByText(/boss-account/).length).toBeGreaterThan(0));
   });
 
-  it("清空备注后回到「未填写」", async () => {
+  it("清空备注后回到「添加备注」", async () => {
     const sites = [{ ...site("moka.example.com", "ok"), account: "old-note" }];
     apiMocks.listLoginStatuses.mockResolvedValue(baseRows(sites));
     apiMocks.listWebformSites.mockResolvedValue(payload(sites));
@@ -320,9 +399,9 @@ describe("原条目 8 A1：账号备注", () => {
     );
     await waitFor(() =>
       expect(
-        within(document.querySelector(".login-status-site") as HTMLElement).getByText(
-          new RegExp(t("applyUi.loginStatus.accountLabel.empty")),
-        ),
+        within(document.querySelector(".login-status-site") as HTMLElement).getByRole("button", {
+          name: t("applyUi.loginStatus.accountLabel.add"),
+        }),
       ).toBeTruthy(),
     );
   });

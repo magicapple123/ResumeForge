@@ -153,6 +153,15 @@ const applyUi = {
     "投递浏览器与网申浏览器是两处彼此独立的登录态，任何一处掉线都只影响它自己。",
   "applyUi.loginStatus.probeHint":
     "检测会真的拉起对应浏览器并访问一次站点，所以只在你点的时候才跑。",
+  // 整改 #16：`probeHint` 与 `siteHint` 合成一句（两句都在说"检测怎么跑"）。
+  // 上面两条键保留在语言包里（中英成对，删一条会与 en 侧失配），只是不再渲染。
+  "applyUi.loginStatus.probeAndSiteHint":
+    "检测会真的拉起对应浏览器并访问一次站点，所以只在你点的时候才跑；网申浏览器按站点逐项检测，一个站点掉线不影响其它站点。",
+  // 站点表格四列（整改 #16）。
+  "applyUi.loginStatus.column.site": "站点",
+  "applyUi.loginStatus.column.status": "状态",
+  "applyUi.loginStatus.column.checked": "上次检测",
+  "applyUi.loginStatus.column.action": "操作",
   "applyUi.loginStatus.status.ok": "正常",
   "applyUi.loginStatus.status.expired": "已失效",
   "applyUi.loginStatus.status.unknown": "无法判断",
@@ -162,6 +171,7 @@ const applyUi = {
   "applyUi.loginStatus.never": "还没检测过",
   "applyUi.loginStatus.action.check": "检测",
   "applyUi.loginStatus.action.relogin": "重新登录",
+  "applyUi.loginStatus.action.more": "更多来源操作",
   "applyUi.loginStatus.action.checkAll": "全部检测",
   "applyUi.loginStatus.action.paste": "粘贴 Cookie",
   "applyUi.loginStatus.cookiePlaceholder": "粘贴门户 Cookie（留空并保存 = 清除）",
@@ -178,6 +188,9 @@ const applyUi = {
   "applyUi.loginStatus.accountLabel": "账号备注",
   "applyUi.loginStatus.accountLabel.empty": "未填写",
   "applyUi.loginStatus.accountLabel.edit": "编辑账号备注",
+  // 紧凑外观（站点点表格里那条文字按钮）：没填就说「添加备注」，填了就显示备注本身。
+  "applyUi.loginStatus.accountLabel.add": "添加备注",
+  "applyUi.loginStatus.accountLabel.value": "备注：{note}",
   "applyUi.loginStatus.accountLabel.save": "保存",
   "applyUi.loginStatus.accountLabel.saved": "已保存账号备注",
   "applyUi.loginStatus.accountLabel.hint": "你自己填的备注，不会自动跟随账号变化",
@@ -187,6 +200,7 @@ const applyUi = {
   "applyUi.loginStatus.siteTruncated": "还有 {count} 个站点未列出（按最近使用只显示前 12 个）。",
   "applyUi.loginStatus.site.check": "检测",
   "applyUi.loginStatus.site.relogin": "重新登录",
+  "applyUi.loginStatus.site.more": "更多站点操作",
   "applyUi.loginStatus.noProbe.apply": "先选择一个投递站点，再回来检测。",
   "applyUi.loginStatus.noProbe.webform": "先在网申填表里打开一个网址，再回来检测。",
   "applyUi.loginStatus.noProbe.track": "先配置投递记录页，再回来检测。",
