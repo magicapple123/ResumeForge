@@ -203,6 +203,27 @@ describe("RowContextMenu 的键盘等价物（问题 25）", () => {
   });
 });
 
+describe("主操作的 tooltip（置灰必须带说明）", () => {
+  it("禁用的主操作由外层包裹承接 hover，说明文案能弹出来", async () => {
+    // 文案用 t() 取：测试里不新增中文 ByText 字面量（cjkRatchet 口径）。
+    const hint = t("resumesPage.external.noTextForInterview");
+    render(
+      <AntdApp>
+        <RowActions
+          primary={[{ key: "interview", label: "Interview", disabled: true, tooltip: hint }]}
+        />
+      </AntdApp>,
+    );
+
+    const button = screen.getByRole("button", { name: "Interview" });
+    // 只置灰不说明 = 用户不知道"为什么点不动"；禁用按钮自己不派发鼠标事件，
+    // 所以说明必须挂在包住它的外层元素上。
+    expect(button).toBeDisabled();
+    fireEvent.mouseEnter(button.parentElement as HTMLElement);
+    expect(await screen.findByText(hint)).toBeInTheDocument();
+  });
+});
+
 describe("BatchDeleteButton 的禁用语义", () => {
   it("未传 disabled 时跟随 Form 级禁用（DisabledContext=true）", () => {
     render(

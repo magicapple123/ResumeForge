@@ -10,7 +10,7 @@
  */
 
 import { MoreOutlined } from "@ant-design/icons";
-import { Button, Dropdown, Space } from "antd";
+import { Button, Dropdown, Space, Tooltip } from "antd";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { cloneElement, isValidElement } from "react";
 import { useRowActionMenu, type RowActionItem, type RowMenuItem } from "./rowActionMenu";
@@ -36,19 +36,30 @@ export function RowActions({ primary = [], more = [], disabled = false }: RowAct
   const menuItems = buildMenu(more);
   return (
     <Space size={4} className="row-actions">
-      {primary.map((item) => (
-        <Button
-          key={item.key}
-          type="link"
-          size="small"
-          disabled={disabled || item.disabled || undefined}
-          danger={item.danger}
-          icon={item.icon}
-          onClick={item.onClick}
-        >
-          {item.label}
-        </Button>
-      ))}
+      {primary.map((item) => {
+        const button = (
+          <Button
+            key={item.key}
+            type="link"
+            size="small"
+            disabled={disabled || item.disabled || undefined}
+            danger={item.danger}
+            icon={item.icon}
+            onClick={item.onClick}
+          >
+            {item.label}
+          </Button>
+        );
+        // 只有需要解释"为什么灰"的主操作才包 Tooltip：antd 的禁用按钮不派发鼠标事件，
+        // 必须由外层 `<span>` 承接 hover，否则说明永远弹不出来（见 RowActionItem.tooltip）。
+        if (!item.tooltip) return button;
+        return (
+          <Tooltip key={item.key} title={item.tooltip}>
+            {/* 外层 span 只为承接 hover/焦点事件，不参与布局（inline-flex 会多出基线间隙）。 */}
+            <span style={{ display: "inline-flex" }}>{button}</span>
+          </Tooltip>
+        );
+      })}
       {more.length > 0 && (
         <Dropdown menu={{ items: menuItems }} trigger={["click"]} placement="bottomRight">
           <Button

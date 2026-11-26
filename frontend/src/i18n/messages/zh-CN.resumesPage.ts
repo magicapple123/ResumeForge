@@ -99,6 +99,20 @@ const resumesPage = {
   "resumesPage.external.chars": "{count} 字",
   "resumesPage.external.noText": "未提取到文字",
   "resumesPage.external.jobTag": "关联岗位：{job}",
+  /** 文件行（#3）：副行的状态排第一，「已提取」是常态，「扫描件」才是要提醒的异常。 */
+  "resumesPage.external.extractedChars": "已提取 {count} 字",
+  "resumesPage.external.scanStatus": "未提取到文字 · 扫描件或图片型 PDF",
+  /** 类型徽标：已知类型直接用格式名（PDF / DOCX…），只有这一档需要翻译。 */
+  "resumesPage.external.kindOther": "其他",
+  "resumesPage.external.column.file": "文件",
+  "resumesPage.external.column.job": "关联岗位",
+  "resumesPage.external.column.created": "上传时间",
+  "resumesPage.external.column.actions": "操作",
+  /** 批量删除：先确认（进回收站可恢复），批量场景不叠 5 秒撤销条。 */
+  "resumesPage.external.batchDelete.title": "删除选中的 {count} 份外部简历？",
+  "resumesPage.external.batchDelete.done": "已删除 {count} 份外部简历",
+  "resumesPage.external.batchDelete.partial": "已删除 {done} 份，{failed} 份没有删掉",
+  "resumesPage.external.batchDelete.failed": "批量删除失败，请重试",
   "resumesPage.external.preview": "预览原件",
   "resumesPage.external.viewText": "查看文本",
   "resumesPage.external.check": "文本检查",

@@ -1,0 +1,89 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * 外部简历「文件行」表格（整改 #3）。
+ *
+ * 作用域全部锁在 `.external-resume-files` 内：这一套选择器只在外部简历列表生效，
+ * 不影响简历中心的任何其它表格。
+ */
+
+/* 勾选列：**常驻 DOM、默认折叠**。
+ *
+ * 为什么不是 `display: none`：列是被 `<colgroup>` 声明出来的，`display: none` 对
+ * `<col>` / `<td>` 的列宽计算不可靠（Chrome 里仍会占位）。`visibility: collapse`
+ * 才是"这一列不存在但结构不变"的标准写法；同时它让列里的勾选框既不可见也不可聚焦，
+ * 不会在 Tab 序列里多出一串看不见的复选框。 */
+.external-resume-files .ant-table-selection-column {
+  visibility: collapse;
+  width: 0;
+  padding: 0;
+}
+
+/* 多选态：恢复成正常列。宽度用 40px（勾选框 16px + 两侧留白），
+   与简历中心的表格勾选列观感一致。 */
+.external-resume-files.is-selecting .ant-table-selection-column {
+  visibility: visible;
+  width: 40px;
+  padding-inline: 8px;
+}
+
+/* 第一列：类型徽标 + 文件名（一行），状态副行在下面。 */
+.external-resume-file {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.external-resume-file-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.external-resume-name {
+  min-width: 0;
+}
+
+/* 状态副行：等宽数字让「已提取 837 字 / 1,020 字」的数字列能对齐。 */
+.external-resume-status {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 类型徽标：中性底 + 等宽大写字母，靠形状区分而不是靠颜色抢注意力。
+   四档只给 PDF 一点强调色（它是唯一能在浏览器里直接预览、也是扫描件的高发区）。 */
+.external-resume-kind {
+  margin-inline-end: 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--rf-text-tertiary, rgb(0 0 0 / 45%));
+  background: var(--rf-fill-quaternary, rgb(0 0 0 / 4%));
+  border-color: transparent;
+}
+
+.external-resume-kind-pdf {
+  color: var(--rf-danger, #cf1322);
+  background: var(--rf-danger-bg, #fff1f0);
+}
+
+/* 时间列：右对齐 + 等宽数字，纵向能对齐到秒。 */
+.external-resume-files .external-resume-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 无关联岗位：低调的破折号，不占视觉重量。 */
+.external-resume-empty {
+  color: var(--rf-text-tertiary, rgb(0 0 0 / 45%));
+}
+
+/* 关联岗位标签：长岗位名省略，不要把整表撑宽（列已 `ellipsis`，Tag 自带内边距要自己截）。 */
+.external-resume-job {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}

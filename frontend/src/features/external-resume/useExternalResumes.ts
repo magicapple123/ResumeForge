@@ -40,6 +40,8 @@ export interface ExternalResumesApi {
   uploading: boolean;
   upload: (file: File, options?: ExternalResumeUploadOptions) => Promise<ExternalResumeDetail>;
   remove: (id: number) => Promise<void>;
+  /** 批量软删：没有批量端点，逐条 `allSettled` 后只刷新一次列表。 */
+  removeMany: (ids: number[]) => Promise<{ deleted: number; failed: number }>;
 }
 
 export function useExternalResumes({
@@ -83,6 +85,23 @@ export function useExternalResumes({
     [reload],
   );
 
+  /**
+   * 批量软删：后端**没有**批量端点（外部简历是一次传一份的私人文件），所以逐条删。
+   *
+   * 用 `allSettled` 而不是 `all`：一份失败不该让已经删掉的那些"看起来没删"
+   * （列表里它们真的没了），返回值把成功/失败分开报，调用方据此给出不同提示。
+   * 列表只刷新一次——每条都刷会把 100 条翻十遍。
+   */
+  const removeMany = useCallback(
+    async (ids: number[]) => {
+      const results = await Promise.allSettled(ids.map((id) => deleteExternalResume(id)));
+      const deleted = results.filter((result) => result.status === "fulfilled").length;
+      await reload();
+      return { deleted, failed: results.length - deleted };
+    },
+    [reload],
+  );
+
   return {
     items: listing.data?.items ?? [],
     total: listing.data?.total ?? 0,
@@ -92,5 +111,6 @@ export function useExternalResumes({
     uploading,
     upload,
     remove,
+    removeMany,
   };
 }

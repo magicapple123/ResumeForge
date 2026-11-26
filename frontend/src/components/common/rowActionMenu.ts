@@ -24,6 +24,14 @@ export interface RowActionItem {
   disabled?: boolean;
   icon?: ReactNode;
   onClick?: () => void;
+  /**
+   * 主操作按钮的悬停说明（只对 `RowActions` 平铺显示的 `primary` 生效，菜单项忽略）。
+   *
+   * 用来解释**为什么这一条是灰的**：禁用按钮不触发鼠标事件，原生 `title` 在 Chrome /
+   * Firefox 里也不会弹，因此带 `tooltip` 的按钮由 `RowActions` 包一层 `<span>` 再挂
+   * antd `Tooltip`——这是让"置灰 + 说明"同时成立的唯一写法。
+   */
+  tooltip?: string;
   /** 有值时点击后弹出二次确认，确认文案即此标题（动作 + 对象，≤12 字，带问号）。 */
   confirm?: string;
   /**
