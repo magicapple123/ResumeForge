@@ -48,7 +48,8 @@
   min-width: 0;
 }
 
-/* 标题行：未读圆点 + 单行省略。 */
+/* 标题行：未读圆点 + 单行省略的标题 + 行尾箭头（T25：箭头挪进来了）。
+   标题文字吃掉剩余宽度，箭头因此贴在标题行（= 行内容）右缘——副行动作组也在同一条线上。 */
 .rf-event-title {
   display: flex;
   gap: 6px;
@@ -64,6 +65,8 @@
 }
 
 .rf-event-title-text {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -111,9 +114,11 @@
 }
 
 /* 右缘箭头：低对比常驻，hover 变深——这是"能点"的唯一视觉承诺。
-   不用品牌色：这一页有六条一样的行，箭头亮起来会抢标题。 */
+   不用品牌色：这一页有六条一样的行，箭头亮起来会抢标题。
+   T25：从「行的兄弟」挪进标题行，右缘因此与副行动作组、分隔线完全重合。 */
 .rf-event-arrow {
   flex: 0 0 auto;
+  align-self: center;
   color: #ccd4df;
   font-size: 16px;
   line-height: 20px;

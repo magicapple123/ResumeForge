@@ -305,9 +305,9 @@ describe("HomePage", () => {
     expect(colors).toContain("var(--rf-danger)"); // overdue
     expect(new Set(colors).size).toBe(2);
 
-    // 点击提醒条目打开既有的提醒弹窗（只有弹窗才有底部「关闭」按钮）。
+    // 点击提醒条目打开既有的提醒弹窗（T25 之后 footer 整条删除，认弹窗靠它的根节点）。
     fireEvent.click(screen.getByLabelText("查看提醒：参加某司二面"));
-    expect(await screen.findByRole("button", { name: /关\s*闭/ })).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".rf-reminder-modal")).not.toBeNull());
 
     // 弹窗每一行的副行：倒计时文案由 `days_until` 按当前界面语言组合，
     // 不再直接渲染后端的中文 `due_label`。这里取语言包里的 today/tomorrow 对照，
@@ -410,8 +410,8 @@ describe("HomePage", () => {
     renderPage();
 
     expect(await screen.findByText("参加某司二面")).toBeInTheDocument();
-    // 弹窗出现：只有启动弹窗才有底部「关闭」按钮（卡片里没有）。
-    expect(await screen.findByRole("button", { name: /关\s*闭/ })).toBeInTheDocument();
+    // 弹窗出现：启动弹窗有自己的根节点（T25 删掉 footer 后不再靠底部按钮认它）。
+    await waitFor(() => expect(document.querySelector(".rf-reminder-modal")).not.toBeNull());
   });
 
   it("本 SPA 会话内只弹一次：切走再回首页不再弹", async () => {
@@ -445,7 +445,7 @@ describe("HomePage", () => {
       </MemoryRouter>,
     );
     // 首次进入：弹窗出现。
-    expect(await screen.findByRole("button", { name: /关\s*闭/ })).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".rf-reminder-modal")).not.toBeNull());
 
     // 切走（卸载）再回首页（重新挂载）。
     first.unmount();
@@ -458,7 +458,7 @@ describe("HomePage", () => {
 
     // 第二次挂载：启动弹窗不应再出现。
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /关\s*闭/ })).not.toBeInTheDocument(),
+      expect(document.querySelector(".rf-reminder-modal")).toBeNull(),
     );
   });
 });

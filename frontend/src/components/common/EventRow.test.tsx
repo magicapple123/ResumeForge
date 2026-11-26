@@ -68,6 +68,20 @@ describe("EventRow 的行结构", () => {
 });
 
 describe("EventRow 的可点语义", () => {
+  it("箭头在标题行内（T25）：可点时才有，且是标题行的最后一个兄弟", () => {
+    const { container } = render(<EventRow title="投递 A 司" meta="今天 14:12" onOpen={() => undefined} />);
+    const title = container.querySelector(".rf-event-title") as HTMLElement;
+    const arrow = container.querySelector(".rf-event-arrow") as HTMLElement;
+
+    // 挪进标题行是三条右缘能重合的前提：箭头若还是「行的兄弟」，动作组就得让出
+    // 箭头宽度 + gap（弹窗实测 13px），副行动作右缘永远贴不到分隔线。
+    expect(title).not.toBeNull();
+    expect(title.contains(arrow)).toBe(true);
+    expect(title.lastElementChild).toBe(arrow);
+    // 标题文字吃掉剩余宽度，箭头才会被顶到最右（样式表里的 flex:1 1 auto）。
+    expect(CSS).toMatch(/\.rf-event-title-text\s*\{[^}]*flex:\s*1\s+1\s+auto/);
+  });
+
   it("整行可点：点击、Enter、空格都触发 onOpen（不嵌套 <button>）", () => {
     const onOpen = vi.fn();
     const { container } = render(<EventRow title="投递 A 司" onOpen={onOpen} />);

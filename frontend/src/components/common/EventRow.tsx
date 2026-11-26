@@ -12,9 +12,14 @@
  * ## 行结构（2026-11-26 用户第二次拍板后的**纯文字**版）
  *
  * ```
- * [未读点] 标题                                    ›
+ * [未读点] 标题                                   ›
  * 副行（相对时间 · 说明）   [逾期 N 天]      [动作…]
  * ```
+ *
+ * 箭头 `›` 在**标题行**里，不在行尾当兄弟（T25 / R24）：原先它是 `.rf-event-main`
+ * 之外的第二个 flex 子项，动作组因此被它挤掉 `箭头宽 + gap` 的宽度——弹窗里
+ * 「动作右缘」比「箭头右缘」内缩 13px，分隔线又是第三个坐标。挪进标题行后，
+ * 主内容占满整行，动作组与箭头共用同一条右缘（弹窗实测三条右缘完全重合）。
  *
  * 拍板时明确去掉的两样东西，**不要加回来**：
  *
@@ -91,6 +96,12 @@ export default function EventRow({
         <span className="rf-event-title">
           {unread && <span className="rf-event-dot" aria-hidden="true" />}
           <span className="rf-event-title-text">{title}</span>
+          {/* 箭头在标题行内（T25）：行的右端只留这一条右缘，副行动作组因此能贴到同一条线。 */}
+          {onOpen && (
+            <span className="rf-event-arrow" aria-hidden="true">
+              ›
+            </span>
+          )}
         </span>
         {hasSubLine && (
           <span className="rf-event-subline">
@@ -104,11 +115,6 @@ export default function EventRow({
           </span>
         )}
       </div>
-      {onOpen && (
-        <span className="rf-event-arrow" aria-hidden="true">
-          ›
-        </span>
-      )}
     </div>
   );
 }

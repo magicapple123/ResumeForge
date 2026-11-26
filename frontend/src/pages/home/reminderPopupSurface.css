@@ -11,10 +11,14 @@
   outline: none;
 }
 
-/* 弹窗 body：上下留白舒适一点，列表条目之间有呼吸感。 */
-:where(.rf-reminder-modal) .ant-modal-body {
-  padding-top: 16px;
-  padding-bottom: 18px;
+/* 弹窗内边距：antd v6 把这圈留白放在 `.ant-modal-container` 上（默认 20px 24px），
+   `.ant-modal-body` 自己是 0——原先写在这儿的 body `padding-top/bottom` 是**死规则**
+   （`:where(…)` 只有 0-1-0，输给 antd 的 `:where(.css-…).ant-modal .ant-modal-body`，
+   实测 computed 全是 0px）。
+   T25（R24）：footer 整条删掉之后 body 就是卡片的下边界，底部留白要 22px；
+   选择器用「.ant-modal.rf-reminder-modal」三个类（0-3-0）压过 antd，不依赖加载顺序。 */
+.ant-modal.rf-reminder-modal .ant-modal-container {
+  padding-bottom: 22px;
 }
 
 /* 位置比全站默认（垂直居中）稍微偏上：提醒是从上往下滑入视野的信息卡，
@@ -32,10 +36,16 @@
   vertical-align: -2px;
 }
 
-/* 条目之间用分隔线 + ~12px 垂直留白：多条提醒时一眼分得清条目边界。 */
-:where(.rf-reminder-modal-list) .ant-listy-item {
+/* 条目之间用分隔线 + ~12px 垂直留白：多条提醒时一眼分得清条目边界。
+   **横向内边距必须归零**（T25 / R24）：antd Listy 的行默认 12px 16px，那 16px 把
+   「行内容」整体内缩，于是同屏出现三条右缘——动作组 896.9 / 箭头 910 / 分隔线 926
+   （460px 卡里差 29px）。归零后三者重合到 body 内容右缘（实测三条同一 pixel 值）。
+   特异性要压过 antd 的 `:where(.css-…).ant-listy .ant-listy-item`（0-2-0）：
+   这里用「弹窗 + 列表 + 行」三个类（0-3-0），不依赖样式表加载顺序。 */
+.rf-reminder-modal .rf-reminder-modal-list .ant-listy-item {
   padding-top: 12px;
   padding-bottom: 12px;
+  padding-inline: 0;
 }
 
 :where(.rf-reminder-modal-list) .ant-listy-item + .ant-listy-item {
@@ -48,6 +58,13 @@
 .rf-reminder-modal-list .rf-event-row {
   padding: 0;
   border-bottom: 0;
+}
+
+/* `⋯`（稍后 / 忽略）用二级灰，不是三级灰（T25 / R24）：460px 的卡里三级灰
+   （--rf-text-tertiary）几乎看不见，那枚按钮就成了"没有入口"。只挑非 primary 的
+   按钮：主操作「完成」的底色与文字由 antd 的 primary 取值决定，不在这里改。 */
+.rf-reminder-modal-list .rf-event-actions .ant-btn:not(.ant-btn-primary) {
+  color: var(--rf-text-secondary);
 }
 
 /* 弹窗行副行里的两段文字（倒计时 / 具体时刻）：同级小字，中间用间隔号分开。 */

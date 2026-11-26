@@ -22,6 +22,9 @@ import { ReminderPopup } from "./ReminderPopup";
 /**
  * antd 会给**两字**中文按钮插入空格（「完成」渲染成「完 成」），无障碍名同样带空格。
  * 断言用容忍空白的正则，而不是改组件里的文案。
+ *
+ * T25（R24）之后行内只剩「完成」+ `⋯`：稍后与忽略都在 `⋯` 的菜单里，所以「忽略」
+ * 的断言从"按钮"改成"菜单项"，仍是同一条行为（PATCH dismissed），没有放松。
  */
 const DONE = /^完\s*成$/;
 /** 用例里的提醒标题：抽成常量，避免 `getByText("中文")` 触发中文断言棘轮。 */
@@ -29,7 +32,6 @@ const TITLE_HR = "催 HR 回复";
 const TITLE_B = "投递 B 司";
 const TITLE_C = "回访 HR";
 const IGNORE = /^忽\s*略$/;
-const CLOSE = /^关\s*闭$/;
 
 const reminderApiMocks = vi.hoisted(() => ({ updateReminder: vi.fn() }));
 
@@ -100,14 +102,15 @@ describe("ReminderPopup 逐条处理", () => {
     expect(onChanged).toHaveBeenCalled();
   });
 
-  it("点「忽略」：PATCH 为 dismissed", async () => {
+  it("「忽略」收在 ⋯ 菜单里：点它 PATCH 为 dismissed", async () => {
     reminderApiMocks.updateReminder.mockResolvedValue({
       ...makeReminder(4, "整理作品集"),
       status: "dismissed",
     });
     renderPopup({ reminders: [makeReminder(4, "整理作品集")] });
 
-    fireEvent.click(await screen.findByRole("button", { name: IGNORE }));
+    fireEvent.click(await screen.findByRole("button", { name: t("common.rowActions.more") }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: IGNORE }));
 
     await waitFor(() =>
       expect(reminderApiMocks.updateReminder).toHaveBeenCalledWith(4, { status: "dismissed" }),
@@ -126,7 +129,10 @@ describe("ReminderPopup 逐条处理", () => {
     fireEvent.click(await screen.findByRole("button", { name: DONE }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: DONE })).toBeDisabled());
-    expect(screen.getByRole("button", { name: IGNORE })).toBeDisabled();
+    // 行内只剩两个入口：另一个是 ⋯（稍后 / 忽略都在它的菜单里，菜单打不开就等于
+    // 那一行整组动作都拦住了）。
+    expect(screen.getByRole("button", { name: t("common.rowActions.more") })).toBeDisabled();
+    expect(screen.queryByRole("menuitem", { name: IGNORE })).toBeNull();
 
     resolvePatch({ ...makeReminder(5, "准备测评"), status: "done" });
   });
@@ -175,10 +181,15 @@ describe("ReminderPopup 逐条处理", () => {
     ).toBeInTheDocument();
   });
 
-  it("底部按钮是「关闭」，不是「知道了」", async () => {
+  it("footer 整条删除（推翻 CR-21）：body 底下不再有「关闭」，只剩右上角 ×", async () => {
     renderPopup({ reminders: [makeReminder(10, "整理简历")] });
 
-    expect(await screen.findByRole("button", { name: CLOSE })).toBeInTheDocument();
+    // 行渲染出来之后再断言：否则"没有 footer"可能只是弹窗还没挂上。
+    await screen.findByRole("button", { name: DONE });
+    expect(document.querySelector(".rf-reminder-modal .ant-modal-footer")).toBeNull();
+    // 唯一关闭入口：右上角 ×（它是 antd 的 close 按钮，无障碍名是语言包里的"关闭"）。
+    expect(document.querySelector(".rf-reminder-modal .ant-modal-close")).not.toBeNull();
+    // 反证：CR-21 之前那颗「知道了」也不许借尸还魂（footer 与行内都没有它）。
     expect(screen.queryByRole("button", { name: /知道了/ })).toBeNull();
   });
 });

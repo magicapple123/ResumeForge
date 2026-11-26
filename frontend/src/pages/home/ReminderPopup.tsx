@@ -26,8 +26,20 @@
  * - 行结构交给 `components/common/EventRow`（与页头通知中心同一份）；
  * - **整行** `onClick` → `onClose()` + `/tracker?reminder=N`（页面据此展开这条的详情）；
  * - 标题不再包 `<Link>`（整行已经是那个入口，再套一层会有两个可点区域）；
- * - 行内三个动作**各自 `stopPropagation`**——点「完成」绝不能顺带跳走；
+ * - 行内动作**各自 `stopPropagation`**——点「完成」绝不能顺带跳走；
  * - 逾期不用色条/Tag，改成副行的红字「逾期 N 天」（`EventRow` 只收 `overdueDays`）。
+ *
+ * ## 2026-11-26（T25 / R24）：行内只留「完成」+ `⋯`，footer 整条删除
+ *
+ * 三个同层动作（实心「完成」/ 文字「稍后」/ 描边「忽略」）把副行挤到只剩 130px，
+ * 而且「完成」与底部 footer 的「关闭」两个 primary 打架。拍板后的口径：
+ *
+ * - 行内只留「完成」（唯一 primary）+ 一个 `⋯`；稍后与忽略都进 `⋯` 这一份菜单
+ *   （预设来自共用的 `ReminderSnoozeMenu`，忽略通过它的 `extraItems` 追加，
+ *   不在这里另抄一遍预设）；
+ * - `footer={null}`：右上角 × 是唯一关闭入口（**推翻 CR-21 的底部关闭按钮**）；
+ * - 三条右缘由 `reminderPopupSurface.css` 归零 Listy 的 16px 与 EventRow 的 4px 横向
+ *   内边距统一到 body 内容右缘，宽度仍固定 460。
  *
  * ## 为什么"已处理"状态放在列表子组件里
  *
@@ -148,6 +160,27 @@ function ReminderRows({ reminders, onChanged, onEmptied, onOpenReminder }: RowsP
               onOpen={() => onOpenReminder(item)}
               actions={
                 <>
+                  {/* 稍后（CR-28 的预设三个 + 自定义时刻）与忽略收进同一个 `⋯`：
+                      预设仍由共用的 ReminderSnoozeMenu 提供，忽略通过 extraItems 追加。
+                      外层 span 挡冒泡——菜单自己是个 Dropdown，展开动作不该跳页。 */}
+                  <span
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    <ReminderSnoozeMenu
+                      iconTrigger
+                      triggerAriaLabel={t("common.rowActions.more")}
+                      disabled={busy}
+                      onSnooze={(payload) => snooze(item, payload)}
+                      extraItems={[
+                        {
+                          key: "dismiss",
+                          label: t("homePage.reminders.action.ignore"),
+                          onSelect: () => void markStatus(item, "dismissed"),
+                        },
+                      ]}
+                    />
+                  </span>
                   <Button
                     size="small"
                     type="primary"
@@ -160,27 +193,6 @@ function ReminderRows({ reminders, onChanged, onEmptied, onOpenReminder }: RowsP
                     }}
                   >
                     {t("homePage.reminders.action.done")}
-                  </Button>
-                  {/* 稍后（CR-28）：预设三个 + 自定义时刻，统一走共用菜单。
-                      外层 span 挡冒泡——菜单自己是个 Dropdown，展开动作不该跳页。 */}
-                  <span
-                    onClick={(event) => event.stopPropagation()}
-                    onKeyDown={(event) => event.stopPropagation()}
-                  >
-                    <ReminderSnoozeMenu
-                      disabled={busy || false}
-                      onSnooze={(payload) => snooze(item, payload)}
-                    />
-                  </span>
-                  <Button
-                    size="small"
-                    disabled={busy || undefined}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void markStatus(item, "dismissed");
-                    }}
-                  >
-                    {t("homePage.reminders.action.ignore")}
                   </Button>
                 </>
               }
@@ -229,11 +241,9 @@ export function ReminderPopup({
       // Windows 大小写不敏感，同 stem 的 tsx/css 会让守卫与解析都踩坑）：打开瞬间
       // antd 程序化聚焦右上角关闭按钮，鼠标路径下不该出现 :focus-visible 边框。
       className="rf-reminder-modal"
-      footer={
-        <Button type="primary" onClick={onClose}>
-          {t("homePage.reminders.close")}
-        </Button>
-      }
+      // T25（R24）：footer 整条删除——它此前只装一个与右上角 × 重复的「关闭」，
+      // 却独占一行、还多出第三个右缘坐标。关闭入口只留 ×（**推翻 CR-21**）。
+      footer={null}
     >
       <div className="rf-reminder-modal-list">
         {/* 只在打开时挂载：关掉即卸载，"已处理"集合自然归零，下次打开按新数据重来。 */}
