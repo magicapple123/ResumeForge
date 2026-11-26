@@ -50,6 +50,12 @@
   font-weight: 600;
   font-size: 13.5px;
   padding: 0;
+  /* antd 的 link 按钮是 `inline-flex`：文字会变成 flex 项，`text-overflow: ellipsis`
+     对 flex 容器**完全无效**，超长岗位名会被列宽硬切（旧实现靠"列自己撑宽"掩盖了这点，
+     改 `tableLayout: fixed` 之后就露出来了）。`block` 让文字回到行内流，省略号才生效；
+     高度由 `height: auto` 的内容撑，行高不变。 */
+  display: block;
+  text-align: left;
 }
 
 .rf-group-identity-sub {
@@ -74,9 +80,16 @@
   font-size: 12px;
   font-weight: 400;
   max-width: 100%;
+  /* 与主行同一条理由：`inline-flex` 下省略号失效，副行标题会被列宽硬切。 */
+  display: block;
+  text-align: left;
 }
 
+/* 分隔符「·」是装饰，不参与收缩：上面那条 `> *` 给了 `overflow: hidden`，flex 项的
+   最小尺寸因此变成 0，窄档下它会先被压掉一点点。分隔符消失比标题少两个字符更扎眼，
+   所以固定为内容宽度。 */
 .rf-group-dot {
+  flex: 0 0 auto;
   color: var(--rf-text-tertiary);
 }
 

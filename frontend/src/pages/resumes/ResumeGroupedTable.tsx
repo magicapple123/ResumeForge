@@ -43,6 +43,7 @@ import ResumeVersionList from "./ResumeVersionList";
 import { singleRowActions, groupRowActions, type GroupMenuContext } from "./resumeGroupMenu";
 import type { RowActionDeps } from "./resumeTableActions";
 import { buildGroupedColumns } from "./resumeGroupedColumns";
+import { GROUP_COLUMN_WIDTHS } from "./resumeGroupLayout";
 import "./resumeGroupTable.css";
 
 interface Props {
@@ -207,6 +208,14 @@ export default function ResumeGroupedTable({
       <Table
         rowKey="key"
         size="middle"
+        /**
+         * 定宽布局（2026-11-26 窄档裁字的根因修复）：默认的 `auto` 会把每一列撑到它的
+         * min-content，而身份列是 `white-space: nowrap`（要省略号），min-content 就是整串
+         * 岗位名。940 视口下实测把身份列撑到 653，四列合计 968 > 容器 834，「操作」列
+         * 被裁掉半截。`fixed` 让它严格按 `GROUP_COLUMN_WIDTHS` 分配，身份列独占剩余空间
+         * 并由内部省略号收缩——见 `resumeGroupLayout.ts` 的说明。
+         */
+        tableLayout="fixed"
         loading={loading}
         columns={columns}
         dataSource={groups}
@@ -247,6 +256,11 @@ export default function ResumeGroupedTable({
           },
         }}
         expandable={{
+          /**
+           * 展开列必须显式定宽：`tableLayout: fixed` 下"没有宽度"的列会去瓜分剩余空间，
+           * 而身份列正是没有宽度的那一列（它要吃掉剩余空间），两者会各分一半。
+           */
+          columnWidth: GROUP_COLUMN_WIDTHS.expand,
           expandedRowKeys: expandedKeys,
           expandedRowRender: (group) => (
             <ResumeVersionList

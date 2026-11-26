@@ -16,6 +16,11 @@
  * 6. 排序**不穿透**版本层：组内版本顺序仍是时间倒序；
  * 7. 点第三次取消，回默认态（等价于「恢复默认排序」重新出现）。
  *
+ * ## 列宽声明（窄档裁字的根因，2026-11-26 返工）
+ * 8. 表格必须是**定宽布局**，且身份列是唯一"不写宽度"的列。
+ *    jsdom 没有排版能力，这条守的是**声明**：真机数字（940 下 834/834、
+ *    操作列右缘 = 容器右缘）由实机验收负责，这里只保证根因不再被改回去。
+ *
  * 断言一律走 `t()`，不写死中文文案；菜单项用 `within(菜单)` 定位——菜单里有带图标的
  * 项，`getByRole("menuitem", { name })` 的可读名会把图标的 aria-label 也算进去，
  * 用文本定位更贴近用户看到的东西。
@@ -30,6 +35,7 @@ import { DEFAULT_GROUP_SORT_STATE, sortGroups, type GroupSortState } from "../..
 import { groupResumes } from "../../features/resume/list/resumeGroups";
 import { useState } from "react";
 import ResumeGroupedTable from "./ResumeGroupedTable";
+import { GROUP_COLUMN_WIDTHS } from "./resumeGroupLayout";
 
 function resume(overrides: Partial<ResumeBrief> & { id: number }): ResumeBrief {
   return {
@@ -250,6 +256,34 @@ describe("ResumeGroupedTable 单版本组行右键", () => {
     expect(within(menu).getByText(t("resumes.list.preview"))).toBeInTheDocument();
     // 单版本组就是一份简历：删除可以出现（右键删除仍走菜单里的二次确认）。
     expect(within(menu).getByText(t("common.action.delete"))).toBeInTheDocument();
+  });
+});
+
+describe("ResumeGroupedTable 列宽声明", () => {
+  it("定宽布局：身份列不写宽度（独占剩余空间），其余列写死（含展开列）", () => {
+    const { container } = renderTable();
+    const table = container.querySelector<HTMLTableElement>(".ant-table-content table");
+    if (!table) throw new Error("grouped table not rendered");
+
+    /**
+     * 根因守卫：`auto` 布局会把每一列撑到 min-content，而身份列里的岗位名是
+     * `white-space: nowrap`（要省略号），min-content 就是整串岗位名的宽度。940 视口实测
+     * 被撑到 653，四列合计 968 > 容器 834，「操作」列被裁到只剩半个「展」字。
+     */
+    expect(table.style.tableLayout).toBe("fixed");
+
+    const widths = [...table.querySelectorAll<HTMLTableColElement>("colgroup col")].map(
+      (col) => col.style.width,
+    );
+    expect(widths).toEqual([
+      // 展开列必须显式定宽：没有宽度的列会去瓜分剩余空间，与身份列抢同一份余量。
+      `${GROUP_COLUMN_WIDTHS.expand}px`,
+      // 身份列**不能**有宽度：它是唯一吸收剩余空间的列，内部靠省略号收缩。
+      "",
+      `${GROUP_COLUMN_WIDTHS.updated}px`,
+      `${GROUP_COLUMN_WIDTHS.delivery}px`,
+      `${GROUP_COLUMN_WIDTHS.actions}px`,
+    ]);
   });
 });
 

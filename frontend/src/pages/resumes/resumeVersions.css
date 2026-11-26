@@ -55,6 +55,12 @@
   white-space: nowrap;
   font-size: 12.5px;
   padding: 0;
+  /* antd 的 link 按钮是 `inline-flex` + `justify-content: center`：标题一旦比格子宽，
+     文字会**向两侧**溢出，左边那几个字直接被切掉（窄档实测「沈亦舟-…」变成「宁-…」），
+     而且 flex 容器上 `text-overflow` 不生效。改 `block` 后是行内流：从左起排、超出打省略号。
+     高度本来就是内容撑的（18px），行高不变。 */
+  display: block;
+  text-align: left;
 }
 
 .resume-version-note {
