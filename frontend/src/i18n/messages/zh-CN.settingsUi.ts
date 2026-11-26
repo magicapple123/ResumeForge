@@ -286,6 +286,63 @@ const settingsUi = {
     "连接被拒：Base URL 少了或多了 /v1，或端口不对；照服务商文档改到以 /v1 结尾。",
   "settingsUi.network.checklist.timeout":
     "超时：先测一次直连；直连也超时就是线路或服务端问题，换网络或稍后重试。",
+
+  // ── 外部连接：凭据行“卡片行”（#8）────────────────────────────
+  /** 「用于」这一行的标签：谁在用这把 Key（数据来自 key_map 的 used_by）。 */
+  "settingsUi.connections.usedBy": "用于",
+  /** 已配置的行在组标题右侧显示「N / M 已配」，M 是组内条数。 */
+  "settingsUi.connections.groupCount": "{configured} / {total} 已配",
+  /** 未配置行的值位：给下一步动作，不再写「未填写」（那是同一件事说两遍）。 */
+  "settingsUi.connections.value.emptyHint": "点「设置」填入后立即生效",
+  /** 会话 Key 的写语义与其它来源相反（留空=沿用），值位单独一句。 */
+  "settingsUi.connections.value.sessionHint": "留空即沿用已保存的那把",
+
+  // ── 外部连接：密钥依赖矩阵（#9）──────────────────────────────
+  "settingsUi.connections.matrix.title": "密钥依赖矩阵",
+  /** 矩阵说明：先立"实心=真的依赖"这条读法，再说清聚焦只压暗、不点亮空位。 */
+  "settingsUi.connections.matrix.hint":
+    "行是功能，列是密钥。实心＝这个功能真的用这把 Key，空心环＝覆盖（仅本次会话的 Key 优先）。点一行或一列只会压暗无关的格子，不会点亮空位。",
+  /** 左上角表头：说明行与列各是什么。 */
+  "settingsUi.connections.matrix.corner": "功能 ＼ 密钥",
+  /** 功能域分组标题（后端给的是 group id，这里给中文；认不出时回落到 id）。 */
+  "settingsUi.connections.matrix.group.content": "内容生成",
+  "settingsUi.connections.matrix.group.web": "联网与抓取",
+  "settingsUi.connections.matrix.group.input": "输入与检索",
+  "settingsUi.connections.matrix.group.system": "系统",
+  /** 汇总行每一档：`已保存 5`；数字由 payload 数出来，不手写。 */
+  "settingsUi.connections.matrix.count": "{label} {count}",
+  /** 汇总档位按钮的无障碍名（同一个按钮点第二次会取消筛选）。 */
+  "settingsUi.connections.matrix.filterAria": "只看{label}的密钥，共 {count} 把",
+  "settingsUi.connections.matrix.clearFilter": "取消筛选",
+  /** 格子的读屏文本：实心。 */
+  "settingsUi.connections.matrix.cell.direct": "{feature} 依赖 {key}",
+  /** 格子的读屏文本：空心环（覆盖式）。 */
+  "settingsUi.connections.matrix.cell.override": "{feature} 用 {key} 覆盖已保存的那把",
+  "settingsUi.connections.matrix.legend.direct": "实心＝直接依赖",
+  "settingsUi.connections.matrix.legend.override": "空心环＝覆盖",
+  "settingsUi.connections.matrix.legend.focus": "聚焦只压暗无关格子，不会点亮空位",
+  /** 闸门带：代理口令不属于某个功能，所以不占列。 */
+  "settingsUi.connections.matrix.gate.title": "代理认证口令（闸门）",
+  "settingsUi.connections.matrix.gate.hint": "所有出网请求都要过它，所以它不是某一列。",
+  /** 闸门带上的「去配置」：可见文案与详情卡相同，无障碍名带上对象以示区分。 */
+  "settingsUi.connections.matrix.gate.actionAria": "去配置：{name}",
+  /** 只经过闸门、不依赖任何密钥的功能：合成一句，不画一排空格子。 */
+  "settingsUi.connections.matrix.gate.only": "只经过代理、不依赖任何密钥的功能：{list}",
+  "settingsUi.connections.matrix.detail.title": "详情",
+  "settingsUi.connections.matrix.detail.placeholder": "点一列（一把密钥）或一行（一个功能）看详情",
+  "settingsUi.connections.matrix.detail.feature": "「{name}」依赖 {count} 把密钥：{list}",
+  "settingsUi.connections.matrix.detail.featureNone": "「{name}」不依赖任何密钥，只经过代理",
+  "settingsUi.connections.matrix.detail.configureAt": "在哪配",
+  "settingsUi.connections.matrix.detail.usedBy": "谁在用",
+  "settingsUi.connections.matrix.detail.emptyMeaning": "留空会怎样",
+  "settingsUi.connections.matrix.detail.anchor": "落点",
+  "settingsUi.connections.matrix.detail.goConfigure": "去配置",
+  "settingsUi.connections.matrix.detail.copyAnchor": "复制落点",
+  "settingsUi.connections.matrix.detail.copied": "落点已复制",
+  "settingsUi.connections.matrix.detail.copyFailed": "复制失败，请手动选中落点",
+  /** 锚点不存在时的兜底提示（滚到分组顶部，不静默停在不相干位置）。 */
+  "settingsUi.connections.anchor.missing":
+    "没找到「{name}」的配置位置（可能被条件隐藏），已定位到所属分组顶部",
 } as const;
 
 export default settingsUi;

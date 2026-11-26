@@ -250,6 +250,57 @@ const settingsUi = {
     "Connection refused: the Base URL has a missing or extra /v1, or the port is wrong; follow the provider docs and end it with /v1.",
   "settingsUi.network.checklist.timeout":
     "Timeout: test Direct once; if Direct also times out it is the line or the provider - switch networks or retry later.",
+
+  // -- External connections: credential row as a card (#8) --
+  /** Label of the "used by" line (data comes from key_map.used_by). */
+  "settingsUi.connections.usedBy": "Used by",
+  /** Group header badge: how many rows in this group are configured. */
+  "settingsUi.connections.groupCount": "{configured} of {total} configured",
+  /** Value slot of an unconfigured row: the next action, instead of "Not set". */
+  "settingsUi.connections.value.emptyHint": 'Click "Set" to fill it in - takes effect immediately',
+  /** The session key keeps the saved one when left blank (opposite write semantics). */
+  "settingsUi.connections.value.sessionHint": "Leave blank to keep using the saved key",
+
+  // -- External connections: key dependency matrix (#9) --
+  "settingsUi.connections.matrix.title": "Key dependency matrix",
+  "settingsUi.connections.matrix.hint":
+    "Rows are features, columns are keys. Filled = the feature really uses that key; hollow ring = override (the session key wins). Clicking a row or a column only dims unrelated cells - it never lights up an empty one.",
+  "settingsUi.connections.matrix.corner": "Feature \\ Key",
+  "settingsUi.connections.matrix.group.content": "Content generation",
+  "settingsUi.connections.matrix.group.web": "Search and fetch",
+  "settingsUi.connections.matrix.group.input": "Input and retrieval",
+  "settingsUi.connections.matrix.group.system": "System",
+  "settingsUi.connections.matrix.count": "{label}: {count}",
+  "settingsUi.connections.matrix.filterAria": "Show only {label} keys ({count})",
+  "settingsUi.connections.matrix.clearFilter": "Clear filter",
+  "settingsUi.connections.matrix.cell.direct": "{feature} uses {key}",
+  "settingsUi.connections.matrix.cell.override": "{feature} overrides with {key}",
+  "settingsUi.connections.matrix.legend.direct": "Filled = direct dependency",
+  "settingsUi.connections.matrix.legend.override": "Hollow ring = override",
+  "settingsUi.connections.matrix.legend.focus":
+    "Focus only dims unrelated cells; it never lights up empty ones",
+  "settingsUi.connections.matrix.gate.title": "Proxy credential (gate)",
+  "settingsUi.connections.matrix.gate.hint":
+    "Every outgoing request passes through it, so it is not one of the columns.",
+  "settingsUi.connections.matrix.gate.actionAria": "Configure {name}",
+  "settingsUi.connections.matrix.gate.only": "Features that only go through the proxy: {list}",
+  "settingsUi.connections.matrix.detail.title": "Details",
+  "settingsUi.connections.matrix.detail.placeholder":
+    "Click a column (a key) or a row (a feature) to see details",
+  "settingsUi.connections.matrix.detail.feature": "{name} depends on {count} keys: {list}",
+  "settingsUi.connections.matrix.detail.featureNone":
+    "{name} does not depend on any key - it only goes through the proxy",
+  "settingsUi.connections.matrix.detail.configureAt": "Configure at",
+  "settingsUi.connections.matrix.detail.usedBy": "Used by",
+  "settingsUi.connections.matrix.detail.emptyMeaning": "If left empty",
+  "settingsUi.connections.matrix.detail.anchor": "Landing",
+  "settingsUi.connections.matrix.detail.goConfigure": "Go configure",
+  "settingsUi.connections.matrix.detail.copyAnchor": "Copy landing link",
+  "settingsUi.connections.matrix.detail.copied": "Landing link copied",
+  "settingsUi.connections.matrix.detail.copyFailed":
+    "Copy failed - select the landing link manually",
+  "settingsUi.connections.anchor.missing":
+    "Could not find where {name} is configured (it may be hidden right now) - scrolled to the top of its section",
 } as const;
 
 export default settingsUi;

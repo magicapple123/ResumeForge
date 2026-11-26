@@ -1,19 +1,42 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /**
- * 「外部连接」页的行容器（T11 / T12，issue I-09）。
+ * 「外部连接」页的行容器（T11 / T12，issue I-09；#8 改「卡片行」）。
  *
- * 之前这页**没有任何 CSS**：11 行只有 `Flex gap={16}`，既没有分隔线也没有 hover，
- * 读起来像一段没有结构的纯文本。本片只管三件事：
+ * ## 改造前
  *
- * 1. 行与行之间的分隔线（`.connection-row` 的 `border-bottom`）与 hover 底色；
- * 2. 行内三段结构：名称+状态 / 值+操作 / 存储形态小字。三段高度固定，
- *    所以**进编辑态前后行高不变**（输入框与值行同为 24px）；
- * 3. 状态圆点的形状（`data-status`）：实心=有值、空心=没有值或没有覆盖。
- *    形状本身能分辨，不靠颜色单独承载语义（色盲用户 + 英文界面同样可读）。
+ * 这页**没有任何 CSS**：11 行只有 `Flex gap={16}`，既没有分隔线也没有 hover，读起来
+ * 像一段没有结构的纯文本。第一版补了分隔线与状态圆点，但每行仍是三段裸文字：
+ * 状态几乎只靠一个 8px 圆点的颜色承载、掩码用正文字体（四颗星像乱码）、未配置的行
+ * 还写着「DPAPI 加密」。
  *
- * `.connection-row` 这个类名**不可改**：六个用例用 `closest(".connection-row")`
- * 定位行。改名字等于让那些断言静默退化成"页面里任何地方"。
+ * ## 现在（#8 卡片行）
+ *
+ * 1. 每行一张卡（`border` + 圆角 10 + `padding:10px 12px`；组内 `gap:8`）；
+ * 2. 左侧 3px 状态条（`::before`）：绿=已保存 / 琥珀=仅本次会话 / 灰=未配置。
+ *    **颜色只在 `[data-status]` 上取一次**，形状与文字由状态 chip 另行给出；
+ * 3. 右侧操作区**定宽 150px**（`grid` 第二列，跨全部行、垂直居中）：`ⓘ` + 主按钮 + `⋯`
+ *    的右边缘因此是一条竖线，不再随"未配置用实心按钮"排成锯齿；
+ * 4. 值行与输入框同为 **26px**：进编辑态操作列位置不动、整行高度不跳（验收 ≤2px）。
+ *
+ * ## 状态色 token（#8 与 #9 共用，全仓只此一处）
+ *
+ * 密钥依赖矩阵（`ConnectionMatrix.css`）的状态灯与这里的状态条必须是同一组语义色；
+ * 两边各写一份的结果是"页面上同一个状态两种绿"。所以本文件顶部定义一次，
+ * 矩阵直接 `var()` 引用。
+ *
+ * ## 不可改的类名
+ *
+ * `.connection-row` **不可改**：六个用例用 `closest(".connection-row")` 定位行。
+ * 改名字等于让那些断言静默退化成"页面里任何地方"。
  */
+
+/* ── 状态色 token（#8 卡片行 与 #9 依赖矩阵共用）─────────────────
+   指向两个主题文件里已有的语义色（`--rf-success-text` / `--rf-warning-text`）：
+   深色主题会自己覆盖成亮一档的值，这里不复制色值、也不再定义第二套主题变量。 */
+:root {
+  --rf-success: var(--rf-success-text, #3f8f1f);
+  --rf-warning: var(--rf-warning-text, #ad6800);
+}
 
 /* ── 分组（A / B / C 各一段）────────────────────────────────── */
 .connection-group {
@@ -23,6 +46,9 @@
 }
 
 .connection-group__title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   margin: 24px 0 2px;
   font-size: 13px;
   font-weight: 500;
@@ -35,6 +61,14 @@
   margin-top: 0;
 }
 
+/* 组标题右侧的「N / M 已配」：由组内 items 现算，不手写。 */
+.connection-group__count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+}
+
 .connection-group__hint {
   margin-bottom: 4px;
   font-size: 12px;
@@ -45,37 +79,74 @@
 .connection-list {
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 
-/* ── 一行 ─────────────────────────────────────────────────── */
+/* ── 一行 = 一张卡 ───────────────────────────────────────────
+   `grid` 而不是 flex 三段：动作列要跨全部行并垂直居中，右边缘才能对齐成一条竖线。 */
 .connection-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 8px 10px 2px;
-  border-bottom: 1px solid var(--rf-border-subtle, #e5e7eb);
-}
-
-/*
- * 末尾那行也保留 border-style（只是透明）：验收要求 `.connection-row` 的
- * `border-bottom` 计算值非 none，用 `border-bottom: none` 抹掉最后一行会让
- * 那条断言变成"取决于它是第几行"。
- */
-.connection-row:last-child {
-  border-bottom-color: transparent;
+  position: relative;
+  display: grid;
+  grid-template-areas:
+    "head acts"
+    "main acts"
+    "meta acts"
+    "used acts";
+  grid-template-columns: minmax(0, 1fr) 150px;
+  row-gap: 2px;
+  column-gap: 12px;
+  align-content: start;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border, #e5e7eb);
+  border-radius: 10px;
+  background: var(--rf-surface, #fff);
+  transition: border-color var(--rf-motion-duration, 0.2s) ease;
 }
 
 .connection-row:hover,
 .connection-row:focus-within {
-  background: var(--rf-fill-tertiary, rgba(0, 0, 0, 0.03));
+  border-color: var(--rf-border-strong, rgba(0, 0, 0, 0.2));
 }
 
-/* ── 第一段：名称 + 状态 + 说明入口 ─────────────────────────── */
+/* 左侧 3px 状态条：贴着卡片左缘，圆角跟着卡片走（不画成一条溢出圆角的直角）。 */
+.connection-row::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  border-radius: 10px 0 0 10px;
+  background: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+  content: "";
+}
+
+.connection-row[data-status="saved"]::before {
+  background: var(--rf-success);
+}
+
+.connection-row[data-status="session_only"]::before {
+  background: var(--rf-warning);
+}
+
+/* 系统来源（C 组）：改过 / 仍是出厂值，都不是"密钥状态"，用信息色与灰色区分。 */
+.connection-row[data-status="modified"]::before {
+  background: var(--rf-info, #1d63d1);
+}
+
+.connection-row[data-status="default"]::before,
+.connection-row[data-status="not_configured"]::before {
+  background: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+}
+
+/* ── 第一段：名称 + 状态 chip ─────────────────────────────── */
 .connection-row__head {
   display: flex;
+  /* 名称长时让**名称**省略，chip 保持完整可读。 */
   align-items: center;
   gap: 8px;
+  min-width: 0;
   min-height: 22px;
+  grid-area: head;
 }
 
 .connection-row__name {
@@ -89,74 +160,91 @@
   white-space: nowrap;
 }
 
-.connection-row__status {
+/* 状态 chip：浅底 + 描边 + 小圆点。文字与颜色同时给，色盲用户读得出。 */
+.connection-row__chip {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--rf-border, #e5e7eb);
+  border-radius: 9px;
+  background: var(--rf-surface-alt, rgba(0, 0, 0, 0.02));
+  font-size: 11.5px;
+  line-height: 16px;
+  color: var(--rf-text-secondary, rgba(0, 0, 0, 0.65));
+  white-space: nowrap;
 }
 
-.connection-row__dot {
+.connection-row__chip-dot {
   flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: currentColor;
 }
 
-/* 空心 = 还没有值（未配置）或没有覆盖过（系统项仍是出厂值）。 */
-.connection-row[data-status="not_configured"] .connection-row__dot,
-.connection-row[data-status="default"] .connection-row__dot {
+/* 未配置与出厂值：空心点（没有值，不是"值很弱"）。 */
+.connection-row[data-status="not_configured"] .connection-row__chip,
+.connection-row[data-status="default"] .connection-row__chip {
+  border-style: dashed;
+}
+
+.connection-row[data-status="not_configured"] .connection-row__chip-dot,
+.connection-row[data-status="default"] .connection-row__chip-dot {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px currentColor;
 }
 
-.connection-row[data-status="saved"] .connection-row__status {
-  color: var(--rf-success-text, #3f8f1f);
+.connection-row[data-status="saved"] .connection-row__chip {
+  border-color: color-mix(in srgb, var(--rf-success) 35%, transparent);
+  color: var(--rf-success);
 }
 
-.connection-row[data-status="session_only"] .connection-row__status {
-  color: var(--rf-warning-text, #ad6800);
+.connection-row[data-status="session_only"] .connection-row__chip {
+  border-color: color-mix(in srgb, var(--rf-warning) 35%, transparent);
+  color: var(--rf-warning);
 }
 
-.connection-row[data-status="modified"] .connection-row__status {
+.connection-row[data-status="modified"] .connection-row__chip {
+  border-color: color-mix(in srgb, var(--rf-info, #1d63d1) 35%, transparent);
   color: var(--rf-info, #1d63d1);
 }
 
-/* 说明入口：图标按钮本身不占位，按下去才展开。 */
-.connection-row__info {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
-  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
-}
-
-/* ── 第二段：值（或输入框）+ 操作列 ─────────────────────────── */
+/* ── 第二段：值（或输入框）────────────────────────────────── */
 .connection-row__main {
   display: flex;
   align-items: center;
-  gap: 8px;
+  min-width: 0;
+  grid-area: main;
 }
 
 /*
- * 值与输入框都是 24px 高：编辑态只是把这一行"换个控件"，操作列位置不动，
- * 整行高度也就不会跳（验收：进编辑态前后行高差 ≤ 2px）。
+ * 值与输入框都是 26px 高：编辑态只是把这一行"换个控件"，操作列位置不动，
+ * 整行高度也就不跳（验收：进编辑态前后行高差 ≤2px）。
  */
 .connection-row__value {
   flex: 1 1 auto;
   min-width: 0;
-  height: 24px;
+  height: 26px;
   overflow: hidden;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
-  line-height: 24px;
+  line-height: 26px;
   color: var(--rf-text-body, rgba(0, 0, 0, 0.88));
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 掩码等宽：`sk-a••••bb44` 在正文字体里认不出是几个字符，等宽字体里是一列整齐的块。 */
+.connection-row__value--masked {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+
+/* 未配置行的值位是**引导文案**（"点设置填入后立即生效"），不是值：用正文字体 + 次要色。 */
+.connection-row__value--empty {
+  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
 }
 
 .connection-row__editor {
@@ -168,26 +256,38 @@
 .connection-row__editor .ant-input,
 .connection-row__editor .ant-input-affix-wrapper,
 .connection-row__editor .ant-input-password {
-  height: 24px;
+  height: 26px;
   padding-top: 0;
   padding-bottom: 0;
   font-size: 12px;
 }
 
-.connection-row__actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-}
-
-/* ── 第三段：存储形态（小字）──────────────────────────────── */
+/* ── 第三段：存储形态 chip + （系统来源）出厂值 ─────────────── */
 .connection-row__meta {
   display: flex;
-  gap: 6px;
   align-items: center;
+  gap: 6px;
   min-height: 16px;
+  overflow: hidden;
+  grid-area: meta;
+}
+
+.connection-row__tag {
+  flex: 0 0 auto;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 5px;
+  border: 1px solid var(--rf-border-subtle, #e5e7eb);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-row__tag-note {
+  min-width: 0;
   overflow: hidden;
   font-size: 11px;
   line-height: 16px;
@@ -196,10 +296,56 @@
   white-space: nowrap;
 }
 
-.connection-row__meta > span {
+/* ── 第四段：「用于」谁在用这把 Key ───────────────────────── */
+.connection-row__used {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  grid-area: used;
+}
+
+.connection-row__used-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+}
+
+.connection-row__used-text {
   min-width: 0;
   overflow: hidden;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--rf-text-secondary, rgba(0, 0, 0, 0.65));
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 右侧操作区：定宽一列，右边缘对齐成竖线 ───────────────── */
+.connection-row__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 26px;
+  align-self: center;
+  grid-area: acts;
+}
+
+/* 说明入口：图标按钮本身不占位，按下去才展开。 */
+.connection-row__info {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+}
+
+/* 行内错误条（保存失败）横跨两列，不挤进动作列。 */
+.connection-row__error {
+  margin-top: 6px;
+  grid-column: 1 / -1;
 }
 
 /* ── 说明浮层（ⓘ 的内容）──────────────────────────────────── */
@@ -217,20 +363,19 @@
   color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
 }
 
-/* 窄屏：值可以折到操作列下面，操作列始终靠右。
+/* 窄屏：动作列挪到名称右侧一行的位置，值与说明占满整宽。
    断点用 767（BREAKPOINTS.phone）——640 不在本仓断点表里，breakpointGuard 会红。 */
 @media (max-width: 767px) {
-  .connection-row__main {
-    flex-wrap: wrap;
+  .connection-row {
+    grid-template-areas:
+      "head acts"
+      "main main"
+      "meta meta"
+      "used used";
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .connection-row__value,
   .connection-row__editor {
-    flex: 1 1 100%;
     max-width: none;
-  }
-
-  .connection-row__actions {
-    margin-left: auto;
   }
 }

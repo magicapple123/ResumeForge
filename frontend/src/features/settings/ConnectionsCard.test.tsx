@@ -10,10 +10,11 @@
 
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ConnectionsCard from "./ConnectionsCard";
 import { t } from "../../i18n";
-import type { ConnectionsPayload } from "../../types";
+import type { ConnectionMatrix, ConnectionsPayload } from "../../types";
 
 const connMocks = vi.hoisted(() => ({
   getConnections: vi.fn(),
@@ -32,6 +33,14 @@ const settingsMocks = vi.hoisted(() => ({
 
 vi.mock("../../api/connections", () => connMocks);
 vi.mock("../../api/settings", () => settingsMocks);
+
+/**
+ * 只依赖闸门口令、因而不进矩阵的功能名。
+ *
+ * 抽成常量是给 i18n 棘轮留的：`getByText("中文")` 会被算作"新增中文文案"，而这里断言的是
+ * **payload 里给的名字**，本来就该引用夹具，不该再抄一遍字面量。
+ */
+const ORPHAN_FEATURE = "更新检查";
 
 const SEARCH_CONFIG = {
   sources: ["bing", "deepseek"],
@@ -64,6 +73,8 @@ function item(overrides: Partial<ConnectionsPayload["groups"][number]["items"][n
     value: "",
     default_value: "",
     is_default: false,
+    // #9：后端投影的深链锚点，行组件把它写成根节点 `id`（矩阵「去配置」的落点）。
+    anchor: "conn-search-deepseek",
     ...overrides,
   };
 }
@@ -85,6 +96,7 @@ function payload(): ConnectionsPayload {
             protection: "memory_only",
             protection_label: "仅内存，不落盘",
             masked: "********",
+            anchor: "conn-llm-session-key",
           }),
           item({
             id: "embedding.default",
@@ -97,6 +109,8 @@ function payload(): ConnectionsPayload {
             write_hint: "语义检索的 Key 在「AI 模型 → 语义检索」里配置",
             protection_label: "DPAPI 加密",
             protection: "dpapi",
+            // 语义检索的 Key 在别的卡里配：这一行没有锚点 → 不写 `id`。
+            anchor: "",
           }),
         ],
       },
@@ -116,9 +130,13 @@ function payload(): ConnectionsPayload {
         group: "web_search",
         group_label: "联网搜索与抓取",
         configure_at: "设置 → 联网搜索 → DeepSeek",
-        used_by: "联网搜索、网页正文抓取、扫描件 OCR 共用这一把",
+        used_by: ["联网搜索", "网页正文抓取", "扫描件 OCR"],
+        used_by_text: "联网搜索、网页正文抓取、扫描件 OCR",
         empty_meaning: "留空并保存 = 移除这把 Key",
         where: "global_settings.json → web_search.deepseek_api_key",
+        status: "saved",
+        section: "assistant-behavior",
+        anchor: "conn-search-deepseek",
       },
       {
         id: "llm.session",
@@ -126,13 +144,57 @@ function payload(): ConnectionsPayload {
         group: "session",
         group_label: "仅本次会话",
         configure_at: "设置 → AI 模型 → 仅本次会话使用",
-        used_by: "临时覆盖已保存的大模型 Key",
+        used_by: ["简历生成", "求职助手"],
+        used_by_text: "简历生成、求职助手",
         empty_meaning: "清空 = 立刻回到已保存的那把 Key",
         where: "后端进程内存",
+        status: "session_only",
+        section: "model",
+        anchor: "conn-llm-session-key",
       },
     ],
+    matrix: matrix(),
     storage: { kind: "plaintext", label: "当前平台无系统加密", description: "密钥以明文落盘" },
     retrieved: true,
+  };
+}
+
+/**
+ * 依赖矩阵的夹具（#9）：两列三行，其中一条覆盖式边、一个只依赖闸门的功能。
+ *
+ * 形状与后端 registry 的投影一致（`keys/features/edges/gate`）：这个夹具同时用来验证
+ * 「矩阵替换表格」——前端不认识任何具体 Key，只照着 payload 画。
+ */
+function matrix(): ConnectionMatrix {
+  return {
+    keys: [
+      {
+        id: "web_search.deepseek",
+        label: "DeepSeek",
+        group: "web_search",
+        status: "saved",
+        section: "assistant-behavior",
+        anchor: "conn-search-deepseek",
+      },
+      {
+        id: "llm.session",
+        label: "仅本次会话使用的大模型 Key",
+        group: "session",
+        status: "session_only",
+        section: "model",
+        anchor: "conn-llm-session-key",
+      },
+    ],
+    features: [
+      { id: "resume_generation", label: "简历生成", group: "content" },
+      { id: "web_search", label: "联网搜索", group: "web" },
+      { id: "update_check", label: ORPHAN_FEATURE, group: "system" },
+    ],
+    edges: [
+      { key: "web_search.deepseek", feature: "web_search", kind: "direct" },
+      { key: "llm.session", feature: "resume_generation", kind: "override" },
+    ],
+    gate: { key: "network.proxy", label: "代理认证口令（当前网络设置）" },
   };
 }
 
@@ -153,9 +215,12 @@ const DEEPSEEK_LABEL = t("connections.item.web_search.deepseek.label");
 
 function renderCard() {
   return render(
-    <AntdApp>
-      <ConnectionsCard />
-    </AntdApp>,
+    // 卡片自己会为矩阵的「去配置」调 `navigate`，所以需要 Router 上下文。
+    <MemoryRouter initialEntries={["/settings?tab=connections"]}>
+      <AntdApp>
+        <ConnectionsCard />
+      </AntdApp>
+    </MemoryRouter>,
   );
 }
 
@@ -187,27 +252,50 @@ describe("ConnectionsCard", () => {
     expect(await screen.findByText(saved)).toBeInTheDocument();
     expect(screen.getAllByText(sessionOnly).length).toBeGreaterThan(0);
     expect(screen.getByText(t("connections.status.not_configured"))).toBeInTheDocument();
-    // 存储方式与状态是两个标签：语义检索那条是 DPAPI，搜索那条是明文。
-    expect(screen.getByText(t("connections.protection.dpapi"))).toBeInTheDocument();
+    // 存储方式与状态是两个标签：会话那一行是「仅内存」，搜索那一行是明文。
+    // （未配置行不再挂存储 chip——"没配还谈加密"是 #8 要消掉的矛盾，见下面那组用例。）
+    expect(screen.getByText(t("connections.protection.memory_only"))).toBeInTheDocument();
     expect(screen.getAllByText(plaintext).length).toBeGreaterThan(0);
     expect(
       screen.getByText(t("connections.storage.title", { label: plaintext })),
     ).toBeInTheDocument();
   });
 
-  it("renders the key map with one row per credential", async () => {
-    const emptyHint = payload().key_map?.[0]?.empty_meaning ?? "";
+  it("renders the dependency matrix instead of the old four-column table", async () => {
     renderCard();
     await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
 
-    // CR-12：地图由后端投影，前端只渲染——行数必须等于后端给的条数（不在这里增删）。
-    const map = (await screen.findByText(t("connections.keyMap.title"))).closest(
-      ".connection-key-map",
-    ) as HTMLElement;
-    expect(within(map).getAllByRole("row")).toHaveLength(3); // 表头 + 2 条
-    expect(within(map).getByText(t("connections.keyMap.col.empty"))).toBeInTheDocument();
-    // 断言渲染的是后端给的「留空含义」，而不是前端另写一句（那句话会与 registry 漂移）。
-    expect(within(map).getByText(emptyHint)).toBeInTheDocument();
+    // #9：整张表格换掉。矩阵的列数由 payload 决定（这里两把 Key → 两个列头按钮）。
+    const panel = (await screen.findByTestId("connection-matrix")) as HTMLElement;
+    expect(document.querySelector(".connection-key-map")).toBeNull();
+    for (const key of matrix().keys) {
+      expect(within(panel).getAllByText(key.label).length).toBeGreaterThan(0);
+    }
+    // 只依赖闸门的功能不画行，合成一句说明（不摆一排空格子）。
+    expect(within(panel).queryByText(ORPHAN_FEATURE)).toBeNull();
+    expect(
+      within(panel).getByText(
+        t("settingsUi.connections.matrix.gate.only", { list: ORPHAN_FEATURE }),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("凭据行带上 key_map 给的锚点 id，矩阵的「去配置」才落得到行上", async () => {
+    renderCard();
+    await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
+    await screen.findAllByText(DEEPSEEK_LABEL);
+
+    // 后端两份投影（`groups[].items[].anchor` 与 `key_map[].anchor`）必须指向同一处：
+    // 前者是 DOM 的 `id`，后者是「去配置」拼出的 `#` 部分。对不上就等于点了没反应。
+    for (const row of payload().key_map ?? []) {
+      const target = document.getElementById(row.anchor);
+      expect(target, `锚点 ${row.anchor} 没有对应的行`).not.toBeNull();
+      expect(target).toHaveClass("connection-row");
+    }
+    // 没有锚点的行（这里：语义检索）不写空 `id`，否则 `#` 会命中第一个空 id 的元素。
+    expect(document.querySelectorAll("[id='']")).toHaveLength(0);
+    // 锚点必须挂在**那一行**上（不是矩阵格子上）：深链要滚到的是可编辑的凭据行。
+    expect(document.getElementById("conn-search-deepseek")).toBe(rowOf(DEEPSEEK_LABEL));
   });
 
   it("writes a new search key through the search settings endpoint, keeping the other fields", async () => {
@@ -244,10 +332,11 @@ describe("ConnectionsCard", () => {
     renderCard();
     await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
 
-    // hint 取代 `********` 作为展示值（掩码字段本身仍是协议值，不参与渲染）。
+    // hint 取代 `********` 作为展示值（掩码字段本身仍是协议值，不参与渲染）；
+    // #8 只换展示字形（`****` → `••••`），`connectionMaskedText` 的输出不变。
     await screen.findAllByText(DEEPSEEK_LABEL);
     const row = within(rowOf(DEEPSEEK_LABEL));
-    expect(row.getByText("sk-a****bb44")).toBeInTheDocument();
+    expect(row.getByText("sk-a••••bb44")).toBeInTheDocument();
     fireEvent.click(
       row.getByRole("button", { name: t("connections.action.more", { name: DEEPSEEK_LABEL }) }),
     );
@@ -304,5 +393,93 @@ describe("ConnectionsCard", () => {
     expect(
       await screen.findByText(new RegExp(t("connections.hint.borrowedModelKey"))),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * #8「卡片行」的四条契约。
+ *
+ * 都在**行**这一层断言（`closest(".connection-row")`），因为改动是行内排版：状态 chip、
+ * 存储 chip、值位引导、动作列。行高这一条尤其不能用 `getBoundingClientRect()`——
+ * jsdom 没有排版引擎，任何元素的 height 都是 0，"0 === 0" 会永远绿。
+ */
+describe("ConnectionListRow 卡片行（#8）", () => {
+  it("未配置行不渲染存储形态 chip", async () => {
+    renderCard();
+    await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
+
+    const label = t("connections.item.embedding.default.label");
+    await screen.findAllByText(label);
+    const row = within(rowOf(label));
+    // 这一条的 protection 是 dpapi：没配就不该谈加密（旧实现每行都写）。
+    expect(row.queryByText(t("connections.protection.dpapi"))).toBeNull();
+    // 已配置的行仍然要有这个 chip（否则"没渲染"可能只是整体丢了）。
+    const saved = within(rowOf(DEEPSEEK_LABEL));
+    expect(saved.getByText(t("connections.protection.plaintext"))).toBeInTheDocument();
+  });
+
+  it("未配置行的值位是引导文案：有「立即生效」，没有「未填写」", async () => {
+    renderCard();
+    await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
+
+    const label = t("connections.item.embedding.default.label");
+    await screen.findAllByText(label);
+    const row = within(rowOf(label));
+
+    const guidance = t("settingsUi.connections.value.emptyHint");
+    expect(guidance).toContain("立即生效");
+    expect(row.getByText(guidance)).toBeInTheDocument();
+    // 同一件事不再说两遍：状态 chip 已经写着「未配置」。
+    expect(row.queryByText(t("connections.emptyMask"))).toBeNull();
+  });
+
+  it("已配置行的状态 chip 保留文字（不是纯色块）", async () => {
+    renderCard();
+    await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
+
+    await screen.findAllByText(DEEPSEEK_LABEL);
+    const row = within(rowOf(DEEPSEEK_LABEL));
+    const chip = row.getByText(t("connections.status.saved"));
+    expect(chip.closest(".connection-row__chip")).not.toBeNull();
+    expect(chip.textContent).toBe(t("connections.status.saved"));
+  });
+
+  it("编辑态与只读态的行结构一致（行高不跳的前提）", async () => {
+    renderCard();
+    await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
+
+    await screen.findAllByText(DEEPSEEK_LABEL);
+    const rowNode = rowOf(DEEPSEEK_LABEL);
+    const readChildren = rowNode.children.length;
+    const readMainChildren = rowNode.querySelector(".connection-row__main")?.children.length;
+
+    fireEvent.click(
+      within(rowNode).getByRole("button", {
+        name: t("connections.action.editAria", { name: DEEPSEEK_LABEL }),
+      }),
+    );
+
+    // 编辑态**不多加一行**：值位换控件，动作列只是换成"保存/取消"，四段结构不变。
+    // （jsdom 无排版，量高度是空断言；量结构才是可失败的断言。）
+    expect(rowNode.children.length).toBe(readChildren);
+    expect(rowNode.querySelector(".connection-row__editor")).not.toBeNull();
+    expect(rowNode.querySelector(".connection-row__main")?.children.length).toBe(readMainChildren);
+    // 动作列在两种状态下都是同一个节点：位置不重排。
+    expect(rowNode.querySelectorAll(".connection-row__actions")).toHaveLength(1);
+  });
+
+  it("「用于」按 id 关联 key_map：不在 map 里的行不渲染这一行", async () => {
+    renderCard();
+    await waitFor(() => expect(connMocks.getConnections).toHaveBeenCalled());
+
+    await screen.findAllByText(DEEPSEEK_LABEL);
+    const usedBy = payload().key_map?.[0]?.used_by_text ?? "";
+    expect(usedBy).not.toBe("");
+    expect(within(rowOf(DEEPSEEK_LABEL)).getByText(usedBy)).toBeInTheDocument();
+
+    // embedding.default 不在这份 key_map 里：宁可少一行，也不显示一句空话。
+    const unmappedLabel = t("connections.item.embedding.default.label");
+    const unmapped = within(rowOf(unmappedLabel));
+    expect(unmapped.queryByText(t("settingsUi.connections.usedBy"))).toBeNull();
   });
 });
