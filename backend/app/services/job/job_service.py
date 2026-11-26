@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ...models.job import Job
 from ...schemas.job import JobCreate, JobUpdate
 from .. import trash
-from ..favorites import apply_favorite
+from ..favorites import apply_favorite, update_favorite
 from ..jd_parser import parse_jd
 
 
@@ -113,6 +113,8 @@ def create_job_record(db: Session, payload: JobCreate, *, source: str = "") -> J
     job = Job(**data)
     if favorite:
         # 新建时就收藏的条目也必须拿到收藏时间（#28E），否则它永远排在收藏夹末尾。
+        # 这里用对象助手而不是 Core UPDATE：行还没 INSERT，没有"被 onupdate 刷新"的
+        # 问题（INSERT 本来就要写 updated_at），Core 更新反而要先 flush 才能按主键定位。
         apply_favorite(job, True)
     refresh_job_keywords(job)
     db.add(job)
@@ -134,7 +136,10 @@ def update_job_record(db: Session, job: Job, payload: JobUpdate) -> Job:
     for field, value in data.items():
         setattr(job, field, value)
     if favorite is not None:
-        apply_favorite(job, favorite)
+        # T15/R2：收藏是标记不是编辑，走 Core UPDATE 且把 updated_at 列自身写回
+        # （见 services/favorites.py）。同一请求里若要改别的内容，那些字段的 autoflush
+        # 会先合法地刷新 updated_at，随后这条 UPDATE 写回的正是刷新后的值——不会互相覆盖。
+        update_favorite(db, Job, job.id, favorite)
     # 只有 JD 内容变了才值得重算标签。
     if {"description", "requirements", "additional_info"}.intersection(data):
         refresh_job_keywords(job)

@@ -26,7 +26,7 @@ from ...schemas.resume import (
 from ...services import trash
 from ...services.actions import add_action_route
 from ...services.actions.catalog import all_actions
-from ...services.favorites import apply_favorite
+from ...services.favorites import update_favorite
 from ...services.resume.document_save import (
     RevisionConflict,
     revision_conflict_response,
@@ -291,7 +291,9 @@ def update_resume_favorite(
     if record is None or trash.is_deleted(record):
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
     # #28E：收藏布尔列与收藏时间必须一起改（唯一写入口，见 services/favorites.py）。
-    apply_favorite(record, payload.favorite)
+    # T15/R2：而且**不许**顺手刷新 updated_at——列表默认按 updated_desc 排序，一次 ORM
+    # 赋值就会让这行带着星星跳到组首，用户会以为"收藏错了行"。所以走 Core UPDATE。
+    update_favorite(db, ResumeRecord, record.id, payload.favorite)
     db.commit()
     db.refresh(record)
     return _to_resume_out(record, db)

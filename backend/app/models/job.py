@@ -58,6 +58,9 @@ class Job(Base):
     # 现在单开一列，备注只存用户自己写的内容。历史备注里的来源行由 0042 迁移迁到这一列。
     origin_source: Mapped[str] = mapped_column(String(64), default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    # 编辑时间；`onupdate` 在 ORM 更新时自动刷新，是岗位列表"最近修改"排序的依据。
+    # **收藏不许刷新它**（T15/R2）：favorite / favorited_at 走
+    # ``services.favorites.update_favorite``（Core UPDATE + 写回本列自身抑制 onupdate）。
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
     # 软删除时间戳：NULL 表示「没删」。列表查询一律加 `deleted_at IS NULL`，
     # 回收站里则只看非 NULL 的行（见 ``services/trash.py``）。

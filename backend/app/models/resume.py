@@ -118,6 +118,9 @@ class ResumeRecord(Base):
     # 最后修改时间（0047）：列表「最近修改」排序用。`onupdate` 在 ORM 更新这一行时
     # 自动刷新——改内容、调版式、改备注都算"动过它"，这正是用户想找的那一份。
     # 旧行升级时用 created_at 回填（见迁移 0047），所以排序不会因为升级而突变。
+    # **收藏不算"动过它"**（T15/R2）：favorite / favorited_at 只能走
+    # ``services.favorites.update_favorite``（Core UPDATE + 把本列**自身**写回 SET 子句来
+    # 抑制 onupdate）。否则点一次星星这行就被顶到组首，看着像"收藏错了行"。
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=True, index=True
     )

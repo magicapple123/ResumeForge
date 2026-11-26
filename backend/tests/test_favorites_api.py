@@ -259,3 +259,113 @@ def test_non_favorites_never_appear_in_favorites_list(client, db_session):
     assert payload["total"] == 0
     assert payload["items"] == []
     assert job.id != 0
+
+
+# ===== T15 / R2：收藏不许改写 updated_at =====
+# 病根：三张表的 ``updated_at`` 都带 ``onupdate=utcnow``，一次 ORM 属性赋值收藏就会在
+# flush 时把它刷成"刚刚"；简历列表默认按 ``updated_desc`` 排序，于是点一下星星，那一行
+# 就带着星星跳到组首——用户以为"收藏错了行"。下面四段分别钉住四个写入路径。
+
+
+def _parsed(value):
+    """响应里的 ISO 时间串 -> datetime（字段为 null 时原样返回 None）。"""
+    return datetime.fromisoformat(value) if isinstance(value, str) else value
+
+
+def test_resume_favorite_does_not_touch_updated_at(client, db_session):
+    """简历收藏端点：updated_at 逐字相等，只有 favorited_at 变。"""
+    old = datetime(2026, 11, 1, 9, 0, 0)
+    record = ResumeRecord(title="待收藏简历", content={"name": "用户"}, updated_at=old)
+    db_session.add(record)
+    db_session.commit()
+    db_session.refresh(record)
+    before = record.updated_at
+    assert before is not None
+
+    response = client.patch(f"/api/resumes/{record.id}/favorite", json={"favorite": True})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["favorite"] is True
+    assert _parsed(body["favorited_at"]) is not None
+    db_session.expire_all()
+    after = db_session.get(ResumeRecord, record.id)
+    assert after.updated_at == before, "收藏不该改写 updated_at（否则列表会跳行）"
+    assert after.favorited_at is not None
+
+    # 取消收藏同样不许动 updated_at，且把时间戳清回 NULL（与「从未收藏」同形）。
+    client.patch(f"/api/resumes/{record.id}/favorite", json={"favorite": False})
+    db_session.expire_all()
+    after = db_session.get(ResumeRecord, record.id)
+    assert after.updated_at == before
+    assert after.favorite is False
+    assert after.favorited_at is None
+
+
+def test_job_favorite_keeps_updated_at(client, db_session):
+    """岗位 PUT 收藏：updated_at 不动，favorited_at 变（28E 语义不变）。"""
+    job = _job(db_session)  # updated_at = 2024-01-01 08:00
+    before = job.updated_at
+
+    response = client.put(f"/api/jobs/{job.id}", json={"favorite": True})
+
+    assert response.status_code == 200
+    assert _parsed(response.json()["favorited_at"]) is not None
+    db_session.expire_all()
+    after = db_session.get(Job, job.id)
+    assert after.updated_at == before
+    assert after.favorite is True
+
+    client.put(f"/api/jobs/{job.id}", json={"favorite": False})
+    db_session.expire_all()
+    after = db_session.get(Job, job.id)
+    assert after.updated_at == before
+    assert after.favorited_at is None
+
+
+def test_batch_favorite_and_assistant_tool_keep_updated_at(client, db_session):
+    """批量收藏端点与助手工具两条路径与单条收藏同一口径。"""
+    from app.services.assistant_tools.job_tools import _tool_update_resume
+
+    first = _job(db_session, title="批量 A")
+    second = _job(db_session, title="批量 B")
+    stamps = {first.id: first.updated_at, second.id: second.updated_at}
+
+    result = client.post(
+        "/api/jobs/favorites/batch",
+        json={"job_ids": [first.id, second.id], "favorite": True},
+    ).json()
+
+    assert result["updated"] == 2
+    db_session.expire_all()
+    for job_id, stamp in stamps.items():
+        row = db_session.get(Job, job_id)
+        assert row.updated_at == stamp, f"批量收藏改写了岗位 {job_id} 的 updated_at"
+        assert row.favorited_at is not None
+
+    old = datetime(2026, 3, 4, 5, 6, 7)
+    record = ResumeRecord(title="助手看上的简历", content={"name": "用户"}, updated_at=old)
+    db_session.add(record)
+    db_session.commit()
+
+    _tool_update_resume(db_session, {"resume_id": record.id, "favorite": True})
+
+    db_session.expire_all()
+    after = db_session.get(ResumeRecord, record.id)
+    assert after.favorite is True
+    assert after.favorited_at is not None
+    assert after.updated_at == old, "助手改收藏同样不该改写 updated_at"
+
+
+def test_favorite_idempotent_keeps_original_timestamp(client, db_session):
+    """已收藏再收藏：不刷新 favorited_at，也不刷新 updated_at（幂等语义不变）。"""
+    stamp = datetime(2026, 5, 6, 7, 8, 9)
+    job = _job(db_session, favorite=True, favorited_at=stamp)
+    before = job.updated_at
+
+    client.put(f"/api/jobs/{job.id}", json={"favorite": True})
+
+    db_session.expire_all()
+    after = db_session.get(Job, job.id)
+    assert after.favorited_at == stamp
+    assert after.updated_at == before

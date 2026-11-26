@@ -31,7 +31,7 @@ from ..schemas.job_favorites import (
     FavoriteSort,
 )
 from ..services import trash
-from ..services.favorites import apply_favorite
+from ..services.favorites import update_favorite
 from ..services.job.job_favorites import (
     MAX_FAVORITE_JOBS,
     lifecycle_for,
@@ -104,7 +104,11 @@ def read_favorites_lifecycle(
 
 @router.post("/favorites/batch", response_model=FavoriteBatchResult)
 def batch_favorite(payload: FavoriteBatchRequest, db: Session = Depends(get_db)):
-    """批量收藏/取消收藏（28F）：不存在的行跳过并回传 id，不做「删一半」。"""
+    """批量收藏/取消收藏（28F）：不存在的行跳过并回传 id，不做「删一半」。
+
+    收藏写入口是 ``update_favorite``（T15/R2）：批量点星星同样不能把整批行的
+    ``updated_at`` 顶成"刚刚"，否则岗位列表按最近修改排序时半页都会往上跳。
+    """
     updated = 0
     skipped: list[int] = []
     for job_id in payload.job_ids:
@@ -112,7 +116,7 @@ def batch_favorite(payload: FavoriteBatchRequest, db: Session = Depends(get_db))
         if job is None:
             skipped.append(job_id)
             continue
-        apply_favorite(job, payload.favorite)
+        update_favorite(db, Job, job.id, payload.favorite)
         updated += 1
     db.commit()
     return FavoriteBatchResult(updated=updated, skipped=skipped)
