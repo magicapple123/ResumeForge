@@ -26,6 +26,12 @@ pillow==13.0.0
 # The audit gate is blocking, so staying on 6.19.0 turns CI red.
 pypdf==6.21.4
 pypdfium2==5.14.0
+# Text-block geometry for in-app editing of uploaded PDF resumes (MIT). pdfminer.six is the
+# only maintained pure-Python PDF layout analyser: pypdf extracts text without coordinates,
+# so it cannot say where a line sits or how big it is. PyMuPDF/iText are AGPL and therefore
+# not usable (see the license rule in AGENTS.md). Its cryptography dependency (Apache-2.0)
+# only unlocks encrypted PDFs, which we reject anyway, and ships as a wheel - no compiler.
+pdfminer.six==20251230
 # Server-side PDF export: fpdf2 embeds a system CJK font so the resume PDF can be
 # downloaded directly. fonttools is its font-parsing backend; pinning it keeps
 # the first-run install reproducible. 4.66+ requires Python >=3.11, which is
