@@ -56,6 +56,16 @@ export interface Reminder {
   track_id: number | null;
   job_id: number | null;
   resume_id: number | null;
+  /**
+   * 外部简历关联（R14）：与 `resume_id` **互斥**（后端同时传两个会 422）。
+   * 旧后端没有这个字段，按缺省 `null` 处理。
+   */
+  external_resume_id?: number | null;
+  /**
+   * 外部简历的标题回显（R14）：口径是 `external_resume.name`，由后端在详情 / 列表 /
+   * upcoming 上实时拼好。只有关联了外部简历时才有值，未关联是空串。
+   */
+  external_resume_name?: string;
   note: string;
   created_at: string;
   updated_at: string;
@@ -90,6 +100,8 @@ export interface ReminderPayload {
   track_id?: number | null;
   job_id?: number | null;
   resume_id?: number | null;
+  /** 外部简历关联（R14）：与 `resume_id` 互斥，写请求里两个都要显式给出（见 resumeRef.ts）。 */
+  external_resume_id?: number | null;
   note?: string;
 }
 

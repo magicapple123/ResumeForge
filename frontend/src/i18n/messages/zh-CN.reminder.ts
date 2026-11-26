@@ -71,6 +71,8 @@ const reminder = {
   "reminder.detail.title": "提醒详情",
   "reminder.detail.track": "关联求职进度",
   "reminder.detail.job": "关联岗位",
+  /** 关联简历的来源标签（R14）：外部简历在卡片 / 详情里显示成「外部 · 文件名」。 */
+  "reminder.resume.externalTag": "外部",
   "reminder.detail.resume": "关联简历",
   "reminder.detail.createdAt": "创建时间",
   "reminder.detail.updatedAt": "更新时间",

@@ -26,13 +26,17 @@ import {
   updateReminder,
 } from "../../api/reminders";
 import { getAgentTaskEvents } from "../../api/settings";
+import { useJobSearchSelect, useTrackSearchSelect } from "../../hooks/remoteSearchOptions";
+import { useResumeRefSelect } from "../../hooks/useResumeRefSelect";
+import { resumeRefIds } from "../../types/resumeRef";
 import {
-  useJobSearchSelect,
-  useResumeSearchSelect,
-  useTrackSearchSelect,
-} from "../../hooks/remoteSearchOptions";
+  linkedLabelOf,
+  reminderResumeHref,
+  reminderResumeLabel,
+  reminderResumeValue,
+} from "./reminderResumeLink";
 import { REMINDER_KINDS } from "../../types";
-import type { Reminder, ReminderKind, ReminderSnoozePayload } from "../../types";
+import type { Reminder, ReminderKind, ReminderPayload, ReminderSnoozePayload } from "../../types";
 import { LISTY_ITEM_PADDING_DEFAULT } from "../../components/common/listyPadding";
 import type { RowActionItem } from "../../components/common/RowActions";
 import BatchActionBar from "../../components/common/BatchActionBar";
@@ -68,7 +72,8 @@ export default function ReminderPanel({
   // 关联目标下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const trackSelect = useTrackSearchSelect();
   const jobSelect = useJobSearchSelect();
-  const resumeSelect = useResumeSearchSelect();
+  // R14：关联简历改为"内部 / 外部两组"的统一选择器（值域是 `internal:12` / `external:7`）。
+  const resumeSelect = useResumeRefSelect();
   const [items, setItems] = useState<Reminder[]>([]);
   const [kind, setKind] = useState<string | undefined>();
   // T06 时间范围：客户端筛选（列表本来就是客户端分页），不影响服务端的类型筛选。
@@ -167,12 +172,14 @@ export default function ReminderPanel({
       note: item.note,
       track_id: item.track_id ?? undefined,
       job_id: item.job_id ?? undefined,
-      resume_id: item.resume_id ?? undefined,
+      // R14：复合值（`internal:12` / `external:7`），提交时才拆回两个 id 字段。
+      resume_ref: reminderResumeValue(item),
     });
     // 已绑定目标的保显示（P0-1）：按 id 回查补进候选，再重置搜索列表。
     void trackSelect.ensure(item.track_id);
     void jobSelect.ensure(item.job_id);
-    void resumeSelect.ensure(item.resume_id);
+    // 外部简历回查 404 时用后端回显的名字降级，别让编辑旧记录显示裸 `external:7`。
+    void resumeSelect.ensure(reminderResumeValue(item), item.external_resume_name);
     void trackSelect.reload();
     void jobSelect.reload();
     void resumeSelect.reload();
@@ -191,7 +198,8 @@ export default function ReminderPanel({
       return;
     }
     setSaving(true);
-    const payload = {
+    // 标成 `ReminderPayload`：两个 id 字段类型上是 `number | null`，塞整条记录会编译报错。
+    const payload: ReminderPayload = {
       title: values.title,
       remind_at: values.remind_at.toISOString(),
       kind: values.kind,
@@ -200,7 +208,9 @@ export default function ReminderPanel({
       note: values.note ?? "",
       track_id: values.track_id ?? null,
       job_id: values.job_id ?? null,
-      resume_id: values.resume_id ?? null,
+      // R14：复合值拆成两个互斥字段，**两个键都给**——PATCH 是"显式给出才改"，只给
+      // 其中一个会让库里的另一个留着，合并后变成"两个都关联"（后端 422）。
+      ...resumeRefIds(values.resume_ref),
     };
     try {
       if (editing) await updateReminder(editing.id, payload);
@@ -251,7 +261,7 @@ export default function ReminderPanel({
     if (!detail) return;
     void trackSelect.ensure(detail.track_id);
     void jobSelect.ensure(detail.job_id);
-    void resumeSelect.ensure(detail.resume_id);
+    void resumeSelect.ensure(reminderResumeValue(detail), detail.external_resume_name);
     // hook 的回调引用稳定，只跟随详情目标变化。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail]);
@@ -337,12 +347,10 @@ export default function ReminderPanel({
     },
   ];
 
-  /**
-   * 关联对象的显示名。未关联（或下拉里查不到）时返回 undefined，而不是 "-"：
-   * 详情抽屉按"空白即不存在"整行不渲染，一条没关联任何东西的提醒不该占三行 "–"。
-   */
-  const labelOf = (options: { value: number; label: string }[], id: number | null | undefined) =>
-    id == null ? undefined : options.find((option) => option.value === id)?.label;
+  /** R14：详情里的「关联简历」——外部带「外部 · 」前缀，内部用下拉回查到的名字。 */
+  const detailResumeLabel = detail
+    ? reminderResumeLabel(detail, resumeSelect.textOfRef(reminderResumeValue(detail)))
+    : undefined;
 
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
@@ -470,9 +478,10 @@ export default function ReminderPanel({
 
       <ReminderDetailDrawer
         detail={detail}
-        trackLabel={labelOf(trackSelect.options, detail?.track_id)}
-        jobLabel={labelOf(jobSelect.options, detail?.job_id)}
-        resumeLabel={labelOf(resumeSelect.options, detail?.resume_id)}
+        trackLabel={linkedLabelOf(trackSelect.options, detail?.track_id)}
+        jobLabel={linkedLabelOf(jobSelect.options, detail?.job_id)}
+        resumeLabel={detailResumeLabel}
+        resumeHref={detail ? reminderResumeHref(detail) : undefined}
         onMarkDone={() => {
           if (!detail) return;
           void setStatus(detail, "done");

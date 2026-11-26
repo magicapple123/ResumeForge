@@ -10,14 +10,20 @@
  * 5. 进度 / 岗位 / 简历三个关联字段收进「关联（选填）」折叠区，默认收起，
  *    收起时标题旁显示「已关联 N 项」。`forceRender` 让折叠里的值仍参与表单校验与提交，
  *    展开/收起不会丢已选值。
+ *
+ * R14：`关联简历` 从"只查内部简历"换成统一选择器 `useResumeRefSelect`
+ * （内部简历 / 外部简历两组并行查）。它的值域是复合串 `internal:12` / `external:7`，
+ * 所以表单里这一项叫 `resume_ref`——**提交时**再由调用方拆成 `resume_id` /
+ * `external_resume_id` 两个独立字段（见 `types/resumeRef.resumeRefIds`），
+ * 复合串永远不会出现在 `resume_id` 里，也不进请求体。
  */
 import { Collapse, DatePicker, Form, Input, Select, Space, Typography } from "antd";
 import type { FormInstance } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
+import type { useResumeRefSelect } from "../../hooks/useResumeRefSelect";
 import type {
   useJobSearchSelect,
-  useResumeSearchSelect,
   useTrackSearchSelect,
 } from "../../hooks/remoteSearchOptions";
 import { t } from "../../i18n";
@@ -46,7 +52,13 @@ export interface ReminderForm {
   note?: string;
   track_id?: number;
   job_id?: number;
-  resume_id?: number;
+  /**
+   * 关联简历的复合值（R14）：`internal:12` / `external:7` / 空。
+   *
+   * **只存在于表单 UI**：提交时拆成请求体里的 `resume_id` / `external_resume_id`
+   * 两个互斥字段（`types/resumeRef.resumeRefIds`），复合串不进协议。
+   */
+  resume_ref?: string;
 }
 
 interface Props {
@@ -57,7 +69,8 @@ interface Props {
   taskCardsEnabled: boolean | null;
   trackSelect: ReturnType<typeof useTrackSearchSelect>;
   jobSelect: ReturnType<typeof useJobSearchSelect>;
-  resumeSelect: ReturnType<typeof useResumeSearchSelect>;
+  /** 关联简历选择器（内部 / 外部两组，值域是复合串；R14）。 */
+  resumeSelect: ReturnType<typeof useResumeRefSelect>;
 }
 
 export default function ReminderFormFields({
@@ -78,8 +91,9 @@ export default function ReminderFormFields({
   const linkedCount = [
     form.getFieldValue("track_id"),
     form.getFieldValue("job_id"),
-    form.getFieldValue("resume_id"),
-  ].filter((value): value is number => typeof value === "number").length;
+    // R14：外部简历也算「关联了 1 项」——计数问的是"关联了几个对象"，不是"关联了哪张表"。
+    form.getFieldValue("resume_ref"),
+  ].filter((value) => value !== undefined && value !== null && value !== "").length;
 
   const linkLabel = (
     <Space size={6}>
@@ -196,7 +210,12 @@ export default function ReminderFormFields({
                     {...jobSelect.selectProps}
                   />
                 </Form.Item>
-                <Form.Item label={t("reminder.field.resume")} name="resume_id">
+                {/*
+                  R14：关联简历 = 一个下拉、两组选项（内部 / 外部），值域是复合串
+                  `internal:12` / `external:7`。复合串只活在表单里，提交时由调用方拆成
+                  `resume_id` / `external_resume_id` 两个互斥字段。
+                */}
+                <Form.Item label={t("reminder.field.resume")} name="resume_ref">
                   <Select
                     allowClear
                     placeholder={t("reminder.placeholder.resume")}

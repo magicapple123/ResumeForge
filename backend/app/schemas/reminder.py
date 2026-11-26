@@ -25,6 +25,12 @@ from ..vocabulary.reminder import (
 MAX_REMINDER_TITLE_CHARS = 200
 MAX_REMINDER_NOTE_CHARS = 4000
 
+#: 内外简历互斥的统一文案（R14）。schema 层的 422 与 service 层"合并后状态"的 422 必须
+#: 说同一句话——用户不该因为"两个都给了"和"改完变成两个"看到两种不同的解释。
+REMINDER_RESUME_LINK_CONFLICT = (
+    "一条提醒只能关联一份简历：内部简历与外部简历二选一，请取消其中一个"
+)
+
 ReminderKind = Literal["interview", "assessment_deadline", "hr_reply", "other"]
 #: 计划状态（DB 列 ``reminder.status``）：这条提醒还要不要继续。
 ReminderStatus = Literal["active", "archived"]
@@ -71,6 +77,10 @@ class ReminderCreate(BaseModel):
     track_id: int | None = Field(default=None, ge=1)
     job_id: int | None = Field(default=None, ge=1)
     resume_id: int | None = Field(default=None, ge=1)
+    #: 外部简历（R14）：用户在别处生成的原件。与 ``resume_id`` **互斥**——一条提醒这次
+    #: 要跟进的只能是"一份"简历，两个都填会让读侧（提醒卡 / 通知落点 / 助手）必须解释
+    #: "以谁为准"，而那个答案永远不合理。
+    external_resume_id: int | None = Field(default=None, ge=1)
     note: str = Field(default="", max_length=MAX_REMINDER_NOTE_CHARS)
 
     @field_validator("title")
@@ -80,6 +90,18 @@ class ReminderCreate(BaseModel):
         if not cleaned:
             raise ValueError("提醒标题不能为空")
         return cleaned
+
+    @model_validator(mode="after")
+    def resume_links_are_exclusive(self) -> "ReminderCreate":
+        """内外简历不能同时关联（R14，沿用 ``application_track`` 的先例）。
+
+        为什么是 422 而不是"后一个覆盖前一个"：两个字段同时非空只可能来自调用方把两次
+        选择叠在同一个 payload 里（前端漏清另一侧，或助手工具直接拼参数）。静默挑一个
+        会出现"界面显示 A、库里存 B"，而这条关联的全部用途就是回答"这次跟进哪一份"。
+        """
+        if self.resume_id is not None and self.external_resume_id is not None:
+            raise ValueError(REMINDER_RESUME_LINK_CONFLICT)
+        return self
 
     @field_validator("kind")
     @classmethod
@@ -113,6 +135,8 @@ class ReminderUpdate(BaseModel):
     track_id: int | None = Field(default=None, ge=1)
     job_id: int | None = Field(default=None, ge=1)
     resume_id: int | None = Field(default=None, ge=1)
+    #: 外部简历（R14）：与 ``resume_id`` 互斥，见 :meth:`resume_links_are_exclusive`。
+    external_resume_id: int | None = Field(default=None, ge=1)
     note: str | None = Field(default=None, max_length=MAX_REMINDER_NOTE_CHARS)
 
     @field_validator("title")
@@ -124,6 +148,30 @@ class ReminderUpdate(BaseModel):
         if not cleaned:
             raise ValueError("提醒标题不能为空")
         return cleaned
+
+    @model_validator(mode="after")
+    def resume_links_are_exclusive(self) -> "ReminderUpdate":
+        """PATCH 语义下只能校验**本次请求**，合并后的最终状态由 service 兜住。
+
+        为什么分两层：
+
+        - 这里只看"这次请求里两个字段都显式给了非空值"——这是调用方把两次选择叠在一起
+          的唯一特征，schema 能独立判定，不必读库。
+        - "合并后变成两个都有"（例如只给 ``external_resume_id``，而库里还存着
+          ``resume_id``）只有 service 拿得到旧行，见
+          ``reminder_service._assert_single_resume_link``。
+
+        反过来，"把 ``resume_id`` 置空 + 同时给 ``external_resume_id``"是**合法**的一次
+        改选：合并后只剩一份，不该被这里拦下。
+        """
+        if (
+            "resume_id" in self.model_fields_set
+            and "external_resume_id" in self.model_fields_set
+            and self.resume_id is not None
+            and self.external_resume_id is not None
+        ):
+            raise ValueError(REMINDER_RESUME_LINK_CONFLICT)
+        return self
 
     @field_validator("kind")
     @classmethod
@@ -180,6 +228,10 @@ class ReminderOut(ReminderCreate):
     id: int
     created_at: datetime
     updated_at: datetime
+    #: 外部简历标题（R14）：口径与 tracker 的外部简历标题一致——``external_resume.name``，
+    #: **实时读**（提醒没有标题快照列）。服务层把它挂到 ORM 实例上再序列化，见
+    #: ``reminder_service._attach_external_resume_names``；没关联外部简历时是空串。
+    external_resume_name: str = ""
 
 
 class ReminderUpcomingOut(ReminderOut):
@@ -214,6 +266,7 @@ class ReminderListItemOut(ReminderOut):
 __all__ = [
     "MAX_REMINDER_NOTE_CHARS",
     "MAX_REMINDER_TITLE_CHARS",
+    "REMINDER_RESUME_LINK_CONFLICT",
     "ReminderCreate",
     "ReminderKind",
     "ReminderListItemOut",

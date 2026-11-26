@@ -352,6 +352,9 @@ def test_three_route_response_shapes_unchanged(client):
         # CR-28：重复规则与结束条件随创建即回（none 也显式给出，前端不必猜）。
         "recurrence",
         "recurrence_until",
+        # R14：外部简历关联与标题回显（与 resume_id 互斥）随创建即回。
+        "external_resume_id",
+        "external_resume_name",
     }
 
     created = client.post(

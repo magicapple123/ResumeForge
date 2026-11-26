@@ -69,6 +69,8 @@ const reminder = {
   "reminder.detail.title": "Reminder details",
   "reminder.detail.track": "Application progress",
   "reminder.detail.job": "Job",
+  /** Source tag for a linked resume (R14): an uploaded resume renders as "External · file". */
+  "reminder.resume.externalTag": "External",
   "reminder.detail.resume": "Resume",
   "reminder.detail.createdAt": "Created",
   "reminder.detail.updatedAt": "Updated",

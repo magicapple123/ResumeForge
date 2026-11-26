@@ -108,6 +108,11 @@ class CreateReminderInput(ReminderCreate):
     track_id: int | None = Field(default=None, ge=1, description="可选，关联求职进度记录 id")
     job_id: int | None = Field(default=None, ge=1, description="可选，关联岗位 id")
     resume_id: int | None = Field(default=None, ge=1, description="可选，关联简历 id")
+    #: R14：外部简历与 ``resume_id`` 互斥（同时给 → 422）。补一条描述只影响工具 schema，
+    #: 字段本身继承自 ``ReminderCreate``，路由侧唯一真源不变。
+    external_resume_id: int | None = Field(
+        default=None, ge=1, description="可选，关联外部简历（上传的原件）id；与 resume_id 二选一"
+    )
     note: str = Field(default="", max_length=MAX_REMINDER_NOTE_CHARS, description="备注，可选")
 
 

@@ -307,3 +307,133 @@ def test_reminder_popup_setting_default_and_toggle(client):
         "enabled": True
     }
     assert client.get("/api/settings/reminder-popup").json() == {"enabled": True}
+
+
+# ===== R14：提醒可关联外部简历（互斥 + 标题回显）=====
+
+
+def _external_resume(client, display_name: str = "外部简历.pdf") -> int:
+    """用应用自己的上传接口造一份外部简历（不直接 INSERT）。
+
+    正文走纯文本（解析器能读），展示名由 ``name`` 表单字段覆盖——名字才是 R14 要回显的东西。
+    """
+    response = client.post(
+        "/api/external-resumes",
+        files={"file": ("upload.txt", b"External resume body", "text/plain")},
+        data={"name": display_name},
+    )
+    assert response.status_code == 201, response.text
+    return int(response.json()["id"])
+
+
+def _detail_text(response) -> str:
+    """422 的 detail 在两侧形状不同（schema 校验 = 字符串列表 / message，契约层 = dict）。"""
+    return str(response.json().get("detail", ""))
+
+
+def test_external_resume_link_saves_and_echoes_name(client):
+    """只给 ``external_resume_id`` → 保存成功，且详情/列表/upcoming 都回显名字。"""
+    external_id = _external_resume(client, "后端工程师-外投版.pdf")
+    created = client.post(
+        "/api/reminders",
+        json={
+            "title": "给外部简历那份投的岗催回复",
+            "remind_at": "2026-12-01T10:00:00",
+            "kind": "hr_reply",
+            "external_resume_id": external_id,
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["external_resume_id"] == external_id
+    assert body["resume_id"] is None
+    # 标题口径 = external_resume.name（与 tracker 一致）。
+    assert body["external_resume_name"] == "后端工程师-外投版.pdf"
+
+    listed = [row for row in client.get("/api/reminders").json() if row["id"] == body["id"]]
+    assert listed and listed[0]["external_resume_name"] == "后端工程师-外投版.pdf"
+    upcoming = {row["id"]: row for row in client.get("/api/reminders/upcoming").json()}
+    assert upcoming[body["id"]]["external_resume_id"] == external_id
+    assert upcoming[body["id"]]["external_resume_name"] == "后端工程师-外投版.pdf"
+
+
+def test_both_resume_links_rejected_with_422(client, db_session):
+    """同时传内部与外部 id → 422（互斥文案可读）。"""
+    resume = _resume(db_session)
+    external_id = _external_resume(client)
+    response = client.post(
+        "/api/reminders",
+        json={
+            "title": "两个都关联",
+            "remind_at": "2026-12-02T10:00:00",
+            "resume_id": resume.id,
+            "external_resume_id": external_id,
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert "二选一" in _detail_text(response)
+    # 一条都没写进去。
+    assert client.get("/api/reminders").json() == []
+
+
+def test_patch_can_switch_internal_to_external_but_not_keep_both(client, db_session):
+    """PATCH 看**合并后**的状态：置空内部 + 给外部 → 成功；只给外部 → 422。"""
+    resume = _resume(db_session)
+    external_id = _external_resume(client, "换掉的版本.docx")
+    created = client.post(
+        "/api/reminders",
+        json={
+            "title": "改选简历",
+            "remind_at": "2026-12-03T10:00:00",
+            "resume_id": resume.id,
+        },
+    ).json()
+
+    # 只给外部、内部还挂着 → 合并后两个都有 → 422（schema 拦不住，靠 service 兜）。
+    conflict = client.patch(
+        f"/api/reminders/{created['id']}", json={"external_resume_id": external_id}
+    )
+    assert conflict.status_code == 422, conflict.text
+    assert "二选一" in _detail_text(conflict)
+
+    # 置空内部 + 给外部 → 合法改选。
+    switched = client.patch(
+        f"/api/reminders/{created['id']}",
+        json={"resume_id": None, "external_resume_id": external_id},
+    )
+    assert switched.status_code == 200, switched.text
+    body = switched.json()
+    assert body["resume_id"] is None
+    assert body["external_resume_id"] == external_id
+    assert body["external_resume_name"] == "换掉的版本.docx"
+
+
+def test_external_resume_link_to_missing_or_deleted_row_is_cleared(client, db_session):
+    """指向不存在 / 已软删的外部简历 → 与内部简历同口径：置空，而不是写入失败。"""
+    created = client.post(
+        "/api/reminders",
+        json={
+            "title": "关联到不存在的简历",
+            "remind_at": "2026-12-04T10:00:00",
+            "external_resume_id": 9999,
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["external_resume_id"] is None
+    assert created.json()["external_resume_name"] == ""
+
+    external_id = _external_resume(client, "会被删掉的.txt")
+    linked = client.post(
+        "/api/reminders",
+        json={
+            "title": "关联后简历被删",
+            "remind_at": "2026-12-05T10:00:00",
+            "external_resume_id": external_id,
+        },
+    ).json()
+    assert client.delete(f"/api/external-resumes/{external_id}").status_code in (200, 204)
+    db_session.expire_all()
+    # 软删后：提醒仍在，名字不再回显（关联对象在回收站里 = 不存在）。
+    listed = {row["id"]: row for row in client.get("/api/reminders").json()}
+    assert listed[linked["id"]]["external_resume_id"] == external_id
+    assert listed[linked["id"]]["external_resume_name"] == ""

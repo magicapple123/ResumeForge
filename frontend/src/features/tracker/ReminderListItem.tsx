@@ -19,6 +19,7 @@ import { t } from "../../i18n";
 import { reminderKindLabelKey, reminderStatusLabelKey } from "../../i18n/enum/reminder";
 import { useLocale } from "../../i18n/i18nContext";
 import ReminderSnoozeMenu from "./ReminderSnoozeMenu";
+import { reminderResumeExternalLabel } from "./reminderResumeLink";
 
 interface Props {
   item: Reminder;
@@ -58,6 +59,8 @@ export default function ReminderListItem({
   // 两个 Tag：协议值先映到语言包 key；未知取值回退成后端下发的原值（不丢信息）。
   const kindLabelKey = reminderKindLabelKey(item.kind);
   const statusLabelKey = reminderStatusLabelKey(item.status);
+  // R14：外部简历的展示名（「外部 · xxx.pdf」）；没关联外部简历时 undefined。
+  const externalResume = reminderResumeExternalLabel(item);
   // 多选模式：行简化为勾选框 + 点行切换，不提供单行操作。
   if (selecting) {
     return (
@@ -174,6 +177,11 @@ export default function ReminderListItem({
           description={
             <Typography.Text type="secondary">
               {formatDateTime(item.remind_at)}
+              {/*
+                R14：关联了外部简历就在副行里标出来（「外部 · xxx.pdf」）。内部简历不在这里
+                显示：它没有后端回显的名字，行内也放不下，详情抽屉里看即可。
+              */}
+              {externalResume ? ` · ${externalResume}` : ""}
               {item.note ? ` · ${item.note}` : ""}
             </Typography.Text>
           }

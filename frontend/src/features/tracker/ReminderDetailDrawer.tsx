@@ -7,6 +7,7 @@
  */
 import { CheckOutlined, EditOutlined } from "@ant-design/icons";
 import { Button, Space, Tag } from "antd";
+import { Link } from "react-router-dom";
 import { t } from "../../i18n";
 import { reminderKindLabelKey, reminderStatusLabelKey } from "../../i18n/enum/reminder";
 import { useLocale } from "../../i18n/i18nContext";
@@ -20,6 +21,11 @@ interface Props {
   trackLabel: string | undefined;
   jobLabel: string | undefined;
   resumeLabel: string | undefined;
+  /**
+   * 关联简历的跳转地址（R14）：外部简历没有自己的路由，只能"打开外部简历列表 +
+   * `?resume=<id>`"，由列表页决定是否展开详情。不给 = 纯文本（查不到名字时的降级态）。
+   */
+  resumeHref?: string;
   onMarkDone: () => void;
   onEdit: () => void;
   onClose: () => void;
@@ -30,6 +36,7 @@ export default function ReminderDetailDrawer({
   trackLabel,
   jobLabel,
   resumeLabel,
+  resumeHref,
   onMarkDone,
   onEdit,
   onClose,
@@ -59,7 +66,16 @@ export default function ReminderDetailDrawer({
               { label: t("reminder.field.time"), value: formatDateTime(detail.remind_at) },
               { label: t("reminder.detail.track"), value: trackLabel },
               { label: t("reminder.detail.job"), value: jobLabel },
-              { label: t("reminder.detail.resume"), value: resumeLabel },
+              {
+                label: t("reminder.detail.resume"),
+                // 外部简历：点了只能落到列表页（+ `?resume=` 让列表有机会展开详情）。
+                value:
+                  resumeHref && resumeLabel ? (
+                    <Link to={resumeHref}>{resumeLabel}</Link>
+                  ) : (
+                    resumeLabel
+                  ),
+              },
               { label: t("reminder.detail.createdAt"), value: formatDateTime(detail.created_at) },
               { label: t("reminder.detail.updatedAt"), value: formatDateTime(detail.updated_at) },
             ]

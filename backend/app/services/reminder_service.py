@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from ..models.external_resume import ExternalResume
 from ..models.job import Job
 from ..models.profile import utcnow
 from ..models.reminder import (
@@ -42,6 +43,12 @@ from ..schemas.reminder import (
     ReminderUrgency,
 )
 from . import trash
+from .reminder_links import (
+    assert_single_resume_link as _assert_single_resume_link,
+)
+from .reminder_links import (
+    attach_external_resume_names as _attach_external_resume_names,
+)
 from .reminder_occurrences import (
     archive_reminder,
     as_naive_utc,
@@ -59,8 +66,11 @@ MAX_REMINDER_LIST = 500
 
 #: 旧二态入口 -> 计划状态。列表筛选收到旧值时按"归档"理解（旧 done/dismissed 的行已被
 #: 迁移归档），助手工具的 status 白名单因此不用跟着改。
-_LEGACY_STATUS_FILTERS = {"pending": REMINDER_STATUS_ACTIVE, "done": REMINDER_STATUS_ARCHIVED,
-                          "dismissed": REMINDER_STATUS_ARCHIVED}
+_LEGACY_STATUS_FILTERS = {
+    "pending": REMINDER_STATUS_ACTIVE,
+    "done": REMINDER_STATUS_ARCHIVED,
+    "dismissed": REMINDER_STATUS_ARCHIVED,
+}
 
 # ===== 首页紧急度（前后端共用一份取值）=====
 # 四档同时是 `ReminderUpcomingOut.urgency` 的取值域：这里标成 `ReminderUrgency`，
@@ -193,9 +203,7 @@ def list_reminders(
         # 有待办才排得上"接下来要做什么"：join 子查询，排序键就是那一刻。
         query, sub = _pending_query(db)
     else:
-        query = db.query(Reminder).filter(
-            trash.live_only(Reminder), Reminder.status == clause
-        )
+        query = db.query(Reminder).filter(trash.live_only(Reminder), Reminder.status == clause)
         sub = None
     if kind.strip():
         query = query.filter(Reminder.kind == kind.strip())
@@ -248,6 +256,7 @@ def reminder_list_items_out(
     """列表接口的完整回显：在 ``list_reminders`` 的筛选/排序之上补两个派生字段。"""
     rows = list_reminders(db, kind=kind, status=status, limit=limit)
     moment = now or utcnow()
+    _attach_external_resume_names(db, rows)
     return [reminder_list_item_out(row, moment) for row in rows]
 
 
@@ -255,6 +264,7 @@ def upcoming_reminders_out(db: Session, *, limit: int = 50) -> list[ReminderUpco
     """待办提醒的首页回显：只返回 pending，按紧急度+时间升序。"""
     rows = upcoming_reminders(db, limit=limit)
     now = utcnow()
+    _attach_external_resume_names(db, rows)
     items = [upcoming_reminder_out(row, now) for row in rows]
     items.sort(key=lambda item: (_URGENCY_RANK[item.urgency], item.remind_at, item.id))
     return items
@@ -266,7 +276,7 @@ def reminder_or_none(db: Session, reminder_id: int) -> Reminder | None:
 
 
 def _resolve_bindings(db: Session, values: dict) -> dict:
-    """校验三个绑定对象：不存在或已软删则置空（SET NULL 语义）。"""
+    """校验四个绑定对象：不存在或已软删则置空（SET NULL 语义）。"""
     if (
         values.get("track_id") is not None
         and trash.get_live(db, ApplicationTrack, values["track_id"]) is None
@@ -279,6 +289,13 @@ def _resolve_bindings(db: Session, values: dict) -> dict:
         and trash.get_live(db, ResumeRecord, values["resume_id"]) is None
     ):
         values["resume_id"] = None
+    # 外部简历（R14）与内部简历**同一个口径**：指向已删除 / 在回收站里的记录时置空，
+    # 而不是让整条提醒写不进去。提醒本身是"什么时候该做什么"，关联只是附加信息。
+    if (
+        values.get("external_resume_id") is not None
+        and trash.get_live(db, ExternalResume, values["external_resume_id"]) is None
+    ):
+        values["external_resume_id"] = None
     return values
 
 
@@ -294,7 +311,11 @@ def create_reminder(db: Session, payload: ReminderCreate) -> Reminder:
     # 这里只提交；不要在这里再补一次，否则两条路径会各自维护同一不变量。
     db.commit()
     db.refresh(reminder)
-    logger.info("已新增提醒 id=%s kind=%s recurrence=%s", reminder.id, reminder.kind, reminder.recurrence)
+    # 写操作回显 ``ReminderOut``：外部简历名同样要带上（前端保存后即刻显示「外部 · …」）。
+    _attach_external_resume_names(db, [reminder])
+    logger.info(
+        "已新增提醒 id=%s kind=%s recurrence=%s", reminder.id, reminder.kind, reminder.recurrence
+    )
     return reminder
 
 
@@ -311,6 +332,9 @@ def update_reminder(db: Session, reminder: Reminder, payload: ReminderUpdate) ->
     （改到未来再改回过去能重新提醒）。CR-26：计划归档时回收它生成的未终态任务卡。
     """
     values = _resolve_bindings(db, payload.model_dump(exclude_unset=True))
+    # R14：内外简历互斥要看**合并后**的状态（schema 只校验得动本次请求体）。
+    # 必须在 ``_resolve_bindings`` 之后：指向已删除记录的 id 已被置空，不该再算冲突。
+    _assert_single_resume_link(reminder, values)
     raw_status = values.pop("status", None)
     if values.get("remind_at") is not None:
         values["remind_at"] = to_naive_utc(values["remind_at"])
@@ -342,9 +366,7 @@ def update_reminder(db: Session, reminder: Reminder, payload: ReminderUpdate) ->
             ),
         )
         # 只回收**这一次**生成的任务卡：重复计划的下一次还没建卡，不能被连坐。
-        _cancel_tasks_for_reminder(
-            db, reminder.id, raw_status, due_at=settled.get("due_at")
-        )
+        _cancel_tasks_for_reminder(db, reminder.id, raw_status, due_at=settled.get("due_at"))
     elif raw_status in ("active", "pending"):
         archive_reminder(db, reminder, archived=False)
     elif raw_status == REMINDER_STATUS_ARCHIVED:
@@ -352,6 +374,7 @@ def update_reminder(db: Session, reminder: Reminder, payload: ReminderUpdate) ->
             _cancel_tasks_for_reminder(db, reminder.id, REMINDER_STATUS_ARCHIVED)
     db.commit()
     db.refresh(reminder)
+    _attach_external_resume_names(db, [reminder])
     return reminder
 
 
@@ -370,6 +393,7 @@ def snooze_reminder(
     snooze_occurrence(db, reminder, preset=preset, until=until, now=now)
     db.commit()
     db.refresh(reminder)
+    _attach_external_resume_names(db, [reminder])
     return reminder
 
 
@@ -399,10 +423,7 @@ def _cancel_tasks_for_reminder(
     if due_at is not None:
         # 只清算这一次；没写 occurrence_due_at 的旧卡不在这里被误伤。
         conditions.append(AgentTask.occurrence_due_at == due_at)
-    task_ids = [
-        int(task_id)
-        for (task_id,) in db.query(AgentTask.id).filter(*conditions).all()
-    ]
+    task_ids = [int(task_id) for (task_id,) in db.query(AgentTask.id).filter(*conditions).all()]
     if not task_ids:
         return 0
     moment = utcnow()
