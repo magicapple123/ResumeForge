@@ -167,6 +167,14 @@
   background: var(--rf-border-strong);
 }
 
+/* `?track=N` 深链定位到的那一行（整改 #18）：**临时底色**，2 秒后由 JS 摘掉 class。
+   不做常驻左色条（第 13 条已按用户意见砍掉），所以这里只动背景、不动排版，
+   避免行高变化把"圆点落在同一条竖线"顶歪。 */
+.track-card.is-highlighted {
+  background: color-mix(in srgb, var(--rf-brand) 10%, transparent);
+  transition: background 240ms ease-out;
+}
+
 /* 状态胶囊改成可点（整改 #15）：容器是原生 <button>，默认外观全部重置为"无外观"，
    且**不加 padding**——定宽 118px 仍挂在里面那个 `.track-status` 上，
    这样右侧列宽与圆点的 x 坐标与改动前逐像素一致（跨行扫视时圆点必须落在同一竖线上）。 */

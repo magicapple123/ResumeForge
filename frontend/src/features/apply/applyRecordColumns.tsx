@@ -51,6 +51,13 @@ export function buildApplyRecordColumns({
           )}
           {/* #15B JD 变更（被动式）：徽标与抽屉整块在组件里，本文件只挂一行。 */}
           <JdChangeBadge record={record} />
+          {/* #18：写没写过是这一行自己的事实（后端 track_id），刷新后仍然成立。
+              小字、次要色，追加在副行里，不另起一行——记录行已经三行了。 */}
+          {record.track_id != null && (
+            <Typography.Text type="secondary" className="apply-record-tracked">
+              {t("applyRecords.track.linked")}
+            </Typography.Text>
+          )}
         </Space>
       ),
     },

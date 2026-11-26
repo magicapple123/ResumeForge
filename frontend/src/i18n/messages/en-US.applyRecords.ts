@@ -44,8 +44,12 @@ const applyRecords = {
   "applyRecords.stale.done": "Marked {count} applications as in progress",
   "applyRecords.stale.partial": "{ok} recorded, {failed} failed - try again",
   "applyRecords.action.track": "Update progress",
+  "applyRecords.action.viewTrack": "View progress",
   "applyRecords.track.hint":
-    "Records an entry in Job tracker (reused when it already exists), where you can update the stage",
+    "Records an entry in Job tracker (reused when it already exists); this row can then take you there",
+  "applyRecords.track.hintLinked": "Already in Job tracker - open it",
+  "applyRecords.track.view": "View",
+  "applyRecords.track.linked": "In Job tracker",
   "applyRecords.toast.tracked": "Recorded this application in Job tracker",
   "applyRecords.toast.trackUpdated": "Updated this application in Job tracker",
   "applyRecords.error.trackFailed": "Could not record it in Job tracker, try again",

@@ -42,6 +42,11 @@ interface Props {
   onStatusChange?: (track: Track, next: TrackStatus) => void;
   /** 这一行正在提交状态：胶囊半透明且不响应点击（防连点写两条事件）。 */
   statusPending?: boolean;
+  /**
+   * `?track=N` 深链刚定位到这一行（整改 #18）：临时底色 2 秒后自动摘掉。
+   * 只是"就是这一条"的提示，不是常驻标记（不要做成左色条）。
+   */
+  highlighted?: boolean;
   /** 长列表每 10 行的分组起点：加一条 2px 细分隔，不重新加回卡片。 */
   groupStart?: boolean;
 }
@@ -80,6 +85,7 @@ export default function TrackCard({
   onDelete,
   onStatusChange,
   statusPending = false,
+  highlighted = false,
   groupStart = false,
 }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后行内容停在旧文案。
@@ -107,6 +113,7 @@ export default function TrackCard({
   const className = [
     "track-card",
     isActiveStatus(track.status) ? "is-active" : "",
+    highlighted ? "is-highlighted" : "",
     groupStart ? "is-group-start" : "",
   ]
     .filter(Boolean)
@@ -166,7 +173,12 @@ export default function TrackCard({
   return (
     // data-stage-index 注入阶段色（--rf-stage-color/--rf-stage-bar，见 tracker-board.css）：
     // 左侧 3px 竖条与状态圆点用与构成条同一套颜色；「已结束 / 待确认」不在主线，index 为 -1。
-    <article className={className} data-stage-index={FUNNEL_STATUSES.indexOf(track.status)}>
+    // data-track-id：`?track=N` 深链按它找人滚动（整改 #18），所以只能是 id 本身。
+    <article
+      className={className}
+      data-stage-index={FUNNEL_STATUSES.indexOf(track.status)}
+      data-track-id={track.id}
+    >
       <header className="track-card-head">
         <div className="track-card-ident">
           <Typography.Text strong>

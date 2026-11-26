@@ -10,6 +10,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyRecord } from "../../types";
 
@@ -95,10 +96,19 @@ function renderBanner() {
 
 function renderTrackButton(record: ApplyRecord = RECORD) {
   return render(
-    <AntdApp>
-      <ApplyRecordTrackButton record={record} />
-    </AntdApp>,
+    <MemoryRouter initialEntries={["/apply/records"]}>
+      <AntdApp>
+        <ApplyRecordTrackButton record={record} />
+        <LocationProbe />
+      </AntdApp>
+    </MemoryRouter>,
   );
+}
+
+/** 读当前 URL：`查看进度` 的去处必须断言真实地址，不看按钮文案就完事。 */
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
 }
 
 describe("ApplyStaleBanner（7 天无回音）", () => {
@@ -178,5 +188,56 @@ describe("ApplyRecordTrackButton（更新进度）", () => {
     renderTrackButton({ ...RECORD, job_id: null });
 
     expect(await screen.findByRole("button", { name: /更新进度/ })).toBeDisabled();
+  });
+});
+
+/**
+ * #18：写完之后要有去处。
+ *
+ * 三态由**接口字段** `record.track_id` 驱动（刷新后仍成立），不是"这次点成功了"这类
+ * 内存状态；成功后按钮就地变「查看进度」并深链到**那一条**的 id（`?track=N`，
+ * 不能用 `?job_id=` 顶替——同一岗位可能有多条进度）。
+ */
+describe("ApplyRecordTrackButton 的查看进度（#18）", () => {
+  function currentUrl(): string {
+    return screen.getByTestId("location").textContent ?? "";
+  }
+
+  it("已经写过（record.track_id 有值）时初始就是「查看进度」，不依赖本次点击", async () => {
+    renderTrackButton({ ...RECORD, track_id: 55 });
+
+    const button = await screen.findByRole("button", {
+      // 名字里还带着图标的 aria-label（antd 的 icon 是 role="img"），所以用正则取子串。
+      name: new RegExp(t("applyRecords.action.viewTrack")),
+    });
+    // 初始态就来自后端字段：刷新一次也不会退回「更新进度」。
+    expect(apiMocks.trackApplyRecord).not.toHaveBeenCalled();
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(currentUrl()).toBe("/tracker?track=55"));
+  });
+
+  it("点完「更新进度」：按钮就地变「查看进度」，toast 里的「查看」跳到那一条", async () => {
+    apiMocks.trackApplyRecord.mockResolvedValue({ track_id: 88, created: true, stage: "applied" });
+
+    renderTrackButton();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: new RegExp(t("applyRecords.action.track")) }),
+    );
+
+    // 按钮态由刚拿到的 track_id 驱动（观感即时，不必等列表重拉）。
+    expect(
+      await screen.findByRole("button", {
+        name: new RegExp(t("applyRecords.action.viewTrack")),
+      }),
+    ).toBeInTheDocument();
+
+    const view = await screen.findByRole("button", { name: t("applyRecords.track.view") });
+    fireEvent.click(view);
+
+    // 反证对象：删掉 openTracker 里的 navigate 调用 → 这一条精确变红。
+    await waitFor(() => expect(currentUrl()).toBe("/tracker?track=88"));
   });
 });

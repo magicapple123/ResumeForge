@@ -41,6 +41,7 @@ import TrackCard from "../features/tracker/TrackCard";
 import TrackFormModal from "../features/tracker/TrackFormModal";
 import TrackImportModal from "../features/tracker/TrackImportModal";
 import { useTrackerDeepLink } from "../features/tracker/useTrackerDeepLink";
+import { useTrackerTrackFocus } from "../features/tracker/useTrackerTrackFocus";
 import { useTrackStatusChange } from "../features/tracker/useTrackStatusChange";
 import { useApi } from "../hooks/useApi";
 import { useDeleteUndo } from "../features/trash/useDeleteUndo";
@@ -62,7 +63,7 @@ export default function TrackerPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   // 三个深链参数（job_id / reminder / track）由**同一份**解析与清理逻辑处理：
   // 各写一份会在关闭抽屉时互相覆盖（例如关提醒把刚点的 track 一起删掉）。
-  const { links, clear: clearDeepLink } = useTrackerDeepLink();
+  const { links, clear: clearDeepLink, focusJob } = useTrackerDeepLink();
   const [status, setStatus] = useState(searchParams.get("status") ?? "");
   const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
   // 搜索框受控镜像（同 JobFilterBar 的处理）：URL 恢复的关键词能回填输入框。
@@ -184,6 +185,17 @@ export default function TrackerPage() {
 
   const items = useMemo(() => data?.items ?? [], [data]);
   const totalCount = data?.total ?? 0;
+  const itemIds = useMemo(() => items.map((row) => row.id), [items]);
+
+  // `?track=N` 深链（整改 #18）：解析出这条的 job_id 并收窄筛选，等那一行真的加载出来
+  // 再滚过去 + 高亮 2 秒。404（记录已删）只提示一句并去掉参数，**保留用户原视图**。
+  const clearTrackLink = useCallback(() => clearDeepLink("track"), [clearDeepLink]);
+  const highlightedTrackId = useTrackerTrackFocus({
+    trackId: links.trackId,
+    loadedIds: itemIds,
+    onFilterJob: focusJob,
+    onMissing: clearTrackLink,
+  });
 
   // 软删可撤销：单条删除不再前置确认，Toast 里给 5 秒「撤销」（见 useDeleteUndo）。
   // 批量走的是本页之外的路径，不受这里影响。
@@ -340,6 +352,7 @@ export default function TrackerPage() {
             onDelete={() => void remove(track)}
             onStatusChange={(target, next) => void statusChange.change(target, next)}
             statusPending={statusChange.pendingId === track.id}
+            highlighted={highlightedTrackId === track.id}
           />
         ))}
       </div>

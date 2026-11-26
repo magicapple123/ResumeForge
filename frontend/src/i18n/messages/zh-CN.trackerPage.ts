@@ -37,6 +37,8 @@ const trackerPage = {
   "trackerPage.linkedJob.prefix": "只看该岗位的投递：{label}",
   "trackerPage.linkedJob.unknownName": "岗位 #{id}",
   "trackerPage.linkedJob.deleted": "该岗位可能已删除",
+  /** #18 `?track=N` 深链：记录已被删（404）时**不清空视图**，只提示一句并去掉参数。 */
+  "trackerPage.trackFocus.missing": "这条投递进度已经不在了（可能已被删除）",
   "trackerPage.empty.filtered": "没有符合条件的记录",
   "trackerPage.empty.initial":
     "还没有进度记录。投递台投出的岗位会自动出现在这里，也可以点「从通知导入」把邮箱里的进展整理进来。",

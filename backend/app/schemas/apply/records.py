@@ -48,6 +48,13 @@ class ApplyRecordOut(BaseModel):
     # 记录表里没有这一列，服务层批量算好后传入；岗位不在队列里（已投完移出、手改过队列）
     # 时为空 —— 此时徽标仍显示，但点不开：抽屉端点只认队列条目 id，不许拿 job_id 去猜。
     queue_id: int | None = None
+    # #18：「更新进度」之后没有去处。这一行是否**已经**写进求职进度、写成了哪一条。
+    # 记录表里没有这一列，服务层按与 ``link_track`` 完全相同的查重键（先 job_id，再
+    # ``(company_key, title_key)`` 兜底）批量反查后传入。前端据此把按钮渲染成
+    # 「查看进度 ↗」（并深链到 ``/tracker?track=N``）；为 None = 还没写过。
+    # **必须与 :func:`services.apply.funnel.link_track` 的判定同源**：两边不一致就会
+    # 出现"列表说没写过、点一下却回 created=false"的矛盾。
+    track_id: int | None = None
     created_at: datetime
     finished_at: datetime | None = None
 

@@ -56,6 +56,11 @@ export interface TrackerDeepLinkState {
   links: TrackerDeepLinks;
   /** 只删指定键，其余参数（含 status/keyword 与另外两个深链）原样保留。 */
   clear: (key: TrackerDeepLinkKey) => void;
+  /**
+   * 把岗位筛选写回去（`?track=N` 解析出 `job_id` 之后要收窄范围，整改 #18）。
+   * 与 `clear("job_id")` 成对：写与删都在这里，页面不再各拼一份 `setSearchParams`。
+   */
+  focusJob: (jobId: number) => void;
 }
 
 /** 页面级 hook：读当前 URL 的深链参数，并提供"只删自己"的清理函数。 */
@@ -91,5 +96,21 @@ export function useTrackerDeepLink(): TrackerDeepLinkState {
     [setSearchParams],
   );
 
-  return { links, clear };
+  const focusJob = useCallback(
+    (jobId: number) => {
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          // 已经是这个岗位就不动：否则会多一条历史记录、还会触发一次无谓的重拉。
+          if (next.get("job_id") === String(jobId)) return next;
+          next.set("job_id", String(jobId));
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  return { links, clear, focusJob };
 }

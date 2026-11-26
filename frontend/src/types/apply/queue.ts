@@ -192,6 +192,17 @@ export interface ApplyRecord {
    *   （猜错会看到别人岗位的 diff，比不给更糟）。
    */
   queue_id?: number | null;
+  /**
+   * #18 这条记录**已经**写进求职进度、写成了哪一条（后端按与 `link_track` 完全相同的
+   * 查重键批量反查后下发）。记录表里没有这一列，所以是只读派生字段。
+   *
+   * - 有值 → 按钮渲染「查看进度 ↗」并深链到 `/tracker?track=N`，**刷新后仍然如此**；
+   * - 空 / 缺失 → 渲染「更新进度」。
+   *
+   * 不用「本次点击成功过」这种内存状态驱动按钮：刷新一次就退回「更新进度」，
+   * 用户会再点一次（后端查重兜住，体验是空转）。
+   */
+  track_id?: number | null;
   created_at: string;
   finished_at: string | null;
 }

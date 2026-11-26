@@ -34,6 +34,7 @@ from ...schemas.apply import (
 from ...schemas.common import Page
 from .. import trash
 from .lifecycle import jd_changed_map
+from .track_link_map import track_id_map
 
 _TASK_ITEM_STATUS_VALUES: tuple[TaskItemStatus, ...] = get_args(TaskItemStatus)
 _TASK_STATUS_VALUES: tuple[TaskStatus, ...] = get_args(TaskStatus)
@@ -98,7 +99,11 @@ def daily_success_count(db: Session) -> int:
 
 
 def _record_out(
-    item: ApplyTaskItem, *, jd_changed: bool = False, queue_id: int | None = None
+    item: ApplyTaskItem,
+    *,
+    jd_changed: bool = False,
+    queue_id: int | None = None,
+    track_id: int | None = None,
 ) -> ApplyRecordOut:
     """记录条目的出口结构。
 
@@ -109,6 +114,10 @@ def _record_out(
     ``queue_id`` 是 15B 抽屉的入口：记录行上的「JD 改过了」徽标要点开 before/after，而那个
     端点（``GET /queue/{id}/jd-change``）只认队列条目 id。岗位不在队列里时为空，前端据此
     只显示徽标、不给点击（绝不拿 job_id 顶替去猜一份别人的 diff）。
+
+    ``track_id``（#18）同理由 :func:`track_link_map.track_id_map` 整批算好：这条记录是否**已经**写进
+    求职进度。为空 = 还没写过，前端渲染「更新进度」；有值 = 渲染「查看进度 ↗」并深链到
+    ``/tracker?track=N``，刷新之后仍然如此。
     """
     return ApplyRecordOut(
         id=item.id,
@@ -134,6 +143,7 @@ def _record_out(
         attempt=item.attempt,
         jd_changed=jd_changed,
         queue_id=queue_id,
+        track_id=track_id,
         created_at=item.created_at,
         finished_at=item.finished_at,
     )
@@ -213,12 +223,15 @@ def list_records(
     flags = jd_changed_map(db, [row.job_id for row in rows])
     # 15B：同一次请求再算一次"这些岗位各自是哪条队列条目"（徽标点开抽屉要它的 id）。
     queue_ids = _queue_id_map(db, [row.job_id for row in rows])
+    # #18：同上，整页一次反查"这些记录是否已经写进求职进度"（按钮三态靠它，不能等点击）。
+    track_ids = track_id_map(db, rows)
     return [
         # job_id 在模型层可空（岗位删除后置空）；没有 job_id 就没有可比对的历史。
         _record_out(
             row,
             jd_changed=flags.get(row.job_id or 0, False),
             queue_id=queue_ids.get(row.job_id or 0),
+            track_id=track_ids.get(row.id),
         )
         for row in rows
     ], total
@@ -330,12 +343,15 @@ def list_record_batches(
         flags = jd_changed_map(db, [item.job_id for item in item_rows])
         # 队列条目映射同样整批一次算（不逐条查队列表）。
         queue_ids = _queue_id_map(db, [item.job_id for item in item_rows])
+        # #18：进度反查也整批一次算（组内每条记录都要能说清"写没写过"）。
+        track_ids = track_id_map(db, item_rows)
         for item in item_rows:
             items_by_task.setdefault(item.task_id, []).append(
                 _record_out(
                     item,
                     jd_changed=flags.get(item.job_id or 0, False),
                     queue_id=queue_ids.get(item.job_id or 0),
+                    track_id=track_ids.get(item.id),
                 )
             )
     batches = [
@@ -415,11 +431,14 @@ def list_batch_items(
     flags = jd_changed_map(db, [row.job_id for row in rows])
     # 一页明细一次算（徽标点开抽屉要队列条目 id，见 _queue_id_map）。
     queue_ids = _queue_id_map(db, [row.job_id for row in rows])
+    # #18：同样一页一次（这两处出口与列表共用同一份判定，展开分组后按钮态不会变）。
+    track_ids = track_id_map(db, rows)
     return [
         _record_out(
             row,
             jd_changed=flags.get(row.job_id or 0, False),
             queue_id=queue_ids.get(row.job_id or 0),
+            track_id=track_ids.get(row.id),
         )
         for row in rows
     ], total

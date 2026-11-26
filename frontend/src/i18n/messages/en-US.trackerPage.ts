@@ -34,6 +34,8 @@ const trackerPage = {
   "trackerPage.linkedJob.prefix": "Only applications for this Job: {label}",
   "trackerPage.linkedJob.unknownName": "Job #{id}",
   "trackerPage.linkedJob.deleted": "This Job may have been deleted",
+  /** #18 `?track=N` deep link: the record is gone (404) - keep the view, just drop the param. */
+  "trackerPage.trackFocus.missing": "That progress entry is gone (it may have been deleted)",
   "trackerPage.empty.filtered": "No entry matches the filters",
   "trackerPage.empty.initial":
     "No tracker entries yet. Jobs sent from the apply console show up here automatically; you can also use Import from messages to bring in progress from your inbox.",
