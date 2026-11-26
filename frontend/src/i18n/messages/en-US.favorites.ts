@@ -14,6 +14,15 @@ const favorites = {
   "favorites.column.postedAt": "Posted",
   "favorites.column.actions": "Actions",
   "favorites.column.resume": "Resume",
+  // T31: the resume tab now holds both kinds (internal + external), so each row says
+  // which table it came from — the two id spaces collide.
+  "favorites.column.kind": "Kind",
+  "favorites.kind.internal": "Internal",
+  "favorites.kind.external": "External",
+  "favorites.column.format": "Format",
+  "favorites.action.openResume": "Open resume details",
+  // T31: deep link to the resume hub (internal `?resume_id=`, external `?resume=`).
+  "favorites.action.openInHub": "Open in resume hub",
   "favorites.column.targetJob": "Target job",
   "favorites.column.source": "Source",
   "favorites.column.createdAt": "Created",

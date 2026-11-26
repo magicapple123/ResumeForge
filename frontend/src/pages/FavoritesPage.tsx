@@ -1,25 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 收藏夹：集中查看收藏的岗位与简历（#28 收藏夹改造成待投清单）。 */
-import { FileTextOutlined, SearchOutlined, StarFilled } from "@ant-design/icons";
-import { App, Button, Space, Table, Tabs, Tag, Tooltip, Typography } from "antd";
-import type { TableColumnsType } from "antd";
-import type { HTMLAttributes } from "react";
+import { FileTextOutlined, SearchOutlined } from "@ant-design/icons";
+import { App, Space, Tabs, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { addToQueue } from "../api/apply";
+import { listFavoriteResumes, type FavoriteResumeItem } from "../api/favorites";
 import {
   batchFavoriteJobs,
   downloadFavoritesExport,
   listFavoriteJobs,
   updateJob,
 } from "../api/jobs";
-import { listResumes, updateResumeFavorite } from "../api/resumes";
-import { RowActions, RowContextMenu, type RowActionItem } from "../components/common/RowActions";
+import { setExternalResumeFavorite } from "../api/externalResumes";
+import { updateResumeFavorite } from "../api/resumes";
 import EmptyState, { EmptyWatermark } from "../components/common/EmptyState";
 import ErrorState from "../components/common/ErrorState";
 import FavoriteJobsTable from "../features/favorites/FavoriteJobsTable";
+import FavoriteResumeTable from "../features/favorites/FavoriteResumeTable";
 import FavoritesBatchBar from "../features/favorites/FavoritesBatchBar";
 import FavoritesToolbar, { type StatusFilter } from "../features/favorites/FavoritesToolbar";
+import ExternalResumeDetailDrawer from "../features/resume/list/ExternalResumeDetailDrawer";
 import ResumeDetailModal from "../features/resume/list/ResumeDetailModal";
 import { useApi } from "../hooks/useApi";
 import {
@@ -29,15 +30,14 @@ import {
   type FavoriteSort,
   type JobList,
   type Page,
-  type ResumeBrief,
 } from "../types";
-import { formatDateTime } from "../utils/format";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 
 type FavoriteKind = "jobs" | "resumes";
 type FavoritePage =
-  { kind: "jobs"; page: Page<FavoriteJob> } | { kind: "resumes"; page: Page<ResumeBrief> };
+  | { kind: "jobs"; page: Page<FavoriteJob> }
+  | { kind: "resumes"; page: Page<FavoriteResumeItem> };
 
 export default function FavoritesPage() {
   useLocale();
@@ -55,7 +55,10 @@ export default function FavoritesPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sort, setSort] = useState<FavoriteSort>("favorited_desc");
   const [selectedKeys, setSelectedKeys] = useState<number[]>([]);
+  // 内部简历详情（标题弹层）与外部简历详情（原件/历史版本弹层）各自一个 id：
+  // 两种 kind 的 id 会撞号，合成一个 id 状态会让"点外部那行"打开内部同号的详情。
   const [previewId, setPreviewId] = useState<number | null>(null);
+  const [externalDetailId, setExternalDetailId] = useState<number | null>(null);
   const [updatingKey, setUpdatingKey] = useState("");
   const [busyKey, setBusyKey] = useState("");
   const updatingKeyRef = useRef("");
@@ -83,7 +86,10 @@ export default function FavoritesPage() {
         }),
       };
     }
-    return { kind, page: await listResumes({ favorite: true, page, page_size: pageSize }) };
+    // T31：简历页签走 `GET /api/favorites`——它一次返回**内部 + 外部**两种 kind
+    // （合并后按收藏时间倒序分页）。原先的 `listResumes({favorite:true})` 只认识
+    // 内部简历，外部简历收藏后在这里看不到。
+    return { kind, page: await listFavoriteResumes({ page, page_size: pageSize }) };
   }, [kind, page, pageSize, keyword, statusFilter, sort]);
 
   useEffect(() => {
@@ -126,14 +132,22 @@ export default function FavoritesPage() {
     [message, reload],
   );
 
+  /**
+   * 取消简历收藏：按行的 `kind` 分派到各自端点。
+   *
+   * 两条写入口都不在收藏页里"顺手刷新 updated_at"——内部走 T15、外部走 T28，最终都落到
+   * `services/favorites.update_favorite`（Core UPDATE + 抑制 `onupdate`）。收藏页只负责
+   * 调对那一个端点，取消成功后重新拉列表，这一行因此立刻消失（服务端口径是 `favorite=1`）。
+   */
   const removeResumeFavorite = useCallback(
-    async (resume: ResumeBrief) => {
-      const key = String(resume.id);
+    async (item: FavoriteResumeItem) => {
+      const key = item.ref || `${item.kind}:${item.id}`;
       if (updatingKeyRef.current) return;
       updatingKeyRef.current = key;
       setUpdatingKey(key);
       try {
-        await updateResumeFavorite(resume.id, false);
+        if (item.kind === "external") await setExternalResumeFavorite(item.id, false);
+        else await updateResumeFavorite(item.id, false);
         await reload();
       } catch (err) {
         message.error(err instanceof Error ? err.message : t("favorites.error.unfavoriteFailed"));
@@ -143,6 +157,36 @@ export default function FavoritesPage() {
       }
     },
     [message, reload],
+  );
+
+  /** 点行 → 打开**对应那张表**的详情；两条路径不共用 id 状态（会撞号）。 */
+  const openResumeDetail = useCallback((item: FavoriteResumeItem) => {
+    if (item.kind === "external") {
+      setExternalDetailId(item.id);
+      return;
+    }
+    setPreviewId(item.id);
+  }, []);
+
+  /**
+   * 「在简历中心打开」：跳该 kind 的既有深链，**不新造路由**。
+   *
+   * - 内部：`/resumes?resume_id=<id>`（`ResumesPage` 挂载即读它并打开详情，RF-11）；
+   * - 外部：`/resumes/external?resume=<id>`——与 T13「提醒 → 关联简历」同一个路径
+   *   （`features/tracker/reminderResumeLink.ts`）。该参数目前**还没有人消费**（外部页
+   *   只读 `job_id` / `keyword` / `sort`），所以这一跳至少落在外部简历列表上；
+   *   要让详情自动展开，得由 `ExternalResumePanel` 补读 `?resume=`（B 的文件）。
+   *   收藏页自身的"点进去看详情"因此走就地弹层，两条路互不依赖。
+   */
+  const openResumeInHub = useCallback(
+    (item: FavoriteResumeItem) => {
+      if (item.kind === "external") {
+        navigate("/resumes/external?resume=" + item.id);
+        return;
+      }
+      navigate("/resumes?resume_id=" + item.id);
+    },
+    [navigate],
   );
 
   /** #28D 行内编辑备注：成功后刷新（保留当前筛选），失败提示且不改本地数据。 */
@@ -228,102 +272,8 @@ export default function FavoritesPage() {
     [keyword, message, sort, statusFilter],
   );
 
-  const favoriteButton = (key: string, onClick: () => void) => (
-    <Tooltip title={t("favorites.action.unfavorite")}>
-      <Button
-        type="text"
-        aria-label={t("favorites.action.unfavorite")}
-        loading={updatingKey === key}
-        disabled={Boolean(updatingKey)}
-        icon={<StarFilled style={{ color: "var(--rf-favorite)" }} />}
-        onClick={onClick}
-      />
-    </Tooltip>
-  );
-
-  const secondaryActions = (item: JobList | ResumeBrief): RowActionItem[] =>
-    kind === "jobs"
-      ? [
-          {
-            key: "open",
-            label: t("favorites.action.openJob"),
-            onClick: () => navigate("/jobs?job_id=" + item.id),
-          },
-        ]
-      : [
-          {
-            key: "preview",
-            label: t("favorites.action.previewExport"),
-            onClick: () => setPreviewId(item.id),
-          },
-        ];
-
-  const contextActions = (item: JobList | ResumeBrief): RowActionItem[] => [
-    ...secondaryActions(item),
-    {
-      key: "unfavorite",
-      label: t("favorites.action.unfavorite"),
-      onClick: () =>
-        kind === "jobs"
-          ? void removeJobFavorite(item as JobList)
-          : void removeResumeFavorite(item as ResumeBrief),
-    },
-  ];
-
-  const resumeColumns: TableColumnsType<ResumeBrief> = [
-    {
-      title: t("favorites.column.resume"),
-      dataIndex: "title",
-      render: (_, resume) => (
-        <Button type="link" className="table-text-link" onClick={() => setPreviewId(resume.id)}>
-          {resume.title}
-        </Button>
-      ),
-    },
-    {
-      title: t("favorites.column.targetJob"),
-      width: 220,
-      render: (_, resume) => (
-        <Space size={4}>
-          <Tag color="blue">{resume.job_title || "-"}</Tag>
-          {resume.company && <Tag>{resume.company}</Tag>}
-        </Space>
-      ),
-    },
-    {
-      title: t("favorites.column.source"),
-      dataIndex: "source",
-      width: 110,
-      render: (value: ResumeBrief["source"]) =>
-        value === "manual" ? t("favorites.source.manual") : t("favorites.source.ai"),
-    },
-    {
-      title: t("favorites.column.createdAt"),
-      dataIndex: "created_at",
-      width: 160,
-      render: (value) => formatDateTime(value),
-    },
-    {
-      title: t("favorites.column.actions"),
-      width: 130,
-      align: "center",
-      render: (_, resume) => {
-        // key 前缀在 JSX 之外拼好：它是内部标识，不是界面文案（也不该进文案扫描语境）。
-        const resumeKey = String(resume.id);
-        return (
-          <Space size={4}>
-            {favoriteButton(resumeKey, () => void removeResumeFavorite(resume))}
-            <RowActions more={secondaryActions(resume)} />
-          </Space>
-        );
-      },
-    },
-  ];
-
   const jobPage = data?.kind === "jobs" ? data.page : undefined;
   const resumePage = data?.kind === "resumes" ? data.page : undefined;
-  const currentPage = jobPage ?? resumePage;
-  const items = currentPage?.items ?? [];
   const jobItems = jobPage?.items ?? [];
 
   return (
@@ -422,40 +372,33 @@ export default function FavoritesPage() {
           onSaveNote={(job, note) => void saveJobNote(job, note)}
         />
       ) : (
-        <Table<ResumeBrief>
-          rowKey="id"
-          columns={resumeColumns}
-          dataSource={items as ResumeBrief[]}
+        <FavoriteResumeTable
+          page={resumePage}
           loading={loading}
-          locale={{ emptyText: <EmptyState description={t("favorites.empty.resumes")} /> }}
-          components={{
-            body: {
-              row: (props: HTMLAttributes<HTMLTableRowElement>) => {
-                const rowKey = String((props as { "data-row-key"?: string })["data-row-key"] ?? "");
-                const item = (items as ResumeBrief[]).find((entry) => String(entry.id) === rowKey);
-                if (!item) return <tr {...props} />;
-                return (
-                  <RowContextMenu items={contextActions(item)}>
-                    <tr {...props} />
-                  </RowContextMenu>
-                );
-              },
-            },
+          busyKey={updatingKey}
+          pageIndex={page}
+          pageSize={pageSize}
+          onPageChange={(nextPage, nextPageSize) => {
+            setPage(nextPage);
+            setPageSize(nextPageSize);
           }}
-          pagination={{
-            current: page,
-            pageSize,
-            total: currentPage?.total ?? 0,
-            showSizeChanger: true,
-            showTotal: (total) => t("favorites.pagination.total", { total }),
-            onChange: (nextPage, nextPageSize) => {
-              setPage(nextPage);
-              setPageSize(nextPageSize);
-            },
-          }}
+          onOpen={openResumeDetail}
+          onOpenInHub={openResumeInHub}
+          onUnfavorite={(item) => void removeResumeFavorite(item)}
+          emptyText={<EmptyState description={t("favorites.empty.resumes")} />}
         />
       )}
       <ResumeDetailModal recordId={previewId} onClose={() => setPreviewId(null)} />
+      {/*
+        外部简历的详情（原件 / 提取文本 / 文本检查 / 编辑 / 历史版本）直接复用简历中心的
+        弹层：收藏页只是"入口"，不重画一份只读详情——两处各写一份必然漂移，用户在外壳
+        和收藏页会看到两种"这份简历长什么样"。
+      */}
+      <ExternalResumeDetailDrawer
+        resumeId={externalDetailId}
+        onClose={() => setExternalDetailId(null)}
+        onChanged={() => void reload()}
+      />
     </div>
   );
 }

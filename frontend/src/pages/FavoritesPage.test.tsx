@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n";
 import { expectNoUnfocusableScroller } from "../test/a11yScrollRegion";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import FavoritesPage from "./FavoritesPage";
@@ -13,8 +14,13 @@ const apiMocks = vi.hoisted(() => ({
   batchFavoriteJobs: vi.fn(),
   downloadFavoritesExport: vi.fn(),
   addToQueue: vi.fn(),
-  listResumes: vi.fn(),
+  // T31：简历页签改走 `GET /api/favorites`（一次返回内部 + 外部两种 kind）。
+  listFavoriteResumes: vi.fn(),
   updateResumeFavorite: vi.fn(),
+  setExternalResumeFavorite: vi.fn(),
+  getExternalResume: vi.fn(),
+  getExternalResumeAnalysis: vi.fn(),
+  externalResumeFileUrl: (id: number) => `/api/external-resumes/${id}/file`,
 }));
 
 // #28：收藏夹岗位页签改用专用端点（带生命周期徽标与「已投/未投」筛选）。
@@ -31,13 +37,23 @@ vi.mock("../api/apply", () => ({
 // "export is not defined"，看起来像组件崩了。
 vi.mock("../api/resumes", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/resumes")>()),
-  listResumes: apiMocks.listResumes,
   updateResumeFavorite: apiMocks.updateResumeFavorite,
   getResume: vi.fn(),
   fetchResumePreviewHtml: vi.fn(),
   renderResume: vi.fn(),
   updateResume: vi.fn(),
   fetchResumeTemplates: vi.fn().mockResolvedValue(TEMPLATE_CATALOG),
+}));
+// T31：收藏页同时消费两条简历链路——内部（`updateResumeFavorite`）与外部
+// （`setExternalResumeFavorite`）。外部详情弹层的取数也在这里挡住，测试不联网。
+vi.mock("../api/favorites", () => ({
+  listFavoriteResumes: apiMocks.listFavoriteResumes,
+}));
+vi.mock("../api/externalResumes", () => ({
+  setExternalResumeFavorite: apiMocks.setExternalResumeFavorite,
+  getExternalResume: apiMocks.getExternalResume,
+  getExternalResumeAnalysis: apiMocks.getExternalResumeAnalysis,
+  externalResumeFileUrl: apiMocks.externalResumeFileUrl,
 }));
 
 beforeEach(() => {
@@ -61,26 +77,80 @@ beforeEach(() => {
     ],
     total: 1,
   });
-  apiMocks.listResumes.mockReset().mockResolvedValue({
+  // T31：简历页签的数据是两种 kind 的并集（内部 `internal:2` + 外部 `external:7`）。
+  // 外部那条的文件名用 ASCII：`cjkRatchet` 的 tests 口径只降不升。
+  apiMocks.listFavoriteResumes.mockReset().mockResolvedValue({
     items: [
       {
+        kind: "internal",
         id: 2,
+        ref: "internal:2",
         title: "数据分析岗位简历",
-        job_id: 1,
         job_title: "数据分析师",
         company: "示例公司",
         source: "ai",
+        mime: "",
+        file_id: null,
+        note: "",
+        text_chars: null,
+        has_text: null,
         favorite: true,
-        model: "test-model",
-        enhancement_enabled: false,
-        enhancement_level: "balanced",
+        favorited_at: "2026-08-20T10:00:00",
+        favorited_at_estimated: false,
         created_at: "2026-08-20T10:00:00",
+        updated_at: "2026-08-20T10:00:00",
+      },
+      {
+        kind: "external",
+        id: 7,
+        ref: "external:7",
+        title: "Client version.pdf",
+        job_title: "数据分析师",
+        company: "示例公司",
+        source: "",
+        mime: "application/pdf",
+        file_id: 99,
+        note: "",
+        text_chars: 830,
+        has_text: true,
+        favorite: true,
+        favorited_at: "2026-11-02T10:00:00",
+        favorited_at_estimated: false,
+        created_at: "2026-11-02T10:00:00",
+        updated_at: "2026-11-02T10:00:00",
       },
     ],
-    total: 1,
+    total: 2,
   });
   apiMocks.updateJob.mockReset().mockResolvedValue({});
   apiMocks.updateResumeFavorite.mockReset().mockResolvedValue({});
+  apiMocks.setExternalResumeFavorite.mockReset().mockResolvedValue({});
+  apiMocks.getExternalResume.mockReset().mockResolvedValue({
+    id: 7,
+    file_id: 99,
+    name: "Client version.pdf",
+    mime: "application/pdf",
+    text_chars: 830,
+    has_text: true,
+    job_id: null,
+    job_title: "",
+    favorite: true,
+    favorited_at: "2026-11-02T10:00:00",
+    note: "",
+    created_at: "2026-11-02T10:00:00",
+    updated_at: "2026-11-02T10:00:00",
+    warnings: [],
+    text: "body",
+  });
+  apiMocks.getExternalResumeAnalysis.mockReset().mockResolvedValue({
+    resume_id: 7,
+    text_chars: 830,
+    line_count: 12,
+    estimated_pages: 1,
+    has_text: true,
+    checks: [],
+    warnings: [],
+  });
   apiMocks.batchFavoriteJobs.mockReset().mockResolvedValue({ updated: 1, skipped: [] });
   apiMocks.downloadFavoritesExport.mockReset().mockResolvedValue(undefined);
   apiMocks.addToQueue.mockReset().mockResolvedValue([]);
@@ -113,8 +183,8 @@ describe("FavoritesPage", () => {
     fireEvent.click(screen.getByText("简历"));
     expect(await screen.findByText("数据分析岗位简历")).toBeInTheDocument();
     await waitFor(() =>
-      expect(apiMocks.listResumes).toHaveBeenCalledWith(
-        expect.objectContaining({ favorite: true }),
+      expect(apiMocks.listFavoriteResumes).toHaveBeenCalledWith(
+        expect.objectContaining({ page: 1, page_size: 10 }),
       ),
     );
   });
@@ -141,7 +211,7 @@ describe("FavoritesPage", () => {
   it("removes a job favorite once and reloads the filtered list", async () => {
     renderPage();
     await screen.findByText("数据分析师");
-    const button = screen.getByRole("button", { name: "取消收藏" });
+    const button = screen.getByRole("button", { name: t("favorites.action.unfavorite") });
     fireEvent.click(button);
     fireEvent.click(button);
 
@@ -151,14 +221,73 @@ describe("FavoritesPage", () => {
   });
 
   it("removes a resume favorite through the resume API", async () => {
+    /** 某一行里的星星按钮（整表按行定位：两条按钮的可访问名相同）。 */
+    const starOf = (title: string) =>
+      within(screen.getByText(title).closest("tr") as HTMLElement).getByRole("button", {
+        name: t("favorites.action.unfavorite"),
+      });
+
     renderPage();
     fireEvent.click(await screen.findByText("简历"));
     await screen.findByText("数据分析岗位简历");
 
-    fireEvent.click(screen.getByRole("button", { name: "取消收藏" }));
+    // 内部行 → `PATCH /api/resumes/{id}/favorite`。
+    fireEvent.click(starOf("数据分析岗位简历"));
 
     await waitFor(() => expect(apiMocks.updateResumeFavorite).toHaveBeenCalledWith(2, false));
-    await waitFor(() => expect(apiMocks.listResumes).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(apiMocks.listFavoriteResumes).toHaveBeenCalledTimes(2));
+    // 写库期间整表星星是禁用的，等这一轮结束后再点下一行（否则点击会被守卫吞掉）。
+    await waitFor(() => expect(starOf("数据分析岗位简历")).toBeEnabled());
+
+    // 外部行 → `PATCH /api/external-resumes/{id}/favorite`（T28 的写入口）。
+    fireEvent.click(starOf("Client version.pdf"));
+
+    await waitFor(() => expect(apiMocks.setExternalResumeFavorite).toHaveBeenCalledWith(7, false));
+    await waitFor(() => expect(apiMocks.listFavoriteResumes).toHaveBeenCalledTimes(3));
+  });
+
+  it("labels internal vs external rows and opens the matching detail", async () => {
+    renderPage(["/favorites?kind=resumes"]);
+    // 行的 `data-row-key` 就是复合引用（`internal:2` / `external:7`）：两种 kind 的 id
+    // 会撞号，所以按 ref 取行，不按数字 id——这同时钉住了 rowKey 的口径。
+    await waitFor(() =>
+      expect(document.querySelector('tr[data-row-key="external:7"]')).not.toBeNull(),
+    );
+    const externalRow = document.querySelector('tr[data-row-key="external:7"]') as HTMLElement;
+    const internalRow = document.querySelector('tr[data-row-key="internal:2"]') as HTMLElement;
+
+    expect(within(externalRow).getByText(t("favorites.kind.external"))).toBeInTheDocument();
+    expect(within(internalRow).getByText(t("favorites.kind.internal"))).toBeInTheDocument();
+
+    // 点外部那行 → 外部详情（`getExternalResume`），不会误开内部同号简历。
+    fireEvent.click(within(externalRow).getByText("Client version.pdf"));
+    await waitFor(() => expect(apiMocks.getExternalResume).toHaveBeenCalledWith(7));
+    // 内部简历的详情走的是另一条取数（`getResume`），不该被这次点击触发。
+    expect(apiMocks.getExternalResume).toHaveBeenCalledTimes(1);
+  });
+
+  it("jumps to the existing external hub deep link from the row menu", async () => {
+    // 深链口径是既有的 `/resumes/external?resume=<id>`（T13 在用），收藏页不新造路由：
+    // 这里把目标路由换成一个 stub，断言"确实跳过去了"而不是"打开了某个弹层"。
+    render(
+      <MemoryRouter initialEntries={["/favorites?kind=resumes"]}>
+        <AntdApp>
+          <Routes>
+            <Route path="/favorites" element={<FavoritesPage />} />
+            <Route path="/resumes/external" element={<div data-testid="external-hub" />} />
+          </Routes>
+        </AntdApp>
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(document.querySelector('tr[data-row-key="external:7"]')).not.toBeNull(),
+    );
+    const row = document.querySelector('tr[data-row-key="external:7"]') as HTMLElement;
+
+    fireEvent.click(within(row).getByRole("button", { name: t("common.rowActions.more") }));
+    fireEvent.click(await screen.findByText(t("favorites.action.openInHub")));
+
+    expect(await screen.findByTestId("external-hub")).toBeInTheDocument();
   });
 
   it("shows an update error and allows the user to retry", async () => {
@@ -166,10 +295,10 @@ describe("FavoritesPage", () => {
     renderPage();
     await screen.findByText("数据分析师");
 
-    fireEvent.click(screen.getByRole("button", { name: "取消收藏" }));
+    fireEvent.click(screen.getByRole("button", { name: t("favorites.action.unfavorite") }));
     expect(await screen.findByText("收藏服务暂时不可用")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "取消收藏" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "取消收藏" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: t("favorites.action.unfavorite") })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: t("favorites.action.unfavorite") }));
 
     await waitFor(() => expect(apiMocks.updateJob).toHaveBeenCalledTimes(2));
   });
@@ -179,7 +308,9 @@ describe("FavoritesPage", () => {
 
     // URL 指定 resumes 时直接落在简历页签上，而不是先渲染岗位再切换。
     expect(await screen.findByText("数据分析岗位简历")).toBeInTheDocument();
-    expect(apiMocks.listResumes).toHaveBeenCalledWith(expect.objectContaining({ favorite: true }));
+    expect(apiMocks.listFavoriteResumes).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, page_size: 10 }),
+    );
   });
 });
 
@@ -198,7 +329,7 @@ describe("FavoritesPage", () => {
 describe("FavoritesPage 空收藏的横向滚动区（a11y）", () => {
   beforeEach(() => {
     apiMocks.listFavoriteJobs.mockReset().mockResolvedValue({ items: [], total: 0 });
-    apiMocks.listResumes.mockReset().mockResolvedValue({ items: [], total: 0 });
+    apiMocks.listFavoriteResumes.mockReset().mockResolvedValue({ items: [], total: 0 });
   });
 
   /**

@@ -37,6 +37,7 @@ from .api import (
     datasets,
     drill,
     external_resumes,
+    favorites,
     followups,
     interview,
     interview_answer_review,
@@ -136,6 +137,9 @@ ROUTERS = (
     # Q12：登录状态面板（独立前缀 /api/login-status），三处登录态各自一行、可手动检测。
     login_status.router,
     resumes.router,
+    # T31：收藏页「简历」页签（`GET /api/favorites`）一次返回内部 + 外部两种 kind。
+    # 独立前缀 `/api/favorites`，与 `/api/jobs/favorites`（岗位侧）不抢路径。
+    favorites.router,
     # 第 21 条：外部简历（只读快照）独立前缀 /api/external-resumes；与 /api/resumes
     # 完全隔离（两表 id 空间独立，不进制作台/导出/版式）。
     external_resumes.router,

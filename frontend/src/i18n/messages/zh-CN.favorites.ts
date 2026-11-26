@@ -13,6 +13,14 @@ const favorites = {
   "favorites.column.postedAt": "发布时间",
   "favorites.column.actions": "操作",
   "favorites.column.resume": "简历",
+  // T31：简历页签同时收内部与外部两种 kind，必须标出"这是哪一类对象"（id 会撞号）。
+  "favorites.column.kind": "类型",
+  "favorites.kind.internal": "内部",
+  "favorites.kind.external": "外部",
+  "favorites.column.format": "格式",
+  "favorites.action.openResume": "打开简历详情",
+  // T31：深链跳转（内部 ?resume_id= / 外部 ?resume=，沿用既有路径，不新造路由）。
+  "favorites.action.openInHub": "在简历中心打开",
   "favorites.column.targetJob": "目标岗位",
   "favorites.column.source": "来源",
   "favorites.column.createdAt": "创建时间",
