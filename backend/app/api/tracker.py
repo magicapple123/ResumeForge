@@ -30,6 +30,7 @@ from ..schemas.tracker import (
     TrackParseOut,
     TrackParseRequest,
     TrackStatsOut,
+    TrackStatusPatch,
     TrackUpdate,
 )
 from ..services.actions import add_action_route
@@ -58,9 +59,11 @@ from ..services.tracker import (
     list_tracks_page,
     preview_merges,
     save_track_record,
+    set_track_status,
     summarize,
     to_json,
     track_or_none,
+    track_out,
 )
 from ..services.tracker import (
     list_track_deliveries as list_track_delivery_records,
@@ -69,6 +72,7 @@ from ..services.tracker import (
     track_brief as _track_brief,
 )
 from ..services.tracker_extract import extract_tracker_records, local_tracker_records
+from ..services.tracker_job_link import resolve_job_links
 from ._disconnect import client_gone, run_until_disconnect
 
 router = APIRouter(prefix="/api/tracker", tags=["tracker"])
@@ -105,8 +109,15 @@ def read_tracks_page(
     )
     # CR-19：一次批查询补「最近一次已联系」，进度行据此显示「已联系 · 11-25」。
     contacted = latest_contacted_at(db, [int(item.id) for item in records])
+    # 整改 #7：一次批查询补「岗位名能点去哪」（只读派生，不写库）。两处都是整页一次，
+    # 不随行数增长；匹配规则见 services/tracker_job_link.py。
+    job_links = resolve_job_links(db, records)
     return Page(
-        items=[_track_brief(item, contacted.get(item.id)) for item in records], total=total
+        items=[
+            _track_brief(item, contacted.get(item.id), job_links.get(int(item.id)))
+            for item in records
+        ],
+        total=total,
     )
 
 
@@ -230,9 +241,7 @@ async def parse_tracks(payload: TrackParseRequest, request: Request, db: Session
     notes: list[str] = list(documents.warnings)
     provider, local_items, extra = await run_in_threadpool(_prepare_parse, db, source_text)
     if provider is None:
-        return TrackParseOut(
-            items=local_items or [], parse_engine="local", notes=[*notes, *extra]
-        )
+        return TrackParseOut(items=local_items or [], parse_engine="local", notes=[*notes, *extra])
 
     try:
         parsed = await run_until_disconnect(
@@ -303,6 +312,26 @@ def save_track(track_id: int, payload: TrackUpdate, db: Session = Depends(get_db
     if result is None:
         raise HTTPException(status_code=404, detail="进度记录不存在或已被删除")
     return result
+
+
+@router.patch("/{track_id}/status", response_model=TrackOut)
+def patch_track_status(track_id: int, payload: TrackStatusPatch, db: Session = Depends(get_db)):
+    """就地改一条进度记录的状态（整改 #15）。
+
+    与 ``PUT /{track_id}`` 的区别是**只碰 status（+ 可选 status_date）**：状态胶囊点一下
+    就发这个请求，不会拿本地旧快照覆盖用户刚改的备注/简历关联，也不会撞上"内外简历互斥"
+    这类整份替换才有的校验。
+
+    同状态 → 200 + 原记录，不写事件（幂等，见 ``services.tracker.set_track_status``）；
+    非法状态/日期 → 422（由 ``TrackStatusPatch`` 校验）；记录不存在或已软删 → 404。
+
+    路由位置：``/{track_id}/status`` 是两段路径，与 ``/{track_id}`` 不冲突，
+    但为可读性紧跟在 PUT 之后（``services/actions`` 的契约不覆盖这个新写入口）。
+    """
+    record = track_or_none(db, track_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="进度记录不存在或已被删除")
+    return track_out(set_track_status(db, record, payload.status, payload.status_date))
 
 
 @router.delete("/{track_id}", status_code=204)

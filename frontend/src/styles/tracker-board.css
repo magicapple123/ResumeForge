@@ -262,6 +262,26 @@
   text-overflow: ellipsis;
 }
 
+/* 岗位名可点（整改 #7）：与简历中心的标题链接同一套"可点"语义（信息蓝）。
+   不加粗、不常驻下划线——这页动作密度已经很高，常驻下划线会让整列都在喊"点我"；
+   hover 才出下划线，键盘聚焦给焦点环（色盲/键盘用户不能只靠颜色）。 */
+.track-card-job-link {
+  color: var(--rf-info);
+  text-decoration: none;
+  border-radius: 3px;
+}
+
+.track-card-job-link:hover,
+.track-card-job-link:focus-visible {
+  color: var(--rf-info-strong);
+  text-decoration: underline;
+}
+
+.track-card-job-link:focus-visible {
+  outline: 2px solid var(--rf-info);
+  outline-offset: 2px;
+}
+
 /* 行动项（下一步）：第三层，保留强调。 */
 .track-card-next {
   display: flex;

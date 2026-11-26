@@ -42,6 +42,7 @@ const trackerUi = {
 
   "trackerUi.card.emptyCompany": "(No company)",
   "trackerUi.card.emptyTitle": "(No Job title)",
+  "trackerUi.card.openJob": "View job details",
   "trackerUi.card.action.edit": "Edit",
   "trackerUi.card.action.delete": "Delete",
   "trackerUi.card.aria.more": "More actions for {name}",

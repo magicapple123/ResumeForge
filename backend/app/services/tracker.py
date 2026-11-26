@@ -74,6 +74,7 @@ __all__ = [
     "preview_merges",
     "record_applied",
     "save_track_record",
+    "set_track_status",
     "summarize",
     "to_csv",
     "to_json",
@@ -340,7 +341,11 @@ def track_out(record: ApplicationTrack) -> TrackOut:
     return TrackOut.model_validate(record)
 
 
-def track_brief(record: ApplicationTrack, latest_followup: datetime | None = None) -> TrackOut:
+def track_brief(
+    record: ApplicationTrack,
+    latest_followup: datetime | None = None,
+    job_link_id: int | None = None,
+) -> TrackOut:
     """列表行只带 note / evidence 的**预览**：超长截断加省略号。
 
     求职看板的主读路径一次拖几十条，note 上限 4000 字（evidence 500），全文随列表
@@ -350,9 +355,13 @@ def track_brief(record: ApplicationTrack, latest_followup: datetime | None = Non
 
     ``latest_followup``（CR-19）：最近一次「已联系」跟进决策的时刻，由调用方**批查询**
     后逐行传入（列表最多 100 行，不在这里逐行查库）；缺省 None = 没联系过/调用方不关心。
+
+    ``job_link_id``（整改 #7）：这一行"岗位名能点去哪"的岗位 id，同样由调用方批查询
+    （``services/tracker_job_link.resolve_job_links``）后逐行传入。只读派生，不写库。
     """
     item = track_out(record)
     item.latest_followup = latest_followup
+    item.job_link_id = job_link_id
     if len(item.note) > TRACK_NOTE_PREVIEW_CHARS:
         item.note = item.note[:TRACK_NOTE_PREVIEW_CHARS] + "…"
     if len(item.evidence) > TRACK_EVIDENCE_PREVIEW_CHARS:
@@ -370,3 +379,49 @@ def save_track_record(db: Session, track_id: int, payload: TrackUpdate) -> Track
     if record is None:
         return None
     return track_out(update_track(db, record, payload))
+
+
+def set_track_status(
+    db: Session, record: ApplicationTrack, status: str, status_date: str = ""
+) -> ApplicationTrack:
+    """就地改一条进度记录的状态（整改 #15），单事务。
+
+    与 ``update_track``（PUT 整份替换）的分工：这个函数**只碰两个字段**，
+    因此不需要 ``TrackCreate`` 那一整套互斥/URL 校验，也不会用前端手里的旧快照
+    覆盖别人刚改的备注、简历关联。
+
+    三条口径：
+
+    1. **同状态是幂等的**：直接返回、不写库、不发事件。理由是时间线记录的是"真实发生
+       过的变化"——用户连点两次同一个状态不是一次变化，把它记进时间线等于污染历史；
+       顺带也不会把 ``updated_at`` 往前推（"停滞提醒"读的是它）。
+    2. **事件复用 ``record_status_change``**：``from/to`` 正确、``source=user``、
+       ``user_confirmed=True``，与手动编辑走同一条留痕路径（``track_events`` 是唯一写入点）。
+    3. **撤销 = 再调一次改回去**（前端做的），所以这里不需要"删除上一条事件"。
+       「改过去」与「改回来」都是真实发生过的事，时间线里就该有两条。
+    """
+    if record.status == status:
+        return record
+    previous = record.status
+    record.status = status
+    if status_date:
+        record.status_date = status_date
+    try:
+        # flush 只写事务缓冲（与 create_track / update_track 同一模式）：事件失败整体回滚，
+        # 不会留下"状态变了但时间线没有这一步"的半成品。
+        db.flush()
+        record_status_change(
+            db,
+            record,
+            from_status=previous,
+            to_status=status,
+            status_date=status_date,
+            source=write_source(manual=True),
+            user_confirmed=True,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(record)
+    return record

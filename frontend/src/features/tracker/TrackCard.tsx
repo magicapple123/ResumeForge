@@ -18,6 +18,7 @@
  */
 import { LinkOutlined, MoreOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Typography } from "antd";
+import { Link } from "react-router-dom";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { TRACK_SOURCE_LABEL_KEYS, TRACK_STATUS_LABEL_KEYS } from "../../i18n/enum/tracker";
@@ -76,6 +77,10 @@ export default function TrackCard({ track, onEdit, onDelete, groupStart = false 
   // 安全判定与助手的 Markdown 外链同一份（`utils/externalUrl`），不为了一个图标再写一套。
   const link = track.link ? safeExternalUrl(track.link) : null;
   const displayName = track.company || track.title || t("trackerUi.card.fallbackName");
+  // 岗位深链（整改 #7）：已关联的走 job_id，识别导入的行走后端派生的 job_link_id。
+  // 只把**岗位名**做成链接——公司名是这一行的身份，不承担跳转（用户原话只要岗位名）。
+  const jobIdValue = track.job_id ?? track.job_link_id ?? null;
+  const jobTitle = track.title || t("trackerUi.card.emptyTitle");
   // 显示条件把外部关联也算进来：只看 resume_id 会让"外部简历"的行整段消失。
   const hasResume = Boolean(track.resume_id || track.external_resume_id || track.resume_title);
   const resume = hasResume ? resumeLabel(track) : "";
@@ -100,9 +105,19 @@ export default function TrackCard({ track, onEdit, onDelete, groupStart = false 
           <Typography.Text strong>
             {track.company || t("trackerUi.card.emptyCompany")}
           </Typography.Text>
-          <Typography.Text type="secondary">
-            {track.title || t("trackerUi.card.emptyTitle")}
-          </Typography.Text>
+          {/* 岗位名可点（整改 #7）：跳岗位广场并打开该岗位详情，深链与其它入口统一
+              `/jobs?job_id=N`。拿不到岗位 id 时保持原来的纯文本，不给死链。 */}
+          {jobIdValue !== null ? (
+            <Link
+              className="track-card-job-link"
+              to={`/jobs?job_id=${jobIdValue}`}
+              title={t("trackerUi.card.openJob")}
+            >
+              {jobTitle}
+            </Link>
+          ) : (
+            <Typography.Text type="secondary">{jobTitle}</Typography.Text>
+          )}
           {track.stage_note && <span className="track-stage-note">{track.stage_note}</span>}
           {/* 关联链接：`target="_blank"` 必须配 `rel="noopener noreferrer"`，
               否则新页面能通过 `window.opener` 反向操纵本页。 */}

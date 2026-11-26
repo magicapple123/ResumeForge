@@ -9,6 +9,7 @@
  */
 import { App as AntdApp } from "antd";
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import type { Track } from "../../types";
@@ -48,11 +49,47 @@ const BASE: Track = {
 
 function renderCard(patch: Partial<Track> = {}) {
   return render(
-    <AntdApp>
-      <TrackCard track={{ ...BASE, ...patch }} onEdit={vi.fn()} onDelete={vi.fn()} />
-    </AntdApp>,
+    <MemoryRouter initialEntries={["/tracker"]}>
+      <AntdApp>
+        <TrackCard track={{ ...BASE, ...patch }} onEdit={vi.fn()} onDelete={vi.fn()} />
+      </AntdApp>
+    </MemoryRouter>,
   );
 }
+
+/**
+ * 岗位深链（整改 #7）：岗位名可点，公司名不承担跳转。
+ *
+ * 两个来源：已关联的 `job_id`，与后端派生的 `job_link_id`（识别导入的行没有 job_id，
+ * 靠"同公司 + 岗位名唯一命中"补出来）。都没有时保持纯文本——不给死链。
+ */
+describe("TrackCard 的岗位名深链", () => {
+  it("有 job_id 时岗位名是链接，指向岗位广场的深链", () => {
+    renderCard({ job_id: 7 });
+
+    const link = screen.getByRole("link", { name: JOB_TITLE });
+    expect(link).toHaveAttribute("href", "/jobs?job_id=7");
+    expect(link).toHaveAttribute("title", t("trackerUi.card.openJob"));
+    // 公司名仍是纯文本（这一行的身份，不做跳转）。
+    expect(screen.queryByRole("link", { name: COMPANY })).toBeNull();
+  });
+
+  it("job_id 为空、只有派生 job_link_id 时也可点（导入的行）", () => {
+    renderCard({ job_id: null, job_link_id: 12 });
+
+    expect(screen.getByRole("link", { name: JOB_TITLE })).toHaveAttribute(
+      "href",
+      "/jobs?job_id=12",
+    );
+  });
+
+  it("两个 id 都没有时岗位名是纯文本：不给死链", () => {
+    renderCard({ job_id: null, job_link_id: null });
+
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText(JOB_TITLE)).toBeInTheDocument();
+  });
+});
 
 describe("TrackCard 的关联链接", () => {
   it("有链接时给出一个在新窗口打开、且不把 opener 交出去的图标", () => {

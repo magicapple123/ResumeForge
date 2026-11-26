@@ -203,6 +203,40 @@ class TrackUpdate(TrackCreate):
     """PUT 语义：整体替换一条进度。"""
 
 
+class TrackStatusPatch(BaseModel):
+    """``PATCH /api/tracker/{id}/status`` 的请求体（整改 #15）。
+
+    只带"要改成哪个状态"（和可选的状态日期）。为什么不复用 ``TrackUpdate``：
+    那是**整份替换**，要求 job_id/resume_id/channel/link/applied_at 全量回传——
+    状态胶囊点一下就要带上整条记录，既容易撞上"内外简历互斥"校验，也会用本地旧快照
+    覆盖别人刚改的字段。这里只碰 ``status``（+ 可选 ``status_date``）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = Field(max_length=24)
+    # 空串 = 不改该字段（与 ``TrackCreate.status_date`` 同一套语义，同一个校验器）。
+    status_date: str = Field(default="", max_length=MAX_TRACK_DATE_CHARS)
+
+    @field_validator("status")
+    @classmethod
+    def status_must_be_known(cls, value: str) -> str:
+        from ..vocabulary.tracker import STATUSES
+
+        cleaned = (value or "").strip()
+        if cleaned not in STATUSES:
+            raise ValueError(f"未知的进度状态「{cleaned}」")
+        return cleaned
+
+    @field_validator("status_date")
+    @classmethod
+    def date_must_be_real(cls, value: str) -> str:
+        cleaned = (value or "").strip()
+        if not _is_date_or_empty(cleaned):
+            raise ValueError("日期要写成 2026-09-18 这样的真实日期，或留空")
+        return cleaned
+
+
 class TrackOut(TrackCreate):
     model_config = ConfigDict(from_attributes=True)
 
@@ -216,6 +250,12 @@ class TrackOut(TrackCreate):
     # CR-19：最近一次「已联系」跟进决策的时刻（naive UTC）；没联系过为 None。
     # 只读派生字段：由接口层按 ``application_follow_up`` 批查询补齐，不在请求模型里。
     latest_followup: datetime | None = None
+    # 岗位深链（整改 #7）：这一行"点岗位名能去哪"的岗位 id。
+    # **只读派生**：``job_id`` 有值时就是它（且岗位未删），否则按"同公司 + 岗位名相等
+    # 或为进度标题前缀"求**唯一命中**（见 ``services/tracker_job_link.py``）。
+    # 不进 ``TrackCreate``/``TrackUpdate``：它是展示层算出来的，写回去就变成一次
+    # 用户无法撤销的猜测性关联。
+    job_link_id: int | None = None
 
 
 class TrackCreateOut(TrackOut):
@@ -346,5 +386,6 @@ __all__ = [
     "TrackParseRequest",
     "TrackRecordIn",
     "TrackStatsOut",
+    "TrackStatusPatch",
     "TrackUpdate",
 ]

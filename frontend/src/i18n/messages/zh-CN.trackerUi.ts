@@ -39,6 +39,7 @@ const trackerUi = {
 
   "trackerUi.card.emptyCompany": "（未填公司）",
   "trackerUi.card.emptyTitle": "（未填岗位）",
+  "trackerUi.card.openJob": "查看岗位详情",
   "trackerUi.card.action.edit": "编辑",
   "trackerUi.card.action.delete": "删除",
   "trackerUi.card.aria.more": "更多操作 {name}",

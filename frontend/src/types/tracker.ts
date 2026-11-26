@@ -96,6 +96,15 @@ export interface Track extends TrackRecord {
   created_at: string;
   updated_at: string;
   job_id: number | null;
+  /**
+   * 岗位深链（整改 #7）：这一行的岗位名能点去哪。
+   *
+   * **只读派生字段**：`job_id` 有值且岗位还在时就是它，否则后端按"同公司 + 岗位名相等
+   * 或为进度标题前缀"求唯一命中（见 `services/tracker_job_link.py`）。为 null 表示
+   * 没匹配上 / 岗位已删 / 有多个候选——此时岗位名保持纯文本，不给死链。
+   * 可选：单条详情等不做批量匹配的出口不带这个字段。
+   */
+  job_link_id?: number | null;
   resume_id: number | null;
   /**
    * 关联的外部简历（T6）：用户在别处生成的 PDF / docx 原件。
