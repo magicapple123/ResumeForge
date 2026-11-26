@@ -1,13 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 详情抽屉「编辑」页签（#5）：取块 → 选块 → 改字 → 应用 → 用服务端返回的文件刷新。
+ * 详情弹层「编辑」页签（R9-5 / R11）：取块 → 左栏选段 → 右栏改字 → 应用 → 出成功条。
+ *
+ * ## 版面：左清单 / 右表单，PDF 只在「原件」页
+ *
+ * 旧版左栏是"PDF 上盖热区"，字小、还被色块压住。现在左栏是段落清单（序号 / 摘要 /
+ * 页内位置 / 标题·正文·锁定），右栏是灰底原文 + 新文输入；PDF 画布只留在「原件」页签。
  *
  * ## 为什么"刷新"是从服务端重取，而不是前端合成预览
  *
  * 前端合成 = 第二套排版（断行、字距、行距、字体替换各写一遍），与后端产物必然不一致，
- * 用户看到的和下载到的就是两份东西。v1 直接把这次改字的结果当**唯一真相**：
- * 应用后重新拉 `blocks`（几何可能变了）并让外层记录换成服务端返回的 `resume`
- * （`file_id` 变了 → 原件预览的 URL 跟着变）。
+ * 用户看到的和下载到的就是两份东西。应用后重新拉 `blocks`（几何可能变了），并让外层
+ * 记录换成服务端返回的 `resume`（`file_id` 变了 → 原件页的 URL 跟着变）。
+ *
+ * ## 成功条（R11）
+ *
+ * 「改完看不到结果」的原因是：改完之后没有任何入口指向新版本。所以应用成功后在右栏下方
+ * 出一条成功条：版本号 + 字数 + 两个入口（查看修改后的原件 / 查看文本），两个入口都
+ * 由外层切页签，进去看到的就是刚存下的那一版。
  *
  * ## 能力探测失败怎么办
  *
@@ -22,6 +32,7 @@ import {
   editExternalResumeBlock,
   externalResumeFileUrl,
   getExternalResumeBlocks,
+  listExternalResumeRevisions,
 } from "../../../api/externalResumes";
 import type {
   ExternalResumeBlock,
@@ -32,9 +43,12 @@ import ErrorState from "../../../components/common/ErrorState";
 import LoadingBlock from "../../../components/common/LoadingBlock";
 import { t, type MessageKey } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
+import { ExternalBlockPreview } from "./ExternalBlockPreview";
 import { ExternalResumeEditor } from "./ExternalResumeEditor";
 import { ExternalResumeEditorPanel } from "./ExternalResumeEditorPanel";
 import type { ExternalResumeEditOutcome } from "./ExternalResumeEditorPanel";
+import "./externalPreview.css";
+import "./externalEditLayout.css";
 
 export interface ExternalResumeEditTabProps {
   resumeId: number;
@@ -42,6 +56,14 @@ export interface ExternalResumeEditTabProps {
   record: ExternalResumeDetail;
   /** 这次改字产生了新版本：外层用它替换详情（不动别的 tab 的状态）。 */
   onRecordChange: (next: ExternalResumeDetail) => void;
+  /** 成功条上的两个入口：切到「原件」/「文本」页签并看到新内容（由外层实现）。 */
+  onGotoTab?: (tab: "original" | "text") => void;
+}
+
+/** 成功条里的那点信息：第几版（拿不到时留空）+ 当前总字数。 */
+interface ApplySuccess {
+  version: number | null;
+  chars: number;
 }
 
 /** 加载失败要分三种：不支持（422）、原件文件没了（404）、临时读不到（其它状态 / 网络）。 */
@@ -50,15 +72,6 @@ interface LoadFailure {
   status: number | undefined;
 }
 
-/**
- * 失败的三种走法。**「原件读不到」≠「原件不存在」**：
- *
- * - `missing`（404）：原件文件真的不在了（盘点里 2 份外部简历就是这样）。此时说
- *   "原件不受影响，可以重试"是自相矛盾——文件都没了，重试也不会回来，所以不给重试、
- *   也不给「下载原件」（那个接口同样是 404），只引导重新上传或从历史版本下载。
- * - `transient`（非 404/422）：网络或服务暂时不可用，原件在，重试有意义。
- * - `unsupported`（422）：文件读到了、但不能在线改字，给原因 + 下载引导。
- */
 type LoadFailureKind = "unsupported" | "missing" | "transient";
 
 function failureKindOf(status: number | undefined): LoadFailureKind {
@@ -81,7 +94,7 @@ function failureHintKey(kind: LoadFailureKind): MessageKey {
   return "externalEdit.blocksFailedHint";
 }
 
-/** 块的读法（与左侧热区的 aria-label 同一口径）。 */
+/** 块的读法（与左栏清单同一口径）。 */
 function labelOf(blocks: readonly ExternalResumeBlock[], block: ExternalResumeBlock): string {
   const index = blocks.indexOf(block);
   return block.page > 0
@@ -89,7 +102,12 @@ function labelOf(blocks: readonly ExternalResumeBlock[], block: ExternalResumeBl
     : t("externalEdit.block.labelNoPage", { index: index + 1 });
 }
 
-export function ExternalResumeEditTab({ resumeId, record, onRecordChange }: ExternalResumeEditTabProps) {
+export function ExternalResumeEditTab({
+  resumeId,
+  record,
+  onRecordChange,
+  onGotoTab,
+}: ExternalResumeEditTabProps) {
   useLocale();
   const [blocks, setBlocks] = useState<ExternalResumeBlocks | null>(null);
   const [failure, setFailure] = useState<LoadFailure | null>(null);
@@ -98,7 +116,8 @@ export function ExternalResumeEditTab({ resumeId, record, onRecordChange }: Exte
   const [submitting, setSubmitting] = useState(false);
   const [applyError, setApplyError] = useState("");
   const [outcome, setOutcome] = useState<ExternalResumeEditOutcome | null>(null);
-  /** 每次应用成功 +1：既触发重新拉 blocks，也用来重建右侧表单（初值换成服务端的新文字）。 */
+  const [success, setSuccess] = useState<ApplySuccess | null>(null);
+  /** 每次应用成功 +1：既触发重新拉 blocks，也用来重建右栏表单（初值换成服务端的新文字）。 */
   const [refreshToken, setRefreshToken] = useState(0);
 
   useEffect(() => {
@@ -146,6 +165,15 @@ export function ExternalResumeEditTab({ resumeId, record, onRecordChange }: Exte
       });
       onRecordChange(result.resume);
       setRefreshToken((value) => value + 1);
+      // 先出条（版本号未知就先不写第几版），拿到版本总数后再补上「第 N 版」。
+      setSuccess({ version: null, chars: result.resume.text_chars });
+      void listExternalResumeRevisions(resumeId)
+        .then((list) => {
+          setSuccess((current) => (current === null ? current : { ...current, version: list.total }));
+        })
+        .catch(() => {
+          // 版本号只是锦上添花：拿不到就沿用「已生成新版本」那句，不影响去哪看结果。
+        });
     } catch (error: unknown) {
       setApplyError(error instanceof Error ? error.message : t("externalEdit.applyFailed"));
     } finally {
@@ -203,8 +231,22 @@ export function ExternalResumeEditTab({ resumeId, record, onRecordChange }: Exte
   const selected = blocks.blocks.find((block) => block.block_id === selectedId) ?? null;
 
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start" }}>
-      <div style={{ flex: "1 1 320px", minWidth: 0 }} data-testid="external-edit-main">
+    <div className="rf-ext-edit">
+      {/* 第一栏：选中那一段所在的页（只读、不可点，选块仍只在清单里进行）。 */}
+      <div className="rf-ext-edit-origin" data-testid="external-edit-origin">
+        <Typography.Text strong className="rf-ext-edit-origin-title">
+          {t("externalEdit.blockPreview.title")}
+        </Typography.Text>
+        <div className="rf-ext-edit-origin-body">
+          <ExternalBlockPreview
+            record={record}
+            block={selected}
+            pageWidth={blocks.page_width}
+            pageHeight={blocks.page_height}
+          />
+        </div>
+      </div>
+      <div className="rf-ext-edit-blocks">
         {blocks.warnings.length > 0 ? (
           <Alert
             type="warning"
@@ -214,36 +256,60 @@ export function ExternalResumeEditTab({ resumeId, record, onRecordChange }: Exte
             description={blocks.warnings.join(" ")}
           />
         ) : null}
-        {blocks.blocks.length === 0 ? (
-          <Alert data-testid="external-blocks-empty" type="warning" showIcon title={t("externalEdit.blocksEmpty")} />
-        ) : (
-          <ExternalResumeEditor
-            blocks={blocks}
-            selectedId={selectedId}
-            fileUrl={fileUrl}
-            onSelect={(blockId) => {
-              setSelectedId(blockId);
-              setOutcome(null);
-              setApplyError("");
-            }}
-          />
-        )}
-      </div>
-      <div style={{ flex: "0 1 300px", minWidth: 260 }} data-testid="external-edit-side">
-        <ExternalResumeEditorPanel
-          key={`${selectedId ?? "none"}-${refreshToken}`}
-          block={selected}
-          blockLabel={selected === null ? "" : labelOf(blocks.blocks, selected)}
-          submitting={submitting}
-          outcome={outcome}
-          error={applyError}
-          onApply={(text) => {
-            if (selected !== null) void apply(selected, text);
-          }}
-          onShiftBelow={(delta) => {
-            if (selected !== null) void apply(selected, selected.text, delta);
+        <ExternalResumeEditor
+          blocks={blocks}
+          selectedId={selectedId}
+          onSelect={(blockId) => {
+            setSelectedId(blockId);
+            setOutcome(null);
+            setApplyError("");
           }}
         />
+      </div>
+      <div className="rf-ext-edit-panel">
+        {/* 表单自己滚，成功条钉在右下角：改完"怎么去看结果"永远看得见（R11）。 */}
+        <div className="rf-ext-edit-form">
+          <ExternalResumeEditorPanel
+            key={`${selectedId ?? "none"}-${refreshToken}`}
+            block={selected}
+            blockLabel={selected === null ? "" : labelOf(blocks.blocks, selected)}
+            submitting={submitting}
+            outcome={outcome}
+            error={applyError}
+            onApply={(text) => {
+              if (selected !== null) void apply(selected, text);
+            }}
+            onShiftBelow={(delta) => {
+              if (selected !== null) void apply(selected, selected.text, delta);
+            }}
+          />
+        </div>
+        {success === null ? null : (
+          <div className="rf-ext-success" data-testid="external-apply-success">
+            <Typography.Text strong>
+              {success.version === null
+                ? t("externalEdit.success.titleNoVersion", { chars: success.chars })
+                : t("externalEdit.success.title", { version: success.version, chars: success.chars })}
+            </Typography.Text>
+            <Typography.Text type="secondary">{t("externalEdit.success.hint")}</Typography.Text>
+            <Space size={8} wrap>
+              <Button
+                size="small"
+                data-testid="external-success-original"
+                onClick={() => onGotoTab?.("original")}
+              >
+                {t("externalEdit.success.viewOriginal")}
+              </Button>
+              <Button
+                size="small"
+                data-testid="external-success-text"
+                onClick={() => onGotoTab?.("text")}
+              >
+                {t("externalEdit.success.viewText")}
+              </Button>
+            </Space>
+          </div>
+        )}
       </div>
     </div>
   );

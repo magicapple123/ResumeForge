@@ -10,9 +10,15 @@ import { describe, expect, it } from "vitest";
 import type { ExternalResumeBlock } from "../../../api/externalResumes";
 import {
   blockPercentRect,
+  blockPreviewText,
+  blockRoleOf,
   blocksOfPage,
+  exceedsBlockWidth,
+  formatCharDelta,
+  maxBlockSize,
   MAX_SHIFT_PT,
   reasonKey,
+  revisionDiffChars,
   revisionSourceKey,
   shiftBelowAmount,
 } from "./blockGeometry";
@@ -112,5 +118,50 @@ describe("协议值到文案 key", () => {
     expect(revisionSourceKey("edit")).toBe("externalEdit.revisions.source.edit");
     expect(revisionSourceKey("restore")).toBe("externalEdit.revisions.source.restore");
     expect(revisionSourceKey("mystery")).toBe("externalEdit.revisions.source.unknown");
+  });
+});
+
+describe("块列表的读法（T11）", () => {
+  it("字号最大的短块算标题；没有字号信息（DOCX）一律正文", () => {
+    const largest = maxBlockSize([block({ size: 18 }), block({ size: 10 })]);
+    expect(largest).toBe(18);
+    expect(blockRoleOf(block({ size: 18, text: "黄岑果" }), largest)).toBe("title");
+    expect(blockRoleOf(block({ size: 10, text: "正文" }), largest)).toBe("body");
+    // 字号够大但整段很长：那是正文，不标标题。
+    expect(blockRoleOf(block({ size: 18, text: "很".repeat(50) }), largest)).toBe("body");
+    expect(blockRoleOf(block({ size: 0, text: "段落" }), 0)).toBe("body");
+  });
+
+  it("清单摘要只取首行，超长截断", () => {
+    expect(blockPreviewText("第一行\n第二行")).toBe("第一行");
+    expect(blockPreviewText("  留白  ")).toBe("留白");
+    expect(blockPreviewText("a".repeat(60), 10)).toBe("aaaaaaaaaa…");
+  });
+
+  it("按字号折算每行字数：超出原块宽度才提示，几何缺失时不提示", () => {
+    // 300pt 宽、字号 10 → 每行 30 字。
+    const wide = block({ x0: 0, x1: 300, size: 10 });
+    expect(exceedsBlockWidth(wide, "あ".repeat(30))).toBe(false);
+    expect(exceedsBlockWidth(wide, "あ".repeat(31))).toBe(true);
+    // 多行只要有一行超了就算超。
+    expect(exceedsBlockWidth(wide, `短\n${"あ".repeat(40)}`)).toBe(true);
+    // DOCX / TXT 没有几何信息：永远不提示（由服务端判定溢出）。
+    expect(exceedsBlockWidth(block({ x0: 0, x1: 0, size: 0 }), "あ".repeat(200))).toBe(false);
+  });
+});
+
+describe("历史版本的字数差（T12）", () => {
+  const items = [{ text_chars: 40 }, { text_chars: 12 }, { text_chars: 0 }];
+
+  it("与下一条（上一版）比；最老的一版没有上一版", () => {
+    expect(revisionDiffChars(items, 0)).toBe(28);
+    expect(revisionDiffChars(items, 1)).toBe(12);
+    expect(revisionDiffChars(items, 2)).toBeNull();
+  });
+
+  it("展示串永远带符号，0 写成 ±0", () => {
+    expect(formatCharDelta(13)).toBe("+13");
+    expect(formatCharDelta(-5)).toBe("-5");
+    expect(formatCharDelta(0)).toBe("±0");
   });
 });

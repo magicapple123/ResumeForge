@@ -1,0 +1,118 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * 历史版本（T12）的样式：版本行下面那块"原件预览"、原版 / 新版对比表。
+ *
+ * 拆出来的理由同上（500 行预算 + 读者不同）：这里只服务「历史版本」页签，
+ * 与画布 / 三栏编辑都不共用选择器。
+ */
+
+/* ── 历史版本（T12）────────────────────────────────────────── */
+
+.rf-ext-revision-preview {
+  margin: 8px 0 12px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  overflow: hidden;
+  height: 420px;
+  display: flex;
+  flex-direction: column;
+}
+
+.rf-ext-revision-diff {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+/* ── 原版 / 新版对比（T12）──────────────────────────────────── */
+
+.rf-ext-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface);
+}
+
+.rf-ext-compare-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rf-ext-compare-hint {
+  font-size: 12px;
+}
+
+/*
+ * 对比表：两列同一行，行高由内容决定。
+ *
+ * 用"两列 + 空位占位"而不是两张独立的表：那样两边的滚动永远对不齐，用户会拿错行。
+ * `same` 行不铺底色（只有增删要"显眼"），免得整张表变成一片色块。
+ */
+.rf-ext-diff {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+  background: var(--rf-surface);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.rf-ext-diff-head,
+.rf-ext-diff-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.rf-ext-diff-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--rf-border);
+  background: var(--rf-surface-alt);
+}
+
+.rf-ext-diff-row {
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.rf-ext-diff-row.is-removed {
+  background: color-mix(in srgb, var(--rf-error-text) 10%, transparent);
+}
+
+.rf-ext-diff-row.is-added {
+  background: color-mix(in srgb, var(--rf-success-text) 12%, transparent);
+}
+
+.rf-ext-diff-cell {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 10px;
+  border-right: 1px solid var(--rf-border-subtle);
+}
+
+.rf-ext-diff-cell.is-empty {
+  background: var(--rf-surface-alt);
+}
+
+.rf-ext-diff-line-no {
+  flex: none;
+  min-width: 26px;
+  color: var(--rf-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.rf-ext-diff-text {
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

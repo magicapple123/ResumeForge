@@ -93,6 +93,7 @@ const externalEdit = {
   "externalEdit.revisions.hasText": "Text extracted",
   "externalEdit.revisions.noText": "No text extracted",
   "externalEdit.revisions.current": "Current version",
+  "externalEdit.revisions.sameFile": "Same content as current",
   "externalEdit.revisions.restore": "Restore this version",
   "externalEdit.revisions.restoreFailed": "Restore failed",
   "externalEdit.revisions.restored":
@@ -101,6 +102,100 @@ const externalEdit = {
   "externalEdit.revisions.source.edit": "Edit",
   "externalEdit.revisions.source.restore": "Restore",
   "externalEdit.revisions.source.unknown": "Other",
+
+  // ── Detail modal (T10) ───────────────────────────────────
+  "externalEdit.detail.hint":
+    "The original is always kept: editing saves a new version and never removes an older one.",
+
+  // ── Original viewer toolbar (T10: pdf.js canvas + own toolbar) ─
+  "externalEdit.original.loading": "Rendering the original pages…",
+  "externalEdit.original.failed": "The original could not be rendered",
+  "externalEdit.original.page": "Page {page} / {total}",
+  "externalEdit.original.prev": "Previous page",
+  "externalEdit.original.next": "Next page",
+  "externalEdit.original.zoomIn": "Zoom in",
+  "externalEdit.original.zoomOut": "Zoom out",
+  "externalEdit.original.fitWidth": "Fit width",
+  "externalEdit.original.zoom": "{percent}%",
+  "externalEdit.original.scanHint":
+    "This scan has no text layer: the page is shown as is, and in dark mode it is only dimmed, not inverted.",
+  "externalEdit.original.darkHint":
+    "In dark mode pages of text are inverted; photos inside the original keep their colours.",
+
+  // ── Multi-format preview (T10: DOCX / TXT / MD / .doc) ───
+  "externalEdit.preview.docxFooter":
+    "Structural preview: rebuilt from Word paragraphs. Fonts, columns and charts will differ from the original.",
+  "externalEdit.preview.markdownFooter": "Light preview: only headings, lists and bold are rendered.",
+  "externalEdit.preview.textFooter": "The text is shown in a monospace font, keeping line breaks and spaces.",
+  "externalEdit.preview.docHint":
+    "Legacy .doc files cannot be previewed here. Open the file in Word, save it as .docx and upload it again.",
+  "externalEdit.preview.empty": "This file has no paragraphs to show.",
+  "externalEdit.preview.failed": "No previewable paragraphs could be read from this file",
+
+  // ── Block-list editing (T11) ─────────────────────────────
+  "externalEdit.blocks.count": "{editable} of {total} passages are editable",
+  "externalEdit.block.roleTitle": "Heading",
+  "externalEdit.block.roleBody": "Body",
+  "externalEdit.block.locked": "Locked",
+  "externalEdit.panel.original": "Original",
+  "externalEdit.panel.newText": "Change to",
+  "externalEdit.panel.origChars": "{count} characters originally",
+  "externalEdit.panel.tooWide": "May be wider than the original block",
+  "externalEdit.reset": "Reset",
+  "externalEdit.success.title": "Version {version} created · {chars} characters",
+  "externalEdit.success.titleNoVersion": "New version created · {chars} characters",
+  "externalEdit.success.hint": "The original is untouched; the change lives in the new version.",
+  "externalEdit.success.viewOriginal": "View the updated original",
+  "externalEdit.success.viewText": "View the text",
+
+  // ── Version history: preview / diff / confirmation (T12) ──
+  "externalEdit.revisions.preview": "Preview",
+  "externalEdit.revisions.previewHint":
+    "The preview shows the original of that version and does not change the current one.",
+  "externalEdit.revisions.previewCurrentHint": "The current version is the one on the Original tab.",
+  "externalEdit.revisions.previewUnsupported":
+    "This version can only be viewed after downloading it (non-PDF history is not previewed in the app).",
+  "externalEdit.revisions.diff": "{delta} vs previous",
+  "externalEdit.revisions.first": "First version",
+  "externalEdit.revisions.confirmTitle": "Restore this version?",
+  "externalEdit.revisions.confirmBody":
+    "Its content is saved as a new version and becomes the current one. No version is ever deleted.",
+  "externalEdit.revisions.confirmOk": "Restore",
+  "externalEdit.revisions.confirmCancel": "Cancel",
+  "externalEdit.revisions.compare": "Compare",
+  "externalEdit.revisions.compareHint":
+    "See the text of this version side by side with the current one.",
+
+  // ── Original vs new comparison (T12) ──────────────────────
+  "externalEdit.compare.left": "This version · {time}",
+  "externalEdit.compare.right": "Current version",
+  "externalEdit.compare.added": "{count} line(s) added",
+  "externalEdit.compare.removed": "{count} line(s) removed",
+  "externalEdit.compare.same": "Both versions have the same text",
+  "externalEdit.compare.loading": "Loading the text of this version…",
+  "externalEdit.compare.failed": "Could not load the text of this version",
+  "externalEdit.compare.noText":
+    "This version has no extracted text, so a line-by-line comparison is not possible; try the original preview.",
+  "externalEdit.compare.tooLarge":
+    "The text is too long (more than {limit} lines on one side), so the line-by-line comparison was skipped; use the original preview or restore directly.",
+  "externalEdit.compare.restoreHint":
+    "Restoring writes a new version; no earlier version is deleted.",
+
+  // ── Viewing a past version (T12: text and preview follow it) ─
+  "externalEdit.versionView.notice":
+    "Viewing a past version ({time}). The current version is unchanged.",
+  "externalEdit.versionView.noticeNoTime":
+    "Viewing a past version. The current version is unchanged.",
+  "externalEdit.versionView.back": "Back to current version",
+  "externalEdit.versionView.textLoading": "Loading the text of this version…",
+  "externalEdit.versionView.textFailed": "Could not load the text of this version",
+  "externalEdit.versionView.noText": "This version has no extracted text.",
+
+  // ── Edit page: original column (T11) ──────────────────────
+  "externalEdit.blockPreview.title": "Original (current passage)",
+  "externalEdit.blockPreview.page": "Page {page}",
+  "externalEdit.blockPreview.textFoot":
+    "This format has no page geometry, so only this passage is outlined here.",
 };
 
 export default externalEdit;

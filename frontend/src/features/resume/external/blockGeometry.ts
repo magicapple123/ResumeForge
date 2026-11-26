@@ -117,3 +117,71 @@ export function revisionSourceKey(source: string): MessageKey {
   if (source === "restore") return "externalEdit.revisions.source.restore";
   return "externalEdit.revisions.source.unknown";
 }
+
+/** 块的语汇（列表里那个「标题 / 正文 / 锁定」角标）。 */
+export type BlockRole = "title" | "body";
+
+/**
+ * 这一段是标题还是正文。
+ *
+ * 判据只有"字号是不是全篇最大的那一档"加"文字够短"：PDF 里标题的字号明显更大，
+ * 而 DOCX / TXT 的几何字段恒为 0（`size` 为 0），一律当正文——宁可少标一个标题，
+ * 也不要把一段长正文误标成标题。
+ */
+export function blockRoleOf(block: ExternalResumeBlock, maxSize: number): BlockRole {
+  if (!(block.size > 0) || !(maxSize > 0)) return "body";
+  const short = block.text.trim().length > 0 && block.text.trim().length <= 40;
+  return block.size >= maxSize * 0.9 && short ? "title" : "body";
+}
+
+/** 全篇最大的块字号（没有几何信息时返回 0，交给 `blockRoleOf` 兜底）。 */
+export function maxBlockSize(blocks: readonly ExternalResumeBlock[]): number {
+  return blocks.reduce((max, block) => (block.size > max ? block.size : max), 0);
+}
+
+/**
+ * 列表里那一行摘要：只取首行，超长截断。
+ *
+ * 保存块原文的完整内容没有意义（一张 PDF 可能有几万字），列表要的是"这是哪一段"。
+ */
+export function blockPreviewText(text: string, limit = 48): string {
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
+  const trimmed = firstLine.trim();
+  if (trimmed.length <= limit) return trimmed;
+  return `${trimmed.slice(0, limit)}…`;
+}
+
+/**
+ * 新文字在这一块里一行放不下（= 大概率会撑高、压到下方内容）。
+ *
+ * 估算而不是精算：按"全角字符宽度 ≈ 字号"折算每行能放几个字，超了就提示。
+ * 只用于**输入时的预警**，真正的溢出由服务端 `overflow` 判定，两者各司其职。
+ */
+export function exceedsBlockWidth(block: ExternalResumeBlock, text: string): boolean {
+  const widthPt = Math.abs(block.x1 - block.x0);
+  if (!(widthPt > 0) || !(block.size > 0)) return false;
+  const perLine = Math.max(1, Math.floor(widthPt / block.size));
+  return text.split(/\r?\n/).some((line) => line.length > perLine);
+}
+
+/**
+ * 这一版与**上一版**的字数差（`+13` / `-5`）。
+ *
+ * 列表是时间倒序（新的在前），所以"上一版"就是数组里下一条；最老的一版没有
+ * 可比的上一版，返回 `null`，界面写「首版」而不是 `+0`。
+ */
+export function revisionDiffChars(
+  items: readonly { text_chars: number }[],
+  index: number,
+): number | null {
+  const older = items[index + 1];
+  if (older === undefined) return null;
+  return items[index].text_chars - older.text_chars;
+}
+
+/** 字数差的展示串（永远带符号，0 也写成 `±0`）。 */
+export function formatCharDelta(delta: number): string {
+  if (delta > 0) return `+${delta}`;
+  if (delta < 0) return `${delta}`;
+  return "±0";
+}

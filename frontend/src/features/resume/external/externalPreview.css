@@ -1,0 +1,198 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * 外部简历详情（T10）的样式：原件画布与工具栏、多格式预览、打印。
+ *
+ * 编辑页三栏（T11）在 `externalEditLayout.css`，历史版本与对比（T12）在
+ * `externalRevisionDiff.css`——500 行预算 + 读者不同，三块各占一个文件。
+ *
+ * 全部锁在 `.rf-ext-` 前缀内：这套选择器只在外部简历详情弹层里生效，不影响简历中心
+ * 的任何其它页面。颜色一律取主题变量（`--rf-*`），浅色/深色各一套由 `data-theme` 驱动。
+ */
+
+/* ── 详情弹层标题 ───────────────────────────────────────────── */
+
+.rf-ext-modal-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* 右侧原本那一大块提示移到标题下一行：一行说明，不占版面。 */
+.rf-ext-modal-hint {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* ── 原件：canvas + 工具栏（R9-4 / R12 / R22）──────────────── */
+
+.rf-ext-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.rf-ext-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--rf-border);
+  background: var(--rf-surface);
+}
+
+.rf-ext-viewer-page {
+  min-width: 92px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 灰画布：页面在其中居中，深色下也跟着变深（不再是亮岛）。 */
+.rf-ext-viewer-canvas {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  background: var(--rf-surface-alt);
+}
+
+.rf-ext-viewer-canvas.is-dark {
+  background: var(--rf-surface-alt);
+}
+
+/* 页面在灰画布居中；`position: relative` 是给"照片层"定位用的。 */
+.rf-ext-page-stack {
+  position: relative;
+  margin: 0 auto;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 16%);
+}
+
+.rf-ext-page {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+}
+
+/* 暗色：整页反色是画完再套一次滤镜（烘进像素），照片由 `.rf-ext-page-overlay` 盖回原色。 */
+
+/* 扫描件在暗色下不反色，只压暗，避免变成亮岛。 */
+.rf-ext-page--dim {
+  filter: brightness(0.84);
+}
+
+/* 只画图片的透明图层：与底层 canvas 同尺寸、同位置，逐像素盖在照片上。 */
+.rf-ext-page-overlay {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.rf-ext-viewer-hint {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-top: 1px solid var(--rf-border);
+}
+
+/* ── 多格式预览（DOCX / TXT / MD）──────────────────────────── */
+
+.rf-ext-doc {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  background: var(--rf-surface-alt);
+}
+
+.rf-ext-doc-paper {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 28px 32px;
+  border: 1px solid var(--rf-border);
+  border-radius: 4px;
+  background: var(--rf-surface);
+  color: var(--rf-text-body);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.rf-ext-doc-paper p {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rf-ext-doc-plain {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rf-ext-md h1,
+.rf-ext-md h2,
+.rf-ext-md h3 {
+  margin: 14px 0 8px;
+  line-height: 1.4;
+}
+
+.rf-ext-md h1 {
+  font-size: 20px;
+}
+
+.rf-ext-md h2 {
+  font-size: 16px;
+}
+
+.rf-ext-md h3 {
+  font-size: 14px;
+}
+
+.rf-ext-doc-footer {
+  display: block;
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--rf-border);
+  font-size: 12px;
+}
+
+/* ── 详情弹层（Modal 1080 × 86vh）────────────────────────────── */
+
+/* body 已经贴边（原件页要满铺），页签栏自己补内边距。 */
+.rf-ext-detail-modal .ant-tabs-nav {
+  padding: 0 16px;
+  margin-bottom: 0;
+}
+
+.rf-ext-detail-modal .ant-tabs-content-holder {
+  min-height: 0;
+}
+
+/* "正在看历史版本"的提示条（T12）：贴在页签栏之上，不挤占内容高度。 */
+.rf-ext-version-notice {
+  flex: none;
+  margin: 8px 16px 0;
+}
+
+/* ── 打印：白纸黑字（R22 验收）──────────────────────────────── */
+
+@media print {
+  .rf-ext-page,
+  .rf-ext-page--dim,
+  .rf-ext-page-overlay,
+  .rf-ext-viewer-canvas,
+  .rf-ext-viewer-canvas.is-dark,
+  .rf-ext-viewer-toolbar {
+    filter: none !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+}

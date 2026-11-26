@@ -1,0 +1,281 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * 编辑页（T11）与「应用成功条」的版面样式。
+ *
+ * 为什么从 `externalPreview.css` 拆出来：那份只管"看原件"（画布、工具栏、多格式预览），
+ * 而这个文件管"改字时的三栏"（原件列 / 段落清单 / 表单）。两者相乘在 500 行预算上超了，
+ * 且它们的读者不同：改版面的人只该动这一个文件，不用在画布那段代码里翻。
+ *
+ * 全部锁在 `.rf-ext-` 前缀内，颜色一律取主题变量（`--rf-*`）。窄屏（< 1024px）在这里
+ * 改成上下堆叠——见文件末尾那条 `@media`。
+ */
+
+/* ── 块列表编辑（T11）──────────────────────────────────────── */
+
+/*
+ * 三栏：原件（当前页 + 高亮）| 段落清单 | 表单。
+ *
+ * 三栏各自滚动：`.rf-ext-edit` 只负责排布，`overflow` 落在每个子栏上（见下面各自的
+ * `overflow: auto`），所以点清单里的一段不会把右栏滚回顶部，也不会带着页面一起跳。
+ */
+.rf-ext-edit {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+  padding: 12px 4px;
+}
+
+.rf-ext-edit > .rf-ext-edit-blocks {
+  flex: 1 1 320px;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+}
+
+.rf-ext-edit > .rf-ext-edit-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 340px;
+  min-width: 300px;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+/* 第一栏：原件（只读）。宽度跟着弹层走，窄屏时由下面的媒体查询改成上下堆叠。 */
+.rf-ext-edit-origin {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 1 340px;
+  min-width: 240px;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.rf-ext-edit-origin-title {
+  font-size: 12px;
+  padding-left: 2px;
+}
+
+.rf-ext-edit-origin-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface-alt);
+}
+
+/* 选中的那一页：纸面 + 百分比定位的高亮框。 */
+.rf-ext-block-page {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+}
+
+.rf-ext-block-page-canvas {
+  position: relative;
+  background: var(--rf-surface-alt);
+}
+
+.rf-ext-block-page-stack {
+  position: relative;
+  width: 100%;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 14%);
+}
+
+/* 高亮框：只描边 + 淡淡的底色，压住正文会让"改哪里"更难看。 */
+.rf-ext-block-highlight {
+  position: absolute;
+  border: 2px solid var(--rf-brand);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--rf-brand) 20%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--rf-brand) 30%, transparent);
+  pointer-events: none;
+}
+
+.rf-ext-block-highlight-text {
+  padding: 6px 8px;
+  border: 1px solid var(--rf-brand);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--rf-brand) 12%, transparent);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rf-ext-block-page-hint {
+  font-size: 12px;
+}
+
+/*
+ * 窄窗口 / 竖屏：三栏改成上下堆叠。
+ *
+ * 阈值取 **1124px** 而不是 1024，是因为要按"弹层放得下三栏"来分界：弹层固定
+ * `1080px` 且封顶 `96vw`，窗口窄于 1124 时弹层已经不足 1080，三栏每栏只剩 300px 上下，
+ * 正文被挤成一条（1024 窗口实测如此）。所以 1024 及以下必然命中这条；1124–1440 之间
+ * 仍给三栏，是因为那时每栏还有 330px 以上、读得下去。
+ *
+ * 堆叠后不再三栏平分高度：原件固定 220px 里自己滚，清单与表单各占剩余的一半 ——
+ * 这样"上面看原件、下面改字"滚动时互不影响（各栏 `overflow` 都还在自己身上）。
+ *
+ * **矮窗口下不再把清单压成一条**：清单与表单各有可用高度下限（200 / 220），三块合计
+ * 超过弹层时由**这一列自己**滚（`overflow-y: auto`）。改之前用 `flex-basis: 0` + 96px
+ * 下限硬塞，1024 × 800 实测清单只剩 96px（只看得见一行，等于没法选段）——用户要的是
+ * "堆叠后还能用"，不是"一定能一屏塞下"。
+ */
+@media (max-width: 1124px) {
+  .rf-ext-edit {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    overflow-y: auto;
+  }
+
+  .rf-ext-edit > .rf-ext-edit-origin {
+    flex: 0 0 220px;
+    max-height: 220px;
+    min-width: 0;
+  }
+
+  .rf-ext-edit > .rf-ext-edit-blocks {
+    flex: 1 1 auto;
+    min-height: 200px;
+    max-height: none;
+  }
+
+  .rf-ext-edit > .rf-ext-edit-panel {
+    flex: 1 1 auto;
+    min-height: 220px;
+    min-width: 0;
+    max-height: none;
+  }
+}
+
+/* 表单区自己滚：成功条要一直留在右下角。 */
+.rf-ext-edit-form {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+/* 右栏表单本体：具名 flex 列，让「原文」能拉伸（见 `ExternalResumeEditorPanel` 的注释）。 */
+.rf-ext-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  min-height: 0;
+}
+
+.rf-ext-blocks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.rf-ext-block {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface);
+  text-align: left;
+  font: inherit;
+  color: var(--rf-text-body);
+  cursor: pointer;
+}
+
+.rf-ext-block:hover:not(:disabled) {
+  border-color: var(--rf-brand);
+}
+
+.rf-ext-block.is-selected {
+  border-color: var(--rf-brand);
+  background: var(--rf-brand-wash);
+}
+
+.rf-ext-block:disabled {
+  cursor: not-allowed;
+  opacity: 0.66;
+}
+
+.rf-ext-block-index {
+  flex: none;
+  min-width: 20px;
+  color: var(--rf-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.rf-ext-block-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rf-ext-block-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-ext-block-meta {
+  font-size: 11px;
+  color: var(--rf-text-tertiary);
+}
+
+.rf-ext-block-reason {
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+}
+
+/*
+ * 原文：灰底只读（右栏第一块，不参与输入）。
+ *
+ * T11 起**改 grow 撑满余下高度**（原先是写死的 `max-height: 180px`）：一段长正文在
+ * 180px 的框里要反复滚，"我改的是哪一句"就被滚丢了。`min-height` 保底，短正文时
+ * 也不会缩成一条。
+ */
+.rf-ext-original {
+  flex: 1 1 auto;
+  /* 保底高度比"改之前"的 180px 略小、但**会长**：余下的高度都给它，长段落不必在
+     180px 的框里反复滚；短段落也不会缩成一条（那是 min-height 的作用）。 */
+  min-height: 150px;
+  max-height: none;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+  background: var(--rf-fill-secondary);
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── 应用成功条（T11）──────────────────────────────────────── */
+
+.rf-ext-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-brand-wash);
+}

@@ -1,185 +1,95 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 外部简历详情抽屉（第 21 条 / #5）：原件、提取文本、文本检查、编辑、历史版本。
+ * 外部简历详情弹层（R9-4 / R9-6 / R9-7 / R11 / R12 / R22）：原件、提取文本、文本检查、
+ * 编辑、历史版本。
  *
- * **前三个视图只读**：没有导出、没有版式——外部简历进不了制作台。视图按内容而不是容器分：
- * 原件看"传的是哪份"，文本看"提取到了什么"，检查看"文本里有什么问题"。
+ * ## 为什么是居中 Modal 而不是全宽 Drawer
  *
- * **后两个视图（#5）能改字**：改的产物是**新的 `user_file` + 一条版本**，原件永不覆盖；
- * 具体交互在 `features/resume/external/` 里（PDF 块点选 / DOCX 段落 / 历史恢复）。
- * 这里只负责挂页签，并把编辑/恢复返回的详情换进本抽屉的 `record`——换了 `file_id`，
- * 原件页签的 URL 才会跟着变（否则改完还在看旧 PDF）。
+ * Drawer 从右侧拉满，宽 1080 的页面挤在左边、右边留一大片空白，看起来像"没画完"。
+ * 改成 1080 × 86vh 的居中卡片后，页面在灰画布居中，标题下面一行说明取代了原来悬在
+ * 右侧的提示（R9-4）。
+ *
+ * ## 「原件」页签为什么不再是 iframe
+ *
+ * iframe 里跑的是浏览器自带的 PDF 阅读器，画布与工具栏跟随浏览器/系统主题，CSS 进不去
+ * ——暗色下它就是界面里的一块亮岛（R12）。现在换成 `pdf.js` 画到 canvas 上，配色、工具栏、
+ * 打印都在自己手里（`ExternalOriginalPreview`），DOCX / TXT / MD 走 `ExternalDocumentPreview`。
+ *
+ * ## 契约（与 CONTRACT.md 第 1 节一致）
+ *
+ * `resumeId` / `open` / `onClose` / `onChanged` / `refreshKey`。`onChanged` 在**编辑 /
+ * 恢复**成功后调用（无参数、幂等，列表侧只做 `reload()`），本组件不负责接线。
  *
  * 检查结果**没有总分**：只按条目渲染每类结论（占位符 / 量化 / 联系方式 / 长度 /
  * 弱表述 / 关键词），每条带行号与原文片段；未提取到文字时只给一条说明，绝不显示
  * "检查通过"。
  */
-import { DownloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Drawer, Space, Tabs, Tag, Typography } from "antd";
+import { Alert, Button, Modal, Space, Tabs, Tag, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
-  externalResumeFileUrl,
   getExternalResume,
   getExternalResumeAnalysis,
+  getExternalResumeRevisionText,
 } from "../../../api/externalResumes";
 import type {
-  AnalysisCheck,
   ExternalResumeAnalysis,
   ExternalResumeDetail,
+  ExternalResumeRevision,
 } from "../../../api/externalResumes";
 import ErrorState from "../../../components/common/ErrorState";
 import LoadingBlock from "../../../components/common/LoadingBlock";
+import { ExternalResumeDetailActions } from "../../external-resume/ExternalResumeDetailActions";
+import { fileKindBadge, fileKindOf } from "../../../utils/fileKind";
+import { formatDateTime } from "../../../utils/format";
+import { ExternalResumeCheckList } from "../external/ExternalResumeCheckList";
 import { ExternalResumeEditTab } from "../external/ExternalResumeEditTab";
+import { ExternalOriginalPreview } from "../external/ExternalOriginalPreview";
 import { ExternalResumeRevisions } from "../external/ExternalResumeRevisions";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
+import "../external/externalPreview.css";
 
 export type ExternalResumeDetailTab = "original" | "text" | "check" | "edit" | "revisions";
 
-type CheckStatus = "ok" | "warn" | "info";
+/*
+ * 「文本检查」的呈现（六类结论、标签、占比文案）已搬到
+ * `features/resume/external/ExternalResumeCheckList.tsx`：这里只留弹层骨架（Modal、
+ * 五个页签、记录缓存、历史版本视图），再往下塞一百多行"占比怎么算"就过 500 行预算了。
+ */
 
-/** 每类检查的"正常/需注意"判定（文案 key 也是界面语汇，协议 key 来自后端）。 */
-const CHECK_META = {
-  placeholder: {
-    label: "resumesPage.external.checkPlaceholder",
-    status: (check: AnalysisCheck): CheckStatus => (check.count > 0 ? "warn" : "ok"),
-  },
-  quantification: {
-    label: "resumesPage.external.checkQuantification",
-    status: (check: AnalysisCheck): CheckStatus =>
-      check.sample_size >= 3 && (check.ratio ?? 0) < 0.3 ? "warn" : "ok",
-  },
-  contact: {
-    label: "resumesPage.external.checkContact",
-    status: (check: AnalysisCheck): CheckStatus => (check.count > 0 ? "ok" : "warn"),
-  },
-  length: {
-    label: "resumesPage.external.checkLength",
-    status: (): CheckStatus => "info",
-  },
-  weak_wording: {
-    label: "resumesPage.external.checkWeakWording",
-    status: (check: AnalysisCheck): CheckStatus => (check.count > 0 ? "warn" : "ok"),
-  },
-  keywords: {
-    label: "resumesPage.external.checkKeywords",
-    status: (check: AnalysisCheck): CheckStatus => ((check.ratio ?? 0) < 0.6 ? "warn" : "ok"),
-  },
-} as const;
-
-function percent(ratio: number | null): number {
-  return Math.round((ratio ?? 0) * 100);
-}
-
-function statusTag(status: CheckStatus) {
-  if (status === "ok") {
-    return <Tag color="success">{t("resumesPage.external.checkStatusOk")}</Tag>;
-  }
-  if (status === "warn") {
-    return <Tag color="warning">{t("resumesPage.external.checkStatusWarn")}</Tag>;
-  }
-  return <Tag>{t("resumesPage.external.checkStatusInfo")}</Tag>;
-}
-
-/** 每类检查的一句结论（比例一律换算成百分比，避免界面出现 0.4 这种原始小数）。 */
-function checkDetail(check: AnalysisCheck): string {
-  switch (check.key) {
-    case "placeholder":
-      return check.count > 0
-        ? t("resumesPage.external.checkPlaceholderDetail", { count: check.count })
-        : t("resumesPage.external.checkPlaceholderOk");
-    case "quantification":
-      return t("resumesPage.external.checkQuantificationDetail", {
-        count: check.count,
-        total: check.sample_size,
-        ratio: percent(check.ratio),
-      });
-    case "contact":
-      return check.count > 0
-        ? t("resumesPage.external.checkContactDetail", { count: check.count })
-        : t("resumesPage.external.checkContactMissing");
-    case "length":
-      return t("resumesPage.external.checkLengthDetail", {
-        chars: check.count,
-        lines: check.sample_size,
-        pages: Math.max(0.1, Math.round((check.count / 1200) * 10) / 10),
-      });
-    case "weak_wording":
-      return check.count > 0
-        ? t("resumesPage.external.checkWeakWordingDetail", {
-            count: check.count,
-            total: check.sample_size,
-            ratio: percent(check.ratio),
-          })
-        : t("resumesPage.external.checkWeakWordingOk");
-    case "keywords": {
-      const keywords = check.keywords;
-      if (!keywords) return "";
-      const base = t("resumesPage.external.checkKeywordsDetail", {
-        matched: keywords.matched.length,
-        target: keywords.target.length,
-        ratio: percent(keywords.coverage_ratio),
-      });
-      return keywords.missing.length > 0
-        ? `${base} · ${t("resumesPage.external.checkKeywordsMissing", {
-            words: keywords.missing.join(" / "),
-          })}`
-        : base;
-    }
-    default:
-      return "";
-  }
-}
-
-function CheckList({ analysis }: { analysis: ExternalResumeAnalysis }) {
-  return (
-    <Space orientation="vertical" size={12} style={{ width: "100%" }}>
-      <Alert type="info" showIcon title={t("resumesPage.external.checkHint")} />
-      {analysis.checks.map((check) => {
-        const meta = CHECK_META[check.key];
-        if (!meta) return null;
-        return (
-          <div key={check.key}>
-            <Space size={8} wrap>
-              <Typography.Text strong>{t(meta.label)}</Typography.Text>
-              {statusTag(meta.status(check))}
-            </Space>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 4 }}>
-              {checkDetail(check)}
-            </Typography.Paragraph>
-            {check.items.length > 0 ? (
-              <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                {check.items.map((item) => (
-                  <li key={`${check.key}-${item.line}-${item.text.slice(0, 12)}`}>
-                    <Typography.Text type="secondary">
-                      {t("resumesPage.external.lineWithText", {
-                        line: item.line,
-                        text: item.text,
-                      })}
-                    </Typography.Text>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        );
-      })}
-    </Space>
-  );
+export interface ExternalResumeDetailDrawerProps {
+  resumeId: number | null;
+  /**
+   * 是否显示。**不传时按 `resumeId !== null` 推断**——两个既有调用点
+   * （简历中心列表、岗位图谱预览）都只传 `resumeId`，这样它们不用改也不会失效。
+   */
+  open?: boolean;
+  onClose: () => void;
+  /** 编辑 / 恢复 成功后调用；无参数、可重复调用（列表侧只做 `reload()`）。 */
+  onChanged?: () => void;
+  /** 外部变更信号（如 `record.file_id`）：进历史版本列表的依赖，用于编辑后立刻刷新。 */
+  refreshKey?: string | number;
+  /** 打开就落在哪个页签（列表「点文件名进文本页」这类深链用）。 */
+  initialTab?: ExternalResumeDetailTab;
+  /**
+   * 打开就**看某一版历史版本**（T12）。
+   *
+   * 给了它，「原件」页签画的是那一版的文件、「文本」页签读的是那一版的正文，并在弹层
+   * 顶部出一条"正在看历史版本"的提示——三条一起切，用户才不会把旧内容当成现在的。
+   * 不给就是当前版本（既有调用点一个也不用改）。
+   */
+  revisionId?: number;
 }
 
 export function ExternalResumeDetailDrawer({
   resumeId,
+  open: openProp,
   initialTab = "original",
   onClose,
   onChanged,
-}: {
-  resumeId: number | null;
-  initialTab?: ExternalResumeDetailTab;
-  onClose: () => void;
-  /** 编辑 / 恢复之后回调一次（`text_chars` / `has_text` / `file_id` 都变了，列表需要刷新）。 */
-  onChanged?: (next: ExternalResumeDetail) => void;
-}) {
+  refreshKey,
+  revisionId,
+}: ExternalResumeDetailDrawerProps) {
   useLocale();
   /**
    * 详情与检查结果都按**记录 id 缓存**（`{id, ...}`），渲染时只认"和当前 resumeId 匹配"
@@ -201,27 +111,56 @@ export function ExternalResumeDetailDrawer({
     id: number;
     tab: ExternalResumeDetailTab;
   } | null>(null);
-  const open = resumeId !== null;
+  /**
+   * 当前是否在"看某一版历史版本"（T12）。
+   *
+   * 与 `detail` / `tabState` 同一套缓存口径：带上 `resumeId`，换一份简历时天然失效，
+   * 不需要在 effect 里清状态（那会多一轮渲染，也会先闪一眼上一份的版本）。
+   * `at` 是那一版的时刻，用于提示条；深链只给了 id 时为空串，提示条就不写时间。
+   */
+  const [viewState, setViewState] = useState<{
+    id: number;
+    revisionId: number;
+    at: string;
+  } | null>(
+    revisionId === undefined || resumeId === null
+      ? null
+      : { id: resumeId, revisionId, at: "" },
+  );
+  const open = openProp ?? resumeId !== null;
   const record = detail !== null && detail.id === resumeId ? detail.record : null;
   const detailError = detail !== null && detail.id === resumeId ? detail.error : "";
   const tab = tabState !== null && tabState.id === resumeId ? tabState.tab : initialTab;
+  const viewing = viewState !== null && viewState.id === resumeId ? viewState : null;
 
   /**
-   * 编辑 / 恢复之后换掉本抽屉里的记录，并把文本检查的缓存作废。
+   * 编辑 / 恢复之后换掉本弹层里的记录，并把文本检查的缓存作废。
    *
-   * 换 `record` 的目的是让「原件」页签的 URL 跟着 `file_id` 变（否则改完还在看旧 PDF）。
-   * 作废检查结果是因为正文已经变了：不清的话切回「文本检查」会读到上一次的结论，
-   * 而"检查通过了"这件事在新正文上可能并不成立。
+   * 换 `record` 的目的是让「原件」页签的地址跟着 `file_id` 变（否则改完还在看旧 PDF），
+   * 也让成功条上的两个入口点进去就是新内容。作废检查结果是因为正文已经变了：不清的话
+   * 切回「文本检查」会读到上一次的结论，而"检查通过了"这件事在新正文上可能并不成立。
    */
   const applyRecord = useCallback(
-    (next: ExternalResumeDetail) => {
+    (next: ExternalResumeDetail, keepView = false) => {
       setDetail((previous) =>
         previous !== null && previous.id === next.id ? { ...previous, record: next } : previous,
       );
       setAnalysisState(null);
-      onChanged?.(next);
+      // 恢复 / 编辑都会产生**新版本**：提示条上那句"当前版本没有改变"已经不成立，收起来。
+      // 收藏 / 备注 / 重命名（T28）不改版本，所以保持"正在看的那一版"不被踢掉。
+      if (!keepView) setViewState(null);
+      onChanged?.();
     },
     [onChanged],
+  );
+
+  /** 历史版本列表里点「预览」：把原件、文本与提示条一起切到那一版（T12）。 */
+  const showRevision = useCallback(
+    (revision: ExternalResumeRevision) => {
+      if (resumeId === null) return;
+      setViewState({ id: resumeId, revisionId: revision.id, at: revision.created_at });
+    },
+    [resumeId],
   );
 
   /**
@@ -283,37 +222,22 @@ export function ExternalResumeDetailDrawer({
     };
   }, [resumeId, initialTab, loadAnalysis]);
 
-  const originalView = () => {
-    if (!record) return null;
-    if ((record.mime ?? "").toLowerCase().includes("pdf")) {
-      return (
-        <iframe
-          title={record.name}
-          // CR-16：`#view=FitV` 让 Chromium 内置阅读器按整页宽度铺开（默认比例会缩在中间）。
-          // `?v=<file_id>`：每次编辑都写新的 `user_file`，URL 变了浏览器才不会拿缓存里的旧 PDF。
-          src={`${externalResumeFileUrl(record.id)}?v=${record.file_id}#view=FitV`}
-          // 高度交给 flex 链（Drawer body → Tabs → 面板），原先写死 560px 时下面一大截空白。
-          style={{ width: "100%", height: "100%", border: "none", display: "block" }}
-        />
-      );
-    }
-    return (
-      <Space orientation="vertical" size={12} style={{ width: "100%" }}>
-        <Alert type="info" showIcon title={t("resumesPage.external.originalUnsupported")} />
-        <Button
-          icon={<DownloadOutlined />}
-          href={externalResumeFileUrl(record.id)}
-          target="_blank"
-          rel="noreferrer"
-        >
-          {t("resumesPage.external.downloadOriginal")}
-        </Button>
-      </Space>
-    );
-  };
+  /** 成功条 / 深链用的页签切换。 */
+  const goto = useCallback(
+    (next: ExternalResumeDetailTab) => {
+      if (resumeId === null) return;
+      setTabState({ id: resumeId, tab: next });
+      if (next === "check" && record !== null && record.has_text) loadAnalysis(record.id);
+    },
+    [resumeId, record, loadAnalysis],
+  );
 
   const textView = () => {
     if (!record) return null;
+    // 在看历史版本时，正文来自那一版自己的文件（历史表不存正文，按需提取）。
+    if (viewing !== null) {
+      return <RevisionTextView resumeId={record.id} revisionId={viewing.revisionId} />;
+    }
     if (!record.has_text) {
       return <Alert type="warning" showIcon title={t("resumesPage.external.textEmpty")} />;
     }
@@ -357,24 +281,43 @@ export function ExternalResumeDetailDrawer({
     if (current.data.warnings.length > 0) {
       return <Alert type="warning" showIcon title={current.data.warnings[0]} />;
     }
-    return <CheckList analysis={current.data} />;
+    return <ExternalResumeCheckList analysis={current.data} />;
   };
 
+  const badge = record === null ? null : fileKindBadge(fileKindOf(record.mime, record.name));
+
   return (
-    <Drawer
+    <Modal
       open={open}
-      onClose={onClose}
-      size="large"
-      // CR-16：body 变纵向 flex，Tabs 才能吃掉剩余高度；原件 iframe 与文本 Tab 都在内部滚动，
-      // 整页不再跟着 PDF 一起滚。
+      onCancel={onClose}
+      footer={null}
+      centered
+      // 1080 × 86vh：页面居中、右侧不再留空白列（R9-4）。
+      width={1080}
+      className="rf-ext-detail-modal"
+      style={{ maxWidth: "96vw", maxHeight: "94vh" }}
       styles={{
-        body: { display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" },
+        body: {
+          height: "86vh",
+          minHeight: 0,
+          padding: 0,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        },
       }}
       title={
-        <Space size={8}>
-          <Typography.Text strong>{t("resumesPage.external.detailTitle")}</Typography.Text>
-          {record ? <Typography.Text type="secondary">{record.name}</Typography.Text> : null}
-        </Space>
+        <div className="rf-ext-modal-head">
+          <Space size={8} wrap>
+            <Typography.Text strong>{t("resumesPage.external.detailTitle")}</Typography.Text>
+            {record ? <Typography.Text>{record.name}</Typography.Text> : null}
+            {badge ? <Tag>{badge}</Tag> : null}
+          </Space>
+          {/* 原来悬在右侧的提示改成标题下一行（R9-4）。 */}
+          <Typography.Text type="secondary" className="rf-ext-modal-hint">
+            {t("externalEdit.detail.hint")}
+          </Typography.Text>
+        </div>
       }
     >
       {detailError ? (
@@ -382,39 +325,66 @@ export function ExternalResumeDetailDrawer({
       ) : record === null ? (
         <LoadingBlock />
       ) : (
+        <>
+          {viewing === null ? null : (
+            // 三条一起切（原件 / 文本 / 这条提示）才算"在看那一版"：只切预览不切正文时，
+            // 用户会在「文本」页签里读到当前版本的字，以为那一版就是这个内容。
+            <Alert
+              data-testid="external-viewing-revision"
+              type="info"
+              showIcon
+              className="rf-ext-version-notice"
+              title={
+                viewing.at.length > 0
+                  ? t("externalEdit.versionView.notice", { time: formatDateTime(viewing.at) })
+                  : t("externalEdit.versionView.noticeNoTime")
+              }
+              action={
+                <Button
+                  size="small"
+                  data-testid="external-view-current"
+                  onClick={() => setViewState(null)}
+                >
+                  {t("externalEdit.versionView.back")}
+                </Button>
+              }
+            />
+          )}
+        {/* P0 四项（T28）：收藏 / 备注 / 重命名 / 导出原件。挂在页签上方，切页签不丢；
+            `revisionId` 传当前在看的那一版，所以"看哪一版就导出哪一版"。 */}
+        <ExternalResumeDetailActions
+          record={record}
+          onRecordChange={(next) => applyRecord(next, true)}
+          revisionId={viewing?.revisionId}
+        />
         <Tabs
           activeKey={tab}
-          // 占满 Drawer body 的剩余高度；`minHeight: 0` 是 flex 子项能收缩、内部才能滚动的关键。
+          // 占满弹层 body 的剩余高度；`minHeight: 0` 是 flex 子项能收缩、内部才能滚动的关键。
           style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
           styles={{
-            // `.ant-tabs-body` / `.ant-tabs-tabpane`：把高度链传到底，滚动发生在面板内部。
-            body: { height: "100%" },
+            body: { height: "100%", minHeight: 0 },
             content: { height: "100%", overflow: "auto" },
           }}
-          onChange={(key) => {
-            if (resumeId === null) return;
-            const nextTab = key as ExternalResumeDetailTab;
-            setTabState({ id: resumeId, tab: nextTab });
-            // 检查结果按需拉取（有文字才值得拉；空正文由界面直接说明）。
-            if (nextTab === "check" && record !== null && record.has_text) {
-              loadAnalysis(record.id);
-            }
-          }}
+          onChange={(key) => goto(key as ExternalResumeDetailTab)}
           items={[
             {
               key: "original",
               label: t("resumesPage.external.tabOriginal"),
-              children: originalView(),
+              // 原件页自己铺满（工具栏 + 灰画布），不加内边距。
+              // 在看历史版本时画那一版的文件（后端 `GET /file?revision_id=` 早就支持）。
+              children: (
+                <ExternalOriginalPreview record={record} revisionId={viewing?.revisionId} />
+              ),
             },
             {
               key: "text",
               label: t("resumesPage.external.tabText"),
-              children: textView(),
+              children: <div style={{ padding: "12px 16px" }}>{textView()}</div>,
             },
             {
               key: "check",
               label: t("resumesPage.external.tabCheck"),
-              children: checkView(),
+              children: <div style={{ padding: "12px 16px" }}>{checkView()}</div>,
             },
             {
               key: "edit",
@@ -425,18 +395,93 @@ export function ExternalResumeDetailDrawer({
                   resumeId={record.id}
                   record={record}
                   onRecordChange={applyRecord}
+                  onGotoTab={goto}
                 />
               ),
             },
             {
               key: "revisions",
               label: t("externalEdit.tab.revisions"),
-              children: <ExternalResumeRevisions resumeId={record.id} onRestored={applyRecord} />,
+              children: (
+                <div style={{ padding: "12px 16px" }}>
+                  <ExternalResumeRevisions
+                    resumeId={record.id}
+                    record={record}
+                    refreshKey={refreshKey ?? record.file_id}
+                    onRestored={applyRecord}
+                    onViewVersion={showRevision}
+                  />
+                </div>
+              ),
             },
           ]}
         />
+        </>
       )}
-    </Drawer>
+    </Modal>
+  );
+}
+
+/**
+ * 「文本」页签在**看历史版本**时的内容（T12）。
+ *
+ * 历史版本表只存 `text_chars`，所以正文按需从那一版的文件提取一次。三种状态都要
+ * 说清楚：还没取到 / 取失败 / 这一版本来就没有文字层（扫描件）——最后一种不能写
+ * "加载中"，那会让人一直等一个不会来的结果。
+ */
+function RevisionTextView({ resumeId, revisionId }: { resumeId: number; revisionId: number }) {
+  const [state, setState] = useState<{
+    id: number;
+    text: string;
+    error: string;
+    loading: boolean;
+  }>({ id: revisionId, text: "", error: "", loading: true });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ id: revisionId, text: "", error: "", loading: true });
+    void getExternalResumeRevisionText(resumeId, revisionId)
+      .then((next) => {
+        if (cancelled) return;
+        setState({ id: revisionId, text: next.text, error: "", loading: false });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setState({
+          id: revisionId,
+          text: "",
+          error: error instanceof Error ? error.message : t("externalEdit.versionView.textFailed"),
+          loading: false,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resumeId, revisionId]);
+
+  if (state.error) {
+    return <ErrorState description={state.error} />;
+  }
+  if (state.loading) {
+    return <LoadingBlock tip={t("externalEdit.versionView.textLoading")} />;
+  }
+  if (state.text.trim().length === 0) {
+    return <Alert type="warning" showIcon title={t("externalEdit.versionView.noText")} />;
+  }
+  return (
+    <pre
+      data-testid="external-revision-text"
+      style={{
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+        margin: 0,
+        fontFamily: "inherit",
+        fontSize: 13,
+        lineHeight: 1.7,
+      }}
+    >
+      {state.text}
+    </pre>
   );
 }
 

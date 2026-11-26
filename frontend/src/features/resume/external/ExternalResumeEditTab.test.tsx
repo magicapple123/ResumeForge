@@ -23,6 +23,7 @@ import { ExternalResumeEditTab } from "./ExternalResumeEditTab";
 const apiMocks = vi.hoisted(() => ({
   getExternalResumeBlocks: vi.fn(),
   editExternalResumeBlock: vi.fn(),
+  listExternalResumeRevisions: vi.fn(),
   externalResumeFileUrl: (id: number) => `/api/external-resumes/${id}/file`,
 }));
 vi.mock("../../../api/externalResumes", () => apiMocks);
@@ -138,6 +139,9 @@ function renderTab(onRecordChange = vi.fn()) {
 beforeEach(() => {
   apiMocks.getExternalResumeBlocks.mockReset();
   apiMocks.editExternalResumeBlock.mockReset();
+  apiMocks.listExternalResumeRevisions
+    .mockReset()
+    .mockResolvedValue({ resume_id: 7, total: 4, items: [] });
 });
 
 afterEach(() => {
@@ -245,6 +249,69 @@ describe("ExternalResumeEditTab", () => {
       expect(apiMocks.getExternalResumeBlocks).toHaveBeenCalledTimes(2);
     });
     expect(await screen.findByTestId("external-block-p1b0")).toBeInTheDocument();
+  });
+
+  it("应用成功后出成功条：第 N 版 · M 字，两个入口分别切到「原件」与「文本」", async () => {
+    apiMocks.getExternalResumeBlocks
+      .mockResolvedValueOnce(blocksWith("旧标题"))
+      .mockResolvedValue(blocksWith("新标题"));
+    apiMocks.editExternalResumeBlock.mockResolvedValue(EDIT_RESULT);
+    const onGotoTab = vi.fn();
+
+    render(
+      <ExternalResumeEditTab
+        resumeId={7}
+        record={RECORD}
+        onRecordChange={vi.fn()}
+        onGotoTab={onGotoTab}
+      />,
+    );
+    fireEvent.click(await screen.findByTestId("external-block-p1b0"));
+    fireEvent.change(screen.getByTestId("external-text-input"), { target: { value: "新标题" } });
+    fireEvent.click(screen.getByTestId("external-apply"));
+
+    // 成功条是 R11 的核心：「改完看不到结果」= 没有入口指向新版本。
+    const bar = await screen.findByTestId("external-apply-success");
+    expect(bar).toHaveTextContent(
+      t("externalEdit.success.title", { version: 4, chars: EDIT_RESULT.resume.text_chars }),
+    );
+    fireEvent.click(screen.getByTestId("external-success-original"));
+    expect(onGotoTab).toHaveBeenCalledWith("original");
+    fireEvent.click(screen.getByTestId("external-success-text"));
+    expect(onGotoTab).toHaveBeenCalledWith("text");
+  });
+
+  it("右栏把这一段的原文灰底只读地摆出来（不用回头去左栏找）", async () => {
+    apiMocks.getExternalResumeBlocks.mockResolvedValue(blocksWith("旧标题"));
+
+    renderTab();
+    fireEvent.click(await screen.findByTestId("external-block-p1b0"));
+
+    expect(screen.getByTestId("external-original-text")).toHaveTextContent("旧标题");
+    // 输入框的初值 = 原文；改过之后可以「重置」回原文。
+    const input = screen.getByTestId("external-text-input");
+    expect(input).toHaveValue("旧标题");
+    fireEvent.change(input, { target: { value: "改了" } });
+    fireEvent.click(screen.getByTestId("external-reset"));
+    expect(screen.getByTestId("external-text-input")).toHaveValue("旧标题");
+  });
+
+  it("左栏是原件：选中一块后画出它所在的页并把那一段框出来（T11 三栏）", async () => {
+    apiMocks.getExternalResumeBlocks.mockResolvedValue(blocksWith("旧标题"));
+
+    renderTab();
+    // 还没选块：原件列只给一句"先在左边点一段"，不画空页面。
+    expect(await screen.findByTestId("external-edit-origin")).toBeInTheDocument();
+    expect(screen.getByTestId("external-block-preview-empty")).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByTestId("external-block-p1b0"));
+    expect(await screen.findByTestId("external-block-page")).toBeInTheDocument();
+    // 高亮框用的是百分比定位（bbox → 页面内百分比），与旧热区同一套换算，缩放不用重算。
+    const highlight = screen.getByTestId("external-block-highlight");
+    expect(highlight.getAttribute("style")).toContain("left");
+    expect(highlight.getAttribute("style")).toContain("width");
+    // 只读：这一列不是按钮，也不接受点击（选块仍然只在清单里）。
+    expect(highlight.closest("button")).toBeNull();
   });
 
   it("没有可编辑的块时给一句说明，而不是一块空白", async () => {

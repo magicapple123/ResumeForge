@@ -177,6 +177,70 @@ def test_revision_file_endpoint_serves_that_version(client):
     assert "改后标题" not in text
 
 
+def test_restore_keeps_text_when_display_name_has_no_extension(client):
+    """恢复不能把正文弄丢：显示名没有扩展名时仍要按那一版文件的名字去提取。
+
+    真实数据里 `external_resume.name` 是用户起的名字（"黄岑果-照片样本-20261127"），
+    没有后缀；早先恢复链按显示名判断"是不是 PDF"，短文档于是被当成扫描件，正文变 0 字。
+    """
+    body = upload(client, "resume.pdf", build_pdf([("原始标题", 18, 780)]), "application/pdf")
+    renamed = client.patch(f"/api/external-resumes/{body['id']}", json={"name": "黄岑果-照片样本"})
+    assert renamed.status_code == 200, renamed.text
+
+    block_id = client.get(f"/api/external-resumes/{body['id']}/blocks").json()["blocks"][0][
+        "block_id"
+    ]
+    edit(client, body["id"], block_id, "改后标题")
+    items = client.get(f"/api/external-resumes/{body['id']}/revisions").json()["items"]
+    upload_revision = next(item for item in items if item["source"] == "upload")
+
+    restored = client.post(
+        f"/api/external-resumes/{body['id']}/revisions/{upload_revision['id']}/restore"
+    )
+    assert restored.status_code == 200, restored.text
+    payload = restored.json()["resume"]
+    assert payload["text_chars"] > 0, "恢复之后正文不能变成 0 字"
+    assert "原始标题" in payload["text"]
+    assert "改后标题" not in payload["text"], "恢复要回到那一版的内容"
+
+
+def test_revision_text_endpoint_returns_that_versions_text(client):
+    """T12「对比」要两侧都有字：历史版本表不存正文，接口按需从那一版的文件重新提取。"""
+    body = upload(client, "resume.pdf", build_pdf([("原始标题", 18, 780)]), "application/pdf")
+    block_id = client.get(f"/api/external-resumes/{body['id']}/blocks").json()["blocks"][0][
+        "block_id"
+    ]
+    edit(client, body["id"], block_id, "改后标题")
+    items = client.get(f"/api/external-resumes/{body['id']}/revisions").json()["items"]
+    upload_revision = next(item for item in items if item["source"] == "upload")
+
+    response = client.get(
+        f"/api/external-resumes/{body['id']}/revisions/{upload_revision['id']}/text"
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["revision_id"] == upload_revision["id"]
+    assert "原始标题" in payload["text"]
+    assert "改后标题" not in payload["text"], "历史版本的正文必须来自那一版的文件，不能拿当前正文冒充"
+    # `has_text` 是**落库时**那个数（版本行上就是这么写的），不在这里重算：
+    # 小样张（整页不足 30 字）在上传时会被"扫描页"口径判成无文字层，正文却是能读出来的。
+    assert payload["has_text"] == upload_revision["has_text"]
+
+
+def test_revision_text_of_another_resume_is_404(client):
+    """别的简历的版本一律当不存在（与 restore 同一口径），不泄露内容。"""
+    first = upload(client, "a.pdf", build_pdf([("第一份", 18, 780)]), "application/pdf")
+    second = upload(client, "b.pdf", build_pdf([("第二份", 18, 780)]), "application/pdf")
+    foreign_revision = client.get(f"/api/external-resumes/{second['id']}/revisions").json()[
+        "items"
+    ][0]
+
+    response = client.get(
+        f"/api/external-resumes/{first['id']}/revisions/{foreign_revision['id']}/text"
+    )
+    assert response.status_code == 404
+
+
 def test_shift_after_growth_is_a_second_request(client):
     """界面上的「下移下方内容」：同文 + delta 再提交一次，必须能成（否则按钮点不动）。"""
     body = upload(
