@@ -34,8 +34,15 @@ export interface TrackStatusChangeApi {
 }
 
 export interface TrackStatusChangeOptions {
-  /** 改完之后统一失效重拉：列表与顶部构成条要一起刷新，否则数字停在旧值。 */
-  onChanged: () => void | Promise<void>;
+  /**
+   * 改完之后统一失效重拉：列表与顶部构成条要一起刷新，否则数字停在旧值。
+   *
+   * 返回 `Promise<unknown>` 而不是 `Promise<void>`：页面上传的是
+   * `Promise.all([reload(), reloadStats()])`，它的类型是 `Promise<[void, void]>`——
+   * 用 `Promise<void>` 会把它挡在门外（tsc TS2322），而这里只关心"什么时候刷完"，
+   * 不关心返回值形状。
+   */
+  onChanged: () => void | Promise<unknown>;
 }
 
 export function useTrackStatusChange({ onChanged }: TrackStatusChangeOptions): TrackStatusChangeApi {
