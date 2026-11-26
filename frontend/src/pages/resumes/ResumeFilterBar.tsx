@@ -6,7 +6,6 @@ import ResumeCenterAiEntry from "../../features/career-scenarios/ResumeCenterAiE
 import ResumeScenarioSuggestion from "../../features/career-scenarios/ResumeScenarioSuggestion";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import { isDefaultResumeSort, type ResumeSortState } from "../../utils/resumeSort";
 import ExternalResumeEntry from "./ExternalResumeEntry";
 import JobFilterSelect from "./JobFilterSelect";
 import ResumeSearchInput from "./ResumeSearchInput";
@@ -16,7 +15,12 @@ interface Props {
   jobId: number | undefined;
   jobLabel: string;
   hasJobFilter: boolean | undefined;
-  sortState: ResumeSortState;
+  /**
+   * 当前排序是否已离开默认值——**由页面判定**，因为本页有两套排序（折叠视图的本地
+   * 组级排序 / 平铺视图的服务端排序），哪个在屏幕上就复位哪个。筛选栏只负责"离开
+   * 默认才出现复位按钮"，不认识排序状态本身。
+   */
+  sortChanged: boolean;
   onNewResume: () => void;
   onOpenArchive: () => void;
   onJobFilterChange: (jobId: number | undefined) => void;
@@ -31,7 +35,7 @@ export default function ResumeFilterBar({
   jobId,
   jobLabel,
   hasJobFilter,
-  sortState,
+  sortChanged,
   onNewResume,
   onOpenArchive,
   onJobFilterChange,
@@ -43,7 +47,7 @@ export default function ResumeFilterBar({
   useLocale();
   return (
     <FilterResetSlot
-      changed={!isDefaultResumeSort(sortState)}
+      changed={sortChanged}
       hint={t("resume.sort.resetHint")}
       label={t("resumesPage.sort.reset")}
       onReset={onSortReset}

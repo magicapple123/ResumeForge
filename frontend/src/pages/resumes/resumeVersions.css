@@ -1,52 +1,82 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* 「岗位 · N 个版本」展开后的版本清单（CR-33）。颜色只用 --rf-* 语义 token，
-   不覆写 antd 原生类名；折叠行的排版由表格自身负责。 */
+/* 「岗位 · N 个版本」展开后的版本清单（CR-33 / 2026-11-26 方案 A 对齐重写）。
+   颜色只用 --rf-* 语义 token，不覆写 antd 原生类名；列宽由 `resumeGroupLayout.ts`
+   以 inline `grid-template-columns` 给出，本文件不重复写数字。 */
 
 .resume-version-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px 0 4px 32px;
+  gap: 2px;
+  /* 让出展开箭头那一列的位置，版本行的第一列（第 N 版）与组行的身份列对齐。 */
+  padding: 2px 0 4px 16px;
 }
 
+/* 5 列栅格：第 N 版 ｜ 标题（+ 最新 chip + 备注）｜ 时间 ｜ 投递占位 ｜ 操作。
+   列宽来自 `versionGridColumns()`，与父表同源。 */
 .resume-version-row {
-  display: flex;
-  flex-wrap: wrap;
+  position: relative;
+  display: grid;
   align-items: center;
-  gap: 8px;
-  min-height: 32px;
+  column-gap: 8px;
+  min-height: 30px;
+}
+
+/* 左侧一条 1px 竖向引导线贯穿整组，标明"这些是同一岗位的版本"。 */
+.resume-version-row::before {
+  content: "";
+  position: absolute;
+  left: -9px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--rf-fill-tertiary);
 }
 
 .resume-version-index {
-  flex: 0 0 auto;
-  min-width: 52px;
   color: var(--rf-text-tertiary);
-  font-size: 12px;
-}
-
-.resume-version-title {
-  max-width: 320px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.resume-version-time {
-  flex: 0 0 auto;
-  font-size: 12px;
+/* 中间列：最新 chip 与标题、备注在同一行，超出部分省略而不是换行把行高顶开。 */
+.resume-version-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.resume-version-title {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  padding: 0;
 }
 
 .resume-version-note {
-  flex: 1 1 160px;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  flex: 0 1 auto;
+}
+
+/* 时间与父表「最近更新」列同一竖线：左对齐 + 等宽数字（与组行 `.rf-group-num` 一致）。 */
+.resume-version-time {
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .resume-version-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
-  margin-left: auto;
 }
 
 /* 折叠行：岗位名 + 版本数不会换行，公司/投递次数跟在后面。 */

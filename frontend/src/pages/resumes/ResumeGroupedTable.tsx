@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历中心的「按岗位折叠」视图（CR-33）。
+ * 简历中心的「按岗位折叠」视图（CR-33 + 2026-11-26 方案 A 排版重做）。
  *
  * 一行 = 一个岗位（或一份通用简历）。行上给出用户判断"要不要展开"的三个事实：
  * 岗位名 · 版本数、最近更新时间、这个岗位投递过几次。版本本身仍然是一等公民：
@@ -9,53 +9,41 @@
  * 刻意**不提供**任何"作用于整组"的动作（组级收藏 / 组级删除）：折叠只是呈现方式，
  * 一旦让"整组"成为操作对象，用户就会在一行里删掉 N 份简历。多版本组因此也不可勾选
  * （见 `isGroupBatchSelectable`）。
+ *
+ * ## 排序：本地组级，与服务端排序并存（别合并）
+ *
+ * 列头三态只改 `groupSortState`（`utils/groupSort`），**不**改数据层的 fetch sort：
+ * 平铺表格的列头排序用的是同一个 `useGroupedResumes`（见 `useResumesPageView` 文件头）。
+ * 组级排序必须是在已加载数据上再排一层——服务端没有"按组"这个维度。
+ *
+ * ## 列与排版
+ *
+ * 列定义在 `resumeGroupedColumns.tsx`，列宽常量在 `resumeGroupLayout.ts`
+ * （父表与版本行共用一份，改一次不会错位），样式在 `resumeGroupTable.css`。
  */
-import { StarFilled } from "@ant-design/icons";
-import { Button, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { Table } from "antd";
 import type { TableColumnsType } from "antd";
+import type { SortOrder } from "antd/es/table/interface";
 import type { HTMLAttributes } from "react";
 import { useCallback, useMemo } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
+import { RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useToast } from "../../hooks/useToast";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { mqMax } from "../../theme/breakpoints";
 import type { ResumeBrief } from "../../types";
 import type { DiffViewData } from "../../types/resumeFieldDiff";
-import { formatDateTime } from "../../utils/format";
-import type { ResumeSortField, ResumeSortState } from "../../utils/resumeSort";
+import { nextGroupSortState, type GroupSortState } from "../../utils/groupSort";
 import type { ResumeGroup } from "../../features/resume/list/resumeGroups";
 import { isGroupBatchSelectable } from "../../features/resume/list/resumeGroups";
 import ResumeVersionList from "./ResumeVersionList";
-import { copyMenuFor } from "./resumeRowCopyActions";
-import {
-  groupRowActions,
-  groupSecondaryActions,
-  groupToggleAction,
-  singleRowActions,
-  type GroupMenuContext,
-} from "./resumeGroupMenu";
-import {
-  batchSelectAction,
-  primaryActionsFor,
-  secondaryActionsFor,
-  type RowActionDeps,
-} from "./resumeTableActions";
-
-const SORT_OPTIONS: {
-  value: ResumeSortField;
-  labelKey:
-    | "responsive.resumes.sort.updated"
-    | "responsive.resumes.sort.created"
-    | "responsive.resumes.sort.title"
-    | "responsive.resumes.sort.job";
-}[] = [
-  { value: "updated", labelKey: "responsive.resumes.sort.updated" },
-  { value: "created", labelKey: "responsive.resumes.sort.created" },
-  { value: "title", labelKey: "responsive.resumes.sort.title" },
-  { value: "job_title", labelKey: "responsive.resumes.sort.job" },
-];
+import { singleRowActions, groupRowActions, type GroupMenuContext } from "./resumeGroupMenu";
+import type { RowActionDeps } from "./resumeTableActions";
+import { buildGroupedColumns } from "./resumeGroupedColumns";
+import "./resumeGroupTable.css";
 
 interface Props {
   /** 平铺视图的入参，由 ResumeResultList 原样透传；折叠视图按组渲染，用不到。 */
@@ -65,6 +53,8 @@ interface Props {
   groups: ResumeGroup[];
   /** 组总数（折叠后的分页 total）。 */
   totalGroups: number;
+  /** 已加载的简历条数（≤2000）：分页文案要同时说清"多少个岗位、多少份简历"。 */
+  resumeCount?: number;
   loading: boolean;
   batch: BatchSelection<number>;
   favoriteResumeId: number | null;
@@ -82,8 +72,9 @@ interface Props {
   setDiffBase: (target: ResumeBrief | null) => void;
   setDiffAgainstId: (id: number | null) => void;
   setDiffResult: (result: DiffViewData | null) => void;
-  sortState: ResumeSortState;
-  onSortChange: (next: ResumeSortState) => void;
+  /** 组级排序状态（本地，不进 URL）。 */
+  groupSortState: GroupSortState;
+  onGroupSortChange?: (next: GroupSortState) => void;
   navigate: (path: string) => void;
   /** 展开的组 key（`job:1` / `resume:2`），由页面持久化到 localStorage。 */
   expandedKeys: string[];
@@ -93,6 +84,7 @@ interface Props {
 export default function ResumeGroupedTable({
   groups,
   totalGroups,
+  resumeCount = 0,
   loading,
   batch,
   batchActions = [],
@@ -111,14 +103,16 @@ export default function ResumeGroupedTable({
   setDiffBase,
   setDiffAgainstId,
   setDiffResult,
-  sortState,
-  onSortChange,
+  groupSortState,
+  onGroupSortChange,
   navigate,
   expandedKeys,
   setExpandedKeys,
 }: Props) {
   useLocale();
   const toast = useToast();
+  /** 窄档与 `ResumeResultList` 同源（同一份断点表，见 `theme/breakpoints.ts`）。 */
+  const narrow = useMediaQuery(mqMax("narrow"));
 
   const deps = useMemo<RowActionDeps>(
     () => ({
@@ -153,14 +147,6 @@ export default function ResumeGroupedTable({
     return map;
   }, [groups]);
 
-  const titleOf = (group: ResumeGroup): string => {
-    if (group.jobId === null) return group.latest.title;
-    const job = group.jobTitle.trim();
-    return job
-      ? t("resumes.list.group.title", { job, count: group.versionCount })
-      : t("resumes.list.group.titleFallback", { count: group.versionCount });
-  };
-
   const toggleGroup = useCallback(
     (key: string) => {
       setExpandedKeys(
@@ -173,7 +159,7 @@ export default function ResumeGroupedTable({
   );
 
   /**
-   * 行菜单上下文：组行 / 单版本行 / 版本行三处共用同一份（`resumeGroupMenu` 里按行类型
+   * 行菜单上下文：组行 / 单版本行 / 版本行三处共用同一份（`resumeGroupMenu` 按行类型
    * 分派）。`navigate` 由页面传下来，岗位名与「在岗位广场打开」走同一条深链。
    */
   const menuCtx = useMemo<GroupMenuContext>(
@@ -188,150 +174,44 @@ export default function ResumeGroupedTable({
     [deps, toast, batch.enterSelecting, toggleGroup, navigate, expandedKeys],
   );
 
-  const columns: TableColumnsType<ResumeGroup> = [
-    {
-      title: t("resumes.list.column.title"),
-      key: "group",
-      render: (_, group) => (
-        <Space size={6} wrap>
-          {group.hasFavorite && (
-            <Tooltip title={t("resumes.list.group.favoriteHint")}>
-              <StarFilled style={{ color: "var(--rf-favorite)" }} />
-            </Tooltip>
-          )}
-          {group.versionCount > 1 ? (
-            <Button type="link" className="table-text-link" onClick={() => toggleGroup(group.key)}>
-              {titleOf(group)}
-            </Button>
-          ) : (
-            <Button
-              type="link"
-              className="table-text-link resume-title-link"
-              onClick={() => setPreviewId(group.latest.id)}
-            >
-              {group.latest.title}
-            </Button>
-          )}
-        </Space>
-      ),
-    },
-    {
-      title: t("resumes.list.column.job"),
-      key: "job",
-      width: 260,
-      render: (_, group) => (
-        <Space size={4} wrap>
-          {group.jobId !== null && group.versionCount === 1 ? (
-            <Button
-              type="link"
-              className="table-text-link"
-              onClick={() => navigate(`/jobs?job_id=${group.jobId}`)}
-            >
-              <Tag color="blue" className="resume-job-tag">
-                {group.jobTitle || "-"}
-              </Tag>
-            </Button>
-          ) : group.jobId === null ? (
-            <Tooltip title={t("resumes.list.generalHint")}>
-              <Tag color="purple">{t("resumes.list.general")}</Tag>
-            </Tooltip>
-          ) : null}
-          {group.company && <Tag className="resume-company-tag">{group.company}</Tag>}
-        </Space>
-      ),
-    },
-    {
-      title: t("resumes.list.column.lastUpdated"),
-      key: "updated",
-      width: 220,
-      render: (_, group) => (
-        <Typography.Text type="secondary" className="resume-group-meta">
-          {t("resumes.list.group.updated", {
-            time: group.latestUpdatedAt ? formatDateTime(group.latestUpdatedAt) : "—",
-          })}
-        </Typography.Text>
-      ),
-    },
-    {
-      title: t("resumes.list.column.delivery"),
-      key: "delivery",
-      width: 160,
-      render: (_, group) => (
-        <span className="resume-group-meta">
-          {t("resumes.list.group.delivery", { count: group.deliveryCount })}
-        </span>
-      ),
-    },
-    {
-      title: t("resumes.list.column.actions"),
-      key: "actions",
-      width: 200,
-      render: (_, group) =>
-        group.versionCount > 1 ? (
-          // 多版本组：主按钮是展开/收起，其余（去岗位广场 + 两个复制项）进「⋯」。
-          // 「⋯」与整行右键共用 `resumeGroupMenu` 的同一份构造——多版本组行以前连
-          // 「⋯」都没有，等于这一屏拿不到任何组级入口（问题 1）。
-          <RowActions
-            primary={[groupToggleAction(group, menuCtx)]}
-            more={groupSecondaryActions(group, menuCtx)}
-            disabled={batch.selecting}
-          />
-        ) : (
-          // 单版本组：与平铺表格的行完全一致（主操作平铺，其余进「⋯」与整行右键）。
-          <RowActions
-            primary={primaryActionsFor(group.latest, deps)}
-            more={[
-              batchSelectAction(batch.enterSelecting),
-              copyMenuFor(group.latest, toast),
-              ...secondaryActionsFor(group.latest, deps),
-            ]}
-            disabled={batch.selecting}
-          />
-        ),
-    },
-  ];
+  const columns: TableColumnsType<ResumeGroup> = useMemo(
+    () =>
+      buildGroupedColumns({
+        deps,
+        toast,
+        batch,
+        menuCtx,
+        groupSortState,
+        onGroupSortChange: onGroupSortChange ?? (() => undefined),
+        navigate,
+        setPreviewId: (id: number) => setPreviewId(id),
+        toggleGroup,
+        narrow,
+      }),
+    [
+      deps,
+      toast,
+      batch,
+      menuCtx,
+      groupSortState,
+      onGroupSortChange,
+      navigate,
+      setPreviewId,
+      toggleGroup,
+      narrow,
+    ],
+  );
 
   return (
     <div className="resume-group-table">
-      <Space size={8} wrap style={{ marginBottom: 8 }}>
-        <span className="resume-group-meta">{t("responsive.resumes.sort")}</span>
-        <Select
-          size="small"
-          value={sortState.field}
-          aria-label={t("responsive.resumes.sort")}
-          options={SORT_OPTIONS.map((option) => ({
-            value: option.value,
-            label: t(option.labelKey),
-          }))}
-          onChange={(field) =>
-            onSortChange({
-              field,
-              order: sortState.field === field && sortState.order === "desc" ? "asc" : "desc",
-              explicit: true,
-            })
-          }
-        />
-        <Button
-          size="small"
-          onClick={() =>
-            onSortChange({
-              ...sortState,
-              order: sortState.order === "asc" ? "desc" : "asc",
-              explicit: true,
-            })
-          }
-        >
-          {sortState.order === "asc"
-            ? t("responsive.resumes.order.asc")
-            : t("responsive.resumes.order.desc")}
-        </Button>
-      </Space>
       <Table
         rowKey="key"
         size="middle"
         loading={loading}
         columns={columns}
         dataSource={groups}
+        // 多版本组行浅底 + 左侧色条（样式在 resumeGroupTable.css，作用域限本表）。
+        rowClassName={(group) => (group.versionCount > 1 ? "rf-group-row" : "")}
         components={{
           body: {
             /**
@@ -356,7 +236,7 @@ export default function ResumeGroupedTable({
                 );
               }
               const items = batch.selecting
-                ? (batchActions ?? [])
+                ? batchActions
                 : singleRowActions(group.latest, menuCtx);
               return (
                 <RowContextMenu items={items}>
@@ -375,6 +255,7 @@ export default function ResumeGroupedTable({
               toast={toast}
               menuCtx={menuCtx}
               selecting={batch.selecting}
+              narrow={narrow}
               favoriteResumeId={favoriteResumeId}
               toggleFavorite={toggleFavorite}
             />
@@ -412,11 +293,21 @@ export default function ResumeGroupedTable({
           pageSize,
           total: totalGroups,
           showSizeChanger: true,
-          showTotal: (total) => t("resumes.list.total", { total }),
+          // `total` 是**组数**：只写"共 N 条记录"会与用户认知（22 份简历）对不上，
+          // 所以两个数一起说清。
+          showTotal: (total) =>
+            t("resumesPage.list.totalGroups", { groups: total, resumes: resumeCount }),
           onChange: (nextPage, nextPageSize) => {
             setPage(nextPage);
             setPageSize(nextPageSize);
           },
+        }}
+        // 列头三态：只把"点了哪一列、什么方向"翻译成组级排序状态；分页走 pagination。
+        onChange={(_pagination, _filters, sorter, extra) => {
+          if (extra.action !== "sort") return;
+          const active = Array.isArray(sorter) ? sorter[0] : sorter;
+          const columnKey = String(active?.columnKey ?? active?.field ?? "");
+          onGroupSortChange?.(nextGroupSortState(columnKey, active?.order as SortOrder | null));
         }}
       />
     </div>

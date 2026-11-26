@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历中心：生成历史列表、收藏、预览与导出。 */
 import { Alert, App } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   deleteResume,
@@ -18,19 +18,11 @@ import ManualResumeModal from "../features/resume/list/ManualResumeModal";
 import ResumeDetailModal from "../features/resume/list/ResumeDetailModal";
 import { registerNewResumeHandler } from "../features/shortcuts/runtimeTargets";
 import { computeFieldDiff } from "../utils/resumeFieldDiff";
-import { useResumeListVersion } from "../features/resume/resumeListEvents";
 import type { DiffViewData } from "../types/resumeFieldDiff";
 import type { ResumeBrief } from "../types";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
-import {
-  DEFAULT_RESUME_SORT_STATE,
-  parseResumeSort,
-  toResumeSort,
-  type ResumeSortState,
-} from "../utils/resumeSort";
 import ResumeResultList from "./resumes/ResumeResultList";
-import { useGroupedResumes } from "../features/resume/list/useGroupedResumes";
 import {
   readExpandedGroupKeys,
   writeExpandedGroupKeys,
@@ -44,6 +36,7 @@ import { useResumeBatchActions } from "./resumes/useResumeBatchActions";
 import { buildResumeBatchRowActions } from "./resumes/resumeBatchActions";
 import BatchConfigModal from "../features/batch/BatchConfigModal";
 import ResumeFilterBar from "./resumes/ResumeFilterBar";
+import { useResumesPageView } from "./resumes/useResumesPageView";
 
 export default function ResumesPage() {
   useLocale();
@@ -53,32 +46,41 @@ export default function ResumesPage() {
   const { message } = App.useApp();
   // 批量选择：勾选若干份简历后一次删除（全部进回收站，可恢复）。
   const batch = useBatchSelection<number>();
-  // 筛选 / 分页初值从 URL 读，改动后用 replace 写回（模式同 WebFormPage / JobsPage）。
-  const boolParam = (key: string): boolean | undefined => {
-    const raw = searchParams.get(key);
-    if (raw === "1") return true;
-    if (raw === "0") return false;
-    return undefined;
-  };
-  const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
-  const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
-  const [pageSize, setPageSize] = useState(Number(searchParams.get("page_size")) || 10);
-  const [hasJobFilter, setHasJobFilter] = useState<boolean | undefined>(() => boolParam("has_job"));
+  /**
+   * 筛选 / 分页 / 排序 / 折叠切片都在 `useResumesPageView` 里（页面本体守住 500 行预算）。
+   * 两套排序状态并存的口径见该文件头：`sortState` 给服务端（平铺表列头），
+   * `groupSortState` 给折叠视图的本地组级排序。
+   */
+  const view = useResumesPageView();
+  const {
+    keyword,
+    jobId,
+    hasJobFilter,
+    page,
+    pageSize,
+    sortState,
+    groupSortState,
+    sortChanged,
+    folded,
+    pageGroups,
+    totalGroups,
+    loadedItems,
+    flatPageItems,
+    grouped,
+    loading,
+    reload,
+    error,
+    setPage,
+    setPageSize,
+    applyKeyword,
+    applyJobFilter,
+    applyHasJobFilter,
+    applySort,
+    applyGroupSort,
+    resetSort,
+  } = view;
   // 新建手写简历（R8）：以前只能从岗位页或「我的资料」进，简历中心自己没有入口。
   const [manualOpen, setManualOpen] = useState(false);
-  /**
-   * 排序（T2）：列头三态 + 「恢复默认排序」。初值从 URL 读一次（深链/刷新保持），
-   * 之后 URL 只是**输出**——每次排序都回读 URL 会让状态有两个真相。
-   * 非法值（含旧下拉框留下的 company_asc）由 parseResumeSort 回落到默认。
-   */
-  const [sortState, setSortState] = useState<ResumeSortState>(() =>
-    parseResumeSort(searchParams.get("sort")),
-  );
-  /** 排序变化：回到第 1 页（不然会停在一个"新排序下不存在的页"上）。 */
-  const applySort = useCallback((next: ResumeSortState) => {
-    setSortState(next);
-    setPage(1);
-  }, []);
 
   // 深链 ?resume_id=（RF-11 搜索直开）：挂载时读一次，数字有效才打开详情；
   // 关闭详情时把参数从 URL 移除（replace，不打历史）。镜像 JobsPage 的 job_id 模式。
@@ -100,80 +102,10 @@ export default function ResumesPage() {
   const [diffAgainstId, setDiffAgainstId] = useState<number | null>(null);
   const [diffResult, setDiffResult] = useState<DiffViewData | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
-  const jobIdParam = searchParams.get("job_id");
-  const jobId = jobIdParam && /^\d+$/.test(jobIdParam) ? Number(jobIdParam) : undefined;
   // 岗位名由 JobFilterSelect 回传（它负责远程搜索与深链回查），Tag 与下拉共用同一份名称，
   // 避免两处各自解析出现"标签是 #3、下拉是岗位名"。
   const [jobLabel, setJobLabel] = useState("");
 
-  /**
-   * 岗位筛选只改 `job_id`（选择时顺带回到第 1 页）。
-   *
-   * 刻意不用 `navigate("/resumes")`：那会把 keyword、has_job、page_size 一起清掉，
-   * 而"按岗位筛选"与"有/无目标岗位""关键词"是互相独立的三维条件。清空同理，只删 job_id。
-   *
-   * `page` 由下面那个统一写回器维护（只在 page > 1 时保留参数），所以"回到第 1 页"
-   * 表现为 URL 里没有 page、请求里的 page 是 1，与本页既有约定一致。
-   */
-  const applyJobFilter = useCallback(
-    (nextJobId: number | undefined) => {
-      setPage(1);
-      setSearchParams(
-        (previous) => {
-          const next = new URLSearchParams(previous);
-          if (nextJobId === undefined) {
-            next.delete("job_id");
-          } else {
-            next.set("job_id", String(nextJobId));
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
-
-  /** 关键词提交（Enter / 防抖 / 清空共用）：回到第 1 页，不动岗位、排序等其它筛选。 */
-  const applyKeyword = useCallback((value: string) => {
-    setKeyword(value);
-    setPage(1);
-  }, []);
-
-  // T12：手写简历保存成功后广播版本号，放进依赖里让列表自动重取。
-  const resumeListVersion = useResumeListVersion();
-  // CR-33：折叠视图按「组」分页。后端只能按简历条分页，所以 useGroupedResumes 先按
-  // 100 条/页补齐（上限 2000 条）再本地分组；这里的 page/pageSize 都是**组页**。
-  const {
-    data: grouped,
-    loading,
-    reload,
-    error,
-  } = useGroupedResumes(
-    {
-      keyword,
-      jobId,
-      hasJobFilter,
-      sort: toResumeSort(sortState),
-    },
-    [keyword, jobId, hasJobFilter, sortState, resumeListVersion],
-  );
-  const allGroups = useMemo(() => grouped?.groups ?? [], [grouped]);
-  const totalGroups = allGroups.length;
-  /** 有「同岗位多版本」才进入折叠视图（与 ResumeResultList 的判定同源）。 */
-  const folded = allGroups.some((group) => group.versionCount > 1);
-  /** 当前页的组：切片在页面做，翻页不重新请求。 */
-  const pageGroups = useMemo(
-    () => allGroups.slice((page - 1) * pageSize, page * pageSize),
-    [allGroups, page, pageSize],
-  );
-  /** 已加载的扁平记录（≤2000）：对比、交付归档等入口仍按 resume_id 工作。 */
-  const loadedItems = useMemo(() => grouped?.items ?? [], [grouped]);
-  /** 没有「同岗位多版本」时不折叠，平铺表格仍按当前页切片（与折叠视图同一份数据）。 */
-  const flatPageItems = useMemo(
-    () => loadedItems.slice((page - 1) * pageSize, page * pageSize),
-    [loadedItems, page, pageSize],
-  );
   /**
    * 展开的组持久化：沿用 `resumeforge.*.v1` 惯例，坏 JSON 由 expandedGroups 容错成
    * 「全部折叠」，不会让列表打不开。
@@ -201,30 +133,6 @@ export default function ResumesPage() {
     hasJobFilter,
     setSelectedIds: batch.setSelected,
   });
-
-  // 筛选 / 分页写回 URL（replace 语义）。effect 只依赖这些状态，不依赖 searchParams，
-  // 因此写回不会触发循环重渲染；job_id 参数通过 functional 更新原样保留。
-  useEffect(() => {
-    setSearchParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        const values: [string, string][] = [
-          ["keyword", keyword],
-          ["has_job", hasJobFilter === undefined ? "" : hasJobFilter ? "1" : "0"],
-          ["page", page > 1 ? String(page) : ""],
-          ["page_size", pageSize !== 10 ? String(pageSize) : ""],
-          // 默认排序不写回 URL：干净的链接比"默认值也显式写出来"更好读。
-          ["sort", sortState.explicit ? toResumeSort(sortState) : ""],
-        ];
-        for (const [key, value] of values) {
-          if (value) next.set(key, value);
-          else next.delete(key);
-        }
-        return next;
-      },
-      { replace: true },
-    );
-  }, [keyword, hasJobFilter, page, pageSize, sortState, setSearchParams]);
 
   const remove = useCallback(
     async (id: number) => {
@@ -358,17 +266,16 @@ export default function ResumesPage() {
         jobId={jobId}
         jobLabel={jobLabel}
         hasJobFilter={hasJobFilter}
-        sortState={sortState}
+        // 「恢复默认排序」只看"当前屏幕上那套排序"是否离开默认：折叠视图归组级排序，
+        // 平铺视图归服务端排序。谁在屏幕上就复位谁（见 useResumesPageView 的 sortChanged）。
+        sortChanged={sortChanged}
         onNewResume={() => setManualOpen(true)}
         onOpenArchive={() => setArchiveOpen(true)}
         onJobFilterChange={applyJobFilter}
         onJobLabelChange={setJobLabel}
         onKeywordCommit={applyKeyword}
-        onHasJobFilterChange={(value) => {
-          setHasJobFilter(value);
-          setPage(1);
-        }}
-        onSortReset={() => applySort(DEFAULT_RESUME_SORT_STATE)}
+        onHasJobFilterChange={applyHasJobFilter}
+        onSortReset={resetSort}
       />
       {batch.selecting && (
         <ResumeBatchToolbar
@@ -420,6 +327,9 @@ export default function ResumesPage() {
           batchActions={batchRowActions}
           groups={pageGroups}
           totalGroups={totalGroups}
+          resumeCount={loadedItems.length}
+          groupSortState={groupSortState}
+          onGroupSortChange={applyGroupSort}
           expandedKeys={expandedKeys}
           setExpandedKeys={setExpandedKeys}
         />

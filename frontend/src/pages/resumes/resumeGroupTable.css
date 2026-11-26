@@ -1,0 +1,112 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「岗位分区列表」（方案 A，2026-11-26）的版式：组行浅底 + 左侧色条、两行身份、
+   版本行与父表同列栅格。颜色只用 --rf-* 语义 token（深色模式自动跟随），
+   所有规则都以 `.resume-group-table` 限定作用域。 */
+
+/* 表头去底色：默认的灰底会把"分区列表"压成普通表格。字重与色阶一并调轻，
+   让第一列的两行身份成为视觉重心。 */
+.resume-group-table .ant-table-thead > tr > th {
+  background: transparent;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--rf-text-tertiary);
+}
+
+/* 多版本组行：浅底 + 左侧 3px 色条（第一格），hover 再深一档。
+   色条用 color-mix 派生，不写字面量，深色主题下自然跟随。 */
+.resume-group-table .rf-group-row > td {
+  background: var(--rf-surface-alt);
+}
+
+.resume-group-table .rf-group-row > td:first-child {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--rf-info) 26%, var(--rf-surface));
+}
+
+.resume-group-table .rf-group-row:hover > td {
+  background: color-mix(in srgb, var(--rf-surface-alt) 94%, var(--rf-info));
+}
+
+/* 两行身份：主行（岗位名 + 版本数 chip）/ 副行（公司 · 最新版本标题）。 */
+.rf-group-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rf-group-identity-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rf-group-identity-name {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 13.5px;
+  padding: 0;
+}
+
+.rf-group-identity-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--rf-text-tertiary);
+}
+
+.rf-group-identity-sub > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 副行里的简历标题是链接（→ 详情），但比主行弱一档：它是"这一组里最新那版叫什么"。 */
+.rf-group-identity-sub .table-text-link {
+  height: auto;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 400;
+  max-width: 100%;
+}
+
+.rf-group-dot {
+  color: var(--rf-text-tertiary);
+}
+
+.rf-group-star {
+  color: var(--rf-favorite);
+  font-size: 11px;
+}
+
+.rf-group-count {
+  margin-inline-end: 0;
+  background: var(--rf-fill-tertiary);
+  border-color: transparent;
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+/* 数字列：等宽数字，时间与次数在纵向上对齐（否则每行宽度不同，读起来在跳）。 */
+.rf-group-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rf-group-empty {
+  color: var(--rf-text-tertiary);
+}
+
+/* 操作列右对齐：与版本行的操作区落在同一条竖线上。 */
+.resume-group-table .rf-group-actions {
+  justify-content: flex-end;
+}
+
+/* 列宽在 `resumeGroupLayout.ts` 里只有一份；表格与版本行共用，这里只管列内的排版。 */
