@@ -6,6 +6,8 @@
  * 3. 保存时把开关一起带上去；
  * 4. 检测到代理时给可关闭提示，关掉后按机器记住。
  */
+// @ts-expect-error Node 内置模块：@types/node 未安装，但本文件只在 Node（vitest）里跑。
+import { readFileSync } from "node:fs";
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -129,6 +131,44 @@ describe("NetworkProxyCard", () => {
     expect(apiMocks.testLLM).toHaveBeenNthCalledWith(2, expect.anything(), "task", true);
     expect(screen.getByText(new RegExp(t("settingsUi.network.probeOk")))).toBeTruthy();
     expect(screen.getByText(/proxy refused/)).toBeTruthy();
+  });
+
+  // ===== #11：结果区挪到工具栏之后，且不再预留高度 =====
+
+  it("结果区在工具栏之后、未测试时是空的（那 86px 空白来自被删的 min-height）", async () => {
+    renderCard();
+    await waitFor(() => expect(apiMocks.getNetworkSettings).toHaveBeenCalled());
+
+    const area = screen.getByTestId("network-probe-area");
+    const toolbar = area.parentElement?.querySelector(".network-toolbar") as HTMLElement | null;
+    expect(toolbar).not.toBeNull();
+    // DOM 顺序：工具栏在前、结果在后。不用 CSS `order` 调视觉顺序——读屏与 Tab 会跟着错。
+    expect(
+      (toolbar as HTMLElement).compareDocumentPosition(area) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // 未测试：结果区里一个节点都没有（不摆占位、不摆空行）。
+    expect(area.childElementCount).toBe(0);
+
+    // 样式层：`.network-probe-area` 里不许再出现 `min-height`（它就是那 44px 空白的来源）。
+    // jsdom 不加载 CSS，所以这里直接读源文件——这条比"看起来还有没有空白"更耐得住回归。
+    const css = readFileSync("src/features/settings/network-proxy-card.css", "utf8");
+    const rule = css.slice(css.indexOf(".network-probe-area"));
+    expect(rule.slice(0, rule.indexOf("}"))).not.toContain("min-height");
+  });
+
+  it("结果区常驻 role=status / aria-live：测试结果由读屏播报", async () => {
+    apiMocks.getLLMConfig.mockResolvedValue({ base_url: "https://api.deepseek.com", model: "x" });
+    apiMocks.testLLM.mockResolvedValue({ ok: true, latency_ms: 90, message: "" });
+    renderCard();
+    await waitFor(() => expect(apiMocks.getNetworkSettings).toHaveBeenCalled());
+
+    const area = screen.getByTestId("network-probe-area");
+    expect(area).toHaveAttribute("role", "status");
+    expect(area).toHaveAttribute("aria-live", "polite");
+    // 结果出来了它还在原位（不是"有结果才插入一块新的"）。
+    fireEvent.click(screen.getByText(t("settingsUi.network.probe")));
+    await waitFor(() => expect(screen.getByTestId("network-probe-lines")).toBeTruthy());
+    expect(screen.getByTestId("network-probe-area")).toBe(area);
   });
 
   // ===== I-33：显式保存 + 脏状态 =====

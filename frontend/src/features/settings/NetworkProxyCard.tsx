@@ -352,8 +352,47 @@ export default function NetworkProxyCard() {
           />
         </div>
 
-        {/* 结果区常驻固定高度：出现/消失时底部工具栏不位移。 */}
-        <div className="network-probe-area" data-testid="network-probe-area">
+        {/* 一条工具栏：测试在左、状态在中、保存在右。三者本来就成对使用，
+            拆开摆会让"保存"孤立在右下角。 */}
+        <div className="network-toolbar">
+          {/* 禁用态按钮上的 Tooltip 在 antd 里根本不触发（无 hover 目标），
+              所以原因只写在按钮右边一次，不重复挂两处。 */}
+          <Button
+            size="small"
+            loading={probing}
+            disabled={!data || dirty}
+            onClick={() => void probe()}
+          >
+            {t("settingsUi.network.probe")}
+          </Button>
+          <span className="network-toolbar-reason">
+            {dirty ? t("settingsUi.network.probeBlocked") : null}
+          </span>
+          <span className={`network-toolbar-state${dirty ? " is-dirty" : ""}`} aria-live="polite">
+            {dirty ? (
+              <>
+                <ExclamationCircleOutlined className="network-toolbar-dot" aria-hidden="true" />
+                {t("settingsUi.network.dirty")}
+              </>
+            ) : (
+              t("settingsUi.network.clean")
+            )}
+          </span>
+          <Button type="primary" loading={saving} disabled={!dirty} onClick={() => void save()}>
+            {t("settingsUi.network.save")}
+          </Button>
+        </div>
+
+        {/* 结果区在工具栏**之后**（DOM 顺序，不用 CSS order）：点了"测试连接"之后，
+            结果出现在按钮下面，视线不用往回跳；未测试时这块是空的、不占高度。
+            容器**始终渲染**并带 live region：结果由 jsdom 之外的真实网络决定，
+            读屏用户听到的应该是"结果播报"，不是"这里多了一块东西"。 */}
+        <div
+          className="network-probe-area"
+          data-testid="network-probe-area"
+          role="status"
+          aria-live="polite"
+        >
           {probeLines ? (
             <Flex vertical gap={4} data-testid="network-probe-lines">
               {probeLines.map((line) => (
@@ -385,37 +424,6 @@ export default function NetworkProxyCard() {
               ))}
             </Flex>
           ) : null}
-        </div>
-
-        {/* 一条工具栏：测试在左、状态在中、保存在右。三者本来就成对使用，
-            拆开摆会让"保存"孤立在右下角。 */}
-        <div className="network-toolbar">
-          {/* 禁用态按钮上的 Tooltip 在 antd 里根本不触发（无 hover 目标），
-              所以原因只写在按钮右边一次，不重复挂两处。 */}
-          <Button
-            size="small"
-            loading={probing}
-            disabled={!data || dirty}
-            onClick={() => void probe()}
-          >
-            {t("settingsUi.network.probe")}
-          </Button>
-          <span className="network-toolbar-reason">
-            {dirty ? t("settingsUi.network.probeBlocked") : null}
-          </span>
-          <span className={`network-toolbar-state${dirty ? " is-dirty" : ""}`} aria-live="polite">
-            {dirty ? (
-              <>
-                <ExclamationCircleOutlined className="network-toolbar-dot" aria-hidden="true" />
-                {t("settingsUi.network.dirty")}
-              </>
-            ) : (
-              t("settingsUi.network.clean")
-            )}
-          </span>
-          <Button type="primary" loading={saving} disabled={!dirty} onClick={() => void save()}>
-            {t("settingsUi.network.save")}
-          </Button>
         </div>
       </div>
     </Card>

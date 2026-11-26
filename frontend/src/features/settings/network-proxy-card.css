@@ -188,10 +188,16 @@
   line-height: 1.6;
 }
 
-/* 结果区常驻：两行高度打底，出现/消失时工具栏不位移。用 min-height 而不是 height，
-   窄屏两行换行时允许长高，不裁字。 */
-.network-probe-area {
-  min-height: 44px;
+/* 结果区（#11）：**不再预留高度**。
+   原来这里写 `min-height: 44px` 想"顶住工具栏不位移"，但真实结果是 140px+ 的清单——
+   44px 根本防不住，只是让人每次打开都看到一条空白（用户报的那块）。
+   现在结果区在工具栏**之后**（DOM 顺序见 NetworkProxyCard）：它变高只把页面往下推，
+   工具栏本身不动；间距由 `.network-card` 的 `gap` 给。
+
+   空的时候用负外边距抵掉那一条 `gap`：容器必须**始终留在无障碍树里**（读屏只有在
+   live region 事先存在时才会播报后来插入的结果），所以不能用 `display: none` 藏空块。 */
+.network-probe-area:empty {
+  margin-top: -14px;
 }
 
 .network-probe-icon {
