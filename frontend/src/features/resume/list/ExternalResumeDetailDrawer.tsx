@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 外部简历详情抽屉（第 21 条）：原件 / 提取文本 / 文本检查三个视图。
+ * 外部简历详情抽屉（第 21 条 / #5）：原件、提取文本、文本检查、编辑、历史版本。
  *
- * **只读**：没有编辑正文、没有导出、没有版式——外部简历进不了制作台，这里也不需要
- * 假装能编辑。三个视图按内容而不是容器分：原件看"传的是哪份"，文本看"提取到了什么"，
- * 检查看"文本里有什么问题"。视图用 Tabs 切换，不在抽屉里再开弹层。
+ * **前三个视图只读**：没有导出、没有版式——外部简历进不了制作台。视图按内容而不是容器分：
+ * 原件看"传的是哪份"，文本看"提取到了什么"，检查看"文本里有什么问题"。
+ *
+ * **后两个视图（#5）能改字**：改的产物是**新的 `user_file` + 一条版本**，原件永不覆盖；
+ * 具体交互在 `features/resume/external/` 里（PDF 块点选 / DOCX 段落 / 历史恢复）。
+ * 这里只负责挂页签，并把编辑/恢复返回的详情换进本抽屉的 `record`——换了 `file_id`，
+ * 原件页签的 URL 才会跟着变（否则改完还在看旧 PDF）。
  *
  * 检查结果**没有总分**：只按条目渲染每类结论（占位符 / 量化 / 联系方式 / 长度 /
  * 弱表述 / 关键词），每条带行号与原文片段；未提取到文字时只给一条说明，绝不显示
@@ -25,10 +29,12 @@ import type {
 } from "../../../api/externalResumes";
 import ErrorState from "../../../components/common/ErrorState";
 import LoadingBlock from "../../../components/common/LoadingBlock";
+import { ExternalResumeEditTab } from "../external/ExternalResumeEditTab";
+import { ExternalResumeRevisions } from "../external/ExternalResumeRevisions";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 
-export type ExternalResumeDetailTab = "original" | "text" | "check";
+export type ExternalResumeDetailTab = "original" | "text" | "check" | "edit" | "revisions";
 
 type CheckStatus = "ok" | "warn" | "info";
 
@@ -166,10 +172,13 @@ export function ExternalResumeDetailDrawer({
   resumeId,
   initialTab = "original",
   onClose,
+  onChanged,
 }: {
   resumeId: number | null;
   initialTab?: ExternalResumeDetailTab;
   onClose: () => void;
+  /** 编辑 / 恢复之后回调一次（`text_chars` / `has_text` / `file_id` 都变了，列表需要刷新）。 */
+  onChanged?: (next: ExternalResumeDetail) => void;
 }) {
   useLocale();
   /**
@@ -196,6 +205,24 @@ export function ExternalResumeDetailDrawer({
   const record = detail !== null && detail.id === resumeId ? detail.record : null;
   const detailError = detail !== null && detail.id === resumeId ? detail.error : "";
   const tab = tabState !== null && tabState.id === resumeId ? tabState.tab : initialTab;
+
+  /**
+   * 编辑 / 恢复之后换掉本抽屉里的记录，并把文本检查的缓存作废。
+   *
+   * 换 `record` 的目的是让「原件」页签的 URL 跟着 `file_id` 变（否则改完还在看旧 PDF）。
+   * 作废检查结果是因为正文已经变了：不清的话切回「文本检查」会读到上一次的结论，
+   * 而"检查通过了"这件事在新正文上可能并不成立。
+   */
+  const applyRecord = useCallback(
+    (next: ExternalResumeDetail) => {
+      setDetail((previous) =>
+        previous !== null && previous.id === next.id ? { ...previous, record: next } : previous,
+      );
+      setAnalysisState(null);
+      onChanged?.(next);
+    },
+    [onChanged],
+  );
 
   /**
    * 文本检查按需加载（只对"有文字"的简历有意义；空正文由界面直接说明）。
@@ -263,7 +290,8 @@ export function ExternalResumeDetailDrawer({
         <iframe
           title={record.name}
           // CR-16：`#view=FitV` 让 Chromium 内置阅读器按整页宽度铺开（默认比例会缩在中间）。
-          src={`${externalResumeFileUrl(record.id)}#view=FitV`}
+          // `?v=<file_id>`：每次编辑都写新的 `user_file`，URL 变了浏览器才不会拿缓存里的旧 PDF。
+          src={`${externalResumeFileUrl(record.id)}?v=${record.file_id}#view=FitV`}
           // 高度交给 flex 链（Drawer body → Tabs → 面板），原先写死 560px 时下面一大截空白。
           style={{ width: "100%", height: "100%", border: "none", display: "block" }}
         />
@@ -387,6 +415,23 @@ export function ExternalResumeDetailDrawer({
               key: "check",
               label: t("resumesPage.external.tabCheck"),
               children: checkView(),
+            },
+            {
+              key: "edit",
+              label: t("externalEdit.tab.edit"),
+              // 页签内容按需挂载：`blocks` 要读整份文件并解析，切到这一页才值得付这个成本。
+              children: (
+                <ExternalResumeEditTab
+                  resumeId={record.id}
+                  record={record}
+                  onRecordChange={applyRecord}
+                />
+              ),
+            },
+            {
+              key: "revisions",
+              label: t("externalEdit.tab.revisions"),
+              children: <ExternalResumeRevisions resumeId={record.id} onRestored={applyRecord} />,
             },
           ]}
         />

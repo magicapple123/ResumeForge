@@ -134,3 +134,148 @@ export function getExternalResumeAnalysis(id: number): Promise<ExternalResumeAna
 export function externalResumeFileUrl(id: number): string {
   return `/api/external-resumes/${id}/file`;
 }
+
+// ── 应用内编辑（#5）──────────────────────────────────────────────
+//
+// 三组接口对应详情抽屉里「编辑」「历史版本」两个页签：
+// `blocks` 读可改的文本块，`edit` 改一块并**另存新版本**，`revisions` 读/恢复历史。
+//
+// 契约要点（与后端 `schemas/external_resume.py` 逐字对齐）：
+// - `kind` 只有三种；`docx` / `text` 没有纸面坐标，几何字段恒为 0、`page` 恒为 0。
+// - `edit` 与 `restore` 都返回**整份新详情**：界面不需要自己猜字数与「有无文字」。
+// - `overflow` / `scaled` / `shifted` 是"这次改字发生了什么"，只用于展示提示与
+//   「下移下方内容」按钮；不改任何几何。
+
+/** 编辑单元所在的文件格式（决定界面画热区还是段落列表）。 */
+export type ExternalResumeKind = "pdf" | "docx" | "text";
+
+/** 一个可点选的编辑单元：PDF 是文本块，DOCX 是段落，TXT/MD 是整篇。 */
+export interface ExternalResumeBlock {
+  block_id: string;
+  /** 1 基页码；`docx` / `text` 恒为 0（不分页）。 */
+  page: number;
+  text: string;
+  editable: boolean;
+  /** 不可编辑的原因码（可编辑时为空串），中文解释由前端映射。 */
+  reason: string;
+  /** PDF 纸面坐标，**原点在左下角**，单位 pt；docx / text 恒为 0。 */
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  /** 字号（pt）；docx / text 恒为 0。 */
+  size: number;
+  /** 行距（pt）；docx / text 恒为 0。 */
+  leading: number;
+  /** `left` / `center` / `right` / `justify`（原块的对齐方式，回写时沿用）。 */
+  align: string;
+}
+
+/** 一份外部简历的编辑视图：格式 + 页面尺寸 + 编辑单元 + 警告。 */
+export interface ExternalResumeBlocks {
+  resume_id: number;
+  kind: ExternalResumeKind;
+  page_count: number;
+  /** 页宽 / 页高（pt）；docx / text 恒为 0。 */
+  page_width: number;
+  page_height: number;
+  blocks: ExternalResumeBlock[];
+  warnings: string[];
+}
+
+/** 一次改字的入参。`shift_below` 只在用户点「下移下方内容」时传。 */
+export interface ExternalResumeEditInput {
+  block_id: string;
+  text: string;
+  /** 把该块下方所有内容整体下移多少 pt（0 = 不动，与 Acrobat 的文本框行为一致）。 */
+  shift_below?: number;
+}
+
+/** 历史版本列表的一行（不含正文：字节在各 `user_file` 里）。 */
+export interface ExternalResumeRevision {
+  id: number;
+  file_id: number;
+  text_chars: number;
+  has_text: boolean;
+  /** `upload` / `edit` / `restore`（协议值，界面按它取译文）。 */
+  source: string;
+  created_at: string;
+  /** 是否当前版本（`file_id` 与简历当前 `file_id` 相同）。 */
+  current: boolean;
+}
+
+export interface ExternalResumeRevisions {
+  resume_id: number;
+  items: ExternalResumeRevision[];
+  total: number;
+}
+
+/** 编辑结果：刷新后的详情 + 新版本 + 这次改字的几何变化。 */
+export interface ExternalResumeEditResult {
+  resume: ExternalResumeDetail;
+  revision: ExternalResumeRevision;
+  kind: ExternalResumeKind;
+  block_id: string;
+  page: number;
+  /** 块高变化（pt，> 0 = 变高）；docx / text 恒为 0。 */
+  delta_pt: number;
+  /** 新文字压到了下方内容。 */
+  overflow: boolean;
+  /** 超出原块宽度，已按比例缩小字号。 */
+  scaled: boolean;
+  /** 这次是否执行了「下移下方内容」。 */
+  shifted: boolean;
+  lines_before: number;
+  lines_after: number;
+  warnings: string[];
+}
+
+/** 恢复历史版本的结果：恢复后的详情 + 新写入的那条版本。 */
+export interface ExternalResumeRestoreResult {
+  resume: ExternalResumeDetail;
+  revision: ExternalResumeRevision;
+  warnings: string[];
+}
+
+/**
+ * 读这份外部简历能改哪些块 / 段落。
+ *
+ * 能力探测失败（扫描件 / 转曲 / 加密 / 表单 / 旋转页 / 不支持的后缀）一律 422，
+ * `detail` 是面向用户的完整句子；界面直接展示并引导下载后本地改。
+ */
+export function getExternalResumeBlocks(id: number): Promise<ExternalResumeBlocks> {
+  return request(`/external-resumes/${id}/blocks`, { budget: "task" });
+}
+
+/**
+ * 把某一块改成新文字，**另存为新版本**（绝不覆盖原件）。
+ *
+ * 422 = 这一块不能改 / 块已不存在 / 新文字放不下；404 = 简历或它当前的文件已不存在。
+ * 预算用 `task`：服务端要解析 content stream、删旧算子、重排覆盖层，15s 会误超时。
+ */
+export function editExternalResumeBlock(
+  id: number,
+  input: ExternalResumeEditInput,
+): Promise<ExternalResumeEditResult> {
+  return request(`/external-resumes/${id}/edit`, {
+    method: "POST",
+    body: JSON.stringify(input),
+    budget: "task",
+  });
+}
+
+/** 历史版本（时间倒序）：时间、字数、有无文字、来源。 */
+export function listExternalResumeRevisions(id: number): Promise<ExternalResumeRevisions> {
+  return request(`/external-resumes/${id}/revisions`);
+}
+
+/** 恢复到某个历史版本：**再写一条** `source=restore` 的新版本，不改写历史。 */
+export function restoreExternalResumeRevision(
+  id: number,
+  revisionId: number,
+): Promise<ExternalResumeRestoreResult> {
+  return request(`/external-resumes/${id}/revisions/${revisionId}/restore`, {
+    method: "POST",
+    budget: "task",
+  });
+}

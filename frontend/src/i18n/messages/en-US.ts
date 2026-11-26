@@ -27,6 +27,8 @@ import provenance from "./en-US.provenance";
 import proview from "./en-US.proview";
 import research from "./en-US.research";
 import external from "./en-US.external";
+// External resume in-app editing and version history (issue #5).
+import externalEdit from "./en-US.externalEdit";
 import ocrScan from "./en-US.ocrScan";
 import voiceMemo from "./en-US.voiceMemo";
 import responsive from "./en-US.responsive";
@@ -396,6 +398,8 @@ const enUS = {
   ...interviewVoice,
   /** Company interview notes block on the interview page (issue #29D). */
   ...interviewKnowledge,
+  /** External resume editing and version history (issue #5). */
+  ...externalEdit,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

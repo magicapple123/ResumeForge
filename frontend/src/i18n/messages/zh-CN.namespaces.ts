@@ -35,6 +35,8 @@ import provenance from "./zh-CN.provenance";
 import proview from "./zh-CN.proview";
 import research from "./zh-CN.research";
 import external from "./zh-CN.external";
+// 外部简历「在应用内改字 / 历史版本」（issue #5）：编辑流程与只读详情是两件事。
+import externalEdit from "./zh-CN.externalEdit";
 import ocrScan from "./zh-CN.ocrScan";
 import voiceMemo from "./zh-CN.voiceMemo";
 import responsive from "./zh-CN.responsive";
@@ -470,6 +472,8 @@ const namespaces = {
   ...interviewVoice,
   /** 面试页「这家公司面经 N 条」（#29D）。 */
   ...interviewKnowledge,
+  /** 外部简历的编辑页与历史版本（#5）。放最后展开：新增命名空间，不与既有 key 重名。 */
+  ...externalEdit,
 } as const;
 
 export default namespaces;
