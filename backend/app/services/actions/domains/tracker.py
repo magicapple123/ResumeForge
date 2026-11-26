@@ -177,6 +177,7 @@ def _run_list_application_tracks(db: Session, payload: ListApplicationTracksInpu
     from ...tracker import MAX_LIST_LIMIT as ROUTE_LIST_LIMIT
     from ...tracker import count_tracks, list_tracks, summarize
     from ...tracker import track_brief as _route_track_brief
+    from ...tracker_job_link import resolve_job_links
 
     # 路由是 500 条兜底（旧行为），把上限下推 SQL，不能为了工具侧"总数"把全表拖进内存。
     # 工具的总数走同一过滤口径的 count（旧工具也是全量计数），行取同一排序的前 limit 条。
@@ -184,6 +185,11 @@ def _run_list_application_tracks(db: Session, payload: ListApplicationTracksInpu
         db, status=payload.status, keyword=payload.keyword, limit=ROUTE_LIST_LIMIT
     )
     total = count_tracks(db, status=payload.status, keyword=payload.keyword)
+    # 整改 #7 补齐：``job_link_id`` 的匹配规则只有一份（``services/tracker_job_link.py``），
+    # 与 ``GET /api/tracker/page`` 调的是**同一个**函数——两处各写一份"同公司 + 岗位名相等
+    # 或前缀"迟早会漂移出两套行为（同一行在两个端点上点得进去 / 点不进去）。这里整批一次
+    # 算完（显式关联一次 + 候选一次，与行数无关），逐行按 id 取用；不做逐行查询。
+    job_links = resolve_job_links(db, records)
     shown = records[: min(payload.limit or DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT)]
     text = json.dumps(
         {
@@ -198,7 +204,10 @@ def _run_list_application_tracks(db: Session, payload: ListApplicationTracksInpu
         text=text,
         link="/tracker",
         data=TrackListOut(
-            items=[_route_track_brief(record) for record in records[:ROUTE_LIST_LIMIT]],
+            items=[
+                _route_track_brief(record, job_link_id=job_links.get(int(record.id)))
+                for record in records[:ROUTE_LIST_LIMIT]
+            ],
             **summarize(db, status=payload.status, keyword=payload.keyword),
         ),
     )
