@@ -445,8 +445,12 @@ def test_brief_401_without_a_tail_omits_the_tail_segment():
     assert "尾号" not in reason
 
 
-def test_brief_401_log_carries_upstream_type_code_and_key_tail(monkeypatch, caplog):
-    """排障要看上游的 error.type / error.code 与「哪把 Key」，但只许出现尾号。"""
+def test_brief_401_log_has_type_and_code_but_no_key_material(monkeypatch, caplog):
+    """日志只留上游的 error.type / error.code 与状态码：**不含任何 Key 材料**。
+
+    尾号走的是用户可见的错误消息（报障时会被一起贴过来），排障信息没丢；日志侧必须干净，
+    否则 CodeQL 的 `py/clear-text-logging-sensitive-data` 会按"敏感数据明文入日志"判高危。
+    """
 
     async def fake_post(payload, api_key):  # noqa: ARG001
         return httpx.Response(401, json=_UPSTREAM_401)
@@ -454,14 +458,17 @@ def test_brief_401_log_carries_upstream_type_code_and_key_tail(monkeypatch, capl
     monkeypatch.setattr(brief_mod, "_post", fake_post)
     with (
         caplog.at_level("WARNING", logger=brief_mod.__name__),
-        pytest.raises(brief_mod.CompanyResearchError),
+        pytest.raises(brief_mod.CompanyResearchError) as raised,
     ):
         _run(brief_mod.build_company_brief("腾讯", "", "", deep=False, api_key=_FULL_KEY))
 
     logged = "\n".join(record.getMessage() for record in caplog.records)
     assert "authentication_error" in logged
     assert "invalid_api_key" in logged
-    assert "bb44" in logged
+    # 日志侧：尾号也不许出现（它就是 Key 的切片）。
+    assert "bb44" not in logged
     assert _FULL_KEY not in logged
     # 上游 message 会回显 Key，所以整段 body 一律不落日志。
     assert "is invalid" not in logged
+    # 尾号没有丢：它在用户看到的那句话里。
+    assert "bb44" in str(raised.value)
