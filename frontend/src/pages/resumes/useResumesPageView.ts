@@ -48,6 +48,37 @@ import {
 /** 每页默认条数（组页与条页共用同一个数字，与搬迁前一致）。 */
 const DEFAULT_PAGE_SIZE = 10;
 
+/** 每页条数上限：与后端 `GET /api/resumes` 的 `page_size` 上限（le=100）对齐。 */
+const MAX_PAGE_SIZE = 100;
+
+/**
+ * 从 URL 读页码（R5）。
+ *
+ * 以前是 `Number(raw) || 1`：`?page=-5` 得到 -5（`Number(-5)` 是真值），`?page=abc`
+ * 得到 NaN→1 但 `?page=1.5` 会原样喂给 antd，切片区间变成 [5, 15) 这种谁都算不清的
+ * 东西。这里只接受"正整数"，其余一律回落到第 1 页——URL 是用户能随手改的输入，
+ * 不是内部状态。
+ */
+function readPageParam(raw: string | null): number {
+  if (raw === null) return 1;
+  const value = Number(raw.trim());
+  return Number.isSafeInteger(value) && value >= 1 ? value : 1;
+}
+
+/**
+ * 从 URL 读每页条数（R5）。`?page_size=-5` 以前会原样喂给 antd（负 pageSize 的
+ * 切片是"负数起点 + 负数长度"，表格空白且分页器没有可选项）；非整数 / 超上限 /
+ * 0 一律回落到默认值。
+ */
+function readPageSizeParam(raw: string | null): number {
+  if (raw === null) return DEFAULT_PAGE_SIZE;
+  const value = Number(raw.trim());
+  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_PAGE_SIZE) {
+    return DEFAULT_PAGE_SIZE;
+  }
+  return value;
+}
+
 export interface ResumesPageView {
   keyword: string;
   jobId: number | undefined;
@@ -95,10 +126,8 @@ export function useResumesPageView(): ResumesPageView {
   };
 
   const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
-  const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
-  const [pageSize, setPageSize] = useState(
-    Number(searchParams.get("page_size")) || DEFAULT_PAGE_SIZE,
-  );
+  const [page, setPage] = useState(() => readPageParam(searchParams.get("page")));
+  const [pageSize, setPageSize] = useState(() => readPageSizeParam(searchParams.get("page_size")));
   const [hasJobFilter, setHasJobFilter] = useState<boolean | undefined>(() =>
     readBoolParam("has_job"),
   );
@@ -206,6 +235,28 @@ export function useResumesPageView(): ResumesPageView {
     () => loadedItems.slice((page - 1) * pageSize, page * pageSize),
     [loadedItems, page, pageSize],
   );
+
+  /** 当前视图驱动分页控件的那一份总数：折叠视图数**组**，平铺视图数**条**。 */
+  const visibleCount = folded ? totalGroups : loadedItems.length;
+  const maxPage = Math.max(1, Math.ceil(visibleCount / pageSize));
+
+  /**
+   * R5：页码夹取。删掉最后一页仅剩的一条后 `total` 缩水，但 antd 的 `Pagination` 只在
+   * **内部**把显示值夹到合法范围、不会回写受控 `current`——于是高亮停在上一页、点那一页
+   * `onChange` 一次都不触发，表现为"空表且点不回去"。
+   *
+   * 两条守卫缺一不可：
+   * - `loading`：重取期间 `items` 可能还是上一轮的（或首屏是空的），此时按 total=0
+   *   夹取会把用户从第 3 页直接踢回第 1 页；
+   * - `grouped === undefined`：首屏还没回来（或请求失败）时没有任何可信的 total。
+   *
+   * 单条删除与批量删除都只 `reload()`（不自己算新页码）：谁让 total 变了，这里就兜住谁，
+   * 少一处"哪条路径忘了 setPage"的隐患。
+   */
+  useEffect(() => {
+    if (loading || grouped === undefined) return;
+    setPage((current) => (current > maxPage ? maxPage : current));
+  }, [loading, grouped, maxPage]);
 
   // 筛选 / 分页写回 URL（replace 语义）。effect 只依赖这些状态，不依赖 searchParams，
   // 因此写回不会触发循环重渲染；job_id 参数通过 functional 更新原样保留。

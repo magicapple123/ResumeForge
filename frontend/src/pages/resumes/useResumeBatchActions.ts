@@ -48,8 +48,20 @@ export function useResumeBatchActions({
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          const { deleted } = await batchDeleteResumes(ids);
-          message.success(t("resumesPage.batchDelete.done", { count: deleted }));
+          // T06：后端不再"有一条已删就整批 404"，而是跳过失效 id 照删其余。
+          // skipped 默认 0 兜住老响应形状（也给测试里的 mock 留出只写 deleted 的余地）。
+          const { deleted, skipped = 0 } = await batchDeleteResumes(ids);
+          if (skipped > 0) {
+            // 跳过的事必须说出来：否则"选了 5 份只删掉 4 份"看起来像丢数据。
+            message.warning(
+              `${t("resumesPage.batchDelete.done", { count: deleted })} · ${t(
+                "applyUi.batch.skipped",
+                { count: skipped },
+              )}`,
+            );
+          } else {
+            message.success(t("resumesPage.batchDelete.done", { count: deleted }));
+          }
         } catch (err) {
           message.error(
             err instanceof Error ? err.message : t("resumesPage.error.batchDeleteFailed"),

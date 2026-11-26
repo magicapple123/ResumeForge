@@ -155,7 +155,9 @@ def test_resume_batch_delete_soft_deletes(client, db_session):
     second = _create_resume(db_session, "批量删除二")
     response = client.post("/api/resumes/batch-delete", json={"resume_ids": [first, second]})
     assert response.status_code == 200
-    assert response.json() == {"deleted": 2}
+    # T06：响应多了 skipped（本次全命中 → 0）。断言从"只有 deleted"改成完整形状，
+    # 免得以后 skipped 恒为 0 也测不出来。
+    assert response.json() == {"deleted": 2, "skipped": 0}
     listing = client.get("/api/resumes").json()
     listed_ids = [item["id"] for item in listing["items"]]
     assert first not in listed_ids and second not in listed_ids
@@ -163,13 +165,28 @@ def test_resume_batch_delete_soft_deletes(client, db_session):
     assert {first, second} <= {item["id"] for item in trash["items"]}
 
 
-def test_resume_batch_delete_rejects_unknown_id_without_partial_delete(client, db_session):
+def test_resume_batch_delete_skips_unknown_id_and_deletes_the_rest(client, db_session):
+    """T06：失效 id 不再让整批 404，改为跳过并如实报出 skipped。
+
+    断言从"404 + 一条都不删"改成"200 + 只删有效的那条 + skipped=1"。语义变化是刻意
+    的：批量删除面对的是"刚才看到的那一屏"，其中一条被别处删掉时用户仍应删掉其余。
+    单条 ``DELETE /api/resumes/{id}`` 仍是 404（见 test_api_resume.py），没有被放宽。
+    """
     keep = _create_resume(db_session, "不能被误删")
     response = client.post("/api/resumes/batch-delete", json={"resume_ids": [keep, keep + 999999]})
-    assert response.status_code == 404
-    assert "不存在或已被删除" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.json() == {"deleted": 1, "skipped": 1}
     listing = client.get("/api/resumes").json()
-    assert keep in [item["id"] for item in listing["items"]]
+    assert keep not in [item["id"] for item in listing["items"]]
+
+
+def test_resume_batch_delete_all_ids_stale_returns_zero_deleted(client, db_session):
+    """全批都已失效：不报错，但 deleted=0 / skipped=N（前端据此提示"跳过 N 条"）。"""
+    gone = _create_resume(db_session, "先删一次")
+    client.delete(f"/api/resumes/{gone}")
+    response = client.post("/api/resumes/batch-delete", json={"resume_ids": [gone]})
+    assert response.status_code == 200
+    assert response.json() == {"deleted": 0, "skipped": 1}
 
 
 def test_resume_batch_delete_rejects_empty_ids(client):

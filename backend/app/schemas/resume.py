@@ -458,4 +458,12 @@ class ResumeBatchRequest(BaseModel):
 
 
 class ResumeBatchDeleteResult(BaseModel):
+    """批量删除结果：实际删掉的条数 + 被跳过的条数（T06）。
+
+    ``skipped`` 为请求里"已不存在 / 已在回收站"的 id 计数。以前这类 id 会让整批
+    404、一条都不删；现在跳过它们照删其余的，同时如实报出跳过了几条，前端据此
+    提示"跳过 N 条已删除的"。老客户端只读 ``deleted``，字段有默认值所以不破坏兼容。
+    """
+
     deleted: int
+    skipped: int = 0

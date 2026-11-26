@@ -80,3 +80,44 @@ describe("ResumeSearchInput", () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * R7：中文输入法组字（拼音 → 上屏）。真机上"打 shen 只发一次请求"必须由用户确认
+ * （jsdom 不会真的跑输入法），这里用 `compositionstart` / `compositionend` 事件模拟
+ * 浏览器给出的那一段时序：事件名与触发顺序与 Chrome 一致。
+ */
+describe("ResumeSearchInput 输入法组字（R7）", () => {
+  it("组字期间即使过了防抖也不提交；上屏（compositionend）后只提交一次上屏值", () => {
+    const { onCommit, input } = renderInput();
+
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "shen" } });
+    act(() => vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS * 3));
+    // 关键断言：拼音阶段的草稿不能变成关键词（否则会去搜「shen」）。
+    expect(onCommit).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: "沈" } });
+    fireEvent.compositionEnd(input);
+    act(() => vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS));
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenCalledWith("沈");
+  });
+
+  it("组字期间按 Enter 是选词，不触发搜索；上屏后仍只发一次", () => {
+    const { onCommit, input } = renderInput();
+
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "shen" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onCommit).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: "沈" } });
+    fireEvent.compositionEnd(input);
+    // 上屏后不再按 Enter：由防抖补上那一次（用户不该为了搜一次再敲一次回车）。
+    act(() => vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS));
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenCalledWith("沈");
+  });
+});

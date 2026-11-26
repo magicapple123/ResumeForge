@@ -28,6 +28,27 @@ from .resume_out import build_resume_out
 #: 详情端点与分页报告的 404 文案（两个端点是同一句话，改一处必须改另一处）。
 RESUME_NOT_FOUND_DETAIL = "简历记录不存在或已被删除"
 
+#: LIKE 的转义符。SQLite（以及当前唯一的生产库）默认没有 ESCAPE 子句，
+#: 必须显式写 ``ESCAPE '\'`` 才会把 ``\%`` / ``\_`` 当成字面量。
+LIKE_ESCAPE_CHAR = "\\"
+
+
+def escape_like(value: str) -> str:
+    """把用户输入里的 LIKE 通配符转义成字面量（T08）。
+
+    不做这一步，搜「100%」等于搜「100 后面任意」——``%`` 与 ``_`` 是 LIKE 的通配符，
+    「a_b」会命中「axb」。顺序要紧：**先**转义反斜杠本身，否则后面插入的 ``\\%``
+    会被再转义一次，变成"字面反斜杠 + 通配符"。
+
+    与原 ``f"%{keyword}%"`` 的可观察差异仅限于"值里含 ``%`` / ``_`` / ``\\``"的搜索，
+    其余搜索的匹配集合逐字不变。
+    """
+    return (
+        value.replace(LIKE_ESCAPE_CHAR, LIKE_ESCAPE_CHAR * 2)
+        .replace("%", f"{LIKE_ESCAPE_CHAR}%")
+        .replace("_", f"{LIKE_ESCAPE_CHAR}_")
+    )
+
 
 class ResumeNotFound(LookupError):
     """简历不存在或已在回收站里。
@@ -138,13 +159,15 @@ def filtered_query(
     if favorite is not None:
         query = query.filter(ResumeRecord.favorite == favorite)
     if keyword:
-        like = f"%{keyword}%"
+        # T08：``%`` / ``_`` / ``\`` 一律转义成字面量（配 ``ESCAPE '\'``）。不转义时
+        # 搜「100%」会退化成"100 后面任意"，搜「a_b」会命中「axb」。
+        like = f"%{escape_like(keyword)}%"
         query = query.filter(
             or_(
-                ResumeRecord.title.like(like),
-                ResumeRecord.job_title.like(like),
-                ResumeRecord.company.like(like),
-                cast(ResumeRecord.content, String).like(like),
+                ResumeRecord.title.like(like, escape=LIKE_ESCAPE_CHAR),
+                ResumeRecord.job_title.like(like, escape=LIKE_ESCAPE_CHAR),
+                ResumeRecord.company.like(like, escape=LIKE_ESCAPE_CHAR),
+                cast(ResumeRecord.content, String).like(like, escape=LIKE_ESCAPE_CHAR),
             )
         )
     return query
@@ -304,10 +327,12 @@ def resume_detail(db: Session, resume_id: int) -> ResumeOut:
 
 
 __all__ = [
+    "LIKE_ESCAPE_CHAR",
     "RESUME_NOT_FOUND_DETAIL",
     "RESUME_SORT_ORDERS",
     "ResumeNotFound",
     "SortKey",
+    "escape_like",
     "filtered_query",
     "list_resume_ids",
     "list_resumes_page",

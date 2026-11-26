@@ -76,25 +76,35 @@ def create_manual_resume(payload: ManualResumeRequest, db: Session = Depends(get
 
 @router.post("/batch-delete", response_model=ResumeBatchDeleteResult)
 def batch_delete_resumes(payload: ResumeBatchRequest, db: Session = Depends(get_db)):
-    """批量移入回收站（软删除，P2-4）：单次上限 500，与岗位批量操作同一口径。
+    """批量移入回收站（软删除，P2-4）：单次上限 5000，与岗位批量操作同一口径。
 
-    语义对齐单条 ``DELETE /{resume_id}``：软删除进回收站可恢复；任何一条 id 不存在
-    或已在回收站里即整体 404（与 ``/jobs/batch-delete`` 的 _get_jobs_or_404 一致），
-    不做"删一半"。
+    单条 ``DELETE /{resume_id}`` 的语义不变（不存在即在回收站里 → 404）；**批量**不同
+    （T06）：列表是"刚才看到的那一屏"，其中某一条可能已被另一个标签页/另一台设备删掉，
+    这时整批 404 会让用户一条都删不成、只能手动挑出那条重来。所以这里**跳过**失效 id、
+    照删其余，并把跳过的条数如实报回去（``deleted`` + ``skipped``）。
+
+    跳过 ≠ 静默：``deleted`` 仍只数真正移入回收站的条数，前端据此提示"跳过 N 条已删除的"。
     """
     records: list[ResumeRecord] = []
+    skipped_ids: list[int] = []
     for resume_id in payload.resume_ids:
         record = trash.get_live(db, ResumeRecord, resume_id)
         if record is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"以下简历不存在或已被删除：{resume_id}",
-            )
+            skipped_ids.append(resume_id)
+            continue
         records.append(record)
     for record in records:
         trash.soft_delete(db, "resume", record)
     db.commit()
-    return ResumeBatchDeleteResult(deleted=len(records))
+    if skipped_ids:
+        # 只记条数与 id：这类日志排查"为什么少删了"时第一手信息就是这几条 id。
+        logger.info(
+            "批量删除跳过 %s 条失效简历 deleted=%s skipped_ids=%s",
+            len(skipped_ids),
+            len(records),
+            skipped_ids,
+        )
+    return ResumeBatchDeleteResult(deleted=len(records), skipped=len(skipped_ids))
 
 
 add_action_route(router, all_actions()["list_resumes"], route_path="")

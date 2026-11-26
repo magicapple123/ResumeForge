@@ -97,9 +97,15 @@ export function deleteResume(id: number): Promise<void> {
 
 /**
  * 批量软删除简历（P2-4）：一次请求删完（全部进回收站），不再前端逐条 N 连发。
- * 任一 id 不存在或已删除时整批失败（404），不会出现"删了一半"的状态；一次最多 5000 份。
+ * 一次最多 5000 份。
+ *
+ * T06 起**不再是全有或全无**：请求里"已不存在 / 已在回收站"的 id 会被后端跳过，
+ * 其余照删。`deleted` 是真正删掉的条数，`skipped` 是被跳过的条数——调用方必须
+ * 把 skipped 说出来，不然用户会以为"点了删除只少了几条"是丢数据。
  */
-export function batchDeleteResumes(resumeIds: number[]): Promise<{ deleted: number }> {
+export function batchDeleteResumes(
+  resumeIds: number[],
+): Promise<{ deleted: number; skipped: number }> {
   return request("/resumes/batch-delete", {
     method: "POST",
     body: JSON.stringify({ resume_ids: resumeIds }),
