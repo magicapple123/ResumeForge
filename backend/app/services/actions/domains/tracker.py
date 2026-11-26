@@ -175,7 +175,7 @@ def _run_list_application_tracks(db: Session, payload: ListApplicationTracksInpu
     from ...assistant_tools._shared import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT
     from ...assistant_tools.tracker_tools import _track_brief as _tool_track_brief
     from ...tracker import MAX_LIST_LIMIT as ROUTE_LIST_LIMIT
-    from ...tracker import count_tracks, list_tracks, summarize
+    from ...tracker import count_tracks, latest_contacted_at, list_tracks, summarize
     from ...tracker import track_brief as _route_track_brief
     from ...tracker_job_link import resolve_job_links
 
@@ -185,10 +185,14 @@ def _run_list_application_tracks(db: Session, payload: ListApplicationTracksInpu
         db, status=payload.status, keyword=payload.keyword, limit=ROUTE_LIST_LIMIT
     )
     total = count_tracks(db, status=payload.status, keyword=payload.keyword)
-    # 整改 #7 补齐：``job_link_id`` 的匹配规则只有一份（``services/tracker_job_link.py``），
-    # 与 ``GET /api/tracker/page`` 调的是**同一个**函数——两处各写一份"同公司 + 岗位名相等
-    # 或前缀"迟早会漂移出两套行为（同一行在两个端点上点得进去 / 点不进去）。这里整批一次
-    # 算完（显式关联一次 + 候选一次，与行数无关），逐行按 id 取用；不做逐行查询。
+    # 两处派生字段都补齐，取的都是 ``GET /api/tracker/page`` 的**同一份**实现：各写一份
+    # 迟早漂移成两套行为（同一行在两个入口显示不同的"已联系"/点了跳不同的岗位）。
+    #
+    # ``latest_followup``（CR-19）：一次批查询补「最近一次已联系」，取值口径（只认
+    # ``contacted``、只取最新）唯一实现在 ``services/tracker_query.latest_contacted_at``。
+    # ``job_link_id``（整改 #7）：匹配规则唯一实现在 ``services/tracker_job_link``
+    # （显式关联一次 + 候选一次）。两者都不随行数增长查询次数，也不写库。
+    contacted = latest_contacted_at(db, [int(record.id) for record in records])
     job_links = resolve_job_links(db, records)
     shown = records[: min(payload.limit or DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT)]
     text = json.dumps(
@@ -205,7 +209,11 @@ def _run_list_application_tracks(db: Session, payload: ListApplicationTracksInpu
         link="/tracker",
         data=TrackListOut(
             items=[
-                _route_track_brief(record, job_link_id=job_links.get(int(record.id)))
+                _route_track_brief(
+                    record,
+                    latest_followup=contacted.get(int(record.id)),
+                    job_link_id=job_links.get(int(record.id)),
+                )
                 for record in records[:ROUTE_LIST_LIMIT]
             ],
             **summarize(db, status=payload.status, keyword=payload.keyword),

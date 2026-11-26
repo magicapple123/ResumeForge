@@ -19,11 +19,21 @@
 `/page` **逐行相等**——同一个问题不允许多出第二套行为。本文件后半段钉住三件事：
 逐行对拍、三种情形（唯一命中 / 两候选 / 软删）在老端点上也成立、以及老端点的
 派生匹配**批量**执行（job 表查询条数不随行数增长）。
+
+同一批还补了 `latest_followup`（CR-19）的同一条纪律：老端点原先恒 `None`、`/page`
+有值，是**同一类**"同一实体两套行为"。取值口径复用
+`services/tracker_query.latest_contacted_at`，本文件同型地钉住逐 id 对拍、六种形态
+与"批量不随行数增长"。
 """
 
 from __future__ import annotations
 
+from datetime import datetime
+
+from app.models.followup import ApplicationFollowUp
 from app.models.job import JOB_STATUS_OPEN, Job
+from app.models.tracker import ApplicationTrack
+from app.services import trash
 from test_apply_task_detail_queries import _count_statements
 
 BASE = {
@@ -36,6 +46,8 @@ BASE = {
 # 老列表端点的派生匹配预算：显式关联一次 + 候选一次。N+1 的实现是"每行再加一次"，
 # 8 行的数据集会到 9 条，直接越过这条线。
 MAX_JOB_LINK_STATEMENTS = 2
+# 「最近一次已联系」是一条聚合查询（GROUP BY track_id）：一次封顶，逐行查就是 N+1。
+MAX_FOLLOWUP_STATEMENTS = 1
 
 
 def _job(db_session, **overrides) -> Job:
@@ -261,3 +273,91 @@ def test_legacy_list_job_link_lookup_is_batched(client, db_session):
     )
     # 8 行都拿到了链接 → 上面的条数确实覆盖了全部行的匹配，而不是"只算了第一行"。
     assert all(row["job_link_id"] is not None for row in response.json()["items"])
+
+
+# ===== 老列表端点 GET /api/tracker：latest_followup 同源（CR-19） =====
+
+
+def _followup(db_session, track_id: int, decision: str, when: datetime) -> ApplicationFollowUp:
+    row = ApplicationFollowUp(track_id=track_id, decision=decision, decided_at=when)
+    db_session.add(row)
+    return row
+
+
+def test_legacy_list_matches_page_row_by_row_for_latest_followup(client, db_session):
+    """老端点原先恒 `None`、`/page` 有值：同一个「已联系 · 11-25」两个入口两套结果。
+
+    六种形态一次覆盖（口径见 ``tracker_query.latest_contacted_at``）：
+
+    1. 多条 `contacted` → 取最新，更晚的 `replied` **不算**「已联系」；
+    2. 只有 `stopped` → 不算已联系；
+    3. 从未跟进 → 空；
+    4. 跟进记录还在、但进度行被软删 → 两个端点都不出现这一行；
+    5. 跨月边界（月末 23:59:59）原样下发，不因时区/取整漂移；
+    6. `contacted` 早于 `replied` → 仍显示 `contacted` 的时刻。
+    """
+    track_ids = {
+        company: client.post("/api/tracker", json={**BASE, "company": company}).json()["id"]
+        for company in ("甲公司", "乙公司", "丙公司", "丁公司", "戊公司", "己公司")
+    }
+
+    _followup(db_session, track_ids["甲公司"], "contacted", datetime(2026, 11, 10, 9))
+    _followup(db_session, track_ids["甲公司"], "contacted", datetime(2026, 11, 25, 9))
+    _followup(db_session, track_ids["甲公司"], "replied", datetime(2026, 11, 26, 9))
+    _followup(db_session, track_ids["乙公司"], "stopped", datetime(2026, 11, 20, 9))
+    _followup(db_session, track_ids["丁公司"], "contacted", datetime(2026, 11, 22, 9))
+    _followup(db_session, track_ids["戊公司"], "contacted", datetime(2026, 10, 31, 23, 59, 59))
+    _followup(db_session, track_ids["己公司"], "contacted", datetime(2026, 11, 1, 8))
+    _followup(db_session, track_ids["己公司"], "replied", datetime(2026, 11, 2, 8))
+    db_session.commit()
+
+    # 丁公司整行进回收站：跟进决策按 CASCADE 只在**硬删**时消失，软删期间还在库里。
+    deleted = db_session.get(ApplicationTrack, track_ids["丁公司"])
+    assert deleted is not None
+    trash.soft_delete(db_session, "track", deleted)
+    db_session.commit()
+
+    legacy = _legacy(client)
+    page = {row["id"]: row for row in _page(client)}
+    assert set(legacy) == set(page)  # 两个端点覆盖同一批行，对拍才有意义
+    assert track_ids["丁公司"] not in legacy  # 软删行两个端点都不返回
+
+    for track_id, row in page.items():
+        assert legacy[track_id]["latest_followup"] == row["latest_followup"], track_id
+
+    # 逐行对拍之外再钉住绝对值：相等也可能是"两边都没实现，一起恒为空"。
+    followups = {row["company"]: row["latest_followup"] for row in legacy.values()}
+    assert followups["甲公司"] == "2026-11-25T09:00:00"
+    assert followups["乙公司"] is None
+    assert followups["丙公司"] is None
+    assert followups["戊公司"] == "2026-10-31T23:59:59"
+    assert followups["己公司"] == "2026-11-01T08:00:00"
+    assert "丁公司" not in followups
+
+
+def test_legacy_list_latest_followup_lookup_is_batched(client, db_session):
+    """「最近一次已联系」必须批量：follow-up 查询条数与行数无关（8 行不能变 8 次查询）。"""
+    expected: dict[str, str] = {}
+    for index in range(8):
+        company = f"公司{index}"
+        track_id = client.post("/api/tracker", json={**BASE, "company": company}).json()["id"]
+        when = datetime(2026, 11, 20, 9, 0, index)
+        _followup(db_session, track_id, "contacted", when)
+        expected[company] = when.isoformat()
+    db_session.commit()
+
+    with _count_statements() as statements:
+        response = client.get("/api/tracker")
+
+    assert response.status_code == 200
+    followup_selects = [
+        sql for sql in statements if "APPLICATION_FOLLOW_UP" in sql.replace("\n", " ").upper()
+    ]
+    assert followup_selects, "跟进时刻一次都没查 application_follow_up：守卫没落在目标路径上"
+    assert len(followup_selects) <= MAX_FOLLOWUP_STATEMENTS, (
+        f"老列表端点执行了 {len(followup_selects)} 条跟进查询"
+        f"（预算 {MAX_FOLLOWUP_STATEMENTS} 条）。请用 "
+        "services/tracker.latest_contacted_at 整批取，不要逐行查：\n" + "\n".join(followup_selects)
+    )
+    # 每行都是**自己**的最近时刻（不是"第一行的值被复用"）。
+    assert {row["company"]: row["latest_followup"] for row in response.json()["items"]} == expected
