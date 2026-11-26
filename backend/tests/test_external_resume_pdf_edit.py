@@ -169,6 +169,10 @@ def test_unknown_block_is_rejected_with_a_reason_code():
     with pytest.raises(PdfEditError) as caught:
         replace_block(data, "p1b99", "新标题")
     assert "pdf_block_not_found" in str(caught.value)
+    # 展示给用户的必须是调用方给的那句（"已经不存在"），不是 `_MESSAGES` 里的兜底
+    # 通用文案：`CODE_BLOCK_NOT_FOUND` 在读侧没有默认句子，不 `message=` 就只剩
+    # "这份 PDF 不支持在线编辑"，用户看不出该刷新还是该换文件。
+    assert "已经不存在了" in str(caught.value)
 
 
 def test_identical_text_is_rejected():

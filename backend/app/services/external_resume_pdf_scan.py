@@ -63,12 +63,16 @@ _MAX_DEPTH = 12
 
 
 class PdfEditError(ValueError):
-    """PDF 不能在线编辑（或改不动）。``code`` 给前端，``message`` 直接展示。"""
+    """PDF 不能在线编辑（或改不动）。``code`` 给前端，文案直接展示。
 
-    def __init__(self, code: str, detail: str = "") -> None:
+    ``message`` 允许调用方自带（编辑链路上的"文字为空""块不存在"这类原因不在读侧），
+    不给就用本模块的默认文案；两种情况下 ``str(exc)`` 都是可读的完整句子。
+    """
+
+    def __init__(self, code: str, detail: str = "", *, message: str = "") -> None:
         self.code = code
-        base = _MESSAGES.get(code, _MESSAGES[CODE_UNSUPPORTED])
         self.detail = detail
+        base = message or _MESSAGES.get(code, _MESSAGES[CODE_UNSUPPORTED])
         super().__init__(f"{base}（{code}{'：' + detail if detail else ''}）")
 
 
