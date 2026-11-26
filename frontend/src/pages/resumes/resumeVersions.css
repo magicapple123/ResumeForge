@@ -1,38 +1,57 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* 「岗位 · N 个版本」展开后的版本清单（CR-33 / 2026-11-26 方案 A 对齐重写）。
+/* 「岗位 · N 个版本」展开后的版本清单（CR-33 / 2026-11-26 逐列对齐返工）。
    颜色只用 --rf-* 语义 token，不覆写 antd 原生类名；列宽由 `resumeGroupLayout.ts`
-   以 inline `grid-template-columns` 给出，本文件不重复写数字。 */
+   以 inline `grid-template-columns` 给出，本文件不重复写数字。
+   横向内边距一律取 `--rf-group-cell-pad-x`（定义在 resumeGroupTable.css，与父表
+   `th`/`td` 的 `padding-inline` 是同一个变量）：两套排布"能用的宽度"必须一样，
+   各写一个 8px 就会再次跑出 32px 偏差。 */
 
 .resume-version-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  /* 让出展开箭头那一列的位置，版本行的第一列（第 N 版）与组行的身份列对齐。 */
-  padding: 2px 0 4px 16px;
+  /* 只留纵向留白：横向留白由每一格自己出。列表再加横向内边距，四列就整体右移。 */
+  padding: 2px 0 4px;
 }
 
-/* 5 列栅格：第 N 版 ｜ 标题（+ 最新 chip + 备注）｜ 时间 ｜ 投递占位 ｜ 操作。
-   列宽来自 `versionGridColumns()`，与父表同源。 */
+/* 列宽由 `versionGridColumns()` 给出（首格吃掉父表的「展开列 + 身份列」，其余三列
+   与父表同宽）。这里**没有** `column-gap`：父表列宽是 border-box 宽度，再插间距
+   会把尾随列整体左移（4 个 8px = 32px），而列与列之间的呼吸已由每格的内边距提供。 */
 .resume-version-row {
   position: relative;
   display: grid;
   align-items: center;
-  column-gap: 8px;
+  column-gap: 0;
   min-height: 30px;
 }
 
-/* 左侧一条 1px 竖向引导线贯穿整组，标明"这些是同一岗位的版本"。 */
+/* 左侧一条 1px 竖向引导线贯穿整组，标明"这些是同一岗位的版本"。
+   与「第 N 版」文字左缘留 9px：首格内边距 8px + 缩进 16px = 24px，减 9px 得 15px。 */
 .resume-version-row::before {
   content: "";
   position: absolute;
-  left: -9px;
+  left: calc(var(--rf-group-cell-pad-x, 8px) + 7px);
   top: 0;
   bottom: 0;
   width: 1px;
   background: var(--rf-fill-tertiary);
 }
 
+/* 首格：父表的「展开列 + 身份列」。比组行的身份列再进 16px —— 版本是组的子项，
+   这个缩进是层级，不是对齐误差（它整块都在首格里，不影响右侧三列的竖线）。 */
+.resume-version-leading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-left: calc(var(--rf-group-cell-pad-x, 8px) + 16px);
+  padding-right: var(--rf-group-cell-pad-x, 8px);
+}
+
+/* 版本号前缀定宽（`--rf-group-version-index` 由 `GROUP_COLUMN_WIDTHS.versionIndex` 写入）：
+   每行同一个宽度，组内标题左缘才不会一行一个位置。 */
 .resume-version-index {
+  flex: 0 0 var(--rf-group-version-index, 44px);
   color: var(--rf-text-tertiary);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
@@ -45,6 +64,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .resume-version-title {
@@ -72,17 +92,28 @@
   flex: 0 1 auto;
 }
 
-/* 时间与父表「最近更新」列同一竖线：左对齐 + 等宽数字（与组行 `.rf-group-num` 一致）。 */
+/* 时间：与父表「最近更新」列同一竖线。父表那一侧是 `td` 的 padding 定位文字，
+   这一侧必须用同一个变量给同样的 padding，否则就是 8/16px 的平移。 */
 .resume-version-time {
+  padding-inline: var(--rf-group-cell-pad-x, 8px);
   font-size: 12px;
   white-space: nowrap;
 }
 
+/* 投递占位：没有内容，但必须占住父表投递列的**同一个盒**（含内边距），
+   否则后面两列会各左移一点。 */
+.resume-version-delivery {
+  padding-inline: var(--rf-group-cell-pad-x, 8px);
+}
+
+/* 操作列右对齐：右缘 = 父表「操作」列内容右缘。 */
 .resume-version-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
+  min-width: 0;
+  padding-inline: var(--rf-group-cell-pad-x, 8px);
 }
 
 /* 折叠行：岗位名 + 版本数不会换行，公司/投递次数跟在后面。 */

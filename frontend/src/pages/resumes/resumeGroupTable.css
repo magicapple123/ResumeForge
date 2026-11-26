@@ -3,6 +3,33 @@
    版本行与父表同列栅格。颜色只用 --rf-* 语义 token（深色模式自动跟随），
    所有规则都以 `.resume-group-table` 限定作用域。 */
 
+/* ## 水平内边距只有一份（2026-11-26 逐列对齐返工的落点）
+ *
+ * 组行的文字位置由 `td` 的内边距决定，版本行的文字位置由每格自己的内边距决定。
+ * 两边各写一个数字时，任何一次改字号/改 antd 密度都会让两边差出半个字符；
+ * 上一版更糟：版本行根本不吃 `td` 的内边距，改用 `column-gap` + 列表缩进，
+ * 尾随列整体左移 16–32px（940 视口实测「最近更新」列 576 vs 608）。
+ *
+ * 所以这里把 8px 提成变量：父表 `th`/`td` 的 `padding-inline` 与版本行每一格的
+ * `padding-inline`（`resumeVersions.css`）读的是同一个 `--rf-group-cell-pad-x`。
+ * 改一次两边一起动，不靠"看着差不多"。
+ */
+.resume-group-table {
+  --rf-group-cell-pad-x: 8px;
+}
+
+.resume-group-table .ant-table-thead > tr > th.ant-table-cell,
+.resume-group-table .ant-table-tbody > tr > td.ant-table-cell {
+  padding-inline: var(--rf-group-cell-pad-x);
+}
+
+/* 展开行装的是版本清单：它要横跨整行、第一格对齐父表的「展开列」左缘，
+   所以横向内边距必须清零（纵向的 12px 行距保留，看起来仍是一段缩进的内容区）。
+   不清零的话，清单整体内缩 8px，四列的竖线就全线错开一个内边距。 */
+.resume-group-table .ant-table-tbody > tr.ant-table-expanded-row > td.ant-table-cell {
+  padding-inline: 0;
+}
+
 /* 表头去底色：默认的灰底会把"分区列表"压成普通表格。字重与色阶一并调轻，
    让第一列的两行身份成为视觉重心。 */
 .resume-group-table .ant-table-thead > tr > th {

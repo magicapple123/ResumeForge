@@ -21,6 +21,13 @@
  *    jsdom 没有排版能力，这条守的是**声明**：真机数字（940 下 834/834、
  *    操作列右缘 = 容器右缘）由实机验收负责，这里只保证根因不再被改回去。
  *
+ * ## 版本行与组行逐列对齐（#2 剩下的 32px，2026-11-26）
+ * 9. 版本行栅格的**跟踪列**必须与父表 `colgroup` 逐列对上（首格吃掉「展开列 + 身份列」，
+ *    尾随三列同宽同序），窄档投递列在两边一起消失；
+ * 10. 两套排布的水平内边距必须引用**同一个** `--rf-group-cell-pad-x`（读 CSS 文本断言）。
+ *     jsdom 量不到像素，所以第 9/10 条守的是"能用的宽度"这件事：列宽同源、内边距同源、
+ *     间距不存在——三者一起成立，尾随列才可能落在同一条竖线上。
+ *
  * 断言一律走 `t()`，不写死中文文案；菜单项用 `within(菜单)` 定位——菜单里有带图标的
  * 项，`getByRole("menuitem", { name })` 的可读名会把图标的 aria-label 也算进去，
  * 用文本定位更贴近用户看到的东西。
@@ -363,3 +370,104 @@ describe("ResumeGroupedTable 列头三态排序", () => {
     ).toBe(true);
   });
 });
+
+/**
+ * jsdom 的 `matchMedia` 桩恒返回 `matches: false`（`src/test/setup.ts`），也就是"宽档"。
+ * 窄档要单独打开：只让 `max-width` 查询命中，其它（颜色偏好等）维持 false。
+ */
+function stubNarrow(): () => void {
+  const original = window.matchMedia;
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches: query.includes("max-width"),
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    }),
+  });
+  return () => {
+    Object.defineProperty(window, "matchMedia", { configurable: true, value: original });
+  };
+}
+
+/** 按**顶层**空格切分 `grid-template-columns`（`minmax(0,1fr)` 括号里的空格不算分隔）。 */
+function splitTracks(template: string): string[] {
+  const tracks: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const char of template) {
+    if (char === "(") depth += 1;
+    if (char === ")") depth -= 1;
+    if (char === " " && depth === 0) {
+      if (current) tracks.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  if (current) tracks.push(current);
+  // jsdom 会把 `minmax(0,1fr)` 序列化成 `minmax(0px, 1fr)`：比之前先去空白。
+  return tracks.map((track) => track.replace(/\s+/g, ""));
+}
+
+/** 版本行栅格的跟踪列 vs 父表 `colgroup`：这条是 32px 偏差的直接守卫。 */
+function expectVersionTracksMatchTable(container: HTMLElement): void {
+  const table = container.querySelector<HTMLTableElement>(".ant-table-content table");
+  if (!table) throw new Error("grouped table not rendered");
+  const columnWidths = [...table.querySelectorAll<HTMLTableColElement>("colgroup col")].map(
+    (col) => col.style.width,
+  );
+  const versionRow = container.querySelector<HTMLElement>(".resume-version-row");
+  if (!versionRow) throw new Error("expanded group must render version rows");
+  const tracks = splitTracks(versionRow.style.gridTemplateColumns || "");
+
+  // 父表第 1 列是展开箭头（定宽），第 2 列是身份列（不写宽度、吃剩余空间）：
+  // 版本行把这两列并进首格，1fr 才和父表算出同一个宽度。
+  expect(tracks[0]).toMatch(/^minmax\(0(px)?,1fr\)$/);
+  expect(columnWidths[1]).toBe("");
+  // 尾随列同宽同序（窄档投递列在两边一起消失，所以按父表实际列数比，不写死 4/5）。
+  expect(tracks.slice(1)).toEqual(columnWidths.slice(2));
+  expect(tracks).toHaveLength(columnWidths.length - 1);
+  // 格子数必须等于跟踪列数：多一个格子会落到隐式跟踪列上，右侧整体左移。
+  expect(versionRow.children.length).toBe(tracks.length);
+}
+
+/** 版本行里每一格的语义标记（按 DOM 顺序），用于核对"格子顺序 == 跟踪列顺序"。 */
+function versionCellMarkers(versionRow: HTMLElement): string[] {
+  const names = ["leading", "time", "delivery", "actions"];
+  return [...versionRow.children].map((child) => {
+    const hit = names.find((name) => child.classList.contains(`resume-version-${name}`));
+    return hit ?? "unknown";
+  });
+}
+
+describe("ResumeGroupedTable 版本行与组行逐列对齐", () => {
+  it("宽档：尾随三列与父表同宽同序，投递占位占住父表投递列", () => {
+    const { container } = renderTable({ expandedKeys: ["job:7"] });
+
+    expectVersionTracksMatchTable(container);
+    const versionRow = container.querySelector<HTMLElement>(".resume-version-row");
+    if (!versionRow) throw new Error("expanded group must render version rows");
+    expect(versionCellMarkers(versionRow)).toEqual(["leading", "time", "delivery", "actions"]);
+  });
+
+  it("窄档：投递列在父表与版本行一起消失，不留下 0 宽的跟踪列", () => {
+    const restore = stubNarrow();
+    try {
+      const { container } = renderTable({ expandedKeys: ["job:7"] });
+
+      // 留一个 0px 的空跟踪列不会"看不见"：它后面的格子会被挤到错误的跟踪列上，
+      // 操作列因此整体左移（真机 940 视口实测 32px 的一部分）。
+      expect(container.querySelector(".resume-version-delivery")).toBeNull();
+      expectVersionTracksMatchTable(container);
+    } finally {
+      restore();
+    }
+  });
+});
+
