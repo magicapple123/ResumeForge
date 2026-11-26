@@ -87,7 +87,7 @@ from .drill import (
     DrillSession,
     DrillTurn,
 )
-from .external_resume import ExternalResume
+from .external_resume import ExternalResume, ExternalResumeRevision
 from .followup import (
     FOLLOWUP_DECISION_CONTACTED,
     FOLLOWUP_DECISION_REPLIED,
@@ -318,6 +318,11 @@ __all__ = [
     "Award",
     "ResumeRecord",
     "ExternalResume",
+    "ExternalResumeRevision",
+    "REVISION_SOURCES",
+    "SOURCE_EDIT",
+    "SOURCE_RESTORE",
+    "SOURCE_UPLOAD",
     "ResumeGenerateTask",
     "ResumeDeliveryRecord",
     "DELIVERY_SOURCES",

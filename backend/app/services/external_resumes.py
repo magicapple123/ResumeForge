@@ -27,7 +27,7 @@ from typing import NamedTuple
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
-from ..models.external_resume import ExternalResume
+from ..models.external_resume import SOURCE_UPLOAD, ExternalResume, ExternalResumeRevision
 from ..models.job import Job
 from ..models.user_file import UserFile
 from ..schemas.external_resume import (
@@ -50,6 +50,7 @@ from .document_text import (
     material_suffix,
 )
 from .external_resume_analysis import analyze_external_resume
+from .external_resume_pdf_scan import normalize_cid_encoding
 from .user_files import save_from_bytes, user_files_dir
 
 logger = logging.getLogger(__name__)
@@ -108,8 +109,14 @@ def prepare_upload(original_name: str, content: bytes) -> ExtractedUpload:
     """
     validate_upload(original_name, content)
     name = _display_name(original_name)
+    payload = content
+    if material_suffix(name) == ".pdf":
+        # fpdf2 2.9 + OTF 导出的 PDF 用内嵌 CMap 做 /Encoding，pdfminer 只按 CMap **名字**
+        # 查表，读出来是零个字形——不先归一化成 /Identity-H，本应用自己导出的 PDF 会被
+        # 误判成扫描件（正文空、"没有文字层"）。归一化只作用于解析副本，原件不动。
+        payload = normalize_cid_encoding(content)[0]
     try:
-        extracted = extract_material_text(name, content, render_scan_pages=False)
+        extracted = extract_material_text(name, payload, render_scan_pages=False)
     except ValueError as exc:
         if str(exc) in _NO_TEXT_MESSAGES:
             return ExtractedUpload(name=name, text="", warnings=[NO_TEXT_WARNING])
@@ -163,12 +170,26 @@ def create_external_resume(
     display = (name or "").strip()[:MAX_NAME_CHARS] or prepared.name
     row = ExternalResume(
         file_id=user_file.id,
+        # 首传那份：编辑另存新版本后，"回到原件"仍指它（#5）。
+        original_file_id=user_file.id,
         name=display,
         text=prepared.text,
         text_chars=len(prepared.text),
         job_id=job.id if job is not None else None,
     )
     db.add(row)
+    db.flush()
+    # 上传也记一版（source=upload）：历史列表从第一天起就是完整的，
+    # 不必让读侧为"升级前的老行"另写一条补录逻辑。
+    db.add(
+        ExternalResumeRevision(
+            resume_id=int(row.id),
+            file_id=int(user_file.id),
+            text_chars=len(prepared.text),
+            has_text=bool(prepared.text.strip()),
+            source=SOURCE_UPLOAD,
+        )
+    )
     db.commit()
     db.refresh(row)
     logger.info("已保存外部简历 id=%s file_id=%s chars=%s", row.id, row.file_id, row.text_chars)

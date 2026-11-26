@@ -22,17 +22,27 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.external_resume import ExternalResume
+from ..models.external_resume import ExternalResume, ExternalResumeRevision
 from ..models.user_file import UserFile
 from ..runtime.blocking import run_sync
 from ..schemas.external_resume import (
     MAX_EXTERNAL_RESUME_BYTES,
     ExternalResumeAnalysisOut,
+    ExternalResumeBlockOut,
+    ExternalResumeBlocksOut,
     ExternalResumeDetail,
+    ExternalResumeEditInput,
+    ExternalResumeEditOut,
     ExternalResumeListOut,
+    ExternalResumeRestoreOut,
+    ExternalResumeRevisionOut,
+    ExternalResumeRevisionsOut,
     ExternalResumeUpdateInput,
 )
+from ..services import external_resume_edit as edit_service
+from ..services import external_resume_versions as versions
 from ..services import external_resumes as service
+from ..services.external_resume_pdf_scan import PdfEditError
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +71,29 @@ def _detail_of(db: Session, row: ExternalResume) -> ExternalResumeDetail:
     """详情回显：关联岗位标题 + 原件 MIME 一起带上（前端据此选预览形态）。"""
     mime = service.user_file_mimes(db, [row.file_id]).get(row.file_id, "")
     return service.detail_of(row, job_title=_job_title(db, row), mime=mime)
+
+
+def _file_meta(db: Session, file_id: int) -> tuple[str, str]:
+    """(原始文件名, MIME)：编辑要按后缀选路，也让回显带上正确的内容类型。"""
+    user_file = db.get(UserFile, file_id)
+    if user_file is None:
+        return "", ""
+    return user_file.original_name or "", user_file.mime or ""
+
+
+def _revision_out(
+    revision: ExternalResumeRevision, row: ExternalResume
+) -> ExternalResumeRevisionOut:
+    """版本回显；``current`` 用"指向的仍是简历当前文件"判定，不另存标记。"""
+    return ExternalResumeRevisionOut(
+        id=int(revision.id),
+        file_id=int(revision.file_id),
+        text_chars=int(revision.text_chars or 0),
+        has_text=bool(revision.has_text),
+        source=revision.source or "",
+        created_at=revision.created_at,
+        current=int(revision.file_id) == int(row.file_id),
+    )
 
 
 def _persist_upload(
@@ -202,19 +235,169 @@ def delete_external_resume(resume_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{resume_id}/file")
-def read_external_resume_file(resume_id: int, db: Session = Depends(get_db)) -> FileResponse:
-    """原件（inline）：PDF 可直接嵌 iframe，图片/文本交给浏览器。"""
+def read_external_resume_file(
+    resume_id: int,
+    revision_id: int | None = Query(default=None, ge=1),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """原件（inline）：PDF 可直接嵌 iframe，图片/文本交给浏览器。
+
+    给了 ``revision_id`` 时返回该历史版本的文件——历史版本列表的「预览 / 下载」用它，
+    不必为"看一版旧文件"再开一个端点。
+    """
     row = _get_or_404(db, resume_id)
+    file_id = row.file_id
+    if revision_id is not None:
+        revision = versions.get_revision(db, row, revision_id)
+        if revision is None:
+            raise HTTPException(status_code=404, detail=_NOT_FOUND)
+        file_id = revision.file_id
     try:
-        path = service.resolve_original_path(db, row)
-    except service.ExternalResumeFileMissing as exc:
+        path = versions.path_of_file(db, file_id)
+    except versions.RevisionFileMissing as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    user_file = db.get(UserFile, row.file_id)
+    user_file = db.get(UserFile, file_id)
     return FileResponse(
         path,
         media_type=(user_file.mime if user_file is not None else "") or "application/octet-stream",
         filename=(user_file.original_name if user_file is not None else "") or path.name,
         content_disposition_type="inline",
+    )
+
+
+@router.get("/{resume_id}/blocks", response_model=ExternalResumeBlocksOut)
+def read_external_resume_blocks(resume_id: int, db: Session = Depends(get_db)):
+    """编辑视图：这份文件能改哪些块 / 段落。
+
+    能力探测失败（扫描件 / 转曲 / 加密 / 表单 / 旋转页 / 不支持的后缀）一律 422，
+    ``detail`` 是面向用户的完整句子（含原因码），前端直接展示并引导下载。
+    """
+    row = _get_or_404(db, resume_id)
+    name, _mime = _file_meta(db, row.file_id)
+    try:
+        document = edit_service.list_blocks(
+            name, versions.path_of_file(db, row.file_id).read_bytes()
+        )
+    except versions.RevisionFileMissing as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (PdfEditError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return ExternalResumeBlocksOut(
+        resume_id=int(row.id),
+        kind=document.kind,
+        page_count=document.page_count,
+        page_width=document.page_width,
+        page_height=document.page_height,
+        blocks=[
+            ExternalResumeBlockOut(
+                block_id=block.block_id,
+                page=block.page,
+                text=block.text,
+                editable=block.editable,
+                reason=block.reason,
+                x0=block.x0,
+                y0=block.y0,
+                x1=block.x1,
+                y1=block.y1,
+                size=block.size,
+                leading=block.leading,
+                align=block.align,
+            )
+            for block in document.blocks
+        ],
+        warnings=list(document.warnings),
+    )
+
+
+def _apply_edit(
+    db: Session, row: ExternalResume, payload: ExternalResumeEditInput
+) -> ExternalResumeEditOut:
+    """改字 + 存新版本的完整工作单元（在 worker 线程里跑，别占事件循环）。
+
+    返回的是**物化好的 DTO**：``row`` 出不了这个函数——会话一关它就成了 detached，
+    ``_detail_of`` 里任何一个没加载过的列都会抛 ``DetachedInstanceError``。
+    """
+    name, mime = _file_meta(db, row.file_id)
+    data = versions.path_of_file(db, row.file_id).read_bytes()
+    outcome = edit_service.replace(
+        name,
+        data,
+        block_id=payload.block_id,
+        new_text=payload.text,
+        shift_below=payload.shift_below,
+    )
+    revision, warnings = versions.persist_edit(
+        db, row, content=outcome.content, original_name=name, mime=mime
+    )
+    return ExternalResumeEditOut(
+        resume=_detail_of(db, row),
+        revision=_revision_out(revision, row),
+        kind=outcome.kind,
+        block_id=outcome.block_id,
+        page=outcome.page,
+        delta_pt=outcome.delta_pt,
+        overflow=outcome.overflow,
+        scaled=outcome.scaled,
+        shifted=outcome.shifted,
+        lines_before=outcome.lines_before,
+        lines_after=outcome.lines_after,
+        warnings=list(dict.fromkeys([*warnings, *outcome.warnings])),
+    )
+
+
+@router.post("/{resume_id}/edit", response_model=ExternalResumeEditOut)
+async def edit_external_resume(
+    resume_id: int, payload: ExternalResumeEditInput, db: Session = Depends(get_db)
+):
+    """把某一块 / 某一段改成新文字，另存为新版本（**绝不覆盖原件**）。
+
+    422 = 这一块不能改（能力探测失败 / 块已不存在 / 新文字放不下）；
+    404 = 简历或它当前的文件已不存在。
+    """
+    row = _get_or_404(db, resume_id)
+    try:
+        return await run_sync(_apply_edit, db, row, payload)
+    except versions.RevisionFileMissing as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (PdfEditError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/{resume_id}/revisions", response_model=ExternalResumeRevisionsOut)
+def list_external_resume_revisions(resume_id: int, db: Session = Depends(get_db)):
+    """历史版本（时间倒序）：时间、字数、有无文字、来源，当前版本标 ``current``。"""
+    row = _get_or_404(db, resume_id)
+    rows = versions.list_revisions(db, row)
+    return ExternalResumeRevisionsOut(
+        resume_id=int(row.id),
+        items=[_revision_out(revision, row) for revision in rows],
+        total=len(rows),
+    )
+
+
+@router.post(
+    "/{resume_id}/revisions/{revision_id}/restore",
+    response_model=ExternalResumeRestoreOut,
+)
+def restore_external_resume_revision(
+    resume_id: int, revision_id: int, db: Session = Depends(get_db)
+):
+    """恢复到某个历史版本：**再写一条** `source=restore` 的新版本，不改写历史。"""
+    row = _get_or_404(db, resume_id)
+    revision = versions.get_revision(db, row, revision_id)
+    if revision is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
+    try:
+        restored, warnings = versions.restore(db, row, revision)
+    except versions.RevisionFileMissing as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    logger.info("外部简历已恢复 id=%s revision=%s", resume_id, revision_id)
+    return ExternalResumeRestoreOut(
+        resume=_detail_of(db, row),
+        revision=_revision_out(restored, row),
+        warnings=list(warnings),
     )
 
 

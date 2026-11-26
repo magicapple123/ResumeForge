@@ -15,28 +15,47 @@ PDF / docx 没有条目 / 字段 / 纸面位置这些语义，用模型还原必
 **正文存两列**：`text` 是上传时本地提取的正文（与 `MAX_MATERIAL_TEXT_CHARS`
 同口径截断），`text_chars` 是冗余字数——列表排序 / 展示不必反复算。扫描件 PDF
 不调用视觉模型：行照建、`text=""`，接口用警告如实告知"没有文字层"。
+
+**编辑另存新版本（#5）**：在线改字**绝不覆盖原件**——`user_file` 是内容寻址的共享登记，
+同一份 sha256 可能被资料照片 / 聊天附件引用，覆盖会连累别的入口。所以每次编辑都写一个
+新 `user_file`，`file_id` 指向最新那份，`original_file_id` 留**首次上传**那份（"回到原件"），
+历史逐条记在 `external_resume_revision`。列表仍是一行 = 一份外部简历，版本只在详情抽屉里看。
 """
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
 from .profile import utcnow
 
+# 历史版本的来源：上传 / 编辑 / 恢复到某个旧版本。
+# `restore` 也**写新版本**而不是删历史：回溯链因此只增不减，谁在什么时候恢复了哪一版都留痕。
+SOURCE_UPLOAD = "upload"
+SOURCE_EDIT = "edit"
+SOURCE_RESTORE = "restore"
+REVISION_SOURCES = (SOURCE_UPLOAD, SOURCE_EDIT, SOURCE_RESTORE)
+
 
 class ExternalResume(Base):
-    """一份上传的外部简历（只读快照）。"""
+    """一份上传的外部简历（原件 + 可改字的历史版本链）。"""
 
     __tablename__ = "external_resume"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     # 物理文件登记（user_file）。**没有 ondelete**：副本行不随外部简历删除而消失。
+    # 这一列永远指向**最新**那份（上传的原件，或最近一次编辑 / 恢复的产物）。
     file_id: Mapped[int] = mapped_column(ForeignKey("user_file.id"), nullable=False, index=True)
+    # 首次上传的那份（"回到原件"用）。迁移会把老数据回填成 file_id；允许 NULL 只是因为
+    # 新建列这一瞬间索引里可能还有老行（服务层对"文件登记丢了"的情况按缺失处理）。
+    original_file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_file.id"), nullable=True, index=True
+    )
     # 用户可改名；默认取原文件名（服务端安全化后的名字）。
     name: Mapped[str] = mapped_column(String(256), default="", nullable=False)
     # 上传时本地提取的正文；扫描件 / 无文字层文件为空串（接口返回 warning）。
+    # **每次编辑后重新提取并回写**，否则"用于面试"和文本检查用的还是旧正文。
     text: Mapped[str] = mapped_column(Text, default="", nullable=False)
     # 冗余字数：列表展示与排序不必对 text 反复求长度。
     text_chars: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -51,5 +70,46 @@ class ExternalResume(Base):
     # NULL 表示未删；软删进回收站（**只写这一列，不动物理文件**）。
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    revisions: Mapped[list["ExternalResumeRevision"]] = relationship(
+        back_populates="resume",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ExternalResumeRevision.created_at.desc(), ExternalResumeRevision.id.desc()",
+    )
 
-__all__ = ["ExternalResume"]
+
+class ExternalResumeRevision(Base):
+    """一次版本快照：某时刻这份外部简历对应哪个文件、正文多长、有没有文字。
+
+    版本语义是**只增不改**：编辑写 `source=edit`，恢复写 `source=restore`，谁都不删历史。
+    快照只记"指向哪个 user_file" + 字数，不复制正文——正文本体在 `external_resume.text`
+    （当前版本）与各 `user_file`（历史版本的字节）里，复制一份必然与原件不一致。
+    """
+
+    __tablename__ = "external_resume_revision"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # 简历被**彻底删除**（清空回收站）时历史一起走：快照离开简历没有任何意义。
+    resume_id: Mapped[int] = mapped_column(
+        ForeignKey("external_resume.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # 这一版对应的文件。**没有 ondelete**：与 file_id 同口径，user_file 行被别处共享。
+    file_id: Mapped[int] = mapped_column(ForeignKey("user_file.id"), nullable=False, index=True)
+    # 这一版提取到的正文字数 / 有没有文字（列表展示"第 3 版 · 837 字"）。
+    text_chars: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    has_text: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    # upload / edit / restore（见模块顶部的三个常量）。
+    source: Mapped[str] = mapped_column(String(16), default=SOURCE_UPLOAD, nullable=False)
+
+    resume: Mapped[ExternalResume] = relationship(back_populates="revisions")
+
+
+__all__ = [
+    "REVISION_SOURCES",
+    "SOURCE_EDIT",
+    "SOURCE_RESTORE",
+    "SOURCE_UPLOAD",
+    "ExternalResume",
+    "ExternalResumeRevision",
+]

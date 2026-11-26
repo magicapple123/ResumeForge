@@ -132,16 +132,128 @@ class ExternalResumeAnalysisOut(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+# 单块 / 单段的新文字上限：够改一整段，也挡得住"手滑把整份简历粘进一个块"。
+MAX_EDIT_TEXT_CHARS = 4000
+# 编辑单元类型（协议值，永不翻译）：PDF 文本块 / Word 段落 / 整篇纯文本。
+EDIT_KINDS: tuple[str, ...] = ("pdf", "docx", "text")
+
+
+class ExternalResumeBlockOut(BaseModel):
+    """一个可点选的编辑单元。
+
+    PDF 的块带 bbox / 字号 / 行距 / 对齐（前端据此画点选热区并按原参数显示）；
+    DOCX 段落与整篇文本没有纸面坐标，几何字段全为 0。
+    """
+
+    block_id: str
+    # 1 基页码；docx / text 恒为 0（不分页）。
+    page: int = 0
+    text: str = ""
+    editable: bool = True
+    # 不可编辑的原因码（可编辑时为空串）：pdf_block_rotated / docx_paragraph_not_editable …
+    reason: str = ""
+    x0: float = 0.0
+    y0: float = 0.0
+    x1: float = 0.0
+    y1: float = 0.0
+    size: float = 0.0
+    leading: float = 0.0
+    # left / center / right / justify
+    align: str = ""
+
+
+class ExternalResumeBlocksOut(BaseModel):
+    """一份外部简历的编辑视图：格式 + 编辑单元 + 页面尺寸（PDF 才有）。"""
+
+    resume_id: int
+    kind: str
+    page_count: int = 0
+    page_width: float = 0.0
+    page_height: float = 0.0
+    blocks: list[ExternalResumeBlockOut] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ExternalResumeEditInput(BaseModel):
+    """一次改字：改哪一块、改成什么、要不要顺手把下方内容下移。
+
+    ``shift_below`` 是用户点「下移下方内容 Δpt」时才传的量（pt，正数向下）；
+    默认 0 = 什么都不动（与 Acrobat 的文本框行为一致）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    block_id: str = Field(min_length=1, max_length=64)
+    text: str = Field(default="", max_length=MAX_EDIT_TEXT_CHARS)
+    shift_below: float = Field(default=0.0, ge=0.0, le=200.0)
+
+
+class ExternalResumeRevisionOut(BaseModel):
+    """历史版本列表的一行（不复制正文：字节在各 `user_file` 里）。"""
+
+    id: int
+    file_id: int
+    text_chars: int
+    has_text: bool
+    # upload / edit / restore
+    source: str
+    created_at: datetime
+    # 是否当前版本（`file_id` 与简历当前 file_id 相同）。
+    current: bool = False
+
+
+class ExternalResumeRevisionsOut(BaseModel):
+    resume_id: int
+    items: list[ExternalResumeRevisionOut] = Field(default_factory=list)
+    total: int = 0
+
+
+class ExternalResumeEditOut(BaseModel):
+    """编辑结果：新的简历详情 + 新版本 + 几何变化（前端画红框 / 提示用）。"""
+
+    resume: ExternalResumeDetail
+    revision: ExternalResumeRevisionOut
+    kind: str
+    block_id: str
+    page: int = 0
+    # 块高变化（pt，> 0 = 变高）。docx / text 恒为 0。
+    delta_pt: float = 0.0
+    # 新文字是否压到下方内容 / 是否缩过字号 / 是否执行了下移。
+    overflow: bool = False
+    scaled: bool = False
+    shifted: bool = False
+    lines_before: int = 0
+    lines_after: int = 0
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ExternalResumeRestoreOut(BaseModel):
+    """恢复到某个历史版本的结果：返回刷新后的详情 + 新写入的那条版本。"""
+
+    resume: ExternalResumeDetail
+    revision: ExternalResumeRevisionOut
+    warnings: list[str] = Field(default_factory=list)
+
+
 __all__ = [
     "ANALYSIS_CHECK_KEYS",
+    "EDIT_KINDS",
+    "MAX_EDIT_TEXT_CHARS",
     "MAX_EXTERNAL_RESUME_BYTES",
     "MAX_NAME_CHARS",
     "AnalysisCheck",
     "AnalysisHit",
     "ExternalResumeAnalysisOut",
+    "ExternalResumeBlockOut",
+    "ExternalResumeBlocksOut",
     "ExternalResumeBrief",
     "ExternalResumeDetail",
+    "ExternalResumeEditInput",
+    "ExternalResumeEditOut",
     "ExternalResumeListOut",
+    "ExternalResumeRestoreOut",
+    "ExternalResumeRevisionOut",
+    "ExternalResumeRevisionsOut",
     "ExternalResumeUpdateInput",
     "KeywordCoverage",
 ]
