@@ -165,13 +165,24 @@ def test_job_id_hit_is_preferred_over_the_key_fallback(client, db_session):
 
 
 def test_key_fallback_matches_manually_created_tracks(client, db_session):
-    """记录没有 ``job_id``（岗位已删/历史数据）时按合并键兜底。"""
+    """记录没有 ``job_id``（岗位已删/历史数据）时按合并键兜底，且**与 link_track 同源**。
+
+    同源是这条字段的全部价值：列表说"已写过"之后，再点一次必须回 ``created=false`` 且
+    ``track_id`` 同一个——否则就是"列表说没写过、点一下却说早就写过"的矛盾。
+    """
     task = _batch(db_session, 1)
     record_id = _record_id(db_session, task)
     created = client.post("/api/tracker", json=TRACK_BASE)
     assert created.status_code == 201
 
-    assert _record(client, record_id)["track_id"] == created.json()["id"]
+    listed = _record(client, record_id)["track_id"]
+    assert listed == created.json()["id"]
+
+    # 直接对账：link_track 判定的是同一条，且不是新建。
+    linked = client.post(f"/api/apply/records/{record_id}/track")
+    assert linked.status_code == 200
+    assert linked.json()["created"] is False
+    assert linked.json()["track_id"] == listed
 
 
 def test_soft_deleted_track_does_not_count_as_linked(client, db_session):
