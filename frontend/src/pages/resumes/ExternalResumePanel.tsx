@@ -14,13 +14,23 @@
  * - 批量删除走「右键/⋯ → 批量选择 → 删除所选」：**先弹一次确认**（N 份、可恢复），
  *   批量场景**不叠** 5 秒撤销——一次删十几份时撤销条只会挡住列表。
  *
+ * ## T09 补的四件事（R9-1/2/3 + R10）
+ *
+ * - **排序**：列头三态箭头 → `sort`/`order` 参数**下推服务端**，状态存 URL
+ *   （`?sort=name&order=asc`），刷新与分享都保持；默认排序时把参数删干净。
+ * - **分页**：条数、页码由 `useExternalResumes` 管（每页 20），超过一页才出现分页器；
+ *   之前"一次取 100 条 + 不分页"在超过 100 份时会静默丢掉后面的。
+ * - **字数/排序刷新**：详情抽屉的写操作（编辑 / 恢复 / 重命名 / 收藏）通过
+ *   `onChanged` + `refreshKey`（CONTRACT 第 1 节）把列表打脏，字数与排序位置跟着变。
+ * - 文件名可点、左缘白带消失见 `ExternalResumeFileTable`。
+ *
  * 组件只做呈现与交互编排：取数/上传/删除在 `useExternalResumes`，详情与文本检查在
  * `ExternalResumeDetailDrawer`，上传表单在 `ExternalResumeUploadModal`。
  */
 import { UploadOutlined } from "@ant-design/icons";
 import { App, Button, Card, Flex, Space, Tag, Typography } from "antd";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { restoreTrashItem } from "../../api/trash";
 import type { ExternalResumeItem } from "../../api/externalResumes";
 import BatchActionBar from "../../components/common/BatchActionBar";
@@ -34,7 +44,8 @@ import type { ExternalResumeDetailTab } from "../../features/resume/list/Externa
 import ExternalResumeUploadModal from "../../features/resume/list/ExternalResumeUploadModal";
 import { useExternalResumes } from "../../features/external-resume/useExternalResumes";
 import type { ExternalResumeFilters } from "../../features/external-resume/useExternalResumes";
-import ExternalResumeFileTable from "./ExternalResumeFileTable";
+import ExternalResumeFileTable, { parseExternalSort } from "./ExternalResumeFileTable";
+import type { ExternalSortState } from "./ExternalResumeFileTable";
 import ExternalResumeFiltersBar from "./ExternalResumeFiltersBar";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
 import { useToast } from "../../hooks/useToast";
@@ -69,11 +80,41 @@ export default function ExternalResumePanel({
   const navigate = useNavigate();
   const { message, modal } = App.useApp();
   const toast = useToast();
-  const { items, total, loading, error, reload, uploading, upload, remove, removeMany } =
-    useExternalResumes(filters);
+  const [searchParams, setSearchParams] = useSearchParams();
+  /**
+   * 排序状态挂在 **URL**（`?sort=name&order=asc`）而不是组件状态：
+   * 刷新、分享链接、从详情退回列表都要保持"我刚才按岗位排的"。非法值由
+   * `parseExternalSort` 回落默认，不会把 `?sort=xxx` 原样发给后端换 422。
+   */
+  const sortState = parseExternalSort(searchParams.get("sort"), searchParams.get("order"));
+  const {
+    items,
+    total,
+    loading,
+    error,
+    page,
+    pageSize,
+    setPage,
+    reload,
+    uploading,
+    upload,
+    remove,
+    removeMany,
+  } = useExternalResumes({ ...filters, sort: sortState.field, order: sortState.order });
   const hasFilters = Boolean(filters.keyword?.trim() || filters.jobId != null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [detail, setDetail] = useState<DetailState | null>(null);
+  /**
+   * 详情抽屉里的写操作（编辑 / 恢复 / 重命名 / 收藏）都把列表打脏一次：
+   * `changeTick` 与列表里那条的 `file_id` 一起构成 `refreshKey`，抽屉据此重取历史版本，
+   * 列表据此重取字数与排序位置。两个信号都要——编辑后 `file_id` 变（本地列表还没刷新时
+   * 靠 tick 立刻触发），收藏/重命名只改名字与时间（`file_id` 不变，只能靠 tick）。
+   */
+  const [changeTick, setChangeTick] = useState(0);
+  const handleChanged = useCallback(() => {
+    setChangeTick((tick) => tick + 1);
+    void reload();
+  }, [reload]);
   /** 多选状态机与简历中心共用一份（`useBatchSelection`），入口只有右键与「⋯」两处。 */
   const batch = useBatchSelection<number>();
 
@@ -135,6 +176,30 @@ export default function ExternalResumePanel({
   const openDetail = (item: ExternalResumeItem, tab: ExternalResumeDetailTab): void => {
     setDetail({ id: item.id, tab });
   };
+
+  /**
+   * 排序写回 URL。
+   *
+   * - 回到默认排序时**删掉**两个参数：URL 干净，且与"从没排过"完全等价（后端默认值就是
+   *   `created_at desc`）；
+   * - `replace: true`：排序不该进浏览器历史，否则连点几次列头后按返回要退好几层才离开列表。
+   */
+  const handleSortChange = (next: ExternalSortState): void => {
+    const params = new URLSearchParams(searchParams);
+    if (next.explicit) {
+      params.set("sort", next.field);
+      params.set("order", next.order);
+    } else {
+      params.delete("sort");
+      params.delete("order");
+    }
+    setSearchParams(params, { replace: true });
+  };
+
+  /** 详情里那条在**当前页**的 `file_id`（编辑后变了 → 抽屉的历史版本要跟着重取）。 */
+  const detailFileId = detail
+    ? (items.find((item) => item.id === detail.id)?.file_id ?? 0)
+    : 0;
 
   /**
    * 批量删除：**先确认再删**（一次删十几份，误点的代价远大于一次点击）。
@@ -256,6 +321,12 @@ export default function ExternalResumePanel({
         batch={batch}
         batchActions={batchActions}
         navigate={navigate}
+        sortState={sortState}
+        onSortChange={handleSortChange}
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
         onOpenText={(item) => openDetail(item, "text")}
         onOpenOriginal={(item) => openDetail(item, "original")}
         onOpenCheck={(item) => openDetail(item, "check")}
@@ -272,7 +343,10 @@ export default function ExternalResumePanel({
           filters={filters}
           onChange={onFiltersChange}
           total={total}
-          shown={items.length}
+          // `shown` 只用来判断"要不要补一句『只显示前 N 条』"。T09 起列表是**真分页**
+          // （每页 20，翻页可达全部），"前 N 条之外还有东西被藏起来"这句话已经不成立，
+          // 再显示就是误导——传 total 让那条提示自然消失（`total > shown` 为假）。
+          shown={total}
           loading={loading}
         />
       ) : null}
@@ -316,6 +390,11 @@ export default function ExternalResumePanel({
         resumeId={detail?.id ?? null}
         initialTab={detail?.tab ?? "original"}
         onClose={() => setDetail(null)}
+        // CONTRACT 第 1 节：写操作成功后通知列表刷新（字数、排序位置、计数）。
+        // 必须幂等：抽屉可能连着调两次（编辑后再恢复），这里只做 `reload()`。
+        onChanged={handleChanged}
+        // 外部变更信号：编辑/恢复后 `file_id` 变、其它写操作靠 `changeTick` 触发重取。
+        refreshKey={`${detail?.id ?? 0}:${detailFileId}:${changeTick}`}
       />
     </>
   );

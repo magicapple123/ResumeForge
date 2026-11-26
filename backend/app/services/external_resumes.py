@@ -21,10 +21,11 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import mimetypes
 from pathlib import Path
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from ..models.external_resume import SOURCE_UPLOAD, ExternalResume, ExternalResumeRevision
@@ -100,6 +101,46 @@ def validate_upload(original_name: str, content: bytes) -> None:
         raise ValueError(f"文件超过 {size_mb} MB，无法上传")
 
 
+#: 浏览器"我不知道这是什么"的万能答案。Windows 上传 .md / .doc 时经常报它。
+OCTET_STREAM = "application/octet-stream"
+
+#: 本功能接受的后缀 → MIME（`MATERIAL_TEXT_SUFFIXES` 的镜像）。
+#: 不只靠 `mimetypes.guess_type`：它读操作系统的映射表，Windows 上 `guess_type("note.md")`
+#: 返回 `(None, None)`（本机实测），正好漏掉这个 bug 的主场。写死这五档，三平台一致；
+#: 不认识的后缀才交给 `guess_type`。
+_SUFFIX_MIMES = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "txt": "text/plain",
+    "md": "text/markdown",
+    "markdown": "text/markdown",
+}
+
+
+def resolve_mime(original_name: str, mime: str) -> str:
+    """上传时声明的 MIME 归一：``application/octet-stream`` 与空串按扩展名重新猜一次。
+
+    为什么必须做（T09 / R9）：列表的类型徽标与"能不能在浏览器里直接预览"都读
+    ``user_file.mime``，而前端**先看扩展名、后看 MIME**（``utils/fileKind.ts``）。Windows
+    上传的 ``.md`` 常带 ``application/octet-stream``，原样落库后判断只能靠文件名兜底。
+
+    归一顺序：剥掉 ``; charset=`` 参数并小写；**不是** octet-stream 就原样保留（浏览器给
+    的精确值比猜的可信）；是万能答案或空串才猜——先 :data:`_SUFFIX_MIMES`（跨平台确定），
+    再 ``mimetypes.guess_type``；都猜不到就保留原值（猜不到就承认猜不到，不编类型）。
+    """
+    cleaned = (mime or "").split(";", 1)[0].strip().lower()
+    if cleaned and cleaned != OCTET_STREAM:
+        return cleaned
+    suffix = material_suffix(original_name or "").lstrip(".")
+    known = _SUFFIX_MIMES.get(suffix)
+    if known:
+        return known
+    guessed, _encoding = mimetypes.guess_type(original_name or "")
+    if guessed:
+        return guessed
+    return cleaned or OCTET_STREAM
+
+
 def prepare_upload(original_name: str, content: bytes) -> ExtractedUpload:
     """校验并本地提取一份上传文件（纯函数，可下沉线程池；不碰数据库）。
 
@@ -159,7 +200,9 @@ def create_external_resume(
         db,
         content,
         original_name=original_name or prepared.name,
-        mime=mime,
+        # 归一在这里而不是接口层：`create_external_resume` 是**唯一**把 mime 落库的入口
+        # （上传接口、测试夹具、将来的批量导入都走它），放在接口层就会有第二条路绕过。
+        mime=resolve_mime(original_name or prepared.name, mime),
         source_type=SOURCE_TYPE,
         source_ref="",
     )
@@ -196,6 +239,52 @@ def create_external_resume(
     return row, list(prepared.warnings)
 
 
+#: 列表排序：``sort``（字段）+ ``order``（方向）→ ORDER BY 子句。
+#
+# 口径与内部简历（``resume_read_service.RESUME_SORT_ORDERS``）一致，差别只有方向是独立
+# 参数（``?sort=name&order=asc``），所以键是 ``字段_方向`` 的复合名。三条硬约束：
+# 1. 每个键都以 ``id`` 收尾且方向一致——同时刻创建的两行跨页时才不重复/漏行；
+# 2. 姓名与岗位名走 ``rf_pinyin``（``database.py`` 在每条连接上注册）：BINARY 会把
+#    ASCII 名全排在中文前、中文再按码点，用户看到的顺序与"按名字排"无关；
+# 3. 岗位名 ``coalesce`` 到空串：外连接后没有岗位的行是 ``NULL``，直接排序时位置取决于
+#    ASC/DESC，``coalesce`` 让"没有岗位"与"岗位名为空"归到同一档。
+EXTERNAL_RESUME_SORT_ORDERS = {
+    "name_asc": (ExternalResume.name.collate("rf_pinyin").asc(), ExternalResume.id.asc()),
+    "name_desc": (ExternalResume.name.collate("rf_pinyin").desc(), ExternalResume.id.desc()),
+    "job_title_asc": (
+        func.coalesce(Job.title, "").collate("rf_pinyin").asc(),
+        ExternalResume.id.asc(),
+    ),
+    "job_title_desc": (
+        func.coalesce(Job.title, "").collate("rf_pinyin").desc(),
+        ExternalResume.id.desc(),
+    ),
+    "created_at_asc": (ExternalResume.created_at.asc(), ExternalResume.id.asc()),
+    "created_at_desc": (ExternalResume.created_at.desc(), ExternalResume.id.desc()),
+    "text_chars_asc": (ExternalResume.text_chars.asc(), ExternalResume.id.asc()),
+    "text_chars_desc": (ExternalResume.text_chars.desc(), ExternalResume.id.desc()),
+}
+
+#: 可排序字段（与前端列头一一对应；``text_chars`` 没有独立列，只能由 URL 指定）。
+ExternalResumeSortKey = Literal["name", "job_title", "created_at", "text_chars"]
+#: 排序方向。
+ExternalResumeSortOrder = Literal["asc", "desc"]
+#: 列表默认排序：最近上传在前（与改造前逐字一致，老调用方不受影响）。
+DEFAULT_EXTERNAL_SORT_KEY: ExternalResumeSortKey = "created_at"
+DEFAULT_EXTERNAL_SORT_ORDER: ExternalResumeSortOrder = "desc"
+
+
+def _sort_order_by(
+    sort: ExternalResumeSortKey, order: ExternalResumeSortOrder
+) -> tuple[object, ...]:
+    """``(sort, order)`` → ORDER BY 子句；未知组合回落到默认（不抛，交给接口层校验）。"""
+    compound = f"{sort}_{order}"
+    return EXTERNAL_RESUME_SORT_ORDERS.get(
+        compound,
+        EXTERNAL_RESUME_SORT_ORDERS[f"{DEFAULT_EXTERNAL_SORT_KEY}_{DEFAULT_EXTERNAL_SORT_ORDER}"],
+    )
+
+
 def list_external_resumes(
     db: Session,
     *,
@@ -204,6 +293,8 @@ def list_external_resumes(
     include_general: bool = False,
     page: int = 1,
     page_size: int = 20,
+    sort: ExternalResumeSortKey = DEFAULT_EXTERNAL_SORT_KEY,
+    order: ExternalResumeSortOrder = DEFAULT_EXTERNAL_SORT_ORDER,
 ) -> tuple[list[ExternalResume], int]:
     """Filter before paging; deleted jobs never contribute searchable metadata.
 
@@ -212,6 +303,10 @@ def list_external_resumes(
     （``job_id IS NULL``），求职进度选"使用的简历"时候选范围要包含它，否则专门写的
     通用简历会从下拉里消失。岗位被彻底删除导致 ``job_id`` 被 SET NULL 的行会因此
     被当成通用——这是既有口径已知的边界，两处（内部/外部）刻意保持一致。
+
+    ``sort`` / ``order``（T09）：服务端排序，**必须下推 SQL**——列表只取当页
+    （默认 20 条），在前端排只能排到当前页，翻页就会看到"排好的顺序又乱了"。
+    默认值与改造前逐字一致（``created_at desc, id desc``），既有调用方不用改。
     """
     query = (
         db.query(ExternalResume)
@@ -238,7 +333,7 @@ def list_external_resumes(
         )
     total = query.count()
     rows = (
-        query.order_by(ExternalResume.created_at.desc(), ExternalResume.id.desc())
+        query.order_by(*_sort_order_by(sort, order))
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()

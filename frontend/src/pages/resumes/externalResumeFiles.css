@@ -6,22 +6,14 @@
  * 不影响简历中心的任何其它表格。
  */
 
-/* 勾选列：**常驻 DOM、默认折叠**。
+/* 勾选列：**只在多选态挂载**（非多选态不传 `rowSelection`）。
  *
- * 为什么不是 `display: none`：列是被 `<colgroup>` 声明出来的，`display: none` 对
- * `<col>` / `<td>` 的列宽计算不可靠（Chrome 里仍会占位）。`visibility: collapse`
- * 才是"这一列不存在但结构不变"的标准写法；同时它让列里的勾选框既不可见也不可聚焦，
- * 不会在 Tab 序列里多出一串看不见的复选框。 */
-.external-resume-files .ant-table-selection-column {
-  visibility: collapse;
-  width: 0;
-  padding: 0;
-}
-
-/* 多选态：恢复成正常列。宽度用 40px（勾选框 16px + 两侧留白），
-   与简历中心的表格勾选列观感一致。 */
+ * 旧写法是让勾选列常驻 DOM、用 `visibility: collapse` 折叠，理由是"切多选态时列宽不跳"。
+ * 但 Chrome 下 `<col>` 即使 collapse 仍然参与表头背景的绘制宽度——表格左缘因此永远
+ * 多出一条 40px 白带（勾选列的表头背景铺不过去），这就是 R9-1 报的"左缘白带"。
+ * 现在非多选态根本不存在这一列，白带从结构上消失；下面这条规则只负责多选态下的宽度
+ * 与简历中心的表格勾选列观感一致（勾选框 16px + 两侧留白）。 */
 .external-resume-files.is-selecting .ant-table-selection-column {
-  visibility: visible;
   width: 40px;
   padding-inline: 8px;
 }
@@ -41,8 +33,26 @@
   min-width: 0;
 }
 
+/* 文件名做成按钮（T09 / R9-2：点名字打开详情）：按钮自带左右内边距与固定行高，
+   不压回 0 会让文件名与类型徽标错位、把行撑高。省略号靠 `min-width: 0`
+   + `text-overflow`，`title` 属性兜住被截断的部分。 */
 .external-resume-name {
   min-width: 0;
+  max-width: 100%;
+  height: auto;
+  padding: 0;
+  font-weight: 600;
+  text-align: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 分页器：只有超过一页才渲染（几份简历时不该多一行控件），右对齐与操作列同侧。 */
+.external-resume-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding-block-start: 12px;
 }
 
 /* 状态副行：等宽数字让「已提取 837 字 / 1,020 字」的数字列能对齐。 */

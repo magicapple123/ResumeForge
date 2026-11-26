@@ -209,6 +209,20 @@ class ExternalResumeRevisionsOut(BaseModel):
     total: int = 0
 
 
+class ExternalResumeRevisionTextOut(BaseModel):
+    """某一版历史版本的正文（T12：点「对比」时才取，列表里不带）。
+
+    正文按需从那一版自己的文件重新提取，所以 `text` 可能与 ``text_chars`` 对不上
+    （提取是启发式的：同一份 PDF 用不同库版本读，行数可能差几处）。界面只用它做
+    **行级对比**，字数仍以列表里的 `text_chars` 为准——那一个数是当初落库时算的。
+    """
+
+    revision_id: int
+    text: str = ""
+    text_chars: int = 0
+    has_text: bool = False
+
+
 class ExternalResumeEditOut(BaseModel):
     """编辑结果：新的简历详情 + 新版本 + 几何变化（前端画红框 / 提示用）。"""
 
@@ -254,6 +268,7 @@ __all__ = [
     "ExternalResumeListOut",
     "ExternalResumeRestoreOut",
     "ExternalResumeRevisionOut",
+    "ExternalResumeRevisionTextOut",
     "ExternalResumeRevisionsOut",
     "ExternalResumeUpdateInput",
     "KeywordCoverage",

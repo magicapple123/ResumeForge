@@ -7,7 +7,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import ExternalResumePanel from "./ExternalResumePanel";
@@ -49,14 +49,19 @@ function externalResume(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderPanel(variant: "card" | "bare" = "card") {
+function renderPanel(variant: "card" | "bare" = "card", initialEntry = "/") {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <AntdApp>
         <ExternalResumePanel variant={variant} />
       </AntdApp>
     </MemoryRouter>,
   );
+}
+
+/** 把当前 `location.search` 打出来：排序必须**写回 URL**（刷新/分享才保持）。 */
+function LocationProbe() {
+  return <div data-testid="location">{useLocation().search}</div>;
 }
 
 beforeEach(() => {
@@ -211,7 +216,7 @@ describe("ExternalResumePanel · bare 变体（07-1 空白行）", () => {
  * 文件行与批量选择（整改 #3）。
  *
  * 断言的落点：
- * - 勾选列默认**在 DOM 里但被折叠**（`is-selecting` 类不出现），这样切多选态时列宽不跳；
+ * - 勾选列默认**不在 DOM 里**（`rowSelection` 不挂载，R9-1 的左缘白带）；进了多选态才出现；
  * - 「批量选择」两个入口（整行右键 / 行尾 ⋯）效果一致；
  * - 批量删除**逐条**调接口（后端没有批量端点），且只刷新一次列表。
  */
@@ -256,15 +261,18 @@ describe("ExternalResumePanel · 文件行与批量选择（#3）", () => {
     });
   }
 
-  it("默认不进多选态：勾选列在 DOM 里但折叠，也没有批量条", async () => {
+  it("默认不进多选态：勾选列**不挂载**，也没有批量条", async () => {
     twoItems();
     const { container } = renderPanel();
 
     await screen.findByText("external-a.txt");
     const table = container.querySelector(".external-resume-files");
     expect(table).not.toBeNull();
-    // 列始终挂载（默认折叠），不是靠卸载列来隐藏——否则切多选态时列宽会跳。
-    expect(container.querySelectorAll(".ant-table-selection-column").length).toBeGreaterThan(0);
+    // T09 / R9-1：旧做法是让勾选列常驻 DOM 再 `visibility: collapse`，但 Chrome 下
+    // `<col>` 即使 collapse 仍参与表头背景绘制宽度，表格左缘因此永远多一条白带。
+    // 现在非多选态**不传 rowSelection**，这一列在 DOM 里根本不存在。行为变了，
+    // 断言跟着反过来（原来断言的是"列在 DOM 里但折叠"）。
+    expect(container.querySelectorAll(".ant-table-selection-column")).toHaveLength(0);
     expect(table?.classList.contains("is-selecting")).toBe(false);
     expect(screen.queryByRole("toolbar")).toBeNull();
   });
@@ -391,5 +399,72 @@ describe("ExternalResumePanel · 关联岗位可点（#4）", () => {
     fireEvent.click(await screen.findByRole("button", { name: "#9" }));
 
     expect(navigateMock).toHaveBeenCalledWith("/jobs?job_id=9");
+  });
+});
+
+/**
+ * 排序状态住在 **URL** 里（T09 / R9-3）。
+ *
+ * 守三件事：URL 上的 `?sort=&order=` 能被读出来下推给接口（刷新/分享保持）；点列头把
+ * 新排序**写回 URL**；非法值回落默认、不把 `?sort=xxx` 原样发给后端换 422。
+ * 三态箭头本身由 `ExternalResumeFileTable` 自己的测试覆盖。
+ */
+describe("ExternalResumePanel · 排序写回 URL（R9-3）", () => {
+  function oneItem() {
+    apiMocks.listExternalResumes.mockResolvedValue({
+      items: [externalResume()],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    });
+  }
+
+  it("URL 上的 sort/order 被下推给接口（刷新后顺序保持）", async () => {
+    oneItem();
+    renderPanel("card", "/?sort=job_title&order=asc");
+
+    await waitFor(() =>
+      expect(apiMocks.listExternalResumes).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: "job_title", order: "asc" }),
+      ),
+    );
+  });
+
+  it("点「文件」列头把 sort/order 写回 URL 并重取", async () => {
+    oneItem();
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AntdApp>
+          <ExternalResumePanel />
+          <LocationProbe />
+        </AntdApp>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("columnheader", {
+        name: new RegExp(t("resumesPage.external.column.file")),
+      }),
+    );
+
+    await waitFor(() =>
+      expect(apiMocks.listExternalResumes).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: "name", order: "asc" }),
+      ),
+    );
+    const search = screen.getByTestId("location").textContent ?? "";
+    expect(search).toContain("sort=name");
+    expect(search).toContain("order=asc");
+  });
+
+  it("URL 上的非法排序回落默认，不发出去换 422", async () => {
+    oneItem();
+    renderPanel("card", "/?sort=drop%20table&order=asc");
+
+    await waitFor(() =>
+      expect(apiMocks.listExternalResumes).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: "created_at", order: "desc" }),
+      ),
+    );
   });
 });

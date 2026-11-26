@@ -157,7 +157,7 @@ def restore(
     """恢复到某一版：**再写一条** `source=restore` 的新版本，不改写历史。"""
     path = path_of_file(db, revision.file_id)
     content = path.read_bytes()
-    text, warnings = _extract(row.name, content)
+    text, warnings = _extract(_extract_name(db, row, revision.file_id), content)
     new_revision = _apply_version(
         db, row, file_id=revision.file_id, source=SOURCE_RESTORE, text=text
     )
@@ -166,6 +166,46 @@ def restore(
     db.refresh(new_revision)
     logger.info("外部简历已恢复到 revision=%s（新版本 %s）", revision.id, new_revision.id)
     return new_revision, warnings
+
+
+def revision_text(db: Session, row: ExternalResume, revision: ExternalResumeRevision) -> str:
+    """取某一版历史版本的**正文**（用户点「对比」时才调）。
+
+    版本表只存 ``text_chars`` / ``has_text``，不存正文：一份简历的正文可能有几万字，
+    每个版本复制一份等于把同一段话在库里存 N 遍（编辑只改一段，95% 的字是重复的）。
+    所以这里按需从那一版自己的文件里重新提取一次——成本是一次 pypdf / docx 解析，
+    只发生在"打开对比"这一下，不在列表里。提取不出来时返回空串（前端按"这一版没有
+    可比的正文"处理），绝不拿当前版本的正文冒充历史版本的内容。
+    """
+    path = path_of_file(db, revision.file_id)
+    text, _warnings = _extract(_extract_name(db, row, revision.file_id), path.read_bytes())
+    return text
+
+
+def _extract_name(db: Session, row: ExternalResume, file_id: int) -> str:
+    """提取正文时该用哪个名字。
+
+    `external_resume.name` 是**用户可改的显示名**（"黄岑果-阿里云-…-20261124" 这类），
+    常常没有扩展名；而提取链路（`prepare_upload` / "是不是 PDF"）要靠扩展名分派。
+    拿显示名去提取，短文档会被判成"没有文字层"，恢复之后正文就变成 0 字——实测 data
+    副本里 id=8 恢复到上传版时正是这样。所以优先用**那一版文件自己的** `original_name`。
+    """
+    user_file = db.get(UserFile, file_id)
+    if user_file is not None and (user_file.original_name or "").strip():
+        return user_file.original_name
+    return row.name
+
+
+def _looks_like_pdf(name: str, content: bytes) -> bool:
+    """是不是 PDF：先看内容魔数，再看后缀。
+
+    只看后缀不够稳（显示名可能没有后缀，见 `_extract_name`）；只看魔数也不够全
+    （有些导出的 PDF 头部带 BOM / 前导空白）。两条任一成立即可，代价最多是一次
+    pypdf 直读——它在读不出来时会自己回落到空正文。
+    """
+    if content[:5] == b"%PDF-":
+        return True
+    return (name or "").lower().endswith(".pdf")
 
 
 def _extract(name: str, content: bytes) -> tuple[str, list[str]]:
@@ -182,7 +222,7 @@ def _extract(name: str, content: bytes) -> tuple[str, list[str]]:
         logger.info("编辑后的文件无法提取正文：%s", exc)
         return "", [f"新文件暂时无法提取正文：{exc}"]
     text = prepared.text
-    if not text.strip() and (name or "").lower().endswith(".pdf"):
+    if not text.strip() and _looks_like_pdf(name, content):
         text = _pdf_text_without_scan_heuristics(content)
     return text, list(prepared.warnings)
 
@@ -207,4 +247,5 @@ __all__ = [
     "record_upload",
     "restore",
     "revision_of",
+    "revision_text",
 ]

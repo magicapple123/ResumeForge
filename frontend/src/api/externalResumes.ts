@@ -36,6 +36,17 @@ export interface ExternalResumeList {
   page_size: number;
 }
 
+/**
+ * 列表可排序字段（与后端 `ExternalResumeSortKey` 逐字一致）。
+ *
+ * `text_chars` 没有独立的列头（字数在文件名副行里），只能由 URL 指定——保留它是为了
+ * 让 `?sort=text_chars` 这类深链与将来的「哪份写得最多」入口不必再改协议。
+ */
+export type ExternalResumeSortKey = "name" | "job_title" | "created_at" | "text_chars";
+
+/** 排序方向（与后端 `ExternalResumeSortOrder` 逐字一致）。 */
+export type ExternalResumeSortOrder = "asc" | "desc";
+
 export interface ExternalResumeUpdateInput {
   name?: string;
   /** 传 null 表示取消关联（后端用 model_fields_set 区分"没传"与"传 null"）。 */
@@ -87,6 +98,9 @@ export function listExternalResumes(
     include_general?: boolean;
     page?: number;
     page_size?: number;
+    /** 服务端排序（T09）：字段 + 方向分开传，默认 `created_at desc`（不传即默认）。 */
+    sort?: ExternalResumeSortKey;
+    order?: ExternalResumeSortOrder;
   } = {},
 ): Promise<ExternalResumeList> {
   return request(`/external-resumes${buildQuery(params)}`);
@@ -130,9 +144,15 @@ export function getExternalResumeAnalysis(id: number): Promise<ExternalResumeAna
   return request(`/external-resumes/${id}/analysis`, { budget: "task" });
 }
 
-/** 原件 raw 直链：PDF 可嵌 iframe，其余格式走下载。 */
-export function externalResumeFileUrl(id: number): string {
-  return `/api/external-resumes/${id}/file`;
+/**
+ * 原件 raw 直链：PDF 用 pdf.js 取字节渲染，其余格式走下载。
+ *
+ * 给 `revisionId` 时返回**那一版**的原件（后端 `GET /{id}/file?revision_id=` 已支持），
+ * 历史版本行的「预览 / 下载」都走同一个端点，不必为"看一版旧文件"再开接口。
+ */
+export function externalResumeFileUrl(id: number, revisionId?: number): string {
+  const base = `/api/external-resumes/${id}/file`;
+  return revisionId == null ? base : `${base}?revision_id=${revisionId}`;
 }
 
 // ── 应用内编辑（#5）──────────────────────────────────────────────
@@ -278,4 +298,26 @@ export function restoreExternalResumeRevision(
     method: "POST",
     budget: "task",
   });
+}
+
+/** 某一版历史版本的正文（T12 的「对比」与"看这一版"用）。 */
+export interface ExternalResumeRevisionText {
+  revision_id: number;
+  text: string;
+  text_chars: number;
+  has_text: boolean;
+}
+
+/**
+ * 取某一版历史版本的**正文**。
+ *
+ * 历史版本列表里不带正文（同一段话在库里只存一份），所以这一条要按需再请求一次：
+ * 后端会从那一版自己的文件重新提取（一次 pypdf / docx 解析，15s 预算够）。
+ * 因此「对比」与"看这一版"都是懒加载——不点就不花这个成本。
+ */
+export function getExternalResumeRevisionText(
+  id: number,
+  revisionId: number,
+): Promise<ExternalResumeRevisionText> {
+  return request(`/external-resumes/${id}/revisions/${revisionId}/text`, { budget: "task" });
 }

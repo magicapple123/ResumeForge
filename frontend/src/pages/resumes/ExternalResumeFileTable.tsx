@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 外部简历列表的「文件行」表格（2026-11-26 整改 #3）。
+ * 外部简历列表的「文件行」表格（2026-11-26 整改 #3 / T09）。
  *
  * 原来的每一行是「文件名 + 外部标签 + N 字 + 关联岗位 + 时间」挤在一行副文案里：
  * 类型只能靠文件名后缀猜，状态（有没有提取到文字）排在中间，岗位与时间没有列、无法
@@ -16,17 +16,37 @@
  * - 主操作按内容变：有文字 →「查看文本」，没文字 →「预览原件」；「用于面试」在没有
  *   文字时置灰并附说明（见 `RowActionItem.tooltip`）。
  *
- * 批量选择：勾选列**常驻 DOM**、默认靠 `visibility: collapse` 折叠
- * （`externalResumeFiles.css`），这样切进多选态时列宽不跳。入口两处——整行右键与行尾
- * 「⋯」里各一条「批量选择」：只放右键的话，不知道能右键的人永远找不到。
+ * ## 批量选择：非多选态**不挂载** `rowSelection`（T09 / R9-1）
  *
- * 组件只负责呈现与事件转发：选择态、删除确认、取数都在 `ExternalResumePanel`。
+ * 旧实现把勾选列常驻 DOM、靠 CSS `visibility: collapse` 折叠，理由是"切多选态时列宽
+ * 不跳"。但 Chrome 下 `<col>` 即使 collapse 也仍参与表头背景的绘制宽度——结果是表格
+ * 左缘永远多出一条白带（勾选列那 40px 宽的表头背景铺不过去）。现在只有多选态才传
+ * `rowSelection`，列根本不渲染：左缘白带从结构上消失，代价只是切进多选时列宽变化
+ * 一次（用户刚点了"批量选择"，这一次变化反而是必要的反馈）。
+ *
+ * ## 点文件名即可打开（T09 / R9-2）
+ *
+ * 文件名本身就是最自然的入口。按**有没有文字层**分流：有文字 → 详情「文本」页
+ * （用户想看的多半是正文），没有文字 → 「原件」页（文本页对他必然是一片空白）。
+ *
+ * ## 列头排序（T09 / R9-3）
+ *
+ * 三列可排（文件名 / 岗位 / 时间），三态箭头（升 → 降 → 取消）由 antd 的 `sorter: true`
+ * 给出；排序**下推服务端**（`sort` / `order` 参数），状态存在 URL 里、由面板负责读写。
+ * 本组件只把"哪一列、什么方向"翻译成 `ExternalSortState` 往上抛。
+ *
+ * 组件只负责呈现与事件转发：选择态、删除确认、取数、URL 都在 `ExternalResumePanel`。
  */
-import { Button, Table, Tag, Typography } from "antd";
+import { Button, Pagination, Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";
+import type { SortOrder } from "antd/es/table/interface";
 import { memo, useMemo } from "react";
 import type { HTMLAttributes } from "react";
-import type { ExternalResumeItem } from "../../api/externalResumes";
+import type {
+  ExternalResumeItem,
+  ExternalResumeSortKey,
+  ExternalResumeSortOrder,
+} from "../../api/externalResumes";
 import { RowActions, RowContextMenu } from "../../components/common/RowActions";
 import type { RowActionItem, RowMenuItem } from "../../components/common/RowActions";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
@@ -37,6 +57,83 @@ import { formatDateTime } from "../../utils/format";
 import { batchSelectAction } from "./resumeTableActions";
 import "./externalResumeFiles.css";
 
+/** 当前排序：字段 + 方向 + "用户是否显式点过列头"。 */
+export interface ExternalSortState {
+  field: ExternalResumeSortKey;
+  order: ExternalResumeSortOrder;
+  /** false = 默认排序（列头不显示箭头）；URL 里没有合法 `sort` 时就是它。 */
+  explicit: boolean;
+}
+
+/** 默认排序：最近上传在前（与后端缺省值逐字一致，不显示箭头）。 */
+export const DEFAULT_EXTERNAL_SORT_STATE: ExternalSortState = Object.freeze({
+  field: "created_at",
+  order: "desc",
+  explicit: false,
+});
+
+/** 可排序字段白名单（其余值一律回落默认：`?sort=xxx` 不该被原样发给后端换 422）。 */
+const SORT_KEYS: readonly ExternalResumeSortKey[] = [
+  "name",
+  "job_title",
+  "created_at",
+  "text_chars",
+];
+
+/** 列 key → 排序字段 + 该列的默认方向（决定第一次点击是升还是降）。 */
+const SORT_COLUMNS = {
+  file: { field: "name", defaultOrder: "asc" },
+  job: { field: "job_title", defaultOrder: "asc" },
+  created: { field: "created_at", defaultOrder: "desc" },
+} as const satisfies Record<
+  string,
+  { field: ExternalResumeSortKey; defaultOrder: ExternalResumeSortOrder }
+>;
+
+type SortColumnKey = keyof typeof SORT_COLUMNS;
+
+function isSortColumn(key: string): key is SortColumnKey {
+  return key in SORT_COLUMNS;
+}
+
+/** URL 的 `?sort=&order=` → 排序状态；缺失/非法一律回落默认。 */
+export function parseExternalSort(
+  sort: string | null | undefined,
+  order: string | null | undefined,
+): ExternalSortState {
+  if (!sort || !SORT_KEYS.includes(sort as ExternalResumeSortKey)) {
+    return DEFAULT_EXTERNAL_SORT_STATE;
+  }
+  if (order !== "asc" && order !== "desc") return DEFAULT_EXTERNAL_SORT_STATE;
+  return { field: sort as ExternalResumeSortKey, order, explicit: true };
+}
+
+/**
+ * 受控 `sortOrder`：只有"用户点过的、且命中的"那一列显示箭头。
+ *
+ * 默认态一律 `null`：默认排序是接口不带参数时的行为，不是用户的选择；给它加箭头会让
+ * 表头永远带高亮，与"取消排序回到默认"这个第三次点击自相矛盾。
+ * `text_chars` 没有独立列头，因此它只可能以 URL 深链的形式存在、不显示箭头。
+ */
+function sortOrderFor(columnKey: string, state: ExternalSortState): SortOrder {
+  if (!state.explicit || !isSortColumn(columnKey)) return null;
+  if (SORT_COLUMNS[columnKey].field !== state.field) return null;
+  return state.order === "asc" ? "ascend" : "descend";
+}
+
+/**
+ * 该列的点击方向序列。
+ *
+ * 默认升序的列用 antd 的 `["ascend","descend"]`；默认降序的列（时间）必须反过来，
+ * 否则第一次点击会被 antd 当成"取消排序"，而取消又回落到默认降序——用户看到的是
+ * "点了没反应"（与内部简历表格同一处踩过的坑）。
+ */
+function sortDirectionsFor(columnKey: SortColumnKey): SortOrder[] {
+  return SORT_COLUMNS[columnKey].defaultOrder === "asc"
+    ? ["ascend", "descend"]
+    : ["descend", "ascend"];
+}
+
 interface Props {
   items: ExternalResumeItem[];
   loading: boolean;
@@ -45,6 +142,14 @@ interface Props {
   batchActions: RowActionItem[];
   /** 跳转实现留在面板（`useNavigate` 不进到这个纯呈现组件里）。 */
   navigate: (path: string) => void;
+  /** 当前排序（受控；面板从 URL 解析后传下来）。 */
+  sortState: ExternalSortState;
+  onSortChange: (next: ExternalSortState) => void;
+  /** 服务端分页：页码/总数都由面板与 hook 决定，这里只渲染分页器。 */
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
   onOpenText: (item: ExternalResumeItem) => void;
   onOpenOriginal: (item: ExternalResumeItem) => void;
   onOpenCheck: (item: ExternalResumeItem) => void;
@@ -81,8 +186,8 @@ const ContextMenuRow = memo(function ContextMenuRow({
   );
 });
 
-/** 第一列：类型徽标 + 文件名 + 状态副行。 */
-function fileCell(item: ExternalResumeItem) {
+/** 第一列：类型徽标 + 文件名（可点）+ 状态副行。 */
+function fileCell(item: ExternalResumeItem, onOpen: (item: ExternalResumeItem) => void) {
   const kind = fileKindOf(item.mime, item.name);
   // 已知类型给格式名（PDF / DOCX…，中英文一致）；只有不认识的类型才需要翻译。
   const badge = fileKindBadge(kind) ?? t("resumesPage.external.kindOther");
@@ -90,9 +195,16 @@ function fileCell(item: ExternalResumeItem) {
     <div className="external-resume-file">
       <div className="external-resume-file-line">
         <Tag className={`external-resume-kind external-resume-kind-${kind}`}>{badge}</Tag>
-        <Typography.Text strong className="external-resume-name" ellipsis={{ tooltip: item.name }}>
+        {/* 文件名就是主入口：按钮而不是 `<a>`——它打开的是弹层，不是导航。
+            `title` 兜住省略号挡住的部分（长文件名在窄屏上必然被截）。 */}
+        <Button
+          type="link"
+          className="external-resume-name"
+          title={item.name}
+          onClick={() => onOpen(item)}
+        >
           {item.name}
-        </Typography.Text>
+        </Button>
       </div>
       {item.has_text ? (
         <Typography.Text type="secondary" className="external-resume-status">
@@ -140,6 +252,12 @@ export default function ExternalResumeFileTable({
   batch,
   batchActions,
   navigate,
+  sortState,
+  onSortChange,
+  page,
+  pageSize,
+  total,
+  onPageChange,
   onOpenText,
   onOpenOriginal,
   onOpenCheck,
@@ -155,7 +273,11 @@ export default function ExternalResumeFileTable({
     return map;
   }, [items]);
 
-  /** 主操作：按内容二选一（没有文字层的文件"查看文本"必然是一片空白）。 */
+  /** 有文字看文本、没文字看原件（没有文字层时"查看文本"必然一片空白）。 */
+  const openByContent = (item: ExternalResumeItem): void =>
+    item.has_text ? onOpenText(item) : onOpenOriginal(item);
+
+  /** 主操作：按内容二选一。 */
   const mainAction = (item: ExternalResumeItem): RowActionItem =>
     item.has_text
       ? {
@@ -215,20 +337,30 @@ export default function ExternalResumeFileTable({
     {
       title: t("resumesPage.external.column.file"),
       key: "file",
-      render: (_, item) => fileCell(item),
+      sorter: true,
+      sortOrder: sortOrderFor("file", sortState),
+      sortDirections: sortDirectionsFor("file"),
+      render: (_, item) => fileCell(item, openByContent),
     },
     {
       title: t("resumesPage.external.column.job"),
       key: "job",
       width: 200,
       ellipsis: true,
+      sorter: true,
+      sortOrder: sortOrderFor("job", sortState),
+      sortDirections: sortDirectionsFor("job"),
       render: (_, item) => jobCell(item, navigate),
     },
     {
       title: t("resumesPage.external.column.created"),
+      key: "created",
       dataIndex: "created_at",
       width: 168,
       align: "right",
+      sorter: true,
+      sortOrder: sortOrderFor("created", sortState),
+      sortDirections: sortDirectionsFor("created"),
       // 右对齐 + 等宽数字：时间列纵向能对齐到秒，扫一眼就能比较先后。
       className: "external-resume-time",
       render: (value: string) => formatDateTime(value),
@@ -253,36 +385,79 @@ export default function ExternalResumeFileTable({
   ];
 
   return (
-    <Table<ExternalResumeItem>
-      className={`external-resume-files${batch.selecting ? " is-selecting" : ""}`}
-      rowKey="id"
-      size="middle"
-      columns={columns}
-      dataSource={items}
-      loading={loading}
-      pagination={false}
-      // 勾选列**始终挂载**：默认由 CSS 的 `visibility: collapse` 折叠，而不是靠
-      // `rowSelection: undefined` 挂载/卸载整列——后者会让列宽在切多选态时跳一下。
-      rowSelection={{
-        selectedRowKeys: [...batch.selectedIds],
-        onChange: (keys) => batch.setSelected(keys as number[]),
-      }}
-      components={{
-        body: {
-          row: (props: HTMLAttributes<HTMLTableRowElement>) => {
-            const rowKey = String((props as { "data-row-key"?: string })["data-row-key"] ?? "");
-            return (
-              <ContextMenuRow
-                {...props}
-                record={itemsByRowKey.get(rowKey)}
-                selecting={batch.selecting}
-                batchActions={batchActions}
-                rowMenu={rowMenu}
-              />
-            );
+    <div className="external-resume-files-wrapper">
+      <Table<ExternalResumeItem>
+        className={`external-resume-files${batch.selecting ? " is-selecting" : ""}`}
+        rowKey="id"
+        size="middle"
+        columns={columns}
+        dataSource={items}
+        loading={loading}
+        pagination={false}
+        // 排序状态由面板（URL）持有；这里只报告"点了哪一列、什么方向"。
+        // 第三次点击（`order` 为空）回到默认排序——服务端默认值就是 `created_at desc`。
+        //
+        // 取消排序必须**先于** `columnKey` 判断：antd 6 取消排序时把 `columnKey` 也一并
+        // 置成 `undefined`（`generateSorterInfo` 的 legacy 兼容分支），先查 `columnKey`
+        // 会让"第三次点击"直接 return ——用户看到的是一次点了没反应、也回不到默认顺序。
+        onChange={(_pagination, _filters, sorter, extra) => {
+          if (extra.action !== "sort") return;
+          const active = Array.isArray(sorter) ? sorter[0] : sorter;
+          const direction = active?.order ?? null;
+          if (!direction) {
+            onSortChange(DEFAULT_EXTERNAL_SORT_STATE);
+            return;
+          }
+          const columnKey = String(active?.columnKey ?? "");
+          if (!isSortColumn(columnKey)) return;
+          onSortChange({
+            field: SORT_COLUMNS[columnKey].field,
+            order: direction === "ascend" ? "asc" : "desc",
+            explicit: true,
+          });
+        }}
+        // 勾选列**只在多选态挂载**：常驻 + `visibility: collapse` 会在表格左缘留下一条
+        // 表头背景铺不过去的白带（Chrome 下 `<col>` 仍参与表头绘制宽度），见文件头注释。
+        rowSelection={
+          batch.selecting
+            ? {
+                selectedRowKeys: [...batch.selectedIds],
+                onChange: (keys) => batch.setSelected(keys as number[]),
+              }
+            : undefined
+        }
+        components={{
+          body: {
+            row: (props: HTMLAttributes<HTMLTableRowElement>) => {
+              const rowKey = String((props as { "data-row-key"?: string })["data-row-key"] ?? "");
+              return (
+                <ContextMenuRow
+                  {...props}
+                  record={itemsByRowKey.get(rowKey)}
+                  selecting={batch.selecting}
+                  batchActions={batchActions}
+                  rowMenu={rowMenu}
+                />
+              );
+            },
           },
-        },
-      }}
-    />
+        }}
+      />
+      {/* 服务端分页：只有超过一页才出现（几份简历时不该多一行控件）。
+          用独立的 `Pagination` 而不是 Table 自带分页：`dataSource` 只是**当前页**，
+          交给 Table 再切一次会把当页数据切空。 */}
+      {total > pageSize ? (
+        <div className="external-resume-pagination">
+          <Pagination
+            size="small"
+            current={page}
+            pageSize={pageSize}
+            total={total}
+            showSizeChanger={false}
+            onChange={onPageChange}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }

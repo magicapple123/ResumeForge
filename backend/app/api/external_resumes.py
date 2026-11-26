@@ -37,6 +37,7 @@ from ..schemas.external_resume import (
     ExternalResumeRestoreOut,
     ExternalResumeRevisionOut,
     ExternalResumeRevisionsOut,
+    ExternalResumeRevisionTextOut,
     ExternalResumeUpdateInput,
 )
 from ..services import external_resume_edit as edit_service
@@ -172,6 +173,8 @@ def list_external_resumes(
     include_general: bool = Query(default=False),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=_MAX_PAGE_SIZE),
+    sort: service.ExternalResumeSortKey = Query(default=service.DEFAULT_EXTERNAL_SORT_KEY),
+    order: service.ExternalResumeSortOrder = Query(default=service.DEFAULT_EXTERNAL_SORT_ORDER),
     db: Session = Depends(get_db),
 ):
     """List live snapshots by name, live job title/company, and optional job.
@@ -179,6 +182,10 @@ def list_external_resumes(
     ``include_general``（T6）：给了 ``job_id`` 时把它扩成 ``job_id == ? OR job_id IS
     NULL``，与 ``GET /api/resumes`` 的内部简历口径逐字一致。求职进度选"使用的简历"
     时要的就是这个范围（本岗位 + 通用），默认 ``false`` 保持既有调用方行为不变。
+
+    ``sort`` / ``order``（T09）：``name`` / ``job_title`` / ``created_at`` /
+    ``text_chars`` 各配升降序，默认 ``created_at desc``（与改造前逐字一致）。
+    两个参数都是 ``Literal``，非法值由 FastAPI 直接给 422，不进服务层。
     """
     rows, total = service.list_external_resumes(
         db,
@@ -187,6 +194,8 @@ def list_external_resumes(
         include_general=include_general,
         page=page,
         page_size=page_size,
+        sort=sort,
+        order=order,
     )
     titles = service.job_titles(db, [row.job_id for row in rows if row.job_id is not None])
     mimes = service.user_file_mimes(db, [row.file_id for row in rows])
@@ -372,6 +381,35 @@ def list_external_resume_revisions(resume_id: int, db: Session = Depends(get_db)
         resume_id=int(row.id),
         items=[_revision_out(revision, row) for revision in rows],
         total=len(rows),
+    )
+
+
+@router.get(
+    "/{resume_id}/revisions/{revision_id}/text",
+    response_model=ExternalResumeRevisionTextOut,
+)
+def get_external_resume_revision_text(
+    resume_id: int, revision_id: int, db: Session = Depends(get_db)
+):
+    """某一版历史版本的**正文**：T12「对比」用（原版 / 新版两侧都要有字）。
+
+    历史版本表只存 ``text_chars``，不存正文，所以这里按需从那一版的文件重新提取一次。
+    正常路径上没有"每份简历都有历史版本"这个前提：``revision_id`` 必须属于这份简历，
+    否则 404（别的简历的版本一律当不存在，与 ``restore`` 同一口径）。
+    """
+    row = _get_or_404(db, resume_id)
+    revision = versions.get_revision(db, row, revision_id)
+    if revision is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
+    try:
+        text = versions.revision_text(db, row, revision)
+    except versions.RevisionFileMissing as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return ExternalResumeRevisionTextOut(
+        revision_id=int(revision.id),
+        text=text,
+        text_chars=int(revision.text_chars or 0),
+        has_text=bool(revision.has_text),
     )
 
 
