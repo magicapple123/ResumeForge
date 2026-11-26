@@ -37,6 +37,17 @@ const BACKEND_COMMAND = '"C:\\payload\\python\\python.exe" -m uvicorn app.main:a
 // A fake process table for the identity probes: `processes` maps pid -> record
 // or undefined. `onQuery` can mutate it (e.g. simulate the process exiting when
 // taskkill runs).
+/**
+ * 进程是否存在，也由**假进程表**决定。
+ *
+ * 不注入的话走的是真实的 `processIdentity.processExists`：CI runner 上 pid 4321 有可能
+ * 真的被别的进程占着，`confirmTermination` 就会一直轮询到 5s 超时，再判"仍然存在"→
+ * `ok: false`（本机跑得快、pid 又不冲突，所以复现不到）。端口探测当年踩过同一个坑。
+ */
+function fakeExists(processes) {
+  return (pid) => Boolean(processes[pid]);
+}
+
 function identityExec(processes, { onQuery } = {}) {
   return async (file, args) => {
     const script = args[args.length - 1];
@@ -89,7 +100,12 @@ test("stop() kills the adopted backend tree when the launcher already exited", a
       if (args && args[0] === "/pid") delete processes[Number(args[1])];
       return { on(event, cb) { if (event === "exit") setTimeout(cb, 0); } };
     };
-    const manager = makeManager(root, { spawnFn, execFileFn: identityExec(processes) });
+    const manager = makeManager(root, {
+      spawnFn,
+      execFileFn: identityExec(processes),
+      processExistsFn: fakeExists(processes),
+      exitConfirmTimeoutMs: 150,
+    });
     manager.adoptedPid = 4321;
     manager.adoptedRecord = { pid: 4321, startedAtUnix: 1760000000, startSignature: null };
     manager.child = { exitCode: 0, signalCode: null, pid: 999 }; // launcher already gone
@@ -143,6 +159,8 @@ test("stop() treats an already-exited adopted backend as a clean stop", async ()
     const manager = makeManager(root, {
       spawnFn: taskkillSpawn(spawnCalls),
       execFileFn: identityExec({}),
+      processExistsFn: () => false,
+      exitConfirmTimeoutMs: 150,
     });
     manager.adoptedPid = 4321;
     manager.adoptedRecord = { pid: 4321, startedAtUnix: 1760000000, startSignature: null };
@@ -232,7 +250,11 @@ test("recordSpawnedChild writes the launcher-format record for a directly spawne
     const processes = {
       1234: { startedAtUnix: 1760000000, commandLine: BACKEND_COMMAND },
     };
-    const manager = makeManager(root, { execFileFn: identityExec(processes) });
+    const manager = makeManager(root, {
+      execFileFn: identityExec(processes),
+      processExistsFn: fakeExists(processes),
+      exitConfirmTimeoutMs: 150,
+    });
     await manager.recordSpawnedChild(1234);
 
     const record = JSON.parse(fs.readFileSync(manager.adoptedPidFile(), "utf-8"));
@@ -254,7 +276,11 @@ test("recordSpawnedChild skips the record when no start time can be read", async
     // A record without a verifiable start time is worse than none: it would
     // turn into an unverifiable kill target on the next launch.
     const processes = { 1234: { startedAtUnix: null, commandLine: BACKEND_COMMAND } };
-    const manager = makeManager(root, { execFileFn: identityExec(processes) });
+    const manager = makeManager(root, {
+      execFileFn: identityExec(processes),
+      processExistsFn: fakeExists(processes),
+      exitConfirmTimeoutMs: 150,
+    });
     await manager.recordSpawnedChild(1234);
     assert.strictEqual(fs.existsSync(manager.adoptedPidFile()), false);
   } finally {
@@ -303,7 +329,11 @@ test("the shell's own record never clobbers another live backend's record", asyn
       9001: { startedAtUnix: 1760000000, commandLine: BACKEND_COMMAND },
       1234: { startedAtUnix: 1760000001, commandLine: BACKEND_COMMAND },
     };
-    const manager = makeManager(root, { execFileFn: identityExec(processes) });
+    const manager = makeManager(root, {
+      execFileFn: identityExec(processes),
+      processExistsFn: fakeExists(processes),
+      exitConfirmTimeoutMs: 150,
+    });
     fs.mkdirSync(path.join(root, "runtime"), { recursive: true });
     fs.writeFileSync(
       path.join(root, "runtime", "backend.json"),
