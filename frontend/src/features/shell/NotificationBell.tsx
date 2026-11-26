@@ -14,9 +14,11 @@
  *    落到列表页而不是 404。标记失败不阻断跳转（用户要的是"去那儿"，不是"改状态"）。
  * 3. **全部已读之后原地变空态**：不关面板、不弹 toast——角标消失本身就是反馈。
  */
-import { Badge, Button, Popover, Spin, Typography } from "antd";
+import { BellOutlined } from "@ant-design/icons";
+import { Button, Popover, Spin, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import CountBadge from "../../components/common/CountBadge";
 import EmptyState from "../../components/common/EmptyState";
 import EventRow from "../../components/common/EventRow";
 import {
@@ -36,11 +38,18 @@ import { startVisibilityPolling } from "../../utils/visibility";
 const UNREAD_POLL_VISIBLE_MS = 30_000;
 const UNREAD_POLL_HIDDEN_MS = 120_000;
 
-const BellIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M12 22a2.6 2.6 0 0 0 2.6-2.6h-5.2A2.6 2.6 0 0 0 12 22Zm7.1-5.2v-5.3a7.1 7.1 0 0 0-5.4-6.9V3.5a1.7 1.7 0 0 0-3.4 0v1.1a7.1 7.1 0 0 0-5.4 6.9v5.3L3.2 18.5v.9h17.6v-.9l-1.7-1.7Z" />
-  </svg>
-);
+/**
+ * 铃铛的无障碍名（整改 #14）：有未读时带上条数。
+ *
+ * 角标是纯视觉的——读屏用户拿不到「3 条未读」这个信息，只能听到一个光秃秃的「通知中心」。
+ * 未读为 0 时退回原来的固定串（不带「0 条未读」这种噪音）。
+ */
+function bellAriaLabel(unread: number): string {
+  return unread > 0
+    ? t("notifications.bell.ariaUnread", { count: unread })
+    : t("notifications.bell.aria");
+}
+
 
 /** 本地日期键：分组按"用户所在时区的今天"，不是 UTC 日。 */
 function dayKey(value: string): string {
@@ -236,15 +245,19 @@ export default function NotificationBell() {
       destroyOnHidden={false}
     >
       {/* 不套 Tooltip：它的浮层会盖住按钮自身的点击区域（实测 pointer-events 冲突），
-          而 aria-label 已经给屏幕阅读器与自动化提供了同一个名字。 */}
-      <Badge count={unread} size="small" offset={[2, -2]}>
-        <Button
-          className="notification-bell-button"
-          type="text"
-          icon={<BellIcon />}
-          aria-label={t("notifications.bell.aria")}
-        />
-      </Badge>
+          而 aria-label 已经给屏幕阅读器与自动化提供了同一个名字（含未读条数，整改 #14）。
+          角标的锚点是**铃铛图标**而不是这个 32px 的按钮：包在按钮上时角标会落在按钮外角，
+          中间隔着 8px 内边距，看着"飘"。 */}
+      <Button
+        className="notification-bell-button"
+        type="text"
+        aria-label={bellAriaLabel(unread)}
+        icon={
+          <CountBadge count={unread} offset={[-4, -4]}>
+            <BellOutlined className="notification-bell-icon" />
+          </CountBadge>
+        }
+      />
     </Popover>
   );
 }

@@ -8,6 +8,12 @@
   padding: 0 8px;
 }
 
+/* 铃铛是线性图标（整改 #14），18px 与页头其它图标同族：原先自绘的 16px 实心 path
+   比旁边几个线性图标重一档，红角标压上去也显得"角标直径 ≈ 铃铛宽度"。 */
+.notification-bell-button .notification-bell-icon {
+  font-size: 18px;
+}
+
 .notification-panel {
   width: 340px;
   max-height: 60vh;

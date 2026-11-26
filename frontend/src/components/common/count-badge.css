@@ -1,0 +1,27 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 计数角标（整改 #14）：页头通知铃铛与后台任务指示器共用。
+ *
+ * 尺寸口径来自用户拍板的「收紧的红色胶囊」：min-width 14px / height 14px / radius 7px /
+ * 10px 字重 600。**故意不用 antd 的 size="small"**（20px 量级实心圆，比旁边的线性图标重一档）。
+ *
+ * 白环用 `--rf-surface` 而不是 #fff：深色模式下底色是深灰，写死白色会出现
+ * "白圈套深底"的接缝；用 token 才能跟着主题走。 */
+
+/* 选择器故意重复一次 `.ant-badge-count`（0,3,0）：antd 的规则是
+   `:where(.css-hash).ant-badge .ant-badge-count`（:where 不计权重），同为 0,2,0 时
+   谁后注入谁赢——而 CSS-in-JS 的注入时机不由我们决定。提高一级权重才不会随机输给它。 */
+.rf-count-badge .ant-badge-count.ant-badge-count {
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  background: var(--rf-danger);
+  border-radius: 7px;
+  /* 2px 环把红点与图标描边分开：直接压上去接缝发脏。 */
+  box-shadow: 0 0 0 2px var(--rf-surface);
+  /* 等宽数字：1 → 8 时不左右跳。 */
+  font-variant-numeric: tabular-nums;
+}

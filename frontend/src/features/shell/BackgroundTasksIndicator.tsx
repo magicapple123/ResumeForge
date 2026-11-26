@@ -15,8 +15,9 @@ import {
   LoadingOutlined,
   QuestionCircleOutlined,
 } from "@ant-design/icons";
-import { App, Badge, Button, Popover, Space, Typography } from "antd";
+import { App, Button, Popover, Space, Typography } from "antd";
 import { useEffect, useState } from "react";
+import CountBadge from "../../components/common/CountBadge";
 import { reportBadgePart } from "../../utils/desktopBadge";
 import { useNavigate } from "react-router-dom";
 import { listAgentTasks } from "../../api/agentTasks";
@@ -319,9 +320,11 @@ export default function BackgroundTasksIndicator() {
         type="text"
         aria-label={t("backgroundTasks.aria.viewTasks")}
       >
-        <Badge count={total} size="small" offset={[2, -2]}>
+        {/* 与通知铃铛共用同一个角标（整改 #14）：两处各写一份 `Badge size="small"`
+            会让页头同时存在两种尺寸的角标。这里锚点是带文字的按钮，偏移保持原样。 */}
+        <CountBadge count={total} offset={[2, -2]}>
           <LoadingOutlined /> {t("backgroundTasks.label")}
-        </Badge>
+        </CountBadge>
       </Button>
     </Popover>
   );

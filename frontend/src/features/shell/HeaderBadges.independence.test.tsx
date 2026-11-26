@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import BackgroundTasksIndicator from "./BackgroundTasksIndicator";
 import NotificationBell from "./NotificationBell";
 import { resetBackgroundTasks } from "../../utils/backgroundTasks";
+import { t } from "../../i18n";
 import type { AgentTask } from "../../api/agentTasks";
 
 const notificationsApi = vi.hoisted(() => ({
@@ -50,8 +51,16 @@ function agentTask(id: number, status: AgentTask["status"]): AgentTask {
 
 function badgeTextOf(label: string): string {
   const button = screen.getByRole("button", { name: label });
-  const badge = button.closest(".ant-badge") ?? button.parentElement;
-  return badge?.textContent ?? "";
+  // 角标在按钮内部（整改 #14：锚点从按钮移到图标本身），所以从按钮里往下找。
+  return button.querySelector(".ant-badge-count")?.textContent ?? "";
+}
+
+/**
+ * 铃铛的可访问名（整改 #14）：有未读时带条数。用例按未读数取名字，
+ * 不再依赖固定的那一串文案。
+ */
+function bellLabel(unread: number): string {
+  return t("notifications.bell.ariaUnread", { count: unread });
 }
 
 function renderHeader() {
@@ -85,10 +94,12 @@ describe("页头角标两个口径", () => {
   it("未读 3 + 待确认 2 → 铃铛 3、任务按钮 2（不是 5）", async () => {
     renderHeader();
 
-    await waitFor(() => expect(badgeTextOf("通知中心")).toContain("3"));
-    await waitFor(() => expect(badgeTextOf("查看后台任务")).toContain("2"));
-    expect(badgeTextOf("通知中心")).not.toBe("5");
-    expect(badgeTextOf("查看后台任务")).not.toBe("5");
+    await waitFor(() => expect(badgeTextOf(bellLabel(3))).toBe("3"));
+    await waitFor(() =>
+      expect(badgeTextOf(t("backgroundTasks.aria.viewTasks"))).toContain("2"),
+    );
+    expect(badgeTextOf(bellLabel(3))).not.toBe("5");
+    expect(badgeTextOf(t("backgroundTasks.aria.viewTasks"))).not.toBe("5");
   });
 
   it("running + 待确认 才是任务按钮的数：running 1 + waiting 2 → 3", async () => {
@@ -99,7 +110,9 @@ describe("页头角标两个口径", () => {
     ]);
     renderHeader();
 
-    await waitFor(() => expect(badgeTextOf("查看后台任务")).toContain("3"));
-    expect(badgeTextOf("通知中心")).toContain("3");
+    await waitFor(() =>
+      expect(badgeTextOf(t("backgroundTasks.aria.viewTasks"))).toBe("3"),
+    );
+    expect(badgeTextOf(bellLabel(3))).toBe("3");
   });
 });
