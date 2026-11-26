@@ -87,3 +87,16 @@
   white-space: nowrap;
   vertical-align: bottom;
 }
+
+/* 关联岗位做成链接（#4）：按钮自带左右内边距会让 Tag 与列头错位，这里压回 0；
+   链接色的下划线由 antd 的 `type="link"` 给，hover 时才有，静止时不抢注意力。 */
+.external-resume-job-link {
+  padding: 0;
+  height: auto;
+  max-width: 100%;
+  text-align: start;
+}
+
+.external-resume-job-link .external-resume-job {
+  max-width: 100%;
+}

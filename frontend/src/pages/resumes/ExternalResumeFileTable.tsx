@@ -9,6 +9,9 @@
  * - 第一列「文件」：类型徽标（`fileKindOf`，接口本来就返回 `mime`）+ 文件名，
  *   副行**状态排第一**——「已提取 N 字」/「未提取到文字 · 扫描件或图片型 PDF」（警示色）；
  * - 岗位、上传时间各自成列：时间右对齐 + 等宽数字，没有关联岗位显示「—」；
+ * - 岗位列可点（#4）：`Tag` 套 `Button type="link"`，跳 `/jobs?job_id=N`；
+ *   岗位已被删除（外键 `SET NULL`，所以 `job_id` 为 null）时**不渲染链接**，
+ *   避免死链；岗位名为空则文案回落到 `#id`，链接仍然可用。
  * - 每行不再有「外部」标签：整页都是外部简历，这个标签零信息量；
  * - 主操作按内容变：有文字 →「查看文本」，没文字 →「预览原件」；「用于面试」在没有
  *   文字时置灰并附说明（见 `RowActionItem.tooltip`）。
@@ -19,7 +22,7 @@
  *
  * 组件只负责呈现与事件转发：选择态、删除确认、取数都在 `ExternalResumePanel`。
  */
-import { Table, Tag, Typography } from "antd";
+import { Button, Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import { memo, useMemo } from "react";
 import type { HTMLAttributes } from "react";
@@ -40,6 +43,8 @@ interface Props {
   batch: BatchSelection<number>;
   /** 多选态的整行右键菜单（目前只有「删除所选」）。 */
   batchActions: RowActionItem[];
+  /** 跳转实现留在面板（`useNavigate` 不进到这个纯呈现组件里）。 */
+  navigate: (path: string) => void;
   onOpenText: (item: ExternalResumeItem) => void;
   onOpenOriginal: (item: ExternalResumeItem) => void;
   onOpenCheck: (item: ExternalResumeItem) => void;
@@ -102,14 +107,30 @@ function fileCell(item: ExternalResumeItem) {
   );
 }
 
-/** 第二列：关联岗位；没有关联（或还没关联）显示「—」，不留白格。 */
-function jobCell(item: ExternalResumeItem) {
+/**
+ * 第二列：关联岗位。
+ *
+ * 三条分支各有理由：
+ * - `job_id` 为空 → 显示「—」且**不给链接**：外键是 `ON DELETE SET NULL`，所以空
+ *   既可能是"从没关联"也可能是"关联的岗位被删了"；两种情况都点不到东西，渲染链接
+ *   就只能是死链。
+ * - 岗位名为空但 id 有值 → 文案回落到 `#id`，链接照旧（详情抽屉用 id 打开）。
+ * - 正常：`Tag` 套 `Button type="link"`（与 `ResumeTable.tsx` 的岗位列同一款），
+ *   按钮天然可 Tab 到达，hover 有链接下划线反馈。
+ */
+function jobCell(item: ExternalResumeItem, navigate: (path: string) => void) {
   if (!item.job_id) return <span className="external-resume-empty">—</span>;
   const title = item.job_title || `#${item.job_id}`;
   return (
-    <Tag color="blue" className="external-resume-job">
-      {title}
-    </Tag>
+    <Button
+      type="link"
+      className="table-text-link external-resume-job-link"
+      onClick={() => navigate(`/jobs?job_id=${item.job_id}`)}
+    >
+      <Tag color="blue" className="external-resume-job">
+        {title}
+      </Tag>
+    </Button>
   );
 }
 
@@ -118,6 +139,7 @@ export default function ExternalResumeFileTable({
   loading,
   batch,
   batchActions,
+  navigate,
   onOpenText,
   onOpenOriginal,
   onOpenCheck,
@@ -200,7 +222,7 @@ export default function ExternalResumeFileTable({
       key: "job",
       width: 200,
       ellipsis: true,
-      render: (_, item) => jobCell(item),
+      render: (_, item) => jobCell(item, navigate),
     },
     {
       title: t("resumesPage.external.column.created"),

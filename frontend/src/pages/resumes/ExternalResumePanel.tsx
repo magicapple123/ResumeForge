@@ -255,6 +255,7 @@ export default function ExternalResumePanel({
         loading={loading}
         batch={batch}
         batchActions={batchActions}
+        navigate={navigate}
         onOpenText={(item) => openDetail(item, "text")}
         onOpenOriginal={(item) => openDetail(item, "original")}
         onOpenCheck={(item) => openDetail(item, "check")}

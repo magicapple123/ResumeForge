@@ -348,3 +348,48 @@ describe("ExternalResumePanel · 文件行与批量选择（#3）", () => {
     ).toBeInTheDocument();
   });
 });
+
+/**
+ * 关联岗位可点（整改 #4）。
+ *
+ * 三条分支：有关联 → 链到 `/jobs?job_id=N`；岗位被删（外键 `SET NULL`，`job_id` 为空）
+ * → 不渲染链接（否则是死链）；岗位名为空但 id 有值 → 文案回落 `#id`，链接照旧。
+ */
+describe("ExternalResumePanel · 关联岗位可点（#4）", () => {
+  function oneItem(overrides: Record<string, unknown>) {
+    apiMocks.listExternalResumes.mockResolvedValue({
+      items: [externalResume(overrides)],
+      total: 1,
+      page: 1,
+      page_size: 100,
+    });
+  }
+
+  it("有关联岗位时点岗位名跳到岗位详情", async () => {
+    oneItem({ job_id: 7, job_title: "Backend Engineer" });
+    renderPanel();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Backend Engineer" }));
+
+    expect(navigateMock).toHaveBeenCalledWith("/jobs?job_id=7");
+  });
+
+  it("岗位已删（job_id 为空）不给链接，只显示破折号", async () => {
+    oneItem({ job_id: null, job_title: "" });
+    renderPanel();
+
+    await screen.findByText("external-a.txt");
+    // 岗位列不出现任何可点的东西——死链比"没有链接"更糟。
+    expect(screen.queryByRole("button", { name: "#7" })).toBeNull();
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("岗位名为空但 id 有值：文案回落 #id，仍可点", async () => {
+    oneItem({ job_id: 9, job_title: "" });
+    renderPanel();
+
+    fireEvent.click(await screen.findByRole("button", { name: "#9" }));
+
+    expect(navigateMock).toHaveBeenCalledWith("/jobs?job_id=9");
+  });
+});
