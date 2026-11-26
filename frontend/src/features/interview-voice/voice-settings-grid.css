@@ -1,0 +1,77 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 面试语音卡的五个滑块（#12）。
+ *
+ * 改造前：每个滑块都是**独占整行**的 `width: 100%`。内容区近 1000px，轨道就有一千像素 —
+ * 音量拉满时滑块头贴到右缘，看起来像一条滚动条；400 / 1500 两个常驻 marks 又把轨道
+ * 压得更挤，读起来像刻度尺。
+ *
+ * 现在：两列等宽网格，每格「标签左 + 值右」一行、滑块一行；第 5 个只占左列。
+ * 窄窗用**容器查询**而不是视口断点：这张卡的宽度由侧栏与窗口共同决定，视口宽 1200px
+ * 时卡可能只有 500px 宽，用 `@media` 会切错。
+ */
+
+/* 容器自身：只声明 inline-size，不参与布局。查询的是它里面的网格。 */
+.voice-settings-sliders {
+  container-type: inline-size;
+}
+
+.voice-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 28px;
+  row-gap: 14px;
+}
+
+/* 一格：`minmax(0,1fr)` 的列里，子项必须允许收缩，否则长标签会把列撑开、两列不再等宽。 */
+.voice-setting-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+/* 标签与值同一行：值靠右且不换行（数字宽度用等宽数字，滚动时不会左右跳）。 */
+.voice-setting-field__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.voice-setting-field__value {
+  flex: 0 0 auto;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 第 5 格（单段录音上限）只占左列：在 2 列网格里被拉满的那一格看起来像另一种控件。 */
+.voice-setting-field--last {
+  grid-column: 1;
+}
+
+/* 单段上限的原因说明：说的是"服务端为什么只给 120 秒"，属于整组滑块的注解，
+   所以放在网格下方，不挂在最后一格里（否则它会跟着那格的列宽换行）。 */
+.voice-settings-cap {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+/* 窄窗变单列。阈值按**实测的卡片容器宽**定，不是按视口宽估的：
+ *   视口 1440 → 卡片内容区 914 → .voice-settings-sliders 866（两列各 419，轨道 407）
+ *   视口  720 → 卡片内容区 676 → .voice-settings-sliders 628（两列各 300，轨道 288）
+ * 两条斜杠的轨道在 300px 时每步只剩十几像素（语速 0.1 档、断句 50ms 档都调不准），
+ * 所以 680 这条线对应"每格 < 326px 就单列"：720 及以下必然回落单列，
+ * 1440 的 866 仍是两列。只写 `max-width:620px` 会在 720 漏判——容器 628 差 8px。 */
+@container (max-width: 680px) {
+  .voice-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .voice-setting-field--last {
+    grid-column: auto;
+  }
+}

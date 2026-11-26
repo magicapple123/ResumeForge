@@ -6,7 +6,8 @@
  * "插话灵敏度""单段录音上限"这类参数调一次就不再动，不该占通话界面的位置。
  *
  * 值存在 `localStorage`（`voiceSettings`），与数据集无关，**不需要数据库迁移**。
- * 布局沿用设置页既有写法（`Card` + 纵向 `Space` + `Divider`），不新增 CSS 类。
+ * 开关 / 档位 / 下拉沿用设置页既有写法（`Card` + 纵向 `Space` + `Divider`）；
+ * 五个滑块另走两列网格（`voice-settings-grid.css`，见 #12 的注释）。
  *
  * 两处与"换厂商"有关的判断都在这里，因为它们都是**用户必须看见**的事实：
  * - **合成服务档位**：两档并列，音色清单跟着档位走；存的音色属于另一档时显式提示
@@ -43,6 +44,7 @@ import {
 } from "./ttsVoices";
 import type { BargeInSensitivity } from "./voiceSettings";
 import { resetVoiceSettings, useVoiceSettings, VOICE_SETTING_RANGES } from "./voiceSettings";
+import "./voice-settings-grid.css";
 
 /** 一行「标签 + 控件」：设置页既有的卡片都是这个形态，不另造样式类。 */
 function Row({
@@ -74,6 +76,58 @@ function Row({
         ) : null}
       </div>
       <div style={{ flex: "0 0 auto" }}>{children}</div>
+    </div>
+  );
+}
+
+/**
+ * 网格里的一格滑块（#12）：**标签左 + 值右**占一行人，滑块自己占第二行。
+ *
+ * 为什么不再写成 `标签 · 值` 一整串：那种写法下标签与值不可分割，读屏会把
+ * 「播报语速 · 1.0 倍」当成一个字段名念出来；拆成两个节点后，滑块自己的 `aria-label`
+ * 才是字段名，值是可独立更新的文本。
+ *
+ * 滑块不给宽度：宽度由网格列决定（`minmax(0,1fr)`），所以轨道永远不超过半宽——
+ * 原来那 5 个滑块是 `width:100%`，轨道近 1000px，音量拉满时滑块头贴着右缘像滚动条。
+ */
+function SliderField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  current,
+  onChange,
+  last = false,
+}: {
+  label: string;
+  /** 已经格式化好的值（含单位），由调用方按各自口径给。 */
+  value: string;
+  min: number;
+  max: number;
+  step: number;
+  current: number;
+  onChange: (value: number) => void;
+  /** 最后一格：只占左列，不拉满（两列布局里被拉满的那格看起来像另一种控件）。 */
+  last?: boolean;
+}) {
+  return (
+    <div className={`voice-setting-field${last ? " voice-setting-field--last" : ""}`}>
+      <div className="voice-setting-field__head">
+        <Typography.Text>{label}</Typography.Text>
+        <span className="voice-setting-field__value">{value}</span>
+      </div>
+      <Slider
+        min={min}
+        max={max}
+        step={step}
+        value={current}
+        onChange={onChange}
+        // 标签在上一行已经可见，但读屏不看布局：滑块自己得有个名字。
+        // antd 6 的 `aria-label` 不会forward到 role="slider" 的滑块上（实测 DOM 里为 null），
+        // 要名字只能走 `ariaLabelForHandle`。
+        ariaLabelForHandle={label}
+      />
     </div>
   );
 }
@@ -133,11 +187,6 @@ export function InterviewVoiceSettingsCard() {
     patch({ ttsProvider: next, voice: target.voice });
     if (target.fellBack) message.info(fallbackNotice(target));
   };
-
-  const markers = (range: [number, number]) => ({
-    [range[0]]: `${range[0]}`,
-    [range[1]]: `${range[1]}`,
-  });
 
   return (
     <Card
@@ -231,79 +280,71 @@ export function InterviewVoiceSettingsCard() {
 
         <Divider style={{ margin: "6px 0" }} />
 
-        <div>
-          <Typography.Text>
-            {t("interviewVoice.settings.rate")} ·{" "}
-            {t("interviewVoice.settings.times", { value: settings.rate.toFixed(1) })}
-          </Typography.Text>
-          <Slider
-            min={0.7}
-            max={1.5}
-            step={0.1}
-            value={settings.rate}
-            onChange={(value) => patch({ rate: value })}
-            aria-label={t("interviewVoice.settings.rate")}
-          />
-        </div>
-        <div>
-          <Typography.Text>
-            {t("interviewVoice.settings.volume")} · {Math.round(settings.volume * 100)}
-            {t("interviewVoice.settings.volumeUnit")}
-          </Typography.Text>
-          <Slider
-            min={0}
-            max={1}
-            step={0.05}
-            value={settings.volume}
-            onChange={(value) => patch({ volume: value })}
-            aria-label={t("interviewVoice.settings.volume")}
-          />
-        </div>
-        <div>
-          <Typography.Text>
-            {t("interviewVoice.settings.silence")} ·{" "}
-            {t("interviewVoice.settings.milliseconds", { value: settings.endpointSilenceMs })}
-          </Typography.Text>
-          <Slider
-            min={400}
-            max={1500}
-            step={50}
-            value={settings.endpointSilenceMs}
-            marks={markers([400, 1500])}
-            onChange={(value) => patch({ endpointSilenceMs: value })}
-            aria-label={t("interviewVoice.settings.silence")}
-          />
-        </div>
-        <div>
-          <Typography.Text>
-            {t("interviewVoice.settings.filler")} ·{" "}
-            {t("interviewVoice.settings.milliseconds", { value: settings.fillerHoldMs })}
-          </Typography.Text>
-          <Slider
-            min={1000}
-            max={2500}
-            step={100}
-            value={settings.fillerHoldMs}
-            onChange={(value) => patch({ fillerHoldMs: value })}
-            aria-label={t("interviewVoice.settings.filler")}
-          />
-        </div>
-        <div>
-          <Typography.Text>
-            {t("interviewVoice.settings.maxRecord")} ·{" "}
-            {t("interviewVoice.settings.seconds", { value: recordValue })}
-          </Typography.Text>
-          <Slider
-            min={VOICE_SETTING_RANGES.maxRecordSeconds[0]}
-            // 上界跟着服务端走：选 DeepSeek 时是 120（不支持流式），其余是 300。
-            max={recordCap}
-            step={30}
-            value={recordValue}
-            onChange={(value) => patch({ maxRecordSeconds: value })}
-            aria-label={t("interviewVoice.settings.maxRecord")}
-          />
+        {/*
+          五个滑块两列排（#12）。原来每个滑块都是**独占整行的 100% 宽**：内容区近 1000px，
+          轨道就有一千像素长，音量拉满时滑块头贴着右缘、看起来更像滚动条；而 400/1500 这类
+          常驻 marks 又把轨道压得更挤。
+
+          现在：每格「标签左 + 值右」一行、滑块一行，两列等宽；**第 5 个只占左列不拉满**，
+          单段上限的那句原因移出格子放到网格下方（它说的是"服务端为什么只给 120 秒"，
+          不是这一格的值）。窄窗用容器查询变单列——视口断点在这里不可靠，卡片宽度由侧栏决定。
+        */}
+        <div className="voice-settings-sliders">
+          <div className="voice-settings-grid">
+            <SliderField
+              label={t("interviewVoice.settings.rate")}
+              value={t("interviewVoice.settings.times", { value: settings.rate.toFixed(1) })}
+              min={0.7}
+              max={1.5}
+              step={0.1}
+              current={settings.rate}
+              onChange={(value) => patch({ rate: value })}
+            />
+            <SliderField
+              label={t("interviewVoice.settings.volume")}
+              value={`${Math.round(settings.volume * 100)}${t("interviewVoice.settings.volumeUnit")}`}
+              min={0}
+              max={1}
+              step={0.05}
+              current={settings.volume}
+              onChange={(value) => patch({ volume: value })}
+            />
+            <SliderField
+              label={t("interviewVoice.settings.silence")}
+              value={t("interviewVoice.settings.milliseconds", {
+                value: settings.endpointSilenceMs,
+              })}
+              min={400}
+              max={1500}
+              step={50}
+              current={settings.endpointSilenceMs}
+              onChange={(value) => patch({ endpointSilenceMs: value })}
+            />
+            <SliderField
+              label={t("interviewVoice.settings.filler")}
+              value={t("interviewVoice.settings.milliseconds", { value: settings.fillerHoldMs })}
+              min={1000}
+              max={2500}
+              step={100}
+              current={settings.fillerHoldMs}
+              onChange={(value) => patch({ fillerHoldMs: value })}
+            />
+            <SliderField
+              // 第 5 个独占左列：两列网格里被"拉满"的那一格看起来像另一种控件。
+              last
+              label={t("interviewVoice.settings.maxRecord")}
+              value={t("interviewVoice.settings.seconds", { value: recordValue })}
+              min={VOICE_SETTING_RANGES.maxRecordSeconds[0]}
+              // 上界跟着服务端走：选 DeepSeek 时是 120（不支持流式），其余是 300。
+              max={recordCap}
+              step={30}
+              current={recordValue}
+              onChange={(value) => patch({ maxRecordSeconds: value })}
+            />
+          </div>
+
           {asr && asr.max_seconds < VOICE_SETTING_RANGES.maxRecordSeconds[1] ? (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            <Typography.Text type="secondary" className="voice-settings-cap">
               {/* 原因分两种：只有 DeepSeek 是"不支持流式"（上游硬限制 120 秒），
                   其它服务商只是服务端上限比滑块小。同一句话套在百炼会说假话。 */}
               {asr.protocol === "deepseek"
