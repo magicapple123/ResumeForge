@@ -7,7 +7,7 @@
  * 2. **StrictMode 双挂载不重复计数**——`+1/-1` 写法会漂，这里按身份登记；
  * 3. `variant="block"` 只换排版，不换交互（默认仍是可点开的按钮）。
  */
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -101,5 +101,47 @@ describe("HintDetail 与提示模式（I-28）", () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole("status")).toHaveTextContent(t("helpMode.badgeEmpty"));
+  });
+});
+
+/**
+ * #10：120 字符无空格串（URL / 路径 / 长参数名）不许撑破卡片。
+ *
+ * jsdom 没有布局，量不到"溢出"，但**折行规则本身**是可判定的：`overflowWrap: anywhere`
+ * 参与 min-content 计算，`maxWidth` 才压得住；只写 `break-word` 时最小宽度仍是整串长度，
+ * 容器该被撑破还是会被撑破。所以这里钉的是这两条声明，而不是像素。
+ */
+describe("HintDetail 长串换行（#10）", () => {
+  // 一整条没有空格的地址：浏览器默认只在空格处折行，所以它是最容易撑破卡片的那种文案。
+  const LONG = `https://example.internal/research/brief?${"a".repeat(120)}`;
+
+  /** 找出正文那一层（带 `pre-line` 的那个 span / 容器）。 */
+  function detailLayer(scope: HTMLElement): HTMLElement {
+    const node = Array.from(scope.querySelectorAll<HTMLElement>("span")).find((span) =>
+      (span.textContent ?? "").includes("https://example.internal"),
+    );
+    if (!node) throw new Error("找不到正文节点");
+    return node;
+  }
+
+  it("气泡（默认分支）里的正文带 anywhere + break-word，且没改 maxWidth", async () => {
+    render(<HintDetail detail={LONG} label={LABEL} />);
+    fireEvent.click(screen.getByRole("button", { name: LABEL }));
+
+    const layer = await screen.findByText(LONG);
+    expect(layer.style.overflowWrap).toBe("anywhere");
+    expect(layer.style.wordBreak).toBe("break-word");
+    // maxWidth 是阅读行宽，不是这个 bug 的原因；不许为了"不撑破"把它改小或去掉。
+    expect(layer.style.maxWidth).toBe("320px");
+  });
+
+  it("提示模式（原地展开分支）同样带折行规则", () => {
+    render(<HintDetail detail={LONG} label={LABEL} />);
+    act(() => enterHelpMode());
+
+    const note = screen.getByRole("note", { name: LABEL });
+    const layer = detailLayer(note);
+    expect(layer.style.overflowWrap).toBe("anywhere");
+    expect(layer.style.wordBreak).toBe("break-word");
   });
 });

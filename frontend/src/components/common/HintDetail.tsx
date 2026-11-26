@@ -95,16 +95,33 @@ const BLOCK_STYLE: CSSProperties = {
 };
 
 /**
+ * 长串换行（#10）：URL / 文件路径 / 长参数名**没有空格**，浏览器默认只在空格处折行，
+ * 于是 120 字符的地址会整行撑出卡片，压在邻居上（用户报的"气泡长串撑破卡片"）。
+ *
+ * 用 `anywhere` 而不是只在 `break-word` 上：前者参与 min-content 计算，容器的
+ * `maxWidth` 才真正压得住（`break-word` 只影响"排不下时怎么断"，不改变最小宽度）。
+ * 两个都写上是为了老的 WebView：认不出 `anywhere` 时还有 `break-word` 兜底。
+ * **不要**改成给 Popover 加 `overflow: hidden`——那会连阴影和箭头一起切掉。
+ */
+const BREAK_LONG_TEXT_STYLE: CSSProperties = {
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
+};
+
+/**
  * 正文容器：`pre-line` 让 `detail` 里的 `\n` 真的换行。
  *
  * 有的说明本身是好几段（例如接口协议那 188 字 + 支持面 + 思考形态三段），拼成一个
  * 字符串传进来是最省心的（调用方不必传 JSX，也就不会两处各写一套排版）；没有 `\n`
  * 的普通文案在 `pre-line` 下与 `normal` 完全一致，所以这一条对所有调用点都是安全的。
+ *
+ * `maxWidth` 不动（320 是读起来最舒服的行宽）；撑破卡片的是"不折行"，不是"太宽"。
  */
 const DETAIL_STYLE: CSSProperties = {
   display: "block",
   maxWidth: 320,
   whiteSpace: "pre-line",
+  ...BREAK_LONG_TEXT_STYLE,
 };
 
 /**
@@ -145,7 +162,12 @@ export function HintDetail({
       >
         {summary ? <span style={block ? { display: "block" } : undefined}>{summary}</span> : null}
         <span
-          style={block ? { display: "block", whiteSpace: "pre-line" } : { whiteSpace: "pre-line" }}
+          style={{
+            display: block ? "block" : undefined,
+            whiteSpace: "pre-line",
+            // #10 的第二条分支：提示模式下是**原地内联展开**，同样会被无空格长串撑破。
+            ...BREAK_LONG_TEXT_STYLE,
+          }}
         >
           {text}
         </span>
