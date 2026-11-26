@@ -25,6 +25,7 @@ import { jobTypeLabelKey } from "../../i18n/enum/jobs";
 import { useLocale } from "../../i18n/i18nContext";
 import { jobCopyMenu } from "./jobRowCopyActions";
 import { jobStatusText, normalizeJobStatus } from "./jobStatusText";
+import { useJobExternalResumeUpload } from "./useJobExternalResumeUpload";
 
 // 值域与 pages/jobs/jobFilterOptions.ts 的 BatchAction 保持一致（新增动作两处同步改）；
 // 此处只判「有无批量操作进行中」，不区分具体动作。类型本地持有是因为 components
@@ -88,6 +89,8 @@ export default function JobTable({
   // 「复制」的 Toast：工厂用同一个 message key 覆盖，连点不会堆成一列。
   const toast = useToast();
   const [graphJob, setGraphJob] = useState<JobList | null>(null);
+  // 「添加外部简历」的弹窗与上传流程（岗位由入口那一行预设，见 hook 文件头）。
+  const externalResumeUpload = useJobExternalResumeUpload();
   const columns: TableColumnsType<JobList> = [
     {
       title: t("jobTable.column.favorite"),
@@ -274,6 +277,13 @@ export default function JobTable({
    */
   const secondaryActions = (job: JobList): RowActionItem[] => [
     { key: "write", label: t("jobTable.action.write"), onClick: () => onWrite(job) },
+    // 「添加外部简历」放在「写简历」之后、「查看简历」之前：三个动作是同一类
+    // （给这个岗位配一份简历），而外部简历是"别处生成、只读快照"，紧挨着写简历更顺。
+    {
+      key: "external-resume",
+      label: t("resumesPage.external.addFromJob"),
+      onClick: () => externalResumeUpload.openForJob(job),
+    },
     { key: "resumes", label: t("jobTable.action.resumes"), onClick: () => onViewResumes(job) },
     {
       key: "resume-graph",
@@ -369,6 +379,8 @@ export default function JobTable({
           }}
         />
       )}
+      {/* 外部简历上传弹窗：没有目标行时 `open=false`，与表格同生共死（不需要页面层知道）。 */}
+      {externalResumeUpload.modal}
     </>
   );
 }

@@ -88,3 +88,58 @@ describe("ExternalResumeUploadModal", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * 预设岗位（整改 #6）：从岗位广场某一行右键进来时，岗位已由入口定好。
+ *
+ * 守三件事：选择器不渲染（否则用户会以为能改）、候选项不请求（拉了没人用）、
+ * 提交的 `jobId` 恒为该岗位 id（哪怕弹窗内部状态被误改）。
+ */
+describe("ExternalResumeUploadModal · 预设岗位（#6）", () => {
+  const PRESET = { id: 7, title: "Backend Engineer" };
+
+  function renderPresetModal(onSubmit = vi.fn().mockResolvedValue(true)) {
+    const onClose = vi.fn();
+    render(
+      <AntdApp>
+        <ExternalResumeUploadModal
+          open
+          uploading={false}
+          presetJob={PRESET}
+          onClose={onClose}
+          onSubmit={onSubmit}
+        />
+      </AntdApp>,
+    );
+    return { onClose, onSubmit };
+  }
+
+  it("不渲染岗位选择器、不发候选请求，提交固定用预设岗位", async () => {
+    const { onSubmit } = renderPresetModal();
+
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByTestId("external-resume-preset-job")).toHaveTextContent(PRESET.title);
+    expect(jobMocks.listJobs).not.toHaveBeenCalled();
+
+    chooseFile(new File(["resume text"], "preset.txt", { type: "text/plain" }));
+    await waitFor(() => expect(screen.getByDisplayValue("preset")).toBeInTheDocument());
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][1]).toEqual({ name: "preset", jobId: PRESET.id });
+  });
+
+  it("不传预设岗位时回归原行为：有选择器、且会请求候选", async () => {
+    renderModal();
+
+    expect(
+      await waitFor(() => {
+        const comboboxes = screen.queryAllByRole("combobox");
+        if (comboboxes.length === 0) throw new Error("job select missing");
+        return comboboxes.length;
+      }),
+    ).toBeGreaterThan(0);
+    expect(jobMocks.listJobs).toHaveBeenCalled();
+    expect(screen.queryByTestId("external-resume-preset-job")).toBeNull();
+  });
+});

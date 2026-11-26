@@ -82,6 +82,11 @@ const resumesPage = {
     "Read-only snapshots you cannot edit; usable for mock interviews and text checks",
   "resumesPage.external.tag": "External",
   "resumesPage.external.upload": "Upload external resume",
+  "resumesPage.external.addFromJob": "Add external resume",
+  "resumesPage.external.addedToJob": "Added “{name}” and linked it to “{job}”",
+  "resumesPage.external.addedToJobNoText":
+    "Added “{name}” and linked it to “{job}”, but no text was extracted",
+  "resumesPage.external.openList": "View",
   "resumesPage.external.empty": "No external resumes yet",
   "resumesPage.external.emptyHint":
     "Upload a PDF / Word / TXT / Markdown resume you created elsewhere: preview the original, run text checks and reuse it in mock interviews",

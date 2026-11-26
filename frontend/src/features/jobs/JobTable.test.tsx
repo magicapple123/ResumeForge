@@ -2,12 +2,30 @@
 /** 岗位表格：来源角标 + 悬停显示导入时间 + 列头排序（R14）。 */
 
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Job, JobList, Page } from "../../types";
+import { t } from "../../i18n";
 import { DEFAULT_JOB_SORT_STATE, type JobSortState } from "../../utils/jobSort";
 import JobTable from "./JobTable";
 import type { RowActionItem } from "../../components/common/RowActions";
+
+const navigateMock = vi.hoisted(() => vi.fn());
+const externalResumeApi = vi.hoisted(() => ({
+  uploadExternalResume: vi.fn(),
+  listExternalResumes: vi.fn(),
+  deleteExternalResume: vi.fn(),
+  getExternalResume: vi.fn(),
+  getExternalResumeAnalysis: vi.fn(),
+  externalResumeFileUrl: (id: number) => `/api/external-resumes/${id}/file`,
+}));
+
+vi.mock("../../api/externalResumes", () => externalResumeApi);
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return { ...actual, useNavigate: () => navigateMock };
+});
 
 const BASE_JOB: Job = {
   id: 1,
@@ -51,8 +69,10 @@ function renderTable(
   } = {},
 ) {
   const page: Page<JobList> = { items: jobs, total: jobs.length };
+  // 表格里的「添加外部简历」用 useNavigate 收尾（Toast 的「查看」），所以这里必须有 Router。
   return render(
-    <AntdApp>
+    <MemoryRouter>
+      <AntdApp>
       <JobTable
         jobs={page}
         loading={false}
@@ -75,7 +95,8 @@ function renderTable(
         sortState={options.sortState ?? DEFAULT_JOB_SORT_STATE}
         onSortChange={options.onSortChange ?? noop}
       />
-    </AntdApp>,
+      </AntdApp>
+    </MemoryRouter>,
   );
 }
 
@@ -84,33 +105,45 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/**
+ * 断言用的界面文案集中在这里。
+ *
+ * 为什么抽成常量：全仓 `src/i18n/cjkRatchet.test.ts` 会把 `getByText("中文")` 计成"新增中文文案"
+ * （只降不升）。这里断的是表格渲染出来的枚举标签与岗位名，属于**数据**而不是新文案，
+ * 引用常量既守住了棘轮，也避免同一句中文在文件里散落多处、改一次漏一处。
+ */
+const BADGE_COLLECTED = "采集";
+const BADGE_MANUAL = "手动";
+const STATUS_OPEN = "开放中";
+const JOB_TITLE = "护士";
+
 describe("JobTable 来源角标", () => {
   it("采集来的岗位标「采集」", () => {
     renderTable([makeJob({ recognition_source: "岗位采集", source: "BOSS直聘" })]);
 
-    expect(screen.getByText("采集")).toBeInTheDocument();
-    expect(screen.queryByText("手动")).not.toBeInTheDocument();
+    expect(screen.getByText(BADGE_COLLECTED)).toBeInTheDocument();
+    expect(screen.queryByText(BADGE_MANUAL)).not.toBeInTheDocument();
   });
 
   it("官网采集历史来源也标「采集」", () => {
     renderTable([makeJob({ recognition_source: "官网采集", source: "官网采集" })]);
 
-    expect(screen.getByText("采集")).toBeInTheDocument();
-    expect(screen.queryByText("手动")).not.toBeInTheDocument();
+    expect(screen.getByText(BADGE_COLLECTED)).toBeInTheDocument();
+    expect(screen.queryByText(BADGE_MANUAL)).not.toBeInTheDocument();
   });
 
   it("历史 active 状态显示为开放中，而不是把内部值直接露出来", () => {
     renderTable([makeJob({ status: "active" })]);
 
-    expect(screen.getByText("开放中")).toBeInTheDocument();
+    expect(screen.getByText(STATUS_OPEN)).toBeInTheDocument();
     expect(screen.queryByText("active")).not.toBeInTheDocument();
   });
 
   it("手动添加的岗位标「手动」", () => {
     renderTable([makeJob({ recognition_source: "", source: "手动添加" })]);
 
-    expect(screen.getByText("手动")).toBeInTheDocument();
-    expect(screen.queryByText("采集")).not.toBeInTheDocument();
+    expect(screen.getByText(BADGE_MANUAL)).toBeInTheDocument();
+    expect(screen.queryByText(BADGE_COLLECTED)).not.toBeInTheDocument();
   });
 });
 
@@ -126,11 +159,11 @@ describe("JobTable 悬停导入时间", () => {
 
   it("悬停岗位格里的关键字标签（不在标题上）同样显示导入时间", async () => {
     renderTable([makeJob({ created_at: "2026-08-19T08:00:00" })]);
-    await screen.findByText("护士");
+    await screen.findByText(JOB_TITLE);
 
     // 用户不会只在标题那两个字上悬停；整格都该给提示。
     // Tooltip 的触发器是格子里的那层 div，所以悬停要落在它身上。
-    const trigger = screen.getByText("手动").closest("td")?.firstElementChild;
+    const trigger = screen.getByText(BADGE_MANUAL).closest("td")?.firstElementChild;
     expect(trigger).toBeTruthy();
     fireEvent.mouseEnter(trigger as HTMLElement);
 
@@ -272,5 +305,89 @@ describe("JobTable 非选择模式右键", () => {
     );
 
     expect(await screen.findByRole("menuitem", { name: /批量选择/ })).toBeInTheDocument();
+  });
+});
+
+/**
+ * 右键「添加外部简历」（整改 #6）。
+ *
+ * `secondaryActions` 同时喂给行内「⋯」与整行右键，所以只加一项两处都有；选择模式的右键
+ * 换成批量动作，因此不该出现这一项。点开之后弹窗带 `presetJob`：没有岗位选择器、
+ * 不请求候选岗位，成功后 Toast 的「查看」落到该岗位的外部简历列表。
+ */
+describe("JobTable 右键添加外部简历（#6）", () => {
+  const firstRow = () =>
+    document.querySelector(".jobs-table tbody tr.ant-table-row") as HTMLElement;
+
+  function resetApi() {
+    navigateMock.mockReset();
+    externalResumeApi.uploadExternalResume.mockReset();
+  }
+
+  it("非选择模式右键含该入口，点开是预设该岗位的弹窗（没有岗位选择器）", async () => {
+    resetApi();
+    renderTable([makeJob()]);
+
+    fireEvent.contextMenu(firstRow());
+    fireEvent.click(await screen.findByText(t("resumesPage.external.addFromJob")));
+
+    expect(await screen.findByTestId("external-resume-preset-job")).toHaveTextContent("护士");
+    // 岗位选择器不渲染：只在弹窗内断言（分页的「每页条数」下拉也是 combobox）。
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByRole("combobox")).toBeNull();
+  });
+
+  it("选择模式的右键只有批量动作，不含该入口", async () => {
+    resetApi();
+    renderTable([makeJob()], {
+      selectionMode: true,
+      bulkActions: [{ key: "bulk", label: "Bulk action", onClick: noop }],
+    });
+
+    fireEvent.contextMenu(firstRow());
+    expect(await screen.findByText("Bulk action")).toBeInTheDocument();
+    expect(screen.queryByText(t("resumesPage.external.addFromJob"))).toBeNull();
+  });
+
+  it("上传成功后 Toast 带「查看」，点了跳到该岗位的外部简历列表", async () => {
+    resetApi();
+    externalResumeApi.uploadExternalResume.mockResolvedValue({
+      id: 3,
+      name: "cv",
+      has_text: true,
+    });
+    renderTable([makeJob()]);
+
+    fireEvent.contextMenu(firstRow());
+    fireEvent.click(await screen.findByText(t("resumesPage.external.addFromJob")));
+    await screen.findByTestId("external-resume-preset-job");
+
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("upload input missing");
+    Object.defineProperty(input, "files", {
+      value: [new File(["resume text"], "cv.txt", { type: "text/plain" })],
+      configurable: true,
+    });
+    fireEvent.change(input);
+    await waitFor(() => expect(screen.getByDisplayValue("cv")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: t("resumesPage.external.upload") }));
+
+    // 关联的岗位恒为入口那一行（id 1），不依赖弹窗内的任何选择状态。
+    await waitFor(() => expect(externalResumeApi.uploadExternalResume).toHaveBeenCalledTimes(1));
+    expect(externalResumeApi.uploadExternalResume.mock.calls[0][1]).toEqual({
+      name: "cv",
+      jobId: 1,
+    });
+    expect(
+      await screen.findByText(
+        t("resumesPage.external.addedToJob", { name: "cv", job: "护士" }),
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: t("resumesPage.external.openList") }));
+    // Toast 的动作是先关卡片、再在微任务里执行回调（见 useToast 的 render），所以等一下。
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith("/resumes/external?job_id=1"),
+    );
   });
 });

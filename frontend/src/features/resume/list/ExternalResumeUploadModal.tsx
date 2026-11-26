@@ -25,32 +25,48 @@ function extensionOf(name: string): string {
   return dot <= 0 ? "" : name.slice(dot).toLowerCase();
 }
 
+export interface ExternalResumeUploadPresetJob {
+  id: number;
+  title: string;
+}
+
 export function ExternalResumeUploadModal({
   open,
   uploading,
   onClose,
   onSubmit,
+  presetJob,
 }: {
   open: boolean;
   uploading: boolean;
   onClose: () => void;
   /** 返回 true 才关闭弹窗（上传失败时留在原地让用户重试）。 */
   onSubmit: (file: File, options: { name: string; jobId: number | null }) => Promise<boolean>;
+  /**
+   * 预设关联岗位（从岗位广场某一行右键进来的「添加外部简历」）。
+   *
+   * 有值时：**不渲染岗位选择器**（岗位已经由入口定好，再让人选一遍只会选错）、
+   * **不请求候选项**、提交固定用它的 `id`，关闭时把状态重置回它的 `id`。
+   * 不传时行为与改造前逐字一致。
+   */
+  presetJob?: ExternalResumeUploadPresetJob;
 }) {
   useLocale();
   const { message } = App.useApp();
   const jobSelect = useJobSearchSelect();
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
-  const [jobId, setJobId] = useState<number | null>(null);
+  // 预设岗位的 id 就是初值：这样即使有人手快先点了提交，提交的也是那一行岗位。
+  const [jobId, setJobId] = useState<number | null>(presetJob?.id ?? null);
   const [dragError, setDragError] = useState("");
 
   // 打开时拉一次岗位候选；hook 的回调引用稳定，只跟随 open。
+  // 预设岗位时**一次都不请求**：选择器都不渲染，拉了也没人用。
   useEffect(() => {
-    if (!open) return;
+    if (!open || presetJob) return;
     void jobSelect.reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, presetJob?.id]);
 
   /**
    * 关闭时清空（而不是打开时重置）：上传失败要留在原地让用户重试，把"清空"绑在
@@ -59,7 +75,8 @@ export function ExternalResumeUploadModal({
   const close = (): void => {
     setFile(null);
     setName("");
-    setJobId(null);
+    // 预设岗位：重置回它而不是 null，下次打开仍是同一个岗位。
+    setJobId(presetJob?.id ?? null);
     setDragError("");
     onClose();
   };
@@ -90,7 +107,7 @@ export function ExternalResumeUploadModal({
       message.error(t("resumesPage.external.uploadRequired"));
       return;
     }
-    const ok = await onSubmit(file, { name: name.trim(), jobId });
+    const ok = await onSubmit(file, { name: name.trim(), jobId: presetJob ? presetJob.id : jobId });
     if (ok) close();
   };
 
@@ -143,15 +160,24 @@ export function ExternalResumeUploadModal({
             placeholder={t("resumesPage.external.uploadNamePlaceholder")}
           />
         </Form.Item>
-        <Form.Item label={t("resumesPage.external.uploadJob")}>
-          <Select
-            allowClear
-            value={jobId ?? undefined}
-            onChange={(value) => setJobId(value ?? null)}
-            placeholder={t("resumesPage.external.uploadJobPlaceholder")}
-            {...jobSelect.selectProps}
-          />
-        </Form.Item>
+        {presetJob ? (
+          // 预设岗位：只读展示"这份简历会关联到哪个岗位"，替代选择器。
+          <Form.Item label={t("resumesPage.external.uploadJob")}>
+            <Typography.Text data-testid="external-resume-preset-job">
+              {presetJob.title}
+            </Typography.Text>
+          </Form.Item>
+        ) : (
+          <Form.Item label={t("resumesPage.external.uploadJob")}>
+            <Select
+              allowClear
+              value={jobId ?? undefined}
+              onChange={(value) => setJobId(value ?? null)}
+              placeholder={t("resumesPage.external.uploadJobPlaceholder")}
+              {...jobSelect.selectProps}
+            />
+          </Form.Item>
+        )}
       </Form>
     </Modal>
   );
