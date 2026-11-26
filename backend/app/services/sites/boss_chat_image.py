@@ -29,20 +29,25 @@
 
 1. **不提供"点第一条"的兜底**。点错会话会把图片发给另一个招聘方，消息不可撤回；匹配不到
    就如实失败，并把列表里前 5 条的文本写进诊断——这是可诊断的失败，不是模糊失败。
-2. **公司名为空就失败，不沿用"当前打开着的会话"**。历史队列条目可能没有公司名；那种情况下
+2. **定位键是「公司名 + 岗位名」两个（R23）**。同一家公司常有多个 HR 在招不同岗位：只按
+   公司名匹配会让脚本在**第一个**含公司名的条目上停下，而右栏核对也只认公司名 → 图发给了
+   另一个人。筛选与判定的实现见 ``boss_conversation_match.py``（要求恰好 1 条，0 条或多条
+   都明确失败并把候选标题写进诊断）。
+3. **公司名为空就失败，不沿用"当前打开着的会话"**。历史队列条目可能没有公司名；那种情况下
    无法判断当前会话是不是本次投递的那个，猜错同样是不可撤回的。失败文案写明「条目缺少
    公司名，无法定位会话」。
-3. **选会话走可信点击**（``Input.dispatchMouseEvent``）。``element.click()`` 发的是
+4. **选会话走可信点击**（``Input.dispatchMouseEvent``）。``element.click()`` 发的是
    ``isTrusted=false`` 的合成事件，现版 BOSS 对这种事件不响应（见 ``boss_apply.py`` 开头的
    第 1 条实测结论）。
-4. **点完必须核对"打开的是谁的会话"**（2026-11-24 事故：队列 #17 万事云回报"已发出 1 张"，
+5. **点完必须核对"打开的是谁的会话"**（2026-11-24 事故：队列 #17 万事云回报"已发出 1 张"，
    实际图发到了另一个人的会话里）。真站上点击经常不生效而页面上早开着别人的会话，
    ``.chat-input`` / ``.btn-sendimg`` 都在——所以点完要读右侧 ``.chat-conversation`` 的标题
-   比对公司名，核对不过就再点一次，仍不过就**一次都不上传**。判定逻辑在
+   比对公司名**与岗位名**，核对不过就再点一次，仍不过就**一次都不上传**。判定逻辑在
    ``boss_chat_guard.py``。
 
-为什么单独成模块：``boss_apply_image.py`` 已贴着 500 行预算，而"进会话 + 选会话"两段的
-脚本与诊断文案都不小；对外入口仍然是 ``adapter.upload_greeting_images(...)``。
+为什么拆成两个模块：``boss_apply_image.py`` 已贴着 500 行预算，而"进会话 + 选会话"两段的
+脚本与诊断文案都不小；本模块只负责"进聊天页 / 等编辑器"，"选会话"在
+``boss_conversation_match.py``。对外入口仍然是 ``adapter.upload_greeting_images(...)``。
 """
 
 from __future__ import annotations
@@ -52,10 +57,10 @@ from typing import TYPE_CHECKING, Any
 
 from ...models.apply import FAILURE_FILE_UPLOAD_FAILED
 from ..browser.cdp_client import CdpClient, CdpError
-from ..browser.interaction import trusted_click
 from ..browser.page_ready import wait_for_page_state
 from .base import SiteFailure
 from .boss_chat_guard import verify_conversation
+from .boss_conversation_match import BossConversationMatchMixin
 from .boss_page import (
     CHAT_PAGE_URL,
     SELECTOR_CHAT_IMAGE_BUTTON,
@@ -67,14 +72,9 @@ from .boss_page import (
     _as_payload,
     _blocker_js,
     _js,
-    blocker_failure,
-    detect_blocker,
 )
 
 logger = logging.getLogger(__name__)
-
-# 诊断里附几条会话文本：够定位"到底在哪个列表里找过"，又不至于把整个会话列表抄进记录。
-_SAMPLE_SIZE = 5
 
 
 if TYPE_CHECKING:
@@ -123,82 +123,7 @@ def _chat_shell_script() -> str:
     )
 
 
-def _user_list_script(company: str) -> str:
-    """在会话列表里按公司名做**包含匹配**，返回命中的条目坐标与列表样本。
-
-    匹配在页面里做（一次往返拿到"命中与否 + 坐标 + 样本"），而不是把整个列表拉回来再比对：
-    坐标必须来自**同一份**渲染结果，否则"取文本"与"取坐标"之间列表一重排就点错位置。
-
-    列表容器先按实测结构找（``.user-list-content``），找不到再退一层到 ``.user-list``；
-    后一层会把顶部筛选行 ``UL.label-list`` 一起圈进来，因此**显式按 class 排除它**
-    （点它只会切换筛选视图，不会打开会话）。
-    """
-    return "".join(
-        [
-            "(() => { /* rf:chat-user-list */\n",
-            _blocker_js(),
-            f"  const LISTS = [{_js(SELECTOR_CHAT_USER_LIST)}, '.chat-content .user-list'];\n",
-            f"  const COMPANY = {_js(company)};\n",
-            f"  const LIMIT = {_SAMPLE_SIZE};\n",
-            "  const SKIP = /label-list/;\n",
-            "  const norm = (text) => (text || '').replace(/\\s+/g, '').toLowerCase();\n",
-            "  const clean = (text) => (text || '').replace(/\\s+/g, ' ').trim();\n",
-            "  const target = norm(COMPANY);\n",
-            "  let items = [];\n",
-            "  for (const sel of LISTS) {\n",
-            "    for (const box of document.querySelectorAll(sel)) {\n",
-            "      const kids = [...box.children].filter((node) => {\n",
-            "        if (SKIP.test(node.getAttribute('class') || '')) return false;\n",
-            "        return clean(node.innerText) !== '';\n",
-            "      });\n",
-            "      if (kids.length > items.length) { items = kids; }\n",
-            "    }\n",
-            "    if (items.length) break;\n",
-            "  }\n",
-            "  const texts = items.map((node) => clean(node.innerText));\n",
-            "  let rect = null;\n",
-            "  let matchedText = '';\n",
-            "  if (target) {\n",
-            "    for (const node of items) {\n",
-            "      if (norm(node.innerText).indexOf(target) < 0) { continue; }\n",
-            # 条目可能在列表的滚动区外，坐标会落到视口之外 → 可信点击就点空了。
-            # 先滚进视野再取坐标（'instant' 是刻意的：站点若设了平滑滚动，会取到中间态）。
-            "      node.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });\n",
-            "      const r = node.getBoundingClientRect();\n",
-            "      if (!r || r.width <= 0 || r.height <= 0) { continue; }\n",
-            "      rect = { x: r.x + r.width / 2, y: r.y + r.height / 2, width: r.width, height: r.height };\n",
-            "      matchedText = clean(node.innerText).slice(0, 60);\n",
-            "      break;\n",
-            "    }\n",
-            "  }\n",
-            "  return JSON.stringify({\n",
-            "    url: location.href,\n",
-            "    item_count: items.length,\n",
-            "    matched: rect !== null,\n",
-            "    matched_text: matchedText,\n",
-            "    rect: rect,\n",
-            "    samples: texts.slice(0, LIMIT),\n",
-            "    captcha: shown(CAPTCHA),\n",
-            "    login_required: shown(LOGIN),\n",
-            "  });\n",
-            "})()",
-        ]
-    )
-
-
-def _blocker_of(state: dict[str, Any]) -> SiteFailure | None:
-    """把"登录失效 / 验证码"两类阻断转成结构化失败（与投递主链路同一套分类）。"""
-    kind = detect_blocker(state)
-    return blocker_failure(kind, state) if kind is not None else None
-
-
-def _raise_if_blocked(state: dict[str, Any]) -> None:
-    failure = _blocker_of(state)
-    if failure is not None:
-        raise failure
-
-
-class BossChatImageMixin:
+class BossChatImageMixin(BossConversationMatchMixin):
     """把浏览器带到"本次投递的会话里、且发图控件可用"的状态。"""
 
     # 宿主契约：由 ``BossAdapter.__init__`` 注入（见 boss.py）。只写在 ``TYPE_CHECKING`` 里，
@@ -208,11 +133,14 @@ class BossChatImageMixin:
 
     # ===== 对外（给 boss_apply_image 用）=====
 
-    def _ensure_chat_conversation(self, client: CdpClient, *, company: str) -> dict[str, Any]:
+    def _ensure_chat_conversation(
+        self, client: CdpClient, *, company: str, job_title: str = ""
+    ) -> dict[str, Any]:
         """确保停在**本次投递的**会话里；返回最后一次页面状态（供诊断使用）。
 
-        ``company`` 取自队列条目（``ApplyTaskItem.company``），招聘方名通常形如
-        「罗先生中科曙光HRBP」，所以用**包含匹配**而不是等值匹配。
+        ``company`` / ``job_title`` 取自队列条目（``ApplyTaskItem.company`` / ``.job_title``）：
+        招聘方名通常形如「罗先生中科曙光HRBP」，所以用**包含匹配**而不是等值匹配；岗位名是
+        R23 加的二级键——同一家公司常有多个 HR，只按公司名会把图片发给另一个人。
 
         返回的 dict 里额外带 ``conversation_title``：那是**核对通过**的会话标题，发图成功后
         要写进结果（"发给了谁"）。真站出过"回报已发出、实际发到别人会话"的事故，只写
@@ -230,29 +158,34 @@ class BossChatImageMixin:
             )
             client.navigate(CHAT_PAGE_URL)
             state = self._wait_chat_shell(client)
-        _raise_if_blocked(state)
-        self._select_conversation(client, company=company)
+        self._raise_if_blocked(state)
+        self._select_conversation(client, company=company, job_title=job_title)
         state = self._wait_chat_editor(client)
         # 真站实测（2026-11-24 21:29，队列 #17 万事云）：点会话条目在自动化下**经常不生效**，
         # 而页面上早开着另一个人的会话（``.chat-input`` / ``.btn-sendimg`` 都在）。所以
-        # "输入框在"根本不证明"会话对"——必须读右侧 ``.chat-conversation`` 的标题核对公司名；
-        # 核对不过就再点一次，仍不过就**一次都不上传**（事故记录见 boss_chat_guard.py）。
+        # "输入框在"根本不证明"会话对"——必须读右侧 ``.chat-conversation`` 的标题核对（公司 +
+        # 岗位两个键）；核对不过就再点一次，仍不过就**一次都不上传**（事故记录见 boss_chat_guard.py）。
         title = verify_conversation(
             client,
             company=company,
+            job_title=job_title,
             ready_wait=self._ready_wait,
-            on_mismatch=lambda: self._reselect_conversation(client, company=company),
+            on_mismatch=lambda: self._reselect_conversation(
+                client, company=company, job_title=job_title
+            ),
         )
         return {**state, "conversation_title": title}
 
-    def _reselect_conversation(self, client: CdpClient, *, company: str) -> None:
+    def _reselect_conversation(
+        self, client: CdpClient, *, company: str, job_title: str = ""
+    ) -> None:
         """归属核对不过时的校正：**再点一次**会话条目，并等编辑器重新可用。
 
         校正的是"点击"而不是"上传"：点击不生效正是这次事故的根因。重走
         :meth:`_select_conversation`（重新取坐标，仍走可信点击），因此列表在这期间重排也
         不会点到错位置。
         """
-        self._select_conversation(client, company=company)
+        self._select_conversation(client, company=company, job_title=job_title)
         self._wait_chat_editor(client)
 
     # ===== 内部步骤 =====
@@ -286,54 +219,7 @@ class BossChatImageMixin:
         return wait_for_page_state(
             _probe,
             is_ready=_ready,
-            blocker=_blocker_of,
-            on_timeout=_timeout,
-            config=self._ready_wait,
-        )
-
-    def _select_conversation(self, client: CdpClient, *, company: str) -> dict[str, Any]:
-        """在会话列表里选中本次投递的招聘方；匹配不到就如实失败（绝不盲点第一条）。"""
-        target = (company or "").strip()
-        if not target:
-            # 公司名是定位会话的**唯一**可靠依据。空串时既**不**退化成"按列表第一条"，也
-            # **不**沿用"当前打开着的那个会话"：两条都可能把图片发给另一个招聘方，而消息
-            # 不可撤回。宁可这一步失败（文本早已送达），也不赌一次。
-            raise SiteFailure(
-                FAILURE_FILE_UPLOAD_FAILED,
-                self._diagnose_missing_company(self._probe_chat_shell(client)),
-            )
-
-        state = self._wait_conversation(client, company=target)
-        rect = state.get("rect")
-        if not isinstance(rect, dict) or not rect:
-            # 走到这里说明等待返回了"命中"却没有坐标（理论上不会）：仍按可诊断失败处理。
-            raise SiteFailure(
-                FAILURE_FILE_UPLOAD_FAILED, self._diagnose_no_conversation(state, target)
-            )
-        trusted_click(client, float(rect["x"]), float(rect["y"]))
-        logger.info("已切到招聘方「%s」的会话：%s", target, state.get("matched_text") or "")
-        return state
-
-    def _wait_conversation(self, client: CdpClient, *, company: str) -> dict[str, Any]:
-        """等会话列表里出现包含 ``company`` 的条目（列表是异步渲染的，不能只探一次）。"""
-
-        def _probe() -> dict[str, Any]:
-            try:
-                value = _as_payload(client.evaluate(_user_list_script(company)))
-            except CdpError as exc:
-                logger.debug("探测会话列表失败：%s", exc)
-                return {}
-            return value if isinstance(value, dict) else {}
-
-        def _timeout(state: dict[str, Any]) -> SiteFailure:
-            return SiteFailure(
-                FAILURE_FILE_UPLOAD_FAILED, self._diagnose_no_conversation(state, company)
-            )
-
-        return wait_for_page_state(
-            _probe,
-            is_ready=lambda state: bool(state.get("matched")),
-            blocker=_blocker_of,
+            blocker=self._blocker_of,
             on_timeout=_timeout,
             config=self._ready_wait,
         )
@@ -350,7 +236,7 @@ class BossChatImageMixin:
         return wait_for_page_state(
             _probe,
             is_ready=lambda state: bool(state.get("chat_input_found")),
-            blocker=_blocker_of,
+            blocker=self._blocker_of,
             on_timeout=_timeout,
             config=self._ready_wait,
         )
@@ -377,35 +263,6 @@ class BossChatImageMixin:
             f"发图控件（{SELECTOR_CHAT_IMAGE_INPUT}）：{state.get('image_input_found', False)}；"
             f"页面里 input[type=file] 数：{state.get('file_input_count', 0)}。"
             "文本招呼语已正常送达；请把这段信息反馈给维护者。"
-        )
-
-    @staticmethod
-    def _diagnose_no_conversation(state: dict[str, Any], company: str) -> str:
-        samples = [str(item) for item in (state.get("samples") or [])]
-        if int(state.get("item_count", 0) or 0) <= 0:
-            return (
-                "聊天页的会话列表没有加载出来，无法定位本次投递的会话；"
-                "这里不会盲点第一条（点错会话会把图片发给另一个招聘方，消息不可撤回）。"
-                f"当前地址：{state.get('url') or '未知'}；会话条目数：0。"
-                "文本招呼语已正常送达；请到浏览器里核对后反馈维护者。"
-            )
-        listing = "；".join(samples) if samples else "（读不到文本）"
-        return (
-            f"会话列表里没有找到包含「{company}」的会话，图片没有发送；"
-            "这里不会盲点第一条（点错会话会把图片发给另一个招聘方，消息不可撤回）。"
-            f"当前地址：{state.get('url') or '未知'}；会话条目数：{state.get('item_count', 0)}；"
-            f"列表前 {len(samples)} 条：{listing}。"
-            "文本招呼语已正常送达；请到浏览器里核对后反馈维护者。"
-        )
-
-    @staticmethod
-    def _diagnose_missing_company(state: dict[str, Any]) -> str:
-        return (
-            "条目缺少公司名，无法定位会话，图片没有发送。"
-            "这里不会按会话列表的第一条、也不会沿用当前打开着的会话去猜"
-            "（点错会话会把图片发给另一个招聘方，消息不可撤回）。"
-            f"当前地址：{state.get('url') or '未知'}；会话条目数：{state.get('list_items', 0)}。"
-            "文本招呼语已正常送达；请给队列条目补上公司名后重试，或手动打开该会话。"
         )
 
 

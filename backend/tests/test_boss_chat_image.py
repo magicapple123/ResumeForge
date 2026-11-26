@@ -27,7 +27,8 @@ import pytest
 from app.models.apply import FAILURE_FILE_UPLOAD_FAILED
 from app.services.sites.base import SiteFailure
 from app.services.sites.boss_apply_image import _bubble_script, _image_probe_script
-from app.services.sites.boss_chat_image import _chat_shell_script, _user_list_script
+from app.services.sites.boss_chat_image import _chat_shell_script
+from app.services.sites.boss_conversation_match import _user_list_script
 from app.services.sites.boss_page import (
     CHAT_PAGE_URL,
     SELECTOR_CHAT_IMAGE_BUTTON,
@@ -50,7 +51,8 @@ from chat_image_support import (
 # 而诊断里完全看不出原因。所以在这里逐脚本钉住那条最容易踩的规则。
 _PAGE_SCRIPTS = {
     "chat_shell": _chat_shell_script,
-    "chat_user_list": lambda: _user_list_script(COMPANY),
+    # R23：选会话的脚本要吃两个键（公司名 + 岗位名），这里也按双键构造，语法前提才盖得住。
+    "chat_user_list": lambda: _user_list_script(COMPANY, "PC 服务工具开发工程师"),
     "image_probe": _image_probe_script,
     "image_bubble": _bubble_script,
 }

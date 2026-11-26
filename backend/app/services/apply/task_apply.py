@@ -429,10 +429,9 @@ def _upload_greeting_images(
         return
 
     try:
-        # company 是发图那一步的必需输入：招呼语送达后要回到聊天页，在会话列表里按公司名定位
-        # 本次投递的招聘方（包含匹配），匹配不到就不发（绝不盲点第一条——点错会话会把图片发给
-        # 另一个招聘方，消息不可撤回）。适配器的签名见 sites/boss_apply_image.py。
-        uploader(client, staging.paths(), company=str(item.company or ""))
+        # 发图按「公司名 + 岗位名」两个键定位招聘方（只按公司名会在同公司多个 HR 时发错人，R23）；
+        # 两个键筛完不唯一就明确失败，绝不盲点第一条。签名见 sites/boss_apply_image.py。
+        uploader(client, staging.paths(), company=str(item.company or ""), job_title=str(item.job_title or ""))
     except SiteFailure as exc:
         # 站点的图片上传失败（形态不符 / 找不到控件 / 气泡没出现）：分类是站点给的，
         # 但**这条投递仍然算成功**——文本已经发出去了。

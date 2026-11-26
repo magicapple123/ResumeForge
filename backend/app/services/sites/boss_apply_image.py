@@ -20,7 +20,8 @@
 3. **"发出去"的判据必须是右栏的图，而且必须核对发给了谁。** 那一次回报 ``image_status=sent``
    而用户肉眼确认图不在这家公司的会话里，出现在了**另一个人**的会话里（已手动撤回）。原因
    是点会话条目没真正切换、页面早开着别人的会话。于是：塞文件前读右侧 ``.chat-conversation``
-   的标题核对公司名（不过就再点一次，仍不过就一张都不发），气泡统计的扫描根也从 ``document``
+   的标题核对**公司名 + 岗位名**（不过就再点一次，仍不过就一张都不发；R23 加岗位名是因为同一
+   家公司常有多个 HR，只认公司名照样会放行别人的会话），气泡统计的扫描根也从 ``document``
    收紧到右侧会话容器（见 ``boss_chat_guard.py``），发出后再核对一次归属。
 
 **仍未实测的一项（不要当成已知事实）**：选完图后是否需要**预览态二次确认**、以及图片消息
@@ -192,14 +193,15 @@ class BossGreetingImageMixin(BossChatImageMixin):
     # ===== 对外入口 =====
 
     def upload_greeting_images(
-        self, client: CdpClient, paths: Sequence[str], *, company: str = ""
+        self, client: CdpClient, paths: Sequence[str], *, company: str = "", job_title: str = ""
     ) -> str:
         """把本地临时文件作为一条图片消息发到**本次投递的**会话；返回实际用到的策略名。
 
-        ``company`` 取自队列条目（``ApplyTaskItem.company``），用来在聊天页的会话列表里定位
-        招聘方（包含匹配）。**空串就直接失败**（``file_upload_failed`` + 「条目缺少公司名，
-        无法定位会话」）：既不点列表第一条，也不沿用当前打开的会话——两者都可能把图片发给
-        另一个招聘方，而消息不可撤回。
+        ``company`` / ``job_title`` 取自队列条目（``ApplyTaskItem.company`` /
+        ``ApplyTaskItem.job_title``），用来在聊天页的会话列表里定位招聘方（包含匹配，两个键
+        都要命中才唯一确定会话——R23：同一家公司多个 HR 只按公司名会发错人）。**公司名为空
+        就直接失败**（``file_upload_failed`` + 「条目缺少公司名，无法定位会话」）：既不点列表
+        第一条，也不沿用当前打开的会话——两者都可能把图片发给另一个招聘方，而消息不可撤回。
 
         失败一律抛 :class:`SiteFailure`（分类 ``file_upload_failed``）：调用方据此把这一支标成
         ``upload_failed``，但**不会**把投递判失败——文本早就送达了。
@@ -211,7 +213,7 @@ class BossGreetingImageMixin(BossChatImageMixin):
         # 1) 先回到聊天页、选中本次投递的会话，并**核对归属**。真站实测（队列 #18）：招呼语
         #    送达后弹层关闭、页面停在岗位详情页，那里没有任何上传控件——这一步以前是缺的。
         #    队列 #17 又证明"点完不一定真的切过去了"：归属核对不过就抛失败，一张都不会上传。
-        state = self._ensure_chat_conversation(client, company=company)
+        state = self._ensure_chat_conversation(client, company=company, job_title=job_title)
         target_title = str(state.get("conversation_title") or "")
 
         # 2) 探一次控件与气泡基线。基线必须在**切到目标会话之后**取：换会话会整片换掉消息
@@ -247,7 +249,7 @@ class BossGreetingImageMixin(BossChatImageMixin):
         #    用户去撤回，也绝不把"已发出"记在别人的会话上（队列 #17 就是这么被误记成 sent 的）。
         #    核对通过的标题写进 ``greeting_image_target``，最终落成「已向「某某」发出 N 张图片」。
         self.greeting_image_target = confirm_conversation_after_send(
-            client, company=company, fallback=target_title
+            client, company=company, job_title=job_title, fallback=target_title
         )
         logger.info(
             "招呼语配图已发出，策略=%s，会话=「%s」",

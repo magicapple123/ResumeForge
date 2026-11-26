@@ -108,17 +108,20 @@ class ImageAdapter(FakeAdapter):
         super().__init__()
         self.upload_calls: list[list[str]] = []
         self.upload_companies: list[str] = []
+        self.upload_job_titles: list[str] = []
         self.uploaded_bytes: list[bytes] = []
         self.existed_during_upload: list[bool] = []
         self._fail_upload = fail_upload
         self.greeting_image_target = target
 
-    def upload_greeting_images(self, client, paths, *, company: str = ""):
-        # 与真适配器同签名：company 是"回聊天页后按公司名定位会话"的输入（见
-        # services/sites/boss_apply_image.py）。假件把它记下来，方便断言它真的被传到了。
+    def upload_greeting_images(self, client, paths, *, company: str = "", job_title: str = ""):
+        # 与真适配器同签名：company + job_title 是"回聊天页后按公司名 + 岗位名定位会话"的输入
+        # （见 services/sites/boss_apply_image.py；R23 起是两个键）。假件把它们记下来，方便断言
+        # 它们真的被传到了。
         files = [str(path) for path in paths]
         self.upload_calls.append(files)
         self.upload_companies.append(company)
+        self.upload_job_titles.append(job_title)
         for path in paths:
             self.existed_during_upload.append(Path(path).exists())
             self.uploaded_bytes.append(Path(path).read_bytes())
