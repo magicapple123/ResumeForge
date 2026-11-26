@@ -186,8 +186,15 @@ class CompanyRepeatBlockOut(BaseModel):
 
 
 class ResumeEffectOut(BaseModel):
-    """按关联简历分组的投递结果（清单 §17.3-B4）。**样本量必须展示**，不做因果归因。"""
+    """按关联简历分组的投递结果（清单 §17.3-B4）。**样本量必须展示**，不做因果归因。
 
+    ``kind`` 区分这份分组来自哪张表（T32）：``internal`` = ``resume_record`` 的
+    ``resume_id``，``external`` = ``external_resume`` 的 ``external_resume_id``。
+    两张表的 id 空间独立且会撞号，所以它们**永远是两份列表**，前端必须分别标注
+    「仅内部简历」/「外部简历」，不许拼成一张排行榜。
+    """
+
+    kind: str = "internal"
     resume_id: int
     resume_title: str = ""
     total: int = 0
@@ -275,7 +282,10 @@ class DashboardOut(BaseModel):
     channel_stats: list[ChannelStatOut] = Field(default_factory=list)
     status_durations: list[StatusDurationOut] = Field(default_factory=list)
     company_repeats: CompanyRepeatBlockOut = Field(default_factory=CompanyRepeatBlockOut)
+    #: 只数内部简历（``resume_id``）；界面上这块必须标「仅内部简历」。
     resume_effects: list[ResumeEffectOut] = Field(default_factory=list)
+    #: T32：只数外部简历（``external_resume_id``），与上面那份**永不混算**。
+    external_resume_effects: list[ResumeEffectOut] = Field(default_factory=list)
 
     # ===== 第 17 条新增：周目标与生成成本（P3） =====
     weekly_goal: WeeklyGoalOut = Field(default_factory=WeeklyGoalOut)
@@ -287,7 +297,11 @@ class DashboardOut(BaseModel):
     resume_with_warnings_count: int = 0
     resume_with_placeholders_count: int = 0
     unverified_claim_count: int = 0
+    #: 关联了简历的投递数 = 内部 + 外部（T32）。外部简历投的那几条以前会被算成
+    #: "没关联简历"，缺口说明因此虚报。两者互斥，所以恒等于下面两个数之和。
     track_resume_linked_count: int = 0
+    track_internal_resume_linked_count: int = 0
+    track_external_resume_linked_count: int = 0
 
 
 __all__ = [

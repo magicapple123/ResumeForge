@@ -174,6 +174,15 @@ const analyticsPage = {
   "analyticsPage.resumeEffect.bias":
     "Linking itself has selection bias (people link a resume for the roles they care about); results with fewer than 5 samples are unreliable.",
   "analyticsPage.resumeEffect.empty": "No applications are linked to a resume yet",
+  "analyticsPage.resumeEffect.internalOnly": "Internal resumes only",
+  "analyticsPage.resumeEffect.kindExternal": "External",
+  "analyticsPage.resumeEffect.externalTitle": "External resumes (originals)",
+  "analyticsPage.resumeEffect.externalDescription":
+    "A separate count: external resumes live in another table (their ids collide with internal ones), so they are never merged into the ranking above and get no bars.",
+  "analyticsPage.resumeEffect.externalEmpty": "No applications are linked to an external resume yet",
+  "analyticsPage.resumeLink.includesExternal": "Includes external resumes",
+  "analyticsPage.resumeLink.legend":
+    "Application and progress totals include external resumes: {internal} internal · {external} external · {none} unlinked",
   "analyticsPage.goal.title": "Goal and generation cost",
   "analyticsPage.goal.description":
     "The weekly goal counts only this week (Monday–Sunday) by application date; generation cost reports tokens and duration only — no money, because the local ledger has no price table.",

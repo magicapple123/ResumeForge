@@ -196,6 +196,11 @@ def resume_effects(tracks: Sequence[TrackRow]) -> list[dict]:
     resume_id 的关联入口在录入界面已有（RF-17），但当前真实库里只有极少数记录有关联
     ——所以每个分组都必须带 small_sample，前端要显示徽标。**不做因果归因**：这组数字
     只描述"关联到这份简历的投递走到了哪一步"，不承诺"用了某版简历能提高 X%"。
+
+    **只数内部简历**（``resume_id``）：外部简历是另一张表、另一份分组
+    （:func:`external_resume_effects`），两块**永不混算**——两张表的 id 空间独立且会
+    撞号，合成一份排行榜连"第 3 名是谁"都说不清。``kind`` 回传 ``internal``，前端据此
+    在这块打「仅内部简历」标，不必靠位置猜。
     """
     grouped: dict[int, dict] = {}
     interview_rank = STATUS_RANK[STATUS_INTERVIEW]
@@ -206,7 +211,55 @@ def resume_effects(tracks: Sequence[TrackRow]) -> list[dict]:
         entry = grouped.get(resume_id)
         if entry is None:
             entry = grouped[resume_id] = {
+                "kind": "internal",
                 "resume_id": int(resume_id),
+                "resume_title": "",
+                "total": 0,
+                "interview_count": 0,
+            }
+        title = (getattr(track, "resume_title", "") or "").strip()
+        if title:
+            entry["resume_title"] = title
+        entry["total"] += 1
+        if STATUS_RANK.get(track.status, -1) >= interview_rank:
+            entry["interview_count"] += 1
+    result = []
+    for entry in grouped.values():
+        entry["interview_rate"] = rate(entry["interview_count"], entry["total"])
+        entry["small_sample"] = entry["total"] < SMALL_SAMPLE_THRESHOLD
+        result.append(entry)
+    result.sort(key=lambda item: (-item["total"], item["resume_id"]))
+    return result
+
+
+def external_resume_effects(tracks: Sequence[TrackRow]) -> list[dict]:
+    """按**外部简历**（``external_resume_id``）分组的投递结果（T32，P1）。
+
+    与 :func:`resume_effects` 字段逐字对齐（``kind="external"`` 用于界面区分），口径与
+    纪律也一致：**每组必须亮样本量**、**不做因果归因**。
+
+    几条刻意的选择：
+
+    - **为什么不合并成一份**：``resume_record.id`` 与 ``external_resume.id`` 是两套
+      自增 id、必然撞号（界面上才要写 ``internal:3`` / ``external:3``）。合并后同一张
+      排行榜会出现两个"3 号简历"，用户无法核对，也与"内部专属指标要写明仅内部"的验收
+      直接冲突。所以这里是**第二份分组**，不是同一份分组多一列。
+    - **标题取 ``resume_title`` 快照**（关联时冻结）：外部简历可以被改名、原文件可以被
+      替换，快照回答的是"当时投的是哪一份"，与内部简历同一口径；空串由前端兜底
+      「未命名简历」。
+    - **空库 / 没有外部关联时返回 ``[]``**（不是 None）：前端据此渲染空态。
+    """
+    grouped: dict[int, dict] = {}
+    interview_rank = STATUS_RANK[STATUS_INTERVIEW]
+    for track in tracks:
+        external_id = getattr(track, "external_resume_id", None)
+        if external_id is None:
+            continue
+        entry = grouped.get(external_id)
+        if entry is None:
+            entry = grouped[external_id] = {
+                "kind": "external",
+                "resume_id": int(external_id),
                 "resume_title": "",
                 "total": 0,
                 "interview_count": 0,
@@ -232,6 +285,7 @@ __all__ = [
     "applied_date",
     "channel_stats",
     "company_repeats",
+    "external_resume_effects",
     "parse_iso_date",
     "resume_effects",
     "status_durations",

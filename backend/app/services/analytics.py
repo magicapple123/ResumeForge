@@ -43,7 +43,19 @@
 - **同公司多投**（第 17 条 P2）= 按 ``company_key`` 归并：投了 >=2 个岗位的清单（带面试/Offer
   次数），以及投了 >=3 次但 0 面试的「最该止损」清单。
 - **简历版本效果**（第 17 条 P2）= 按 ``resume_id`` 分组的投递数与面试数，**每组都必须带
-  样本量**；关联入口已有但覆盖率低，因此只描述、不做因果归因。
+  样本量**；关联入口已有但覆盖率低，因此只描述、不做因果归因。**这块只数内部简历**
+  （见下一条「外部简历口径」）。
+- **外部简历口径**（T32）= **按行计数**的指标（投递总量 / 有效投递 / 面试 / 测评 / Offer /
+  漏斗 / 渠道转化 / 同公司多投 / 耗时 / 趋势 / 周内分布 / 最近新增）本来就不看关联字段，
+  所以同一个岗位用内部简历投还是用外部原件投，**都算在同一条投递里**——这部分不需要
+  改代码，只需要在图例上写明「含外部简历」，否则用户会以为外部简历投的那些没被统计。
+  **按简历分组的两块分开算**：``resume_effects`` 只数 ``resume_id``（内部），
+  ``external_resume_effects`` 只数 ``external_resume_id``（外部）——两张表的 id 空间
+  独立且会撞号（界面上才要写成 ``internal:3`` / ``external:3``），把两边合成一份
+  「简历版本效果」排行榜，第 3 名到底是哪一份简历都说不清。``track_resume_linked_count``
+  是**两种关联之和**（"关联了简历"这件事不分内外），并另给
+  ``track_internal_resume_linked_count`` / ``track_external_resume_linked_count``
+  两个拆分数，界面的图例与缺口说明都按这三个数说话。
 - **周投递目标**（第 17 条 P3）= 本数据集设置里的目标值（0 = 没设）+ 本周按 ``applied_at`` 落在
   周一至周日的投递数（业务日期，不按记录创建时间）。
 - **生成成本**（第 17 条 P3）= ``llm_usage_record`` 的聚合：resume_generate 的调用数 /
@@ -107,6 +119,7 @@ from .analytics_breakdowns import (
     applied_date,
     channel_stats,
     company_repeats,
+    external_resume_effects,
     resume_effects,
     status_durations,
 )
@@ -270,6 +283,9 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
             ApplicationTrack.next_action,
             ApplicationTrack.resume_id,
             ApplicationTrack.resume_title,
+            # T32：外部简历的关联也要取——「关联了简历的投递数」与外部简历那份分组
+            # 都靠它，少取一列就会把外部简历投的那几条静默算成"没关联简历"。
+            ApplicationTrack.external_resume_id,
             ApplicationTrack.created_at,
             ApplicationTrack.updated_at,
         )
@@ -297,7 +313,10 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
     stalled_count = 0
     no_next_action_count = 0
     dated = 0
-    resume_linked = 0
+    # 「关联了简历的投递数」分内部 / 外部两条累计：两种关联互斥（schema 层守着），
+    # 所以 total = internal + external 恒成立，前端可以直接拿这三个数画图例。
+    resume_linked_internal = 0
+    resume_linked_external = 0
 
     for track in tracks:
         counts[track.status] = counts.get(track.status, 0) + 1
@@ -324,7 +343,11 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
         if _applied_date(track) is not None:
             dated += 1
         if track.resume_id is not None:
-            resume_linked += 1
+            resume_linked_internal += 1
+        elif track.external_resume_id is not None:
+            # ``elif`` 不是省事：两种关联在 ``schemas/tracker.py`` 里是互斥的，
+            # 真同时存在时也只算一次，不会让"关联数"超过"投递数"。
+            resume_linked_external += 1
 
     funnel = [
         {"status": status, "label": STATUS_LABELS.get(status, status), "count": counts[status]}
@@ -387,11 +410,16 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
         # ===== 第 17 条（P2）：同公司多投 + 简历版本效果（带样本量） =====
         "company_repeats": company_repeats(tracks),
         "resume_effects": resume_effects(tracks),
+        # ===== T32：外部简历单独一份分组（与上面那块永不混算）=====
+        "external_resume_effects": external_resume_effects(tracks),
         # ===== 第 17 条（P3）：周目标与生成成本 =====
         "weekly_goal": weekly_goal_block(db),
         "generation_cost": generation_cost(db),
         # ===== 简历与健康度 =====
-        "track_resume_linked_count": resume_linked,
+        # 含外部简历（T32）：只数内部简历会让"外部原件投的那些"看起来像没关联过简历。
+        "track_resume_linked_count": resume_linked_internal + resume_linked_external,
+        "track_internal_resume_linked_count": resume_linked_internal,
+        "track_external_resume_linked_count": resume_linked_external,
     }
     payload.update(recent)
     payload.update(resume_health(db))
@@ -412,6 +440,8 @@ _BRIEF_DROP = (
     "status_durations",
     "company_repeats",
     "resume_effects",
+    # T32：外部简历分组同样是"给人逐行看的"明细数组，不进助手摘要。
+    "external_resume_effects",
 )
 _BRIEF_COMPANY_LIMIT = 5
 

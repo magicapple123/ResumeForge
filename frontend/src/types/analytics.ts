@@ -139,8 +139,15 @@ export interface CompanyRepeatBlock {
   no_interview: CompanyRepeat[];
 }
 
-/** 按关联简历分组的投递结果（清单 §17.3-B4）；`small_sample` 必须展示，不做因果归因。 */
+/** 按关联简历分组的投递结果（清单 §17.3-B4）；`small_sample` 必须展示，不做因果归因。
+ *
+ * T32：`kind` 说明这份分组来自哪张表——`internal` 是 `resume_record` 的 `resume_id`，
+ * `external` 是 `external_resume` 的 `external_resume_id`。两张表的 id 空间独立且会撞号
+ * （所以才要写 `internal:3` / `external:3`），因此它们**永远是两份列表**：
+ * 界面必须分别标注「仅内部简历」/「外部简历」，不许拼成一张排行榜。 */
 export interface ResumeEffect {
+  kind: "internal" | "external";
+  /** 内部简历是 `resume_record.id`，外部简历是 `external_resume.id`——**不要跨 kind 比较**。 */
   resume_id: number;
   resume_title: string;
   total: number;
@@ -219,7 +226,10 @@ export interface AnalyticsDashboard {
   channel_stats: ChannelStat[];
   status_durations: StatusDuration[];
   company_repeats: CompanyRepeatBlock;
+  /** **只数内部简历**（`resume_id`）：这块在界面上标「仅内部简历」。 */
   resume_effects: ResumeEffect[];
+  /** T32：**只数外部简历**（`external_resume_id`），与上面那份永不混算。 */
+  external_resume_effects: ResumeEffect[];
 
   // ===== 第 17 条新增：周目标与生成成本（P3） =====
   weekly_goal: WeeklyGoal;
@@ -232,6 +242,9 @@ export interface AnalyticsDashboard {
   resume_with_warnings_count: number;
   resume_with_placeholders_count: number;
   unverified_claim_count: number;
-  /** 投递-简历关联覆盖率。录入界面目前没有关联入口，所以它是用来**暴露缺口**的。 */
+  /** 关联了简历的投递数 = 内部 + 外部（T32）。外部简历投的那几条以前会被算成
+   *  "没关联简历"，缺口说明因此虚报。两者互斥，所以恒等于下面两个数之和。 */
   track_resume_linked_count: number;
+  track_internal_resume_linked_count: number;
+  track_external_resume_linked_count: number;
 }

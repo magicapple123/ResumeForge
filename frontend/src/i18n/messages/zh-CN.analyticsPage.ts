@@ -161,6 +161,15 @@ const analyticsPage = {
   "analyticsPage.resumeEffect.bias":
     "关联本身有选择偏差（好岗位才认真配简历），样本不足 5 条时结论不可靠。",
   "analyticsPage.resumeEffect.empty": "还没有投递关联了简历",
+  "analyticsPage.resumeEffect.internalOnly": "仅内部简历",
+  "analyticsPage.resumeEffect.kindExternal": "外部",
+  "analyticsPage.resumeEffect.externalTitle": "外部简历（原件）",
+  "analyticsPage.resumeEffect.externalDescription":
+    "单独一份口径：外部简历是另一张表（id 与内部简历会撞号），所以不并入上面的内部排行，也不画柱比较。",
+  "analyticsPage.resumeEffect.externalEmpty": "还没有投递关联外部简历",
+  "analyticsPage.resumeLink.includesExternal": "含外部简历",
+  "analyticsPage.resumeLink.legend":
+    "投递与进度合计含外部简历：内部 {internal} 条 · 外部 {external} 条 · 未关联 {none} 条",
   "analyticsPage.goal.title": "目标与生成成本",
   "analyticsPage.goal.description":
     "周投递目标只看本周（周一至周日）按投递日期新增的记录；生成成本只报 token 与耗时，不报金额（本地账本没有价格表）。",

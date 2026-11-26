@@ -199,11 +199,24 @@ export function analyticsDashboard(overrides: Record<string, unknown> = {}): Ana
     },
     resume_effects: [
       {
+        kind: "internal",
         resume_id: 1,
         resume_title: "Backend v1",
         total: 3,
         interview_count: 1,
         interview_rate: 0.3333,
+        small_sample: true,
+      },
+    ],
+    // T32：外部简历是**另一份列表**（id 与内部会撞号，所以 kind 必须跟着走）。
+    external_resume_effects: [
+      {
+        kind: "external",
+        resume_id: 1,
+        resume_title: "external-v1.pdf",
+        total: 2,
+        interview_count: 1,
+        interview_rate: 0.5,
         small_sample: true,
       },
     ],
@@ -222,6 +235,8 @@ export function analyticsDashboard(overrides: Record<string, unknown> = {}): Ana
     resume_with_placeholders_count: 2,
     unverified_claim_count: 1,
     track_resume_linked_count: 3,
+    track_internal_resume_linked_count: 2,
+    track_external_resume_linked_count: 1,
     ...overrides,
   } as AnalyticsDashboard;
 }

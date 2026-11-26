@@ -18,6 +18,7 @@ import ChartBlock from "./ChartBlock";
 import DataGapNotice from "./DataGapNotice";
 import FunnelChart from "./FunnelChart";
 import HorizontalBarChart from "./HorizontalBarChart";
+import ResumeLinkLegend from "./ResumeLinkLegend";
 import SectionCard from "./SectionCard";
 import StatCard from "./StatCard";
 import { CohortBlock, TopCompaniesBlock } from "../../pages/analytics/AnalyticsBlocks";
@@ -44,57 +45,64 @@ type ReminderBucketKeys = {
   later: number;
 };
 
-/** 顶部四张概览卡（投递总量 / 面试率 / 笔试通过率 / Offer 数）。 */
+/** 顶部四张概览卡（投递总量 / 面试率 / 笔试通过率 / Offer 数）。
+ *
+ * T32：这四张卡都是**按行计数**的——同一份投递用内部简历还是外部原件投，算的都是同一条
+ * 记录。数字本身不需要改，但必须把「含外部简历」写在旁边（图例里同时给出内部/外部/未关联
+ * 三个数），否则"我上传了外部简历却像没投过"就是口径歧义。 */
 export function OverviewSection({ data }: { data: AnalyticsDashboard }) {
   useLocale();
   return (
-    <Row gutter={[16, 16]} className="analytics-metric-row">
-      <Col xs={24} sm={12} xl={6}>
-        <StatCard
-          framed
-          className="stat-card-applied"
-          title={t("analyticsPage.overview.total")}
-          value={data.total_applications}
-          hint={t("analyticsPage.overview.validApplications", {
-            count: data.valid_applications,
-          })}
-        />
-      </Col>
-      <Col xs={24} sm={12} xl={6}>
-        <StatCard
-          framed
-          className="stat-card-interview"
-          title={t("analyticsPage.overview.interviewRate")}
-          value={formatRate(data.interview_rate)}
-          hint={t("analyticsPage.overview.interviewHint", {
-            interview: data.interview_count,
-            valid: data.valid_applications,
-          })}
-        />
-      </Col>
-      <Col xs={24} sm={12} xl={6}>
-        <StatCard
-          framed
-          className="stat-card-assessment"
-          title={t("analyticsPage.overview.assessmentRate")}
-          value={formatRate(data.assessment_pass_rate)}
-          hint={t("analyticsPage.overview.assessmentHint", {
-            toInterview: data.assessment_to_interview_count,
-            assessment: data.assessment_count,
-          })}
-        />
-      </Col>
-      <Col xs={24} sm={12} xl={6}>
-        <StatCard
-          framed
-          className="stat-card-offer"
-          title={t("analyticsPage.overview.offerCount")}
-          value={data.offer_count}
-          valueStyle={{ color: "var(--rf-success-strong)" }}
-          hint={t("analyticsPage.overview.offerHint", { rate: formatRate(data.offer_rate) })}
-        />
-      </Col>
-    </Row>
+    <>
+      <Row gutter={[16, 16]} className="analytics-metric-row">
+        <Col xs={24} sm={12} xl={6}>
+          <StatCard
+            framed
+            className="stat-card-applied"
+            title={t("analyticsPage.overview.total")}
+            value={data.total_applications}
+            hint={t("analyticsPage.overview.validApplications", {
+              count: data.valid_applications,
+            })}
+          />
+        </Col>
+        <Col xs={24} sm={12} xl={6}>
+          <StatCard
+            framed
+            className="stat-card-interview"
+            title={t("analyticsPage.overview.interviewRate")}
+            value={formatRate(data.interview_rate)}
+            hint={t("analyticsPage.overview.interviewHint", {
+              interview: data.interview_count,
+              valid: data.valid_applications,
+            })}
+          />
+        </Col>
+        <Col xs={24} sm={12} xl={6}>
+          <StatCard
+            framed
+            className="stat-card-assessment"
+            title={t("analyticsPage.overview.assessmentRate")}
+            value={formatRate(data.assessment_pass_rate)}
+            hint={t("analyticsPage.overview.assessmentHint", {
+              toInterview: data.assessment_to_interview_count,
+              assessment: data.assessment_count,
+            })}
+          />
+        </Col>
+        <Col xs={24} sm={12} xl={6}>
+          <StatCard
+            framed
+            className="stat-card-offer"
+            title={t("analyticsPage.overview.offerCount")}
+            value={data.offer_count}
+            valueStyle={{ color: "var(--rf-success-strong)" }}
+            hint={t("analyticsPage.overview.offerHint", { rate: formatRate(data.offer_rate) })}
+          />
+        </Col>
+      </Row>
+      <ResumeLinkLegend data={data} />
+    </>
   );
 }
 
@@ -356,7 +364,11 @@ export function ChannelsSection({ data }: { data: AnalyticsDashboard }) {
   );
 }
 
-/** 简历与健康度。 */
+/** 简历与健康度。
+ *
+ * 注意这里的「简历」四张卡只数**内部简历库**（`resume_record`）：外部简历是原件快照，
+ * 不进制作台、也不参与一致性检查，把它们混进"待补/待确认"的分子里只会让两个数字都失真。
+ * 关联覆盖率的图例（T32）写清了内部/外部各几条，读者不会误以为外部简历没被统计。 */
 export function ResumeSection({ data }: { data: AnalyticsDashboard }) {
   useLocale();
   const unlinkedApplications = data.total_applications - data.track_resume_linked_count;
@@ -396,6 +408,7 @@ export function ResumeSection({ data }: { data: AnalyticsDashboard }) {
           />
         </Col>
       </Row>
+      <ResumeLinkLegend data={data} compact />
       <DataGapNotice
         missing={unlinkedApplications}
         available={data.track_resume_linked_count}
