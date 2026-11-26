@@ -100,10 +100,13 @@ def _rewrite(
     pdf_bytes: bytes,
     *,
     page_index: int,
-    erase_bbox: tuple[float, float, float, float] | None,
+    erase_boxes: list[tuple[float, float, float, float]] | None,
     shift_below: tuple[float, float] | None,
 ) -> ContentRewrite:
     """重建第 ``page_index`` 页（0 基）的内容流。
+
+    ``erase_boxes`` 是**逐行**的 bbox 列表（不是整块的合并 bbox）：块长高以后，两个块
+    在竖直方向可能交错，用合并 bbox 删字会顺手把邻块的字删掉。按行带判定就不会。
 
     ``shift_below`` 是 ``(y 阈值, delta)``：y **小于**该阈值（PDF 坐标里更靠下）的算子
     整体下移 ``delta`` pt。
@@ -161,8 +164,8 @@ def _rewrite(
                 tlm = _mult(_translate(0.0, -leading), tlm)
                 tm = tlm
             origin = _mult(_translate(tm[4], tm[5]), ctm)
-            if erase_bbox is not None and _inside_point(
-                (origin[4], origin[5]), erase_bbox, BBOX_PADDING
+            if erase_boxes and any(
+                _inside_point((origin[4], origin[5]), box, BBOX_PADDING) for box in erase_boxes
             ):
                 removed += 1
                 continue
@@ -227,7 +230,7 @@ def erase_block_text(
     page_index: int,
 ) -> ContentRewrite:
     """删掉落在 ``bbox`` 内的显示文字算子（返回整份新 PDF 的字节）。"""
-    return _rewrite(pdf_bytes, page_index=page_index, erase_bbox=bbox, shift_below=None)
+    return _rewrite(pdf_bytes, page_index=page_index, erase_boxes=[bbox], shift_below=None)
 
 
 def shift_content_below(
@@ -243,22 +246,32 @@ def shift_content_below(
     """
     if delta <= 0:
         return ContentRewrite(content=pdf_bytes, removed_ops=0, shifted=False)
-    return _rewrite(pdf_bytes, page_index=page_index, erase_bbox=None, shift_below=(bbox[1], delta))
+    return _rewrite(
+        pdf_bytes, page_index=page_index, erase_boxes=None, shift_below=(bbox[1], delta)
+    )
 
 
 def erase_and_shift(
     pdf_bytes: bytes,
-    bbox: tuple[float, float, float, float],
+    boxes: list[tuple[float, float, float, float]],
     *,
     page_index: int,
     delta: float = 0.0,
 ) -> ContentRewrite:
-    """删字与下移一次做完（避免连着两次改写整页内容流）。"""
+    """删字与下移一次做完（避免连着两次改写整页内容流）。
+
+    ``boxes`` 逐行传（见 :func:`_rewrite` 的说明）。下移阈值取**首行的底边**：
+    块长高之后它的最后一行可能已经压到下方内容上，用"整块底边"当阈值会把下方内容
+    算成"在块里"而不移动——那正是用户点「下移」想要解决的情形。
+    """
+    if not boxes:
+        return ContentRewrite(content=pdf_bytes, removed_ops=0, shifted=False)
+    threshold = boxes[0][1]
     return _rewrite(
         pdf_bytes,
         page_index=page_index,
-        erase_bbox=bbox,
-        shift_below=(bbox[1], delta) if delta > 0 else None,
+        erase_boxes=boxes,
+        shift_below=(threshold, delta) if delta > 0 else None,
     )
 
 

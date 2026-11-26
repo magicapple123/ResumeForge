@@ -343,8 +343,10 @@ def replace_block(
             "".join(missing[:10]),
             message="新文字里有系统字体渲染不出的字，请换掉这些字",
         )
-    if "".join(new_text.split()) == "".join(target.text.split()):
-        # 文字没变：再写一版只会多一条空历史，还让"删旧字"这一步无从验收。
+    if "".join(new_text.split()) == "".join(target.text.split()) and shift_below <= 0:
+        # 文字没变、也不下移：再写一版只会多一条空历史，还让"删旧字"这一步无从验收。
+        # 但"同文 + 下移"是合法的一次操作——界面上「下移下方内容」就是在已经改完字之后，
+        # 拿同样的文字再提交一次并带上 delta，那一次必须放行。
         raise PdfEditError(
             CODE_BLOCK_NOT_EDITABLE, block_id, message="新文字与原文字相同，没有需要保存的修改"
         )
@@ -357,7 +359,7 @@ def replace_block(
 
     rewritten = erase_and_shift(
         pdf_bytes,
-        (block.x0, block.y0, block.x1, block.y1),
+        [(line.x0, line.y0, line.x1, line.y1) for line in block.lines],
         page_index=target.page - 1,
         delta=shift_below,
     )

@@ -185,7 +185,8 @@ class ExternalResumeEditInput(BaseModel):
 
     block_id: str = Field(min_length=1, max_length=64)
     text: str = Field(default="", max_length=MAX_EDIT_TEXT_CHARS)
-    shift_below: float = Field(default=0.0, ge=0.0, le=200.0)
+    # 上限取"一页高度"的量级：块变高几百 pt 是正常情形，卡太紧会把合法的下移挡成 422。
+    shift_below: float = Field(default=0.0, ge=0.0, le=1000.0)
 
 
 class ExternalResumeRevisionOut(BaseModel):

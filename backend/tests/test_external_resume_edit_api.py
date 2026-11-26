@@ -177,6 +177,30 @@ def test_revision_file_endpoint_serves_that_version(client):
     assert "改后标题" not in text
 
 
+def test_shift_after_growth_is_a_second_request(client):
+    """界面上的「下移下方内容」：同文 + delta 再提交一次，必须能成（否则按钮点不动）。"""
+    body = upload(
+        client,
+        "resume.pdf",
+        build_pdf([("短标题", 18, 780), ("下方正文内容", 10, 700)]),
+        "application/pdf",
+    )
+    blocks = client.get(f"/api/external-resumes/{body['id']}/blocks").json()["blocks"]
+    target = next(block for block in blocks if "短标题" in block["text"])
+    long_text = "这是一个被写得很长的标题用来验证块内回流与溢出提示再点下移"
+
+    first = edit(client, body["id"], target["block_id"], long_text)
+    assert first["overflow"] is True and first["delta_pt"] > 0
+
+    after = client.get(f"/api/external-resumes/{body['id']}/blocks").json()["blocks"]
+    # 块窄时新文字会被切成一行两三个字，按"去空白后的整段"匹配才稳。
+    flat = "".join(long_text.split())
+    grown = next(block for block in after if flat in "".join(block["text"].split()))
+    second = edit(client, body["id"], grown["block_id"], long_text, shift_below=first["delta_pt"])
+    assert second["shifted"] is True
+    assert second["revision"]["source"] == "edit"
+
+
 def test_restore_unknown_revision_is_404(client):
     body = upload(client, "resume.txt", "整篇文本".encode(), "text/plain")
     response = client.post(f"/api/external-resumes/{body['id']}/revisions/9999/restore")

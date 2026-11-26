@@ -144,6 +144,26 @@ def test_shift_below_moves_the_following_content_down():
     assert below.y1 == pytest.approx(below_before.y1 - 30, abs=1.5), "下移没有作用到下方内容上"
 
 
+def test_same_text_with_shift_is_allowed():
+    """界面上「下移下方内容」= 同文再提交一次 + delta：这一路必须放行。
+
+    用户先改字（块变高压到了下方），再点下移；前端只能把同样的文字再 POST 一次并带上
+    ``shift_below``。如果这里也按"文字没变"拒绝，那个按钮就永远点不动。
+    """
+    data = build_pdf([("短标题", 18, 780), ("下方正文", 10, 700)])
+    document = analyse(data)
+    target = next(block for block in document.blocks if "短标题" in block.text)
+    below_before = next(block for block in document.blocks if "下方正文" in block.text)
+
+    outcome = replace_block(data, target.block_id, target.text, shift_below=20)
+    assert outcome.shifted is True
+
+    below_after = next(
+        block for block in analyse(outcome.content).blocks if "下方正文" in block.text
+    )
+    assert below_after.y1 == pytest.approx(below_before.y1 - 20, abs=1.5)
+
+
 def test_unknown_block_is_rejected_with_a_reason_code():
     data = build_pdf([("第一块标题", 18, 780)])
     with pytest.raises(PdfEditError) as caught:
