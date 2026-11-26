@@ -133,6 +133,9 @@ const analyticsPage = {
     "Linking is required to see resume performance; the entry form does not offer linking yet.",
 
   // ===== Item 17 additions: channel conversion / durations / repeats / resume effect / goal+cost =====
+  "analyticsPage.rank.applications": "Applications",
+  "analyticsPage.rank.interviewRate": "Interview rate",
+  "analyticsPage.rank.name": "Name",
   "analyticsPage.channelConversion.title": "Channel conversion",
   "analyticsPage.channelConversion.description":
     "Groups by the application record's channel field: applications, interviews reached and offers per channel. Channels and referrals are **two separate systems** — the referral channel is a record field while the referral module is its own object, so never add them together.",

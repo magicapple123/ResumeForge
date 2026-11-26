@@ -91,6 +91,8 @@ def read_tracks_page(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     job_id: int | None = Query(default=None),
+    sort: str = Query(default="stage"),
+    order: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
     """分页列出求职进度（RF-08）：过滤与排序与旧列表端点完全一致（阶段序优先）。
@@ -101,11 +103,22 @@ def read_tracks_page(
     ``/{track_id}`` 之前**：字面量段必须排在参数段前面（同 ``/export`` 的理由）。
 
     ``job_id``（RF-11）：岗位详情「该岗位的投递进度」深链带的过滤；不传时行为不变。
+
+    ``sort`` / ``order``（R13）：排序字段与方向，缺省等于改造前的次序。五个键的取值
+    见 ``services/tracker_query.TRACK_SORT_KEYS``；**非法值回落默认而不是 422**——
+    手改坏的 URL 应该"按默认次序看"，不是撞一页错误。
     """
     if status and status not in STATUSES:
         raise HTTPException(status_code=422, detail="未知的进度状态")
     records, total = list_tracks_page(
-        db, status=status, keyword=keyword, page=page, page_size=page_size, job_id=job_id
+        db,
+        status=status,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        job_id=job_id,
+        sort=sort,
+        order=order,
     )
     # CR-19：一次批查询补「最近一次已联系」，进度行据此显示「已联系 · 11-25」。
     contacted = latest_contacted_at(db, [int(item.id) for item in records])

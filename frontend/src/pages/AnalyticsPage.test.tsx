@@ -47,7 +47,8 @@ describe("AnalyticsPage", () => {
     renderAnalyticsPage();
 
     expect(await screen.findByText("投递总量")).toBeInTheDocument();
-    expect(screen.getByText("面试率")).toBeInTheDocument();
+    // R13：榜单的三段控件里也有「面试率」这一项，所以概览卡那一处只能用 getAllByText。
+    expect(screen.getAllByText("面试率").length).toBeGreaterThan(0);
     expect(screen.getByText("笔试通过率")).toBeInTheDocument();
     expect(screen.getByText("Offer 数")).toBeInTheDocument();
   });

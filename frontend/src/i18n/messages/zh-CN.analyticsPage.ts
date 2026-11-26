@@ -123,6 +123,9 @@ const analyticsPage = {
   "analyticsPage.resume.missingLinkAction": "关联后才能按简历看效果；录入界面暂未提供关联入口。",
 
   // ===== 第 17 条新增：渠道转化 / 投递→当前阶段 / 同公司多投 / 简历效果 / 目标与成本 =====
+  "analyticsPage.rank.applications": "投递数",
+  "analyticsPage.rank.interviewRate": "面试率",
+  "analyticsPage.rank.name": "名称",
   "analyticsPage.channelConversion.title": "渠道转化",
   "analyticsPage.channelConversion.description":
     "按投递记录里的「渠道」字段统计：该渠道投了多少、多少进面、多少拿 Offer。渠道与内推是**两套口径**——渠道里的「内推」是记录字段，内推模块是独立对象，只能二选一相加。",

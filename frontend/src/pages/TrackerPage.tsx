@@ -40,6 +40,8 @@ import ReminderPanel from "../features/tracker/ReminderPanel";
 import TrackCard from "../features/tracker/TrackCard";
 import TrackFormModal from "../features/tracker/TrackFormModal";
 import TrackImportModal from "../features/tracker/TrackImportModal";
+import TrackerSortMenu from "../features/tracker/TrackerSortMenu";
+import { parseTrackSort, trackSortParams } from "../features/tracker/trackSort";
 import { useTrackerDeepLink } from "../features/tracker/useTrackerDeepLink";
 import { useTrackerTrackFocus } from "../features/tracker/useTrackerTrackFocus";
 import { useTrackStatusChange } from "../features/tracker/useTrackStatusChange";
@@ -66,6 +68,10 @@ export default function TrackerPage() {
   const { links, clear: clearDeepLink, focusJob } = useTrackerDeepLink();
   const [status, setStatus] = useState(searchParams.get("status") ?? "");
   const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
+  // 排序状态从 URL 读初值（R13）：刷新后保持；非法值由 parseTrackSort 回落默认。
+  const [sortState, setSortState] = useState(() =>
+    parseTrackSort(searchParams.get("sort"), searchParams.get("order")),
+  );
   // 搜索框受控镜像（同 JobFilterBar 的处理）：URL 恢复的关键词能回填输入框。
   // Compiler 规范：镜像同步用渲染期守卫式调整。
   const [searchText, setSearchText] = useState(keyword);
@@ -98,11 +104,18 @@ export default function TrackerPage() {
   // 筛选标签上的岗位名：单独取一次；岗位可能已被删除，失败时仍显示可清除的标签。
   const [linkedJobLabel, setLinkedJobLabel] = useState<string | null>(null);
 
-  // 列表走分页端点（RF-08）：翻页/筛选变化都重新拉取，历史记录超过旧端点 500 条上限后仍可达。
+  // 列表走分页端点（RF-08）：翻页/筛选/排序变化都重新拉取，历史记录超过旧端点 500 条上限后仍可达。
   const [page, setPage] = useState(1);
+  // 排序参数（R13）：默认（阶段优先）不传，请求与改造前逐字节相同。
+  const sortParams = trackSortParams(sortState);
   const { data, loading, error, reload } = useApi(
-    () => listTracksPage({ status, keyword, jobId: jobId ?? undefined }, page, TRACK_PAGE_SIZE),
-    [status, keyword, page, jobId],
+    () =>
+      listTracksPage(
+        { status, keyword, jobId: jobId ?? undefined, ...sortParams },
+        page,
+        TRACK_PAGE_SIZE,
+      ),
+    [status, keyword, page, jobId, sortParams.sort, sortParams.order],
     // 回到前台静默重拉（问题 27a）：投递队列与岗位/简历列表同一批开启。
     { refetchOnFocus: {} },
   );
@@ -126,16 +139,18 @@ export default function TrackerPage() {
     [reload, reloadStats],
   );
 
-  // 筛选条件变化时回第 1 页（渲染期守卫式调整，Compiler 规范）；深链 job_id 也算筛选。
-  const filterKey = `${status}|${keyword}|${jobId ?? ""}`;
+  // 筛选条件变化时回第 1 页（渲染期守卫式调整，Compiler 规范）；深链 job_id 与排序都算筛选
+  // （排序变了还停在第 3 页，用户看到的是"新次序的第 3 页"，很容易被读成排序没生效）。
+  const filterKey = `${status}|${keyword}|${jobId ?? ""}|${sortState.key}|${sortState.order}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   if (prevFilterKey !== filterKey) {
     setPrevFilterKey(filterKey);
     setPage(1);
   }
 
-  // 筛选写回 URL（replace 语义）；effect 不依赖 searchParams，不会循环重渲染。
-  // 只写 status/keyword：job_id 通过 functional 更新原样保留，清除走 clearJobFilter。
+  // 筛选与排序写回 URL（replace 语义）；effect 不依赖 searchParams，不会循环重渲染。
+  // 只写 status/keyword/sort/order：job_id 通过 functional 更新原样保留，清除走 clearJobFilter。
+  // 默认排序（阶段优先）**不写参数**——这样"什么都没动"的链接保持干净，也与老链接一致。
   useEffect(() => {
     setSearchParams(
       (previous) => {
@@ -144,11 +159,15 @@ export default function TrackerPage() {
         else next.delete("status");
         if (keyword) next.set("keyword", keyword);
         else next.delete("keyword");
+        if (sortParams.sort) next.set("sort", sortParams.sort);
+        else next.delete("sort");
+        if (sortParams.order) next.set("order", sortParams.order);
+        else next.delete("order");
         return next;
       },
       { replace: true },
     );
-  }, [status, keyword, setSearchParams]);
+  }, [status, keyword, sortParams.sort, sortParams.order, setSearchParams]);
 
   // 筛选标签的岗位名：单取一次（JobsPage 深链同款做法）。jobId 变化即重取；
   // 岗位已删除时给出一句实话，标签本身仍可清除。
@@ -326,6 +345,8 @@ export default function TrackerPage() {
             />
           </Tag>
         )}
+        {/* 排序贴右端（R13）：状态筛选不动，排序是**新增**的一格。 */}
+        <TrackerSortMenu value={sortState} onChange={setSortState} />
       </Space>
 
       {loading && <PageSkeleton rows={6} />}

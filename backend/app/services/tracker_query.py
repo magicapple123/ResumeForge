@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from datetime import date
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Query, Session
 
 from ..models.followup import ApplicationFollowUp
@@ -82,18 +82,100 @@ def _stage_expression() -> Any:
     return case(_STATUS_ORDER, value=ApplicationTrack.status, else_=9)
 
 
-def _stage_ordered(query: Query[ApplicationTrack]) -> Query[ApplicationTrack]:
-    """list_tracks 与 list_tracks_page **共用的排序**：阶段序 → updated_at → id。
+# ===== 排序（R13：进度页可排序，方向与字段都下推 SQL） =====
 
-    抽出来是为了让分页端点与旧列表的次序永远一致——两处各写一遍排序，迟早会改漏一边。
+#: 可排序字段。``stage``（阶段优先）是默认值，语义等于改造前写死的次序。
+TRACK_SORT_KEYS: tuple[str, ...] = (
+    "stage",
+    "updated",
+    "next_action_date",
+    "applied_at",
+    "company",
+)
+
+#: 默认排序键。前端「阶段优先」不写 URL，后端缺省值也必须是它，否则刷新一次次序就变了。
+DEFAULT_TRACK_SORT = "stage"
+
+#: 每个字段的默认方向（换字段时前端回到这里，后端做非法值兜底时也用它）。
+#: ``stage`` 不在表里：它是复合排序（阶段序 → 更新时间 → id），没有可翻转的方向。
+TRACK_SORT_DEFAULT_ORDER: dict[str, str] = {
+    "updated": "desc",
+    "next_action_date": "asc",
+    "applied_at": "desc",
+    "company": "asc",
+}
+
+
+def normalize_track_sort(sort: str | None, order: str | None) -> tuple[str, str]:
+    """``(sort, order)`` → 合法组合；**任何非法值都回落默认，不抛 422、更不能 500**。
+
+    为什么不在接口层用 Literal 校验：排序是"看数据的角度"，URL 里带了个手改坏的
+    ``?sort=foo`` 时，用户想要的是"按默认次序看"，而不是一页错误。这与 ``status``
+    的 422 不同——状态是过滤条件，悄悄忽略会让人以为筛选生效了。
     """
-    return query.order_by(
+    key = (sort or "").strip().lower()
+    if key not in TRACK_SORT_DEFAULT_ORDER and key != DEFAULT_TRACK_SORT:
+        return DEFAULT_TRACK_SORT, ""
+    if key == DEFAULT_TRACK_SORT:
+        # 阶段优先是固定次序：等宽翻转在这里没有意义，方向一律归零（前端也不显示）。
+        return DEFAULT_TRACK_SORT, ""
+    direction = (order or "").strip().lower()
+    if direction not in ("asc", "desc"):
+        direction = TRACK_SORT_DEFAULT_ORDER[key]
+    return key, direction
+
+
+def _blank_last(column: Any) -> Any:
+    """空值分层表达式：**不管升降序，空值一律排最后**。
+
+    只按方向排是不够的：``applied_at`` / ``next_action_date`` 升序时 SQLite 把空值排在
+    最前，而"没有下一步时间"正是最不紧急的那一批，顶到第一屏与"最该先看的排前面"相反。
+    这两列在模型里默认是**空串**（不是 NULL），所以两种"没填"都要当成空值。
+    """
+    return case((or_(column.is_(None), column == ""), 1), else_=0)
+
+
+def track_order_by(sort: str, order: str) -> tuple[Any, ...]:
+    """``(sort, order)`` → ORDER BY 子句（调用方先用 :func:`normalize_track_sort` 洗过）。
+
+    每个键都以 ``id`` 收尾：同一时刻更新的两条记录在翻页时才不会重复或漏行。
+    平局口径统一是 ``updated_at desc → id desc``——与改造前的默认次序逐字一致，
+    用户从"阶段优先"切到别的键时，同分的那批记录不会整片倒过来。
+    """
+    tie_break = (ApplicationTrack.updated_at.desc(), ApplicationTrack.id.desc())
+    if sort == "updated":
+        column = ApplicationTrack.updated_at
+        primary = column.desc() if order == "desc" else column.asc()
+        return (primary, ApplicationTrack.id.desc())
+    if sort == "next_action_date":
+        column = ApplicationTrack.next_action_date
+        primary = column.desc() if order == "desc" else column.asc()
+        return (_blank_last(column), primary, *tie_break)
+    if sort == "applied_at":
+        column = ApplicationTrack.applied_at
+        primary = column.desc() if order == "desc" else column.asc()
+        return (_blank_last(column), primary, *tie_break)
+    if sort == "company":
+        # 中文按拼音、英文按字母：SQLite 默认的 BINARY collation 会把中文全部沉底
+        # （「111」永远第一），``rf_pinyin`` 由 ``app/database.py`` 在每条连接上注册。
+        column = func.coalesce(ApplicationTrack.company, "").collate("rf_pinyin")
+        primary = column.desc() if order == "desc" else column.asc()
+        return (primary, *tie_break)
+    return (
         _stage_expression(),
         # SQLite 的 DESC 把 NULL 排在最后，与旧实现 None→datetime.min→排在末尾一致；
         # updated_at 同值时按 id 新的在前，也与旧实现的 -id 次序键一致。
         ApplicationTrack.updated_at.desc(),
         ApplicationTrack.id.desc(),
     )
+
+
+def _stage_ordered(query: Query[ApplicationTrack]) -> Query[ApplicationTrack]:
+    """list_tracks / iter_tracks / 导出共用的默认次序：阶段序 → updated_at → id。
+
+    与分页端点共用同一份 :func:`track_order_by`——两处各写一遍排序，迟早会改漏一边。
+    """
+    return query.order_by(*track_order_by(DEFAULT_TRACK_SORT, ""))
 
 
 def list_tracks(
@@ -128,6 +210,8 @@ def list_tracks_page(
     page: int = 1,
     page_size: int = 20,
     job_id: int | None = None,
+    sort: str = DEFAULT_TRACK_SORT,
+    order: str = "",
 ) -> tuple[list[ApplicationTrack], int]:
     """分页列出求职进度（RF-08）：过滤与排序与 :func:`list_tracks` 完全一致。
 
@@ -138,10 +222,19 @@ def list_tracks_page(
     ``job_id``（RF-11）：岗位详情深链过来的「该岗位的投递进度」过滤；None 表示
     不过滤（不传该参数的行为与从前完全一致）。过滤下推 ``_filtered_query``（PR-13），
     与统计/导出共用同一份口径。
+
+    ``sort`` / ``order``（R13）：用户在下拉里选的字段与方向。**必须下推 SQL**——列表
+    20 条一页，本地排序只能排当页。缺省 ``stage`` 等于改造前的次序。
     """
+    key, direction = normalize_track_sort(sort, order)
     base = _filtered_query(db, status=status, keyword=keyword, job_id=job_id)
     total = base.count()
-    rows = _stage_ordered(base).offset((page - 1) * page_size).limit(page_size).all()
+    rows = (
+        base.order_by(*track_order_by(key, direction))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
     return rows, total
 
 
@@ -249,7 +342,10 @@ def count_tracks(
 
 
 __all__ = [
+    "DEFAULT_TRACK_SORT",
     "MAX_LIST_LIMIT",
+    "TRACK_SORT_DEFAULT_ORDER",
+    "TRACK_SORT_KEYS",
     "count_tracks",
     "existing_track_ids",
     "iter_tracks",
@@ -257,6 +353,8 @@ __all__ = [
     "list_tracks",
     "list_tracks_page",
     "latest_contacted_at",
+    "normalize_track_sort",
     "summarize",
     "track_or_none",
+    "track_order_by",
 ]

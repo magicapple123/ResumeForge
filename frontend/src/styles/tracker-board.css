@@ -55,6 +55,80 @@
   row-gap: 8px;
 }
 
+/* 排序控件贴筛选栏右端（R13）：用 `:has` 认自己那一格，**不给最后一个格子写**——
+   深链岗位时最后一项是「只看该岗位」标签，按 last-child 写会把它推到右边去。 */
+.tracker-filters > .ant-space-item:has(> .tracker-sort-trigger) {
+  margin-inline-start: auto;
+}
+
+/* 排序触发按钮：与旁边 32px 高的筛选控件同高，外观沿用站内描边按钮（不引入新色）。 */
+.tracker-sort-trigger {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 32px;
+  padding: 0 11px;
+  color: var(--rf-text-body);
+  font-size: 14px;
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tracker-sort-trigger:hover {
+  color: var(--rf-info);
+  border-color: var(--rf-info);
+}
+
+/* 键盘用户与鼠标用户拿到同一个可见的"这里能点、这里是焦点"。 */
+.tracker-sort-trigger:focus-visible {
+  outline: 2px solid var(--rf-info);
+  outline-offset: 2px;
+}
+
+.tracker-sort-trigger-label {
+  white-space: nowrap;
+}
+
+/* 方向箭头是**信息**（不只是装饰），所以用正文的次要色而不是更淡的边框色。 */
+.tracker-sort-trigger-dir {
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+}
+
+/* 下拉小三角压到最淡：它只说明"能展开"，方向由上面的箭头表达。 */
+.tracker-sort-trigger-caret {
+  font-size: 10px;
+  color: var(--rf-text-secondary);
+  transform: scale(0.9);
+}
+
+/* 菜单项：左字段名、中方向、右勾；三列定宽不随文案长短抖（同状态菜单的做法）。 */
+.tracker-sort-option {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 148px;
+}
+
+/* 「固定」是说明文字，不是可选方向：次级色 + 小字号，避免被读成一个方向。 */
+.tracker-sort-option-fixed {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.tracker-sort-option-dir {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.tracker-sort-option-check {
+  color: var(--rf-info);
+  font-size: 12px;
+}
+
 /* 列表：一张容器 + 分隔线行（13.2-D）。外层负责背景/边框/圆角，行不再自成一张卡。 */
 .tracker-list {
   display: flex;
@@ -68,8 +142,11 @@
 .track-card {
   position: relative;
   /* padding-left 比 16px 大 4px：给贴左缘的 3px 阶段竖条让出宽度后，
-     条与文字之间仍保持 16px 间距。纵向 12 → 10（第 4 条：行高 128 → ≤96）。 */
-  padding: 10px 16px 10px 20px;
+     条与文字之间仍保持 16px 间距。
+     纵向 10 → 15（R13，2026-11-26）：三行卡片内容挤在一起、扫描时行与行黏成一片，
+     行高因此从约 62px 抬到约 76px。**不加行间 gap**——2026-11-10 刻意把"每行一张卡"
+     改成"一个容器 + 分隔线行"，加 gap 会把它推翻。 */
+  padding: 15px 16px 15px 20px;
   background: transparent;
   border-bottom: 1px solid var(--rf-border);
   /* 行不是卡片：无边框圆角、无投影（13.2-D / 13.4 守卫）。 */
@@ -139,11 +216,15 @@
   align-items: center;
 }
 
-/* 状态：6px 圆点 + 文字（13.2-E）。颜色只用在圆点上，文字用正文色。 */
+/* 状态：6px 圆点 + 文字（13.2-E）。颜色只用在圆点上，文字用正文色。
+   R13：加 2px/10px 内边距（状态胶囊的定稿值）。**不给它加底色或边框**——
+   "每条记录只保留一种状态信号"（见 `.track-card::before` 的说明），再叠一块彩色底
+   就把这条约定推翻了；这里只要那点呼吸感。 */
 .track-status {
   display: inline-flex;
   gap: 6px;
   align-items: center;
+  padding: 2px 10px;
   color: var(--rf-text-body);
   font-size: 12px;
 }
@@ -340,12 +421,13 @@
   outline-offset: 2px;
 }
 
-/* 行动项（下一步）：第三层，保留强调。 */
+/* 行动项（下一步）：第三层，保留强调。
+   与上面元信息的间距 3 → 7（R13）：两行都是 12px 的次要信息，贴太近会被读成同一句。 */
 .track-card-next {
   display: flex;
   gap: 10px;
   align-items: center;
-  margin-top: 5px;
+  margin-top: 7px;
   color: var(--rf-text-body);
   font-size: 12px;
 }

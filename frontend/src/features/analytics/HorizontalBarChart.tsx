@@ -32,6 +32,11 @@ interface Props {
   colorFor?: (key: string) => string;
   /** 是否显示"相对第一阶段的百分比"小字（漏斗默认开，排行不需要）。 */
   showPercent?: boolean;
+  /**
+   * 右侧数值的单位（R13）。榜单按面试率排序时，柱长与数字都是百分比——没有它就只能显示
+   * 一个裸数字 `33`，读者无法与同一张图里"12 次投递"区分开。
+   */
+  valueSuffix?: string;
 }
 
 export const HORIZONTAL_BAR_WIDTH = 620;
@@ -45,6 +50,7 @@ export default function HorizontalBarChart({
   align = "center",
   colorFor,
   showPercent = false,
+  valueSuffix = "",
 }: Props) {
   // 轨道与文字色跟随主题（R18）：写死 #f0f2f5 的轨道在深色下是一整块白板。
   const palette = useChartPalette();
@@ -129,6 +135,7 @@ export default function HorizontalBarChart({
               fontWeight={600}
             >
               {item.count}
+              {valueSuffix}
               {pct !== null && (
                 <tspan fontSize={10} fill={palette.mutedText} dx={4}>
                   {pct}%

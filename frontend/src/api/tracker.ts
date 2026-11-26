@@ -35,13 +35,21 @@ export function listTrackStats(
  * 分页列出求职进度（RF-08）：过滤与排序与旧列表完全一致，不受旧端点 500 条兜底上限约束。
  * **响应不含漏斗/统计字段**——统计（status_counts 等）仍走旧 `listTracks`（同一套筛选）。
  * `jobId`（RF-11）：岗位详情「该岗位的投递进度」深链带的过滤；缺省不过滤。
+ * `sort`/`order`（R13）：排序字段与方向。**必须由服务端排**——一页 20 条，本地排序
+ * 只能排当页，翻页就会出现"第 21 条跑到第 1 条前面"。缺省不传 = 阶段优先。
  */
 export function listTracksPage(
-  params: { status?: string; keyword?: string; jobId?: number } = {},
+  params: {
+    status?: string;
+    keyword?: string;
+    jobId?: number;
+    sort?: string;
+    order?: string;
+  } = {},
   page: number,
   pageSize: number,
 ): Promise<Page<Track>> {
-  // jobId → 后端的蛇形 job_id；余下的 status/keyword 原样透传。
+  // jobId → 后端的蛇形 job_id；余下的 status/keyword/sort/order 原样透传。
   const { jobId, ...rest } = params;
   return request(
     `/tracker/page${buildQuery({ ...rest, job_id: jobId, page, page_size: pageSize })}`,
