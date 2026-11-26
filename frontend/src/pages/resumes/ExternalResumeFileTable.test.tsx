@@ -33,6 +33,9 @@ function item(overrides: Partial<ExternalResumeItem> = {}): ExternalResumeItem {
     has_text: true,
     job_id: null,
     job_title: "",
+    favorite: false,
+    favorited_at: null,
+    note: "",
     created_at: "2026-11-10T10:00:00",
     updated_at: "2026-11-10T10:00:00",
     warnings: [],
@@ -82,6 +85,7 @@ function table(overrides: Record<string, unknown> = {}) {
       onOpenCheck={noop}
       onUseForInterview={noop}
       onDelete={noop}
+      onToggleFavorite={noop}
       {...overrides}
     />
   );
@@ -199,5 +203,56 @@ describe("ExternalResumeFileTable · 分页（R9）", () => {
 
     // antd 的 `onChange` 带两个参数（页码 + 每页条数），面板只关心第一个。
     expect(onPageChange.mock.calls[0][0]).toBe(2);
+  });
+});
+
+describe("ExternalResumeFileTable · 收藏与备注（T28）", () => {
+  /** 星标：`aria-label` 随状态变（收藏 / 取消收藏），点它就上报"切换"。 */
+  const star = (label: string) => screen.getByRole("button", { name: label });
+
+  it("点星标上报「切换收藏」，写作与刷新留在面板", () => {
+    const onToggleFavorite = vi.fn();
+    renderTable(table({ onToggleFavorite }));
+
+    fireEvent.click(star(t("resumesPage.external.favorite")));
+
+    expect(onToggleFavorite).toHaveBeenCalledTimes(1);
+    expect(onToggleFavorite.mock.calls[0][0].id).toBe(1);
+  });
+
+  it("已收藏的行：星标的无障碍名是「取消收藏」，且 aria-pressed 为真", () => {
+    renderTable(table({ items: [item({ favorite: true })] }));
+
+    const button = star(t("resumesPage.external.unfavorite"));
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("有备注才渲染备注行；没有备注不留空行（验收项 2）", () => {
+    const { container, rerender } = renderTable(
+      table({ items: [item({ note: "client-version" })] }),
+    );
+    expect(container.querySelector(".external-resume-note")?.textContent).toContain(
+      "client-version",
+    );
+
+    rerender(<AntdApp>{table({ items: [item({ note: "" })] })}</AntdApp>);
+    expect(container.querySelector(".external-resume-note")).toBeNull();
+  });
+
+  it("「最近更新」列默认降序：第一次点击就是降序（不是「取消排序」）", () => {
+    const onSortChange = vi.fn();
+    renderTable(table({ onSortChange }));
+
+    fireEvent.click(
+      screen.getByRole("columnheader", {
+        name: new RegExp(t("resumesPage.external.column.updated")),
+      }),
+    );
+
+    expect(onSortChange).toHaveBeenLastCalledWith({
+      field: "updated_at",
+      order: "desc",
+      explicit: true,
+    });
   });
 });

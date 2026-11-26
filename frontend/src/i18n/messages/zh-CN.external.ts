@@ -45,7 +45,7 @@ const external = {
   // ── 三态（协议值 → 显示名；后端同名字段兜底）────────────────
   "connections.status.saved": "已保存",
   "connections.status.not_configured": "未配置",
-  "connections.status.session_only": "仅本次会话",
+  "connections.status.session_only": "临时",
   "connections.status.modified": "已改过",
   "connections.status.default": "默认值",
 
@@ -98,15 +98,16 @@ const external = {
   "connections.error.noAsrProfile": "还没有可写的语音配置，请先在「语音与面试 → 语音转写」里建一条",
 
   // ── 条目名称与就地编辑说明（后端同名字段兜底）────────────────
-  "connections.item.llm.default.label": "大模型 API Key（当前生效配置）",
+  "connections.item.llm.default.label": "大模型 API Key",
   "connections.item.llm.default.hint":
     "这里只改 Key。服务商与模型在「AI 模型」里改；换服务商时 Key 不会跟过去。",
-  "connections.item.llm.session.label": "仅本次会话使用的大模型 Key",
+  /** R15：临时 Key 的真实边界要在标题里就说清——它不是"另一个已保存的配置"。 */
+  "connections.item.llm.session.label": "临时 Key（仅本次运行有效）",
   "connections.item.llm.session.hint":
-    "只存在后端内存，程序重启即失效；清除后立刻回到已保存的那把 Key。",
-  "connections.item.asr.default.label": "语音转写 API Key（当前生效配置）",
+    "只存在后端内存，不写入数据库、不进备份、退出程序即清除。只替换大模型请求用的 Key，不影响语义检索、语音转写与联网搜索。清空后立刻回到已保存的那把 Key，改其它参数再保存也不会覆盖它。",
+  "connections.item.asr.default.label": "语音转写 API Key",
   "connections.item.asr.default.hint": "改的是当前这条语音配置的 Key。地址或协议一变就要重填。",
-  "connections.item.embedding.default.label": "语义检索 API Key（当前生效配置）",
+  "connections.item.embedding.default.label": "语义检索 API Key",
   "connections.item.embedding.default.hint":
     "语义检索的 Key 在「AI 模型 → 语义检索」里配置；这里只显示有没有配，不回掩码。",
   "connections.item.web_search.deepseek.label": "DeepSeek（联网搜索 / 抓取 / OCR 共用）",
@@ -116,7 +117,7 @@ const external = {
   "connections.item.web_search.tavily.hint": "清空即移除 Tavily Key，助手搜索会少一条来源。",
   "connections.item.web_search.jina.label": "Jina（网页正文抓取来源）",
   "connections.item.web_search.jina.hint": "清空即移除 Jina Key，抓取网页正文时会少一条来源。",
-  "connections.item.network.proxy.label": "代理认证口令（当前网络设置）",
+  "connections.item.network.proxy.label": "代理认证口令",
   "connections.item.network.proxy.hint":
     "改的是代理的认证口令。代理模式与地址在「网络代理」卡片里改；清除后请求不再带认证。",
   "connections.item.system.update_repo.label": "更新源（GitHub 仓库）",

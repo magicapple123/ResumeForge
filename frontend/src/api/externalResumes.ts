@@ -19,6 +19,19 @@ export interface ExternalResumeItem {
   has_text: boolean;
   job_id: number | null;
   job_title: string;
+  /**
+   * 是否收藏（T28，迁移 0031）。
+   *
+   * 三个收藏/备注字段是**后加的可选字段**：后端 `brief_of` 每次都会填（缺省 false /
+   * null / ""），但仓库里有些"局部 DTO"与测试夹具是在这三列之前写的，它们描述的仍是
+   * 合法的外部简历（只是没提收藏）。声明成必填会让那些夹具整片报类型错，而它们并不
+   * 影响运行——所以读侧一律归一：`Boolean(item.favorite)`、`item.note ?? ""`。
+   */
+  favorite?: boolean;
+  /** 收藏时刻；null / 缺省 = 从没收藏过（取消收藏时清回 null）。 */
+  favorited_at?: string | null;
+  /** 用户备注（"这份是给甲方的那版"）。空串 / 缺省 = 没写，界面据此不渲染备注行。 */
+  note?: string;
   created_at: string;
   updated_at: string;
   /** 上传接口的警告（如"没有文字层"）；列表/详情默认为空数组。 */
@@ -42,7 +55,8 @@ export interface ExternalResumeList {
  * `text_chars` 没有独立的列头（字数在文件名副行里），只能由 URL 指定——保留它是为了
  * 让 `?sort=text_chars` 这类深链与将来的「哪份写得最多」入口不必再改协议。
  */
-export type ExternalResumeSortKey = "name" | "job_title" | "created_at" | "text_chars";
+export type ExternalResumeSortKey =
+  "name" | "job_title" | "created_at" | "updated_at" | "text_chars";
 
 /** 排序方向（与后端 `ExternalResumeSortOrder` 逐字一致）。 */
 export type ExternalResumeSortOrder = "asc" | "desc";
@@ -139,6 +153,31 @@ export function deleteExternalResume(id: number): Promise<void> {
   return request(`/external-resumes/${id}`, { method: "DELETE" });
 }
 
+/**
+ * 收藏 / 取消收藏（T28）。
+ *
+ * 走服务端的唯一写入口（`services/favorites.update_favorite`）：那里用 Core UPDATE 把
+ * `updated_at` 列自身写回 SET 子句，抑制 `onupdate`。前端**不能**把它当成"改一下字段"
+ * 顺手塞进 `updateExternalResume`——那正是 R2「点星星跳行」的入口。
+ */
+export function setExternalResumeFavorite(
+  id: number,
+  favorite: boolean,
+): Promise<ExternalResumeDetail> {
+  return request(`/external-resumes/${id}/favorite`, {
+    method: "PATCH",
+    body: JSON.stringify({ favorite }),
+  });
+}
+
+/** 写备注（空串 = 清空）。备注是编辑，服务端会正常刷新 `updated_at`。 */
+export function setExternalResumeNote(id: number, note: string): Promise<ExternalResumeDetail> {
+  return request(`/external-resumes/${id}/note`, {
+    method: "PATCH",
+    body: JSON.stringify({ note }),
+  });
+}
+
 /** 文本级检查（纯规则、不调模型、没有总分）；关联岗位时附关键词覆盖。 */
 export function getExternalResumeAnalysis(id: number): Promise<ExternalResumeAnalysis> {
   return request(`/external-resumes/${id}/analysis`, { budget: "task" });
@@ -149,10 +188,18 @@ export function getExternalResumeAnalysis(id: number): Promise<ExternalResumeAna
  *
  * 给 `revisionId` 时返回**那一版**的原件（后端 `GET /{id}/file?revision_id=` 已支持），
  * 历史版本行的「预览 / 下载」都走同一个端点，不必为"看一版旧文件"再开接口。
+ *
+ * 给 `download` 时是「导出原件」（T28）：后端只改 `Content-Disposition: attachment`，
+ * 文件名取上传时的原始名、字节原样——所以扩展名与内容都是用户当初交上来的那份。
+ * 默认 `false` 保持既有预览链路不变（inline 才能喂给 pdf.js / img）。
  */
-export function externalResumeFileUrl(id: number, revisionId?: number): string {
+export function externalResumeFileUrl(id: number, revisionId?: number, download = false): string {
   const base = `/api/external-resumes/${id}/file`;
-  return revisionId == null ? base : `${base}?revision_id=${revisionId}`;
+  const params = new URLSearchParams();
+  if (revisionId != null) params.set("revision_id", String(revisionId));
+  if (download) params.set("download", "true");
+  const query = params.toString();
+  return query ? `${base}?${query}` : base;
 }
 
 // ── 应用内编辑（#5）──────────────────────────────────────────────

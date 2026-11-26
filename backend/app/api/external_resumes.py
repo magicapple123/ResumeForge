@@ -33,13 +33,16 @@ from ..schemas.external_resume import (
     ExternalResumeDetail,
     ExternalResumeEditInput,
     ExternalResumeEditOut,
+    ExternalResumeFavoriteInput,
     ExternalResumeListOut,
+    ExternalResumeNoteInput,
     ExternalResumeRestoreOut,
     ExternalResumeRevisionOut,
     ExternalResumeRevisionsOut,
     ExternalResumeRevisionTextOut,
     ExternalResumeUpdateInput,
 )
+from ..services import external_resume_actions as actions
 from ..services import external_resume_edit as edit_service
 from ..services import external_resume_versions as versions
 from ..services import external_resumes as service
@@ -224,10 +227,44 @@ def update_external_resume(
     """改名 / 关联岗位（只读快照**没有正文编辑**这一路）。"""
     row = _get_or_404(db, resume_id)
     try:
-        row = service.update_external_resume(db, row, payload)
+        row = actions.update_external_resume(db, row, payload)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     logger.info("外部简历已更新 id=%s", resume_id)
+    return _detail_of(db, row)
+
+
+@router.patch("/{resume_id}/favorite", response_model=ExternalResumeDetail)
+def update_external_resume_favorite(
+    resume_id: int,
+    payload: ExternalResumeFavoriteInput,
+    db: Session = Depends(get_db),
+):
+    """收藏 / 取消收藏（T28）：**只写标记，不改 `updated_at`**。
+
+    与内部简历 `PATCH /api/resumes/{id}/favorite` 同一口径（唯一写入口
+    `services/favorites.update_favorite`）。收藏不是编辑：列表的「最近更新」列若被
+    它刷新，用户点一下星星那一行就跳到最前面——正是排查报告 R2 的"收藏错了行"。
+    """
+    row = _get_or_404(db, resume_id)
+    actions.set_favorite(db, row, payload.favorite)
+    db.commit()
+    db.refresh(row)
+    return _detail_of(db, row)
+
+
+@router.patch("/{resume_id}/note", response_model=ExternalResumeDetail)
+def update_external_resume_note(
+    resume_id: int,
+    payload: ExternalResumeNoteInput,
+    db: Session = Depends(get_db),
+):
+    """写备注（T28）：空串 = 清空。备注是编辑，`updated_at` 正常刷新。"""
+    row = _get_or_404(db, resume_id)
+    try:
+        actions.set_note(db, row, payload.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _detail_of(db, row)
 
 
@@ -247,12 +284,18 @@ def delete_external_resume(resume_id: int, db: Session = Depends(get_db)):
 def read_external_resume_file(
     resume_id: int,
     revision_id: int | None = Query(default=None, ge=1),
+    download: bool = Query(default=False),
     db: Session = Depends(get_db),
 ) -> FileResponse:
-    """原件（inline）：PDF 可直接嵌 iframe，图片/文本交给浏览器。
+    """原件：默认 inline（PDF 可直接嵌 iframe / pdf.js，图片/文本交给浏览器）。
 
     给了 ``revision_id`` 时返回该历史版本的文件——历史版本列表的「预览 / 下载」用它，
     不必为"看一版旧文件"再开一个端点。
+
+    ``download=true``（T28「导出原件」）只改 ``Content-Disposition``：``attachment`` +
+    ``filename=<上传时的原始文件名>``。**文件名与字节都原样**——不重新编码、不改扩展名，
+    浏览器存下来的就是用户当初上传的那份（扩展名来自 ``user_file.original_name``，
+    改名只改展示名 ``external_resume.name``，不影响这里）。
     """
     row = _get_or_404(db, resume_id)
     file_id = row.file_id
@@ -270,7 +313,7 @@ def read_external_resume_file(
         path,
         media_type=(user_file.mime if user_file is not None else "") or "application/octet-stream",
         filename=(user_file.original_name if user_file is not None else "") or path.name,
-        content_disposition_type="inline",
+        content_disposition_type="attachment" if download else "inline",
     )
 
 

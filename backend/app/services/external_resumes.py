@@ -37,7 +37,6 @@ from ..schemas.external_resume import (
     ExternalResumeAnalysisOut,
     ExternalResumeBrief,
     ExternalResumeDetail,
-    ExternalResumeUpdateInput,
 )
 from . import trash
 from .document_text import (
@@ -50,6 +49,7 @@ from .document_text import (
     extract_material_text,
     material_suffix,
 )
+from .external_resume_actions import _live_job, update_external_resume  # noqa: F401  (re-export)
 from .external_resume_analysis import analyze_external_resume
 from .external_resume_pdf_scan import normalize_cid_encoding
 from .user_files import save_from_bytes, user_files_dir
@@ -169,16 +169,6 @@ def prepare_upload(original_name: str, content: bytes) -> ExtractedUpload:
     return ExtractedUpload(name=name, text=text, warnings=list(dict.fromkeys(warnings)))
 
 
-def _live_job_or_none(db: Session, job_id: int | None) -> Job | None:
-    """关联岗位必须存在且未删；给了非法 id 就明确失败，而不是悄悄丢关联。"""
-    if job_id is None:
-        return None
-    job = trash.get_live(db, Job, job_id)
-    if job is None:
-        raise ValueError("关联岗位不存在或已被删除")
-    return job
-
-
 def create_external_resume(
     db: Session,
     *,
@@ -195,7 +185,7 @@ def create_external_resume(
     函数内部自己提取）。文件登记与建行在同一事务里；磁盘文件由既有副本库管理。
     """
     prepared = extracted or prepare_upload(original_name, content)
-    job = _live_job_or_none(db, job_id)
+    job = _live_job(db, job_id)
     save_from_bytes(
         db,
         content,
@@ -261,12 +251,18 @@ EXTERNAL_RESUME_SORT_ORDERS = {
     ),
     "created_at_asc": (ExternalResume.created_at.asc(), ExternalResume.id.asc()),
     "created_at_desc": (ExternalResume.created_at.desc(), ExternalResume.id.desc()),
+    "updated_at_asc": (ExternalResume.updated_at.asc(), ExternalResume.id.asc()),
+    "updated_at_desc": (ExternalResume.updated_at.desc(), ExternalResume.id.desc()),
     "text_chars_asc": (ExternalResume.text_chars.asc(), ExternalResume.id.asc()),
     "text_chars_desc": (ExternalResume.text_chars.desc(), ExternalResume.id.desc()),
 }
 
 #: 可排序字段（与前端列头一一对应；``text_chars`` 没有独立列，只能由 URL 指定）。
-ExternalResumeSortKey = Literal["name", "job_title", "created_at", "text_chars"]
+#
+# ``updated_at``（T28）是「最近更新」列：上传、改名、改正文、恢复版本都会换它，收藏
+# **不会**（收藏走 Core UPDATE 抑制 ``onupdate``）。正因为它能排序，"收藏不刷新时间戳"
+# 才是一条用户看得见的判据——否则那一行会在用户点完星星后跳到列表最前面（R2）。
+ExternalResumeSortKey = Literal["name", "job_title", "created_at", "updated_at", "text_chars"]
 #: 排序方向。
 ExternalResumeSortOrder = Literal["asc", "desc"]
 #: 列表默认排序：最近上传在前（与改造前逐字一致，老调用方不受影响）。
@@ -374,6 +370,9 @@ def brief_of(row: ExternalResume, *, job_title: str = "", mime: str = "") -> Ext
         has_text=bool((row.text or "").strip()),
         job_id=row.job_id,
         job_title=job_title,
+        favorite=bool(row.favorite),
+        favorited_at=row.favorited_at,
+        note=row.note or "",
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -384,27 +383,6 @@ def detail_of(row: ExternalResume, *, job_title: str = "", mime: str = "") -> Ex
         **brief_of(row, job_title=job_title, mime=mime).model_dump(),
         text=row.text or "",
     )
-
-
-def update_external_resume(
-    db: Session, row: ExternalResume, payload: ExternalResumeUpdateInput
-) -> ExternalResume:
-    """改名 / 关联岗位（PATCH）。
-
-    `job_id` 只有在调用方**显式传了**这个键时才处理：`model_fields_set` 区分"没传"
-    （保留原关联）与"传 null"（取消关联）——只用 None 当默认值会让取消关联做不到。
-    """
-    if payload.name is not None:
-        display = payload.name.strip()[:MAX_NAME_CHARS]
-        if not display:
-            raise ValueError("名称不能为空")
-        row.name = display
-    if "job_id" in payload.model_fields_set:
-        job = _live_job_or_none(db, payload.job_id)
-        row.job_id = job.id if job is not None else None
-    db.commit()
-    db.refresh(row)
-    return row
 
 
 def delete_external_resume(db: Session, row: ExternalResume) -> None:

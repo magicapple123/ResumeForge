@@ -125,7 +125,32 @@ const resumesPage = {
   "resumesPage.external.column.file": "文件",
   "resumesPage.external.column.job": "关联岗位",
   "resumesPage.external.column.created": "上传时间",
+  /** 「最近更新」列（T28）：上传 / 改名 / 改正文 / 恢复会换它，**收藏不会**。 */
+  "resumesPage.external.column.updated": "最近更新",
   "resumesPage.external.column.actions": "操作",
+  /** 收藏与备注（T28 · 迁移 0031）：一级标记，列表行与详情都能切。 */
+  "resumesPage.external.favorite": "收藏",
+  "resumesPage.external.unfavorite": "取消收藏",
+  "resumesPage.external.favoriteFailed": "收藏状态没保存成功，请重试",
+  "resumesPage.external.note.label": "备注",
+  "resumesPage.external.note.display": "备注：{note}",
+  "resumesPage.external.note.add": "添加备注",
+  "resumesPage.external.note.edit": "编辑备注",
+  "resumesPage.external.note.placeholder":
+    "记一句这份简历的用途，例如「给甲方的那版」「投后端岗用」",
+  "resumesPage.external.note.saved": "备注已保存",
+  "resumesPage.external.note.failed": "备注没保存成功，请重试",
+  "resumesPage.external.note.tooLong": "备注最多 {max} 字",
+  /** 重命名弹窗（T28）：校验口径与服务端一致（去空白后非空、不超列宽）。 */
+  "resumesPage.external.rename.action": "重命名",
+  "resumesPage.external.rename.title": "重命名外部简历",
+  "resumesPage.external.rename.label": "文件名",
+  "resumesPage.external.rename.empty": "名称不能为空",
+  "resumesPage.external.rename.tooLong": "名称最多 {max} 个字符",
+  "resumesPage.external.rename.done": "已重命名为「{name}」",
+  "resumesPage.external.rename.failed": "重命名失败，请重试",
+  /** 导出原件（T28）：下载的是上传时那份文件（原名 + 原扩展名 + 原字节）。 */
+  "resumesPage.external.exportOriginal": "导出原件",
   /** 批量删除：先确认（进回收站可恢复），批量场景不叠 5 秒撤销条。 */
   "resumesPage.external.batchDelete.title": "删除选中的 {count} 份外部简历？",
   "resumesPage.external.batchDelete.done": "已删除 {count} 份外部简历",

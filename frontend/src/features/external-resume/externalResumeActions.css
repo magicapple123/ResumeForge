@@ -1,0 +1,55 @@
+/* SPDX-License-Identifier: Apache-2.0
+ *
+ * 外部简历「P0 四项」（T28）的样式：列表文件格里的收藏星标 / 备注行，详情里的动作条。
+ *
+ * 单独一个文件而不是继续往 `pages/resumes/externalResumeFiles.css` 里加：那份 CSS 是
+ * 表格结构（列宽、行高、徽标），这里的两个组件在 `features/external-resume/` 下，
+ * 样式跟着组件走，删组件时不会留下孤儿规则。
+ */
+
+/* ── 列表文件格（ExternalResumeFileCell）──────────────────────────── */
+
+/* 星标：只占图标宽度，不参与"文件名被省略号截断"的宽度分配。 */
+.external-resume-star {
+  flex: none;
+  color: var(--rf-text-tertiary, rgb(0 0 0 / 45%));
+  margin-inline-start: 2px;
+}
+
+.external-resume-star:hover {
+  color: var(--rf-color-warning, #faad14);
+}
+
+/* 已收藏：实心星 + 警示色，扫一眼列表就知道哪几份是自己留过的。 */
+.external-resume-star.is-on,
+.external-resume-star.is-on:hover {
+  color: var(--rf-color-warning, #faad14);
+}
+
+/* 备注行：比状态副行更弱（它是用户自己写的补充，不是文件的属性）。
+   单行省略由 antd 的 `Typography.Text ellipsis` 负责，这里只管上下间距。 */
+.external-resume-note {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 2px;
+  opacity: 0.9;
+}
+
+/* ── 详情动作条（ExternalResumeDetailActions）────────────────────── */
+
+.rf-ext-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 16px 10px;
+  border-bottom: 1px solid var(--rf-border-subtle, rgb(5 5 5 / 6%));
+  background: var(--rf-surface-raised, transparent);
+}
+
+/* 备注预览：贴动作条，左右不留多余内边距（父级已经给过）。 */
+.rf-ext-actions .rf-ext-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}

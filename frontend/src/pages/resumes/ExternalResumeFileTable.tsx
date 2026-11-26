@@ -37,7 +37,7 @@
  *
  * 组件只负责呈现与事件转发：选择态、删除确认、取数、URL 都在 `ExternalResumePanel`。
  */
-import { Button, Pagination, Table, Tag, Typography } from "antd";
+import { Button, Pagination, Table, Tag } from "antd";
 import type { TableColumnsType } from "antd";
 import type { SortOrder } from "antd/es/table/interface";
 import { memo, useMemo } from "react";
@@ -49,10 +49,10 @@ import type {
 } from "../../api/externalResumes";
 import { RowActions, RowContextMenu } from "../../components/common/RowActions";
 import type { RowActionItem, RowMenuItem } from "../../components/common/RowActions";
+import { ExternalResumeFileCell } from "../../features/external-resume/ExternalResumeFileCell";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import { fileKindBadge, fileKindOf } from "../../utils/fileKind";
 import { formatDateTime } from "../../utils/format";
 import { batchSelectAction } from "./resumeTableActions";
 import "./externalResumeFiles.css";
@@ -77,6 +77,7 @@ const SORT_KEYS: readonly ExternalResumeSortKey[] = [
   "name",
   "job_title",
   "created_at",
+  "updated_at",
   "text_chars",
 ];
 
@@ -85,6 +86,9 @@ const SORT_COLUMNS = {
   file: { field: "name", defaultOrder: "asc" },
   job: { field: "job_title", defaultOrder: "asc" },
   created: { field: "created_at", defaultOrder: "desc" },
+  // 「最近更新」（T28）：上传 / 改名 / 改正文 / 恢复会换它，**收藏不会**——这条排序
+  // 正是"收藏不许刷新 updated_at"这条判据对用户可见的那一半（R2）。
+  updated: { field: "updated_at", defaultOrder: "desc" },
 } as const satisfies Record<
   string,
   { field: ExternalResumeSortKey; defaultOrder: ExternalResumeSortOrder }
@@ -155,6 +159,8 @@ interface Props {
   onOpenCheck: (item: ExternalResumeItem) => void;
   onUseForInterview: (item: ExternalResumeItem) => void;
   onDelete: (item: ExternalResumeItem) => void;
+  /** 切换收藏（T28）：写作与刷新列表都在面板，表格只报"哪一行被点了"。 */
+  onToggleFavorite: (item: ExternalResumeItem) => void;
 }
 
 interface RowProps extends HTMLAttributes<HTMLTableRowElement> {
@@ -186,38 +192,12 @@ const ContextMenuRow = memo(function ContextMenuRow({
   );
 });
 
-/** 第一列：类型徽标 + 文件名（可点）+ 状态副行。 */
-function fileCell(item: ExternalResumeItem, onOpen: (item: ExternalResumeItem) => void) {
-  const kind = fileKindOf(item.mime, item.name);
-  // 已知类型给格式名（PDF / DOCX…，中英文一致）；只有不认识的类型才需要翻译。
-  const badge = fileKindBadge(kind) ?? t("resumesPage.external.kindOther");
-  return (
-    <div className="external-resume-file">
-      <div className="external-resume-file-line">
-        <Tag className={`external-resume-kind external-resume-kind-${kind}`}>{badge}</Tag>
-        {/* 文件名就是主入口：按钮而不是 `<a>`——它打开的是弹层，不是导航。
-            `title` 兜住省略号挡住的部分（长文件名在窄屏上必然被截）。 */}
-        <Button
-          type="link"
-          className="external-resume-name"
-          title={item.name}
-          onClick={() => onOpen(item)}
-        >
-          {item.name}
-        </Button>
-      </div>
-      {item.has_text ? (
-        <Typography.Text type="secondary" className="external-resume-status">
-          {t("resumesPage.external.extractedChars", { count: item.text_chars })}
-        </Typography.Text>
-      ) : (
-        <Typography.Text type="warning" className="external-resume-status">
-          {t("resumesPage.external.scanStatus")}
-        </Typography.Text>
-      )}
-    </div>
-  );
-}
+/**
+ * 第一列：类型徽标 + 文件名（可点）+ 状态副行 + 收藏星标 + 备注（T28）。
+ *
+ * 单元格本身抽到 `features/external-resume/ExternalResumeFileCell.tsx`：这一格里现在有
+ * 四段内容，留在表格里会把本文件顶破 500 行，而它又不是"表格结构"的一部分。
+ */
 
 /**
  * 第二列：关联岗位。
@@ -263,6 +243,7 @@ export default function ExternalResumeFileTable({
   onOpenCheck,
   onUseForInterview,
   onDelete,
+  onToggleFavorite,
 }: Props) {
   useLocale(); // 本组件用模块级 t()，必须订阅语言变化（见 i18n/localeSubscription.test.ts）
 
@@ -307,6 +288,15 @@ export default function ExternalResumeFileTable({
           onClick: () => onOpenText(item),
         },
     { key: "check", label: t("resumesPage.external.check"), onClick: () => onOpenCheck(item) },
+    // 收藏（T28）：与文件名旁的星标同一个动作。菜单里也给一条，是因为"收藏/取消收藏"
+    // 是带状态的动词，菜单文字能说清这一次点下去会发生什么（星标只能说"现在是什么"）。
+    {
+      key: "favorite",
+      label: item.favorite
+        ? t("resumesPage.external.unfavorite")
+        : t("resumesPage.external.favorite"),
+      onClick: () => onToggleFavorite(item),
+    },
     // 多选入口：默认观感不变，点过之后才出现勾选列与批量条。
     batchSelectAction(batch.enterSelecting),
     { key: "divider-actions", type: "divider" },
@@ -340,7 +330,13 @@ export default function ExternalResumeFileTable({
       sorter: true,
       sortOrder: sortOrderFor("file", sortState),
       sortDirections: sortDirectionsFor("file"),
-      render: (_, item) => fileCell(item, openByContent),
+      render: (_, item) => (
+        <ExternalResumeFileCell
+          item={item}
+          onOpen={openByContent}
+          onToggleFavorite={onToggleFavorite}
+        />
+      ),
     },
     {
       title: t("resumesPage.external.column.job"),
@@ -362,6 +358,20 @@ export default function ExternalResumeFileTable({
       sortOrder: sortOrderFor("created", sortState),
       sortDirections: sortDirectionsFor("created"),
       // 右对齐 + 等宽数字：时间列纵向能对齐到秒，扫一眼就能比较先后。
+      className: "external-resume-time",
+      render: (value: string) => formatDateTime(value),
+    },
+    {
+      // 「最近更新」（T28）：与「上传时间」并列存在——改过名 / 改过正文 / 恢复过版本的
+      // 行靠它排，收藏**不会**把它换掉（否则点一下星星这行就跳到最前面，R2）。
+      title: t("resumesPage.external.column.updated"),
+      key: "updated",
+      dataIndex: "updated_at",
+      width: 168,
+      align: "right",
+      sorter: true,
+      sortOrder: sortOrderFor("updated", sortState),
+      sortDirections: sortDirectionsFor("updated"),
       className: "external-resume-time",
       render: (value: string) => formatDateTime(value),
     },

@@ -21,6 +21,9 @@ from pydantic import BaseModel, ConfigDict, Field
 MAX_EXTERNAL_RESUME_BYTES = 10 * 1024 * 1024
 # 文件名的展示上限（与模型 name 列一致）。
 MAX_NAME_CHARS = 256
+# 备注上限：与内部简历 `MAX_RESUME_NOTE_CHARS`（schemas/resume.py）同一个数。两处都写
+# 字面量而不是互相 import：schemas 之间不建依赖边，读这一行就知道口径是多少。
+MAX_EXTERNAL_NOTE_CHARS = 2000
 # 检查项 key 的闭集（协议值，永不翻译）。顺序即界面展示顺序；`keywords` 只在有 JD
 # 时出现（没有该分项 ≠ 0 分）。
 ANALYSIS_CHECK_KEYS: tuple[str, ...] = (
@@ -47,6 +50,13 @@ class ExternalResumeBrief(BaseModel):
     has_text: bool
     job_id: int | None = None
     job_title: str = ""
+    # ===== 收藏与备注（迁移 0031 / T28）=====
+    # 是否收藏。收藏是**标记**不是编辑：写它不许刷新 `updated_at`（R2「点星星跳行」）。
+    favorite: bool = False
+    # 收藏时刻；null = 从没收藏过（取消收藏时清回 null）。
+    favorited_at: datetime | None = None
+    # 用户备注（"这份是给甲方的那版"）。空串 = 没写，界面据此不渲染备注行。
+    note: str = ""
     created_at: datetime
     updated_at: datetime
     # 上传接口的警告（如"没有文字层"）；列表/详情默认空——警告属于"这次上传的结果"。
@@ -77,6 +87,30 @@ class ExternalResumeUpdateInput(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=MAX_NAME_CHARS)
     job_id: int | None = Field(default=None, ge=1)
+
+
+class ExternalResumeFavoriteInput(BaseModel):
+    """收藏开关：只认 `favorite` 一个字段。
+
+    `extra="forbid"` 是刻意的：收藏**只改标记**，连 `note` 一起传上来是调用方写错了，
+    与其静默忽略、不如 422 出来（否则"顺手存备注"会变成一条没生效的请求）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    favorite: bool
+
+
+class ExternalResumeNoteInput(BaseModel):
+    """备注：空串 = 清空（与内部简历 `ResumeNoteUpdate` 同一口径）。
+
+    上限在 Pydantic 与 `services/external_resume_actions.set_note` 各挡一次：schema 给
+    422，服务层给"直接调服务"的调用方（测试夹具 / 将来的批量导入）同一个边界。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    note: str = Field(default="", max_length=MAX_EXTERNAL_NOTE_CHARS)
 
 
 class AnalysisHit(BaseModel):
@@ -254,6 +288,7 @@ __all__ = [
     "ANALYSIS_CHECK_KEYS",
     "EDIT_KINDS",
     "MAX_EDIT_TEXT_CHARS",
+    "MAX_EXTERNAL_NOTE_CHARS",
     "MAX_EXTERNAL_RESUME_BYTES",
     "MAX_NAME_CHARS",
     "AnalysisCheck",
@@ -265,7 +300,9 @@ __all__ = [
     "ExternalResumeDetail",
     "ExternalResumeEditInput",
     "ExternalResumeEditOut",
+    "ExternalResumeFavoriteInput",
     "ExternalResumeListOut",
+    "ExternalResumeNoteInput",
     "ExternalResumeRestoreOut",
     "ExternalResumeRevisionOut",
     "ExternalResumeRevisionTextOut",

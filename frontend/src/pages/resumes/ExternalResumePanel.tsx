@@ -33,6 +33,7 @@ import { useCallback, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { restoreTrashItem } from "../../api/trash";
 import type { ExternalResumeItem } from "../../api/externalResumes";
+import { setExternalResumeFavorite } from "../../api/externalResumes";
 import BatchActionBar from "../../components/common/BatchActionBar";
 import BatchDeleteButton from "../../components/common/BatchDeleteButton";
 import EmptyState from "../../components/common/EmptyState";
@@ -138,6 +139,21 @@ export default function ExternalResumePanel({
     } catch (err) {
       message.error(err instanceof Error ? err.message : t("resumesPage.external.uploadFailed"));
       return false;
+    }
+  };
+
+  /**
+   * 收藏切换（T28）：写服务端唯一入口 → 重取列表。
+   *
+   * 必须 `reload()` 而不是就地改本地这条：收藏时间戳与排序位置都由服务端决定（收藏
+   * **不**刷新 `updated_at`，所以这一行不会跳），列表那一份才是真相。
+   */
+  const handleToggleFavorite = async (item: ExternalResumeItem): Promise<void> => {
+    try {
+      await setExternalResumeFavorite(item.id, !item.favorite);
+      await reload();
+    } catch {
+      message.error(t("resumesPage.external.favoriteFailed"));
     }
   };
 
@@ -332,6 +348,7 @@ export default function ExternalResumePanel({
         onOpenCheck={(item) => openDetail(item, "check")}
         onUseForInterview={handleUseForInterview}
         onDelete={(item) => void handleDelete(item)}
+        onToggleFavorite={(item) => void handleToggleFavorite(item)}
       />
     );
   };

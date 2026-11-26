@@ -38,7 +38,7 @@ const external = {
   // ── Status ─────────────────────────────────────────────────
   "connections.status.saved": "Saved",
   "connections.status.not_configured": "Not configured",
-  "connections.status.session_only": "This session only",
+  "connections.status.session_only": "Temporary",
   "connections.status.modified": "Changed",
   "connections.status.default": "Default",
 
@@ -94,16 +94,16 @@ const external = {
     "No voice configuration to write to yet; create one under Voice & interview → Speech-to-text",
 
   // ── Item names and inline hints ────────────────────────────
-  "connections.item.llm.default.label": "Model API key (active configuration)",
+  "connections.item.llm.default.label": "Model API key",
   "connections.item.llm.default.hint":
     "Only the key is changed here. Provider and model live under AI models; switching providers does not carry the key over.",
-  "connections.item.llm.session.label": "Model key for this session only",
+  "connections.item.llm.session.label": "Temporary key (this run only)",
   "connections.item.llm.session.hint":
-    "Held in backend memory only, gone after a restart. Clearing it falls back to the saved key.",
-  "connections.item.asr.default.label": "Speech-to-text API key (active configuration)",
+    "Held in backend memory only: never written to the database, never included in backups, cleared when the app quits. It replaces the key used for model requests only; semantic search, speech-to-text and web search are unaffected. Clearing it falls back to the saved key, and saving other settings never overwrites that key.",
+  "connections.item.asr.default.label": "Speech-to-text API key",
   "connections.item.asr.default.hint":
     "Changes the key of the active voice configuration. A new address or protocol needs the key again.",
-  "connections.item.embedding.default.label": "Semantic search API key (active configuration)",
+  "connections.item.embedding.default.label": "Semantic search API key",
   "connections.item.embedding.default.hint":
     "Configured under AI models → semantic search; this page only tells whether a key exists.",
   "connections.item.web_search.deepseek.label": "DeepSeek (search / fetch / OCR)",
@@ -115,8 +115,7 @@ const external = {
   "connections.item.web_search.jina.label": "Jina (page fetch source)",
   "connections.item.web_search.jina.hint":
     "Clearing removes the Jina key; page fetching loses one source.",
-  "connections.item.network.proxy.label":
-    "Proxy authentication password (current network settings)",
+  "connections.item.network.proxy.label": "Proxy authentication password",
   "connections.item.network.proxy.hint":
     "Changing it here changes the proxy password; the mode and address live in the network proxy card. Clearing removes authentication.",
   "connections.item.system.update_repo.label": "Update source (GitHub repository)",
