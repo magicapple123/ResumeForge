@@ -33,6 +33,11 @@ export interface TrackerApiMocks {
   parseTracks: Mock;
   applyTracks: Mock;
   exportTracks: Mock;
+  /**
+   * 状态就地改（整改 #15）。可选：2026-11-26 之前写的用例不关心这条端点，
+   * 它们的 `vi.hoisted` 里没有这个 mock（`resetTrackerApiMocks` 只复位给了的键）。
+   */
+  patchTrackStatus?: Mock;
 }
 
 /** 测试文件里 `vi.hoisted` 创建的那组 ../api/jobs mock 的形状。 */

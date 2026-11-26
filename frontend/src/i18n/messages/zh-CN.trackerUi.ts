@@ -40,6 +40,11 @@ const trackerUi = {
   "trackerUi.card.emptyCompany": "（未填公司）",
   "trackerUi.card.emptyTitle": "（未填岗位）",
   "trackerUi.card.openJob": "查看岗位详情",
+  /** 状态胶囊下拉（整改 #15）：顶部那行「推进到下一格」，`{stage}` 是下一阶段显示名。 */
+  "trackerUi.card.advanceTo": "推进到「{stage}」",
+  "trackerUi.card.statusChanged": "已改为「{status}」",
+  "trackerUi.card.statusChangeFailed": "状态没改成，请重试",
+  "trackerUi.card.aria.statusMenu": "更改 {name} 的进度状态",
   "trackerUi.card.action.edit": "编辑",
   "trackerUi.card.action.delete": "删除",
   "trackerUi.card.aria.more": "更多操作 {name}",

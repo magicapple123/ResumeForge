@@ -41,6 +41,7 @@ import TrackCard from "../features/tracker/TrackCard";
 import TrackFormModal from "../features/tracker/TrackFormModal";
 import TrackImportModal from "../features/tracker/TrackImportModal";
 import { useTrackerDeepLink } from "../features/tracker/useTrackerDeepLink";
+import { useTrackStatusChange } from "../features/tracker/useTrackStatusChange";
 import { useApi } from "../hooks/useApi";
 import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import { downloadBlob } from "../utils/download";
@@ -187,6 +188,8 @@ export default function TrackerPage() {
   // 软删可撤销：单条删除不再前置确认，Toast 里给 5 秒「撤销」（见 useDeleteUndo）。
   // 批量走的是本页之外的路径，不受这里影响。
   const deleteUndo = useDeleteUndo();
+  // 状态就地改（整改 #15）：专端点 + 5 秒撤销，成功后跟删除一样两边一起刷新。
+  const statusChange = useTrackStatusChange({ onChanged: reloadAll });
   const remove = async (track: Track) => {
     try {
       await deleteUndo.run({ type: "track", ids: [track.id] }, () => deleteTrack(track.id), {
@@ -335,6 +338,8 @@ export default function TrackerPage() {
               setFormOpen(true);
             }}
             onDelete={() => void remove(track)}
+            onStatusChange={(target, next) => void statusChange.change(target, next)}
+            statusPending={statusChange.pendingId === track.id}
           />
         ))}
       </div>

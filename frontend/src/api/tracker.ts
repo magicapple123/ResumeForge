@@ -9,6 +9,7 @@ import type {
   TrackPayload,
   TrackRecord,
   TrackStats,
+  TrackStatus,
 } from "../types";
 import type { Page } from "../types/common";
 import { buildQuery, getFilenameFromDisposition, request, requestRaw } from "./client";
@@ -57,6 +58,26 @@ export function createTrack(payload: TrackPayload): Promise<Track & { created: b
 
 export function updateTrack(id: number, payload: TrackPayload): Promise<Track> {
   return request(`/tracker/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+
+/**
+ * 就地改状态（整改 #15）：只带要改成的状态（+ 可选的状态日期）。
+ *
+ * 为什么不用 `updateTrack`（PUT）：那是**整份替换**，要求 job_id / resume_id / channel /
+ * link / applied_at 全量回传——状态胶囊点一下就要把整条记录带上，既容易撞上"内外简历
+ * 互斥"校验，也会用本地旧快照覆盖别人刚改的字段。这个端点只碰 status（+ status_date）。
+ *
+ * 同状态是幂等的：后端直接返回、不写事件（连点两次同一格不是一次真实变化）。
+ */
+export function patchTrackStatus(
+  id: number,
+  status: TrackStatus,
+  statusDate = "",
+): Promise<Track> {
+  return request(`/tracker/${id}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status, status_date: statusDate }),
+  });
 }
 
 export function deleteTrack(id: number): Promise<void> {

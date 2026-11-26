@@ -167,6 +167,56 @@
   background: var(--rf-border-strong);
 }
 
+/* 状态胶囊改成可点（整改 #15）：容器是原生 <button>，默认外观全部重置为"无外观"，
+   且**不加 padding**——定宽 118px 仍挂在里面那个 `.track-status` 上，
+   这样右侧列宽与圆点的 x 坐标与改动前逐像素一致（跨行扫视时圆点必须落在同一竖线上）。 */
+.track-status-button {
+  display: inline-flex;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* 不可点时（只读复用 / 提交中）保持原样，不出现"可点"暗示。 */
+.track-status-button:disabled {
+  cursor: default;
+}
+
+/* hover / 聚焦才把标签提到信息蓝：不加粗、不加底色、不位移——这一页动作密度已经很高。 */
+.track-status-button:not(:disabled):hover .track-status,
+.track-status-button:not(:disabled):focus-visible .track-status {
+  color: var(--rf-info-strong);
+}
+
+/* 键盘焦点环：可点但看不见 hover 的用户也要知道这里能按。 */
+.track-status-button:focus-visible {
+  outline: 2px solid var(--rf-info);
+  outline-offset: 2px;
+}
+
+/* 提交中：半透明给"正在处理"的反馈，同时 disabled 已经挡住点击（防连点写两条事件）。 */
+.track-status-button.is-pending {
+  opacity: 0.55;
+}
+
+/* 下拉菜单里的状态项：文字在左、当前项的 ✓ 在右（`min-width` 让 ✓ 不会贴着文字抖）。 */
+.track-status-option {
+  display: inline-flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 132px;
+}
+
+.track-status-option-check {
+  color: var(--rf-info);
+  font-size: 12px;
+}
+
 /* stage_note 从灰底 Tag 改成普通次要文字：前置一个小圆点分隔符，不占第二块彩色。 */
 .track-stage-note {
   color: var(--rf-text-secondary);

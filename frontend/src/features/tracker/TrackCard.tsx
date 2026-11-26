@@ -16,13 +16,15 @@
  * - 逾期从句尾「· 已过期」改成红色短标记「逾期 N 天」，日期单独成 chip；
  * - 左侧竖条给**所有**行：进行中用阶段色、已结束/待确认用中性描边色。
  */
-import { LinkOutlined, MoreOutlined } from "@ant-design/icons";
+import { CheckOutlined, LinkOutlined, MoreOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Typography } from "antd";
+import type { MenuProps } from "antd";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { TRACK_SOURCE_LABEL_KEYS, TRACK_STATUS_LABEL_KEYS } from "../../i18n/enum/tracker";
-import type { Track } from "../../types";
+import type { Track, TrackStatus } from "../../types";
 import { FUNNEL_STATUSES, isActiveStatus } from "../../types";
 import { useRowActionMenu } from "../../components/common/rowActionMenu";
 import { safeExternalUrl } from "../../utils/externalUrl";
@@ -33,6 +35,13 @@ interface Props {
   track: Track;
   onEdit: () => void;
   onDelete: () => void;
+  /**
+   * 就地改状态（整改 #15）：`next` 是要改成的那一格。不传则状态胶囊不可点
+   * （只读场景，例如别的页面复用这一行做预览）。
+   */
+  onStatusChange?: (track: Track, next: TrackStatus) => void;
+  /** 这一行正在提交状态：胶囊半透明且不响应点击（防连点写两条事件）。 */
+  statusPending?: boolean;
   /** 长列表每 10 行的分组起点：加一条 2px 细分隔，不重新加回卡片。 */
   groupStart?: boolean;
 }
@@ -65,7 +74,14 @@ function resumeLabel(track: Track): string {
   return `${title}${kind}${historical}`;
 }
 
-export default function TrackCard({ track, onEdit, onDelete, groupStart = false }: Props) {
+export default function TrackCard({
+  track,
+  onEdit,
+  onDelete,
+  onStatusChange,
+  statusPending = false,
+  groupStart = false,
+}: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后行内容停在旧文案。
   useLocale();
   const buildMenu = useRowActionMenu();
@@ -95,6 +111,57 @@ export default function TrackCard({ track, onEdit, onDelete, groupStart = false 
   ]
     .filter(Boolean)
     .join(" ");
+
+  /**
+   * 状态胶囊的下拉菜单（整改 #15，用户拍板 A+B）。
+   *
+   * 结构顺序即语义：
+   * 1. 置顶「推进到「下一格」」——**只**在当前处于主线且不是 `offer` 时出现。
+   *    不选纯 B（只给一个前进按钮）的理由：回退与「已结束/待确认」没有入口，
+   *    而且按钮会把右侧定宽列撑宽，破坏跨行扫视时圆点落在同一竖线上。
+   * 2. 主线 5 格（已投递 → Offer）。
+   * 3. 「已结束 / 待确认」两个非主线态。
+   *
+   * 当前那一项 `disabled` + 右侧 ✓：既说明"现在在哪"，也从源头去掉一次同状态写入
+   * （后端虽然幂等，但一条明知无效的请求不该发）。
+   */
+  const currentIndex = FUNNEL_STATUSES.indexOf(track.status);
+  const nextStatus: TrackStatus | null =
+    currentIndex >= 0 ? (FUNNEL_STATUSES[currentIndex + 1] ?? null) : null;
+  const statusOption = (value: TrackStatus) => ({
+    key: value,
+    disabled: value === track.status,
+    label: (
+      <span className="track-status-option">
+        <span>{t(TRACK_STATUS_LABEL_KEYS[value])}</span>
+        {value === track.status && (
+          <CheckOutlined className="track-status-option-check" aria-hidden="true" />
+        )}
+      </span>
+    ),
+    onClick: () => onStatusChange?.(track, value),
+  });
+  const statusMenu: MenuProps["items"] = [
+    ...(nextStatus
+      ? [
+          {
+            key: "advance",
+            label: t("trackerUi.card.advanceTo", {
+              stage: t(TRACK_STATUS_LABEL_KEYS[nextStatus]),
+            }),
+            onClick: () => onStatusChange?.(track, nextStatus),
+          },
+          { key: "advance-divider", type: "divider" as const },
+        ]
+      : []),
+    ...FUNNEL_STATUSES.map(statusOption),
+    { key: "terminal-divider", type: "divider" as const },
+    statusOption("rejected"),
+    statusOption("unknown"),
+  ];
+  // 展开态自己持有：`aria-expanded` 必须跟着真实展开状态走（读屏要能报"已展开"）。
+  const [statusOpen, setStatusOpen] = useState(false);
+  const statusInteractive = Boolean(onStatusChange) && !statusPending;
 
   return (
     // data-stage-index 注入阶段色（--rf-stage-color/--rf-stage-bar，见 tracker-board.css）：
@@ -135,10 +202,30 @@ export default function TrackCard({ track, onEdit, onDelete, groupStart = false 
           )}
         </div>
         <div className="track-card-aside">
-          <span className={`track-status${track.status === "unknown" ? " is-unknown" : ""}`}>
-            <span className="track-status-dot" aria-hidden="true" />
-            {t(TRACK_STATUS_LABEL_KEYS[track.status])}
-          </span>
+          {/* 状态胶囊可点（整改 #15）：点开是状态菜单，不用再进编辑弹窗找「状态」字段。
+              容器是原生 button（回车/空格天然可用），`aria-haspopup`/`aria-expanded`
+              由我们自己维护——antd 的 Dropdown 不会替你声明这两条。 */}
+          <Dropdown
+            trigger={["click"]}
+            disabled={!statusInteractive}
+            open={statusOpen}
+            onOpenChange={setStatusOpen}
+            menu={{ items: statusMenu }}
+          >
+            <button
+              type="button"
+              className={`track-status-button${statusPending ? " is-pending" : ""}`}
+              aria-haspopup="menu"
+              aria-expanded={statusOpen}
+              aria-label={t("trackerUi.card.aria.statusMenu", { name: displayName })}
+              disabled={!statusInteractive}
+            >
+              <span className={`track-status${track.status === "unknown" ? " is-unknown" : ""}`}>
+                <span className="track-status-dot" aria-hidden="true" />
+                {t(TRACK_STATUS_LABEL_KEYS[track.status])}
+              </span>
+            </button>
+          </Dropdown>
           <Dropdown
             trigger={["click"]}
             menu={{

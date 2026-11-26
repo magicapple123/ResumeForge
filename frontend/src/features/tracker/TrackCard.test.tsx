@@ -8,11 +8,12 @@
  *    掉的字符，用户既看不到、也没法在 tooltip 里找回来。
  */
 import { App as AntdApp } from "antd";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
-import type { Track } from "../../types";
+import { TRACK_STATUS_LABEL_KEYS } from "../../i18n/enum/tracker";
+import type { Track, TrackStatus } from "../../types";
 import { formatServerTime } from "../../utils/serverTime";
 import TrackCard from "./TrackCard";
 
@@ -47,11 +48,21 @@ const BASE: Track = {
   updated_at: "2026-09-18T08:00:00",
 };
 
-function renderCard(patch: Partial<Track> = {}) {
+function renderCard(
+  patch: Partial<Track> = {},
+  onStatusChange?: (track: Track, next: TrackStatus) => void,
+  statusPending = false,
+) {
   return render(
     <MemoryRouter initialEntries={["/tracker"]}>
       <AntdApp>
-        <TrackCard track={{ ...BASE, ...patch }} onEdit={vi.fn()} onDelete={vi.fn()} />
+        <TrackCard
+          track={{ ...BASE, ...patch }}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+          onStatusChange={onStatusChange}
+          statusPending={statusPending}
+        />
       </AntdApp>
     </MemoryRouter>,
   );
@@ -193,6 +204,105 @@ describe("TrackCard 的外部简历关联", () => {
  * CR-19：首页任务卡的步骤链到 `/tracker?job_id=` 之后，进度行要能看出跟进痕迹。
  * 「已联系 · 11-25」只来自**最近一次 contacted**；其余决策与旧数据都不显示。
  */
+/**
+ * 状态就地改（整改 #15）：胶囊点开是状态菜单，不用再进编辑弹窗找「状态」字段。
+ *
+ * 结构口径（用户拍板 A+B）：置顶「推进到「下一格」」+ 主线 5 项 + 已结束/待确认；
+ * 当前那一项 disabled + ✓。`offer` 已在主线末端，**没有**推进项。
+ */
+describe("TrackCard 的状态就地改（#15）", () => {
+  const statusLabel = (value: TrackStatus) => t(TRACK_STATUS_LABEL_KEYS[value]);
+
+  function openMenu(patch: Partial<Track>, handler = vi.fn()) {
+    renderCard(patch, handler);
+    const trigger = screen.getByRole("button", {
+      name: t("trackerUi.card.aria.statusMenu", { name: COMPANY }),
+    });
+    fireEvent.click(trigger);
+    return { handler, trigger };
+  }
+
+  it("菜单 = 推进项 + 主线 5 项 + 已结束/待确认（共 8 项），第 1 项是推进到下一格", async () => {
+    const { trigger } = openMenu({ status: "applied" });
+
+    // 触发器自己声明菜单语义：读屏要能报"这是个菜单、现在是否展开"。
+    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items).toHaveLength(8);
+    expect(items[0]).toHaveTextContent(
+      t("trackerUi.card.advanceTo", { stage: statusLabel("screening") }),
+    );
+    // 主线 5 项 → 非主线 2 项，顺序就是语义顺序。
+    expect(items.slice(1).map((node) => node.textContent)).toEqual([
+      statusLabel("applied"),
+      statusLabel("screening"),
+      statusLabel("assessment"),
+      statusLabel("interview"),
+      statusLabel("offer"),
+      statusLabel("rejected"),
+      statusLabel("unknown"),
+    ]);
+  });
+
+  it("当前那一项 disabled（点它不会重复提交同状态）", async () => {
+    openMenu({ status: "interview" });
+
+    const items = await screen.findAllByRole("menuitem");
+    const current = items.find((node) => node.textContent === statusLabel("interview"));
+    expect(current).toHaveAttribute("aria-disabled", "true");
+    const other = items.find((node) => node.textContent === statusLabel("screening"));
+    // antd 给可点项也写了 `aria-disabled="false"`：判据看值，不看有没有这个属性。
+    expect(other).toHaveAttribute("aria-disabled", "false");
+  });
+
+  it("offer 行没有推进项：已在主线末端，只剩 7 个状态项", async () => {
+    openMenu({ status: "offer" });
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items).toHaveLength(7);
+    expect(items.map((node) => node.textContent)).toEqual([
+      statusLabel("applied"),
+      statusLabel("screening"),
+      statusLabel("assessment"),
+      statusLabel("interview"),
+      statusLabel("offer"),
+      statusLabel("rejected"),
+      statusLabel("unknown"),
+    ]);
+  });
+
+  it("点某一格把目标状态交出去（改哪一个由调用方决定，卡片不自作主张）", async () => {
+    const { handler } = openMenu({ status: "applied" });
+
+    const items = await screen.findAllByRole("menuitem");
+    fireEvent.click(items[items.length - 1]);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), "unknown");
+  });
+
+  it("没有 onStatusChange 时（只读复用）胶囊不可点，也不声明菜单语义", () => {
+    renderCard({ status: "applied" });
+
+    const trigger = screen.getByRole("button", {
+      name: t("trackerUi.card.aria.statusMenu", { name: COMPANY }),
+    });
+    expect(trigger).toBeDisabled();
+  });
+
+  it("statusPending 时胶囊半透明且不可点（防连点写两条事件）", () => {
+    renderCard({ status: "applied" }, vi.fn(), true);
+
+    const trigger = screen.getByRole("button", {
+      name: t("trackerUi.card.aria.statusMenu", { name: COMPANY }),
+    });
+    expect(trigger).toBeDisabled();
+    expect(trigger.className).toContain("is-pending");
+  });
+});
+
 describe("TrackCard 的最近跟进（CR-19）", () => {
   const LAST_CONTACT = "2026-11-25T12:00:00";
 
