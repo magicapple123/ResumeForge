@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { ResumeBrief } from "../../../types";
-import { groupResumes, isGroupBatchSelectable } from "./resumeGroups";
+import { groupResumeIds, groupResumes } from "./resumeGroups";
 
 function resume(overrides: Partial<ResumeBrief> & { id: number }): ResumeBrief {
   return {
@@ -132,13 +132,15 @@ describe("groupResumes 分组口径", () => {
     expect(groups.reduce((sum, group) => sum + group.versionCount, 0)).toBe(22);
   });
 
-  it("只有单版本组能被批量勾选：多版本组必须以具体版本为单位操作", () => {
+  it("组行勾选 = 整组每一份简历：key → id 的展开只此一处", () => {
     const groups = groupResumes([
       resume({ id: 1, job_id: 5 }),
       resume({ id: 2, job_id: 5 }),
       resume({ id: 3 }),
     ]);
 
-    expect(groups.map(isGroupBatchSelectable)).toEqual([false, true]);
+    // 2026-11-26 三态方案（R1）：多版本组不再被排除在批量勾选之外，
+    // 勾一行 = 勾上这一组的每一份——所以这里守的是"展开成了哪些 id"。
+    expect(groups.map(groupResumeIds)).toEqual([[2, 1], [3]]);
   });
 });

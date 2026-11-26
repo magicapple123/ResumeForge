@@ -2,7 +2,7 @@
 /** 批量选择模式的操作条：已选计数 + 「全选本页」(可选) + 调用方操作 + 退出选择。 */
 import { Button, Checkbox, Space, Typography } from "antd";
 import type { ReactNode } from "react";
-import { t } from "../../i18n";
+import { t, type MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
 export interface PageSelectAll {
@@ -14,6 +14,14 @@ export interface PageSelectAll {
 
 interface Props {
   count: number;
+  /**
+   * 计数那一句的文案 key（默认「已选 {count} 项」）。
+   *
+   * 量词不是装饰：简历中心选中的是**简历**，用户与文档都说"N 份简历"（R1 决策原话
+   * 「批量栏按「N 份简历」计数」），而岗位广场选中的是"条记录/个岗位"。所以由调用方
+   * 指定 key，而不是在这里按 count 猜一个量词。
+   */
+  countKey?: MessageKey;
   /** 「全选本页」：卡片网格类列表传这个（表格类自带表头全选，不用传）。 */
   pageSelectAll?: PageSelectAll;
   /** 勾选框不带「全选本页」文字（hover 由 title 提示含义）；简历中心等窄操作条用。 */
@@ -25,6 +33,7 @@ interface Props {
 
 export default function BatchActionBar({
   count,
+  countKey = "common.batchBar.selected",
   pageSelectAll,
   pageSelectAllLabelHidden = false,
   children,
@@ -40,7 +49,7 @@ export default function BatchActionBar({
     >
       <Space size={12} wrap>
         <Typography.Text type="secondary">
-          {t("common.batchBar.selected", { count })}
+          {t(countKey, { count })}
         </Typography.Text>
         {pageSelectAll && (
           <Checkbox

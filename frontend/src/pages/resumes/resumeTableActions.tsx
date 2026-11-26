@@ -8,7 +8,7 @@
  *
  * 文案一律走 `t()`；调用方组件（ResumeTable / ContextMenuRow）负责 `useLocale()` 订阅。
  */
-import { CheckSquareOutlined } from "@ant-design/icons";
+import { ApartmentOutlined, CheckSquareOutlined } from "@ant-design/icons";
 import type { RowActionItem } from "../../components/common/RowActions";
 import type { CopyNotifier } from "../../components/common/copyMenu";
 import { t } from "../../i18n";
@@ -29,6 +29,14 @@ export interface RowActionDeps {
   setDiffResult: (result: DiffViewData | null) => void;
   toggleFavorite: (record: ResumeBrief) => Promise<void>;
   remove: (id: number) => Promise<void>;
+  /**
+   * 跳岗位广场（可选）。**由它决定「在岗位广场打开」出不出现**：
+   * 只有接了导航的宿主（平铺表 / 折叠表 / 卡片列表）才给这一项。
+   *
+   * 为什么是可选而不是必填：`RowActionDeps` 有若干只读消费方（导出、测试替身），
+   * 没有路由也要能构造一份动作清单。
+   */
+  openJob?: (jobId: number) => void;
 }
 
 export function primaryActionsFor(record: ResumeBrief, deps: RowActionDeps): RowActionItem[] {
@@ -42,7 +50,29 @@ export function primaryActionsFor(record: ResumeBrief, deps: RowActionDeps): Row
 }
 
 export function secondaryActionsFor(record: ResumeBrief, deps: RowActionDeps): RowActionItem[] {
-  return [
+  const items: RowActionItem[] = [];
+  /**
+   * 「在岗位广场打开」——岗位跳转的**唯一**入口（R25）。
+   *
+   * 原来这列岗位名是个左键链接（`/jobs?job_id=N`）：点一下就把人从简历上下文里带走，
+   * 而那一列上用户十次里有九次是想看清楚岗位名叫什么。现在岗位名是纯文本，
+   * 跳转收进菜单。**这一处加完，平铺行 / 单版本组行 / 版本行同时生效**——三处共用的
+   * 就是这份 builder，不需要各挂一遍。
+   *
+   * 两个前置条件都是硬的：没有 `job_id`（通用简历）就没有岗位可去；宿主没接导航
+   * （`deps.openJob` 为空）时给一项点了没反应的菜单项，比不给更糟。
+   */
+  if (record.job_id && deps.openJob) {
+    const jobId = record.job_id;
+    const openJob = deps.openJob;
+    items.push({
+      key: "open_job",
+      label: t("resumesPage.list.group.openJob"),
+      icon: <ApartmentOutlined />,
+      onClick: () => openJob(jobId),
+    });
+  }
+  items.push(
     {
       key: "rename",
       label: t("resumes.list.rename"),
@@ -84,7 +114,8 @@ export function secondaryActionsFor(record: ResumeBrief, deps: RowActionDeps): R
       confirmCancelText: t("resumes.remove.confirm.cancel"),
       onClick: () => void deps.remove(record.id),
     },
-  ];
+  );
+  return items;
 }
 
 /** 右键菜单顶部的「批量选择」入口：工具栏按钮已收进这里（R8），点它进入多选模式。 */
@@ -104,8 +135,8 @@ export function batchSelectAction(enterSelecting: () => void): RowActionItem {
  * 三处共用这一份：折叠视图上线时的验收要求"单版本行的右键与平铺行同一份 builder"，
  * 各写一份的话，`secondaryActionsFor` 加一项就会有地方漏掉。
  *
- * `enterSelecting` 为空表示**不给批量选择**（版本行：多版本组不可整组勾选，给了会引导
- * 用户删整组）。
+ * `enterSelecting` 可选：全部单条行都应该给「批量选择」（2026-11-26 R3，版本行原先
+ * 以"多版本组不可整组勾选"为由不给入口，该前提随三态整组方案失效）。
  */
 export function resumeRowMenuItems(
   record: ResumeBrief,

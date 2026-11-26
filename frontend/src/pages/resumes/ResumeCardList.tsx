@@ -50,6 +50,8 @@ interface Props {
   setDiffResult: (result: DiffViewData | null) => void;
   sortState: ResumeSortState;
   onSortChange: (next: ResumeSortState) => void;
+  /** 页面持有的 `useNavigate`：卡片的「去岗位广场」只走菜单，槽位仍需要这条通道。 */
+  navigate: (path: string) => void;
 }
 
 /**
@@ -92,6 +94,7 @@ export default function ResumeCardList({
   setDiffResult,
   sortState,
   onSortChange,
+  navigate,
 }: Props) {
   useLocale();
   const buildMenu = useRowActionMenu();
@@ -112,6 +115,8 @@ export default function ResumeCardList({
       setDiffResult,
       toggleFavorite,
       remove,
+      // 卡片视图与两张表共用同一份「去岗位广场」（R25）：三处都有这一项。
+      openJob: (jobId: number) => navigate(`/jobs?job_id=${jobId}`),
     }),
     [
       setPreviewId,
@@ -124,6 +129,7 @@ export default function ResumeCardList({
       setDiffResult,
       toggleFavorite,
       remove,
+      navigate,
     ],
   );
   const items = data?.items ?? [];
@@ -189,8 +195,12 @@ export default function ResumeCardList({
               // 多选态下不接管右键：此时容易让人以为"只作用于这一张"，批量动作在页面批量工具条上。
               // 非多选态下第一项固定是「批量选择」——窄档（<1092）没有表格工具栏，
               // 这里是进入选择模式的唯一入口（与 ResumeTable 的右键/三点完全一致）。
+              // 进入时顺手把这一张勾上：这一项只出现在具体某张卡上，它永远有"主语"。
               const actions = [
-                batchSelectAction(batch.enterSelecting),
+                batchSelectAction(() => {
+                  batch.enterSelecting();
+                  batch.selectPage([record.id], true);
+                }),
                 ...secondaryActionsFor(record, deps),
               ];
               return (

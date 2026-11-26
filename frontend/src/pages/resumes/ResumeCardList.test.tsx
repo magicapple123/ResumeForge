@@ -94,6 +94,7 @@ function Harness({
         setDiffResult={() => {}}
         sortState={DEFAULT_RESUME_SORT_STATE}
         onSortChange={() => {}}
+        navigate={() => {}}
       />
     </AntdApp>
   );
@@ -112,6 +113,8 @@ function expectedLabels(): string[] {
     setDiffResult: vi.fn(),
     toggleFavorite: async () => {},
     remove: async () => {},
+    // R25：卡片视图也接了导航，所以「在岗位广场打开」在清单里。
+    openJob: vi.fn(),
   };
   return [
     t("common.action.batchSelect"),
@@ -127,12 +130,12 @@ afterEach(() => {
 });
 
 describe("简历卡片视图与表格视图共用一份动作清单（26a）", () => {
-  it("⋯ 菜单 = 「批量选择」+ 五项与表格同源的次级操作（含「对比」与「删除」）", async () => {
+  it("⋯ 菜单 = 「批量选择」+ 六项与表格同源的次级操作（含「对比」与「删除」）", async () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: t("common.rowActions.more") }));
 
     expect(menuLabels()).toEqual(expectedLabels());
-    expect(menuLabels()).toHaveLength(6);
+    expect(menuLabels()).toHaveLength(7);
     // 第一项必须是「批量选择」：窄档下这是进入选择模式的唯一入口（条目 01）。
     expect(menuLabels()[0]).toBe(t("common.action.batchSelect"));
   });

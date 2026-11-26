@@ -192,6 +192,18 @@ describe("ResumeTable 目标岗位列（T3）", () => {
   });
 });
 
+describe("ResumeTable 岗位名不是左键链接（R25）", () => {
+  it("岗位 Tag 不再是按钮：跳岗位广场只走右键/「⋯」的「在岗位广场打开」", async () => {
+    render(<Harness item={RESUME} />);
+    const jobTag = await screen.findByText(RESUME.job_title);
+
+    // 原来这里是 `<Button type="link">` 套 `<Tag>`：想看清岗位名叫什么的人点一下
+    // 整页就被带走了，而岗位名本身长得像标签、不像链接。
+    expect(jobTag.closest("button")).toBeNull();
+    expect(jobTag.closest("a")).toBeNull();
+  });
+});
+
 describe("ResumeTable 列头排序（T2）", () => {
   /** 点某列列头。表头标题在 antd 6 里会出现多份（测量/克隆节点），统一点 `<th>` 本体。 */
   function clickHeader(label: string) {

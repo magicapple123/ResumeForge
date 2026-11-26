@@ -31,6 +31,11 @@ const resumesPage = {
   "resumesPage.list.group.expandVersions": "Expand {count} versions",
   "resumesPage.list.group.collapseVersions": "Collapse versions",
   "resumesPage.list.group.openJob": "Open in Job Board",
+  "resumesPage.list.group.selectWhole": "Select all {count} resumes in this job",
+  "resumesPage.list.group.selectVersion": "Select version {index}: {title}",
+  "resumesPage.list.group.selectionSummary":
+    "{count} resumes selected ({groups} whole jobs included)",
+  "resumesPage.list.group.selectionSummaryPlain": "{count} resumes selected",
   "resumesPage.list.totalGroups": "{groups} jobs · {resumes} resumes",
   "resumesPage.list.sort.identity": "Sort by job title (general resumes by resume title)",
   "resumesPage.list.sort.updated": "Sort by the latest update in each group",
@@ -45,6 +50,7 @@ const resumesPage = {
   "resumesPage.selectAll.done":
     "Selected all {count} Resumes matching the current filter (all pages)",
   "resumesPage.batch.actions": "Bulk actions",
+  "resumesPage.batch.selected": "{count} selected",
   "resumesPage.batch.export": "Export selected",
   "resumesPage.batchDelete.button": "Delete selected",
   "resumesPage.batchDelete.title": "Delete the selected resumes?",

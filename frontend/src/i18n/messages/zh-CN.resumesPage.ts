@@ -37,6 +37,14 @@ const resumesPage = {
   "resumesPage.list.group.expandVersions": "展开 {count} 个版本",
   "resumesPage.list.group.collapseVersions": "收起版本",
   "resumesPage.list.group.openJob": "在岗位广场打开",
+  // 组行勾选框的 title：勾一行 = 勾上这一组的每一份简历（三态整组，R1 第四条）。
+  "resumesPage.list.group.selectWhole": "勾选这一组的全部 {count} 份简历",
+  // 版本行自己的勾选框（展开后才出现）：只想选其中一版时用。
+  "resumesPage.list.group.selectVersion": "选择第 {index} 版：{title}",
+  // 折叠表的选区摘要：份数 + 其中几个是整组（多版本岗位）带上来的（R1 第四条）。
+  "resumesPage.list.group.selectionSummary": "已选 {count} 份（含 {groups} 个整组岗位）",
+  // 没有多版本组时的纯份数版本：硬说"含 0 个整组岗位"只是噪音。
+  "resumesPage.list.group.selectionSummaryPlain": "已选 {count} 份",
   // 折叠视图分页文案：`total` 是组数，必须同时说清"多少个岗位、多少份简历"。
   "resumesPage.list.totalGroups": "共 {groups} 个岗位 · {resumes} 份简历",
   // 组级列头排序提示（三态机制由箭头自解释，这里只说这一列按什么排）。
@@ -52,6 +60,8 @@ const resumesPage = {
     "当前筛选下共 {count} 份简历，超出单次批量上限 5000 份；请先用筛选或搜索缩小范围",
   "resumesPage.selectAll.done": "已选中当前筛选下的全部 {count} 份简历（所有页）",
   "resumesPage.batch.actions": "批量操作",
+  // 计数量词是「份」不是「项」：这里选中的是简历，用户与文档都说"N 份简历"（R1 决策）。
+  "resumesPage.batch.selected": "已选 {count} 份",
   "resumesPage.batch.export": "批量导出",
   "resumesPage.batchDelete.button": "批量删除",
   "resumesPage.batchDelete.title": "删除选中的简历？",

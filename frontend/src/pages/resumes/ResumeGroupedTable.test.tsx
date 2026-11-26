@@ -5,10 +5,10 @@
  * 这张表此前**一个测试都没有**：新视图 + 无测试 = 整行右键与列头排序的回归都没有
  * 闸门能拦住。两类用例：
  *
- * ## 整行右键（问题 1）
- * 1. 多版本组行：出现菜单，且**不含**删除 / 批量选择（CR-33 禁止组级破坏性动作）；
- * 2. 版本行：出现单条动作（含「预览」），但**不含**批量选择；
- * 3. 单版本组行：与平铺行同一份清单，含「批量选择」。
+ * ## 整行右键（问题 1 / R3 / R25）
+ * 1. 多版本组行：出现菜单，且**不含**删除 / 批量选择（组级破坏性动作仍不进菜单）；
+ * 2. 版本行：单条动作（含「预览」与「批量选择」，R3 后两者都有）；
+ * 3. 单版本组行：与平铺行同一份清单，含「批量选择」与「在岗位广场打开」（R25）。
  *
  * ## 列头三态（问题 2）
  * 4. 默认态三列都**不带**箭头（默认排序不是用户的选择）；
@@ -17,12 +17,13 @@
  * 7. 点第三次取消，回默认态（等价于「恢复默认排序」重新出现）。
  *
  * ## 列宽声明（窄档裁字的根因，2026-11-26 返工）
- * 8. 表格必须是**定宽布局**，且身份列是唯一"不写宽度"的列。
+ * 8. 表格必须是**定宽布局**，且身份列是唯一"不写宽度"的列；44px 的展开列已去掉
+ *    （R1 第五条，箭头挪进身份格），所以 colgroup 的第 1 列就是身份列。
  *    jsdom 没有排版能力，这条守的是**声明**：真机数字（940 下 834/834、
  *    操作列右缘 = 容器右缘）由实机验收负责，这里只保证根因不再被改回去。
  *
  * ## 版本行与组行逐列对齐（#2 剩下的 32px，2026-11-26）
- * 9. 版本行栅格的**跟踪列**必须与父表 `colgroup` 逐列对上（首格吃掉「展开列 + 身份列」，
+ * 9. 版本行栅格的**跟踪列**必须与父表 `colgroup` 逐列对上（首格 = 身份列，
  *    尾随三列同宽同序），窄档投递列在两边一起消失；
  * 10. 两套排布的水平内边距必须引用**同一个** `--rf-group-cell-pad-x`（读 CSS 文本断言）。
  *     jsdom 量不到像素，所以第 9/10 条守的是"能用的宽度"这件事：列宽同源、内边距同源、
@@ -237,7 +238,7 @@ describe("ResumeGroupedTable 多版本组行右键", () => {
 });
 
 describe("ResumeGroupedTable 版本行右键", () => {
-  it("展开后版本行有单条动作（含预览），但不含批量选择", async () => {
+  it("展开后版本行有单条动作（含预览与批量选择）", async () => {
     const { container } = renderTable({ expandedKeys: ["job:7"] });
     const versionRow = container.querySelector<HTMLElement>(".resume-version-row");
     if (!versionRow) throw new Error("expanded group must render version rows");
@@ -246,13 +247,14 @@ describe("ResumeGroupedTable 版本行右键", () => {
 
     expect(within(menu).getByText(t("resumes.list.preview"))).toBeInTheDocument();
     expect(within(menu).getByText(t("common.action.delete"))).toBeInTheDocument();
-    // 多版本组不可整组勾选：版本行不给「批量选择」。
-    expect(within(menu).queryByText(t("common.action.batchSelect"))).toBeNull();
+    // R3（2026-11-26）：版本行原先以"多版本组不可整组勾选"为由不给批量入口，
+    // 该前提随三态整组方案失效——现在与单条行同一份清单。
+    expect(within(menu).getByText(t("common.action.batchSelect"))).toBeInTheDocument();
   });
 });
 
 describe("ResumeGroupedTable 单版本组行右键", () => {
-  it("与平铺行同一份清单：含批量选择与预览", async () => {
+  it("与平铺行同一份清单：含批量选择、预览与「在岗位广场打开」", async () => {
     const { container } = renderTable();
     const single = stackedGroups().find((item) => item.versionCount === 1);
     if (!single) throw new Error("fixture must contain a single-version group");
@@ -263,11 +265,13 @@ describe("ResumeGroupedTable 单版本组行右键", () => {
     expect(within(menu).getByText(t("resumes.list.preview"))).toBeInTheDocument();
     // 单版本组就是一份简历：删除可以出现（右键删除仍走菜单里的二次确认）。
     expect(within(menu).getByText(t("common.action.delete"))).toBeInTheDocument();
+    // R25：岗位名不再是左键链接，跳转只走菜单——所以这一项**必须**在。
+    expect(within(menu).getByText(t("resumesPage.list.group.openJob"))).toBeInTheDocument();
   });
 });
 
 describe("ResumeGroupedTable 列宽声明", () => {
-  it("定宽布局：身份列不写宽度（独占剩余空间），其余列写死（含展开列）", () => {
+  it("定宽布局：身份列不写宽度（独占剩余空间），其余列写死，且没有独立的展开列", () => {
     const { container } = renderTable();
     const table = container.querySelector<HTMLTableElement>(".ant-table-content table");
     if (!table) throw new Error("grouped table not rendered");
@@ -282,10 +286,9 @@ describe("ResumeGroupedTable 列宽声明", () => {
     const widths = [...table.querySelectorAll<HTMLTableColElement>("colgroup col")].map(
       (col) => col.style.width,
     );
+    // R1 第五条：44px 的展开列已去掉（箭头挪进身份格），首列就是身份列。
+    // 它留一格空槽会在表头形成 40px 白带，而 `fixed` 布局又必须由它独占剩余空间。
     expect(widths).toEqual([
-      // 展开列必须显式定宽：没有宽度的列会去瓜分剩余空间，与身份列抢同一份余量。
-      `${GROUP_COLUMN_WIDTHS.expand}px`,
-      // 身份列**不能**有宽度：它是唯一吸收剩余空间的列，内部靠省略号收缩。
       "",
       `${GROUP_COLUMN_WIDTHS.updated}px`,
       `${GROUP_COLUMN_WIDTHS.delivery}px`,
@@ -426,13 +429,13 @@ function expectVersionTracksMatchTable(container: HTMLElement): void {
   if (!versionRow) throw new Error("expanded group must render version rows");
   const tracks = splitTracks(versionRow.style.gridTemplateColumns || "");
 
-  // 父表第 1 列是展开箭头（定宽），第 2 列是身份列（不写宽度、吃剩余空间）：
-  // 版本行把这两列并进首格，1fr 才和父表算出同一个宽度。
+  // R1 第五条之后父表没有独立的展开列：第 1 列就是身份列（不写宽度、吃剩余空间），
+  // 版本行的第 1 个跟踪列与它一一对应。
   expect(tracks[0]).toMatch(/^minmax\(0(px)?,1fr\)$/);
-  expect(columnWidths[1]).toBe("");
-  // 尾随列同宽同序（窄档投递列在两边一起消失，所以按父表实际列数比，不写死 4/5）。
-  expect(tracks.slice(1)).toEqual(columnWidths.slice(2));
-  expect(tracks).toHaveLength(columnWidths.length - 1);
+  expect(columnWidths[0]).toBe("");
+  // 尾随列同宽同序（窄档投递列在两边一起消失，所以按父表实际列数比，不写死 3/4）。
+  expect(tracks.slice(1)).toEqual(columnWidths.slice(1));
+  expect(tracks).toHaveLength(columnWidths.length);
   // 格子数必须等于跟踪列数：多一个格子会落到隐式跟踪列上，右侧整体左移。
   expect(versionRow.children.length).toBe(tracks.length);
 }

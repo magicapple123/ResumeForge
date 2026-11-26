@@ -110,7 +110,10 @@ async function enterSelectingAndPickOne() {
   const title = await screen.findByText(RESUME.title, {}, { timeout: 5000 });
   fireEvent.contextMenu(title.closest("tr") as HTMLElement);
   fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
-  fireEvent.click(screen.getAllByRole("checkbox")[1]!);
+  // R4：右键进入多选会顺手勾上被右键的那一行。所以这里**只在它还没勾上时**补点一下；
+  // 盲目点第 1 个行勾选框是把它取消，计数掉到 0，「批量操作」变灰、下拉打不开。
+  const firstRowBox = () => screen.getAllByRole("checkbox")[1] as HTMLInputElement | undefined;
+  if (!firstRowBox()?.checked) fireEvent.click(firstRowBox()!);
 }
 
 async function openBatchExportModal() {

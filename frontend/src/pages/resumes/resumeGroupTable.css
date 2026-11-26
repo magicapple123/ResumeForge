@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* 「岗位分区列表」（方案 A，2026-11-26）的版式：组行浅底 + 左侧色条、两行身份、
-   版本行与父表同列栅格。颜色只用 --rf-* 语义 token（深色模式自动跟随），
+/* 「岗位分区列表」（方案 A + R1 排版返工，2026-11-26）：
+   表头 = 浅底 + 品牌色、组行 = 分区标题（白底 + 上分隔线）、选满的行才有蓝底与左竖条、
+   行距 58/64、展开过渡 240ms。颜色只用 --rf-* 语义 token（深色模式自动跟随），
    所有规则都以 `.resume-group-table` 限定作用域。 */
 
 /* ## 水平内边距只有一份（2026-11-26 逐列对齐返工的落点）
@@ -12,10 +13,12 @@
  *
  * 所以这里把 8px 提成变量：父表 `th`/`td` 的 `padding-inline` 与版本行每一格的
  * `padding-inline`（`resumeVersions.css`）读的是同一个 `--rf-group-cell-pad-x`。
- * 改一次两边一起动，不靠"看着差不多"。
  */
 .resume-group-table {
   --rf-group-cell-pad-x: 8px;
+  /* 展开/收起过渡时长：`ResumeGroupedTable.tsx` 的 EXPAND_DURATION_MS 与它同值，
+     收起动画结束后才真正卸载（antd 默认一收就卸载，动画跑不完）。 */
+  --rf-group-expand-duration: 240ms;
 }
 
 .resume-group-table .ant-table-thead > tr > th.ant-table-cell,
@@ -23,37 +26,211 @@
   padding-inline: var(--rf-group-cell-pad-x);
 }
 
-/* 展开行装的是版本清单：它要横跨整行、第一格对齐父表的「展开列」左缘，
-   所以横向内边距必须清零（纵向的 12px 行距保留，看起来仍是一段缩进的内容区）。
-   不清零的话，清单整体内缩 8px，四列的竖线就全线错开一个内边距。 */
+/* ## 表头（R1 第一条 + 第二条）
+ *
+ * 原来这里是 `transparent` + 12px + 三级灰 + 500：读起来是一排浮动小字，与岗位广场的
+ * 「浅底 + 品牌深蓝」完全两套。antd token 本来就是 `headerBg=surfaceAlt` /
+ * `headerColor=brand`（`theme/appTheme.ts`），是这段覆盖把它抹掉了。
+ *
+ * 排序箭头（第二条）：antd 的 `.ant-table-column-sorters` 是 `justify-content: space-between`，
+ * 身份列是唯一不写宽度的列，于是箭头被推到整列右端（1440 下离标题 700px）。
+ * 改成 `flex-start` 并让标题不再抢剩余空间，箭头就贴在标题后面。 */
+.resume-group-table .ant-table-thead > tr > th {
+  background: var(--rf-surface-alt);
+  color: var(--rf-brand);
+  font-weight: 600;
+  font-size: 13px;
+  height: 48px;
+  border-bottom: 1px solid var(--rf-border-strong);
+}
+
+.resume-group-table .ant-table-column-sorters {
+  justify-content: flex-start;
+  /* 不再额外交 gap：antd 的 `.ant-table-column-sorter` 自带 `margin-inline-start: 4px`，
+     再叠 6px 会把「投递次数」这一列（88px − 16px 内边距 = 72px）挤到换行——
+     实测表头因此长到 66px，直接违反 44–48px 那一档。 */
+  gap: 0;
+}
+
+.resume-group-table .ant-table-column-sorters .ant-table-column-title {
+  /* 不吸收剩余空间：否则 `flex-start` 也会被一个 1fr 的标题吃掉，箭头跑回右端。 */
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* 展开行装的是版本清单：它要横跨整行，横向内边距清零（否则四列的竖线全线错开一个
+   内边距），纵向也清零——留白交给裁剪容器内的清单自己出。
+   两轴分开写而不是 `padding: 0`：横向清零是**布局契约**（`resumeVersionRowAlign.test.ts`
+   逐字断言 `padding-inline: 0`），写成简写会让"横向到底清没清"重新变成不可读的推断。 */
 .resume-group-table .ant-table-tbody > tr.ant-table-expanded-row > td.ant-table-cell {
+  padding-block: 0;
   padding-inline: 0;
 }
 
-/* 表头去底色：默认的灰底会把"分区列表"压成普通表格。字重与色阶一并调轻，
-   让第一列的两行身份成为视觉重心。 */
-.resume-group-table .ant-table-thead > tr > th {
+/* ## 组行 = 分区标题（R1 第三条）
+ *
+ * 原来多版本组行是 `surface-alt` 浅蓝底 + 左侧 3px 蓝条，而"已勾选"用的是
+ * `brandTint`（`theme/appTheme.ts` 的 `rowSelectedBg`）——两者几乎同色，于是每个多版本
+ * 岗位都像被选中了。现在：
+ * - 分区标题：白底 + 上分隔线，靠**结构**分区，不靠底色；
+ * - 选满的行：`brandTint` 底 + 品牌色左竖条（antd 自己给的 `ant-table-row-selected`）；
+ * - 半选的行：只有勾选框的半选态，**不加底色**。 */
+.resume-group-table .ant-table-tbody > tr.rf-group-row > td,
+.resume-group-table .ant-table-tbody > tr.rf-group-single > td {
+  background: var(--rf-surface);
+  border-top: 1px solid var(--rf-border);
+}
+
+/* 第一行不加上分隔线：表头自己有一条更重的下边框，两条叠在一起是 2px 的毛边。 */
+.resume-group-table .ant-table-tbody > tr:first-child > td {
+  border-top-color: transparent;
+}
+
+/* 行距舒适档（R1）：组行 58 / 单行 64（版本行 36 见 resumeVersions.css）。
+ *
+ * `td` 的 `height` 只是 min-height：真正决定行高的是"内容 + padding-block"。身份区
+ * 两行加起来是 20 + 2 + 16 = 38px（实测单元格内容盒 40px），所以 58 = 40 + 18、64 = 40 + 24——
+ * 写死这两个 padding 才能让"58/64"是个可核对的数，而不是"看着差不多"。
+ *
+ * `!important` 是必须的：antd 6 的 `.ant-table-medium .ant-table-tbody > tr > td`
+ * 权重高于这里（同仓 `.apply-queue-panel` 等表格覆盖也用了同一个做法）。 */
+/* antd-override: 行距（antd 的 medium 密度规则权重更高） */
+.resume-group-table .ant-table-tbody > tr.rf-group-row > td {
+  height: 58px !important;
+  padding-block: 9px !important;
+}
+
+.resume-group-table .ant-table-tbody > tr.rf-group-single > td {
+  height: 64px !important;
+  padding-block: 12px !important;
+}
+
+.resume-group-table .ant-table-tbody > tr.rf-group-row:hover > td,
+.resume-group-table .ant-table-tbody > tr.rf-group-single:hover > td {
+  background: var(--rf-fill-quaternary);
+}
+
+/* 选满的行：底色 + 左侧品牌竖条（只此一处给底色）。 */
+.resume-group-table .ant-table-tbody > tr.ant-table-row-selected > td {
+  background: var(--rf-brand-tint);
+}
+
+.resume-group-table .ant-table-tbody > tr.ant-table-row-selected > td:first-child {
+  box-shadow: inset 3px 0 0 var(--rf-brand);
+}
+
+.resume-group-table .ant-table-tbody > tr.ant-table-row-selected:hover > td {
+  background: color-mix(in srgb, var(--rf-brand-tint) 88%, var(--rf-brand));
+}
+
+/* ## 自绘展开按钮（R1 第五条）
+ *
+ * 独立的 44px 箭头列已去掉（`showExpandColumn: false`）：它在表头留一格空槽，两侧
+ * 还各有一条分隔线，是"首列表头右缘与身份格左缘之间那道白带"的来源。箭头挪进身份格，
+ * 用纯 CSS 三角形——不引图标、不额外增加一个可聚焦元素之外的东西。
+ *
+ * 尺寸 20px 是"可点区域"：视觉三角只有 5×8，靠 padding 撑出 44px 的最小触达面积
+ * 属于行内小控件，这里取 20px 与 antd 的 small 图标按钮同档。 */
+.rf-group-expand {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
   background: transparent;
-  font-weight: 500;
+  color: var(--rf-text-secondary);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.rf-group-expand:hover {
+  background: var(--rf-fill-secondary);
+}
+
+.rf-group-expand:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 1px;
+}
+
+.rf-group-expand-icon {
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform var(--rf-group-expand-duration) ease;
+}
+
+/* 展开时箭头转向下：方向与"内容在下方"一致，不必再读一次 `aria-expanded`。 */
+.rf-group-expand[aria-expanded="true"] .rf-group-expand-icon {
+  transform: rotate(90deg);
+}
+
+/* 单版本组的箭头占位：不留位的话，同列里带箭头与不带箭头的岗位名左缘差 26px。 */
+.rf-group-expand-placeholder {
+  flex: 0 0 20px;
+}
+
+/* ## 展开过渡（R1 第六条）
+ *
+ * `grid-template-rows: 0fr → 1fr` 是唯一能在"内容高度未知"时做过渡的写法；内层必须
+ * `min-height: 0` + `overflow: hidden`，否则 0fr 的那一行仍被内容撑开（`min-height: auto`）。
+ *
+ * 用 `animation` 而不是 `transition`：antd 在 `expandedRowKeys` 变化时会重建这个节点，
+ * 收起时新节点一出生就是 closed，没有"前一帧"可供 transition 插值（实测 402 → 0 只用
+ * 一帧）。两条 keyframes + `both` 与"节点是否重建"无关，两个方向都能真跑满 240ms。
+ * 卸载时机由 `ResumeGroupedTable` 的 `closingKeys` 接管（`animationend` + 定时器兜底）。 */
+.rf-group-versions-clip {
+  display: grid;
+  grid-template-rows: 0fr;
+}
+
+.rf-group-versions-clip[data-state="open"] {
+  animation: rf-group-versions-in var(--rf-group-expand-duration) ease both;
+}
+
+.rf-group-versions-clip[data-state="closed"] {
+  animation: rf-group-versions-out var(--rf-group-expand-duration) ease both;
+}
+
+@keyframes rf-group-versions-in {
+  from {
+    grid-template-rows: 0fr;
+  }
+  to {
+    grid-template-rows: 1fr;
+  }
+}
+
+@keyframes rf-group-versions-out {
+  from {
+    grid-template-rows: 1fr;
+  }
+  to {
+    grid-template-rows: 0fr;
+  }
+}
+
+.rf-group-versions-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 选区摘要（R1 第四条）：批量栏说"已选 N 项"，这张表补一句"其中几个是整组带上来的"。 */
+.rf-group-selection-summary {
+  padding: 6px var(--rf-group-cell-pad-x) 8px;
   font-size: 12px;
-  color: var(--rf-text-tertiary);
+  color: var(--rf-text-secondary);
 }
 
-/* 多版本组行：浅底 + 左侧 3px 色条（第一格），hover 再深一档。
-   色条用 color-mix 派生，不写字面量，深色主题下自然跟随。 */
-.resume-group-table .rf-group-row > td {
-  background: var(--rf-surface-alt);
-}
-
-.resume-group-table .rf-group-row > td:first-child {
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--rf-info) 26%, var(--rf-surface));
-}
-
-.resume-group-table .rf-group-row:hover > td {
-  background: color-mix(in srgb, var(--rf-surface-alt) 94%, var(--rf-info));
-}
-
-/* 两行身份：主行（岗位名 + 版本数 chip）/ 副行（公司 · 最新版本标题）。 */
+/* 两行身份：主行（展开箭头 + 岗位名 + 版本数 chip）/ 副行（公司 · 最新版本标题）。
+   行高写死（18 / 16）是为了让"58 / 64"变成可算的数：antd 默认的 1.5715 行高会让每个
+   Tag、每个数字都把行高往上顶一点，最后谁也对不上 58。 */
 .rf-group-identity {
   display: flex;
   flex-direction: column;
@@ -66,8 +243,12 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  line-height: 18px;
 }
 
+/* 岗位名 = **纯文本**（R25）。原来它是 antd 的 link 按钮（`inline-flex`），
+   `text-overflow: ellipsis` 对 flex 容器完全无效，超长岗位名被列宽硬切；
+   现在是行内流，省略号生效，也不再有点一下就跳走的误触。 */
 .rf-group-identity-name {
   min-width: 0;
   max-width: 100%;
@@ -76,13 +257,18 @@
   white-space: nowrap;
   font-weight: 600;
   font-size: 13.5px;
-  padding: 0;
-  /* antd 的 link 按钮是 `inline-flex`：文字会变成 flex 项，`text-overflow: ellipsis`
-     对 flex 容器**完全无效**，超长岗位名会被列宽硬切（旧实现靠"列自己撑宽"掩盖了这点，
-     改 `tableLayout: fixed` 之后就露出来了）。`block` 让文字回到行内流，省略号才生效；
-     高度由 `height: auto` 的内容撑，行高不变。 */
+  color: var(--rf-text-body);
   display: block;
   text-align: left;
+}
+
+/* 通用简历的主行仍是按钮（打开的是**这一行自己的详情**）：把它压回文字尺寸，
+   与岗位名的纯文本对齐同一基线。 */
+.rf-group-identity-main .table-text-link.rf-group-identity-name {
+  height: auto;
+  padding: 0;
+  font-weight: 600;
+  color: var(--rf-brand);
 }
 
 .rf-group-identity-sub {
@@ -91,6 +277,7 @@
   gap: 5px;
   min-width: 0;
   font-size: 12px;
+  line-height: 16px;
   color: var(--rf-text-tertiary);
 }
 

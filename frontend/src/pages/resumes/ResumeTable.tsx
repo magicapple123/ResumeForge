@@ -8,10 +8,10 @@ import { StarFilled, StarOutlined } from "@ant-design/icons";
 import { Button, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import type { SortOrder } from "antd/es/table/interface";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { HTMLAttributes } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
+import { RowActions, type RowActionItem } from "../../components/common/RowActions";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import { useToast } from "../../hooks/useToast";
 import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescriptionKey } from "../../config";
@@ -30,51 +30,10 @@ import { copyMenuFor } from "./resumeRowCopyActions";
 import {
   batchSelectAction,
   primaryActionsFor,
-  resumeRowMenuItems,
   secondaryActionsFor,
   type RowActionDeps,
 } from "./resumeTableActions";
-
-interface ContextMenuRowProps extends HTMLAttributes<HTMLTableRowElement> {
-  record?: ResumeBrief;
-  /** 批量选择模式下右键菜单收起，与行内操作保持一致。 */
-  selecting: boolean;
-  /** 进入多选模式（「批量选择」菜单项的动作），页面传入的 useCallback 稳定引用。 */
-  enterSelecting: () => void;
-  /** 多选态的整行右键菜单：与工具条的「批量操作」下拉同一组动作。 */
-  batchActions: RowActionItem[];
-  deps: RowActionDeps;
-}
-
-/** 带右键菜单的表格行：props 全是稳定引用（antd 的 tr 属性 + record + deps），
- * 用 React.memo 让页面级 state 变化不触发整表行级重渲染。 */
-const ContextMenuRow = memo(function ContextMenuRow({
-  record,
-  selecting,
-  enterSelecting,
-  batchActions,
-  deps,
-  ...rest
-}: ContextMenuRowProps) {
-  // 必须在提前 return 之前调用（Hook 顺序），`record` 为空时用不上也无妨。
-  const toast = useToast();
-  useLocale();
-  if (!record) return <tr {...rest} />;
-  return (
-    <RowContextMenu
-      items={
-        // 选择模式：只给批量动作（对所选这批做什么）；否则给单条动作全集。
-        // 单条那一份与折叠视图的单版本组行、版本行共用 `resumeRowMenuItems`——
-        // 各写一份的话，`secondaryActionsFor` 加一项就会有地方漏掉。
-        selecting
-          ? batchActions
-          : resumeRowMenuItems(record, { deps, toast, enterSelecting })
-      }
-    >
-      <tr {...rest} />
-    </RowContextMenu>
-  );
-});
+import ContextMenuRow from "./resumeTableRow";
 
 interface Props {
   data: Page<ResumeBrief> | undefined;
@@ -166,6 +125,8 @@ export default function ResumeTable({
       setDiffResult,
       toggleFavorite,
       remove,
+      // 岗位跳转（R25）：岗位名是纯文本，去岗位广场只走右键/「⋯」里的 `open_job`。
+      openJob: (jobId: number) => navigate(`/jobs?job_id=${jobId}`),
     }),
     [
       setPreviewId,
@@ -178,11 +139,30 @@ export default function ResumeTable({
       setDiffResult,
       toggleFavorite,
       remove,
+      navigate,
     ],
   );
 
   const primaryActions = (record: ResumeBrief): RowActionItem[] =>
     primaryActionsFor(record, actionDeps);
+
+  /**
+   * 「批量选择」的完整语义：进多选 + 把点中的那一行勾上。
+   *
+   * 这一项只出现在具体某一行的右键/「⋯」里，所以它永远有一个"主语"。进去之后那一行
+   * 还空着，用户下一步只能自己再找一遍刚才那一行——折叠表的版本行同理（R3 的验收
+   * 口径就是"点击后该 id 在 selectedIds"），三处（平铺 / 折叠 / 卡片）保持同一行为。
+   *
+   * 引用稳定（`batch` 的两个动作都是 useCallback）：行组件是 memo 化的，每次渲染换一个
+   * 新函数会让整表行级重渲染。
+   */
+  const enterSelectingRow = useCallback(
+    (id: number) => {
+      batch.enterSelecting();
+      batch.selectPage([id], true);
+    },
+    [batch.enterSelecting, batch.selectPage],
+  );
 
   /** rowKey → record：行渲染 O(1) 取值，替代对 items 的逐条 find（O(n²)）。 */
   const itemsByRowKey = useMemo(() => {
@@ -275,18 +255,17 @@ export default function ResumeTable({
       sortDirections: sortDirectionsFor("job"),
       showSorterTooltip: sortTooltip(t("resumes.list.column.job")),
       ellipsis: { showTitle: false },
+      /**
+       * 岗位名是**纯文本**（R25）。原来是 `Button type="link"` 套着蓝 Tag → `/jobs?job_id=N`：
+       * 想看清岗位名叫什么的人点一下就整页被带走，而岗位名本身是个标签、不像链接。
+       * 跳转没有消失，它在右键/「⋯」菜单里（`secondaryActionsFor` 的 `open_job`）。
+       */
       render: (_, record) => (
         <Space wrap size={[4, 4]}>
           {record.job_id ? (
-            <Button
-              type="link"
-              className="table-text-link"
-              onClick={() => navigate(`/jobs?job_id=${record.job_id}`)}
-            >
-              <Tag color="blue" className="resume-job-tag">
-                {record.job_title || "-"}
-              </Tag>
-            </Button>
+            <Tag color="blue" className="resume-job-tag">
+              {record.job_title || "-"}
+            </Tag>
           ) : (
             // 无岗位记录的 job_title 存的是求职意向，不能当岗位名显示，
             // 否则通用简历看起来就是一份岗位简历。
@@ -395,7 +374,7 @@ export default function ResumeTable({
         <RowActions
           primary={primaryActions(record)}
           more={[
-            batchSelectAction(batch.enterSelecting),
+            batchSelectAction(() => enterSelectingRow(record.id)),
             // 行内「⋯」也要能复制：只在右键里的话，不知道能右键的人永远找不到。
             copyMenuFor(record, toast),
             ...secondaryActionsFor(record, actionDeps),
@@ -419,8 +398,24 @@ export default function ResumeTable({
         rowSelection={
           batch.selecting
             ? {
+                /**
+                 * 跨页勾选不丢（R4，真 bug）：`onChange` 只回传 dataSource 里存在的 key，
+                 * 用它做 `setSelected(keys)` 会在翻页后把别的页的选区整批扔掉
+                 * （探针：selectedRowKeys=[1,2,3]、本页只有 [1,2]，取消 1 号 → 回传 [2]）。
+                 * `preserveSelectedRowKeys` 保住 antd 内部状态，真正干活的是下面两个
+                 * **增量**回调：它们只说"哪一行、变勾还是变不勾"，合并交给 `selectPage`。
+                 */
+                preserveSelectedRowKeys: true,
                 selectedRowKeys: [...batch.selectedIds],
-                onChange: (keys) => batch.setSelected(keys as number[]),
+                onSelect: (record, selected) => batch.selectPage([record.id], selected),
+                onSelectAll: (selected, _rows, changeRows) => {
+                  // 取消全选清整页：半选的条目不在 `changeRows` 里，只清它就会留残局。
+                  const targets = selected ? changeRows : (data?.items ?? []);
+                  batch.selectPage(
+                    targets.map((item) => item.id),
+                    selected,
+                  );
+                },
               }
             : undefined
         }
@@ -435,7 +430,7 @@ export default function ResumeTable({
                   {...props}
                   record={itemsByRowKey.get(rowKey)}
                   selecting={batch.selecting}
-                  enterSelecting={batch.enterSelecting}
+                  enterSelecting={enterSelectingRow}
                   batchActions={batchActions}
                   deps={actionDeps}
                 />

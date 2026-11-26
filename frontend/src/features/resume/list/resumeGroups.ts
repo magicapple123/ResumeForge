@@ -48,13 +48,18 @@ export function groupKeyOf(item: ResumeBrief): string {
 }
 
 /**
- * 折叠行能不能被批量勾选：**只有单版本组**可以。
+ * 这个组里的全部 `resume_id`（组内版本倒序，最新在前）。
  *
- * 多版本组的勾选框代表哪一份简历说不清（最新那版？全组？），而"勾一行 = 删一组"
- * 正是 CR-33 明确禁止的整组动作。要让用户逐版操作，就先展开。
+ * 折叠表的**组行勾选 = 整组全部版本**（2026-11-26 三态方案，推翻 CR-33 的
+ * "多版本组不可勾选"）：勾选框要有确定的语义，而"这一行的勾选框代表哪一份简历"
+ * 说不清，所以它代表整组。批量栏因此按「份」计数，并注明其中几个是整组带上来的
+ * （见 `ResumeGroupedTable` 的选区摘要）。
+ *
+ * 只此一处做 key → id 的展开：`rowSelection` 的 `onSelect` / `onSelectAll` 与
+ * `selectedRowKeys` 的反推都读它，各写一遍迟早有一处漏掉某个版本。
  */
-export function isGroupBatchSelectable(group: ResumeGroup): boolean {
-  return group.versionCount === 1;
+export function groupResumeIds(group: ResumeGroup): number[] {
+  return group.versions.map((version) => version.id);
 }
 
 export function groupResumes(items: ResumeBrief[]): ResumeGroup[] {

@@ -35,12 +35,12 @@ import type { ResumeGroup } from "../../features/resume/list/resumeGroups";
 import { copyMenuFor } from "./resumeRowCopyActions";
 import { GROUP_COLUMN_WIDTHS } from "./resumeGroupLayout";
 import {
+  batchSelectFor,
   groupSecondaryActions,
   groupToggleAction,
   type GroupMenuContext,
 } from "./resumeGroupMenu";
 import {
-  batchSelectAction,
   primaryActionsFor,
   secondaryActionsFor,
   type RowActionDeps,
@@ -53,11 +53,22 @@ export interface GroupedColumnArgs {
   menuCtx: GroupMenuContext;
   groupSortState: GroupSortState;
   onGroupSortChange: (next: GroupSortState) => void;
-  navigate: (path: string) => void;
   setPreviewId: (id: number) => void;
   toggleGroup: (key: string) => void;
+  /** 该组当前是否展开（自绘展开按钮要 `aria-expanded`，不是给 antd 箭头用的）。 */
+  isExpanded: (key: string) => boolean;
   /** 窄档（`mqMax("narrow")`）：收窄时间列，收起「投递」列。 */
   narrow: boolean;
+}
+
+/**
+ * 展开区域（版本清单）的 DOM id：自绘按钮的 `aria-controls` 必须指到它。
+ *
+ * 写在这里而不是 `ResumeGroupedTable`：按钮与容器分属两个文件，id 只能有一份拼法。
+ * 组 key 里只有 `job:12` / `resume:7` 这种字符，直接拼进 id 是安全的。
+ */
+export function groupVersionsRegionId(groupKey: string): string {
+  return `rf-group-versions-${groupKey.replace(":", "-")}`;
 }
 
 /** 多版本组 / 单版本组 / 通用简历的主身份都是"岗位名或简历标题"，副行各有各的写法。 */
@@ -67,99 +78,120 @@ function identityOf(group: ResumeGroup): { primary: string; secondary: string } 
 }
 
 /**
- * 第一列：两行身份。
+ * 第一列：两行身份 + 自绘展开按钮。
  *
  * 三档渲染：
- * - 多版本组：主行岗位名（→ 岗位广场）+「N 个版本」chip；副行「公司 · 最新版本 {标题}」。
- *   展开只走左侧箭头与操作列按钮（用户明确要求"点岗位名去岗位广场"）。
- * - 单版本组：主行岗位名（→ 岗位广场）；副行「公司 · 该版本标题」（→ 详情）。
- * - 通用简历（无 job_id）：主行简历标题（→ 详情）；副行「通用简历」tag + 求职意向。
+ * - 多版本组：主行岗位名（**纯文本**，R25）+「N 个版本」chip；副行「公司 · 最新版本 {标题}」。
+ * - 单版本组：主行岗位名（**纯文本**）；副行「公司 · 该版本标题」（→ 详情）。
+ * - 通用简历（无 job_id）：主行简历标题（→ 自己的详情）；副行「通用简历」tag + 求职意向。
+ *
+ * ## 岗位名为什么不再是链接（R25）
+ *
+ * 原来它是 `Button type="link"` → `/jobs?job_id=N`：用户想看清岗位名，点一下就整页
+ * 跳到岗位广场；通用简历一旦有两个版本还会拼出 `/jobs?job_id=null`。跳转没有消失，
+ * 只是挪进了右键/「⋯」菜单（`secondaryActionsFor` 的 `open_job`）——**误触优先于可发现性**。
+ * 平铺表的同名列同一口径。
+ *
+ * 通用简历的主行仍是按钮：它打开的**就是这一行自己的详情**（不离开上下文），
+ * 与"被带走"是两件事。副行里最新版本的标题也保留详情入口。
  */
 function groupIdentity(group: ResumeGroup, args: GroupedColumnArgs) {
-  const { navigate, setPreviewId } = args;
+  const { setPreviewId, toggleGroup, isExpanded } = args;
   const { primary, secondary } = identityOf(group);
+  const isGeneral = group.jobId === null;
+  const stacked = group.versionCount > 1;
+  const expanded = stacked && isExpanded(group.key);
+  const regionId = groupVersionsRegionId(group.key);
   const star = group.hasFavorite ? (
     <StarFilled className="rf-group-star" aria-label={t("resumes.list.group.favoriteHint")} />
   ) : null;
 
-  if (group.versionCount > 1) {
-    return (
-      <div className="rf-group-identity">
-        <div className="rf-group-identity-main">
-          {star}
-          <Button
-            type="link"
-            className="table-text-link rf-group-identity-name"
-            onClick={() => navigate(`/jobs?job_id=${group.jobId}`)}
-          >
-            {primary}
-          </Button>
-          <Tag className="rf-group-count">
-            {t("resumesPage.list.group.versionCount", { count: group.versionCount })}
-          </Tag>
-        </div>
-        <div className="rf-group-identity-sub">
-          {secondary ? (
-            <>
-              <span>{secondary}</span>
-              <span className="rf-group-dot">·</span>
-            </>
-          ) : null}
-          <span>{t("resumesPage.list.group.latestVersion", { title: group.latest.title })}</span>
-        </div>
-      </div>
-    );
-  }
+  /**
+   * 展开按钮占位：单版本组没有"展开"这回事，但箭头位仍要留出来，
+   * 否则同列里带箭头与不带箭头的岗位名左缘差 20px，读起来像两级缩进。
+   *
+   * ## 为什么这里不叫「展开 {count} 个版本」（2026-11-26 收尾）
+   *
+   * 同一行里本来就有**两个**展开入口：左边这个箭头（R1 第五条把 44px 展开列去掉后
+   * 自绘的，带 `aria-expanded` / `aria-controls`）与操作列那个文字按钮
+   * （`groupToggleAction`，鼠标用户更容易发现的显式入口）。两者此前共用同一句
+   * 「展开 3 个版本」，对读屏用户就是**同一行里两个同名按钮**——无法区分，也让
+   * `getByRole("button", { name })` 这种"唯一命名"的断言无解。
+   * 箭头用「展开版本 / 收起版本」（版本数紧接着的 chip 已经说了），语义仍然是
+   * "这块可折叠区域"，与操作列那句带计数的动作不再撞名。
+   */
+  const expandLabel = expanded
+    ? t("resumes.list.group.collapse")
+    : t("resumes.list.group.expand");
+  const expandSlot = stacked ? (
+    <button
+      type="button"
+      className="rf-group-expand"
+      aria-expanded={expanded}
+      aria-controls={regionId}
+      aria-label={expandLabel}
+      title={expandLabel}
+      onClick={() => toggleGroup(group.key)}
+    >
+      <span className="rf-group-expand-icon" aria-hidden="true" />
+    </button>
+  ) : (
+    <span className="rf-group-expand-placeholder" aria-hidden="true" />
+  );
 
-  if (group.jobId === null) {
-    return (
-      <div className="rf-group-identity">
-        <div className="rf-group-identity-main">
-          {star}
-          <Button
-            type="link"
-            className="table-text-link rf-group-identity-name"
-            onClick={() => setPreviewId(group.latest.id)}
-          >
-            {primary}
-          </Button>
-        </div>
-        <div className="rf-group-identity-sub">
-          <Tag color="purple">{t("resumes.list.general")}</Tag>
-          {secondary ? (
-            <span>{t("resumes.list.intent", { job: secondary })}</span>
-          ) : null}
-        </div>
-      </div>
-    );
-  }
+  const primaryNode = isGeneral ? (
+    <Button
+      type="link"
+      className="table-text-link rf-group-identity-name"
+      onClick={() => setPreviewId(group.latest.id)}
+    >
+      {primary}
+    </Button>
+  ) : (
+    <span className="rf-group-identity-name" title={primary}>
+      {primary}
+    </span>
+  );
 
   return (
     <div className="rf-group-identity">
       <div className="rf-group-identity-main">
+        {expandSlot}
         {star}
-        <Button
-          type="link"
-          className="table-text-link rf-group-identity-name"
-          onClick={() => navigate(`/jobs?job_id=${group.jobId}`)}
-        >
-          {primary}
-        </Button>
+        {primaryNode}
+        {stacked ? (
+          <Tag className="rf-group-count">
+            {t("resumesPage.list.group.versionCount", { count: group.versionCount })}
+          </Tag>
+        ) : null}
       </div>
       <div className="rf-group-identity-sub">
-        {secondary ? (
+        {isGeneral ? (
           <>
-            <span>{secondary}</span>
-            <span className="rf-group-dot">·</span>
+            <Tag color="purple">{t("resumes.list.general")}</Tag>
+            {secondary ? <span>{t("resumes.list.intent", { job: secondary })}</span> : null}
           </>
-        ) : null}
-        <Button
-          type="link"
-          className="table-text-link"
-          onClick={() => setPreviewId(group.latest.id)}
-        >
-          {group.latest.title}
-        </Button>
+        ) : (
+          <>
+            {secondary ? (
+              <>
+                <span>{secondary}</span>
+                <span className="rf-group-dot">·</span>
+              </>
+            ) : null}
+            {stacked ? (
+              <span>{t("resumesPage.list.group.latestVersion", { title: group.latest.title })}</span>
+            ) : (
+              <Button
+                type="link"
+                className="table-text-link"
+                onClick={() => setPreviewId(group.latest.id)}
+              >
+                {group.latest.title}
+              </Button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -181,7 +213,8 @@ function groupActions(group: ResumeGroup, args: GroupedColumnArgs) {
     <RowActions
       primary={primaryActionsFor(group.latest, deps)}
       more={[
-        batchSelectAction(batch.enterSelecting),
+        // 与整行右键同一份语义（进多选 + 勾上这一行），不是裸的 `enterSelecting`。
+        batchSelectFor(group.latest, menuCtx),
         copyMenuFor(group.latest, toast),
         ...secondaryActionsFor(group.latest, deps),
       ]}

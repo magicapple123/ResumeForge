@@ -33,7 +33,7 @@ export default function ResumeBatchToolbar({
   return (
     // 外层留出上间距：提示条与操作条此前贴在一起，读起来像同一块内容。
     <div style={{ marginTop: 16 }}>
-      <BatchActionBar count={count} onExit={onExit}>
+      <BatchActionBar count={count} countKey="resumesPage.batch.selected" onExit={onExit}>
         {total > 0 ? (
           <Button loading={selectAllLoading} disabled={busy} onClick={onSelectAll}>
             {t("resumesPage.selectAll.button", { count: total })}

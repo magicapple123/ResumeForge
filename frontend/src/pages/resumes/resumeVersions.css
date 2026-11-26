@@ -9,43 +9,64 @@
 .resume-version-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  /* 版本之间用 1px 分隔线（R1 第六条），不再用 `gap` 留缝：缝隙读起来是"两段内容"，
+     分隔线读起来是"同一个清单的两行"。 */
+  gap: 0;
   /* 只留纵向留白：横向留白由每一格自己出。列表再加横向内边距，四列就整体右移。 */
-  padding: 2px 0 4px;
+  padding: 0 0 6px;
 }
 
-/* 列宽由 `versionGridColumns()` 给出（首格吃掉父表的「展开列 + 身份列」，其余三列
-   与父表同宽）。这里**没有** `column-gap`：父表列宽是 border-box 宽度，再插间距
-   会把尾随列整体左移（4 个 8px = 32px），而列与列之间的呼吸已由每格的内边距提供。 */
+/* 列宽由 `versionGridColumns()` 给出（首格 = 父表的身份列，其余三列与父表同宽）。
+   这里**没有** `column-gap`：父表列宽是 border-box 宽度，再插间距会把尾随列整体
+   左移（4 个 8px = 32px），而列与列之间的呼吸已由每格的内边距提供。 */
 .resume-version-row {
   position: relative;
   display: grid;
   align-items: center;
   column-gap: 0;
-  min-height: 30px;
+  /* 舒适档版本行 36px（R1：组行 58 / 单行 64 / 版本行 36）。 */
+  min-height: 36px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.resume-version-row:last-child {
+  border-bottom: 0;
 }
 
 /* 左侧一条 1px 竖向引导线贯穿整组，标明"这些是同一岗位的版本"。
-   与「第 N 版」文字左缘留 9px：首格内边距 8px + 缩进 16px = 24px，减 9px 得 15px。 */
+   与「第 N 版」文字左缘留 9px：首格内边距 8px + 缩进 26px = 34px，减 9px 得 25px。 */
 .resume-version-row::before {
   content: "";
   position: absolute;
-  left: calc(var(--rf-group-cell-pad-x, 8px) + 7px);
+  left: calc(var(--rf-group-cell-pad-x, 8px) + 17px);
   top: 0;
   bottom: 0;
   width: 1px;
   background: var(--rf-fill-tertiary);
 }
 
-/* 首格：父表的「展开列 + 身份列」。比组行的身份列再进 16px —— 版本是组的子项，
-   这个缩进是层级，不是对齐误差（它整块都在首格里，不影响右侧三列的竖线）。 */
+/* 首格 = 父表的身份列。比组行的岗位名再进 26px（= 组行那个 20px 展开按钮 + 6px gap）：
+   版本是组的子项，这个缩进是层级，不是对齐误差（它整块都在首格里，不影响右侧三列的竖线）。 */
 .resume-version-leading {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  padding-left: calc(var(--rf-group-cell-pad-x, 8px) + 16px);
+  padding-left: calc(var(--rf-group-cell-pad-x, 8px) + 26px);
   padding-right: var(--rf-group-cell-pad-x, 8px);
+}
+
+/* 父表勾选列的占位格（多选态）：不画任何东西，只负责让后面四格与父表对齐。
+   宽度由 `ResumeVersionList` 以栅格跟踪列给出，这里只是"有一个格子"的语义标记。 */
+.resume-version-gutter {
+  display: block;
+}
+
+/* 版本自己的勾选框（R1 第四条）：放在首格内，不新增栅格跟踪列——多一个跟踪列，
+   右侧三列就整体右移一格。 */
+.resume-version-check {
+  flex: 0 0 auto;
+  margin-inline-end: 0;
 }
 
 /* 版本号前缀定宽（`--rf-group-version-index` 由 `GROUP_COLUMN_WIDTHS.versionIndex` 写入）：
@@ -106,7 +127,11 @@
   padding-inline: var(--rf-group-cell-pad-x, 8px);
 }
 
-/* 操作列右对齐：右缘 = 父表「操作」列内容右缘。 */
+/* 操作列右对齐：右缘 = 父表「操作」列内容右缘。
+   行高被压到 36px 之后，antd 的默认控件高度会把行顶到 41px（实测收藏按钮 40px）——
+   收到 24px（= small 档）才留得住 36。
+   基类规则写在覆盖之前：`resumeVersionRowAlign.test.ts` 按"第一条命中的规则"读这一格的
+   内边距，覆盖项排在前面会让它读到 24px 的按钮尺寸而不是这一格的对齐契约。 */
 .resume-version-actions {
   display: flex;
   align-items: center;
@@ -114,6 +139,14 @@
   gap: 4px;
   min-width: 0;
   padding-inline: var(--rf-group-cell-pad-x, 8px);
+}
+
+/* antd-override: 版本行控件高度（antd 默认控件 32–40px 会把行高顶到 41px） */
+.resume-version-actions .ant-btn {
+  height: 24px;
+  min-height: 24px;
+  min-width: 24px;
+  padding-block: 0;
 }
 
 /* 折叠行：岗位名 + 版本数不会换行，公司/投递次数跟在后面。 */
