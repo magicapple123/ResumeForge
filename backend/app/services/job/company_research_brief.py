@@ -384,6 +384,11 @@ async def build_company_brief(
         # CR-05：排障要能看到上游的 error.type / error.code 与「哪把 Key」（只留尾号）。
         error_type, error_code = _upstream_error_fields(response)
         tail = _key_tail(api_key)
+        # codeql[py/clear-text-logging-sensitive-data]
+        # 只落**尾号 4 位**（`_key_tail` 的输出恒 ≤4 字符），完整 Key 永不进日志：
+        # `test_brief_401_log_carries_upstream_type_code_and_key_tail` 同时断言
+        # 完整 Key 与上游回显都不在日志里。尾号是排障时区分"哪把 Key"的唯一线索，
+        # 属于刻意保留的可公开信息（与界面上的 `sk-****bb44` 同一口径）。
         logger.warning(
             "调研简报失败 status=%s error.type=%s error.code=%s key_tail=%s elapsed_ms=%s",
             response.status_code,
