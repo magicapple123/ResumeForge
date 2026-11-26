@@ -2,9 +2,14 @@
 """日历提醒：把"什么时候该做什么"从人脑里搬到本地日程。
 
 提醒不自己发明时机，只记录用户或流程**明确给出**的时点（面试时间、测评截止、该催 HR 回复了）。
-它同时绑定三个可选对象——求职进度（``application_track``）、岗位（``job``）、简历版本
-（``resume_record``），但三者都可空：一条"周日整理简历"的提醒不绑定任何漏斗，一条
-"跟进某岗位"的提醒只绑岗位。绑定用 ``SET NULL``：被绑对象删除后提醒仍保留，只是失去关联。
+它同时绑定四个可选对象——求职进度（``application_track``）、岗位（``job``）、内部简历版本
+（``resume_record``）、外部简历（``external_resume``），但都可空：一条"周日整理简历"的提醒
+不绑定任何漏斗，一条"跟进某岗位"的提醒只绑岗位。绑定用 ``SET NULL``：被绑对象删除后提醒
+仍保留，只是失去关联。
+
+**两份简历关联互斥**（R14）：``resume_id`` 与 ``external_resume_id`` 最多填一个，同时传两个
+由 API/schema 层返回 422。它们不是"多对多"而是"这次跟进的是哪一份"，同时填会让读侧
+（提醒卡、通知落点、助手工具）必须解释"两个都指的时候以谁为准"，而那个答案永远不合理。
 
 设计要点（CR-28 起）：
 
@@ -74,7 +79,7 @@ class Reminder(Base):
         String(16), default=REMINDER_RECURRENCE_NONE, index=False
     )
     recurrence_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    # 三个可选绑定对象，均为 SET NULL：被绑对象删除后提醒仍保留。
+    # 四个可选绑定对象，均为 SET NULL：被绑对象删除后提醒仍保留。
     track_id: Mapped[int | None] = mapped_column(
         ForeignKey("application_track.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -83,6 +88,11 @@ class Reminder(Base):
     )
     resume_id: Mapped[int | None] = mapped_column(
         ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # 外部简历关联（迁移 0030，R14）。与 ``resume_id`` **互斥**：同时传两个由 schema 层
+    # 返回 422，库上不做 CHECK（SQLite 加 CHECK 要重建整张表）。
+    external_resume_id: Mapped[int | None] = mapped_column(
+        ForeignKey("external_resume.id", ondelete="SET NULL"), nullable=True, index=True
     )
     note: Mapped[str] = mapped_column(Text, default="")
     # CR-22 的投递标记。CR-28 起**不再写入**：投递幂等改由 ``ReminderOccurrence.notified_at``

@@ -20,6 +20,12 @@ PDF / docx 没有条目 / 字段 / 纸面位置这些语义，用模型还原必
 同一份 sha256 可能被资料照片 / 聊天附件引用，覆盖会连累别的入口。所以每次编辑都写一个
 新 `user_file`，`file_id` 指向最新那份，`original_file_id` 留**首次上传**那份（"回到原件"），
 历史逐条记在 `external_resume_revision`。列表仍是一行 = 一份外部简历，版本只在详情抽屉里看。
+
+**收藏与备注（#R10 续 · 迁移 0031）**：外部简历此前只能"上传 / 删除"，留不住"这份先留着"
+和"这份是给甲方的版本"。`favorite` / `favorited_at` / `note` 三列把能力补齐到与内部简历
+齐平。**写入必须走 `services/favorites.py`**（Core `update()` + 显式写回 `updated_at`）：
+`updated_at` 带 `onupdate=utcnow`，一次 ORM 赋值收藏就会把行顶到"最近更新"的头上并重演
+R2 的"行跳位"。
 """
 
 from datetime import datetime
@@ -59,6 +65,14 @@ class ExternalResume(Base):
     text: Mapped[str] = mapped_column(Text, default="", nullable=False)
     # 冗余字数：列表展示与排序不必对 text 反复求长度。
     text_chars: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # ===== 收藏与备注（迁移 0031，R10 续 · P0）=====
+    # 是否收藏。**不给它 index=True**：收藏页的候选集是"用户自己上传的几十份"，全表扫足够，
+    # 建索引要跟迁移双向对齐却没有查询收益。
+    favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 收藏时刻；NULL = 从没收藏过（取消收藏时清回 NULL）。收藏页按它倒序排"最近收藏的在前"。
+    favorited_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 用户备注（"这份是给甲方的那版"）。空串 = 没写，与内部简历同口径，读侧不必再判 NULL。
+    note: Mapped[str] = mapped_column(Text, default="", nullable=False)
     # 可选关联岗位：便于表达"这份简历是投这个岗的"；岗位彻底删除时置空。
     job_id: Mapped[int | None] = mapped_column(
         ForeignKey("job.id", ondelete="SET NULL"), nullable=True, index=True

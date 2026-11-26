@@ -303,6 +303,12 @@ class ApplyTaskItem(Base):
     resume_id: Mapped[int | None] = mapped_column(
         ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # 用**外部简历原件**投递时指向那一份（迁移 0032，R10 续 · P1）。与 ``resume_id`` 互斥：
+    # 同时传两个由 schema 层返回 422。``SET NULL``：外部简历被彻底删除后这条历史记录
+    # 仍然保留（``resume_title`` 快照是当时的名字，与内部简历同一口径）。
+    external_resume_id: Mapped[int | None] = mapped_column(
+        ForeignKey("external_resume.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     resume_title: Mapped[str] = mapped_column(String(256), default="")
     # 实际发送的招呼语（脱敏按"记全文但截断到合理上限"处理）。
     greeting: Mapped[str] = mapped_column(Text, default="")

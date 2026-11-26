@@ -65,13 +65,21 @@ def test_head_is_external_resume_migration(migrated):
 
 
 def test_upgrade_creates_documented_columns_and_indexes(migrated):
-    """列与索引逐个点名：与清单 `21.3 的轻量表一致（多一列少一列都要显式改这里）。"""
+    """列与索引逐个点名：与清单 `21.3 的轻量表一致（多一列少一列都要显式改这里）。
+
+    `original_file_id` 由 0029 落地、`favorite` / `favorited_at` / `note` 由 0031 落地；
+    断言仍是**精确集合**（多一列少一列都红），只是把后续迁移合法加上的列补进清单。
+    """
     assert {
         "id",
         "file_id",
+        "original_file_id",
         "name",
         "text",
         "text_chars",
+        "favorite",
+        "favorited_at",
+        "note",
         "job_id",
         "created_at",
         "updated_at",
