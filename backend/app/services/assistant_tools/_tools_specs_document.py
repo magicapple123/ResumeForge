@@ -63,6 +63,8 @@ DOCUMENT_TOOLS: tuple[Tool, ...] = (
         description=(
             "修改简历里**已存在的一个字段**的值（正文某一条的一个字段，不是版式）。"
             "需要先 get_entry 确认 path（条目序号从 1 开始，如 education.1.gpa）。"
+            "path 必须指向**一个字段**：指向整条条目或整份简历会被拒绝——整条布局用 "
+            "set_entry_layout，整篇重写请改为逐块调用。不能传整份文档 content。"
             + _STATELESS_READ_NOTE
             + "这是写入工具：会先给用户看 before/after 差异，用户确认后才执行；执行前自动留"
             "「助手修改前」版本，可在版本面板恢复。"

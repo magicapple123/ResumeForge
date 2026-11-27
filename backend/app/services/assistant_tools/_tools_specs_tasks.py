@@ -23,7 +23,8 @@ from .task_tools import (
 #: 也与 task_tools._PLANNERS 的键一一对应（守卫测试钉住两处一致）。
 _TASK_KIND_HINT = (
     "可选类型与参数："
-    "resume_batch_edit（resume_id 简历 id、instruction 改写要求、section 可选的板块 key）；"
+    "resume_batch_edit（resume_id 简历 id、instruction 改写要求、section 板块 key——"
+    "助手侧**必须指定**，一次只改一个板块；不带 section 等于整篇重写，会被策略拒绝）；"
     "job_import（url 网页链接、limit 最多抓取条数 1–200）；"
     "match_batch（job_ids 岗位 id 数组，最多 "
     f"{MAX_JOB_BATCH} 个）；"

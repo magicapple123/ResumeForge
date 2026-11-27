@@ -15,6 +15,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from ..assistant.assistant_sources import SourceNumberer
+from . import rewrite_policy
 from ._tools_specs_core import CORE_TOOLS
 from ._tools_specs_data import DATA_TOOLS
 from ._tools_specs_diagnosis import DIAGNOSIS_TOOLS
@@ -145,19 +146,27 @@ def _refuse(name: str, reason: str) -> ToolResult:
     return ToolResult(text=f"工具未获授权：{name}（{reason}）", summary="", changed=False)
 
 
-def _ensure_allowed(ctx: ToolExecutionContext | None, name: str) -> ToolResult | None:
+def _ensure_allowed(
+    ctx: ToolExecutionContext | None, name: str, arguments: dict
+) -> ToolResult | None:
     """执行前的授权闸门；返回 None 表示放行，否则返回拒绝结果。
 
     ``ctx=None``（受信调用方缺省）放行；``is_allowed`` 覆盖"未下发/未注册"；
     写工具还要求 ``ctx.writable``——未确认的写入由流层转提案，这里是兜底防线。
+
+    最后一道是 ``rewrite_policy``：无论有没有 ctx，**整份简历写入**一律拒绝。它按
+    工具调用形态判断（不是看模型怎么说），所以新加一个"写整份内容"的工具不会绕过。
     """
-    if ctx is None:
-        return None
-    if not is_allowed(ctx, name):
-        return _refuse(name, "未在本次请求的授权清单里")
-    tool = get_tool(name)
-    if tool is not None and tool.writes and not ctx.writable:
-        return _refuse(name, "写入操作未获用户确认")
+    if ctx is not None:
+        if not is_allowed(ctx, name):
+            return _refuse(name, "未在本次请求的授权清单里")
+        tool = get_tool(name)
+        if tool is not None and tool.writes and not ctx.writable:
+            return _refuse(name, "写入操作未获用户确认")
+    rewrite_refusal = rewrite_policy.build_refusal(name, arguments)
+    if rewrite_refusal is not None:
+        logger.warning("助手工具 %s 被整篇重写策略拒绝", name)
+        return ToolResult(text=rewrite_refusal, summary="已拒绝整篇重写", changed=False)
     return None
 
 
@@ -169,7 +178,7 @@ def execute_tool(
     聊天流走 ``execute_tool_async``；这个入口保留给不需要联网搜索的调用方与测试，
     让它们不必把自己变成异步。模型路径必须传 ``ctx``。
     """
-    refusal = _ensure_allowed(ctx, name)
+    refusal = _ensure_allowed(ctx, name, arguments)
     if refusal is not None:
         return refusal
     tool = _find_tool(name)
@@ -192,7 +201,7 @@ async def execute_tool_async(
     网络请求，其余工具是纯数据库操作。``numberer`` 是这一次回答里跨所有联网搜索
     共享的来源编号器，只传给联网搜索 handler。模型路径必须传 ``ctx``。
     """
-    refusal = _ensure_allowed(ctx, name)
+    refusal = _ensure_allowed(ctx, name, arguments)
     if refusal is not None:
         return refusal
     tool = _find_tool(name)

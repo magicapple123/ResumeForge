@@ -26,6 +26,7 @@ from ..assistant_run_trace import (
 from ..assistant_tools import (
     execute_tool_async,
     get_tool,
+    rewrite_policy,
     tool_writes,
 )
 from ..assistant_tools import policy as tool_policy
@@ -171,6 +172,14 @@ async def run_tool_call(
         arguments = _parse_tool_arguments(function.get("arguments") or "")
         record["arguments"] = arguments
         record["args_preview"] = build_args_preview(arguments)
+        # T35：整份简历写入在**生成提案之前**就拒绝——否则用户会先看到一张"重写整篇"
+        # 的确认卡，点确认后才被告知不能做。这里给模型的是"怎么做才有效"的逐块出路。
+        rewrite_refusal = rewrite_policy.build_refusal(name, arguments)
+        if rewrite_refusal is not None:
+            record["summary"] = "已拒绝整篇重写"
+            record["result_text"] = rewrite_refusal
+            logger.info("助手工具 %s 被整篇重写策略拒绝（未生成提案）", name)
+            return record
         if tool_writes(name) and tool_policy.requires_proposal(name, writable=ctx.writable):
             # 写工具 + 用户未同意写入（RF-01）：不执行 handler，生成结构化提案等
             # 用户在界面上确认。批准走 REST 端点用存储参数执行，token 不进模型
