@@ -43,6 +43,7 @@ import { t } from "../../i18n";
 import { ADMISSION_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 import JobMatchResumeSelect from "./JobMatchResumeSelect";
+import JobMatchTextLevelPanel from "./JobMatchTextLevelPanel";
 import JobMatchSourceNotice from "./JobMatchSourceNotice";
 import JobMatchConditionList from "./JobMatchConditionList";
 import { GROUPS, HARD_GATE_LABELS, dimensionLabel } from "./jobMatchLabels";
@@ -407,6 +408,10 @@ export default function JobMatchModal({ job, onClose }: Props) {
           </div>
         )
       )}
+
+      {/* 文本级口径**单独成块**（T34）：来源是外部简历的正文字，结论只有词级覆盖，
+          与上面的结构化匹配不可比——所以既不复用那张列表，也不往它里面塞行。 */}
+      {job && <JobMatchTextLevelPanel jobId={job.id} />}
     </Modal>
   );
 }

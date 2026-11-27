@@ -186,7 +186,11 @@ const interviewPage = {
   "interviewPage.setup.resumeGroup.external": "外部简历（上传的）",
   // 没有正文的外部简历在下拉里就禁用（方案 25C）：短标记给选项文案，长句子给悬停提示。
   "interviewPage.setup.resumeNoTextBadge": "无正文",
-  "interviewPage.setup.resumeNoText": "这份简历没有提取到文字，请上传原件",
+  "interviewPage.setup.resumeNoText":
+    "这份没有提取到正文（多为扫描件），进不了面试：到简历中心打开它，做一次文本检查或补录正文后再来选",
+  // 同上，但**常驻可见**：禁用项只有悬停才出提示，而"灰的为什么点不了"是每个扫描件都会撞上的问题。
+  "interviewPage.setup.resumeNoTextHelp":
+    "灰掉的那几份没有正文（多为扫描件）：先在简历中心为它做文本检查或补录正文，就能用于模拟面试。",
   // 外部简历按岗位只打标签、不过滤（方案 25D）：列表接口没有 job_id 参数。
   "interviewPage.setup.resumeJobTag": "关联此岗位",
   // 「当前材料」：选完外部简历后下拉是空的（材料走"导入文件"那一侧），必须显式说清现在用的是哪份。

@@ -189,7 +189,11 @@ const interviewPage = {
   // External resumes without text are disabled in the dropdown (plan 25C).
   "interviewPage.setup.resumeNoTextBadge": "no text",
   "interviewPage.setup.resumeNoText":
-    "No text could be extracted from this resume - upload the original file",
+    "No text was extracted here (usually a scan), so it cannot be used for an interview: open it in the resume center, run a text check or add the text, then pick it again",
+  // Same reason, but always visible: a disabled option only explains itself on hover, and
+  // "why is this one greyed out" is what every scanned file hits.
+  "interviewPage.setup.resumeNoTextHelp":
+    "Greyed-out resumes have no body text (usually scans): run a text check or add the text in the resume center, and they become usable for mock interviews.",
   // Job link is a label only, never a filter (plan 25D).
   "interviewPage.setup.resumeJobTag": "linked to this job",
   // "Current material": after picking an external resume the select is empty (the text lives

@@ -43,7 +43,7 @@ export function useQuestionBankMaterials() {
     value: resumeValue,
     onExternal: externalResume.apply,
     onExternalFailed: externalResume.notifyFailed,
-    onSelectInternal: setResumeValue,
+    onSelect: setResumeValue,
   });
   useEffect(() => {
     void jobSelect.reload();

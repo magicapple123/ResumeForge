@@ -174,7 +174,7 @@ describe("independent resume selection (R28)", () => {
     expect(await screen.findByText(t("interviewPage.setup.jobRequired"))).toBeInTheDocument();
     expect(onStart).not.toHaveBeenCalled();
     expect(resumesMocks.listResumes).toHaveBeenCalledWith(
-      expect.objectContaining({ job_id: undefined, include_general: true }),
+      expect.not.objectContaining({ job_id: expect.anything() }),
     );
   });
 
@@ -191,7 +191,8 @@ describe("independent resume selection (R28)", () => {
     await waitFor(() =>
       expect(onStart).toHaveBeenCalledWith(
         expect.objectContaining({
-          resumeId: undefined,
+          // 外部简历的选择值是复合引用（没有内部 id）；正文走材料。
+          resumeId: "external:7",
           jobMaterial: null,
           resumeMaterial: expect.objectContaining({ name: "external-a.pdf", text: EXTERNAL_TEXT }),
         }),
@@ -239,6 +240,8 @@ describe("简历材料下拉分组（#25）", () => {
     const scan = await optionFor("scan-only.pdf");
     expect(scan.className).toContain("ant-select-item-option-disabled");
     expect(scan.getAttribute("title")).toBe(t("interviewPage.setup.resumeNoText"));
+    // 禁用项之外还有常驻说明：为什么灰 + 去哪里补正文（不只靠悬停）。
+    expect(screen.getByText(t("interviewPage.setup.resumeNoTextHelp"))).toBeInTheDocument();
 
     // 点禁用项：什么都不该发生——材料侧不出现文件名，提交仍被必选规则挡住。
     fireEvent.click(scan);
@@ -268,8 +271,9 @@ describe("选中外部简历 = 复用深链那一套（#25）", () => {
     await waitFor(() => expect(onStart).toHaveBeenCalled());
     expect(onStart).toHaveBeenCalledWith(
       expect.objectContaining({
-        // 外部简历没有内部 id：这一栏必须是空的，正文走材料。
-        resumeId: undefined,
+        // 外部简历的选择值是复合引用（external:<id>）：界面知道选的是哪一份，
+        // 提交时只拆出材料，不产生 resume_id。
+        resumeId: "external:7",
         resumeMaterial: {
           name: "external-a.pdf",
           text: EXTERNAL_TEXT,
@@ -327,8 +331,8 @@ describe("选中外部简历 = 复用深链那一套（#25）", () => {
   });
 });
 
-describe("选中内部简历：值带前缀（#25）", () => {
-  it("提交带 r:<id>，「当前材料」显示内部简历标题", async () => {
+describe("选中内部简历：值用复合引用（T33）", () => {
+  it("提交带 internal:<id>，「当前材料」显示内部简历标题", async () => {
     const { onStart } = renderSetup();
     await pickJob();
     await pickOption(t("interviewPage.setup.resumeLabel"), INTERNAL_RESUME.title);
@@ -342,7 +346,7 @@ describe("选中内部简历：值带前缀（#25）", () => {
     await submit();
     await waitFor(() => expect(onStart).toHaveBeenCalled());
     expect(onStart).toHaveBeenCalledWith(
-      expect.objectContaining({ resumeId: "r:1", resumeMaterial: null }),
+      expect.objectContaining({ resumeId: "internal:1", resumeMaterial: null }),
     );
   });
 });

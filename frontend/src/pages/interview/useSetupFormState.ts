@@ -33,8 +33,8 @@ export interface SetupForm {
   /** 关联岗位：岗位侧只剩"从记录选"（Q3），所以它始终必填。 */
   jobId?: number;
   /**
-   * 关联简历：与 `resumeMaterial` 二选一。**带前缀的字符串**（#25）：`r:<id>` = 本应用的
-   * 简历，`e:<id>` = 外部简历——前缀就是 `onChange` 的分派依据；提交时由
+   * 关联简历：与 `resumeMaterial` 二选一。**复合引用**（T33）：`internal:<id>` = 本应用的
+   * 简历，`external:<id>` = 外部简历——来源就是 `onChange` 的分派依据；提交时由
    * `toInternalResumeId` 还原成后端要的数字 id（外部简历没有内部 id，正文走材料）。
    */
   resumeId?: string;
@@ -106,7 +106,7 @@ export function useSetupFormState(
     value: watchedResumeValue,
     onExternal: externalResume.apply,
     onExternalFailed: externalResume.notifyFailed,
-    onSelectInternal: (value) => form.setFieldValue("resumeId", value),
+    onSelect: (value) => form.setFieldValue("resumeId", value),
   });
 
   // 岗位一变就重拉简历候选：上一次的候选属于上一个岗位，留着会让用户挑到不该出现的简历。
@@ -165,6 +165,7 @@ export function useSetupFormState(
     setResumeSource,
     resumeMaterial,
     setResumeMaterial,
+    resumeFileOrigin,
     setResumeFileOrigin,
     resumeSelect,
     hasPersona,

@@ -8,6 +8,7 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { App as AntdApp } from "antd";
 import type { ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExternalResumeDetail, ExternalResumeItem } from "../api/externalResumes";
 import { toInternalResumeId } from "../features/interview/materialPayload";
@@ -61,6 +62,11 @@ function externalDetail(overrides: Partial<ExternalResumeDetail> = {}): External
   return { ...externalItem(), text: "External resume body", ...overrides };
 }
 
+/** 把选项的 ReactNode label 拍成文本，用来断言「名字 + 说明 + 徽标」的组合。 */
+function labelText(node: ReactNode): string {
+  return renderToStaticMarkup(<>{node}</>);
+}
+
 beforeEach(() => {
   resumesMocks.listResumes
     .mockReset()
@@ -81,15 +87,18 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("下拉 value 的前缀（#25）", () => {
-  it("两种来源各自带前缀，前缀互不重叠", () => {
+describe("下拉 value 的复合引用（T33）", () => {
+  it("写出去的是新写法 internal:/external:，旧前缀常量只作为读侧兼容保留", () => {
+    expect(internalResumeValue(12)).toBe("internal:12");
+    expect(externalResumeValue(7)).toBe("external:7");
+    // 旧写法仍被接受（只进不出）：常量本身不再被任何写路径使用。
     expect(INTERNAL_RESUME_PREFIX).toBe("r:");
     expect(EXTERNAL_RESUME_PREFIX).toBe("e:");
-    expect(internalResumeValue(12)).toBe("r:12");
-    expect(externalResumeValue(7)).toBe("e:7");
   });
 
-  it("parseResumeValue：只认带前缀的正整数，裸 id 与脏值都算没选", () => {
+  it("parseResumeValue：新旧前缀都认，裸 id 与脏值都算没选", () => {
+    expect(parseResumeValue("internal:12")).toEqual({ kind: "internal", id: 12 });
+    expect(parseResumeValue("external:7")).toEqual({ kind: "external", id: 7 });
     expect(parseResumeValue("r:12")).toEqual({ kind: "internal", id: 12 });
     expect(parseResumeValue("e:7")).toEqual({ kind: "external", id: 7 });
     for (const dirty of ["12", "r:", "r:0", "x:1", "r:1.5", "", undefined]) {
@@ -98,8 +107,9 @@ describe("下拉 value 的前缀（#25）", () => {
   });
 
   it("提交时只有内部简历能还原成数字 id（外部简历没有内部 id）", () => {
+    expect(toInternalResumeId("internal:12")).toBe(12);
     expect(toInternalResumeId("r:12")).toBe(12);
-    expect(toInternalResumeId("e:7")).toBeUndefined();
+    expect(toInternalResumeId("external:7")).toBeUndefined();
     expect(toInternalResumeId(undefined)).toBeUndefined();
   });
 
@@ -257,13 +267,13 @@ describe("useInterviewResumeSelect", () => {
       value?: string;
       onExternal?: (record: ExternalResumeDetail) => void;
       onExternalFailed?: () => void;
-      onSelectInternal?: (value: string | undefined) => void;
+      onSelect?: (value: string | undefined) => void;
     } = {},
   ) {
     const callbacks = {
       onExternal: overrides.onExternal ?? vi.fn(),
       onExternalFailed: overrides.onExternalFailed ?? vi.fn(),
-      onSelectInternal: overrides.onSelectInternal ?? vi.fn(),
+      onSelect: overrides.onSelect ?? vi.fn(),
     };
     const hook = renderHook(() =>
       useInterviewResumeSelect({
@@ -276,20 +286,26 @@ describe("useInterviewResumeSelect", () => {
     return { ...hook, ...callbacks };
   }
 
-  it("两组都在：内部 value 用 r:、外部用 e:（同一个下拉里分来源）", async () => {
+  it("两组都在：内部 value 用 internal:、外部用 external:（同一个下拉里分来源）", async () => {
     const { result } = renderSelect();
 
     await waitFor(() => expect(result.current.selectProps.options).toHaveLength(2));
     // 分组对象每次渲染都是新的：断言要读**当前**这一份，别拿着首次渲染的快照去等。
     await waitFor(() => {
       const [, externalGroup] = result.current.selectProps.options;
-      expect(externalGroup.options.map((option) => option.value)).toEqual(["e:7"]);
+      expect(externalGroup.options.map((option) => option.value)).toEqual(["external:7"]);
     });
     const [internalGroup, externalGroup] = result.current.selectProps.options;
     expect(internalGroup.label).toBe(t("interviewPage.setup.resumeGroup.internal"));
     expect(externalGroup.label).toBe(t("interviewPage.setup.resumeGroup.external"));
-    expect(internalGroup.options.map((option) => option.value)).toEqual(["r:1", "r:2"]);
-    // 外部组只按关键词查，不带岗位过滤（列表接口没有 job_id 参数）。
+    expect(internalGroup.options.map((option) => option.value)).toEqual([
+      "internal:1",
+      "internal:2",
+    ]);
+    // 内部按岗位域过滤（本岗位 + 通用），外部只按关键词查（列表接口没有 job_id 参数）。
+    expect(resumesMocks.listResumes).toHaveBeenCalledWith(
+      expect.objectContaining({ job_id: 3, include_general: true }),
+    );
     expect(externalMocks.listExternalResumes).toHaveBeenCalledWith(
       expect.not.objectContaining({ job_id: expect.anything() }),
     );
@@ -308,8 +324,8 @@ describe("useInterviewResumeSelect", () => {
     await waitFor(() => expect(result.current.selectProps.options[1].options).toHaveLength(1));
     const option = result.current.selectProps.options[1].options[0];
     expect(option.disabled).toBe(true);
-    expect(option.label).toContain("scan.pdf");
-    expect(option.label).toContain(t("interviewPage.setup.resumeNoTextBadge"));
+    expect(labelText(option.label)).toContain("scan.pdf");
+    expect(labelText(option.label)).toContain(t("interviewPage.setup.resumeNoTextBadge"));
     // 悬停提示：说清为什么禁用，而不是只把行变灰。
     expect(option.title).toBe(t("interviewPage.setup.resumeNoText"));
   });
@@ -325,7 +341,7 @@ describe("useInterviewResumeSelect", () => {
     await waitFor(() =>
       expect(linked.result.current.selectProps.options[1].options).toHaveLength(1),
     );
-    expect(linked.result.current.selectProps.options[1].options[0].label).toContain(
+    expect(labelText(linked.result.current.selectProps.options[1].options[0].label)).toContain(
       t("interviewPage.setup.resumeJobTag"),
     );
     cleanup();
@@ -341,7 +357,9 @@ describe("useInterviewResumeSelect", () => {
       expect(other.result.current.selectProps.options[1].options).toHaveLength(1),
     );
     // 别的岗位的外部简历**不**被过滤掉，只是没有那个标签。
-    expect(other.result.current.selectProps.options[1].options[0].label).toBe("other-job.pdf");
+    const otherOption = other.result.current.selectProps.options[1].options[0];
+    expect(otherOption.text).toBe("other-job.pdf");
+    expect(labelText(otherOption.label)).not.toContain(t("interviewPage.setup.resumeJobTag"));
   });
 
   it("外部列表挂了不连坐：外部组留空，内部简历照常可选", async () => {
@@ -351,66 +369,82 @@ describe("useInterviewResumeSelect", () => {
 
     await waitFor(() =>
       expect(result.current.selectProps.options[0].options.map((option) => option.value)).toEqual([
-        "r:1",
-        "r:2",
+        "internal:1",
+        "internal:2",
       ]),
     );
     expect(result.current.selectProps.options[1].options).toEqual([]);
     expect(result.current.selectProps.loading).toBe(false);
   });
 
-  it("选内部简历：只写表单（r:<id>），不请求外部详情", async () => {
-    const { result, onSelectInternal } = renderSelect({ value: undefined });
+  it("选内部简历：只写表单（internal:<id>），不请求外部详情", async () => {
+    const { result, onSelect } = renderSelect({ value: undefined });
 
-    act(() => result.current.selectProps.onChange("r:2"));
+    act(() => result.current.selectProps.onChange("internal:2"));
 
-    expect(onSelectInternal).toHaveBeenCalledWith("r:2");
+    expect(onSelect).toHaveBeenCalledWith("internal:2");
     expect(externalMocks.getExternalResume).not.toHaveBeenCalled();
   });
 
-  it("选外部简历：取正文后交给 onExternal（与深链同一个落地函数）", async () => {
-    const { result, onExternal } = renderSelect();
+  it("选外部简历：取正文后交给 onExternal，并把 external:<id> 写回表单", async () => {
+    const { result, onExternal, onSelect } = renderSelect();
 
-    act(() => result.current.selectProps.onChange("e:7"));
+    act(() => result.current.selectProps.onChange("external:7"));
 
     await waitFor(() => expect(onExternal).toHaveBeenCalledTimes(1));
     expect(externalMocks.getExternalResume).toHaveBeenCalledWith(7);
     expect(onExternal).toHaveBeenCalledWith(
       expect.objectContaining({ id: 7, name: "external-a.pdf", text: "External resume body" }),
     );
+    // 选择值本身是复合引用：界面与表单说"选的是哪一份"，材料才承载正文。
+    expect(onSelect).toHaveBeenCalledWith("external:7");
+  });
+
+  it("没有正文的外部简历即使被程序化选中也不写值（由落地函数说明为什么 + 怎么办）", async () => {
+    externalMocks.getExternalResume.mockResolvedValue(
+      externalDetail({ has_text: false, text: "" }),
+    );
+    const { result, onExternal, onSelect } = renderSelect();
+
+    act(() => result.current.selectProps.onChange("external:7"));
+
+    await waitFor(() => expect(onExternal).toHaveBeenCalledTimes(1));
+    // 不写回值：下拉仍停在"没选"，用户不会看到"已选却进不了面试"的假状态。
+    expect(onSelect).not.toHaveBeenCalledWith("external:7");
   });
 
   it("外部简历已被删除：不落材料，交给 onExternalFailed", async () => {
     externalMocks.getExternalResume.mockRejectedValue(new Error("404"));
     const { result, onExternal, onExternalFailed } = renderSelect();
 
-    act(() => result.current.selectProps.onChange("e:7"));
+    act(() => result.current.selectProps.onChange("external:7"));
 
     await waitFor(() => expect(onExternalFailed).toHaveBeenCalledTimes(1));
     expect(onExternal).not.toHaveBeenCalled();
   });
 
   it("清空（allowClear）与认不出的脏值都按「没选」写回表单", async () => {
-    const { result, onSelectInternal } = renderSelect({ value: "r:1" });
+    const { result, onSelect } = renderSelect({ value: "internal:1" });
 
     act(() => result.current.selectProps.onChange(undefined));
     act(() => result.current.selectProps.onChange("garbage"));
 
-    expect(onSelectInternal).toHaveBeenNthCalledWith(1, undefined);
-    expect(onSelectInternal).toHaveBeenNthCalledWith(2, undefined);
+    expect(onSelect).toHaveBeenNthCalledWith(1, undefined);
+    expect(onSelect).toHaveBeenNthCalledWith(2, undefined);
   });
 
   it("已选值保显示：候选里没有它时按 id 回查钉住，reload 之后仍然拿得到文案", async () => {
     resumesMocks.listResumes.mockResolvedValue({ items: [], total: 0 });
-    const { result } = renderSelect({ value: "r:2" });
+    const { result } = renderSelect({ value: "internal:2" });
 
-    // 换岗位重载候选项：这一次第一页里没有 r:2，但已选项不能退化成显示 "r:2"。
-    await waitFor(() => expect(result.current.labelFor("r:2")).toBe("General resume"));
+    // 换岗位重载候选项：这一次第一页里没有 internal:2，但已选项不能退化成显示裸值。
+    await waitFor(() => expect(result.current.labelFor("internal:2")).toBe("General resume"));
     act(() => result.current.reload());
     await waitFor(() => expect(resumesMocks.listResumes).toHaveBeenCalledTimes(2));
-    expect(result.current.labelFor("r:2")).toBe("General resume");
+    // reload 会清掉钉住项，封装层紧接着重新 ensure；等它回填。
+    await waitFor(() => expect(result.current.labelFor("internal:2")).toBe("General resume"));
     expect(result.current.selectProps.options[0].options.map((option) => option.value)).toContain(
-      "r:2",
+      "internal:2",
     );
   });
 
@@ -422,7 +456,7 @@ describe("useInterviewResumeSelect", () => {
 
     await waitFor(() => expect(externalMocks.listExternalResumes).toHaveBeenCalledTimes(2));
     expect(externalMocks.listExternalResumes).toHaveBeenLastCalledWith(
-      expect.objectContaining({ keyword: undefined }),
+      expect.objectContaining({ keyword: "" }),
     );
   });
 });

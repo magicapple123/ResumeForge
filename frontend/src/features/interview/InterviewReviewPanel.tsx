@@ -150,15 +150,16 @@ export default function InterviewReviewPanel({
       message.info(t("interviewPage.setup.external.prefilled", { name: external.name }));
     },
     onExternalFailed: () => message.warning(t("interviewPage.setup.external.loadFailed")),
-    onSelectInternal: (raw) => {
+    onSelect: (raw) => {
       const parsed = parseResumeValue(raw);
-      if (parsed?.kind === "internal") {
-        setActiveChoice({ kind: "internal", id: parsed.id });
+      if (!parsed) {
+        setActiveChoice(null);
         setActiveMaterial(null);
         return;
       }
-      setActiveChoice(null);
-      setActiveMaterial(null);
+      setActiveChoice({ kind: parsed.kind, id: parsed.id });
+      // 内部简历的正文读记录，不占材料侧；外部简历的材料由 `onExternal` 刚写过，别清掉。
+      if (parsed.kind === "internal") setActiveMaterial(null);
     },
   });
 

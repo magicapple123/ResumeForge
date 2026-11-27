@@ -27,8 +27,11 @@ const resumesMocks = vi.hoisted(() => ({
   listResumes: vi.fn(),
   getResume: vi.fn(),
 }));
-// 外部简历深链预填（第 21 条）：按 id 取那条只读快照。
-const externalResumeMocks = vi.hoisted(() => ({ getExternalResume: vi.fn() }));
+// 外部简历深链预填（第 21 条）：按 id 取那条只读快照；下拉分两组后也会查列表。
+const externalResumeMocks = vi.hoisted(() => ({
+  getExternalResume: vi.fn(),
+  listExternalResumes: vi.fn(),
+}));
 
 vi.mock("../../api/jobs", () => jobsMocks);
 vi.mock("../../api/resumes", () => resumesMocks);
@@ -59,6 +62,9 @@ beforeEach(() => {
       Promise.resolve(RESUME_OPTIONS.find((item) => item.id === id) ?? null),
     );
   externalResumeMocks.getExternalResume.mockReset();
+  externalResumeMocks.listExternalResumes
+    .mockReset()
+    .mockResolvedValue({ items: [], total: 0, page: 1, page_size: 50 });
 });
 
 /**
@@ -183,8 +189,10 @@ describe("SetupTab 关联岗位与关联简历都必选（0066）", () => {
     await submit();
 
     await waitFor(() => expect(onStart).toHaveBeenCalled());
-    // 关联简历的值带前缀（#25）：`r:` = 本应用的简历。
-    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ jobId: 7, resumeId: "r:1" }));
+    // 关联简历的值是复合引用（T33）：`internal:` = 本应用的简历。
+    expect(onStart).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: 7, resumeId: "internal:1" }),
+    );
     // 候选请求带 include_general：真实面试里通用简历同样可选。
     expect(resumesMocks.listResumes).toHaveBeenCalledWith(
       expect.objectContaining({ job_id: 7, include_general: true }),

@@ -25,11 +25,12 @@ export function toMaterialPayload(
 }
 
 /**
- * 「关联简历」的表单值 → 写端点的 `resume_id`（#25）。同一个边界上的第二个投影。
+ * 「关联简历」的表单值 → 写端点的 `resume_id`（#25 / T33）。同一个边界上的第二个投影。
  *
- * 下拉的 value 是带前缀的字符串：`r:12` 才是内部简历的 id；`e:7`（外部简历）**没有**内部
- * id —— 它的正文由 `resume_material` 承载，这里给 `undefined`。少走这一步会把 `"r:12"`
- * 当数字发出去（TS 拦得住）或静默发 `undefined`（拦不住，界面上还显示"已选"）。
+ * 下拉的 value 是复合引用：`internal:12` 才是内部简历的 id；`external:7`（外部简历）
+ * **没有**内部 id —— 它的正文由 `resume_material` 承载，这里给 `undefined`。少走这一步
+ * 会把 `"internal:12"` 当数字发出去（TS 拦得住）或静默发 `undefined`（拦不住，界面上
+ * 还显示"已选"）。
  */
 export function toInternalResumeId(raw: string | null | undefined): number | undefined {
   const parsed = parseResumeValue(raw);

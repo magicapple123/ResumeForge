@@ -58,7 +58,9 @@ const output: JobMatchOut = {
 };
 
 async function selectResume() {
-  fireEvent.mouseDown(screen.getByRole("combobox"));
+  // T34 起弹窗里多了第二块（文本级 / 外部简历），那块也有一个 combobox；这里按无障碍名
+  // 定位「匹配简历」那一个，否则 `getByRole("combobox")` 会命中两个而直接报错。
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: t("jobMatch.resume.label") }));
   fireEvent.click(await screen.findByText("Resume A"));
 }
 beforeEach(() => {

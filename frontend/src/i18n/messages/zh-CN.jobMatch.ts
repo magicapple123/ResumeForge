@@ -61,6 +61,29 @@ const jobMatch = {
   "jobMatch.resume.profileOnly": "分析来源：我的资料",
   "jobMatch.resume.unknownSource": "旧结果未记录简历来源",
   "jobMatch.resume.stale": "简历或岗位已变化，请重新分析",
+  "jobMatch.textLevel.title": "文本级匹配（外部简历）",
+  "jobMatch.textLevel.badge": "文本级",
+  "jobMatch.textLevel.intro":
+    "只比对「JD 抽出来的词」与「这份外部简历的正文字」：不读结构化字段与版式，也没有准入判断。它与上面的结构化匹配是两个口径，分母不同，结论不可互相比较，所以单独列在这里。",
+  "jobMatch.textLevel.resume.label": "用哪份外部简历",
+  "jobMatch.textLevel.resume.placeholder": "选一份有正文的外部简历",
+  "jobMatch.textLevel.resume.noText": "（无正文）",
+  "jobMatch.textLevel.resume.noTextHint":
+    "这份没有提取到正文（可能是扫描件），无法做文本比对：先到简历中心做一次文本检查或补录正文",
+  "jobMatch.textLevel.resume.someNoText":
+    "灰掉的那几份没有提取到正文（多为扫描件），不能做文本比对：到简历中心为它做一次文本检查或补录正文后再来选。",
+  "jobMatch.textLevel.resume.empty":
+    "还没有可用于比对的外部简历。扫描件或缺文字层的文件没有正文，先在简历中心做文本检查或补录正文再来。",
+  "jobMatch.textLevel.error.resumes": "外部简历列表加载失败，请重试",
+  "jobMatch.textLevel.error.run": "文本级比对失败，请稍后重试",
+  "jobMatch.textLevel.coverage": "字面覆盖",
+  "jobMatch.textLevel.coverageValue": "{matched} / {target} 个词",
+  "jobMatch.textLevel.resumeSource": "来源：{name} · {chars} 字",
+  "jobMatch.textLevel.matched": "正文里出现",
+  "jobMatch.textLevel.missing": "正文里没写",
+  "jobMatch.textLevel.highlights": "正文摘录",
+  "jobMatch.textLevel.highlightWords": "（命中：{words}）",
+  "jobMatch.textLevel.empty.words": "这个 JD 没抽出可比对的词（描述与要求过短或全是通用说法）。",
 } as const;
 
 export default jobMatch;

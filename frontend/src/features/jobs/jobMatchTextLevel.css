@@ -1,0 +1,47 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 岗位匹配「文本级」面板（T34）：只补结构间距，颜色一律走主题变量，
+   深色模式因此不需要第二套规则（与 `.job-match-notes` 同一个口径）。 */
+
+/* 与上方结构化结论之间拉开一段：两块是**两个口径**，视觉上也要看得出是两块。 */
+.job-match-text-level {
+  margin-top: 16px;
+}
+
+.job-match-text-level-intro {
+  margin-bottom: 0;
+}
+
+.job-match-text-level-result {
+  padding-top: 4px;
+}
+
+.job-match-text-level-head {
+  margin-bottom: 2px;
+}
+
+/* 词表：标题一行、标签一行。定宽标签列会让两行（出现 / 没写）的词起始位置对齐，
+   扫一眼就能对比，而不是在两段不齐的文字里找差别。 */
+.job-match-text-level-words {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 8px;
+}
+
+.job-match-text-level-words > :first-child {
+  flex: 0 0 76px;
+  white-space: nowrap;
+}
+
+/* 正文摘录：等宽感来自行高与左边线，不用背景色（深色模式下背景色最容易压住正文）。 */
+.job-match-text-level-quotes {
+  margin: 0;
+  padding-left: 14px;
+  border-left: 2px solid var(--rf-border);
+  color: var(--rf-text-body);
+  line-height: 1.6;
+}
+
+.job-match-text-level-quotes > li + li {
+  margin-top: 6px;
+}

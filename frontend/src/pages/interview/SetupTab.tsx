@@ -41,6 +41,7 @@ import {
   MIN_INTERVIEW_ROUNDS,
 } from "../../types";
 import type { InterviewMaterialExtract } from "../../types";
+import { decodeResumeRef } from "../../types/resumeRef";
 import { JANE_FACE_SOURCES } from "./janeFaces";
 import { MaterialSourceField } from "./MaterialSourceField";
 import type { SetupForm } from "./useSetupFormState";
@@ -82,6 +83,7 @@ export function SetupTab({
     setResumeSource,
     resumeMaterial,
     setResumeMaterial,
+    resumeFileOrigin,
     setResumeFileOrigin,
     resumeSelect,
     hasPersona,
@@ -219,7 +221,21 @@ export function SetupTab({
                     disabled={starting}
                     onModeChange={(mode) => {
                       setResumeSource(mode);
-                      if (mode === "file") form.setFieldValue("resumeId", undefined);
+                      if (mode === "file") {
+                        // 文件与记录互斥：切到文件侧时不能留着记录侧的 id。
+                        form.setFieldValue("resumeId", undefined);
+                        return;
+                      }
+                      // 切回记录侧：外部简历的复合引用不能再留着——它没有内部 id，留着会
+                      // 让必填校验通过、提交时却既没有 resume_id 也没有材料。
+                      const current = form.getFieldValue("resumeId") as string | undefined;
+                      if (decodeResumeRef(current)?.kind === "external") {
+                        form.setFieldValue("resumeId", undefined);
+                        if (resumeFileOrigin === "external") {
+                          setResumeMaterial(null);
+                          setResumeFileOrigin(null);
+                        }
+                      }
                     }}
                     onMaterialChange={(material) => {
                       setResumeMaterial(material);
@@ -232,6 +248,13 @@ export function SetupTab({
                   <Typography.Text type="secondary" className="interview-resume-current">
                     {currentMaterialText}
                   </Typography.Text>
+                  {/* 禁用项只有悬停才解释"为什么灰"，而扫描件是每次都会撞上的情况：
+                      这里给一条常驻说明（原因 + 去哪里补正文），不让用户自己猜。 */}
+                  {resumeSource === "record" && resumeSelect.hasTextlessExternal && (
+                    <Typography.Text type="secondary" className="interview-resume-note">
+                      {t("interviewPage.setup.resumeNoTextHelp")}
+                    </Typography.Text>
+                  )}
                 </>
               }
             >

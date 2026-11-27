@@ -64,6 +64,30 @@ const jobMatch = {
   "jobMatch.resume.profileOnly": "Analysis source: My profile",
   "jobMatch.resume.unknownSource": "Resume source unavailable for this older result",
   "jobMatch.resume.stale": "Resume or job changed; analyze again",
+  "jobMatch.textLevel.title": "Text-level match (external resume)",
+  "jobMatch.textLevel.badge": "Text-level",
+  "jobMatch.textLevel.intro":
+    "Compares the words pulled from the job description against the plain text of this external resume. It does not read structured fields or layout, and it makes no hiring-gate call. That is a different basis from the structured match above, so the two are not comparable and are shown separately.",
+  "jobMatch.textLevel.resume.label": "Which external resume",
+  "jobMatch.textLevel.resume.placeholder": "Pick an external resume that has text",
+  "jobMatch.textLevel.resume.noText": "(no text)",
+  "jobMatch.textLevel.resume.noTextHint":
+    "No text was extracted from this file (likely a scan), so it cannot be compared: run a text check or add the text in the resume center first",
+  "jobMatch.textLevel.resume.someNoText":
+    "The greyed-out resumes have no extracted text (usually scans), so they cannot be compared: run a text check or add the text in the resume center, then pick one.",
+  "jobMatch.textLevel.resume.empty":
+    "No external resume is available for comparison yet. Scans and files without a text layer have no body text - run a text check or add the text in the resume center first.",
+  "jobMatch.textLevel.error.resumes": "Could not load external resumes; retry",
+  "jobMatch.textLevel.error.run": "Text-level comparison failed; try again later",
+  "jobMatch.textLevel.coverage": "Literal coverage",
+  "jobMatch.textLevel.coverageValue": "{matched} / {target} words",
+  "jobMatch.textLevel.resumeSource": "Source: {name} · {chars} characters",
+  "jobMatch.textLevel.matched": "Found in the text",
+  "jobMatch.textLevel.missing": "Not mentioned in the text",
+  "jobMatch.textLevel.highlights": "Quoted from the text",
+  "jobMatch.textLevel.highlightWords": "(matches: {words})",
+  "jobMatch.textLevel.empty.words":
+    "No comparable words could be pulled from this job description (too short, or only generic phrasing).",
 } as const;
 
 export default jobMatch;

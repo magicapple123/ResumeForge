@@ -27,6 +27,7 @@ from ..schemas.job_match_batch import (
     JobMatchBatchOut,
     JobMatchBatchRequest,
 )
+from ..schemas.job_match_text import TextLevelMatchOut, TextLevelMatchRequest
 from ..services.actions import add_action_route
 from ..services.actions.catalog import registered_action
 from ..services.apply import apply_service
@@ -53,6 +54,7 @@ from ..services.job.job_match_batch import (
     run_batch_match,
 )
 from ..services.job.job_match_context import match_source_texts, profile_is_empty
+from ..services.job.job_match_external import analyze_text_level
 from ..services.job.job_match_sources import match_source_snapshot, source_matches
 from ..services.job.job_queries import jobs_by_ids
 from ..services.llm import create_provider
@@ -292,6 +294,31 @@ def get_match_batch(batch_id: int, db: Session = Depends(get_db)):
     if row is None:
         raise HTTPException(status_code=404, detail="批量匹配记录不存在")
     return _batch_out(row, load_comparison(db, batch_id))
+
+
+@router.post("/{job_id}/match-analysis-text-level", response_model=TextLevelMatchOut)
+def create_text_level_match(
+    job_id: int,
+    payload: TextLevelMatchRequest,
+    db: Session = Depends(get_db),
+):
+    """用一份**外部简历的正文**对 JD 做文本级比对（T34）。
+
+    薄路由：查岗位 + 调 ``services.job.job_match_external.analyze_text_level``。
+    与 ``/{job_id}/match-analysis`` 是**两个口径**，刻意不共用端点、不共用表：
+
+    - 本端点只读 ``external_resume.text``，不读我的资料、不读内部简历、不调模型；
+    - 结果不落库（可直接重算），因此不会覆盖或污染结构化匹配的历史结论；
+    - 三类"用不了"的情况（简历没了 / 没有正文 / 岗位没有 JD）一律 400 + 可照做的中文原因，
+      不返回一个看起来像"匹配度 0"的空结果。
+    """
+    job = db.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
+    try:
+        return analyze_text_level(db, job, payload.external_resume_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/{job_id}/match-analysis", response_model=JobMatchResult)

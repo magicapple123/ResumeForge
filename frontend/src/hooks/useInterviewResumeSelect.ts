@@ -1,48 +1,41 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 面试「简历材料」下拉（#25）：把**本应用的简历**与**外部简历（上传的）**合并成一个分组下拉。
+ * 面试「简历材料」下拉（#25 / T33）：把**本应用的简历**与**外部简历（上传的）**合并成
+ * 一个分组下拉。
  *
- * 为什么需要它：`?externalResumeId=` 深链早就支持把外部简历预填进「导入文件」这一侧，
- * 但下拉只查内部简历表，用户在下拉里根本看不到外部简历——能力存在、入口不可发现。
+ * 这一层现在只是 `useResumeRefSelect` 的**薄封装**：取数、防抖 300ms、请求序号、空态文案
+ * 全部复用那一份实现（`useDebouncedRemoteSearch` 内核）。本文件不再出现 `setTimeout`
+ * 或自增序号——两套防抖并存的分歧不会报错，只会表现为"某个下拉偶尔停在旧结果上"。
  *
- * 四条口径（方案详册 #25）：
- * 1. **两个数据源合并、分组**：内部走 `listResumes({ job_id, include_general })`，外部走
- *    `listExternalResumes({ keyword })`。外部组保留跨岗位选择，只对
- *    `job_id === 当前岗位` 的条目打一个「关联此岗位」标签（只标记，不过滤）。
- * 2. **value 带前缀**：`r:<id>` / `e:<id>`。前缀就是分派依据——同一次 `onChange` 里两种来源
- *    要做的事完全不同（内部只写表单，外部要落材料）。
- * 3. **选中外部简历 = 深链那一套**：统一交给 `applyExternalResume`。两条路径共用同一个函数，
- *    否则迟早有一处漏清 `resumeId`，出现"显示已选、提交 undefined"的脏状态。
- * 4. **没有正文的外部简历在下拉里就禁用**：`has_text === false` 时选中也进不了面试（提示词
- *    要的是正文）。事后弹 warning 等于让用户白做一次选择动作。
+ * 面试比通用选择器多三件事：
  *
- * 两件容易被漏掉的事：
- * - **已选值的显示**：表单里存的是 `r:<id>`，而搜索结果随时会被下一次关键词替换掉。这里用
- *   一份 `pinned` 缓存把当前选中项单独钉住（`reload()` 之后同样有效），否则切一次关键词、
- *   或换岗位重载候选，下拉框就退化成显示原始的 `r:12`。
- * - **外部列表失败不能连坐**：外部简历只是"多一个来源"，`GET /api/external-resumes` 挂了就
- *   让那一组留空，内部简历照常可选（下拉不能因为可选的第二来源报错而整体不可用）。
+ * 1. **内部简历按岗位域过滤**：只给当前岗位关联的 + 通用简历（别的岗位的简历面试官不会看）。
+ * 2. **外部简历要正文**：`has_text === false` 的项在下拉里就禁用并写明原因与怎么办
+ *    （扫描件进不了面试，事后弹 warning 等于让用户白选一次）。
+ * 3. **选中外部简历 = 深链那一套**：正文落到「导入文件」这一侧，`resume_material` 带着它
+ *    进提示词；`?externalResumeId=` 深链与下拉共用 `applyExternalResume`，两条路径永远一致。
+ * 4. **外部组跨岗位可见**：只对命中当前岗位的项打「关联此岗位」标签，不过滤（方案 25D）。
  *
- * 文案在渲染期求值：`useLocale()` 让本 hook 在切语言后重算分组名，缓存里只放原始数据。
+ * 值域统一为 `types/resumeRef` 的复合引用：`internal:12` / `external:7`。旧写法 `r:` / `e:`
+ * 只在**读**的时候被接受（`decodeResumeRef`），这里不再产出。
  */
 import { App } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getExternalResume, listExternalResumes } from "../api/externalResumes";
-import type { ExternalResumeDetail, ExternalResumeItem } from "../api/externalResumes";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { getExternalResume } from "../api/externalResumes";
+import type { ExternalResumeDetail } from "../api/externalResumes";
 import { t } from "../i18n";
-import { useLocale } from "../i18n/i18nContext";
 import type { InterviewMaterialExtract } from "../types";
-import { useResumeSearchSelectForJobOrGeneral } from "./remoteSearchOptions";
+import { decodeResumeRef, encodeResumeRef, type ResumeRef } from "../types/resumeRef";
+import { useResumeRefSelect, type ResumeRefMeta } from "./useResumeRefSelect";
 
-/** 下拉 value 的前缀：`r:` = 本应用的简历（内部表），`e:` = 外部简历（上传的快照）。 */
+/**
+ * 旧前缀常量（只作为读侧的兼容说明保留）。
+ *
+ * 新代码写值一律用 `internal:` / `external:`；这两个常量不再被任何写路径使用，留着是为了
+ * 让"旧值长什么样"在代码里有一处可查（测试也据此钉住"旧值仍能解析"）。
+ */
 export const INTERNAL_RESUME_PREFIX = "r:";
 export const EXTERNAL_RESUME_PREFIX = "e:";
-
-/** 外部简历搜索每页条数（与内部简历的远程搜索同一档）。 */
-const EXTERNAL_PAGE_SIZE = 50;
-
-/** 与 `useRemoteSearchSelect` 保持同一个防抖口径，两组的搜索手感才一致。 */
-const SEARCH_DEBOUNCE_MS = 300;
 
 export type ResumeSelectionKind = "internal" | "external";
 
@@ -51,27 +44,22 @@ export interface ResumeSelection {
   id: number;
 }
 
-/** 内部简历在下拉里的 value（`r:12`）。 */
+/** 内部简历在下拉里的 value（新写法 `internal:12`）。 */
 export function internalResumeValue(id: number): string {
-  return `${INTERNAL_RESUME_PREFIX}${id}`;
+  return encodeResumeRef({ kind: "internal", id });
 }
 
-/** 外部简历在下拉里的 value（`e:7`）。 */
+/** 外部简历在下拉里的 value（新写法 `external:7`）。 */
 export function externalResumeValue(id: number): string {
-  return `${EXTERNAL_RESUME_PREFIX}${id}`;
+  return encodeResumeRef({ kind: "external", id });
 }
 
 /**
- * 解析下拉 value。**只认带前缀的正整数**：不猜"裸 id"是内部还是外部——猜错就等于把一份
- * 外部简历当成内部简历提交，那是脏数据的来源。
+ * 解析下拉 value。新旧前缀都认（旧写法只进不出），裸 id 与脏值一律算"没选"——猜"裸 id
+ * 是内部还是外部"猜错就等于把一份外部简历当成内部简历提交，那是脏数据的来源。
  */
-export function parseResumeValue(raw: string | null | undefined): ResumeSelection | null {
-  if (!raw) return null;
-  const match = /^([re]):(\d+)$/.exec(raw);
-  if (!match) return null;
-  const id = Number(match[2]);
-  if (!Number.isInteger(id) || id <= 0) return null;
-  return { kind: match[1] === "r" ? "internal" : "external", id };
+export function parseResumeValue(raw: string | null | undefined): ResumeRef | null {
+  return decodeResumeRef(raw);
 }
 
 /** 外部简历 → 开面试时随请求带上的材料（与深链预填的形状逐字一致）。 */
@@ -203,206 +191,113 @@ export function describeCurrentMaterial(params: {
   );
 }
 
-/** 合并后的下拉项：`value` 是 `r:` / `e:` 前缀串，其余字段直接交给 antd。 */
-export interface InterviewResumeOption {
-  value: string;
-  label: string;
-  disabled?: boolean;
-  /** 禁用原因的悬停提示（原生 title）。 */
-  title?: string;
-}
-
-export interface InterviewResumeGroup {
-  label: string;
-  options: InterviewResumeOption[];
-}
-
-/** 外部简历的展示名：名字 + （可选）岗位标签 + 无正文标记。 */
-function externalResumeLabel(item: ExternalResumeItem, jobId: number | null): string {
-  const parts = [item.name];
-  // 只标记不过滤：面试材料允许复用其他岗位的外部简历。
-  if (jobId !== null && item.job_id === jobId) parts.push(t("interviewPage.setup.resumeJobTag"));
-  if (!item.has_text) parts.push(t("interviewPage.setup.resumeNoTextBadge"));
-  return parts.join(" · ");
-}
-
 interface Params {
-  /** 当前关联岗位：决定内部候选范围，也决定外部组里打不打「关联此岗位」标签。 */
+  /** 当前关联岗位：决定内部候选范围（外部简历保留跨岗位选择，只打标签）。 */
   jobId: number | null;
-  /** 表单里当前的选择（`r:<id>` / undefined）。只用来把选中项钉在下拉里。 */
+  /** 表单里当前的选择（复合值）。用来把选中项钉在下拉里。 */
   value: string | undefined;
-  /** 选中一份外部简历：交给 `applyExternalResume`（与深链同一个函数）。 */
+  /** 选中一份有正文的外部简历：交给 `applyExternalResume`（与深链同一个函数）。 */
   onExternal: (record: ExternalResumeDetail) => void;
   /** 外部简历详情拉不到（可能已被删除）。 */
   onExternalFailed: () => void;
-  /** 记录侧选中 / 清空时写回表单。 */
-  onSelectInternal: (value: string | undefined) => void;
+  /** 选择变化（`internal:12` / `external:7` / `undefined`）：写回表单。 */
+  onSelect: (value: string | undefined) => void;
 }
 
 /**
- * 面试「简历材料」下拉：两路合并 + 分组 + 按前缀分派。
+ * 面试「简历材料」下拉：在统一选择器上补"岗位域 / 要正文 / 面试分组名"。
  *
  * 返回的 `selectProps` 直接展开给 antd `Select`（表单里的 `name="resumeId"` 仍由
- * `Form.Item` 注入 value，本 hook 只提供选项、搜索与 onChange 的分派）。
+ * `Form.Item` 注入 value，本 hook 负责选项、搜索与 onChange 的分派）。
  */
 export function useInterviewResumeSelect({
   jobId,
   value,
   onExternal,
   onExternalFailed,
-  onSelectInternal,
+  onSelect,
 }: Params) {
-  // 订阅语言：分组名与无正文标记都是渲染期 `t()` 求值的。
-  const locale = useLocale();
-  const internal = useResumeSearchSelectForJobOrGeneral(jobId);
-
-  const [externalItems, setExternalItems] = useState<ExternalResumeItem[]>([]);
-  const [externalLoading, setExternalLoading] = useState(false);
-  const externalSeqRef = useRef(0);
-  const externalTimerRef = useRef<number | null>(null);
-  const [pinned, setPinned] = useState<Record<string, InterviewResumeOption>>({});
-  const ensuredRef = useRef(new Set<string>());
-
-  const pinOption = useCallback((option: InterviewResumeOption) => {
-    // 返回同一个对象时 React 会跳过重渲染：这个 setter 因此可以安全地被每渲染一次的
-    // effect 调用（不会打转）。
-    setPinned((previous) =>
-      previous[option.value] ? previous : { ...previous, [option.value]: option },
-    );
-  }, []);
-
-  const runExternalSearch = useCallback(async (keyword: string) => {
-    const requestId = ++externalSeqRef.current;
-    setExternalLoading(true);
-    try {
-      const page = await listExternalResumes({
-        keyword: keyword || undefined,
-        page_size: EXTERNAL_PAGE_SIZE,
-      });
-      if (requestId !== externalSeqRef.current) return;
-      setExternalItems(page.items);
-    } catch {
-      // 见文件头「外部列表失败不能连坐」：整组留空，内部简历照常可选。
-      if (requestId !== externalSeqRef.current) return;
-      setExternalItems([]);
-    } finally {
-      if (requestId === externalSeqRef.current) setExternalLoading(false);
-    }
-  }, []);
-
-  const searchExternal = useCallback(
-    (keyword: string) => {
-      if (externalTimerRef.current !== null) window.clearTimeout(externalTimerRef.current);
-      externalTimerRef.current = window.setTimeout(() => {
-        void runExternalSearch(keyword.trim());
-      }, SEARCH_DEBOUNCE_MS);
+  // 外部项的说明：岗位命中只打标签（不过滤），没有正文再补一个短标记。
+  const externalNote = useCallback(
+    (item: ResumeRefMeta): string | null => {
+      const parts: string[] = [];
+      if (jobId !== null && item.jobId === jobId) parts.push(t("interviewPage.setup.resumeJobTag"));
+      if (!item.hasText) parts.push(t("interviewPage.setup.resumeNoTextBadge"));
+      return parts.length > 0 ? parts.join(" · ") : null;
     },
-    [runExternalSearch],
+    [jobId],
   );
 
-  // 卸载时清掉还没触发的防抖计时器（与 `useRemoteSearchSelect` 同一口径）。
-  useEffect(
-    () => () => {
-      if (externalTimerRef.current !== null) window.clearTimeout(externalTimerRef.current);
+  const shared = useResumeRefSelect({
+    jobId,
+    // 外部组保留跨岗位选择，只对命中当前岗位的项打标签（方案 25D）：面试官读的是用户
+    // 手里那份文件，不该因为归属岗位不同就把它藏起来。
+    externalJobScope: false,
+    // 面试要保留外部组：即使这次列表是空的，"外部简历（上传的）"也是这个来源唯一的入口。
+    keepEmptyGroups: true,
+    groupLabels: {
+      internal: "interviewPage.setup.resumeGroup.internal",
+      external: "interviewPage.setup.resumeGroup.external",
     },
-    [],
-  );
+    externalRequiresText: { hint: t("interviewPage.setup.resumeNoText") },
+    externalNote,
+  });
 
-  /**
-   * 已选值保显示：表单里存的是 `r:<id>`，而候选里未必还有它（换岗位、换关键词都会重拉）。
-   * 按 id 回查一次并钉住，`reload()` 之后同样有效。
-   *
-   * 这里**不设 cancelled 标记**（与其它 effect 不同）：`internal` 每次渲染都是新对象，
-   * 这个 effect 会跟着重跑，用清理标记取消的话，回查刚落地就被下一次渲染取消掉，钉住的
-   * 文案永远留不下来。用 `ensuredRef` 去重 + `pinOption` 的"已有就不改"兜住，重复执行无害。
-   */
+  const { ensure, reload } = shared;
+
+  // 已选值保显示：换岗位 / 换关键词都会重拉候选，选中项不能退化成裸复合值。
+  // `reload` 会清空「钉住」项（共享 hook 的约定：调用方紧接着 ensure 把它钉回来），
+  // 所以这里包一层，保证重拉后已选值的文案还在。
   useEffect(() => {
-    const parsed = parseResumeValue(value);
-    if (!value || parsed?.kind !== "internal" || ensuredRef.current.has(value)) return;
-    ensuredRef.current.add(value);
-    void internal.ensure(parsed.id).then((option) => {
-      if (option) pinOption({ value, label: option.label });
-    });
-  }, [value, internal, pinOption]);
+    if (value) void ensure(value);
+  }, [ensure, value]);
 
-  const groups = useMemo<InterviewResumeGroup[]>(() => {
-    // 语言进依赖（`void locale`）：分组名是渲染期求值的，不订阅就不会重算。
-    void locale;
-    const internalOptions: InterviewResumeOption[] = internal.options.map((option) => ({
-      value: internalResumeValue(option.value),
-      label: option.label,
-    }));
-    const known = new Set(internalOptions.map((option) => option.value));
-    for (const option of Object.values(pinned)) {
-      if (!known.has(option.value)) internalOptions.unshift(option);
-    }
-    const externalOptions: InterviewResumeOption[] = externalItems.map((item) => ({
-      value: externalResumeValue(item.id),
-      label: externalResumeLabel(item, jobId),
-      // 没有正文就禁用：不是"能选但会报错"，而是根本选不到（方案 25C）。
-      disabled: item.has_text ? undefined : true,
-      title: item.has_text ? undefined : t("interviewPage.setup.resumeNoText"),
-    }));
-    // 空组保留：一组"外部简历（上传的）"即使暂时是空的，也是这个来源唯一的可发现入口。
-    return [
-      { label: t("interviewPage.setup.resumeGroup.internal"), options: internalOptions },
-      { label: t("interviewPage.setup.resumeGroup.external"), options: externalOptions },
-    ];
-  }, [internal.options, externalItems, jobId, locale, pinned]);
+  const reloadWithSelection = useCallback(() => {
+    reload();
+    if (value) void ensure(value);
+  }, [ensure, reload, value]);
 
-  /** 按前缀分派：内部只写表单；外部先取正文再交给共用的落地函数。 */
   const handleChange = useCallback(
     (raw: string | undefined) => {
-      const parsed = parseResumeValue(raw);
-      if (!parsed) {
-        // allowClear 给的是 undefined；认不出的脏值同样按"没选"处理。
-        onSelectInternal(undefined);
+      const ref = decodeResumeRef(raw);
+      if (!ref) {
+        onSelect(undefined);
         return;
       }
-      if (parsed.kind === "internal") {
-        onSelectInternal(internalResumeValue(parsed.id));
+      if (ref.kind === "internal") {
+        onSelect(encodeResumeRef(ref));
         return;
       }
-      void getExternalResume(parsed.id)
-        .then((record) => onExternal(record))
+      void getExternalResume(ref.id)
+        .then((record) => {
+          // 先落地材料（没有正文时由 applier 提示"为什么 + 怎么办"），再记选择值。
+          onExternal(record);
+          if (record.has_text && record.text.trim().length > 0) onSelect(encodeResumeRef(ref));
+        })
         .catch(() => onExternalFailed());
     },
-    [onExternal, onExternalFailed, onSelectInternal],
+    [onExternal, onExternalFailed, onSelect],
   );
 
-  const onSearch = useCallback(
-    (keyword: string) => {
-      internal.selectProps.onSearch(keyword);
-      searchExternal(keyword);
-    },
-    [internal.selectProps, searchExternal],
+  /** 下拉里是否存在"没有正文"的外部项（面试页据此常驻一行说明，不只靠悬停）。 */
+  const hasTextlessExternal = useMemo(
+    () =>
+      shared.groups
+        .find((group) => group.kind === "external")
+        ?.options.some((option) => option.disabled) ?? false,
+    [shared.groups],
   );
-
-  /** 重载候选：内部跟随岗位、外部跟随关键词（外部组不随岗位变）。已选项由 `pinned` 保住。 */
-  const reload = useCallback(() => {
-    internal.reload();
-    void runExternalSearch("");
-  }, [internal, runExternalSearch]);
-
-  /** 当前选中项在候选里的展示文案（「当前材料」用；查不到时由调用方降级）。 */
-  const labelFor = (raw: string | undefined): string | undefined => {
-    if (!raw) return undefined;
-    const cached = pinned[raw]?.label;
-    if (cached) return cached;
-    const match = internal.options.find((option) => internalResumeValue(option.value) === raw);
-    return match?.label;
-  };
 
   const selectProps = {
-    showSearch: true,
-    filterOption: false,
-    onSearch,
+    ...shared.selectProps,
     onChange: handleChange,
-    loading: internal.selectProps.loading || externalLoading,
-    options: groups,
-    // 空态文案沿用内部那一套（"没有结果"对两组是同一句话，不另写一份）。
-    notFoundContent: internal.selectProps.notFoundContent,
   } as const;
 
-  return { selectProps, reload, labelFor };
+  return {
+    selectProps,
+    reload: reloadWithSelection,
+    /** 已选值的纯文本名（「当前材料」用；查不到时由调用方降级）。 */
+    labelFor: shared.textOfRef,
+    hasTextlessExternal,
+  };
 }
