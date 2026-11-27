@@ -268,7 +268,8 @@ class ReminderTaskScheduler:
         )
         self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self) -> bool:
+        """请求停止并返回线程是否仍在运行（供 stop_scheduler 决定是否保留引用）。"""
         self._stop.set()
         self._wake.set()
         if self._thread is not None:
