@@ -272,7 +272,14 @@ class ReminderTaskScheduler:
         self._stop.set()
         self._wake.set()
         if self._thread is not None:
-            self._thread.join(timeout=5)
+            # join 必须等到线程真正退出：CI 的 xdist worker 上 SQLite 可能很慢，
+            # 5s 超时后线程还留在 `run_for_current_dataset()` 里，测试已经进入下一条
+            # 用例，它才补完一次扫描并把卡建掉——表现是"扫描结果 created=0，但库里
+            # 已经有一张卡"（Ubuntu 3.13 上反复撞到）。宁可这里多等一会，也不能
+            # 让一条已停的调度线程跨用例写库。
+            self._thread.join(timeout=30)
+            return self._thread.is_alive()
+        return False
 
     def trigger_check(self) -> None:
         self._wake.set()
@@ -311,8 +318,11 @@ def stop_scheduler() -> None:
     global _scheduler
     with _scheduler_lock:
         if _scheduler is not None:
-            _scheduler.stop()
-            _scheduler = None
+            still_running = _scheduler.stop()
+            # 线程还没退干净就**不要**把引用清掉：留着它，下一次 stop_scheduler() 还能
+            # 继续 join。清成 None 只会让那条线程变成没人看着的孤儿，继续跨用例写库。
+            if not still_running:
+                _scheduler = None
 
 
 def trigger_check() -> None:
