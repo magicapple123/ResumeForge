@@ -374,11 +374,7 @@ export default function ExternalResumePanel({
   const content = (
     <Flex vertical gap={12}>
       {onFiltersChange ? (
-        <ExternalResumeFiltersBar
-          filters={filters}
-          onChange={onFiltersChange}
-          total={total}
-        />
+        <ExternalResumeFiltersBar filters={filters} onChange={onFiltersChange} total={total} />
       ) : null}
       {/* 批量条只在多选态出现（默认观感与改造前一致：没有任何勾选框与工具条）。 */}
       {batch.selecting ? (

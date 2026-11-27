@@ -44,7 +44,7 @@ const trackerUi = {
   "trackerUi.card.advanceTo": "推进到「{stage}」",
   "trackerUi.card.statusChanged": "已改为「{status}」",
   "trackerUi.card.statusChangeFailed": "状态没改成，请重试",
-  "trackerUi.card.aria.statusMenu": "更改 {name} 的进度状态",
+  "trackerUi.card.aria.statusMenu": "更改 {name} 的进度状态：{status}",
   "trackerUi.card.action.edit": "编辑",
   "trackerUi.card.action.delete": "删除",
   "trackerUi.card.aria.more": "更多操作 {name}",

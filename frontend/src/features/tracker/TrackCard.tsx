@@ -229,7 +229,12 @@ export default function TrackCard({
               className={`track-status-button${statusPending ? " is-pending" : ""}`}
               aria-haspopup="menu"
               aria-expanded={statusOpen}
-              aria-label={t("trackerUi.card.aria.statusMenu", { name: displayName })}
+              aria-label={t("trackerUi.card.aria.statusMenu", {
+                name: displayName,
+                // axe 的 label-content-name-mismatch：无障碍名必须**含可见文字**。
+                // 只写「更改 X 的进度状态」时，按钮上明明写着「面试中」，读屏名却对不上。
+                status: t(TRACK_STATUS_LABEL_KEYS[track.status]),
+              })}
               disabled={!statusInteractive}
             >
               <span className={`track-status${track.status === "unknown" ? " is-unknown" : ""}`}>

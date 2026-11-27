@@ -405,7 +405,10 @@
    不加粗、不常驻下划线——这页动作密度已经很高，常驻下划线会让整列都在喊"点我"；
    hover 才出下划线，键盘聚焦给焦点环（色盲/键盘用户不能只靠颜色）。 */
 .track-card-job-link {
-  color: var(--rf-info);
+  /* WCAG 颜色对比：#1677ff（--rf-info）在浅色卡片上约 4.0:1，axe 判 serious。
+     默认就用强化档 --rf-info-strong（4.5:1 以上），hover/focus 靠下划线区分，
+     不靠颜色单独承载状态。 */
+  color: var(--rf-info-strong);
   text-decoration: none;
   border-radius: 3px;
 }

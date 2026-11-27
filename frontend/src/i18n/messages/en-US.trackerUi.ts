@@ -47,7 +47,7 @@ const trackerUi = {
   "trackerUi.card.advanceTo": "Advance to {stage}",
   "trackerUi.card.statusChanged": "Status is now {status}",
   "trackerUi.card.statusChangeFailed": "Could not change the status, please retry",
-  "trackerUi.card.aria.statusMenu": "Change the status of {name}",
+  "trackerUi.card.aria.statusMenu": "Change the status of {name} ({status})",
   "trackerUi.card.action.edit": "Edit",
   "trackerUi.card.action.delete": "Delete",
   "trackerUi.card.aria.more": "More actions for {name}",

@@ -216,7 +216,10 @@ describe("TrackCard 的状态就地改（#15）", () => {
   function openMenu(patch: Partial<Track>, handler = vi.fn()) {
     renderCard(patch, handler);
     const trigger = screen.getByRole("button", {
-      name: t("trackerUi.card.aria.statusMenu", { name: COMPANY }),
+      name: t("trackerUi.card.aria.statusMenu", {
+        name: COMPANY,
+        status: statusLabel(patch.status ?? "applied"),
+      }),
     });
     fireEvent.click(trigger);
     return { handler, trigger };
@@ -287,7 +290,10 @@ describe("TrackCard 的状态就地改（#15）", () => {
     renderCard({ status: "applied" });
 
     const trigger = screen.getByRole("button", {
-      name: t("trackerUi.card.aria.statusMenu", { name: COMPANY }),
+      name: t("trackerUi.card.aria.statusMenu", {
+        name: COMPANY,
+        status: statusLabel("applied"),
+      }),
     });
     expect(trigger).toBeDisabled();
   });
@@ -296,7 +302,10 @@ describe("TrackCard 的状态就地改（#15）", () => {
     renderCard({ status: "applied" }, vi.fn(), true);
 
     const trigger = screen.getByRole("button", {
-      name: t("trackerUi.card.aria.statusMenu", { name: COMPANY }),
+      name: t("trackerUi.card.aria.statusMenu", {
+        name: COMPANY,
+        status: statusLabel("applied"),
+      }),
     });
     expect(trigger).toBeDisabled();
     expect(trigger.className).toContain("is-pending");

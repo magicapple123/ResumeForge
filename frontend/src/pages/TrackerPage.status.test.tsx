@@ -48,9 +48,12 @@ vi.mock("../api/jobs", () => jobApiMocks);
 const COMPANY = "Acme Labs";
 const JOB = "Backend intern";
 
-/** 胶囊的无障碍名：`更改 {name} 的进度状态`（名字里带公司名，多行时不串）。 */
+/** 胶囊的无障碍名：`更改 {name} 的进度状态：{status}`（公司名 + 可见状态，axe 才认）。 */
 function statusTriggerName(): string {
-  return t("trackerUi.card.aria.statusMenu", { name: COMPANY });
+  return t("trackerUi.card.aria.statusMenu", {
+    name: COMPANY,
+    status: t(TRACK_STATUS_LABEL_KEYS.applied),
+  });
 }
 
 /** 打开这一行的状态菜单。 */
