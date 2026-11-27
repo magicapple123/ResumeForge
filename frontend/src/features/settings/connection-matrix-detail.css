@@ -1,0 +1,72 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * 连接矩阵：选中行下方的「详情卡」（从 `connection-matrix.css` 拆出）。
+ *
+ * 为什么单独一份：主体样式已经贴着 500 行预算（`test_file_size_budget` 是硬闸门，
+ * 含 `.css`），详情卡这一块选择器自成语义、与矩阵格子/列头没有覆盖关系，
+ * 是唯一天然可切的一段。拆出来后主体 445 行，改动有余量。
+ *
+ * 引入顺序：`ConnectionMatrix.tsx` 里本文件排在 `connection-matrix.css` **之后**，
+ * 万一将来出现同名选择器，后引入的这份会赢——详情卡本来就该盖住矩阵主体。
+ */
+
+/* ── 详情卡：固定在矩阵下方 ───────────────────────────────── */
+.connection-matrix__detail {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface-alt);
+}
+
+.connection-matrix__detail-title {
+  margin-bottom: 6px;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+}
+
+.connection-matrix__detail-empty,
+.connection-matrix__detail-line {
+  margin: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.connection-matrix__detail-head {
+  margin-bottom: 6px;
+  color: var(--rf-text-body);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.connection-matrix__detail-fields {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 4px 10px;
+}
+
+.connection-matrix__field {
+  display: contents;
+}
+
+.connection-matrix__field-label {
+  color: var(--rf-text-tertiary);
+  font-size: 11.5px;
+  line-height: 18px;
+}
+
+.connection-matrix__field-value {
+  min-width: 0;
+  color: var(--rf-text-secondary);
+  font-size: 11.5px;
+  line-height: 18px;
+  /* 模型 id / 文件路径是整串无空格字符：不给断点就会顶出卡片（与 #10 同一个坑）。 */
+  overflow-wrap: anywhere;
+}
+
+.connection-matrix__detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}

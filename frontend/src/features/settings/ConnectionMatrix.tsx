@@ -48,12 +48,15 @@ import {
   edgeId,
   gateOnlyFeatures,
   groupFeatures,
+  matrixStatusOf,
   rowFeatures,
   visibleKeys,
   type MatrixFocus,
   type MatrixStatusFilter,
 } from "./connectionMatrixModel";
 import "./connection-matrix.css";
+// 详情卡单独一份，必须排在主体之后：真要撞选择器时，详情卡应当赢。
+import "./connection-matrix-detail.css";
 
 export interface ConnectionMatrixProps {
   /** `GET /api/connections` 的 `matrix`；老后端不返回时为 `null`（整块不渲染）。 */
@@ -180,7 +183,17 @@ function ConnectionMatrixBody({
         </div>
       </div>
 
-      <p className="connection-matrix__hint">{t("settingsUi.connections.matrix.hint")}</p>
+      <p className="connection-matrix__hint">
+        {t("settingsUi.connections.matrix.hint")}
+        {/* R18：两条操作说明。原来只有一句"实心/空心"的读法，用户把可点计数当图例、
+            把聚焦变淡当成"未配置"，于是既不敢点、也读错了状态。 */}
+        <span className="connection-matrix__hint-line">
+          {t("settingsUi.connections.matrix.hintFilter")}
+        </span>
+        <span className="connection-matrix__hint-line">
+          {t("settingsUi.connections.matrix.hintFocus")}
+        </span>
+      </p>
 
       <div className="connection-matrix__scroll">
         <table className={`connection-matrix__table${focus !== null ? " is-focused" : ""}`}>
@@ -191,13 +204,15 @@ function ConnectionMatrixBody({
               </th>
               {keys.map((key) => {
                 const active = focus?.kind === "key" && focus.id === key.id;
+                // 列头状态只认三档：`default` / `modified` 这类系统来源归"未配置"。
+                const status = matrixStatusOf(key.status);
                 return (
                   <th
                     key={key.id}
                     scope="col"
                     className={`connection-matrix__col${active ? " is-focus" : ""}`}
                     data-group={key.group}
-                    data-status={key.status}
+                    data-status={status}
                   >
                     <button
                       type="button"
@@ -207,8 +222,15 @@ function ConnectionMatrixBody({
                       title={key.label}
                     >
                       <span className="connection-matrix__col-dot" aria-hidden="true" />
-                      {key.label}
+                      {/* 密钥名单独包一层：R18 要"未配置的列名字降色"，而降色只能落在名字上——
+                          直接压整颗按钮会把左边那个**分组色点**一起压暗，分组信息就没了。 */}
+                      <span className="connection-matrix__col-name">{key.label}</span>
                     </button>
+                    {/* R18：状态标签放在按钮**外面**——按钮的文字必须仍然只是密钥名
+                        （列头的可点语义是"聚焦这一列"，不是"切换状态"）。 */}
+                    <span className="connection-matrix__col-status" data-status={status}>
+                      {filterLabel(status)}
+                    </span>
                   </th>
                 );
               })}

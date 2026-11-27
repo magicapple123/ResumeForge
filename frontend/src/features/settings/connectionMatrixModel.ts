@@ -33,6 +33,20 @@ export const MATRIX_FILTERS: readonly MatrixStatusFilter[] = [
   "session_only",
 ];
 
+/**
+ * 后端给的凭据状态 → 矩阵里的三档（R18）。
+ *
+ * 为什么要有这一层：凭据状态比三档多（C 组下载源还有 `default` / `modified`），而矩阵只讲
+ * "这把 Key 现在能不能用"。**列头小标签与汇总计数必须走同一个映射**——各写一份的结果是
+ * "标签写着已保存、计数把它算进未配置"，那种自相矛盾比不显示更糟。
+ */
+export function matrixStatusOf(status: string): MatrixStatusFilter {
+  if (status === "saved") return "saved";
+  if (status === "session_only") return "session_only";
+  // `not_configured` 与 C 组的 `default` / `modified` 都归这一档：没有可用密钥。
+  return "not_configured";
+}
+
 /** 格子键：一把 Key × 一个功能。用 NUL 分隔，避免 id 里出现连字符时拼串撞车。 */
 export function edgeId(keyId: string, featureId: string): string {
   return `${keyId}\u0000${featureId}`;
@@ -55,9 +69,7 @@ export function countByStatus(
     session_only: 0,
   };
   for (const key of keys) {
-    if (key.status === "saved") counts.saved += 1;
-    else if (key.status === "session_only") counts.session_only += 1;
-    else counts.not_configured += 1;
+    counts[matrixStatusOf(key.status)] += 1;
   }
   return counts;
 }

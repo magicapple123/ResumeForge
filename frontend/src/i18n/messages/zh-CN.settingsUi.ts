@@ -314,6 +314,11 @@ const settingsUi = {
   /** 汇总档位按钮的无障碍名（同一个按钮点第二次会取消筛选）。 */
   "settingsUi.connections.matrix.filterAria": "只看{label}的密钥，共 {count} 把",
   "settingsUi.connections.matrix.clearFilter": "取消筛选",
+  /** R18：两条操作说明（用户原来把"计数"当图例、"变淡"当未配置）。 */
+  "settingsUi.connections.matrix.hintFilter":
+    "点上方任一个计数，只看该状态的列；再点一次（或按 Esc）取消筛选。",
+  "settingsUi.connections.matrix.hintFocus":
+    "点列头的密钥名只是聚焦：其余列变淡表示「与你无关」，不是「没配置」——状态看列头的小标签。",
   /** 格子的读屏文本：实心。 */
   "settingsUi.connections.matrix.cell.direct": "{feature} 依赖 {key}",
   /** 格子的读屏文本：空心环（覆盖式）。 */
@@ -343,6 +348,37 @@ const settingsUi = {
   /** 锚点不存在时的兜底提示（滚到分组顶部，不静默停在不相干位置）。 */
   "settingsUi.connections.anchor.missing":
     "没找到「{name}」的配置位置（可能被条件隐藏），已定位到所属分组顶部",
+
+  /**
+   * T23：保存 / 测试失败时点名「哪一把 Key、哪个字段」。
+   * `namedFailure` 用在拿不到结构化字段的失败；`fieldFailure` 用在 422 的 `loc` 能解析时。
+   */
+  "settingsErrors.namedFailure": "「{name}」操作失败：{reason}",
+  "settingsErrors.fieldFailure": "「{name}」操作失败 · 字段：{fields} · 原因：{reason}",
+  "settingsErrors.fieldSeparator": "、",
+  "settingsErrors.field.apiKey": "API 密钥",
+  "settingsErrors.field.deepseekApiKey": "DeepSeek API 密钥",
+  "settingsErrors.field.tavilyApiKey": "Tavily API 密钥",
+  "settingsErrors.field.jinaApiKey": "Jina API 密钥",
+  "settingsErrors.field.customApiKey": "自定义搜索 API 密钥",
+  "settingsErrors.field.baseUrl": "接口地址（Base URL）",
+  "settingsErrors.field.model": "模型",
+  "settingsErrors.field.apiStyle": "接口协议",
+  "settingsErrors.field.protocol": "接口协议",
+  "settingsErrors.field.name": "名称",
+  "settingsErrors.field.sources": "搜索来源",
+  "settingsErrors.field.depth": "抓取深度",
+  "settingsErrors.field.maxResults": "返回条数上限",
+  "settingsErrors.field.searxngUrl": "SearXNG 实例地址",
+  "settingsErrors.field.customTemplate": "协议模板",
+  "settingsErrors.field.customName": "自定义来源名称",
+  "settingsErrors.field.customBaseUrl": "自定义接口地址",
+  "settingsErrors.field.customSearchPath": "自定义搜索端点",
+  "settingsErrors.field.customFetchPath": "自定义抓取端点",
+  "settingsErrors.field.customResultsField": "结果字段路径",
+  "settingsErrors.field.proxyUrl": "代理地址",
+  "settingsErrors.field.proxyPassword": "代理口令",
+  "settingsErrors.field.proxyUsername": "代理用户名",
 } as const;
 
 export default settingsUi;

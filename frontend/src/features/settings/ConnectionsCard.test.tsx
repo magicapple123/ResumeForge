@@ -249,13 +249,12 @@ describe("ConnectionsCard", () => {
     const saved = t("connections.status.saved");
     const sessionOnly = t("connections.status.session_only");
     const plaintext = t("connections.protection.plaintext");
-    expect(await screen.findByText(saved)).toBeInTheDocument();
+    // 三态：矩阵列头的状态标签与凭据行 chip 说的是同一件事，所以这里只要求"至少出现"。
+    expect((await screen.findAllByText(saved)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(sessionOnly).length).toBeGreaterThan(0);
     expect(screen.getByText(t("connections.status.not_configured"))).toBeInTheDocument();
-    // 存储方式与状态是两个标签：会话那一行是「仅内存」，搜索那一行是明文。
-    // （未配置行不再挂存储 chip——"没配还谈加密"是 #8 要消掉的矛盾，见下面那组用例。）
-    expect(screen.getByText(t("connections.protection.memory_only"))).toBeInTheDocument();
-    expect(screen.getAllByText(plaintext).length).toBeGreaterThan(0);
+    // R19：密钥行的存储方式从"行内 chip"挪进了 ⓘ（两行布局），所以这里断言的是
+    // **整页那条存储说明**仍然在，以及行内不再挂存储 chip（见下面那组用例）。
     expect(
       screen.getByText(t("connections.storage.title", { label: plaintext })),
     ).toBeInTheDocument();
@@ -413,9 +412,13 @@ describe("ConnectionListRow 卡片行（#8）", () => {
     const row = within(rowOf(label));
     // 这一条的 protection 是 dpapi：没配就不该谈加密（旧实现每行都写）。
     expect(row.queryByText(t("connections.protection.dpapi"))).toBeNull();
-    // 已配置的行仍然要有这个 chip（否则"没渲染"可能只是整体丢了）。
+    // R19：密钥行连已配置的也不在行内挂存储 chip 了——它挪进了右侧 `ⓘ`，
+    // 两行布局才装得下。断言"整行没有存储 chip"，避免"没渲染"其实是整体丢了。
     const saved = within(rowOf(DEEPSEEK_LABEL));
-    expect(saved.getByText(t("connections.protection.plaintext"))).toBeInTheDocument();
+    expect(saved.queryByText(t("connections.protection.plaintext"))).toBeNull();
+    expect(
+      saved.getByRole("button", { name: t("connections.hint.aria", { name: DEEPSEEK_LABEL }) }),
+    ).toBeTruthy();
   });
 
   it("未配置行的值位是引导文案：有「立即生效」，没有「未填写」", async () => {

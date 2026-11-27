@@ -132,9 +132,7 @@ describe("SearchCard", () => {
       target: { value: "localhost:8080" },
     });
 
-    expect(
-      await screen.findByText("SearXNG 地址要以 http:// 或 https:// 开头"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(t("searchCard.badSearxngUrl"))).toBeInTheDocument();
     expect(apiMocks.saveSearchConfig).not.toHaveBeenCalled();
   });
 

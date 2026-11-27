@@ -31,6 +31,7 @@ import LoadingBlock from "../../components/common/LoadingBlock";
 import SettingsField from "./SettingsField";
 import SearchDepthField from "./SearchDepthField";
 import SearchSourceTiles from "./SearchSourceTiles";
+import { namedFailure } from "./settingsFailure";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSearchConfig, saveSearchConfig } from "../../api/settings";
 import type { SearchConfig } from "../../types";
@@ -147,14 +148,15 @@ export default function SearchCard() {
     }
     if (trimmed.searxng_url && !/^https?:\/\//i.test(trimmed.searxng_url)) {
       setSaveStatus("error");
-      setSaveError(t("searchCard.badUrl"));
+      // 点名是哪一个字段：同一张卡里还有自定义接口地址，说「地址不对」用户不知道改哪。
+      setSaveError(t("searchCard.badSearxngUrl"));
       return;
     }
     // 自定义地址的完整规则在服务端（相对路径 / 公网地址 / 字段语法）；这里只拦最明显的
     // "忘了写协议"，避免每敲一个字就发一次必然 422 的请求。
     if (trimmed.custom_base_url && !/^https?:\/\//i.test(trimmed.custom_base_url)) {
       setSaveStatus("error");
-      setSaveError(t("searchCard.badUrl"));
+      setSaveError(t("searchCard.badCustomUrl"));
       return;
     }
     setSaveStatus("saving");
@@ -164,7 +166,8 @@ export default function SearchCard() {
       setSaveStatus("saved");
     } catch (err) {
       setSaveStatus("error");
-      setSaveError(err instanceof Error ? err.message : t("searchCard.saveFailed"));
+      // 保存失败也要点名卡片与字段：后端 422 的 loc 会被翻成「接口地址 / 来源」这类名字。
+      setSaveError(namedFailure(t("searchCard.title"), err, t("searchCard.saveFailed")));
     }
   }, []);
 

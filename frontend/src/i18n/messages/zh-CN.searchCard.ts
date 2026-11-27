@@ -48,8 +48,9 @@ const searchCard = {
   "searchCard.loadErrorBody": "{message}。下面显示的是默认值，保存会覆盖服务端当前的设置。",
   "searchCard.loadFailed": "加载联网搜索设置失败",
   "searchCard.needSource": "至少要选一个搜索来源",
-  /** URL 部分保持原样：校验规则里的 scheme 是技术常量。 */
-  "searchCard.badUrl": "SearXNG 地址要以 http:// 或 https:// 开头",
+  /** URL 部分保持原样：校验规则里的 scheme 是技术常量。两条各自点名字段（T23）。 */
+  "searchCard.badSearxngUrl": "SearXNG 实例地址要以 http:// 或 https:// 开头",
+  "searchCard.badCustomUrl": "自定义搜索接口地址要以 http:// 或 https:// 开头",
   "searchCard.saving": "保存中…",
   "searchCard.saved": "已保存联网搜索设置",
   "searchCard.saveFailed": "保存联网搜索设置失败",
@@ -129,6 +130,17 @@ const searchCard = {
   "searchCard.deepseek.test": "测试 Key",
   "searchCard.deepseek.testing": "测试中…",
   "searchCard.deepseek.testOk": "Key 可用（{ms} ms）",
+  /** T23：失败必须点名哪一把 Key + 问题落在哪个字段/哪一环（`reason` 是后端协议值）。 */
+  "searchCard.deepseek.testFailed": "{name} 测试失败：{reason}",
+  "searchCard.deepseek.testUnknown": "原因未识别，请查看诊断日志",
+  "searchCard.deepseek.fail.missingKey": "还没有可测的 Key：先在输入框填一把，或先保存再测",
+  "searchCard.deepseek.fail.unauthorized":
+    "API Key 无效或没有权限：检查这把 Key 是否填错、是否已失效",
+  "searchCard.deepseek.fail.balance": "这把 Key 余额不足：充值或换一把",
+  "searchCard.deepseek.fail.rateLimited": "这把 Key 被限流：稍后再试",
+  "searchCard.deepseek.fail.network": "连不上 DeepSeek：检查网络或代理（不是 Key 本身的问题）",
+  "searchCard.deepseek.fail.parse":
+    "能连上但响应无法解析：检查中转地址与接口协议（不是 Key 本身的问题）",
 
   /** CR-09：自定义搜索来源（模板 + 端点 + 字段映射）。 */
   "searchCard.custom.template": "协议模板",

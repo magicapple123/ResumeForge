@@ -80,7 +80,7 @@ describe("SearchSourceTiles", () => {
     expect(apiMocks.testSearchKey).toHaveBeenCalledTimes(1);
   });
 
-  it("tests the saved key when the field shows a mask, and shows the failure text (CR-04)", async () => {
+  it("tests the saved key when the field shows a mask, and names the key + field on failure (T23)", async () => {
     apiMocks.testSearchKey.mockResolvedValue({
       ok: false,
       reason: "unauthorized",
@@ -93,7 +93,36 @@ describe("SearchSourceTiles", () => {
 
     // 掩码不能被当成 Key 发出去：测的是"已保存的那把"。
     await waitFor(() => expect(apiMocks.testSearchKey).toHaveBeenCalledWith(""));
-    expect(await screen.findByText(/invalid key or no permission/)).toBeInTheDocument();
+    // T23：不展示后端中文原句，改由稳定 reason 选文案——点名 DeepSeek 与 API Key 字段。
+    expect(
+      await screen.findByText(
+        t("searchCard.deepseek.testFailed", {
+          name: t("searchCard.source.deepseek"),
+          reason: t("searchCard.deepseek.fail.unauthorized"),
+        }),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("tells the user which field is missing when there is no key to test (T23)", async () => {
+    apiMocks.testSearchKey.mockResolvedValue({
+      ok: false,
+      reason: "missing_key",
+      latency_ms: null,
+      message: "",
+    });
+
+    renderTiles({ sources: ["bing", "deepseek"], deepseek_api_key: "" });
+    fireEvent.click(screen.getByRole("button", { name: t("searchCard.deepseek.test") }));
+
+    expect(
+      await screen.findByText(
+        t("searchCard.deepseek.testFailed", {
+          name: t("searchCard.source.deepseek"),
+          reason: t("searchCard.deepseek.fail.missingKey"),
+        }),
+      ),
+    ).toBeInTheDocument();
   });
 
   it("offers a custom source whose form follows the template (CR-09)", async () => {

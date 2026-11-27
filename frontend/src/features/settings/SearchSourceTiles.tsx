@@ -36,6 +36,24 @@ const KEY_RULE_KEYS: Partial<Record<SearchSource, MessageKey>> = {
 };
 
 /**
+ * 测试失败原因 → **字段级**说明（T23）。
+ *
+ * `reason` 是后端的稳定协议值（`schemas/search_key_test.py`），前端据此选文案；
+ * 每句都必须点名问题落在哪一环：Key 本身、Key 的余额、Key 的限流、网络/代理、
+ * 还是中转地址——只说「测试失败」等于把排查工作全丢回给用户。
+ *
+ * 未登记的 reason 才回落后端原句（`message`）；不认识的协议值不许被吞掉。
+ */
+const TEST_FAILURE_KEYS: Record<string, MessageKey> = {
+  missing_key: "searchCard.deepseek.fail.missingKey",
+  unauthorized: "searchCard.deepseek.fail.unauthorized",
+  insufficient_balance: "searchCard.deepseek.fail.balance",
+  rate_limited: "searchCard.deepseek.fail.rateLimited",
+  network: "searchCard.deepseek.fail.network",
+  parse: "searchCard.deepseek.fail.parse",
+};
+
+/**
  * 一条搜索来源的显示名与卡片副标题。
  *
  * 全部走 `labelKey`（品牌名在两种语言里写法相同，登记在 `EQUALITY_EXEMPT_KEYS`）。
@@ -121,18 +139,29 @@ export default function SearchSourceTiles({
     const key = typed.startsWith(API_KEY_MASK_PREFIX) ? "" : typed;
     try {
       const result = await testSearchKey(key);
-      setTestState(
-        result.ok
-          ? {
-              status: "ok",
-              message: t("searchCard.deepseek.testOk", { ms: result.latency_ms ?? 0 }),
-            }
-          : { status: "error", message: result.message },
-      );
+      if (result.ok) {
+        setTestState({
+          status: "ok",
+          message: t("searchCard.deepseek.testOk", { ms: result.latency_ms ?? 0 }),
+        });
+        return;
+      }
+      const reasonKey = TEST_FAILURE_KEYS[result.reason];
+      setTestState({
+        status: "error",
+        message: t("searchCard.deepseek.testFailed", {
+          // 点名是哪一把 Key：同一页还有 Tavily / Jina / 自定义，失败提示不能只说「Key」。
+          name: t("searchCard.source.deepseek"),
+          reason: reasonKey ? t(reasonKey) : result.message || t("searchCard.deepseek.testUnknown"),
+        }),
+      });
     } catch (err) {
       setTestState({
         status: "error",
-        message: err instanceof Error ? err.message : t("searchCard.saveFailed"),
+        message: t("searchCard.deepseek.testFailed", {
+          name: t("searchCard.source.deepseek"),
+          reason: err instanceof Error ? err.message : t("searchCard.saveFailed"),
+        }),
       });
     }
   };

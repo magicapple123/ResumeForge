@@ -45,15 +45,26 @@
   font-size: 11.5px;
   line-height: 18px;
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
+/* R18：hover 一定要有底色。只改边框色时，这排计数看起来就是一排图例
+   （"能看不能点"），用户根本不会去点它。 */
 .connection-matrix__summary-btn:hover {
   border-color: var(--rf-border-strong);
+  background: var(--rf-surface-alt);
+}
+
+.connection-matrix__summary-btn:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 1px;
 }
 
 .connection-matrix__summary-btn.is-active {
   border-color: var(--rf-brand);
-  background: var(--rf-surface-alt);
+  background: color-mix(in srgb, var(--rf-brand) 12%, transparent);
   color: var(--rf-brand);
   font-weight: 500;
 }
@@ -72,15 +83,21 @@
   color: inherit;
 }
 
+/* 「取消筛选」也是一颗 chip：筛选生效时它是唯一的退出入口，不能长得像脚注。 */
 .connection-matrix__summary-clear {
-  padding: 1px 6px;
-  border: 0;
-  background: transparent;
-  color: var(--rf-text-tertiary);
+  padding: 1px 8px;
+  border: 1px solid var(--rf-border-strong);
+  border-radius: 10px;
+  background: var(--rf-surface);
+  color: var(--rf-text-secondary);
   font-size: 11.5px;
   line-height: 18px;
   cursor: pointer;
-  text-decoration: underline;
+}
+
+.connection-matrix__summary-clear:hover {
+  border-color: var(--rf-brand);
+  color: var(--rf-brand);
 }
 
 .connection-matrix__hint {
@@ -88,6 +105,11 @@
   color: var(--rf-text-tertiary);
   font-size: 12px;
   line-height: 1.6;
+}
+
+/* 补的两句各自成行：挤在同一行里会被当成同一句话读过去，用户还是不知道能点。 */
+.connection-matrix__hint-line {
+  display: block;
 }
 
 /* ── 表格：窄窗横向滚动，首列吸顶 ─────────────────────────── */
@@ -166,6 +188,59 @@
   height: 5px;
   border-radius: 50%;
   background: var(--rf-matrix-ink, var(--rf-text-tertiary));
+}
+
+/* ── 列头状态标签（R18）─────────────────────────────────────
+   三档状态原来是"看不见的"：`data-status` 挂在 th 上，但 CSS 里没有任何
+   `.connection-matrix__col[data-status]` 规则，列头那个圆点讲的又是**分组**。
+   于是在界面上，一把没配的 Key 和一把配好的 Key 长得一样。
+   现在把状态写成一个小标签（文字 + 边框形状），色点继续表示分组——两件事分开说。 */
+.connection-matrix__col-status {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  margin-top: 2px;
+  padding: 0 5px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-tertiary);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.connection-matrix__col-status[data-status="saved"] {
+  border-color: color-mix(in srgb, var(--rf-success) 35%, transparent);
+  color: var(--rf-success);
+}
+
+.connection-matrix__col-status[data-status="session_only"] {
+  border-color: color-mix(in srgb, var(--rf-warning) 35%, transparent);
+  color: var(--rf-warning);
+}
+
+/* 未配置：虚线边（"这里没有东西"）+ 标签降色；同时把密钥名一起降色+压淡，
+   这样整列扫过去就能看出"这一列还没有值"，不必凑近读标签。
+   **只压名字不压按钮**：按钮左边的圆点表示分组，压暗它等于丢掉"这列属于哪组"。 */
+.connection-matrix__col-status[data-status="not_configured"] {
+  border-style: dashed;
+}
+
+.connection-matrix__col-name {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* `#626f7f`（tertiary）本身只比 secondary 浅一点，单靠换色几乎看不出来（实测
+   rgb(98,111,127) vs rgb(95,107,122)，Δ≈4）——所以再叠一层 0.72 的透明度，
+   视觉上落到"灰而不刺眼"，与已保存的列一眼可分。 */
+.connection-matrix__col[data-status="not_configured"] .connection-matrix__col-name {
+  color: var(--rf-text-tertiary);
+  opacity: 0.72;
 }
 
 /* 聚焦的列头只做定位（浅底），不代表依赖。 */
@@ -353,66 +428,10 @@
   gap: 5px;
 }
 
-/* ── 详情卡：固定在矩阵下方 ───────────────────────────────── */
-.connection-matrix__detail {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--rf-border);
-  border-radius: var(--rf-radius-control);
-  background: var(--rf-surface-alt);
-}
-
-.connection-matrix__detail-title {
-  margin-bottom: 6px;
-  color: var(--rf-text-tertiary);
-  font-size: 11px;
-}
-
-.connection-matrix__detail-empty,
-.connection-matrix__detail-line {
-  margin: 0;
-  color: var(--rf-text-tertiary);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.connection-matrix__detail-head {
-  margin-bottom: 6px;
-  color: var(--rf-text-body);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.connection-matrix__detail-fields {
-  display: grid;
-  grid-template-columns: 84px minmax(0, 1fr);
-  gap: 4px 10px;
-}
-
-.connection-matrix__field {
-  display: contents;
-}
-
-.connection-matrix__field-label {
-  color: var(--rf-text-tertiary);
-  font-size: 11.5px;
-  line-height: 18px;
-}
-
-.connection-matrix__field-value {
-  min-width: 0;
-  color: var(--rf-text-secondary);
-  font-size: 11.5px;
-  line-height: 18px;
-  /* 模型 id / 文件路径是整串无空格字符：不给断点就会顶出卡片（与 #10 同一个坑）。 */
-  overflow-wrap: anywhere;
-}
-
-.connection-matrix__detail-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
+/* ── 详情卡：见 `connection-matrix-detail.css` ─────────────────
+   这一块（detail / field 共 9 条规则）拆成独立文件：主体已经贴着 500 行预算
+   （`test_file_size_budget` 是硬闸门，含 .css），而详情卡与矩阵格子、列头之间
+   没有覆盖关系，是唯一天然可整段切开的部分。引入顺序见 `ConnectionMatrix.tsx`。 */
 
 /* 窄窗只收窄首列与行名，**不隐藏任何列**（隐藏等于让用户以为那把 Key 不存在）。
    断点用 1092（BREAKPOINTS.narrow）：设置页卡片两侧还有侧栏，视口 900 时内容区更窄。 */

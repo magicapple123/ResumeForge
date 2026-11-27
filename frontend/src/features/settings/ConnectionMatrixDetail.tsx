@@ -5,8 +5,12 @@
  * 为什么在下方而不是右侧：内容区只有 ~790px，右侧再切一栏会把矩阵压到每列 40px 以下。
  *
  * 两种聚焦各给一份详情：
- * - 点**一列**（一把密钥）：在哪配 / 谁在用 / 留空会怎样 / 落点 + 「去配置」「复制落点」；
+ * - 点**一列**（一把密钥）：在哪配 / 谁在用 / 留空会怎样 / 落点 + 「去配置」；
  * - 点**一行**（一个功能）：它依赖哪几把密钥（按列顺序）。
+ *
+ * 落点那一行（`?tab=…#anchor`）**只作文本展示**：原来旁边还有一个「复制落点」按钮，
+ * 复制出来的串没有路径（`?tab=…#…`），粘进地址栏会被当成搜索词（R17）。按钮已删，
+ * 文本保留——它仍然是"这一行的深链长什么样"的唯一说明。
  *
  * 数据全部来自 payload：`matrix.keys` 给列，`key_map` 给那四句整话（`used_by` 已经
  * 被后端拼回 `used_by_text`）。这里**不按 id 判断任何语义**。
@@ -15,7 +19,6 @@
 import { Button } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import { useToast } from "../../hooks/useToast";
 import type { ConnectionKeyMapRow, ConnectionMatrix } from "../../types";
 import { keysOfFeature, type MatrixFocus } from "./connectionMatrixModel";
 
@@ -45,7 +48,6 @@ export function ConnectionMatrixDetail({
   onConfigure,
 }: ConnectionMatrixDetailProps) {
   useLocale();
-  const toast = useToast();
 
   if (focus === null) {
     return (
@@ -83,16 +85,6 @@ export function ConnectionMatrixDetail({
     );
   }
   const detail = detailsById.get(key.id);
-  const landing = `/settings?tab=${encodeURIComponent(key.section)}#${key.anchor}`;
-
-  const copyLanding = async (): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(landing);
-      toast.success(t("settingsUi.connections.matrix.detail.copied"));
-    } catch {
-      toast.error(t("settingsUi.connections.matrix.detail.copyFailed"));
-    }
-  };
 
   return (
     <div className="connection-matrix__detail-body" data-focus="key">
@@ -119,9 +111,6 @@ export function ConnectionMatrixDetail({
       <div className="connection-matrix__detail-actions">
         <Button size="small" type="primary" onClick={() => onConfigure(key.section, key.anchor)}>
           {t("settingsUi.connections.matrix.detail.goConfigure")}
-        </Button>
-        <Button size="small" onClick={() => void copyLanding()}>
-          {t("settingsUi.connections.matrix.detail.copyAnchor")}
         </Button>
       </div>
     </div>

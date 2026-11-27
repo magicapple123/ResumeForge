@@ -273,6 +273,10 @@ const settingsUi = {
   "settingsUi.connections.matrix.count": "{label}: {count}",
   "settingsUi.connections.matrix.filterAria": "Show only {label} keys ({count})",
   "settingsUi.connections.matrix.clearFilter": "Clear filter",
+  "settingsUi.connections.matrix.hintFilter":
+    "Click a count above to show only keys in that state; click again (or press Esc) to clear the filter.",
+  "settingsUi.connections.matrix.hintFocus":
+    "Clicking a key name only focuses that column: the other columns dim because they are irrelevant, not because they are unconfigured — read the state from the small tag in each column header.",
   "settingsUi.connections.matrix.cell.direct": "{feature} uses {key}",
   "settingsUi.connections.matrix.cell.override": "{feature} overrides with {key}",
   "settingsUi.connections.matrix.legend.direct": "Filled = direct dependency",
@@ -301,6 +305,34 @@ const settingsUi = {
     "Copy failed - select the landing link manually",
   "settingsUi.connections.anchor.missing":
     "Could not find where {name} is configured (it may be hidden right now) - scrolled to the top of its section",
+
+  /** T23: name the key and the field on save / test failures. */
+  "settingsErrors.namedFailure": "{name} failed: {reason}",
+  "settingsErrors.fieldFailure": "{name} failed · field: {fields} · reason: {reason}",
+  "settingsErrors.fieldSeparator": ", ",
+  "settingsErrors.field.apiKey": "API Key",
+  "settingsErrors.field.deepseekApiKey": "DeepSeek API key",
+  "settingsErrors.field.tavilyApiKey": "Tavily API key",
+  "settingsErrors.field.jinaApiKey": "Jina API key",
+  "settingsErrors.field.customApiKey": "Custom search API key",
+  "settingsErrors.field.baseUrl": "Base URL",
+  "settingsErrors.field.model": "Model",
+  "settingsErrors.field.apiStyle": "API protocol",
+  "settingsErrors.field.protocol": "API protocol",
+  "settingsErrors.field.name": "Name",
+  "settingsErrors.field.sources": "Search sources",
+  "settingsErrors.field.depth": "Fetch depth",
+  "settingsErrors.field.maxResults": "Result cap",
+  "settingsErrors.field.searxngUrl": "SearXNG instance URL",
+  "settingsErrors.field.customTemplate": "Protocol template",
+  "settingsErrors.field.customName": "Custom source name",
+  "settingsErrors.field.customBaseUrl": "Custom base URL",
+  "settingsErrors.field.customSearchPath": "Custom search endpoint",
+  "settingsErrors.field.customFetchPath": "Custom fetch endpoint",
+  "settingsErrors.field.customResultsField": "Results field path",
+  "settingsErrors.field.proxyUrl": "Proxy URL",
+  "settingsErrors.field.proxyPassword": "Proxy password",
+  "settingsErrors.field.proxyUsername": "Proxy username",
 } as const;
 
 export default settingsUi;

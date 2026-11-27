@@ -279,6 +279,33 @@ describe("ConnectionMatrix：汇总与筛选", () => {
     fireEvent.click(saved);
     expect(columnButtons(panel)).toHaveLength(matrix().keys.length);
   });
+
+  it("筛选后出现「取消筛选」chip；点它或按 Esc 都回到全部列（T18）", () => {
+    const view = renderMatrix();
+    const panel = view.getByTestId("connection-matrix");
+    const saved = within(panel)
+      .getAllByRole("button")
+      .find((button) => (button.textContent ?? "").includes(t("connections.status.saved")));
+    if (!saved) throw new Error("找不到已保存档位的按钮");
+
+    fireEvent.click(saved);
+    const clear = within(panel).getByRole("button", {
+      name: t("settingsUi.connections.matrix.clearFilter"),
+    });
+    fireEvent.click(clear);
+    expect(columnButtons(panel)).toHaveLength(matrix().keys.length);
+    expect(
+      within(panel).queryByRole("button", {
+        name: t("settingsUi.connections.matrix.clearFilter"),
+      }),
+    ).toBeNull();
+
+    // Esc 与「取消筛选」是同一个退出语义：筛选存在时先撤筛选。
+    fireEvent.click(saved);
+    expect(columnButtons(panel)).toHaveLength(1);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(columnButtons(panel)).toHaveLength(matrix().keys.length);
+  });
 });
 
 describe("ConnectionMatrix：详情与落点", () => {

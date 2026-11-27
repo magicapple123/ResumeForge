@@ -25,7 +25,8 @@ const searchCard = {
     "{message}. The values below are defaults; saving overwrites the settings currently stored on the server.",
   "searchCard.loadFailed": "Could not load the web search settings",
   "searchCard.needSource": "Select at least one search source",
-  "searchCard.badUrl": "The SearXNG address must start with http:// or https://",
+  "searchCard.badSearxngUrl": "The SearXNG instance URL must start with http:// or https://",
+  "searchCard.badCustomUrl": "The custom search base URL must start with http:// or https://",
   "searchCard.saving": "Saving…",
   "searchCard.saved": "Web search settings saved",
   "searchCard.saveFailed": "Could not save the web search settings",
@@ -96,6 +97,17 @@ const searchCard = {
   "searchCard.deepseek.test": "Test key",
   "searchCard.deepseek.testing": "Testing…",
   "searchCard.deepseek.testOk": "Key works ({ms} ms)",
+  "searchCard.deepseek.testFailed": "{name} test failed: {reason}",
+  "searchCard.deepseek.testUnknown": "Unrecognized reason; check the diagnostics log",
+  "searchCard.deepseek.fail.missingKey": "No key to test yet: type one in the field, or save first",
+  "searchCard.deepseek.fail.unauthorized":
+    "API key is invalid or lacks permission: check whether this key is mistyped or revoked",
+  "searchCard.deepseek.fail.balance": "This key is out of balance: top up or use another key",
+  "searchCard.deepseek.fail.rateLimited": "This key is rate-limited: try again later",
+  "searchCard.deepseek.fail.network":
+    "Cannot reach DeepSeek: check the network or proxy (the key itself is fine)",
+  "searchCard.deepseek.fail.parse":
+    "Connected but the response cannot be parsed: check the relay URL and API protocol (the key itself is fine)",
 
   /** CR-09: custom search source (template + endpoint + field mapping). */
   "searchCard.custom.template": "Protocol template",

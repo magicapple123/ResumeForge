@@ -4,31 +4,28 @@
  *
  * ## 为什么只有一份
  *
- * 之前 A/B 组（`ConnectionRow`）与 C 组（`SystemSourcesCard` 的内联 `SystemRow`）是
- * 两份几乎相同的代码：同样的结构、同样的就地编辑、同样的保存/取消，只是写的端点
- * 与"清除 vs 恢复默认"不同。差异用 `variant` 表达就够了，两份实现迟早漂成两种行为
- * （一边加了 loading、另一边忘了）。
+ * 两组曾有几乎相同的实现（结构、就地编辑、保存/取消都一样，只有端点和清除语义不同），
+ * 差异用 `variant` 表达就够了；两份实现迟早漂成两种行为。
  *
  * ## 一行一张卡（#8「卡片行」）
  *
- * 改造前每行只有三段文字 + 一个 8px 圆点：状态几乎只靠圆点颜色承载，掩码用正文字体
- * （`sk-e****59be` 里的四颗星像乱码），未配置的行还写「DPAPI 加密」——没配还谈加密。
- *
+ * 改造前只有三段文字 + 8px 圆点：状态只靠颜色、掩码用正文字体、未配置还写「DPAPI 加密」。
  * 现在：
  *
  * 1. 每行一张卡（`border` + 圆角 10 + `padding:10px 12px`，组内 `gap:8`），**去掉斑马底**
  *    （旧实现只给已保存行上灰底，看起来像"选中行"）；
- * 2. 左侧 3px 状态条（绿=已保存 / 琥珀=仅本次会话 / 灰=未配置），颜色取自
- *    `settings-connections.css` 顶部那组 token（#9 的矩阵共用同一组，不许两边各写一份）；
+ * 2. 状态**只由 chip 表达**（R16 删掉了贴左缘的 3px 彩条：它与 chip 说的是同一件事，
+ *    同一条信息出现两次反而让人以为"条"和"chip"是两个状态）；
  * 3. 状态 **chip** 带文字：颜色不是唯一信号（色盲与英文界面同样读得出来）；
  * 4. 掩码等宽（`••••`），`connectionMaskedText` 的输出格式不变，只在这一层换字形；
- * 5. 存储形态变 chip，**未配置的行不渲染**；
+ * 5. 存储形态变 chip，**未配置的行不渲染**；R19 起密钥行连这个 chip 也不渲染
+ *    （DPAPI / 仅内存的说明挪进右侧 `ⓘ`，两行布局才够矮）；
  * 6. 未配置行的值位改成一句引导（「点「设置」填入后立即生效」），不再让「未配置」与
  *    「未填写」在同一行里说两遍；
  * 7. 右侧操作区**定宽**（`ⓘ` + 主按钮 + `⋯` 排在 150px 的同一列里，右边缘是一条竖线，
  *    不再随状态换形态排成锯齿）；
- * 8. 新增「用于」一行（数据来自 `key_map[].used_by`，由 `ConnectionsCard` 按 id 传入，
- *    **不新增接口**）。
+ * 8. 「用于」并进第二行（`Key •••• · 用于 …`，R19）；数据来自 `key_map[].used_by`，
+ *    由 `ConnectionsCard` 按 id 传入，**不新增接口**。
  *
  * 布局是 `grid`（`minmax(0,1fr) 150px`）：动作列跨全部行、垂直居中，所以值行与输入框
  * 都是 26px 时，进编辑态整行高度不变（验收：行高差 ≤2px）。
@@ -60,6 +57,7 @@ import { useLocale } from "../../i18n/i18nContext";
 import { HintDetail } from "../../components/common/HintDetail";
 import type { ConnectionItem, ConnectionsPayload } from "../../types";
 import { clearConnectionSecret, writeConnectionSecret } from "./connectionKeyWrite";
+import { namedFailure } from "./settingsFailure";
 import {
   connectionItemHint,
   connectionItemLabel,
@@ -157,6 +155,13 @@ export function ConnectionListRow({
   const [failure, setFailure] = useState("");
 
   const label = connectionItemLabel(item);
+  /**
+   * R19：这一行用的是「谁家的哪个模型」。两段都取**实际生效的配置**（后端算，前端不猜），
+   * 任何一个为空就不显示——宁可少一行字，也不要把注册表里的名字当成"正在用的模型"。
+   */
+  const identity = [item.provider ?? "", item.model ?? ""]
+    .filter((part) => part.trim() !== "")
+    .join(" · ");
   const valueText = variant === "value" ? item.value : connectionMaskedText(item);
   const dirtyDraft = draft.trim() !== "";
   /** 掩码之外的值（系统来源）保持原样：等宽字体本来就对，不做字形替换。 */
@@ -168,9 +173,10 @@ export function ConnectionListRow({
     variant === "value" ? true : item.status !== "not_configured" && item.key_configured;
   const usedByText = (usedBy ?? "").trim();
 
-  /** 后端 400 的说明里就带着"怎么改"（端口区间 / http 前缀 / owner/repo），原样显示。 */
+  /** 后端 400 的说明里就带着"怎么改"（端口区间 / http 前缀 / owner/repo），原样保留原因。 */
   const fail = (err: unknown): void => {
-    setFailure(err instanceof Error ? err.message : t("connections.loadFailed"));
+    // T23：失败必须点名「哪一把 Key」；422 的结构化 loc 再补上「哪个字段」。
+    setFailure(namedFailure(label, err, t("connections.loadFailed")));
   };
 
   const startEdit = (): void => {
@@ -324,6 +330,12 @@ export function ConnectionListRow({
     >
       <div className="connection-row__head">
         <span className="connection-row__name">{label}</span>
+        {/* R19：模型 chip。服务商 · 模型取自实际配置，读不到就整块不渲染。 */}
+        {identity !== "" ? (
+          <span className="connection-row__model" title={identity}>
+            {identity}
+          </span>
+        ) : null}
         {/* 状态 chip：浅底 + 描边 + 小圆点，**文字必须保留**（色盲与英文界面同样可读）。 */}
         <span className="connection-row__chip" data-status={item.status}>
           <span className="connection-row__chip-dot" aria-hidden="true" />
@@ -368,9 +380,22 @@ export function ConnectionListRow({
             {shownValue}
           </span>
         )}
+        {/* R19 的第二行：`Key •••• · 用于 …`。原来"用于"自己占一行、存储方式再占一行，
+            四段堆叠把卡片撑到 ~120px，中间还留一段空白。现在挤成一行，存储方式收进 ⓘ。
+            编辑态同样保留这三段（值位换控件、其余位置不动 → 整行不跳，见单测）。 */}
+        {variant === "secret" && usedByText !== "" ? (
+          <>
+            <span className="connection-row__sep" aria-hidden="true">
+              ·
+            </span>
+            <span className="connection-row__used-inline" title={usedByText}>
+              {usedByText}
+            </span>
+          </>
+        ) : null}
       </div>
 
-      {showProtection ? (
+      {showProtection && variant === "value" ? (
         <div className="connection-row__meta">
           <span className="connection-row__tag" title={item.protection_description || undefined}>
             {connectionProtectionLabel(item)}
@@ -383,8 +408,10 @@ export function ConnectionListRow({
         </div>
       ) : null}
 
-      {/* 「用于」：谁在用这把 Key。数据来自 key_map（按 id 关联），不新增接口。 */}
-      {usedByText !== "" ? (
+      {/* 「用于」：谁在用这把 Key。数据来自 key_map（按 id 关联），不新增接口。
+          R19：密钥行（secret）的这一行已并进上面那行（`Key •••• · 用于 …`），
+          只剩系统来源行还需要它独占一行。 */}
+      {usedByText !== "" && variant === "value" ? (
         <div className="connection-row__used">
           <span className="connection-row__used-label">{t("settingsUi.connections.usedBy")}</span>
           <span className="connection-row__used-text" title={usedByText}>
