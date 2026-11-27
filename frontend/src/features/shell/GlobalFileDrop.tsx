@@ -62,7 +62,11 @@ export default function GlobalFileDrop() {
           const trouble = describeImportIssues(created.failed, created.skipped);
           if (trouble) message.warning(trouble);
           // 数据集列表在页头菜单里是挂载时取的：换一份数据集必须重载才能看到。
-          window.setTimeout(() => window.location.reload(), 600);
+          // 捕获 location 引用、回调里不再读 window：测试环境可能在 600ms 之前就卸载
+          // jsdom，那时全局 window 已不存在，裸写 `window.location.reload()` 会抛出
+          // 未处理异常（CI 的 Errors 行会红，尽管所有用例都通过）。
+          const { location } = globalThis;
+          globalThis.setTimeout(() => location?.reload?.(), 600);
         },
       });
     },

@@ -76,10 +76,13 @@ def _scan(
     # 结束旧事务，后续 db.get 才一定读到刚保存的开关。
     db_session.rollback()
     db_session.expire_all()
-    # 默认 `now=None` 交给服务层取**当前**时刻：`NOW` 是模块导入时抓的快照，用例跑得慢
-    # 一点（CI 的 3.13 作业）就会落后几秒，而建提醒时写进去的 `due_at` 是"真实的过去"，
-    # 于是 `due_at <= now` 判不过，扫描返回 created=0。窗口类断言靠的是 NOW 的相对偏移
-    # （-5min / -20h / -3d），换成当前时刻后相对关系不变。
+    # 用注入时钟 NOW，而不是"服务层取当前时刻"：用例里所有提醒都按 NOW 造
+    # （-5min / -30min / -2h），窗口判断必须用同一把尺子。CI 的 xdist worker 在
+    # 收集之后可能跑几十分钟才轮到这个文件，真实时钟会把 NOW 之前的事件推到窗口外，
+    # 于是出现"开关写成功、扫描却 created=0"。NOW 是导入时抓的真实时刻，不是写死的
+    # 过去日期，逾期 7 天体检也不会误伤。
+    if now is None:
+        now = NOW
     result = scan_due_reminders(db_session, now=now, enabled=enabled, notify_enabled=notify)
     db_session.expire_all()
     return result
