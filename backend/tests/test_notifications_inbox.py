@@ -57,7 +57,7 @@ def _exists(db, row_id: int) -> bool:
     return db.query(Notification.id).filter(Notification.id == row_id).scalar() is not None
 
 
-def test_retention_window_uses_created_at_with_injectable_now(client, db_session):
+def test_retention_window_uses_created_at_with_injectable_now(client, db_session, monkeypatch):
     """超过 30 天的已读通知不再出现；把"现在"往回拨到窗口内则能看到。"""
     old = _row(
         db_session,
@@ -81,20 +81,23 @@ def test_retention_window_uses_created_at_with_injectable_now(client, db_session
     rewound = notifications.list_notifications(db_session, now=NOW - timedelta(days=1))
     assert {int(row.id) for row in rewound} == {int(old.id), int(fresh.id)}
 
-    # HTTP 读侧与 service 同一口径：这里用"真实现在"造两行，窗外的不可见、窗内的可见
-    # （不写死日期，避免用例随日历腐烂）。
-    now_real = utcnow()
+    # HTTP 读侧与 service 同一口径。**时钟必须一起冻结在 NOW**：上面两行是按固定 NOW
+    # 造的，而接口读侧用的是真实 `utcnow()`——日历每往后走一天，那两条 29/31 天的行就
+    # 往窗外多漂一天。实测 2026-11-27 这条断言就在**没有任何代码改动**的情况下变红
+    # （29 天前那条按真实时间已经是 31 天前，被 30 天窗口滤掉了）。这不是用例松紧问题，
+    # 是用例自带的时间炸弹：固定 NOW 就必须连时钟一起固定。
+    monkeypatch.setattr(notifications, "utcnow", lambda: NOW)
     _row(
         db_session,
         title="40 天前的行",
-        created_at=now_real - timedelta(days=40),
+        created_at=NOW - timedelta(days=40),
         dedupe_key="retention:http-old",
         read=True,
     )
     _row(
         db_session,
         title="5 天前的行",
-        created_at=now_real - timedelta(days=5),
+        created_at=NOW - timedelta(days=5),
         dedupe_key="retention:http-fresh",
     )
     assert [row["title"] for row in client.get("/api/notifications").json()] == [

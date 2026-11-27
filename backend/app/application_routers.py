@@ -36,6 +36,7 @@ from .api import (
     connections,
     datasets,
     drill,
+    external_resume_edits,
     external_resumes,
     favorites,
     followups,
@@ -143,6 +144,9 @@ ROUTERS = (
     # 第 21 条：外部简历（只读快照）独立前缀 /api/external-resumes；与 /api/resumes
     # 完全隔离（两表 id 空间独立，不进制作台/导出/版式）。
     external_resumes.router,
+    # 外部简历的**在线改字**（`/blocks` 与 `/edit`）：与上一条同前缀、路径互不重叠。
+    # 单独一个模块是因为上一条已经贴着 500 行硬闸门，见该模块的 docstring。
+    external_resume_edits.router,
     resume_writing.router,
     # A1：职业场景（独立前缀，不与 /api/resumes、/api/profile 抢路径）。
     career_scenarios.router,

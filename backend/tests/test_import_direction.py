@@ -206,6 +206,8 @@ SHARED_API_MODULES: frozenset[str] = frozenset(
         "app.api.interview_shared",  # interview 子域共享层（会话读写 + 详情序列化）
         # drill 的同步工作单元（读→关会话→落库），路由只在循环上调 provider.chat
         "app.api.drill_units",
+        # 外部简历子域共享层：列表/详情/原件 与 在线改字 两支路由共用的 DTO 组装与 404 语义
+        "app.api.external_resume_shared",
     }
 )
 
