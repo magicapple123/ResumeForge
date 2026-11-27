@@ -51,8 +51,18 @@ def _count_selects() -> Iterator[list[str]]:
     statements: list[str] = []
 
     def _before_cursor_execute(_conn, _cursor, statement, _params, _context, _executemany):
-        if statement.lstrip().upper().startswith("SELECT"):
-            statements.append(statement)
+        # 只统计这条列表接口真正会查的表。CI 上进程活得久，后台巡检 / 其它模块会
+        # 顺带发出 candidate_job 等 SELECT（实测第 3 次请求多 1 条），它们与本用例
+        # 要守的"记录 → 进度反查不随条数增长"无关，混进来只会把口径污染成噪声。
+        # 接口自身的表仍一条不漏地数：一页 20 条若退化成逐条查，立刻变红。
+        if not statement.lstrip().upper().startswith("SELECT"):
+            return
+        if not any(
+            name in statement
+            for name in ("apply_task_item", "application_track", "apply_queue_item", "job_seen")
+        ):
+            return
+        statements.append(statement)
 
     event.listen(database.engine, "before_cursor_execute", _before_cursor_execute)
     try:

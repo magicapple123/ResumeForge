@@ -70,6 +70,11 @@ def _scan(
     enabled: bool | None = None,
     notify: bool | None = None,
 ) -> dict:
+    # 开关是 HTTP 请求用**另一个 Session** 写进 AppSetting 的。测试 Session 若还开着
+    # 一个读事务，SQLite 的快照不会把那次提交露出来，`expire_all()` 也救不了——
+    # CI 3.13 上出现过 enabled=True 写完、扫描仍按默认关算出 created=0。先 rollback
+    # 结束旧事务，后续 db.get 才一定读到刚保存的开关。
+    db_session.rollback()
     db_session.expire_all()
     # 默认 `now=None` 交给服务层取**当前**时刻：`NOW` 是模块导入时抓的快照，用例跑得慢
     # 一点（CI 的 3.13 作业）就会落后几秒，而建提醒时写进去的 `due_at` 是"真实的过去"，
