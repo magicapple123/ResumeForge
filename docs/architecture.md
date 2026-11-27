@@ -100,7 +100,7 @@ backend/app/
 │   ├── search/          # 受限联网搜索聚合
 │   ├── rag/             # RAG 语义补召回（配置/索引/编码器/provider/预热，19 个文件）
 │   ├── career_scenarios/ # 职业场景与跨行业筛选兜底
-│   ├── external_resume*.py # 外部简历：文本抽取 + 条目化检查（只读快照，不进制作台）
+│   ├── external_resume*.py # 外部简历：文本抽取 + 原位改字/历史版本 + 条目化检查（不进制作台）
 │   ├── agent_task_*.py   # 助手任务的状态机 / 事件 / 恢复（5 个分片）
 │   ├── followup_*.py     # 跟进巡检与决策
 │   ├── web_fetch/        # 只走 HTTP 的受控取页（助手联网、公司调研共用）
@@ -767,10 +767,12 @@ sequenceDiagram
 
 - **外部简历**（前端 `/resumes/external`，`pages/ExternalResumesPage.tsx`）：用户上传 pdf / docx /
   txt / md，服务在本地抽文本（`services/external_resumes.py` + `external_resume_analysis.py`），
-  存成**只读快照**（`models/external_resume.py`）——可预览、可做条目化文本检查，但**不可编辑、
-  不进制作台、不参与导出**。它与 `resume_record` 不是同一类对象：回收站里是独立一类
-  （`trash_registry` 的 `external_resume`），彻底删除只删记录、不删物理文件；可「用于面试」带进
-  模拟面试材料。
+  保留原件并建行（`models/external_resume.py`）——可预览、可做条目化文本检查。**改字走
+  `external_resume_edit.py`**（PDF 按块 / DOCX 按段 / TXT·MD 整篇），每次**另存为新版本**；
+  `external_resume_versions.py` 负责历史、行级对比与恢复（恢复也是新增一版，不改写历史）。
+  它**不转成 `resume_record`、不进制作台、不参与制作台导出**，但可被求职进度、投递台
+  （`external_resume_id`）、岗位匹配（文本级）、模拟面试（正文快照）与助手（`resume_ref`）引用；
+  回收站里是独立一类（`trash_registry` 的 `external_resume`），彻底删除只删记录、不删物理文件。
 - **公司调研**（前端 `/research`，`pages/CompanyResearchPage.tsx`）：两条出网路径并存——应用侧
   检索产出资料卡片（官网 / 近期新闻 / 公司介绍），联网工具产出带编号引用的简报
   （`services/job/company_research.py` / `company_research_store.py`），两路并发、互不阻塞；

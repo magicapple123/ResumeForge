@@ -120,7 +120,8 @@ const analyticsPage = {
   "analyticsPage.resume.withPlaceholders": "带【待补】",
   "analyticsPage.resume.unverifiedClaims": "待确认主张",
   "analyticsPage.resume.missingLink": "投递没有关联简历",
-  "analyticsPage.resume.missingLinkAction": "关联后才能按简历看效果；录入界面暂未提供关联入口。",
+  "analyticsPage.resume.missingLinkAction":
+    "关联后才能按简历看效果；到「求职进度」编辑这条记录即可补上。",
 
   // ===== 第 17 条新增：渠道转化 / 投递→当前阶段 / 同公司多投 / 简历效果 / 目标与成本 =====
   "analyticsPage.rank.applications": "投递数",
@@ -163,7 +164,7 @@ const analyticsPage = {
   "analyticsPage.resumeEffect.empty": "还没有投递关联了简历",
   "analyticsPage.resumeEffect.internalOnly": "仅内部简历",
   "analyticsPage.resumeEffect.kindExternal": "外部",
-  "analyticsPage.resumeEffect.externalTitle": "外部简历（原件）",
+  "analyticsPage.resumeEffect.externalTitle": "外部简历",
   "analyticsPage.resumeEffect.externalDescription":
     "单独一份口径：外部简历是另一张表（id 与内部简历会撞号），所以不并入上面的内部排行，也不画柱比较。",
   "analyticsPage.resumeEffect.externalEmpty": "还没有投递关联外部简历",

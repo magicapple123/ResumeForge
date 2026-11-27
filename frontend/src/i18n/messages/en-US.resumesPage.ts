@@ -85,7 +85,7 @@ const resumesPage = {
   "resumesPage.external.entry": "External resumes",
   "resumesPage.external.entryWithCount": "External resumes {count}",
   "resumesPage.external.subtitle":
-    "Read-only snapshots you cannot edit; usable for mock interviews and text checks",
+    "The original file and its text stay on this machine; edit it in place (each change saves a new version) and use it in the apply queue, job matching and mock interviews",
   "resumesPage.external.tag": "External",
   "resumesPage.external.upload": "Upload external resume",
   "resumesPage.external.addFromJob": "Add external resume",
@@ -95,7 +95,7 @@ const resumesPage = {
   "resumesPage.external.openList": "View",
   "resumesPage.external.empty": "No external resumes yet",
   "resumesPage.external.emptyHint":
-    "Upload a PDF / Word / TXT / Markdown resume you created elsewhere: preview the original, run text checks and reuse it in mock interviews",
+    "Upload a PDF / Word / TXT / Markdown resume you created elsewhere: preview and edit it (each change saves a new version), run text checks, and use it for applying, job matching and mock interviews",
   "resumesPage.external.chars": "{count} chars",
   "resumesPage.external.noText": "No text extracted",
   "resumesPage.external.jobTag": "Related job: {job}",

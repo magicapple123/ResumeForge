@@ -191,7 +191,7 @@ const interviewPage = {
   // 同上，但**常驻可见**：禁用项只有悬停才出提示，而"灰的为什么点不了"是每个扫描件都会撞上的问题。
   "interviewPage.setup.resumeNoTextHelp":
     "灰掉的那几份没有正文（多为扫描件）：先在简历中心为它做文本检查或补录正文，就能用于模拟面试。",
-  // 外部简历按岗位只打标签、不过滤（方案 25D）：列表接口没有 job_id 参数。
+  // 外部简历跨岗位可见：命中当前岗位的项只加「关联此岗位」标签，不过滤（方案 25D）。
   "interviewPage.setup.resumeJobTag": "关联此岗位",
   // 「当前材料」：选完外部简历后下拉是空的（材料走"导入文件"那一侧），必须显式说清现在用的是哪份。
   "interviewPage.setup.currentMaterial.record": "当前材料：本应用的简历《{name}》",

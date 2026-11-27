@@ -130,7 +130,7 @@ const analyticsPage = {
   "analyticsPage.resume.unverifiedClaims": "Unconfirmed claims",
   "analyticsPage.resume.missingLink": "Applications not linked to a resume",
   "analyticsPage.resume.missingLinkAction":
-    "Linking is required to see resume performance; the entry form does not offer linking yet.",
+    "Linking is required to see resume performance; edit the record in Job Tracker to add the link.",
 
   // ===== Item 17 additions: channel conversion / durations / repeats / resume effect / goal+cost =====
   "analyticsPage.rank.applications": "Applications",
@@ -176,10 +176,11 @@ const analyticsPage = {
   "analyticsPage.resumeEffect.empty": "No applications are linked to a resume yet",
   "analyticsPage.resumeEffect.internalOnly": "Internal resumes only",
   "analyticsPage.resumeEffect.kindExternal": "External",
-  "analyticsPage.resumeEffect.externalTitle": "External resumes (originals)",
+  "analyticsPage.resumeEffect.externalTitle": "External resumes",
   "analyticsPage.resumeEffect.externalDescription":
     "A separate count: external resumes live in another table (their ids collide with internal ones), so they are never merged into the ranking above and get no bars.",
-  "analyticsPage.resumeEffect.externalEmpty": "No applications are linked to an external resume yet",
+  "analyticsPage.resumeEffect.externalEmpty":
+    "No applications are linked to an external resume yet",
   "analyticsPage.resumeLink.includesExternal": "Includes external resumes",
   "analyticsPage.resumeLink.legend":
     "Application and progress totals include external resumes: {internal} internal · {external} external · {none} unlinked",

@@ -12,7 +12,7 @@
       "status": "current",
       "note": "面向用户的主文档；改设置页分组、卡片位置、界面文案都要回来对一遍",
       "tier": "A",
-      "last_reviewed": "2026-11-17",
+      "last_reviewed": "2026-11-27",
       "pairs": [
         "frontend/src/features/settings/",
         "frontend/src/features/user-guide/",
@@ -387,6 +387,35 @@
       "title": "制作台本地性能基线（W21 / plan §11）",
       "status": "record",
       "note": "单机性能实测快照；重测就新增一节，不改旧数字"
+    },
+    {
+      "path": "docs/api-reference.md",
+      "title": "HTTP API 参考（外部简历与简历引用）",
+      "status": "current",
+      "note": "本轮新增端点与字段的协议口径：收藏页读模型、投递 external_resume_id、文本级匹配、助手 resume_ref；这些接口再改要回来对一遍",
+      "tier": "A",
+      "last_reviewed": "2026-11-27",
+      "pairs": [
+        "backend/app/api/favorites.py",
+        "backend/app/schemas/apply/queue.py",
+        "backend/app/schemas/assistant.py",
+        "backend/app/schemas/job_match_text.py",
+        "frontend/src/types/resumeRef.ts"
+      ]
+    },
+    {
+      "path": "docs/external-resume.md",
+      "title": "外部简历：能用在哪些页面",
+      "status": "current",
+      "note": "外部简历的唯一说明书：上传/改字/历史版本/收藏，以及它参与进度、投递、匹配、面试、助手与统计的边界",
+      "tier": "A",
+      "last_reviewed": "2026-11-27",
+      "pairs": [
+        "backend/app/services/external_resume_edit.py",
+        "frontend/src/pages/resumes/ExternalResumePanel.tsx",
+        "frontend/src/features/apply/queue/QueueItemEditor.tsx",
+        "frontend/src/hooks/useResumeRefSelect.tsx"
+      ]
     }
   ],
   "archived": [

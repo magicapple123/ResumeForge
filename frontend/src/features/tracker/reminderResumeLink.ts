@@ -30,9 +30,9 @@ export function reminderResumeExternalLabel(item: Reminder): string | undefined 
 /**
  * 详情抽屉里「关联简历」的跳转地址（R14）。
  *
- * 外部简历**没有独立路由**，唯一可行的深链是"打开外部简历列表 + `?resume=<id>`"，
- * 由列表页决定要不要展开详情（B/C 落 `?resume=` 之后自然生效；没落之前等于只跳列表，
- * 至少用户能在那儿按名字找到它）。内部简历的深链归统一基座（T29）统一处理，这里不给。
+ * 外部简历**没有独立路由**，唯一可行的深链是"打开外部简历列表 + `?resume=<id>`"；
+ * 列表页会消费这个参数、确认那一份还在之后自动打开详情，并把它从地址栏清掉
+ * （不存在或已删除时给一条可关闭的提示）。内部简历的深链归统一基座（T29）统一处理，这里不给。
  */
 export function reminderResumeHref(item: Reminder): string | undefined {
   if (item.external_resume_id == null) return undefined;

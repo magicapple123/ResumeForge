@@ -92,7 +92,7 @@ const resumesPage = {
   "resumesPage.note.saved": "备注已保存",
   "resumesPage.note.saveFailed": "保存备注失败",
 
-  // ── 外部简历（第 21 条：只读快照）──────────────────────────
+  // ── 外部简历（第 21 条：原件 + 正文快照；改字另存新版本）────────────
   "resumesPage.external.title": "外部简历",
   /** 独立页的返回入口（第 1 条）。 */
   "resumesPage.external.back": "返回简历中心",
@@ -100,7 +100,8 @@ const resumesPage = {
   "resumesPage.external.entry": "外部简历",
   /** 筛选栏入口按钮（有数量时的可见文本）。 */
   "resumesPage.external.entryWithCount": "外部简历 {count}",
-  "resumesPage.external.subtitle": "只读快照，不能编辑，可用于模拟面试与文本检查",
+  "resumesPage.external.subtitle":
+    "原件与提取的正文都留在本机；可改字（每次另存新版本），也能选进投递台、岗位匹配与模拟面试",
   "resumesPage.external.tag": "外部",
   "resumesPage.external.upload": "上传外部简历",
   /** 岗位广场某一行右键/「⋯」里的入口（#6）：岗位由入口定好，弹窗里不再让选。 */
@@ -112,7 +113,7 @@ const resumesPage = {
   "resumesPage.external.openList": "查看",
   "resumesPage.external.empty": "还没有上传过外部简历",
   "resumesPage.external.emptyHint":
-    "上传你在别处生成的 PDF / Word / TXT / Markdown 简历，可预览原件、做文本检查、用于模拟面试",
+    "上传你在别处生成的 PDF / Word / TXT / Markdown 简历，可预览与改字（另存新版本）、做文本检查，也能用于投递、岗位匹配与模拟面试",
   "resumesPage.external.chars": "{count} 字",
   "resumesPage.external.noText": "未提取到文字",
   "resumesPage.external.jobTag": "关联岗位：{job}",
