@@ -233,6 +233,7 @@ def link_track(db: Session, record_id: int) -> ApplyTrackLinkOut:
         applied_at=_as_date(record.finished_at or record.created_at) or date.today().isoformat(),
         job_id=record.job_id,
         resume_id=record.resume_id,
+        external_resume_id=record.external_resume_id,
         channel=_channel_of(job),
         note=f"由投递台一键写入（投递记录 #{record.id}）",
     )

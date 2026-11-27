@@ -14,6 +14,7 @@ import { QUEUE_STATUS_LABEL_KEYS } from "../../../i18n/enum/apply";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import { QUEUE_STATUS_META, type ApplyQueueItem } from "../../../types";
+import { applyResumeLabel } from "../resumeLinkLabel";
 import { AdmissionTag } from "./AdmissionTag";
 
 export function ApplyQueueDetailDrawer({
@@ -67,7 +68,7 @@ export function ApplyQueueDetailDrawer({
               },
               {
                 label: t("applyQueue.detail.resume"),
-                value: item.resume_title || t("applyQueue.detail.defaultResume"),
+                value: applyResumeLabel(item, t("applyQueue.detail.defaultResume")),
               },
               {
                 label: t("applyQueue.detail.joinedAt"),

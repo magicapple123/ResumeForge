@@ -33,9 +33,10 @@ from ._base import (
 )
 from ._config import get_apply_config, get_collect_config
 from ._match import _admission_of_match, _blocking_gaps, latest_match
-from ._queue import job_apply_site, resolve_resume
+from ._queue import job_apply_site
 from ._records import daily_success_count
 from .greeting_image import normalize_image_ids
+from .resume_link import resume_plan
 
 logger = logging.getLogger(__name__)
 
@@ -268,17 +269,19 @@ def create_apply_task(db: Session, payload: ApplyTaskCreate) -> ApplyTask:
     db.add(task)
     db.flush()
     for index, (job, queue_item) in enumerate(targets):
-        resume = resolve_resume(
-            db, job.id, queue_item.resume_id if queue_item is not None else None
-        )
+        # T30：简历这一侧统一走 ``resume_link.resume_plan``——它同时管"用哪份内部简历"
+        # （唯一实现仍在 ``resolve_resume``）和"用哪份外部简历原件"，并给出标题快照。
+        # 队列条目为空（直接指定岗位、未入队）时传 None：按默认规则为该岗位找简历。
+        plan = resume_plan(db, job, queue_item)
         db.add(
             ApplyTaskItem(
                 task_id=task.id,
                 job_id=job.id,
                 job_title=job.title,
                 company=job.company,
-                resume_id=resume.id if resume is not None else None,
-                resume_title=resume.title if resume is not None else "",
+                resume_id=plan.resume_id,
+                external_resume_id=plan.external_resume_id,
+                resume_title=plan.title,
                 greeting=_clip_greeting(queue_item.greeting) if queue_item is not None else "",
                 # T8：配图在这里**快照**一份（与 resume_title 同一套口径）。投完之后用户
                 # 改了队列里的选择，这条历史记录仍要显示"当时发的是哪几张"；而下一次投递

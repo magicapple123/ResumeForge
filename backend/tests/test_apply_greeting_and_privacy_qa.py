@@ -197,6 +197,9 @@ def test_apply_tables_match_the_design_contract():
         "job_title",
         "company",
         "resume_id",
+        # 0032（T30）：用外部简历原件投递时指向那一份；与 resume_id 互斥（schema 层守）。
+        # 只存指向，不复制字节——附件按 external_resume.file_id 现取。
+        "external_resume_id",
         "resume_title",
         "greeting",
         "status",

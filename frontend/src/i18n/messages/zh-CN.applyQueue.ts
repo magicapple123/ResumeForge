@@ -288,11 +288,40 @@ const applyQueue = {
   // CR-18：配图就地上传 / 删除（队列行与设置页共用同一个选择器）。
   "applyQueue.image.upload": "上传图片",
   "applyQueue.image.uploaded": "已上传这张图片",
+  "applyQueue.image.uploadedBatch": "已上传 {count} 张图片",
   "applyQueue.image.uploadFailed": "图片上传失败，换一张试试",
+  "applyQueue.image.uploadFailedNamed": "「{name}」上传失败：{reason}",
+  "applyQueue.image.pasteHint": "也可以直接粘贴截图（Ctrl+V）",
+  // 上传前的两道闸：格式、体积。拒绝必须说清是哪个文件、为什么——静默丢弃最招人烦。
+  "applyQueue.image.rejectNotImage": "这不是图片：{name}（只支持 PNG / JPG / WebP / GIF）",
+  "applyQueue.image.rejectTooLarge": "图片 {name}（{size}）超过 {limit} 上限，请压缩后再传",
+  "applyQueue.image.rejectEmpty": "{name} 是空文件，换一张试试",
+  "applyQueue.image.unnamedFile": "未命名文件",
+  // 失败托盘：批量里失败的那几张留在原地，可重试、也可自己关掉。
+  "applyQueue.image.failedTray": "下面这些没有上传成功，可以重试：",
+  "applyQueue.image.retry": "重试",
+  "applyQueue.image.dismissFailure": "忽略",
+  "applyQueue.image.dismissFailureAria": "不再尝试上传 {name}",
   "applyQueue.image.deleteAria": "删除图片 {name}",
   "applyQueue.image.deleted": "已删除这张图片",
   "applyQueue.image.deleteFailed": "删除失败，请稍后重试",
   "applyQueue.image.inUse": "使用中",
+  // R21：本条要发（横向缩略图）与图片库分开；× 只移除、不删库。
+  "applyQueue.image.followDefault": "跟随默认图片",
+  "applyQueue.image.addTile": "选择图片",
+  "applyQueue.image.addTileAria": "打开图片库选择配图（已选 {count} / {max}）",
+  "applyQueue.image.previewAria": "预览 {name}",
+  "applyQueue.image.removeAria": "从这一条移除 {name}",
+  "applyQueue.image.removeOnly": "已从这一条移除；图片仍在图片库里",
+  "applyQueue.image.removeOnlyHint": "「×」只把这张图从这一条拿掉，不会删除图片库里的文件。",
+  "applyQueue.image.library": "图片库",
+  "applyQueue.image.librarySummary": "共 {total} 张 · 已选 {count} 张",
+  "applyQueue.image.libraryEmpty": "图片库里还没有图片，先上传一张。",
+  "applyQueue.image.manageInSettings": "要删除图片请到「投递设置 → 附带图片」；这里只选这一条要发的。",
+  "applyQueue.image.maxReached": "已达 {count} 张上限，先移除一张再加。",
+  "applyQueue.image.toggleAria": "选择 {name}（{size}）",
+  "applyQueue.image.lightboxHint": "Esc 关闭",
+  "applyQueue.image.lightboxClose": "关闭预览",
 } as const;
 
 export default applyQueue;

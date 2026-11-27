@@ -23,6 +23,7 @@ from ._base import (
     ApplyConflict,
     ApplyNotFound,
     ApplyServiceError,
+    ApplyUnprocessable,
     _clip_greeting,  # noqa: F401 - 历史导出
 )
 from ._config import (
@@ -87,6 +88,12 @@ from ._tasks import (
     list_apply_tasks_page,
     list_task_items,
 )
+from .resume_link import (
+    ResumePlan,
+    external_names,
+    resume_plan,
+    stored_link,
+)
 
 __all__ = [
     "ACTIVE_TASK_STATUSES",
@@ -96,6 +103,8 @@ __all__ = [
     "ApplyConflict",
     "ApplyNotFound",
     "ApplyServiceError",
+    "ApplyUnprocessable",
+    "ResumePlan",
     "add_to_queue",
     "browser_status",
     "build_apply_data",
@@ -113,6 +122,7 @@ __all__ = [
     "delete_match",
     "delete_record",
     "delete_record_batch",
+    "external_names",
     "fail_orphaned_tasks",
     "get_apply_config",
     "get_browser_manager",
@@ -140,7 +150,9 @@ __all__ = [
     "reorder_queue",
     "reset_browser_manager",
     "resolve_greeting",
+    "resume_plan",
     "select_retryable_items",
+    "stored_link",
     "resolve_resume",
     "save_apply_config",
     "save_collect_config",

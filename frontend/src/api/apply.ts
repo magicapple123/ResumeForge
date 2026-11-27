@@ -143,7 +143,15 @@ export function updateQueueItem(
   itemId: number,
   payload: {
     greeting?: string;
-    resume_id?: number;
+    /**
+     * 用哪份简历（T30）：内部 `resume_id` 与外部 `external_resume_id` **互斥**，
+     * 同时给后端回 422。提交时两个键都带上（一个非空、一个 null），后端才能把
+     * "从内部改选到外部"与"改回默认"表达清楚——只给一侧会让库里另一半留着。
+     *
+     * 两键都给 `null` = 改回"按默认规则为该岗位找简历"（合法，不是错误）。
+     */
+    resume_id?: number | null;
+    external_resume_id?: number | null;
     /**
      * 行内覆盖招呼语配图（T8）：`user_file.id` 列表。
      *

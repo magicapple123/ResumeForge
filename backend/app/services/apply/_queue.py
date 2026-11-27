@@ -30,6 +30,7 @@ from ._match import _admission_of_match, _blocking_gaps, _match_requires_confirm
 from .blocklist import load_blocklist
 from .greeting_image import normalize_image_ids
 from .lifecycle import job_history
+from .resume_link import external_names, stored_link
 from .signals import favorite_of, reference_score
 
 # 队列列表的兜底上限（P2-2）：超过后前端按 total/truncated 如实提示。
@@ -115,6 +116,7 @@ def _queue_out(
     *,
     cache: dict[str, Any] | None = None,
     resume_titles: dict[int, str] | None = None,
+    external_titles: dict[int, str] | None = None,
     matches: dict[int, JobMatchAnalysis] | None = None,
 ) -> ApplyQueueItemOut:
     """队列条目的出口结构：准入摘要 + 能否投递 + 参考分/收藏（14B）+ 生命周期（15A/15B）。
@@ -137,6 +139,15 @@ def _queue_out(
         resume_title = resume_titles.get(item.resume_id, "") if item.resume_id is not None else ""
     else:
         resume_title = _resume_title(db, item.resume_id)
+    # T30：条目改用外部简历原件时，``resume_title`` 回显那份外部简历的名字（队列行据此
+    # 渲染「外部 · xxx.pdf」）。批量出口用预取字典，单条出口查一次——两者同一口径。
+    if item.external_resume_id is not None:
+        if external_titles is not None:
+            resume_title = external_titles.get(int(item.external_resume_id), "")
+        else:
+            resume_title = external_names(db, [item.external_resume_id]).get(
+                int(item.external_resume_id), ""
+            )
     # 15A/15B：僵尸分与 JD 变更都来自同一份采集历史，一次读库（见 lifecycle.job_history）。
     history = job_history(db, job, cache=cache)
     return ApplyQueueItemOut(
@@ -145,6 +156,7 @@ def _queue_out(
         job_title=item.job_title,
         company=item.company,
         resume_id=item.resume_id,
+        external_resume_id=item.external_resume_id,
         resume_title=resume_title,
         greeting=item.greeting,
         # T8：配图只回引用 id（列表接口绝不下发 data URL）。脏值在这里收敛一次，
@@ -189,6 +201,8 @@ def list_queue(db: Session, limit: int = MAX_QUEUE_LIST) -> list[ApplyQueueItemO
     # 简历标题与匹配结论同样整页一次取回（原先每行各一次 db.get / latest_match）：
     # 500 条队列 = 1000 次多余的主键/单行查询，而这两份数据在出口处只用于填充字段。
     resume_titles = _resume_titles(db, [item.resume_id for item in items])
+    # T30：外部简历名同样整页一次取回（否则每行一次主键查询）。
+    external_titles = external_names(db, [item.external_resume_id for item in items])
     matches = _matches_by_job_id(db, [item.job_id for item in items])
     # 参考分要现算：资料文本整页只读一次，简历文本逐岗位不同（见 signals.reference_score）。
     cache: dict[str, Any] = {}
@@ -200,6 +214,7 @@ def list_queue(db: Session, limit: int = MAX_QUEUE_LIST) -> list[ApplyQueueItemO
             jobs.get(item.job_id) if item.job_id is not None else None,
             cache=cache,
             resume_titles=resume_titles,
+            external_titles=external_titles,
             matches=matches,
         )
         for item in items
@@ -306,11 +321,17 @@ def add_to_queue(db: Session, request: Any) -> list[ApplyQueueItemOut]:
                 # 未获授权自动投递——`_match_requires_confirm` 会据此算出 requires_confirm=True，
                 # 投递前仍要用户逐条确认。未知/空结论绝不默认放行。
             next_order += 1
+            # T30：入队时就把"用哪份简历"收敛成三元组（内外互斥 + 外部简历必须还存在）。
+            # 放在准入判断之后：先回答"这个岗位能不能投"，再回答"用哪份投"。
+            linked_resume_id, linked_external_id, _title = stored_link(
+                db, entry.resume_id, entry.external_resume_id
+            )
             queue_item = ApplyQueueItem(
                 job_id=job.id,
                 job_title=job.title,
                 company=job.company,
-                resume_id=entry.resume_id,
+                resume_id=linked_resume_id,
+                external_resume_id=linked_external_id,
                 greeting=_clip_greeting(entry.greeting),
                 sort_order=next_order,
                 status=QUEUE_STATUS_PENDING,
@@ -337,11 +358,28 @@ def update_queue_item(db: Session, item_id: int, payload: Any) -> ApplyQueueItem
         raise ApplyNotFound("投递队列条目不存在或已被移除")
     if payload.greeting is not None:
         item.greeting = _clip_greeting(payload.greeting)
-    if payload.resume_id is not None:
-        resume = db.get(ResumeRecord, payload.resume_id)
-        if resume is None:
-            raise ApplyNotFound("指定的简历不存在")
-        item.resume_id = resume.id
+    # T30：简历这一侧的 PATCH 语义——**只提交一个键**也要能表达改选：
+    # - 显式给 `external_resume_id` 非空 = 换成外部简历，内部 id 随之清空；
+    # - 显式给 `resume_id` 非空 = 换成内部简历，外部 id 随之清空；
+    # - 两键都给 null = 改回"按默认规则为该岗位找简历"，两个关联都清空。
+    # "改选要清另一侧"只能在这里做：schema 看不到库里已存的那一侧（与 R14 提醒同一分层）。
+    fields = getattr(payload, "model_fields_set", set())
+    if "resume_id" in fields or "external_resume_id" in fields:
+        wanted_resume = getattr(payload, "resume_id", None)
+        wanted_external = getattr(payload, "external_resume_id", None)
+        merged_resume = wanted_resume if "resume_id" in fields else item.resume_id
+        merged_external = (
+            wanted_external if "external_resume_id" in fields else item.external_resume_id
+        )
+        if wanted_external is not None:
+            merged_resume = None
+        if wanted_resume is not None:
+            merged_external = None
+        # stored_link 一次做完全部校验（互斥 / 外部简历还存在 / 内部简历还存在），
+        # 不合格就 422 或 404，绝不留一个悬空 id 落到执行期。
+        item.resume_id, item.external_resume_id, _title = stored_link(
+            db, merged_resume, merged_external
+        )
     image_ids = getattr(payload, "image_ids", None)
     if image_ids is not None:
         # 行内覆盖（T8）：**空列表是"这条不发图"**，不是"没改"——两者必须区分开，

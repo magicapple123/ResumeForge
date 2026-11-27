@@ -27,6 +27,7 @@ import { type KeyboardEvent as ReactKeyboardEvent, useMemo, useState } from "rea
 import { t } from "../../../i18n";
 import { QUEUE_STATUS_LABEL_KEYS } from "../../../i18n/enum/apply";
 import { useLocale } from "../../../i18n/i18nContext";
+import { applyResumeLabel } from "../resumeLinkLabel";
 import { useContextMenu } from "../../context-menu/contextMenuContext";
 import HintDetail from "../../../components/common/HintDetail";
 import {
@@ -241,7 +242,7 @@ export function QueueTable({
           // 原先上下两行、简历名还是蓝色实底，整列视觉重量比岗位列还高。
           <div className="apply-queue-assets">
             <Tag className="apply-queue-resume-tag">
-              {item.resume_title || t("applyQueue.detail.defaultResume")}
+              {applyResumeLabel(item, t("applyQueue.detail.defaultResume"))}
             </Tag>
             {imageCount > 0 && (
               // 配图角标：只报张数，不带文件名（一列里塞文件名会把招呼语挤成省略号）。

@@ -103,6 +103,7 @@ export default function ApplyGreetingImageSection() {
             value={imageId}
             onChange={(next) => setImageId(typeof next === "number" ? next : null)}
             options={data?.options ?? []}
+            maxImageBytes={data?.max_image_bytes}
             ariaLabel={t("applySettings.image.pickLabel")}
             placeholder={t("applySettings.image.pickPlaceholder")}
           />

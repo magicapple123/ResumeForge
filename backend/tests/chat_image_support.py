@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from app.services.browser.cdp_client import CdpClient
 from app.services.browser.page_ready import ReadyWait
@@ -47,6 +48,30 @@ FAST_WAIT = ReadyWait(timeout=0.05, poll_interval=0.001)
 # 与真实客户端同形：``set_file_input`` 内部发的就是这条 CDP 命令。
 FILE_INPUT_METHOD = "DOM.setFileInputFiles"
 _SEND_BUTTON_POINT = (700, 720)
+# 会话条目坐标的默认尺寸（只要非零即可：被测逻辑只要求 width/height > 0）。
+_ITEM_BOX = (220, 64)
+
+
+def norm(text: str) -> str:
+    """与页面脚本同一个口径：压掉所有空白并转小写（真站条目文本里有全角空格）。"""
+    return "".join(str(text or "").split()).lower()
+
+
+def _string_const(expression: str, name: str) -> str:
+    """从页面脚本里取出 ``const NAME = "…";`` 的字符串值（``_js`` 用的是 ``json.dumps``）。
+
+    假件必须真的去读脚本里的两个键，而不是复用调用方传进来的参数：否则"脚本里漏掉岗位名"
+    这种回归在本地永远绿。
+    """
+    match = re.search(rf'const {name} = ("(?:[^"\\]|\\.)*");', expression)
+    return json.loads(match.group(1)) if match else ""
+
+
+def _rect_of(point: tuple[int, int] | None) -> dict | None:
+    """条目坐标（None = 这一条取不到坐标，页面脚本会给 ``rect: null``）。"""
+    if point is None:
+        return None
+    return {"x": point[0], "y": point[1], "width": _ITEM_BOX[0], "height": _ITEM_BOX[1]}
 
 
 class ChatCdp(CdpClient):
@@ -67,10 +92,17 @@ class ChatCdp(CdpClient):
         title_visible: bool = True,
         left_list_images: int = 0,
         left_list_images_after_upload: int | None = None,
+        item_rects: list[tuple[int, int] | None] | None = None,
+        item_titles: list[str] | None = None,
     ) -> None:
         self.url = start_url
         self.conversations = list(conversations if conversations is not None else [ITEM_TEXT])
         self.item_rect = item_rect
+        # 逐条目的点击坐标（None 的元素 = 该条目取不到坐标）。给了它就按条目区分，
+        # 否则所有条目共用 ``item_rect``——R23 的"选中第二条"必须按条目区分才能断言。
+        self.item_rects = list(item_rects) if item_rects is not None else None
+        # 点开第 i 条之后右栏显示什么标题；不给就统一显示 ``TARGET_TITLE``（含公司名 + 岗位名）。
+        self.item_titles = list(item_titles) if item_titles is not None else None
         self.image_input_present = image_input_present
         self.chat_input_present = chat_input_present
         self.send_button_present = send_button_present
@@ -129,7 +161,7 @@ class ChatCdp(CdpClient):
         if "rf:chat-conversation" in expression:
             return json.dumps(self._conversation())
         if "rf:chat-user-list" in expression:
-            return json.dumps(self._user_list())
+            return json.dumps(self._user_list(expression))
         if "rf:image-probe" in expression:
             return json.dumps(self._image_probe(expression))
         if "rf:image-bubble" in expression:
@@ -144,14 +176,33 @@ class ChatCdp(CdpClient):
 
     # ---- 点击的后果 ----
 
+    def _item_rects(self) -> list[tuple[int, int] | None]:
+        """每条会话条目的点击坐标：没给 ``item_rects`` 时所有条目共用 ``item_rect``。"""
+        if self.item_rects is not None:
+            return list(self.item_rects)
+        return [self.item_rect] * len(self.conversations)
+
+    def _title_of(self, index: int) -> str:
+        """点开第 ``index`` 条之后右栏显示的标题（默认是含公司名 + 岗位名的真站形状）。"""
+        if self.item_titles is not None and index < len(self.item_titles):
+            return self.item_titles[index]
+        return TARGET_TITLE
+
+    def _item_index_at(self, point: tuple[int, int]) -> int | None:
+        for index, rect in enumerate(self._item_rects()):
+            if rect is not None and point == rect:
+                return index
+        return None
+
     def _after_click(self, point: tuple[int, int]) -> None:
         """还原真站上点击的两种后果：可能不切换会话、点了发送图片会带出上传控件。"""
-        if self.item_rect is not None and point == self.item_rect:
+        index = self._item_index_at(point)
+        if index is not None:
             self.item_clicks += 1
             if self.company_switch_after is not None and (
                 self.item_clicks >= self.company_switch_after
             ):
-                self.open_conversation = TARGET_TITLE
+                self.open_conversation = self._title_of(index)
         if point == _SEND_BUTTON_POINT:
             self.image_input_present = True
 
@@ -189,18 +240,33 @@ class ChatCdp(CdpClient):
             "login_required": False,
         }
 
-    def _user_list(self) -> dict:
-        hit = next((text for text in self.conversations if COMPANY in text), "")
-        matched = bool(hit) and self.item_rect is not None
-        rect = None
-        if matched and self.item_rect is not None:
-            rect = {"x": self.item_rect[0], "y": self.item_rect[1], "width": 220, "height": 64}
+    def _user_list(self, expression: str) -> dict:
+        """会话列表探针：与页面脚本**同一个口径**做「公司名 → 岗位名」两级筛。
+
+        R23 的关键点：命中几条要如实报 ``match_count``（不是"只留第一条"），``matched`` / ``rect``
+        只在恰好 1 条且坐标可用时才给。假件照抄这条规则，两个都命中 / 一个都不命中的用例才有意义。
+        """
+        company = norm(_string_const(expression, "COMPANY"))
+        job = norm(_string_const(expression, "JOB"))
+        rects = self._item_rects()
+        hits: list[dict] = []
+        for index, text in enumerate(self.conversations):
+            squashed = norm(text)
+            if not company or company not in squashed:
+                continue
+            if job and job not in squashed:
+                continue
+            point = rects[index] if index < len(rects) else None
+            hits.append({"text": text[:60], "rect": _rect_of(point)})
+        only = hits[0] if len(hits) == 1 and hits[0]["rect"] else None
         return {
             "url": self.url,
             "item_count": len(self.conversations),
-            "matched": matched,
-            "matched_text": hit[:60],
-            "rect": rect,
+            "matched": only is not None,
+            "matched_text": str(only["text"]) if only else "",
+            "rect": only["rect"] if only else None,
+            "match_count": len(hits),
+            "matches": hits[:5],
             "samples": self.conversations[:5],
             "captcha": False,
             "login_required": False,
@@ -254,18 +320,24 @@ class ChatCdp(CdpClient):
         return [entry for entry in self.log if entry.startswith("click")]
 
 
-def upload(client: ChatCdp, *, company: str = COMPANY, files: list[str] | None = None) -> str:
+def upload(
+    client: ChatCdp, *, company: str = COMPANY, job_title: str = "", files: list[str] | None = None
+) -> str:
     """用真适配器跑一次"补发图片"，返回策略名（失败会抛 ``SiteFailure``）。"""
     adapter = BossAdapter(ready_wait=FAST_WAIT)
-    return adapter.upload_greeting_images(client, files or FILES, company=company)
+    return adapter.upload_greeting_images(
+        client, files or FILES, company=company, job_title=job_title
+    )
 
 
 def upload_with_adapter(
-    client: ChatCdp, *, company: str = COMPANY, files: list[str] | None = None
+    client: ChatCdp, *, company: str = COMPANY, job_title: str = "", files: list[str] | None = None
 ) -> tuple[BossAdapter, str]:
     """同上，但同时把适配器交回来（要读它核对通过的会话标题时用）。"""
     adapter = BossAdapter(ready_wait=FAST_WAIT)
-    strategy = adapter.upload_greeting_images(client, files or FILES, company=company)
+    strategy = adapter.upload_greeting_images(
+        client, files or FILES, company=company, job_title=job_title
+    )
     return adapter, strategy
 
 
@@ -281,6 +353,7 @@ __all__ = [
     "OTHER_TITLE",
     "TARGET_TITLE",
     "ChatCdp",
+    "norm",
     "upload",
     "upload_with_adapter",
 ]

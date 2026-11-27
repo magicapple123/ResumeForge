@@ -1,0 +1,421 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 招呼语配图：横向缩略图槽 + 折叠图片库 + 灯箱（R21）。
+ *
+ * 全部走语义 token，深浅两套主题共用一份：这一块最容易踩的坑是"缩略图上的白底文件名在
+ * 深色下亮成一块白砖"，所以名字条的底色用 `--rf-scrim-strong`（两种主题都是"压暗"）。
+ */
+
+/* ===== 缩略图槽（本条要发） ===== */
+
+/* 容器：缩略图槽 + 说明行 + 折叠图片库，纵向排列。 */
+.rf-greeting-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rf-greeting-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.rf-greeting-slot {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+  border: 1px solid var(--rf-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--rf-surface-alt);
+}
+
+/* 单张缩略图：整块可点，点开灯箱。 */
+.rf-greeting-slot-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.rf-greeting-slot-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rf-greeting-slot-preview:focus-visible {
+  outline: 2px solid var(--rf-brand);
+  outline-offset: -2px;
+}
+
+/*
+ * 「×」只从这一条移除，不删库。压在图上的小圆点：不做成 antd 的 danger 按钮，
+ * 否则它的红色和"删除文件"的语义纠缠在一起，正是 R21 里用户不敢点的那个东西。
+ */
+.rf-greeting-slot-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--rf-on-brand);
+  background: var(--rf-scrim-strong);
+}
+
+.rf-greeting-slot-remove:hover {
+  background: var(--rf-brand-fill);
+}
+
+/* 空槽：没选 = 跟随投递设置里的默认图。这条说明必须留在原位，否则"没选"会被读成"不发图"。 */
+.rf-greeting-slot-follow {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  width: 96px;
+  padding: 6px;
+  border-style: dashed;
+  text-align: center;
+}
+
+.rf-greeting-slot-follow-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--rf-text-body);
+}
+
+.rf-greeting-slot-follow-hint {
+  font-size: 9.5px;
+  line-height: 1.3;
+  color: var(--rf-text-secondary);
+}
+
+/* 「选择图片」槽：到上限时置灰（并在下方给一句原因，见 .rf-greeting-image-note-warn）。 */
+.rf-greeting-slot-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 72px;
+  padding: 0;
+  border-style: dashed;
+  cursor: pointer;
+  color: var(--rf-text-secondary);
+  background: var(--rf-surface);
+}
+
+.rf-greeting-slot-add:hover:not(:disabled) {
+  border-color: var(--rf-brand);
+  color: var(--rf-brand);
+}
+
+.rf-greeting-slot-add:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.rf-greeting-slot-add-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.rf-greeting-slot-add-text {
+  font-size: 10.5px;
+}
+
+.rf-greeting-slot-add-count {
+  font-size: 9.5px;
+  color: var(--rf-text-tertiary);
+}
+
+/* ===== 说明行 ===== */
+
+.rf-greeting-image-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--rf-text-secondary);
+}
+
+/* 到上限的那句原因：颜色 + 文案两条腿，不只靠颜色传达。 */
+.rf-greeting-image-note-warn {
+  color: var(--rf-warning-text);
+}
+
+/* ===== 图片库（默认折叠） ===== */
+
+.rf-greeting-library {
+  margin-top: 4px;
+  background: transparent;
+}
+
+.rf-greeting-library-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.rf-greeting-library-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--rf-text-body);
+}
+
+.rf-greeting-library-count {
+  font-size: 11.5px;
+  color: var(--rf-text-secondary);
+}
+
+.rf-greeting-library-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rf-greeting-library-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.rf-greeting-library-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 208px;
+  overflow-y: auto;
+}
+
+/* 库里的一张候选：勾选态、使用中标记、底部文件名（截断，不换行）。 */
+.rf-greeting-thumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 1px solid var(--rf-border);
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--rf-surface-alt);
+}
+
+.rf-greeting-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rf-greeting-thumb:hover:not(:disabled) {
+  border-color: var(--rf-brand);
+}
+
+.rf-greeting-thumb:focus-visible {
+  outline: 2px solid var(--rf-brand);
+  outline-offset: 1px;
+}
+
+.rf-greeting-thumb.is-selected {
+  border-color: var(--rf-brand);
+  box-shadow: 0 0 0 2px var(--rf-brand-tint);
+}
+
+/* 到上限时未选中的图不可点：置灰即可，原因在下方常驻说明里。 */
+.rf-greeting-thumb:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.rf-greeting-thumb-check {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--rf-on-brand);
+  background: var(--rf-brand);
+}
+
+.rf-greeting-thumb-used {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-size: 9px;
+  color: var(--rf-text-body);
+  background: var(--rf-surface-glass);
+}
+
+.rf-greeting-thumb-name {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 1px 3px;
+  font-size: 9.5px;
+  line-height: 1.4;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--rf-on-brand);
+  background: var(--rf-scrim-strong);
+}
+
+/* ===== 设置页的库清单（可删；队列编辑里没有这段） ===== */
+
+.rf-greeting-image-manage {
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.rf-greeting-image-manage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rf-greeting-image-manage-name {
+  font-size: 12px;
+}
+
+.rf-greeting-image-manage-inuse {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ===== 灯箱 ===== */
+
+.rf-greeting-lightbox {
+  position: fixed;
+  inset: 0;
+  /*
+   * 灯箱是从**队列编辑弹窗里**打开的，而 antd 6 的单层 Modal 是
+   * `popupBase(3100) + 100 = 3200`（见 `theme/tokens.ts` 的 `layer` 注释）。
+   * 取 3210：只比它高一点，仍低于 antd message（4110）——正在提示的 toast 不该被灯箱盖住。
+   */
+  z-index: 3210;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--rf-scrim-strong);
+}
+
+.rf-greeting-lightbox-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 82vw;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--rf-surface-elevated);
+  box-shadow: 0 18px 48px var(--rf-scrim-strong);
+}
+
+/* 灯箱本体不该画出焦点框（它是容器），焦点环留给里面的按钮。 */
+.rf-greeting-lightbox-inner:focus {
+  outline: none;
+}
+
+.rf-greeting-lightbox-img {
+  display: block;
+  max-width: 76vw;
+  max-height: 68vh;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--rf-surface-alt);
+}
+
+.rf-greeting-lightbox-caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+}
+
+.rf-greeting-lightbox-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--rf-text-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rf-greeting-lightbox-size {
+  white-space: nowrap;
+}
+
+.rf-greeting-lightbox-hint {
+  white-space: nowrap;
+  color: var(--rf-text-tertiary);
+}
+
+/* ===== 上传失败托盘（粘贴 / 多选时逐张留痕） ===== */
+
+/* 放在折叠区外面：图片库收起时失败原因也必须看得见，否则用户以为"没反应"。 */
+.rf-greeting-failures {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--rf-warning-border);
+  border-radius: 8px;
+  background: var(--rf-warning-bg);
+}
+
+.rf-greeting-failure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.rf-greeting-failure-name {
+  flex: 0 1 auto;
+  max-width: 30%;
+  font-weight: 600;
+  color: var(--rf-text-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rf-greeting-failure-reason {
+  flex: 1;
+  min-width: 0;
+  color: var(--rf-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* 「也可以粘贴」这句在两个入口都出现：作为按钮旁的次要说明，不抢主次。 */
+.rf-greeting-library-paste-hint,
+.rf-greeting-image-paste-hint {
+  font-size: 12px;
+  color: var(--rf-text-tertiary);
+}

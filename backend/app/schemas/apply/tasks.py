@@ -58,6 +58,8 @@ class ApplyTaskItemOut(BaseModel):
     job_title: str = ""
     company: str = ""
     resume_id: int | None = None
+    #: 用外部简历原件投递时指向那一份（T30）；``resume_title`` 是它的名字快照。
+    external_resume_id: int | None = None
     resume_title: str = ""
     greeting: str = ""
     status: TaskItemStatus = "pending"

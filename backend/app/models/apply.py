@@ -239,6 +239,15 @@ class ApplyQueueItem(Base):
     resume_id: Mapped[int | None] = mapped_column(
         ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # 用户指定用哪份**外部简历原件**投递（T30 / 迁移 0033）。与 ``resume_id`` **互斥**：
+    # 同时给由 schema 层返回 422（``schemas.apply.check_resume_link_exclusive``）。
+    #
+    # 为什么要这一列：队列条目是"这条岗位用什么投"的唯一存放处，用户选完外部简历再刷新
+    # 页面必须还在；只在开始投递时传一次会让"选了"和"存住"是两件事。
+    # ``SET NULL``：外部简历被彻底删除后条目仍可读（继续按默认规则找简历），不是级联删。
+    external_resume_id: Mapped[int | None] = mapped_column(
+        ForeignKey("external_resume.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     # 本岗位的招呼语（用户可编辑 / 按岗位生成后落此）；空 = 用默认招呼语。
     greeting: Mapped[str] = mapped_column(Text, default="")
     # 招呼语附带图片（T8 迁移 0026）：**只存引用**，即 ``user_file.id`` 的列表，

@@ -146,6 +146,15 @@ export interface ApplyGreetingImageOption {
 }
 
 /**
+ * 配图张数的**兜底**上限。
+ *
+ * 权威值仍是 `GET /apply/greeting-image` 返回的 `max_count`（后端 `services/attachments.py`）；
+ * 这个常量只在接口还没回包时用。之所以抽成常量而不是各处写 `4`：队列编辑器与选择器都要
+ * 一个默认值，两处各写一个字面量迟早漂，而漂移的表现是"编辑器说 4 张、选择器拦在 3 张"。
+ */
+export const GREETING_IMAGE_MAX_FALLBACK = 4;
+
+/**
  * 全局配图设置 + 可选清单 + 额度。
  *
  * 三个额度由**后端下发**（权威值在 `services/attachments.py`），前端不写第二份数字：

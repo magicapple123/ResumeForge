@@ -9,6 +9,14 @@ export interface ApplyQueueItem {
   job_title: string;
   company: string;
   resume_id: number | null;
+  /**
+   * 这条岗位改用**外部简历原件**投递时指向那一份（T30）；与 `resume_id` 互斥。
+   *
+   * 非空时 `resume_title` 是那份外部简历的名字，界面据此渲染「外部 · xxx.pdf」——
+   * 前缀由前端按语言加，后端只回显名字（否则快照里会混进一句会随语言变的话）。
+   * **可选**：旧响应没有，缺失与 `null` 同义（= 用内部简历 / 按默认规则解析）。
+   */
+  external_resume_id?: number | null;
   resume_title: string;
   greeting: string;
   /**
@@ -68,6 +76,8 @@ export interface ApplyQueueItem {
 export interface ApplyQueueAddItem {
   job_id: number;
   resume_id?: number | null;
+  /** 用外部简历原件投递（T30）；与 `resume_id` 互斥，同时给后端回 422。 */
+  external_resume_id?: number | null;
   greeting?: string;
   confirm_real_gap?: boolean;
   confirm_unanalyzed?: boolean;
@@ -128,6 +138,8 @@ export interface ApplyTaskItem {
   job_title: string;
   company: string;
   resume_id: number | null;
+  /** 用外部简历原件投递时指向那一份（T30）；`resume_title` 是它的名字快照。 */
+  external_resume_id?: number | null;
   resume_title: string;
   greeting: string;
   status: TaskItemStatus;
@@ -150,6 +162,12 @@ export interface ApplyRecord {
   job_id: number | null;
   job_title: string;
   company: string;
+  /**
+   * 这条记录用的是**外部简历原件**时指向那一份（T30）；`resume_title` 是当时的名字快照。
+   * 非空 → 界面渲染「外部 · xxx.pdf」；为空 → 内部简历 / 当时没解析出可用简历。
+   * **可选**：旧响应没有，缺失与 `null` 同义。
+   */
+  external_resume_id?: number | null;
   resume_title: string;
   greeting: string;
   status: TaskItemStatus;

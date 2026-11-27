@@ -49,6 +49,19 @@ class ApplyConflict(ApplyServiceError):
         super().__init__(detail, 409)
 
 
+class ApplyUnprocessable(ApplyServiceError):
+    """语义上无法处理（422）：字段组合互斥，或指向的对象已失效。
+
+    与 400 分开的理由：400 是"请求缺了东西"（用户得补一个字段），422 是"请求形状对、
+    但内容互斥"（内外简历同时给）或"指向的外部简历已删除"——前端据此把提示挂在简历
+    选择器上，而不是弹一条笼统的"请求无效"。取值来自 pydantic 的 422 同语义，
+    助手工具侧拿到的仍是 ``ApplyServiceError`` 的 ``detail``。
+    """
+
+    def __init__(self, detail: str | dict[str, Any]) -> None:
+        super().__init__(detail, 422)
+
+
 def _clip_greeting(value: str) -> str:
     """招呼语落库前截断到上限（记录用户写给 HR 的全文，但不让单条无限增长）。"""
     text = (value or "").strip()

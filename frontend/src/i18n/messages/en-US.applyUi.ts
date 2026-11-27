@@ -15,6 +15,9 @@
 const applyUi = {
   "applyUi.recordDetail.title": "Apply record details",
   "applyUi.recordDetail.time": "Time",
+  // T30: prefix for "which resume this row/record used" when it is an external one
+  // (shared by the queue row, the detail drawer and the records column).
+  "applyUi.resume.externalTag": "External",
   "applyUi.recordDetail.taskBatch": "Task / batch",
   "applyUi.recordDetail.defaultGreeting": "(default greeting)",
   "applyUi.recordDetail.failureDetail": "Failure details (page URL and title)",

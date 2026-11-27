@@ -281,11 +281,44 @@ const applyQueue = {
   // CR-18: inline upload / delete for greeting images (shared by queue rows and settings).
   "applyQueue.image.upload": "Upload image",
   "applyQueue.image.uploaded": "Image uploaded",
+  "applyQueue.image.uploadedBatch": "Uploaded {count} images",
   "applyQueue.image.uploadFailed": "Upload failed, try another image",
+  "applyQueue.image.uploadFailedNamed": "Could not upload {name}: {reason}",
+  "applyQueue.image.pasteHint": "You can also paste a screenshot (Ctrl+V)",
+  // Two gates before upload: format and size. A rejection must say which file and why;
+  // silently dropping it is the worst option.
+  "applyQueue.image.rejectNotImage":
+    "Not an image: {name} (only PNG, JPG, WebP and GIF are supported)",
+  "applyQueue.image.rejectTooLarge":
+    "Image {name} is {size}, over the {limit} limit. Compress it and try again.",
+  "applyQueue.image.rejectEmpty": "{name} is an empty file, try another one",
+  "applyQueue.image.unnamedFile": "Unnamed file",
+  "applyQueue.image.failedTray": "These did not upload. You can retry:",
+  "applyQueue.image.retry": "Retry",
+  "applyQueue.image.dismissFailure": "Dismiss",
+  "applyQueue.image.dismissFailureAria": "Stop retrying {name}",
   "applyQueue.image.deleteAria": "Delete image {name}",
   "applyQueue.image.deleted": "Image deleted",
   "applyQueue.image.deleteFailed": "Could not delete image, try again",
   "applyQueue.image.inUse": "In use",
+  // R21: "what this job sends" (thumbnails) is separated from the image library; x only removes.
+  "applyQueue.image.followDefault": "Follow the default image",
+  "applyQueue.image.addTile": "Choose images",
+  "applyQueue.image.addTileAria": "Open the image library to pick images ({count} of {max} selected)",
+  "applyQueue.image.previewAria": "Preview {name}",
+  "applyQueue.image.removeAria": "Remove {name} from this job",
+  "applyQueue.image.removeOnly": "Removed from this job. The image is still in the library",
+  "applyQueue.image.removeOnlyHint":
+    "The x only drops the image from this job; the file stays in the image library.",
+  "applyQueue.image.library": "Image library",
+  "applyQueue.image.librarySummary": "{total} images · {count} selected",
+  "applyQueue.image.libraryEmpty": "The library is empty. Upload one first.",
+  "applyQueue.image.manageInSettings":
+    "Delete images in Apply settings, Greeting images. This picker only chooses what this job sends.",
+  "applyQueue.image.maxReached": "Limit of {count} images reached. Remove one first.",
+  "applyQueue.image.toggleAria": "Select {name} ({size})",
+  "applyQueue.image.lightboxHint": "Esc to close",
+  "applyQueue.image.lightboxClose": "Close preview",
 } as const;
 
 export default applyQueue;

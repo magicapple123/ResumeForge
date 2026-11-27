@@ -185,6 +185,42 @@ def test_key_fallback_matches_manually_created_tracks(client, db_session):
     assert linked.json()["track_id"] == listed
 
 
+def test_linking_keeps_the_external_resume_link(client, db_session):
+    """T30 回归：外部简历投的记录写进进度后不能变成「没关联简历」。
+
+    统计页的「未关联」缺口按 ``resume_id`` 与 ``external_resume_id`` 都为空来数，
+    ``link_track`` 只带 ``resume_id`` 时，外部简历投的每一条都会虚增一分缺口
+    （实测 17 应为 14）。这里直接钉住写入的那一对字段。
+    """
+    from app.models.tracker import ApplicationTrack
+
+    uploaded = client.post(
+        "/api/external-resumes",
+        files={"file": ("外部版.txt", b"external resume body", "text/plain")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    external_id = uploaded.json()["id"]
+
+    task = _batch(db_session, 1)
+    record_id = _record_id(db_session, task)
+    # 把记录改成"用外部简历投"（真实写入路径在 test_apply_queue_external_resume，
+    # 这里只需要一条已经带上外部关联的记录来验证 link_track 这一跳）。
+    db_session.rollback()
+    row = db_session.get(ApplyTaskItem, record_id)
+    row.resume_id = None
+    row.external_resume_id = external_id
+    row.resume_title = "外部版.txt"
+    db_session.commit()
+
+    linked = client.post(f"/api/apply/records/{record_id}/track")
+    assert linked.status_code == 200, linked.text
+
+    track = db_session.get(ApplicationTrack, linked.json()["track_id"])
+    assert track is not None
+    assert track.external_resume_id == external_id
+    assert track.resume_id is None
+
+
 def test_soft_deleted_track_does_not_count_as_linked(client, db_session):
     """回收站里的进度不能被当成"已写过"：那条链接点进去是空的。"""
     task = _batch(db_session, 1)

@@ -289,17 +289,18 @@ def execute_item(
     adapter = registry.resolve_for_job(job)
     if adapter is None:
         raise SiteFailure(FAILURE_SITE_UNSUPPORTED, apply_service.unsupported_site_message(job))
-    resume = apply_service.resolve_resume(session, job.id, item.resume_id)
-    if resume is None and adapter.requires_resume:
+    # T30：内部简历 / 外部简历原件都从 ``resume_plan`` 出（附件只记 external_resume.file_id）。
+    plan = apply_service.resume_plan(session, job, item)
+    if plan.resume is None and plan.file_id is None and adapter.requires_resume:
         # 资料不足是用户可解决的前置条件，按软跳过处理（不计失败、不触发熔断），
         # 但留下 profile_insufficient 分类，统计与界面才能把它和站点故障区分开。
         raise ItemSkip(
-            "未找到可用简历：请先在简历中心为该岗位生成简历后再投递",
+            plan.missing_reason or "未找到可用简历：请先在简历中心为该岗位生成简历后再投递",
             category=FAILURE_PROFILE_INSUFFICIENT,
             step=STEP_FILLING,
             target="resume_upload",
         )
-    data = apply_service.build_apply_data(session, resume)
+    data = apply_service.build_apply_data(session, plan.resume)
     # 14D：招呼语里的 {company} / {job_title} / {name} 在**发送前**才替换成实际值——
     # 提前替换会让队列里的文案与用户看到的不一致；未知花括号原样保留（见渲染函数）。
     greeting = render_greeting_template(

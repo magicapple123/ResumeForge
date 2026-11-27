@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 招呼语配图选择器（CR-18）：队列行与设置页共用同一份"选图 / 上传 / 删除"。
+ * 招呼语配图选择器的入口：按 `mode` 分派到两个语义不同的组件。
  *
- * 为什么抽出来：两处原先各写一个 `Select`，上传入口一加就得写两遍；而"哪些图能删"
- * 必须由后端 `deletable` 决定（全局默认 / 队列行 / 投递审计任一引用即不可删），
- * 前端重算必然与后端漂移。
+ * ## 为什么分成两个组件而不是一个组件加分支
  *
- * 上传成功后**自动选中**（新图就是用户刚放进去的那张，再让他回下拉里找一遍是多余的）；
- * 删除只对 `deletable` 的图给入口，仍被引用的那张显示"使用中"而不是禁用按钮——
- * 禁用按钮不解释原因，用户只会反复点。
+ * 两处的"选中"根本不是一个动作：
+ *
+ * - **设置页（`mode="single"`）** 选的是"默认图"，而且这里就是**图片库的管理位置**——
+ *   删库入口正当且必须存在（`GreetingImageSingleSelect`）。
+ * - **队列编辑（`mode="multiple"`）** 选的是"这一条投递要发的 1..4 张"，`×` 只表示
+ *   "这条不带了"，**不是**删库（`GreetingImageMultiSelect`）。R21 的病根正是这两件事共用
+ *   同一份列表：用户在"编辑这一条"里看到一个带垃圾桶的库清单，既不敢点、点了还回 409。
+ *
+ * 保留同一个入口是因为调用方（`ApplyGreetingImageSection` / `QueueItemEditor`）只需要知道
+ * "要配图"，不关心内部是下拉还是缩略图；上传逻辑也确实是同一段（`useGreetingImageUpload`）。
  */
-import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
-import { App, Button, Select, Space, Typography, Upload } from "antd";
-import { useState } from "react";
-import { deleteGreetingImage, uploadGreetingImage } from "../../api/applyExtras";
-import { t } from "../../i18n";
-import { useLocale } from "../../i18n/i18nContext";
 import type { ApplyGreetingImageOption } from "../../types";
-import { formatBytes } from "../../utils/format";
+import { GREETING_IMAGE_MAX_FALLBACK } from "../../types";
+import GreetingImageMultiSelect from "./GreetingImageMultiSelect";
+import GreetingImageSingleSelect from "./GreetingImageSingleSelect";
 
 export interface GreetingImagePickerProps {
   mode: "single" | "multiple";
@@ -25,7 +26,10 @@ export interface GreetingImagePickerProps {
   value?: number | number[] | null;
   onChange?: (next: number | number[] | null) => void;
   options: ApplyGreetingImageOption[];
+  /** 后端下发的张数上限；缺省用兜底值（只有接口没回包时才会走到）。 */
   maxCount?: number;
+  /** 后端下发的单张体积上限（`max_image_bytes`）；缺省用同源镜像常量。 */
+  maxImageBytes?: number;
   disabled?: boolean;
   placeholder?: string;
   ariaLabel: string;
@@ -36,144 +40,35 @@ export default function GreetingImagePicker({
   value,
   onChange,
   options,
-  maxCount = 4,
+  maxCount = GREETING_IMAGE_MAX_FALLBACK,
+  maxImageBytes,
   disabled,
   placeholder,
   ariaLabel,
 }: GreetingImagePickerProps) {
-  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块停在旧文案。
-  useLocale();
-  const { message } = App.useApp();
-  const [uploading, setUploading] = useState(false);
-  const [items, setItems] = useState<ApplyGreetingImageOption[]>(options);
-  // 渲染期镜像同步（与 ApplyGreetingImageSection 同一模式）：父组件每次渲染都新建数组，
-  // 按 id + deletable 的签名判断"真的变了"再灌一次，避免 setState → 重渲染的死循环。
-  const signature = options.map((item) => `${item.id}:${item.deletable ? 1 : 0}`).join(",");
-  const [sourceSignature, setSourceSignature] = useState(signature);
-  if (signature !== sourceSignature) {
-    setSourceSignature(signature);
-    setItems(options);
+  if (mode === "single") {
+    return (
+      <GreetingImageSingleSelect
+        value={typeof value === "number" ? value : null}
+        onChange={(next) => onChange?.(next)}
+        options={options}
+        maxImageBytes={maxImageBytes}
+        disabled={disabled}
+        placeholder={placeholder}
+        ariaLabel={ariaLabel}
+      />
+    );
   }
-
-  const selectedIds: number[] =
-    mode === "single"
-      ? typeof value === "number"
-        ? [value]
-        : []
-      : Array.isArray(value)
-        ? value
-        : [];
-
-  const commit = (next: number[]) => {
-    onChange?.(mode === "single" ? (next[0] ?? null) : next);
-  };
-
-  const handleUpload = async (file: File) => {
-    setUploading(true);
-    try {
-      const uploaded = await uploadGreetingImage(file);
-      setItems((previous) =>
-        previous.some((item) => item.id === uploaded.id) ? previous : [...previous, uploaded],
-      );
-      const next = selectedIds.includes(uploaded.id)
-        ? selectedIds
-        : [...selectedIds, uploaded.id].slice(0, maxCount);
-      commit(next);
-      message.success(t("applyQueue.image.uploaded"));
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : t("applyQueue.image.uploadFailed"));
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDelete = async (option: ApplyGreetingImageOption) => {
-    try {
-      await deleteGreetingImage(option.id);
-      setItems((previous) => previous.filter((item) => item.id !== option.id));
-      commit(selectedIds.filter((id) => id !== option.id));
-      message.success(t("applyQueue.image.deleted"));
-    } catch (error) {
-      // 409 的文案由后端给（说清是哪一处还在引用），原样展示比"删除失败"更有用。
-      message.error(error instanceof Error ? error.message : t("applyQueue.image.deleteFailed"));
-    }
-  };
-
-  const selectOptions = items.map((item) => ({
-    value: item.id,
-    label: t("applyQueue.image.editorOption", {
-      name: item.name,
-      size: formatBytes(item.size_bytes),
-    }),
-  }));
-
   return (
-    <Space orientation="vertical" size={8} style={{ width: "100%" }}>
-      <Space.Compact style={{ width: "100%" }}>
-        <Select<number | number[]>
-          mode={mode === "multiple" ? "multiple" : undefined}
-          allowClear
-          maxCount={mode === "multiple" ? maxCount : undefined}
-          value={mode === "single" ? (selectedIds[0] ?? undefined) : (selectedIds as number[])}
-          onChange={(next) => commit(Array.isArray(next) ? next : next === undefined ? [] : [next])}
-          options={selectOptions}
-          disabled={disabled}
-          style={{ flex: 1 }}
-          aria-label={ariaLabel}
-          placeholder={placeholder}
-        />
-        <Upload
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          showUploadList={false}
-          disabled={disabled || uploading}
-          beforeUpload={(file) => {
-            void handleUpload(file as File);
-            return Upload.LIST_IGNORE;
-          }}
-        >
-          <Button icon={<UploadOutlined />} loading={uploading} disabled={disabled}>
-            {t("applyQueue.image.upload")}
-          </Button>
-        </Upload>
-      </Space.Compact>
-      {items.length > 0 && (
-        // 候选清单：能删的给删除入口，仍被引用的写明"使用中"。
-        // 高度限死并内部滚动，避免图片多时把队列编辑弹窗撑长。
-        <div style={{ maxHeight: 160, overflowY: "auto", width: "100%" }}>
-          {items.map((item) => (
-            <div
-              key={item.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 8,
-              }}
-            >
-              <Typography.Text type="secondary" style={{ fontSize: 12 }} ellipsis>
-                {t("applyQueue.image.editorOption", {
-                  name: item.name,
-                  size: formatBytes(item.size_bytes),
-                })}
-              </Typography.Text>
-              {item.deletable ? (
-                <Button
-                  size="small"
-                  type="text"
-                  danger
-                  icon={<DeleteOutlined />}
-                  aria-label={t("applyQueue.image.deleteAria", { name: item.name })}
-                  onClick={() => void handleDelete(item)}
-                />
-              ) : (
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {t("applyQueue.image.inUse")}
-                </Typography.Text>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </Space>
+    <GreetingImageMultiSelect
+      value={Array.isArray(value) ? value : []}
+      onChange={(next) => onChange?.(next)}
+      options={options}
+      maxCount={maxCount}
+      maxImageBytes={maxImageBytes}
+      disabled={disabled}
+      placeholder={placeholder}
+      ariaLabel={ariaLabel}
+    />
   );
 }

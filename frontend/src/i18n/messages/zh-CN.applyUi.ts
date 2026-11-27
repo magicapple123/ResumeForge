@@ -13,6 +13,9 @@
 const applyUi = {
   "applyUi.recordDetail.title": "投递记录详情",
   "applyUi.recordDetail.time": "时间",
+  // T30：「这一条用哪份简历」里外部简历的前缀（队列行 / 详情 / 记录列共用一处）。
+  // 后面固定接「 · 文件名」，与提醒卡（R14）的写法一致，用户不会遇到两种说法。
+  "applyUi.resume.externalTag": "外部",
   "applyUi.recordDetail.taskBatch": "任务 / 批次",
   "applyUi.recordDetail.defaultGreeting": "（默认招呼语）",
   "applyUi.recordDetail.failureDetail": "失败信息（含页面 URL / 标题）",

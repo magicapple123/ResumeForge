@@ -3,7 +3,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..job_match import AdmissionResult, HardGateResult
 from .base import (
@@ -12,6 +12,7 @@ from .base import (
     MAX_QUEUE_BATCH,
     MAX_TASK_TARGETS,
     QueueStatus,
+    check_resume_link_exclusive,
 )
 
 # ===== 投递队列 =====
@@ -24,11 +25,19 @@ class ApplyQueueAddItem(BaseModel):
 
     job_id: int = Field(ge=1)
     resume_id: int | None = Field(default=None, ge=1)
+    #: 用**外部简历原件**投递（T30）：与 ``resume_id`` 互斥，同时给 → 422。
+    external_resume_id: int | None = Field(default=None, ge=1)
     greeting: str = Field(default="", max_length=GREETING_INPUT_MAX_CHARS)
     # 命中"真实缺口"时，用户需要显式确认为真才会入队。
     confirm_real_gap: bool = False
     # 尚未分析过的岗位，用户需要显式确认"我知道它没分析过"。
     confirm_unanalyzed: bool = False
+
+    @model_validator(mode="after")
+    def resume_links_are_exclusive(self) -> "ApplyQueueAddItem":
+        """内外简历二选一（T30）：判定只有 ``check_resume_link_exclusive`` 一处实现。"""
+        check_resume_link_exclusive(self.resume_id, self.external_resume_id)
+        return self
 
 
 class ApplyQueueAddRequest(BaseModel):
@@ -44,10 +53,26 @@ class ApplyQueueItemUpdate(BaseModel):
 
     greeting: str | None = Field(default=None, max_length=GREETING_INPUT_MAX_CHARS)
     resume_id: int | None = Field(default=None, ge=1)
+    #: 改用**外部简历原件**投递（T30）；显式给 null = 改回"按默认规则找简历"。
+    external_resume_id: int | None = Field(default=None, ge=1)
     # 行内覆盖招呼语配图（T8）：给空列表 = 明确"这条不发图"（不会退回全局默认），
     # 给 None/不传 = 不改。与 ``greeting`` 的语义不同，这是刻意为之——「清空」是用户能
     # 表达的一个具体意愿，而"没提交这个字段"只是没提到它。
     image_ids: list[int] | None = Field(default=None, max_length=MAX_GREETING_IMAGES)
+
+    @model_validator(mode="after")
+    def resume_links_are_exclusive(self) -> "ApplyQueueItemUpdate":
+        """PATCH 语义下只看**本次请求**：两个键都显式给了非空值才算"叠了两次选择"。
+
+        合并后的最终状态由 service 兜住（``update_queue_item`` 里改选一侧就清另一侧），
+        因为 schema 看不到库里已存的那一侧——与 R14 提醒的分层完全一致。
+        """
+        if (
+            "resume_id" in self.model_fields_set
+            and "external_resume_id" in self.model_fields_set
+        ):
+            check_resume_link_exclusive(self.resume_id, self.external_resume_id)
+        return self
 
 
 class ApplyQueueReorderRequest(BaseModel):
@@ -66,6 +91,9 @@ class ApplyQueueItemOut(BaseModel):
     job_title: str = ""
     company: str = ""
     resume_id: int | None = None
+    #: 这条岗位改用**外部简历原件**投递时指向那一份（T30）；与 ``resume_id`` 互斥。
+    #: 非空时 ``resume_title`` 是那份外部简历的名字，界面据此渲染「外部 · xxx.pdf」。
+    external_resume_id: int | None = None
     resume_title: str = ""
     greeting: str = ""
     # 招呼语配图（T8）：``user_file.id`` 列表，**不含 data URL**（一张截图 base64 就是

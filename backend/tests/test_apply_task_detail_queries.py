@@ -40,6 +40,9 @@ ITEM_KEYS = (
     "job_title",
     "company",
     "resume_id",
+    # T30：这条记录用的是**外部简历原件**时指向那一份；与 resume_id 互斥。
+    # 键的位置紧跟在 resume_id 之后，与 schemas/apply/tasks.py 的字段顺序一致。
+    "external_resume_id",
     "resume_title",
     "greeting",
     "status",

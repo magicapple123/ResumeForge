@@ -102,3 +102,35 @@ def _check_failure_category(value: str) -> str:
         raise ValueError(f"无效的失败分类，可选值：{'、'.join(FAILURE_CATEGORIES)}")
     return cleaned
 
+
+# ===== 内外简历互斥（T30 / R10 续）=====
+
+#: 内外简历互斥的统一文案。schema 层的 422 与 service 层"合并后状态"的 422 必须说同一句话
+#: ——用户不该因为"两个都给了"和"改完变成两个"看到两种不同的解释（与 R14 提醒同一取舍）。
+APPLY_RESUME_LINK_CONFLICT = (
+    "一条投递只能选一份简历：内部简历与外部简历二选一，请取消其中一个"
+)
+
+#: 外部简历已被删除 / 从未存在时的 422 文案。**必须是 422 而不是 500**：用户能自己解决
+#: （重新选一份），而 500 只会让人以为是程序坏了。
+APPLY_EXTERNAL_RESUME_MISSING = (
+    "指定的外部简历不存在或已在回收站，请重新选择一份；"
+    "也可以留空，改为按默认规则为该岗位找简历"
+)
+
+
+def check_resume_link_exclusive(
+    resume_id: int | None, external_resume_id: int | None
+) -> None:
+    """内外简历互斥的**唯一**判定（T30）。
+
+    为什么是 422 而不是"后一个覆盖前一个"：两个字段同时非空只可能来自调用方把两次选择
+    叠在同一个请求体里（前端漏清另一侧，或助手工具直接拼参数）。静默挑一个会出现
+    "界面显示 A、库里存 B"，而这条关联的全部用途就是回答"这次投的是哪一份"。
+
+    **两个都为空是合法的**：队列条目的简历本来就允许不指定（运行时按默认规则解析），
+    PATCH 里"两键都给 null"是用户明确表达"改回默认"，不该被拦。
+    """
+    if resume_id is not None and external_resume_id is not None:
+        raise ValueError(APPLY_RESUME_LINK_CONFLICT)
+

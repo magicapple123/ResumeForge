@@ -126,6 +126,7 @@ def _record_out(
         job_title=item.job_title,
         company=item.company,
         resume_title=item.resume_title,
+        external_resume_id=item.external_resume_id,
         greeting=item.greeting,
         status=_as_task_item_status(item.status),
         failure_category=item.failure_category,

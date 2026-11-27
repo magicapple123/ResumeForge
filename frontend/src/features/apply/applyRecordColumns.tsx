@@ -12,6 +12,7 @@ import JdChangeBadge from "./insights/JdChangeBadge";
 import { RowActions } from "../../components/common/RowActions";
 import { formatDateTime } from "../../utils/format";
 import { TASK_ITEM_STATUS_META, failureLabel, type ApplyRecord } from "../../types";
+import { applyResumeLabel } from "./resumeLinkLabel";
 import { t } from "../../i18n";
 import {
   STEP_LABEL_KEYS,
@@ -128,9 +129,11 @@ export function buildApplyRecordColumns({
     {
       title: t("applyRecords.column.resume"),
       dataIndex: "resume_title",
-      width: 120,
+      width: 140,
       ellipsis: true,
-      render: (v: string) => v || "-",
+      // T30：外部简历投的记录显示「外部 · xxx.pdf」（前缀走语言包），内部简历只显示标题；
+      // 两者都空才显示 `-`（当时没解析出可用简历）。
+      render: (_value: string, record: ApplyRecord) => applyResumeLabel(record, "-"),
     },
     {
       title: t("applyRecords.column.greeting"),

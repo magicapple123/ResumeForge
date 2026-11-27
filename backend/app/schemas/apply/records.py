@@ -22,6 +22,10 @@ class ApplyRecordOut(BaseModel):
     job_title: str = ""
     company: str = ""
     resume_title: str = ""
+    # 这条记录用的是**外部简历原件**时指向那一份（T30）；与 ``resume_id`` 互斥，两者都空
+    # 表示当时没能解析出可用简历（记录里 ``resume_title`` 会如实说明）。
+    # 只用于展示「外部 · xxx.pdf」与取附件：附件不落副本，直接读 ``external_resume.file_id``。
+    external_resume_id: int | None = None
     greeting: str = ""
     status: TaskItemStatus = "pending"
     failure_category: str = ""

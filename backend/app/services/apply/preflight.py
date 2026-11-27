@@ -32,13 +32,14 @@ from ...schemas.apply import (
 )
 from ...schemas.apply.extras import PreflightCode, PreflightSeverity
 from ._match import _admission_of_match, latest_match
-from ._queue import job_apply_site, resolve_resume
+from ._queue import job_apply_site
 from .lifecycle import (
     EVIDENCE_INSUFFICIENT,
     GHOST_ALERT_THRESHOLD,
     ghost_score,
     seens_for_job,
 )
+from .resume_link import resume_plan
 from .signals import reference_score
 
 logger = logging.getLogger(__name__)
@@ -112,9 +113,15 @@ def _source_issues(job: Job | None) -> list[_Issue]:
 
 
 def _resume_issues(db: Session, item: ApplyQueueItem) -> list[_Issue]:
-    """简历缺失：与真实投递链路同一判据（``resolve_resume`` + 正文非空）。"""
-    resume = resolve_resume(db, item.job_id, item.resume_id)
-    if not _resume_is_empty(resume):
+    """简历缺失：与真实投递链路同一判据（``resume_plan``：内部简历或外部简历原件）。
+
+    T30：选了**外部简历原件**的条目不再回退到"该岗位最近一份内部简历"——否则一份只配了
+    外部简历的岗位会被体检判成"没有可用简历"（假阻断），而真实投递时那份原件是好的。
+    判据与 ``task_apply.execute_item`` 完全同源（都是 ``resume_link.resume_plan``）。
+    """
+    job = db.get(Job, item.job_id) if item.job_id else None
+    plan = resume_plan(db, job, item)
+    if plan.file_id is not None or not _resume_is_empty(plan.resume):
         return []
     return [
         _issue(
