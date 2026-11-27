@@ -317,7 +317,8 @@ const applyQueue = {
   "applyQueue.image.library": "图片库",
   "applyQueue.image.librarySummary": "共 {total} 张 · 已选 {count} 张",
   "applyQueue.image.libraryEmpty": "图片库里还没有图片，先上传一张。",
-  "applyQueue.image.manageInSettings": "要删除图片请到「投递设置 → 附带图片」；这里只选这一条要发的。",
+  "applyQueue.image.manageInSettings":
+    "要删除图片请到「投递设置 → 附带图片」；这里只选这一条要发的。",
   "applyQueue.image.maxReached": "已达 {count} 张上限，先移除一张再加。",
   "applyQueue.image.toggleAria": "选择 {name}（{size}）",
   "applyQueue.image.lightboxHint": "Esc 关闭",

@@ -45,7 +45,9 @@ export interface TrackStatusChangeOptions {
   onChanged: () => void | Promise<unknown>;
 }
 
-export function useTrackStatusChange({ onChanged }: TrackStatusChangeOptions): TrackStatusChangeApi {
+export function useTrackStatusChange({
+  onChanged,
+}: TrackStatusChangeOptions): TrackStatusChangeApi {
   const toast = useToast();
   const [pendingId, setPendingId] = useState<number | null>(null);
   // 同步的"在飞行中"标记：state 异步，挡不住双击。
@@ -87,9 +89,7 @@ export function useTrackStatusChange({ onChanged }: TrackStatusChangeOptions): T
           { key: `track-status-${track.id}` },
         );
       } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : t("trackerUi.card.statusChangeFailed"),
-        );
+        toast.error(err instanceof Error ? err.message : t("trackerUi.card.statusChangeFailed"));
       } finally {
         inFlight.current.delete(track.id);
         // 只清自己那一行的 pending：另一行还在飞时不要把它的反馈也抹掉。

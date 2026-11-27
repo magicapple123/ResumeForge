@@ -457,8 +457,6 @@ describe("HomePage", () => {
     );
 
     // 第二次挂载：启动弹窗不应再出现。
-    await waitFor(() =>
-      expect(document.querySelector(".rf-reminder-modal")).toBeNull(),
-    );
+    await waitFor(() => expect(document.querySelector(".rf-reminder-modal")).toBeNull());
   });
 });

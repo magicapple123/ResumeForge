@@ -147,9 +147,12 @@ describe("F07 登录状态：网申逐站点", () => {
     expect(document.querySelectorAll(".login-status-site")).toHaveLength(2);
 
     // 表头四列：站点 / 状态 / 上次检测 / 操作。
-    const headers = [...document.querySelectorAll(".login-status-site")[0].closest("table")!.querySelectorAll(
-      "thead th",
-    )].map((th) => (th.textContent ?? "").trim());
+    const headers = [
+      ...document
+        .querySelectorAll(".login-status-site")[0]
+        .closest("table")!
+        .querySelectorAll("thead th"),
+    ].map((th) => (th.textContent ?? "").trim());
     expect(headers).toEqual([
       t("applyUi.loginStatus.column.site"),
       t("applyUi.loginStatus.column.status"),
@@ -312,9 +315,7 @@ describe("整改 #16：同一句话不说两遍", () => {
 
     // i18n-ok: 断言后端下发的 source_label，不是前端文案
     await screen.findByText("投递浏览器");
-    expect(document.body.textContent ?? "").not.toContain(
-      t("applyUi.loginStatus.localOnlyHint"),
-    );
+    expect(document.body.textContent ?? "").not.toContain(t("applyUi.loginStatus.localOnlyHint"));
   });
 });
 

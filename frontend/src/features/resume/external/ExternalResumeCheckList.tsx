@@ -121,7 +121,12 @@ export interface ExternalResumeCheckListProps {
 export function ExternalResumeCheckList({ analysis }: ExternalResumeCheckListProps) {
   useLocale();
   return (
-    <Space orientation="vertical" size={12} style={{ width: "100%" }} data-testid="external-check-list">
+    <Space
+      orientation="vertical"
+      size={12}
+      style={{ width: "100%" }}
+      data-testid="external-check-list"
+    >
       <Alert type="info" showIcon title={t("resumesPage.external.checkHint")} />
       {analysis.checks.map((check) => {
         const meta = CHECK_META[check.key];

@@ -61,7 +61,10 @@ export function blockPercentRect(block: ExternalResumeBlock, page: PageBox): Blo
 }
 
 /** 某一页上的块（按后端给的顺序，不重排：顺序就是阅读顺序）。 */
-export function blocksOfPage(blocks: readonly ExternalResumeBlock[], page: number): ExternalResumeBlock[] {
+export function blocksOfPage(
+  blocks: readonly ExternalResumeBlock[],
+  page: number,
+): ExternalResumeBlock[] {
   return blocks.filter((block) => block.page === page);
 }
 

@@ -36,8 +36,7 @@ import { useLocale } from "../i18n/i18nContext";
 
 type FavoriteKind = "jobs" | "resumes";
 type FavoritePage =
-  | { kind: "jobs"; page: Page<FavoriteJob> }
-  | { kind: "resumes"; page: Page<FavoriteResumeItem> };
+  { kind: "jobs"; page: Page<FavoriteJob> } | { kind: "resumes"; page: Page<FavoriteResumeItem> };
 
 export default function FavoritesPage() {
   useLocale();

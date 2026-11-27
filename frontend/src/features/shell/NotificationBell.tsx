@@ -50,7 +50,6 @@ function bellAriaLabel(unread: number): string {
     : t("notifications.bell.aria");
 }
 
-
 /** 本地日期键：分组按"用户所在时区的今天"，不是 UTC 日。 */
 function dayKey(value: string): string {
   const date = new Date(value);
@@ -80,14 +79,7 @@ function NotificationRow({
   // 副行 = 相对时间 + 事件正文（`今天 14:12 · 提醒已自动跳过`）。「已自动跳过」保持
   // 三级灰：它是信息不是错误，红色语义只留给"逾期 N 天"这类需要处理的内容。
   const meta = [relativeTimeLabel(item.created_at), item.body].filter(Boolean).join(" · ");
-  return (
-    <EventRow
-      title={item.title}
-      meta={meta}
-      unread={unread}
-      onOpen={() => onOpen(item)}
-    />
-  );
+  return <EventRow title={item.title} meta={meta} unread={unread} onOpen={() => onOpen(item)} />;
 }
 
 export default function NotificationBell() {

@@ -34,7 +34,11 @@ export interface TrackerDeepLinks {
 export type TrackerDeepLinkKey = "job_id" | "reminder" | "track";
 
 /** URL 参数里出现的键名（与后端的 deep_link 逐字对应，不许改名）。 */
-export const TRACKER_DEEP_LINK_KEYS: readonly TrackerDeepLinkKey[] = ["job_id", "reminder", "track"];
+export const TRACKER_DEEP_LINK_KEYS: readonly TrackerDeepLinkKey[] = [
+  "job_id",
+  "reminder",
+  "track",
+];
 
 /** 正整数才认：其余（缺省 / 非数字 / ≤0）都按"没有这个深链"处理。 */
 export function parseDeepLinkId(raw: string | null): number | null {

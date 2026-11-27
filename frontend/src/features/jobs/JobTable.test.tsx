@@ -73,28 +73,28 @@ function renderTable(
   return render(
     <MemoryRouter>
       <AntdApp>
-      <JobTable
-        jobs={page}
-        loading={false}
-        selectionMode={options.selectionMode ?? false}
-        rowSelection={{} as never}
-        batchAction={null}
-        favoriteJobId={null}
-        page={1}
-        pageSize={10}
-        onToggleFavorite={noop}
-        onOpenDetail={noop}
-        onGenerate={noop}
-        onWrite={noop}
-        onViewResumes={noop}
-        onEdit={noop}
-        onDelete={noop}
-        onEnterSelecting={noop}
-        bulkActions={options.bulkActions ?? []}
-        onPageChange={noop}
-        sortState={options.sortState ?? DEFAULT_JOB_SORT_STATE}
-        onSortChange={options.onSortChange ?? noop}
-      />
+        <JobTable
+          jobs={page}
+          loading={false}
+          selectionMode={options.selectionMode ?? false}
+          rowSelection={{} as never}
+          batchAction={null}
+          favoriteJobId={null}
+          page={1}
+          pageSize={10}
+          onToggleFavorite={noop}
+          onOpenDetail={noop}
+          onGenerate={noop}
+          onWrite={noop}
+          onViewResumes={noop}
+          onEdit={noop}
+          onDelete={noop}
+          onEnterSelecting={noop}
+          bulkActions={options.bulkActions ?? []}
+          onPageChange={noop}
+          sortState={options.sortState ?? DEFAULT_JOB_SORT_STATE}
+          onSortChange={options.onSortChange ?? noop}
+        />
       </AntdApp>
     </MemoryRouter>,
   );
@@ -379,15 +379,11 @@ describe("JobTable 右键添加外部简历（#6）", () => {
       jobId: 1,
     });
     expect(
-      await screen.findByText(
-        t("resumesPage.external.addedToJob", { name: "cv", job: "护士" }),
-      ),
+      await screen.findByText(t("resumesPage.external.addedToJob", { name: "cv", job: "护士" })),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: t("resumesPage.external.openList") }));
     // Toast 的动作是先关卡片、再在微任务里执行回调（见 useToast 的 render），所以等一下。
-    await waitFor(() =>
-      expect(navigateMock).toHaveBeenCalledWith("/resumes/external?job_id=1"),
-    );
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/resumes/external?job_id=1"));
   });
 });

@@ -34,7 +34,10 @@ vi.mock("pdfjs-dist", () => ({
     promise: Promise.resolve({
       numPages: 1,
       getPage: async () => ({
-        getViewport: ({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale }),
+        getViewport: ({ scale }: { scale: number }) => ({
+          width: 600 * scale,
+          height: 800 * scale,
+        }),
         render: () => ({ promise: Promise.resolve() }),
         cleanup: () => undefined,
       }),
@@ -210,10 +213,9 @@ describe("ExternalResumeEditTab", () => {
     const alert = await screen.findByTestId("external-edit-failure-unsupported");
     expect(alert).toHaveTextContent(UNSUPPORTED_MESSAGE);
     expect(alert).toHaveTextContent(t("externalEdit.unsupported.title"));
-    expect(screen.getByRole("link", { name: new RegExp(t("externalEdit.download")) })).toHaveAttribute(
-      "href",
-      "/api/external-resumes/7/file?v=21",
-    );
+    expect(
+      screen.getByRole("link", { name: new RegExp(t("externalEdit.download")) }),
+    ).toHaveAttribute("href", "/api/external-resumes/7/file?v=21");
     expect(screen.queryByTestId("external-editor")).toBeNull();
   });
 

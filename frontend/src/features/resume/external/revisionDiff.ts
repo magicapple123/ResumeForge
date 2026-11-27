@@ -49,7 +49,10 @@ export interface DiffSummary {
 
 /** 把正文切成行（去掉末尾空行：PDF 抽取常在文末留一串空行，逐行进表只会噪声）。 */
 export function splitLines(text: string): string[] {
-  const lines = text.replace(/\r\n/g, "\n").split("\n").map((line) => line.trimEnd());
+  const lines = text
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd());
   while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   return lines;
 }
@@ -76,9 +79,7 @@ export function lineDiff(leftText: string, rightText: string): DiffRow[] {
   for (let i = left.length - 1; i >= 0; i -= 1) {
     for (let j = right.length - 1; j >= 0; j -= 1) {
       lcs[i][j] =
-        left[i] === right[j]
-          ? lcs[i + 1][j + 1] + 1
-          : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+        left[i] === right[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
     }
   }
   const rows: DiffRow[] = [];
@@ -86,7 +87,13 @@ export function lineDiff(leftText: string, rightText: string): DiffRow[] {
   let j = 0;
   while (i < left.length && j < right.length) {
     if (left[i] === right[j]) {
-      rows.push({ kind: "same", left: left[i], right: right[j], leftLine: i + 1, rightLine: j + 1 });
+      rows.push({
+        kind: "same",
+        left: left[i],
+        right: right[j],
+        leftLine: i + 1,
+        rightLine: j + 1,
+      });
       i += 1;
       j += 1;
       continue;

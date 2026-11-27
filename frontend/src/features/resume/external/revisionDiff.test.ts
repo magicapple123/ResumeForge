@@ -5,13 +5,7 @@
  * 只测纯函数：像素与版式由截图守（`shots/T12/`），这里守的是"哪一行算改了"。
  */
 import { describe, expect, it } from "vitest";
-import {
-  diffSummary,
-  isDiffable,
-  lineDiff,
-  MAX_DIFF_LINES,
-  splitLines,
-} from "./revisionDiff";
+import { diffSummary, isDiffable, lineDiff, MAX_DIFF_LINES, splitLines } from "./revisionDiff";
 
 describe("splitLines", () => {
   it("归一化 CRLF，并丢掉文末的空行", () => {

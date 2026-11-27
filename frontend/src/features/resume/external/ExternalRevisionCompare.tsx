@@ -132,7 +132,10 @@ export function ExternalRevisionCompare({
             <Typography.Text type="secondary">{t("externalEdit.compare.right")}</Typography.Text>
           </div>
           {rows.map((row, index) => (
-            <DiffLine key={`${row.kind}-${row.leftLine ?? "a"}-${row.rightLine ?? "b"}-${index}`} row={row} />
+            <DiffLine
+              key={`${row.kind}-${row.leftLine ?? "a"}-${row.rightLine ?? "b"}-${index}`}
+              row={row}
+            />
           ))}
         </div>
       )}

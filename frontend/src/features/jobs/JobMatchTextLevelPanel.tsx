@@ -136,7 +136,9 @@ export default function JobMatchTextLevelPanel({ jobId }: Props) {
         )}
 
         <div>
-          <Typography.Text id={selectLabelId}>{t("jobMatch.textLevel.resume.label")}</Typography.Text>
+          <Typography.Text id={selectLabelId}>
+            {t("jobMatch.textLevel.resume.label")}
+          </Typography.Text>
           <Select
             aria-labelledby={selectLabelId}
             style={{ width: "100%", marginTop: 4 }}

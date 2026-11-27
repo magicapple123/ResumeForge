@@ -144,7 +144,9 @@ function DocxPreview({ record }: { record: ExternalResumeDetail }) {
     void getExternalResumeBlocks(record.id)
       .then((next) => {
         if (cancelled) return;
-        setParagraphs(next.blocks.map((block) => block.text).filter((text) => text.trim().length > 0));
+        setParagraphs(
+          next.blocks.map((block) => block.text).filter((text) => text.trim().length > 0),
+        );
       })
       .catch((caught: unknown) => {
         if (cancelled) return;

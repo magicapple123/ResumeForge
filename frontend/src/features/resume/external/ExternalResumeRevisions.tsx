@@ -25,7 +25,11 @@
  */
 import { Alert, Button, Popconfirm, Space, Tag, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
-import { externalResumeFileUrl, listExternalResumeRevisions, restoreExternalResumeRevision } from "../../../api/externalResumes";
+import {
+  externalResumeFileUrl,
+  listExternalResumeRevisions,
+  restoreExternalResumeRevision,
+} from "../../../api/externalResumes";
 import type {
   ExternalResumeDetail,
   ExternalResumeRevision,
@@ -39,11 +43,7 @@ import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import { fileKindOf } from "../../../utils/fileKind";
 import { formatDateTime } from "../../../utils/format";
-import {
-  formatCharDelta,
-  revisionDiffChars,
-  revisionSourceKey,
-} from "./blockGeometry";
+import { formatCharDelta, revisionDiffChars, revisionSourceKey } from "./blockGeometry";
 import { ExternalOriginalPreview } from "./ExternalOriginalPreview";
 import { ExternalRevisionCompare } from "./ExternalRevisionCompare";
 import "./externalPreview.css";
@@ -123,7 +123,9 @@ export function ExternalResumeRevisions({
         setRestored(true);
         setRefreshToken((value) => value + 1);
       } catch (caught: unknown) {
-        setActionError(caught instanceof Error ? caught.message : t("externalEdit.revisions.restoreFailed"));
+        setActionError(
+          caught instanceof Error ? caught.message : t("externalEdit.revisions.restoreFailed"),
+        );
       } finally {
         setRestoringId(null);
       }
@@ -131,7 +133,8 @@ export function ExternalResumeRevisions({
     [resumeId, onRestored],
   );
 
-  if (loading && revisions === null) return <LoadingBlock tip={t("externalEdit.revisions.loading")} />;
+  if (loading && revisions === null)
+    return <LoadingBlock tip={t("externalEdit.revisions.loading")} />;
   if (error) {
     return (
       <ErrorState
@@ -142,7 +145,14 @@ export function ExternalResumeRevisions({
     );
   }
   if (revisions === null || revisions.items.length === 0) {
-    return <Alert data-testid="external-revisions-empty" type="info" showIcon title={t("externalEdit.revisions.empty")} />;
+    return (
+      <Alert
+        data-testid="external-revisions-empty"
+        type="info"
+        showIcon
+        title={t("externalEdit.revisions.empty")}
+      />
+    );
   }
 
   const previewable = fileKindOf(record.mime, record.name) === "pdf";
@@ -171,9 +181,19 @@ export function ExternalResumeRevisions({
   };
 
   return (
-    <Space orientation="vertical" size={8} style={{ width: "100%" }} data-testid="external-revisions">
+    <Space
+      orientation="vertical"
+      size={8}
+      style={{ width: "100%" }}
+      data-testid="external-revisions"
+    >
       {restored ? (
-        <Alert data-testid="external-restored" type="success" showIcon title={t("externalEdit.revisions.restored")} />
+        <Alert
+          data-testid="external-restored"
+          type="success"
+          showIcon
+          title={t("externalEdit.revisions.restored")}
+        />
       ) : null}
       {actionError ? (
         <Alert
@@ -273,7 +293,10 @@ export function ExternalResumeRevisions({
               </Space>
             </ListyItem>
             {showPreview ? (
-              <div className="rf-ext-revision-preview" data-testid={`external-preview-pane-${revision.id}`}>
+              <div
+                className="rf-ext-revision-preview"
+                data-testid={`external-preview-pane-${revision.id}`}
+              >
                 {previewable ? (
                   <ExternalOriginalPreview
                     record={{ ...record, file_id: revision.file_id }}
@@ -281,7 +304,11 @@ export function ExternalResumeRevisions({
                   />
                 ) : (
                   <Space orientation="vertical" size={8} style={{ padding: 12 }}>
-                    <Alert type="info" showIcon title={t("externalEdit.revisions.previewUnsupported")} />
+                    <Alert
+                      type="info"
+                      showIcon
+                      title={t("externalEdit.revisions.previewUnsupported")}
+                    />
                     {/* 第三个参数 `download` = 让后端把 `Content-Disposition` 换成 attachment：
                         这一支本来就说"非 PDF 历史文件不做在线预览"，点了是要存盘，不是在新标签页里
                         再撞一次"打不开"。（T28 加的入参，旧调用点不传即保持 inline，向后兼容。） */}

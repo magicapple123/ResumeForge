@@ -325,9 +325,7 @@ export function useResumeRefSelect(config: UseResumeRefSelectConfig = {}) {
       // （见 `api/externalResumes.listExternalResumes`）。只收窄内部一组会让同一个下拉里
       // 「通用简历为什么只出现在一组」没法解释，也会让用户选到别的岗位的版本。
       // `externalJobScope: false` 是例外（模拟面试，方案 25D）：外部组跨岗位可见、只打标签。
-      const externalParams = externalScoped
-        ? params
-        : { keyword, page_size: SELECT_PAGE_SIZE };
+      const externalParams = externalScoped ? params : { keyword, page_size: SELECT_PAGE_SIZE };
       void Promise.allSettled([listResumes(params), listExternalResumes(externalParams)]).then(
         ([internal, external]) => {
           // 过期响应直接丢弃（序号比对，与共享 hook 同一约定）。

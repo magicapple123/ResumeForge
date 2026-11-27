@@ -140,9 +140,7 @@ export function useResumesPageView(): ResumesPageView {
     parseResumeSort(searchParams.get("sort")),
   );
   /** 组级排序只存组件 state：刷新回默认（已拍板"不写 URL"）。 */
-  const [groupSortState, setGroupSortState] = useState<GroupSortState>(
-    DEFAULT_GROUP_SORT_STATE,
-  );
+  const [groupSortState, setGroupSortState] = useState<GroupSortState>(DEFAULT_GROUP_SORT_STATE);
 
   /** 排序变化：回到第 1 页（不然会停在一个"新排序下不存在的页"上）。 */
   const applySort = useCallback((next: ResumeSortState) => {
@@ -201,7 +199,12 @@ export function useResumesPageView(): ResumesPageView {
   const resumeListVersion = useResumeListVersion();
   // CR-33：折叠视图按「组」分页。后端只能按简历条分页，所以 useGroupedResumes 先按
   // 100 条/页补齐（上限 2000 条）再本地分组；这里的 page/pageSize 都是**组页**。
-  const { data: grouped, loading, reload, error } = useGroupedResumes(
+  const {
+    data: grouped,
+    loading,
+    reload,
+    error,
+  } = useGroupedResumes(
     {
       keyword,
       jobId,

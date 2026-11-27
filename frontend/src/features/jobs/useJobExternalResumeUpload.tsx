@@ -56,10 +56,9 @@ export function useJobExternalResumeUpload(): JobExternalResumeUpload {
         onClick: () => navigate(`/resumes/external?job_id=${job.id}`),
       };
       if (record.has_text) {
-        toast.success(
-          t("resumesPage.external.addedToJob", { name: record.name, job: job.title }),
-          { action: viewAction },
-        );
+        toast.success(t("resumesPage.external.addedToJob", { name: record.name, job: job.title }), {
+          action: viewAction,
+        });
       } else {
         // 扫描件不是失败：文件已存、岗位已关联，只是没有正文；提示语要说清这一点。
         toast.warning(

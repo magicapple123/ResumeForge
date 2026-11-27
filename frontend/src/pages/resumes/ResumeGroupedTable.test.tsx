@@ -367,9 +367,7 @@ describe("ResumeGroupedTable 列头三态排序", () => {
     const { container } = renderTable();
 
     expect(
-      container.textContent?.includes(
-        t("resumesPage.list.totalGroups", { groups: 2, resumes: 4 }),
-      ),
+      container.textContent?.includes(t("resumesPage.list.totalGroups", { groups: 2, resumes: 4 })),
     ).toBe(true);
   });
 });
@@ -473,4 +471,3 @@ describe("ResumeGroupedTable 版本行与组行逐列对齐", () => {
     }
   });
 });
-

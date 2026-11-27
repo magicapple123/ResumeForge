@@ -49,7 +49,9 @@ afterEach(() => {
 describe("ExternalResumeEditorPanel", () => {
   it("还没选块时只提示先选一段", () => {
     renderPanel({ block: null });
-    expect(screen.getByTestId("external-panel-empty")).toHaveTextContent(t("externalEdit.hint.pick"));
+    expect(screen.getByTestId("external-panel-empty")).toHaveTextContent(
+      t("externalEdit.hint.pick"),
+    );
     expect(screen.queryByTestId("external-apply")).toBeNull();
   });
 
@@ -75,7 +77,14 @@ describe("ExternalResumeEditorPanel", () => {
 
   it("溢出：红框 + 「下移下方内容 Δpt」按钮，点它才回调（位移取上整）", () => {
     const props = renderPanel({
-      outcome: { deltaPt: 23.4, overflow: true, scaled: false, shifted: false, linesBefore: 2, linesAfter: 3 },
+      outcome: {
+        deltaPt: 23.4,
+        overflow: true,
+        scaled: false,
+        shifted: false,
+        linesBefore: 2,
+        linesAfter: 3,
+      },
     });
 
     const alert = screen.getByTestId("external-overflow");
@@ -89,7 +98,14 @@ describe("ExternalResumeEditorPanel", () => {
 
   it("缩过字号 / 已下移各给一条提示", () => {
     renderPanel({
-      outcome: { deltaPt: 0, overflow: false, scaled: true, shifted: true, linesBefore: 1, linesAfter: 1 },
+      outcome: {
+        deltaPt: 0,
+        overflow: false,
+        scaled: true,
+        shifted: true,
+        linesBefore: 1,
+        linesAfter: 1,
+      },
     });
     expect(screen.getByTestId("external-scaled")).toHaveTextContent(t("externalEdit.scaled"));
     expect(screen.getByTestId("external-shifted")).toHaveTextContent(t("externalEdit.shifted"));

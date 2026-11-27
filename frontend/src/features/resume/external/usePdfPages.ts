@@ -76,7 +76,8 @@ export function usePdfPages(fileUrl: string): PdfPagesResult {
             // 先按 scale=1 取原尺寸，再折算到目标宽：不同 PDF 的纸张尺寸可以不一样
             // （A4 / Letter / 自定义），固定 scale 会让它们宽度不一，热区百分比也会错。
             const base = proxy.getViewport({ scale: 1 });
-            const height = base.width > 0 ? (base.height / base.width) * PAGE_WIDTH_PX : PAGE_WIDTH_PX;
+            const height =
+              base.width > 0 ? (base.height / base.width) * PAGE_WIDTH_PX : PAGE_WIDTH_PX;
             pages.push({ page, width: PAGE_WIDTH_PX, height: Math.round(height) });
           } finally {
             proxy.cleanup();

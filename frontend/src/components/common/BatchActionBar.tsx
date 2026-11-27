@@ -48,9 +48,7 @@ export default function BatchActionBar({
       style={{ marginBottom: 12 }}
     >
       <Space size={12} wrap>
-        <Typography.Text type="secondary">
-          {t(countKey, { count })}
-        </Typography.Text>
+        <Typography.Text type="secondary">{t(countKey, { count })}</Typography.Text>
         {pageSelectAll && (
           <Checkbox
             checked={pageSelectAll.allSelected}

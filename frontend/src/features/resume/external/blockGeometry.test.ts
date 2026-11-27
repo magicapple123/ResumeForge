@@ -65,12 +65,18 @@ describe("blockPercentRect", () => {
   });
 
   it("页面尺寸缺失（docx / text 的 0）时不画", () => {
-    expect(blockPercentRect(block({ x0: 0, y0: 0, x1: 10, y1: 10 }), { width: 0, height: 0 })).toBeNull();
+    expect(
+      blockPercentRect(block({ x0: 0, y0: 0, x1: 10, y1: 10 }), { width: 0, height: 0 }),
+    ).toBeNull();
   });
 
   it("退化的 bbox（宽或高为 0）不画，避免出现点不到的 0×0 热区", () => {
-    expect(blockPercentRect(block({ x0: 10, y0: 10, x1: 10, y1: 20 }), { width: 600, height: 800 })).toBeNull();
-    expect(blockPercentRect(block({ x0: 10, y0: 20, x1: 40, y1: 20 }), { width: 600, height: 800 })).toBeNull();
+    expect(
+      blockPercentRect(block({ x0: 10, y0: 10, x1: 10, y1: 20 }), { width: 600, height: 800 }),
+    ).toBeNull();
+    expect(
+      blockPercentRect(block({ x0: 10, y0: 20, x1: 40, y1: 20 }), { width: 600, height: 800 }),
+    ).toBeNull();
   });
 });
 

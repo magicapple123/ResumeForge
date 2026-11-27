@@ -40,7 +40,9 @@ import ApplyResumeFitDrawer from "./ApplyResumeFitDrawer";
 /** 长到一定会被 198px 的岗位列省略：用来钉住"省略必须配 Tooltip 全文"。 */
 const LONG_JOB_TITLE = "Senior Backend Engineer (Payments Platform, Remote-Friendly)";
 
-function queueItem(overrides: Partial<ApplyQueueItem> & Pick<ApplyQueueItem, "id">): ApplyQueueItem {
+function queueItem(
+  overrides: Partial<ApplyQueueItem> & Pick<ApplyQueueItem, "id">,
+): ApplyQueueItem {
   return {
     job_id: overrides.id + 10,
     job_title: "",
@@ -66,7 +68,13 @@ function queueItem(overrides: Partial<ApplyQueueItem> & Pick<ApplyQueueItem, "id
  * - 3：**没有基线**（`current_coverage === null`）、`gain = 67` → 「新指派」（不是 `+67`）。
  */
 const ITEMS: ApplyQueueItem[] = [
-  queueItem({ id: 1, job_id: 11, job_title: "Backend Engineer", resume_id: 3, resume_title: "General" }),
+  queueItem({
+    id: 1,
+    job_id: 11,
+    job_title: "Backend Engineer",
+    resume_id: 3,
+    resume_title: "General",
+  }),
   queueItem({
     id: 2,
     job_id: 12,
@@ -195,15 +203,11 @@ describe("ApplyResumeFitDrawer · 四列两栏", () => {
 
     await screen.findByText("Backend edition");
     const row = rowOf(LONG_JOB_TITLE);
-    expect(
-      within(row).getByText(t("applyQueue.insights.fit.chip.new")),
-    ).toBeInTheDocument();
+    expect(within(row).getByText(t("applyQueue.insights.fit.chip.new"))).toBeInTheDocument();
     // gain 是 67，但当前没有基线：写「+67」会把"从无到 67"说成"提升了 67 点"。
     expect(within(row).queryByText("+67")).toBeNull();
     // 全页唯一以 `+` 开头的 chip 来自**真有基线**的那一行（queue_id=1 的 +35）。
-    expect(plusChips(document.body)).toEqual([
-      t("applyQueue.insights.fit.gain", { gain: 35 }),
-    ]);
+    expect(plusChips(document.body)).toEqual([t("applyQueue.insights.fit.gain", { gain: 35 })]);
   });
 
   it("全部条目都没有基线时，页面依然不出现任何 `+` chip", async () => {
@@ -268,12 +272,8 @@ describe("ApplyResumeFitDrawer · 操作列", () => {
 
     await screen.findByText("Backend edition");
     const row = rowOf("Frontend Engineer");
-    expect(
-      within(row).getByText(t("applyQueue.insights.fit.bestRow")),
-    ).toBeInTheDocument();
-    expect(
-      within(row).getByText(t("applyQueue.insights.fit.chip.noChange")),
-    ).toBeInTheDocument();
+    expect(within(row).getByText(t("applyQueue.insights.fit.bestRow"))).toBeInTheDocument();
+    expect(within(row).getByText(t("applyQueue.insights.fit.chip.noChange"))).toBeInTheDocument();
     // 点了只会变差的按钮不该存在（哪怕是 disabled）。
     expect(within(row).queryAllByRole("button")).toHaveLength(0);
     expect(within(row).getByText("—")).toBeInTheDocument();
@@ -295,9 +295,7 @@ describe("ApplyResumeFitDrawer · 操作列", () => {
     await waitFor(() => expect(apiMocks.updateQueueItem).toHaveBeenCalledWith(1, { resume_id: 5 }));
     expect(apiMocks.updateQueueItem).toHaveBeenCalledTimes(1);
     expect(
-      await within(rowOf("Backend Engineer")).findByText(
-        t("applyQueue.insights.fit.swapped"),
-      ),
+      await within(rowOf("Backend Engineer")).findByText(t("applyQueue.insights.fit.swapped")),
     ).toBeInTheDocument();
     // 换过的那一行不再出现「换用」按钮：可换数从 2 变 1。
     await waitFor(() => expect(screen.getAllByRole("button", { name: SWAP })).toHaveLength(1));
@@ -327,13 +325,9 @@ describe("ApplyResumeFitDrawer · 说明与摘要", () => {
 
     await screen.findByText("Backend edition");
     expect(screen.getByText(t("applyQueue.insights.fit.intro"))).toBeInTheDocument();
+    expect(screen.getByText(t("applyQueue.insights.fit.coverageHelpLabel"))).toBeInTheDocument();
     expect(
-      screen.getByText(t("applyQueue.insights.fit.coverageHelpLabel")),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        t("applyQueue.insights.fit.summary", { total: 3, swappable: 2, best: 1 }),
-      ),
+      screen.getByText(t("applyQueue.insights.fit.summary", { total: 3, swappable: 2, best: 1 })),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: t("applyQueue.insights.fit.cancel") }),

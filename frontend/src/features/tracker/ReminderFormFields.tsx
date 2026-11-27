@@ -22,10 +22,7 @@ import type { FormInstance } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useState } from "react";
 import type { useResumeRefSelect } from "../../hooks/useResumeRefSelect";
-import type {
-  useJobSearchSelect,
-  useTrackSearchSelect,
-} from "../../hooks/remoteSearchOptions";
+import type { useJobSearchSelect, useTrackSearchSelect } from "../../hooks/remoteSearchOptions";
 import { t } from "../../i18n";
 import { REMINDER_KIND_LABEL_KEYS } from "../../i18n/enum/reminder";
 import { useLocale } from "../../i18n/i18nContext";

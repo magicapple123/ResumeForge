@@ -181,7 +181,9 @@ describe("ReminderPopup 的行内动作收敛", () => {
     expect(
       await screen.findByRole("menuitem", { name: t("reminder.snooze.oneHour") }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: t("reminder.snooze.tonight") })).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: t("reminder.snooze.tonight") }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("menuitem", { name: t("reminder.snooze.tomorrowMorning") }),
     ).toBeInTheDocument();

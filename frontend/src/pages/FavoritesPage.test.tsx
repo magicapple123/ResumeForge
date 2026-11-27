@@ -297,7 +297,9 @@ describe("FavoritesPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: t("favorites.action.unfavorite") }));
     expect(await screen.findByText("收藏服务暂时不可用")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: t("favorites.action.unfavorite") })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: t("favorites.action.unfavorite") })).toBeEnabled(),
+    );
     fireEvent.click(screen.getByRole("button", { name: t("favorites.action.unfavorite") }));
 
     await waitFor(() => expect(apiMocks.updateJob).toHaveBeenCalledTimes(2));

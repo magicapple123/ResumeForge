@@ -123,15 +123,14 @@ describe("ResumesPage 批量选择", () => {
     // 全选框与数据行勾选框都叫「全选本页」/ 行标题，全部现查现点（重渲会重建 DOM）。
     topUpSelection(2);
     // 量词是「份」（R1 决策「批量栏按 N 份简历计数」），不是「项」。
-    expect(
-      screen.getByText(t("resumesPage.batch.selected", { count: 2 })),
-    ).toBeInTheDocument();
+    expect(screen.getByText(t("resumesPage.batch.selected", { count: 2 }))).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: t("resumesPage.batch.actions") }));
     fireEvent.click(await screen.findByRole("menuitem", { name: /批量删除/ }));
     // 标题只写动作 + 对象；条数按 §4.4 的例外进正文（见下一条断言）。
     expect(
-      (await screen.findAllByText(t("resumesPage.batchDelete.title"), {}, { timeout: 5000 })).length,
+      (await screen.findAllByText(t("resumesPage.batchDelete.title"), {}, { timeout: 5000 }))
+        .length,
     ).toBeGreaterThan(0);
     // 未确认前绝不能删（单删与批量删都不能调）。
     expect(apiMocks.deleteResume).not.toHaveBeenCalled();
@@ -159,7 +158,11 @@ describe("ResumesPage 批量选择", () => {
       expect.arrayContaining([RESUME.id, 9]),
     );
     expect(
-      await screen.findByText(t("resumesPage.batchDelete.done", { count: 2 }), {}, { timeout: 5000 }),
+      await screen.findByText(
+        t("resumesPage.batchDelete.done", { count: 2 }),
+        {},
+        { timeout: 5000 },
+      ),
     ).toBeInTheDocument();
   });
 
@@ -188,9 +191,7 @@ describe("ResumesPage 批量选择", () => {
     // 计数文案的量词在 R4 里从「项」改成了「份」，本条只关心"勾了两份"，不跟着量词改断言。
     // 断言里的文案一律走 `t()`：这个仓库的 CJK 棘轮会数 ByText 家族里的中文字面量。
     expect(
-      screen.getByText(
-        t("resumesPage.list.group.selectionSummaryPlain", { count: 2 }),
-      ),
+      screen.getByText(t("resumesPage.list.group.selectionSummaryPlain", { count: 2 })),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: t("resumesPage.batch.actions") }));
@@ -238,15 +239,11 @@ describe("ResumesPage 批量选择", () => {
     const rowCheckbox = () => screen.getAllByRole("checkbox") as HTMLInputElement[];
     fireEvent.click(rowCheckbox()[1]!);
     expect(checkedRowCount()).toBe(0);
-    expect(
-      screen.getByText(t("resumesPage.batch.selected", { count: 0 })),
-    ).toBeInTheDocument();
+    expect(screen.getByText(t("resumesPage.batch.selected", { count: 0 }))).toBeInTheDocument();
     expect(actionsBtn).toBeDisabled();
 
     fireEvent.click(rowCheckbox()[1]!);
-    expect(
-      screen.getByText(t("resumesPage.batch.selected", { count: 1 })),
-    ).toBeInTheDocument();
+    expect(screen.getByText(t("resumesPage.batch.selected", { count: 1 }))).toBeInTheDocument();
     // 重新查一次按钮：勾选会重渲操作条，别对旧节点断言。
     expect(screen.getByRole("button", { name: "批量操作" })).not.toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "退出选择" }));
@@ -278,9 +275,7 @@ describe("ResumesPage 跨页全选（C3）", () => {
       await screen.findByText(t("resumesPage.selectAll.done", { count: 3 })),
     ).toBeInTheDocument();
     // 跨页全选是**整体替换**选区：右键时勾上的那 1 份被这 3 份替换掉，不是 4 份。
-    expect(
-      screen.getByText(t("resumesPage.batch.selected", { count: 3 })),
-    ).toBeInTheDocument();
+    expect(screen.getByText(t("resumesPage.batch.selected", { count: 3 }))).toBeInTheDocument();
     expect(apiMocks.listResumeIds).toHaveBeenCalledWith(
       expect.objectContaining({ keyword: "", has_job: undefined }),
     );
@@ -318,9 +313,7 @@ describe("ResumesPage 跨页全选（C3）", () => {
     expect(
       await screen.findByText(t("resumesPage.selectAll.tooMany", { count: 5001 })),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(t("resumesPage.batch.selected", { count: 1 })),
-    ).toBeInTheDocument();
+    expect(screen.getByText(t("resumesPage.batch.selected", { count: 1 }))).toBeInTheDocument();
     expect(apiMocks.batchDeleteResumes).not.toHaveBeenCalled();
   });
 
@@ -333,8 +326,6 @@ describe("ResumesPage 跨页全选（C3）", () => {
     fireEvent.click(screen.getByRole("button", { name: "全选全部简历（共 1 个）" }));
 
     expect(await screen.findByText(t("resumesPage.selectAll.empty"))).toBeInTheDocument();
-    expect(
-      screen.getByText(t("resumesPage.batch.selected", { count: 1 })),
-    ).toBeInTheDocument();
+    expect(screen.getByText(t("resumesPage.batch.selected", { count: 1 }))).toBeInTheDocument();
   });
 });

@@ -36,7 +36,10 @@ vi.mock("pdfjs-dist", () => ({
     promise: Promise.resolve({
       numPages: 1,
       getPage: async () => ({
-        getViewport: ({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale }),
+        getViewport: ({ scale }: { scale: number }) => ({
+          width: 600 * scale,
+          height: 800 * scale,
+        }),
         render: () => ({ promise: Promise.resolve() }),
         cleanup: () => undefined,
       }),
@@ -109,9 +112,7 @@ function renderTab(onRestored = vi.fn(), onViewVersion?: (id: number) => void) {
       record={RECORD}
       onRestored={onRestored}
       onViewVersion={
-        onViewVersion === undefined
-          ? undefined
-          : (revision) => onViewVersion(revision.id)
+        onViewVersion === undefined ? undefined : (revision) => onViewVersion(revision.id)
       }
     />,
   );

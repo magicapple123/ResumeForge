@@ -386,7 +386,8 @@ export default function ExternalResumeFileTable({
         <RowActions
           primary={primaryActions(item)}
           more={rowMenu(item).filter(
-            (entry) => entry.type === "divider" || (entry.key !== "text" && entry.key !== "preview"),
+            (entry) =>
+              entry.type === "divider" || (entry.key !== "text" && entry.key !== "preview"),
           )}
           disabled={batch.selecting}
         />

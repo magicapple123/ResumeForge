@@ -73,12 +73,15 @@ const externalEdit = {
 
   // ── 不可编辑的原因（后缀 = 后端原因码）──────────────────────
   "externalEdit.reason.pdf_block_not_found": "这一块已经不存在了，刷新后再试。",
-  "externalEdit.reason.pdf_block_not_editable": "这一块不是普通文本（表格、图片或版式元素里的字）。",
+  "externalEdit.reason.pdf_block_not_editable":
+    "这一块不是普通文本（表格、图片或版式元素里的字）。",
   "externalEdit.reason.pdf_block_rotated": "这一块是旋转或倾斜的文字，只支持水平文字。",
   "externalEdit.reason.pdf_block_missing_glyphs": "这一块用的字体里缺字，改完显示不出来。",
   "externalEdit.reason.pdf_page_rotated": "这一页是旋转页，暂不支持。",
-  "externalEdit.reason.pdf_erase_failed": "没能定位到这块文字在文件里的位置，为避免压坏原文已中止。",
-  "externalEdit.reason.pdf_edit_verify_failed": "改完自检没通过（可能压到了别的内容），已放弃保存。",
+  "externalEdit.reason.pdf_erase_failed":
+    "没能定位到这块文字在文件里的位置，为避免压坏原文已中止。",
+  "externalEdit.reason.pdf_edit_verify_failed":
+    "改完自检没通过（可能压到了别的内容），已放弃保存。",
   "externalEdit.reason.pdf_parse_failed": "这份 PDF 解析失败，无法定位文字。",
   "externalEdit.reason.pdf_encrypted": "这份 PDF 有加密保护。",
   "externalEdit.reason.pdf_form_fields": "这份 PDF 带可填写表单，暂不支持改字。",
@@ -127,7 +130,8 @@ const externalEdit = {
   "externalEdit.preview.docxFooter": "结构预览：按 Word 段落还原，字体、分栏与图表会与原文不同。",
   "externalEdit.preview.markdownFooter": "轻量预览：只还原标题、列表与加粗。",
   "externalEdit.preview.textFooter": "原文按等宽字体显示，保留换行与空格。",
-  "externalEdit.preview.docHint": "旧版 .doc 无法在线预览。请用 Word 打开后「另存为 .docx」再重新上传。",
+  "externalEdit.preview.docHint":
+    "旧版 .doc 无法在线预览。请用 Word 打开后「另存为 .docx」再重新上传。",
   "externalEdit.preview.empty": "这份文件里没有可显示的段落。",
   "externalEdit.preview.failed": "这份文件没能读出可预览的段落",
 
@@ -151,7 +155,8 @@ const externalEdit = {
   "externalEdit.revisions.preview": "预览",
   "externalEdit.revisions.previewHint": "预览打开的是那一版的原件，不会改动当前版本。",
   "externalEdit.revisions.previewCurrentHint": "当前版本就在「原件」页签里。",
-  "externalEdit.revisions.previewUnsupported": "这一版只能在浏览器里下载后查看（非 PDF 的历史文件不做在线预览）。",
+  "externalEdit.revisions.previewUnsupported":
+    "这一版只能在浏览器里下载后查看（非 PDF 的历史文件不做在线预览）。",
   "externalEdit.revisions.diff": "比上一版 {delta}",
   "externalEdit.revisions.first": "首版",
   "externalEdit.revisions.confirmTitle": "恢复到这个版本？",
@@ -171,7 +176,8 @@ const externalEdit = {
   "externalEdit.compare.loading": "正在读取这一版的正文…",
   "externalEdit.compare.failed": "没能读到这一版的正文",
   "externalEdit.compare.noText": "这一版没有提取到文字，无法逐行对比；可以看原件预览。",
-  "externalEdit.compare.tooLarge": "正文太长（单侧超过 {limit} 行），已跳过逐行对比；可以看原件预览，或直接恢复。",
+  "externalEdit.compare.tooLarge":
+    "正文太长（单侧超过 {limit} 行），已跳过逐行对比；可以看原件预览，或直接恢复。",
   "externalEdit.compare.restoreHint": "恢复会写入一条新版本，历史版本不会被删除。",
 
   // ── 查看历史版本（T12：内容与预览一起切到那一版）────────────

@@ -121,9 +121,9 @@ afterEach(() => {
 
 describe("applyResumeLabel", () => {
   it("prefixes an external resume with the shared external tag", () => {
-    expect(
-      applyResumeLabel({ external_resume_id: 7, resume_title: EXTERNAL_NAME }, FALLBACK),
-    ).toBe(`${t("applyUi.resume.externalTag")} · ${EXTERNAL_NAME}`);
+    expect(applyResumeLabel({ external_resume_id: 7, resume_title: EXTERNAL_NAME }, FALLBACK)).toBe(
+      `${t("applyUi.resume.externalTag")} · ${EXTERNAL_NAME}`,
+    );
   });
 
   it("keeps an internal resume as its snapshot title", () => {

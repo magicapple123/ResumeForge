@@ -69,7 +69,9 @@ describe("EventRow 的行结构", () => {
 
 describe("EventRow 的可点语义", () => {
   it("箭头在标题行内（T25）：可点时才有，且是标题行的最后一个兄弟", () => {
-    const { container } = render(<EventRow title="投递 A 司" meta="今天 14:12" onOpen={() => undefined} />);
+    const { container } = render(
+      <EventRow title="投递 A 司" meta="今天 14:12" onOpen={() => undefined} />,
+    );
     const title = container.querySelector(".rf-event-title") as HTMLElement;
     const arrow = container.querySelector(".rf-event-arrow") as HTMLElement;
 
@@ -101,11 +103,7 @@ describe("EventRow 的可点语义", () => {
   it("焦点在行内按钮上按回车，不会顺手把整行也打开", () => {
     const onOpen = vi.fn();
     const { container } = render(
-      <EventRow
-        title="投递 A 司"
-        onOpen={onOpen}
-        actions={<button type="button">完成</button>}
-      />,
+      <EventRow title="投递 A 司" onOpen={onOpen} actions={<button type="button">完成</button>} />,
     );
     const action = screen.getByRole("button", { name: "完成" });
 

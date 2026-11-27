@@ -26,11 +26,7 @@ import type { BatchSelection } from "../../hooks/useBatchSelection";
 import type { CopyNotifier } from "../../components/common/copyMenu";
 import { t } from "../../i18n";
 import { formatDateTime } from "../../utils/format";
-import {
-  groupSortDirections,
-  groupSortOrderFor,
-  type GroupSortState,
-} from "../../utils/groupSort";
+import { groupSortDirections, groupSortOrderFor, type GroupSortState } from "../../utils/groupSort";
 import type { ResumeGroup } from "../../features/resume/list/resumeGroups";
 import { copyMenuFor } from "./resumeRowCopyActions";
 import { GROUP_COLUMN_WIDTHS } from "./resumeGroupLayout";
@@ -40,11 +36,7 @@ import {
   groupToggleAction,
   type GroupMenuContext,
 } from "./resumeGroupMenu";
-import {
-  primaryActionsFor,
-  secondaryActionsFor,
-  type RowActionDeps,
-} from "./resumeTableActions";
+import { primaryActionsFor, secondaryActionsFor, type RowActionDeps } from "./resumeTableActions";
 
 export interface GroupedColumnArgs {
   deps: RowActionDeps;
@@ -73,7 +65,8 @@ export function groupVersionsRegionId(groupKey: string): string {
 
 /** 多版本组 / 单版本组 / 通用简历的主身份都是"岗位名或简历标题"，副行各有各的写法。 */
 function identityOf(group: ResumeGroup): { primary: string; secondary: string } {
-  if (group.jobId === null) return { primary: group.latest.title, secondary: group.latest.job_title };
+  if (group.jobId === null)
+    return { primary: group.latest.title, secondary: group.latest.job_title };
   return { primary: group.jobTitle || `#${group.jobId}`, secondary: group.company };
 }
 
@@ -120,9 +113,7 @@ function groupIdentity(group: ResumeGroup, args: GroupedColumnArgs) {
    * 箭头用「展开版本 / 收起版本」（版本数紧接着的 chip 已经说了），语义仍然是
    * "这块可折叠区域"，与操作列那句带计数的动作不再撞名。
    */
-  const expandLabel = expanded
-    ? t("resumes.list.group.collapse")
-    : t("resumes.list.group.expand");
+  const expandLabel = expanded ? t("resumes.list.group.collapse") : t("resumes.list.group.expand");
   const expandSlot = stacked ? (
     <button
       type="button"
@@ -180,7 +171,9 @@ function groupIdentity(group: ResumeGroup, args: GroupedColumnArgs) {
               </>
             ) : null}
             {stacked ? (
-              <span>{t("resumesPage.list.group.latestVersion", { title: group.latest.title })}</span>
+              <span>
+                {t("resumesPage.list.group.latestVersion", { title: group.latest.title })}
+              </span>
             ) : (
               <Button
                 type="link"
@@ -287,9 +280,7 @@ export function buildGroupedColumns(args: GroupedColumnArgs): TableColumnsType<R
     key: "actions",
     width: GROUP_COLUMN_WIDTHS.actions,
     align: "right",
-    render: (_, group) => (
-      <span className="rf-group-actions">{groupActions(group, args)}</span>
-    ),
+    render: (_, group) => <span className="rf-group-actions">{groupActions(group, args)}</span>,
   });
 
   return columns;

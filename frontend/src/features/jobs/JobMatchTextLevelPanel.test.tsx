@@ -127,9 +127,7 @@ describe("JobMatchTextLevelPanel：文本级口径", () => {
 
   it("灰掉的那几份在面板上常驻说明原因与怎么办，不是只藏在悬停里", async () => {
     renderPanel();
-    expect(
-      await screen.findByText(t("jobMatch.textLevel.resume.someNoText")),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(t("jobMatch.textLevel.resume.someNoText"))).toBeInTheDocument();
   });
 
   it("选中一份后按后端返回渲染计数、词表与正文摘录", async () => {

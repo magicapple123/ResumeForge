@@ -84,10 +84,20 @@ function OutcomeAlerts({
         />
       ) : null}
       {outcome.scaled ? (
-        <Alert data-testid="external-scaled" type="warning" showIcon title={t("externalEdit.scaled")} />
+        <Alert
+          data-testid="external-scaled"
+          type="warning"
+          showIcon
+          title={t("externalEdit.scaled")}
+        />
       ) : null}
       {outcome.shifted ? (
-        <Alert data-testid="external-shifted" type="success" showIcon title={t("externalEdit.shifted")} />
+        <Alert
+          data-testid="external-shifted"
+          type="success"
+          showIcon
+          title={t("externalEdit.shifted")}
+        />
       ) : null}
     </Space>
   );
@@ -108,7 +118,12 @@ export function ExternalResumeEditorPanel({
 
   if (block === null) {
     return (
-      <Alert data-testid="external-panel-empty" type="info" showIcon title={t("externalEdit.hint.pick")} />
+      <Alert
+        data-testid="external-panel-empty"
+        type="info"
+        showIcon
+        title={t("externalEdit.hint.pick")}
+      />
     );
   }
 
@@ -174,7 +189,9 @@ export function ExternalResumeEditorPanel({
         >
           {t("externalEdit.reset")}
         </Button>
-        <Typography.Text type="secondary">{t("externalEdit.chars", { count: text.length })}</Typography.Text>
+        <Typography.Text type="secondary">
+          {t("externalEdit.chars", { count: text.length })}
+        </Typography.Text>
         <Typography.Text type="secondary">
           {t("externalEdit.panel.origChars", { count: block.text.length })}
         </Typography.Text>
@@ -199,7 +216,9 @@ export function ExternalResumeEditorPanel({
           description={error}
         />
       ) : null}
-      {outcome ? <OutcomeAlerts outcome={outcome} submitting={submitting} onShiftBelow={onShiftBelow} /> : null}
+      {outcome ? (
+        <OutcomeAlerts outcome={outcome} submitting={submitting} onShiftBelow={onShiftBelow} />
+      ) : null}
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         {t("externalEdit.keepFormatHint")}
       </Typography.Text>

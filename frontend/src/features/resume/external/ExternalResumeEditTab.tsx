@@ -169,7 +169,9 @@ export function ExternalResumeEditTab({
       setSuccess({ version: null, chars: result.resume.text_chars });
       void listExternalResumeRevisions(resumeId)
         .then((list) => {
-          setSuccess((current) => (current === null ? current : { ...current, version: list.total }));
+          setSuccess((current) =>
+            current === null ? current : { ...current, version: list.total },
+          );
         })
         .catch(() => {
           // 版本号只是锦上添花：拿不到就沿用「已生成新版本」那句，不影响去哪看结果。
@@ -188,7 +190,12 @@ export function ExternalResumeEditTab({
   if (failure !== null) {
     const kind = failureKindOf(failure.status);
     return (
-      <Space orientation="vertical" size={12} style={{ width: "100%" }} data-testid="external-edit-failed">
+      <Space
+        orientation="vertical"
+        size={12}
+        style={{ width: "100%" }}
+        data-testid="external-edit-failed"
+      >
         <Alert
           data-testid={`external-edit-failure-${kind}`}
           type={kind === "unsupported" ? "warning" : "error"}
@@ -289,7 +296,10 @@ export function ExternalResumeEditTab({
             <Typography.Text strong>
               {success.version === null
                 ? t("externalEdit.success.titleNoVersion", { chars: success.chars })
-                : t("externalEdit.success.title", { version: success.version, chars: success.chars })}
+                : t("externalEdit.success.title", {
+                    version: success.version,
+                    chars: success.chars,
+                  })}
             </Typography.Text>
             <Typography.Text type="secondary">{t("externalEdit.success.hint")}</Typography.Text>
             <Space size={8} wrap>

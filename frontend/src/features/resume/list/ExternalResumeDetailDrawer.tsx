@@ -123,9 +123,7 @@ export function ExternalResumeDetailDrawer({
     revisionId: number;
     at: string;
   } | null>(
-    revisionId === undefined || resumeId === null
-      ? null
-      : { id: resumeId, revisionId, at: "" },
+    revisionId === undefined || resumeId === null ? null : { id: resumeId, revisionId, at: "" },
   );
   const open = openProp ?? resumeId !== null;
   const record = detail !== null && detail.id === resumeId ? detail.record : null;
@@ -350,72 +348,72 @@ export function ExternalResumeDetailDrawer({
               }
             />
           )}
-        {/* P0 四项（T28）：收藏 / 备注 / 重命名 / 导出原件。挂在页签上方，切页签不丢；
+          {/* P0 四项（T28）：收藏 / 备注 / 重命名 / 导出原件。挂在页签上方，切页签不丢；
             `revisionId` 传当前在看的那一版，所以"看哪一版就导出哪一版"。 */}
-        <ExternalResumeDetailActions
-          record={record}
-          onRecordChange={(next) => applyRecord(next, true)}
-          revisionId={viewing?.revisionId}
-        />
-        <Tabs
-          activeKey={tab}
-          // 占满弹层 body 的剩余高度；`minHeight: 0` 是 flex 子项能收缩、内部才能滚动的关键。
-          style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
-          styles={{
-            body: { height: "100%", minHeight: 0 },
-            content: { height: "100%", overflow: "auto" },
-          }}
-          onChange={(key) => goto(key as ExternalResumeDetailTab)}
-          items={[
-            {
-              key: "original",
-              label: t("resumesPage.external.tabOriginal"),
-              // 原件页自己铺满（工具栏 + 灰画布），不加内边距。
-              // 在看历史版本时画那一版的文件（后端 `GET /file?revision_id=` 早就支持）。
-              children: (
-                <ExternalOriginalPreview record={record} revisionId={viewing?.revisionId} />
-              ),
-            },
-            {
-              key: "text",
-              label: t("resumesPage.external.tabText"),
-              children: <div style={{ padding: "12px 16px" }}>{textView()}</div>,
-            },
-            {
-              key: "check",
-              label: t("resumesPage.external.tabCheck"),
-              children: <div style={{ padding: "12px 16px" }}>{checkView()}</div>,
-            },
-            {
-              key: "edit",
-              label: t("externalEdit.tab.edit"),
-              // 页签内容按需挂载：`blocks` 要读整份文件并解析，切到这一页才值得付这个成本。
-              children: (
-                <ExternalResumeEditTab
-                  resumeId={record.id}
-                  record={record}
-                  onRecordChange={applyRecord}
-                  onGotoTab={goto}
-                />
-              ),
-            },
-            {
-              key: "revisions",
-              label: t("externalEdit.tab.revisions"),
-              children: (
-                <div style={{ padding: "12px 16px" }}>
-                  <ExternalResumeRevisions
+          <ExternalResumeDetailActions
+            record={record}
+            onRecordChange={(next) => applyRecord(next, true)}
+            revisionId={viewing?.revisionId}
+          />
+          <Tabs
+            activeKey={tab}
+            // 占满弹层 body 的剩余高度；`minHeight: 0` 是 flex 子项能收缩、内部才能滚动的关键。
+            style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
+            styles={{
+              body: { height: "100%", minHeight: 0 },
+              content: { height: "100%", overflow: "auto" },
+            }}
+            onChange={(key) => goto(key as ExternalResumeDetailTab)}
+            items={[
+              {
+                key: "original",
+                label: t("resumesPage.external.tabOriginal"),
+                // 原件页自己铺满（工具栏 + 灰画布），不加内边距。
+                // 在看历史版本时画那一版的文件（后端 `GET /file?revision_id=` 早就支持）。
+                children: (
+                  <ExternalOriginalPreview record={record} revisionId={viewing?.revisionId} />
+                ),
+              },
+              {
+                key: "text",
+                label: t("resumesPage.external.tabText"),
+                children: <div style={{ padding: "12px 16px" }}>{textView()}</div>,
+              },
+              {
+                key: "check",
+                label: t("resumesPage.external.tabCheck"),
+                children: <div style={{ padding: "12px 16px" }}>{checkView()}</div>,
+              },
+              {
+                key: "edit",
+                label: t("externalEdit.tab.edit"),
+                // 页签内容按需挂载：`blocks` 要读整份文件并解析，切到这一页才值得付这个成本。
+                children: (
+                  <ExternalResumeEditTab
                     resumeId={record.id}
                     record={record}
-                    refreshKey={refreshKey ?? record.file_id}
-                    onRestored={applyRecord}
-                    onViewVersion={showRevision}
+                    onRecordChange={applyRecord}
+                    onGotoTab={goto}
                   />
-                </div>
-              ),
-            },
-          ]}
-        />
+                ),
+              },
+              {
+                key: "revisions",
+                label: t("externalEdit.tab.revisions"),
+                children: (
+                  <div style={{ padding: "12px 16px" }}>
+                    <ExternalResumeRevisions
+                      resumeId={record.id}
+                      record={record}
+                      refreshKey={refreshKey ?? record.file_id}
+                      onRestored={applyRecord}
+                      onViewVersion={showRevision}
+                    />
+                  </div>
+                ),
+              },
+            ]}
+          />
         </>
       )}
     </Modal>

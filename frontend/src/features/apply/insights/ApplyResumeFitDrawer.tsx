@@ -161,17 +161,11 @@ export default function ApplyResumeFitDrawer({ open, items, onClose, onApplied }
 
   /** 还没换、且换成推荐版本确实更好看的那些行。 */
   const swappableRows = useMemo(
-    () =>
-      rows.filter(
-        (row) => planOf(row).mode === "swap" && !applied.includes(row.queue_id),
-      ),
+    () => rows.filter((row) => planOf(row).mode === "swap" && !applied.includes(row.queue_id)),
     [rows, applied],
   );
   /** 已经是最优的行数（footer 摘要用）。 */
-  const bestCount = useMemo(
-    () => rows.filter((row) => planOf(row).mode === "best").length,
-    [rows],
-  );
+  const bestCount = useMemo(() => rows.filter((row) => planOf(row).mode === "best").length, [rows]);
 
   /**
    * 应用一条：走现有改简历接口（只改 `resume_id`，招呼语等字段不带）。

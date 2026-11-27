@@ -95,9 +95,7 @@ describe("页头角标两个口径", () => {
     renderHeader();
 
     await waitFor(() => expect(badgeTextOf(bellLabel(3))).toBe("3"));
-    await waitFor(() =>
-      expect(badgeTextOf(t("backgroundTasks.aria.viewTasks"))).toContain("2"),
-    );
+    await waitFor(() => expect(badgeTextOf(t("backgroundTasks.aria.viewTasks"))).toContain("2"));
     expect(badgeTextOf(bellLabel(3))).not.toBe("5");
     expect(badgeTextOf(t("backgroundTasks.aria.viewTasks"))).not.toBe("5");
   });
@@ -110,9 +108,7 @@ describe("页头角标两个口径", () => {
     ]);
     renderHeader();
 
-    await waitFor(() =>
-      expect(badgeTextOf(t("backgroundTasks.aria.viewTasks"))).toBe("3"),
-    );
+    await waitFor(() => expect(badgeTextOf(t("backgroundTasks.aria.viewTasks"))).toBe("3"));
     expect(badgeTextOf(bellLabel(3))).toBe("3");
   });
 });

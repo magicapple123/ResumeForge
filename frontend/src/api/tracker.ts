@@ -77,11 +77,7 @@ export function updateTrack(id: number, payload: TrackPayload): Promise<Track> {
  *
  * 同状态是幂等的：后端直接返回、不写事件（连点两次同一格不是一次真实变化）。
  */
-export function patchTrackStatus(
-  id: number,
-  status: TrackStatus,
-  statusDate = "",
-): Promise<Track> {
+export function patchTrackStatus(id: number, status: TrackStatus, statusDate = ""): Promise<Track> {
   return request(`/tracker/${id}/status`, {
     method: "PATCH",
     body: JSON.stringify({ status, status_date: statusDate }),

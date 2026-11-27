@@ -304,7 +304,8 @@ const applyQueue = {
   // R21: "what this job sends" (thumbnails) is separated from the image library; x only removes.
   "applyQueue.image.followDefault": "Follow the default image",
   "applyQueue.image.addTile": "Choose images",
-  "applyQueue.image.addTileAria": "Open the image library to pick images ({count} of {max} selected)",
+  "applyQueue.image.addTileAria":
+    "Open the image library to pick images ({count} of {max} selected)",
   "applyQueue.image.previewAria": "Preview {name}",
   "applyQueue.image.removeAria": "Remove {name} from this job",
   "applyQueue.image.removeOnly": "Removed from this job. The image is still in the library",

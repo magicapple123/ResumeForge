@@ -90,5 +90,7 @@ export function resolveGreetingImages(
  * 避免 `setState` → 重渲染的死循环。名字进签名是因为上传后同名文件会被后端改名。
  */
 export function greetingImageSignature(options: readonly ApplyGreetingImageOption[]): string {
-  return options.map((option) => `${option.id}:${option.deletable ? 1 : 0}:${option.name}`).join(",");
+  return options
+    .map((option) => `${option.id}:${option.deletable ? 1 : 0}:${option.name}`)
+    .join(",");
 }

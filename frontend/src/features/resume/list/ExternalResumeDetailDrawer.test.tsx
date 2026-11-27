@@ -34,7 +34,10 @@ vi.mock("pdfjs-dist", () => ({
     promise: Promise.resolve({
       numPages: 2,
       getPage: async () => ({
-        getViewport: ({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale }),
+        getViewport: ({ scale }: { scale: number }) => ({
+          width: 600 * scale,
+          height: 800 * scale,
+        }),
         render: () => ({ promise: Promise.resolve() }),
         cleanup: () => undefined,
       }),
@@ -226,7 +229,15 @@ describe("ExternalResumeDetailDrawer", () => {
     const onChanged = vi.fn();
     apiMocks.editExternalResumeBlock.mockResolvedValue({
       resume: { ...RECORD, file_id: 22, text_chars: 20, text: EDITED_TEXT },
-      revision: { id: 6, file_id: 22, text_chars: 20, has_text: true, source: "edit", created_at: "2026-11-10T11:00:00", current: true },
+      revision: {
+        id: 6,
+        file_id: 22,
+        text_chars: 20,
+        has_text: true,
+        source: "edit",
+        created_at: "2026-11-10T11:00:00",
+        current: true,
+      },
       kind: "pdf",
       block_id: "p1b0",
       page: 1,
@@ -252,7 +263,9 @@ describe("ExternalResumeDetailDrawer", () => {
     fireEvent.click(screen.getByTestId("external-success-original"));
     // 新 `file_id` 进 URL：原件页拿到的是刚存下的那一版，不是缓存里的旧 PDF。
     expect(
-      await screen.findByRole("link", { name: new RegExp(t("resumesPage.external.downloadOriginal")) }),
+      await screen.findByRole("link", {
+        name: new RegExp(t("resumesPage.external.downloadOriginal")),
+      }),
     ).toHaveAttribute("href", "/api/external-resumes/7/file?v=22");
 
     fireEvent.click(screen.getByRole("tab", { name: t("externalEdit.tab.edit") }));
@@ -273,7 +286,9 @@ describe("ExternalResumeDetailDrawer", () => {
     // 原件页签的地址也要带 revision_id（画的是那一版的文件）。
     fireEvent.click(screen.getByRole("tab", { name: t("resumesPage.external.tabOriginal") }));
     expect(
-      await screen.findByRole("link", { name: new RegExp(t("resumesPage.external.downloadOriginal")) }),
+      await screen.findByRole("link", {
+        name: new RegExp(t("resumesPage.external.downloadOriginal")),
+      }),
     ).toHaveAttribute("href", "/api/external-resumes/7/file?revision_id=5");
 
     // 「回到当前版本」= 收起提示条，正文回到 record.text。
@@ -332,7 +347,11 @@ describe("ExternalResumeDetailDrawer", () => {
   });
 
   it("旧版 .doc：给「另存为 .docx」的引导 + 下载入口", async () => {
-    apiMocks.getExternalResume.mockResolvedValue({ ...RECORD, name: "简历.doc", mime: "application/msword" });
+    apiMocks.getExternalResume.mockResolvedValue({
+      ...RECORD,
+      name: "简历.doc",
+      mime: "application/msword",
+    });
     renderDrawer(7);
 
     expect(await screen.findByTestId("external-doc-fallback")).toHaveTextContent(

@@ -67,16 +67,8 @@ describe("sortGroups 三个字段的升降序", () => {
   ];
 
   it("身份：按岗位名（通用简历回落到标题）升序 / 降序", () => {
-    expect(ids(sortGroups(groups, state("identity", "asc")))).toEqual([
-      "job-3",
-      "job-1",
-      "job-2",
-    ]);
-    expect(ids(sortGroups(groups, state("identity", "desc")))).toEqual([
-      "job-2",
-      "job-1",
-      "job-3",
-    ]);
+    expect(ids(sortGroups(groups, state("identity", "asc")))).toEqual(["job-3", "job-1", "job-2"]);
+    expect(ids(sortGroups(groups, state("identity", "desc")))).toEqual(["job-2", "job-1", "job-3"]);
   });
 
   it("身份：岗位名为空的通用简历用最新版标题参与排序", () => {
@@ -89,16 +81,8 @@ describe("sortGroups 三个字段的升降序", () => {
   });
 
   it("投递次数：升序 / 降序", () => {
-    expect(ids(sortGroups(groups, state("delivery", "asc")))).toEqual([
-      "job-3",
-      "job-2",
-      "job-1",
-    ]);
-    expect(ids(sortGroups(groups, state("delivery", "desc")))).toEqual([
-      "job-1",
-      "job-2",
-      "job-3",
-    ]);
+    expect(ids(sortGroups(groups, state("delivery", "asc")))).toEqual(["job-3", "job-2", "job-1"]);
+    expect(ids(sortGroups(groups, state("delivery", "desc")))).toEqual(["job-1", "job-2", "job-3"]);
   });
 
   it("最近更新：升序 / 降序", () => {

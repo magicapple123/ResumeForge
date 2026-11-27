@@ -233,9 +233,7 @@ export default function ExternalResumePanel({
   };
 
   /** 详情里那条在**当前页**的 `file_id`（编辑后变了 → 抽屉的历史版本要跟着重取）。 */
-  const detailFileId = detail
-    ? (items.find((item) => item.id === detail.id)?.file_id ?? 0)
-    : 0;
+  const detailFileId = detail ? (items.find((item) => item.id === detail.id)?.file_id ?? 0) : 0;
 
   /**
    * 批量删除：**先确认再删**（一次删十几份，误点的代价远大于一次点击）。
@@ -259,9 +257,7 @@ export default function ExternalResumePanel({
             toast.success(t("resumesPage.external.batchDelete.done", { count: deleted }));
           } else if (deleted > 0) {
             // 部分失败要说清两个数字：假装全成功会让用户以为列表刷新出了问题。
-            toast.warning(
-              t("resumesPage.external.batchDelete.partial", { done: deleted, failed }),
-            );
+            toast.warning(t("resumesPage.external.batchDelete.partial", { done: deleted, failed }));
           } else {
             toast.error(t("resumesPage.external.batchDelete.failed"));
           }
@@ -392,8 +388,7 @@ export default function ExternalResumePanel({
         <BatchActionBar
           count={batch.selectedCount}
           pageSelectAll={{
-            allSelected:
-              items.length > 0 && items.every((item) => batch.isSelected(item.id)),
+            allSelected: items.length > 0 && items.every((item) => batch.isSelected(item.id)),
             someSelected: batch.selectedCount > 0,
             onToggle: (checked) =>
               batch.selectPage(

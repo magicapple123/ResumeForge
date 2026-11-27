@@ -102,7 +102,10 @@ function PdfOriginalViewer({ record, revisionId }: ExternalOriginalPreviewProps)
     chainRef.current = chainRef.current
       .then(async () => {
         if (runRef.current !== run) return;
-        await drawPdfPage(canvas, doc, target, { background: plan.background, invert: plan.invert });
+        await drawPdfPage(canvas, doc, target, {
+          background: plan.background,
+          invert: plan.invert,
+        });
         // 反色页里照片被反了色：把只有图片的那一块贴回去，照片恢复原样（R22）。
         if (!plan.imagesOverlay || runRef.current !== run) return;
         await drawPdfImagesOver(canvas, doc, target);
@@ -110,7 +113,16 @@ function PdfOriginalViewer({ record, revisionId }: ExternalOriginalPreviewProps)
       .catch(() => {
         // 单页渲染失败不该炸掉整个弹层：工具栏仍在，用户能翻页或下载原件。
       });
-  }, [pdf.status, pdf.document, pdf.pages, page, zoomIndex, plan.background, plan.invert, plan.imagesOverlay]);
+  }, [
+    pdf.status,
+    pdf.document,
+    pdf.pages,
+    page,
+    zoomIndex,
+    plan.background,
+    plan.invert,
+    plan.imagesOverlay,
+  ]);
 
   const zoomLabel = t("externalEdit.original.zoom", {
     percent: Math.round(ZOOM_STEPS[zoomIndex] * 100),
@@ -129,7 +141,10 @@ function PdfOriginalViewer({ record, revisionId }: ExternalOriginalPreviewProps)
             onClick={() => setPage((current) => Math.max(1, current - 1))}
           />
           <Typography.Text className="rf-ext-viewer-page" data-testid="external-original-pager">
-            {t("externalEdit.original.page", { page: Math.min(page, Math.max(total, 1)), total: Math.max(total, 1) })}
+            {t("externalEdit.original.page", {
+              page: Math.min(page, Math.max(total, 1)),
+              total: Math.max(total, 1),
+            })}
           </Typography.Text>
           <Button
             size="small"
@@ -178,10 +193,17 @@ function PdfOriginalViewer({ record, revisionId }: ExternalOriginalPreviewProps)
         </Space>
       </div>
       {pdf.status === "error" ? (
-        <Alert type="warning" showIcon title={t("externalEdit.original.failed")} description={pdf.error} />
+        <Alert
+          type="warning"
+          showIcon
+          title={t("externalEdit.original.failed")}
+          description={pdf.error}
+        />
       ) : null}
       <div className={`rf-ext-viewer-canvas${dark && !printing ? " is-dark" : ""}`}>
-        {pdf.status === "loading" ? <LoadingBlock tip={t("externalEdit.original.loading")} /> : null}
+        {pdf.status === "loading" ? (
+          <LoadingBlock tip={t("externalEdit.original.loading")} />
+        ) : null}
         <div className="rf-ext-page-stack" style={{ width: `${ZOOM_STEPS[zoomIndex] * 100}%` }}>
           <canvas
             ref={canvasRef}

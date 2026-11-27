@@ -111,10 +111,7 @@ export function groupToggleAction(group: ResumeGroup, ctx: GroupMenuContext): Ro
  * 单独导出是因为行内「⋯」要把它与 `groupToggleAction` 拆成"主按钮 + 菜单"两处，
  * 而整行右键要的是两份合起来的一整张菜单——**同一个数组**喂两个位置，不各自拼一遍。
  */
-export function groupSecondaryActions(
-  group: ResumeGroup,
-  ctx: GroupMenuContext,
-): RowActionItem[] {
+export function groupSecondaryActions(group: ResumeGroup, ctx: GroupMenuContext): RowActionItem[] {
   const items: RowActionItem[] = [];
   if (group.jobId !== null) {
     const jobId = group.jobId;

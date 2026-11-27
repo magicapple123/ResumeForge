@@ -116,9 +116,7 @@ export default function FavoriteResumeTable({
       width: 104,
       render: (_, item) => (
         <Tag color={item.kind === "external" ? "gold" : "blue"}>
-          {item.kind === "external"
-            ? t("favorites.kind.external")
-            : t("favorites.kind.internal")}
+          {item.kind === "external" ? t("favorites.kind.external") : t("favorites.kind.internal")}
         </Tag>
       ),
     },

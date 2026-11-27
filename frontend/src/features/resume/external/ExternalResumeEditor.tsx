@@ -20,12 +20,7 @@ import { Alert, Tag, Typography } from "antd";
 import type { ExternalResumeBlock, ExternalResumeBlocks } from "../../../api/externalResumes";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
-import {
-  blockPreviewText,
-  blockRoleOf,
-  maxBlockSize,
-  reasonKey,
-} from "./blockGeometry";
+import { blockPreviewText, blockRoleOf, maxBlockSize, reasonKey } from "./blockGeometry";
 
 export interface ExternalResumeEditorProps {
   blocks: ExternalResumeBlocks;

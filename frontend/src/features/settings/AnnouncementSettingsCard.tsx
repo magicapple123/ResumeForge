@@ -27,11 +27,7 @@ import { useLocale } from "../../i18n/i18nContext";
 import { useToast } from "../../hooks/useToast";
 import type { AnnouncementCode } from "../announcements/announcementCodes";
 import { ANNOUNCEMENT_CODES } from "../announcements/announcementCodes";
-import {
-  isMuted,
-  muteAnnouncement,
-  unmuteAnnouncement,
-} from "../announcements/announcementMute";
+import { isMuted, muteAnnouncement, unmuteAnnouncement } from "../announcements/announcementMute";
 import { notifyAnnouncements } from "../announcements/announcementStore";
 
 /**

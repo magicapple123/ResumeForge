@@ -59,27 +59,36 @@ const externalEdit = {
   "externalEdit.overflow.body":
     "This passage went from {before} lines to {after} lines and grew by {delta} pt. Shorten it, or move the content below down.",
   "externalEdit.shift.action": "Move the content below down by {delta} pt",
-  "externalEdit.scaled": "The new text was wider than the original block, so the font size was reduced automatically.",
+  "externalEdit.scaled":
+    "The new text was wider than the original block, so the font size was reduced automatically.",
   "externalEdit.shifted": "The content below has been moved down.",
 
   // ── Reasons a block is not editable (suffix = backend code) ─
   "externalEdit.reason.pdf_block_not_found": "This block no longer exists. Refresh and try again.",
   "externalEdit.reason.pdf_block_not_editable":
     "This block is not plain text (text inside tables, images or layout elements).",
-  "externalEdit.reason.pdf_block_rotated": "This block is rotated or skewed; only horizontal text is supported.",
-  "externalEdit.reason.pdf_block_missing_glyphs": "The font of this block has no glyphs for the new text.",
+  "externalEdit.reason.pdf_block_rotated":
+    "This block is rotated or skewed; only horizontal text is supported.",
+  "externalEdit.reason.pdf_block_missing_glyphs":
+    "The font of this block has no glyphs for the new text.",
   "externalEdit.reason.pdf_page_rotated": "This page is rotated, which is not supported yet.",
   "externalEdit.reason.pdf_erase_failed":
     "The old glyphs could not be located inside the file, so the edit was aborted to avoid damaging the page.",
   "externalEdit.reason.pdf_edit_verify_failed":
     "The post-edit self-check failed (content below may have been overwritten), so nothing was saved.",
-  "externalEdit.reason.pdf_parse_failed": "This PDF could not be parsed, so its text cannot be located.",
+  "externalEdit.reason.pdf_parse_failed":
+    "This PDF could not be parsed, so its text cannot be located.",
   "externalEdit.reason.pdf_encrypted": "This PDF is encrypted.",
-  "externalEdit.reason.pdf_form_fields": "This PDF contains fillable form fields, which are not supported yet.",
-  "externalEdit.reason.pdf_no_text_layer": "This PDF has no text layer (it is a scan or a pure image).",
-  "externalEdit.reason.pdf_outlined_text": "The text of this PDF has been outlined into shapes, so it cannot be edited.",
-  "externalEdit.reason.pdf_unsupported": "This PDF uses a format that is outside the supported range.",
-  "externalEdit.reason.docx_text_in_table": "This passage is inside a table; editing it could break the table layout.",
+  "externalEdit.reason.pdf_form_fields":
+    "This PDF contains fillable form fields, which are not supported yet.",
+  "externalEdit.reason.pdf_no_text_layer":
+    "This PDF has no text layer (it is a scan or a pure image).",
+  "externalEdit.reason.pdf_outlined_text":
+    "The text of this PDF has been outlined into shapes, so it cannot be edited.",
+  "externalEdit.reason.pdf_unsupported":
+    "This PDF uses a format that is outside the supported range.",
+  "externalEdit.reason.docx_text_in_table":
+    "This passage is inside a table; editing it could break the table layout.",
   "externalEdit.reason.docx_paragraph_not_editable":
     "This passage has no editable text (image, blank paragraph or field code).",
   "externalEdit.reason.edit_unsupported_kind": "This file type cannot be edited in the app.",
@@ -125,8 +134,10 @@ const externalEdit = {
   // ── Multi-format preview (T10: DOCX / TXT / MD / .doc) ───
   "externalEdit.preview.docxFooter":
     "Structural preview: rebuilt from Word paragraphs. Fonts, columns and charts will differ from the original.",
-  "externalEdit.preview.markdownFooter": "Light preview: only headings, lists and bold are rendered.",
-  "externalEdit.preview.textFooter": "The text is shown in a monospace font, keeping line breaks and spaces.",
+  "externalEdit.preview.markdownFooter":
+    "Light preview: only headings, lists and bold are rendered.",
+  "externalEdit.preview.textFooter":
+    "The text is shown in a monospace font, keeping line breaks and spaces.",
   "externalEdit.preview.docHint":
     "Legacy .doc files cannot be previewed here. Open the file in Word, save it as .docx and upload it again.",
   "externalEdit.preview.empty": "This file has no paragraphs to show.",
@@ -152,7 +163,8 @@ const externalEdit = {
   "externalEdit.revisions.preview": "Preview",
   "externalEdit.revisions.previewHint":
     "The preview shows the original of that version and does not change the current one.",
-  "externalEdit.revisions.previewCurrentHint": "The current version is the one on the Original tab.",
+  "externalEdit.revisions.previewCurrentHint":
+    "The current version is the one on the Original tab.",
   "externalEdit.revisions.previewUnsupported":
     "This version can only be viewed after downloading it (non-PDF history is not previewed in the app).",
   "externalEdit.revisions.diff": "{delta} vs previous",

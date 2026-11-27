@@ -137,10 +137,14 @@ describe("ResumeTable 跨页勾选（R4）", () => {
     await waitFor(() => expect(count()).toBe(2));
 
     // 表头全选都是"本页"语义，先确认它不会把跨页选区清掉。
-    fireEvent.click(container.querySelector<HTMLElement>("thead .ant-checkbox-input") as HTMLElement);
+    fireEvent.click(
+      container.querySelector<HTMLElement>("thead .ant-checkbox-input") as HTMLElement,
+    );
     await waitFor(() => expect(count()).toBe(0));
 
-    fireEvent.click(container.querySelector<HTMLElement>("thead .ant-checkbox-input") as HTMLElement);
+    fireEvent.click(
+      container.querySelector<HTMLElement>("thead .ant-checkbox-input") as HTMLElement,
+    );
     await waitFor(() => expect(ids()).toBe("1,2"));
 
     // 取消当前页一条：计数只 −1。

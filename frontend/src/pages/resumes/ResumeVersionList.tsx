@@ -113,9 +113,7 @@ export default function ResumeVersionList({
           >
             <div className="resume-version-row" role="listitem" style={rowStyle}>
               {/* 父表勾选列的占位（只在多选态出现）：让后面四格与父表同名四列对齐。 */}
-              {selecting ? (
-                <span className="resume-version-gutter" aria-hidden="true" />
-              ) : null}
+              {selecting ? <span className="resume-version-gutter" aria-hidden="true" /> : null}
               {/* 首格 = 父表的身份列：里面是「勾选框 + 第 N 版」+ 标题。 */}
               <div className="resume-version-leading">
                 {selecting ? (

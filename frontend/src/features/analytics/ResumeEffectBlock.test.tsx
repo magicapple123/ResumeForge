@@ -53,9 +53,7 @@ describe("ResumeEffectBlock 的内外两套口径", () => {
   it("没有外部关联时外部那块显示自己的空态，不影响内部柱图", () => {
     renderWithApp(<ResumeEffectBlock data={analyticsDashboard({ external_resume_effects: [] })} />);
 
-    expect(
-      screen.getByText(t("analyticsPage.resumeEffect.externalEmpty")),
-    ).toBeInTheDocument();
+    expect(screen.getByText(t("analyticsPage.resumeEffect.externalEmpty"))).toBeInTheDocument();
     expect(screen.getAllByText("Backend v1").length).toBeGreaterThan(0);
   });
 });
@@ -67,9 +65,7 @@ describe("ResumeLinkLegend 的口径图例", () => {
     expect(screen.getByText(t("analyticsPage.resumeLink.includesExternal"))).toBeInTheDocument();
     // 夹具：总投递 7、关联 3（内部 2 + 外部 1）→ 未关联 4。
     expect(
-      screen.getByText(
-        t("analyticsPage.resumeLink.legend", { internal: 2, external: 1, none: 4 }),
-      ),
+      screen.getByText(t("analyticsPage.resumeLink.legend", { internal: 2, external: 1, none: 4 })),
     ).toBeInTheDocument();
   });
 
@@ -81,9 +77,7 @@ describe("ResumeLinkLegend 的口径图例", () => {
     );
 
     expect(
-      screen.getByText(
-        t("analyticsPage.resumeLink.legend", { internal: 2, external: 1, none: 0 }),
-      ),
+      screen.getByText(t("analyticsPage.resumeLink.legend", { internal: 2, external: 1, none: 0 })),
     ).toBeInTheDocument();
     expect(screen.queryByText(/-1/u)).toBeNull();
   });

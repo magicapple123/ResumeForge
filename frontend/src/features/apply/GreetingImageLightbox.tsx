@@ -88,17 +88,11 @@ export default function GreetingImageLightbox({ image, onClose }: GreetingImageL
         className="rf-greeting-lightbox-inner"
         tabIndex={-1}
       >
-        <img
-          className="rf-greeting-lightbox-img"
-          src={userFileRawUrl(image.id)}
-          alt={image.name}
-        />
+        <img className="rf-greeting-lightbox-img" src={userFileRawUrl(image.id)} alt={image.name} />
         <div className="rf-greeting-lightbox-caption">
           <span className="rf-greeting-lightbox-name">{image.name}</span>
           <span className="rf-greeting-lightbox-size">{formatBytes(image.size_bytes)}</span>
-          <span className="rf-greeting-lightbox-hint">
-            {t("applyQueue.image.lightboxHint")}
-          </span>
+          <span className="rf-greeting-lightbox-hint">{t("applyQueue.image.lightboxHint")}</span>
           <Button
             size="small"
             icon={<CloseOutlined />}

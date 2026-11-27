@@ -103,7 +103,14 @@ function PdfBlockPage({
   }, [block.block_id, page, pdf.status]);
 
   if (pdf.status === "error") {
-    return <Alert type="warning" showIcon title={t("externalEdit.original.failed")} description={pdf.error} />;
+    return (
+      <Alert
+        type="warning"
+        showIcon
+        title={t("externalEdit.original.failed")}
+        description={pdf.error}
+      />
+    );
   }
   return (
     <div className="rf-ext-block-page" data-testid="external-block-page">
@@ -150,23 +157,28 @@ function TextBlockPreview({ block }: { block: ExternalResumeBlock }) {
   );
 }
 
-export function ExternalBlockPreview({ record, block, pageWidth, pageHeight }: ExternalBlockPreviewProps) {
+export function ExternalBlockPreview({
+  record,
+  block,
+  pageWidth,
+  pageHeight,
+}: ExternalBlockPreviewProps) {
   useLocale();
   if (block === null) {
     return (
       <Space orientation="vertical" size={8} style={{ width: "100%" }}>
-        <Alert type="info" showIcon title={t("externalEdit.hint.pick")} data-testid="external-block-preview-empty" />
+        <Alert
+          type="info"
+          showIcon
+          title={t("externalEdit.hint.pick")}
+          data-testid="external-block-preview-empty"
+        />
       </Space>
     );
   }
   if (block.page <= 0) return <TextBlockPreview block={block} />;
   return (
-    <PdfBlockPage
-      record={record}
-      block={block}
-      pageWidth={pageWidth}
-      pageHeight={pageHeight}
-    />
+    <PdfBlockPage record={record} block={block} pageWidth={pageWidth} pageHeight={pageHeight} />
   );
 }
 
