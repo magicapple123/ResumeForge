@@ -17,6 +17,7 @@ import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { APP_VERSION } from "../../config";
 import UpdateReleaseNotes from "../settings/UpdateReleaseNotes";
+import AnnouncementReminderRow from "../settings/AnnouncementSettingsCard";
 import { type InAppUpdateBridge, useDesktopUpdateState } from "./desktopUpdateBridge";
 
 export default function DesktopUpdateCard({ bridge }: { bridge: InAppUpdateBridge }) {
@@ -102,6 +103,8 @@ export default function DesktopUpdateCard({ bridge }: { bridge: InAppUpdateBridg
           title={t("update.desktop.checkFailed")}
         />
       )}
+      {/* R20：桌面安装版同样用这张卡，更新提醒开关必须跟着来，否则公告能弹却没有恢复入口。 */}
+      <AnnouncementReminderRow />
     </Card>
   );
 }
