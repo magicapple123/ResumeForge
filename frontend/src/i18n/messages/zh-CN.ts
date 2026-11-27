@@ -444,12 +444,10 @@ const zhCN = {
   "announcement.mute.action": "不再提醒",
   /** 「不再提醒」的无障碍名：点明可撤销，这是唯一的说明书。 */
   "announcement.mute": "不再提醒这类公告，可在设置里恢复",
-  /** 设置页那张卡片的标题。 */
-  "announcement.settings.title": "公告提醒",
-  /** 没有静音项时的空态。 */
-  "announcement.settings.empty": "暂时没有静音的公告提醒",
-  /** 设置页恢复按钮。 */
-  "announcement.settings.restore": "恢复提醒",
+  /** R20：「软件更新」卡里那一行开关的名字（原先是独立卡片的标题）。 */
+  "announcement.settings.title": "更新提醒",
+  /** R20：开关下面那句说明——关掉之后到底会怎样。 */
+  "announcement.settings.hint": "关掉后顶部不再出现更新提醒，随时可以在这里重新打开",
   /** 恢复后的告知：用户在设置页当场看不到公告条（hideOnPaths），所以要说"回到页面"。 */
   "toast.announcement.unmuted": "已恢复提醒，回到页面就能看到",
 

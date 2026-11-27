@@ -17,13 +17,8 @@ beforeEach(() => {
 });
 
 describe("公告队列", () => {
-  it("白名单就是四个来源（新增要显式改这里）", () => {
-    expect(ANNOUNCEMENT_CODES).toEqual([
-      "update.ready",
-      "update.downloaded",
-      "backend.degraded",
-      "dataset.error",
-    ]);
+  it("白名单就是两个更新来源（R20 删掉了没有任何触发点的两条）", () => {
+    expect(ANNOUNCEMENT_CODES).toEqual(["update.ready", "update.downloaded"]);
   });
 
   it("同 code 覆盖而不是堆两条", () => {
@@ -51,8 +46,8 @@ describe("已关闭记忆", () => {
   });
 
   it("不带代次时按 1 记", () => {
-    dismissAnnouncement("backend.degraded");
-    expect(isDismissed("backend.degraded")).toBe(true);
+    dismissAnnouncement("update.downloaded");
+    expect(isDismissed("update.downloaded")).toBe(true);
   });
 
   it("只存 code + 代次，不存正文", () => {

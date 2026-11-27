@@ -214,9 +214,9 @@ const core = {
   "announcement.update.action": "Go to updates",
   "announcement.mute.action": "Do not remind again",
   "announcement.mute": "Mute these announcements; restore reminders in Settings",
-  "announcement.settings.title": "Announcement reminders",
-  "announcement.settings.empty": "No announcement reminders are muted",
-  "announcement.settings.restore": "Restore reminders",
+  "announcement.settings.title": "Update notifications",
+  "announcement.settings.hint":
+    "When off, update reminders stop appearing at the top; turn it back on here at any time",
   "toast.announcement.unmuted": "Reminders restored; return to the page to see announcements",
 } as const;
 

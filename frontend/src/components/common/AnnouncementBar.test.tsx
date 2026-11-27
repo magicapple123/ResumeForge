@@ -37,7 +37,7 @@ const warning: Announcement = {
 };
 
 const error: Announcement = {
-  code: "dataset.error",
+  code: "update.downloaded",
   severity: "error",
   message: "当前数据集读取失败",
 };
@@ -45,7 +45,7 @@ const error: Announcement = {
 describe("选取顺序", () => {
   it("error 优先于 warning", () => {
     expect(severityRank("error")).toBeLessThan(severityRank("warning"));
-    expect(pickVisible([warning, error], "/")?.code).toBe("dataset.error");
+    expect(pickVisible([warning, error], "/")?.code).toBe("update.downloaded");
   });
 
   it("同 severity 时 priority 小者先显示", () => {

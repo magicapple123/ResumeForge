@@ -9,13 +9,15 @@
  * 判据（`AGENTS.md`：「跨页常驻 + 需用户看见并处理 + 允许先不理」三条同时满足才用公告条）：
  * 影响全站、不是一次性反馈、不挡操作。任务进度/完成通知**不属于**这里，它们走
  * `notification` 与 `utils/taskNotify.ts`。
+ *
+ * ## R20：这里原来还有 `backend.degraded` / `dataset.error`
+ *
+ * 两条都**从未被 post 过**（全仓库没有一处产生它们：后端降级走的是设置页的诊断卡与
+ * 首次失败 toast，数据集读取失败走 `ErrorState`）。留着它们的代价是可验证的：设置页
+ * 要为不存在的来源写一份"静音项名字"，而映射漏一条就会把原始 code 直接显示给用户。
+ * 确认没有触发点后删掉——真需要时再加回来，连同它的触发点一起加。
  */
-export const ANNOUNCEMENT_CODES = [
-  "update.ready",
-  "update.downloaded",
-  "backend.degraded",
-  "dataset.error",
-] as const;
+export const ANNOUNCEMENT_CODES = ["update.ready", "update.downloaded"] as const;
 
 export type AnnouncementCode = (typeof ANNOUNCEMENT_CODES)[number];
 

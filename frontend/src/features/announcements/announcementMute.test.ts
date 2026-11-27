@@ -13,8 +13,6 @@ beforeEach(() => {
   // 内存兜底也要清：模块级 Set 会跨用例留着。
   unmuteAnnouncement("update.ready");
   unmuteAnnouncement("update.downloaded");
-  unmuteAnnouncement("backend.degraded");
-  unmuteAnnouncement("dataset.error");
 });
 
 describe("静音存储", () => {
@@ -32,9 +30,9 @@ describe("静音存储", () => {
   });
 
   it("listMutedCodes 用前缀 slice 还原含点的 code", () => {
+    muteAnnouncement("update.downloaded");
     muteAnnouncement("update.ready");
-    muteAnnouncement("dataset.error");
-    expect(listMutedCodes()).toEqual(["update.ready", "dataset.error"]);
+    expect(listMutedCodes()).toEqual(["update.ready", "update.downloaded"]);
   });
 
   it("白名单外的孤儿键被忽略，也不会让读取炸掉", () => {
@@ -53,9 +51,9 @@ describe("静音存储", () => {
     const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("quota");
     });
-    expect(() => muteAnnouncement("backend.degraded")).not.toThrow();
+    expect(() => muteAnnouncement("update.ready")).not.toThrow();
     spy.mockRestore();
     // 内存里仍然生效：本会话内这条不会再来打扰。
-    expect(isMuted("backend.degraded")).toBe(true);
+    expect(isMuted("update.ready")).toBe(true);
   });
 });
