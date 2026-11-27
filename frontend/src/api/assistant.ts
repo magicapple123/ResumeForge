@@ -258,6 +258,11 @@ export function sendAssistantMessage(
     compaction_threshold_tokens?: number | null;
     job_id?: number | null;
     resume_id?: number | null;
+    /**
+     * T29：`ResumeRef` 复合引用（`internal:12` / `external:7`）。新客户端只发它；
+     * `resume_id` 保留给旧客户端与旧会话重放，后端两者都给时以本字段为准。
+     */
+    resume_ref?: string | null;
     include_profile?: boolean;
     web_search?: boolean;
     /**

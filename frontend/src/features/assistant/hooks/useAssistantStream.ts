@@ -36,7 +36,8 @@ interface Options {
   attachmentReadsRef: RefObject<number>;
   attachmentsRef: RefObject<PendingAttachment[]>;
   jobId: number | undefined;
-  resumeId: number | undefined;
+  /** T29：已选简历的复合引用（`internal:12` / `external:7`），与提醒表单同一套写法。 */
+  resumeRef: string | undefined;
   /** 发送成功后清空输入区的关联选择（F36）。 */
   clearContextRefs?: () => void;
   webSearch: boolean;
@@ -64,7 +65,7 @@ export function useAssistantStream(options: Options) {
     attachmentReadsRef,
     attachmentsRef,
     jobId,
-    resumeId,
+    resumeRef,
     clearContextRefs,
     webSearch,
     reasoningEffort,
@@ -94,7 +95,7 @@ export function useAssistantStream(options: Options) {
         attachmentsRef,
         setTouTouStatus,
         jobId,
-        resumeId,
+        resumeRef,
         contextRefs,
         clearContextRefs,
         webSearch,
@@ -120,7 +121,7 @@ export function useAssistantStream(options: Options) {
       quotedMessageId,
       reasoningEffort,
       reloadConversations,
-      resumeId,
+      resumeRef,
       setTouTouStatus,
       skillIds,
       skillRefs,
@@ -147,7 +148,7 @@ export function useAssistantStream(options: Options) {
           attachmentsRef,
           setTouTouStatus,
           jobId,
-          resumeId,
+          resumeRef,
           webSearch,
           reasoningEffort,
           surface,
@@ -168,7 +169,7 @@ export function useAssistantStream(options: Options) {
       quotedMessageId,
       reasoningEffort,
       reloadConversations,
-      resumeId,
+      resumeRef,
       setTouTouStatus,
       surface,
       webSearch,

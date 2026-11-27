@@ -101,3 +101,100 @@ def test_regenerate_replay_ignores_snapshot_keys(db_session):
     assert replay.resume_id == 9
     assert "job_title" not in replay.model_dump()
     assert "resume_title" not in replay.model_dump()
+
+
+# ===== T29：`resume_ref` 复合引用 =====
+
+
+def _upload_external(client, content: bytes, filename: str) -> int:
+    """真的上传一份外部简历（落盘 + 提取正文），返回 id。"""
+    response = client.post(
+        "/api/external-resumes",
+        files={"file": (filename, content, "application/octet-stream")},
+        data={"name": ""},
+    )
+    assert response.status_code == 201, response.text
+    return int(response.json()["id"])
+
+
+def test_internal_resume_ref_matches_the_id_channel(db_session):
+    """`resume_ref=internal:N` 与只给 `resume_id=N` 得到同一份上下文与快照。"""
+    resume = _seed_resume(db_session)
+    by_id = load_local_context(
+        db_session, AssistantMessageCreate(content="看看这份。", resume_id=resume.id)
+    )
+    by_ref = load_local_context(
+        db_session,
+        AssistantMessageCreate(content="看看这份。", resume_ref=f"internal:{resume.id}"),
+    )
+
+    assert by_ref[0][0] == by_id[0][0]
+    assert by_ref[1]["resume_id"] == resume.id
+    assert by_ref[1]["resume_ref"] == f"internal:{resume.id}"
+    assert by_ref[1]["resume_kind"] == "internal"
+    assert by_ref[1]["resume_title"] == resume.title
+
+
+def test_external_resume_ref_gives_text_not_a_structured_document(client, db_session):
+    external_id = _upload_external(client, "张三\n六年后端经验".encode(), "外部简历.txt")
+
+    blocks, metadata = load_local_context(
+        db_session, AssistantMessageCreate(content="分析下这份。", resume_ref=f"external:{external_id}")
+    )
+
+    assert metadata["resume_ref"] == f"external:{external_id}"
+    assert metadata["resume_kind"] == "external"
+    # 外部简历的 id 绝不写进 resume_id：两张表 id 会撞号。
+    assert metadata["resume_id"] is None
+    assert "六年后端经验" in blocks[0]
+
+
+def test_external_resume_without_text_layer_gives_reason_instead_of_empty_analysis(
+    client, db_session
+):
+    """扫描件：不能塞一段空正文让模型瞎分析，要把「为什么 + 怎么办」交给它。"""
+    from tests.test_document_text import build_pdf
+
+    external_id = _upload_external(client, build_pdf(blank=True), "扫描件.pdf")
+
+    blocks, metadata = load_local_context(
+        db_session, AssistantMessageCreate(content="分析下这份。", resume_ref=f"external:{external_id}")
+    )
+
+    assert metadata["resume_kind"] == "external"
+    assert '"available": false' in blocks[0]
+    assert "文字层" in blocks[0] and "怎么办" in blocks[0]
+
+
+def test_resume_ref_wins_over_resume_id(db_session):
+    """两个都给时以 `resume_ref` 为准：旧字段不能把用户新选的那一份顶掉。"""
+    stale = _seed_resume(db_session, title="旧的那一份")
+    chosen = _seed_resume(db_session, title="刚刚选的那一份")
+
+    _blocks, metadata = load_local_context(
+        db_session,
+        AssistantMessageCreate(
+            content="分析下这份。",
+            resume_id=stale.id,
+            resume_ref=f"internal:{chosen.id}",
+        ),
+    )
+
+    assert metadata["resume_id"] == chosen.id
+    assert metadata["resume_title"] == "刚刚选的那一份"
+    assert metadata["resume_ref"] == f"internal:{chosen.id}"
+
+
+@pytest.mark.parametrize(
+    ("resume_ref", "status"),
+    [("internal:987654", 404), ("external:987654", 404), ("nonsense", 422), ("internal:0", 422)],
+)
+def test_bad_resume_ref_fails_loudly_instead_of_falling_back(db_session, resume_ref, status):
+    """写错 / 已删 → 4xx；**不静默退回 `resume_id`**（那会让用户以为用的是新的那份）。"""
+    resume = _seed_resume(db_session)
+    payload = AssistantMessageCreate(content="分析下这份。", resume_id=resume.id, resume_ref=resume_ref)
+
+    with pytest.raises(ValueError) as error:
+        load_local_context(db_session, payload)
+
+    assert getattr(error.value, "status_code", None) == status

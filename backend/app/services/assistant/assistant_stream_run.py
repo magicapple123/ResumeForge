@@ -123,6 +123,10 @@ async def _run_rounds(run: StreamRun) -> AsyncGenerator[str, None]:
             "user_message_id": run.user_message_id,
             "assistant_message_id": run.assistant_message_id,
             "conversation_title": run.generated_title,
+            # T29：回显**实际解析到**的简历引用（用户可能同时发了 `resume_id` 与
+            # `resume_ref`，也可能 ref 是旧写法 `r:12`）——客户端据此显示/校正 chip，
+            # 不必自己再猜一次"我发出去的到底指了哪一份"。没选简历时是 None。
+            "resume_ref": run.metadata.get("resume_ref") or None,
         }
     )
     # 历史与当前消息各算一次、两处复用：拼进 ``messages`` 的内容与「对话消息」桶

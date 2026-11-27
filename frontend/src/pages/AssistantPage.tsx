@@ -59,7 +59,7 @@ export default function AssistantPage({
   // 只预填、**不自动发送**：用户能改完再点发送，避免一个链接就替用户发起一次模型调用。
   const [content, setContent] = useState(() => (searchParams.get("ask") ?? "").slice(0, 4000));
   // F36：岗位/简历关联的状态、发送后清空、切会话清空与引用片跳转都由这个 hook 统一持有。
-  const { jobId, resumeId, setJobId, setResumeId, clearContextRefs, openReference } =
+  const { jobId, resumeRef, setJobId, setResumeRef, clearContextRefs, openReference } =
     useAssistantContextSelection(searchParams);
   // 允许联网：惰性读上次的选择（首帧就是对的，不会先闪一下"关"再变"开"）。
   const [webSearch, setWebSearch] = useState(readStoredWebSearch);
@@ -134,7 +134,7 @@ export default function AssistantPage({
     quotedMessageId: quoted?.id ?? null,
     clearQuote,
     jobId,
-    resumeId,
+    resumeRef,
     clearContextRefs,
     webSearch,
     reasoningEffort,
@@ -403,7 +403,7 @@ export default function AssistantPage({
           sending={sending}
           attachmentReads={attachmentReads}
           jobId={jobId}
-          resumeId={resumeId}
+          resumeRef={resumeRef}
           webSearch={webSearch}
           reasoningEffort={reasoningEffort}
           skillCatalog={skillCatalog}
@@ -413,7 +413,7 @@ export default function AssistantPage({
           togglingSkillId={togglingSkillId}
           onContentChange={setContent}
           onJobChange={setJobId}
-          onResumeChange={setResumeId}
+          onResumeRefChange={setResumeRef}
           onWebSearchChange={setWebSearch}
           onReasoningEffortChange={setReasoningEffort}
           onToggleSkill={(skill, enabled) => void handleToggleSkill(skill, enabled)}

@@ -67,4 +67,18 @@ describe("message references (F36)", () => {
     fireEvent.keyDown(resumeChip, { key: "Enter" });
     expect(onOpenReference).toHaveBeenCalledWith("resume", 9);
   });
+
+  it("renders an external resume kept only in `resume_ref` and routes it to the external page", () => {
+    const onOpenReference = vi.fn();
+    render(
+      <MessageReferences
+        refs={{ resume_ref: "external:7", resume_kind: "external", resume_title: "Uploaded PDF" }}
+        onOpenReference={onOpenReference}
+      />,
+    );
+    expect(screen.getByText("Uploaded PDF")).toBeTruthy();
+    fireEvent.click(screen.getByRole("link"));
+    // 外部简历的 id 不能送进内部简历详情（两张表 id 会撞号）。
+    expect(onOpenReference).toHaveBeenCalledWith("external_resume", 7);
+  });
 });

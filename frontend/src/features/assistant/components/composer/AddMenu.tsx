@@ -43,7 +43,8 @@ import { ASSISTANT_ACCEPT, MAX_ATTACHMENT_COUNT } from "../../assistantUtils";
 import { layer } from "../../../../theme/tokens";
 import { t } from "../../../../i18n";
 import { useLocale } from "../../../../i18n/i18nContext";
-import { useJobSearchSelect, useResumeSearchSelect } from "../../../../hooks/remoteSearchOptions";
+import { useJobSearchSelect } from "../../../../hooks/remoteSearchOptions";
+import { useResumeRefSelect } from "../../../../hooks/useResumeRefSelect";
 import { TOU_TOU_POPUP_EXEMPT_CLASS } from "../../../tou-tou/touTouCardGuards";
 import { useTouTouPopupExemption } from "../../../tou-tou/touTouPopupExemption";
 import { SkillPicker } from "./SkillChips";
@@ -92,14 +93,18 @@ export interface AddMenuProps {
   /** 已选附件数（到上限就不能再加）。 */
   attachmentsCount: number;
   jobId: number | undefined;
-  resumeId: number | undefined;
+  /**
+   * T29：已选简历的复合引用（`internal:12` / `external:7`）。与提醒表单同一个
+   * `useResumeRefSelect`，「内部简历 / 外部简历」两组一起给。
+   */
+  resumeRef: string | undefined;
   skillCatalog: AssistantSkill[];
   selectedSkills: ConversationSkillItem[];
   skillBudget: ConversationSkillBudget | null;
   skillsLoaded: boolean;
   togglingSkillId: number | null;
   onJobChange: (value: number | undefined) => void;
-  onResumeChange: (value: number | undefined) => void;
+  onResumeRefChange: (value: string | undefined) => void;
   onToggleSkill: (skill: AssistantSkill, enabled: boolean) => void;
   onManageSkills: () => void;
   onAddAttachment: (file: File) => void;
@@ -112,14 +117,14 @@ export default function AddMenu({
   attachmentReads,
   attachmentsCount,
   jobId,
-  resumeId,
+  resumeRef,
   skillCatalog,
   selectedSkills,
   skillBudget,
   skillsLoaded,
   togglingSkillId,
   onJobChange,
-  onResumeChange,
+  onResumeRefChange,
   onToggleSkill,
   onManageSkills,
   onAddAttachment,
@@ -130,7 +135,8 @@ export default function AddMenu({
   const providerPopupExempt = useTouTouPopupExemption();
   const popupExempt = exemptPopups ?? providerPopupExempt;
   const jobSelect = useJobSearchSelect();
-  const resumeSelect = useResumeSearchSelect();
+  // T29：与提醒表单同一个选择器（内部 / 外部并行查、分组、外部项带格式徽标）。
+  const resumeSelect = useResumeRefSelect();
   const [open, setOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const {
@@ -165,9 +171,9 @@ export default function AddMenu({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
   useEffect(() => {
-    void resumeSelect.ensure(resumeId);
+    void resumeSelect.ensure(resumeRef);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumeId]);
+  }, [resumeRef]);
 
   // Esc 关闭：面板挂在 body 上，键盘事件不经过触发器，所以监听在 document 上。
   // 二级开着时的 Esc 走二级自己的 React 处理器（带 `stopPropagation`）——antd 的 Dropdown
@@ -291,8 +297,8 @@ export default function AddMenu({
           className="composer-add-select"
           aria-label={t("assistantComposer.aria.resumeSelect")}
           placeholder={t("assistantComposer.placeholder.resume")}
-          value={resumeId}
-          onChange={onResumeChange}
+          value={resumeRef}
+          onChange={onResumeRefChange}
           {...resumeSelect.selectProps}
           // T11：同上（简历下拉）。
           classNames={popupExemptClassNames}

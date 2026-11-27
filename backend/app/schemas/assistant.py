@@ -101,6 +101,11 @@ class AssistantMessageCreate(BaseModel):
     content: str = Field(default="", max_length=MAX_ASSISTANT_MESSAGE_CHARS)
     job_id: int | None = Field(default=None, ge=1)
     resume_id: int | None = Field(default=None, ge=1)
+    # T29：`ResumeRef` 复合引用（``internal:12`` / ``external:7``），与提醒表单、助手只读
+    # 工具同一套写法。**纯加法**：``resume_id`` 保留给旧客户端与旧会话（历史消息快照里
+    # 还是单表 id），两个都给了以本字段为准。上限 32 只挡超长垃圾串：合法写法最长
+    # ``external:2147483647``（18 字符），解析失败的判定交给 ``services.resume_ref``。
+    resume_ref: str | None = Field(default=None, max_length=32)
     # 保留字段是为了兼容旧版客户端，但现在助手默认读取本地完整个人资料，前端不再提供
     # 关闭开关。无论旧客户端传 false 还是新客户端省略，都在校验后归一为 True。
     include_profile: bool = True

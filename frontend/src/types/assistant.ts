@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /** AI 求职助手会话、消息和流式事件类型。 */
 
+import type { ResumeKind } from "./resumeRef";
+
 export interface AssistantConversationBrief {
   id: number;
   title: string;
@@ -218,12 +220,27 @@ export interface AssistantMessageReferences {
   job_id?: number | null;
   job_title?: string;
   job_company?: string;
+  /**
+   * **只有内部简历**才会填这里（T29）。
+   *
+   * 外部简历的 id 绝不写进 `resume_id`：`resume_record` 与 `external_resume` 的 id 各自
+   * 从 1 开始、会撞号，拿它去开详情会打开别人的记录。外部简历看 `resume_ref` / `resume_kind`。
+   */
   resume_id?: number | null;
+  /** 复合引用（`internal:12` / `external:7`）；T29 之后新消息一律带它。 */
+  resume_ref?: string;
+  /** 复合引用指向哪张表；旧消息没有这个字段（那时只可能是内部简历）。 */
+  resume_kind?: ResumeKind;
   resume_title?: string;
 }
 
-/** 引用片点击后的跳转目标。 */
-export type AssistantReferenceKind = "job" | "resume";
+/**
+ * 引用片点击后的跳转目标。
+ *
+ * T29：外部简历（`external:7`）与内部简历开的是**两个**详情页（`/resumes/external?resume=7`
+ * 与 `/resumes?resume_id=7`），所以渠道必须分开——拿外部 id 去开内部详情会打开别人的简历。
+ */
+export type AssistantReferenceKind = "job" | "resume" | "external_resume";
 
 /**
  * 一条用户消息发送时勾选的技能（T24，消息级）。气泡前缀渲染为「使用 X」；
@@ -446,6 +463,13 @@ export type AssistantStreamEvent =
       user_message_id: number;
       assistant_message_id: number;
       conversation_title: string;
+      /**
+       * T29：后端**实际解析到**的简历复合引用（`internal:12` / `external:7`）。
+       *
+       * 用户可能同时发了 `resume_id` 与 `resume_ref`（ref 优先），也可能发的是旧写法
+       * `r:12`——以这个回显为准，客户端不要自己再猜。没选简历时是 `null` / 缺省。
+       */
+      resume_ref?: string | null;
     }
   | { type: "progress"; message: string }
   | {

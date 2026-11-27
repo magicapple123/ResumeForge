@@ -13,9 +13,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const jobMocks = vi.hoisted(() => ({ listJobs: vi.fn(), getJob: vi.fn() }));
 const resumeMocks = vi.hoisted(() => ({ listResumes: vi.fn(), getResume: vi.fn() }));
+// T29：助手改用统一的「内部 + 外部」选择器，外部那一路也要给一个空结果（否则会去打真网络）。
+const externalMocks = vi.hoisted(() => ({
+  listExternalResumes: vi.fn(),
+  getExternalResume: vi.fn(),
+}));
 
 vi.mock("../../../../api/jobs", () => jobMocks);
 vi.mock("../../../../api/resumes", () => resumeMocks);
+vi.mock("../../../../api/externalResumes", () => externalMocks);
 
 import AddMenu from "./AddMenu";
 import type { AddMenuProps } from "./AddMenu";
@@ -31,14 +37,14 @@ function renderMenu(overrides: Partial<AddMenuProps> = {}) {
     attachmentReads: 0,
     attachmentsCount: 0,
     jobId: undefined,
-    resumeId: undefined,
+    resumeRef: undefined,
     skillCatalog: [],
     selectedSkills: [],
     skillBudget: null,
     skillsLoaded: true,
     togglingSkillId: null,
     onJobChange: vi.fn(),
-    onResumeChange: vi.fn(),
+    onResumeRefChange: vi.fn(),
     onToggleSkill: vi.fn(),
     onManageSkills: vi.fn(),
     onAddAttachment: vi.fn(),
@@ -69,6 +75,12 @@ beforeEach(() => {
   jobMocks.getJob.mockResolvedValue(JOB);
   resumeMocks.listResumes.mockResolvedValue({ items: [RESUME], total: 1, page: 1, page_size: 50 });
   resumeMocks.getResume.mockResolvedValue(RESUME);
+  externalMocks.listExternalResumes.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    page_size: 50,
+  });
 });
 
 afterEach(() => {
@@ -147,7 +159,7 @@ describe("AddMenu 四组内容", () => {
     expect(screen.getByText(t("composerAddMenu.action.attach"))).toBeInTheDocument();
   });
 
-  it("选简历后回传 id", async () => {
+  it("选简历后回传复合引用", async () => {
     const { props } = renderMenu();
     fireEvent.click(trigger());
 
@@ -157,7 +169,33 @@ describe("AddMenu 四组内容", () => {
     fireEvent.mouseDown(combobox);
     fireEvent.click(await screen.findByText(RESUME.title));
 
-    expect(props.onResumeChange).toHaveBeenCalledWith(RESUME.id, expect.anything());
+    // T29：值域是复合串，不再是裸数字（两张表的 id 会撞号）。
+    expect(props.onResumeRefChange).toHaveBeenCalledWith(
+      `internal:${RESUME.id}`,
+      expect.anything(),
+    );
+  });
+
+  it("外部简历单独一组，选中回传 `external:<id>`", async () => {
+    externalMocks.listExternalResumes.mockResolvedValue({
+      items: [{ id: 9, name: "Uploaded CV", mime: "application/pdf", has_text: true }],
+      total: 1,
+      page: 1,
+      page_size: 50,
+    });
+    const { props } = renderMenu();
+    fireEvent.click(trigger());
+
+    const combobox = await screen.findByRole("combobox", {
+      name: t("assistantComposer.aria.resumeSelect"),
+    });
+    fireEvent.mouseDown(combobox);
+    // 两组都要在：只列内部简历就等于"外部简历在助手里选不到"。
+    expect(await screen.findByText(t("trackerForm.resume.group.internal"))).toBeInTheDocument();
+    expect(await screen.findByText(t("trackerForm.resume.group.external"))).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByText("Uploaded CV"));
+    expect(props.onResumeRefChange).toHaveBeenCalledWith("external:9", expect.anything());
   });
 
   it("已选的岗位显示标题而不是 #id（深链带入的 id 靠 ensure 回查）", async () => {

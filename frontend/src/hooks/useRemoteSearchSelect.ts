@@ -24,9 +24,10 @@
  *   `labelKey` + 参数），渲染时再 `t()` 生成展示文案。把已求值的文案存进 state 的话，
  *   切语言后它会一直停在旧语种——`useLocale()` 让本 hook 在切语言时重新渲染。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { t, type MessageKey, type MessageParams } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import { useDebouncedRemoteSearch, remoteSearchEmptyText } from "./useDebouncedRemoteSearch";
 
 export interface RemoteSelectOption {
   value: number;
@@ -59,9 +60,8 @@ export function useRemoteSearchSelect({ fetchOptions, fetchById, debounceMs = 30
   // 订阅语言变化：切语言后 `labelKey` 与空态文案都要重新求值（模块级 t() 不自带订阅）。
   const locale = useLocale();
   const [storedOptions, setStoredOptions] = useState<RemoteSelectOption[]>([]);
-  const [loading, setLoading] = useState(false);
-  const requestSeqRef = useRef(0);
-  const timerRef = useRef<number | null>(null);
+  // 防抖 / 请求序号 / loading 与「关联简历」那个下拉共用一份实现（T29 收敛）。
+  const { loading, begin, isCurrent, settle, schedule } = useDebouncedRemoteSearch(debounceMs);
   const ensureCacheRef = useRef(new Map<number, RemoteSelectOption>());
 
   // 缓存里是原始选项，展示文案到这里才生成；语言进依赖，否则切语言后不会重算。
@@ -71,38 +71,27 @@ export function useRemoteSearchSelect({ fetchOptions, fetchById, debounceMs = 30
     return storedOptions.map(resolveLabel);
   }, [storedOptions, locale]);
 
-  // 组件卸载时清掉还没触发的防抖计时器，避免对已卸载组件 setState。
-  useEffect(() => {
-    return () => {
-      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    };
-  }, []);
-
   const runSearch = useCallback(
     (keyword: string) => {
-      const requestId = ++requestSeqRef.current;
-      setLoading(true);
+      const requestId = begin();
       void fetchOptions(keyword)
         .then((next) => {
-          if (requestId !== requestSeqRef.current) return;
+          if (!isCurrent(requestId)) return;
           setStoredOptions(next);
-          setLoading(false);
+          settle();
         })
         .catch(() => {
-          if (requestId !== requestSeqRef.current) return;
+          if (!isCurrent(requestId)) return;
           setStoredOptions([]);
-          setLoading(false);
+          settle();
         });
     },
-    [fetchOptions],
+    [begin, fetchOptions, isCurrent, settle],
   );
 
   const onSearch = useCallback(
-    (value: string) => {
-      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-      timerRef.current = window.setTimeout(() => runSearch(value.trim()), debounceMs);
-    },
-    [debounceMs, runSearch],
+    (value: string) => schedule(value, runSearch),
+    [runSearch, schedule],
   );
 
   /** 重新拉当前关键词的选项（打开弹窗/面板时调用一次做初始加载）。 */
@@ -147,9 +136,7 @@ export function useRemoteSearchSelect({ fetchOptions, fetchById, debounceMs = 30
     loading,
     options,
     // 空态文案在渲染期取：本 hook 订阅了语言，切语言后会重新求值。
-    notFoundContent: loading
-      ? t("hooksUi.remoteSearch.searching")
-      : t("hooksUi.remoteSearch.empty"),
+    notFoundContent: remoteSearchEmptyText(loading),
   } as const;
 
   return { selectProps, options, ensure, reload };

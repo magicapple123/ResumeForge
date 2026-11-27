@@ -25,7 +25,23 @@ describe("assistant context selection (F36)", () => {
       { wrapper },
     );
     expect(result.current.jobId).toBe(7);
-    expect(result.current.resumeId).toBe(9);
+    expect(result.current.resumeRef).toBe("internal:9");
+  });
+
+  it("accepts the composite deep link and keeps external resumes external", () => {
+    const { result } = renderHook(
+      () => useAssistantContextSelection(new URLSearchParams("resume_ref=external:7")),
+      { wrapper },
+    );
+    expect(result.current.resumeRef).toBe("external:7");
+  });
+
+  it("drops a malformed resume_ref instead of half-selecting it", () => {
+    const { result } = renderHook(
+      () => useAssistantContextSelection(new URLSearchParams("resume_ref=external:0")),
+      { wrapper },
+    );
+    expect(result.current.resumeRef).toBeUndefined();
   });
 
   it("ignores invalid ids instead of selecting #0", () => {
@@ -43,7 +59,7 @@ describe("assistant context selection (F36)", () => {
     );
     act(() => result.current.clearContextRefs());
     expect(result.current.jobId).toBeUndefined();
-    expect(result.current.resumeId).toBeUndefined();
+    expect(result.current.resumeRef).toBeUndefined();
   });
 
   it("clears before running the original sidebar action", () => {

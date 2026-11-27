@@ -61,7 +61,8 @@ interface Props {
   sending: boolean;
   attachmentReads: number;
   jobId: number | undefined;
-  resumeId: number | undefined;
+  /** T29：已选简历的复合引用（`internal:12` / `external:7`）。 */
+  resumeRef: string | undefined;
   webSearch: boolean;
   reasoningEffort: ReasoningEffort;
   /** 技能库（菜单候选）：新建/导入技能后由页面重挂载刷新。 */
@@ -74,7 +75,7 @@ interface Props {
   togglingSkillId: number | null;
   onContentChange: (value: string) => void;
   onJobChange: (value: number | undefined) => void;
-  onResumeChange: (value: number | undefined) => void;
+  onResumeRefChange: (value: string | undefined) => void;
   onWebSearchChange: (value: boolean) => void;
   onReasoningEffortChange: (value: ReasoningEffort) => void;
   onToggleSkill: (skill: AssistantSkill, enabled: boolean) => void;
@@ -110,7 +111,7 @@ export default function AssistantComposer({
   sending,
   attachmentReads,
   jobId,
-  resumeId,
+  resumeRef,
   webSearch,
   reasoningEffort,
   skillCatalog,
@@ -120,7 +121,7 @@ export default function AssistantComposer({
   togglingSkillId,
   onContentChange,
   onJobChange,
-  onResumeChange,
+  onResumeRefChange,
   onWebSearchChange,
   onReasoningEffortChange,
   onToggleSkill,
@@ -143,7 +144,7 @@ export default function AssistantComposer({
   const permission = useAssistantPermission(conversationId ?? null);
   // 岗位/简历的展示口径与「本轮引用」快照（F36 一处实现）：发送时随消息带上，
   // 发送后页面清空选择，乐观气泡仍能显示这段引用。
-  const { jobLabel, resumeLabel, refs: contextRefs } = useContextLabels(jobId, resumeId);
+  const { jobLabel, resumeLabel, refs: contextRefs } = useContextLabels(jobId, resumeRef);
   const textAreaRef = useRef<ComposerTextAreaRef | null>(null);
   // 一次打开只聚焦一次：`sending` 变化会让下面的 effect 重跑，不能变成"每轮回复结束
   // 都把焦点从用户手里抢回输入框"。
@@ -193,11 +194,11 @@ export default function AssistantComposer({
         {!compact && (
           <ContextChips
             jobId={jobId}
-            resumeId={resumeId}
+            resumeRef={resumeRef}
             jobLabel={jobLabel}
             resumeLabel={resumeLabel}
             onJobChange={onJobChange}
-            onResumeChange={onResumeChange}
+            onResumeRefChange={onResumeRefChange}
           />
         )}
         {/* 对话技能 chip 行（T14）：只在已选时出现（空态入口同样收进 `+`）。 */}
@@ -305,14 +306,14 @@ export default function AssistantComposer({
             attachmentReads,
             attachmentsCount: attachments.length,
             jobId,
-            resumeId,
+            resumeRef,
             skillCatalog,
             selectedSkills,
             skillBudget,
             skillsLoaded,
             togglingSkillId,
             onJobChange,
-            onResumeChange,
+            onResumeRefChange,
             onToggleSkill,
             onManageSkills,
             onAddAttachment,

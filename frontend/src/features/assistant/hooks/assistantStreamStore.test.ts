@@ -43,7 +43,7 @@ function sendOptions(
     attachmentsRef: { current: [] },
     setTouTouStatus: vi.fn(),
     jobId: undefined,
-    resumeId: undefined,
+    resumeRef: undefined,
     webSearch: false,
     reasoningEffort: "",
     surface: "page",
@@ -145,6 +145,19 @@ describe("请求体两轴（四档解算）", () => {
 });
 
 describe("transient context request wiring", () => {
+  it("sends the selected resume as `resume_ref` and never as `resume_id`", async () => {
+    const payload = await sendAndGetPayload({ resumeRef: "external:7" });
+    // T29：复合串只在 `resume_ref` 里流动——两张表的 id 会撞号，拆成 `resume_id` 发出去
+    // 会让后端去内部简历表里找第 7 份（别人的记录）。
+    expect(payload.resume_ref).toBe("external:7");
+    expect(payload).not.toHaveProperty("resume_id");
+  });
+
+  it("sends an explicit null when nothing is selected", async () => {
+    const payload = await sendAndGetPayload();
+    expect(payload.resume_ref).toBeNull();
+  });
+
   it("sends A's threshold and leaves B on the global default", async () => {
     setConversationThreshold(CONVERSATION_ID, 200_000);
     const payload = await sendAndGetPayload();

@@ -19,25 +19,26 @@ import { useLocale } from "../../../../i18n/i18nContext";
 
 interface Props {
   jobId: number | undefined;
-  resumeId: number | undefined;
+  /** T29：简历用复合引用（`internal:12` / `external:7`），空 = 没选。 */
+  resumeRef: string | undefined;
   jobLabel: string;
   resumeLabel: string;
   onJobChange: (value: number | undefined) => void;
-  onResumeChange: (value: number | undefined) => void;
+  onResumeRefChange: (value: string | undefined) => void;
 }
 
 export default function ContextChips({
   jobId,
-  resumeId,
+  resumeRef,
   jobLabel,
   resumeLabel,
   onJobChange,
-  onResumeChange,
+  onResumeRefChange,
 }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化。
   useLocale();
 
-  if (jobId == null && resumeId == null) return null;
+  if (jobId == null && resumeRef == null) return null;
 
   return (
     <div className="assistant-context-chips">
@@ -54,7 +55,7 @@ export default function ContextChips({
           />
         </Tag>
       )}
-      {resumeId != null && (
+      {resumeRef != null && (
         <Tag className="assistant-context-chip" icon={<LinkOutlined />}>
           <span className="assistant-context-chip-text">{resumeLabel}</span>
           <Button
@@ -63,7 +64,7 @@ export default function ContextChips({
             className="assistant-context-chip-close"
             aria-label={t("assistantComposer.context.removeResume")}
             icon={<CloseOutlined />}
-            onClick={() => onResumeChange(undefined)}
+            onClick={() => onResumeRefChange(undefined)}
           />
         </Tag>
       )}

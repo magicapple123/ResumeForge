@@ -7,11 +7,16 @@
  * - 只有传了 `onOpenReference` 才可点：浮动/紧凑形态与单测不传它就退化成只读标签，
  *   不必为了"能点"改一遍所有调用方签名；
  * - 一个引用都没有时返回 `null`——空 div 会在气泡里多出一截间距。
+ *
+ * T29：外部简历的 id **不写进** `resume_id`（两张表 id 会撞号），新消息把它放在
+ * `resume_ref`（`external:7`）。所以简历片按 `resume_id` → `resume_ref` 的顺序取一个：
+ * 老消息只有前者，新消息（外部简历）只有后者；两个都在时以 `resume_id` 为准（同一份）。
  */
 import { FileTextOutlined, LinkOutlined } from "@ant-design/icons";
 import { Tag, Tooltip } from "antd";
 import type { ReactNode } from "react";
 import type { AssistantMessageReferences, AssistantReferenceKind } from "../../../types";
+import { decodeResumeRef } from "../../../types/resumeRef";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 
@@ -61,6 +66,18 @@ export default function MessageReferences({ refs, onOpenReference }: Props) {
       label: resumeText(refs, refs.resume_id),
       icon: <FileTextOutlined />,
     });
+  } else {
+    // T29：外部简历只带 `resume_ref`（`external:7`）。解不出来就当没选——脏值不该
+    // 在气泡里显示成一枚点不动的坏标签。
+    const ref = decodeResumeRef(refs.resume_ref);
+    if (ref) {
+      items.push({
+        kind: ref.kind === "external" ? "external_resume" : "resume",
+        id: ref.id,
+        label: resumeText(refs, ref.id),
+        icon: <FileTextOutlined />,
+      });
+    }
   }
   if (items.length === 0) return null;
 

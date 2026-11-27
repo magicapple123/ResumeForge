@@ -77,7 +77,12 @@ export interface SendAssistantStreamOptions extends AssistantStreamInstance {
   attachmentsRef: RefObject<PendingAttachment[]>;
   setTouTouStatus: (status: TouTouStatus) => void;
   jobId: number | undefined;
-  resumeId: number | undefined;
+  /**
+   * T29：已选简历的**复合引用**（`internal:12` / `external:7`）。助手与提醒表单用同一套
+   * 写法、同一个选择器；发请求时原样进 `resume_ref`（复合串只在 UI 与这个字段里流动，
+   * 落库仍是两条互斥的单表 id）。
+   */
+  resumeRef: string | undefined;
   /** 本轮引用的岗位/简历快照（F36，乐观气泡用）。 */
   contextRefs?: AssistantMessageReferences;
   /** F36：发送成功后清空关联选择（拿到 conversationId 之后才调，失败不能清）。 */
@@ -295,7 +300,7 @@ export async function sendAssistantStreamMessage(
         content: trimmedText,
         compaction_threshold_tokens: thresholdTokens,
         job_id: options.jobId,
-        resume_id: options.resumeId,
+        resume_ref: options.resumeRef ?? null,
         // 后端保留这个字段只是兼容旧客户端；助手现在始终读取本地个人资料。
         include_profile: true,
         web_search: options.webSearch,

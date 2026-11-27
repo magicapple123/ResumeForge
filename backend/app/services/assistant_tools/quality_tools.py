@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from ...models.claim import ClaimRecord
 from ...models.job import Job
+from ...models.resume import ResumeRecord
 from ...schemas.job import JobOut
 from ...schemas.preflight import PreflightRequest, PreflightSnapshot
 from ...schemas.versions import VersionCompareOut
@@ -31,6 +32,7 @@ from ..resume.document_versions import VersionNotFound, compare_versions
 from ..resume.preflight import run_preflight
 from ..resume.resume_delivery import canonical_content_sha256
 from ..resume.resume_risk_rules import scan_local
+from ..resume_ref import ResolvedResume, resolve_resume_ref
 from ._shared import MAX_JOB_RESULT_CHARS, _trim, int_argument
 from ._types import ToolResult
 from .document_support import (
@@ -79,10 +81,53 @@ def _preflight_snapshot(db: Session, record, document: dict, settings: dict) -> 
     )
 
 
+def _ref_failure_result(resolved: ResolvedResume, *, tool_label: str) -> ToolResult:
+    """复合引用解析不出来时的统一结果（T29）。
+
+    与"工具失败"分开：这不是系统故障，而是**这份简历确实给不了**——把
+    ``resolve_resume_ref`` 的「为什么没有 + 怎么办」原样交给用户（模型也据此改口，
+    不会编一句"简历内容为空"）。落点按来源选：外部简历没有独立路由，只能回列表。
+    """
+    payload = {
+        "resume_ref": resolved.ref,
+        "kind": resolved.kind,
+        "id": resolved.id,
+        "name": resolved.name,
+        "available": False,
+        "reason": resolved.reason,
+        "reading": resolved.reason,
+    }
+    return ToolResult(
+        text=json.dumps(payload, ensure_ascii=False, default=str)[:MAX_RESULT_CHARS],
+        summary=_clip(f"{tool_label}没做成：{resolved.reason}", 120),
+        link="/resumes",
+    )
+
+
 def _tool_run_resume_quality_check(db: Session, arguments: dict) -> ToolResult:
-    """简历质量检测（本地规则五类，不调模型、不改正文）。"""
-    record = record_or_error(db, arguments)
-    document = document_for(db, record)
+    """简历质量检测（本地规则五类，不调模型、不改正文）。
+
+    ``resume_ref``（T29）：``internal:12`` / ``external:7`` 复合引用，与提醒表单、提醒卡片
+    用的是同一套写法。内部简历走同一条文档规则；外部简历没有结构化文档，
+    ``resolve_resume_ref`` 会说明「为什么做不了 + 怎么办」，这里原样转述——
+    **不降级成"外部简历没有发现问题"**，那是最坏的一种谎。
+    """
+    ref_value = str(arguments.get("resume_ref") or "").strip()
+    resolved: ResolvedResume | None = None
+    if ref_value:
+        resolved = resolve_resume_ref(db, ref_value, "document")
+        if not resolved.ok:
+            return _ref_failure_result(resolved, tool_label="质量检测")
+        record = trash.get_live(db, ResumeRecord, resolved.id)
+        if record is None:
+            # 刚解析到就消失（并发删除）：按"不存在"如实说，不静默换成别的简历。
+            raise ValueError(f"简历 {resolved.id} 不存在或已被删除")
+        document = resolved.document if resolved.document is not None else document_for(db, record)
+    else:
+        if arguments.get("resume_id") is None:
+            raise ValueError("需要提供 resume_id 或 resume_ref（可以先用 list_resumes 查）")
+        record = record_or_error(db, arguments)
+        document = document_for(db, record)
     claims = db.query(ClaimRecord).filter(trash.live_only(ClaimRecord)).all()
     notes: list[str] = []
     # 只调本地确定性规则；远端增强编排 scan_resume_risks 绝不在这里出现。
@@ -93,6 +138,7 @@ def _tool_run_resume_quality_check(db: Session, arguments: dict) -> ToolResult:
     top = points[:MAX_ITEMS]
     payload = {
         "resume_id": record.id,
+        "resume_ref": resolved.ref if resolved is not None else f"internal:{record.id}",
         "title": record.title,
         "revision": int(record.revision or 0),
         "total": len(points),
