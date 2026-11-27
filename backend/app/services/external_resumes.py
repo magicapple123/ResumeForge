@@ -23,7 +23,7 @@ import hashlib
 import logging
 import mimetypes
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
@@ -238,7 +238,7 @@ def create_external_resume(
 #    ASCII 名全排在中文前、中文再按码点，用户看到的顺序与"按名字排"无关；
 # 3. 岗位名 ``coalesce`` 到空串：外连接后没有岗位的行是 ``NULL``，直接排序时位置取决于
 #    ASC/DESC，``coalesce`` 让"没有岗位"与"岗位名为空"归到同一档。
-EXTERNAL_RESUME_SORT_ORDERS = {
+EXTERNAL_RESUME_SORT_ORDERS: dict[str, tuple[Any, ...]] = {
     "name_asc": (ExternalResume.name.collate("rf_pinyin").asc(), ExternalResume.id.asc()),
     "name_desc": (ExternalResume.name.collate("rf_pinyin").desc(), ExternalResume.id.desc()),
     "job_title_asc": (
@@ -270,10 +270,15 @@ DEFAULT_EXTERNAL_SORT_KEY: ExternalResumeSortKey = "created_at"
 DEFAULT_EXTERNAL_SORT_ORDER: ExternalResumeSortOrder = "desc"
 
 
-def _sort_order_by(
-    sort: ExternalResumeSortKey, order: ExternalResumeSortOrder
-) -> tuple[object, ...]:
-    """``(sort, order)`` → ORDER BY 子句；未知组合回落到默认（不抛，交给接口层校验）。"""
+def _sort_order_by(sort: ExternalResumeSortKey, order: ExternalResumeSortOrder) -> tuple[Any, ...]:
+    """``(sort, order)`` → ORDER BY 子句；未知组合回落到默认（不抛，交给接口层校验）。
+
+    元素是 SQLAlchemy 的排序表达式（`Column.asc()` / `func.coalesce(...).desc()` 等），
+    类型标注成 `Any` 而不是 `ColumnElement`：`collate()` 返回的 `Collation` 与
+    `UnaryExpression` 在 `order_by()` 的签名里是可接受的，但它们的公共基类并不在
+    SQLAlchemy 的公开类型里没有它们的公共基类；标成 `object` 会被 `order_by()` 拒绝
+    （这正是 pyright 报 2 处 error 的原因）。
+    """
     compound = f"{sort}_{order}"
     return EXTERNAL_RESUME_SORT_ORDERS.get(
         compound,

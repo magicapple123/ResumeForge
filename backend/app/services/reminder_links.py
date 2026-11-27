@@ -64,7 +64,14 @@ def attach_external_resume_names(db: Session, reminders: list[Reminder]) -> None
         names = {int(row_id): (name or "") for row_id, name in rows}
     for item in reminders:
         external_id = item.external_resume_id
-        item.external_resume_name = "" if external_id is None else names.get(int(external_id), "")
+        # 响应专用字段（`ReminderOut.external_resume_name`），**没有对应的列**：名字来自
+        # 上面那次批量查询，不落库（外部简历改名后，提醒里显示的应是新名字）。因此这里
+        # 只能动态挂；写成 `item.external_resume_name = …` 会被 pyright 判成"给模型类
+        # 赋一个不存在的属性"，而真加一个 `Mapped[...]` 又会要求一次迁移。
+        # `B010`（别用 setattr 挂常量名）在这里不适用：它假定"属性本来就存在"，而这里
+        # 刻意挂的正是模型上没有、只在响应里出现的字段。
+        name = "" if external_id is None else names.get(int(external_id), "")
+        setattr(item, "external_resume_name", name)  # noqa: B010
 
 
 __all__ = ["assert_single_resume_link", "attach_external_resume_names"]
