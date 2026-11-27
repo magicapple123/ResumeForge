@@ -88,6 +88,18 @@ def _scan(
     return result
 
 
+def _handled(result: dict) -> int:
+    """这一轮扫描"处理掉"的到期 occurrence 数 = 建卡 + 已被并发扫描抢先。
+
+    后台调度线程（CR-22 起默认开）可能与用例里的显式扫描同时看到同一条 occurrence：
+    谁先谁后不确定，但**结果必须是"一条 occurrence 只对应一张卡"**。断言 created==1
+    会把"并发扫描抢先"误判成缺陷（CI 上实测 created=0/skipped=1，库里恰好一张卡）。
+    所以这里钉的是"这一轮确实看见了这条 occurrence"（created+skipped），再由
+    `len(_tasks(client)) == 1` 钉住"没有重复卡"。
+    """
+    return int(result["created"]) + int(result["skipped"])
+
+
 def _set_notify(db_session, enabled: bool) -> None:
     """直接写 AppSetting：CR-22 的通知开关本轮不接 HTTP 界面（W2-A 才做）。"""
     import json
@@ -136,7 +148,7 @@ def test_enabled_generates_prepare_task_card(client, db_session):
     result = _scan(db_session)
 
     assert result["enabled"] is True
-    assert result["created"] == 1
+    assert _handled(result) == 1
     tasks = _tasks(client)
     assert len(tasks) == 1
     task = tasks[0]
@@ -166,8 +178,8 @@ def test_repeated_scans_do_not_duplicate(client, db_session):
     second = _scan(db_session)
     third = _scan(db_session)
 
-    assert first["created"] == 1, (
-        f"首次扫描没建卡：{first}；库里的卡={_tasks(client)}；提醒={reminder}"
+    assert _handled(first) == 1, (
+        f"首次扫描没看见到期 occurrence：{first}；库里的卡={_tasks(client)}；提醒={reminder}"
     )
     assert second["created"] == 0
     assert third["created"] == 0
@@ -180,7 +192,7 @@ def test_postponed_reminder_creates_a_second_occurrence(client, db_session):
     _set_enabled(client, True)
     reminder = _create_reminder(client, remind_at=NOW - timedelta(hours=2))
     first = _scan(db_session)
-    assert first["created"] == 1
+    assert _handled(first) == 1
 
     later = NOW - timedelta(hours=1)
     patched = client.patch(
@@ -189,7 +201,7 @@ def test_postponed_reminder_creates_a_second_occurrence(client, db_session):
     assert patched.status_code == 200, patched.text
     second = _scan(db_session)
 
-    assert second["created"] == 1
+    assert _handled(second) == 1
     tasks = _tasks(client)
     assert len(tasks) == 2
     assert {task["title"] for task in tasks} == {f"{TASK_TITLE_PREFIX}面试提醒"}
@@ -201,7 +213,7 @@ def test_disabling_keeps_existing_cards(client, db_session):
     """e) 关闭后不再生成；已生成的卡保留（不追删）。"""
     _set_enabled(client, True)
     _create_reminder(client, remind_at=NOW - timedelta(minutes=30), title="已生成的")
-    assert _scan(db_session)["created"] == 1
+    assert _handled(_scan(db_session)) == 1
 
     assert _set_enabled(client, False) == {"enabled": False}
     _create_reminder(client, remind_at=NOW - timedelta(minutes=5), title="关闭后的")
@@ -220,7 +232,7 @@ def test_only_the_last_24_hours_are_backfilled(client, db_session):
 
     result = _scan(db_session)
 
-    assert result["created"] == 1
+    assert _handled(result) == 1
     titles = [task["title"] for task in _tasks(client)]
     assert titles == [f"{TASK_TITLE_PREFIX}二十小时前的（该生成）"]
     assert timedelta(hours=24) == BACKFILL_WINDOW
@@ -232,7 +244,7 @@ def test_reminder_list_and_upcoming_are_unchanged(client, db_session):
     past = _create_reminder(client, remind_at=NOW - timedelta(minutes=5), title="过期的提醒")
     future = _create_reminder(client, remind_at=NOW + timedelta(hours=2), title="两小时后")
 
-    assert _scan(db_session)["created"] == 1
+    assert _handled(_scan(db_session)) == 1
 
     listed = client.get("/api/reminders")
     assert listed.status_code == 200
@@ -264,7 +276,7 @@ def test_event_task_is_visible_in_conversation_filtered_list(client, db_session)
 
     _set_enabled(client, True)
     _create_reminder(client, remind_at=NOW - timedelta(minutes=5), title="字节跳动二面")
-    assert _scan(db_session)["created"] == 1
+    assert _handled(_scan(db_session)) == 1
 
     event_task = db_session.query(AgentTask).filter(AgentTask.source == "reminder").one()
     assert event_task.conversation_id is None
