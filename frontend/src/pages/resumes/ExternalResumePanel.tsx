@@ -48,6 +48,7 @@ import type { ExternalResumeFilters } from "../../features/external-resume/useEx
 import ExternalResumeFileTable, { parseExternalSort } from "./ExternalResumeFileTable";
 import type { ExternalSortState } from "./ExternalResumeFileTable";
 import ExternalResumeFiltersBar from "./ExternalResumeFiltersBar";
+import { useExternalResumeDeepLink } from "./useExternalResumeDeepLink";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
 import { useToast } from "../../hooks/useToast";
 import { t } from "../../i18n";
@@ -79,7 +80,7 @@ export default function ExternalResumePanel({
 }: Props) {
   useLocale();
   const navigate = useNavigate();
-  const { message, modal } = App.useApp();
+  const { message, modal, notification } = App.useApp();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   /**
@@ -116,6 +117,25 @@ export default function ExternalResumePanel({
     setChangeTick((tick) => tick + 1);
     void reload();
   }, [reload]);
+  /**
+   * 深链 `?resume=<id>`（T31 续）：提醒 / 收藏页 / 求职进度都往这里跳，之前没人读这个
+   * 参数，点过去只落在列表上。命中就开详情并把参数消费掉；不存在的 id **不静默**，
+   * 给一条可关的提示（规则与取舍见 `useExternalResumeDeepLink.ts` 的文档串）。
+   */
+  const openDeepLinkedResume = useCallback((id: number) => {
+    setDetail({ id, tab: "original" });
+  }, []);
+  const reportMissingResume = useCallback(() => {
+    // 用 notification 而不是 message：这条要有说明文字、要能被用户主动关掉（duration 0），
+    // 而 message 既不能手动关、也没有第二行放"怎么办"。
+    notification.warning({
+      message: t("resumesPage.external.deepLinkMissing"),
+      description: t("resumesPage.external.deepLinkMissingHint"),
+      duration: 0,
+      closable: true,
+    });
+  }, [notification]);
+  useExternalResumeDeepLink({ onOpen: openDeepLinkedResume, onMissing: reportMissingResume });
   /** 多选状态机与简历中心共用一份（`useBatchSelection`），入口只有右键与「⋯」两处。 */
   const batch = useBatchSelection<number>();
 

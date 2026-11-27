@@ -107,8 +107,7 @@ const resumesPage = {
   "resumesPage.external.addFromJob": "添加外部简历",
   /** 成功 Toast：带上文件名与关联的岗位名，配合下面的「查看」动作。 */
   "resumesPage.external.addedToJob": "已添加「{name}」并关联到「{job}」",
-  "resumesPage.external.addedToJobNoText":
-    "已添加「{name}」并关联到「{job}」，但没有提取到文字",
+  "resumesPage.external.addedToJobNoText": "已添加「{name}」并关联到「{job}」，但没有提取到文字",
   /** Toast 上的动作按钮（≤6 字）：跳到该岗位的外部简历列表。 */
   "resumesPage.external.openList": "查看",
   "resumesPage.external.empty": "还没有上传过外部简历",
@@ -168,6 +167,10 @@ const resumesPage = {
   "resumesPage.external.restored": "已恢复「{name}」",
   "resumesPage.external.restoreFailed": "恢复失败，可到回收站里手动恢复",
   "resumesPage.external.loadFailed": "获取外部简历失败",
+  // 深链 `?resume=<id>` 打不开（不存在 / 已进回收站 / 参数非法）：一条可关的提示。
+  "resumesPage.external.deepLinkMissing": "这份外部简历打不开",
+  "resumesPage.external.deepLinkMissingHint":
+    "它可能已被删除或移入回收站。你可以从下面的列表里重新选一份。",
   "resumesPage.external.uploadTitle": "上传外部简历",
   "resumesPage.external.uploadName": "显示名称",
   "resumesPage.external.uploadNamePlaceholder": "默认取文件名",

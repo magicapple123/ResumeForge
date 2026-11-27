@@ -115,7 +115,7 @@ const resumesPage = {
   "resumesPage.external.note.add": "Add a note",
   "resumesPage.external.note.edit": "Edit note",
   "resumesPage.external.note.placeholder":
-    "What this file is for, e.g. \"the version sent to the client\"",
+    'What this file is for, e.g. "the version sent to the client"',
   "resumesPage.external.note.saved": "Note saved",
   "resumesPage.external.note.failed": "Could not save the note, please try again",
   "resumesPage.external.note.tooLong": "A note can be at most {max} characters",
@@ -124,7 +124,7 @@ const resumesPage = {
   "resumesPage.external.rename.label": "File name",
   "resumesPage.external.rename.empty": "The name cannot be empty",
   "resumesPage.external.rename.tooLong": "A name can be at most {max} characters",
-  "resumesPage.external.rename.done": "Renamed to \"{name}\"",
+  "resumesPage.external.rename.done": 'Renamed to "{name}"',
   "resumesPage.external.rename.failed": "Could not rename, please try again",
   "resumesPage.external.exportOriginal": "Export original",
   "resumesPage.external.batchDelete.title": "Delete the {count} selected external resumes?",
@@ -143,6 +143,11 @@ const resumesPage = {
   "resumesPage.external.restored": "Restored “{name}”",
   "resumesPage.external.restoreFailed": "Could not restore it; restore it from the Trash manually",
   "resumesPage.external.loadFailed": "Could not load external resumes",
+  // Deep link `?resume=<id>` that cannot be opened (missing / trashed / malformed):
+  // one dismissible notice telling the user what to do next.
+  "resumesPage.external.deepLinkMissing": "This external resume can't be opened",
+  "resumesPage.external.deepLinkMissingHint":
+    "It may have been deleted or moved to the Trash. Pick another one from the list below.",
   "resumesPage.external.uploadTitle": "Upload external resume",
   "resumesPage.external.uploadName": "Display name",
   "resumesPage.external.uploadNamePlaceholder": "Defaults to the file name",
