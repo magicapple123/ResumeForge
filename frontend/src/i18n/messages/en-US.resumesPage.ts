@@ -204,7 +204,6 @@ const resumesPage = {
   "resumesPage.external.filteredTotal": "{count} matching resumes",
   "resumesPage.external.noMatches": "No matching external resumes",
   "resumesPage.external.clearFilters": "Clear filters",
-  "resumesPage.external.limited": "Showing the latest {count}; search to find other resumes",
   "resumesPage.external.uploadFiltersCleared": "Filters cleared to show the uploaded resume",
 } as const;
 

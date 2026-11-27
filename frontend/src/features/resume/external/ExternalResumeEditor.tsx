@@ -54,7 +54,7 @@ export function ExternalResumeEditor({ blocks, selectedId, onSelect }: ExternalR
   const largest = maxBlockSize(blocks.blocks);
 
   return (
-    <div data-testid="external-editor" className="rf-ext-editor">
+    <div data-testid="external-editor">
       <Typography.Text type="secondary">
         {t("externalEdit.blocks.count", { editable, total: blocks.blocks.length })}
       </Typography.Text>

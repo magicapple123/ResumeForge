@@ -132,9 +132,18 @@ describe("颜色回归：提醒弹窗链接色用达标 token", () => {
     expect(declarations).not.toContain("#f0f2f5");
   });
 
-  it("链接与 hover 都走语义 token", () => {
-    expect(ruleBlock(css, ":where(.rf-reminder-modal-list) a")).toContain("var(--rf-info-strong)");
-    expect(ruleBlock(css, ":where(.rf-reminder-modal-list) a:hover")).toContain("var(--rf-brand)");
+  it("行内可点文字的着色走语义 token", () => {
+    // T25 把弹窗的条目换成了 `EventRow`：**没有 `<a>` 了**，可点的东西是行尾那两颗按钮
+    // （稍后 / 完成），原来的两条链接色断言（`:where(.rf-reminder-modal-list) a` 与 `a:hover`）
+    // 因此指向了不存在的规则——守卫报的是"找不到选择器"，不是"颜色不对"。
+    //
+    // 保留意图、换掉载体：现在承担"可点文字"的是非 primary 按钮，它的颜色同样是三级灰里
+    // 看不见的那一档（T25 已从 tertiary 提到 secondary），所以继续钉住这一条。
+    expect(
+      ruleBlock(css, ".rf-reminder-modal-list .rf-event-actions .ant-btn:not(.ant-btn-primary)"),
+    ).toContain("var(--rf-text-secondary)");
+    // 反向确认：弹窗里不该再出现裸 `<a>` 的旧规则，否则说明有人把链接加回来却没配色。
+    expect(css).not.toContain(":where(.rf-reminder-modal-list) a");
   });
 
   it("标题图标与分隔线也不再写字面量颜色", () => {

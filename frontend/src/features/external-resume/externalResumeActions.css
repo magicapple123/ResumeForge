@@ -17,13 +17,13 @@
 }
 
 .external-resume-star:hover {
-  color: var(--rf-color-warning, #faad14);
+  color: var(--rf-warning-text);
 }
 
 /* 已收藏：实心星 + 警示色，扫一眼列表就知道哪几份是自己留过的。 */
 .external-resume-star.is-on,
 .external-resume-star.is-on:hover {
-  color: var(--rf-color-warning, #faad14);
+  color: var(--rf-warning-text);
 }
 
 /* 备注行：比状态副行更弱（它是用户自己写的补充，不是文件的属性）。

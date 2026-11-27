@@ -104,7 +104,7 @@ const external = {
   /** R15：临时 Key 的真实边界要在标题里就说清——它不是"另一个已保存的配置"。 */
   "connections.item.llm.session.label": "临时 Key（仅本次运行有效）",
   "connections.item.llm.session.hint":
-    "只存在后端内存，不写入数据库、不进备份、退出程序即清除。只替换大模型请求用的 Key，不影响语义检索、语音转写与联网搜索。清空后立刻回到已保存的那把 Key，改其它参数再保存也不会覆盖它。",
+    "只存在内存：不落库、不进备份、退出即清除。只顶替大模型这一处 Key，语义检索等不受影响；清空就回到已保存的那把。",
   "connections.item.asr.default.label": "语音转写 API Key",
   "connections.item.asr.default.hint": "改的是当前这条语音配置的 Key。地址或协议一变就要重填。",
   "connections.item.embedding.default.label": "语义检索 API Key",

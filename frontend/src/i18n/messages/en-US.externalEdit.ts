@@ -35,7 +35,7 @@ const externalEdit = {
   "externalEdit.hint.pdf":
     "The original page is on the left. Click the passage you want to change (dashed blocks cannot be edited; the reason is listed below). Then press Apply on the right.",
   "externalEdit.hint.docx":
-    "The passages are listed here. Click one to edit it on the right. Text inside tables is not supported yet.",
+    "Click any passage on the left, then edit it on the right. Text inside tables is not supported yet.",
   "externalEdit.hint.text": "The whole document is one editable unit. Edit it on the right.",
   "externalEdit.hint.pick": "Click a passage on the left first, then edit it on the right.",
   "externalEdit.block.label": "Page {page} · passage {index}",

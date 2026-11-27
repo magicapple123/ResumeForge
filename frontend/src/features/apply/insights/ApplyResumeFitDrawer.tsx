@@ -62,7 +62,7 @@ const COLUMN_WIDTH = { job: 198, current: 196, action: 92 } as const;
 const SUB_STYLE: CSSProperties = {
   fontSize: 12,
   lineHeight: 1.5,
-  color: "var(--rf-text-tertiary, #8a94a6)",
+  color: "var(--rf-text-tertiary)",
 };
 
 /** 单元格内的单行省略：`tableLayout="fixed"` 下由这一层裁掉，全文交给 `Tooltip`。 */
@@ -270,7 +270,7 @@ export default function ApplyResumeFitDrawer({ open, items, onClose, onApplied }
           return (
             <div style={{ minWidth: 0 }}>
               <div style={MAIN_ROW}>
-                <span style={{ ...ELLIPSIS, color: "var(--rf-text-tertiary, #8a94a6)" }}>
+                <span style={{ ...ELLIPSIS, color: "var(--rf-text-tertiary)" }}>
                   {t("applyQueue.insights.fit.bestRow")}
                 </span>
                 <Tag style={{ marginInlineEnd: 0 }}>
@@ -398,7 +398,7 @@ export default function ApplyResumeFitDrawer({ open, items, onClose, onApplied }
               <Typography.Text
                 style={{
                   fontSize: 12,
-                  color: "var(--rf-brand, #1d63d1)",
+                  color: "var(--rf-brand)",
                   cursor: "help",
                   borderBottom: "1px dashed currentColor",
                 }}

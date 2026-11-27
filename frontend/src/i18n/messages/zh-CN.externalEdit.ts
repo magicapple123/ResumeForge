@@ -44,7 +44,7 @@ const externalEdit = {
   // ── 左侧选择区 ────────────────────────────────────────────
   "externalEdit.hint.pdf":
     "左边是原件页面，点一下要改的那一段（虚线的块不能改，原因见下方列表）。改完点右边「应用」。",
-  "externalEdit.hint.docx": "这里按段落列出可以改的文字，点一段在右边改。表格里的文字暂不支持。",
+  "externalEdit.hint.docx": "点左边任意一段，再在右边改；表格里的文字暂不支持。",
   "externalEdit.hint.text": "整篇正文就是一个编辑单元，在右边直接改。",
   "externalEdit.hint.pick": "先在左边点一段文字，再在右边改。",
   "externalEdit.block.label": "第 {page} 页 · 第 {index} 段",

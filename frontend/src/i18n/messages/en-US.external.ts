@@ -99,7 +99,7 @@ const external = {
     "Only the key is changed here. Provider and model live under AI models; switching providers does not carry the key over.",
   "connections.item.llm.session.label": "Temporary key (this run only)",
   "connections.item.llm.session.hint":
-    "Held in backend memory only: never written to the database, never included in backups, cleared when the app quits. It replaces the key used for model requests only; semantic search, speech-to-text and web search are unaffected. Clearing it falls back to the saved key, and saving other settings never overwrites that key.",
+    "In memory only: not stored, never backed up, gone on exit. Overrides the model key only; search and others are unaffected. Clearing it restores the saved key.",
   "connections.item.asr.default.label": "Speech-to-text API key",
   "connections.item.asr.default.hint":
     "Changes the key of the active voice configuration. A new address or protocol needs the key again.",

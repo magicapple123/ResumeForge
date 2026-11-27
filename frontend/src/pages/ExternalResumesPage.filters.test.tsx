@@ -64,10 +64,16 @@ it("restores keyword/job deep links and filters on the server", async () => {
     "Acme",
   );
   await screen.findByText(ITEM.name);
+  // 列表改成服务端分页 + 排序之后，调用参数多了 page / page_size / sort / order
+  // （`PAGE_SIZE = 20`，默认按 `created_at` 倒序）。这些默认值本身就是契约的一部分：
+  // 它们决定了"打开页面看到的是最新 20 份"，不是全部。
   expect(api.listExternalResumes).toHaveBeenCalledWith({
     keyword: "Acme",
     job_id: 3,
-    page_size: 100,
+    page: 1,
+    page_size: 20,
+    sort: "created_at",
+    order: "desc",
   });
   expect(
     screen.getByRole("combobox", { name: t("resumesPage.jobFilter.label") }).closest(".ant-select"),
@@ -87,7 +93,10 @@ it("changing the keyword refetches while preserving the job and unrelated URL va
     expect(api.listExternalResumes).toHaveBeenLastCalledWith({
       keyword: "Agent",
       job_id: 3,
-      page_size: 100,
+      page: 1,
+      page_size: 20,
+      sort: "created_at",
+      order: "desc",
     }),
   );
   expect(screen.getByTestId("search")).toHaveTextContent("keyword=Agent");
@@ -107,13 +116,18 @@ it("filtered zero results show a clear action instead of upload guidance", async
   expect(api.listExternalResumes).toHaveBeenLastCalledWith({
     keyword: undefined,
     job_id: undefined,
-    page_size: 100,
+    page: 1,
+    page_size: 20,
+    sort: "created_at",
+    order: "desc",
   });
 });
 
-it("shows the server total and warns when only the most recent hundred are shown", async () => {
+it("shows the server total and renders pagination for the rest", async () => {
+  // 服务端分页之后，"只显示最近 100 份"那句提示已经没有意义了：每页 20 条，其余在翻页里。
+  // 这一条改成钉住新契约——总数来自服务端（不是当页条数），且超过一页时出翻页控件。
   api.listExternalResumes.mockResolvedValue({
-    items: Array.from({ length: 100 }, (_, index) => ({
+    items: Array.from({ length: 20 }, (_, index) => ({
       ...ITEM,
       id: index + 1,
       name: `resume-${index}.txt`,
@@ -124,7 +138,9 @@ it("shows the server total and warns when only the most recent hundred are shown
   expect(
     await screen.findByText(t("resumesPage.external.total", { count: 101 })),
   ).toBeInTheDocument();
-  expect(screen.getByText(t("resumesPage.external.limited", { count: 100 }))).toBeInTheDocument();
+  // 101 条 / 每页 20 → 6 页；控件存在即说明用户能翻到其余 81 条。
+  expect(document.querySelector(".external-resume-pagination")).not.toBeNull();
+  expect(screen.getByText(t("resumesPage.external.total", { count: 101 }))).toBeInTheDocument();
 });
 
 it("clears filters after upload and tells the user why the list changed", async () => {

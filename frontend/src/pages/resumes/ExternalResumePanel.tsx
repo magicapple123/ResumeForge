@@ -129,7 +129,9 @@ export default function ExternalResumePanel({
     // 用 notification 而不是 message：这条要有说明文字、要能被用户主动关掉（duration 0），
     // 而 message 既不能手动关、也没有第二行放"怎么办"。
     notification.warning({
-      message: t("resumesPage.external.deepLinkMissing"),
+      // antd v5 起 notification 的标题键是 `title`；`message` 已标 @deprecated，
+      // 守卫 `antdDeprecatedProp.test.ts` 会点名。
+      title: t("resumesPage.external.deepLinkMissing"),
       description: t("resumesPage.external.deepLinkMissingHint"),
       duration: 0,
       closable: true,
@@ -376,11 +378,6 @@ export default function ExternalResumePanel({
           filters={filters}
           onChange={onFiltersChange}
           total={total}
-          // `shown` 只用来判断"要不要补一句『只显示前 N 条』"。T09 起列表是**真分页**
-          // （每页 20，翻页可达全部），"前 N 条之外还有东西被藏起来"这句话已经不成立，
-          // 再显示就是误导——传 total 让那条提示自然消失（`total > shown` 为假）。
-          shown={total}
-          loading={loading}
         />
       ) : null}
       {/* 批量条只在多选态出现（默认观感与改造前一致：没有任何勾选框与工具条）。 */}

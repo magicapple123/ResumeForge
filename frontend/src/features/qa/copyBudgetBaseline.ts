@@ -338,6 +338,23 @@ const copyBudgetBaseline: Record<string, string> = {
   "webFormPage.relaxed.risk": "2026-12-31",
   "writing.hint.body": "2026-12-31",
   "writing.modal.hint-copy": "2026-12-31",
+  // ── 2026-11-27（外部简历 / 设置页那一轮）────────────────────────────────
+  // 这些是**解释型** hint（说清「为什么是这样」而不只是「怎么做」），中文都在 80 字内，
+  // 英文按语义展开后落在 160–240 之间。到期日放得比惯例（2026-12-31）近，是刻意的：
+  // 到期前要么再压一版，要么拆成「一句 hint + 详情弹层」——不要改成 2026-12-31 混进旧账。
+  "analyticsPage.resumeEffect.externalDescription": "2026-12-15",
+  "applyQueue.insights.fit.intro": "2026-12-15",
+  "applyUi.loginStatus.probeAndSiteHint": "2026-12-15",
+  "externalEdit.blocksMissingHint": "2026-12-15",
+  "externalEdit.unsupported.hint": "2026-12-15",
+  "externalEdit.hint.pdf": "2026-12-15",
+  "externalEdit.keepFormatHint": "2026-12-15",
+  "interviewPage.setup.resumeNoText": "2026-12-15",
+  "jobMatch.textLevel.resume.empty": "2026-12-15",
+  "resumesPage.external.subtitle": "2026-12-15",
+  "resumesPage.external.emptyHint": "2026-12-15",
+  "settingsUi.connections.matrix.hint": "2026-12-15",
+  "settingsUi.connections.matrix.hintFocus": "2026-12-15",
 };
 
 export default copyBudgetBaseline;

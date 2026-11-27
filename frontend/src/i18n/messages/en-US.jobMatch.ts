@@ -67,7 +67,7 @@ const jobMatch = {
   "jobMatch.textLevel.title": "Text-level match (external resume)",
   "jobMatch.textLevel.badge": "Text-level",
   "jobMatch.textLevel.intro":
-    "Compares the words pulled from the job description against the plain text of this external resume. It does not read structured fields or layout, and it makes no hiring-gate call. That is a different basis from the structured match above, so the two are not comparable and are shown separately.",
+    "Only JD keywords vs this resume's text: no structured fields, no eligibility call. A different basis from the structured match above.",
   "jobMatch.textLevel.resume.label": "Which external resume",
   "jobMatch.textLevel.resume.placeholder": "Pick an external resume that has text",
   "jobMatch.textLevel.resume.noText": "(no text)",

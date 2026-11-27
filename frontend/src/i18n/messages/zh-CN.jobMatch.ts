@@ -64,7 +64,7 @@ const jobMatch = {
   "jobMatch.textLevel.title": "文本级匹配（外部简历）",
   "jobMatch.textLevel.badge": "文本级",
   "jobMatch.textLevel.intro":
-    "只比对「JD 抽出来的词」与「这份外部简历的正文字」：不读结构化字段与版式，也没有准入判断。它与上面的结构化匹配是两个口径，分母不同，结论不可互相比较，所以单独列在这里。",
+    "只比对 JD 词与这份简历的正文：不读结构化字段，也不做准入判断。与上面的结构化匹配口径不同，不可直接比较。",
   "jobMatch.textLevel.resume.label": "用哪份外部简历",
   "jobMatch.textLevel.resume.placeholder": "选一份有正文的外部简历",
   "jobMatch.textLevel.resume.noText": "（无正文）",

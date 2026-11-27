@@ -4,7 +4,10 @@
  *
  * 计数分两种文案：有关键词/岗位时是「筛出 N 条」，否则是「共 N 条」——用户要能分清
  * 「库里只有这么多」和「被筛掉了」。
- * `total > shown` 时补一句「只显示前 N 条」：接口有分页上限，不说明会让人以为数据丢了。
+ *
+ * 这里**不再**写「只显示前 N 条」：列表改成服务端分页之后，每页就是 20 条，翻页控件在表格
+ * 下方（`ExternalResumeFileTable`）。此前那行判断是 `total > shown`，而调用方传的正是
+ * `shown={total}`——恒为假，等于一段永远不出现的死代码，连同文案键一起删掉了。
  */
 import { Button, Flex, Typography } from "antd";
 import type { ExternalResumeFilters } from "../../features/external-resume/useExternalResumes";
@@ -17,17 +20,9 @@ interface Props {
   filters: ExternalResumeFilters;
   onChange: (filters: ExternalResumeFilters) => void;
   total: number;
-  shown: number;
-  loading: boolean;
 }
 
-export default function ExternalResumeFiltersBar({
-  filters,
-  onChange,
-  total,
-  shown,
-  loading,
-}: Props) {
+export default function ExternalResumeFiltersBar({ filters, onChange, total }: Props) {
   useLocale();
   const filtered = Boolean(filters.keyword?.trim() || filters.jobId != null);
   return (
@@ -53,11 +48,6 @@ export default function ExternalResumeFiltersBar({
           })}
         </Typography.Text>
       </Flex>
-      {!loading && total > shown ? (
-        <Typography.Text type="secondary">
-          {t("resumesPage.external.limited", { count: shown })}
-        </Typography.Text>
-      ) : null}
     </Flex>
   );
 }
