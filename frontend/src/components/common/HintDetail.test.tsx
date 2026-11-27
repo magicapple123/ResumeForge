@@ -117,8 +117,11 @@ describe("HintDetail 长串换行（#10）", () => {
 
   /** 找出正文那一层（带 `pre-line` 的那个 span / 容器）。 */
   function detailLayer(scope: HTMLElement): HTMLElement {
-    const node = Array.from(scope.querySelectorAll<HTMLElement>("span")).find((span) =>
-      (span.textContent ?? "").includes("https://example.internal"),
+    // 用**全等**而不是 `includes(URL 前缀)`：后者是 CodeQL
+    // `js/incomplete-url-substring-sanitization` 的告警点（把 URL 当字符串检查子串），
+    // 而且这里本来就该找"正文恰好是这条长串"的那个节点——子串匹配还可能误命中父节点。
+    const node = Array.from(scope.querySelectorAll<HTMLElement>("span")).find(
+      (span) => span.textContent === LONG,
     );
     if (!node) throw new Error("找不到正文节点");
     return node;
