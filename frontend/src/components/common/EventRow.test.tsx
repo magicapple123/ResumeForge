@@ -84,20 +84,23 @@ describe("EventRow 的可点语义", () => {
     expect(CSS).toMatch(/\.rf-event-title-text\s*\{[^}]*flex:\s*1\s+1\s+auto/);
   });
 
-  it("整行可点：点击、Enter、空格都触发 onOpen（不嵌套 <button>）", () => {
+  it("鼠标点整行、键盘激活标题按钮都触发 onOpen（交互角色不嵌套）", () => {
     const onOpen = vi.fn();
-    const { container } = render(<EventRow title="投递 A 司" onOpen={onOpen} />);
+    const { container } = render(
+      <EventRow title="投递 A 司" onOpen={onOpen} actions={<button type="button">完成</button>} />,
+    );
     const row = container.querySelector(".rf-event-row") as HTMLElement;
-
-    // 行容器是 div role=button（行内可能还有真按钮，嵌套 button 是非法 HTML）。
+    // 容器只是 div：role=button 会与行内的「完成」形成 nested-interactive（axe serious）。
     expect(row.tagName).toBe("DIV");
-    expect(row).toHaveAttribute("role", "button");
-    expect(row).toHaveAttribute("tabindex", "0");
+    expect(row).not.toHaveAttribute("role");
+    expect(row).not.toHaveAttribute("tabindex");
+    // 可聚焦的是标题按钮，它原生支持 Enter / Space。
+    const titleButton = screen.getByRole("button", { name: /投递 A 司/ });
+    expect(titleButton.tagName).toBe("BUTTON");
 
     fireEvent.click(row);
-    fireEvent.keyDown(row, { key: "Enter" });
-    fireEvent.keyDown(row, { key: " " });
-    expect(onOpen).toHaveBeenCalledTimes(3);
+    fireEvent.click(titleButton);
+    expect(onOpen).toHaveBeenCalledTimes(2);
   });
 
   it("焦点在行内按钮上按回车，不会顺手把整行也打开", () => {
@@ -119,6 +122,7 @@ describe("EventRow 的可点语义", () => {
     expect(row).not.toHaveAttribute("role");
     expect(row).not.toHaveAttribute("tabindex");
     expect(container.querySelector(".rf-event-arrow")).toBeNull();
+    expect(container.querySelector(".rf-event-open")).toBeNull();
   });
 });
 

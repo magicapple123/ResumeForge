@@ -33,13 +33,15 @@
  * - **没有 `tone` / `icon`**：只收 `unread` 与 `overdueDays`。这是从类型上堵住"按状态
  *   上色"——组件里不可能再长出第二个配色分支（颜色只用在未读点与逾期红字上）。
  * - **容器不是 `<button>`**：弹窗行里有三个真按钮，`<button>` 里套 `<button>` 是非法
- *   HTML（浏览器会把内层拆出去，事件全乱）。用 `div role="button" tabIndex={0}` +
- *   Enter/Space 触发，键盘仍然可达。
+ *   HTML（浏览器会把内层拆出去，事件全乱）。用 `div` 容器 + **标题上的一个真 button** 承担
+ *   打开动作：鼠标点整行仍然有效（外层 onClick），键盘 Tab 到标题按钮按 Enter/Space 打开。
+ *   早先容器是 `div role="button" tabIndex=0`，axe 的 `nested-interactive` 判 serious——
+ *   交互角色里不能再放交互元素；现在角色只落在标题按钮上，行内动作是它的兄弟节点。
  *
  * 行内动作自己 `stopPropagation`（见调用方）：那一层是"点完成不该跳走"的唯一保障，
  * 组件不替他兜（兜了反而会掩盖漏写的 `stopPropagation`）。
  */
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import "./event-row.css";
@@ -75,34 +77,31 @@ export default function EventRow({
     .filter(Boolean)
     .join(" ");
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    // 只响应"行本身"的按键：行内按钮/输入的 Enter、空格不该顺手把整行也打开
-    // （焦点在「完成」上按回车，用户要的是完成，不是跳走）。
-    if (event.target !== event.currentTarget) return;
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    onOpen?.();
-  };
+  const titleNode = (
+    <>
+      {unread && <span className="rf-event-dot" aria-hidden="true" />}
+      <span className="rf-event-title-text">{title}</span>
+      {/* 箭头在标题行内（T25）：行的右端只留这一条右缘，副行动作组因此能贴到同一条线。 */}
+      {onOpen && (
+        <span className="rf-event-arrow" aria-hidden="true">
+          ›
+        </span>
+      )}
+    </>
+  );
 
   return (
-    <div
-      className={className}
-      role={onOpen ? "button" : undefined}
-      tabIndex={onOpen ? 0 : undefined}
-      onClick={onOpen}
-      onKeyDown={onOpen ? handleKeyDown : undefined}
-    >
+    <div className={className} onClick={onOpen}>
       <div className="rf-event-main">
-        <span className="rf-event-title">
-          {unread && <span className="rf-event-dot" aria-hidden="true" />}
-          <span className="rf-event-title-text">{title}</span>
-          {/* 箭头在标题行内（T25）：行的右端只留这一条右缘，副行动作组因此能贴到同一条线。 */}
-          {onOpen && (
-            <span className="rf-event-arrow" aria-hidden="true">
-              ›
-            </span>
-          )}
-        </span>
+        {onOpen ? (
+          // 可点行：打开动作落在标题按钮上；行内的「更多操作 / 完成」是它的兄弟，
+          // 不再嵌在交互角色里（axe nested-interactive）。按钮原生支持 Enter / Space。
+          <button type="button" className="rf-event-open">
+            <span className="rf-event-title">{titleNode}</span>
+          </button>
+        ) : (
+          <span className="rf-event-title">{titleNode}</span>
+        )}
         {hasSubLine && (
           <span className="rf-event-subline">
             {meta && <span className="rf-event-meta">{meta}</span>}

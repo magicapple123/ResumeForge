@@ -30,12 +30,24 @@
 }
 
 .rf-event-row.is-clickable:hover,
-.rf-event-row.is-clickable:focus-visible {
+.rf-event-row.is-clickable:focus-within {
   background: color-mix(in srgb, var(--rf-info) 3.5%, var(--rf-surface));
 }
 
-/* 键盘焦点环：可点的行不能只靠 hover 暗示（键盘用户看不到 hover）。 */
-.rf-event-row.is-clickable:focus-visible {
+/* 键盘焦点环落在标题按钮上（不是整行）：它才是那个可聚焦的交互元素。 */
+.rf-event-open {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rf-event-open:focus-visible {
   outline: 2px solid var(--rf-info);
   outline-offset: 1px;
 }
@@ -126,6 +138,6 @@
 }
 
 .rf-event-row.is-clickable:hover .rf-event-arrow,
-.rf-event-row.is-clickable:focus-visible .rf-event-arrow {
+.rf-event-row.is-clickable:focus-within .rf-event-arrow {
   color: #8a94a6;
 }
