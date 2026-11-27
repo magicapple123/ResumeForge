@@ -69,7 +69,8 @@ const CARD_IDS: Record<string, string> = {
   ManualBackupsCard: "manual-backup",
   PrivacyCard: "privacy",
   UpdateCard: "update",
-  AnnouncementSettingsCard: "announcement",
+  // 「公告提醒」不再是独立的卡：R20 把它并进 `UpdateCard`（`<AnnouncementReminderRow />`），
+  // 所以这里也不该再登记一个"页面上找不到的卡"，索引项一并删掉（见 settingsIndex.ts）。
   HelpDiagnosticsCard: "diagnostics",
   ReminderPopupCard: "reminders",
   NotificationsCard: "notifications",

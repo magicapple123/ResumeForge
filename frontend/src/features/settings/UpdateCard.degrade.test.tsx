@@ -113,7 +113,15 @@ describe("UpdateCard（形态与降级）", () => {
       expect(screen.queryByRole("button", { name: "下载更新" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "重启并安装" })).not.toBeInTheDocument();
       // 后台下载开关也随之消失（它是下载入口的一部分）。
-      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+      // R20：「更新提醒」开关并进了本卡，所以不能再按 `role=switch` 一票否决——
+      // 那会把"另一个与本入口无关的开关"也算进来（改造后这里就多了一颗）。
+      // 按可访问名精确定位：消失的必须是"后台下载"，而"更新提醒"仍在。
+      expect(
+        screen.queryByRole("switch", { name: t("update.bgDownload") }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("switch", { name: t("announcement.settings.title") }),
+      ).toBeInTheDocument();
       // 检查/重新检查保留；发布页面可以打开。
       expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "重新检查" })).toBeInTheDocument();
@@ -160,7 +168,8 @@ describe("UpdateCard（形态与降级）", () => {
     fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
 
     expect(await screen.findByRole("button", { name: "下载更新" })).toBeEnabled();
-    expect(screen.getByRole("switch")).toBeInTheDocument();
+    // 两颗开关：后台下载（本用例关心的那颗）与「更新提醒」（R20 并进来的）。
+    expect(screen.getByRole("switch", { name: t("update.bgDownload") })).toBeInTheDocument();
     expect(screen.queryByText(t("update.desktop.title"))).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "下载更新" }));

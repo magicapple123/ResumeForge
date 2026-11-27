@@ -47,7 +47,6 @@ import BackupStatusCard from "./BackupStatusCard";
 import ManualBackupsCard from "./ManualBackupsCard";
 import PrivacyCard from "./PrivacyCard";
 import UpdateCard from "./UpdateCard";
-import AnnouncementSettingsCard from "./AnnouncementSettingsCard";
 import HelpDiagnosticsCard from "./HelpDiagnosticsCard";
 import NotificationsCard from "./NotificationsCard";
 import ReminderPopupCard from "./ReminderPopupCard";
@@ -243,13 +242,12 @@ export function BackupPanel() {
   );
 }
 
-/** 更新与帮助：版本更新、公告提醒、诊断与提醒弹窗行为。 */
+/** 更新与帮助：版本更新（含「更新提醒」开关）、诊断与提醒弹窗行为。 */
 export function AboutPanel() {
   useLocale();
   return (
     <>
       <UpdateCard />
-      <AnnouncementSettingsCard />
       <HelpDiagnosticsCard />
       {/* 提醒弹窗是"应用行为"而不是"外观"：与版本、诊断同组更符合用户的找法。 */}
       <ReminderPopupCard />

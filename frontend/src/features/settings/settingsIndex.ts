@@ -119,7 +119,9 @@ export const SETTINGS_INDEX: readonly SettingsIndexEntry[] = [
   { id: "privacy", section: "backup", titleKey: "settingsUi.privacy.title" },
   // 更新与帮助
   { id: "update", section: "about", titleKey: "update.card.title" },
-  { id: "announcement", section: "about", titleKey: "announcement.settings.title" },
+  // R20：原有一条 `{ id: "announcement" }`（独立的「公告提醒」卡）。那个开关已并进
+  // 「软件更新」卡，页面上不再有独立的一张卡，索引项留着就会"选中后跳到空白"。
+  // 搜「更新」仍能命中上面这一条，开关就在那张卡里。
   { id: "diagnostics", section: "about", titleKey: "settingsUi.help.title" },
   { id: "reminders", section: "about", titleKey: "settingsUi.reminderPopup.title" },
   // 通知（CR-29）

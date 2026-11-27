@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
+/**
+ * R20：「更新提醒」开关（并进「软件更新」卡的那一行）。
+ *
+ * 断言的是**行为**而不是排版：关掉 = 全部 code 都被静音（顶部黄条当场消失）、
+ * 再打开 = 键被真删（不是写空串）、恢复时给一句"回页面才看得到"。
+ */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { App as AntdApp } from "antd";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -6,11 +12,12 @@ import { t } from "../../i18n";
 import { ANNOUNCEMENT_CODES } from "../announcements/announcementCodes";
 import {
   MUTE_KEY_PREFIX,
+  isMuted,
   muteAnnouncement,
   unmuteAnnouncement,
 } from "../announcements/announcementMute";
 import { resetAnnouncementsForTest } from "../announcements/announcementStore";
-import AnnouncementSettingsCard from "./AnnouncementSettingsCard";
+import AnnouncementReminderRow from "./AnnouncementSettingsCard";
 
 afterEach(cleanup);
 
@@ -20,38 +27,48 @@ beforeEach(() => {
   resetAnnouncementsForTest();
 });
 
-function renderCard() {
+function renderRow() {
   return render(
     <AntdApp>
-      <AnnouncementSettingsCard />
+      <AnnouncementReminderRow />
     </AntdApp>,
   );
 }
 
-describe("AnnouncementSettingsCard", () => {
-  it("卡片常驻：没有静音项时也渲染，并给空态", () => {
-    renderCard();
+/** antd 的 `Switch` 渲染成 `role="switch"`，可访问名来自 `aria-label`。 */
+function switcher(): HTMLElement {
+  return screen.getByRole("switch", { name: t("announcement.settings.title") });
+}
+
+describe("AnnouncementReminderRow（R20）", () => {
+  it("默认开着：没有静音项时开关是勾选态", () => {
+    renderRow();
     expect(screen.getByText(t("announcement.settings.title"))).toBeInTheDocument();
-    expect(screen.getByText(t("announcement.settings.empty"))).toBeInTheDocument();
+    expect(switcher()).toBeChecked();
   });
 
-  it("有静音项时逐行列出，并能恢复提醒", () => {
-    muteAnnouncement("update.ready");
-    renderCard();
-    expect(screen.queryByText(t("announcement.settings.empty"))).toBeNull();
-    expect(screen.getByText(t("announcement.update.ready"))).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: t("announcement.settings.restore") }));
-
-    // 恢复后：键真的被删了，列表回到空态。
-    expect(window.localStorage.getItem(`${MUTE_KEY_PREFIX}update.ready`)).toBeNull();
-    expect(screen.getByText(t("announcement.settings.empty"))).toBeInTheDocument();
+  it("关掉 = 白名单里的每个 code 都写入静音（黄条当场不再出现）", () => {
+    renderRow();
+    fireEvent.click(switcher());
+    for (const code of ANNOUNCEMENT_CODES) {
+      expect(window.localStorage.getItem(`${MUTE_KEY_PREFIX}${code}`)).toBe("1");
+      expect(isMuted(code)).toBe(true);
+    }
+    expect(switcher()).not.toBeChecked();
   });
 
-  it("恢复成功给一条 Toast（告诉用户回页面才看得到）", async () => {
+  it("再打开 = 键被真删（不是写空串），并给一句恢复提示", async () => {
     muteAnnouncement("update.downloaded");
-    renderCard();
-    fireEvent.click(screen.getByRole("button", { name: t("announcement.settings.restore") }));
+    renderRow();
+    expect(switcher()).not.toBeChecked();
+
+    fireEvent.click(switcher());
+
+    for (const code of ANNOUNCEMENT_CODES) {
+      expect(window.localStorage.getItem(`${MUTE_KEY_PREFIX}${code}`)).toBeNull();
+    }
+    expect(switcher()).toBeChecked();
+    // 更新类公告带 `hideOnPaths: ["/settings"]`：设置页里当场看不到，所以文案是"回页面"。
     expect(await screen.findByText(t("toast.announcement.unmuted"))).toBeInTheDocument();
   });
 });

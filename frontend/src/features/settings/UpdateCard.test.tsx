@@ -120,7 +120,8 @@ describe("UpdateCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
     expect(await screen.findByRole("button", { name: "下载更新" })).toBeEnabled();
 
-    const backgroundSwitch = screen.getByRole("switch");
+    // 这一页现在有两颗同形开关（后台下载 / 更新提醒，R20），按名字取。
+    const backgroundSwitch = screen.getByRole("switch", { name: t("update.bgDownload") });
     fireEvent.click(backgroundSwitch);
     expect(backgroundSwitch).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "下载更新" }));

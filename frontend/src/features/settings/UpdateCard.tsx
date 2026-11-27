@@ -22,6 +22,7 @@ import { useUpdateDownloadStatus } from "../../hooks/useUpdateDownloadStatus";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import UpdateReleaseNotes from "./UpdateReleaseNotes";
+import AnnouncementReminderRow from "./AnnouncementSettingsCard";
 import { getInAppUpdateBridge } from "../updates/desktopUpdateBridge";
 import DesktopUpdateCard from "../updates/DesktopUpdateCard";
 import {
@@ -305,12 +306,18 @@ function UpdateCard() {
           <Switch
             size="small"
             checked={background}
+            // 读屏名：`<label>` 里的文字不会成为按钮的名字（antd 的 Switch 是 `role=switch`
+            // 的 button），而这一页现在有两颗同形开关（后台下载 / 更新提醒），必须有名字区分。
+            aria-label={t("update.bgDownload")}
             disabled={activeStatus || installing || Boolean(statusError)}
             onChange={setBackground}
           />
           <span>{t("update.bgDownload")}</span>
         </label>
       )}
+
+      {/* R20：「更新提醒」开关并进本卡（原来是一张只在有静音项时才有内容的独立卡）。 */}
+      <AnnouncementReminderRow />
 
       {checking && !result && <Spin style={{ marginTop: 16 }} />}
       <div className="update-meta">
