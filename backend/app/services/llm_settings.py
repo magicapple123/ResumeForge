@@ -218,18 +218,62 @@ def get_llm_config(db: Session) -> LLMConfig:
     return get_dataset_llm_config(db)
 
 
-def _strip_session_key(config: LLMConfig) -> LLMConfig:
-    """会话密钥绝不落库：解析结果若是临时密钥，落库为空串（清掉已保存的密钥）。"""
+def same_origin_stored_key(base_url: str, stored_base_url: str, stored_key: str) -> str:
+    """"可以写回库里的旧密钥"：**同一 origin** 才给，否则给空串（安全底线）。
+
+    判据复用 :func:`base_url_binding_identity`：同一主机上的 path 变化不影响，换主机
+    一律不给。会话密钥（R15）走"写回原记录的 Key"这条路径时，必须先过这一关——否则
+    用户切到 ``evil.example.com`` 再随手保存一次，就会把旧主机那把 Key 带过去。
+    """
+    if not stored_key:
+        return ""
+    if base_url_binding_identity(base_url) != base_url_binding_identity(stored_base_url):
+        return ""
+    return stored_key
+
+
+def _strip_session_key(config: LLMConfig, stored_key: str = "") -> LLMConfig:
+    """会话密钥绝不落库；解析到会话密钥时**写回原记录里的密钥**（R15，P1）。
+
+    改造前这里返回空串，于是"填了临时 Key 之后随手改个温度并保存"会把已保存的 Key
+    静默清掉：前端拿到的是 ``********``（`_masked_global(session_key=True)`），
+    回传后解析成会话密钥，落库就成了空串——用户既没点「清除」，也没收到任何提示，
+    重启后 Key 就没了。
+
+    现在改成"写回 ``stored_key``"：临时 Key 只影响本次运行的请求，不动库里那一把。
+    ``stored_key`` 由调用方按**它要写的那个目标**（数据集快照 / 全局记录 / 同名记录）
+    取旧值，并先过 :func:`same_origin_stored_key`。
+    """
     if session_key_configured() and config.api_key == get_session_key():
-        return config.model_copy(update={"api_key": ""})
+        return config.model_copy(update={"api_key": stored_key})
     return config
+
+
+def _stored_dataset_config(db: Session) -> LLMConfig:
+    """数据集快照里**落库的那一份**（不注入会话密钥：这里要的是"原记录"）。"""
+    row = db.get(AppSetting, _LLM_CONFIG_KEY)
+    if row is None:
+        return LLMConfig()
+    try:
+        raw = json.loads(row.value)
+        return LLMConfig.model_validate(raw).model_copy(
+            update={"api_key": decrypt_key(str(raw.get("api_key") or ""))}
+        )
+    except (json.JSONDecodeError, ValidationError, AttributeError):
+        # 脏数据与读接口同一条口径：当成"没有旧记录"，不阻塞保存。
+        return LLMConfig()
 
 
 def save_llm_config(db: Session, config: LLMConfig) -> LLMConfig:
     """保存 LLM 配置：先还原脱敏占位符，再加密 API Key 后落库。"""
     config = resolve_llm_config_api_key(db, config)
     row = db.get(AppSetting, _LLM_CONFIG_KEY)
-    stored = config.model_copy(update={"api_key": encrypt_key(_strip_session_key(config).api_key)})
+    # R15：解析结果是会话密钥时，写回**快照里原有的那把**，不要清成空串。
+    previous = _stored_dataset_config(db)
+    kept_key = same_origin_stored_key(config.base_url, previous.base_url, previous.api_key)
+    stored = config.model_copy(
+        update={"api_key": encrypt_key(_strip_session_key(config, kept_key).api_key)}
+    )
     serialized = json.dumps(stored.model_dump(), ensure_ascii=False)
     if row is None:
         db.add(AppSetting(key=_LLM_CONFIG_KEY, value=serialized))
@@ -252,7 +296,12 @@ def save_llm_config_record(db: Session, payload: LLMConfigRecordCreate) -> LLMCo
     resolved = resolve_llm_config_api_key(db, payload)
     row = db.query(LLMConfigRecord).filter(LLMConfigRecord.name == resolved.name).one_or_none()
     values = resolved.model_dump(exclude={"name"})
-    values["api_key"] = encrypt_key(_strip_session_key(resolved).api_key)
+    # R15：同一条记录里已有 Key 时，会话密钥不改写它（按 origin 判断能不能沿用）。
+    previous_key = decrypt_key(row.api_key) if row is not None else ""
+    kept_key = same_origin_stored_key(
+        resolved.base_url, row.base_url if row is not None else "", previous_key
+    )
+    values["api_key"] = encrypt_key(_strip_session_key(resolved, kept_key).api_key)
     if row is None:
         row = LLMConfigRecord(name=resolved.name, **values)
         db.add(row)

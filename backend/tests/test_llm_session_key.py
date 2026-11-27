@@ -83,6 +83,41 @@ def test_session_key_placeholder_roundtrip_does_not_persist_it(client, db_sessio
     assert raw["api_key"] == ""
 
 
+def test_session_key_does_not_wipe_the_saved_key_on_save(client, db_session):
+    """R15（P1）：临时 Key 生效时改个参数再保存，库里那把**仍然在**。
+
+    改造前的链路：GET 回 ``********``（因为生效的是会话密钥）→ 前端原样回传 →
+    解析成会话密钥 → `_strip_session_key` 写空串 → 已保存的 Key 被静默清掉。
+    """
+    import json as _json
+
+    from app.models.setting import AppSetting
+    from app.services.api_key_crypto import decrypt_key
+
+    config = LLMConfig(
+        base_url="https://api.example.com/v1", api_key="sk-saved-A", model="test-model"
+    )
+    client.put("/api/settings/llm", json=config.model_dump())
+    stored_before = _json.loads(db_session.get(AppSetting, "llm_config").value)["api_key"]
+    assert decrypt_key(stored_before) == "sk-saved-A"
+
+    # 设一把临时 Key B，再模拟"改温度后保存"：前端拿到的是掩码，原样回传。
+    client.put("/api/settings/llm/session-key", json={"api_key": "sk-session-B"})
+    masked = client.get("/api/settings/llm").json()
+    assert masked["api_key"] == API_KEY_MASK
+    client.put("/api/settings/llm", json={**masked, "temperature": 0.2})
+
+    db_session.expire_all()
+    raw = _json.loads(db_session.get(AppSetting, "llm_config").value)
+    # 库里仍是 A：临时 Key 只影响本次运行的请求，不参与落库、也不清掉原记录。
+    # DPAPI 每次加密结果不同（带随机向量），所以比明文而不是比密文。
+    assert decrypt_key(raw["api_key"]) == "sk-saved-A"
+    assert raw["temperature"] == 0.2
+    # 临时 Key 自己依然没有落盘。
+    assert "sk-session-B" not in _json.dumps(raw, ensure_ascii=False)
+    assert get_llm_config(db_session).api_key == "sk-session-B"
+
+
 def test_dpapi_failure_fails_loudly_and_never_persists_key(client, db_session, monkeypatch):
     """DPAPI 加密失败：API 显式报错，密钥不落盘、不伪装成功（RF-24）。"""
     from app.models.setting import AppSetting

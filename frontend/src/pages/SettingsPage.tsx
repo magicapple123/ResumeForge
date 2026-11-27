@@ -13,7 +13,7 @@
 import { Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { useSettingsDatasets } from "../features/settings/useSettingsDatasets";
 import { useSettingsSkills } from "../features/settings/useSettingsSkills";
 import { useLLMSettings } from "../features/settings/useLLMSettings";
@@ -66,6 +66,7 @@ const HASH_ANCHOR_RETRY_MS = 40;
 
 export default function SettingsPage() {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const initialSection = parseSettingsSection(searchParams.get("tab"));
   const [activeSection, setActiveSection] = useState<SettingsSectionKey>(initialSection);
   // 去过的分组不卸载：切回来时输入到一半的表单、已取到的数据都还在（原来 antd Tabs 的行为）。
@@ -76,6 +77,10 @@ export default function SettingsPage() {
   const prevSectionRef = useRef<SettingsSectionKey | null>(null);
   /** 这一次切组是搜索命中引起的：预滚动让给 revealSettingsCard，避免连跳两段。 */
   const skipResetRef = useRef(false);
+  /** 这一次切组是深链锚点引起的：预滚动让给 revealSettingsAnchor（R17）。 */
+  const anchorJumpRef = useRef(false);
+  /** `activeSection` 的镜像：effect 里要知道"分组变了没有"，又不能让 effect 依赖它。 */
+  const activeSectionRef = useRef<SettingsSectionKey>(initialSection);
 
   // 本页用模块级 t() 取文案：必须订阅语言变化，否则切到英文后这一页仍是中文。
   useLocale();
@@ -89,12 +94,49 @@ export default function SettingsPage() {
   // 3. 锚点只处理一次：用户随后自己切组是新的意图，不该被反复拉回。
   //
   // 于是用**有界重试**（≈2s）：命中即收手；超时则退回分组顶部，不把页面永远挂在轮询上。
+  //
+  // R17（P1）：依赖原来是 `[]`，于是**同页内**点「去配置」什么都不动——同路由 navigate
+  // 只改 URL、不重挂组件，`activeSection` 由 `useState(initialSection)` 初始化后再也不跟随
+  // `?tab=`。现在依赖 `[searchParams, location.hash, location.key]`：地址一变就把分组同步
+  // 到 URL 说的那一组、再 reveal，所以连点两个「去配置」能各自切组（`location.key` 兜住
+  // "同一落点再点一次"——hash 与 query 都没变时只有它变）。
+  //
+  // **分组永远以 `?tab=` 为准**，不从眼前的 DOM 反推：`anchorHostSection` 那种"锚点在谁家
+  // 就切到谁家"的写法会带来两个更糟的结果——(a) 用户直接粘 `?tab=model#conn-…` 进来时被
+  // 拽去「外部连接」，URL 与界面不一致；(b) 锚点恰好落在另一个**已挂载**分组里时，页面会
+  // 在你眼前换组，看着像自己乱跳。锚点只在**本组**里找，找不到就退回本组顶部（`?tab=` 才是
+  // 用户要去的"在哪配"），这条契约由 `SettingsPage.anchor.test.tsx` 守着。
   useEffect(() => {
-    const hash = window.location.hash;
+    const requested = parseSettingsSection(searchParams.get("tab"));
+    const hash = location.hash;
+    // 先同步分组：这一步必须由 URL 驱动（R17 的根因就是它只在挂载时跑一次）。
+    if (requested !== activeSectionRef.current) {
+      activeSectionRef.current = requested;
+      setActiveSection(requested);
+      // 这一趟的滚动由下面的 reveal 负责，别让"切组回顶"把刚滚到的行又拉回去。
+      anchorJumpRef.current = true;
+    }
+    setVisited((prev) => (prev.includes(requested) ? prev : [...prev, requested]));
     if (hash === "" || hash === "#") return undefined;
+
     let timer: number | undefined;
     let attempts = 0;
     const attempt = (): void => {
+      // 锚点已经存在、但属于**别的分组**：这不是"还没渲染出来"，再重试 2s 也等不到。
+      // 立刻停在目标分组顶部——否则用户会先看到 2s 的"滚到一半"，然后才被拉回组顶部。
+      // 声明时不初始化：两个分支都会赋值，初值 `null` 只会被立刻覆盖
+      // （eslint `no-useless-assignment` 会把它当成"赋了没用"）。
+      let node: Element | null;
+      try {
+        node = document.querySelector(hash);
+      } catch {
+        node = null;
+      }
+      const host = node?.closest<HTMLElement>(".settings-section")?.dataset.section ?? "";
+      if (node !== null && host !== "" && host !== requested) {
+        scrollSettingsToTop(contentRef.current);
+        return;
+      }
       if (revealSettingsAnchor(hash)) return;
       attempts += 1;
       if (attempts >= HASH_ANCHOR_RETRIES) {
@@ -105,11 +147,16 @@ export default function SettingsPage() {
       }
       timer = window.setTimeout(attempt, HASH_ANCHOR_RETRY_MS);
     };
-    attempt();
+    // 第一次也走定时器：让上面那次 setActiveSection 先提交，否则 reveal 会在"旧分组还
+    // 可见"的同一帧里跑——目标行这时在 `[hidden]` 里、没有布局盒，`revealSettingsAnchor`
+    // 会白跑一次（虽然有重试兜着，但白等一轮 40ms）。
+    timer = window.setTimeout(attempt, HASH_ANCHOR_RETRY_MS);
     return () => {
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, []);
+    // `activeSection` 刻意不进依赖：进了就会在用户自己切组时重跑一遍 reveal，
+    // 把"手动换一组"变成"被深链拉回去"。
+  }, [searchParams, location.hash, location.key]);
 
   const {
     records,
@@ -298,6 +345,11 @@ export default function SettingsPage() {
     if (prevSectionRef.current === activeSection) return;
     prevSectionRef.current = activeSection;
     if (skipResetRef.current) return;
+    // 深链锚点引起的切组：回顶会让 reveal 的滚动白做，消费掉这个标记就收手。
+    if (anchorJumpRef.current) {
+      anchorJumpRef.current = false;
+      return;
+    }
     scrollSettingsToTop(contentRef.current);
   }, [activeSection, pendingJump]);
 
@@ -376,7 +428,14 @@ export default function SettingsPage() {
             <Typography.Text type="secondary">{t(activeMeta.introKey)}</Typography.Text>
           </div>
           {visited.map((key) => (
-            <div key={key} className="settings-section" hidden={key !== activeSection}>
+            <div
+              key={key}
+              // 这一块渲染的是哪一组：与侧栏导航项（`.settings-nav-item[data-section]`）
+              // 用同一个值，真机排障时"现在可见的是哪一组"一眼可读（T23 的取证也靠它）。
+              data-section={key}
+              className="settings-section"
+              hidden={key !== activeSection}
+            >
               {panelFor(key)}
             </div>
           ))}

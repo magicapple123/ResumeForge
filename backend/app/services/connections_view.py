@@ -103,6 +103,40 @@ def _protection_label(value: str) -> str:
     return PROTECTION_LABELS.get(value, value)
 
 
+def _ai_identity(source_id: str, db: Session | None) -> tuple[str, str]:
+    """AI 服务那一行"用的是哪个服务商 + 哪个模型"（R19）。
+
+    只读**实际生效的配置**（与大模型 / 语音 / 语义检索各域同一个读取入口），读不到就给
+    空串——界面据此不渲染模型 chip。宁可少一行字，也不要把注册表里的名字当成"正在用的
+    模型"：那正是 R19 的另一半（标题里的「当前生效配置」既没说服务商也没说模型）。
+
+    单条读失败按"不知道"处理（返回空串），不让整页 500：与 `credential_states` 同一条口径。
+    """
+    if db is None:
+        return "", ""
+    try:
+        if source_id in (SOURCE_LLM_DEFAULT, SOURCE_LLM_SESSION):
+            from .settings_service import get_llm_config
+
+            config = get_llm_config(db)
+            return str(config.provider or ""), str(config.model or "")
+        if source_id == SOURCE_ASR_DEFAULT:
+            from .asr_settings import get_asr_runtime_settings, provider_host
+
+            settings = get_asr_runtime_settings(db)
+            return provider_host(settings.base_url), str(settings.model or "")
+        if source_id == SOURCE_EMBEDDING_DEFAULT:
+            from .llm.embedding_settings import read_embedding_config
+
+            config = read_embedding_config()
+            if config is None:
+                return "", ""
+            return str(config.provider or ""), str(config.model or "")
+    except Exception:  # noqa: BLE001 - 读不到就是"不知道"，不该让整页 500
+        logger.warning("读取 %s 的服务商/模型失败", source_id, exc_info=True)
+    return "", ""
+
+
 def _global_llm_target() -> str:
     """当前生效的全局模型记录 id（没有配置时为空串）。
 
@@ -161,8 +195,11 @@ def _target_id(source: CredentialSource) -> str:
     return ""
 
 
-def _credential_item(source: CredentialSource, state: CredentialState) -> dict[str, Any]:
+def _credential_item(
+    source: CredentialSource, state: CredentialState, db: Session | None = None
+) -> dict[str, Any]:
     editable = is_editable(source)
+    provider, model = _ai_identity(source.source_id, db)
     return {
         "id": source.source_id,
         "label": source.label,
@@ -170,6 +207,9 @@ def _credential_item(source: CredentialSource, state: CredentialState) -> dict[s
         "status": str(state.status.value),
         "status_label": state.status_label,
         "detail": state.detail,
+        # R19：AI 服务行要能说清"用的是谁家的哪个模型"。取不到就是空串（前端不渲染）。
+        "provider": provider,
+        "model": model,
         "masked": state.masked,
         "hint": state.hint,
         "key_configured": state.key_configured,
@@ -302,7 +342,7 @@ def build_connections(db: Session | None) -> dict[str, Any]:
         state = states.get(source.source_id)
         if state is None:  # pragma: no cover - registry 保证一一对应
             continue
-        item = _credential_item(source, state)
+        item = _credential_item(source, state, db)
         if source.group in AI_REGISTRY_GROUPS:
             ai_items.append(item)
         elif source.group == GROUP_NETWORK:

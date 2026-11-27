@@ -78,3 +78,33 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/*
+ * R20：一行「更新提醒 [开关]」——原来它是一张独立的「公告提醒」卡，平时只有一句空态，
+ * 却占着同一屏里最贵的位置。并进来之后与「后台下载」那一行同一套排法（开关 + 文字），
+ * 用户不必在两处找"更新有关的开关"。
+ */
+.update-reminder-row {
+  display: grid;
+  /* 开关 + 名字一行，说明另起一行并与名字左对齐：
+     挤在同一行里说明会被读成"开关的名字"，用户仍然不知道关掉之后会怎样。 */
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.update-reminder-row__label {
+  color: var(--rf-text-body);
+}
+
+/* 说明跟在名字下面，但不抢注意力：它解释的是"关掉之后会怎样"。 */
+.update-reminder-row__hint {
+  grid-column: 2;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+}

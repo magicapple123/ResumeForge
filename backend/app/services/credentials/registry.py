@@ -190,7 +190,7 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
     CredentialSource(
         source_id=SOURCE_LLM_DEFAULT,
         group=GROUP_LLM,
-        label="大模型 API Key（当前生效配置）",
+        label="大模型 API Key",
         scope=CredentialScope.GLOBAL_FILE,
         location="global_settings.json → llm.profiles[].config.api_key，或 AppSetting llm_config",
         multi_profile=True,
@@ -212,7 +212,7 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
     CredentialSource(
         source_id=SOURCE_LLM_SESSION,
         group=GROUP_SESSION,
-        label="仅本次会话使用的大模型 Key",
+        label="临时 Key（仅本次运行有效）",
         scope=CredentialScope.MEMORY,
         location="后端进程内存（api_key_session），不落盘、不进备份",
         configure_at="设置 → AI 模型 → 仅本次会话使用",
@@ -223,14 +223,15 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
         edge_kind="override",
         empty_meaning="清空 = 立刻回到已保存的那把 Key",
         note=(
-            "RF-24 的纯内存通道：进程重启即失效。它存在时生效值以它为准，"
-            "保存链路会把落库值清成空串（_strip_session_key）。"
+            "RF-24 的纯内存通道：进程重启即失效。它存在时生效值以它为准；"
+            "保存链路（_strip_session_key）落库时写回**原记录里已有的那把**，"
+            "所以临时 Key 生效期间改温度再保存不会清掉已保存的 Key（R15）。"
         ),
     ),
     CredentialSource(
         source_id=SOURCE_ASR_DEFAULT,
         group=GROUP_ASR,
-        label="语音转写 API Key（当前生效配置）",
+        label="语音转写 API Key",
         scope=CredentialScope.GLOBAL_FILE,
         location="global_settings.json → asr_profiles.profiles[].api_key",
         multi_profile=True,
@@ -250,7 +251,7 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
     CredentialSource(
         source_id=SOURCE_EMBEDDING_DEFAULT,
         group=GROUP_EMBEDDING,
-        label="语义检索 API Key（当前生效配置）",
+        label="语义检索 API Key",
         scope=CredentialScope.GLOBAL_FILE,
         location="global_settings.json → embedding_profiles.profiles[].config.api_key",
         display=KeyDisplay.BOOLEAN,
@@ -269,7 +270,7 @@ CREDENTIAL_SOURCES: tuple[CredentialSource, ...] = (
     CredentialSource(
         source_id=SOURCE_NETWORK_PROXY,
         group=GROUP_NETWORK,
-        label="代理认证口令（当前网络设置）",
+        label="代理认证口令",
         scope=CredentialScope.GLOBAL_FILE,
         location="global_settings.json → network.proxy_password",
         storage_field="proxy_password",

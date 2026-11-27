@@ -21,6 +21,12 @@ export interface ConnectionItem {
   status_label: string;
   detail: string;
   masked: string;
+  /**
+   * R19：这一条用的**服务商**与**模型**（取实际生效的配置；取不到就是空串）。
+   * 只有 AI 服务那几条会填，其余来源恒为空串——前端据此不渲染模型 chip。
+   */
+  provider?: string;
+  model?: string;
   /** CR-07：只读展示提示（前 4 后 4，短于 16 位为 `********`）；未配置时为空串。 */
   hint?: string;
   key_configured: boolean;

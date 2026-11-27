@@ -9,12 +9,14 @@
  * 状态几乎只靠一个 8px 圆点的颜色承载、掩码用正文字体（四颗星像乱码）、未配置的行
  * 还写着「DPAPI 加密」。
  *
- * ## 现在（#8 卡片行）
+ * ## 现在（#8 卡片行 + R16 去彩条）
  *
  * 1. 每行一张卡（`border` + 圆角 10 + `padding:10px 12px`；组内 `gap:8`）；
- * 2. 左侧 3px 状态条（`::before`）：绿=已保存 / 琥珀=仅本次会话 / 灰=未配置。
- *    **颜色只在 `[data-status]` 上取一次**，形状与文字由状态 chip 另行给出；
- * 3. 右侧操作区**定宽 150px**（`grid` 第二列，跨全部行、垂直居中）：`ⓘ` + 主按钮 + `⋯`
+ * 2. **状态只由 chip 表达**（R16，2026-11-26）：原来还有一条贴左缘的 3px 彩条
+ *    （`::before` + 四色），它与 chip 说的是同一件事，同一条信息在一行里出现两次，
+ *    反而让人以为"条"和"chip"是两个不同的状态。彩条已删；`data-status` 属性**保留**
+ *    ——chip 的配色与空心点都靠它选；状态色 token 也保留（chip 还在用）；
+ * 3. 右侧操作区**定宽 150px**（`grid` 第二列、跨全部行、垂直居中）：`ⓘ` + 主按钮 + `⋯`
  *    的右边缘因此是一条竖线，不再随"未配置用实心按钮"排成锯齿；
  * 4. 值行与输入框同为 **26px**：进编辑态操作列位置不动、整行高度不跳（验收 ≤2px）。
  *
@@ -103,40 +105,34 @@
   transition: border-color var(--rf-motion-duration, 0.2s) ease;
 }
 
+/*
+ * R19：密钥行（A/B 组）改成**两行**——第一行「名称 + 模型 chip + 状态 chip」，
+ * 第二行「Key •••• · 用于 …」；存储方式（DPAPI / 仅内存）收进右侧 `ⓘ`。
+ *
+ * 原来四段各占一行：名称 + Key + 「DPAPI 加密」+「用于 …」，卡片 ~120px，而中间
+ * 300–400px 是空白——信息没变多，行数却翻倍。两行后行高约 68px。
+ *
+ * 系统来源行（`[data-variant="value"]`）不改：它没有模型，但要显示出厂值与恢复默认。
+ */
+.connection-row[data-variant="secret"] {
+  grid-template-areas:
+    "head acts"
+    "main acts";
+  /* 22（标题行）+ 2（间距）+ 26（值行）+ 16（上下内边距）+ 2（边框）= 68px，
+     与 R19 的"约 68px"对齐；编辑态值位换成的输入框也是 26px，整行高度不跳。 */
+  padding: 8px 12px;
+  row-gap: 2px;
+}
+
 .connection-row:hover,
 .connection-row:focus-within {
   border-color: var(--rf-border-strong, rgba(0, 0, 0, 0.2));
 }
 
-/* 左侧 3px 状态条：贴着卡片左缘，圆角跟着卡片走（不画成一条溢出圆角的直角）。 */
-.connection-row::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
-  border-radius: 10px 0 0 10px;
-  background: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
-  content: "";
-}
-
-.connection-row[data-status="saved"]::before {
-  background: var(--rf-success);
-}
-
-.connection-row[data-status="session_only"]::before {
-  background: var(--rf-warning);
-}
-
-/* 系统来源（C 组）：改过 / 仍是出厂值，都不是"密钥状态"，用信息色与灰色区分。 */
-.connection-row[data-status="modified"]::before {
-  background: var(--rf-info, #1d63d1);
-}
-
-.connection-row[data-status="default"]::before,
-.connection-row[data-status="not_configured"]::before {
-  background: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
-}
+/* R16（2026-11-26）：这里原有一条贴左缘的 3px 状态彩条（`.connection-row::before` +
+   四条 `[data-status]::before` 配色），与状态 chip 重复表达同一件事，已删。
+   **`data-status` 属性保留**：chip 的配色、虚线边与空心点都按它选（见下方 chip 段落），
+   删属性等于让 chip 退化成"一行一个颜色都没有"。矩阵视图没有共用这条规则。 */
 
 /* ── 第一段：名称 + 状态 chip ─────────────────────────────── */
 .connection-row__head {
@@ -185,6 +181,42 @@
   background: currentColor;
 }
 
+/* R19：模型 chip（服务商 · 模型）。比状态 chip 更淡：它是"补充说明"，
+   状态才是"要不要动手"的判据；同名过长时省略，不挤掉状态 chip。 */
+.connection-row__model {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--rf-surface-alt, rgba(0, 0, 0, 0.02));
+  font-size: 11.5px;
+  line-height: 18px;
+  color: var(--rf-text-secondary, rgba(0, 0, 0, 0.65));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 第二行里的分隔点与「用于」：一行读完，不再各占一整行。 */
+.connection-row__sep {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 26px;
+  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+}
+
+.connection-row__used-inline {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11.5px;
+  line-height: 26px;
+  color: var(--rf-text-tertiary, rgba(0, 0, 0, 0.45));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 未配置与出厂值：空心点（没有值，不是"值很弱"）。 */
 .connection-row[data-status="not_configured"] .connection-row__chip,
 .connection-row[data-status="default"] .connection-row__chip {
@@ -210,6 +242,11 @@
 .connection-row[data-status="modified"] .connection-row__chip {
   border-color: color-mix(in srgb, var(--rf-info, #1d63d1) 35%, transparent);
   color: var(--rf-info, #1d63d1);
+}
+
+/* 密钥行的掩码/提示本身就是短串，不要撑满：撑满会把「用于」挤到最右边（R19）。 */
+.connection-row[data-variant="secret"] .connection-row__value {
+  flex: 0 1 auto;
 }
 
 /* ── 第二段：值（或输入框）────────────────────────────────── */

@@ -58,6 +58,7 @@ from ..services.settings_service import (
     get_llm_config,
     mask_llm_config,
     resolve_llm_config_api_key,
+    same_origin_stored_key,
     save_llm_config,
 )
 
@@ -165,7 +166,15 @@ def write_llm_config(payload: LLMConfig, db: Session = Depends(get_db)) -> LLMCo
         resolved = resolve_llm_config_api_key(db, config)
         # 会话密钥绝不落盘：全局文件与数据集快照都只存"去掉会话密钥"的形态；
         # 生成链路读配置时会由 get_llm_config 把内存里的临时密钥补回去。
-        stored = _strip_session_key(resolved)
+        #
+        # R15（P1）：这里原来写空串，等于"临时 Key 生效时随手保存一次就把已保存的 Key 清掉"。
+        # 现在写回**原记录里那把**（同 origin 才给，见 same_origin_stored_key）。
+        kept_key = same_origin_stored_key(
+            resolved.base_url,
+            existing.config.base_url if existing is not None else "",
+            existing.config.api_key if existing is not None else "",
+        )
+        stored = _strip_session_key(resolved, kept_key)
         save_llm_config(db, stored)
         saved = write_global_llm(stored)
     except ValueError as exc:
@@ -214,8 +223,16 @@ def write_llm_record(payload: dict, db: Session = Depends(get_db)) -> LLMGlobalR
         config = config.model_copy(update={"api_key": keep})
     try:
         resolved = resolve_llm_config_api_key(db, config)
-        # 与 PUT /llm 同一条规则：会话密钥只存在于内存，记录里存空串。
-        record = upsert_record(name, _strip_session_key(resolved), payload.get("models"))
+        # 与 PUT /llm 同一条规则：会话密钥只存在于内存，记录里存**原本那把**（R15）。
+        previous = read_record_config(name)
+        kept_key = same_origin_stored_key(
+            resolved.base_url,
+            previous.base_url if previous is not None else "",
+            previous.api_key if previous is not None else "",
+        )
+        record = upsert_record(
+            name, _strip_session_key(resolved, kept_key), payload.get("models")
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ApiKeyEncryptionError as exc:
