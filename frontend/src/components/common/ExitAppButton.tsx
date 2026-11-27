@@ -65,7 +65,10 @@ export default function ExitAppButton() {
         }
         // 浏览器路径（行为不变）：试一次关闭，多数浏览器只允许脚本关闭"自己打开的"
         // 窗口，被拒也无妨——页面上已经写明"请顺手关掉这个标签页"。
-        window.setTimeout(() => window.close(), 600);
+        // 与 GlobalFileDrop 的重载定时器同理：先捕获 close，回调里不再读 window，
+        // 免得 jsdom 在 600ms 内卸载后抛出未处理的 ReferenceError（CI 的 Errors 行）。
+        const { close } = globalThis;
+        globalThis.setTimeout(() => close?.call(globalThis), 600);
       },
     });
   };
