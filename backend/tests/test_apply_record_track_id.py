@@ -240,6 +240,11 @@ def test_soft_deleted_track_does_not_count_as_linked(client, db_session):
 def test_lookup_is_batched_not_per_record(client, db_session):
     """第 5 条口径：SELECT 次数与记录条数无关（否则一页 20 条 = N+1）。"""
     _batch(db_session, 3)
+    # 先打一次预热请求：进程级的一次性查询（数据集身份同步、引擎漂移检查等）不该被
+    # 算进"反查是否批量"的对照。CI 的全量作业跑到这条用例时进程已经活了很久，
+    # 实测出现过第二次请求多 1 条 SELECT（4 vs 3），而两次请求查的记录数完全不同源。
+    # 预热把这类一次性查询留在计数窗口之外，下面比的才是稳态的批量反查成本。
+    _records(client)
     with _count_selects() as few:
         _records(client)
 

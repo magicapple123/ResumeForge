@@ -236,7 +236,9 @@ describe("TrackerPage", () => {
     renderPage();
     await screen.findByText("示例科技");
 
-    fireEvent.click(screen.getByRole("button", { name: /面试/ }));
+    // 漏斗步骤的可见名含百分比（「面试中 1 0%」），状态胶囊的无障碍名也含「面试中」
+    // （WCAG 2.5.3 要求）；用 /面试.*%/ 只挑漏斗那颗，不误中点进详情的状态按钮。
+    fireEvent.click(screen.getByRole("button", { name: /面试.*%/ }));
 
     // 列表与统计都带着同一套筛选重新拉取。
     await waitFor(() => {
