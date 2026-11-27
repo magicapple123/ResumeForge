@@ -36,6 +36,10 @@ import pytest
 from app.api import external_resumes as external_api
 from app.api import research as research_api
 from app.api import transcribe as transcribe_api
+
+# 模型直接从 models 取：`app.api.external_resumes` 只用它做类型标注，拆出改字路由后那处
+# 标注搬走了，模块里不再为了测试留一个「当命名空间用」的未用导入。
+from app.models.external_resume import ExternalResume
 from app.schemas.asr import AsrProfileTestRequest, AsrSettingsTestResult
 from app.schemas.external_resume import ExternalResumeDetail
 from app.schemas.research import ResearchCompanyRequest
@@ -183,7 +187,7 @@ def test_external_resume_persist_runs_off_loop(
     assert "负责后端接口开发" in result.text, "解析结果应原样带回响应，语义不能被搬运改掉"
 
     db_session.rollback()
-    rows = db_session.query(external_api.ExternalResume).all()
+    rows = db_session.query(ExternalResume).all()
     assert len(rows) == 1, "落库段是真的写进了库，而不是被探针替换成了空实现"
 
 
